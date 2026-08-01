@@ -84,3 +84,24 @@ func TestPreambleIsIndependentOfTheDefinition(t *testing.T) {
 		assert.Nil(t, inst.preamble, "%q renders no strip", string(src))
 	}
 }
+
+// TestDatasetNoticeIsSetAndCleared pins the host's runtime strip: unlike the
+// two document-derived surfaces it is expected to come and go while the
+// instance is live, as the condition it reports appears and clears.
+func TestDatasetNoticeIsSetAndCleared(t *testing.T) {
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x")
+	defer inst.Close()
+
+	assert.Nil(t, inst.datasetNotice, "an instance with no unmet precondition shows no strip")
+
+	inst.SetDatasetNotice([]byte("Waiting for dataset `pprof_cpu`."))
+	require.NotNil(t, inst.datasetNotice)
+	assert.Nil(t, inst.preamble, "the notice does not stand in for a preamble")
+
+	// Clearing is what the applet does once the alias binds — the strip goes
+	// away rather than lingering as an empty band.
+	for _, src := range [][]byte{nil, {}, []byte(" \n\t")} {
+		inst.SetDatasetNotice(src)
+		assert.Nil(t, inst.datasetNotice, "%q renders no strip", string(src))
+	}
+}

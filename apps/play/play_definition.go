@@ -3,7 +3,9 @@ package play
 // play_definition.go carries the two surfaces an embedded instance derives
 // from the document it was defined by: the **Definition drawer** (the whole
 // document, on demand) and the **preamble** (a short explanatory passage the
-// author chose to keep over the numbers, always visible).
+// author chose to keep over the numbers, always visible). It also carries the
+// **dataset notice**, which rides in the same strip but comes from the host
+// rather than the document — see [PlayApp.SetDatasetNotice].
 //
 // The Definition drawer is the markdown document an embedded instance was
 // defined BY, rendered as a right-hand drawer the top bar's "Definition"
@@ -117,6 +119,44 @@ func (inst *PlayApp) SetPreambleMarkdown(src []byte) {
 		return
 	}
 	inst.preamble = markdown.Parse(src)
+}
+
+// SetDatasetNotice hands play a runtime notice about this instance's data
+// preconditions — in practice, that a declared ad-hoc dataset alias has no
+// dataset behind it yet (ADR-0134 §SD4). It renders above the preamble,
+// inside the central panel, so the reader meets the reason the panes are
+// empty before the prose explaining what the panes would mean.
+//
+// Unlike [PlayApp.SetPreambleMarkdown] this is expected to be re-set while
+// the instance is live, as the condition it reports appears and clears;
+// empty source clears it. It reparses on every call, so a caller that
+// re-derives the same text each frame should compare before setting.
+//
+// It is the host's surface, not the document's: play has no idea what
+// produces a given alias, and the embedder that declared the alias does.
+func (inst *PlayApp) SetDatasetNotice(src []byte) {
+	if len(bytes.TrimSpace(src)) == 0 {
+		inst.datasetNotice = nil
+		return
+	}
+	inst.datasetNotice = markdown.Parse(src)
+}
+
+// renderDatasetNotice draws the notice strip, immediately above the preamble
+// and under the same panel discipline: non-resizable, sized to its content.
+func (inst *PlayApp) renderDatasetNotice() {
+	if inst.datasetNotice == nil {
+		return
+	}
+	ids := inst.ids
+	for range c.PanelTopInside(ids.PrepareStr("datasetNoticePanel")).Resizable(false).KeepIter() {
+		// IdScope isolates the document's derived widget ids, for the reason
+		// the preamble does it: more than one markdown doc renders per frame.
+		for range c.IdScope(ids.PrepareStr("datasetNoticeBody")) {
+			inst.datasetNotice.Render(ids)
+		}
+		c.Separator().Send()
+	}
 }
 
 // renderPreamble draws the preamble strip. Render calls it inside the central

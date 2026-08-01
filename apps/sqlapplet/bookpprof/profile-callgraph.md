@@ -7,6 +7,7 @@ icon: "🕸"
 endpoint: introspection
 tabs: [network, table, detail]
 datasets: [pprof_cpu]
+datasets_hint: "Capture one from imzrt → Profiles → Capture CPU."
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
@@ -19,8 +20,9 @@ function labelled with its cumulative cost. The Network tab draws it; the
 Table tab lists the same edges as caller/callee/ms rows, and a click's
 Detail shows one edge.
 
-**Needs a capture first.** Open imzrt → Profiles → *Capture CPU*; this
-applet binds the newest `pprof_cpu` dataset when it opens. Re-captures
+**Needs a capture.** Open imzrt → Profiles → *Capture CPU*, before or after
+opening this applet: with no `pprof_cpu` dataset yet it says so and keeps
+looking, then binds and re-runs on its own once one appears. Re-captures
 republish onto the same dataset — Run refreshes an open window.
 
 **The knob.** `edge_cap` keeps the heaviest N edges. The vertex set follows

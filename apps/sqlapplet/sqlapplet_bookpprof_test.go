@@ -194,8 +194,9 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 	appletBus := bus.NewClient("test.bookpprof.applet", []app.SubjectFilter{
 		{Pattern: adhocdata.SubjectResolve, Direction: app.CapDirectionPub, Reason: "test"},
 	})
-	bindings := resolveDatasetAliases(appletBus, logger, []string{"pprof_cpu", "pprof_heap"})
+	bindings, unresolved := resolveDatasetAliases(appletBus, logger, []string{"pprof_cpu", "pprof_heap"})
 	require.Len(t, bindings, 2)
+	require.Empty(t, unresolved)
 
 	query := func(sql string) (out string) {
 		t.Helper()
@@ -216,7 +217,41 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 		assert.NotEmpty(t, out, "%s: the sink returned no rows", slug)
 	}
 
-	// A miss binds nothing and fails nothing: the applet-open path over an
-	// alias never captured.
-	assert.Empty(t, resolveDatasetAliases(appletBus, logger, []string{"pprof_goroutine"}))
+	// A miss binds nothing and fails nothing, and reports the alias back so
+	// the open window can keep trying: the applet-open path over an alias
+	// never captured.
+	missBindings, missUnresolved := resolveDatasetAliases(appletBus, logger, []string{"pprof_goroutine"})
+	assert.Empty(t, missBindings)
+	assert.Equal(t, []string{"pprof_goroutine"}, missUnresolved)
+
+	// And the retry path closes it: a rebinder over that alias picks up the
+	// dataset published after open, without the window being reopened.
+	reb := newDatasetRebinder(appletBus, logger, "hint.", missUnresolved)
+	require.NotNil(t, reb)
+	// Any instance will do as the bind target — the rebinder's contract is
+	// with PlayApp.BindDataset, not with this buffer's aliases.
+	inner, err := NewEmbedded(pprofDefsBySlug(t)["profile-top"], EmbedConfig{
+		StampAppId: "test.rebind", Bus: appletBus, Log: logger, EndpointURL: srv.BaseURL() + "/query",
+	})
+	require.NoError(t, err)
+
+	var goroutineBuf bytes.Buffer
+	require.NoError(t, pprof.Lookup("goroutine").WriteTo(&goroutineBuf, 0))
+	publish("goroutine", goroutineBuf.Bytes())
+
+	var boundOK bool
+	for range 100 {
+		// Drive the retries at test speed; the interval is not what this
+		// test is about.
+		reb.mu.Lock()
+		reb.nextAt = time.Time{}
+		reb.mu.Unlock()
+		bound, _, _, done := reb.sync(inner.BindDataset)
+		if bound && done {
+			boundOK = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	assert.True(t, boundOK, "the rebinder never picked up the after-open publish")
 }

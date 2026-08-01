@@ -548,6 +548,12 @@ type PlayApp struct {
 	// nothing. Parsed once; see play_definition.go.
 	preamble *markdown.Doc
 
+	// datasetNotice is the host's runtime notice about this instance's data
+	// preconditions (SetDatasetNotice) — an unbound ad-hoc dataset alias, in
+	// practice. It rides above the preamble and, unlike it, is re-set as the
+	// condition changes. nil renders nothing. See play_definition.go.
+	datasetNotice *markdown.Doc
+
 	// Param-slot UI (see play_param_render.go). paramSlots mirrors what
 	// the debounced parse extracted from inst.sql; paramDrafts owns the
 	// stable string pointers each widget binds via SendRespVal;
@@ -1154,8 +1160,11 @@ func (inst *PlayApp) Render() error {
 	// their width in the order they are added.
 	inst.renderDefinitionPanel()
 	for range c.PanelCentralInside().KeepIter() {
-		// The author's explanatory passage, above every result pane and
-		// below the controls — an applet's `md preamble` fence.
+		// The host's data-precondition notice, then the author's explanatory
+		// passage, above every result pane and below the controls — an
+		// applet's `md preamble` fence. The notice sits first: it says why
+		// the panes below it are empty, which outranks what they mean.
+		inst.renderDatasetNotice()
 		inst.renderPreamble()
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
 			if inst.pendingDockActivate != 0 {

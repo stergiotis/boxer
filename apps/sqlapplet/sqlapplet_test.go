@@ -177,6 +177,15 @@ func TestParseDocShapes(t *testing.T) {
 	require.Empty(t, errs)
 	require.NotNil(t, def)
 	assert.Equal(t, []string{"items", "series_a"}, def.Datasets)
+	assert.Empty(t, def.DatasetsHint)
+
+	// datasets_hint is the one line the notice strip shows while an alias is
+	// still unbound.
+	def, errs = parseOne(t, "dshint.md", docMD("title: DS\ndatasets: [items]\ndatasets_hint: \"Publish it from Foo.\"",
+		"```sql\nSELECT * FROM keelson('items')\n```"))
+	require.Empty(t, errs)
+	require.NotNil(t, def)
+	assert.Equal(t, "Publish it from Foo.", def.DatasetsHint)
 
 	def, errs = parseOne(t, "nods.md", docMD("title: NoDS", "```sql\nSELECT 1\n```"))
 	require.Empty(t, errs)
@@ -210,6 +219,8 @@ func TestParseDocErrors(t *testing.T) {
 		{"datasets_not_list", "a.md", "title: A\ndatasets: nope", sqlFence, "must be a list"},
 		{"datasets_bad_alias", "a.md", "title: A\ndatasets: [bad-alias]", sqlFence, "not a bare identifier"},
 		{"datasets_duplicate", "a.md", "title: A\ndatasets: [items, items]", sqlFence, "twice"},
+		{"datasets_hint_not_string", "a.md", "title: A\ndatasets: [items]\ndatasets_hint: [a, b]", sqlFence, "must be a string"},
+		{"datasets_hint_without_datasets", "a.md", "title: A\ndatasets_hint: \"nowhere to show\"", sqlFence, "never renders"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

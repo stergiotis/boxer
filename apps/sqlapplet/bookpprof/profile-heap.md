@@ -7,6 +7,7 @@ icon: "🧠"
 endpoint: introspection
 tabs: [table, detail]
 datasets: [pprof_heap]
+datasets_hint: "Capture one from imzrt → Profiles → Capture Heap."
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
@@ -20,8 +21,9 @@ they answer: **in_use** (bytes live at the last GC — who holds memory) and
 makes garbage). A site with modest `in_use` and huge `churn` is a
 GC-pressure source even though it never shows up in a memory-leak hunt.
 
-**Needs a capture first.** Open imzrt → Profiles → *Capture Heap*; this
-applet binds the newest `pprof_heap` dataset when it opens. Re-captures
+**Needs a capture.** Open imzrt → Profiles → *Capture Heap*, before or after
+opening this applet: with no `pprof_heap` dataset yet it says so and keeps
+looking, then binds and re-runs on its own once one appears. Re-captures
 republish onto the same dataset — Run refreshes an open window.
 
 **The knobs.** `fn_like` filters allocation sites (`ILIKE`); `lim` caps the

@@ -90,6 +90,16 @@ type AppletDef struct {
 	// ephemeral handle before mount. The corpus gate treats them as
 	// valid-by-declaration.
 	Datasets []string
+	// DatasetsHint is the frontmatter `datasets_hint`: one line telling a
+	// reader how to produce the declared datasets, shown in the applet's
+	// notice strip while an alias is still unbound. Optional, and only
+	// meaningful alongside Datasets.
+	//
+	// It exists because the alias is the only thing the runtime knows: play
+	// can say `pprof_cpu` has nothing behind it, but only the author knows
+	// that imzrt's Profiles tab is what puts something there. Without it the
+	// empty state names a table the reader has never heard of.
+	DatasetsHint string
 	// Source is the document's raw markdown — the definition itself, kept so
 	// an instance can show a reader what it was minted from (play's
 	// "Definition" drawer). Bytes rather than a parsed markdown.Doc: parsing
@@ -315,6 +325,9 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 	if def.Datasets, err = parseDatasets(bookID, path, fm["datasets"]); err != nil {
 		return
 	}
+	if def.DatasetsHint, err = parseDatasetsHint(bookID, path, fm["datasets_hint"], def.Datasets); err != nil {
+		return
+	}
 	// The §SD5 class, computed once per corpus at parse time. An
 	// unclassifiable buffer is a definition error (§SD6), never a runtime
 	// surprise — the conservative direction with the corpus as the gate.
@@ -446,6 +459,28 @@ func parseDatasets(bookID string, path string, v any) (datasets []string, err er
 		}
 		seen[alias] = struct{}{}
 		datasets = append(datasets, alias)
+	}
+	return
+}
+
+// parseDatasetsHint maps the frontmatter `datasets_hint` value: absent is
+// empty; a string is the one line the notice strip shows while a declared
+// alias is unbound. Declaring it without `datasets` is a definition error —
+// the hint would never render, which is a typo worth catching at the corpus
+// gate rather than a harmless extra key.
+func parseDatasetsHint(bookID string, path string, v any, datasets []string) (hint string, err error) {
+	if v == nil {
+		return
+	}
+	s, isStr := v.(string)
+	if !isStr {
+		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `datasets_hint` must be a string", bookID, path)
+		return
+	}
+	hint = strings.TrimSpace(s)
+	if hint != "" && len(datasets) == 0 {
+		err = eh.Errorf("sqlapplet: %s/%s: `datasets_hint` without `datasets` never renders", bookID, path)
+		return
 	}
 	return
 }

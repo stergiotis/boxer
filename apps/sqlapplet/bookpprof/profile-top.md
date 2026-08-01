@@ -7,6 +7,7 @@ icon: "🔥"
 endpoint: introspection
 tabs: [table, detail]
 datasets: [pprof_cpu]
+datasets_hint: "Capture one from imzrt → Profiles → Capture CPU."
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
@@ -19,10 +20,11 @@ function) and its **cumulative** cost (samples whose stack contains it
 anywhere). Rows sort by self cost; click a column header to re-sort, and a
 row's Detail shows both numbers with the package split out.
 
-**Needs a capture first.** Open imzrt → Profiles → *Capture CPU*; this
-applet binds the newest `pprof_cpu` dataset when it opens. A later
-re-capture republishes onto the same dataset, so an already-open window
-just needs Run to see the fresh profile.
+**Needs a capture.** Open imzrt → Profiles → *Capture CPU*. Order does not
+matter: the applet binds the newest `pprof_cpu` dataset at open, and if
+there is none it says so and keeps looking, then binds and re-runs on its
+own once one appears. A later re-capture republishes onto the same dataset,
+so an already-open window just needs Run to see the fresh profile.
 
 **The knobs.** `fn_like` filters function names (`ILIKE`, so
 `%runtime%` or `%.Render` shapes work); `lim` caps the rows.
