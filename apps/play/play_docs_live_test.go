@@ -9,6 +9,9 @@ package play
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +97,44 @@ func TestLiveDocsLookupCoversTheOtherKinds(t *testing.T) {
 // survive the round trip.
 func TestLiveDocsLookupUnknownNameIsEmptyNotAnError(t *testing.T) {
 	require.Empty(t, runDocsQuery(t, "no_such_entity_anywhere_xyzzy"))
+}
+
+// execRawSQL runs a statement with no result set (DDL) against the live
+// endpoint directly over HTTP, bypassing Client: the pre-execute pass
+// registry and dispatch machinery have nothing to contribute to a bare
+// CREATE/DROP FUNCTION, and clientExecutor expects an Arrow-producing query.
+func execRawSQL(t *testing.T, sql string) {
+	t.Helper()
+	resp, err := http.Post(liveClickHouseURL(t), "text/plain", strings.NewReader(sql))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "clickhouse DDL failed: %s", body)
+}
+
+// system.functions carries no prose for a user-defined function — description,
+// syntax, arguments, returned_value and examples are empty for every
+// SQLUserDefined row (checked live against this repo's own dev endpoint,
+// which already carries 397 of them). defaultDocsQuery's UNION half exists
+// so the pane still answers something: the function's own create_query,
+// fenced as SQL. This proves that half end to end against a function this
+// test owns, rather than one of the pre-existing fixtures, so it does not
+// depend on what happens to be installed on whatever server CLICKHOUSE_URL
+// points to.
+func TestLiveDocsLookupIncludesSQLUserDefinedFunctions(t *testing.T) {
+	const fn = "BOXER_PLAY_DOCS_TEST_PROBE"
+	cleanup := func() { execRawSQL(t, "DROP FUNCTION IF EXISTS "+fn) }
+	cleanup() // in case a previous run of this test crashed before its own cleanup
+	t.Cleanup(cleanup)
+	execRawSQL(t, "CREATE FUNCTION "+fn+" AS (x) -> x + 1")
+
+	got := runDocsQuery(t, fn)
+	require.Len(t, got, 1, "no other kind should share this name")
+	require.Equal(t, fn, got[0].Name)
+	require.Equal(t, "SQL User Defined Function", got[0].Kind)
+	require.Contains(t, got[0].Body, "CREATE FUNCTION "+fn, "the body is the function's own definition")
+	require.Contains(t, got[0].Body, "```sql", "fenced so Insert/Replace work on it")
+	require.Empty(t, got[0].Source, "no file backs a user-defined function")
 }
 
 // The bodies really are Markdown with fenced SQL examples, which is what the

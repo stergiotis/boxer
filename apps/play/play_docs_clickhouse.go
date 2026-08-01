@@ -47,7 +47,11 @@ const (
 // data type AND an aggregate-function combinator; `JSON` a data type AND a
 // format), and which one the reader meant is a question for the pane, not the
 // query. Ordering by the rendered type keeps the kind list stable and
-// alphabetical across lookups.
+// alphabetical across lookups — which is why the two halves below are UNIONed
+// inside a subquery rather than plainly: a trailing ORDER BY after a bare
+// UNION ALL binds only to the last SELECT in ClickHouse, not to the combined
+// result (verified live against 26.7), so ordering the outer query is load-
+// bearing, not stylistic.
 //
 // `toString(type)` is load-bearing, not decoration. `type` is an Enum8, and
 // ClickHouse ships an Enum8 over Arrow as the raw int8 ordinal — the names do
@@ -55,13 +59,35 @@ const (
 // numbers and no way back to "Table Engine". Rendering it server-side is the
 // only place the enum's dictionary exists.
 //
+// The second half surfaces this server's own SQL user-defined functions
+// (`system.functions.origin = 'SQLUserDefined'`), which `system.documentation`
+// never carries — it is ClickHouse's shipped, static corpus, not a live
+// reflection of what a given server has registered. Those rows carry no
+// prose (description/syntax/examples are empty for every user-defined
+// function on a server this was checked against), so the body is built from
+// `create_query` instead — the function's own definition, fenced as SQL so
+// the pane's Insert/Replace actions work on it like any other example.
+// `create_query` and `origin` are marked "Obsolete" in system.functions'
+// own documentation but still populated correctly as of 26.7; if a future
+// server stops filling them, this half degrades to zero extra rows, not an
+// error (see decodeDocRows). Deliberately scoped to SQLUserDefined only, not
+// ExecutableUserDefined/WasmUserDefined — those have no comparable
+// definition column to show.
+//
 // A re-user pointing ClickHouseDocsSource.Query at a different table must
 // keep this four-column shape (aliased name/type/description/source) and the
 // {n:String} parameter — see decodeDocRows.
-const defaultDocsQuery = "SELECT name, toString(type) AS type, description, source " +
+const defaultDocsQuery = "SELECT * FROM (" +
+	"SELECT name, toString(type) AS type, description, source " +
 	"FROM system.documentation " +
 	"WHERE lower(name) = lower({n:String}) " +
-	"ORDER BY name = {n:String} DESC, type"
+	"UNION ALL " +
+	"SELECT name, 'SQL User Defined Function' AS type, " +
+	"concat('User-defined function:\\n\\n```sql\\n', create_query, '\\n```') AS description, " +
+	"'' AS source " +
+	"FROM system.functions " +
+	"WHERE origin = 'SQLUserDefined' AND lower(name) = lower({n:String})" +
+	") ORDER BY name = {n:String} DESC, type"
 
 // ClickHouseDocsSource wraps a ClickHouse Client as a DocsSourceI. It is the
 // source an unconfigured PlayApp with a live client already uses
