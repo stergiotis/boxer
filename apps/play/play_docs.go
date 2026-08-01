@@ -1,95 +1,65 @@
 package play
 
 // The Docs pane's data half: turning the name under the caret into
-// ClickHouse's own reference documentation.
+// documentation, from whatever DocsSourceI is installed.
 //
-// `system.documentation` is a table the server ships (ClickHouse 26.x): one
-// row per documented entity — functions, aggregate functions, data types,
-// table engines, table functions, formats, settings, system tables and a dozen
-// more kinds — carrying the reference prose as Markdown. It is the same
-// content published on the website, answered by the server actually being
-// queried, which is why it is worth a live query rather than a vendored copy:
-// the docs then match the server's version by construction.
+// This file is the source-agnostic engine — debounce, cache, and the
+// caret-to-candidate-name walk — and knows nothing about ClickHouse. The
+// default source (ClickHouse's own system.documentation) lives in
+// play_docs_clickhouse.go; see DocsSourceI (play_docs_source.go) for the
+// seam a re-user installs a different one through, and
+// doc/howto/play-pluggable-docs.md for how.
 //
-// The query runs through the ordinary lane machinery (newNodeLane over
-// clientExecutor), so it inherits endpoint routing, auth, the pre-execute pass
-// registry and the Arrow decode — and, being a lane, it runs off the render
-// thread and memoises. What this file adds on top is a debounce (the caret
-// moves per keystroke; the server should not) and a small cache of parsed
-// documents, because the lane holds exactly one result and a reader flipping
-// between two names would otherwise re-query both every time.
+// What this file adds on top of a source's raw Lookup is a debounce (the
+// caret moves per keystroke; a source should not be asked that often) and a
+// small cache of parsed documents, because a reader flipping between two
+// names would otherwise re-look-up both every time.
 
 import (
 	"strings"
 	"time"
 
-	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
 const (
 	// docsQuiescence is how long the caret's entity must hold still before a
-	// lookup ships. The caret moves per keystroke and per arrow key; the
-	// server should see neither. Short enough that a deliberate pause on a
+	// lookup ships. The caret moves per keystroke and per arrow key; a
+	// source should see neither. Short enough that a deliberate pause on a
 	// name feels immediate.
 	docsQuiescence = 250 * time.Millisecond
-	// docsProbeTimeout bounds one lookup. The table is a few thousand rows
-	// held in memory server-side, so a slow answer means the endpoint is in
-	// trouble, not that the query is hard.
-	docsProbeTimeout = 10 * time.Second
-	// docsCacheMax is how many looked-up names are kept. Documentation bodies
-	// run from ~80 B to ~80 KB, so this is bounded by the largest plausible
-	// working set rather than by memory pressure.
+	// docsCacheMax is how many looked-up names are kept. Documentation
+	// bodies can run large (ClickHouse's MergeTree entry is ~80 KB), so this
+	// is bounded by the largest plausible working set rather than by memory
+	// pressure.
 	docsCacheMax = 32
-	// docsSiteBase is where the site-relative links in the corpus point.
-	// ClickHouse writes them for its own documentation site (`/sql-reference/…`),
-	// and left alone they render as hyperlinks that resolve to nothing.
-	docsSiteBase = "https://clickhouse.com/docs"
 )
 
-// docsQuery is the lookup. It matches case-insensitively and then prefers the
-// exact spelling, because ClickHouse's own naming is inconsistent about it —
-// `count` is lower-case, `INET6_ATON` upper — and a reader who typed one
-// casing of a case-insensitive function should still get the page.
-//
-// The kind is not filtered here: ~70 names carry more than one (`Array` is a
-// data type AND an aggregate-function combinator; `JSON` a data type AND a
-// format), and which one the reader meant is a question for the pane, not the
-// query. Ordering by the rendered type keeps the kind list stable and
-// alphabetical across lookups.
-//
-// `toString(type)` is load-bearing, not decoration. `type` is an Enum8, and
-// ClickHouse ships an Enum8 over Arrow as the raw int8 ordinal — the names do
-// not cross the wire at all, so a client reading the column directly gets
-// numbers and no way back to "Table Engine". Rendering it server-side is the
-// only place the enum's dictionary exists.
-const docsQuery = "SELECT name, toString(type) AS type, description, source " +
-	"FROM system.documentation " +
-	"WHERE lower(name) = lower({n:String}) " +
-	"ORDER BY name = {n:String} DESC, type"
-
-// docEntry is one `system.documentation` row, with its rendered form attached
-// once something asks for it.
+// docEntry is one DocsSourceI result, with its rendered form attached once
+// something asks for it.
 type docEntry struct {
-	Name   string
-	Kind   string // the `type` enum's text: "Function", "Data Type", …
-	Body   string // Markdown, as the server stores it
-	Source string // path in the ClickHouse tree, empty when unknown
+	DocsEntry
+	// source is what produced this entry, kept for AbsolutiseLinks — the
+	// rewrite happens lazily on first render, matching how markdown.Parse
+	// itself is deferred (a name with several kinds fetches every one, and
+	// an unseen kind's large body should cost nothing until shown).
+	source DocsSourceI
 
 	// doc is Body parsed, built on first render rather than on fetch: a name
-	// with several kinds fetches every one of them, and `MergeTree`'s body
-	// alone is ~80 KB of Markdown that a reader looking at `Dictionary` never
-	// sees.
+	// with several kinds fetches every one of them, and a large body alone
+	// is more Markdown than a reader looking at a different kind ever sees.
 	doc *markdown.Doc
 }
 
 // rendered returns the parsed document, parsing on first use.
 func (inst *docEntry) rendered() *markdown.Doc {
 	if inst.doc == nil {
-		inst.doc = markdown.Parse([]byte(absolutiseDocLinks(inst.Body)))
+		md := inst.Body
+		if inst.source != nil {
+			md = inst.source.AbsolutiseLinks(md)
+		}
+		inst.doc = markdown.Parse([]byte(md))
 	}
 	return inst.doc
 }
@@ -97,17 +67,20 @@ func (inst *docEntry) rendered() *markdown.Doc {
 // docsResult is what one name's lookup produced.
 type docsResult struct {
 	entries []docEntry
-	// err is the lookup's failure, if any. A server too old to have the table
-	// lands here — an honest "this endpoint cannot answer", not an empty page.
+	// err is the lookup's failure, if any. A source too old, or too
+	// differently shaped, to answer lands here — an honest "this source
+	// cannot answer", not an empty page.
 	err error
 }
 
-// docsDriver owns the lookup lane and the parsed-document cache.
+// docsDriver owns the debounce, the parsed-document cache, and the installed
+// DocsSourceI. It has no opinion on how a source finds its answers.
 //
-// Render-thread-only. A nil driver (tests, a client-less session) makes every
-// method a no-op and the pane says so, the same shape DiagnosticsDriver uses.
+// Render-thread-only. A nil source (tests, a client-less session, or before
+// SetDocsSource installs one) makes lookup a no-op and the pane says so, the
+// same shape DiagnosticsDriver uses.
 type docsDriver struct {
-	lane *nodeLane
+	source DocsSourceI
 
 	// cache maps a lowercased name to its result; order is the LRU, most
 	// recently used last.
@@ -125,19 +98,15 @@ type docsDriver struct {
 	now func() time.Time
 }
 
-func newDocsDriver(client *Client) (inst *docsDriver) {
-	inst = &docsDriver{cache: make(map[string]*docsResult, docsCacheMax)}
-	if client != nil {
-		inst.lane = newNodeLane(clientExecutor{client: client, opts: newExecOptions("docs")},
-			memory.NewGoAllocator(), docsProbeTimeout)
-	}
+func newDocsDriver(source DocsSourceI) (inst *docsDriver) {
+	inst = &docsDriver{source: source, cache: make(map[string]*docsResult, docsCacheMax)}
 	return
 }
 
-// close tears down the lane (PlayApp.Close). Idempotent, nil-safe.
+// close tears down the installed source (PlayApp.Close). Idempotent, nil-safe.
 func (inst *docsDriver) close() {
-	if inst != nil && inst.lane != nil {
-		inst.lane.close()
+	if inst != nil && inst.source != nil {
+		inst.source.Close()
 	}
 }
 
@@ -158,8 +127,8 @@ func (inst *docsDriver) cached(name string) (res *docsResult) {
 }
 
 // lookup returns what is known about `name`, driving the fetch as a side
-// effect: arming the debounce, shipping the query once the name holds still,
-// and draining a finished lane run into the cache.
+// effect: arming the debounce, asking the source once the name holds still,
+// and draining a finished lookup into the cache.
 //
 // CALL IT AT MOST ONCE PER FRAME. The debounce is a single slot, so two calls
 // naming different entities restart each other's timer and neither ever
@@ -177,7 +146,7 @@ func (inst *docsDriver) lookup(name string) (res *docsResult, loading bool) {
 	if hit := inst.cached(name); hit != nil {
 		return hit, false
 	}
-	if inst.lane == nil {
+	if inst.source == nil {
 		return
 	}
 	key := strings.ToLower(name)
@@ -195,22 +164,17 @@ func (inst *docsDriver) lookup(name string) (res *docsResult, loading bool) {
 		return nil, false
 	}
 
-	node := compiledNode{SQL: docsQuery, Params: map[string]string{"n": name}}
-	view := inst.lane.demand(node)
-	defer func() {
-		if view.rec != nil {
-			view.rec.Release()
-		}
-	}()
 	inst.pending = key
-	if view.key != node.key() {
-		// Nothing served for THIS name yet — either the first demand or a
-		// stale last-good from the previous one.
+	entries, ready, err := inst.source.Lookup(name)
+	if !ready {
 		return nil, true
 	}
-	stored := &docsResult{err: view.err}
-	if view.err == nil {
-		stored.entries = decodeDocRows(view.rec)
+	stored := &docsResult{err: err}
+	if err == nil {
+		stored.entries = make([]docEntry, len(entries))
+		for i, e := range entries {
+			stored.entries[i] = docEntry{DocsEntry: e, source: inst.source}
+		}
 	}
 	inst.store(key, stored)
 	inst.pending = ""
@@ -239,103 +203,19 @@ func (inst *docsDriver) touch(key string) {
 	inst.order = append(inst.order, key)
 }
 
-// decodeDocRows lifts the four string columns out of the served record.
-//
-// `type` is an Enum8 server-side; the Arrow stream carries it as a dictionary
-// or as a plain string depending on the server's encoding choice, so both are
-// read through the same value accessor.
-func decodeDocRows(rec arrow.RecordBatch) (out []docEntry) {
-	if rec == nil || rec.NumRows() == 0 {
-		return
+// SetDocsSource overrides the Docs pane's lookup, replacing whatever source
+// is currently installed (closing it first). Passing nil restores ClickHouse's
+// own system.documentation via NewClickHouseDocsSource — what an unconfigured
+// PlayApp with a live client already uses. Takes effect on the next frame;
+// there is nothing else to unregister. See doc/howto/play-pluggable-docs.md.
+func (inst *PlayApp) SetDocsSource(src DocsSourceI) {
+	if inst.docs != nil {
+		inst.docs.close()
 	}
-	col := func(name string) func(int) string {
-		idx := rec.Schema().FieldIndices(name)
-		if len(idx) == 0 {
-			return func(int) string { return "" }
-		}
-		return stringAccessor(rec.Column(idx[0]))
+	if src == nil && inst.client != nil {
+		src = NewClickHouseDocsSource(inst.client)
 	}
-	name, kind, body, source := col("name"), col("type"), col("description"), col("source")
-	out = make([]docEntry, 0, rec.NumRows())
-	for i := 0; i < int(rec.NumRows()); i++ {
-		out = append(out, docEntry{
-			Name: name(i), Kind: kind(i), Body: body(i), Source: source(i),
-		})
-	}
-	return
-}
-
-// stringAccessor reads an Arrow column as text, covering the encodings a
-// String or Enum column arrives in. Anything else reads as empty rather than
-// panicking: a server whose schema drifted should degrade to a blank field,
-// not take the pane down.
-func stringAccessor(a arrow.Array) func(int) string {
-	switch v := a.(type) {
-	case *array.String:
-		return func(i int) string {
-			if v.IsNull(i) {
-				return ""
-			}
-			return v.Value(i)
-		}
-	case *array.LargeString:
-		return func(i int) string {
-			if v.IsNull(i) {
-				return ""
-			}
-			return v.Value(i)
-		}
-	case *array.Binary:
-		return func(i int) string {
-			if v.IsNull(i) {
-				return ""
-			}
-			return string(v.Value(i))
-		}
-	case *array.Dictionary:
-		inner := stringAccessor(v.Dictionary())
-		return func(i int) string {
-			if v.IsNull(i) {
-				return ""
-			}
-			return inner(v.GetValueIndex(i))
-		}
-	default:
-		return func(int) string { return "" }
-	}
-}
-
-// absolutiseDocLinks rewrites the corpus's site-relative link targets onto the
-// public documentation site.
-//
-// ClickHouse authors these for its own site — `[DateTime](/sql-reference/…)` —
-// and the widget has no base to resolve them against, so left alone they
-// render as hyperlinks that go nowhere. This is a textual pre-pass rather than
-// a resolver because the markdown widget's resolver seam covers wikilinks and
-// embeds, not plain CommonMark links.
-//
-// Deliberately narrow: only `](/` is rewritten. A protocol-relative `](//host`
-// is already absolute and must not gain a prefix, and an in-document anchor
-// `](#section)` resolves within the page.
-func absolutiseDocLinks(md string) string {
-	if !strings.Contains(md, "](/") {
-		return md
-	}
-	var b strings.Builder
-	b.Grow(len(md) + 64)
-	for {
-		i := strings.Index(md, "](/")
-		if i < 0 {
-			b.WriteString(md)
-			return b.String()
-		}
-		b.WriteString(md[:i+2])
-		md = md[i+2:]
-		if strings.HasPrefix(md, "//") {
-			continue // protocol-relative: already absolute
-		}
-		b.WriteString(docsSiteBase)
-	}
+	inst.docs = newDocsDriver(src)
 }
 
 // docsCandidates is the ranked list of names to look up for one caret
@@ -367,75 +247,5 @@ func docsCandidates(e highlight.CaretEntity, ok bool) (out []string) {
 	for _, n := range e.Enclosing {
 		add(n)
 	}
-	return
-}
-
-// docsLinkClaimed reports whether a link target is a ClickHouse documentation
-// page, and so belongs in this pane rather than in a browser.
-//
-// It runs once per link per frame during layout, so it is a cheap syntactic
-// test and never a lookup: whether the target names something this server
-// documents is decided on the click, where a query is affordable. Claiming a
-// page that turns out to be undocumented is recoverable — the pane says so and
-// offers the original URL — whereas consulting the cache here would make a
-// link's appearance depend on what happened to be cached, and links would
-// change shape as the reader scrolled.
-//
-// Absolute URLs are claimed only for the documentation site; a link out to
-// GitHub or an RFC is exactly the case that should still leave for a browser.
-func docsLinkClaimed(url string) bool {
-	switch {
-	case url == "":
-		return false
-	case strings.HasPrefix(url, "#"):
-		// A fragment alone addresses this same page. There is nothing to
-		// navigate TO, and the widget cannot scroll to it from here.
-		return false
-	case strings.HasPrefix(url, docsSiteBase):
-		return true
-	case strings.HasPrefix(url, "http://"), strings.HasPrefix(url, "https://"):
-		return false
-	case strings.HasPrefix(url, "/"), strings.HasPrefix(url, "../"), strings.HasPrefix(url, "./"):
-		// The corpus's own relative and root-relative forms.
-		return true
-	}
-	return false
-}
-
-// docsLinkCandidates ranks the names a claimed link might be naming, best
-// first, for the pane to try in order.
-//
-// The LABEL leads, because it is what the author wrote to name the thing:
-// “[`UInt8`](/sql-reference/data-types/int-uint)“ points at a page covering
-// a dozen types and only the label says which one. Measured over the corpus
-// the label and the URL's last segment each resolve about 60% of links on
-// their own, and they fail on different links — the page-per-family targets
-// (`int-uint`, `special-data-types/expression`) are exactly where the label
-// carries the answer.
-//
-// The fragment comes second: doc URLs point at a section of a page, and the
-// section is usually the entity (`.../date-time-functions#tohour`).
-func docsLinkCandidates(label string, url string) (out []string) {
-	seen := make(map[string]struct{}, 3)
-	add := func(n string) {
-		n = strings.TrimSpace(strings.Trim(n, "`"))
-		if n == "" || strings.ContainsAny(n, " \t/\\") {
-			return
-		}
-		k := strings.ToLower(n)
-		if _, dup := seen[k]; dup {
-			return
-		}
-		seen[k] = struct{}{}
-		out = append(out, n)
-	}
-	add(label)
-
-	path, frag, _ := strings.Cut(url, "#")
-	add(frag)
-	if i := strings.LastIndexByte(path, '/'); i >= 0 {
-		path = path[i+1:]
-	}
-	add(strings.TrimSuffix(path, ".md"))
 	return
 }

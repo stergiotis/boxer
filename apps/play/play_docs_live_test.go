@@ -13,15 +13,16 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stretchr/testify/require"
 )
 
-// runDocsQuery ships the pane's own query for one name and decodes it exactly
-// as the driver would.
-func runDocsQuery(t *testing.T, name string) []docEntry {
+// runDocsQuery ships ClickHouseDocsSource's default query for one name and
+// decodes it exactly as the driver would.
+func runDocsQuery(t *testing.T, name string) []DocsEntry {
 	t.Helper()
 	client := NewClient(ClientConfig{URL: liveClickHouseURL(t)}, nil)
-	node := compiledNode{SQL: docsQuery, Params: map[string]string{"n": name}}
+	node := compiledNode{SQL: defaultDocsQuery, Params: map[string]string{"n": name}}
 	rec, _, _, err := clientExecutor{client: client, opts: newExecOptions("docs")}.
 		execute(context.Background(), node, memory.NewGoAllocator())
 	require.NoError(t, err, "the documentation lookup must run on this endpoint")
@@ -100,7 +101,7 @@ func TestLiveDocsLookupUnknownNameIsEmptyNotAnError(t *testing.T) {
 func TestLiveDocsBodiesCarryFencedSqlExamples(t *testing.T) {
 	got := runDocsQuery(t, "toHour")
 	require.NotEmpty(t, got)
-	doc := got[0].rendered()
+	doc := markdown.Parse([]byte(got[0].Body))
 	require.NotNil(t, doc, "the body must parse as markdown")
 	require.Contains(t, got[0].Body, "```sql", "examples are fenced as sql")
 }
@@ -109,7 +110,7 @@ func TestLiveDocsBodiesCarryFencedSqlExamples(t *testing.T) {
 // name settles, and the answer lands in the cache.
 func TestLiveDocsDriverDebouncesThenCaches(t *testing.T) {
 	client := NewClient(ClientConfig{URL: liveClickHouseURL(t)}, nil)
-	d := newDocsDriver(client)
+	d := newDocsDriver(NewClickHouseDocsSource(client))
 	defer d.close()
 	clock := &docsClock{t: time.Unix(1000, 0)}
 	d.now = clock.now

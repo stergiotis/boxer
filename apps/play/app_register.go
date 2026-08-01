@@ -118,11 +118,12 @@ var (
 // NewLivePlayApp builds a PlayApp wired to a live ClickHouse Client — the same
 // query-graph wiring PlayLauncher.Mount uses — and returns it ready for a
 // re-user to customize before mounting (e.g. SetDetailContent to override the
-// Detail body). It is the supported constructor for embedding the playground
+// Detail body, or SetDocsSource to point the Docs pane at a different
+// corpus). It is the supported constructor for embedding the playground
 // behind a domain-specific AppI: the live query graph type is unexported, so an
 // external module cannot call NewPlayApp directly. maxHistory bounds each lane's
 // result-history ring (the shipped launcher uses 100). See
-// doc/howto/play-pluggable-detail.md.
+// doc/howto/play-pluggable-detail.md and doc/howto/play-pluggable-docs.md.
 //
 // It also installs the client's pre-execute SQL pipeline — the standard pass
 // set (ADR-0108, e.g. LW_ID_* macro expansion) plus the schema-aware leeway

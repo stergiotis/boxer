@@ -8,9 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stretchr/testify/require"
@@ -38,85 +35,6 @@ func TestDocsCandidatesOrder(t *testing.T) {
 	}
 }
 
-// The corpus links to ClickHouse's own site with root-relative targets. Left
-// alone they render as hyperlinks that resolve to nothing.
-func TestAbsolutiseDocLinks(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"see [DateTime](/sql-reference/data-types/datetime)",
-			"see [DateTime](" + docsSiteBase + "/sql-reference/data-types/datetime)"},
-		// Already absolute: untouched.
-		{"[x](https://example.org/a)", "[x](https://example.org/a)"},
-		// Protocol-relative is already absolute and must not gain a prefix.
-		{"[x](//cdn.example.org/a)", "[x](//cdn.example.org/a)"},
-		// An in-document anchor resolves within the page.
-		{"[x](#syntax)", "[x](#syntax)"},
-		// Several in one document, and a buffer with none at all.
-		{"[a](/one) and [b](/two)",
-			"[a](" + docsSiteBase + "/one) and [b](" + docsSiteBase + "/two)"},
-		{"no links here", "no links here"},
-		{"", ""},
-	}
-	for _, tc := range cases {
-		require.Equal(t, tc.want, absolutiseDocLinks(tc.in), "input %q", tc.in)
-	}
-}
-
-// docRecord builds a record shaped like the lookup's result set.
-func docRecord(t *testing.T, names, kinds, bodies, sources []string) arrow.RecordBatch {
-	t.Helper()
-	alloc := memory.NewGoAllocator()
-	schema := arrow.NewSchema([]arrow.Field{
-		{Name: "name", Type: arrow.BinaryTypes.String},
-		{Name: "type", Type: arrow.BinaryTypes.String},
-		{Name: "description", Type: arrow.BinaryTypes.String},
-		{Name: "source", Type: arrow.BinaryTypes.String},
-	}, nil)
-	b := array.NewRecordBuilder(alloc, schema)
-	defer b.Release()
-	for i, col := range [][]string{names, kinds, bodies, sources} {
-		b.Field(i).(*array.StringBuilder).AppendValues(col, nil)
-	}
-	return b.NewRecordBatch()
-}
-
-func TestDecodeDocRows(t *testing.T) {
-	rec := docRecord(t,
-		[]string{"Array", "Array"},
-		[]string{"Data Type", "Aggregate Function Combinator"},
-		[]string{"the type", "the combinator"},
-		[]string{"src/DataTypes/DataTypeArray.cpp", ""})
-	defer rec.Release()
-
-	got := decodeDocRows(rec)
-	require.Len(t, got, 2)
-	require.Equal(t, "Array", got[0].Name)
-	require.Equal(t, "Data Type", got[0].Kind)
-	require.Equal(t, "the type", got[0].Body)
-	require.Equal(t, "src/DataTypes/DataTypeArray.cpp", got[0].Source)
-	require.Empty(t, got[1].Source, "an unknown source is empty, not missing")
-
-	require.Empty(t, decodeDocRows(nil), "no record decodes to nothing")
-}
-
-// A column the server did not send reads as empty rather than panicking: the
-// pane must degrade to a blank field, not take the tab down.
-func TestDecodeDocRowsToleratesAMissingColumn(t *testing.T) {
-	alloc := memory.NewGoAllocator()
-	schema := arrow.NewSchema([]arrow.Field{
-		{Name: "name", Type: arrow.BinaryTypes.String},
-	}, nil)
-	b := array.NewRecordBuilder(alloc, schema)
-	defer b.Release()
-	b.Field(0).(*array.StringBuilder).AppendValues([]string{"toHour"}, nil)
-	rec := b.NewRecordBatch()
-	defer rec.Release()
-
-	got := decodeDocRows(rec)
-	require.Len(t, got, 1)
-	require.Equal(t, "toHour", got[0].Name)
-	require.Empty(t, got[0].Body)
-}
-
 // --- cache and debounce ---
 
 type docsClock struct{ t time.Time }
@@ -124,8 +42,8 @@ type docsClock struct{ t time.Time }
 func (inst *docsClock) now() time.Time          { return inst.t }
 func (inst *docsClock) advance(d time.Duration) { inst.t = inst.t.Add(d) }
 
-// newDocsDriver with no client leaves the lane nil, which is the shape a
-// client-less session has; the cache half still works, which is what these
+// newDocsDriver with no source leaves lookups unavailable, which is the shape
+// a client-less session has; the cache half still works, which is what these
 // exercise.
 func testDocsDriver() (*docsDriver, *docsClock) {
 	clock := &docsClock{t: time.Unix(1000, 0)}
@@ -136,7 +54,7 @@ func testDocsDriver() (*docsDriver, *docsClock) {
 
 func TestDocsCacheServesWithoutTheLane(t *testing.T) {
 	d, _ := testDocsDriver()
-	want := &docsResult{entries: []docEntry{{Name: "toHour", Kind: "Function"}}}
+	want := &docsResult{entries: []docEntry{{DocsEntry: DocsEntry{Name: "toHour", Kind: "Function"}}}}
 	d.store("tohour", want)
 
 	// Case-insensitively: ClickHouse's own naming is inconsistent, so the
@@ -179,10 +97,14 @@ func TestDocsCachedDoesNotArmTheDebounce(t *testing.T) {
 
 // --- the pane's resolution walk ---
 
-// docsApp is a PlayApp with a pre-populated documentation cache and no lane,
-// so the walk can be exercised without a server.
+// docsApp is a PlayApp with a pre-populated documentation cache and a
+// lane-less ClickHouseDocsSource, so the walk can be exercised without a
+// server. The lane-less source is safe here: every candidate these tests walk
+// is pre-seeded via store, so lookup always hits the cache and never reaches
+// DocsSourceI.Lookup — it is wired only so followDocsLink has a real
+// LinkCandidates to call.
 func docsApp(entries map[string]*docsResult) *PlayApp {
-	app := &PlayApp{docs: newDocsDriver(nil), docsPane: newDocsPaneState()}
+	app := &PlayApp{docs: newDocsDriver(&ClickHouseDocsSource{SiteBase: defaultDocsSiteBase}), docsPane: newDocsPaneState()}
 	for k, v := range entries {
 		app.docs.store(k, v)
 	}
@@ -190,7 +112,7 @@ func docsApp(entries map[string]*docsResult) *PlayApp {
 }
 
 func withDoc(name, kind string) *docsResult {
-	return &docsResult{entries: []docEntry{{Name: name, Kind: kind, Body: "body"}}}
+	return &docsResult{entries: []docEntry{{DocsEntry: DocsEntry{Name: name, Kind: kind, Body: "body"}}}}
 }
 
 // The walk prefers the name under the caret and falls through to the calls
@@ -273,65 +195,11 @@ func candsAt(sql string, off int) []string {
 
 // --- link routing (ADR-0147's caret seam's sibling: a link is the other way
 // a reader says "tell me about this") ---
-
-// Claiming is a syntactic test that runs per link per frame, so it must not
-// depend on what happens to be cached — a link that changed shape as the
-// reader scrolled would read as a glitch.
-func TestDocsLinkClaimed(t *testing.T) {
-	claimed := []string{
-		"/sql-reference/data-types/datetime",
-		"../data-types/int-uint.md",
-		"./functions/date-time-functions",
-		docsSiteBase + "/sql-reference/functions/date-time-functions#tohour",
-	}
-	for _, u := range claimed {
-		require.True(t, docsLinkClaimed(u), "should stay in the pane: %s", u)
-	}
-	notClaimed := []string{
-		"",
-		"#syntax",                         // addresses this same page
-		"https://github.com/ClickHouse/x", // genuinely elsewhere
-		"http://example.org/",
-		"mailto:a@b.c",
-	}
-	for _, u := range notClaimed {
-		require.False(t, docsLinkClaimed(u), "should leave for a browser: %s", u)
-	}
-}
-
-// The label leads, because it is what the author wrote to name the thing: a
-// page covering a whole family is addressed by one URL and only the label
-// says which member was meant.
-func TestDocsLinkCandidatesPreferTheLabel(t *testing.T) {
-	got := docsLinkCandidates("UInt8", "/sql-reference/data-types/int-uint")
-	require.Equal(t, []string{"UInt8", "int-uint"}, got,
-		"the label answers where the page name cannot")
-
-	// A fragment names a section, which is usually the entity.
-	got = docsLinkCandidates("date and time functions",
-		"/sql-reference/functions/date-time-functions#tohour")
-	require.Equal(t, []string{"tohour", "date-time-functions"}, got,
-		"a multi-word label is not an entity name and is dropped")
-
-	// Backticks are markup, not part of the name; `.md` is not either. The
-	// segment then collapses into the label, because the dedup is
-	// case-insensitive — which it must be, since the lookup is.
-	require.Equal(t, []string{"DateTime"},
-		docsLinkCandidates("`DateTime`", "../data-types/datetime.md"))
-
-	// Label and fragment collapse when they agree, and the page they live on
-	// stays as the last resort — `date-time` is not an entity, but a corpus
-	// where it became one should still be reachable.
-	require.Equal(t, []string{"toHour", "date-time"},
-		docsLinkCandidates("toHour", "/sql-reference/functions/date-time#toHour"))
-}
-
-func TestDocsAbsoluteURL(t *testing.T) {
-	require.Equal(t, docsSiteBase+"/sql-reference/x", docsAbsoluteURL("/sql-reference/x"))
-	require.Equal(t, "https://example.org/a", docsAbsoluteURL("https://example.org/a"))
-	require.Equal(t, docsSiteBase+"/data-types/x.md", docsAbsoluteURL("../data-types/x.md"))
-	require.Equal(t, docsSiteBase+"/functions/y", docsAbsoluteURL("./functions/y"))
-}
+//
+// The claim/candidate/absolute-URL heuristics themselves are
+// ClickHouseDocsSource's own concern — see play_docs_clickhouse_test.go —
+// these exercise the pane-state machine (followDocsLink/resolveDocs) that
+// sits above whatever DocsSourceI is installed.
 
 // Following a link pins the pane: the caret has not moved, so leaving Follow
 // on would snap it back on the next frame and the click would look inert.

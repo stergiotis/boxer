@@ -1,6 +1,6 @@
 package play
 
-// The Docs pane's render half: ClickHouse's reference documentation for
+// The Docs pane's render half: the installed DocsSourceI's documentation for
 // whatever the caret is pointing at, as a markdown view.
 //
 // It is a TOOL pane, not a result panel — it registers with a nil PanelI and
@@ -88,7 +88,7 @@ func (inst *PlayApp) renderDocsTab() {
 		}
 	}
 
-	if inst.docs == nil || inst.docs.lane == nil {
+	if inst.docs == nil || inst.docs.source == nil {
 		for rt := range c.RichTextLabel("No client in this session — documentation lookup is unavailable.") {
 			rt.Small().Weak()
 		}
@@ -103,7 +103,7 @@ func (inst *PlayApp) renderDocsTab() {
 	// The body.
 	switch {
 	case s.shown == "":
-		for rt := range c.RichTextLabel("Put the caret on a function, data type, table engine, format or setting name — or type one above. Documentation comes from this server's own `system.documentation`.") {
+		for rt := range c.RichTextLabel(inst.docs.source.EmptyHint()) {
 			rt.Small().Weak()
 		}
 		return
@@ -123,7 +123,7 @@ func (inst *PlayApp) renderDocsTab() {
 		// one case where leaving for a browser is the right answer, so the
 		// target it named is still reachable.
 		if s.navURL != "" {
-			c.HyperlinkTo("open "+s.navURL, docsAbsoluteURL(s.navURL)).OpenInNewTab(true).Send()
+			c.HyperlinkTo("open "+s.navURL, inst.docs.source.AbsoluteURL(s.navURL)).OpenInNewTab(true).Send()
 		}
 		return
 	}
@@ -150,12 +150,12 @@ func (inst *PlayApp) renderDocsTab() {
 		// documented invariant) so the pane cannot collide with the Snippets
 		// tab or the Help center rendering another document the same frame.
 		for range c.IdScope(ids.PrepareStr("docsBody")) {
-			// Links the endpoint itself documents are followed in place; the
-			// rest stay browser hyperlinks (docsLinkClaimed). The action
-			// filter is what keeps a ```response block of query output from
-			// advertising an Insert (sqlBlockActionable).
+			// Links the source itself documents are followed in place; the
+			// rest stay browser hyperlinks (DocsSourceI.LinkClaimed). The
+			// action filter is what keeps a ```response block of query
+			// output from advertising an Insert (sqlBlockActionable).
 			for act := range entry.rendered().RenderActionsN(ids, snippetActionLabels,
-				markdown.WithLinkRouter(docsLinkClaimed, inst.followDocsLink),
+				markdown.WithLinkRouter(inst.docs.source.LinkClaimed, inst.followDocsLink),
 				markdown.WithCodeActionFilter(sqlBlockActionable)) {
 				switch act.Button {
 				case snippetButtonInsert:
@@ -321,23 +321,11 @@ func (inst *PlayApp) pickDocsKind(entries []docEntry) (entry *docEntry) {
 	return &entries[0]
 }
 
-// renderDocsError explains a failed lookup, separating the one cause a reader
-// can act on from the rest.
-//
-// `system.documentation` arrived in ClickHouse 26.x. Against an older server
-// the query fails with an unknown-table error, and saying "this endpoint does
-// not ship the documentation table" is a different message from "the lookup
-// failed" — the first is a fact about the server, the second a fault.
+// renderDocsError explains a failed lookup, in the installed source's own
+// words (DocsSourceI.ExplainError) — a source knows which of its own
+// failures a reader can act on, and which are just "the lookup failed".
 func (inst *PlayApp) renderDocsError(err error) {
-	text := err.Error()
-	if strings.Contains(text, "UNKNOWN_TABLE") || strings.Contains(text, "system.documentation") &&
-		strings.Contains(text, "doesn't exist") {
-		for rt := range c.RichTextLabel("This endpoint has no `system.documentation` — it arrived in ClickHouse 26.x. Documentation lookup needs a newer server.") {
-			rt.Small().Weak()
-		}
-		return
-	}
-	for rt := range c.RichTextLabel("Documentation lookup failed: " + text) {
+	for rt := range c.RichTextLabel(inst.docs.source.ExplainError(err)) {
 		rt.Small().Weak()
 	}
 }
@@ -351,7 +339,7 @@ func (inst *PlayApp) renderDocsError(err error) {
 // Follow on would snap the pane back on the very next frame — the click would
 // look like it did nothing.
 func (inst *PlayApp) followDocsLink(label string, url string) {
-	cands := docsLinkCandidates(label, url)
+	cands := inst.docs.source.LinkCandidates(label, url)
 	if len(cands) == 0 {
 		return
 	}
@@ -366,19 +354,4 @@ func (inst *PlayApp) followDocsLink(label string, url string) {
 	s.manual = ""
 	s.nav, s.navURL = cands, url
 	s.lastMiss = ""
-}
-
-// docsAbsoluteURL turns a corpus link target into something a browser can
-// open. Relative forms are resolved against the documentation site root
-// rather than against the entity's own page, whose location the corpus does
-// not record — good enough to land the reader on the right site, and honest
-// about being a fallback for the case where nothing here could answer.
-func docsAbsoluteURL(url string) string {
-	switch {
-	case strings.HasPrefix(url, "http://"), strings.HasPrefix(url, "https://"):
-		return url
-	case strings.HasPrefix(url, "/"):
-		return docsSiteBase + url
-	}
-	return docsSiteBase + "/" + strings.TrimLeft(strings.TrimPrefix(url, "./"), "./")
 }

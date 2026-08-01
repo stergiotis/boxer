@@ -136,9 +136,11 @@ type PlayApp struct {
 	sql         string
 	lastSentSql string
 
-	// docs is the Docs pane's lookup lane over system.documentation, and
-	// docsPane its view state. A tool pane, not a result panel: its input is
-	// the editor's published caret entity, never the query result.
+	// docs is the Docs pane's lookup driver — cache, debounce, and the
+	// installed DocsSourceI (ClickHouse's system.documentation by default;
+	// SetDocsSource overrides it) — and docsPane its view state. A tool
+	// pane, not a result panel: its input is the editor's published caret
+	// entity, never the query result.
 	docs     *docsDriver
 	docsPane *docsPaneState
 
@@ -830,7 +832,11 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
 	inst.diag = NewDiagnosticsDriver(client)
-	inst.docs = newDocsDriver(client)
+	var docsSource DocsSourceI
+	if client != nil {
+		docsSource = NewClickHouseDocsSource(client)
+	}
+	inst.docs = newDocsDriver(docsSource)
 	inst.docsPane = newDocsPaneState()
 	inst.runsHist = newRunsHistoryDriver(client)
 	inst.pins = newPinDriver(client)
