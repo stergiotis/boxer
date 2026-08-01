@@ -220,6 +220,63 @@ func (p *Plot) areaHandle() widgethandle.WidgetHandle {
 	return widgethandle.Make(p.ids.PrepareStr("implot-area").Derive())
 }
 
+// pxWindow is the plot-area rect a gesture manipulates, in canvas pixels.
+// Pan and zoom compose here rather than in plot space, so every gesture
+// stays correct on any monotone scale (log, symlog), not just linear: the
+// window is inverted through the transform once, at the end.
+type pxWindow struct{ x0, x1, y0, y1 float32 }
+
+// gestureLocks is the per-axis AxisFlagsNoPan / AxisFlagsNoZoom pair,
+// resolved once a frame.
+//
+// The locks are applied per gesture kind rather than to the resulting
+// range, because the two are not the same: an anchored wheel zoom moves an
+// axis's centre as well as its span, so restoring only the span afterwards
+// would let the wheel pan a NoZoom axis.
+type gestureLocks struct{ noPanX, noPanY, noZoomX, noZoomY bool }
+
+func locksOf(x *axisState, y *axisState) gestureLocks {
+	return gestureLocks{
+		noPanX:  x.flags&AxisFlagsNoPan != 0,
+		noPanY:  y.flags&AxisFlagsNoPan != 0,
+		noZoomX: x.flags&AxisFlagsNoZoom != 0,
+		noZoomY: y.flags&AxisFlagsNoZoom != 0,
+	}
+}
+
+// pan translates the window by a pixel delta, skipping a NoPan axis, and
+// reports which axes moved. A zero delta on an axis does not count as a
+// move: a purely vertical drag must not push x through the transform and
+// back, which is lossy and would creep frame after frame.
+func (g gestureLocks) pan(w *pxWindow, dx float32, dy float32) (movedX bool, movedY bool) {
+	if !g.noPanX && dx != 0 {
+		w.x0 -= dx
+		w.x1 -= dx
+		movedX = true
+	}
+	if !g.noPanY && dy != 0 {
+		w.y0 -= dy
+		w.y1 -= dy
+		movedY = true
+	}
+	return movedX, movedY
+}
+
+// zoom scales the window about the anchor point, skipping a NoZoom axis.
+func (g gestureLocks) zoom(w *pxWindow, ax float32, ay float32, factor float32) (movedX bool, movedY bool) {
+	if !g.noZoomX {
+		w.x0 = ax - (ax-w.x0)/factor
+		w.x1 = ax + (w.x1-ax)/factor
+		movedX = true
+	}
+	if !g.noZoomY {
+		w.y0 = ay - (ay-w.y0)/factor
+		w.y1 = ay + (w.y1-ay)/factor
+		movedY = true
+	}
+	return movedX, movedY
+}
+
 // applyInteractions interprets last frame's gesture registers against last
 // frame's transform: drag pan, Shift+drag box-zoom, anchored wheel zoom,
 // double-click fit. One-frame lag by design (see doc.go).
@@ -290,22 +347,20 @@ func (p *Plot) applyInteractions() {
 	// through the transform once. Working in pixels keeps every gesture
 	// correct on any monotone scale (log, symlog), not just linear.
 	pr := st.prev
-	wx0, wx1 := float32(pr.px0), float32(pr.px0+pr.plotW)
-	wy0, wy1 := float32(pr.py0), float32(pr.py0+pr.plotH)
-	windowMoved := false
+	w := pxWindow{
+		x0: float32(pr.px0), x1: float32(pr.px0 + pr.plotW),
+		y0: float32(pr.py0), y1: float32(pr.py0 + pr.plotH),
+	}
+	locks := locksOf(&st.x, &st.y)
+	movedX, movedY := false, false
 
 	if st.dragging && flags.HasDragged() && posOk {
 		if st.dragBox {
 			st.boxCur = [2]float32{posX, posY}
 		} else {
-			dx := posX - st.lastDrag[0]
-			dy := posY - st.lastDrag[1]
-			wx0 -= dx
-			wx1 -= dx
-			wy0 -= dy
-			wy1 -= dy
+			mx, my := locks.pan(&w, posX-st.lastDrag[0], posY-st.lastDrag[1])
+			movedX, movedY = movedX || mx, movedY || my
 			st.lastDrag = [2]float32{posX, posY}
-			windowMoved = true
 		}
 	}
 	if flags.HasDragStopped() && st.dragging {
@@ -315,17 +370,32 @@ func (p *Plot) applyInteractions() {
 			y0 := pr.plotY(st.boxStart[1])
 			y1 := pr.plotY(st.boxCur[1])
 			if abs32(st.boxCur[0]-st.boxStart[0]) > 5 && abs32(st.boxCur[1]-st.boxStart[1]) > 5 {
-				st.x.rng = Range{math.Min(x0, x1), math.Max(x0, x1)}
-				st.y.rng = Range{math.Min(y0, y1), math.Max(y0, y1)}
-				st.x.touched, st.y.touched = true, true
+				// Box-zoom is a zoom on both axes; a NoZoom axis keeps its
+				// range and the box degenerates to a one-axis zoom.
+				if !locks.noZoomX {
+					st.x.rng = Range{math.Min(x0, x1), math.Max(x0, x1)}
+					st.x.touched = true
+				}
+				if !locks.noZoomY {
+					st.y.rng = Range{math.Min(y0, y1), math.Max(y0, y1)}
+					st.y.touched = true
+				}
 			}
 		}
 		st.dragging = false
 		st.dragBox = false
 	}
 	if flags.HasDoubleClicked() {
-		st.x.fitNext = true
-		st.y.fitNext = true
+		// A fit rewrites the span, so it counts as a zoom: the axis whose
+		// range the caller owns is left where it is. Only ever set here —
+		// assigning the negation would clear a fit already pending from
+		// FitNext or the context menu.
+		if !locks.noZoomX {
+			st.x.fitNext = true
+		}
+		if !locks.noZoomY {
+			st.y.fitNext = true
+		}
 	}
 	if flags.HasSecondaryClicked() && posOk && curOk {
 		st.ctxOpen = true
@@ -343,19 +413,22 @@ func (p *Plot) applyInteractions() {
 	if zoom != 1.0 && zoom > 0 {
 		ax, ay := wheel.HoverX, wheel.HoverY
 		if isNaN32(ax) {
-			ax = (wx0 + wx1) / 2
-			ay = (wy0 + wy1) / 2
+			ax = (w.x0 + w.x1) / 2
+			ay = (w.y0 + w.y1) / 2
 		}
-		wx0 = ax - (ax-wx0)/zoom
-		wx1 = ax + (wx1-ax)/zoom
-		wy0 = ay - (ay-wy0)/zoom
-		wy1 = ay + (wy1-ay)/zoom
-		windowMoved = true
+		mx, my := locks.zoom(&w, ax, ay, zoom)
+		movedX, movedY = movedX || mx, movedY || my
 	}
-	if windowMoved {
-		st.x.rng = Range{pr.plotX(wx0), pr.plotX(wx1)}
-		st.y.rng = Range{pr.plotY(wy1), pr.plotY(wy0)}
-		st.x.touched, st.y.touched = true, true
+	// Assign per axis: an axis no gesture moved is never written back, so it
+	// keeps its exact range instead of accumulating a lossy round trip
+	// through the transform on every frame the other axis is dragged.
+	if movedX {
+		st.x.rng = Range{pr.plotX(w.x0), pr.plotX(w.x1)}
+		st.x.touched = true
+	}
+	if movedY {
+		st.y.rng = Range{pr.plotY(w.y1), pr.plotY(w.y0)}
+		st.y.touched = true
 	}
 }
 
@@ -498,6 +571,25 @@ func (p *Plot) FitNext() *Plot {
 	p.st.x.fitNext = true
 	p.st.y.fitNext = true
 	return p
+}
+
+// AxisLimits reports an axis's current visible range — upstream's
+// GetPlotLimits, narrowed to one axis. It is the readback a caller needs to
+// re-pin a range it derives from the plot area (a depth axis whose span is
+// the area height over a fixed row height) without discarding the scroll
+// position a pan has since put there.
+//
+// The range is this frame's if Setup has already run, and last frame's
+// otherwise; ok is false until the plot has resolved a range once.
+func (p *Plot) AxisLimits(axis AxisE) (vmin float64, vmax float64, ok bool) {
+	if p == nil || p.st == nil || !p.st.initialized {
+		return 0, 0, false // nil-safe for headless widget tests
+	}
+	ax := &p.st.x
+	if axis == AxisY1 {
+		ax = &p.st.y
+	}
+	return ax.rng.Min, ax.rng.Max, true
 }
 
 // Clicked reports a primary click on the plot area, with the click

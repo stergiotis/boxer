@@ -65,6 +65,18 @@ const (
 	// monitoring panels whose data is a rolling window — not an upstream
 	// ImPlot flag.
 	AxisFlagsFollow AxisFlags = 1 << 3
+	// AxisFlagsNoPan stops gestures translating this axis: a drag moves
+	// only the other one. The axis still zooms, about its own centre.
+	AxisFlagsNoPan AxisFlags = 1 << 4
+	// AxisFlagsNoZoom stops gestures scaling this axis: the wheel, box-zoom
+	// and a double-click fit leave its span alone, so a caller that derives
+	// the span from the plot-area height keeps a constant pixels-per-unit.
+	// Panning still slides the window, which is how a depth axis scrolls.
+	AxisFlagsNoZoom AxisFlags = 1 << 5
+	// AxisFlagsLock is NoPan|NoZoom: the range is the caller's alone, and
+	// no gesture changes it — upstream's ImPlotAxisFlags_Lock, which locks
+	// both ends together.
+	AxisFlagsLock = AxisFlagsNoPan | AxisFlagsNoZoom
 )
 
 // Cond controls when SetupAxisLimits applies, mirroring ImPlot's ImPlotCond.

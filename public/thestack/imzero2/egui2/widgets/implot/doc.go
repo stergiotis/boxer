@@ -35,6 +35,15 @@
 // upstream's draw-list order is; labeled customs join the legend like
 // any item.
 //
+// Per-axis gesture locks (AxisFlagsNoPan / AxisFlagsNoZoom, and
+// AxisFlagsLock for both) carry upstream's ImPlotAxisFlags_Lock, split so
+// that an axis can be scrolled but not scaled — what a categorical or
+// depth axis wants when its span is derived from the plot-area height to
+// hold a constant pixels-per-unit. The locks apply per gesture kind, not
+// to the resulting range: an anchored wheel zoom shifts an axis's centre
+// as well as its span, so restoring only the span would let the wheel pan
+// a NoZoom axis.
+//
 // House extensions beyond the upstream surface, named as such in their
 // doc comments: Boxes, IncludeX/IncludeY, TimeTicksLocal,
 // AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached, the pixel-space
