@@ -22,7 +22,6 @@ package view
 import (
 	"math"
 	"sort"
-	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -50,6 +49,9 @@ const (
 // Hit is a node index, or nothing. It is a struct rather than a bare int
 // because the zero value has to mean "nothing" while leaving node 0
 // addressable — an Opts{} must not silently select the root.
+//
+// It reads the same way as sankey/view.Hit, the other widget on this lane:
+// Hit{} is the empty one and None reports it.
 type Hit struct {
 	// Node indexes Layout.Nodes. Meaningful only when Ok.
 	Node int32
@@ -57,11 +59,12 @@ type Hit struct {
 	Ok bool
 }
 
-// NoHit is the empty result, and also the zero value.
-var NoHit = Hit{}
-
 // NodeHit builds a hit on a layout node index.
 func NodeHit(i int) Hit { return Hit{Node: int32(i), Ok: true} }
+
+// None reports the empty hit — the zero value, and what a probe over empty
+// plot area returns.
+func (h Hit) None() bool { return !h.Ok }
 
 // Opts configures one draw. The zero value is usable: colour by label,
 // labels shown, no legend, nothing highlighted.
@@ -75,6 +78,12 @@ type Opts struct {
 	Color ColorModeE
 	// Sequential is the palette ColorByDepth ramps. The zero value defers to
 	// the user's configured default (styletokens.SequentialDefault).
+	//
+	// That zero is also SequentialBatlow, so Batlow cannot be asked for by
+	// name — it arrives only by being the configured default. Deliberate: a
+	// widget deferring to the user's IDS setting is the behaviour worth
+	// having at the zero value, and the alternative costs a sentinel in a
+	// shared enum.
 	Sequential styletokens.SequentialE
 	// NodeColor overrides a frame's fill; ok=false falls back to the scheme.
 	NodeColor func(n *icicle.Node) (rgba uint32, ok bool)
@@ -87,10 +96,13 @@ type Opts struct {
 	FontSize float32
 	// XLabel names the value axis; empty falls back to the layout's unit.
 	XLabel string
-	// Legend gives the two drawing layers (frames, labels) labelled custom
-	// items, so implot renders a legend row with a visibility toggle for
-	// each. Off by default: the legend costs plot area and overlays the
-	// frames, which are self-labelling.
+	// Legend labels the drawing so implot renders a legend row, whose
+	// visibility toggle hides the icicle. One row, not two: the frames and
+	// their labels are one picture, and a label without its frame under it is
+	// unreadable. Use HideLabels for a labels-only switch.
+	//
+	// Off by default: the legend costs plot area and overlays the frames,
+	// which are self-labelling.
 	Legend bool
 	// ResetView re-applies the initial ranges this frame, discarding whatever
 	// the user has zoomed or scrolled to.
@@ -101,6 +113,10 @@ type Opts struct {
 	// looking at the previous tree's value window — showing a slice of the
 	// new tree, or nothing at all. The widget cannot detect the swap for
 	// itself: a Layout carries no identity to compare against.
+	//
+	// It outranks a click that arrived the same frame: that click was
+	// resolved against the outgoing layout, so honouring its zoom would land
+	// on whatever node happens to occupy those coordinates in the new one.
 	ResetView bool
 }
 
@@ -120,9 +136,15 @@ const (
 	// siblings next to each other often enough to matter; the gap is
 	// background showing through, so it costs no extra paint call.
 	gapPx = 1.0
-	// minRectPx is the narrowest frame still worth emitting. Below this a
-	// rectangle is a sliver that cannot be read or clicked, and at a deep
-	// zoom there are a great many of them.
+	// minRectPx is the narrowest frame still worth emitting, measured after
+	// the gap has been taken out of it. Below this a rectangle is a sliver
+	// that says nothing, and at a deep zoom there are a great many of them.
+	//
+	// Because the edges are snapped first, the surviving width is a whole
+	// number of pixels, so the effective cut is at minRectPx+gapPx on the
+	// un-inset span — 2 px, not the fraction this constant reads as. snapX
+	// is where that is decided, and the hit test goes through it too, so a
+	// frame that is not drawn is not hittable either.
 	minRectPx = 0.75
 	// labelPadPx is the inset between a frame's edge and its label.
 	labelPadPx = 3.0
@@ -140,9 +162,15 @@ const (
 // flamegraph gesture. A double-click anywhere fits back to the whole tree,
 // which is implot's own reset and needs nothing here.
 //
-// clicked distinguishes a click that landed on no frame (click == NoHit,
+// clicked distinguishes a click that landed on no frame (click.None(),
 // clicked true) from no click at all (clicked false) — the difference a host
 // needs to implement click-to-pin with click-away-to-clear.
+//
+// title is the label above the plot and also its retained identity: implot
+// keys a plot's ranges, legend state and previous transform by it, under the
+// "visible##hidden" convention Begin documents. Two icicles in one frame
+// sharing a title share one set of ranges — give them "Alloc##left" and
+// "Alloc##right" rather than the same string.
 //
 // The returned hover and click are one frame behind, like every register read.
 func Show(ids *c.WidgetIdStack, title string, w float32, h float32, lay *icicle.Layout, opts Opts) (hover Hit, click Hit, clicked bool) {
@@ -154,14 +182,19 @@ func Show(ids *c.WidgetIdStack, title string, w float32, h float32, lay *icicle.
 // Renderer's buffers across frames.
 func (r *Renderer) Show(ids *c.WidgetIdStack, title string, w float32, h float32, lay *icicle.Layout, opts Opts) (hover Hit, click Hit, clicked bool) {
 	if lay == nil {
-		return NoHit, NoHit, false
+		return Hit{}, Hit{}, false
 	}
 	for p := range implot.Scoped(ids, title, w, h) {
 		hover, click, clicked = Probe(p, lay)
 		Setup(p, lay, opts)
-		if click.Ok {
+		if click.Ok && !opts.ResetView {
 			// CondAlways, but only on the frame the click arrived, so the
 			// zoom sticks without pinning the axis against later panning.
+			//
+			// Both this and Setup's reset are CondAlways and this one runs
+			// second, so on the frame a layout is replaced it would otherwise
+			// win — zooming to a node resolved against the outgoing layout's
+			// transform, and undoing the reset that was the point of the swap.
 			ZoomTo(p, lay, int(click.Node))
 		}
 		opts.Hover = hover
@@ -194,51 +227,79 @@ func Setup(p *implot.Plot, lay *icicle.Layout, opts Opts) {
 	p.SetupAxisLimitsConstraints(implot.AxisX1, 0, lay.Report.Total)
 
 	rows := float64(lay.Report.Rows)
-	// The span is derived, not chosen: it is however many rows of RowPx fit
-	// in the area. Capped at the tree's depth, so a shallow tree fills the
-	// pane with taller rows instead of leaving most of it blank.
-	span := rows
-	if _, _, _, areaH, ok := p.PlotAreaPrev(); ok && opts.RowPx > 0 {
-		if visible := float64(areaH / opts.RowPx); visible < rows {
-			span = visible
-		}
-	}
-	// Bound the scroll to the tree. The root sits at the y=0 edge either way,
-	// so the extent runs away from zero in the growth direction.
-	lo, hi := -rows, 0.0
-	if lay.Orientation == icicle.OrientFlame {
-		lo, hi = 0.0, rows
-	}
-	p.SetupAxisLimitsConstraints(implot.AxisY1, lo, hi)
-
 	flame := lay.Orientation == icicle.OrientFlame
+	_, _, _, areaH, areaOk := p.PlotAreaPrev()
+	span := depthSpan(rows, areaH, opts.RowPx, areaOk)
+
+	// Bound the scroll to the tree.
+	clampLo, clampHi := rootWindow(rows, flame)
+	p.SetupAxisLimitsConstraints(implot.AxisY1, clampLo, clampHi)
+
 	cur0, cur1, known := p.AxisLimits(implot.AxisY1)
-	switch {
-	case opts.ResetView:
-		// Back to the root edge, discarding any depth scroll.
-		if flame {
-			p.SetupAxisLimits(implot.AxisY1, 0, span, implot.CondAlways)
-		} else {
-			p.SetupAxisLimits(implot.AxisY1, -span, 0, implot.CondAlways)
-		}
-	case known && math.Abs((cur1-cur0)-span) > spanEps:
-		// The pane resized, so the span no longer holds RowPx. Re-assert it
-		// while keeping the root-side edge, which is what stops a resize from
-		// also scrolling the view.
-		if flame {
-			p.SetupAxisLimits(implot.AxisY1, cur0, cur0+span, implot.CondAlways)
-		} else {
-			p.SetupAxisLimits(implot.AxisY1, cur1-span, cur1, implot.CondAlways)
-		}
-	case flame:
-		p.SetupAxisLimits(implot.AxisY1, 0, span, implot.CondOnce)
-	default:
-		p.SetupAxisLimits(implot.AxisY1, -span, 0, implot.CondOnce)
-	}
+	lo, hi, cond := depthWindow(cur0, cur1, span, flame, known, opts.ResetView)
+	p.SetupAxisLimits(implot.AxisY1, lo, hi, cond)
 
 	if !opts.Legend {
 		p.NoLegend()
 	}
+}
+
+// depthSpan is the depth axis's span in rows: however many rows of rowPx fit
+// in the plot area, capped at the tree's own depth. The span is derived, not
+// chosen — that is what makes RowPx a minimum rather than a height. A shallow
+// tree hits the cap and fills the pane with taller rows instead of leaving
+// most of it blank; a deep one sits at exactly rowPx and scrolls.
+//
+// areaOk is false before the plot has rendered once: there is no area to
+// divide then, so the whole tree is the span.
+func depthSpan(rows float64, areaH float32, rowPx float32, areaOk bool) float64 {
+	if !areaOk || !(areaH > 0) || !(rowPx > 0) {
+		return rows
+	}
+	if visible := float64(areaH / rowPx); visible < rows {
+		return visible
+	}
+	return rows
+}
+
+// depthWindow resolves the depth axis's limits and the condition to apply
+// them under.
+//
+// The span is derived from the pane, so it has to be re-asserted when the
+// pane changes — but asserting it every frame would pin the axis and a scroll
+// could never stick. Hence the condition is part of the answer: CondAlways
+// only when the window is genuinely wrong, CondOnce otherwise.
+func depthWindow(cur0 float64, cur1 float64, span float64, flame bool, known bool, reset bool) (lo float64, hi float64, cond implot.Cond) {
+	switch {
+	case reset:
+		// Back to the root edge, discarding any depth scroll.
+		lo, hi = rootWindow(span, flame)
+		return lo, hi, implot.CondAlways
+	case known && math.Abs((cur1-cur0)-span) > spanEps:
+		// The pane resized, so the window no longer holds rows at rowPx.
+		// Re-assert the span while keeping the root-side edge, which is what
+		// stops a resize from scrolling the view as well as re-scaling it.
+		if flame {
+			return cur0, cur0 + span, implot.CondAlways
+		}
+		return cur1 - span, cur1, implot.CondAlways
+	default:
+		// The span still holds. CondOnce seeds the window on the first frame
+		// and leaves it alone on every one after, so a pan sticks.
+		lo, hi = rootWindow(span, flame)
+		return lo, hi, implot.CondOnce
+	}
+}
+
+// rootWindow places a span against the root edge. The root sits at y=0 in
+// both orientations, so the window runs away from zero in the growth
+// direction: with the tree's full depth this is the scroll bound, and with
+// the derived span it is the initial view.
+func rootWindow(span float64, flame bool) (lo float64, hi float64) {
+	if flame {
+		return 0, span
+	}
+	return -span, 0
 }
 
 // ZoomTo pins the value axis to one node's span — the click-to-zoom of a
@@ -261,17 +322,15 @@ func ZoomTo(p *implot.Plot, lay *icicle.Layout, node int) {
 // Probe resolves the pointer against the layout, in plot space.
 //
 // clicked reports that a click happened at all, which is not the same as
-// click != NoHit: a click that landed on empty plot area returns NoHit with
-// clicked true, and that is what clears a pinned selection.
+// !click.None(): a click that landed on empty plot area returns the empty hit
+// with clicked true, and that is what clears a pinned selection.
 func Probe(p *implot.Plot, lay *icicle.Layout) (hover Hit, click Hit, clicked bool) {
 	if p == nil || lay == nil {
-		return NoHit, NoHit, false
+		return Hit{}, Hit{}, false
 	}
+	proj, projOk := plotXProj(p)
 	resolve := func(x float64, y float64) Hit {
-		if i := lay.NodeAt(x, y); i >= 0 {
-			return NodeHit(i)
-		}
-		return NoHit
+		return resolveHit(lay, proj, projOk, x, y)
 	}
 	if x, y, ok := p.HoverPlotPos(); ok {
 		hover = resolve(x, y)
@@ -280,6 +339,63 @@ func Probe(p *implot.Plot, lay *icicle.Layout) (hover Hit, click Hit, clicked bo
 		click, clicked = resolve(x, y), true
 	}
 	return hover, click, clicked
+}
+
+// resolveHit is Probe's decision for one point: the layout's answer, less the
+// frames that were too narrow to have been drawn.
+//
+// The layout hit test is pure geometry and has no minimum, so on its own it
+// reports slivers the renderer culled — a hover that names a function with
+// nothing under the pointer, and an outline with no rectangle to trace. The
+// cull is a pixel judgement, so it is applied here rather than pushed down
+// into the layout, which never touches pixels (ADR-0160 SD5).
+//
+// With projOk false the plot has not rendered yet, so nothing has been culled
+// and every hit stands.
+func resolveHit(lay *icicle.Layout, proj xProj, projOk bool, x float64, y float64) Hit {
+	i := lay.NodeAt(x, y)
+	if i < 0 {
+		return Hit{}
+	}
+	if projOk {
+		n := &lay.Nodes[i]
+		if _, _, wide := snapX(proj.px(n.X0), proj.px(n.X1)); !wide {
+			return Hit{}
+		}
+	}
+	return NodeHit(i)
+}
+
+// xProj is the value-to-pixel mapping of the value axis, as it stood when the
+// plot last rendered. It is the half of a frame's transform the hit test
+// needs, recovered from the plot's own readbacks rather than captured during
+// a draw — Probe runs before Setup and outside any Custom closure, so there
+// is no DrawCtx to take it from.
+type xProj struct {
+	originPx float64 // pixel x of vMin
+	vMin     float64
+	perValue float64 // pixels per value unit
+}
+
+func (x xProj) px(v float64) float64 { return x.originPx + (v-x.vMin)*x.perValue }
+
+// plotXProj recovers last frame's value-axis mapping. ok is false before the
+// plot has rendered once, and for a degenerate area or range.
+//
+// The axis is linear, which is what makes two readbacks enough. The widget
+// always sets it that way; a host driving implot itself and choosing a log
+// axis would get a mapping that disagrees with the drawn one.
+func plotXProj(p *implot.Plot) (proj xProj, ok bool) {
+	areaX, _, areaW, _, areaOk := p.PlotAreaPrev()
+	vMin, vMax, limOk := p.AxisLimits(implot.AxisX1)
+	if !areaOk || !limOk || !(areaW > 0) || !(vMax > vMin) {
+		return xProj{}, false
+	}
+	return xProj{
+		originPx: float64(areaX),
+		vMin:     vMin,
+		perValue: float64(areaW) / (vMax - vMin),
+	}, true
 }
 
 // Draw declares the layout's custom items into p: frames, then labels.
@@ -298,26 +414,34 @@ func (r *Renderer) Draw(p *implot.Plot, lay *icicle.Layout, opts Opts) {
 	}
 	st := &r.s
 	st.prepare(lay, opts.withDefaults(lay))
-	// Custom items do not contribute to auto-fit, so the extent has to be
-	// declared or a double-click would fit to nothing. Only x: the depth axis
-	// is NoZoom, so it never fits.
+	// Custom items do not contribute to auto-fit, so both extents have to be
+	// declared or a fit would fit to nothing. The depth axis is NoZoom, which
+	// keeps the gestures off it but not Plot.FitNext — and an undeclared axis
+	// fits to the seeded +Inf/-Inf, which sanitises to a single visible row.
 	p.IncludeX(0)
 	p.IncludeX(lay.Report.Total)
+	rowLo, rowHi := rootWindow(float64(lay.Report.Rows), lay.Orientation == icicle.OrientFlame)
+	p.IncludeY(rowLo)
+	p.IncludeY(rowHi)
 
-	label := func(s string) string {
-		if opts.Legend {
-			return s
-		}
-		return ""
+	// Both layers take the same legend label, so they get one legend row and
+	// one toggle: implot keys its hidden set by label and dedups the rows by
+	// it. Two rows would let a viewer hide the frames and keep the labels,
+	// and the label ink is picked to contrast with a frame's fill — for most
+	// of the palette that is near-black, invisible on the plot background.
+	// Opts.HideLabels is the labels-only switch.
+	label := ""
+	if st.opts.Legend {
+		label = "frames"
 	}
-	p.Custom(label("frames"), st.drawFrames)
+	p.Custom(label, st.drawFrames)
 	if !st.opts.HideLabels {
-		p.Custom(label("labels"), st.drawLabels)
+		p.Custom(label, st.drawLabels)
 	}
 }
 
 // withDefaults resolves the zero values, and folds an out-of-range hit onto
-// NoHit so a stale index from a previous layout cannot address a node.
+// the empty one so a stale index from a previous layout cannot address a node.
 func (o Opts) withDefaults(lay *icicle.Layout) Opts {
 	if o.RowPx <= 0 {
 		o.RowPx = DefaultRowPx
@@ -328,7 +452,7 @@ func (o Opts) withDefaults(lay *icicle.Layout) Opts {
 	n := int32(len(lay.Nodes))
 	for _, h := range []*Hit{&o.Hover, &o.Selected} {
 		if h.Ok && (h.Node < 0 || h.Node >= n) {
-			*h = NoHit
+			*h = Hit{}
 		}
 	}
 	return o
@@ -347,17 +471,30 @@ type Renderer struct {
 }
 
 // state carries the per-draw scratch buffers.
+//
+// The rect buffers are parallel arrays over the visible frames, and they
+// carry the node index and the fill as well as the geometry so the label pass
+// can read them instead of projecting and hashing every node a second time.
+// That matters because the widget's cost argument (ADR-0160 C4) is that a
+// frame's work tracks the nodes on screen — twice that is still linear, but
+// it is twice.
 type state struct {
 	lay  *icicle.Layout
 	opts Opts
 	seq  styletokens.SequentialE
-	// batched rect scratch
+	// batched rect scratch, one entry per visible frame
 	rMinX, rMinY, rMaxX, rMaxY []float32
 	rCols                      []uint32
+	rNode                      []int32 // index into lay.Nodes
+	// collected says the buffers hold this draw's frames. Cleared by prepare
+	// and set by collectFrames, so whichever custom item runs first fills
+	// them and the other reads them.
+	collected bool
 }
 
 func (s *state) prepare(lay *icicle.Layout, opts Opts) {
 	s.lay, s.opts = lay, opts
+	s.collected = false
 	s.seq = opts.Sequential
 	if s.seq == 0 {
 		s.seq = styletokens.SequentialDefault()
@@ -417,28 +554,26 @@ func frameOf(dc implot.DrawCtx) frame {
 // visibleRows is the inclusive row window the plot area covers, and reports
 // false when the layout is entirely off screen.
 func (s *state) visibleRows(f frame) (lo int, hi int, ok bool) {
-	a := s.rowDist(f.plotY(f.areaY))
-	b := s.rowDist(f.plotY(f.areaY + f.areaH))
+	a := s.lay.RowDist(f.plotY(f.areaY))
+	b := s.lay.RowDist(f.plotY(f.areaY + f.areaH))
 	if a > b {
 		a, b = b, a
 	}
-	lo, hi = int(math.Floor(a)), int(math.Floor(b))
-	if lo < 0 {
-		lo = 0
+	// Bound the window before converting, for the reason Layout.DepthAt
+	// spells out: a degenerate transform hands back a non-finite coordinate,
+	// and int() of one is INT_MIN here rather than anything a clamp on the
+	// far side would recognise. `!(a <= b)` is the NaN branch.
+	last := float64(len(s.lay.Rows) - 1)
+	if !(a <= b) || a > last || b < 0 {
+		return 0, 0, false
 	}
-	if last := len(s.lay.Rows) - 1; hi > last {
-		hi = last
+	if a < 0 {
+		a = 0
 	}
-	return lo, hi, lo <= hi
-}
-
-// rowDist is the distance from the root edge in row units, which is the depth
-// before flooring — the view-side counterpart of the layout's sign rule.
-func (s *state) rowDist(y float64) float64 {
-	if s.lay.Orientation == icicle.OrientFlame {
-		return y
+	if b > last {
+		b = last
 	}
-	return -y
+	return int(math.Floor(a)), int(math.Floor(b)), true
 }
 
 // visibleValues is the value window the plot area covers.
@@ -480,16 +615,32 @@ func (s *state) eachVisible(f frame, fn func(n *icicle.Node, idx int)) {
 // and so round identically, which keeps the gap uniform instead of letting
 // each edge feather by a different fraction of a pixel.
 func rectOf(f frame, n *icicle.Node) (x0, y0, x1, y1 float32, ok bool) {
-	x0 = float32(math.Round(float64(f.pxX(n.X0))))
-	x1 = float32(math.Round(float64(f.pxX(n.X1)))) - gapPx
+	sx0, sx1, wide := snapX(float64(f.pxX(n.X0)), float64(f.pxX(n.X1)))
 	// Plot y grows up and pixel y grows down, so the node's upper edge Y1 is
 	// the smaller pixel value.
 	y0 = float32(math.Round(float64(f.pxY(n.Y1))))
 	y1 = float32(math.Round(float64(f.pxY(n.Y0)))) - gapPx
-	if x1-x0 < minRectPx || y1 <= y0 {
+	if !wide || y1 <= y0 {
 		return 0, 0, 0, 0, false
 	}
-	return x0, y0, x1, y1, true
+	return float32(sx0), y0, float32(sx1), y1, true
+}
+
+// snapX turns a frame's unsnapped pixel edges into the drawn ones and reports
+// whether what is left is wide enough to draw.
+//
+// It is one function rather than an inlined pair of expressions because the
+// hit test has to reach the same verdict: a frame the renderer culls must not
+// be hoverable, or the pointer names a node the eye cannot see and the hover
+// ring outlines nothing. Two copies of this arithmetic would drift.
+//
+// The edges snap to whole pixels: neighbours share a boundary value and so
+// round identically, which keeps the gap uniform instead of letting each edge
+// feather by a different fraction of a pixel.
+func snapX(px0 float64, px1 float64) (x0 float64, x1 float64, ok bool) {
+	x0 = math.Round(px0)
+	x1 = math.Round(px1) - gapPx
+	return x0, x1, x1-x0 >= minRectPx
 }
 
 // collectFrames fills the batch buffers with every visible frame's rectangle.
@@ -498,7 +649,8 @@ func rectOf(f frame, n *icicle.Node) (x0, y0, x1, y1 float32, ok bool) {
 func (s *state) collectFrames(f frame) {
 	s.rMinX, s.rMinY = s.rMinX[:0], s.rMinY[:0]
 	s.rMaxX, s.rMaxY, s.rCols = s.rMaxX[:0], s.rMaxY[:0], s.rCols[:0]
-	s.eachVisible(f, func(n *icicle.Node, _ int) {
+	s.rNode = s.rNode[:0]
+	s.eachVisible(f, func(n *icicle.Node, idx int) {
 		x0, y0, x1, y1, ok := rectOf(f, n)
 		if !ok {
 			return
@@ -508,7 +660,9 @@ func (s *state) collectFrames(f frame) {
 		s.rMaxX = append(s.rMaxX, x1)
 		s.rMaxY = append(s.rMaxY, y1)
 		s.rCols = append(s.rCols, s.fill(n))
+		s.rNode = append(s.rNode, int32(idx))
 	})
+	s.collected = true
 }
 
 func (s *state) drawFrames(dc implot.DrawCtx) {
@@ -541,12 +695,18 @@ func (s *state) labelFor(f frame, n *icicle.Node) (text string, x float32, y flo
 	if !vis {
 		return "", 0, 0, false
 	}
+	return s.labelIn(x0, y0, x1, y1, n.Label)
+}
+
+// labelIn is labelFor once the rectangle is known: the draw path already has
+// one in the batch buffers and has no reason to project the node again.
+func (s *state) labelIn(x0 float32, y0 float32, x1 float32, y1 float32, label string) (text string, x float32, y float32, ok bool) {
 	size := s.opts.FontSize
 	if y1-y0 < size {
 		return "", 0, 0, false // the row is shorter than the glyphs
 	}
 	avail := x1 - x0 - 2*labelPadPx
-	text = elide(n.Label, avail, size)
+	text = implot.Elide(label, avail, size)
 	if text == "" {
 		return "", 0, 0, false
 	}
@@ -554,60 +714,43 @@ func (s *state) labelFor(f frame, n *icicle.Node) (text string, x float32, y flo
 }
 
 func (s *state) drawLabels(dc implot.DrawCtx) {
-	f := frameOf(dc)
+	// Normally drawFrames has already filled the buffers — it is declared
+	// first, and the two items share a legend label so they are hidden
+	// together. Collecting here as well keeps that an optimisation rather
+	// than a requirement.
+	if !s.collected {
+		s.collectFrames(frameOf(dc))
+	}
 	size := s.opts.FontSize
-	s.eachVisible(f, func(n *icicle.Node, _ int) {
-		text, x, y, ok := s.labelFor(f, n)
+	for i := range s.rNode {
+		text, x, y, ok := s.labelIn(s.rMinX[i], s.rMinY[i], s.rMaxX[i], s.rMaxY[i],
+			s.lay.Nodes[s.rNode[i]].Label)
 		if !ok {
-			return
+			continue
 		}
-		c.PaintText(x, y, 0, 1, text, size,
-			color.Hex(contrastText(s.fill(n)))).Send()
-	})
-}
-
-// elide shortens a label to fit availPx, or returns "" when not even an
-// ellipsis and one glyph would fit — a one-glyph label is noise, not
-// information.
-//
-// It budgets in pixels rather than characters, using the same estimate the
-// caller decided the frame was labellable with, so the string it returns
-// really does fit the space it was cut for. A character budget cannot: it
-// charges a CJK glyph the same as an "l", and those labels then overflow.
-func elide(s string, availPx float32, fontSize float32) string {
-	if implot.EstimateTextWidth(s, fontSize) <= availPx {
-		return s
+		c.PaintText(x, y, 0, 1, text, size, color.Hex(contrastText(s.rCols[i]))).Send()
 	}
-	budget := availPx - implot.EstimateRuneWidth('…', fontSize)
-	used, cut := float32(0), 0
-	for i, r := range s {
-		w := implot.EstimateRuneWidth(r, fontSize)
-		if used+w > budget {
-			break
-		}
-		used, cut = used+w, i+utf8.RuneLen(r)
-	}
-	if cut == 0 {
-		return "" // not even one glyph beside the ellipsis
-	}
-	return s[:cut] + "…"
 }
 
 // contrastText picks the readable ink for a fill by WCAG relative luminance.
 // Both ends are IDS neutrals rather than pure black and white.
 func contrastText(fill uint32) uint32 {
-	lin := func(shift uint) float64 {
-		v := float64(fill>>shift&0xff) / 255
-		if v <= 0.04045 {
-			return v / 12.92
-		}
-		return math.Pow((v+0.055)/1.055, 2.4)
-	}
-	y := 0.2126*lin(24) + 0.7152*lin(16) + 0.0722*lin(8)
-	// 0.18 is the luminance at which the two neutrals contrast equally
-	// against a fill; above it the dark ink wins.
-	if y > 0.18 {
+	if implot.RelativeLuminance(fill) > inkSwitchL {
 		return styletokens.NeutralBgExtreme.AsHex()
 	}
 	return styletokens.NeutralTextExtreme.AsHex()
 }
+
+// inkSwitchL is the fill luminance at which the two neutrals contrast equally
+// against it; above the switch the dark ink is the better of the two. It works
+// out at 0.1734 for the palette as it stands, where both inks give 4.45:1.
+//
+// Derived rather than written down, so that regenerating the IDS palette
+// moves it instead of leaving a stale constant behind. It is not the line
+// between readable and not — the worst the qualitative cycle does under it is
+// 4.90:1 — only between the better and the worse of two readable choices.
+var inkSwitchL = func() float64 {
+	d := implot.RelativeLuminance(styletokens.NeutralBgExtreme.AsHex())
+	l := implot.RelativeLuminance(styletokens.NeutralTextExtreme.AsHex())
+	return math.Sqrt((d+0.05)*(l+0.05)) - 0.05
+}()

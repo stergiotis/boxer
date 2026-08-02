@@ -244,7 +244,7 @@ func (st *icicleDemoState) recompute() {
 		return
 	}
 	st.layout, st.status = lay, ""
-	st.selected = icicleview.NoHit // indices do not carry across layouts
+	st.selected = icicleview.Hit{} // indices do not carry across layouts
 	st.resetView = true
 }
 

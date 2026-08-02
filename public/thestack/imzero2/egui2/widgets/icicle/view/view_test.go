@@ -126,6 +126,104 @@ func TestRectOfCullsSubPixelFrames(t *testing.T) {
 	}
 }
 
+// The cull is one predicate, and the numbers it turns on are worth pinning:
+// the edges snap first, so the width that survives is a whole number of
+// pixels and the real cut sits at 2 px of un-inset span, not at minRectPx.
+func TestSnapXCutsAtTwoWholePixels(t *testing.T) {
+	cases := []struct {
+		px0, px1   float64
+		wantX0, x1 float64
+		ok         bool
+	}{
+		{0, 80, 0, 79, true},     // a wide frame keeps its gap
+		{0.4, 79.6, 0, 79, true}, // both edges snap, and land where the last case did
+		{10, 12, 10, 11, true},   // exactly 2 px un-inset: 1 px survives, which is minRectPx-wide enough
+		{10, 11.6, 10, 11, true}, // 1.6 px, but it snaps up to 2
+		{10, 11.4, 10, 10, false},
+		{10, 11, 10, 10, false}, // 1 px un-inset: the gap takes all of it
+		{10, 10, 10, 9, false},  // degenerate
+		{10, 9, 10, 8, false},   // inverted, which the layout never produces
+	}
+	for _, tc := range cases {
+		x0, x1, ok := snapX(tc.px0, tc.px1)
+		if x0 != tc.wantX0 || x1 != tc.x1 || ok != tc.ok {
+			t.Errorf("snapX(%v,%v) = (%v,%v,%v), want (%v,%v,%v)",
+				tc.px0, tc.px1, x0, x1, ok, tc.wantX0, tc.x1, tc.ok)
+		}
+	}
+}
+
+// The pointer must not name a frame the renderer culled. Both go through
+// snapX, so this pins that resolveHit really consults it — and that it stands
+// down before the first render, when nothing has been culled yet.
+func TestResolveHitDeclinesWhatWasNotDrawn(t *testing.T) {
+	tr := icicle.Tree{
+		Labels:  []string{"root", "big", "speck"},
+		Parents: []int32{-1, 0, 0},
+		Self:    []float64{0, 10000, 1},
+	}
+	lay, err := icicle.Compute(tr, icicle.Options{})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	speck, big := -1, -1
+	for i := range lay.Nodes {
+		switch lay.Nodes[i].Label {
+		case "speck":
+			speck = i
+		case "big":
+			big = i
+		}
+	}
+	if speck < 0 || big < 0 {
+		t.Fatal("the fixture lost a node")
+	}
+	// The projection the frame in TestRectOfCullsSubPixelFrames stands for:
+	// 10001 units across 360 px, so the speck is well under a pixel.
+	proj := xProj{originPx: 0, vMin: 0, perValue: 360.0 / 10001}
+	inside := func(i int) (float64, float64) {
+		n := &lay.Nodes[i]
+		return (n.X0 + n.X1) / 2, (n.Y0 + n.Y1) / 2
+	}
+
+	x, y := inside(speck)
+	if h := resolveHit(lay, proj, true, x, y); h.Ok {
+		t.Errorf("a culled sliver was hittable: node %d", h.Node)
+	}
+	// The layout on its own still reports it — the filter is the view's, and
+	// the layout stays pixel-free.
+	if got := lay.NodeAt(x, y); got != speck {
+		t.Errorf("NodeAt = %d, want the speck at %d: the cull leaked into the layout", got, speck)
+	}
+	// Before the first render there is no projection, and nothing has been
+	// drawn for a hit to disagree with.
+	if h := resolveHit(lay, xProj{}, false, x, y); !h.Ok || int(h.Node) != speck {
+		t.Errorf("first-frame hit = %+v, want the speck at %d", h, speck)
+	}
+	// A frame that is drawn stays hittable, and empty space stays empty.
+	x, y = inside(big)
+	if h := resolveHit(lay, proj, true, x, y); !h.Ok || int(h.Node) != big {
+		t.Errorf("hit on a drawn frame = %+v, want node %d", h, big)
+	}
+	if h := resolveHit(lay, proj, true, -1, y); h.Ok {
+		t.Error("a point outside the tree reported a hit")
+	}
+}
+
+// The projection is recovered from readbacks, so it has to decline while
+// those are empty rather than invent a mapping.
+func TestPlotXProjNeedsARenderedPlot(t *testing.T) {
+	if _, ok := plotXProj(implot.NewDetached()); ok {
+		t.Error("a plot that has never rendered offered a projection")
+	}
+	proj := xProj{originPx: 40, vMin: 5, perValue: 2}
+	for _, tc := range []struct{ v, want float64 }{{5, 40}, {6, 42}, {0, 30}} {
+		if got := proj.px(tc.v); got != tc.want {
+			t.Errorf("px(%v) = %v, want %v", tc.v, got, tc.want)
+		}
+	}
+}
+
 func TestVisibleRowsBothOrientations(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -166,6 +264,39 @@ func TestVisibleRowsClampsAndRejectsOffScreen(t *testing.T) {
 	lo, hi, ok := s.visibleRows(linFrame(0, 18, -1, 2, 0, 0, 360, 54))
 	if !ok || lo != 0 {
 		t.Errorf("rows = [%d,%d,%v], want lo 0", lo, hi, ok)
+	}
+}
+
+// The row window comes out of the plot transform, and a degenerate one hands
+// back non-finite coordinates. They are bounded before the conversion for the
+// same reason Layout.DepthAt bounds its argument: int() of such a value is
+// INT_MIN on amd64, which a clamp written for a row index reads as plausible.
+func TestVisibleRowsRejectsNonFiniteTransform(t *testing.T) {
+	lay := mustLayout(t, icicle.Options{})
+	s := newState(t, lay, Opts{})
+	// A frame whose inverse transform is degenerate: areaH of 0 divides by
+	// zero in linFrame, which is exactly how one arises in practice.
+	degenerate := func(v float64) frame {
+		f := icicleFrame()
+		f.plotY = func(float32) float64 { return v }
+		return f
+	}
+	for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if lo, hi, ok := s.visibleRows(degenerate(v)); ok {
+			t.Errorf("plotY = %v gave rows [%d,%d], want nothing visible", v, lo, hi)
+		}
+	}
+	// One finite edge and one infinite one still resolves, clamped to the
+	// tree, rather than collapsing to nothing.
+	f := icicleFrame()
+	f.plotY = func(px float32) float64 {
+		if px == 0 {
+			return 0
+		}
+		return math.Inf(-1) // an unbounded scroll downward, in icicle sign
+	}
+	if lo, hi, ok := s.visibleRows(f); !ok || lo != 0 || hi != len(lay.Rows)-1 {
+		t.Errorf("rows = [%d,%d,%v], want the whole tree [0,%d]", lo, hi, ok, len(lay.Rows)-1)
 	}
 }
 
@@ -218,6 +349,53 @@ func TestCollectFramesBatchesOnlyVisibleRects(t *testing.T) {
 	s.collectFrames(icicleFrame())
 	if got := len(s.rMinX); got != 7 {
 		t.Errorf("second emit batched %d rects, want 7 (buffers were not reset)", got)
+	}
+}
+
+// The label pass reads the batch instead of projecting and hashing every node
+// again, so the node column has to be there and has to line up with the rest.
+func TestCollectFramesCarriesTheNodeAndFill(t *testing.T) {
+	lay := mustLayout(t, icicle.Options{})
+	s := newState(t, lay, Opts{})
+	f := icicleFrame()
+	s.collectFrames(f)
+	if len(s.rNode) != len(s.rMinX) {
+		t.Fatalf("the node column is %d long against %d rects", len(s.rNode), len(s.rMinX))
+	}
+	if !s.collected {
+		t.Error("collectFrames did not mark the buffers as filled")
+	}
+	seen := map[string]bool{}
+	for i, idx := range s.rNode {
+		n := &lay.Nodes[idx]
+		seen[n.Label] = true
+		// The carried fill is the one the node would have got on its own.
+		if got := s.fill(n); got != s.rCols[i] {
+			t.Errorf("%s: carried fill %08x, want %08x", n.Label, s.rCols[i], got)
+		}
+		// And the carried rect is the one rectOf produces for it.
+		x0, y0, x1, y1, ok := rectOf(f, n)
+		if !ok || x0 != s.rMinX[i] || y0 != s.rMinY[i] || x1 != s.rMaxX[i] || y1 != s.rMaxY[i] {
+			t.Errorf("%s: carried rect [%v,%v]-[%v,%v], want [%v,%v]-[%v,%v] (ok=%v)",
+				n.Label, s.rMinX[i], s.rMinY[i], s.rMaxX[i], s.rMaxY[i], x0, y0, x1, y1, ok)
+		}
+		// The label the draw path would produce agrees with labelFor's.
+		wantText, wantX, wantY, wantOK := s.labelFor(f, n)
+		text, lx, ly, lok := s.labelIn(s.rMinX[i], s.rMinY[i], s.rMaxX[i], s.rMaxY[i], n.Label)
+		if text != wantText || lx != wantX || ly != wantY || lok != wantOK {
+			t.Errorf("%s: label from the batch = (%q,%v,%v,%v), from the node = (%q,%v,%v,%v)",
+				n.Label, text, lx, ly, lok, wantText, wantX, wantY, wantOK)
+		}
+	}
+	for _, want := range []string{"main", "parse", "eval", "lex", "ast", "walk", "emit"} {
+		if !seen[want] {
+			t.Errorf("the batch is missing %s", want)
+		}
+	}
+	// prepare starts a new draw, so the buffers are no longer this frame's.
+	s.prepare(lay, Opts{}.withDefaults(lay))
+	if s.collected {
+		t.Error("prepare left the previous draw's buffers marked as current")
 	}
 }
 
@@ -288,46 +466,6 @@ func TestLabelForFitsAndDeclines(t *testing.T) {
 	}
 }
 
-func TestElide(t *testing.T) {
-	// At this size a Latin glyph is 6.2 px and a CJK one 10, which is what
-	// makes the budgets below readable.
-	const size = 10
-	cases := []struct {
-		in      string
-		availPx float32
-		want    string
-	}{
-		{"runtime.mallocgc", 200, "runtime.mallocgc"},
-		{"runtime.mallocgc", 100, "runtime.mallocgc"}, // 99.2 px, fits exactly
-		{"runtime.mallocgc", 50, "runtime…"},
-		{"runtime.mallocgc", 13, "r…"},
-		{"runtime.mallocgc", 8, ""}, // no room for a glyph beside the ellipsis
-		{"runtime.mallocgc", 0, ""},
-		{"runtime.mallocgc", -3, ""},
-		{"", 10, ""},
-		// Multi-byte: the cut lands on a rune boundary, not a byte one.
-		{"日本語のフレーム", 40, "日本語…"},
-		{"日本語", 30, "日本語"},
-		// And the reason the budget is pixels rather than characters: a box
-		// 49.6 px wide holds eight Latin glyphs, so a character budget would
-		// have kept all eight of these — 80 px of them. It keeps four.
-		{"日本語のフレーム", 49.6, "日本語の…"},
-	}
-	for _, tc := range cases {
-		if got := elide(tc.in, tc.availPx, size); got != tc.want {
-			t.Errorf("elide(%q, %v) = %q, want %q", tc.in, tc.availPx, got, tc.want)
-		}
-	}
-	// Whatever comes back must actually fit what it was cut for.
-	for _, tc := range cases {
-		if got := elide(tc.in, tc.availPx, size); got != "" {
-			if w := implot.EstimateTextWidth(got, size); w > tc.availPx {
-				t.Errorf("elide(%q, %v) = %q, which is %v px wide", tc.in, tc.availPx, got, w)
-			}
-		}
-	}
-}
-
 func TestContrastTextPicksTheReadableNeutral(t *testing.T) {
 	light := styletokens.QualitativeCycle(4).AsHex() // a bright palette entry
 	dark := styletokens.NeutralBgPanel.AsHex()
@@ -345,6 +483,38 @@ func TestContrastTextPicksTheReadableNeutral(t *testing.T) {
 	got := contrastText(light)
 	if got != styletokens.NeutralBgExtreme.AsHex() && got != styletokens.NeutralTextExtreme.AsHex() {
 		t.Errorf("ink = %08x, which is neither IDS neutral", got)
+	}
+}
+
+// The switch point is derived from the two inks, so it cannot go stale when
+// the palette is regenerated. This pins what it derives to today and, more to
+// the point, that it really is the balance point rather than a rounded one.
+func TestInkSwitchIsTheEqualContrastPoint(t *testing.T) {
+	d := styletokens.NeutralBgExtreme.AsHex()
+	l := styletokens.NeutralTextExtreme.AsHex()
+	if math.Abs(inkSwitchL-0.173365) > 1e-5 {
+		t.Errorf("inkSwitchL = %v, want 0.173365 for the palette as it stands", inkSwitchL)
+	}
+	// A fill exactly at the switch contrasts equally with either ink. The
+	// identity is on the luminance, not on a colour: no byte triple lands
+	// exactly on the switch, so quantising to one first would only measure
+	// the rounding.
+	toDark := (inkSwitchL + 0.05) / (implot.RelativeLuminance(d) + 0.05)
+	toLite := (implot.RelativeLuminance(l) + 0.05) / (inkSwitchL + 0.05)
+	if math.Abs(toDark-toLite) > 1e-9 {
+		t.Errorf("at the switch the inks give %.6f:1 and %.6f:1, want them level", toDark, toLite)
+	}
+	// And the ink really does turn over there, in the direction claimed.
+	if contrastText(0xffffffff) != d || contrastText(0x000000ff) != l {
+		t.Error("the switch runs the wrong way: dark ink belongs on the brighter fill")
+	}
+	// And the whole qualitative cycle clears 4.5:1 under it, which is the
+	// reason the switch is allowed to be this coarse.
+	for i := range 7 {
+		fill := styletokens.QualitativeCycle(i).AsHex()
+		if cr := implot.ContrastRatio(fill, contrastText(fill)); cr < 4.5 {
+			t.Errorf("palette entry %d (%08x) reads at only %.4f:1", i, fill, cr)
+		}
 	}
 }
 
@@ -431,6 +601,118 @@ func TestWithDefaults(t *testing.T) {
 	kept := Opts{RowPx: 30, FontSize: 9}.withDefaults(lay)
 	if kept.RowPx != 30 || kept.FontSize != 9 {
 		t.Errorf("explicit sizes were overwritten: %v / %v", kept.RowPx, kept.FontSize)
+	}
+}
+
+// RowPx is a minimum, not a height: the span is the pane divided by it, but
+// capped at the tree's own depth so a shallow tree gets taller rows rather
+// than empty pane.
+func TestDepthSpanIsDerivedAndCapped(t *testing.T) {
+	const rowPx = 18
+	cases := []struct {
+		name   string
+		rows   float64
+		areaH  float32
+		areaOk bool
+		want   float64
+	}{
+		{"shallow tree in a tall pane", 3, 540, true, 3}, // 30 rows would fit; there are 3
+		{"deep tree", 100, 540, true, 30},                // 540/18
+		{"exactly full", 30, 540, true, 30},              // the cap and the fit agree
+		{"first frame has no area", 100, 0, false, 100},  // nothing to divide yet
+		{"a stale area of zero", 100, 0, true, 100},      // and a zero one is not a span
+		{"a collapsed pane", 100, 9, true, 0.5},          // half a row, honestly reported
+		{"one row deep", 1, 540, true, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := depthSpan(tc.rows, tc.areaH, rowPx, tc.areaOk); got != tc.want {
+				t.Errorf("depthSpan(%v, %v, %v, %v) = %v, want %v",
+					tc.rows, tc.areaH, rowPx, tc.areaOk, got, tc.want)
+			}
+		})
+	}
+	// A zero RowPx would divide by zero. withDefaults rules it out, but the
+	// helper is the one that must not produce an infinity.
+	if got := depthSpan(100, 540, 0, true); got != 100 {
+		t.Errorf("depthSpan with no row height = %v, want the tree's depth", got)
+	}
+}
+
+// The window and the condition are one answer: re-asserting the span every
+// frame would pin the axis, so CondAlways has to be reserved for the frames
+// where the window is genuinely wrong.
+func TestDepthWindowKeepsTheRootEdgeAndLetsAPanStick(t *testing.T) {
+	cases := []struct {
+		name             string
+		cur0, cur1, span float64
+		flame            bool
+		known, reset     bool
+		lo, hi           float64
+		cond             implot.Cond
+	}{
+		// First frame: nothing known yet, so seed the root edge once.
+		{"icicle first frame", 0, 0, 5, false, false, false, -5, 0, implot.CondOnce},
+		{"flame first frame", 0, 0, 5, true, false, false, 0, 5, implot.CondOnce},
+		// Steady state: the span still holds, so a pan sticks.
+		{"icicle steady, scrolled", -12, -7, 5, false, true, false, -5, 0, implot.CondOnce},
+		{"flame steady, scrolled", 7, 12, 5, true, true, false, 0, 5, implot.CondOnce},
+		// Resize: re-assert the span, keeping the edge nearest the root —
+		// which is the far end of the window in each orientation.
+		{"icicle resized", -12, -7, 8, false, true, false, -15, -7, implot.CondAlways},
+		{"flame resized", 7, 12, 8, true, true, false, 7, 15, implot.CondAlways},
+		// Reset outranks a resize and returns to the root either way.
+		{"icicle reset", -12, -7, 8, false, true, true, -8, 0, implot.CondAlways},
+		{"flame reset", 7, 12, 8, true, true, true, 0, 8, implot.CondAlways},
+		// A difference below the epsilon is not a resize: at CondAlways a
+		// drag would fight the widget every frame.
+		{"sub-epsilon drift", -5, 0, 5 + spanEps/2, false, true, false, -5.0005, 0, implot.CondOnce},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lo, hi, cond := depthWindow(tc.cur0, tc.cur1, tc.span, tc.flame, tc.known, tc.reset)
+			if math.Abs(lo-tc.lo) > 1e-9 || math.Abs(hi-tc.hi) > 1e-9 || cond != tc.cond {
+				t.Errorf("depthWindow = (%v,%v,%v), want (%v,%v,%v)", lo, hi, cond, tc.lo, tc.hi, tc.cond)
+			}
+			// Whatever it returns spans exactly what was asked for.
+			if got := hi - lo; math.Abs(got-tc.span) > 1e-9 {
+				t.Errorf("window spans %v rows, want %v", got, tc.span)
+			}
+		})
+	}
+}
+
+// A resize must re-scale the view without also scrolling it: the row at the
+// root-side edge stays put.
+func TestDepthWindowResizeDoesNotScroll(t *testing.T) {
+	for _, flame := range []bool{false, true} {
+		cur0, cur1 := -12.0, -7.0 // icicle: scrolled to rows 7..12
+		if flame {
+			cur0, cur1 = 7.0, 12.0
+		}
+		for _, span := range []float64{3, 8} { // shrink and grow
+			lo, hi, cond := depthWindow(cur0, cur1, span, flame, true, false)
+			if cond != implot.CondAlways {
+				t.Errorf("flame=%v span=%v: cond = %v, want CondAlways", flame, span, cond)
+			}
+			// The root-side edge is the one nearer the root: cur0 growing up,
+			// cur1 growing down.
+			if flame && lo != cur0 {
+				t.Errorf("flame span=%v: lower edge moved from %v to %v", span, cur0, lo)
+			}
+			if !flame && hi != cur1 {
+				t.Errorf("icicle span=%v: upper edge moved from %v to %v", span, cur1, hi)
+			}
+		}
+	}
+}
+
+func TestRootWindowRunsAwayFromZero(t *testing.T) {
+	if lo, hi := rootWindow(4, true); lo != 0 || hi != 4 {
+		t.Errorf("flame root window = (%v,%v), want (0,4)", lo, hi)
+	}
+	if lo, hi := rootWindow(4, false); lo != -4 || hi != 0 {
+		t.Errorf("icicle root window = (%v,%v), want (-4,0)", lo, hi)
 	}
 }
 
