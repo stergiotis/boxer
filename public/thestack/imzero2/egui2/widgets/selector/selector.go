@@ -91,7 +91,14 @@ func renderControl(id c.WidgetIdCreatorI, style Style, frameless, checked bool, 
 			b := c.Button(id, c.Atoms().Text(text).Keep()).Selected(checked)
 			if frameless {
 				// Frame(false) drops the button chrome — the borderless
-				// segment used in dense toolbars and ComboBox popups.
+				// segment used in ComboBox popups, where what is selected is
+				// said by the popup rather than by the row.
+				//
+				// It ALSO drops the selected fill, since that fill IS the
+				// frame: a bar of these renders its checked and unchecked
+				// options identically. Only combine the two where something
+				// else states the selection — a standalone options bar wants
+				// StyleSelectable, which is frameless AND highlights.
 				b = b.Frame(false)
 			}
 			clicked = b.SendResp().HasPrimaryClicked()
@@ -253,6 +260,17 @@ func (inst GroupFluid[T]) Gap(px float32) GroupFluid[T] { inst.gap = px; return 
 // Frameless drops the button chrome on [StyleSegmented] (renders each segment
 // with Frame(false)); it is a no-op for [StyleSelectable] (already frameless)
 // and [StyleRadio].
+//
+// It also drops the SELECTED STATE, because [StyleSegmented] shows selection by
+// filling the segment and the fill is the frame — a frameless segmented bar
+// draws its checked and unchecked options identically. That is tolerable inside
+// a ComboBox popup, where the popup says what is selected, and wrong for a
+// standalone options bar.
+//
+// Reach for [StyleSelectable] instead: it is frameless too, and highlights the
+// selected option. Four `play` panels reached here first and rendered
+// unreadable bars until a pair of screenshots differing only in one toggle came
+// back pixel-identical.
 func (inst GroupFluid[T]) Frameless() GroupFluid[T] { inst.frameless = true; return inst }
 
 // SendResp lays out the bar and returns true on the frame a click moves the

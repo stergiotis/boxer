@@ -768,7 +768,7 @@ func (inst *SankeyDriver) renderControls(stagesGiven bool) {
 		c.Label("mode").Send()
 		selector.Segmented(inst.ids, "sankey-mode", &inst.choice).
 			Inline().
-			Frameless().
+			Style(selector.StyleSelectable).
 			Option(sankeyChoiceAuto, "auto").
 			Option(sankeyChoiceSankey, "sankey").
 			Option(sankeyChoiceAlluvial, "alluvial").
@@ -777,7 +777,7 @@ func (inst *SankeyDriver) renderControls(stagesGiven bool) {
 		c.Label("fill").Send()
 		selector.Segmented(inst.ids, "sankey-fill", &inst.fill).
 			Inline().
-			Frameless().
+			Style(selector.StyleSelectable).
 			Option(sankeyview.FillPolygon, "polygon").
 			Option(sankeyview.FillColumns, "columns").
 			SendResp()

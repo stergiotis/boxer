@@ -757,14 +757,14 @@ func (inst *flowDriver) renderControls(active NodeID) {
 		c.Label("source").Send()
 		selector.Segmented(inst.ids, "flow-src", &inst.srcMode).
 			Inline().
-			Frameless().
+			Style(selector.StyleSelectable).
 			Option(flowSrcRun, "run").
 			Option(flowSrcCaret, "caret").
 			SendResp()
 		c.Label("layout").Send()
 		selector.Segmented(inst.ids, "flow-rank-dir", &inst.rankDir).
 			Inline().
-			Frameless().
+			Style(selector.StyleSelectable).
 			Option(layeredgraph.RankDirLeftRight, "left-right").
 			Option(layeredgraph.RankDirTopBottom, "top-down").
 			SendResp()
@@ -772,7 +772,7 @@ func (inst *flowDriver) renderControls(active NodeID) {
 			c.Label("view").Send()
 			selector.Segmented(inst.ids, "flow-lens-view", &inst.lensView).
 				Inline().
-				Frameless().
+				Style(selector.StyleSelectable).
 				Option(flowViewGraph, "graph").
 				Option(flowViewText, "text").
 				SendResp()

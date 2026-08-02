@@ -597,7 +597,7 @@ func (inst *NetworkDriver) renderControls() {
 		c.Label("layout").Send()
 		selector.Segmented(inst.ids, "rank-dir", &inst.rankDir).
 			Inline().
-			Frameless().
+			Style(selector.StyleSelectable).
 			Option(layeredgraph.RankDirTopBottom, "top-down").
 			Option(layeredgraph.RankDirLeftRight, "left-right").
 			SendResp()
