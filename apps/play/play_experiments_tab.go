@@ -9,7 +9,6 @@ import (
 	"encoding/json/jsontext"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
@@ -304,9 +303,13 @@ func (inst *experimentsDriver) renderBody(rec arrow.RecordBatch, schema *arrow.S
 const (
 	experimentsCardScopeFixture uint64 = 0xE7C1
 	experimentsCardScopeResult  uint64 = 0xE7C2
-)
 
-var expRenderCalls int
+	// experimentsCardSaltMix is XORed into the base salt of the stack those two
+	// emitters derive from, so the pane's ids are disjoint from the app's card
+	// stack rather than merely scoped apart. See the construction site in
+	// play_renderer.go.
+	experimentsCardSaltMix uint64 = 0x5EED_E7C0_0000_0001
+)
 
 // renderCard drives and draws the Table2 card emitter. Unlike the other sinks
 // this happens every frame: the emitter re-bases its widget-id counter at each
@@ -320,6 +323,10 @@ func (inst *experimentsDriver) renderCard(rec arrow.RecordBatch, schema *arrow.S
 	if inst.source == experimentsSourceFixture {
 		if inst.fixtureCard == nil {
 			inst.fixtureCard = leewaywidgets.NewTable2CardEmitter(inst.cardIds, leewaywidgets.ColorPaletteViridis, nil)
+			// Without this the emitter flushes at EndBatch — i.e. inside
+			// RunFixture — and the Render() below draws the same widgets a
+			// second time. CardDriver sets it for the same reason.
+			inst.fixtureCard.DeferRender = true
 		}
 		leewaywidgets.RunFixture(inst.fixtureCard)
 		for range c.IdScope(inst.cardIds.PrepareSeq(experimentsCardScopeFixture)) {
@@ -339,9 +346,9 @@ func (inst *experimentsDriver) renderCard(rec arrow.RecordBatch, schema *arrow.S
 		c.Label("Driving the result failed: " + err.Error()).Send()
 		return
 	}
-	expRenderCalls++
-	log.Warn().Int("call", expRenderCalls).Msg("PROBE renderCard result-arm Render")
-	inst.cards.Render()
+	for range c.IdScope(inst.cardIds.PrepareSeq(experimentsCardScopeResult)) {
+		inst.cards.Render()
+	}
 }
 
 // renderTopology sizes the treemap against the pane and draws it. Sizing is

@@ -875,7 +875,16 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
-	inst.experiments = newExperimentsDriver(mk(), mk())
+	// The Experiments pane's card emitters get a stack on a DIFFERENT base
+	// salt, not merely a different instance. PrepareSeq maps its argument
+	// through makeHighEntropy alone and Derive XORs it with the enclosing
+	// scope, which on an empty stack is the base salt — so two stacks built by
+	// mk() produce byte-identical ids for the same argument. The pane and the
+	// Detail tab both render a Table2CardEmitter over the same result in the
+	// same frame, so sharing a salt makes every cell id a duplicate.
+	expCardIds := mk()
+	expCardIds.SetBaseSalt(salt ^ experimentsCardSaltMix)
+	inst.experiments = newExperimentsDriver(mk(), expCardIds)
 	inst.diag = NewDiagnosticsDriver(client)
 	var docsSource DocsSourceI
 	if client != nil {
