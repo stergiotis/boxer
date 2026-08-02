@@ -1,14 +1,12 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-02
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-02
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
-
-# ADR-0161: a Distribution panel for play — result contract + `descriptive_statistics` macro
+# ADR-0161: a Distribution panel for play — result contract + `descriptiveStatistics` macro
 
 ## Context
 
@@ -28,7 +26,7 @@ Three verified facts enable a thin cut:
   a quantile grid plus a count feeds everything, bands calibrated at true n.
 - ClickHouse returns that grid in one aggregate call (`quantiles*` →
   `Array(Float64)`); play's Arrow path already folds `Array` columns.
-- grammar1 parses `descriptive_statistics(a, b)` today, and the pass
+- grammar1 parses `descriptiveStatistics(a, b)` today, and the pass
   pipeline already hosts statement-level rewrites (`CanonicalizeFull` @ 50)
   and registered macro expansion (`LW_ID_*`, ADR-0106 §SD5).
 
@@ -103,11 +101,11 @@ grid; this one is the macro's choice, not the panel's demand.
 ### §SD3 — the macro
 
 ```sql
-SELECT descriptive_statistics(['exact' | 'gk' | 'dd' | 'tdigest',] col1 [, col2 …])
+SELECT descriptiveStatistics(['exact' | 'gk' | 'dd' | 'tdigest',] col1 [, col2 …])
 FROM …  [WHERE …]  [GROUP BY k1 [, k2 …]]
 ```
 
-- Canonical name `descriptive_statistics`, matched case-insensitively. The
+- Canonical name `descriptiveStatistics`, matched case-insensitively. The
   optional first string literal selects the estimator (default `tdigest`).
 - **Sole-select-item rule**: mixing with other select expressions is a loud
   pass error — a merged output shape does not exist. Misuse errors at
@@ -165,7 +163,7 @@ labels the collapse; few distinct `qs` values hint at GROUP BY.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| User-facing SQL vocabulary | new macro `descriptive_statistics` | editor docs/snippets; sqleditor completion corpus (ADR-0147); play help pages |
+| User-facing SQL vocabulary | new macro `descriptiveStatistics` | editor docs/snippets; sqleditor completion corpus (ADR-0147); play help pages |
 | keelson passreg defaults | new `StagePreExecute` entry | Passes tab listing; `TestRegisterPassesOrdering` pin; every defaults host (applets included) |
 | Result-contract names | `series`, `n`, `ps`, `qs` + optionals (§SD1) | panel claim code; applet/gallery examples; future consumers of the shape |
 | Exported Go API | new pkg `public/analytics/stats/distsql` | godoc; downstream modules |
@@ -180,7 +178,7 @@ Structural kills live in §Design space. Additionally rejected:
   validation already makes accidental claims implausible.
 - **A short macro alias** — two names for one expansion; the macro-family
   precedent is one canonical name.
-- **Parametric spelling** `descriptive_statistics('gk')(…)` — parses, but a
+- **Parametric spelling** `descriptiveStatistics('gk')(…)` — parses, but a
   second CST shape for zero added expressiveness.
 - **Histogram from the macro in v1** — bin-count and normalisation defaults
   deserve their own look (M2); descope over gate.
@@ -215,7 +213,7 @@ Structural kills live in §Design space. Additionally rejected:
 ## Migration
 
 - **Breaks.** None — every surface is new; a query already naming
-  `descriptive_statistics` previously failed with `UNKNOWN_FUNCTION`.
+  `descriptiveStatistics` previously failed with `UNKNOWN_FUNCTION`.
 - **Path.** (1) `distsql` package + unit tests. (2) Panel M0 against
   hand-written contract SQL. (3) Expansion pass + defaults registration +
   goldens; ordering pin updated. (4) M2: histogram emission + view; gallery
@@ -246,9 +244,7 @@ Structural kills live in §Design space. Additionally rejected:
 
 ## Status
 
-Proposed 2026-08-02, out of the
-[distribution-panel survey](../adr-background-work/play-distribution-panel-survey.md)
-and its recorded dialogue. Milestones in §Migration; the four adjacent
+Accepted 2026-08-02. Milestones in §Migration; the four adjacent
 tracks are deliberately not gated by this ADR.
 
 ## References

@@ -1,12 +1,10 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-02
 ---
-
-> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
 # Distribution data as a play panel — a design-space survey
 
@@ -30,7 +28,7 @@ statistical footing the in-process `distsummary` inspector already has for
 live telemetry. Four things need deciding, and they are separable:
 
 1. **The SQL surface** — how a user asks for a distribution (§5). The prompt
-   for this survey sketched `SELECT descriptive_statistics(mycol1, mycol2,
+   for this survey sketched `SELECT descriptiveStatistics(mycol1, mycol2,
    mycol3)` expanded by a nanopass pass.
 2. **The result-shape contract** — what crosses the wire from ClickHouse to
    the panel (§6).
@@ -325,7 +323,7 @@ result (§6.2) so the panel can label what it shows.
 **O1. Macro in the select list** (the prompt's sketch):
 
 ```sql
-SELECT descriptive_statistics(duration_ms, payload_bytes)
+SELECT descriptiveStatistics(duration_ms, payload_bytes)
 FROM runs WHERE day >= yesterday() GROUP BY service
 ```
 
@@ -335,8 +333,8 @@ group). This parses today as a plain function call — no grammar change. It
 is a statement-level rewrite, which is more than `LW_ID_*` does
 (expression→expression) but less than `CanonicalizeFull` (whole-statement,
 already at order 50). An estimator knob fits either as a leading string
-argument (`descriptive_statistics('gk', a, b)`) or the parametric spelling
-(`descriptive_statistics('gk')(a, b)`); both parse (§3.3), the plain-argument
+argument (`descriptiveStatistics('gk', a, b)`) or the parametric spelling
+(`descriptiveStatistics('gk')(a, b)`); both parse (§3.3), the plain-argument
 form reuses the `LW_ID` CST handling as-is.
 
 **O2. Contract only, no macro.** Publish §6's named-column contract; users
@@ -345,7 +343,7 @@ precedent says the contract is the real interface regardless — anything the
 macro can emit, a hand query can too, and the panel cannot tell the
 difference.
 
-**O3. Table-function style** — `FROM descriptive_statistics(…)`. Killed:
+**O3. Table-function style** — `FROM descriptiveStatistics(…)`. Killed:
 touches the FROM grammar surface, no prior art in the pass stack, and the
 subquery plumbing (what relation does it scan?) reintroduces everything O1
 already solves inside a familiar shape.
@@ -505,8 +503,8 @@ Resolved 2026-08-02: the roles framing (§1.1); comparison-first composition
 conformal readout, and the lineup protocol are wanted (tracks in §10); the
 agent surface is a strategic goal. Still open:
 
-1. Macro name and spelling — `descriptive_statistics` is long;
-   `dist_summary`? Leading-string-arg vs parametric estimator knob? And the
+1. Macro name and spelling — `descriptiveStatistics` is long;
+   `distSummary`? Leading-string-arg vs parametric estimator knob? And the
    comparison sibling's shape (§5).
 2. Estimator default — `tdigest` (practice, bounded state) vs `gk`
    (formal rank bound that composes with the bands). This page leans
@@ -532,10 +530,10 @@ agent surface is a strategic goal. Still open:
 
 ## 10. Suggested path
 
-> **Pointer.** The panel + contract + macro scope was proposed as
-> [ADR-0161](../adr/0161-play-distribution-panel.md) (2026-08-02); once
-> accepted, that record is authoritative and this page is its background
-> snapshot. The four directed tracks below remain un-gated by it.
+> **Pointer.** The panel + contract + macro scope was decided by
+> [ADR-0161](../adr/0161-play-distribution-panel.md) (accepted 2026-08-02);
+> that record is authoritative and this page is its background snapshot.
+> The four directed tracks below remain un-gated by it.
 
 Dialogue round 1 (2026-08-02) settled the roles and the comparison-first
 redirection; the remaining §9 questions gate the ADR (a new public SQL
