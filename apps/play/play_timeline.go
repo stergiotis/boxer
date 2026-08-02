@@ -208,8 +208,8 @@ func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineCon
 // three column-shape modes the Timeline panel accepts (Points,
 // Intervals, Annotations) and the slot constraints. Intended for
 // empty-state and rejection-state surfaces so first-time users learn
-// the contract from the panel itself instead of having to chase the
-// how-to doc. Body line is body-sized; slot rows use the monospace
+// the contract from the panel itself instead of having to chase it
+// elsewhere. Body line is body-sized; slot rows use the monospace
 // style so column names line up visually; the closing note is small +
 // weak so it doesn't compete with surrounding controls.
 func (inst *TimelineDriver) RenderContractHelp() {
@@ -228,7 +228,7 @@ func (inst *TimelineDriver) RenderContractHelp() {
 		c.AddSpace(4)
 		for rt := range c.RichTextLabel(
 			"Timestamps must be DateTime64(N); strings for labels and lanes. " +
-				"See doc/howto/play-timeline-panel.md for recipes and the background-bands overlay.") {
+				"The Snippets tab carries a ready-made query for each shape, and one for the background-bands overlay.") {
 			rt.Small().Weak()
 		}
 	}

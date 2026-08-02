@@ -44,10 +44,11 @@ const bandAlpha uint8 = 0x30
 
 // bandColorTokens maps IDS dot-notation token names to the source
 // styletokens.RGBA8 entries. Names follow ADR-0031 §SD2 (palette.toml).
-// Edit this map in lockstep with the band-color section of
-// doc/howto/play-timeline-panel.md; an unknown name surfaces as a
-// per-row warning in the bands status line rather than a silent
-// fallback so the SQL author can fix it.
+// Edit this map in lockstep with the "Timeline regions (background
+// bands)" section of apps/play/help/snippets.md, which names the tokens
+// a SQL author can reach for; an unknown name surfaces as a per-row
+// warning in the bands status line rather than a silent fallback so the
+// SQL author can fix it.
 var bandColorTokens = map[string]styletokens.RGBA8{
 	"neutral.bg.faint":   styletokens.NeutralBgFaint,
 	"neutral.bg.surface": styletokens.NeutralBgSurface,
