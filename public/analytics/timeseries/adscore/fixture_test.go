@@ -129,16 +129,7 @@ func matrixProfileScores(t *testing.T, values []float64, window int32) (scores [
 	t.Helper()
 	series, err := matrixprofile.NewSeriesE(values, window, 0.0)
 	require.NoError(t, err)
-	prof := series.Compute()
-
-	scores = make([]float64, len(values))
-	centre := window / 2
-	for i, d := range prof.Distance {
-		p := int32(i) + centre
-		if int(p) < len(scores) && d > scores[p] {
-			scores[p] = d
-		}
-	}
+	scores = series.Compute().PositionScores(int32(len(values)), nil)
 	return
 }
 

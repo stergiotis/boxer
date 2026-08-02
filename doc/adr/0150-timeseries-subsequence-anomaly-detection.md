@@ -567,6 +567,79 @@ a few hours. Giving `sysmetrics` a persistence path (declined at acceptance, and
 still not obviously worth it on its own) would produce dense, continuous,
 per-process data and turn this from a suggestive exercise into a measurement.
 
+### 2026-08-02 — M4 implemented; the aggregation direction, and a cheap alternative that matches it
+
+`public/analytics/timeseries/matrixprofile` gains `MultiSeries` / `MultiProfile`:
+mSTAMP over the existing STOMP recurrence, computing the k-dimensional profile
+for every k from 1 to d at once, with the selected channel subset recorded per
+position and MDL selection of k for motifs. No new module dependency. The
+univariate recurrence was extracted into a shared row scanner so both paths
+drive one transcription of it; with d = 1 the multivariate path now reproduces
+the univariate profile bit for bit, which is asserted rather than assumed.
+
+The channel subset is a `uint64` bitmask, so d is capped at 64. That is well past
+where the method stops being the right choice — the survey records its advantage
+inverting somewhere between a handful of channels and a few dozen.
+
+**The aggregation direction was got wrong first, and measurement corrected it.**
+mSTAMP averages the k *smallest* per-channel distances. For an anomaly confined
+to some channels that reads backwards — the unaffected channels still match well,
+so the k smallest look like the channels where nothing happened — and an
+aggregation over the k *largest* was implemented on that argument. Measured, it
+lost at every k on every fixture kind, by three to seven times, and it was
+removed rather than shipped beside the better option. The intuition ignores that
+the neighbour is chosen *jointly*: an anomaly does not have to make the selected
+channels look bad, it only has to remove them from the pool, after which the
+remaining channels must find a single position that suits all of them. The
+published aggregation is right, for a reason the paper does not spell out
+because the paper is about motifs.
+
+**Swept over k, accuracy peaks at the number of affected channels.** On composed
+multivariate fixtures — five channels, an anomaly in two — VUS-PR by k runs
+0.057, **0.303–0.527**, 0.16–0.20, 0.12–0.21, 0.09–0.15 across the four anomaly
+kinds, peaking at k = 2 in all four. So the affected-channel count can be read
+off the sweep rather than supplied, which is the anomaly-side counterpart of MDL
+recovering a motif's dimensionality. Both ends of the sweep are bad and for
+opposite reasons: k = 1 finds some channel matching somewhere and sits at chance,
+k = d dilutes the affected channels among all the rest. **A factor of ten across
+k on one series makes k the dominant parameter here**, as window length was at M2.
+
+**The result that does not flatter this code**: the obvious cheap alternative —
+run d univariate profiles, keep the largest score at each position, same
+O(d·n²) — scores 0.53–0.59 against the joint profile's 0.30–0.53, matching or
+beating it on every kind. On these fixtures the subdimensional machinery buys
+the channel subset and the count, **not accuracy**. The fixtures' channels are
+mutually independent, which is the worst case for a joint nearest neighbour and
+the best case for treating channels separately, so this is a bound rather than a
+verdict. The missing experiment is a correlated-channel fixture; it is deferred
+rather than done, because building one means an anomaly injector for
+multivariate series, which is its own design question and would have gated M4 on
+its hardest peripheral piece.
+
+**The MDL formula does not match the widely used reference implementation.** The
+paper's worked example is unambiguous — a pair of ten-sample series at 4 bits
+costs 80 bits stored directly and 50 stored as reference-plus-difference — and 50
+is one raw side plus one difference. The reference implementation omits the raw
+side, which makes a matched channel cost only its difference and biases the
+argmin toward larger k. The paper's arithmetic is implemented here. Two further
+choices are ours: the difference width is taken per channel rather than pooled
+across the selected ones, and it comes from the difference's *range* rather than
+a count of its distinct values. The count degenerates — at most m distinct values
+occur among m samples, so on any window shorter than 2^bits every channel
+compresses and the argmin is always d.
+
+Two smaller notes. `Profile.PositionScores` and `MultiProfile.PositionScores`
+now do the centre attribution that M2 measured as worth more than half the
+achievable accuracy; it had been hand-rolled at each call site, and the copy in
+adscore's tests is gone. And the monotonicity of the profile in k holds exactly
+on the values the search ranks, but each k selects and refines its neighbour
+independently, so on a series mixing local scales across many orders of
+magnitude two adjacent k can cross by far more than rounding — measured at 0.34
+against a window of 3. That is the identity's documented behaviour, not the
+aggregation's.
+
+**M5 `hstrees` is next**, unchanged.
+
 ## References
 
 - Survey and literature landscape:

@@ -32,14 +32,38 @@
 // The published practical ceiling for this algorithm is around 500,000
 // samples. Beyond that, the quadratic term dominates.
 //
+// # Multivariate series
+//
+// [MultiSeries] and [MultiProfile] carry the same structure across d channels
+// at once, as mSTAMP: for every k from 1 to d, the nearest neighbour under the
+// best-matching k channels, and which channels those were. A pattern in a wide
+// series usually occupies a subset of its channels, and this finds the subset
+// rather than requiring it as input. [MultiSeries.SelectDimsMDLE] picks k for a
+// motif; for an anomaly, sweeping k and taking the best is what the measurement
+// in the tests does, and the sweep peaks at the number of affected channels.
+//
+// Cost is O(d·n²·log d) time and O(d·n) space — every k is computed whether or
+// not it is read, because the profiles at different k do not nest and so cannot
+// prune one another.
+//
 // # Scope
 //
-// Batch and univariate. Streaming left-discords (DAMP) and multivariate
-// subdimensional aggregation are separate milestones of ADR-0150; see
-// doc/adr/0150-timeseries-subsequence-anomaly-detection.md for the decision
-// and doc/explanation/timeseries-motif-anomaly-survey.md for why these
-// algorithms were chosen over the alternatives.
+// Batch. Streaming left-discords are a separate package,
+// [github.com/stergiotis/boxer/public/analytics/timeseries/damp]. See
+// doc/adr/0150-timeseries-subsequence-anomaly-detection.md for the decision and
+// doc/explanation/timeseries-motif-anomaly-survey.md for why these algorithms
+// were chosen over the alternatives.
 //
-// Nothing here is validated against a labelled benchmark yet — that harness is
-// M2 of the same ADR. Until it lands, treat accuracy claims as untested.
+// # What the accuracy numbers say
+//
+// Both paths are measured against
+// [github.com/stergiotis/boxer/public/analytics/timeseries/adscore]'s
+// flaw-resistant fixtures, and the results are not uniformly flattering. The
+// univariate profile clears the trivial one-liner baselines by a wide margin.
+// The subdimensional profile clears them too, but on fixtures whose channels are
+// mutually independent it does *not* beat the obvious cheap alternative —
+// running d univariate profiles and taking the largest score at each position,
+// which costs the same. What it adds over that alternative there is the channel
+// subset and the count, not accuracy. Neither path has been measured on a
+// multivariate series recorded from anything real.
 package matrixprofile

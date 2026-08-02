@@ -377,31 +377,11 @@ func (inst *Series) Compute() (prof *Profile) {
 		prof.Index[i] = -1
 	}
 
-	// Row 0, computed directly. By symmetry QT[i][0] == QT[0][i], so this one
-	// pass also supplies the first column every later row needs.
-	firstRow := make([]float64, numWindows)
-	for j := range numWindows {
-		firstRow[j] = inst.dotAt(0, j)
-	}
-	firstCol := make([]float64, numWindows)
-	copy(firstCol, firstRow)
-
-	qt := firstRow
-	inst.reduceRow(prof, 0, qt, zone)
-
-	m := inst.window
-	// The recurrence must run over the same values the initial dot products did.
-	values := inst.centered
+	sc := inst.newRowScanner()
+	inst.reduceRow(prof, 0, sc.qt, zone)
 	for i := int32(1); i < numWindows; i++ {
-		// Descending j so the in-place update reads QT[i-1][j-1] before
-		// overwriting it.
-		dropI := values[i-1]
-		addI := values[i+m-1]
-		for j := numWindows - 1; j >= 1; j-- {
-			qt[j] = qt[j-1] - dropI*values[j-1] + addI*values[j+m-1]
-		}
-		qt[0] = firstCol[i]
-		inst.reduceRow(prof, i, qt, zone)
+		sc.advance(i)
+		inst.reduceRow(prof, i, sc.qt, zone)
 	}
 
 	// The search above ranks candidates through the 2m(1−ρ) identity, which is
@@ -416,6 +396,67 @@ func (inst *Series) Compute() (prof *Profile) {
 		prof.Distance[i] = inst.exactDistance(int32(i), prof.Index[i])
 	}
 	return
+}
+
+// rowScanner carries the STOMP dot-product state for one series: the current
+// row of the QT matrix, and the first column every later row needs.
+//
+// It exists so that the univariate search and the subdimensional one in
+// multi.go drive the same recurrence rather than two transcriptions of it. The
+// multivariate path needs d rows advanced in lockstep and read together, which
+// is the one thing [Series.Compute]'s original inlined loop could not give.
+type rowScanner struct {
+	series *Series
+	// qt holds row i of the dot-product matrix once advance has been called for
+	// i. Callers read it and must not write it.
+	qt []float64
+	// firstCol is column 0 of the matrix, which the recurrence cannot produce
+	// because it has no j-1 to read.
+	firstCol []float64
+}
+
+// newRowScanner computes row 0 directly, at O(n·Window), and returns a scanner
+// positioned there.
+//
+// By symmetry QT[i][0] == QT[0][i], so this one pass also supplies the first
+// column.
+func (inst *Series) newRowScanner() (sc *rowScanner) {
+	numWindows := inst.NumWindows()
+	firstRow := make([]float64, numWindows)
+	for j := range numWindows {
+		firstRow[j] = inst.dotAt(0, j)
+	}
+	firstCol := make([]float64, numWindows)
+	copy(firstCol, firstRow)
+
+	sc = &rowScanner{
+		series:   inst,
+		qt:       firstRow,
+		firstCol: firstCol,
+	}
+	return
+}
+
+// advance moves the scanner from row i-1 to row i in O(n), via the recurrence
+//
+//	QT[i][j] = QT[i-1][j-1] − t[i-1]·t[j-1] + t[i+m-1]·t[j+m-1]
+//
+// Rows must be visited in order, starting at 1.
+func (sc *rowScanner) advance(i int32) {
+	inst := sc.series
+	numWindows := inst.NumWindows()
+	m := inst.window
+	// The recurrence must run over the same values the initial dot products did.
+	values := inst.centered
+
+	// Descending j so the in-place update reads QT[i-1][j-1] before overwriting
+	// it.
+	dropI := values[i-1]
+	addI := values[i+m-1]
+	for j := numWindows - 1; j >= 1; j-- {
+		sc.qt[j] = sc.qt[j-1] - dropI*values[j-1] + addI*values[j+m-1]
+	}
+	sc.qt[0] = sc.firstCol[i]
 }
 
 // reduceRow folds one row of dot products into the running profile, updating
@@ -477,4 +518,63 @@ func (prof *Profile) Discord() (idx int32, dist float64, found bool) {
 		found = true
 	}
 	return
+}
+
+// PositionScores expands a profile into a per-position anomaly score vector of
+// length n — the shape
+// [github.com/stergiotis/boxer/public/analytics/timeseries/adscore] expects,
+// where n is the length of the series the profile was computed from.
+//
+// **Each window's score is attributed to the window's centre**, i + Window/2,
+// not to its start. A profile is indexed by window start, and handing those
+// indices to a per-position scorer displaces every peak by half a window.
+// Measured on this repository's own fixtures that costs more than half the
+// achievable accuracy, which is why this conversion is provided rather than
+// left to callers. The same convention is documented at
+// [github.com/stergiotis/boxer/public/analytics/timeseries/damp.Reading].
+//
+// Positions no window covers, and positions whose window had no admissible
+// neighbour, keep zero. Where windows overlap the larger score wins.
+//
+// dst is filled and returned when it has room for n values; otherwise a fresh
+// slice is allocated.
+func (prof *Profile) PositionScores(n int32, dst []float64) (out []float64) {
+	out = scoreBuffer(n, dst)
+	accumulateScores(out, prof.Distance, prof.Index, prof.Window)
+	return
+}
+
+// scoreBuffer returns a zeroed slice of length n, reusing dst when it fits.
+func scoreBuffer(n int32, dst []float64) (out []float64) {
+	if n < 0 {
+		n = 0
+	}
+	if cap(dst) >= int(n) {
+		out = dst[:n]
+		clear(out)
+	} else {
+		out = make([]float64, n)
+	}
+	return
+}
+
+// accumulateScores writes each window's distance to its centre position,
+// keeping the larger where windows overlap. Positions without an admissible
+// neighbour carry +Inf in dist and are skipped rather than saturating the
+// vector.
+func accumulateScores(out []float64, dist []float64, idx []int32, window int32) {
+	n := int32(len(out))
+	half := window / 2
+	for i, d := range dist {
+		if idx[i] < 0 || math.IsInf(d, 0) || math.IsNaN(d) {
+			continue
+		}
+		centre := int32(i) + half
+		if centre < 0 || centre >= n {
+			continue
+		}
+		if d > out[centre] {
+			out[centre] = d
+		}
+	}
 }
