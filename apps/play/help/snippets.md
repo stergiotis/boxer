@@ -648,6 +648,87 @@ WITH
 SELECT * FROM flows ORDER BY value DESC
 ```
 
+## The same disk, as an icicle
+
+The **Icicle** tab draws a result as a space-filling hierarchy: one row per
+depth, each frame's *width* its value, children abutting under their parent
+(ADR-0160). Turned upside down — root at the bottom — the same layout is a
+flamegraph, which is the switch at the left of its control row.
+
+Where the Sankey above reads these bytes as a *flow* between three stages, this
+reads them as *containment*: a table is in a database is on a disk. Neither is
+more correct. The flow answers "how much went from here to there"; the
+hierarchy answers "what is big, and what is it part of".
+
+The folded contract is one row per root-to-leaf path — `stack`, an array from
+the outermost frame inward, and `value`, that path's own quantity. The panel
+interns the paths into a trie, so the interior frames (the databases, the disk)
+are synthesised and take the sum of what sits under them. Nothing needs
+prefixing the way the Sankey's node ids did: a frame's identity is its whole
+path, so a database and a table sharing a name cannot collide. `unit` is
+optional and only labels the value axis.
+
+```sql
+SELECT [disk_name, database, table] AS stack,
+       sum(bytes_on_disk)           AS value,
+       'bytes'                      AS unit
+FROM system.parts
+WHERE active
+GROUP BY stack
+ORDER BY value DESC
+```
+
+Any delimited path is one function away: `splitByChar('/', path) AS stack`
+turns a file path, a package path or a folded stack trace into the same shape.
+A pprof capture published as an ad-hoc dataset already arrives in it — one row
+per unique call stack — so `SELECT stack, value FROM keelson('<handle>')` needs
+nothing added.
+
+## One row per node (the other Icicle contract)
+
+When the hierarchy already carries its parents — a self-join, a `WITH
+RECURSIVE`, a table that stores a tree — say so directly instead of building
+paths. `id`, `parent` and `value`, one row per node; an empty or NULL `parent`
+marks a root, and `label` overrides the drawn text. Several roots are fine and
+are laid out side by side, so a forest needs no synthetic root inventing a
+total no row supports.
+
+The two contracts are not interchangeable. This is the only one in which an
+**interior** node can carry a value of its own. A database has none — its width
+below is exactly the sum of its tables — but a directory with loose files in it,
+or a profiled function with both its own samples and callees, does, and the
+uncovered remainder of its bar is that value. The folded contract cannot say it:
+every value there lands on a leaf.
+
+```sql
+WITH parts AS (
+    SELECT database AS db, table AS tbl, sum(bytes_on_disk) AS bytes
+    FROM system.parts
+    WHERE active
+    GROUP BY db, tbl
+)
+SELECT concat('db:', db) AS id,
+       ''                AS parent,
+       db                AS label,
+       toFloat64(0)      AS value,
+       'bytes'           AS unit
+FROM parts
+GROUP BY db
+UNION ALL
+SELECT concat('tbl:', db, '.', tbl) AS id,
+       concat('db:', db)            AS parent,
+       tbl                          AS label,
+       toFloat64(bytes)             AS value,
+       'bytes'                      AS unit
+FROM parts
+```
+
+The ids are prefixed for the reason the Sankey's were, arriving by a different
+route: `parent` has to name exactly one row, and a database and a table may
+share a name. `toFloat64` on both branches because a `UNION ALL` takes its
+column types from the first — a bare `0` there would make every table's byte
+count an integer cast of it.
+
 ## Query outcomes (an alluvial over the query log)
 
 Where the server's own traffic goes: how a query arrived, what kind it was, and
