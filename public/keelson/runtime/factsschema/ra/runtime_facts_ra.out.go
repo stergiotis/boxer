@@ -31,7 +31,7 @@ var _ = time.Time{}
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:208
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:251
 
 type MembershipPackFactsForeignKey struct {
 	ValueLowCardRef            *array.List
@@ -729,7 +729,7 @@ func (inst *MembershipPackFactsShared1) GetNumberOfMemberItemsByAttrLowCardRefHi
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:826
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:869
 
 type ReadAccessFactsPlainEntityIdAttributes struct {
 	ValueId               *array.Uint64
@@ -1703,7 +1703,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessFactsTaggedU8ArrayAttributes)(n
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1044
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1087
 
 func (inst *ReadAccessFactsPlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -1879,7 +1879,7 @@ func (inst *ReadAccessFactsTaggedU8ArrayAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1118
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1161
 
 var _ runtime.ReleasableI = (*ReadAccessFactsPlainEntityIdAttributes)(nil)
 
@@ -2069,7 +2069,7 @@ func (inst *ReadAccessFactsTaggedU8ArrayAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1197
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1240
 
 func (inst *ReadAccessFactsPlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -2242,7 +2242,7 @@ func (inst *ReadAccessFactsTaggedU8ArrayAttributes) Len() (nEntities int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1249
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1292
 
 func (inst *ReadAccessFactsPlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
@@ -3133,7 +3133,7 @@ func (inst *ReadAccessFactsPlainEntityLifecycleAttributes) GetAttrValueExpiresAt
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1873
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1968
 
 func (inst *ReadAccessFactsTaggedForeignKeyAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
@@ -3227,7 +3227,7 @@ func (inst *ReadAccessFactsTaggedBoolAttributes) GetNumberOfAttributes(entityIdx
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1971
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2066
 
 type ReadAccessFactsTaggedForeignKey struct {
 	Attributes  *ReadAccessFactsTaggedForeignKeyAttributes
@@ -5059,7 +5059,7 @@ func (inst *ReadAccessFactsTaggedBool) GetSectionMembershipSpec() common.Members
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2321
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2416
 
 type ReadAccessFacts struct {
 	EntityId        *ReadAccessFactsPlainEntityIdAttributes
