@@ -93,6 +93,7 @@ const (
 	dockTabFlow        uint64 = 18
 	dockTabSankey      uint64 = 19
 	dockTabExperiments uint64 = 20
+	dockTabDist        uint64 = 21
 )
 
 type PlayApp struct {
@@ -362,6 +363,11 @@ type PlayApp struct {
 	// same two-private-lane shape as the Network's, over the `flows` and
 	// `nodes` CTEs (closed in Close, forgotten on Run).
 	sankeyDriver *SankeyDriver
+
+	// distDriver is the ADR-0161 distribution panel (Distribution dock tab):
+	// a plain observer of the active result claiming the series/n/ps/qs
+	// contract — no lane, nothing to Close.
+	distDriver *DistDriver
 
 	// flow is the ADR-0153 Flow dock tab: the active node's clause-level
 	// dataflow, derived statically from the split; the EXPLAIN lenses add
@@ -872,6 +878,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.kanbanDriver = NewKanbanDriver(mk(), client)
 	inst.networkDriver = NewNetworkDriver(mk(), client)
 	inst.sankeyDriver = NewSankeyDriver(mk(), client)
+	inst.distDriver = NewDistDriver(mk())
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())

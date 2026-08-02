@@ -24,14 +24,14 @@ func tabsTestApp() *PlayApp {
 func TestDefaultTabsEnumeration(t *testing.T) {
 	reg := tabsTestApp().Tabs()
 	specs := reg.all()
-	require.Len(t, specs, 20)
+	require.Len(t, specs, 21)
 
 	wantDockID := map[string]uint64{
 		"editor": dockTabEditor, "history": dockTabHistory, "preview": dockTabPreview,
 		"table": dockTabTable, "projection": dockTabProjection, "timeline": dockTabTimeline,
 		"snippets": dockTabSnippets, "map": dockTabMap, "world": dockTabWorld,
 		"kanban": dockTabKanban, "network": dockTabNetwork, "sankey": dockTabSankey,
-		"graph": dockTabGraph,
+		"dist": dockTabDist, "graph": dockTabGraph,
 		"schema": dockTabSchema, "diagnostics": dockTabDiagnostics, "passes": dockTabPasses,
 		"docs": dockTabDocs, "flow": dockTabFlow, "detail": dockTabDetail,
 		"experiments": dockTabExperiments,
@@ -74,13 +74,13 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 		}
 	}
 	assert.ElementsMatch(t, []string{"table", "projection", "timeline", "world", "kanban", "network", "sankey",
-		"schema", "detail"},
+		"dist", "schema", "detail"},
 		panelIDs, "chrome registers with a nil PanelI (SD7)")
 
 	// Presentation order per zone. Docs stays first among the tools so a
 	// fresh layout opens on it.
 	assert.Equal(t, []uint64{dockTabTable, dockTabProjection, dockTabTimeline,
-		dockTabMap, dockTabWorld, dockTabKanban, dockTabNetwork, dockTabSankey, dockTabGraph, dockTabSchema},
+		dockTabMap, dockTabWorld, dockTabKanban, dockTabNetwork, dockTabSankey, dockTabDist, dockTabGraph, dockTabSchema},
 		dockIDsOf(reg.byZone(TabZoneBody)))
 	assert.Equal(t, []uint64{dockTabDocs, dockTabPreview, dockTabFlow, dockTabPasses,
 		dockTabDiagnostics, dockTabSnippets, dockTabExperiments},
@@ -100,18 +100,18 @@ func TestTabRegistryMutationAndFreeze(t *testing.T) {
 	require.Error(t, reg.Add(TabSpec{ID: "x", DockID: dockTabTable, Render: noop}), "duplicate DockID")
 
 	require.NoError(t, reg.Add(TabSpec{ID: "x", DockID: 64, Title: "X", Render: noop}))
-	require.Len(t, reg.all(), 21)
-	assert.Equal(t, TabZoneBody, reg.all()[20].Zone, "embedder tabs default to the body zone")
+	require.Len(t, reg.all(), 22)
+	assert.Equal(t, TabZoneBody, reg.all()[21].Zone, "embedder tabs default to the body zone")
 
 	// Replace keeps the position and re-validates against the others.
 	require.Error(t, reg.Replace("x", TabSpec{ID: "table", DockID: 64, Render: noop}),
 		"replacement must not collide with another tab")
 	require.NoError(t, reg.Replace("x", TabSpec{ID: "y", DockID: 65, Title: "Y", Render: noop}))
-	assert.Equal(t, "y", reg.all()[20].ID)
+	assert.Equal(t, "y", reg.all()[21].ID)
 	require.Error(t, reg.Replace("x", TabSpec{ID: "z", DockID: 66, Render: noop}), "x is gone")
 
 	require.NoError(t, reg.Remove("y"))
-	require.Len(t, reg.all(), 20)
+	require.Len(t, reg.all(), 21)
 	require.Error(t, reg.Remove("y"), "already removed")
 
 	reg.freeze()

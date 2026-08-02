@@ -191,7 +191,7 @@ func TestBuiltinTabMarkDeclarations(t *testing.T) {
 		}
 	}
 	assert.Equal(t, map[string]bool{"timeline": true, "world": true, "kanban": true, "network": true,
-		"sankey": true}, shape)
+		"sankey": true, "dist": true}, shape)
 
 	require.Contains(t, writes, "map", "the Map publishes its viewport without being a PanelI")
 	assert.Len(t, writes["map"], len(mapViewportSignals))

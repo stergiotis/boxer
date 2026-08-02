@@ -316,6 +316,10 @@ var builtinTabDefs = []builtinTabDef{
 	// the same reason the Network's is; a pinned node publishes its id.
 	{id: "sankey", dockID: dockTabSankey, title: "Sankey", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelectionKey}},
+	// Distribution observes the active result like Table and Kanban; its rows
+	// ARE result rows, so a series click writes the ordinary row cursor.
+	{id: "dist", dockID: dockTabDist, title: "Distribution", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection}},
 	// Graph stays in the body against its classification: its input is the
 	// split and the signal store, so by the criterion above it is a tool pane,
 	// but its subject is the SESSION's reactive wiring rather than the
@@ -503,6 +507,11 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			// zeroes the delta the ScrollArea would read (ADR-0140).
 			spec.Panel = sankeyPanel{driver: inst.sankeyDriver}
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderSankeyTab) }
+		case "dist":
+			spec.Panel = distPanel{driver: inst.distDriver}
+			spec.Render = func(f *TabFrame) {
+				scrollTab(func() { inst.renderDistTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
+			}
 		case "graph":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphTab) }
 		case "schema":
