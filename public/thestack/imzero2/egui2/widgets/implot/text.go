@@ -1,5 +1,7 @@
 package implot
 
+import "unicode/utf8"
+
 // Text-width estimation — the lane's shared answer to "how wide will this
 // label be", for layout decisions that have to be made synchronously.
 //
@@ -47,6 +49,41 @@ func EstimateRuneWidth(r rune, fontSize float32) float32 {
 		return fontSize
 	}
 	return fontSize * GlyphWidthRatio
+}
+
+// Elide shortens s to fit availPx at fontSize, appending an ellipsis, or
+// returns "" when not even the ellipsis and one glyph would fit — a
+// one-glyph label is noise, not information.
+//
+// It lives here, beside the estimate, because it is the same decision: the
+// string it returns fits the space it was cut for only because it was
+// budgeted with the estimate the caller sized the space with. Two widgets
+// eliding by different rules is the disagreement this file exists to stop.
+//
+// The budget is pixels rather than characters, which a character budget
+// cannot approximate: it charges a CJK glyph the same as an "l", and those
+// labels then overflow the box they were cut to fit.
+//
+// Not every widget wants this — a bar chart that drops a label it cannot fit
+// is making a different, equally reasonable call. This is for the ones that
+// would rather show a prefix.
+func Elide(s string, availPx float32, fontSize float32) string {
+	if EstimateTextWidth(s, fontSize) <= availPx {
+		return s
+	}
+	budget := availPx - EstimateRuneWidth('…', fontSize)
+	used, cut := float32(0), 0
+	for i, r := range s {
+		w := EstimateRuneWidth(r, fontSize)
+		if used+w > budget {
+			break
+		}
+		used, cut = used+w, i+utf8.RuneLen(r)
+	}
+	if cut == 0 {
+		return "" // not even one glyph beside the ellipsis
+	}
+	return s[:cut] + "…"
 }
 
 // wideRuneRanges are the East Asian Wide and Fullwidth blocks, charged a full
