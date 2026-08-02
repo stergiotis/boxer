@@ -704,7 +704,12 @@ func (inst *SankeyDriver) render(flowsRec arrow.RecordBatch, fc sankeyFlowsClaim
 		paneW = r.MaxX - r.MinX
 	}
 	w := min(max(paneW-12, 360), 1600)
-	h := min(max(w*0.42, 260), 560)
+	// The aspect is set so that a maximised window's DEFAULT body leaf fits the
+	// plot without scrolling — measured from a tour capture, where 0.42 put the
+	// diagram about a hundred pixels past the leaf and made every first look a
+	// scroll. A taller leaf gains nothing past the cap, which is the price of
+	// having no pane height to read; zoom is the answer there.
+	h := min(max(w*0.34, 240), 460)
 
 	hover, click, clicked := inst.renderer.Show(inst.ids, "flow##playsankey", w, h, inst.layout, sankeyview.Opts{
 		Fill:       inst.fill,
