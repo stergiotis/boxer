@@ -304,10 +304,11 @@ obvious next cut, recorded in SD8.
 
 Not in this cut, recorded so they do not gate it:
 
-- **A result panel.** No consumer ships here — the gallery demo is the only
-  caller, as with ADR-0159. The pprof M5 panel and a generic `play` panel over
-  a stack/value column convention are the obvious next two, and neither changes
-  the widget's surface.
+- **A pprof-specific applet book.** The generic `play` panel of SD9 draws a
+  capture already — `SELECT stack, value FROM keelson('<handle>')` is the whole
+  query, since the M1 converter's output *is* the folded contract — so what is
+  left of the ladder's M5 is a committed book beside `profile-top` and
+  `profile-callgraph`, not any widget or panel work.
 - **Differential flamegraphs.** Signed values (red/blue against a baseline)
   need a second tree and a diff model; the widget rejects negative values today
   rather than half-supporting them.
@@ -336,14 +337,72 @@ Not in this cut, recorded so they do not gate it:
 - **Minimap / value-axis overview.** Only earns its keep once a real profile is
   driving the widget.
 
+### SD9 — The `play` panel: two contracts, over the active result
+
+`apps/play/play_icicle_panel.go` is the **Icicle** dock tab, a `PanelI` over
+this package. Most of it follows the ADR-0097 channel contract and so is not a
+decision. Three things are.
+
+**Two column contracts, not one.** *Folded* — `stack` (an array) plus `value`,
+one row per root-to-leaf path, interned into a trie with the interior frames
+synthesised. *Nodes* — `id`, `parent`, `value`, one row per node, straight onto
+`Tree`. Neither converts to the other in a line of SQL: the folded shape is what
+a capture and a `splitByChar` produce and needs no recursive CTE, while the node
+shape is what a recursive CTE emits and is the only one of the two in which an
+interior node can carry a value of its own — the very distinction SD1 rejected
+`treemap`'s type over. A list-typed `stack` wins when a schema satisfies both,
+and the status line names the mode rather than leaving it to be inferred.
+
+**The active result, not a named CTE.** Sankey and Network take private lanes
+because they need two inputs and want the final `SELECT` left alone. One input
+needs neither, so this binds `chMain` as World and Kanban do, and any query
+naming the columns draws without being restructured.
+
+**Selection is local anyway.** Binding the active result would allow the row
+cursor, and it is still not published: in folded mode a frame is a path
+*prefix*, so an interior frame spans many rows and a leaf frame is one row only
+when the stacks happen to be unique. A clicked frame publishes its label as
+`selection_key` — a value, which is also what a follow-up query wants
+(`WHERE has(stack, {selection_key:String})`).
+
+Rows the form cannot draw are dropped and *counted* rather than failing the
+picture, and the two caps behave differently on purpose: a path past the depth
+cap is truncated and a folded path past the node cap lands its value on the
+deepest ancestor already interned, so both cost DEPTH rather than quantity and
+the total stays conserved.
+
+Two notes for the next consumer, both found by looking at a capture:
+
+- **An options bar must not be `.Frameless()`.** `StyleSegmented` shows the
+  selection by *filling* the selected segment, and `Frame(false)` draws no
+  background — so a frameless segmented bar renders its selected and unselected
+  options identically. Two captures of this pane differing only in orientation
+  came back with pixel-identical control rows, which is how it was found; the
+  Flow, Network and Sankey panels turned out to have it too, six bars between
+  them, and are fixed with this cut. (Experiments sets `Frameless` as well and
+  was never affected: it also sets `StyleSelectable`, the one arm that ignores
+  the flag.) All of them, and this panel's four bars, now use
+  `StyleSelectable` — frameless *and* highlighting, which is the denser
+  reading and the one look every options bar in `play` now shares. `Frameless`
+  itself is kept, documented, and left with no caller: it is still right inside
+  a ComboBox popup, where the popup states the selection.
+- The aspect that fits the plot in a dock leaf lands within a pixel of
+  ADR-0159's, being the same leaf minus the same control row and status line.
+  For this form the overflow is worse than for the sankey's: the depth axis
+  holds rows at `RowPx` rather than scaling, so a plot past the leaf hides a
+  whole row of frames instead of shrinking the picture.
+
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `widgets/icicle` (exported Go API under `public/`) | added — `Tree`, `Options`, `OrientationE`, `OrderE`, `Report`, `Layout`, `Node`, `Compute`, plus `Tree.Validate` / `Tree.Len` and `Layout.NodeAt` / `DepthAt` / `RowDist` / `PathTo` | `package_props.go` registration (ADR-0080); no consumer yet |
+| `widgets/icicle` (exported Go API under `public/`) | added — `Tree`, `Options`, `OrientationE`, `OrderE`, `Report`, `Layout`, `Node`, `Compute`, plus `Tree.Validate` / `Tree.Len` and `Layout.NodeAt` / `DepthAt` / `RowDist` / `PathTo` | `package_props.go` registration (ADR-0080) |
 | `widgets/icicle/view` (exported Go API under `public/`) | added — `Opts` (including `ResetView`), `ColorModeE`, `Hit` (with `None`), `NodeHit`, `Renderer`, `Setup`, `Probe`, `Draw`, `Show`, `ZoomTo`, `DefaultRowPx`, `DefaultFontSize` | imports `implot` and the bindings; the only half that touches UI |
 | `widgets/implot` (exported Go API under `public/`) | added — `AxisFlagsNoPan`, `AxisFlagsNoZoom`, `AxisFlagsLock`, `AxisLimits`, `Elide`, `RelativeLuminance`, `ContrastRatio` | additive; existing flag values unchanged. The context menu no longer offers a fit for a `NoZoom` axis — no shipped plot sets one except this widget |
 | demo registry (`egui2_hl_registrations.go`) | added — one `icicle` demo entry | registry is a named list; adding a member is not itself a decision |
+| `play` dock tabs | added — the **Icicle** tab (SD9): frozen `DockID` 22, a `ShapeContract` mark, `selection_key` in `Writes`, and the derived `BOXER_PLAY_FOCUS_ICICLE` knob | the tab-registry counts in `play_tabs_test.go`, `play_tab_marks_test.go` and `play_panes_menu_test.go`; `doc/env-vars.md` regenerates |
+| `play` internals | `sankeyCellValue` renamed `quantityCellValue` | package-private; one reader of a numeric cell now serves both panels |
+| `play` Flow / Network / Sankey options bars | rendering fixed — six `.Frameless()` bars that drew no selected state at all now use `StyleSelectable` (SD9's first note) | appearance only; no API moved, and `widgets/selector` gained the warning on `Frameless` rather than a behaviour change |
 | egui2 IDL | **unchanged** | no new paint opcode; batched rects, polylines and text all exist |
 
 ## Alternatives
@@ -449,10 +508,24 @@ the drift.
   stale binary and an FFI-desynchronised capture).
 - **IDS** — `designlint` over both new packages, expected clean; no raw colour
   constructors, no literal stroke widths.
+- **The `play` panel (SD9)** — unit tests over both contracts and both builds:
+  the resolver's precedence and each of its three rejections; folded interning
+  (one node per distinct prefix, a repeated path summing, a path that is a
+  prefix of another landing on the interior node), empty path elements skipped,
+  the depth cut and the drop counters; node-mode two-pass resolution with a
+  child ahead of its parent, an unknown or self parent demoted to a root, and a
+  duplicate id dropped. Every one of them asserts the accepted rows' total
+  survives, since a panel that quietly loses value is the failure with no
+  symptom. Plus a tour scene (`08_icicle`) capturing both orientations, which
+  is what the two notes at the end of SD9 came from.
 
 ## Status
 
 Proposed — 2026-08-01. Awaiting human review.
+
+Built: the widget, and the `play` panel of SD9 (2026-08-02) — SD9 was written
+against the panel rather than ahead of it, so it records what the binding
+conceded rather than proposing it.
 
 ## References
 

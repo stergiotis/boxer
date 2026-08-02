@@ -16,11 +16,12 @@ ready-to-run fragments see **Snippets**. This page describes each feature in tur
 The window is a rearrangeable, splittable dock of tabs between a pinned top bar
 (Run, Load, connection) and a status bar (the query-state inspector). They fall
 into three groups: the **editor** (Editor, History), the **tool panes** beside
-it (Docs, Preview, Flow, Passes, Diagnostics, Snippets — each reads the buffer,
-or something derived from it, while you type), and the **result panes** below
-(Table, Projection, Timeline, Map, World, Kanban, Network, Graph, Schema, and
-Detail alongside them). Drag a tab to re-dock or split it; the layout holds for
-the session and starts fresh next launch.
+it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Experiments — each reads
+the buffer, or something derived from it, while you type), and the **result
+panes** below (Table, Projection, Timeline, Map, World, Kanban, Network, Sankey,
+Distribution, Icicle, Graph, Schema, and Detail alongside them). Drag a tab to
+re-dock or split it; the layout holds for the session and starts fresh next
+launch.
 
 ## Connecting to ClickHouse
 

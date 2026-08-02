@@ -320,6 +320,12 @@ var builtinTabDefs = []builtinTabDef{
 	// ARE result rows, so a series click writes the ordinary row cursor.
 	{id: "dist", dockID: dockTabDist, title: "Distribution", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelection}},
+	// The Icicle tab draws the result as an icicle plot or a flamegraph
+	// (ADR-0160). It observes the active result, but its frames are path
+	// PREFIXES rather than rows, so — like Network and Sankey — its selection
+	// stays local and a pinned frame publishes its label as a value.
+	{id: "icicle", dockID: dockTabIcicle, title: "Icicle", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelectionKey}},
 	// Graph stays in the body against its classification: its input is the
 	// split and the signal store, so by the criterion above it is a tool pane,
 	// but its subject is the SESSION's reactive wiring rather than the
@@ -511,6 +517,17 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Panel = distPanel{driver: inst.distDriver}
 			spec.Render = func(f *TabFrame) {
 				scrollTab(func() { inst.renderDistTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
+			}
+		case "icicle":
+			// Scrolled, for the Sankey tab's reason: the plot is a fixed box
+			// sized from the pane WIDTH (the only dimension a non-contending
+			// probe yields), so a short leaf scrolls rather than clips. The two
+			// do not fight over the wheel — implot captures scroll only while
+			// the pointer is over the plot, and zeroes the delta the ScrollArea
+			// would read (ADR-0140).
+			spec.Panel = iciclePanel{driver: inst.icicleDriver}
+			spec.Render = func(f *TabFrame) {
+				scrollTab(func() { inst.renderIcicleTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
 			}
 		case "graph":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphTab) }

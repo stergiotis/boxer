@@ -94,6 +94,7 @@ const (
 	dockTabSankey      uint64 = 19
 	dockTabExperiments uint64 = 20
 	dockTabDist        uint64 = 21
+	dockTabIcicle      uint64 = 22
 )
 
 type PlayApp struct {
@@ -368,6 +369,12 @@ type PlayApp struct {
 	// a plain observer of the active result claiming the series/n/ps/qs
 	// contract — no lane, nothing to Close.
 	distDriver *DistDriver
+
+	// icicleDriver is the ADR-0160 icicle/flamegraph panel (Icicle dock tab):
+	// likewise a plain observer of the active result, claiming either the
+	// folded `stack`+`value` contract or the `id`/`parent`/`value` one — no
+	// lane, nothing to Close.
+	icicleDriver *IcicleDriver
 
 	// flow is the ADR-0153 Flow dock tab: the active node's clause-level
 	// dataflow, derived statically from the split; the EXPLAIN lenses add
@@ -879,6 +886,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.networkDriver = NewNetworkDriver(mk(), client)
 	inst.sankeyDriver = NewSankeyDriver(mk(), client)
 	inst.distDriver = NewDistDriver(mk())
+	inst.icicleDriver = NewIcicleDriver(mk())
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())

@@ -141,13 +141,14 @@ func sankeyTone(s string) (rgba uint32, ok bool) {
 	return 0, false
 }
 
-// sankeyCellValue reads one cell as the flow quantity. It tries the numeric
-// arrays first, then falls back to parsing the formatted cell — which is what
-// carries ClickHouse Decimal (and a dictionary-encoded numeric) through, since
-// those arrive as Arrow types the numeric switch does not case. A `value`
-// column produced by `sum()` over a Decimal is ordinary enough that dropping
-// every link would read as the panel being broken.
-func sankeyCellValue(rec arrow.RecordBatch, col int, row int64) (v float64, ok bool) {
+// quantityCellValue reads one cell as a quantity — a sankey flow's value, an
+// icicle frame's. It tries the numeric arrays first, then falls back to parsing
+// the formatted cell, which is what carries ClickHouse Decimal (and a
+// dictionary-encoded numeric) through, since those arrive as Arrow types the
+// numeric switch does not case. A `value` column produced by `sum()` over a
+// Decimal is ordinary enough that dropping every row would read as the panel
+// being broken.
+func quantityCellValue(rec arrow.RecordBatch, col int, row int64) (v float64, ok bool) {
 	arr := rec.Column(col)
 	if v, ok = numericCellValue(arr, row); ok {
 		return
@@ -247,13 +248,13 @@ func buildSankeyDiagram(flowsRec arrow.RecordBatch, fc sankeyFlowsClaim,
 				}
 			}
 			if nc.stageCol >= 0 {
-				if s, ok := sankeyCellValue(nodesRec, nc.stageCol, row); ok && s >= 0 && !math.IsInf(s, 0) {
+				if s, ok := quantityCellValue(nodesRec, nc.stageCol, row); ok && s >= 0 && !math.IsInf(s, 0) {
 					n.Stage = int(s)
 					staged[id] = true
 				}
 			}
 			if nc.orderCol >= 0 {
-				if o, ok := sankeyCellValue(nodesRec, nc.orderCol, row); ok {
+				if o, ok := quantityCellValue(nodesRec, nc.orderCol, row); ok {
 					n.Order = o
 				}
 			}
@@ -291,7 +292,7 @@ func buildSankeyDiagram(flowsRec arrow.RecordBatch, fc sankeyFlowsClaim,
 				b.stats.droppedValue++
 				continue
 			}
-			v, ok := sankeyCellValue(flowsRec, fc.valCol, row)
+			v, ok := quantityCellValue(flowsRec, fc.valCol, row)
 			if !ok || v <= 0 || math.IsInf(v, 0) {
 				// Validate would reject the diagram outright over one such row;
 				// dropping it keeps the rest readable. A zero flow is also
@@ -580,7 +581,7 @@ func (inst sankeyPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEm
 // types), so they carry no type requirement — a numeric id is a fine key. The
 // value column is not type-checked here either, because ClickHouse Decimal and
 // LowCardinality both arrive as Arrow types a numeric-kind test would reject
-// though sankeyCellValue reads them; an unreadable value is reported per row.
+// though quantityCellValue reads them; an unreadable value is reported per row.
 func resolveSankeyFlows(schema *arrow.Schema) (fc sankeyFlowsClaim, reason string) {
 	fc = sankeyFlowsClaim{srcCol: -1, tgtCol: -1, valCol: -1, labelCol: -1, toneCol: -1}
 	for ci, f := range schema.Fields() {
