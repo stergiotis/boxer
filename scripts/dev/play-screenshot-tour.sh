@@ -294,6 +294,53 @@ SELECT * FROM flows ORDER BY value DESC"
 	settle=3000
 }
 
+scene_08_icicle() {
+	desc="Icicle — the result as an icicle plot (ADR-0160): one row per depth, width as value, over the folded stack/value contract; the same population the Sankey draws, read as a containment hierarchy rather than a flow"
+	senv=(BOXER_PLAY_FOCUS_ICICLE=1)
+	# The folded contract, which is the one a profile arrives in: one row per
+	# root-to-leaf path, the path as an array, `value` the path's own quantity.
+	# Four levels — operator, manufacturer, type, altitude band — so the depth
+	# axis has something to show; the Sankey scene reads three of the same
+	# columns as a flow, and the contrast between the two forms over one
+	# population is the point of putting them side by side.
+	#
+	# Operators are capped, not because the widget cannot draw the tail (it
+	# culls what is too narrow to see) but because a root row of two hundred
+	# slivers is a texture rather than a reading. `unit` labels the value axis;
+	# it is a plain column, so a query that has no unit simply omits it.
+	sql="WITH
+  ops AS (
+    SELECT ownOp
+    FROM default.planes_mercator_sample100
+    WHERE ownOp != '' AND t != '' AND desc != '' AND altitude > 0
+    GROUP BY ownOp
+    ORDER BY count() DESC
+    LIMIT 8
+  ),
+  legs AS (
+    SELECT ownOp AS op,
+           splitByChar(' ', desc)[1] AS maker,
+           t AS model,
+           concat(toString(intDiv(altitude, 10000) * 10), 'k ft') AS band
+    FROM default.planes_mercator_sample100
+    WHERE ownOp IN (SELECT ownOp FROM ops)
+      AND t != '' AND desc != '' AND altitude > 0
+  )
+SELECT [op, maker, model, band] AS stack, count() AS value, 'positions' AS unit
+FROM legs
+GROUP BY stack
+ORDER BY value DESC"
+	# Two captures: the icicle proper, then the flamegraph the orientation
+	# switch inverts it into. They are one layout and one switch, and the second
+	# shot is also what shows the view reset the flip has to trigger — implot
+	# retains a plot's ranges, so without it the flipped tree would be viewed
+	# through the old orientation's window (ADR-0160 §SD3).
+	steps='{"do":"capture","text":"08_icicle","settleMs":600}
+{"do":"click","name":"flame"}
+{"do":"capture","text":"08_icicle_flame","settleMs":600}'
+	settle=2500
+}
+
 scene_09_projection() {
 	desc="Projection — dimensionality reduction over the numeric columns of a result, with the point cloud tied to the selection signal"
 	senv=(BOXER_PLAY_FOCUS_PROJECTION=1)
