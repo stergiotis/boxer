@@ -182,6 +182,79 @@ SELECT * FROM edges"
 	settle=3000
 }
 
+# Shares 08 with the Network scene rather than renumbering the tail: order is
+# the function name's sort order, so this lands immediately after it, which is
+# where the other result-shape panel belongs.
+scene_08_sankey() {
+	desc="Sankey — the result as a flow-quantity diagram (ADR-0159): a required flows channel carrying source/target/value, plus an optional nodes channel whose stage column selects the alluvial reading"
+	senv=(BOXER_PLAY_FOCUS_SANKEY=1)
+	# Three stages of the same population — operator, aircraft type, altitude
+	# band — so every position counted flows the full width exactly once and the
+	# node bars are exact subdivisions rather than three bar charts. Both the
+	# operator set and the type set are capped: a Sankey is a tens-of-nodes
+	# instrument, and the layout reports flows too thin to read rather than
+	# quietly widening them.
+	#
+	# The hops are written out and stacked with UNION ALL, which is the readable
+	# way when the stages are few and named; the array pivot in the help corpus
+	# is for when the stage count is a property of the data.
+	#
+	# Node ids carry their stage (`1:B763`), because a value recurring in two
+	# stages would otherwise fuse into one node — and a flow returning to an
+	# earlier stage is a cycle, which this form rejects rather than draws. The
+	# nodes channel hands the readable name back as a label, and its `stage`
+	# column is what puts the panel in alluvial mode without being told.
+	sql="WITH
+  ops AS (
+    SELECT ownOp
+    FROM default.planes_mercator_sample100
+    WHERE ownOp != '' AND t != '' AND altitude > 0
+    GROUP BY ownOp
+    ORDER BY uniq(icao) DESC
+    LIMIT 4
+  ),
+  models AS (
+    SELECT t
+    FROM default.planes_mercator_sample100
+    WHERE t != '' AND altitude > 0 AND ownOp IN (SELECT ownOp FROM ops)
+    GROUP BY t
+    ORDER BY count() DESC
+    LIMIT 8
+  ),
+  legs AS (
+    SELECT ownOp AS op,
+           t     AS model,
+           multiIf(altitude < 10000, 'below 10k',
+                   altitude < 25000, '10-25k',
+                   altitude < 35000, '25-35k',
+                   'above 35k')     AS band
+    FROM default.planes_mercator_sample100
+    WHERE ownOp IN (SELECT ownOp FROM ops)
+      AND t IN (SELECT t FROM models)
+      AND altitude > 0
+  ),
+  flows AS (
+    SELECT concat('0:', op) AS source, concat('1:', model) AS target, count() AS value
+    FROM legs
+    GROUP BY source, target
+    UNION ALL
+    SELECT concat('1:', model) AS source, concat('2:', band) AS target, count() AS value
+    FROM legs
+    GROUP BY source, target
+  ),
+  nodes AS (
+    SELECT DISTINCT concat('0:', op) AS id, op AS label, 0 AS stage FROM legs
+    UNION ALL
+    SELECT DISTINCT concat('1:', model) AS id, model AS label, 1 AS stage FROM legs
+    UNION ALL
+    SELECT DISTINCT concat('2:', band) AS id, band AS label, 2 AS stage FROM legs
+  )
+SELECT * FROM flows ORDER BY value DESC"
+	# Both channels run on their own lanes, off the split of this query — the
+	# capture has to wait for the second, not just for the main result.
+	settle=3000
+}
+
 scene_09_projection() {
 	desc="Projection — dimensionality reduction over the numeric columns of a result, with the point cloud tied to the selection signal"
 	senv=(BOXER_PLAY_FOCUS_PROJECTION=1)
