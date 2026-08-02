@@ -961,6 +961,7 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 		pl.SetupAxisLimitsConstraints(implot.AxisY1, 0, 1)
 		pl.IncludeY(0)
 		pl.IncludeY(1)
+		pl.NoLegend()
 		if resetZoom {
 			pl.FitNext()
 		}
