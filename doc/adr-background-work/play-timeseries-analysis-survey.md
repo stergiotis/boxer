@@ -363,7 +363,9 @@ wire, S5's concern) and client-side per-viewport decimation before the
 plot (the full series is client-side anyway for the Go analysis tier, and
 zooming re-decimates without a re-query) — with a per-pixel min/max
 envelope as the alternative decimation family (exact extremes, twice the
-points). Which seam(s) the carrier uses is Q9.
+points). The seam is settled (Q9): the carrier decimates automatically via
+the per-pixel min/max envelope, render-only; SQL-side `lttb` is the
+documented option for huge-range viewing.
 
 ## 4. Scientific commitments — what "right" must mean in the UI
 
@@ -452,10 +454,10 @@ name-guessing — but this is a doctrine question and belongs to the
 dialogue (Q2). Display smoothing lands here as presentation, via the
 `trendsmooth` commitments (raw underlay, fixed degree, live-edge marking) —
 it is a view concern and should not appear in any data contract. The
-carrier also owns display decimation: dense series decimate for rendering
-(per-viewport LTTB client-side, SQL-side `lttb`, or an envelope — §3.2,
-Q9), irregular series render time-true, and both smoothing and analysis
-gate on the grid rather than assuming it.
+carrier also owns display decimation (settled, Q9: per-pixel min/max
+envelope, client-side, render-only — §3.2); irregular series render
+time-true, and both smoothing and analysis gate on the grid rather than
+assuming it.
 
 ### 5.2 D2 — substrate × spelling: where computation runs, how it is invoked
 
@@ -585,13 +587,13 @@ Detector and miner outputs should be records with contracts, not pixels:
   motif occurrences (one colour per motif) render on the Timeline **today**,
   and as chart bands via the implot custom lane. A ranked span table feeds
   the Table panel and the adjudication affordance (S6).
-- **Motif output, v1** — top pair plus occurrences collected within a
-  radius. Requires a small new reader on `matrixprofile.Profile` (top-k
-  non-overlapping pairs; collect-within-r): M1-adjacent, cheap, and
-  explicitly left open by ADR-0150's sub-decision 1. Motif *sets*
-  (k-Motiflets) stay with the deferred follow-up ADR; this exposure should
-  not gate on it. A motif "gallery" (aligned occurrence small-multiples) is
-  a later view; spans-on-the-series is the v1 rendering.
+- **Motif output** — *(Q4, settled: none of this ships in v1.)* The
+  surveyed cut was a small reader on `matrixprofile.Profile` (top-k
+  non-overlapping pairs; collect-within-r, radius defaulted from the
+  pair's own distance — left open by ADR-0150's sub-decision 1); the
+  dialogue held all motif UI for the set-discovery follow-up ADR instead.
+  The span output contract below remains the ready seam, and motif names
+  stay reserved in `ts*`.
 - **The profile itself** — a second line under the series. Cheap, and the
   single most trust-building view the field has: minima visibly repeat,
   maxima visibly do not fit.
@@ -622,13 +624,16 @@ threshold lines labelled for what they are (S4). Adjudication-to-facts (S6)
 is strategically load-bearing but schema-shaped — it wants the
 facts-modelling dialogue before any schema is committed; the v1 cut can be
 deliberately minimal (a mark, a span, a verdict) with the schema question
-flagged.
+flagged. (Settled, Q6: the v1 home is a dedicated keelson-style labels
+table; the facts dialogue is deferred with a trigger.)
 
 Under the §1 framing this section is product, not chrome, and the M2
 fixture generator joins it: flaw-avoiding synthetic series with known
 ground truth, generated on demand, are the education role's laboratory —
 run a detector against a fixture whose answer is known, see VUS-PR with
-its honest band, let the triviality check catch a too-easy setup.
+its honest band, let the triviality check catch a too-easy setup. (Shape
+settled, Q8: fixtures publish as per-session ad-hoc datasets, ADR-0134
+route; the generator affordance is an early post-v1 slice.)
 
 ### 5.7 D7 — the app split: batch here, causal there
 
@@ -671,9 +676,9 @@ host's own metrics) once the pieces exist.
 
 ## 7. Leans — pre-dialogue, held loosely
 
-- **L1**: build the Series panel first. It is the largest single gap
-  against the comparator, independently valuable, and every other piece
-  renders through it.
+- **L1** *(claim rule settled by Q2)*: build the Series panel first. It is
+  the largest single gap against the comparator, independently valuable,
+  and every other piece renders through it.
 - **L2** *(resolved by Q1)*: execution is client-side Go behind the
   graph's executor seam; the spelling is the buffer vocabulary (O4,
   §5.2); O2 covers only what CH genuinely expresses; O5 deferred with
@@ -683,41 +688,64 @@ host's own metrics) once the pieces exist.
   gallery waits.
 - **L4**: exact-mode scores only; baselines default-on; segment at gaps,
   never silently fill; centre attribution and plateau extents throughout.
-- **L5**: motif v1 = the small top-k/occurrences reader on M1's profile;
-  the set-discovery ADR proceeds independently.
-- **L6**: adjudication-to-facts in v1 in its most minimal form, schema
-  dialogue first.
+- **L5** *(not taken — Q4 settled the other way)*: the survey leaned
+  toward shipping the small pair+occurrences reader; the dialogue held all
+  motif UI for the set-discovery ADR instead.
+- **L6** *(resolved by Q6)*: adjudication in v1 in its most minimal form;
+  the v1 home is a keelson-style labels table, and the facts-schema
+  dialogue is deferred with a trigger.
 
-## 8. Open questions — the dialogue agenda
+## 8. The dialogue agenda — all settled
+
+All nine questions were settled in the dialogues of 2026-08-02; the entries
+below record the outcomes. The ADR consumes them as decisions.
 
 1. **The spelling fork (D2). SETTLED 2026-08-02: O4, CTE-only v1.** The
    recorded artifact is the SQL text from day one; findings, kill-reasons
    and v1 scope in §5.2.
-2. **The carrier's claim rule (D1).** Type-directed (any temporal+numeric
-   result charts) versus named contract, against the ADR-0122 doctrine. And
-   is the Series panel a main-result panel with row-cursor selection
-   semantics (the dist precedent), a span-cursor, or both?
-3. **Backtest scope (D7).** Does causal DAMP replay belong in play v1, or
-   does play stay two-sided/batch and causal work goes entirely to the
-   monitoring apps first? (The §1 workbench framing argues for v1.)
-4. **Motif timing (D3).** Expose pair+occurrences now via the small M1
-   reader, or hold all motif UI for the set-discovery ADR?
-5. **Grid policy (S5).** Refuse-with-hint only, or also an affordance that
-   rewrites the buffer (`InsertSqlAtCaret` exists) to add the `WITH FILL`
-   scaffold?
-6. **Adjudication v1 (S6).** In scope minimally, or deferred until the
-   facts-schema dialogue? (The labels bootstrap argues for minimal-now.)
+2. **The carrier's claim rule (D1). SETTLED: typed claim + row cursor.**
+   x = the first temporal column, lanes = all numeric columns, reject with
+   reason otherwise — detection where *types* disambiguate, the doctrinal
+   carve-out from ADR-0122's same-typed-ambiguity motivation. Point click
+   publishes the ordinary selection row cursor (Detail follows); box-zoom
+   stays implot-native; brush-emitting `{sel_from}`/`{sel_to}` signals is
+   deferred with a trigger (first cross-filter-by-time request).
+3. **Backtest scope (D7). SETTLED: v1, as vocabulary.** `tsAnomalyScores`
+   is DAMP in exact mode — causal by construction, so replaying it over a
+   queried range *is* the backtest. Warm-up is marked in the output
+   contract; the vocabulary registry records per-function causality so the
+   chart labels lanes per S1. The VUS-PR readout activates when Q6 labels
+   exist.
+4. **Motif timing (D3). SETTLED: hold for the set-discovery ADR.** The
+   pair-plus-radius promotion does not ship; v1 vocabulary is anomalies
+   and smoothing only. The span output contract remains the ready seam,
+   and motif names stay reserved inside the `ts*` family.
+5. **Grid policy (S5). SETTLED: hints plus scaffold affordance.** Refusals
+   stay loud; one-click scaffolds are written into the buffer via the
+   delivery ops — `GROUP BY toStartOfInterval(…)` for irregular data,
+   `WITH FILL STEP` with explicit NULL gaps for gappy grids — with the
+   validator's measured Δt filled in.
+6. **Adjudication v1 (S6). SETTLED: minimal affordance, keelson-table
+   home.** Mark-span-confirmed/false ships in v1, writing to a dedicated
+   keelson-style labels table (the workingsets precedent) — persistent and
+   SQL-joinable by the scorer. Modeling adjudications as facts (series
+   identity via pinned QueryRun) is deferred to its own dialogue with a
+   trigger.
 7. **Vocabulary naming (D2/O4). SETTLED 2026-08-02: the `ts*` camelCase
    family is reserved** — ADR-0162 SD2 conventions, strict arguments,
    collision-checked against server UDFs at classify time. Final names
    land in the ADR.
-8. **Fixture lab (§1 framing).** Does the education/evaluation framing pull
-   the M2 fixture generator into the UI as a data source beside real
-   queries — and in v1 or later?
-9. **Decimation seam (§3.2).** Does the carrier decimate dense series via
-   SQL-side `lttb`, client-side per-viewport LTTB, a per-pixel min/max
-   envelope, or a combination — i.e. does the choice serve the wire-volume
-   concern (S5) or the zoom-without-requery concern first?
+8. **Fixture lab (§1 framing). SETTLED: shape now, build as an early
+   follow-on.** Fixtures publish as per-session ad-hoc datasets (the
+   ADR-0134 route, the pprof-suite precedent): series plus ground-truth
+   labels as ordinary queryable tables, so the workbench operates on them
+   identically to real data — no special demo mode. The generator
+   affordance lands as an early post-v1 slice.
+9. **Decimation seam (§3.2). SETTLED: automatic per-pixel min/max
+   envelope.** Client-side and render-only — the full series always backs
+   hover, selection and the analysis tier; an envelope cannot drop an
+   extreme, which LTTB can. SQL-side `lttb` is documented in the snippets
+   corpus for huge-range viewing (available today, zero build).
 
 ## References
 
