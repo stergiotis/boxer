@@ -38,12 +38,12 @@ FROM (
       LEEWAY_LU_MEMBS_OF_VAL_IDX([10,11,12,13,14,15],[2,0,1,3],4) = [13,14,15] AS a15,
       -- Fixture B: homogenous array (level 2); B7-9 empty array attribute
       LEEWAY_LU_MEMB_IDX_TO_VAL_IDX([1,1,1]) = [1,2,3] AS b1,
-      LEEWAY_UNFLATTEN(['x1','x2','y1','y2','y3','z1'],[2,3,1]) = [['x1','x2'],['y1','y2','y3'],['z1']] AS b2,
+      raggedNest(['x1','x2','y1','y2','y3','z1'],[2,3,1]) = [['x1','x2'],['y1','y2','y3'],['z1']] AS b2,
       LEEWAY_LIST_BY_TAG_EQUAL(['x1','x2','y1','y2','y3','z1'],[2,3,1],[100,200,300],100,LEEWAY_LU_MEMB_IDX_TO_VAL_IDX([1,1,1])) = ['x1','x2'] AS b3,
       LEEWAY_LIST_BY_TAG_EQUAL(['x1','x2','y1','y2','y3','z1'],[2,3,1],[100,200,300],200,LEEWAY_LU_MEMB_IDX_TO_VAL_IDX([1,1,1])) = ['y1','y2','y3'] AS b4,
       LEEWAY_LIST_BY_TAG_EQUAL(['x1','x2','y1','y2','y3','z1'],[2,3,1],[100,200,300],300,LEEWAY_LU_MEMB_IDX_TO_VAL_IDX([1,1,1])) = ['z1'] AS b5,
       empty(LEEWAY_LIST_BY_TAG_EQUAL(['x1','x2','y1','y2','y3','z1'],[2,3,1],[100,200,300],999,LEEWAY_LU_MEMB_IDX_TO_VAL_IDX([1,1,1]))) AS b6,
-      LEEWAY_UNFLATTEN(['x1','x2','z1'],[2,0,1]) = [['x1','x2'],[],['z1']] AS b7,
+      raggedNest(['x1','x2','z1'],[2,0,1]) = [['x1','x2'],[],['z1']] AS b7,
       empty(LEEWAY_LIST_BY_TAG_EQUAL(['x1','x2','z1'],[2,0,1],[100,200,300],200,LEEWAY_LU_MEMB_IDX_TO_VAL_IDX([1,1,1]))) AS b8,
       LEEWAY_LIST_BY_TAG_EQUAL(['x1','x2','z1'],[2,0,1],[100,200,300],300,LEEWAY_LU_MEMB_IDX_TO_VAL_IDX([1,1,1])) = ['z1'] AS b9,
       -- Fixture C: array + aliasing, membership-card ([2,1]) decoupled from value-length ([3,1])

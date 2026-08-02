@@ -1,7 +1,9 @@
 -- Leeway DQL helper UDFs — jagged-array (SoA) read-back primitives.
--- Consolidated from a downstream consumer's tag UDFs plus boxer anchor's
--- ANCHOR_UNFLATTEN_LEEWAY_ARRAY, fixed (BEGIN_INCL no longer references an
--- undefined _END) and extended with level-2 (value array/set) extraction.
+-- Consolidated from a downstream consumer's tag UDFs (with the inherited
+-- BEGIN_INCL bug fixed: it referenced an undefined _END) and extended with
+-- level-2 (value array/set) extraction. The family layers on the co/ragged
+-- function pack (ADR-0162): HelperUDFsSQL() emits the pack's statements
+-- ahead of this file, and level-2 unflattening is the pack's raggedNest.
 --
 -- A tagged section stores, per entity row, parallel arrays: a value array
 -- (one element per attribute for scalar sections; a flattened element array
@@ -40,13 +42,8 @@ CREATE OR REPLACE FUNCTION LEEWAY_LU_MEMBS_OF_VAL_IDX AS (membcol, cardcol, vali
 CREATE OR REPLACE FUNCTION LEEWAY_VALUE_BY_TAG_EQUAL AS (valcol, tagcol, tagval, m2v) ->
     valcol[LEEWAY_LU_ATTR_BY_TAG(tagcol, tagval, m2v)];
 
--- Unflatten a per-attribute flattened value array into array-of-arrays using
--- the per-attribute length column (supersedes ANCHOR_UNFLATTEN_LEEWAY_ARRAY).
-CREATE OR REPLACE FUNCTION LEEWAY_UNFLATTEN AS (flatArr, lengths) ->
-    arrayMap(i -> arraySlice(flatArr,
-                             toUInt64(arraySum(arraySlice(arrayPushFront(lengths, 0), 1, i)) + 1),
-                             toUInt64(lengths[i])),
-             range(1, length(lengths) + 1));
+-- Level-2 unflatten (flattened value array -> array-of-arrays by the length
+-- column) is the pack's raggedNest, emitted ahead of this file.
 
 -- List (array/set) value of the attribute tagged with `tagval`; [] if absent.
 -- `lencol` is the per-attribute element-count support column (len/card).

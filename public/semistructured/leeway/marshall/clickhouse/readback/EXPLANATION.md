@@ -140,9 +140,10 @@ Option fields the generator emits an `<= 1` validator term and projects the natu
 ## Reference ClickHouse implementation
 
 The helper UDFs ship in [`lw_readback_udfs.sql`](./lw_readback_udfs.sql) (accessor `HelperUDFsSQL()`),
-consolidated from a downstream consumer's tag UDFs plus the anchor unflatten UDF — with that
-implementation's `BEGIN_INCL` bug fixed (it called an undefined `…_END`) and level-2 (value
-array/set) extraction added. They are kind-independent (create once per database) and are
+consolidated from a downstream consumer's tag UDFs — with the inherited `BEGIN_INCL` bug fixed
+(it called an undefined `…_END`) — and layered on the co/ragged function pack (ADR-0162):
+`HelperUDFsSQL()` emits the pack's statements first, and level-2 unflattening is the pack's
+`raggedNest`. They are kind-independent (create once per database) and are
 verified by a truth-table run through `clickhouse-local` (`lw_readback_udfs_test.go`). Naming follows
 the inherited `LEEWAY_LU_*` ("Leeway LookUp") convention: "val idx" = attribute index, "memb idx"
 = flattened membership position.
@@ -157,7 +158,7 @@ LEEWAY_LU_ATTR_BY_TAG(idCol, lit, m2v)        -- attribute carrying membership `
                                               --   = m2v[indexOf(idCol, lit)]
 ```
 
-Value extraction composes the locate with the level-2 unflatten (with
+Value extraction composes the locate with the level-2 extraction (with
 `m2v = LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(cardCol)`, CSE'd across a section's fields; `lenCol` = the
 section's `len` for arrays or `card` for sets):
 
@@ -302,5 +303,5 @@ CI-friendly variant when no server is present.
 - [ADR-0008 — leeway marshall extensions](../../../../../../doc/adr/0008-leeway-marshall-extensions.md) — membership channels; the Cut-2 parametrized/mixed channels.
 - `streamreadaccess/EXPLANATION.md` — the column-major vs attribute-major layout and the cardinality-support reading the driver already does.
 - `marshallreflect/unmarshal.go` — the read-back behaviour that is this mapping's oracle.
-- `anchor/card_anchor_udf_unflatten_leeway_array.sql` — the existing unflatten UDF generalized as `leeway_unflatten`; `anchor/card_anchor_integration2_test.go` — the harness pattern.
+- `anchor/card_anchor_integration2_test.go` — the harness pattern. The anchor showcase's former unflatten UDF is retired, as is this family's `LEEWAY_UNFLATTEN`: both are the pack's `raggedNest` now (ADR-0162).
 - `common/lw_enums.go` — `ColumnRoleE` (`len`, `card`, `<role>card`, `cusum*`) and `MembershipSpecE`.

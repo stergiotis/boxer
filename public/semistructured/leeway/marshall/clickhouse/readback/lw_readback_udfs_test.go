@@ -46,12 +46,16 @@ func TestHelperUDFs_TruthTable(t *testing.T) {
 	}
 }
 
-// TestHelperUDFs_SQLShape is a server-free guard on the embedded DDL: the
-// expected functions are present, and the inherited BEGIN_INCL bug
-// (referencing an undefined LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END) stays fixed.
+// TestHelperUDFs_SQLShape is a server-free guard on the provisioning DDL:
+// the co/ragged pack (ADR-0162) is layered underneath, the expected family
+// functions are present, LEEWAY_UNFLATTEN stays retired (level-2 unflatten
+// is the pack's raggedNest), and the inherited BEGIN_INCL bug (referencing
+// an undefined LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END) stays fixed.
 func TestHelperUDFs_SQLShape(t *testing.T) {
 	sql := HelperUDFsSQL()
 	for _, fn := range []string{
+		"raggedNest",
+		"leewayPackVersion",
 		"LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL",
 		"LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END_EXCL",
 		"LEEWAY_LU_MEMB_IDX_TO_VAL_IDX",
@@ -59,7 +63,6 @@ func TestHelperUDFs_SQLShape(t *testing.T) {
 		"LEEWAY_LU_ATTR_BY_TAG",
 		"LEEWAY_LU_MEMBS_OF_VAL_IDX",
 		"LEEWAY_VALUE_BY_TAG_EQUAL",
-		"LEEWAY_UNFLATTEN",
 		"LEEWAY_LIST_BY_TAG_EQUAL",
 	} {
 		if !strings.Contains(sql, "FUNCTION "+fn+" ") {

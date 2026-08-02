@@ -327,3 +327,12 @@ Accepted 2026-08-02. Changes now arrive as dated `## Update` sections.
 - [ADR-0094](./0094-keelson-introspection-tables.md) — the `url()`
   introspection path, the standing example of a read-only target (SD8
   trigger).
+
+## Update 2026-08-02 — the read-back helper family layers on the pack
+
+The reference note that the
+[read-back generator](./0066-leeway-dql-clickhouse-readback-generator.md)
+is unaffected is superseded in one particular: its hand-use helper
+`LEEWAY_UNFLATTEN` is retired in favor of `raggedNest`, and
+`readback.HelperUDFsSQL()` now emits this pack's statements ahead of its
+own `LEEWAY_LU_*` family. The generator's *emitted* SQL remains pack-free.
