@@ -8,16 +8,16 @@ status: draft
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
-# How to query leeway co-arrays and CSR values in ClickHouse
+# How to query leeway co-arrays and ragged values in ClickHouse
 
 A leeway tagged-value section lands in ClickHouse as a bundle of parallel
 arrays: per row, every tagged-value column of the section — and of its
 co-sections — has the same length, and position `i` in each lane refers to the
 same attribute instance. Non-scalar values add a second level: the value
 column is one flat stream and a cardinality column says how many consecutive
-elements belong to each attribute instance — a CSR layout (roles `card` /
-`len`, optionally with materialized cumulative offsets `cusumcard` /
-`cusumlen`).
+elements belong to each attribute instance — a ragged layout, values plus
+lengths (roles `card` / `len`, optionally with materialized cumulative
+offsets `cusumcard` / `cusumlen`).
 
 This page collects a small kernel of array functions that is sufficient for
 querying both layouts by hand, and the idioms built from it. Caveats up front:
@@ -31,7 +31,7 @@ querying both layouts by hand, and the idioms built from it. Caveats up front:
   ([ADR-0066](../adr/0066-leeway-dql-clickhouse-readback-generator.md)) emits
   its own SQL and is not affected by this page.
 - Examples quote lanes in the `"section:column"` style of the play surface;
-  in the CSR section, `vals` stands for the flat value column and `card` for
+  in the ragged section, `vals` stands for the flat value column and `card` for
   its cardinality column — substitute the physical names of your table.
 
 ## The kernel
@@ -47,8 +47,8 @@ querying both layouts by hand, and the idioms built from it. Caveats up front:
 | predicate | `arrayExists`, `arrayAll`, `arrayCount` | multi-lane lambdas |
 | zip / unzip | `arrayZip`, tuple access `t.1` | glue lanes into `Array(Tuple)`; `arrayZipUnaligned` pads with NULL |
 | argsort | `arraySort(i -> key[i], arrayEnumerate(key))` | permutation to gather every lane through |
-| offsets ↔ lengths | `arrayCumSum`, `arrayDifference` | CSR bookkeeping |
-| segment | `arraySlice(vals, start, len)` | with `arrayCumSum(card)`, the CSR cut |
+| offsets ↔ lengths | `arrayCumSum`, `arrayDifference` | ragged bookkeeping |
+| slice a run | `arraySlice(vals, start, len)` | with `arrayCumSum(card)`, one instance's values |
 | reduce | `arraySum/Min/Max/Avg`, `arrayReduce`, `arrayReduceInRanges`, `arrayFold` | `arrayReduce` takes any aggregate, including parametrized (`'topK(3)'`) and multi-argument (`'argMax'`) ones |
 | explode / implode | `ARRAY JOIN` clause, `groupArray` | the clause zips several arrays positionally; `LEFT ARRAY JOIN` keeps rows with empty sections |
 | cross-row co-arrays | `sumMap` / `minMap` / `maxMap`, `-Array` / `-ForEach` combinators | aggregate over lanes across rows without exploding |
@@ -152,7 +152,7 @@ The direct form `arraySort((v, k) -> k, vals, keys)` sorts a single output
 lane by another lane. Never sort (or dedup) one lane in place — the siblings
 silently stop corresponding; go through the permutation.
 
-## CSR idioms
+## Ragged idioms
 
 The invariant, worth asserting when something looks off:
 
@@ -164,23 +164,23 @@ End offsets are `arrayCumSum(card)`; the start of segment `i` is
 `hi[i] - card[i] + 1`. When the table materializes `cusumcard`, use it instead
 of recomputing.
 
-Materializing the segments gives an `Array(Array(T))` lane co-aligned with the
-membership lanes — empty members come out as `[]`:
+Materializing the per-instance lists gives an `Array(Array(T))` lane
+co-aligned with the membership lanes — empty members come out as `[]`:
 
 ```sql
 arrayMap((c, hi) -> arraySlice(vals, hi - c + 1, c),
-         card, arrayCumSum(card)) AS seg
+         card, arrayCumSum(card)) AS lists
 ```
 
-With `seg` in hand the whole co-array kernel lifts one level — "members whose
-value list contains a model ending in /test":
+With `lists` in hand the whole co-array kernel lifts one level — "members
+whose value list contains a model ending in /test":
 
 ```sql
 arrayFilter((m, vs) -> arrayExists(v -> v LIKE '%/test', vs),
-            "string:member", seg)
+            "string:member", lists)
 ```
 
-Per-segment aggregates work without materializing, via 1-based
+Per-instance aggregates work without materializing, via 1-based
 `(start, length)` ranges:
 
 ```sql
@@ -193,9 +193,9 @@ The k-th value of member `i` is `vals[hi[i] - card[i] + k]`, valid while
 `k <= card[i]`.
 
 One trap: `arraySplit` cuts *before* mask positions and can never produce an
-empty segment, so any mask-based reconstruction mis-assigns values as soon as
+empty list, so any mask-based reconstruction mis-assigns values as soon as
 one member has `card = 0`. The `arraySlice` recipe handles zeros; prefer it.
-`arrayFlatten(seg)` is the inverse direction.
+`arrayFlatten(lists)` is the inverse direction.
 
 ## Crossing rows
 
@@ -236,7 +236,7 @@ unusually well because a SQL UDF is a macro: it is inlined into the query
 tree during analysis. Verified consequences:
 
 ```sql
-CREATE OR REPLACE FUNCTION csrSegments AS (vals, card) ->
+CREATE OR REPLACE FUNCTION raggedNest AS (vals, card) ->
     arrayMap((c, hi) -> arraySlice(vals, hi - c + 1, c), card, arrayCumSum(card))
 ```
 
@@ -247,7 +247,7 @@ CREATE OR REPLACE FUNCTION csrSegments AS (vals, card) ->
   `arrayExists(f, lane) AND has(lane, x)` inside one UDF keeps the pruning.
 - **Lambdas can be parameters.** A UDF may accept a lambda and forward it to
   a higher-order builtin —
-  `CREATE FUNCTION csrExists AS (f, vals, card) -> arrayMap(vs -> arrayExists(f, vs), csrSegments(vals, card))`
+  `CREATE FUNCTION raggedExists AS (f, vals, card) -> arrayMap(vs -> arrayExists(f, vs), raggedNest(vals, card))`
   works — so the kernel lifts to the ragged case generically.
 - **UDFs compose.** A UDF body may call other UDFs (non-recursively), and
   constant arguments stay constant through inlining: even a constructed
@@ -281,5 +281,5 @@ client-side expansion of the same bodies is an equivalent substitute there.
 6. Lambdas past the single-lane equality rewrite never use indexes; when a
    query should prune granules, add a constant-argument `has` / `hasAny`
    guard beside the lambda. Stream-level `has(vals, x)` stays a valid guard
-   under CSR: it is a necessary condition for any member's list to contain
-   `x`.
+   under raggedness: it is a necessary condition for any member's list to
+   contain `x`.
