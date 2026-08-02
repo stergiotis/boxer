@@ -280,6 +280,42 @@ Two caveats: the namespace is global and flat (prefix a function pack), and
 (`url(...)`) will not have it. Since inlining is all a SQL UDF does, a
 client-side expansion of the same bodies is an equivalent substitute there.
 
+### The shipped pack, in one look
+
+The vocabulary ships as the co/ragged function pack
+([ADR-0162](../adr/0162-leeway-co-ragged-function-pack.md)); play installs
+it at connect, and `SELECT leewayPackVersion()` reports the revision. Its
+value proposition is one comparison. Hand-woven, the intent, the offset
+bookkeeping, and the pruning guards travel separately — and the guards are
+the part call sites forget, at the every-granule-scanned cost measured
+above:
+
+```sql
+SELECT arrayReduceInRanges('avg',
+           arrayMap((h, c) -> (h - c + 1, c), arrayCumSum(card), card),
+           vals)
+FROM t
+WHERE has("string:semanticType", 'myst')
+  AND has("string:short", 'abc')
+  AND arrayExists((p, q) -> p = 'myst' AND q = 'abc',
+                  "string:semanticType", "string:short")
+```
+
+With the pack, the same statement reads as what it means, and nothing is
+forgettable, because the fused ranges and the guards live inside the
+function bodies:
+
+```sql
+SELECT raggedReduce('avg', vals, card)
+FROM t
+WHERE coExistsEq2("string:semanticType", 'myst', "string:short", 'abc')
+```
+
+The two compile to identical plans (verified byte for byte via
+`EXPLAIN actions = 1` on 26.7): the short form costs nothing at runtime,
+prunes granules through the bundled `has` conjuncts, and is the form that
+survives in stored queries and `system.query_log`.
+
 ## Sharp edges
 
 1. Arrays are 1-based; index `0` and out-of-range return the element type's
