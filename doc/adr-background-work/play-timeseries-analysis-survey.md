@@ -539,6 +539,41 @@ buffer (O4, accepting the terminal-leaf restriction and the preview chrome
 now). That fork — migration debt versus upfront compiler honesty — is Q1,
 the main dialogue point.
 
+**Settled (dialogue, 2026-08-02): O4, CTE-only v1 — with the `ts*`
+camelCase family reserved (Q7).** Two code findings collapsed O4's marginal
+cost and carried the decision:
+
+- The terminal-leaf rule is a walk over `splitNode.DependsOn` edges that
+  already exist, and `{name:Type}` slots inside a client body already land
+  in `splitNode.Reads` — so analysis parameters are live, sweepable,
+  history-recorded signals with no new machinery.
+- The client executor *composes* rather than coordinates: the client
+  node's `compiledNode.SQL` is the fused input CTE (the CH-executable
+  part), and the executor wraps the wire executor — execute the input on
+  ClickHouse, transform in Go, return Arrow — so the lane's (SQL, params)
+  memo key remains the identity unchanged, and the swap point is the
+  existing per-node lane construction. An observed input recomputes on its
+  own lane, which is the recorded SD13 status quo, not a new concession.
+
+O3-as-primary is rejected with three kill-reasons: it violates all three
+§2.3 roles (the Projection counter-precedent the roles framing exists to
+stop); its cost advantage is illusory (transform, validation and lane work
+are shared — the delta is chrome versus controls); and its discoverability
+virtue is achievable SQL-first by affordances that *write the spelling
+into the buffer* via the existing delivery ops. v1 scope: client
+vocabulary is legal only as a terminal-leaf CTE, rendered through
+bindings/channels; a client call in the sink position is a loud error with
+the CTE hint (auto-observe sugar is a follow-on slice); downstream SQL
+reading a client node remains the SD13 trigger. Residual risks with their
+mitigations: buffer no longer runs on bare ClickHouse (engine badge on the
+node plus a Preview caption; the spelling names the computation, not the
+engine — it becomes genuinely server-executable if O5 ever lands);
+vocabulary calcifying into recorded artifacts (tiny v1 roster, strict
+sole-select-item arguments, additive-only evolution per the ADR-0162
+discipline); passes must pass unknown function names through (pinned by a
+test); collision with a real server UDF (classify-time check, the chpack
+precedent).
+
 ### 5.3 D3 — outputs are ordinary data
 
 Detector and miner outputs should be records with contracts, not pixels:
@@ -639,10 +674,10 @@ host's own metrics) once the pieces exist.
 - **L1**: build the Series panel first. It is the largest single gap
   against the comparator, independently valuable, and every other piece
   renders through it.
-- **L2**: execution is client-side Go behind the graph's executor seam
-  regardless of spelling; O2 covers only what CH genuinely expresses;
-  O5 deferred with trigger. The O3-vs-O4 spelling fork is the dialogue's
-  main business (Q1) — the survey deliberately does not pick.
+- **L2** *(resolved by Q1)*: execution is client-side Go behind the
+  graph's executor seam; the spelling is the buffer vocabulary (O4,
+  §5.2); O2 covers only what CH genuinely expresses; O5 deferred with
+  trigger.
 - **L3**: outputs on existing contracts — spans are `_tl_band_*`-shaped,
   scores are series. No new widget beyond the carrier for v1; the motif
   gallery waits.
@@ -655,11 +690,9 @@ host's own metrics) once the pieces exist.
 
 ## 8. Open questions — the dialogue agenda
 
-1. **The spelling fork (D2).** Start panel-authored (O3) with
-   vocabulary-compatible naming and migrate, or start in the buffer (O4)
-   with terminal-leaf client nodes and the preview chrome? Decides what the
-   recorded artifact is from day one — and whether graduation is a spelling
-   change or a redesign.
+1. **The spelling fork (D2). SETTLED 2026-08-02: O4, CTE-only v1.** The
+   recorded artifact is the SQL text from day one; findings, kill-reasons
+   and v1 scope in §5.2.
 2. **The carrier's claim rule (D1).** Type-directed (any temporal+numeric
    result charts) versus named contract, against the ADR-0122 doctrine. And
    is the Series panel a main-result panel with row-cursor selection
@@ -674,9 +707,10 @@ host's own metrics) once the pieces exist.
    scaffold?
 6. **Adjudication v1 (S6).** In scope minimally, or deferred until the
    facts-schema dialogue? (The labels bootstrap argues for minimal-now.)
-7. **Vocabulary naming (D2/O4).** If the vocabulary ever lands, it follows
-   the ADR-0162 SD2 conventions (camelCase, CH-idiomatic, `ts` prefix?) —
-   worth reserving the names in the ADR even if v1 ships O3.
+7. **Vocabulary naming (D2/O4). SETTLED 2026-08-02: the `ts*` camelCase
+   family is reserved** — ADR-0162 SD2 conventions, strict arguments,
+   collision-checked against server UDFs at classify time. Final names
+   land in the ADR.
 8. **Fixture lab (§1 framing).** Does the education/evaluation framing pull
    the M2 fixture generator into the UI as a data source beside real
    queries — and in v1 or later?
