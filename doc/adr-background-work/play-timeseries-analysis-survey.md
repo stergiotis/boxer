@@ -20,6 +20,8 @@ status: draft
 > algorithm literature is covered by the existing
 > [motif and anomaly survey](../explanation/timeseries-motif-anomaly-survey.md)
 > and is only pointed at here. No new algorithm was run for this survey.
+> Outcomes of the design dialogue of 2026-08-02 are recorded inline as
+> settled direction — decisions, not measurements.
 
 ## 1. The question
 
@@ -31,6 +33,27 @@ capabilities, with three qualities named up front: scientifically honest,
 expressive enough to compose, and designed as one surface rather than three
 bolt-ons. The comparator is the core of Grafana: query → time-series chart →
 transformations → anomaly flags.
+
+**Framing (dialogue outcome, 2026-08-02 — settled direction).** Comparator
+parity is the floor, not the frame. The exposure is equally three things the
+comparator is not:
+
+- **an algorithm-evaluation workbench** — the M2 scorer, the baselines and
+  the backtest are product surface, not CI plumbing; play is where a
+  detector's claim gets examined on this host's data, against the
+  one-liners. The loadstudy discipline, made interactive.
+- **a data-quality assessment surface** — the S5 validators are findings,
+  not error handling: a series failing a detector's preconditions (gaps,
+  jitter, silent fill) is itself a result about the data, and the
+  anomaly/motif views double as data-auditing lenses.
+- **an education tool** — the profile-under-series view, the fixture
+  generator's known-ground-truth series and the honesty chrome teach what
+  these methods can and cannot claim, which is a capability in its own
+  right given the field's benchmark history.
+
+This framing promotes the §4 honesty layer from chrome to product, and it
+raises the backtest readout and a fixture "lab" (§5.6) in priority relative
+to pure charting.
 
 Four sub-questions are separable, and the first is prior to the rest:
 
@@ -181,6 +204,63 @@ artifact per analysis, a reactive signal system, facts persistence for
 outputs, an in-repo scorer with flaw-avoiding fixtures, and — in
 `adscore.BaselineScores` — the institutional habit of showing the one-liner
 beside the detector.
+
+### 3.1 Smoothing, specifically — the comparator's four layers vs ADR-0152
+
+Added at the user's direction (dialogue 2026-08-02). Exception to this
+section's tier-(b) disclaimer: the mechanism names and options below were
+checked against the current Grafana documentation on the compile date; the
+filter-theoretic characterisations are standard signal-processing facts.
+
+Grafana's "smoothing" is four unrelated mechanisms at four layers:
+
+| Layer | Mechanism | Filter character |
+| --- | --- | --- |
+| query time | interval bucketing (`$__interval` avg/max/min); datasource functions (`avg_over_time`, `moving_average`, `exponential_moving_average`) | decimation plus trailing boxcar or single-pole EWMA; solves data *volume*, only incidentally noise |
+| transformation | *Window functions*: moving mean/stddev/variance, **trailing or centered** | uniform boxcar FIR; centered is zero-phase, trailing lags by half the window |
+| transformation | *Smoothing*: the ASAP algorithm, one *Resolution* knob (1–1000) | still a boxcar — ASAP automates the **window length**, not the kernel |
+| panel render | *Smooth* line interpolation | a spline through the unmodified samples; removes no noise, can invent extrema between points |
+
+Filter-theoretically, everything upstream of the renderer is a boxcar or a
+single-pole EWMA. The boxcar is the weakest low-pass in common use: its
+frequency response is a sinc — first sidelobe about −13 dB, 1/f rolloff,
+and spectral nulls with phase inversion at multiples of the window rate —
+so noise above the cutoff substantially survives and narrow peaks distort.
+This is the same defect class the ADR-0152 paper quantifies for
+Savitzky–Golay (−11 to −13 dB sidelobes), and the boxcar is the worse
+member of it (Savitzky–Golay at least keeps a flat passband). The EWMA is
+causal but has frequency-dependent lag — different components of a
+waveform are delayed by different amounts — and no zero-phase form. The
+spline mode is not a filter at all: every sample passes through unchanged,
+curvature is invented between them, and noise is beautified rather than
+removed.
+
+ASAP (Rong & Bailis, PVLDB 2017) is the one genuinely interesting entry,
+and it is worth being precise about what it contributes: not a better
+kernel but **automated bandwidth selection** — an autocorrelation-guided
+search over window lengths that minimises roughness subject to preserving
+kurtosis, the latter serving as a don't-hide-the-outliers guard. Two of
+its ideas independently reappear in this survey: window-from-ACF is S7,
+and don't-let-smoothing-hide-anomalies is `trendsmooth`'s raw-underlay
+commitment — solved there by display honesty rather than by capping the
+filter. What ASAP leaves untouched is the kernel: the smoother it tunes
+remains a boxcar with everything above.
+
+Against this, the MS kernel (ADR-0152) is the complementary contribution —
+a *designed* kernel: flat passband (peak heights preserved), first
+sidelobe below −70 dB with 1/f⁴ decay, zero-phase, explicit boundary
+treatment, analytic derivatives — with bandwidth left to the caller plus
+mapping helpers. The honest trades run the other way too: the trailing
+boxcar and the EWMA are causal and therefore live-safe, where MS's last
+`m` samples rest on extrapolation (S1); ASAP needs no parameter at all
+where `trendsmooth` still exposes a half-width; and interval bucketing
+addresses data volume, which MS does not and this design places in the
+SQL (S5). Two consequences for this design: the comparator's smoother
+appears in it twice, both times as a reference point rather than the
+product — an O2 window-function one-liner, and the moving-average
+`adscore` baseline; and ASAP's bandwidth-selection idea is worth adopting
+*on top of* the better kernel — an ACF-driven suggested half-width for
+`trendsmooth`, sharing S7's machinery — rather than alongside it.
 
 ## 4. Scientific commitments — what "right" must mean in the UI
 
@@ -400,6 +480,12 @@ facts-modelling dialogue before any schema is committed; the v1 cut can be
 deliberately minimal (a mark, a span, a verdict) with the schema question
 flagged.
 
+Under the §1 framing this section is product, not chrome, and the M2
+fixture generator joins it: flaw-avoiding synthetic series with known
+ground truth, generated on demand, are the education role's laboratory —
+run a detector against a fixture whose answer is known, see VUS-PR with
+its honest band, let the triviality check catch a too-easy setup.
+
 ### 5.7 D7 — the app split: batch here, causal there
 
 play is a batch/investigation surface: profile, motifs, and **backtest** —
@@ -471,7 +557,7 @@ host's own metrics) once the pieces exist.
    semantics (the dist precedent), a span-cursor, or both?
 3. **Backtest scope (D7).** Does causal DAMP replay belong in play v1, or
    does play stay two-sided/batch and causal work goes entirely to the
-   monitoring apps first?
+   monitoring apps first? (The §1 workbench framing argues for v1.)
 4. **Motif timing (D3).** Expose pair+occurrences now via the small M1
    reader, or hold all motif UI for the set-discovery ADR?
 5. **Grid policy (S5).** Refuse-with-hint only, or also an affordance that
@@ -482,6 +568,9 @@ host's own metrics) once the pieces exist.
 7. **Vocabulary naming (D2/O4).** If the vocabulary ever lands, it follows
    the ADR-0162 SD2 conventions (camelCase, CH-idiomatic, `ts` prefix?) —
    worth reserving the names in the ADR even if v1 ships O3.
+8. **Fixture lab (§1 framing).** Does the education/evaluation framing pull
+   the M2 fixture generator into the UI as a data source beside real
+   queries — and in v1 or later?
 
 ## References
 
@@ -508,5 +597,6 @@ External (tier c — pointers, covered in the in-repo surveys):
 - Wu, Keogh. *Current Time Series Anomaly Detection Benchmarks are Flawed…* TKDE 2021.
 - Liu, Paparrizos. *TSB-AD.* NeurIPS 2024.
 - Lu et al. *DAMP.* DMKD 2022.
+- Rong, Bailis. *ASAP: Prioritizing Attention via Time Series Smoothing.* PVLDB 10(11), 2017 — the comparator's Smoothing transformation (§3.1).
 - Schäfer, Leser. *Motiflets.* PVLDB 2022.
 - Howard, Ramdas et al. *Time-uniform, nonparametric, nonasymptotic confidence sequences.* Ann. Statist. 2021 — the anytime-valid track's anchor.
