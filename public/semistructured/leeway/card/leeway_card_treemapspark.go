@@ -3,6 +3,7 @@ package card
 import (
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -92,10 +93,15 @@ func (s *TreemapSpark) render() {
 		return
 	}
 
-	// Compute box widths: max(len(name)+2, nCols*2, 4)
+	// Compute box widths: max(nameWidth+2, nCols*2, 4). Name width is in
+	// runes for the same reason the fill below counts glyphs — a non-ASCII
+	// section name measured in bytes would over-reserve here and misalign the
+	// centring in the top border. (A wide East Asian rune still occupies two
+	// terminal columns and would misalign; that limit is shared with
+	// UnicodeCardEmitter and recorded in KnownIssues.md.)
 	widths := make([]int, len(s.cells))
 	for i, c := range s.cells {
-		w := len(c.name) + 2
+		w := utf8.RuneCountInString(c.name) + 2
 		if cw := c.nCols*2 + 2; cw > w {
 			w = cw
 		}
@@ -187,8 +193,15 @@ func (s *TreemapSpark) render() {
 			}
 		}
 
-		// Build fill content
+		// Build fill content. Width is counted in GLYPHS, not bytes: every
+		// fill rune below is multi-byte in UTF-8 (█ ▓ ░ are three bytes, ·
+		// is two), so strings.Builder.Len() overstates the cell's width by
+		// 2–3×, the padding below computes negative, and the row is emitted
+		// short of the header that sits above it. Every other border here
+		// goes through strings.Repeat, which repeats whole runes and so was
+		// always right — which is why only the middle row drifted.
 		var fill strings.Builder
+		glyphs := 0
 		for a := 0; a < c.nAttrs && a < innerW; a++ {
 			if a < len(c.attrs) {
 				ai := c.attrs[a]
@@ -204,10 +217,10 @@ func (s *TreemapSpark) render() {
 			} else {
 				fill.WriteString("·")
 			}
+			glyphs++
 		}
 		// Pad remaining width
-		remaining := innerW - fill.Len()
-		if remaining > 0 {
+		if remaining := innerW - glyphs; remaining > 0 {
 			fill.WriteString(strings.Repeat(" ", remaining))
 		}
 		mid.WriteString(fill.String())
