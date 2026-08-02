@@ -206,6 +206,46 @@ descriptor. Rank selection also names the surface question: choosing the
 plane an operation applies at (a scalar map versus a per-run map) is a rank
 annotation, with silent upward coercion along the ladder.
 
+## Groundings in familiar systems
+
+The lineage above cites theory, but none of it is load-bearing for using
+the model; each concept has an exact twin in systems closer to hand.
+
+**Wolfram Language.** `gather` is `Part` with an index list
+(`lane[[{3, 1}]]`); `argwhere` is `Position`; `sortPerm` is `Ordering`
+(which returns the permutation, not the sorted list); nesting a ragged
+stream is literally `TakeList[vals, card]` — empty runs included — and
+flattening is `Catenate`; per-run reduction is `Total /@ TakeList[…]`,
+which the fused ClickHouse forms compute without materializing the split.
+Rank resolution with silent scalar coercion is the `Listable` attribute.
+The laws-with-a-direction are Wolfram's native mode of being: terms
+rewritten by rules (`//.`) toward a normal form. A practical consequence:
+Wolfram is a second executable model of the algebra — an independent
+differential-testing oracle for a future function pack.
+
+**Scheme.** The macro substrate is `define-syntax` phase separation:
+expansion happens before execution, and whether it happens in the server
+(SQL user-defined functions) or in a client-side pass is invisible in the
+expanded program — the two substrates are one program under
+macroexpansion. SRFI-1's split between `fold` (always seeded) and `reduce`
+(seed consulted only for the empty list) is the positivity dividend in
+library form: on leeway reads the empty case is dead, so everything lives
+in `reduce`'s world and no identity element is ever fabricated.
+
+**Dhall.** The exclusions are the Dhall move: no recursion, folds as the
+only consumption, hence every term normalizes and analysis is total —
+deliberately not Turing-complete, for the same reason Dhall isn't. Dhall's
+semantic import hashes (content-addressing the *normal form*) also name a
+door the laws open here: with the rewrite system as normalizer, query
+terms gain a canonical identity — a natural fit for a system that treats
+queries as data.
+
+**Interval arithmetic** (Wolfram's `Interval`) grounds the guard
+semantics: conservative bounds propagated through operations. A minmax
+skip index evaluates a predicate in exactly that arithmetic per granule; a
+Bloom filter is the set-shaped analog; the (S, N) pair generalizes both to
+arbitrary predicates with polarity made explicit.
+
 ## Three interpretations
 
 A term of the algebra has three compositional semantics. That they share
