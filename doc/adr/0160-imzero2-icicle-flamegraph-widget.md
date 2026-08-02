@@ -159,6 +159,13 @@ With those, the interaction contract is:
 | drag | pans the value axis and scrolls through depth |
 | click a frame | zooms the value axis to that frame's span |
 | double-click | fits the value axis back to the whole profile |
+| right-click → *Fit Y axis* | not offered: the depth axis is `NoZoom`, and a menu fit is a gesture kind like any other (SD4) |
+| right-click → *Fit both* | fits the value axis only |
+
+`ResetView` outranks a click resolved the same frame. Both are `CondAlways` and
+the zoom is applied second, so on the frame a layout is swapped the click —
+resolved against the *outgoing* layout's transform — would otherwise silently
+undo the reset that was the point of the swap.
 
 Depth scrolling is a pan of the depth axis rather than an enclosing scroll
 area, because an implot plot captures the wheel for its own zoom — a plot
@@ -175,10 +182,20 @@ is what lets a depth axis be scrolled but not scaled.
 The locks apply **per gesture kind, not to the resulting range**. That is the
 one subtlety: an anchored wheel zoom moves an axis's centre as well as its
 span, so a "let it zoom, then restore the span" implementation would leave the
-axis panned by the wheel. Pan, wheel, box-zoom and double-click fit each
-consult the locks separately, and an axis no gesture moved is not written back
-at all — which also stops a purely vertical drag from round-tripping the value
-axis through the transform on every frame.
+axis panned by the wheel. Pan, wheel, box-zoom and fit each consult the locks
+separately, and an axis no gesture moved is not written back at all — which
+also stops a purely vertical drag from round-tripping the value axis through
+the transform on every frame.
+
+"Every gesture kind" has to include the ones that do not come from the
+pointer. The **context menu's fit actions** are a gesture kind, and the first
+implementation missed them: they set the pending-fit flag directly and so
+reached past a `NoZoom` axis, collapsing the depth axis to a single row. A fit
+now goes through one helper that consults the locks, and the menu does not
+offer an action a locked axis would decline. `Plot.FitNext()` is deliberately
+*not* filtered — it is the caller asking in its own right, not a user gesture
+— which is why the widget also declares its depth extent (see the note in
+SD7).
 
 **`AxisLimits(axis)`** — upstream's `GetPlotLimits`, narrowed to one axis. A
 caller that derives a span from the plot area must re-assert it when the pane
@@ -200,6 +217,21 @@ breadcrumb or a tooltip; the widget does not draw either. Hover and selection
 come back as indices and the host decides what to say about them, as the sankey
 returns hits rather than rendering its own chrome.
 
+One qualification the first implementation got wrong: pixel-free is right for
+the *layout*, and not sufficient for the *probe*. The view culls frames too
+narrow to draw (SD7), so a layout-only hit test reports nodes that were never
+painted — a hover naming a function with nothing under the pointer, and a
+selection ring with no rectangle to trace. The cull is therefore applied a
+second time in `view.Probe`, which recovers the value axis's mapping from
+`PlotAreaPrev` and `AxisLimits` and runs the *same* predicate the renderer
+does. The pixel knowledge stays in the view; the layout stays pixel-free; and
+because both go through one function they cannot drift apart. Before the first
+render there is no mapping and nothing has been drawn, so every hit stands.
+
+This assumes the value axis is linear, which the widget always configures. A
+host driving implot itself and choosing a log axis would get a probe that
+disagrees with what it drew.
+
 ### SD6 — Colour is a data encoding, from the IDS tokens
 
 Two schemes, plus a caller override:
@@ -218,6 +250,22 @@ than by a border, which costs no extra paint opcode. Text ink, the selection
 ring and the stroke ladder are token values (rules L2/L10), so the widget is
 IDS-conformant on its first commit rather than after a lint pass.
 
+The label ink is chosen against the fill by WCAG relative luminance, which is
+now `implot.RelativeLuminance` — hoisted so the lane has one such formula
+rather than one per widget. The switch point between the two neutral inks is
+*derived* from them (`sqrt((Ld+0.05)(Ll+0.05)) - 0.05`, which is 0.1734 for
+the palette as it stands) rather than written down, so regenerating the IDS
+palette moves it instead of leaving a stale constant. The first draft used a
+rounded 0.18, which picked the worse of the two inks over about 1.4% of the
+colour space — 4.32:1 where 4.58:1 was available. Nothing in the shipped
+palette fell in that band, and the worst it does under either threshold is
+4.90:1.
+
+implot's own `contrastText` is deliberately left on upstream's Rec.601 rule,
+so a ported ImPlot chart keeps the ink upstream would have given it. The two
+rules disagree on about 7% of the colour space; converting it would change a
+shipped widget's appearance, which is a separate decision from this one.
+
 ### SD7 — Culling is by visible range, pruning is by fraction
 
 Two different jobs, deliberately not conflated:
@@ -227,12 +275,30 @@ Two different jobs, deliberately not conflated:
   and reproducible.
 - **Culling** (view-time, always on) skips what cannot be seen: rows outside
   the depth window, nodes outside the visible value range — both found by
-  inverting the frame transform — and rectangles narrower than half a pixel.
+  inverting the frame transform — and rectangles too narrow to be worth
+  drawing.
+
+The width threshold is worth stating exactly, because it is not the fraction
+the constant reads as. Each edge is snapped to a whole pixel first (neighbours
+share a boundary value and so round identically, which keeps the separating
+gap uniform), then the gap is taken off the right edge, and what remains must
+be at least `minRectPx` = 0.75 px. Since snapped edges are integers, the
+surviving width is a whole number of pixels, so the effective cut is at **2 px
+of un-inset span** — not the half-pixel an earlier draft of this ADR claimed.
+`view.snapX` is the single place that decides it, and `Probe` calls the same
+function (SD5).
 
 Everything surviving both is drawn in a single batched `PaintRectsFilled`, so
 frame cost tracks *visible* nodes, not tree size. This is what makes C4
-tractable: at any zoom the number of rectangles wider than half a pixel is
-bounded by the plot's width in pixels times the number of visible rows.
+tractable: at any zoom the number of surviving rectangles is bounded by half
+the plot's width in pixels times the number of visible rows. The label pass
+reads the batch buffers rather than re-projecting and re-hashing each node, so
+that bound is paid once per frame rather than twice.
+
+A frame narrower than the threshold is dropped rather than drawn as a sliver
+or merged with its neighbours. Drawing slivers would forfeit the bound above;
+coalescing runs of them into one rectangle would read better and is the
+obvious next cut, recorded in SD8.
 
 ### SD8 — Deferred, deliberately
 
@@ -245,14 +311,27 @@ Not in this cut, recorded so they do not gate it:
 - **Differential flamegraphs.** Signed values (red/blue against a baseline)
   need a second tree and a diff model; the widget rejects negative values today
   rather than half-supporting them.
-- **Text measurement.** Label fitting uses `implot.EstimateTextWidth`, the
-  lane's shared estimate: rune-counted, charging the East Asian wide blocks a
-  full em, and budgeted in pixels so what `elide` returns fits what it was cut
-  for. Real measurement is *not* unavailable — `bindings.MeasureText` is live
+- **Text measurement.** Label fitting uses `implot.Elide`, which budgets in
+  pixels against the lane's shared estimate (`implot.EstimateTextWidth`:
+  rune-counted, charging the East Asian wide blocks a full em) so what it
+  returns fits what it was cut for. The elision itself lives beside the
+  estimate rather than in this widget, because it is the same decision — two
+  widgets eliding by different rules is exactly what that file exists to
+  stop. Real measurement is *not* unavailable — `bindings.MeasureText` is live
   and `widgets/colorscale` drives it on a one-frame lag. What ADR-0149 §SD6
   defers is a fetcher inside implot for its own tick and legend sizing.
   Adopting measurement here would want a shared cache and a frame of lag for
   what is a few percent of width, so the estimate stands.
+- **Coalescing sub-threshold runs.** A run of siblings each too narrow to draw
+  currently leaves background where a blended block would read as "many small
+  things". It is the best-looking answer to the SD7 cull and the most work:
+  the merged rectangle needs a fill, and the hit test needs to resolve to
+  something sensible inside it.
+- **A reverse index from `Node.Index` to layout position.** A host that found
+  a node by other means — a search result, a row in a table — has to scan
+  `Layout.Nodes` to highlight it. `func (l *Layout) ByIndex(int32) int` over a
+  lazily built map is a few lines, but it is new public surface and no
+  consumer needs it yet.
 - **Search / highlight-by-pattern.** Wants a host-side query surface.
 - **Minimap / value-axis overview.** Only earns its keep once a real profile is
   driving the widget.
@@ -261,9 +340,9 @@ Not in this cut, recorded so they do not gate it:
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `widgets/icicle` (exported Go API under `public/`) | added — `Tree`, `Options`, `OrientationE`, `OrderE`, `Report`, `Layout`, `Node`, `Compute`, plus `Tree.Validate` / `Tree.Len` and `Layout.NodeAt` / `DepthAt` / `PathTo` | `package_props.go` registration (ADR-0080); no consumer yet |
-| `widgets/icicle/view` (exported Go API under `public/`) | added — `Opts` (including `ResetView`), `ColorModeE`, `Hit`, `NoHit`, `NodeHit`, `Renderer`, `Setup`, `Probe`, `Draw`, `Show`, `ZoomTo`, `DefaultRowPx`, `DefaultFontSize` | imports `implot` and the bindings; the only half that touches UI |
-| `widgets/implot` (exported Go API under `public/`) | added — `AxisFlagsNoPan`, `AxisFlagsNoZoom`, `AxisFlagsLock`, `AxisLimits` | additive; existing flag values and gesture behaviour unchanged |
+| `widgets/icicle` (exported Go API under `public/`) | added — `Tree`, `Options`, `OrientationE`, `OrderE`, `Report`, `Layout`, `Node`, `Compute`, plus `Tree.Validate` / `Tree.Len` and `Layout.NodeAt` / `DepthAt` / `RowDist` / `PathTo` | `package_props.go` registration (ADR-0080); no consumer yet |
+| `widgets/icicle/view` (exported Go API under `public/`) | added — `Opts` (including `ResetView`), `ColorModeE`, `Hit` (with `None`), `NodeHit`, `Renderer`, `Setup`, `Probe`, `Draw`, `Show`, `ZoomTo`, `DefaultRowPx`, `DefaultFontSize` | imports `implot` and the bindings; the only half that touches UI |
+| `widgets/implot` (exported Go API under `public/`) | added — `AxisFlagsNoPan`, `AxisFlagsNoZoom`, `AxisFlagsLock`, `AxisLimits`, `Elide`, `RelativeLuminance`, `ContrastRatio` | additive; existing flag values unchanged. The context menu no longer offers a fit for a `NoZoom` axis — no shipped plot sets one except this widget |
 | demo registry (`egui2_hl_registrations.go`) | added — one `icicle` demo entry | registry is a named list; adding a member is not itself a decision |
 | egui2 IDL | **unchanged** | no new paint opcode; batched rects, polylines and text all exist |
 
@@ -302,6 +381,14 @@ Not in this cut, recorded so they do not gate it:
 
 - implot grows two more flags. The flag space is a `uint32` and the additions
   are additive, but every flag is a thing a reader must now understand.
+- Per-axis locks are a cross-cutting rule, and a cross-cutting rule is only as
+  good as its coverage. The context-menu fit was missed on the first pass and
+  collapsed the depth axis; the fix routes every fit through one helper, but
+  the general hazard — a new gesture path that writes a range without asking —
+  remains, and only a reader who knows the rule will apply it.
+- The hit test now needs the plot's transform, which it recovers from
+  readbacks rather than being handed. That is one more place assuming a linear
+  value axis, and one more thing that is inert on the first frame.
 - The derived depth span is a one-frame feedback loop: the first frame has no
   plot area to read, so it uses the requested height as an estimate and
   corrects on the second. A widget that appears and is screenshotted in the
@@ -337,16 +424,26 @@ the drift.
 - **Layout unit tests** — roll-up correctness (`Self + Σ children`), tiling
   (siblings abut and never exceed the parent's span), value conservation
   against the input total, ordering under each `OrderE`, forest layout, cycle
-  and malformed-input rejection, pruning counts, and orientation sign.
+  and malformed-input rejection, pruning counts, and orientation sign
+  (`RowDist` inverts `rowSpan` for every node in both orientations).
 - **Hit-test agreement** — the probe resolves to the same node the layout
   placed, for a sweep of points across every row, including the boundaries
-  between abutting siblings.
+  between abutting siblings; a frame the renderer culled resolves to *no* hit
+  while the layout on its own still reports it (SD5); and a non-finite
+  coordinate is rejected rather than converted, in both orientations.
 - **Golden layouts** — committed for a hand-built tree in both orientations, so
   a layout change has to be deliberate.
+- **Derived depth span** — `depthSpan` and `depthWindow` are pure functions so
+  SD3 can be tested without a live plot: the cap at the tree's depth, the
+  first frame with no plot area, a resize re-asserting the span while keeping
+  the root-side edge, `ResetView` in both orientations, a steady state where a
+  pan sticks, and the epsilon below which a drag must not be fought.
 - **implot locks** — pure unit tests over the gesture helpers: a NoZoom axis is
   bit-for-bit unmoved by the wheel yet still pans, a NoPan axis is unmoved by a
   drag, `AxisFlagsLock` is both, the new bits do not collide with the existing
-  flags, and `AxisLimits` reads back what was set.
+  flags, `AxisLimits` reads back what was set, and a fit — from the
+  double-click *or the context menu* — skips a NoZoom axis without clearing a
+  fit already pending.
 - **Visual** — a gallery demo capture in both orientations and both colour
   schemes, taken from a pristine worktree build (a shared working tree risks a
   stale binary and an FFI-desynchronised capture).
@@ -377,7 +474,8 @@ was consulted, per ADR-0119 §SD6.
 
 - [ADR-0149](./0149-implot-core-port-painter-lane.md) — the implot port: the
   custom-item lane this widget renders through, the shared text-width estimate
-  it fits labels with, and the surface the per-axis locks extend.
+  it fits labels with, and the surface the per-axis locks, `Elide` and
+  `RelativeLuminance` extend.
 - [ADR-0159](./0159-imzero2-sankey-flow-widget.md) — the sankey widget: the
   package split, the plot-space hit-test argument, and the first user of the
   custom-item lane.
