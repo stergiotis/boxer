@@ -19,7 +19,8 @@ status: draft
 > observed outputs are inlined; (c) the literature in §2 comes from general
 > knowledge — titles and venues are given so a reader can verify, but the
 > works were not re-read for this survey. Treat tier (c) as pointers, not
-> citations.
+> citations. Outcomes of the design dialogue of 2026-08-02 are recorded
+> inline as settled direction — decisions, not measurements.
 
 ## 1. The question
 
@@ -40,6 +41,30 @@ live telemetry. Four things need deciding, and they are separable:
 
 The existing widget and pass infrastructure constrains all four in a helpful
 way: most of the hard parts already exist (§3).
+
+### 1.1 The three roles play serves (settled 2026-08-02)
+
+The design dialogue settled a framing that reshapes the priorities below.
+play serves three roles on one substrate:
+
+- **(a) Feature foundry** — a human develops statistical "features" (a
+  quantile contrast, a distribution distance, a drift score) that later
+  graduate into automated comparison and monitoring. Graduation is cheap
+  because the feature already *is* SQL: the same query re-executes on a
+  schedule and its output persists as facts.
+- **(b) Human-on-the-loop viewer** — the explorative substrate for routine
+  work (sql applets, drill-down, adjudicating what detectors flag).
+- **(c) Agentic surface** — a human–machine team steers; the macro
+  vocabulary is the agent's constrained, auditable tool-call surface and the
+  rendered panel is the human's verification artifact. Marked a strategic
+  goal in the dialogue.
+
+The roles are one pipeline read at three maturity stages — explore,
+routinize, delegate — and artifacts must cross the stage boundaries without
+translation. That is why everything below is data: the queries, the result
+contract, and (for the lineup protocol, §2.4) the adjudications themselves.
+The composition consequence: **comparison, not portraiture, is the primary
+view** (§7).
 
 ## 2. What "scientifically correct" means here (literature)
 
@@ -118,6 +143,52 @@ Two-sample formality: ClickHouse can compute Kolmogorov–Smirnov,
 Mann–Whitney U, and Welch/Student t directly (§4.4). These are affordances
 for *labelling* an observed contrast, with the usual multiple-comparison
 caveat when a panel invites eyeballing many pairs.
+
+### 2.4 Where the workflow is heading (and what a look licenses)
+
+Tier (c). Descriptive-statistics visualization has not been superseded as a
+substrate; the workflow around it changed in two directions — automation
+below it (what deserves a look) and guarantees above it (what a look
+entitles you to conclude). The chart's modern role is the surface where an
+automated distributional claim gets audited by a person.
+
+- **Continuous profiling and drift detection.** Distribution summaries
+  computed on a schedule, diffed against baselines, with humans shown a
+  ranked list of changes (the ML-monitoring tool families around whylogs /
+  Evidently; data contracts). The distribution view is entered from a flag.
+  For boxer the flag source is ADR-0150's detectors.
+- **Visual inference / lineups.** Buja, Cook, Hofmann, Lawrence, Lee,
+  Swayne & Wickham, "Statistical inference for exploratory data analysis
+  and model diagnostics" (Phil. Trans. R. Soc. A, 2009); Wickham, Cook,
+  Hofmann & Buja, "Graphical inference for infovis" (IEEE TVCG, 2010);
+  validation in Majumder, Hofmann & Cook (JASA, 2013). The observed plot is
+  hidden among K−1 null plots (group labels permuted, or data simulated
+  under H0); an adjudicator who picks the real one provides evidence
+  against H0 at p = 1/K, and m independent adjudicators combine binomially.
+  This makes "it looks different" defensible, supports four-eyes review,
+  and its decision base — the K underlying summaries, the permutation
+  seeds, the picks — archives as plain data. (Same Hofmann as the
+  letter-value plots.) The dialogue marked the approach as wanted.
+- **Anytime-valid inference.** Confidence sequences and e-values (Howard,
+  Ramdas, McAuliffe & Sekhon, "Time-uniform, nonparametric, nonasymptotic
+  confidence sequences", Annals of Statistics, 2021; Howard & Ramdas on
+  sequential quantile estimation, Bernoulli, 2022). A fixed-n band that is
+  watched continuously and acted on at crossing time does not hold its
+  stated error rate; time-uniform bands do, at an iterated-logarithm
+  widening — the honest price of watching. The dialogue directed adding
+  time as a dimension to `ecdfbands` (§10).
+- **Distribution-free prediction.** For a raw next observation the interval
+  is order statistics at adjusted ranks — classically Wilks (1941)
+  nonparametric tolerance intervals; conformal prediction generalises the
+  idea via score functions. Finite-sample coverage holds under
+  exchangeability, which is exactly what a drift detector monitors — so
+  the two compose: the interval is honest *while the detector stays
+  quiet*. Directed as wanted in the dialogue.
+- **Effect sizes over p-values.** Shift functions — quantile-by-quantile
+  differences with uncertainty (Doksum 1974; Rousselet, Pernet & Wilcox,
+  "Beyond differences in means", Eur. J. Neuroscience, 2017) — readable
+  directly from the same quantile grids this survey already proposes
+  (§6.4).
 
 ## 3. What the repository already has (tier a)
 
@@ -220,13 +291,26 @@ them with n, never alone. No medcouple (robust skew) server-side. `entropy`
 and `uniq*` exist; a low `uniq` is a useful "this column is discrete —
 an ECDF/histogram of 12 distinct values wants a bar chart" hint.
 
-### 4.4 Two-sample tests
+### 4.4 Two-sample and k-group tests
 
 `kolmogorovSmirnovTest('two-sided')(value, group)` → `(D, p)` (verified:
 `(0.02, 0.27)` on a null case); `mannWhitneyUTest`, `welchTTest`,
 `studentTTest`(+`OneSample`), `meanZTest`. All take the value column plus a
 two-valued group column — usable for a "compare these two series" affordance
 without new math client-side.
+
+For k groups, `analysisOfVariance(value, group_index)` (alias `anova`)
+exists — verified: `(F, p)` ≈ `(62.2, 0)` on three shifted synthetic
+groups. It is one-way and fixed-effects, with the usual normality and
+homoscedasticity sensitivity, and there is no Welch variant. There is no
+Kruskal–Wallis (verified absent); the rank-transform route — window-function
+ranks, then ANOVA on the ranks (Conover & Iman, 1981) — is the in-SQL
+approximation if a robust omnibus test is wanted.
+
+Separately useful for §2.4's lineups: `arrayShuffle(arr, seed)` is
+deterministic for a fixed seed (verified) — an in-SQL permutation-null
+generator whose seed can be archived, so a lineup's null panels re-derive
+exactly.
 
 ### 4.5 Determinism summary
 
@@ -281,6 +365,10 @@ consequence as the existing macro family).
 Grouping and multi-column compose: each GROUP BY key row × each argument
 column yields one output row; `series` is the argument column's name,
 suffixed with the group key values when a GROUP BY is present.
+
+The comparison-first redirection (§1.1) suggests a sibling spelling — a
+baseline-marking argument, or a second macro for window-vs-baseline — whose
+shape is an open question (§9).
 
 ## 6. Decision 2 — the result-shape contract
 
@@ -347,13 +435,39 @@ LV depth to `letterval.RecommendedDepth(n)` after seeing n, resolving the
 - The band is calibrated at true `n` from `count()`, matching the
   band-provenance ethos `distsummary` already established (BandN vs SampleN).
 
+### 6.4 Comparison feeds from the same grids
+
+Two series sharing the fixed p-grid give the comparison layer without any
+new transport:
+
+- **Shift function**: Δ(p) = Q_B(p) − Q_A(p) against p — the quantile-wise
+  effect size (§2.4). A conservative simultaneous band comes from combining
+  the two per-series bands at α/2 each; bootstrap tightening is a later
+  refinement.
+- **Wasserstein-1 distance**: W₁ = ∫₀¹ |Q_A(p) − Q_B(p)| dp — a trapezoid
+  over the shared grid. A natural scalar drift feature for role (a).
+- **PSI-style stability features**: bins at the *baseline's* quantiles make
+  expected mass uniform by construction, so population-stability indices
+  reduce to arithmetic on the grid.
+- Omnibus labels from §4.4 (KS, MWU, ANOVA), with false-discovery framing
+  once many series are scanned at once.
+
+How a baseline is marked in the contract (a `series_baseline` flag column,
+a naming convention, or panel-side selection) is open (§9).
+
 ## 7. Decision 3 — panel composition
+
+The dialogue inverted the original composition: **comparison is the primary
+view** — a window-vs-baseline or A/B entry with overlaid ECDFs, the shift
+function, and paired boxen — and the single-series portrait is the
+degenerate case, not the default. The roster reads with that inversion:
 
 - A body-zone tab `{id: "dist", lazy, shapeContract}` beside Table / World /
   Kanban, claiming on §6's required columns, rejecting loudly on
   near-misses.
-- Three sub-views over implot, one claim: **ECDF** (overlaid series +
-  bands), **Boxen** (one LV column per series, side by side), **Histogram**
+- Sub-views over implot, one claim: **ECDF** (overlaid series + bands),
+  **Shift** (Δ(p) with its conservative band, shown when ≥2 series),
+  **Boxen** (one LV column per series, side by side), **Histogram**
   (density-normalised). Crosshair readouts reuse the existing
   `WriteStatusLine`/`Verbose` registers.
 - The honesty line is always visible: n, null count, estimator, band method
@@ -372,9 +486,9 @@ LV depth to `letterval.RecommendedDepth(n)` after seeing n, resolving the
   strong uncertainty-communication literature (§2.2).
 - **Freedman–Diaconis fixed-width histograms** — needs the two-stage query
   (§4.2); the adaptive `histogram(M)` with honest labelling ships first.
-- **Pairwise test matrix** (KS/MWU across all series) — multiple-comparison
-  UI is its own design problem; a two-series-selected affordance may ship
-  earlier.
+- **All-pairs test matrices** — comparison ships as baseline-vs-window /
+  selected-pair first (§7); the full matrix and its multiple-comparison UI
+  stay out until false-discovery framing is designed.
 - **Time-faceted / ridgeline distributions** — adjacent to ADR-0150's
   windowing work; separate dialogue.
 - **Raw-sample small-n mode** (ship rows, panel sorts, exact ECDF via
@@ -386,15 +500,20 @@ LV depth to `letterval.RecommendedDepth(n)` after seeing n, resolving the
 
 ## 9. Open questions for the design dialogue
 
+Resolved 2026-08-02: the roles framing (§1.1); comparison-first composition
+(§7); tests surface in v1 as comparison labels; time-uniform bands,
+conformal readout, and the lineup protocol are wanted (tracks in §10); the
+agent surface is a strategic goal. Still open:
+
 1. Macro name and spelling — `descriptive_statistics` is long;
-   `dist_summary`? Leading-string-arg vs parametric estimator knob?
+   `dist_summary`? Leading-string-arg vs parametric estimator knob? And the
+   comparison sibling's shape (§5).
 2. Estimator default — `tdigest` (practice, bounded state) vs `gk`
    (formal rank bound that composes with the bands). This page leans
    tdigest-by-default with `'exact'`/`'gk'`/`'dd'` opt-ins, but the formal
    composability argument for GK is real.
 3. Contract column names — bare (`series`, `n`, `ps`) vs prefixed
-   (`dist_series`, …). Bare matches kanban (`lane`, `title`); prefixed
-   lowers accidental-claim odds on hand-written queries.
+   (`dist_series`, …); and how a baseline series is marked (§6.4).
 4. Multi-series band policy — all bands, focused-series-only, or ≤k series.
 5. Histogram default M, and whether `histogram()` ships in v1 at all.
 6. Where the expansion pass registers — keelson passreg defaults (reaches
@@ -402,12 +521,35 @@ LV depth to `letterval.RecommendedDepth(n)` after seeing n, resolving the
 7. Claim exclusivity — does Dist claiming a result affect Table's rendering
    of the same frame? (World/kanban precedent says tabs are independent;
    verify at implementation time.)
-8. Whether the two-sample tests (§4.4) surface in v1, and where.
+8. Lineup protocol specifics — null-generator query shape (seeded
+   `arrayShuffle` label permutation, §4.4), K, blinding when an *agent*
+   prepares the lineup, and how picks persist as facts.
+9. Time-uniform band family — which boundary (the Howard–Ramdas line has
+   several) lands in `ecdfbands` first, and how the panel decides
+   static-snapshot vs monitored-stream mode.
+10. Whether rank-transform ANOVA (§4.4) is worth wrapping as a macro, given
+    Kruskal–Wallis is absent server-side.
 
 ## 10. Suggested path
 
-Design dialogue on §5/§6 leans → an ADR (new public SQL surface + new pass +
-new panel is comfortably ADR-tier) → M0: contract + panel fed by hand-written
-SQL (O2 proves the wire and the widgets); M1: the macro pass (O1); M2:
-histogram + affordances. Each milestone is independently shippable, and M0
-requires no grammar or pass work at all.
+Dialogue round 1 (2026-08-02) settled the roles and the comparison-first
+redirection; the remaining §9 questions gate the ADR (a new public SQL
+surface + a new pass + a new panel is comfortably ADR-tier). Suggested cut:
+
+- **M0** — contract + panel with the comparison core (overlaid ECDF, shift
+  function, paired boxen) fed by hand-written SQL (O2). Proves the wire and
+  the widgets; no grammar or pass work.
+- **M1** — the macro pass (O1), including the comparison spelling.
+- **M2** — histogram + degenerate-case affordances.
+
+Parallel directed tracks, each meriting its own dialogue before code:
+
+- **Time as a dimension in `ecdfbands`** — a time-uniform band family for
+  monitored streams, labelled via the existing band-provenance machinery.
+- **Conformal / tolerance readout** — interval overlay + readout line
+  derived from the same grid, stated with its exchangeability caveat and
+  composed with drift detection (honest while the detector is quiet).
+- **Lineup protocol** — seeded in-SQL nulls, blind adjudication UI,
+  picks-as-facts (four-eyes capable, archivable; §2.4, §9.8).
+- **Agent surface** — the macro vocabulary as tool-calls (strategic; rides
+  ADR-0120 Ask / ADR-0139 text2dsl rather than this panel).
