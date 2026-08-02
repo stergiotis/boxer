@@ -588,6 +588,115 @@ FROM journey
 GROUP BY entity
 ```
 
+## Where the disk went (a two-hop flow)
+
+The same Sankey tab over a question every server can answer with no fixtures at
+all: which databases and tables are holding the bytes. Every active part belongs
+to exactly one disk, one database and one table, so each byte flows the whole
+width of the diagram exactly once — which is what makes the node bars honest
+subdivisions rather than three unrelated bar charts.
+
+The two hops are written out and stacked with `UNION ALL`. That is the other
+natural way to build `flows`, and when the stages are few and named it reads
+better than the array pivot above; reach for the pivot when the stage count is
+a property of the data rather than of the query.
+
+Node ids are prefixed (`db:`, `tbl:`) because a database and a table can share a
+name, and two stages sharing an id would fuse into one node — the same
+collision the pivot's stage prefix avoids, arriving by a different route. The
+`nodes` CTE hands the readable name back as a `label`, so the bars read plainly
+while the ids stay unique. It carries no `stage`, so this is the Sankey reading:
+the columns are derived, and they come out disk → database → table anyway.
+
+One thing not to do: leave `value` a bare number. `formatReadableSize` would
+make it text and the flow would be dropped for having no positive value. The
+status line abbreviates the total for you.
+
+A server with one large table and a long tail of small ones will report most of
+its flows as too thin to read, which is the honest answer for a linear
+thickness encoding. Add a `HAVING sum(bytes_on_disk) > …` to the second hop, or
+group the tail, if you want the small tables collapsed rather than drawn at a
+size you cannot see.
+
+```sql
+WITH
+  parts AS (
+    SELECT disk_name, database, table AS tbl, bytes_on_disk
+    FROM system.parts
+    WHERE active
+  ),
+  flows AS (
+    SELECT concat('disk:', disk_name)         AS source,
+           concat('db:', database)            AS target,
+           sum(bytes_on_disk)                 AS value
+    FROM parts
+    GROUP BY source, target
+    UNION ALL
+    SELECT concat('db:', database)            AS source,
+           concat('tbl:', database, '.', tbl) AS target,
+           sum(bytes_on_disk)                 AS value
+    FROM parts
+    GROUP BY source, target
+  ),
+  nodes AS (
+    SELECT DISTINCT concat('disk:', disk_name) AS id, disk_name AS label FROM parts
+    UNION ALL
+    SELECT DISTINCT concat('db:', database) AS id, database AS label FROM parts
+    UNION ALL
+    SELECT DISTINCT concat('tbl:', database, '.', tbl) AS id, tbl AS label FROM parts
+  )
+SELECT * FROM flows ORDER BY value DESC
+```
+
+## Query outcomes (an alluvial over the query log)
+
+Where the server's own traffic goes: how a query arrived, what kind it was, and
+how it ended. `system.query_log` is on by default, so this needs no setup
+either.
+
+Every node here carries a `stage`, so the panel takes the alluvial reading
+without being told — the columns are the query's life stages, in the order the
+query passed through them, and nothing may reorder them to reduce crossings.
+The stages are written by hand rather than pivoted out of an array, which is
+worth seeing beside the pivot: three named stages do not need that machinery.
+
+On a healthy server the exception outcomes will be *below* a pixel and the
+status line will say how many flows were too thin to read — a failure rate of a
+fraction of a percent is exactly the thing this form cannot draw, and it says so
+rather than rounding it up to something visible. That is also what makes the
+picture worth keeping: the exceptions peel off the same flow that carries the
+successes, so when they do grow into a readable ribbon you are seeing a share of
+the traffic and not a number on a chart of its own. To read the tail on a quiet
+log, filter to one `kind` first.
+
+```sql
+WITH
+  q AS (
+    SELECT if(interface = 1, 'native', 'http') AS via,
+           query_kind                          AS kind,
+           toString(type)                      AS outcome
+    FROM system.query_log
+    WHERE type != 'QueryStart' AND query_kind != ''
+  ),
+  flows AS (
+    SELECT concat('0:', via) AS source, concat('1:', kind) AS target, count() AS value
+    FROM q
+    GROUP BY source, target
+    UNION ALL
+    SELECT concat('1:', kind) AS source, concat('2:', outcome) AS target, count() AS value
+    FROM q
+    GROUP BY source, target
+  ),
+  nodes AS (
+    SELECT DISTINCT concat('0:', via) AS id, via AS label, 0 AS stage FROM q
+    UNION ALL
+    SELECT DISTINCT concat('1:', kind) AS id, kind AS label, 1 AS stage FROM q
+    UNION ALL
+    SELECT DISTINCT concat('2:', outcome) AS id, outcome AS label, 2 AS stage FROM q
+  )
+SELECT * FROM flows ORDER BY value DESC
+```
+
 ## The shell's own apps and windows
 
 Two more in-process tables, same no-setup path as the ADR board above: point the
