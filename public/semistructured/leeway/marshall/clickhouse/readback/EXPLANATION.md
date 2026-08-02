@@ -114,7 +114,7 @@ the generator may emit `indexOf(M_R, L)` directly when it can prove alignment (I
 The full extraction for field `f` (section `S`, value subcolumn `V`, channel role `R`):
 
 ```
-m2v := LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(MC_R)               -- materialized position->attribute map
+m2v := raggedParentIds(MC_R)               -- materialized position->attribute map
 a   := LEEWAY_LU_ATTR_BY_TAG(M_R, L, m2v)                -- level 1, 0 if absent
 out := LEEWAY_VALUE_BY_TAG_EQUAL(V, M_R, L, m2v)         (scalar:    V[a])
      | LEEWAY_LIST_BY_TAG_EQUAL(V, LEN, M_R, L, m2v)     (homogenous array)
@@ -148,18 +148,18 @@ verified by a truth-table run through `clickhouse-local` (`lw_readback_udfs_test
 the inherited `LEEWAY_LU_*` ("Leeway LookUp") convention: "val idx" = attribute index, "memb idx"
 = flattened membership position.
 
-The locate primitive is the **materialized** position→attribute map (`MEMB_IDX_TO_VAL_IDX`),
+The locate primitive is the **materialized** position→attribute map (the pack's `raggedParentIds`),
 built once per row and indexed — cheaper than a per-position `arrayFirstIndex`, and the form
 proven multi-membership-correct by the truth-table:
 
 ```
-LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(cardCol)        -- [2,0,1,3] -> [1,1,3,4,4,4]
+raggedParentIds(cardCol)        -- [2,0,1,3] -> [1,1,3,4,4,4]
 LEEWAY_LU_ATTR_BY_TAG(idCol, lit, m2v)        -- attribute carrying membership `lit` (0 if absent)
                                               --   = m2v[indexOf(idCol, lit)]
 ```
 
 Value extraction composes the locate with the level-2 extraction (with
-`m2v = LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(cardCol)`, CSE'd across a section's fields; `lenCol` = the
+`m2v = raggedParentIds(cardCol)`, CSE'd across a section's fields; `lenCol` = the
 section's `len` for arrays or `card` for sets):
 
 ```
@@ -177,7 +177,7 @@ LEEWAY_LIST_BY_TAG_EQUAL(
     `tv:u64Array:len:len:u64:28o:0:0:0::data`,
     `tv:u64Array:lr:lr:u64:2q:0:0:0::data`,
     2,
-    LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`))
+    raggedParentIds(`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`))
 ```
 
 **Generated artefacts** (`lw_readback_generator.go`, `Generator.Generate`):

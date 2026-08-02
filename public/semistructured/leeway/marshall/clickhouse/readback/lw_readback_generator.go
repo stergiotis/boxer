@@ -355,7 +355,7 @@ func (g *Generator) field(f *mappingplan.TaggedField, contract mappingplan.ReadC
 		return
 	}
 	lit := resolved.Identity().Literal
-	m2v := "LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(" + loc.cardCol + ")"
+	m2v := "raggedParentIds(" + loc.cardCol + ")"
 
 	var valExpr string
 	switch vinfo.subType {

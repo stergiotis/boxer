@@ -545,3 +545,11 @@ The passage above that generalizes the anchor unflatten UDF into
 `leeway_unflatten` is historical on both ends: the anchor showcase calls
 `raggedNest` directly, and this family no longer defines an unflatten of
 its own.
+
+Later the same day the locate map followed: `LEEWAY_LU_MEMB_IDX_TO_VAL_IDX`
+is retired too (its body was byte-identical to `raggedParentIds`), and the
+generator now emits `raggedParentIds(<cardcol>)` as the `m2v` argument — so
+generated read-back SQL references pack names, with `HelperUDFsSQL()` (pack
+first, family second) remaining the one provisioning step.
+`LEEWAY_VALUE_BY_TAG_EQUAL` and `LEEWAY_LIST_BY_TAG_EQUAL` take the map as a
+parameter, so their bodies were never coupled to the retired name.

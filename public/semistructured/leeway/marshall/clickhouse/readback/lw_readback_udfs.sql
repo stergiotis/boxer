@@ -19,10 +19,8 @@ CREATE OR REPLACE FUNCTION LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END_EXCL AS (cardcol) -
 CREATE OR REPLACE FUNCTION LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL AS (cardcol) ->
     arrayMap((s, c) -> (c > 0) * (s - c + 1), arrayCumSum(cardcol), cardcol);
 
--- Inverse map: flattened membership position -> owning attribute index.
--- length = sum(cardcol). [2,0,1,3] -> [1,1,3,4,4,4].
-CREATE OR REPLACE FUNCTION LEEWAY_LU_MEMB_IDX_TO_VAL_IDX AS (cardcol) ->
-    arrayFlatten(arrayMap((i, l) -> arrayWithConstant(l, i), arrayEnumerate(cardcol), cardcol));
+-- The inverse map (flattened membership position -> owning attribute index)
+-- is the pack's raggedParentIds: [2,0,1,3] -> [1,1,3,4,4,4].
 
 -- Value broadcast: each membership position carries its owning attribute's
 -- value. (['a','b','c','d'], [2,0,1,3]) -> ['a','a','c','d','d','d'].
@@ -30,7 +28,7 @@ CREATE OR REPLACE FUNCTION LEEWAY_LU_VAL_BY_MEMB_IDX AS (valcol, cardcol) ->
     arrayFlatten(arrayMap((i, l) -> arrayWithConstant(l, valcol[i]), arrayEnumerate(cardcol), cardcol));
 
 -- Locate: attribute index carrying membership `tagval`, or 0 if absent.
--- `m2v` = LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(cardcol), computed once per row.
+-- `m2v` = raggedParentIds(cardcol), computed once per row.
 CREATE OR REPLACE FUNCTION LEEWAY_LU_ATTR_BY_TAG AS (tagcol, tagval, m2v) ->
     m2v[indexOf(tagcol, tagval)];
 

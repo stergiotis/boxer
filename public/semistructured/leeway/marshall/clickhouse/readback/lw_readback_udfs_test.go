@@ -55,10 +55,10 @@ func TestHelperUDFs_SQLShape(t *testing.T) {
 	sql := HelperUDFsSQL()
 	for _, fn := range []string{
 		"raggedNest",
+		"raggedParentIds",
 		"leewayPackVersion",
 		"LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL",
 		"LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END_EXCL",
-		"LEEWAY_LU_MEMB_IDX_TO_VAL_IDX",
 		"LEEWAY_LU_VAL_BY_MEMB_IDX",
 		"LEEWAY_LU_ATTR_BY_TAG",
 		"LEEWAY_LU_MEMBS_OF_VAL_IDX",

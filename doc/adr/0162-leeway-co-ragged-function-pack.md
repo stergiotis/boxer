@@ -336,3 +336,9 @@ is unaffected is superseded in one particular: its hand-use helper
 `LEEWAY_UNFLATTEN` is retired in favor of `raggedNest`, and
 `readback.HelperUDFsSQL()` now emits this pack's statements ahead of its
 own `LEEWAY_LU_*` family. The generator's *emitted* SQL remains pack-free.
+
+Later the same day the consolidation reached the generator's emissions:
+`LEEWAY_LU_MEMB_IDX_TO_VAL_IDX` retired onto `raggedParentIds`, so generated
+read-back SQL now names pack functions and the sentence above about emitted
+SQL staying pack-free no longer holds. Provisioning is unchanged —
+`HelperUDFsSQL()` emits the pack first.
