@@ -306,6 +306,11 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		User:     clickhouseenv.User.Get(),
 		Password: clickhouseenv.Password.Get(),
 	}
+	// Reconcile the co/ragged function pack (ADR-0162) against the env
+	// endpoint, once per process and off the open path — before the
+	// introspection retarget below, because the pack belongs to the real
+	// server, not the in-process /query endpoint.
+	installChPack(cfg.URL, cfg.User, cfg.Password, ctx.Log())
 	// A launch config may retarget the endpoint (ADR-0135 §SD7): an
 	// EndpointIntrospection open binds the client to the in-process keelson
 	// `/query` endpoint so ad-hoc `keelson('<handle>')` datasets resolve
