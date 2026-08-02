@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stergiotis/boxer/public/analytics/stats/letterval"
 )
 
 func TestGridLevelsPinnedShape(t *testing.T) {
@@ -135,6 +137,27 @@ func TestGridOracleCDF(t *testing.T) {
 	x := o.Quantile(0.3)
 	if got := o.CDF(x); math.Abs(got-0.3) > 1e-12 {
 		t.Fatalf("CDF(Quantile(0.3)) = %v", got)
+	}
+}
+
+func TestGridMaxDepth(t *testing.T) {
+	cases := []struct {
+		name string
+		ps   []float64
+		n    int64
+		want uint8
+	}{
+		{"default grid is never binding", GridLevels(), 50000, letterval.RecommendedDepth(50000)},
+		{"sparse tails clamp (p0=0.05 → 4)", []float64{0.05, 0.25, 0.5, 0.75, 0.95}, 50000, 4},
+		{"small n binds before the grid", []float64{0.05, 0.25, 0.5, 0.75, 0.95}, 20, 1},
+		{"asymmetric: shallower tail wins", []float64{0.25, 0.5, 0.9}, 1_000_000, 2},
+		{"body-only grid floors at the median", []float64{0.4, 0.5, 0.6}, 1_000_000, 1},
+		{"empty grid falls back to n-bound", nil, 100, letterval.RecommendedDepth(100)},
+	}
+	for _, tc := range cases {
+		if got := GridMaxDepth(tc.ps, tc.n); got != tc.want {
+			t.Fatalf("%s: got %d want %d", tc.name, got, tc.want)
+		}
 	}
 }
 

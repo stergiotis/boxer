@@ -426,7 +426,7 @@ func (inst *DistDriver) renderBoxen(w float32) {
 			if err != nil {
 				continue
 			}
-			levels := letterval.Levels(o, letterval.RecommendedDepth(s.n))
+			levels := letterval.Levels(o, distsql.GridMaxDepth(s.ps, s.n))
 			var extremes []float64
 			if s.haveExtremes {
 				extremes = []float64{s.xMin, s.xMax}

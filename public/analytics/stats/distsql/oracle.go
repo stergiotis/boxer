@@ -1,6 +1,7 @@
 package distsql
 
 import (
+	"math"
 	"sort"
 
 	"github.com/stergiotis/boxer/public/analytics/stats/letterval"
@@ -88,4 +89,28 @@ func upperOfPlateau(qs []float64, i int) int {
 		i++
 	}
 	return i
+}
+
+// GridMaxDepth is letterval.RecommendedDepth additionally clamped by what
+// the grid's tails can support: a letter-value rung at depth k needs the
+// quantiles 2^-k and 1-2^-k, and a grid whose deepest tail level is ps[0]
+// cannot answer past k = ⌊-log2 ps[0]⌋ — the oracle would clamp, stacking
+// visually duplicate boxes at the tail (the GUI-drive F1 finding). The
+// §SD2 default grid reaches 2^-16 and is never the binding constraint;
+// sparse hand-written grids are.
+func GridMaxDepth(ps []float64, n int64) uint8 {
+	depth := letterval.RecommendedDepth(n)
+	if depth <= 1 || len(ps) == 0 {
+		return depth
+	}
+	lo := math.Floor(-math.Log2(ps[0]))
+	hi := math.Floor(-math.Log2(1 - ps[len(ps)-1]))
+	cap64 := math.Min(lo, hi)
+	if cap64 < 1 {
+		cap64 = 1 // the median is always drawable
+	}
+	if float64(depth) > cap64 {
+		depth = uint8(cap64)
+	}
+	return depth
 }
