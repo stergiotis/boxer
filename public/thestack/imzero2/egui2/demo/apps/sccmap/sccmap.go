@@ -805,7 +805,7 @@ func (inst *App) renderDistSummaries() {
 	sizeName := sccMetrics[inst.sizeMetricIdx].Name
 	colorName := sccMetrics[inst.colorMetricIdx].Name
 	aliased := inst.sizeDigest == inst.colorDigest
-	for range c.Horizontal().KeepIter() {
+	for range c.HorizontalTop().KeepIter() {
 		if aliased {
 			inst.gutterLabel("Size & color (" + sizeName + "):")
 		} else {
