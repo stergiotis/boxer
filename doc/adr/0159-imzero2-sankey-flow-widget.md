@@ -425,6 +425,64 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-08-02 — the deferred `play` panel, and what its binding had to concede
+
+§SD6 deferred "a `play` panel … a separate slice, so the panel-channel plumbing
+is reviewable on its own". That slice is built: `apps/play/play_sankey_panel.go`
+is the **Sankey** dock tab, a `PanelI` over this package. §Status's "no consumer
+is wired yet" no longer holds.
+
+The panel follows the ADR-0097 channel contract and the ADR-0129 Network
+panel's shape, so most of it is not a decision. Four things are.
+
+**Both inputs are named CTEs, not the active result.** `flows` (required:
+`source`, `target`, `value`) and `nodes` (optional: `id`, `label`, `stage`,
+`order`, `group`, `tone`), each demanded on its own lane. The alternative —
+binding the links to the active result, as World and Kanban bind — would have
+made a ribbon click publish the shared row cursor, since a ribbon would then be
+a row. It was rejected in favour of leaving the final `SELECT` to the user;
+ADR-0129 §SD4's clamp is the price, so **selection is local**, and a clicked
+node publishes `selection_key` (a value) as the Network's does.
+
+**Duplicate flows are summed, where the Network panel keeps the first.** A
+parallel edge states one relation twice; two rows carrying a quantity are two
+quantities, and dropping the second understates the total everything else is
+scaled against. Rows the form cannot draw — self-flows, non-positive or
+unreadable values — are dropped and *counted*, rather than failing the diagram
+the way `Validate` would.
+
+**The data picks the mode.** Supplying a `stage` for every node is read as the
+request for the alluvial layout; anything less is the Sankey one. The control
+overrides in both directions, and an alluvial layout that `Validate` rejects
+(§SD4's adjacency rule) falls back to Sankey carrying the offending link's
+message rather than rendering nothing.
+
+**No wide-input contract.** The classic alluvial shape — one row per entity,
+one column per stage — pivots to `flows` in about four lines of ClickHouse
+array SQL (`arrayJoin` over `arrayMap` of adjacent pairs), which the help corpus
+now teaches. Keeping the pivot in SQL leaves the panel one input shape and puts
+the stage-qualified node id (`1:go`) in the query, where the author picks it —
+and that id is what stops a category recurring in two stages from collapsing
+into one node, which is also what keeps the graph acyclic under §SD6's
+cycle rejection.
+
+Two notes for the next consumer, both found by looking at a capture:
+
+- A control row separated by `c.Separator()` **balloons**: in a horizontal row
+  that is a vertical rule sized to available height, and in a dock leaf it took
+  the whole pane and pushed the plot out of sight. Group with `AddSpace`.
+- The plot is sized from the pane **width** only. The one register carrying a
+  pane height is `CaptureAvailableSize`, already spoken for by play's editor,
+  and a second writer per frame would corrupt both. Since §SD1 pins the axes to
+  the unit box, a smaller plot still shows the whole diagram, so this costs
+  detail rather than content — and the readouts are drawn *above* the plot so a
+  short leaf cannot push them off.
+
+`Report` earns its keep in the status line: on a first live query — 137
+databases against ~4 engines — it read "138 flow(s) too thin to read · 133
+bar(s) reuse a hue", which is the honest description of data this form serves
+badly, and is the answer §SD6 and `PaletteRepeats` were written to give.
+
 ### 2026-08-01 — pipelineview's overlay shipped without consuming this package
 
 §Consequences claims ADR-0119 §SD5's deferral "gains something concrete to
