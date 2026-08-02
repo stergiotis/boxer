@@ -278,6 +278,11 @@ var builtinTabDefs = []builtinTabDef{
 	// the delivery ops raise the editor leaf, so Snippets cannot hide itself
 	// with its own click.
 	{id: "snippets", dockID: dockTabSnippets, title: "Snippets", zone: TabZoneTools},
+	// Experiments drives one batch through a chosen leeway sink. It is a tool
+	// pane, not a result view: its default source is a built-in fixture, so it
+	// says something before a query has run and keeps saying it when the
+	// result is not leeway-shaped. Lazy — a hidden pane must not drive a sink.
+	{id: "experiments", dockID: dockTabExperiments, title: "Experiments", zone: TabZoneTools, lazy: true},
 
 	{id: "table", dockID: dockTabTable, title: "Table", writes: []SignalID{signalSelection}},
 	{id: "projection", dockID: dockTabProjection, title: "Projection", lazy: true,
@@ -464,6 +469,13 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Render = func(f *TabFrame) { inst.renderTimelineTab(f.Rec, f.Schema, f.Loading, f.Err) }
 		case "snippets":
 			spec.Render = func(f *TabFrame) { inst.renderSnippetsTab() }
+		case "experiments":
+			// Scrolled: the text sinks emit an unbounded run of lines, and the
+			// topology treemap floors its own height rather than shrinking to
+			// fit a short leaf.
+			spec.Render = func(f *TabFrame) {
+				scrollTab(func() { inst.renderExperimentsTab(f.Rec, f.Schema) })
+			}
 		case "map":
 			// The Map is a panel-authored node on its own lane (5c), not a
 			// PanelI: it renders the driver directly.

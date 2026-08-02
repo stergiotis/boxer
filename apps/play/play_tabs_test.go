@@ -24,7 +24,7 @@ func tabsTestApp() *PlayApp {
 func TestDefaultTabsEnumeration(t *testing.T) {
 	reg := tabsTestApp().Tabs()
 	specs := reg.all()
-	require.Len(t, specs, 19)
+	require.Len(t, specs, 20)
 
 	wantDockID := map[string]uint64{
 		"editor": dockTabEditor, "history": dockTabHistory, "preview": dockTabPreview,
@@ -34,6 +34,7 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 		"graph": dockTabGraph,
 		"schema": dockTabSchema, "diagnostics": dockTabDiagnostics, "passes": dockTabPasses,
 		"docs": dockTabDocs, "flow": dockTabFlow, "detail": dockTabDetail,
+		"experiments": dockTabExperiments,
 	}
 	seen := make(map[string]TabSpec, len(specs))
 	for _, s := range specs {
@@ -82,7 +83,7 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 		dockTabMap, dockTabWorld, dockTabKanban, dockTabNetwork, dockTabSankey, dockTabGraph, dockTabSchema},
 		dockIDsOf(reg.byZone(TabZoneBody)))
 	assert.Equal(t, []uint64{dockTabDocs, dockTabPreview, dockTabFlow, dockTabPasses,
-		dockTabDiagnostics, dockTabSnippets},
+		dockTabDiagnostics, dockTabSnippets, dockTabExperiments},
 		dockIDsOf(reg.byZone(TabZoneTools)))
 }
 
@@ -99,18 +100,18 @@ func TestTabRegistryMutationAndFreeze(t *testing.T) {
 	require.Error(t, reg.Add(TabSpec{ID: "x", DockID: dockTabTable, Render: noop}), "duplicate DockID")
 
 	require.NoError(t, reg.Add(TabSpec{ID: "x", DockID: 64, Title: "X", Render: noop}))
-	require.Len(t, reg.all(), 20)
-	assert.Equal(t, TabZoneBody, reg.all()[19].Zone, "embedder tabs default to the body zone")
+	require.Len(t, reg.all(), 21)
+	assert.Equal(t, TabZoneBody, reg.all()[20].Zone, "embedder tabs default to the body zone")
 
 	// Replace keeps the position and re-validates against the others.
 	require.Error(t, reg.Replace("x", TabSpec{ID: "table", DockID: 64, Render: noop}),
 		"replacement must not collide with another tab")
 	require.NoError(t, reg.Replace("x", TabSpec{ID: "y", DockID: 65, Title: "Y", Render: noop}))
-	assert.Equal(t, "y", reg.all()[19].ID)
+	assert.Equal(t, "y", reg.all()[20].ID)
 	require.Error(t, reg.Replace("x", TabSpec{ID: "z", DockID: 66, Render: noop}), "x is gone")
 
 	require.NoError(t, reg.Remove("y"))
-	require.Len(t, reg.all(), 19)
+	require.Len(t, reg.all(), 20)
 	require.Error(t, reg.Remove("y"), "already removed")
 
 	reg.freeze()

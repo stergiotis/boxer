@@ -92,6 +92,7 @@ const (
 	dockTabDocs        uint64 = 17
 	dockTabFlow        uint64 = 18
 	dockTabSankey      uint64 = 19
+	dockTabExperiments uint64 = 20
 )
 
 type PlayApp struct {
@@ -287,6 +288,9 @@ type PlayApp struct {
 	cards          *CardDriver
 	detailTimeline *DetailTimeline
 	projector      *Projector
+	// experiments backs the Experiments tool pane: a leeway sink playground
+	// over the fixture or the current result.
+	experiments *experimentsDriver
 
 	// tableOpts holds the Table pane's leeway display-mode configuration — the
 	// options bar's three orthogonal controls (row granularity, reveal support
@@ -871,6 +875,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
+	inst.experiments = newExperimentsDriver(mk(), mk())
 	inst.diag = NewDiagnosticsDriver(client)
 	var docsSource DocsSourceI
 	if client != nil {
