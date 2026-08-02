@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-02
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-02
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0162: co/ragged query primitives as a ClickHouse SQL-UDF pack
 
@@ -310,8 +307,7 @@ For acceptance, the implementation must add:
 
 ## Status
 
-Proposed. Pre-acceptance, this document is edited in place; after
-acceptance, changes arrive as dated `## Update` sections.
+Accepted 2026-08-02. Changes now arrive as dated `## Update` sections.
 
 ## References
 
