@@ -515,6 +515,24 @@ Accepted — 2026-06-21 (reviewed by @spx).
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-08-02 — Three of SD7's card emitters were deleted
+
+SD7 named `UnicodeCardEmitter`, `HtmlCardEmitter`, `SvgCardEmitter`,
+`ImZero2CardEmitter` and `TypstCardEmitter` as emitters this ADR leaves
+untouched. `HtmlCardEmitter`, `SvgCardEmitter` and `TypstCardEmitter` have since
+been removed: a usage review found `SvgCardEmitter` had never had a caller, and
+`HtmlCardEmitter` / `TypstCardEmitter` were reachable only through
+`lw card inspect`, whose format list is now `unicode` and `json`. The HTML
+golden test and its three fixtures went with them.
+
+`UnicodeCardEmitter` survives unchanged. `ImZero2CardEmitter` is now
+`leewaywidgets.Table2CardEmitter`, an imzero2-native sink. SD7's substance is
+unaffected — the surviving emitters still operate against the existing
+`streamreadaccess.SinkI` protocol and still do not consume the classifier; the
+list of names is simply shorter.
+
 ## References
 
 - [ADR-0007](0007-leeway-membership-role-classifier.md) — membership-role classifier design.

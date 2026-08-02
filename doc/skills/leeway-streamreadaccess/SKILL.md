@@ -195,4 +195,4 @@ The five `AddMembership*` shapes map onto the five `MembershipKindE` values one-
 |----------------------|--------------------------|---|---|
 | `UnicodeCardEmitter` | `leeway_card_unicode.go` | Buffered per section | Accumulates `textRow` cells, flushes box-drawn table at `EndSection` |
 | `JsonCardEmitter`    | `leeway_card_json.go`    | Streaming | `jsontext.Encoder.WriteToken()` — zero buffering |
-| `HtmlCardEmitter`    | `leeway_card_html.go`    | Streaming + cell buffer | Streams HTML tags directly; buffers one `cellBuf` per column, flushes at `EndColumn` |
+| `TopologySink`       | `egui2/widgets/leewaywidgets/topology_sink.go` | Buffered whole-batch | Discards every value; accumulates the containment hierarchy into a `treemap/layout.Node` tree that a widget renders |

@@ -18,10 +18,11 @@ status: draft
 
 - **Set values wrapped in `{"set": [...]}`.** Adds a structural distinction from arrays but increases nesting. Consumers must handle this explicitly.
 
-## HTML (`HtmlCardEmitter`)
+## Topology sparks (`TopologySpark`, `BrailleSpark`, `TreemapSpark`)
 
-- **No max-items or max-attributes cap.** Unlike the text emitter, the HTML emitter has no `MaxCollectionItems` or `MaxAttributesPerSection` limit. Large datasets will produce very large HTML.
-
-- **No JavaScript.** The `<details>/<summary>` interactivity is HTML5-only. More complex interactions (filtering, search, sorting) would require JS.
-
-- **Palette color collision.** The golden-ratio spacing `(idx*37) % span` can produce visually similar colors for certain section counts. Not a correctness issue but affects readability.
+- **All three assume 1 rune = 1 column**, like `UnicodeCardEmitter`. The braille
+  and box-drawing glyphs they emit are single-width, but section *names* are
+  passed through verbatim, so a wide East Asian character in a name still
+  misaligns the row. `TreemapSpark` measures in runes rather than bytes since
+  the fix below, which is correct for everything except double-width runes;
+  closing that last gap needs a display-width table.

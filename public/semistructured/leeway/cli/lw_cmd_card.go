@@ -26,7 +26,7 @@ func NewCliCommandCard() *cli.Command {
 	}
 }
 func newCliCommandCardInspect() *cli.Command {
-	validCardFormats := []string{"html", "unicode", "json", "typst"}
+	validCardFormats := []string{"unicode", "json"}
 	return &cli.Command{
 		Name:  "inspect",
 		Usage: "converts an IPC arrow file into cards",
@@ -87,11 +87,8 @@ func newCliCommandCardInspect() *cli.Command {
 			defer out.Flush()
 			var sink streamreadaccess.SinkI
 			{
-				colors := card.ColorPaletteMagma
 				format := context.String("cardFormat")
 				switch format {
-				case "html":
-					sink = card.NewHtmlCardEmitter(out, colors)
 				case "unicode":
 					sink = card.NewUnicodeCardEmitter(out, 210)
 				case "json":
@@ -99,8 +96,6 @@ func newCliCommandCardInspect() *cli.Command {
 						jsontext.WithIndent("  "),
 						jsontext.Multiline(true))
 					sink = card.NewJsonCardEmitter(enc, nil)
-				case "typst":
-					sink = card.NewTypstCardEmitter(out, colors)
 				default:
 					err = eb.Build().Str("cardFormat", format).Strs("validCardFormats", validCardFormats).Errorf("unhandled card format")
 					return
