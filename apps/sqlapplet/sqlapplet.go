@@ -145,6 +145,7 @@ var resultTabIDs = map[string]struct{}{
 	"world":      {},
 	"kanban":     {},
 	"network":    {},
+	"sankey":     {},
 	"schema":     {},
 	"detail":     {},
 }

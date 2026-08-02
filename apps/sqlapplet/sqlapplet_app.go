@@ -17,12 +17,33 @@ const appletMaxHistory = 25
 // (ADR-0132 §SD3). The result panels and the status bar stay; the dock
 // handles an emptied editor zone (ADR-0097 slice 6a). Docs is chrome too:
 // its follow-caret half reads the editor the applet just removed. So is
-// Flow: it inspects how the buffer executes, not what it returned.
-var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow"}
+// Flow: it inspects how the buffer executes, not what it returned. And so is
+// Experiments: a sink playground whose default subject is a built-in fixture
+// rather than the applet's own result.
+var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments"}
 
 // orderedResultTabIDs is resultTabIDs in play's registration order, for
 // deterministic removal when an explicit `tabs:` list prunes the set.
-var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "network", "schema", "detail"}
+//
+// Every tab play registers must appear here or in chromeTabIDs — a tab in
+// neither survives attenuation unconditionally, so an explicit `tabs:` list
+// cannot prune it and it rides along on every applet. TestTabPolicyCoversEveryRegisteredTab
+// pins that, because the failure is silent: a new panel in play just quietly
+// appears in every applet window.
+var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "network", "sankey", "schema", "detail"}
+
+// autoOffResultTabIDs are result panels `tabs: auto` does NOT show. They are
+// still listable — an applet that names one in `tabs:` gets it — so this is a
+// default, not an attenuation.
+//
+// SD4's auto rule is "the panels whose channel negotiation accepts the executed
+// shapes", and the accept/reject contract answers that at render time. It
+// answers it per-frame, though, not per-applet: a panel that no applet's shape
+// will ever satisfy still occupies a tab and still draws its reject. Sankey is
+// that case today — it binds two convention-named CTEs (`flows`, `nodes`)
+// carrying a conserved quantity, which no applet in the corpus has — so under
+// auto it would be a permanently rejecting tab on every applet window.
+var autoOffResultTabIDs = []string{"sankey"}
 
 // appletApp is the minted AppI: a fresh attenuated PlayApp per open window
 // (factory dispatch), built in Mount so env-configured connection details
@@ -132,15 +153,25 @@ func (inst *appletApp) Unmount(ctx app.MountContextI) (err error) {
 }
 
 // attenuateTabs applies the ADR-0132 §SD3/§SD4 tab surface between
-// construction and mount: chrome removed wholesale; with an explicit `tabs:`
-// list, unlisted result panels removed and node bindings applied. A failed
-// chrome removal (a renamed built-in) degrades to a warning — an applet with
-// a stray tab beats one that fails to mount — while a failed binding is an
-// error: the author asked for a view the instance cannot provide.
+// construction and mount: chrome removed wholesale; under `tabs: auto` the
+// default-off panels removed; with an explicit `tabs:` list, unlisted result
+// panels removed and node bindings applied. A failed removal (a renamed
+// built-in) degrades to a warning — an applet with a stray tab beats one that
+// fails to mount — while a failed binding is an error: the author asked for a
+// view the instance cannot provide.
 func attenuateTabs(inner *play.PlayApp, def *AppletDef, logger zerolog.Logger) (err error) {
 	for _, id := range chromeTabIDs {
 		if rerr := inner.Tabs().Remove(id); rerr != nil {
 			logger.Warn().Err(rerr).Str("tab", id).Msg("sqlapplet: chrome tab removal failed")
+		}
+	}
+	if len(def.Tabs) == 0 {
+		// `tabs: auto` — the default-off panels are the only ones removed;
+		// everything else negotiates per frame (SD4).
+		for _, id := range autoOffResultTabIDs {
+			if rerr := inner.Tabs().Remove(id); rerr != nil {
+				logger.Warn().Err(rerr).Str("tab", id).Msg("sqlapplet: default-off tab removal failed")
+			}
 		}
 	}
 	if len(def.Tabs) > 0 {

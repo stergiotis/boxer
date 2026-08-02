@@ -555,6 +555,30 @@ where the drawer already shows it.
 
 The dogfood is `book/runtime-env.md`.
 
+## Update (2026-08-02) — §SD4's auto rule gains a default-off list
+
+§SD4 says `tabs: auto` shows "the result panels whose channel negotiation
+accepts the executed shapes", delegating the question to the SD6 accept/reject
+contract. That contract answers per frame, not per applet: a panel no applet's
+shape will ever satisfy still takes a tab and still draws its rejection. Play's
+new Sankey panel is that case — it binds two convention-named CTEs carrying a
+conserved quantity, which nothing in the corpus has — so under auto it was a
+permanently rejecting tab on every applet window.
+
+`autoOffResultTabIDs` names the panels auto skips. It is a default and not an
+attenuation: such a panel stays listable, so an applet whose buffer does carry
+the contract asks for it in `tabs:` and gets it.
+
+The same change closes a hole the addition exposed. A tab classified as neither
+chrome nor a result panel survived attenuation unconditionally — no `tabs:`
+list could name it, so none could prune it either — and both Sankey and the
+Experiments pane had landed in play that way, riding along on every applet.
+Experiments is chrome by §SD3's own criterion (its subject is a built-in
+fixture, not the applet's result) and is removed with the rest of it. The
+classification is now pinned by a test that enumerates play's registry, because
+the failure mode is silent: adding a panel to play quietly widens every
+applet's surface, and nothing else notices.
+
 ## References
 
 Internal:
