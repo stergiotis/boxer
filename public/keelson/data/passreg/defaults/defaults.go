@@ -6,6 +6,7 @@
 package defaults
 
 import (
+	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/identity/identsql"
@@ -14,6 +15,10 @@ import (
 
 // RegisterStandard registers the standard set into r:
 //
+//   - distsql.ExpandDescriptiveStatistics (ADR-0161 §SD3) at
+//     StagePreExecute, ordered before the LW_ID_* expansion so an LW_ID
+//     macro inside a descriptiveStatistics argument is replicated into
+//     the branches first and still expands.
 //   - identsql.ExpandPass (LW_ID_* macros → bit arithmetic, ADR-0106
 //     §SD5) at StagePreExecute. chlocal executors have no LW_ID_* UDFs
 //     installed, so an unexpanded macro only works against a server
@@ -36,6 +41,13 @@ import (
 // shapes.
 func RegisterStandard(r *passreg.Registry) (err error) {
 	for _, e := range []passreg.Entry{
+		{
+			Pass:        distsql.ExpandDescriptiveStatistics,
+			Stage:       passreg.StagePreExecute,
+			Order:       75,
+			Description: "expand descriptiveStatistics(cols…) into the ADR-0161 distribution result contract",
+			Provenance:  "github.com/stergiotis/boxer/public/analytics/stats/distsql",
+		},
 		{
 			Pass:        identsql.ExpandPass,
 			Stage:       passreg.StagePreExecute,

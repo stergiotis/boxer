@@ -23,15 +23,31 @@ func TestRegisterStandard(t *testing.T) {
 	require.NoError(t, RegisterStandard(r))
 
 	es := r.Entries(passreg.StagePreExecute)
-	require.Len(t, es, 1)
-	require.Equal(t, "ExpandLwIdMacros", es[0].Pass.Name)
-	require.NotEmpty(t, es[0].Description)
-	require.NotEmpty(t, es[0].Provenance)
+	require.Len(t, es, 2)
+	require.Equal(t, "ExpandDescriptiveStatistics", es[0].Pass.Name, "ADR-0161 expansion orders before LW_ID (75 < 100)")
+	require.Equal(t, "ExpandLwIdMacros", es[1].Pass.Name)
+	for _, e := range es {
+		require.NotEmpty(t, e.Description)
+		require.NotEmpty(t, e.Provenance)
+	}
 
 	// Registering twice into the same registry must fail loudly (duplicate
 	// key), not silently double the entries.
 	require.Error(t, RegisterStandard(r))
-	require.Len(t, r.Entries(passreg.StagePreExecute), 1)
+	require.Len(t, r.Entries(passreg.StagePreExecute), 2)
+}
+
+// TestStandardSetExpandsDescriptiveStatistics proves the ADR-0161 wiring end
+// to end: the macro leaves the pre-execute stage as the contract query.
+func TestStandardSetExpandsDescriptiveStatistics(t *testing.T) {
+	r := passreg.NewRegistry()
+	require.NoError(t, RegisterStandard(r))
+
+	out := r.ApplyBestEffort(passreg.StagePreExecute, "SELECT descriptiveStatistics(x) FROM t", zerolog.Nop())
+	require.NotContains(t, out, "descriptiveStatistics", "macro call must be expanded")
+	require.Contains(t, out, "quantilesTDigest(")
+	require.Contains(t, out, "AS series")
+	require.Contains(t, out, "FROM t", "surrounding query must survive")
 }
 
 // TestStandardSetExpandsLwIdMacros proves the wiring end to end: a query
@@ -53,8 +69,8 @@ func TestStandardSetRegistersResolveColumnNamesFactory(t *testing.T) {
 	r := passreg.NewRegistry()
 	require.NoError(t, RegisterStandard(r))
 
-	// Concrete entries are identsql-only; the resolver is a factory.
-	require.Len(t, r.Entries(passreg.StagePreExecute), 1)
+	// Concrete entries are the two expansions; the resolver is a factory.
+	require.Len(t, r.Entries(passreg.StagePreExecute), 2)
 	fs := r.Factories(passreg.StagePreExecute)
 	require.Len(t, fs, 1)
 	f := fs[0]
