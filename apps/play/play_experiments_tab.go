@@ -132,13 +132,79 @@ func (inst *experimentsDriver) isTextSink() bool {
 	return false
 }
 
-// renderExperimentsTab draws the control row and the selected sink's output.
+// renderExperimentsTab draws the control row, a reading guide for the selected
+// sink, and the sink's output — the guide separated from the output by a rule,
+// so what is chrome and what is the artifact stay distinguishable.
 func (inst *PlayApp) renderExperimentsTab(rec arrow.RecordBatch, schema *arrow.Schema) {
 	d := inst.experiments
+	gap := styletokens.GapItems(styletokens.DensityFromEnv())
 	d.renderControls()
-	c.AddSpace(styletokens.GapSections(styletokens.DensityFromEnv()))
+	c.AddSpace(gap)
+	d.renderGuide()
+	c.AddSpace(gap)
+	c.Separator().Horizontal().Send()
+	c.AddSpace(gap)
 	d.ensureBuilt(rec, schema)
 	d.renderBody(rec, schema)
+}
+
+// sinkGuide is how to READ each sink's output. Every one of these renders the
+// same Begin*/End* callback sequence, so what changes between them is the
+// encoding, not the data — and the encoding is the thing a reader has to be
+// told. Kept to two lines: this is a legend, not documentation.
+func sinkGuide(sink experimentsSinkE) (headline, detail string) {
+	switch sink {
+	case experimentsSinkCard:
+		return "One row per attribute, grouped by section.",
+			"Columns are section · primary memberships · secondary memberships · values. " +
+				"A section header row carries its own size and share of the entity."
+	case experimentsSinkTopology:
+		return "Shape only — every value is discarded.",
+			"Nesting is entity › co-section group › section › attribute; a cell's AREA is the " +
+				"attribute count beneath it, and an attribute's COLOUR is what it carried (key below). " +
+				"Click a box to drill in."
+	case experimentsSinkJSON:
+		return "The canonical lossless card-JSON (ADR-0018).",
+			"byStructure holds the schema once per entity; byAttribute is rooted at primary " +
+				"memberships. Scalars keep their JSON type — numbers are not stringified."
+	case experimentsSinkUnicode:
+		return "One box-drawn table per section.",
+			"Column headers are the section's value names, one row per attribute. The widest " +
+				"cell sets the column, so ragged sections show as ragged tables."
+	case experimentsSinkTopoSpark:
+		return "One line per entity — arity and types, no values.",
+			"◆ plain section · ◇N× tagged section with N attributes · ⟨…⟩ its column canonical " +
+				"types · ∥n array of n · {n} set of n · #n membership count · ˡ ʰ ᵐ low/high/mixed cardinality."
+	case experimentsSinkBrailleSpark:
+		return "One braille cell per four attributes.",
+			"Within a cell the LEFT dot column marks attributes that carried a value and the " +
+				"RIGHT column those that carried tags; │ separates sections, ⟦ ⟧ wrap a co-section group."
+	case experimentsSinkTreemapSpark:
+		return "Three lines per entity: a proportional box row.",
+			"Box width follows the section's column count. Inside, █ is value+tags, ▓ value only, " +
+				"░ tags only, · an empty slot; ═ double rules mark a co-section group."
+	}
+	return "", ""
+}
+
+// renderGuide draws the two-line reading guide for the active sink.
+func (inst *experimentsDriver) renderGuide() {
+	headline, detail := sinkGuide(inst.sink)
+	if headline == "" {
+		return
+	}
+	c.LabelAtoms(c.Atoms().BeginRichText(headline).Strong().End().Keep()).Send()
+	if detail == "" {
+		return
+	}
+	// A text sink's guide names the glyphs its output is made of, so it has to
+	// be set in the same face: the proportional UI font has no ⟨ ⟩ and draws
+	// tofu where the monospace output draws brackets.
+	rt := c.Atoms().BeginRichText(detail).Small().Weak()
+	if inst.isTextSink() {
+		rt = rt.Monospace()
+	}
+	c.LabelAtoms(rt.End().Keep()).Wrap().Send()
 }
 
 func (inst *experimentsDriver) renderControls() {
@@ -148,6 +214,7 @@ func (inst *experimentsDriver) renderControls() {
 		selector.Segmented(inst.ids, "exp-source", &inst.source).
 			Inline().
 			Frameless().
+			Style(selector.StyleSelectable).
 			Option(experimentsSourceFixture, "fixture").
 			Option(experimentsSourceResult, "result").
 			SendResp()
@@ -156,6 +223,7 @@ func (inst *experimentsDriver) renderControls() {
 		selector.Segmented(inst.ids, "exp-sink", &inst.sink).
 			Inline().
 			Frameless().
+			Style(selector.StyleSelectable).
 			Option(experimentsSinkCard, "card").
 			Option(experimentsSinkTopology, "topology").
 			Option(experimentsSinkJSON, "json").
