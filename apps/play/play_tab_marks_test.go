@@ -190,7 +190,8 @@ func TestBuiltinTabMarkDeclarations(t *testing.T) {
 			writes[s.ID] = s.Writes
 		}
 	}
-	assert.Equal(t, map[string]bool{"timeline": true, "world": true, "kanban": true, "network": true}, shape)
+	assert.Equal(t, map[string]bool{"timeline": true, "world": true, "kanban": true, "network": true,
+		"sankey": true}, shape)
 
 	require.Contains(t, writes, "map", "the Map publishes its viewport without being a PanelI")
 	assert.Len(t, writes["map"], len(mapViewportSignals))
@@ -203,6 +204,10 @@ func TestBuiltinTabMarkDeclarations(t *testing.T) {
 	// jerk the other panels to row 0 (ADR-0129 §SD4).
 	assert.Equal(t, []SignalID{signalSelectionKey}, writes["network"])
 	assert.NotContains(t, writes["network"], signalSelection)
+	// The Sankey tab reads two private lanes for the same reason, so the same
+	// rule applies to it.
+	assert.Equal(t, []SignalID{signalSelectionKey}, writes["sankey"])
+	assert.NotContains(t, writes["sankey"], signalSelection)
 
 	for _, s := range specs {
 		if s.ShapeContract {

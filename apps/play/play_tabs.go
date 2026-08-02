@@ -306,6 +306,11 @@ var builtinTabDefs = []builtinTabDef{
 	// row-index `selection` stays local to the driver, per ADR-0129 §SD4.
 	{id: "network", dockID: dockTabNetwork, title: "Network", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelectionKey}},
+	// The Sankey tab draws the result as a flow-quantity diagram (ADR-0159).
+	// Its inputs are the `flows`/`nodes` CTEs, so its selection is local for
+	// the same reason the Network's is; a pinned node publishes its id.
+	{id: "sankey", dockID: dockTabSankey, title: "Sankey", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelectionKey}},
 	// Graph stays in the body against its classification: its input is the
 	// split and the signal store, so by the criterion above it is a tool pane,
 	// but its subject is the SESSION's reactive wiring rather than the
@@ -476,6 +481,16 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			// ScrollArea.
 			spec.Panel = layeredGraphPanel{driver: inst.networkDriver}
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderNetworkTab) }
+		case "sankey":
+			// Reads its two named CTEs off the split, not the active result, so
+			// the body ignores the frame. Scrolled, like the Network tab: the
+			// plot is a fixed box sized from the pane WIDTH (the only dimension
+			// a non-contending probe yields), so a short leaf has to scroll
+			// rather than clip. The two do not fight over the wheel — implot
+			// captures scroll only while the pointer is over the plot, and
+			// zeroes the delta the ScrollArea would read (ADR-0140).
+			spec.Panel = sankeyPanel{driver: inst.sankeyDriver}
+			spec.Render = func(f *TabFrame) { scrollTab(inst.renderSankeyTab) }
 		case "graph":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphTab) }
 		case "schema":

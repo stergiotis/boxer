@@ -517,6 +517,77 @@ WITH
 SELECT * FROM edges
 ```
 
+## Flow diagram (Sankey / alluvial)
+
+The **Sankey** tab draws a result as a flow-quantity diagram: ribbons whose
+thickness is proportional to a conserved value (ADR-0159). It reads two CTEs of
+this query **by name**, on the same footing as the Network tab above. `flows` —
+required — carries `source`, `target` and `value`; that alone draws a diagram,
+with the nodes inferred from the endpoints. `nodes` — optional — decorates the
+ones it names: an `id` (the key the flows reference), a `label`, a `stage`, an
+`order` within that stage, a `group` that colours by category, and a `tone`.
+Duplicate `source`/`target` rows are summed rather than drawn twice, so an
+un-aggregated flow table still totals correctly.
+
+Supplying a `stage` for **every** node is what switches the reading from Sankey —
+where the columns are derived from the graph and the order within one is relaxed
+to reduce crossings — to alluvial, where both are fixed by the query. The mode
+control's *auto* setting is that rule; the other two settings override it.
+
+Alluvial data usually starts one row per entity with one column per stage, which
+is a pivot ClickHouse does natively — no panel support needed. Build the path as
+an array and walk its adjacent pairs. Here each ADR code citation is one entity
+whose path is *decision status → language → top-level area*, so the diagram
+shows where the corpus's evidence actually sits. Same no-setup path as the two
+sections above: point the **Endpoint** menu at *Keelson introspection*, focus the
+Sankey tab, and Run.
+
+The stage index is prefixed onto each node id (`1:go`) deliberately. It is what
+keeps a category that recurs in two stages from collapsing into one node — and
+with it, what keeps the diagram acyclic, since a flow that returns to an earlier
+stage is rejected rather than drawn. The `label` drops the prefix again, so the
+bars read plainly.
+
+```sql
+WITH
+  paths AS (
+    SELECT [a.status, r.lang, splitByChar('/', r.path)[1]] AS p
+    FROM keelson('coderef') AS r
+    INNER JOIN keelson('adr') AS a ON a.num = r.num
+    WHERE r.lang != '' AND r.path != ''
+  ),
+  flows AS (
+    SELECT e.1 AS source, e.2 AS target, count() AS value
+    FROM (
+      SELECT arrayJoin(arrayMap(
+               i -> (concat(toString(i - 1), ':', p[i]), concat(toString(i), ':', p[i + 1])),
+               range(1, length(p)))) AS e
+      FROM paths
+    )
+    GROUP BY source, target
+  ),
+  nodes AS (
+    SELECT concat(toString(x.1), ':', x.2) AS id,
+           x.2                             AS label,
+           x.1                             AS stage
+    FROM (
+      SELECT arrayJoin(arrayMap((i, v) -> (i - 1, v), arrayEnumerate(p), p)) AS x
+      FROM paths
+    )
+    GROUP BY id, label, stage
+  )
+SELECT * FROM flows ORDER BY value DESC
+```
+
+If the data is already long — one row per entity per stage — `groupArray` and
+`arraySort` rebuild the same `p` array and the rest is unchanged:
+
+```sql
+SELECT arrayMap(x -> x.2, arraySort(x -> x.1, groupArray((stage, category)))) AS p
+FROM journey
+GROUP BY entity
+```
+
 ## The shell's own apps and windows
 
 Two more in-process tables, same no-setup path as the ADR board above: point the

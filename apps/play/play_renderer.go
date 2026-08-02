@@ -91,6 +91,7 @@ const (
 	dockTabNetwork     uint64 = 16
 	dockTabDocs        uint64 = 17
 	dockTabFlow        uint64 = 18
+	dockTabSankey      uint64 = 19
 )
 
 type PlayApp struct {
@@ -352,6 +353,11 @@ type PlayApp struct {
 	// node-link view whose vertices and edges come from two named CTEs of the
 	// user's query, each on its own lane (closed in Close).
 	networkDriver *NetworkDriver
+
+	// sankeyDriver is the ADR-0159 flow-diagram panel (Sankey dock tab): the
+	// same two-private-lane shape as the Network's, over the `flows` and
+	// `nodes` CTEs (closed in Close, forgotten on Run).
+	sankeyDriver *SankeyDriver
 
 	// flow is the ADR-0153 Flow dock tab: the active node's clause-level
 	// dataflow, derived statically from the split; the EXPLAIN lenses add
@@ -861,6 +867,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.worldDriver = NewWorldDriver(mk())
 	inst.kanbanDriver = NewKanbanDriver(mk(), client)
 	inst.networkDriver = NewNetworkDriver(mk(), client)
+	inst.sankeyDriver = NewSankeyDriver(mk(), client)
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
@@ -921,6 +928,14 @@ func (inst *PlayApp) Close() {
 		}
 		if inst.networkDriver.verticesLane != nil {
 			inst.networkDriver.verticesLane.close()
+		}
+	}
+	if inst.sankeyDriver != nil {
+		if inst.sankeyDriver.flowsLane != nil {
+			inst.sankeyDriver.flowsLane.close()
+		}
+		if inst.sankeyDriver.nodesLane != nil {
+			inst.sankeyDriver.nodesLane.close()
 		}
 	}
 	inst.flow.closeLanes()
@@ -1414,6 +1429,8 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	// key is the SQL, unchanged) and the lane inventory would stay stuck-errored
 	// though the board recovered.
 	inst.kanbanDriver.forgetLanes()
+	// The Sankey panel's `flows`/`nodes` CTEs are the same shape again.
+	inst.sankeyDriver.forgetLanes()
 	// The Flow tab's EXPLAIN lenses (ADR-0153) wrap this query on their own
 	// lanes; same reason again.
 	inst.flow.forgetLanes()

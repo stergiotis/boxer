@@ -73,6 +73,8 @@ const (
 	chLanes    ChannelID = "lanes"    // the Kanban board's lane inventory (ADR-0122 §SD6)
 	chEdges    ChannelID = "edges"    // the Network graph's arcs (ADR-0129)
 	chVertices ChannelID = "vertices" // the Network graph's nodes (ADR-0129, optional)
+	chFlows    ChannelID = "flows"    // the Sankey diagram's quantified flows (ADR-0159)
+	chNodes    ChannelID = "nodes"    // the Sankey diagram's nodes (ADR-0159, optional)
 )
 
 // ChannelSpec declares one of a panel's input channels. A panel is renderable iff
