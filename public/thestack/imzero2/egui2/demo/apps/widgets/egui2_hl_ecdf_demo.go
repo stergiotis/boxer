@@ -204,6 +204,7 @@ func demoEcdf(ids *c.WidgetIdStack, st *ecdfDemoState) {
 	p.SetupAxisLimitsConstraints(implot.AxisY1, 0, 1)
 	p.IncludeY(0)
 	p.IncludeY(1)
+	p.NoLegend()
 	if resetZoom {
 		p.FitNext()
 	}
