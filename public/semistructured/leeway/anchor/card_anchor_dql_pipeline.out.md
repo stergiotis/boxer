@@ -22,18 +22,21 @@ nothing is omitted. The final stage's output is the committed
 ### source (friendly handles)
 
 ```sql
-/* Query 1 — attack types and their target ports, via the unflatten UDF.
+/* Query 1 — attack types and their target ports, via the pack's raggedNest.
 
 Lists each cyber incident's attack type (the `symbol` section value) together
 with its target network ports, which ride the same attributes as low-cardinality
-ref memberships (`lr`). The UDF regroups the flat `lr` list by the per-attribute
-`lrcard` counts so it can be ARRAY-JOINed in parallel with the value column.
+ref memberships (`lr`). raggedNest — from the co/ragged function pack
+(ADR-0162) that hosts reconcile at connect — regroups the flat `lr` stream by
+the per-attribute `lrcard` counts so it can be ARRAY-JOINed in parallel with
+the value column. Nesting at an ARRAY JOIN boundary is exactly the pack's
+documented use for raggedNest: the codomain is genuinely nested here.
 
 Column references are friendly leeway handles (`section:column`, ADR-0116); the
 nanopass pipeline resolves them to physical names (see the .out.sql neighbour).
 `symbol:lr` and `symbol:lrcard` are support columns — handles cover those too.
 
-The UDF call sits inline in ARRAY JOIN rather than in a `WITH expr AS name`
+The pack call sits inline in ARRAY JOIN rather than in a `WITH expr AS name`
 clause: the resolve pass walks each SELECT's own subtree, and a query-level
 WITH-expression clause is outside it — handles there would pass through
 unresolved. (deferred: teach ResolveColumnNames the query-level WITH clause.)
@@ -47,7 +50,7 @@ FROM facts
 -- parallel ARRAY JOIN: both lists carry one element per attribute
 ARRAY JOIN
     `symbol:value` AS attack_type,
-    ANCHOR_UNFLATTEN_LEEWAY_ARRAY(`symbol:lr`, `symbol:lrcard`) AS target_ports
+    raggedNest(`symbol:lr`, `symbol:lrcard`) AS target_ports
 WHERE has(['DDOS', 'SQL_INJECTION', 'PORT_SCAN'], attack_type)
 ```
 
@@ -63,26 +66,26 @@ SELECT
 FROM facts
  ARRAY JOIN
     `symbol:value` AS attack_type,
-    ANCHOR_UNFLATTEN_LEEWAY_ARRAY(`symbol:lr`, `symbol:lrcard`) AS target_ports
+    raggedNest(`symbol:lr`, `symbol:lrcard`) AS target_ports
 WHERE has(['DDOS', 'SQL_INJECTION', 'PORT_SCAN'], attack_type)
 ```
 
 ### after CanonicalizeFull
 
 ```sql
-SELECT "id:id" AS "id", "id:naturalKey" AS "incident_ticket", "attack_type", "target_ports" FROM "facts" ARRAY JOIN "symbol:value" AS "attack_type", "ANCHOR_UNFLATTEN_LEEWAY_ARRAY"("symbol:lr", "symbol:lrcard") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
+SELECT "id:id" AS "id", "id:naturalKey" AS "incident_ticket", "attack_type", "target_ports" FROM "facts" ARRAY JOIN "symbol:value" AS "attack_type", "raggedNest"("symbol:lr", "symbol:lrcard") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
 ```
 
 ### after QualifyTables
 
 ```sql
-SELECT "id:id" AS "id", "id:naturalKey" AS "incident_ticket", "attack_type", "target_ports" FROM "anchor"."facts" ARRAY JOIN "symbol:value" AS "attack_type", "ANCHOR_UNFLATTEN_LEEWAY_ARRAY"("symbol:lr", "symbol:lrcard") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
+SELECT "id:id" AS "id", "id:naturalKey" AS "incident_ticket", "attack_type", "target_ports" FROM "anchor"."facts" ARRAY JOIN "symbol:value" AS "attack_type", "raggedNest"("symbol:lr", "symbol:lrcard") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
 ```
 
 ### after ResolveColumnNames
 
 ```sql
-SELECT "id:id:u64:2k:0:0:" AS "id", "id:naturalKey:y:g:0:0:" AS "incident_ticket", "attack_type", "target_ports" FROM "anchor"."facts" ARRAY JOIN "tv:symbol:value:val:s:m:0:24:0::data" AS "attack_type", "ANCHOR_UNFLATTEN_LEEWAY_ARRAY"("tv:symbol:lr:lr:u64:2q:0:0:0::data", "tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
+SELECT "id:id:u64:2k:0:0:" AS "id", "id:naturalKey:y:g:0:0:" AS "incident_ticket", "attack_type", "target_ports" FROM "anchor"."facts" ARRAY JOIN "tv:symbol:value:val:s:m:0:24:0::data" AS "attack_type", "raggedNest"("tv:symbol:lr:lr:u64:2q:0:0:0::data", "tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
 ```
 
 ## card_anchor_dql_query2.sql
@@ -182,8 +185,9 @@ exact tokens avoids LIKE-style scans over the raw text.
 
 Shape note: `text:text` has one element per attribute, while `text:wordBag` is
 a flat co-container (its per-attribute lengths live in the `text:len` support
-column). They cannot be parallel-ARRAY-JOINed, so arrayExists filters rows and
-arrayFilter projects the matching tokens.
+column). They cannot be parallel-ARRAY-JOINed, so the row filter is hasAny —
+the constant-argument membership form index analysis can serve (the guard
+discipline of ADR-0162) — and arrayFilter projects the matching tokens.
 */
 SELECT
     `id:id` AS id,
@@ -191,7 +195,7 @@ SELECT
     arrayStringConcat(`text:text`, ' | ') AS text_payload,
     arrayFilter(w -> w IN ('quietly', 'union'), `text:wordBag`) AS matched_tokens
 FROM facts
-WHERE arrayExists(w -> w IN ('quietly', 'union'), `text:wordBag`)
+WHERE hasAny(`text:wordBag`, ['quietly', 'union'])
 LIMIT 10
 ```
 
@@ -205,26 +209,26 @@ SELECT
     arrayStringConcat(`text:text`, ' | ') AS text_payload,
     arrayFilter(w -> w IN ('quietly', 'union'), `text:wordBag`) AS matched_tokens
 FROM facts
-WHERE arrayExists(w -> w IN ('quietly', 'union'), `text:wordBag`)
+WHERE hasAny(`text:wordBag`, ['quietly', 'union'])
 LIMIT 10
 ```
 
 ### after CanonicalizeFull
 
 ```sql
-SELECT "id:id" AS "id", "arrayElement"("symbol:value", 1) AS "event_type", "arrayStringConcat"("text:text", ' | ') AS "text_payload", "arrayFilter"("w" -> "w" IN "array"('quietly', 'union'), "text:wordBag") AS "matched_tokens" FROM "facts" WHERE "arrayExists"("w" -> "w" IN "array"('quietly', 'union'), "text:wordBag") LIMIT 10
+SELECT "id:id" AS "id", "arrayElement"("symbol:value", 1) AS "event_type", "arrayStringConcat"("text:text", ' | ') AS "text_payload", "arrayFilter"("w" -> "w" IN "array"('quietly', 'union'), "text:wordBag") AS "matched_tokens" FROM "facts" WHERE "hasAny"("text:wordBag", "array"('quietly', 'union')) LIMIT 10
 ```
 
 ### after QualifyTables
 
 ```sql
-SELECT "id:id" AS "id", "arrayElement"("symbol:value", 1) AS "event_type", "arrayStringConcat"("text:text", ' | ') AS "text_payload", "arrayFilter"("w" -> "w" IN "array"('quietly', 'union'), "text:wordBag") AS "matched_tokens" FROM "anchor"."facts" WHERE "arrayExists"("w" -> "w" IN "array"('quietly', 'union'), "text:wordBag") LIMIT 10
+SELECT "id:id" AS "id", "arrayElement"("symbol:value", 1) AS "event_type", "arrayStringConcat"("text:text", ' | ') AS "text_payload", "arrayFilter"("w" -> "w" IN "array"('quietly', 'union'), "text:wordBag") AS "matched_tokens" FROM "anchor"."facts" WHERE "hasAny"("text:wordBag", "array"('quietly', 'union')) LIMIT 10
 ```
 
 ### after ResolveColumnNames
 
 ```sql
-SELECT "id:id:u64:2k:0:0:" AS "id", "arrayElement"("tv:symbol:value:val:s:m:0:24:0::data", 1) AS "event_type", "arrayStringConcat"("tv:text:text:val:s:0:0:0:0::", ' | ') AS "text_payload", "arrayFilter"("w" -> "w" IN "array"('quietly', 'union'), "tv:text:wordBag:val:sh:0:0:0:0::") AS "matched_tokens" FROM "anchor"."facts" WHERE "arrayExists"("w" -> "w" IN "array"('quietly', 'union'), "tv:text:wordBag:val:sh:0:0:0:0::") LIMIT 10
+SELECT "id:id:u64:2k:0:0:" AS "id", "arrayElement"("tv:symbol:value:val:s:m:0:24:0::data", 1) AS "event_type", "arrayStringConcat"("tv:text:text:val:s:0:0:0:0::", ' | ') AS "text_payload", "arrayFilter"("w" -> "w" IN "array"('quietly', 'union'), "tv:text:wordBag:val:sh:0:0:0:0::") AS "matched_tokens" FROM "anchor"."facts" WHERE "hasAny"("tv:text:wordBag:val:sh:0:0:0:0::", "array"('quietly', 'union')) LIMIT 10
 ```
 
 ## card_anchor_dql_query4.sql

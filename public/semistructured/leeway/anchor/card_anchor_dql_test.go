@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	"github.com/stretchr/testify/require"
 )
@@ -165,12 +166,13 @@ func TestDqlAnalysisGeneration(t *testing.T) {
 		fmt.Fprintf(doc, "- functions: %s\n\n", mdCodeList(dedupeSorted(names)))
 	}
 
-	// The UDF installer is CREATE FUNCTION — not a SELECT. The classifier
-	// lands it on a non-read-only kind, which is how an executor's read-only
-	// gate turns it away before parsing.
-	udf := readDqlSource("./card_anchor_udf_unflatten_leeway_array.sql", t)
-	fmt.Fprintf(doc, "## card_anchor_udf_unflatten_leeway_array.sql\n\n- statement kind: `%s`\n",
-		analysis.ClassifyStatementKind(udf))
+	// A pack installer statement is CREATE FUNCTION — not a SELECT. The
+	// classifier lands it on a non-read-only kind, which is how an
+	// executor's read-only gate turns it away before parsing. Query 1
+	// depends on the pack (ADR-0162), so its first installer statement is
+	// the specimen.
+	fmt.Fprintf(doc, "## co/ragged pack installer (ADR-0162)\n\n- statement kind: `%s`\n",
+		analysis.ClassifyStatementKind(chpack.Statements()[0]))
 
 	writeFile("./card_anchor_dql_analysis.out.md", doc.String(), t)
 }

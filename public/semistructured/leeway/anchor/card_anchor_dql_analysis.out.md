@@ -18,7 +18,7 @@ generator: go test, TestDqlAnalysisGeneration
 - tables: `anchor.facts`
 - passthrough tables (ADR-0117): (none)
 - columns (8 refs): `attack_type`, `id:id:u64:2k:0:0:`, `id:naturalKey:y:g:0:0:`, `target_ports`, `tv:symbol:lr:lr:u64:2q:0:0:0::data`, `tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`, `tv:symbol:value:val:s:m:0:24:0::data`
-- functions: `ANCHOR_UNFLATTEN_LEEWAY_ARRAY`, `array`, `has`
+- functions: `array`, `has`, `raggedNest`
 
 ## card_anchor_dql_query2.sql
 
@@ -35,8 +35,8 @@ generator: go test, TestDqlAnalysisGeneration
 - security class: `read`
 - tables: `anchor.facts`
 - passthrough tables (ADR-0117): (none)
-- columns (7 refs): `id:id:u64:2k:0:0:`, `tv:symbol:value:val:s:m:0:24:0::data`, `tv:text:text:val:s:0:0:0:0::`, `tv:text:wordBag:val:sh:0:0:0:0::`, `w`
-- functions: `array`, `arrayElement`, `arrayExists`, `arrayFilter`, `arrayStringConcat`
+- columns (6 refs): `id:id:u64:2k:0:0:`, `tv:symbol:value:val:s:m:0:24:0::data`, `tv:text:text:val:s:0:0:0:0::`, `tv:text:wordBag:val:sh:0:0:0:0::`, `w`
+- functions: `array`, `arrayElement`, `arrayFilter`, `arrayStringConcat`, `hasAny`
 
 ## card_anchor_dql_query4.sql
 
@@ -74,6 +74,6 @@ generator: go test, TestDqlAnalysisGeneration
 - columns (7 refs): `id:id:u64:2k:0:0:`, `id:naturalKey:y:g:0:0:`, `tv:geoPoint:h3:val:u64:g:0:0:0::geo`, `tv:symbol:value:val:s:m:0:24:0::data`, `tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`
 - functions: `has`
 
-## card_anchor_udf_unflatten_leeway_array.sql
+## co/ragged pack installer (ADR-0162)
 
 - statement kind: `mutating`

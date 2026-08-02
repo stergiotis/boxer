@@ -6,8 +6,9 @@ exact tokens avoids LIKE-style scans over the raw text.
 
 Shape note: `text:text` has one element per attribute, while `text:wordBag` is
 a flat co-container (its per-attribute lengths live in the `text:len` support
-column). They cannot be parallel-ARRAY-JOINed, so arrayExists filters rows and
-arrayFilter projects the matching tokens.
+column). They cannot be parallel-ARRAY-JOINed, so the row filter is hasAny —
+the constant-argument membership form index analysis can serve (the guard
+discipline of ADR-0162) — and arrayFilter projects the matching tokens.
 */
 SELECT
     `id:id` AS id,
@@ -15,5 +16,5 @@ SELECT
     arrayStringConcat(`text:text`, ' | ') AS text_payload,
     arrayFilter(w -> w IN ('quietly', 'union'), `text:wordBag`) AS matched_tokens
 FROM facts
-WHERE arrayExists(w -> w IN ('quietly', 'union'), `text:wordBag`)
+WHERE hasAny(`text:wordBag`, ['quietly', 'union'])
 LIMIT 10

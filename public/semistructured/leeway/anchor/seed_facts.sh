@@ -6,7 +6,8 @@
 # `Memory` (so rows are wiped whenever the ClickHouse server restarts) and its
 # DDL is `CREATE OR REPLACE TABLE` (so it is recreated empty on each setup).
 # Nothing fills it at rest. This script drives the TestLeewayClickHouse
-# integration test, which creates the schema + unflatten UDF and inserts the
+# integration test, which creates the schema, reconciles the co/ragged
+# function pack (ADR-0162), and inserts the
 # Alpine + Cyber + Drone demo events via Arrow IPC, then prints the row count.
 #
 # Prerequisite: a ClickHouse server reachable over HTTP, by default at
