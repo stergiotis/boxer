@@ -160,6 +160,16 @@ The invariant, worth asserting when something looks off:
 arraySum(card) = length(vals)
 ```
 
+A leeway-specific refinement: in valued sections every run is non-empty —
+an empty list is not representable and is *absent* instead (the lossless
+JSON mapping routes empty arrays and objects to dedicated value-less
+sections). Generic ClickHouse data may still carry `card = 0`, and the
+recipes here stay total for it; but on leeway reads the defaults an
+aggregate fabricates for an empty run — the `0` a zero-length range
+produces under `arrayReduceInRanges('sum', …)` — are dead cases, and
+order-based picks (`argMax`, the first or last of a run) are always
+well-defined.
+
 End offsets are `arrayCumSum(card)`; the start of segment `i` is
 `hi[i] - card[i] + 1`. When the table materializes `cusumcard`, use it instead
 of recomputing.
