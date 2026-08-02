@@ -198,6 +198,11 @@ func (p *Plot) emitContextMenu() {
 	if !st.ctxOpen {
 		return
 	}
+	// A menu fit is a gesture kind like the wheel and the double-click, so it
+	// reads the same per-axis locks: an action a NoZoom axis would decline is
+	// not offered, rather than offered and silently ignored. "Fit both" is
+	// still offered while one axis is free, and fits that one.
+	locks := locksOf(&st.x, &st.y)
 	// Relative ids from the plot's scope (still pushed here), salted by the
 	// open-counter so each opening is a fresh window that re-anchors at the
 	// pointer via DefaultPos.
@@ -206,18 +211,23 @@ func (p *Plot) emitContextMenu() {
 		Resizable(false).
 		DefaultPos(st.ctxScreen[0], st.ctxScreen[1]).
 		KeepIter() {
-		if c.Button(p.ids.PrepareStr("ctx-fit-x"), c.Atoms().Text("Fit X axis").Keep()).SendResp().HasPrimaryClicked() {
-			st.x.fitNext = true
-			st.ctxOpen = false
+		if !locks.noZoomX {
+			if c.Button(p.ids.PrepareStr("ctx-fit-x"), c.Atoms().Text("Fit X axis").Keep()).SendResp().HasPrimaryClicked() {
+				locks.requestFit(&st.x, &st.y, true, false)
+				st.ctxOpen = false
+			}
 		}
-		if c.Button(p.ids.PrepareStr("ctx-fit-y"), c.Atoms().Text("Fit Y axis").Keep()).SendResp().HasPrimaryClicked() {
-			st.y.fitNext = true
-			st.ctxOpen = false
+		if !locks.noZoomY {
+			if c.Button(p.ids.PrepareStr("ctx-fit-y"), c.Atoms().Text("Fit Y axis").Keep()).SendResp().HasPrimaryClicked() {
+				locks.requestFit(&st.x, &st.y, false, true)
+				st.ctxOpen = false
+			}
 		}
-		if c.Button(p.ids.PrepareStr("ctx-fit-both"), c.Atoms().Text("Fit both").Keep()).SendResp().HasPrimaryClicked() {
-			st.x.fitNext = true
-			st.y.fitNext = true
-			st.ctxOpen = false
+		if !locks.noZoomX || !locks.noZoomY {
+			if c.Button(p.ids.PrepareStr("ctx-fit-both"), c.Atoms().Text("Fit both").Keep()).SendResp().HasPrimaryClicked() {
+				locks.requestFit(&st.x, &st.y, true, true)
+				st.ctxOpen = false
+			}
 		}
 		if c.Button(p.ids.PrepareStr("ctx-close"), c.Atoms().Text("Close").Keep()).SendResp().HasPrimaryClicked() {
 			st.ctxOpen = false

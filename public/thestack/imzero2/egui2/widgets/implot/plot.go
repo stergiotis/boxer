@@ -278,6 +278,22 @@ func (g gestureLocks) zoom(w *pxWindow, ax float32, ay float32, factor float32) 
 	return movedX, movedY
 }
 
+// requestFit marks the axes a fit gesture may re-range, skipping a NoZoom
+// one. A fit rewrites a span, so it is a zoom by any other name and the axis
+// whose range the caller owns declines it exactly as it declines the wheel.
+//
+// The flag is only ever set here, never cleared: assigning the negation would
+// drop a fit already pending from FitNext or from an earlier gesture this
+// frame.
+func (g gestureLocks) requestFit(x *axisState, y *axisState, wantX bool, wantY bool) {
+	if wantX && !g.noZoomX {
+		x.fitNext = true
+	}
+	if wantY && !g.noZoomY {
+		y.fitNext = true
+	}
+}
+
 // applyInteractions interprets last frame's gesture registers against last
 // frame's transform: drag pan, Shift+drag box-zoom, anchored wheel zoom,
 // double-click fit. One-frame lag by design (see doc.go).
@@ -387,16 +403,7 @@ func (p *Plot) applyInteractions() {
 		st.dragBox = false
 	}
 	if flags.HasDoubleClicked() {
-		// A fit rewrites the span, so it counts as a zoom: the axis whose
-		// range the caller owns is left where it is. Only ever set here —
-		// assigning the negation would clear a fit already pending from
-		// FitNext or the context menu.
-		if !locks.noZoomX {
-			st.x.fitNext = true
-		}
-		if !locks.noZoomY {
-			st.y.fitNext = true
-		}
+		locks.requestFit(&st.x, &st.y, true, true)
 	}
 	if flags.HasSecondaryClicked() && posOk && curOk {
 		st.ctxOpen = true

@@ -94,6 +94,48 @@ func TestPanIgnoresZeroDelta(t *testing.T) {
 	}
 }
 
+// A fit rewrites a span, so it is a zoom and a NoZoom axis declines it —
+// whichever gesture asked. The double-click already went through the locks;
+// the context menu's fit actions are the path that did not, and the icicle's
+// depth axis is the configuration that notices.
+func TestRequestFitSkipsNoZoomAxis(t *testing.T) {
+	cases := []struct {
+		name           string
+		xflags, yflags AxisFlags
+		wantX, wantY   bool // which axes the action asks to fit
+		fitX, fitY     bool // which end up pending
+	}{
+		{"fit both, free", AxisFlagsNone, AxisFlagsNone, true, true, true, true},
+		{"fit both, depth locked", AxisFlagsNone, AxisFlagsNoZoom, true, true, true, false},
+		{"fit both, all locked", AxisFlagsNoZoom, AxisFlagsNoZoom, true, true, false, false},
+		{"fit x only", AxisFlagsNone, AxisFlagsNoZoom, true, false, true, false},
+		{"fit y only, locked", AxisFlagsNone, AxisFlagsNoZoom, false, true, false, false},
+		{"fit y only, free", AxisFlagsNone, AxisFlagsNone, false, true, false, true},
+		// NoPan is not NoZoom: a pinned-scroll axis still fits.
+		{"fit both, pan locked", AxisFlagsNoPan, AxisFlagsNoPan, true, true, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			x, y := axisState{flags: tc.xflags}, axisState{flags: tc.yflags}
+			locksOf(&x, &y).requestFit(&x, &y, tc.wantX, tc.wantY)
+			if x.fitNext != tc.fitX || y.fitNext != tc.fitY {
+				t.Errorf("fitNext = (%v,%v), want (%v,%v)", x.fitNext, y.fitNext, tc.fitX, tc.fitY)
+			}
+		})
+	}
+}
+
+// A declined fit must not clear one already pending — from FitNext, or from
+// another gesture resolved earlier in the same frame.
+func TestRequestFitNeverClearsAPendingFit(t *testing.T) {
+	x, y := axisState{flags: AxisFlagsNoZoom}, axisState{flags: AxisFlagsNoZoom}
+	x.fitNext, y.fitNext = true, true
+	locksOf(&x, &y).requestFit(&x, &y, true, true)
+	if !x.fitNext || !y.fitNext {
+		t.Errorf("fitNext = (%v,%v), want both still pending", x.fitNext, y.fitNext)
+	}
+}
+
 func TestAxisFlagsLockIsBothLocks(t *testing.T) {
 	if AxisFlagsLock != AxisFlagsNoPan|AxisFlagsNoZoom {
 		t.Fatalf("AxisFlagsLock = %d, want NoPan|NoZoom", AxisFlagsLock)
