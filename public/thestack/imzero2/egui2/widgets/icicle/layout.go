@@ -131,10 +131,8 @@ func Compute(t Tree, o Options) (*Layout, error) {
 			Y1:     y1,
 		})
 		me := int32(len(lay.Nodes) - 1)
-		if int(d) >= len(lay.Rows) {
-			for len(lay.Rows) <= int(d) {
-				lay.Rows = append(lay.Rows, nil)
-			}
+		for len(lay.Rows) <= int(d) {
+			lay.Rows = append(lay.Rows, nil)
 		}
 		lay.Rows[d] = append(lay.Rows[d], me)
 
@@ -179,6 +177,20 @@ func rowSpan(d int32, orient OrientationE) (y0 float64, y1 float64) {
 	return -float64(d + 1), -float64(d)
 }
 
+// RowDist is a row coordinate's distance from the root edge, in row units —
+// the depth before flooring, and the inverse of rowSpan's sign.
+//
+// It is exported because it is the whole of the orientation convention read
+// backwards, and a renderer resolving its own visible row window needs that
+// without wanting a depth: writing the sign rule out a second time is how one
+// copy gets fixed and the other does not.
+func (l *Layout) RowDist(y float64) float64 {
+	if l == nil || l.Orientation == OrientFlame {
+		return y
+	}
+	return -y
+}
+
 // DepthAt maps a row coordinate back to a depth, undoing rowSpan. ok is false
 // for a coordinate outside the laid-out rows.
 func (l *Layout) DepthAt(y float64) (depth int, ok bool) {
@@ -188,18 +200,16 @@ func (l *Layout) DepthAt(y float64) (depth int, ok bool) {
 	// Row d spans [d, d+1) going up, or [-(d+1), -d) going down; either way
 	// the depth is the floor of the distance from the root edge. Truncation
 	// is the floor here because that distance is never negative.
-	dist := y
-	if l.Orientation != OrientFlame {
-		dist = -y
-	}
-	if dist < 0 {
+	dist := l.RowDist(y)
+	// Both bounds are checked before the conversion, and the lower one is
+	// written as a negated >= so that a NaN fails it. A float the int range
+	// cannot hold converts to an implementation-defined value — INT_MIN on
+	// amd64 — which would then pass any bound expressed as `d >= len(Rows)`
+	// and index the row slice out of range.
+	if !(dist >= 0) || dist >= float64(len(l.Rows)) {
 		return 0, false
 	}
-	d := int(dist)
-	if d >= len(l.Rows) {
-		return 0, false
-	}
-	return d, true
+	return int(dist), true
 }
 
 // NodeAt resolves a plot-space point to a node index, or -1. It maps y to a

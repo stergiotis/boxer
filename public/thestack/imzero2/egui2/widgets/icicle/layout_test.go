@@ -196,6 +196,75 @@ func TestDepthAtRoundTrip(t *testing.T) {
 	}
 }
 
+// RowDist is the sign rule read backwards, so it has to invert rowSpan
+// exactly — every node's own span must map back onto its own depth, in both
+// orientations, with no off-by-one at the row boundaries.
+func TestRowDistInvertsRowSpan(t *testing.T) {
+	for _, orient := range []OrientationE{OrientIcicle, OrientFlame} {
+		lay := mustCompute(t, testProfile(), Options{Orientation: orient})
+		for i := range lay.Nodes {
+			n := &lay.Nodes[i]
+			// The root-side edge of a row is at exactly its depth, and the
+			// far edge one short of the next.
+			for _, y := range []float64{n.Y0, n.Y1, (n.Y0 + n.Y1) / 2} {
+				d := lay.RowDist(y)
+				if d < float64(n.Depth) || d > float64(n.Depth)+1 {
+					t.Errorf("orient %d: RowDist(%v) = %v, outside row %d", orient, y, d, n.Depth)
+				}
+			}
+			mid := (n.Y0 + n.Y1) / 2
+			if got := math.Floor(lay.RowDist(mid)); got != float64(n.Depth) {
+				t.Errorf("orient %d: floor(RowDist(%v)) = %v, want depth %d", orient, mid, got, n.Depth)
+			}
+		}
+		// It is the same rule DepthAt applies, not a second copy of it.
+		for _, y := range []float64{-2.5, -0.5, 0, 0.5, 2.5} {
+			d, ok := lay.DepthAt(y)
+			dist := lay.RowDist(y)
+			wantOK := dist >= 0 && dist < float64(len(lay.Rows))
+			if ok != wantOK || (ok && d != int(dist)) {
+				t.Errorf("orient %d: DepthAt(%v) = (%d,%v) but RowDist says %v", orient, y, d, ok, dist)
+			}
+		}
+	}
+	// Nil-safe, like every other method on Layout.
+	var nilLay *Layout
+	if got := nilLay.RowDist(3); got != 3 {
+		t.Errorf("nil layout RowDist = %v", got)
+	}
+}
+
+// A plot-space coordinate is whatever the transform produced, and a degenerate
+// transform produces non-finite values. They have to be rejected rather than
+// converted: int() of a float outside the int range is implementation-defined,
+// and the value amd64 picks is INT_MIN — which is below every upper bound and
+// so would sail through a check placed after the conversion.
+//
+// The sign rule means the two orientations fail on opposite infinities, so
+// both are swept.
+func TestDepthAtRejectsNonFinite(t *testing.T) {
+	nan := math.NaN()
+	for _, orient := range []OrientationE{OrientIcicle, OrientFlame} {
+		lay := mustCompute(t, testProfile(), Options{Orientation: orient})
+		for _, y := range []float64{nan, math.Inf(1), math.Inf(-1)} {
+			if d, ok := lay.DepthAt(y); ok {
+				t.Errorf("orient %d: DepthAt(%v) = (%d,true), want no depth", orient, y, d)
+			}
+		}
+		// The same values reach NodeAt through both of its arguments; a NaN x
+		// is rejected by the row search rather than the depth guard, so it is
+		// worth pinning separately.
+		for _, p := range [][2]float64{
+			{nan, nan}, {0, nan}, {0, math.Inf(1)}, {0, math.Inf(-1)},
+			{nan, 0}, {math.Inf(1), 0}, {math.Inf(-1), 0},
+		} {
+			if got := lay.NodeAt(p[0], p[1]); got != -1 {
+				t.Errorf("orient %d: NodeAt(%v,%v) = %d, want -1", orient, p[0], p[1], got)
+			}
+		}
+	}
+}
+
 // A probe anywhere inside a node's rectangle must return that node, and the
 // self-time gap under a parent must return nothing.
 func TestNodeAtSweep(t *testing.T) {
