@@ -132,7 +132,14 @@ func (p *Plot) emitPieSlice(s *seriesFrame, tr transform, colHex uint32) {
 }
 
 // contrastText picks a dark or light text color against the given fill by
-// perceived luminance — the shape of upstream's CalcTextColor.
+// perceived luminance — the shape of upstream's CalcTextColor: Rec.601
+// weights on the gamma-encoded bytes, switching at 140 of 255.
+//
+// It is kept rather than rewritten over RelativeLuminance so a ported ImPlot
+// chart keeps the ink upstream would have given it. The two rules disagree on
+// about 7% of the colour space, and near the switch the accurate one is the
+// better pick — see contrast.go. A widget that is not reproducing an upstream
+// look should use RelativeLuminance and choose its own switch point.
 func contrastText(colHex uint32) uint32 {
 	r := float64(colHex >> 24 & 0xff)
 	g := float64(colHex >> 16 & 0xff)
