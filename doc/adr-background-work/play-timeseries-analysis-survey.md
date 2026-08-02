@@ -212,7 +212,11 @@ section's tier-(b) disclaimer: the mechanism names and options below were
 checked against the current Grafana documentation on the compile date; the
 filter-theoretic characterisations are standard signal-processing facts.
 
-Grafana's "smoothing" is four unrelated mechanisms at four layers:
+Three different jobs hide under the word "smoothing" — **data reduction**
+(fit millions of samples through a wire and a few thousand pixels),
+**noise filtering** (attenuate what obscures the signal), and **line
+aesthetics** — and Grafana's four mechanisms split across them at four
+layers:
 
 | Layer | Mechanism | Filter character |
 | --- | --- | --- |
@@ -235,11 +239,28 @@ spline mode is not a filter at all: every sample passes through unchanged,
 curvature is invented between them, and noise is beautified rather than
 removed.
 
+The causality trade underneath is an exclusion, not an engineering choice:
+a causal filter with exactly zero phase would need an impulse response
+symmetric about zero yet zero for all negative time — a pure gain, no
+smoothing. Every smoother picks a side. Causal ones pay in **delay**: the
+trailing boxcar displaces every feature by (N−1)/2 samples; the EWMA
+delays different frequency components by different amounts, distorting
+shape as well as position. Zero-phase ones pay in **lookahead**: MS's last
+`m` samples rest on the weighted-linear tail extrapolation and are revised
+as real samples arrive, so the newest stretch of a live chart — the part a
+viewer watches — is exactly where the smooth is provisional, which is what
+S1's live-edge marking is for. This is the same axiom as left discords:
+looking back may use both directions; anything live must be causal.
+
 ASAP (Rong & Bailis, PVLDB 2017) is the one genuinely interesting entry,
 and it is worth being precise about what it contributes: not a better
 kernel but **automated bandwidth selection** — an autocorrelation-guided
 search over window lengths that minimises roughness subject to preserving
-kurtosis, the latter serving as a don't-hide-the-outliers guard. Two of
+kurtosis, the latter serving as a don't-hide-the-outliers guard.
+"Parameter-free" is a UX fact, not a fidelity guarantee: accepting the
+automation means accepting its objective — perceptual roughness for
+at-a-glance reading — which promises nothing about peak heights or
+shapes. Two of
 its ideas independently reappear in this survey: window-from-ACF is S7,
 and don't-let-smoothing-hide-anomalies is `trendsmooth`'s raw-underlay
 commitment — solved there by display honesty rather than by capping the
@@ -257,10 +278,92 @@ where `trendsmooth` still exposes a half-width; and interval bucketing
 addresses data volume, which MS does not and this design places in the
 SQL (S5). Two consequences for this design: the comparator's smoother
 appears in it twice, both times as a reference point rather than the
-product — an O2 window-function one-liner, and the moving-average
-`adscore` baseline; and ASAP's bandwidth-selection idea is worth adopting
-*on top of* the better kernel — an ACF-driven suggested half-width for
-`trendsmooth`, sharing S7's machinery — rather than alongside it.
+product. First as an O2 window-function one-liner —
+
+```sql
+SELECT t, v,
+       avg(v) OVER (ORDER BY t ROWS BETWEEN 5 PRECEDING AND CURRENT ROW) AS v_smooth
+FROM series
+```
+
+— the comparator's Window-functions transformation as ordinary, recorded,
+replayable SQL (`5 PRECEDING AND 5 FOLLOWING` for the centered, zero-phase
+variant). Second as the moving-average residual among the `adscore`
+baselines — one of the Wu-and-Keogh one-liners, the null hypothesis a
+detector must beat (S3). And ASAP's bandwidth-selection idea is worth
+adopting *on top of* the better kernel — an ACF-driven suggested
+half-width for `trendsmooth`, sharing S7's machinery — rather than
+alongside it.
+
+### 3.2 Non-equidistant series, and where LTTB sits
+
+Added at the user's direction (dialogue 2026-08-02). The comparator's
+panel documentation was checked on the compile date; the ClickHouse probe
+below ran against the live 26.7 server.
+
+**The comparator's stance is implicit.** Rendering is time-true — samples
+plot at their real positions — and gap handling is a display toggle: the
+panel offers *Connect null values* (Never / Always / Threshold) and
+*Disconnect values* (above a spacing threshold). The documentation expects
+"unique timestamps" and says nothing else about spacing. The *analysis*
+machinery, however, is index-based: the Window-functions moving mean
+counts **rows**, so on irregular data an N-sample window has no fixed
+duration, and ASAP likewise assumes regular sampling. Where regularity
+exists it was manufactured upstream, per datasource — PromQL evaluates
+range queries on a fixed `step` with a staleness lookback (resampling by
+heuristic, applied silently), and SQL sources are offered
+`$__timeGroup(col, interval, fill)` with null/previous/zero fill. The
+equidistance question is thus dissolved into per-datasource conventions;
+no layer surfaces it as a property with a policy.
+
+**This design's treatment (S5 made concrete).** Three classes of series,
+told apart by the Δt distribution the claim validator computes:
+
+1. *Regular with jitter* — a sampler wobbling by a small fraction of its
+   period. The validator declares the grid at the median Δt within a
+   tolerance and the series is treated as equidistant; the approximation
+   is explicit rather than assumed. The tolerance policy is an open detail
+   for the ADR.
+2. *Regular with gaps* — the loadstudy case. Segment at gaps, analyse per
+   segment; fill only where the user spells it in SQL (`WITH FILL`,
+   `INTERPOLATE`), visible and recorded.
+3. *Genuinely irregular* — events, request logs. Aggregation onto a grid
+   (a rate, a per-bucket quantile) is a modelling decision and is spelled
+   in SQL; unaggregated, it is event data and belongs to the Timeline, not
+   the analysis tier.
+
+The chart renders all three time-true (the plot takes explicit x
+positions); only the analysis tier gates on the grid, and the display
+smoother declines off-grid and falls back to raw (the trendsmooth
+commitment).
+
+**LTTB is the data-reduction job done honestly.**
+Largest-Triangle-Three-Buckets (Steinarsson, 2013) decimates for
+*display*: one real sample kept per output bucket — the one maximising the
+triangle area with the previously kept point and the next bucket's mean —
+so spikes survive where an `avg` bucket erases them, and every plotted
+point is a datum, not a fabrication. It is not in the comparator's core
+product (it lives in storage layers such as TimescaleDB's `lttb()`
+instead), but **ClickHouse ships it**: verified against the live 26.7
+server on the compile date,
+
+```sql
+SELECT lttb(4)(t, v) FROM series  -- alias of largestTriangleThreeBuckets
+```
+
+returns an `Array(Tuple(t, v))` of selected real samples. Two properties
+bound its role. Its output is non-equidistant *by construction* (the probe
+returned bucket picks at 00:00, 04:26, 07:56 and 11:33 from a 7-second
+grid), and its selection objective is visual-shape preservation, not
+distributional or spectral fidelity — so **LTTB output must never feed
+the analysis tier**. It is renderer-adjacent: the analysis path reads the
+gridded series, the display path may decimate. Two legitimate seams
+exist — SQL-side `lttb` for long-range exploration (volume stays off the
+wire, S5's concern) and client-side per-viewport decimation before the
+plot (the full series is client-side anyway for the Go analysis tier, and
+zooming re-decimates without a re-query) — with a per-pixel min/max
+envelope as the alternative decimation family (exact extremes, twice the
+points). Which seam(s) the carrier uses is Q9.
 
 ## 4. Scientific commitments — what "right" must mean in the UI
 
@@ -304,7 +407,9 @@ an ADR's Verification section, not decisions.
   validate Δt on claim; **segment at gaps and analyse per segment** (what
   loadstudy did); and when the user wants a grid, put the gridding *in the
   SQL* (`WITH FILL` / `INTERPOLATE`) where it is visible and recorded —
-  never resample silently client-side.
+  never resample silently client-side. Display decimation is the one
+  legitimate exception to grid discipline, and it is barred from the
+  analysis tier for the same reason (§3.2).
 - **S6 — Adjudication closes the labels gap.** loadstudy's verdict was not
   "detector bad" but "events are not labels, so this evaluation cannot
   demonstrate value". A minimal adjudication affordance — mark a flagged
@@ -346,7 +451,11 @@ evidence, closer to the World panel's shape claim than to kanban's
 name-guessing — but this is a doctrine question and belongs to the
 dialogue (Q2). Display smoothing lands here as presentation, via the
 `trendsmooth` commitments (raw underlay, fixed degree, live-edge marking) —
-it is a view concern and should not appear in any data contract.
+it is a view concern and should not appear in any data contract. The
+carrier also owns display decimation: dense series decimate for rendering
+(per-viewport LTTB client-side, SQL-side `lttb`, or an envelope — §3.2,
+Q9), irregular series render time-true, and both smoothing and analysis
+gate on the grid rather than assuming it.
 
 ### 5.2 D2 — substrate × spelling: where computation runs, how it is invoked
 
@@ -571,6 +680,10 @@ host's own metrics) once the pieces exist.
 8. **Fixture lab (§1 framing).** Does the education/evaluation framing pull
    the M2 fixture generator into the UI as a data source beside real
    queries — and in v1 or later?
+9. **Decimation seam (§3.2).** Does the carrier decimate dense series via
+   SQL-side `lttb`, client-side per-viewport LTTB, a per-pixel min/max
+   envelope, or a combination — i.e. does the choice serve the wire-volume
+   concern (S5) or the zoom-without-requery concern first?
 
 ## References
 
@@ -598,5 +711,6 @@ External (tier c — pointers, covered in the in-repo surveys):
 - Liu, Paparrizos. *TSB-AD.* NeurIPS 2024.
 - Lu et al. *DAMP.* DMKD 2022.
 - Rong, Bailis. *ASAP: Prioritizing Attention via Time Series Smoothing.* PVLDB 10(11), 2017 — the comparator's Smoothing transformation (§3.1).
+- Steinarsson. *Downsampling Time Series for Visual Representation.* MSc thesis, University of Iceland, 2013 — LTTB (§3.2).
 - Schäfer, Leser. *Motiflets.* PVLDB 2022.
 - Howard, Ramdas et al. *Time-uniform, nonparametric, nonasymptotic confidence sequences.* Ann. Statist. 2021 — the anytime-valid track's anchor.
