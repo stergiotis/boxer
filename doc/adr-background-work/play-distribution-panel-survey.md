@@ -532,6 +532,11 @@ agent surface is a strategic goal. Still open:
 
 ## 10. Suggested path
 
+> **Pointer.** The panel + contract + macro scope was proposed as
+> [ADR-0161](../adr/0161-play-distribution-panel.md) (2026-08-02); once
+> accepted, that record is authoritative and this page is its background
+> snapshot. The four directed tracks below remain un-gated by it.
+
 Dialogue round 1 (2026-08-02) settled the roles and the comparison-first
 redirection; the remaining §9 questions gate the ADR (a new public SQL
 surface + a new pass + a new panel is comfortably ADR-tier). Suggested cut:
