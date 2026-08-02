@@ -747,6 +747,112 @@ below record the outcomes. The ADR consumes them as decisions.
    extreme, which LTTB can. SQL-side `lttb` is documented in the snippets
    corpus for huge-range viewing (available today, zero build).
 
+## 9. The settled pipeline, in one picture
+
+The spine below fuses the classical measurement chain (acquire → condition
+→ analyze → decide — the ordering the ADR-0152 paper's smooth-then-
+differentiate rule instantiates) with the dashboard chain verified in §3
+(query → transform → render → interact, the comparator's four layers). The
+two lanes are the S1 causality/audience split — the fork the comparator
+does not draw, which is the root of several §3 pathologies (transformations
+serving display and alerting indistinguishably). Left of the spine: the
+known-good algorithm per stage. Right: the design decision that governs it
+here, keyed to the commitments (S1–S8) and settlements (Q1–Q9).
+
+```text
+   KNOWN-GOOD ALGORITHMS                    STAGE                DESIGN DECISIONS (settled)
+
+                                  ┌──────────────────────┐
+   1 Hz asynchronous_metric_log;  │ 0 · SOURCE (sampler) │  UTC forced on read-back (S8);
+   PromQL staleness lookback;     └──────────┬───────────┘  persistence is a choice —
+   sysmetrics → NATS, no sink                │              sysmetrics persists nothing
+                                             ▼              (the loadstudy limit)
+                                  ┌──────────┴───────────┐
+   SQL over ClickHouse;           │ 1 · QUERY (select)   │  the SQL text IS the recorded
+   PromQL range+step eval         └──────────┬───────────┘  artifact (Q1/O4): one artifact for
+   (comparator); skip indexes,               │              humans, agents, scheduler; range
+   PREWHERE prune                            ▼              and params as signals (SD8)
+                                  ┌──────────┴───────────┐
+   GROUP BY toStartOfInterval     │ 2 · GRID (server SQL)│  gridding spelled IN SQL, visible
+   (avg/max/min/quantile);        └──────────┬───────────┘  and recorded (S5); NULL gaps only,
+   WITH FILL STEP; INTERPOLATE               │              never silent interpolation;
+   (= fabrication); PromQL step              ▼              scaffold affordance writes the
+   resample (comparator, silent)             │              idiom into the buffer (Q5)
+                                  ┌──────────┴───────────┐
+   Δt distribution; median-Δt     │ 3 · VALIDATE (client)│  typed claim, reject with reason
+   grid declaration;              └──────────┬───────────┘  (Q2); three classes: jitter →
+   monotonicity check                        │              tolerate · gaps → segment ·
+                                             │              irregular → aggregate or Timeline;
+                                             ▼              ~500k length ceiling (M1)
+   ═══════════════════ ANALYSIS LANE (A–C) — inference: exact & causal ═══════════════════
+                                  ┌──────────────────────┐
+   differencing; smooth-residual  │ A · CONDITION        │  conditioning is spelled
+   detrend (MS/WH); log           └──────────┬───────────┘  composition — a CTE, never a
+   transforms                                │              hidden option (S8); trend breaks
+                                             ▼              z-normalised profiles (RQ6)
+                                  ┌──────────┴───────────┐
+   matrix profile MASS+STOMP      │ B · ANALYZE (Go, ts*)│  ts* client vocabulary as
+   (M1, per-window z-norm +       └──────────┬───────────┘  terminal-leaf CTE (Q1); params are
+   variance floor); DAMP left                │              live signals; window follows the
+   discords, exact mode (M3);                │              period, ACF-suggested (S7); centre
+   one-liner baselines (M2);                 │              attribution, plateau extents (S2);
+   ACF period probe;                         │              per-function causality recorded
+   [motifs: held for set ADR, Q4]            ▼              (Q3); exact scores only (S2)
+                                  ┌──────────┴───────────┐
+   reference-window quantiles;    │ C · CALIBRATE/DECIDE │  a distance is not a probability
+   conformal & anytime-valid      └──────────┬───────────┘  (S4); thresholds labeled for what
+   (directed track); VUS-PR +                │              they are; baselines beside,
+   range P/R (M2); [comparator:              │              default on (S3); labels via
+   bare threshold + for-duration]            │              adjudication → keelson table (Q6);
+                                             │              backtest = causal replay (Q3)
+                                             │
+                                             │  outputs: score series · span sets
+                                             │  (_tl_band_*) · the profile — ordinary
+                                             ▼  contracts; overlays below + Timeline/Table
+   ══════════════ DISPLAY LANE (D–F) — perception: decorates, never feeds back ═══════════
+                                  ┌──────────────────────┐
+   modified-sinc kernel, degree 4 │ D · SMOOTH (display) │  raw stays visible underneath
+   (ADR-0152); WH/SGW (QOC        └──────────┬───────────┘  (trendsmooth); zero-phase ⇒ the
+   alternates); boxcar, EWMA,                │              live edge is marked (S1);
+   ASAP auto-window                          │              half-width the only knob; never
+   (comparator, §3.1)                        ▼              part of any data contract
+                                  ┌──────────┴───────────┐
+   per-pixel min/max envelope;    │ E · DECIMATE (render)│  render-only (Q9): the full series
+   lttb(n)(t,v) in CH 26.7        └──────────┬───────────┘  backs hover, selection, analysis;
+   (SQL, huge ranges, §3.2);                 │              envelope cannot drop extremes,
+   [comparator: $__interval]                 ▼              LTTB can — LTTB never analyzed
+                                  ┌──────────┴───────────┐
+   implot polyline + custom lane: │ F · RENDER (implot)  │  no invented curvature (spline
+   bands-under, flags, callouts   └──────────┬───────────┘  mode rejected, §3.1); irregular
+   (ADR-0149 P1); Okabe-Ito                  │              renders time-true; overlays = the
+   palette (ADR-0156);                       │              analysis contracts; engine badge
+   [comparator: spline interp.]              ▼              on client nodes (Q1)
+                                  ┌──────────┴───────────┐
+   hover rollover; box-zoom       │ G · INTERACT         │  row cursor on point click, Detail
+   (implot native); point-click   └──────────┬───────────┘  follows (Q2); selection is a
+   row cursor                                │              signal (SD8); zoom re-renders from
+                                             │              the client-held series; brush →
+                                             ▼              {sel_from,sel_to} deferred (Q2)
+                                  ┌──────────┴───────────┐
+   keelson labels table (Q6);     │ H · PERSIST / LOOP   │  adjudication = the labels
+   per-session ad-hoc fixture     └──────────┬───────────┘  bootstrap (S6); fixtures ride the
+   datasets (Q8, ADR-0134);                  │              identical pipeline, no demo mode
+   QueryRun pins                             │              (Q8); graduation = pin + schedule
+                                             │              the SAME SQL text (§2.3 roles)
+                                             │
+                                             └────────→ back to 1 · QUERY
+                                                        (scheduled re-execution: the
+                                                        workbench closes its loop)
+```
+
+How to read it: every stage on the trunk (0–3, G–H) is shared; the lanes
+diverge only between VALIDATE and RENDER, and material crosses from the
+analysis lane to the display lane exclusively as output contracts — never
+the other way. That one-way rule is the diagram-level statement of §3.2's
+LTTB prohibition and S1's causality split, and it is the structural
+difference from the comparator, where a single transformation list feeds
+charting and alerting alike.
+
 ## References
 
 In-repo:
