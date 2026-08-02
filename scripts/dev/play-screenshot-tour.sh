@@ -91,10 +91,12 @@ LIMIT 200"
 scene_02_table_adhoc() {
 	desc="Table — an ordinary aggregate result (the non-leeway path): plain grid, column headers, row count in the status bar"
 	senv=(BOXER_PLAY_FOCUS_TABLE=1)
-	sql="SELECT domain, count() AS capabilities, round(avg(level), 2) AS avg_level, max(level) AS deepest
-FROM capmap.capabilities
-GROUP BY domain
-ORDER BY capabilities DESC"
+	sql="SELECT t AS aircraft, count() AS positions, round(avg(altitude)) AS avg_altitude, max(ground_speed) AS top_speed
+FROM default.planes_mercator_sample100
+WHERE t != ''
+GROUP BY t
+ORDER BY positions DESC
+LIMIT 40"
 }
 
 scene_03_detail_card() {
@@ -110,15 +112,31 @@ SELECT * FROM anchor.facts WHERE \`id:id\` = 10005"
 
 scene_04_timeline() {
 	desc="Timeline — the interval contract (_tl_time + _tl_time_end + _tl_lane) drawn as lanes, with a background bands channel"
+	# The events shape is Intervals, so NO _tl_label: _tl_time_end and
+	# _tl_label select mutually exclusive modes, and returning both is a
+	# contract reject ("Ambiguous: remove …"), which is what the pane draws
+	# instead of a timeline. Bands ride their own _tl_band_* slots — the
+	# events slot names do not carry over — and are sized off the
+	# {tl_min}/{tl_max} extent the events render publishes, so the shading
+	# lands in view whatever the data's era.
 	senv=(
 		BOXER_PLAY_FOCUS_TIMELINE=1
-		"BOXER_PLAY_TIMELINE_BANDS_SQL=SELECT toDateTime64('2026-01-01 00:00:00', 3) AS _tl_time, toDateTime64('2026-07-01 00:00:00', 3) AS _tl_time_end, 'H1' AS _tl_label UNION ALL SELECT toDateTime64('2026-07-01 00:00:00', 3), toDateTime64('2027-01-01 00:00:00', 3), 'H2'"
+		"BOXER_PLAY_TIMELINE_BANDS_SQL=WITH {tl_min:DateTime64(3, 'UTC')} AS lo,
+     {tl_max:DateTime64(3, 'UTC')} AS hi
+SELECT lo                                                                AS _tl_band_from,
+       addMilliseconds(lo, toInt64(0.5 * dateDiff('millisecond', lo, hi))) AS _tl_band_to,
+       'info.subtle'                                                     AS _tl_band_color,
+       'first half'                                                      AS _tl_band_label
+UNION ALL
+SELECT addMilliseconds(lo, toInt64(0.5 * dateDiff('millisecond', lo, hi))),
+       hi,
+       'accent.subtle',
+       'second half'"
 	)
 	sql="SELECT
   \`timeRange:beginIncl\`[1] AS _tl_time,
   \`timeRange:endExcl\`[1]   AS _tl_time_end,
-  \`symbol:value\`[1]        AS _tl_lane,
-  toString(\`id:id\`)        AS _tl_label
+  \`symbol:value\`[1]        AS _tl_lane
 FROM anchor.facts
 WHERE length(\`timeRange:beginIncl\`) > 0
 ORDER BY _tl_time"
@@ -157,26 +175,47 @@ scene_07_kanban() {
 	desc="Kanban — the result as a board (ADR-0122): the lane/title columns by name, an optional lanes node fixing the column order"
 	senv=(BOXER_PLAY_FOCUS_KANBAN=1)
 	sql="WITH lanes AS (
-  SELECT arrayJoin(['data-management', 'data-governance', 'analytics-modeling']) AS lane
+  SELECT arrayJoin(['A320', 'B738', 'A20N']) AS lane
 )
-SELECT domain AS lane, name AS title, abbrev AS subtitle
-FROM capmap.capabilities
-WHERE level <= 2
-ORDER BY domain, name
-LIMIT 60"
+SELECT t AS lane, r AS title, any(\`desc\`) AS subtitle
+FROM default.planes_mercator_sample100
+WHERE t IN ('A320', 'B738', 'A20N') AND r != ''
+GROUP BY t, r
+ORDER BY lane, title
+LIMIT 20 BY lane"
 }
 
 scene_08_network() {
 	desc="Network — the result as a layered node-link graph (ADR-0129): an edges channel, plus an optional vertices node carrying labels and groups"
 	senv=(BOXER_PLAY_FOCUS_NETWORK=1)
+	# Operator → aircraft-type is bipartite, which is what a LAYERED graph
+	# wants: two ranks, edges only between them. The registered-owner field
+	# is US-only in this fixture, so a handful of operators keeps the node
+	# count legible. Derive the vertices FROM the edge set, not from the
+	# whole table: a vertex the edges never mention is an isolated node, and
+	# enough of them collapse the layout into a single squashed rank.
 	sql="WITH
+  top_ops AS (
+    SELECT ownOp
+    FROM default.planes_mercator_sample100
+    WHERE ownOp != '' AND t != ''
+    GROUP BY ownOp
+    ORDER BY uniq(icao) DESC
+    LIMIT 6
+  ),
+  fleets AS (
+    SELECT ownOp, t
+    FROM default.planes_mercator_sample100
+    WHERE t != '' AND ownOp IN (SELECT ownOp FROM top_ops)
+    GROUP BY ownOp, t
+  ),
   vertices AS (
-    SELECT toString(id) AS id, abbrev AS label, domain AS \`group\`
-    FROM capmap.capabilities WHERE level <= 3
+    SELECT DISTINCT ownOp AS id, ownOp AS label, 'operator' AS \`group\` FROM fleets
+    UNION ALL
+    SELECT DISTINCT t, t, 'aircraft type' FROM fleets
   ),
   edges AS (
-    SELECT toString(arrayJoin(parent_ids)) AS source, toString(id) AS target
-    FROM capmap.capabilities WHERE level <= 3 AND notEmpty(parent_ids)
+    SELECT ownOp AS source, t AS target FROM fleets
   )
 SELECT * FROM edges"
 	settle=3000
@@ -335,10 +374,10 @@ LIMIT 100"
 scene_16_preview_canonical() {
 	desc="Preview — the canonical form the nanopass pipeline rewrites the buffer into, before any handle resolution"
 	senv=(BOXER_PLAY_FOCUS_TABLE=1 BOXER_PLAY_FOCUS_PREVIEW=1)
-	sql="SELECT domain, countIf(level = 1) AS l1, countIf(level = 2) AS l2, count() AS total
-FROM capmap.capabilities
-WHERE domain != ''
-GROUP BY domain
+	sql="SELECT t, countIf(altitude > 30000) AS cruising, countIf(altitude <= 30000) AS lower, count() AS total
+FROM default.planes_mercator_sample100
+WHERE t != ''
+GROUP BY t
 HAVING total > 5
 ORDER BY total DESC"
 }
@@ -429,7 +468,7 @@ LIMIT 50"
 scene_25_panes_menu() {
 	desc="Panes menu — the ADR-0097 prose surface: every pane, and for a rejecting one the reason its channels cannot be filled"
 	senv=(BOXER_PLAY_FOCUS_TABLE=1)
-	sql="SELECT domain, count() AS n FROM capmap.capabilities GROUP BY domain ORDER BY n DESC"
+	sql="SELECT t, count() AS n FROM default.planes_mercator_sample100 WHERE t != '' GROUP BY t ORDER BY n DESC"
 	steps='{"do":"click","name":"Panes","comment":"a menu, not a launch state"}
 {"do":"capture","text":"25_panes_menu","settleMs":600}'
 }
@@ -438,9 +477,9 @@ scene_26_subquery_toggle() {
 	desc="Subquery toggle — the editor's account of the query the caret is in: the tinted extent, its underlined environment, and the Run subquery button the toggle adds"
 	senv=(BOXER_PLAY_FOCUS_TABLE=1)
 	sql="WITH busy AS (
-  SELECT domain, count() AS n FROM capmap.capabilities GROUP BY domain
+  SELECT t, count() AS n FROM default.planes_mercator_sample100 WHERE t != '' GROUP BY t
 )
-SELECT domain, n FROM busy WHERE n > (SELECT avg(n) FROM busy) ORDER BY n DESC"
+SELECT t, n FROM busy WHERE n > (SELECT avg(n) FROM busy) ORDER BY n DESC"
 	steps='{"do":"click","name":"Subquery","role":"check_box"}
 {"do":"capture","text":"26_subquery_toggle","settleMs":600}'
 }
@@ -448,7 +487,7 @@ SELECT domain, n FROM busy WHERE n > (SELECT avg(n) FROM busy) ORDER BY n DESC"
 scene_27_conditions_toggle() {
 	desc="Conditions — the ADR-0121 selection-conditions chrome, off by default and reachable only by clicking it on"
 	senv=(BOXER_PLAY_FOCUS_TABLE=1)
-	sql="SELECT domain, name, level FROM capmap.capabilities WHERE level <= 2 ORDER BY domain LIMIT 100"
+	sql="SELECT icao, r, t, altitude FROM default.planes_mercator_sample100 WHERE altitude > 30000 AND ground_speed > 400 ORDER BY icao LIMIT 100"
 	steps='{"do":"click","name":"Conditions","role":"check_box"}
 {"do":"capture","text":"27_conditions_toggle","settleMs":600}'
 }
@@ -464,7 +503,7 @@ scene_28_endpoint_menu() {
 scene_29_history_two_runs() {
 	desc="History — more than one run in the list, which needs a second Run and so cannot be seeded at launch"
 	senv=(BOXER_PLAY_FOCUS_TABLE=1)
-	sql="SELECT domain, count() AS n FROM capmap.capabilities GROUP BY domain ORDER BY n DESC LIMIT 20"
+	sql="SELECT t, count() AS n FROM default.planes_mercator_sample100 WHERE t != '' GROUP BY t ORDER BY n DESC LIMIT 20"
 	# The dock's tab strip is custom-painted and carries no accessibility nodes,
 	# so a tab cannot be resolved by name — this is the ladder's last rung, and
 	# the honest use for it. The coordinate holds because the window size is
@@ -530,6 +569,53 @@ LIMIT 20"
 {"do":"capture","text":"30_regex_affordance","settleMs":800}'
 }
 
+scene_31_experiments_topology() {
+	desc="Experiments — the leeway sink playground: the built-in fixture driven through the TopologySink, whose treemap draws an entity's shape (plain sections, the co-section group, attributes) with value/tag presence as cell colour"
+	senv=(BOXER_PLAY_FOCUS_EXPERIMENTS=1)
+	# The pane's default source is the built-in leeway fixture, so it draws
+	# without a result — that is the point of defaulting to it. The query below
+	# exists only to satisfy the prelude, which waits on Run and then holds; the
+	# scene reads nothing from the result panes.
+	sql="SELECT 1 AS ok"
+	# The sink defaults to `card`, so the topology treemap needs one click. The
+	# segmented selector renders each option as a named button, so it is
+	# addressable by label rather than by index.
+	steps='{"do":"click","name":"topology","comment":"switch the sink from the default card view","settleMs":600}
+{"do":"capture","text":"31_experiments_topology","settleMs":800}'
+}
+
+scene_32_experiments_sparks() {
+	desc="Experiments — the same fixture through the text sinks: the topology sparkline, one line per entity, encoding section arity, column canonical types and membership counts without printing a single value"
+	senv=(BOXER_PLAY_FOCUS_EXPERIMENTS=1)
+	sql="SELECT 1 AS ok"
+	# Three captures from one launch: the sinks are cheap to switch and each is
+	# a different reading of the same callback sequence, which is the pane's
+	# whole argument.
+	steps='{"do":"click","name":"topo","comment":"the single-line topology sparkline","settleMs":600}
+{"do":"capture","text":"32_experiments_sparks_topo","settleMs":600}
+{"do":"click","name":"braille","comment":"the braille density variant","settleMs":600}
+{"do":"capture","text":"32_experiments_sparks_braille","settleMs":600}
+{"do":"click","name":"json","comment":"the canonical card-JSON of ADR-0018","settleMs":600}
+{"do":"capture","text":"32_experiments_sparks_json","settleMs":800}'
+}
+
+scene_33_experiments_result_card() {
+	desc="Experiments — the card sink over the CURRENT result rather than the fixture, drawn beside the Detail tab that renders the same emitter: the pane owns its own CardDriver so the two do not share widget ids"
+	senv=(BOXER_PLAY_FOCUS_EXPERIMENTS=1)
+	# Detail claims its channel from `selection`, so the pinned param puts a row
+	# in the same signal env it reads — Detail then renders its own card in the
+	# same frame the pane renders its own. Both drive a Table2CardEmitter, which
+	# derives cell ids from a per-section counter, so sharing one CardDriver
+	# between them emits every id twice and egui reports the clash.
+	# LIMIT 1 rather than a pinned id: the scene has to actually RETURN a row or
+	# both cards short-circuit to their empty notice and the frame proves
+	# nothing about id sharing.
+	sql="SET param_selection = 0;
+SELECT * FROM anchor.facts ORDER BY \`id:id\` LIMIT 1"
+	steps='{"do":"click","name":"result","comment":"switch the source off the fixture","settleMs":800}
+{"do":"capture","text":"33_experiments_result_card","settleMs":800}'
+}
+
 # =============================================================================
 # Fixtures the scenes read. Checked once, up front, so a missing one is a line
 # of output rather than twenty screenshots of an error state.
@@ -537,7 +623,6 @@ LIMIT 20"
 fixtures() {
 	cat <<-'EOF'
 	anchor.facts|apps/play/help/howto-example-queries.md — go test -tags="$(cat ./tags),integration" -run TestLeewayClickHouse ./public/semistructured/leeway/anchor/
-	capmap.capabilities|the capmap fixture loader
 	default.planes_mercator_sample100|apps/play/demo/adsb/demo.sh
 	default.planes_mercator|apps/play/demo/adsb/demo.sh
 	EOF
