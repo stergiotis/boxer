@@ -1127,3 +1127,15 @@ func TestGenerated_T086_with_recursive_subquery(t *testing.T) {
 	_, err = nanopass.Parse(sql)
 	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
 }
+
+// Source: 087_table_function_tuple_args
+// SQL: SELECT * FROM values('country String, population Float64', ('Germany', 83.2), ('France', -68.1), ('XK', 1.7), ('atlan...
+func TestGenerated_T087_table_function_tuple_args(t *testing.T) {
+	q, err := Select(Star()).
+		FromExpr(ast.JoinExpr{Kind: ast.JoinExprTable, Table: &ast.JoinTableData{TableKind: ast.TableKindFunc, FuncName: "values", FuncArgs: []ast.Expr{Raw("'country String, population Float64'").Expr, Raw("\"tuple\"('Germany', 83.2)").Expr, Raw("\"tuple\"('France', -68.1)").Expr, Raw("\"tuple\"('XK', 1.7)").Expr, Raw("\"tuple\"('atlantis', 0.1)").Expr}}}).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
