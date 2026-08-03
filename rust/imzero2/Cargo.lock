@@ -2695,7 +2695,7 @@ dependencies = [
  "memmap2 0.9.11",
  "mimalloc",
  "petgraph",
- "png 0.17.16",
+ "png 0.18.0",
  "pollster",
  "profiling",
  "prost",

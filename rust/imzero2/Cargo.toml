@@ -136,7 +136,7 @@ egui_table = "0.9.0"
 egui_dock = "0.20"
 egui_graphs = { version = "0.31", features = ["events"] }
 petgraph = { version = "0.8", default-features = false, features = ["stable_graph"] }
-png = "0.17"
+png = "0.18"
 walkers = "0.56"
 # Used by imzero2::svgexport to read the TTF `name` table at font-load time,
 # so SVG export can emit the real family name (e.g. "Noto Sans") instead of
