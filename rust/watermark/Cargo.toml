@@ -16,7 +16,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # CLI: encode / decode / roundtrip / sweep subcommands.
 clap = { version = "4", features = ["derive"] }
 # Deterministic, seedable RNG for payload generation in the CLI and tests.
-rand = "0.8"
+rand = "0.10"
 
 # NOTE: no `crc` or `rustfft` dependency. CRC-16/CCITT is hand-rolled in
 # payload.rs (~10 lines); the Stage-7 locator evaluates a single Fourier
