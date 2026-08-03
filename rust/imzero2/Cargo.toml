@@ -100,7 +100,7 @@ eframe = { version = ">=0.35.0", optional = true, default-features = false, feat
 # Headless host (ADR-0024 SD2): drives egui_wgpu::Renderer directly against
 # an offscreen texture; wgpu with default features so the native backends
 # (vulkan/gles) are present even when eframe is compiled out.
-wgpu = { version = "29.0.1", optional = true }
+wgpu = { version = "30.0.0", optional = true }
 egui-wgpu = { version = "0.35.0", optional = true }
 pollster = { version = "0.4", optional = true }
 # ADR-0024 SD4/SD6/SD7: WebSocket carrier + protobuf wire. The proto
