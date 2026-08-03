@@ -114,7 +114,7 @@ futures-util = { version = "0.3", optional = true, default-features = false, fea
 log = "0.4.27"
 binary_rw = "4.1.0"
 thiserror = "2.0.17"
-strum = { version = "0.27", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 bitflags = "2.9.4"
 egui_ltreeview = "0.8.0"
 roaring = "0.11.2"
