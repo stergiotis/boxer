@@ -762,7 +762,12 @@ func (inst Renderer) renderBoxenplotBody(scope string, digest *tdigest.TDigest, 
 	// Seq-keyed and not CaptureAvailableSize, whose one process-wide slot the
 	// frame's last capture wins: this widget embeds inside apps that probe too
 	// (imztop's CPU tab is one), and the loser reads the other's pane.
-	availW, _, availOk := c.CapturePaneSize(c.ProbeSeq(inst.idPrefix, "distsummary-boxen-pane"))
+	// Keyed by `scope`, not idPrefix: the prefix is a constant at the
+	// embedder ("fps", "scc-dist"), so two windows of one app — or two
+	// .Render(...) calls with the same prefix — would hold ONE slot and the
+	// loser would read the other's pane. `scope` already carries the caller's
+	// derived id, which is what makes it per-call and per-window.
+	availW, _, availOk := c.CapturePaneSize(c.ProbeSeq(scope, "distsummary-boxen-pane"))
 	lead := pad
 	if availOk && availW == availW { // reject NaN
 		if centred := (availW - inst.popupWidth) / 2; centred > lead {
@@ -915,7 +920,8 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	// which starves a fixed popupWidth plot of a wide-range distribution (the
 	// window opens at [defaultEcdfPlotWidth] so the fresh view already clears
 	// that bar). Seq-keyed, not CaptureAvailableSize — see the boxen tab above.
-	availW, _, availOk := c.CapturePaneSize(c.ProbeSeq(inst.idPrefix, "distsummary-ecdf-pane"))
+	// Per `scope`, for the reason renderBoxenplotBody's probe is.
+	availW, _, availOk := c.CapturePaneSize(c.ProbeSeq(scope, "distsummary-ecdf-pane"))
 	pad := inst.popupPad
 	plotW := inst.popupWidth
 	// Subtract a chrome budget beyond the two pad insets so the rendered row

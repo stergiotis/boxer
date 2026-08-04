@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/ecdfbands"
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -371,4 +372,29 @@ func TestFormatTailClipNote(t *testing.T) {
 	assert.Contains(t, note, "upper tail")
 	assert.Contains(t, note, "hidden")
 	assert.Contains(t, note, "% of n")
+}
+
+// TestPaneProbeSeqIsPerScope guards the r21 pane probes the two popup bodies
+// arm. They used to key on idPrefix, which embedders pass as a constant
+// ("fps", "scc-dist", "imztop-"+suffix): two windows of one app, or two
+// .Render(...) calls sharing a Renderer, then held ONE slot and whichever
+// armed last decided the width both read — the process-wide-slot failure r18
+// had, inside the seq-keyed register. `scope` carries the caller's derived id,
+// so it separates both cases; this asserts the derivation it relies on.
+func TestPaneProbeSeqIsPerScope(t *testing.T) {
+	const prefix = "fps"
+	// Two callers of one Renderer: same prefix, different derived ids — the
+	// two windows case and the two-Render-calls case have the same shape.
+	a := callScope(prefix, 0x1111_2222_3333_4444)
+	b := callScope(prefix, 0x5555_6666_7777_8888)
+	require.NotEqual(t, a, b, "callScope collapsed two callers onto one scope")
+
+	for _, role := range []string{"distsummary-boxen-pane", "distsummary-ecdf-pane"} {
+		assert.NotEqual(t, c.ProbeSeq(a, role), c.ProbeSeq(b, role),
+			"two callers share the %s probe slot", role)
+	}
+	// The two bodies of ONE caller must not share a slot either.
+	assert.NotEqual(t,
+		c.ProbeSeq(a, "distsummary-boxen-pane"),
+		c.ProbeSeq(a, "distsummary-ecdf-pane"))
 }
