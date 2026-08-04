@@ -100,11 +100,31 @@ func TestCPUCaptureHonorsCancel(t *testing.T) {
 	assert.Less(t, time.Since(start), 5*time.Second)
 }
 
+// TestProfileSeedSqlShape pins the explore buffer against the icicle panel's
+// folded contract: a list-typed `stack` and each stack's OWN `value`. The
+// panel resolves that from the Arrow schema, so a projection that renamed or
+// rolled up either column opens a window that runs and draws nothing.
 func TestProfileSeedSqlShape(t *testing.T) {
-	sql := profileSeedSql("h_abc123")
-	assert.Contains(t, sql, "keelson('h_abc123')")
-	assert.Contains(t, sql, "GROUP BY")
-	// grammar1 parses a single SELECT statement; a stray semicolon would
-	// fail the whole buffer.
-	assert.False(t, strings.Contains(sql, ";"))
+	for _, spec := range profileKinds {
+		sql := profileSeedSql("h_abc123", spec)
+		assert.Contains(t, sql, "keelson('h_abc123')", spec.key)
+		assert.Contains(t, sql, "SELECT stack, ", spec.key)
+		assert.Contains(t, sql, " AS value,", spec.key)
+		assert.Contains(t, sql, "'"+spec.unit+"' AS unit", spec.key)
+		// Rolling paths into their prefixes is what the panel does; doing it
+		// in SQL would fold the stacks away before it ever saw them.
+		assert.NotContains(t, sql, "GROUP BY", spec.key)
+		// grammar1 parses a single statement; a stray semicolon would fail
+		// the whole buffer.
+		assert.False(t, strings.Contains(sql, ";"), spec.key)
+		// `value / d AS value` is a cyclic alias in ClickHouse — the rescale
+		// has to read from an inner name.
+		assert.NotContains(t, sql, "value / ", spec.key)
+	}
+
+	// The rescale is per kind, and it reaches the buffer as a plain integer:
+	// exponent form parses, but the buffer is something a reader edits.
+	assert.Contains(t, profileSeedSql("h", profileKinds[0]), "v / 1000000 AS value")
+	assert.Contains(t, profileSeedSql("h", profileKinds[3]), "SELECT stack, v AS value",
+		"a count needs no rescale")
 }

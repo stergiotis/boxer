@@ -58,20 +58,36 @@ type profileCapture struct {
 }
 
 // profileKindSpec declares one capturable kind: its alias/hint key, button
-// label, and the raw-bytes capture step.
+// label, the raw-bytes capture step, and how the kind's value reads.
 type profileKindSpec struct {
 	key     string
 	label   string
 	capture func(ctx context.Context, report bgjob.Reporter) ([]byte, error)
+
+	// unit labels the explore window's value axis and divisor converts the
+	// profile's native quantity into it. Nanoseconds and bytes both read
+	// badly raw — a 10 s capture is ~1e10 ns — and the reader scales by SI
+	// prefix only, so the choice here is what lands totals in a range that
+	// needs no prefix at all. A zero divisor leaves the native value alone.
+	// ClickHouse's `/` is floating division whatever the operand types, so
+	// an integer divisor does not truncate.
+	unit    string
+	divisor int64
 }
 
 // profileKinds is the UI order. CPU runs a sampling window; the others
-// snapshot instantly.
+// snapshot instantly. The units follow the converter's default sample type
+// per kind: cpu/nanoseconds, inuse_space and alloc_space in bytes,
+// goroutine/count.
 var profileKinds = []profileKindSpec{
-	{key: "cpu", label: "CPU (10 s)", capture: captureCPU(cpuCaptureDuration)},
-	{key: "heap", label: "Heap", capture: captureLookup("heap")},
-	{key: "allocs", label: "Allocs", capture: captureLookup("allocs")},
-	{key: "goroutine", label: "Goroutines", capture: captureLookup("goroutine")},
+	{key: "cpu", label: "CPU (10 s)", capture: captureCPU(cpuCaptureDuration),
+		unit: "ms", divisor: 1e6},
+	{key: "heap", label: "Heap", capture: captureLookup("heap"),
+		unit: "MiB", divisor: 1 << 20},
+	{key: "allocs", label: "Allocs", capture: captureLookup("allocs"),
+		unit: "MiB", divisor: 1 << 20},
+	{key: "goroutine", label: "Goroutines", capture: captureLookup("goroutine"),
+		unit: "goroutines"},
 }
 
 // profileEntry is the shared per-kind state. The embedded Runner has its
@@ -156,17 +172,34 @@ func captureLookup(name string) func(ctx context.Context, report bgjob.Reporter)
 	}
 }
 
-// profileSeedSql is the buffer a fresh explore window opens with: top
-// functions by self cost over the published dataset. One statement —
-// grammar1 parses nothing else — and the handle is spliced as a literal
-// (keelson() resolution runs before parameter substitution).
-func profileSeedSql(handle string) string {
+// profileExploreTab is the body tab an explore window opens focused on:
+// play's icicle panel (ADR-0160), which the seed below feeds directly. An
+// id play does not register is a warning there, not a mount error, so a
+// drifted slug costs the focus and nothing else — which is why this stays a
+// literal rather than an import of the play package (whose init registers
+// the SQL playground as a side effect, ADR-0017 §SD4).
+const profileExploreTab = "icicle"
+
+// profileSeedSql is the buffer a fresh explore window opens with: the
+// capture projected into the icicle panel's folded contract — a root-first
+// `stack` array and each stack's OWN value, which is exactly what the
+// converter emits, so the projection only rescales the quantity and names
+// its unit. The window carries every other tab too, so Table reads the same
+// rows unfolded.
+//
+// One statement — grammar1 parses nothing else — and the handle is spliced
+// as a literal (keelson() resolution runs before parameter substitution).
+// The inner alias is load-bearing: `value / d AS value` reads to ClickHouse
+// as a cyclic alias.
+func profileSeedSql(handle string, spec profileKindSpec) string {
+	value := "v"
+	if spec.divisor != 0 {
+		value = fmt.Sprintf("v / %d", spec.divisor)
+	}
 	return fmt.Sprintf(
-		"SELECT leaf AS fn, pkg, sum(value) AS self\n"+
-			"FROM keelson('%s')\n"+
-			"GROUP BY fn, pkg\n"+
-			"ORDER BY self DESC\n"+
-			"LIMIT 100", handle)
+		"WITH s AS (SELECT stack, value AS v FROM keelson('%s'))\n"+
+			"SELECT stack, %s AS value, '%s' AS unit\n"+
+			"FROM s", handle, value, spec.unit)
 }
 
 // startCapture launches the capture→convert→publish job for one kind. The
@@ -218,7 +251,8 @@ func (h *profilesHub) startCapture(spec profileKindSpec, bus app.BusI, tasks tas
 // explore opens a play window seeded on the kind's current dataset, bound
 // to the introspection endpoint where keelson('<handle>') resolves.
 // RequestOpen blocks on the bus round-trip, so it runs off the frame loop.
-func (h *profilesHub) explore(key string, bus app.BusI) {
+func (h *profilesHub) explore(spec profileKindSpec, bus app.BusI) {
+	key := spec.key
 	e := h.entry(key)
 	h.mu.Lock()
 	handle := e.handle
@@ -232,8 +266,9 @@ func (h *profilesHub) explore(key string, bus app.BusI) {
 	go func() {
 		cfgBytes, err := buscodec.Encode(launchcfg.PlayLaunch{
 			At:       time.Now().UTC(),
-			Sql:      profileSeedSql(handle),
+			Sql:      profileSeedSql(handle, spec),
 			AutoRun:  true,
+			Tab:      profileExploreTab,
 			Endpoint: launchcfg.EndpointIntrospection,
 		})
 		if err == nil {
@@ -268,7 +303,7 @@ func (h *profilesHub) syncEntry(e *profileEntry) {
 // capture/explore affordances and the current dataset's coordinates.
 func (inst *App) renderProfilesPanel() {
 	inst.sectionHeader("Profile capture")
-	c.Label("Captures profile this process, publishes it as an ad-hoc dataset (alias pprof_<kind>, stable handle across re-captures), and Explore opens a play window on it.").Send()
+	c.Label("Captures profile this process, publishes it as an ad-hoc dataset (alias pprof_<kind>, stable handle across re-captures), and Explore opens a play window on it — focused on the flamegraph, with the other lenses a tab away.").Send()
 	c.AddSpace(4)
 
 	for _, spec := range profileKinds {
@@ -288,7 +323,7 @@ func (inst *App) renderProfilesPanel() {
 			}
 			if handle != "" {
 				if c.Button(inst.ids.PrepareStr("pprof-open-"+spec.key), c.Atoms().Text("Explore").Keep()).SendResp().HasPrimaryClicked() {
-					profiles.explore(spec.key, inst.bus)
+					profiles.explore(spec, inst.bus)
 				}
 				c.Label(fmt.Sprintf("keelson('%s') · rev %d · %d rows", handle, revision, rows)).Send()
 			}
