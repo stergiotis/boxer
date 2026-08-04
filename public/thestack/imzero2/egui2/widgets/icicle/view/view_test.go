@@ -467,7 +467,7 @@ func TestLabelForFitsAndDeclines(t *testing.T) {
 }
 
 func TestContrastTextPicksTheReadableNeutral(t *testing.T) {
-	light := styletokens.QualitativeCycle(4).AsHex() // a bright palette entry
+	mid := styletokens.Sequential(styletokens.SequentialLajolla, 0.6).AsHex() // a mid flame-band fill
 	dark := styletokens.NeutralBgPanel.AsHex()
 	if got := contrastText(0xffffffff); got != styletokens.NeutralBgExtreme.AsHex() {
 		t.Errorf("ink on white = %08x, want the dark neutral", got)
@@ -480,7 +480,7 @@ func TestContrastTextPicksTheReadableNeutral(t *testing.T) {
 	}
 	// Whatever it picks for a mid palette colour, it must be one of the two
 	// tokens and never an invented value.
-	got := contrastText(light)
+	got := contrastText(mid)
 	if got != styletokens.NeutralBgExtreme.AsHex() && got != styletokens.NeutralTextExtreme.AsHex() {
 		t.Errorf("ink = %08x, which is neither IDS neutral", got)
 	}
@@ -508,12 +508,15 @@ func TestInkSwitchIsTheEqualContrastPoint(t *testing.T) {
 	if contrastText(0xffffffff) != d || contrastText(0x000000ff) != l {
 		t.Error("the switch runs the wrong way: dark ink belongs on the brighter fill")
 	}
-	// And the whole qualitative cycle clears 4.5:1 under it, which is the
-	// reason the switch is allowed to be this coarse.
-	for i := range 7 {
-		fill := styletokens.QualitativeCycle(i).AsHex()
-		if cr := implot.ContrastRatio(fill, contrastText(fill)); cr < 4.5 {
-			t.Errorf("palette entry %d (%08x) reads at only %.4f:1", i, fill, cr)
+	// And the whole flame band stays within a whisker of 4.5:1 under it. The
+	// band is a dark-to-light ramp, so it crosses the switch, and at the
+	// crossing the two inks meet at 4.45:1 — that is the floor pinned here;
+	// everything off the crossing reads higher.
+	for i := range 256 {
+		t01 := flameBandLo + (flameBandHi-flameBandLo)*float32(i)/255
+		fill := styletokens.Sequential(styletokens.SequentialLajolla, t01).AsHex()
+		if cr := implot.ContrastRatio(fill, contrastText(fill)); cr < 4.4 {
+			t.Errorf("flame band at t=%.3f (%08x) reads at only %.4f:1", t01, fill, cr)
 		}
 	}
 }
@@ -542,6 +545,29 @@ func TestFillByLabelIsPositionIndependent(t *testing.T) {
 	}
 	if shared[0] != shared[1] {
 		t.Errorf("the same label got two colours: %08x and %08x", shared[0], shared[1])
+	}
+	// And different names are told apart. Deterministic, so this is a real
+	// pin, not a flake: it would catch the hash-to-band mapping collapsing.
+	if a, b := s.fill(&lay.Nodes[0]), s.fill(&lay.Nodes[1]); a == b {
+		t.Errorf("%q and %q share a colour: %08x", lay.Nodes[0].Label, lay.Nodes[1].Label, a)
+	}
+}
+
+// The hash lands inside the flame band by construction: the band's ends are
+// where Lajolla stops reading as fire, so a hash escaping them would draw a
+// frame in a background colour.
+func TestFlameTStaysInsideTheBand(t *testing.T) {
+	// The interval is closed and carries one ulp of slack: float32 rounds the
+	// topmost hashes onto the band ceiling exactly, which flameT documents.
+	const ulp = 1e-6
+	for _, h := range []uint32{0, 1, 0x40000000, 0x7fffffff} {
+		got := flameT(h)
+		if got < flameBandLo || got > flameBandHi+ulp {
+			t.Errorf("flameT(%#x) = %v, outside [%v, %v]", h, got, flameBandLo, flameBandHi)
+		}
+	}
+	if flameT(0) != flameBandLo {
+		t.Errorf("flameT(0) = %v, want the band floor %v", flameT(0), flameBandLo)
 	}
 }
 

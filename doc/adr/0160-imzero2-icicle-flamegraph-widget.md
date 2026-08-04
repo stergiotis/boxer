@@ -236,17 +236,25 @@ disagrees with what it drew.
 
 Two schemes, plus a caller override:
 
-- **By label** (default) — a hash of the frame name into
-  `styletokens.QualitativeCycle` (ADR-0156). A given function keeps its colour
-  everywhere it appears, including across two captures, which is what makes the
-  picture comparable. The classic flamegraph's random warm palette is decorative
-  by intent; this keeps the stability and drops the randomness.
+- **By label** (default) — a hash of the frame name into the warm band of the
+  Lajolla sequential scale (`styletokens.Sequential`, t ∈ [0.30, 0.90]): the
+  flamegraph's conventional red-through-yellow, from the IDS tokens rather than
+  the classic random warm RGB. The hash keeps what the randomness never had —
+  a given function keeps its colour everywhere it appears, including across
+  two captures, which is what makes the picture comparable. The first cut
+  hashed into the seven-hue qualitative cycle (ADR-0156) instead; with seven
+  bins, unrelated neighbours collided exactly rather than merely landing near
+  each other, and the picture stopped reading as a flamegraph. The band's ends
+  are where Lajolla stops reading as fire — browns sinking toward the plot
+  surface below it, creams washing into it above — and its monotone lightness
+  keeps two names apart under CVD, where the classic equal-lightness warm
+  noise is not.
 - **By depth** — a sequential ramp (`styletokens.Sequential`), which reads the
   structure rather than the identity.
 
-A seven-colour cycle means adjacent siblings collide often, so every rectangle
-is inset by a hairline gap: neighbours are separated by the background rather
-than by a border, which costs no extra paint opcode. Text ink, the selection
+One warm band means adjacent siblings are similar in colour by construction,
+so every rectangle is inset by a hairline gap: neighbours are separated by the
+background rather than by a border, which costs no extra paint opcode. Text ink, the selection
 ring and the stroke ladder are token values (rules L2/L10), so the widget is
 IDS-conformant on its first commit rather than after a lint pass.
 
@@ -257,9 +265,10 @@ rather than one per widget. The switch point between the two neutral inks is
 the palette as it stands) rather than written down, so regenerating the IDS
 palette moves it instead of leaving a stale constant. The first draft used a
 rounded 0.18, which picked the worse of the two inks over about 1.4% of the
-colour space — 4.32:1 where 4.58:1 was available. Nothing in the shipped
-palette fell in that band, and the worst it does under either threshold is
-4.90:1.
+colour space — 4.32:1 where 4.58:1 was available. The flame band crosses the
+switch — a dark-to-light ramp must — so its worst fill reads at the switch's
+own 4.45:1, a hair under WCAG AA's 4.5 and confined to that single crossing;
+the classic flamegraph's black-on-deep-red reads nearer 3:1.
 
 implot's own `contrastText` is deliberately left on upstream's Rec.601 rule,
 so a ported ImPlot chart keeps the ink upstream would have given it. The two
@@ -462,8 +471,8 @@ Two notes for the next consumer, both found by looking at a capture:
   some rectangles that could hold a short label will not get one. Kerning and
   font fallback are unmodelled, so the error is a few percent either way.
 - Two colour schemes and an override is more surface than a single scheme, and
-  the hash-based default will occasionally place two same-coloured siblings
-  next to each other despite the gap.
+  the hash-based default places similar-coloured siblings next to each other
+  by construction — one warm band — so the gap is what tells them apart.
 
 ### Neutral
 
@@ -559,9 +568,10 @@ was consulted, per ADR-0119 §SD6.
   package split, the plot-space hit-test argument, and the first user of the
   custom-item lane.
 - [ADR-0156](./0156-qualitative-palette-dark-surface.md) — the qualitative
-  palette the by-label colouring cycles.
+  palette the by-label colouring first cycled, before the flame band replaced
+  it.
 - [ADR-0031](./0031-imzero2-design-system-color.md) — the sequential palettes
-  the by-depth colouring ramps through.
+  both colour modes sample: the by-label flame band and the by-depth ramp.
 - [ADR-0080](./0080-packageprops-per-package-declarations.md) — the
   `package_props.go` registration both new packages carry.
 - [ADR-0057](./0057-demo-registry-and-drivers.md) — the demo registry the

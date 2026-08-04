@@ -209,7 +209,7 @@ func init() {
 		Title:       icons.PhFlame + " icicle / flamegraph",
 		Stage:       [2]float32{900, 600},
 		Kind:        registry.DemoKindMixed,
-		Description: "Stack hierarchies on the implot custom-item lane (ADR-0160): one row per depth, a frame's width is its value, and the part no child covers is its own self time. The value axis carries the tree's units, so implot supplies the gestures — the wheel zooms anchored at the pointer, clicking a frame assigns the axis to that frame's span (ancestors stay above it, full width), a double-click fits back. The depth axis is declared NoZoom, the per-axis lock this ADR added to implot, so a drag scrolls depth without scaling rows; the recursive-descent dataset is deeper than the pane and shows it. Colour is a hash of the frame name, so a function keeps its colour everywhere, or a ramp over depth.",
+		Description: "Stack hierarchies on the implot custom-item lane (ADR-0160): one row per depth, a frame's width is its value, and the part no child covers is its own self time. The value axis carries the tree's units, so implot supplies the gestures — the wheel zooms anchored at the pointer, clicking a frame assigns the axis to that frame's span (ancestors stay above it, full width), a double-click fits back. The depth axis is declared NoZoom, the per-axis lock this ADR added to implot, so a drag scrolls depth without scaling rows; the recursive-descent dataset is deeper than the pane and shows it. Colour is a hash of the frame name into the flamegraph's warm band, so a function keeps its colour everywhere, or a ramp over depth.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			st := &icicleDemoState{
 				datasets: []icicleDemoDataset{

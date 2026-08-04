@@ -35,11 +35,13 @@ import (
 type ColorModeE uint8
 
 const (
-	// ColorByLabel hashes the frame's label into the qualitative cycle
-	// (ADR-0156). A given function keeps its colour everywhere it appears,
-	// including across two captures, which is what makes two pictures
-	// comparable. The classic flamegraph's warm random palette is decorative
-	// by intent; this keeps its stability and drops the randomness.
+	// ColorByLabel hashes the frame's label into the warm band of the
+	// Lajolla sequential scale — the flamegraph's conventional red-through-
+	// yellow gamut, realised from the IDS tokens rather than the classic
+	// random warm RGB. The hash keeps what the randomness never had: a given
+	// function keeps its colour everywhere it appears, including across two
+	// captures, which is what makes two pictures comparable. The scale is
+	// pinned; Opts.Sequential configures only ColorByDepth.
 	ColorByLabel ColorModeE = iota
 	// ColorByDepth ramps a sequential palette over the depth, which reads the
 	// structure rather than the identity.
@@ -132,9 +134,9 @@ const (
 
 const (
 	// gapPx separates neighbouring frames. Two abutting rectangles of similar
-	// colour read as one, and a seven-colour cycle puts same-coloured
-	// siblings next to each other often enough to matter; the gap is
-	// background showing through, so it costs no extra paint call.
+	// colour read as one, and a hash into one warm band puts similar-coloured
+	// siblings next to each other constantly; the gap is background showing
+	// through, so it costs no extra paint call.
 	gapPx = 1.0
 	// minRectPx is the narrowest frame still worth emitting, measured after
 	// the gap has been taken out of it. Below this a rectangle is a sliver
@@ -515,7 +517,28 @@ func (s *state) fill(n *icicle.Node) uint32 {
 		}
 		return styletokens.Sequential(s.seq, t).AsHex()
 	}
-	return styletokens.QualitativeCycle(int(labelHash(n.Label))).AsHex()
+	return styletokens.Sequential(styletokens.SequentialLajolla, flameT(labelHash(n.Label))).AsHex()
+}
+
+// The flame band is the slice of the Lajolla scale a label hash lands in.
+// The full scale runs near-black to cream; the band keeps the middle that
+// reads as fire — deep red through orange to golden yellow — and cuts the
+// ends that read as background: below it the browns sink toward the plot
+// surface, above it the creams wash into it. Lajolla's lightness varies
+// monotonically, so across the band two names differ in lightness as well
+// as hue — which is also what keeps the scheme legible under CVD, where the
+// classic near-equal-lightness warm noise is not.
+const (
+	flameBandLo = 0.30
+	flameBandHi = 0.90
+)
+
+// flameT maps a label hash onto the flame band. labelHash keeps 31 bits;
+// dividing by 2³¹ lands in [0, 1] rather than [0, 1), float32 rounding the
+// topmost hashes onto 1 exactly — fine, because the band ceiling is itself a
+// flame colour and Sequential clamps.
+func flameT(h uint32) float32 {
+	return flameBandLo + (flameBandHi-flameBandLo)*(float32(h)/(1<<31))
 }
 
 // labelHash is FNV-1a over the label. Any stable hash would do; what matters
@@ -747,8 +770,11 @@ func contrastText(fill uint32) uint32 {
 //
 // Derived rather than written down, so that regenerating the IDS palette
 // moves it instead of leaving a stale constant behind. It is not the line
-// between readable and not — the worst the qualitative cycle does under it is
-// 4.90:1 — only between the better and the worse of two readable choices.
+// between readable and not, only between the better and the worse of two
+// readable choices. The flame band crosses the switch — a dark-to-light ramp
+// must — so a fill sitting exactly on it reads at the 4.45:1 above, a hair
+// under WCAG AA's 4.5 and the band's single worst point; the classic
+// flamegraph draws black on its deepest red at nearer 3:1.
 var inkSwitchL = func() float64 {
 	d := implot.RelativeLuminance(styletokens.NeutralBgExtreme.AsHex())
 	l := implot.RelativeLuminance(styletokens.NeutralTextExtreme.AsHex())
