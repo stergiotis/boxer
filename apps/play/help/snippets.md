@@ -778,6 +778,172 @@ WITH
 SELECT * FROM flows ORDER BY value DESC
 ```
 
+## Distribution summary (`descriptiveStatistics`)
+
+The **Distribution** tab draws a result as a distribution rather than a table:
+an ECDF with a confidence band, a shift function against a chosen baseline, and
+a letter-value (boxen) column per series (ADR-0161). It claims a result by
+column names — `series`, `n`, `ps`, `qs` — so hand-written SQL that emits them
+is on the same footing as the macro here.
+
+`descriptiveStatistics(...)` writes those columns for you. It expands before the
+query ships, into one `UNION ALL` branch per argument column, each carrying the
+original `FROM` / `WHERE` / `GROUP BY`. Table-free, so this one runs against any
+endpoint:
+
+```sql
+WITH sample AS (
+  SELECT exp(randNormal(0, 1)) AS latency_ms
+  FROM numbers(100000)
+)
+SELECT descriptiveStatistics(latency_ms)
+FROM sample
+```
+
+One row comes back per series: the probability grid in `ps` and its quantiles in
+`qs` (87 levels, p from 1.5e-5 to 1 − 1.5e-5), `n` and the null count beside
+them, the sample moments, and the estimator that produced the quantiles —
+`tdigest` unless you name another as a leading string argument (`'exact'`,
+`'gk'`, `'dd'`). The `series` label is the argument's own text, which is why
+aliasing it in a CTE is worth the line; it arrives quoted, because the
+pre-execute canonicaliser quotes identifiers.
+
+Three rules the expansion enforces, each a loud error before anything reaches
+the server:
+
+- The call must be the **sole select item** — not aliased, not beside other
+  expressions, one call per statement. There is no merged output shape.
+- `ORDER BY`, `LIMIT`, `HAVING` and `QUALIFY` have no home across the
+  expansion's branches. Do their work in a CTE instead — the last section below
+  does exactly that.
+- `GROUP BY` is carried, and its key values fold into the `series` label. Name
+  the expressions rather than their positions.
+
+## Same mean and sd, four different shapes
+
+Four columns in one call become four series over the same `FROM`. All four
+samples are standardised by construction — mean 0, sd 1 — so those two moments
+agree to about three decimals, and that agreement is most of what they have to
+say about the four samples.
+
+```sql
+WITH shapes AS (
+  SELECT
+    randUniform(-1.7320508075688772, 1.7320508075688772) AS uniform,
+    randNormal(0, 1)                                     AS gaussian,
+    randUniform(0, 1)                                    AS u,
+    if(u < 0.5, log(2 * u), -log(2 - 2 * u)) / sqrt(2.)  AS laplace,
+    randExponential(1) - 1                               AS exponential
+  FROM numbers(200000)
+)
+SELECT descriptiveStatistics(uniform, gaussian, laplace, exponential)
+FROM shapes
+```
+
+The ECDF view separates them at a glance; **Boxen** says where. The observed
+range runs ±1.73 for the uniform, about ±4.4 for the Gaussian and about ±8 for
+the Laplace — one scale parameter, three different tails — while the exponential
+cannot go below −1 and reaches +11 or so above. `kurt` is the moment that tracks
+that ordering (ClickHouse reports it unstandardised, so ≈ 1.8 / 3.0 / 6.0 / 9.2
+here) and `skew` separates only the exponential. Neither says the uniform is
+bounded or that the Laplace has a cusp at its median.
+
+Four series is also where the band policy changes: up to three, every series
+carries its confidence band; beyond that only the selected one does, and the
+rest draw as curves.
+
+Two constructions above are worth keeping. The Laplace comes from a single
+uniform pushed through its quantile function, because ClickHouse folds identical
+expressions into one — `randExponential(1) - randExponential(1)` is one draw
+minus itself and yields a column of zeros. That same folding is what makes `u` a
+single draw across the three places it appears. And `randNormal`'s second
+argument behaves as the standard deviation rather than the variance its
+reference names (measured against 26.7); `randNormal(0, 1)` means the same thing
+under either reading, which is why it is the one used here.
+
+## Two treatments and the shift function
+
+`GROUP BY` makes each group a series, so a controlled comparison is one call.
+Three arms of the same lognormal latency: a baseline, the baseline plus a
+constant 0.5 ms, and the baseline scaled by 1.25.
+
+```sql
+WITH
+  draws AS (
+    SELECT ['A baseline', 'B shift +0.5', 'C scale ×1.25'][1 + (number % 3)] AS arm,
+           exp(randNormal(0, 1))                                             AS draw
+    FROM numbers(300000)
+  ),
+  trial AS (
+    SELECT arm,
+           multiIf(arm = 'B shift +0.5',  draw + 0.5,
+                   arm = 'C scale ×1.25', draw * 1.25,
+                   draw) AS latency_ms
+    FROM draws
+  )
+SELECT descriptiveStatistics(latency_ms)
+FROM trial
+GROUP BY arm
+```
+
+Click a series chip — or the matching row in **Table** — to make it the
+baseline. The **Shift** view then draws Δ(p) = Q_arm(p) − Q_baseline(p) against
+p, with W₁, the mean absolute quantile gap ∫|Δ| dp, in the legend.
+
+With `A baseline` selected, the two Δ curves are the two things a difference of
+distributions can be, and this is the view that tells them apart. The additive
+arm sits flat at ≈ 0.5 from p ≈ 0.001 to p ≈ 0.98. The multiplicative arm rises
+with the baseline quantile it multiplies — ≈ 0.13 at the first quartile, ≈ 0.25
+at the median, ≈ 0.5 at the third, ≈ 2 at p = 0.984. Both arms move the *mean*
+by a similar amount (1.65 → 2.15 and 1.65 → 2.07), so a comparison of means
+would report one effect where there are two.
+
+Past p ≈ 0.998 both curves come apart into noise, and that is the honest
+reading rather than a defect: the grid runs to p = 1 − 1.5e-5, which at 100 000
+rows per arm is where a quantile rests on one or two observations. The band
+around each curve is what says so.
+
+## A real corpus, and what small n looks like
+
+`keelson('adr')` reads this repository's decisions in-process, so this one needs
+no server at all: point the **Endpoint** menu at *Keelson introspection*, focus
+the Distribution tab, and Run. `body_bytes` is each ADR's size on disk; grouping
+by status compares the accepted corpus against what is still proposed.
+
+```sql
+WITH busy AS (
+  SELECT status
+  FROM keelson('adr')
+  GROUP BY status
+  HAVING count() >= 10
+)
+SELECT descriptiveStatistics('exact', body_bytes)
+FROM keelson('adr')
+WHERE status IN (SELECT status FROM busy)
+GROUP BY status
+```
+
+The `busy` CTE is how a `HAVING` is spelled here, since the macro refuses one at
+the top level. It also keeps the query honest as the corpus grows: the statuses
+holding a handful of documents each — superseded, withdrawn, deferred — would
+otherwise arrive as series the panel can say nothing about.
+
+`'exact'` rather than the default `tdigest`, because at a few hundred rows the
+exact Hyndman–Fan type-7 quantiles cost nothing, and the status line then drops
+its *excludes sketch error* caveat: the band becomes the whole error budget.
+
+Most of what the panel then shows is the smallness of the sample, which is the
+point of running it here. The 95% DKW band is ±ε with ε = √(ln(2/α) / 2n), so
+about ±0.12 in F over the ~125 accepted decisions and ±0.28 over the ~23
+proposed ones. The largest vertical gap between the two curves is smaller than
+those two half-widths added together, and a two-sample Kolmogorov–Smirnov test
+on the same columns does not reject at 5% either (D ≈ 0.27, p ≈ 0.09 today).
+The Boxen ladder stops at three letter values for the larger series and one for
+the smaller — `letterval.RecommendedDepth` wants eight observations in a tail
+before it draws the box that rests on them. Only the moments look confident,
+and they are the misleading ones: the accepted set's mean sits several kilobytes
+above its median, a gap made mostly by one outlying document.
+
 ## The shell's own apps and windows
 
 Two more in-process tables, same no-setup path as the ADR board above: point the
