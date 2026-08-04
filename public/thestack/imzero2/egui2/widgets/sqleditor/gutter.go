@@ -38,8 +38,8 @@ const (
 	// editorTrailingCols is slack past the longest line so the caret at
 	// end-of-line is still inside the scrollable area.
 	editorTrailingCols = 3
-	// editorFallbackWidthPx sizes the editor on the first frame, before the
-	// previous frame's available-size capture (R18) has anything to report.
+	// editorFallbackWidthPx sizes the editor on its first frame, before the
+	// pane probe (R21, see [Editor.Render]) has anything to report.
 	editorFallbackWidthPx float32 = 480.0
 )
 

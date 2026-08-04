@@ -1,8 +1,6 @@
 package sqleditor
 
 import (
-	"math"
-
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -14,6 +12,18 @@ import (
 // DefaultRows is the editor's height before an embedder computes one from the
 // pane's available size.
 const DefaultRows uint32 = 10
+
+const (
+	// rowHeightSeedFactor converts the font's pt size into the frame-0 row
+	// height, before the measurement lands. Real egui row heights run ≈1.2–1.3×
+	// the pt size; 1.45 is deliberately generous (see [Editor.measureRowHeight]
+	// on seed direction). Same constant, same reason, as the treemap's label
+	// gates.
+	rowHeightSeedFactor float64 = 1.45
+	// rowProbeText is the row-height probe. Any non-empty string measures the
+	// same single-line galley height.
+	rowProbeText = "Mg"
+)
 
 // Frame is one frame's binding: what the editor is bound to and how it is
 // sized. See the package doc for the coordinate contract Offset establishes.
@@ -142,6 +152,70 @@ type Editor struct {
 
 	// sem is the L2 semantic tier (async, see tiers.go).
 	sem semanticTier
+
+	// paneW/paneH are what the pane probe reported last, held across frames so
+	// a tab that was hidden — its probe absent from the R21 drain, so
+	// unreadable on the frame it comes back — reopens at the size it had
+	// rather than at the fallback.
+	paneW float32
+	paneH float32
+
+	// rowPx is the measured monospace row height, refreshed each Sync through
+	// an r9 databinding; rowFontPt is the size it describes, so a density
+	// change re-seeds rather than carrying the old font's answer.
+	rowPx     float64
+	rowFontPt float32
+}
+
+// slotId derives a stable per-editor register slot from the IDSlot and a role,
+// so two editors in one app read their own measurements and not each other's.
+func slotId(idSlot, role string) (id uint64) {
+	return c.ProbeSeq("sqleditor#"+idSlot, role)
+}
+
+// PaneHeight is the height that was free for the editor where it last rendered
+// — the pane minus whatever the embedder drew above it, and NOT minus what it
+// draws below. Zero before the first [Editor.Render], and one frame stale after
+// that, like every register read.
+//
+// Published because [Frame.Rows] is the embedder's to choose and it cannot
+// measure this itself: the only unscoped way to ask egui for free space is the
+// single-slot r18 register, which the last capture of a frame wins. The editor
+// is already probing its own pane for the width, so it is the honest place for
+// the answer. An embedder filling the pane subtracts what it will render below
+// the editor and divides by [Editor.RowHeight].
+func (inst *Editor) PaneHeight() (px float32) { return inst.paneH }
+
+// RowHeight is the editor's measured monospace row height — what one unit of
+// [Frame.Rows] is worth, so an embedder can convert [Editor.PaneHeight] into a
+// row count. Analytically seeded before the first measurement lands, and
+// floored at the font size, since no row is shorter than its em box.
+//
+// Measured rather than assumed because the host may leave the monospace face
+// unconfigured, and a hardcoded guess is off by enough to matter: at ~14 pt the
+// real row height here is ≈11.4 px, so the previous constant 16 left a quarter
+// of the pane blank once the height it divided was the editor's own.
+func (inst *Editor) RowHeight() (px float32) {
+	return max(float32(inst.rowPx), inst.rowFontPt)
+}
+
+// measureRowHeight (re-)arms the row-height probe. Re-emitted every frame
+// because Sync resets databindings, and re-seeded when the density changes the
+// font size. A single non-wrapped line's galley height IS the font's row
+// height, so the probe string is arbitrary and the answer is a constant after
+// the first Sync — the one-frame lag is a one-time warm-up, not a lag.
+//
+// The seed over-estimates on purpose: too tall means too few rows and a strip
+// of unused pane for one frame, where too short means an editor taller than its
+// pane, which the embedder's layout has to absorb.
+func (inst *Editor) measureRowHeight(f Frame) {
+	pt := styletokens.ScaledPt(styletokens.BodyPt, f.Density)
+	if inst.rowFontPt != pt {
+		inst.rowFontPt = pt
+		inst.rowPx = float64(pt) * rowHeightSeedFactor
+	}
+	c.MeasureTextSizeBind(slotId(f.IDSlot, "row-w"), slotId(f.IDSlot, "row-h"),
+		rowProbeText, pt, true, nil, &inst.rowPx)
 }
 
 // New returns an editor. The zero value is also usable; New exists so a
@@ -249,9 +323,23 @@ func (inst *Editor) Render(ids *c.WidgetIdStack, d Decoration) {
 	styled = ShiftStyledSections(styled, f.Offset, len(view))
 	subq := ShiftRange(d.SubqueryMark, f.Offset, len(view))
 
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
-	paneW := avail.W
-	if math.IsNaN(float64(paneW)) || paneW <= 0 {
+	inst.measureRowHeight(f)
+
+	// The pane, from this editor's OWN seq-keyed probe (R21). Emitted here,
+	// before anything is placed, because the op reports the space left for the
+	// NEXT widget: from this point it is the editor's own pane, and it does not
+	// move when the editor draws into it, so sizing off it cannot ratchet.
+	//
+	// Not CaptureAvailableSize: that register is a single process-wide slot
+	// that the last capture of a frame wins, so an editor reading it is sized
+	// by whichever unrelated panel captured after it — play's Detail pane,
+	// whose timeline captures the narrow side column, was the case that
+	// surfaced this. One-frame lag, like every register read.
+	if w, h, ok := c.CapturePaneSize(slotId(f.IDSlot, "pane")); ok && w > 0 {
+		inst.paneW, inst.paneH = w, h
+	}
+	paneW := inst.paneW
+	if paneW <= 0 {
 		paneW = editorFallbackWidthPx
 	}
 	m := buildGutterModel(view, styled, subq, f.Density)

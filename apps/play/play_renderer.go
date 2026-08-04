@@ -2,7 +2,6 @@ package play
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"slices"
 	"sort"
@@ -2026,35 +2025,38 @@ func (inst *PlayApp) clearAutoEndpoint() {
 // canonical form lives in its own Preview tab (split to the right by
 // default); the toolbar lives in the topbar.
 //
-// The TextEdit's desired_rows is computed from the previous frame's
-// captured ui.available_size (R18) so the editor fills the dock pane
-// vertically. egui's TextEdit otherwise allocates a fixed
-// desired_rows × row_height and leaves the rest of the pane blank.
-// First frame falls back to editorDesiredRows; the editor's own
-// internal scroll handles content overflow.
+// The TextEdit's desired_rows is computed from the height the editor
+// measured for its own pane last frame (sqleditor's seq-keyed R21 probe)
+// so the editor fills the dock pane vertically. egui's TextEdit otherwise
+// allocates a fixed desired_rows × row_height and leaves the rest of the
+// pane blank. First frame falls back to editorDesiredRows; the editor's
+// own internal scroll handles content overflow.
 func (inst *PlayApp) renderEditorTab() {
-	// Approximate row height for Monospace at default text-style size
-	// (TextStyle::Monospace ≈ 14 px + ~2 px line spacing). The reserve
-	// covers chrome below the editor: a thin bottom margin always, plus
-	// room for the affordances block when at least one observation was
-	// captured by the most recent updatePreview run. The parameter block
-	// now renders ABOVE the editor, so it is deliberately absent from
-	// this reserve: CaptureAvailableSize runs after renderParamSlots, so
-	// avail.H already has the param block's height subtracted.
-	const editorRowPx float32 = 16.0
+	// The reserve covers chrome below the editor: the TextEdit's own bottom
+	// margin always, plus room for the affordances block when at least one
+	// observation was captured by the most recent updatePreview run. The
+	// parameter block renders ABOVE the editor and is deliberately absent from
+	// this reserve: PaneHeight is measured where the editor itself starts, so
+	// the param block's height is already out of it.
 	const editorBaseReservePx float32 = 8.0
 	const editorAffordanceReservePx float32 = 120.0
 
+	// Both numbers come from the editor, which measures its own pane and its
+	// own row height. NOT CaptureAvailableSize (r18): that register is one
+	// process-wide slot won by the frame's last capture, so with a Detail or
+	// Distribution pane on screen the editor was sized by THAT pane. And not a
+	// row-height constant either — the host's monospace metrics are not ours to
+	// guess, and the guess is what decides whether the pane is filled.
 	rows := uint32(editorDesiredRows)
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
-	if !math.IsNaN(float64(avail.H)) && avail.H > 0 {
+	availH, rowPx := inst.editor.PaneHeight(), inst.editor.RowHeight()
+	if availH > 0 && rowPx > 0 {
 		reserve := editorBaseReservePx
 		if len(inst.observations) > 0 {
 			reserve += editorAffordanceReservePx
 		}
-		usable := avail.H - reserve
+		usable := availH - reserve
 		if usable > 0 {
-			if r := uint32(usable / editorRowPx); r > rows {
+			if r := uint32(usable / rowPx); r > rows {
 				rows = r
 			}
 		}
@@ -2065,14 +2067,6 @@ func (inst *PlayApp) renderEditorTab() {
 		// leading SET prelude. Rendered first so the editor below claims
 		// the remaining vertical space.
 		inst.renderParamSlots()
-
-		// Capture the height left below the param block for next frame's
-		// editor sizing. Runs AFTER renderParamSlots so the captured
-		// value already excludes the param block, but BEFORE the editor:
-		// the param block is fixed-height for a given slot count, so
-		// capturing here is stable, whereas capturing after the
-		// variable-height editor would ratchet the size down each frame.
-		c.CaptureAvailableSize()
 
 		// Editor binding. Default mode keeps the leading SET prelude
 		// inside the main editor; hide-prelude mode slices the prelude
