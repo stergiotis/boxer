@@ -102,8 +102,7 @@ other decision here. *(Fixed since — commit `ff2965e6`.)*
    applet action*; it must be an app affordance, a bus service, or a CLI
    verb.
 3. **The applet books** — pure SQL once (1) and (2) exist.
-4. Optionally, a **treemap result panel** — a thin adapter over an existing
-   widget.
+4. ~~Optionally, a **treemap result panel**~~ — *dropped 2026-08-04, see §9 R1.*
 5. Optionally, a **flame/icicle widget + panel** — the only genuinely new
    render surface in the whole plan.
 
@@ -275,13 +274,29 @@ small, self-contained follow-up worth its own mini-dialogue.
   One thing to verify while authoring the book: how edge *weight* can be
   encoded (the panel exposes stroke/fill override hooks; worst case the book
   ships top-N edges and puts weight in the label).
-- **R1 — treemap result panel** *(cheap, high value for heap)*: a thin
-  adapter over the existing widget, adopting a column convention (`path
+- **R1 — treemap result panel** — ~~*(cheap, high value for heap)*~~
+  **dropped 2026-08-04, after R2 shipped.** The proposal was a thin adapter
+  over the existing widget, adopting a column convention (`path
   Array(String)` + `value`, or a `tree` CTE) in the style of the kanban and
-  graph panels. Cost anchors: kanban panel 533 lines, layered-graph panel
-  632, timeline panel 90 (its widget carries the logic; treemap's would
-  too). Estimate 400–700 lines + tests, no FFI/IDL surface. Gives
-  drill-navigable "heap by package / by call prefix" immediately.
+  graph panels, at an estimated 400–700 lines against cost anchors of kanban
+  533 and layered-graph 632. What it was *for* was drill-navigable "heap by
+  package / by call prefix".
+
+  **Why it is dropped rather than deferred.** R2 landed first and answers
+  that question on the same input: a folded `stack` + `value`, which is what
+  a treemap panel would have adopted too. Between the two forms the icicle
+  is the better fit for this data, not merely an alternative — it keeps the
+  depth and the sibling order of a path, which is what a *stack* profile is
+  about and precisely what a treemap discards (ADR-0160's own opening
+  observation). A treemap panel would therefore be a second, weaker lens
+  over the identical query, and the tab it occupies is not free: every
+  applet negotiates every result panel per frame.
+
+  This is a judgment about *profiles*, not about treemaps. The widget keeps
+  its uses — `imztop`'s Proc Map is one — and a hierarchy whose reading
+  really is "what is big" with no meaningful path order (disk usage by
+  directory, say) is a live reason to revisit. Nothing here blocks that; it
+  would just want its own motivation rather than this ladder's.
 - **R2 — flame/icicle widget + panel** *(the real thing, and the only heavy
   piece)*: the canonical stack-profile view — horizontal partition layout
   over the same folded trie a treemap consumes (the hierarchy model is
@@ -300,7 +315,7 @@ small, self-contained follow-up worth its own mini-dialogue.
 | M1 | Converter package (suggested home: `public/observability/profiling/pprofarrow`): parse (P1) → O1 Arrow stream; golden fixtures incl. one recursive and one inlined stack; invariant: total value conserved | P1/P2 decision |
 | M2 | Producers: `imzrt` capture affordance (bgjob CPU; instant heap/goroutine/block/mutex) → publish + launch-request handoff; CLI ingest verb; producer caps (adhoc publish, open request) | M1 |
 | M3 | Applet books: `profile-top` (table+detail, `{fn:String}` param), `profile-callgraph` (`tabs: [graph, table]`), `profile-diff`; committed beside the existing dogfood books | M1–M2 |
-| M4 | Treemap result panel + `profile-treemap` applet | R1 dialogue |
+| ~~M4~~ | ~~Treemap result panel + `profile-treemap` applet~~ — **dropped 2026-08-04** (§9 R1) | — |
 | M5 | Flame widget + panel (own ADR) | R2 dialogue |
 
 *(M5 shipped 2026-08-04, and cost less than R2 costed it. The widget and the
@@ -311,9 +326,12 @@ icicle **is** cartesian, x the value domain and y depth. What M5 needed here
 was therefore only a book, `profile-flame`, plus `Tab: icicle` on imzrt's
 Explore seed. The projection is the converter's own output rescaled — ns to
 ms, bytes to MiB — because the reader scales by SI prefix and not by unit.
-R1's treemap panel (M4) is unstarted and its case is weaker now: the icicle
-answers "what is big, and what is it part of" for stack-shaped data, which
-was M4's motivating question.)*
+M4 was dropped the same day, unstarted: the icicle answers what R1's treemap
+panel was for, on the same input and keeping the path order a treemap
+discards. The kill reasoning stays in §9 R1 rather than being deleted with
+the rung, since the widget itself is not what was rejected. With that, the
+ladder is closed — every rung either shipped or has a recorded reason not
+to.)*
 
 *(M3 shipped 2026-08-01 with two adjustments: the graph book's tab slug is
 `network` — the ADR-0129 panel's id in today's play — and `profile-diff`
@@ -346,14 +364,25 @@ non-obvious cost.
 
 ## 11 Open questions for the design dialogue
 
+*(All six were settled between 2026-08-01 and 2026-08-04; the answers are
+recorded with the milestones that took them, and are summarised inline below
+so this list is not read as still-open.)*
+
 1. P1 (`google/pprof` dep) vs P2 (hand-rolled decoder) — §6.
+   *P1, taken at M1.*
 2. Does the capture affordance live in `imzrt`, or does its read-only
    dashboard framing argue for a tiny dedicated producer app? — §8.
+   *`imzrt`, taken at M2; ADR-0061 §SD6 relaxed by dated update to allow it.*
 3. Wide per-kind value columns (per-kind books) vs a lowest-common
-   `value`+`unit` pair — §5.
-4. Treemap panel input convention: columns on the main result vs a named
-   CTE; align with the kanban/graph precedent in its own mini-dialogue — §9.
+   `value`+`unit` pair — §5. *Wide, taken at M1 — `profile-heap` reads all
+   four heap measures, which the narrow form could not.*
+4. ~~Treemap panel input convention~~ — *moot: M4 dropped (§9 R1).*
 5. Alias-latest handle resolution (`keelson('alias:…')`) — worth doing early,
-   or live with catalog copy-paste? — §8.
+   or live with catalog copy-paste? — §8. *Early, and not as a `keelson()`
+   spelling: M3 landed the `adhoc.resolve` subject, so a book declares
+   `datasets:` and the applet binds the newest handle at open.*
 6. Edge-weight encoding in the graph tab — verify the override hooks reach
-   stroke width from panel input — §9.
+   stroke width from panel input — §9. *Not verified, and not needed:
+   `profile-callgraph` took §9's stated worst case and puts the weight in
+   the edge label. Whether stroke width is reachable is still unanswered —
+   it is now an ADR-0129 question, not a pprof one.*
