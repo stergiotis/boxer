@@ -33,12 +33,12 @@ func pprofDefsBySlug(t *testing.T) map[string]*AppletDef {
 	t.Helper()
 	defs, errs := ParseBook("pprof", help.MustSub(bookpprofFS, "bookpprof"))
 	require.Empty(t, errs)
-	require.Len(t, defs, 3)
+	require.Len(t, defs, 4)
 	bySlug := make(map[string]*AppletDef, len(defs))
 	for _, d := range defs {
 		bySlug[d.Slug] = d
 	}
-	require.Len(t, bySlug, 3)
+	require.Len(t, bySlug, 4)
 	return bySlug
 }
 
@@ -56,17 +56,27 @@ func TestPprofBookCorpus(t *testing.T) {
 
 	assert.Equal(t, []string{"pprof_cpu"}, bySlug["profile-top"].Datasets)
 	assert.Equal(t, []string{"pprof_cpu"}, bySlug["profile-callgraph"].Datasets)
+	assert.Equal(t, []string{"pprof_cpu"}, bySlug["profile-flame"].Datasets)
 	assert.Equal(t, []string{"pprof_heap"}, bySlug["profile-heap"].Datasets)
 
 	masterDetail := []TabSel{{ID: "table"}, {ID: "detail"}}
 	assert.Equal(t, masterDetail, bySlug["profile-top"].Tabs)
 	assert.Equal(t, masterDetail, bySlug["profile-heap"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "network"}, {ID: "table"}, {ID: "detail"}}, bySlug["profile-callgraph"].Tabs)
+	assert.Equal(t, []TabSel{{ID: "icicle"}, {ID: "table"}, {ID: "detail"}}, bySlug["profile-flame"].Tabs)
 
 	// The graph lens feeds the network panel through the convention-named
 	// top-level CTEs (ADR-0129).
 	assert.Contains(t, bySlug["profile-callgraph"].SQL, "edges AS (")
 	assert.Contains(t, bySlug["profile-callgraph"].SQL, "vertices AS (")
+
+	// The flame lens is a projection into the ADR-0160 folded contract: a
+	// list-typed `stack` and each stack's OWN `value`, which is what the
+	// converter already emits. A `stack` that stopped being an array — or a
+	// GROUP BY that rolled paths into their prefixes — would draw nothing.
+	assert.Contains(t, bySlug["profile-flame"].SQL, "stack,")
+	assert.Contains(t, bySlug["profile-flame"].SQL, "AS value")
+	assert.NotContains(t, bySlug["profile-flame"].SQL, "GROUP BY")
 }
 
 // TestMintPprofBook mints the book beside its siblings, guarding slug
@@ -81,7 +91,7 @@ func TestMintPprofBook(t *testing.T) {
 		{id: "pprof", fsys: help.MustSub(bookpprofFS, "bookpprof"), topics: []app.TopicT{app.TopicObservability}},
 	})
 	require.Empty(t, errs)
-	assert.Equal(t, 16, minted)
+	assert.Equal(t, 17, minted)
 
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "profile-top"))
 	require.True(t, ok)
@@ -198,9 +208,9 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 	require.Len(t, bindings, 2)
 	require.Empty(t, unresolved)
 
-	query := func(sql string) (out string) {
+	query := func(sql string, format string) (out string) {
 		t.Helper()
-		resp, perr := http.Post(srv.BaseURL()+"/query", "text/plain", strings.NewReader(sql+" FORMAT TabSeparated"))
+		resp, perr := http.Post(srv.BaseURL()+"/query", "text/plain", strings.NewReader(sql+" FORMAT "+format))
 		require.NoError(t, perr)
 		defer func() { _ = resp.Body.Close() }()
 		raw, _ := io.ReadAll(resp.Body)
@@ -213,8 +223,22 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 		for alias, handle := range bindings {
 			sql = strings.ReplaceAll(sql, "keelson('"+alias+"')", "keelson('"+handle+"')")
 		}
-		out := query(sql)
+		out := query(sql, "TabSeparated")
 		assert.NotEmpty(t, out, "%s: the sink returned no rows", slug)
+
+		// The flame lens is resolved from the Arrow SCHEMA (ADR-0160 §SD9),
+		// not from the rows, so returning rows is not evidence it draws: a
+		// `stack` that stopped being a list, or a `value` that came back as
+		// text, rejects with data on the wire. Pin the two types the panel
+		// keys on — the header carries them.
+		if slug == "profile-flame" {
+			head := query(sql, "TabSeparatedWithNamesAndTypes")
+			lines := strings.SplitN(head, "\n", 3)
+			require.Len(t, lines, 3, "profile-flame: no names+types header")
+			assert.Equal(t, "stack\tvalue\tunit", lines[0])
+			assert.Equal(t, "Array(String)\tFloat64\tString", lines[1],
+				"profile-flame: the folded contract needs a list `stack` and a numeric `value`")
+		}
 	}
 
 	// A miss binds nothing and fails nothing, and reports the alias back so
