@@ -530,8 +530,10 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 	}
 	// Fill the pane width: a full-width separator, then a Seq-keyed UiRect probe
 	// reads its span next frame (the passes-tab idiom — a per-seq R21 slot, so
-	// it does not contend with the editor's single CaptureAvailableSize
-	// register). Height follows the layout's aspect (clamped); the tab scrolls
+	// it contends with nobody, unlike the single CaptureAvailableSize register
+	// that the frame's last capture wins; captureUiAvailableRect is the same
+	// slot without the separator, height included).
+	// Height follows the layout's aspect (clamped); the tab scrolls
 	// if the graph is taller than the leaf. Filling the width is what maximises
 	// the drawing — view.Render fits uniformly, so a wide graph is
 	// width-constrained and a taller canvas would only add margin. One-frame

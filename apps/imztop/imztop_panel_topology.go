@@ -186,12 +186,11 @@ func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 	c.AddSpace(inst.spaceInner())
 
 	// Size the treemap to the pane, reserving room below for the legend + hover
-	// line. One-frame lag on available_size, the CPU-heatmap idiom.
-	c.CaptureAvailableSize()
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
-	if avail.W > 0 && avail.H > 0 &&
-		!math.IsNaN(float64(avail.W)) && !math.IsNaN(float64(avail.H)) {
-		w, h := avail.W, avail.H-topoReservedBelowPx
+	// line. One-frame lag on the seq-keyed pane probe, the CPU-heatmap idiom.
+	availW, availH, _ := inst.capturePane("topology")
+	if availW > 0 && availH > 0 &&
+		!math.IsNaN(float64(availW)) && !math.IsNaN(float64(availH)) {
+		w, h := availW, availH-topoReservedBelowPx
 		if h < topoMinH {
 			h = topoMinH
 			w -= topoScrollbarAllowPx // vertical scrollbar is showing

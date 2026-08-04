@@ -590,18 +590,24 @@ func TestSetAnnotations_ClearsAnnotationSelection(t *testing.T) {
 
 func TestEffectiveContainerW_AvailableOverridesFallback(t *testing.T) {
 	tl := newTestTimeline(t, nil, WithContainerWidth(500))
-	avail := c.AvailableSizeValue{W: 1000, H: 600}
-	if w := tl.effectiveContainerW(avail); w != 1000 {
-		t.Errorf("avail.W: got %v want 1000", w)
+	if w := tl.effectiveContainerW(1000, true); w != 1000 {
+		t.Errorf("probe width: got %v want 1000", w)
 	}
 }
 
 func TestEffectiveContainerW_NaNFallsBackToContainer(t *testing.T) {
 	tl := newTestTimeline(t, nil, WithContainerWidth(500))
-	nan := float32(math.NaN())
-	avail := c.AvailableSizeValue{W: nan}
-	if w := tl.effectiveContainerW(avail); w != 500 {
-		t.Errorf("NaN avail.W: got %v want 500 (fallback)", w)
+	if w := tl.effectiveContainerW(float32(math.NaN()), true); w != 500 {
+		t.Errorf("NaN probe width: got %v want 500 (fallback)", w)
+	}
+}
+
+// A seq that never captured reads back absent, not zero — the fallback has to
+// survive it, which is what a hidden tab hits on the frame it comes back.
+func TestEffectiveContainerW_NoProbeFallsBackToContainer(t *testing.T) {
+	tl := newTestTimeline(t, nil, WithContainerWidth(500))
+	if w := tl.effectiveContainerW(0, false); w != 500 {
+		t.Errorf("absent probe: got %v want 500 (fallback)", w)
 	}
 }
 

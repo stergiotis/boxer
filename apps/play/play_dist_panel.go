@@ -51,6 +51,11 @@ const (
 	distPlotMinW   = 480
 )
 
+// distPaneProbeSalt namespaces the pane probe's r21 slot; threading it through
+// the instance's id stack makes it window-unique, so two playgrounds size their
+// own plot.
+const distPaneProbeSalt uint64 = 0xd1570d15791b0001
+
 // distClaim is the panel's channel claim: resolved column indices (-1 when
 // an optional is absent) plus the row to highlight from the selection signal.
 type distClaim struct {
@@ -294,10 +299,14 @@ func (inst *DistDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k di
 	inst.renderSelectors(emit, k)
 	c.AddSpace(styletokens.GapItems(dens))
 
-	c.CaptureAvailableSize()
+	// Seq-keyed pane probe, window-unique through the instance's id stack (one
+	// frame behind). NOT CaptureAvailableSize: one process-wide slot the
+	// frame's last capture wins, and play's Detail pane renders after every
+	// body tab — so with a temporal row selected the plot was drawn at the
+	// width of the narrow side column.
 	w := float32(distPlotMinW)
-	if avail := c.CurrentApplicationState.StateManager.GetAvailableSize(); avail.W > distPlotMinW {
-		w = avail.W - 8
+	if availW, _, _ := c.CapturePaneSize(inst.ids.PrepareHighEntropy(distPaneProbeSalt).Derive()); availW > distPlotMinW {
+		w = availW - 8
 	}
 	switch inst.view {
 	case 1:

@@ -620,9 +620,11 @@ func (inst *IcicleDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl
 		paneW = r.MaxX - r.MinX
 	}
 	w := min(max(paneW-12, 360), 1600)
-	// Height follows a fixed aspect, clamped — the pane's own height is not
-	// readable here (the one register carrying it, CaptureAvailableSize, is the
-	// editor's and a second writer per frame would corrupt both).
+	// Height follows a fixed aspect, clamped. The pane's own height used to be
+	// unreadable here — the one register carrying it, CaptureAvailableSize, is
+	// a single slot the frame's last capture wins, so a second writer corrupts
+	// both. captureUiAvailableRect retired that: it reports the free rect into
+	// the same seq-keyed r21 slot this probe already uses.
 	//
 	// The aspect is measured from a tour capture, and lands within a pixel of
 	// the Sankey's for the same reason: it is the same dock leaf minus the same

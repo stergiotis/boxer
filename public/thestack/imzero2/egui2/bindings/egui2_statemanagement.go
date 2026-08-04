@@ -326,6 +326,12 @@ func (inst *StateManager) GetModifiers() ModifiersValue {
 // W and H are NaN until a captureAvailableSize op has been emitted from
 // inside a Ui scope at least once. One-frame lag: the value reflects the
 // previous frame's capture.
+//
+// Deprecated: r18 is a SINGLE process-wide scalar that the frame's LAST
+// capture wins, so two panels using it size each other — the reader has no way
+// to tell whose pane it is holding. Use [CapturePaneSize], whose r21 slot is
+// per-caller. Every layout consumer in this repo has moved; nothing reads this
+// today, and a new reader is a bug in waiting.
 func (inst *StateManager) GetAvailableSize() AvailableSizeValue {
 	return inst.r18AvailableSize
 }

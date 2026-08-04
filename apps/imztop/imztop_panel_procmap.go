@@ -150,12 +150,12 @@ func (inst *App) renderProcMapPanel(snap *PublishedSnapshot) {
 	c.AddSpace(inst.spaceInner())
 
 	// Size the treemap to the pane, reserving room below for the hover line.
-	// One-frame lag on available_size — the CPU-heatmap / topology idiom.
-	c.CaptureAvailableSize()
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
-	if avail.W > 0 && avail.H > 0 &&
-		!math.IsNaN(float64(avail.W)) && !math.IsNaN(float64(avail.H)) {
-		w, h := avail.W, avail.H-procMapReservedBelowPx
+	// One-frame lag on the seq-keyed pane probe — the CPU-heatmap / topology
+	// idiom.
+	availW, availH, _ := inst.capturePane("procmap")
+	if availW > 0 && availH > 0 &&
+		!math.IsNaN(float64(availW)) && !math.IsNaN(float64(availH)) {
+		w, h := availW, availH-procMapReservedBelowPx
 		if h < procMapMinH {
 			h = procMapMinH
 			w -= procMapScrollbarAllowPx // vertical scrollbar is showing

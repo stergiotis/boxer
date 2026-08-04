@@ -191,13 +191,12 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 
 	// Stretch the texture to fill the panel width (minus the y-axis gutter) so
 	// the spectrogram and its x-axis use all available space, not the native
-	// 600 px. 0 keeps the native width as a fallback before the available size
-	// is known (one-frame lag on CaptureAvailableSize is fine for a stable dock).
+	// 600 px. 0 keeps the native width as a fallback before the probe has
+	// landed (one-frame lag is fine for a stable dock).
 	texW := float32(0)
-	c.CaptureAvailableSize()
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
-	if avail.W > 0 && !math.IsNaN(float64(avail.W)) {
-		if cand := avail.W - spectroYAxisW - spectroAxisPad; cand > spectroMinTexW {
+	availW, _, _ := c.CapturePaneSize(inst.paneProbeSeq("sched-spectro"))
+	if availW > 0 && !math.IsNaN(float64(availW)) {
+		if cand := availW - spectroYAxisW - spectroAxisPad; cand > spectroMinTexW {
 			texW = cand
 		}
 	}

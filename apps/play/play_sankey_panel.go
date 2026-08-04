@@ -689,9 +689,11 @@ func (inst *SankeyDriver) render(flowsRec arrow.RecordBatch, fc sankeyFlowsClaim
 
 	// Fill the pane width: a full-width separator, then a Seq-keyed UiRect probe
 	// reads its span next frame (the passes/Network idiom — a per-seq R21 slot,
-	// so it does not contend with the editor's single CaptureAvailableSize
-	// register, which is the only source of a pane HEIGHT and is already spoken
-	// for). Height follows a fixed aspect, clamped: a flow diagram reads across,
+	// so it contends with nobody, unlike the single CaptureAvailableSize
+	// register that the frame's last capture wins). A pane HEIGHT is available
+	// too since captureUiAvailableRect landed — the same seq-keyed slot, no
+	// separator needed, if this ever wants one.
+	// Height follows a fixed aspect, clamped: a flow diagram reads across,
 	// so width is what it wants. The tab scrolls, so a leaf shorter than the
 	// aspect asks for costs a scroll rather than a clipped diagram — and since
 	// implot pins both axes to the unit box, the whole diagram is on screen at

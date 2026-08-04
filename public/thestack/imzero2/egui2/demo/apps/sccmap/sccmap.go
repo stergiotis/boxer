@@ -361,6 +361,11 @@ type App struct {
 	// that caused W to grow despite the H guard.
 	lastContainerW float32
 	lastContainerH float32
+
+	// availW / availH / availOk are this app's own pane probe, armed where
+	// the treemap starts and read one frame later by availableContainerSize.
+	availW, availH float32
+	availOk        bool
 }
 
 var _ runtimeapp.AppI = (*App)(nil)
@@ -594,7 +599,7 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	inst.renderDistSummaries()
 	inst.renderTotals()
 
-	w, h := availableContainerSize()
+	w, h := inst.availableContainerSize()
 	if inst.lastContainerW > 0 && w > inst.lastContainerW && w-inst.lastContainerW < containerGrowGuardPx {
 		w = inst.lastContainerW
 	}
@@ -604,7 +609,10 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	inst.lastContainerW = w
 	inst.lastContainerH = h
 	inst.tm.SetContainerSize(w, h)
-	c.CaptureAvailableSize()
+	// Arm the pane probe HERE — after the chrome above, before the treemap
+	// below — so the rect it reports next frame is the space the treemap
+	// actually gets, and does not include what the treemap itself drew.
+	inst.availW, inst.availH, inst.availOk = c.CapturePaneSize(c.ProbeSeq("sccmap", "treemap-pane"))
 
 	inst.tm.Render()
 
@@ -719,21 +727,29 @@ func (inst *App) renderNoData() {
 }
 
 // availableContainerSize reports the (w, h) the treemap should fill
-// this frame. Reads R18 from last frame's captureAvailableSize; falls
-// back to the historical 900×550 while the value is NaN (first frame
-// or capture-outside-Ui). Both axes are reduced by their respective
+// this frame, from what this app's own pane probe reported last frame;
+// falls back to the historical 900×550 until one lands (first frame, or
+// a probe armed outside a Ui). Both axes are reduced by their respective
 // chrome budgets (see treemapChromeW / treemapChromeH) so the treemap
 // Frame's outer rect — including the per-cell stroke overshoot — fits
-// inside the captured area and doesn't drive the host Window's
+// inside the measured area and doesn't drive the host Window's
 // monotonic auto-grow loop.
-func availableContainerSize() (w, h float32) {
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
+//
+// Seq-keyed rather than R18: that register is one process-wide slot the
+// frame's last capture wins, so any other probing panel in the same
+// frame would hand this treemap the wrong pane. It does NOT retire the
+// grow guard at the call site — that damps the window's auto-grow loop,
+// which is a different feedback path.
+func (inst *App) availableContainerSize() (w, h float32) {
 	w, h = fallbackContainerW, fallbackContainerH
-	if !math.IsNaN(float64(avail.W)) && avail.W > treemapChromeW {
-		w = avail.W - treemapChromeW
+	if !inst.availOk {
+		return
 	}
-	if !math.IsNaN(float64(avail.H)) && avail.H > treemapChromeH {
-		h = avail.H - treemapChromeH
+	if !math.IsNaN(float64(inst.availW)) && inst.availW > treemapChromeW {
+		w = inst.availW - treemapChromeW
+	}
+	if !math.IsNaN(float64(inst.availH)) && inst.availH > treemapChromeH {
+		h = inst.availH - treemapChromeH
 	}
 	return
 }

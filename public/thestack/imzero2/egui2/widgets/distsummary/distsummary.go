@@ -757,14 +757,15 @@ func (inst Renderer) renderBoxenplotBody(scope string, digest *tdigest.TDigest, 
 	// Centre the fixed-width boxenplot horizontally: the window opens wide for
 	// the ECDF tab (see [defaultEcdfPlotWidth]), so without a centring lead the
 	// narrow letter-value plot would hug the left edge with dead space to its
-	// right. avail.W is last frame's captured content width (NaN until the
-	// first capture) — fall back to the plain pad when it is unavailable.
-	sm := c.CurrentApplicationState.StateManager
-	avail := sm.GetAvailableSize()
-	c.CaptureAvailableSize()
+	// right. availW is last frame's content width from this instance's own r21
+	// probe (absent until the first lands) — fall back to the plain pad then.
+	// Seq-keyed and not CaptureAvailableSize, whose one process-wide slot the
+	// frame's last capture wins: this widget embeds inside apps that probe too
+	// (imztop's CPU tab is one), and the loser reads the other's pane.
+	availW, _, availOk := c.CapturePaneSize(c.ProbeSeq(inst.idPrefix, "distsummary-boxen-pane"))
 	lead := pad
-	if avail.W == avail.W { // reject NaN
-		if centred := (avail.W - inst.popupWidth) / 2; centred > lead {
+	if availOk && availW == availW { // reject NaN
+		if centred := (availW - inst.popupWidth) / 2; centred > lead {
 			lead = centred
 		}
 	}
@@ -906,24 +907,23 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	}
 	// Responsive width: the ECDF reads as a wide 2-D curve, so it fills the
 	// window's content width instead of the fixed popupWidth the narrow
-	// boxenplot tab keeps. avail is last frame's captured content size (one-
-	// frame lag; W is NaN until the first capture lands), and popupWidth is
-	// the floor so a just-opened or shrunk-narrow window never collapses the
-	// curve. Widening is also what restores the x-axis ticks: egui_plot culls
-	// any X label whose inter-mark spacing drops under 60 px, which starves a
-	// fixed popupWidth plot of a wide-range distribution (the window opens at
-	// [defaultEcdfPlotWidth] so the fresh view already clears that bar).
-	sm := c.CurrentApplicationState.StateManager
-	avail := sm.GetAvailableSize()
-	c.CaptureAvailableSize()
+	// boxenplot tab keeps. availW is last frame's content width from this
+	// instance's own r21 probe (one-frame lag; absent until the first lands),
+	// and popupWidth is the floor so a just-opened or shrunk-narrow window never
+	// collapses the curve. Widening is also what restores the x-axis ticks:
+	// egui_plot culls any X label whose inter-mark spacing drops under 60 px,
+	// which starves a fixed popupWidth plot of a wide-range distribution (the
+	// window opens at [defaultEcdfPlotWidth] so the fresh view already clears
+	// that bar). Seq-keyed, not CaptureAvailableSize — see the boxen tab above.
+	availW, _, availOk := c.CapturePaneSize(c.ProbeSeq(inst.idPrefix, "distsummary-ecdf-pane"))
 	pad := inst.popupPad
 	plotW := inst.popupWidth
 	// Subtract a chrome budget beyond the two pad insets so the rendered row
 	// (pad + plot + pad + egui's inter-item spacings) fits strictly inside the
 	// width it was measured from, instead of overflowing it by ~2 item_spacings
 	// and ratcheting the host Window wider every frame. See [ecdfPlotChromeW].
-	if avail.W == avail.W { // avail.W == avail.W rejects NaN
-		if fill := avail.W - 2*pad - ecdfPlotChromeW; fill > plotW {
+	if availOk && availW == availW { // availW == availW rejects NaN
+		if fill := availW - 2*pad - ecdfPlotChromeW; fill > plotW {
 			plotW = fill
 		}
 	}
@@ -931,6 +931,10 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	// mis-estimates) to last frame's width so any residual overflow can't
 	// resurrect the auto-grow loop; a real resize moves in larger steps. See
 	// [ecdfPlotGrowGuardPx]. Downward deltas pass through (window shrink).
+	//
+	// The seq-keyed probe does NOT retire this: the loop it damps runs through
+	// the host Window's auto-grow (content sized from a width the content
+	// itself sets), not through the register the probe replaced.
 	if state.lastEcdfPlotW > 0 && plotW > state.lastEcdfPlotW && plotW-state.lastEcdfPlotW < ecdfPlotGrowGuardPx {
 		plotW = state.lastEcdfPlotW
 	}

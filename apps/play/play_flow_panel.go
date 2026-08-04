@@ -669,8 +669,10 @@ func (inst *flowDriver) renderGraph(g flowGraph) {
 	}
 	// Fill the pane width via the separator + Seq-keyed UiRect probe (the
 	// passes/Network idiom — per-seq R21 slot, never CaptureAvailableSize:
-	// that single register is the Editor tab's). One-frame lag; the first
-	// frame falls back to a conservative width.
+	// one register, won by the frame's last capture, so its readers size each
+	// other). One-frame lag; the first frame falls back to a conservative
+	// width. captureUiAvailableRect is the newer form: same slot, no
+	// separator, and it reports the pane height as well.
 	sm := c.CurrentApplicationState.StateManager
 	c.Separator().Horizontal().Send()
 	probeSeq := flowIDSalt ^ inst.idSeed ^ 0x1

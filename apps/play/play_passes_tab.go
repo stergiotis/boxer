@@ -356,8 +356,10 @@ func (inst *PlayApp) renderPassesTab() {
 	// Pane-width probe: the separator spans the full pane width, so the
 	// captureUiRect snapshot right after it reports it (min_rect is the
 	// placed-widget bbox — a probe with nothing placed reads degenerate,
-	// which is why the separator comes first). Seq-keyed r21 slot, so this
-	// does not contend with the editor's CaptureAvailableSize register.
+	// which is why the separator comes first). Seq-keyed r21 slot, so it
+	// contends with nobody — unlike CaptureAvailableSize, whose one register
+	// the frame's last capture wins. (captureUiAvailableRect is the same slot
+	// without the separator, and carries the pane HEIGHT too.)
 	// One-frame lag; first frame falls back to a conservative width.
 	c.Separator().Horizontal().Send()
 	probeSeq := passesVizIDSalt ^ inst.vizSeed ^ 0x1

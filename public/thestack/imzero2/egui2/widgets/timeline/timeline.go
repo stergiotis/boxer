@@ -1091,22 +1091,27 @@ func (inst *Timeline) renderBody() {
 	// pointer was over us last frame), not the global zoom register that any
 	// hovered canvas would also see.
 	wheel := stateMgr.GetCanvasWheel(canvasH)
-	avail := stateMgr.GetAvailableSize()
+	// Width auto-fit reads THIS instance's own pane probe. Nothing has been
+	// placed in this Ui yet, so the rect is the whole pane; arming it here also
+	// keeps it clear of the canvas allocated further down (a probe after that
+	// would report the strip below it). Per-seq for the same reason the pointer
+	// moved off R14 above — the single-slot CaptureAvailableSize register is
+	// last-capture-wins, and it made this strip render at the width of whatever
+	// panel captured after it (play's Detail pane, in the case that surfaced
+	// it). One-frame lag either way.
+	availW, _, availOk := c.CapturePaneSize(c.ProbeSeq(inst.scopeKey, "timeline-pane"))
 
-	effW := inst.effectiveContainerW(avail)
+	effW := inst.effectiveContainerW(availW, availOk)
 	// Lane packing and the label band are view-independent (they read only
 	// inst.intervals), and pan needs labelW to know the true axis width, so
 	// both run before the input block rather than after it.
 	inst.laneAssn = layout.PackLanes(inst.intervals)
 	labelW := inst.computeLabelW()
-	// Width auto-fit is a layout concern, not an interaction one: capturing the
-	// parent's available_size is what lets effectiveContainerW track the pane
-	// next frame (WithContainerWidth is only the frame-1 fallback). It must run
-	// even when interaction is off, or a non-interactive timeline — e.g. the
-	// Detail pane's read-only strip — is stuck at the stale/fallback width and
-	// overspills a narrow pane, clipping its right edge (the newest event). Only
-	// the pan/zoom input handling below is genuinely gated on interactivity.
-	c.CaptureAvailableSize()
+	// Width auto-fit is a layout concern, not an interaction one, which is why
+	// the probe above is unconditional: a non-interactive timeline — e.g. the
+	// Detail pane's read-only strip — would otherwise be stuck at the fallback
+	// width and overspill a narrow pane, clipping its right edge (the newest
+	// event). Only the pan/zoom input handling here is gated on interactivity.
 	if inst.interactionEnabled {
 		inst.applyZoomInput(wheel, effW)
 		inst.applyPanInput(stateMgr, labelW, effW)
@@ -1344,15 +1349,15 @@ func (inst *Timeline) paintLaneLabels(vl verticalLayout) {
 	}
 }
 
-// effectiveContainerW returns the parent's available width from the
-// previous frame's captureAvailableSize. Falls back to containerW when
-// no capture has landed yet (first frame after construction, or capture
-// ran outside a Ui). WithContainerWidth sets the fallback, not a pin —
-// auto-fit always wins when a valid capture is available.
-func (inst *Timeline) effectiveContainerW(avail c.AvailableSizeValue) (w float32) {
+// effectiveContainerW returns the parent's available width as this instance's
+// own pane probe reported it last frame. Falls back to containerW when no
+// capture has landed yet (first frame after construction, or the probe ran
+// outside a Ui). WithContainerWidth sets the fallback, not a pin — auto-fit
+// always wins when a valid probe is available.
+func (inst *Timeline) effectiveContainerW(availW float32, ok bool) (w float32) {
 	w = inst.containerW
-	if !math.IsNaN(float64(avail.W)) && avail.W > 0 {
-		w = avail.W
+	if ok && !math.IsNaN(float64(availW)) && availW > 0 {
+		w = availW
 	}
 	return
 }

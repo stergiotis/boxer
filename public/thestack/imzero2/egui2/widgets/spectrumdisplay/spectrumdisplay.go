@@ -143,6 +143,11 @@ type SpectrumDisplay struct {
 	hs       *heatmapscroll.HeatmapScroll
 	cbar     *colorscale.ColorScale
 
+	// availW/availH/availOk are this instance's own pane probe, read one frame
+	// after it is armed and only in fill mode (no pinned display size).
+	availW, availH float32
+	availOk        bool
+
 	heightSlots uint32
 
 	freqAxis    AxisSpec
@@ -293,9 +298,13 @@ func (inst *SpectrumDisplay) Render() {
 }
 
 func (inst *SpectrumDisplay) renderInner() {
-	// Capture this Ui's available size for next frame's window-fill resolve.
+	// Probe this Ui's free rect for next frame's window-fill resolve, into this
+	// instance's own r21 slot. NOT CaptureAvailableSize: that register is a
+	// single process-wide scalar the frame's last capture wins, so in fill mode
+	// this widget was sized by whichever unrelated panel captured after it.
 	if inst.dispW <= 0 || inst.dispH <= 0 {
-		c.CaptureAvailableSize()
+		inst.availW, inst.availH, inst.availOk = c.CapturePaneSize(
+			c.ProbeSeq(inst.scopeKey, "spectrumdisplay-pane"))
 	}
 	W, H := inst.resolveSize()
 	if W < 8 || H < 8 {
@@ -354,12 +363,11 @@ func (inst *SpectrumDisplay) resolveSize() (w, h float32) {
 	if inst.dispW > 0 && inst.dispH > 0 {
 		return inst.dispW, inst.dispH
 	}
-	av := c.CurrentApplicationState.StateManager.GetAvailableSize()
-	w, h = av.W, av.H
-	if math.IsNaN(float64(w)) || w < 1 {
+	w, h = inst.availW, inst.availH
+	if !inst.availOk || math.IsNaN(float64(w)) || w < 1 {
 		w = DefaultSize[0]
 	}
-	if math.IsNaN(float64(h)) || h < 1 {
+	if !inst.availOk || math.IsNaN(float64(h)) || h < 1 {
 		h = DefaultSize[1]
 	}
 	return

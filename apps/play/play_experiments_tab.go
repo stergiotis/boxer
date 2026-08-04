@@ -72,6 +72,11 @@ const (
 	experimentsTopoReservedPx = 8
 )
 
+// experimentsTopoPaneProbeSalt namespaces the pane probe's r21 slot; threading
+// it through the instance's id stack makes it window-unique, so two playgrounds
+// size their own treemap.
+const experimentsTopoPaneProbeSalt uint64 = 0xe89e21a1e57090b0
+
 // experimentsKey is the cache key for the built output: re-drive only when the
 // user changes what they asked for, or when the result underneath changes.
 // Schema identity is a pointer compare, the same idiom CardDriver.EnsureFor
@@ -427,16 +432,21 @@ func (inst *experimentsDriver) renderTopology() {
 		return
 	}
 	// Legend first, then measure: the colours are data-bearing, so the key has
-	// to be on screen whatever the pane's height. Drawing it above means
-	// CaptureAvailableSize already excludes it and the treemap needs no
-	// guessed reserve for it — sizing the treemap to the full pane and putting
-	// the legend under it pushed the key below the fold.
+	// to be on screen whatever the pane's height. Drawing it above means the
+	// probe already excludes it and the treemap needs no guessed reserve for it
+	// — sizing the treemap to the full pane and putting the legend under it
+	// pushed the key below the fold.
+	//
+	// The probe is seq-keyed and window-unique (one frame behind). NOT
+	// CaptureAvailableSize: one process-wide slot the frame's last capture
+	// wins, and this tab lives in the tools leaf, which renders BEFORE every
+	// body tab — so any body pane that captured (Projection, Timeline,
+	// Distribution) sized this treemap, no Detail pane needed.
 	inst.renderTopologyLegend()
-	c.CaptureAvailableSize()
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
-	if avail.W > 0 && avail.H > 0 &&
-		!math.IsNaN(float64(avail.W)) && !math.IsNaN(float64(avail.H)) {
-		w, h := avail.W, avail.H-experimentsTopoReservedPx
+	availW, availH, _ := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsTopoPaneProbeSalt).Derive())
+	if availW > 0 && availH > 0 &&
+		!math.IsNaN(float64(availW)) && !math.IsNaN(float64(availH)) {
+		w, h := availW, availH-experimentsTopoReservedPx
 		if w < experimentsTopoMinW {
 			w = experimentsTopoMinW
 		}

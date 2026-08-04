@@ -20,9 +20,14 @@ import (
 // the range they want the axis to have. Only a degenerate layout falls back
 // to refitting, and then with a zero floor.
 func (inst *App) beginTimePlot(id string, height float32, ylabel string, times []float64, yTickLo, yTickHi float64) *implot.Plot {
-	c.CaptureAvailableSize()
-	w := c.CurrentApplicationState.StateManager.GetAvailableSize().W
-	if !(w >= 200) { // NaN until the first capture lands
+	// One probe slot per plot id, threaded through the instance's id stack so
+	// it is window-unique too. NOT CaptureAvailableSize: that register is a
+	// single process-wide slot the frame's last capture wins, and imztop's
+	// default layout renders the right-hand leaf (Network / Disk / GPU, ~27% of
+	// the width) AFTER the wide left leaf — so every plot and heatmap on the
+	// left was sized by the narrow column beside it.
+	w, _, _ := c.CapturePaneSize(inst.paneProbeSeq("plot#" + id))
+	if !(w >= 200) { // no probe has landed yet
 		w = 600
 	}
 	yAxis, yAxisOk := talbotTicks(yTickLo, yTickHi, 5)

@@ -204,21 +204,22 @@ func (inst *App) renderCPUHeatmap(snap *PublishedSnapshot) {
 	// much vertical space as the chrome + sparkline grid below leave free, so
 	// users see it grow when they enlarge the panel. 0 along an axis keeps the
 	// native slot-count size as a first-frame fallback before the available
-	// size is known. One-frame lag is fine — the captured size reflects the
-	// previous frame's available_size, stable across frames at a fixed leaf.
-	c.CaptureAvailableSize()
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
+	// size is known. One-frame lag is fine — the probe reflects the previous
+	// frame's free rect, stable across frames at a fixed leaf. Seq-keyed, so
+	// the Network / Disk / GPU leaf rendering after this one no longer decides
+	// how wide the heatmap is (see [App.paneProbeSeq]).
+	availW, availH, _ := inst.capturePane("cpu-heatmap")
 	texW := float32(0)
-	if avail.W > 0 && !math.IsNaN(float64(avail.W)) {
-		if cand := avail.W - cpuHeatmapAxisPad; cand > cpuHeatmapMinTexW {
+	if availW > 0 && !math.IsNaN(float64(availW)) {
+		if cand := availW - cpuHeatmapAxisPad; cand > cpuHeatmapMinTexW {
 			texW = cand
 		}
 	}
 	texH := float32(0)
-	if avail.H > 0 && !math.IsNaN(float64(avail.H)) {
+	if availH > 0 && !math.IsNaN(float64(availH)) {
 		minH := float32(st.heightSlots)
 		maxH := minH * cpuHeatmapMaxStretch
-		texH = avail.H - cpuHeatmapReservedBelowPx
+		texH = availH - cpuHeatmapReservedBelowPx
 		if texH < minH {
 			texH = minH
 		}

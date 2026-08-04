@@ -113,14 +113,15 @@ func demoLayeredGraph(ids *c.WidgetIdStack, st *layeredGraphDemoState) {
 		return
 	}
 
-	// Responsive width: fill the gallery panel's available width (captured
-	// from the previous frame; NaN until the first capture lands).
-	sm := c.CurrentApplicationState.StateManager
-	avail := sm.GetAvailableSize()
-	c.CaptureAvailableSize()
+	// Responsive width: fill the gallery panel's available width, from this
+	// demo's own seq-keyed probe (one frame behind; absent until the first
+	// lands). Not CaptureAvailableSize — one process-wide slot, last capture of
+	// the frame wins, so a gallery showing two probing demos sizes each by the
+	// other.
+	availW, _, availOk := c.CapturePaneSize(c.ProbeSeq("layeredgraph-demo", "pane"))
 	canvasW := float32(760)
-	if avail.W == avail.W && avail.W > 16 { // avail.W == avail.W rejects NaN
-		canvasW = avail.W - 8
+	if availOk && availW > 16 {
+		canvasW = availW - 8
 	}
 
 	res := view.Render(layeredGraphDemoIDBase, st.layout, view.RenderOpts{

@@ -130,6 +130,11 @@ func ensureArchLayout() (*layeredgraph.Layout, map[string]nodeMeta, error) {
 // inspector windows derive disjoint canvas / sense-region ids.
 const archIDSalt uint64 = 0x9e3779b97f4a7c15
 
+// archPaneProbeSalt namespaces the pane probe's r21 slot, distinct from the
+// canvas ids archIDSalt covers; both go through the instance's id stack, so
+// each window probes its own panel.
+const archPaneProbeSalt uint64 = 0xa4c89a9ee0be0001
+
 func (inst *App) graphIDBase() uint64 { return inst.ids.PrepareHighEntropy(archIDSalt).Derive() }
 
 const (
@@ -164,16 +169,17 @@ func (inst *App) renderGraph(spec CapSpec) {
 		return
 	}
 
-	// Responsive width: track the panel's available width (captured last
-	// frame; NaN until the first capture lands). The surrounding ScrollArea
-	// uses AutoShrink(false,false), so this reflects the panel width, not the
-	// canvas's own previous width.
-	sm := c.CurrentApplicationState.StateManager
-	avail := sm.GetAvailableSize()
-	c.CaptureAvailableSize()
+	// Responsive width: track the panel's available width, from this app's own
+	// seq-keyed probe (one frame behind; absent until the first lands). The
+	// surrounding ScrollArea uses AutoShrink(false,false), so this reflects the
+	// panel width, not the canvas's own previous width. Seq-keyed and not
+	// CaptureAvailableSize, whose one process-wide slot the frame's last
+	// capture wins — this app has a single reader today, and that is exactly
+	// the condition that quietly stops holding.
+	availW, _, _ := c.CapturePaneSize(inst.ids.PrepareHighEntropy(archPaneProbeSalt).Derive())
 	canvasW := archFallbackW
-	if avail.W == avail.W && avail.W > archChromeW { // avail.W == avail.W rejects NaN
-		canvasW = avail.W - archChromeW
+	if availW > archChromeW {
+		canvasW = availW - archChromeW
 	}
 	canvasW = max(min(canvasW, archMaxCanvasW), archMinCanvasW)
 	// Height from the layout's own aspect so the short three-rank graph fills

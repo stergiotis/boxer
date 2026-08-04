@@ -694,18 +694,27 @@ func formatRunningLabel(snap projectorSnapshot) (label string) {
 // member, but a click in empty space still snaps to the closest point (no
 // max-distance threshold). One-frame lag inherited from the implot
 // click register read.
+
+// projectionPaneProbeSalt namespaces the pane probe's r21 slot; threading it
+// through the instance's id stack makes it window-unique, so two playgrounds
+// size their own plot.
+const projectionPaneProbeSalt uint64 = 0x9401ec7104e9a11e
+
 func renderProjectionPlot(ids *c.WidgetIdStack, snap projectorSnapshot, selectedRow int64, colorByFeature int8) (newSelectedRow int64, hit bool) {
 	coords := snap.coords
 	coordRow := snap.coordRow
 
-	// Fill the remaining panel area in both axes (R18 available-size, one
-	// frame behind) — the greedy-fill choice of the bridge version; a
-	// pinned aspect would preserve cluster shapes but letterbox one axis.
-	// The port renders through implot (ADR-0149 SD7); pan, anchored zoom,
-	// Shift+drag box-zoom and double-click fit come with it.
-	c.CaptureAvailableSize()
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
-	w, h := avail.W, avail.H
+	// Fill the remaining panel area in both axes — the greedy-fill choice of
+	// the bridge version; a pinned aspect would preserve cluster shapes but
+	// letterbox one axis. The port renders through implot (ADR-0149 SD7); pan,
+	// anchored zoom, Shift+drag box-zoom and double-click fit come with it.
+	//
+	// The probe is seq-keyed and window-unique (one frame behind). NOT
+	// CaptureAvailableSize: that register is one process-wide slot the frame's
+	// last capture wins, and play's Detail pane renders after every body tab —
+	// so with a temporal row selected this plot took the narrow side column's
+	// size for BOTH of its axes.
+	w, h, _ := c.CapturePaneSize(ids.PrepareHighEntropy(projectionPaneProbeSalt).Derive())
 	if !(w >= 200) {
 		w = 700
 	}
