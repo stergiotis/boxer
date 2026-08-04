@@ -303,6 +303,18 @@ small, self-contained follow-up worth its own mini-dialogue.
 | M4 | Treemap result panel + `profile-treemap` applet | R1 dialogue |
 | M5 | Flame widget + panel (own ADR) | R2 dialogue |
 
+*(M5 shipped 2026-08-04, and cost less than R2 costed it. The widget and the
+`play` panel came from [ADR-0160](../adr/0160-imzero2-icicle-flamegraph-widget.md)
+on the ImPlot custom-item lane rather than from this ladder — which corrects
+§3's aside that "a flame view is a partition layout, not an ImPlot item": an
+icicle **is** cartesian, x the value domain and y depth. What M5 needed here
+was therefore only a book, `profile-flame`, plus `Tab: icicle` on imzrt's
+Explore seed. The projection is the converter's own output rescaled — ns to
+ms, bytes to MiB — because the reader scales by SI prefix and not by unit.
+R1's treemap panel (M4) is unstarted and its case is weaker now: the icicle
+answers "what is big, and what is it part of" for stack-shaped data, which
+was M4's motivating question.)*
+
 *(M3 shipped 2026-08-01 with two adjustments: the graph book's tab slug is
 `network` — the ADR-0129 panel's id in today's play — and `profile-diff`
 became `profile-heap` (in-use vs churn from the heap profile's own four

@@ -304,11 +304,17 @@ obvious next cut, recorded in SD8.
 
 Not in this cut, recorded so they do not gate it:
 
-- **A pprof-specific applet book.** The generic `play` panel of SD9 draws a
-  capture already — `SELECT stack, value FROM keelson('<handle>')` is the whole
-  query, since the M1 converter's output *is* the folded contract — so what is
-  left of the ladder's M5 is a committed book beside `profile-top` and
-  `profile-callgraph`, not any widget or panel work.
+- ~~**A pprof-specific applet book.**~~ *Landed.* The generic `play` panel of
+  SD9 drew a capture already — `SELECT stack, value FROM keelson('<handle>')`
+  is the whole query, since the M1 converter's output *is* the folded contract
+  — so what was left of the ladder's M5 was a committed book, not any widget or
+  panel work. `bookpprof/profile-flame.md` is it, and imzrt's Explore now seeds
+  the same projection with `Tab: icicle`. Both rescale the value (nanoseconds
+  and bytes read badly raw) through an inner alias, `value / d AS value` being
+  a cyclic alias to ClickHouse. Naming `icicle` in an applet's `tabs:` needed
+  the slug added to sqlapplet's result-panel roster — it had been registered in
+  play and classified in neither list, which the tab-policy gate had been
+  failing on since this ADR's panel landed.
 - **Differential flamegraphs.** Signed values (red/blue against a baseline)
   need a second tree and a diff model; the widget rejects negative values today
   rather than half-supporting them.
