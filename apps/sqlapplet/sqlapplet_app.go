@@ -30,7 +30,7 @@ var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "
 // cannot prune it and it rides along on every applet. TestTabPolicyCoversEveryRegisteredTab
 // pins that, because the failure is silent: a new panel in play just quietly
 // appears in every applet window.
-var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "network", "sankey", "schema", "detail"}
+var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "network", "sankey", "dist", "icicle", "schema", "detail"}
 
 // autoOffResultTabIDs are result panels `tabs: auto` does NOT show. They are
 // still listable — an applet that names one in `tabs:` gets it — so this is a
@@ -43,7 +43,16 @@ var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "
 // that case today — it binds two convention-named CTEs (`flows`, `nodes`)
 // carrying a conserved quantity, which no applet in the corpus has — so under
 // auto it would be a permanently rejecting tab on every applet window.
-var autoOffResultTabIDs = []string{"sankey"}
+// Distribution joins it for the same reason: its columns (`series`, `n`, `ps`,
+// `qs`, `hist_*`) come out of the `distsql` macro vocabulary, so a query either
+// asked for a distribution or carries none of them.
+//
+// Icicle is deliberately NOT here. Its node contract is `id` + `parent` +
+// `value` — an ordinary hierarchy shape a recursive CTE can land on without
+// meaning to, like kanban's `lane` + `title` — so it earns the same per-frame
+// accept/reject the other shape panels take. Its folded contract is what a
+// pprof capture already is; `bookpprof/profile-flame.md` names it explicitly.
+var autoOffResultTabIDs = []string{"sankey", "dist"}
 
 // appletApp is the minted AppI: a fresh attenuated PlayApp per open window
 // (factory dispatch), built in Mount so env-configured connection details

@@ -78,7 +78,8 @@ func TestAttenuateTabsAutoDropsOnlyChromeAndDefaultOff(t *testing.T) {
 		assert.NotContainsf(t, ids, id, "chrome tab %q survived", id)
 	}
 	assert.NotContains(t, ids, "sankey", "Sankey is default-off: no applet's shape carries a `flows` CTE")
-	for _, id := range []string{"table", "detail", "network", "kanban", "timeline", "world", "projection", "schema"} {
+	assert.NotContains(t, ids, "dist", "Distribution is default-off: its columns come from the distsql macros")
+	for _, id := range []string{"table", "detail", "network", "kanban", "timeline", "world", "projection", "schema", "icicle"} {
 		assert.Containsf(t, ids, id, "auto must keep %q for the accept/reject contract to answer", id)
 	}
 }
@@ -90,7 +91,7 @@ func TestAttenuateTabsExplicitListPrunes(t *testing.T) {
 
 	assert.Contains(t, ids, "table")
 	assert.Contains(t, ids, "detail")
-	for _, id := range []string{"sankey", "network", "kanban", "timeline", "world", "projection", "schema"} {
+	for _, id := range []string{"sankey", "network", "kanban", "timeline", "world", "projection", "schema", "dist", "icicle"} {
 		assert.NotContainsf(t, ids, id, "unlisted result panel %q survived an explicit `tabs:`", id)
 	}
 }
