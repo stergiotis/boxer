@@ -54,31 +54,22 @@ func (inst *Fetcher) FetchR10() (idsTrue []uint64, idsFalse iter.Seq[uint64]) {
 	idsFalse = inst.iterateU64h()
 	return
 }
-func (inst *Fetcher) FetchR14CanvasPointer() (hoverX float32, hoverY float32, clicked bool) {
-	inst.invoke(FuncProcIdFetchR14CanvasPointer)
-	hoverX = inst.readF32()
-	hoverY = inst.readF32()
-	clicked = inst.readB()
-	return
-}
-func (inst *Fetcher) FetchR15WalkersCamera() (found bool, mapId uint64, zoom float64, centerLat float64, centerLon float64, minLat float64, minLon float64, maxLat float64, maxLon float64, screenWidthPx float32, screenHeightPx float32, hoverLat float64, hoverLon float64, hoverValid bool, clicked bool, viewHash uint64) {
-	inst.invoke(FuncProcIdFetchR15WalkersCamera)
-	found = inst.readB()
-	mapId = inst.readU64()
-	zoom = inst.readF64()
-	centerLat = inst.readF64()
-	centerLon = inst.readF64()
-	minLat = inst.readF64()
-	minLon = inst.readF64()
-	maxLat = inst.readF64()
-	maxLon = inst.readF64()
-	screenWidthPx = inst.readF32()
-	screenHeightPx = inst.readF32()
-	hoverLat = inst.readF64()
-	hoverLon = inst.readF64()
-	hoverValid = inst.readB()
-	clicked = inst.readB()
-	viewHash = inst.readU64()
+func (inst *Fetcher) FetchR15WalkersCameras() (mapIds []uint64, zooms []float64, centerLats []float64, centerLons []float64, minLats []float64, minLons []float64, maxLats []float64, maxLons []float64, screenWidthPxs []float32, screenHeightPxs []float32, hoverLats []float64, hoverLons []float64, flags []uint8, viewHashes iter.Seq[uint64]) {
+	inst.invoke(FuncProcIdFetchR15WalkersCameras)
+	mapIds = inst.readU64h()
+	zooms = inst.readF64h()
+	centerLats = inst.readF64h()
+	centerLons = inst.readF64h()
+	minLats = inst.readF64h()
+	minLons = inst.readF64h()
+	maxLats = inst.readF64h()
+	maxLons = inst.readF64h()
+	screenWidthPxs = inst.readF32h()
+	screenHeightPxs = inst.readF32h()
+	hoverLats = inst.readF64h()
+	hoverLons = inst.readF64h()
+	flags = inst.readU8h()
+	viewHashes = inst.iterateU64h()
 	return
 }
 func (inst *Fetcher) FetchR16ScrollDelta() (x float32, y float32) {

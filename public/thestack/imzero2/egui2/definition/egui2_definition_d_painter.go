@@ -470,18 +470,17 @@ if {{EguiUiOptionalOuter}}.is_some() {
     if sense_hover { sense = sense.union(egui::Sense::hover()); }
     let (resp, mut painter) = ui.allocate_painter(desired, sense);
     let origin = resp.rect.min;
-    self.r14_canvas_origin_x = origin.x;
-    self.r14_canvas_origin_y = origin.y;
-    self.r14_canvas_clicked = resp.clicked();
-    if let Some(hp) = resp.hover_pos() {
-        self.r14_canvas_hover_x = hp.x - origin.x;
-        self.r14_canvas_hover_y = hp.y - origin.y;
-    } else {
-        self.r14_canvas_hover_x = f32::NAN;
-        self.r14_canvas_hover_y = f32::NAN;
-    }
-    // ADR-0149 M1: the per-id pointer row (r24) beside the legacy single-slot
-    // r14. interact_pointer_pos first, so an active drag keeps reporting after
+    // Canvas-local hover, in canvas coordinates, NaN when the pointer is
+    // elsewhere. A LOCAL: its only reader is this canvas's own r23 wheel row
+    // below. It used to be written to the r14 register, which was one slot for
+    // the whole frame — every canvas overwrote the previous one's, so what a
+    // reader got depended on render order, and r14 is retired.
+    let (hover_x, hover_y) = match resp.hover_pos() {
+        Some(hp) => (hp.x - origin.x, hp.y - origin.y),
+        None => (f32::NAN, f32::NAN),
+    };
+    // ADR-0149 M1: the per-id pointer row (r24), keyed by canvas id.
+    // interact_pointer_pos first, so an active drag keeps reporting after
     // the pointer leaves the canvas (edge-crossing pan); hover_pos otherwise.
     {
         let pp = resp.interact_pointer_pos().or_else(|| resp.hover_pos());
@@ -515,9 +514,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
             wheel_scroll_y = sd.y;
             ui.input_mut(|inp| inp.smooth_scroll_delta = egui::Vec2::ZERO);
         }
-        let hx = self.r14_canvas_hover_x;
-        let hy = self.r14_canvas_hover_y;
-        self.r23_canvas_wheel_push({{Id}}.value(), wheel_scroll_x, wheel_scroll_y, wheel_zoom, hx, hy);
+        self.r23_canvas_wheel_push({{Id}}.value(), wheel_scroll_x, wheel_scroll_y, wheel_zoom, hover_x, hover_y);
     }
     if let Some(op) = opacity {
         painter.set_opacity(op);

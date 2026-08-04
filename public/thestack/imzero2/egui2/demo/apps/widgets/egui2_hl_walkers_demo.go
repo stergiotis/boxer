@@ -8,6 +8,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/science/geo/h3"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -175,6 +176,12 @@ var walkersTileServers = []walkersTileServer{
 // counter, the tile-server radio binding, and the per-window heatmap
 // cache (invalidated when viewHash or H3 resolution changes).
 type walkersDemoState struct {
+	// mapH identifies the main map in the keyed camera register. Recorded by
+	// demoWalkersBasic, which owns the map; the camera and heatmap readers
+	// render under their own CollapsingHeader scopes and so cannot derive the
+	// same id themselves.
+	mapH widgethandle.WidgetHandle
+
 	showMarkers     bool
 	showPolyline    bool
 	showRegion      bool
@@ -230,6 +237,9 @@ func newWalkersDemoState() (st *walkersDemoState) {
 // viewport.
 func demoWalkersBasic(ids *c.WidgetIdStack, st *walkersDemoState) {
 	hm := &st.heatmap
+	// The map's own id, derived at this nesting so it matches the one the
+	// WalkersMap below prepares, and published for the readers in st.
+	st.mapH = widgethandle.Make(ids.PrepareStr("walkers-main").Derive())
 
 	// Controls
 	c.Checkbox(ids.PrepareStr("walkers-markers"), st.showMarkers, "markers").
@@ -314,7 +324,7 @@ func demoWalkersBasic(ids *c.WidgetIdStack, st *walkersDemoState) {
 	// space function, and colormaps. Sent BEFORE the walkersMap opcode
 	// below so it joins the overlay drain for this frame's map render.
 	if hm.show {
-		emitUniformHeatmap(hm)
+		emitUniformHeatmap(hm, st.mapH)
 	}
 
 	// Map widget itself. override_zoom / override_center are sticky for one
@@ -394,9 +404,9 @@ func demoWalkersChoropleth(ids *c.WidgetIdStack, st *walkersDemoState) {
 func demoWalkersCamera(ids *c.WidgetIdStack, st *walkersDemoState) {
 	_ = ids
 	_ = st
-	cam := c.CurrentApplicationState.StateManager.GetWalkersCamera()
-	if !cam.Found {
-		c.Label("No walkersMap rendered since last fetch").Send()
+	cam, ok := c.CurrentApplicationState.StateManager.GetWalkersCamera(st.mapH)
+	if !ok {
+		c.Label("The main walkersMap has not rendered yet").Send()
 		return
 	}
 	c.Label(fmt.Sprintf("map id     : 0x%x", cam.MapId)).Send()
@@ -454,17 +464,18 @@ func demoWalkersHeatmapInfo(ids *c.WidgetIdStack, st *walkersDemoState) {
 // frame's viewport. Called from demoWalkersBasic so the overlay joins the
 // main map's render. Caches cells+colors by viewHash — still cameras pay
 // zero work.
-func emitUniformHeatmap(hm *walkersHeatmapState) {
+func emitUniformHeatmap(hm *walkersHeatmapState, mapH widgethandle.WidgetHandle) {
 	err := ensureH3()
 	if err != nil {
 		return
 	}
-	// Read cached camera (drained at last frame's end by
-	// StateManager.Sync). Inline fetching here would deadlock when the
-	// walkers demo is mounted inside a dock.Tab body — see
-	// CanvasPointerValue docstring.
-	cam := c.CurrentApplicationState.StateManager.GetWalkersCamera()
-	if !cam.Found {
+	// Read the main map's cached camera (refreshed at last frame's end by
+	// StateManager.Sync). Inline fetching here would deadlock when the walkers
+	// demo is mounted inside a dock.Tab body. Keyed by the map's handle, so a
+	// second map — another demo, another window — cannot substitute its own
+	// viewport for the one this overlay is drawn for.
+	cam, ok := c.CurrentApplicationState.StateManager.GetWalkersCamera(mapH)
+	if !ok {
 		return
 	}
 

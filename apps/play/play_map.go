@@ -10,13 +10,15 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 )
 
 // MapDriver is the ADR-0096 geo-raster map panel: a walkers slippy map whose
 // viewport drives an in-DB-rendered RGBA raster. Each frame it reads the
-// previous frame's camera (fetchR15WalkersCamera, cached); once the camera has
+// previous frame's camera (fetchR15WalkersCameras, cached, keyed by this
+// map's handle); once the camera has
 // settled it EMITS the viewport as the six reserved vp_* signals (ADR-0096
 // §SD6 realized via ADR-0097 slice 5c) and demands a panel-authored node whose
 // SQL carries the matching {vp_*:UInt32} slots — a pan changes only the
@@ -256,6 +258,13 @@ func parseWxH(s string) (w, h float64, ok bool) {
 	return wv, hv, true
 }
 
+// mapHandle is this driver's map in the keyed camera register (r15). Derived
+// at the same id-stack nesting as the WalkersMap call in Render, so the two
+// agree; Prepare+Derive is balanced and leaves the stack as it found it.
+func (inst *MapDriver) mapHandle() widgethandle.WidgetHandle {
+	return widgethandle.Make(inst.ids.PrepareStr("map").Derive())
+}
+
 // Render draws the controls, the last-good raster overlay, and the map; and,
 // once the viewport has settled (debounced), publishes it as the vp_* signals
 // and demands the raster node compiled against the frame's signal snapshot
@@ -265,11 +274,15 @@ func parseWxH(s string) (w, h float64, ok bool) {
 func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	inst.renderControls()
 
-	// Previous frame's camera (drained at last frame's end). Reading the cache
-	// rather than inline-fetching avoids the dock.Tab render-loop deadlock —
-	// same idiom as the walkers demo's demoWalkersCamera.
-	cam := c.CurrentApplicationState.StateManager.GetWalkersCamera()
-	if cam.Found {
+	// Previous frame's camera for THIS map (refreshed at last frame's end).
+	// Reading the cache rather than inline-fetching avoids the dock.Tab
+	// render-loop deadlock — same idiom as the walkers demo's
+	// demoWalkersCamera. Keyed by the map's own handle: the register held one
+	// camera process-wide until 2026-08-04, so a second map — the same
+	// playground open in another window, or terrainscope beside it — used to
+	// hand this driver its viewport, and these vp_* signals published it.
+	cam, camOk := c.CurrentApplicationState.StateManager.GetWalkersCamera(inst.mapHandle())
+	if camOk {
 		if cam.ViewHash != inst.lastViewHash {
 			inst.lastViewHash = cam.ViewHash
 			inst.viewStableAt = time.Now()
@@ -341,13 +354,13 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	}
 	// SetZoom is a one-shot op: sent into a hidden tab's discarded buffer it
 	// is silently lost, so "sent" may not mean "applied". Keep sending until
-	// the camera register proves THIS map rendered at least one frame (the
-	// register is global — another app's walkers map can fill it while this
-	// tab is still hidden — so match on MapId). The frame after first render
-	// stops the re-send, so a user zoom is never fought.
+	// the camera register proves THIS map rendered at least one frame — a
+	// keyed lookup, so another app's map filling the register while this tab
+	// is hidden cannot end the re-send early. The frame after first render
+	// stops it, so a user zoom is never fought.
 	if !inst.inited {
 		mw = mw.SetZoom(inst.initZoom)
-		if cam.Found && cam.MapId == inst.ids.PrepareStr("map").Derive() {
+		if camOk {
 			inst.inited = true
 		}
 	}

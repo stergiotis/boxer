@@ -104,12 +104,11 @@ const (
 	// The H budget covers the treemap's vertical chrome (breadcrumb
 	// ~22 px, inter-section padding ~4 + ~9 item_spacings, status
 	// label ~18 = ~53 px) AND the colorscale row rendered AFTER the
-	// treemap. The legend has to be the last PaintCanvas in the frame
-	// so its PaintCanvas, not a treemap hatch's, owns R14 — otherwise
-	// the colorscale's hover detection reads stale pointer state from
-	// the last hatched leaf cell and misfires (see
-	// `feedback-egui-frame-outer-overshoot`'s sibling: R14 is global,
-	// only the most-recent PaintCanvas wins).
+	// treemap. That ordering was once required for hover to work at all
+	// — the colorscale read the global R14 pointer, which the frame's
+	// last PaintCanvas won, so a hatched leaf cell drawn after it stole
+	// the hover. R14 is retired and the colorscale reads its own R24
+	// row now, so this budget is about layout only.
 	//
 	// The W budget covers a subtle bug that only triggered at top
 	// level: `egui::Frame::outer_rect = content + inner_margin + stroke
@@ -288,6 +287,10 @@ func (inst *App) buildTreeForMetrics(sizeIdx, colorIdx int, keep func(*scctree.S
 // are process-static, computed once via sccDataOnce on first Mount.
 type App struct {
 	ids *c.WidgetIdStack
+
+	// probeSalt is this window's share of the r21 slot map, derived on first
+	// use. See [App.probeSeq].
+	probeSalt uint64
 
 	// repoPath is the scan target, bound to the header path box. job runs the
 	// scc scan off the render thread; data is the last completed scan, owned by
@@ -540,6 +543,22 @@ func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) {
 	return
 }
 
+// sccmapProbeSalt namespaces this app's pane probes in the shared r21 slot map.
+const sccmapProbeSalt uint64 = 0x2e6b90d41f7a3c85
+
+// probeSeq is this window's slot for one probe role. The app id alone cannot
+// key it: sccmap is registered as a factory, so two open windows would hash to
+// one seq and each treemap would size itself from the other's pane — the
+// process-wide-slot failure that r18 had, inside the seq-keyed register.
+// Derived on first use so it sees the per-window id scope the host pushes
+// around Frame (empty during Mount).
+func (inst *App) probeSeq(role string) (seq uint64) {
+	if inst.probeSalt == 0 {
+		inst.probeSalt = inst.ids.PrepareHighEntropy(sccmapProbeSalt).Derive()
+	}
+	return c.ProbeSeq("sccmap", role) ^ inst.probeSalt
+}
+
 func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	// Consume a completed scan (if any) before rendering, so the header box and
 	// the treemap reflect the newest data this frame.
@@ -612,21 +631,17 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	// Arm the pane probe HERE — after the chrome above, before the treemap
 	// below — so the rect it reports next frame is the space the treemap
 	// actually gets, and does not include what the treemap itself drew.
-	inst.availW, inst.availH, inst.availOk = c.CapturePaneSize(c.ProbeSeq("sccmap", "treemap-pane"))
+	inst.availW, inst.availH, inst.availOk = c.CapturePaneSize(inst.probeSeq("treemap-pane"))
 
 	inst.tm.Render()
 
-	// Colorscale legend renders LAST so its PaintCanvas, not a treemap
-	// hatch's, is the final R14 writer of the frame. The cs reads R14
-	// from StateManager.GetCanvasPointer next frame to detect hovers;
-	// R14 is a single global slot. Top-level leaf cells in the SCC tree
-	// (files at the repo root) fall through to DefaultStyle's hatched
-	// default branch — paintHatch emits a PaintCanvas per leaf, each
-	// one overwriting R14. With the colorscale rendered at the top,
-	// every one of those hatch canvases overwrites cs's R14 state, so
-	// cs.OnHover never fires. Placing cs after the treemap makes its
-	// PaintCanvas the final R14 writer; demo treemap escaped this
-	// because its sample tree has no leaf children at the top level.
+	// Colorscale legend renders last. This used to be load-bearing: the
+	// colorscale detected hovers through R14, one global slot that every
+	// PaintCanvas overwrote, so the hatch canvas each top-level leaf cell
+	// emits (files at the repo root, falling through DefaultStyle's hatched
+	// branch) stole it and cs.OnHover never fired unless cs wrote last. The
+	// colorscale reads the per-canvas R24 row now and R14 is retired, so the
+	// order no longer decides whether hover works — it is kept as layout.
 	inst.cs.Render()
 	return
 }

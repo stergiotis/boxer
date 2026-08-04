@@ -36,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/science/geo/swisstopo"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
@@ -423,10 +424,14 @@ func (inst *App) renderMap() {
 	sm := c.CurrentApplicationState.StateManager
 
 	inst.ids.PrepareStr("ts-map")
-	mapId := inst.ids.Derive()
+	mapH := widgethandle.Make(inst.ids.Derive())
 
-	cam := sm.GetWalkersCamera()
-	if cam.Found && cam.Clicked && cam.HoverValid && cam.MapId == mapId {
+	// Keyed by this map's handle (r15 was a single process-wide slot until
+	// 2026-08-04, which is what the MapId comparison here used to guard
+	// against — and it could only reject another map's camera, never recover
+	// this one's when the other map rendered later in the frame).
+	cam, ok := sm.GetWalkersCamera(mapH)
+	if ok && cam.Clicked && cam.HoverValid {
 		inst.handleClick(cam.HoverLat, cam.HoverLon)
 	}
 

@@ -40,25 +40,22 @@ type EtColWidthsValue struct {
 	Widths []float32
 }
 
-// CanvasPointerValue is the cached payload of the R14 canvas-pointer
-// register, drained once per frame by StateManager.Sync. Read via
-// StateManager.GetCanvasPointer; callers that previously invoked
-// Fetcher.FetchR14CanvasPointer inline (e.g. the colorscale hover
-// readout) read from this cache instead, because inline fetches inside
-// a deferred-block capture scope (e.g. dock.Tab bodies) buffer rather
-// than flush and deadlock the render loop.
-type CanvasPointerValue struct {
-	HoverX  float32
-	HoverY  float32
-	Clicked bool
-}
+// R14, the single-slot canvas-pointer register, is retired. Every
+// paintCanvas in a frame wrote it in turn, so a reader got whichever
+// canvas rendered last — and with the same app open in two windows,
+// the other window's. Read [StateManager.GetCanvasCursor] (R24, keyed
+// by canvas id, drag-stable, carries modifiers) and the widget's own
+// r7 response for the click.
 
-// WalkersCameraValue is the cached payload of the R15 walkers-camera
-// register, drained once per frame by StateManager.Sync. Found is
-// false until at least one WalkersMap widget has rendered. Mirrors the
-// 16 return values of Fetcher.FetchR15WalkersCamera.
+// WalkersCameraValue is one map's camera, keyed by the map's widget id
+// in the R15 snapshot that StateManager.Sync refreshes each frame. Read
+// via [StateManager.GetWalkersCamera] with that map's handle.
+//
+// Entries are RETAINED between renders: a map that did not render this
+// frame keeps its last camera, because a reader running a frame behind
+// the viewport (the Go-side heatmap recompute) still needs one. A map
+// that has never rendered is absent, which is what ok=false means.
 type WalkersCameraValue struct {
-	Found          bool
 	MapId          uint64
 	Zoom           float64
 	CenterLat      float64
@@ -112,8 +109,8 @@ var nilCanvasWheel = CanvasWheelValue{
 // CanvasCursorValue is one R24 canvas-pointer row: the canvas's screen
 // origin plus the pointer in canvas-relative coordinates (NaN when the
 // pointer is neither over the canvas nor dragging it). Per canvas id —
-// unlike the single-slot R14 pointer, which is last-canvas-wins and so
-// unusable with several canvases in one frame. PosX/PosY are drag-stable
+// unlike the R14 pointer it replaced (retired 2026-08-04), which was one
+// slot that the frame's last canvas won. PosX/PosY are drag-stable
 // (interact_pointer_pos first), so a drag keeps reporting positions after
 // the pointer crosses the canvas edge. One-frame lag like every register.
 type CanvasCursorValue struct {
@@ -225,14 +222,13 @@ type StateManager struct {
 	// "fetchers run only at frame end" convention and deadlocked when
 	// the render scope was inside a deferred-block capture (e.g. a
 	// dock.Tab body).
-	r14CanvasPointer CanvasPointerValue
-	r15WalkersCamera WalkersCameraValue
-	r16ScrollDelta   ScrollDeltaValue
-	r17Modifiers     ModifiersValue
-	r18AvailableSize AvailableSizeValue
-	r19ZoomDelta     ZoomDeltaValue
-	r20Pointer       PointerValue
-	r21UiRects       map[uint64]UiRectValue
+	r15WalkersCameras map[uint64]WalkersCameraValue
+	r16ScrollDelta    ScrollDeltaValue
+	r17Modifiers      ModifiersValue
+	r18AvailableSize  AvailableSizeValue
+	r19ZoomDelta      ZoomDeltaValue
+	r20Pointer        PointerValue
+	r21UiRects        map[uint64]UiRectValue
 	// r23CanvasWheel holds LAST frame's per-canvas wheel captures (ADR-0140),
 	// keyed by canvas widget id. Rebuilt each Sync; read via GetCanvasWheel.
 	r23CanvasWheel map[uint64]CanvasWheelValue
@@ -281,6 +277,7 @@ func NewStateManager() *StateManager {
 		etColWidths:          containers.NewBinarySearchGrowingKVOrdered[uint64, EtColWidthsValue](8),
 		overriddenBindingIds: containers.NewHashSet[uint64](128),
 		fetcher:              NewFetcher(),
+		r15WalkersCameras:    make(map[uint64]WalkersCameraValue, 4),
 		r21UiRects:           make(map[uint64]UiRectValue, 8),
 		r23CanvasWheel:       make(map[uint64]CanvasWheelValue, 8),
 		r24CanvasPointers:    make(map[uint64]CanvasCursorValue, 8),
@@ -288,17 +285,19 @@ func NewStateManager() *StateManager {
 	}
 }
 
-// GetCanvasPointer returns last frame's R14 canvas-pointer state. Use
-// this in widget render bodies instead of calling FetchR14CanvasPointer
-// inline — the latter buffers (and deadlocks) inside dock.Tab bodies.
-func (inst *StateManager) GetCanvasPointer() CanvasPointerValue {
-	return inst.r14CanvasPointer
-}
-
-// GetWalkersCamera returns last frame's R15 walkers-camera state.
-// Found=false means no WalkersMap has rendered yet.
-func (inst *StateManager) GetWalkersCamera() WalkersCameraValue {
-	return inst.r15WalkersCamera
+// GetWalkersCamera returns the last camera reported by the WalkersMap with
+// the given handle. ok=false means that map has never rendered — NOT that it
+// did not render this frame, since entries are retained (see
+// [WalkersCameraValue]).
+//
+// Keyed since 2026-08-04. The register was a single slot before that, so the
+// last map to render in a frame was the only one any reader could see: two
+// maps in one process — two windows of one app, or play beside terrainscope —
+// and a caller either acted on another map's camera or, once it compared
+// MapId, never saw its own again.
+func (inst *StateManager) GetWalkersCamera(h widgethandle.WidgetHandle) (v WalkersCameraValue, ok bool) {
+	v, ok = inst.r15WalkersCameras[h.Resolve()]
+	return
 }
 
 // GetScrollDelta returns last frame's R16 smoothed scroll-wheel delta.
@@ -798,22 +797,32 @@ func (inst *StateManager) Sync() {
 	// zeros / empty arrays when no source widget rendered last frame,
 	// so the cost is bounded regardless of which demos are mounted.
 	// Widget code reads these caches via the matching Get* method
-	// instead of calling Fetcher inline — see CanvasPointerValue
-	// docstring for the deadlock rationale.
+	// instead of calling Fetcher inline — an inline fetch inside a
+	// deferred-block capture scope (a dock.Tab body) buffers rather than
+	// flushes, and deadlocks the render loop.
 	{
-		hx, hy, clicked := fetcher.FetchR14CanvasPointer()
-		inst.r14CanvasPointer = CanvasPointerValue{HoverX: hx, HoverY: hy, Clicked: clicked}
-	}
-	{
-		found, mapId, zoom, cLat, cLon, minLat, minLon, maxLat, maxLon,
-			sw, sh, hLat, hLon, hValid, clicked, vh := fetcher.FetchR15WalkersCamera()
-		inst.r15WalkersCamera = WalkersCameraValue{
-			Found: found, MapId: mapId, Zoom: zoom,
-			CenterLat: cLat, CenterLon: cLon,
-			MinLat: minLat, MinLon: minLon, MaxLat: maxLat, MaxLon: maxLon,
-			ScreenWidthPx: sw, ScreenHeightPx: sh,
-			HoverLat: hLat, HoverLon: hLon, HoverValid: hValid,
-			Clicked: clicked, ViewHash: vh,
+		// One row per map that has ever rendered; Rust retains them, so this
+		// replaces the snapshot wholesale rather than merging into it.
+		mapIds, zooms, cLats, cLons, minLats, minLons, maxLats, maxLons,
+			sws, shs, hLats, hLons, flags, viewHashSeq := fetcher.FetchR15WalkersCameras()
+		clear(inst.r15WalkersCameras)
+		i := 0
+		for vh := range viewHashSeq {
+			if i >= len(mapIds) {
+				break
+			}
+			inst.r15WalkersCameras[mapIds[i]] = WalkersCameraValue{
+				MapId: mapIds[i], Zoom: zooms[i],
+				CenterLat: cLats[i], CenterLon: cLons[i],
+				MinLat: minLats[i], MinLon: minLons[i],
+				MaxLat: maxLats[i], MaxLon: maxLons[i],
+				ScreenWidthPx: sws[i], ScreenHeightPx: shs[i],
+				HoverLat: hLats[i], HoverLon: hLons[i],
+				HoverValid: flags[i]&1 != 0,
+				Clicked:    flags[i]&2 != 0,
+				ViewHash:   vh,
+			}
+			i++
 		}
 	}
 	{

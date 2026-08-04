@@ -105,6 +105,21 @@ type Marker struct {
 	Dashed bool    // reserved; v1 draws solid
 }
 
+// spectrumProbeSalt namespaces one display's r21 pane slot. Mixed through the
+// instance's id stack so two windows of the same app — which pass the same
+// constant scopeKey — do not share a slot and size each other.
+const spectrumProbeSalt uint64 = 0x8c1d5f30b7429ae6
+
+// probeSeq is this instance's slot for one probe role, salted on first use so
+// the derivation sees the enclosing per-window id scope (windowhost pushes it
+// around Frame, not around Mount). Same shape as the timeline widget's.
+func (inst *SpectrumDisplay) probeSeq(role string) (seq uint64) {
+	if inst.probeSalt == 0 {
+		inst.probeSalt = inst.ids.PrepareHighEntropy(spectrumProbeSalt).Derive()
+	}
+	return c.ProbeSeq(inst.scopeKey, role) ^ inst.probeSalt
+}
+
 // PlacementE selects where a Region band is drawn within the texture height.
 type PlacementE uint8
 
@@ -139,9 +154,13 @@ type Readout struct {
 type SpectrumDisplay struct {
 	ids      *c.WidgetIdStack
 	scopeKey string
-	cfg      *colormap.Config
-	hs       *heatmapscroll.HeatmapScroll
-	cbar     *colorscale.ColorScale
+	// probeSalt makes this instance's r21 pane slot window-unique — the
+	// scopeKey is a constant at the embedder, so two windows of the same app
+	// would otherwise share one slot and size each other. See [probeSeq].
+	probeSalt uint64
+	cfg       *colormap.Config
+	hs        *heatmapscroll.HeatmapScroll
+	cbar      *colorscale.ColorScale
 
 	// availW/availH/availOk are this instance's own pane probe, read one frame
 	// after it is armed and only in fill mode (no pinned display size).
@@ -304,7 +323,7 @@ func (inst *SpectrumDisplay) renderInner() {
 	// this widget was sized by whichever unrelated panel captured after it.
 	if inst.dispW <= 0 || inst.dispH <= 0 {
 		inst.availW, inst.availH, inst.availOk = c.CapturePaneSize(
-			c.ProbeSeq(inst.scopeKey, "spectrumdisplay-pane"))
+			inst.probeSeq("spectrumdisplay-pane"))
 	}
 	W, H := inst.resolveSize()
 	if W < 8 || H < 8 {

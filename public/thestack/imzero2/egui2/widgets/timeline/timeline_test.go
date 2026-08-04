@@ -58,10 +58,10 @@ func TestClamp01ToRange(t *testing.T) {
 func TestCursorInsideCanvas(t *testing.T) {
 	nan := float32(math.NaN())
 	cases := []struct {
-		name       string
-		hx, hy     float32
-		w, h       float32
-		want       bool
+		name   string
+		hx, hy float32
+		w, h   float32
+		want   bool
 	}{
 		{"nan_x", nan, 50, 100, 100, false},
 		{"nan_y", 50, nan, 100, 100, false},
@@ -72,7 +72,7 @@ func TestCursorInsideCanvas(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cp := c.CanvasPointerValue{HoverX: tc.hx, HoverY: tc.hy}
+			cp := canvasPointer{HoverX: tc.hx, HoverY: tc.hy}
 			if got := cursorInsideCanvas(cp, tc.w, tc.h); got != tc.want {
 				t.Errorf("got %v want %v", got, tc.want)
 			}

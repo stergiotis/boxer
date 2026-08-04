@@ -200,19 +200,13 @@ self.io.write_plain_u64(self.last_pass_nr)?;
 		AddReturnValue("passNr", ctabb.U64).
 		Build())
 
-	// Canvas pointer state — returns hover position (relative to canvas origin)
-	// and clicked flag from the last PaintCanvas.
-	fetchers = append(fetchers, idl.NewFetcherNode("fetchR14CanvasPointer").
-		WithApplyCodeClientRust(rustClientCode(`
-self.io.write_plain_f32(self.r14_canvas_hover_x)?;
-self.io.write_plain_f32(self.r14_canvas_hover_y)?;
-self.io.write_plain_b(self.r14_canvas_clicked)?;
-{{SendMessage}}
-`)).
-		AddReturnValue("hoverX", ctabb.F32).
-		AddReturnValue("hoverY", ctabb.F32).
-		AddReturnValue("clicked", ctabb.B).
-		Build())
+	// r14 (canvas pointer) is retired. It was one slot for the whole frame,
+	// written by every paintCanvas in turn, so a reader got whichever canvas
+	// rendered last — unusable with more than one canvas, and wrong across two
+	// windows of one app. Its per-canvas replacement is fetchR24CanvasPointers
+	// (position, drag-stable, with modifiers) plus the r7 response flags for
+	// the click. The canvas-local hover it also served as scratch for is now a
+	// local in the paintCanvas apply code.
 
 	// Smoothed scroll-wheel delta for the current frame, read directly from
 	// egui's InputState. Use for pan / zoom gestures inside custom-drawn

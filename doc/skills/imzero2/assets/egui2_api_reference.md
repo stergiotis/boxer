@@ -57,8 +57,7 @@ status: draft
 | FetchGraphMetrics | Fetcher | No | 0 | 0 | - | - |
 | FetchGraphSelection | Fetcher | No | 0 | 0 | - | - |
 | FetchR10 | Fetcher | No | 0 | 0 | - | - |
-| FetchR14CanvasPointer | Fetcher | No | 0 | 0 | - | - |
-| FetchR15WalkersCamera | Fetcher | No | 0 | 0 | - | - |
+| FetchR15WalkersCameras | Fetcher | No | 0 | 0 | - | - |
 | FetchR16ScrollDelta | Fetcher | No | 0 | 0 | - | - |
 | FetchR17Modifiers | Fetcher | No | 0 | 0 | - | - |
 | FetchR18AvailableSize | Fetcher | No | 0 | 0 | - | - |
@@ -3467,7 +3466,7 @@ Block
 
 ---
 
-### FetchR14CanvasPointer
+### FetchR15WalkersCameras
 
 - **Type:** Fetcher
 
@@ -3475,36 +3474,20 @@ Block
 
 | Name | Type |
 |------|------|
-| hoverX | f32 |
-| hoverY | f32 |
-| clicked | b |
-
----
-
-### FetchR15WalkersCamera
-
-- **Type:** Fetcher
-
-#### Return Values
-
-| Name | Type |
-|------|------|
-| found | b |
-| mapId | u64 |
-| zoom | f64 |
-| centerLat | f64 |
-| centerLon | f64 |
-| minLat | f64 |
-| minLon | f64 |
-| maxLat | f64 |
-| maxLon | f64 |
-| screenWidthPx | f32 |
-| screenHeightPx | f32 |
-| hoverLat | f64 |
-| hoverLon | f64 |
-| hoverValid | b |
-| clicked | b |
-| viewHash | u64 |
+| mapIds | u64h |
+| zooms | f64h |
+| centerLats | f64h |
+| centerLons | f64h |
+| minLats | f64h |
+| minLons | f64h |
+| maxLats | f64h |
+| maxLons | f64h |
+| screenWidthPxs | f32h |
+| screenHeightPxs | f32h |
+| hoverLats | f64h |
+| hoverLons | f64h |
+| flags | u8h |
+| viewHashes | u64h |
 
 ---
 

@@ -386,6 +386,30 @@ type laneRef struct {
 	index int32
 }
 
+// timelineProbeSalt namespaces one Timeline's register slots (the r21 pane
+// probe) inside the shared slot map. The scopeKey alone cannot: embedders pass
+// a constant ("play-timeline"), so two windows of the same app hash to one seq
+// and size each other — the shape the r18 retirement removed between panels,
+// which survives between windows for as long as the seq ignores the instance.
+// Mixed through the instance's own id stack, which carries whatever separates
+// the instances — a base salt, or the host's per-window scope. Mirrors
+// imztop's paneProbeSeq.
+const timelineProbeSalt uint64 = 0x4b3f21c7a95e6d03
+
+// probeSeq is this instance's slot for one probe role. The salt is derived on
+// FIRST USE rather than at New, which is what makes it window-unique for every
+// embedder: windowhost pushes its per-window salt as an id SCOPE around Frame,
+// so a widget constructed in Mount would read an empty stack (peek falls back
+// to the base salt, zero unless the embedder set one) and two windows would
+// mint the same value. At render time the scope is on the stack. Derive is
+// non-zero by construction, so zero is an unambiguous "not yet".
+func (inst *Timeline) probeSeq(role string) (seq uint64) {
+	if inst.probeSalt == 0 {
+		inst.probeSalt = inst.ids.PrepareHighEntropy(timelineProbeSalt).Derive()
+	}
+	return c.ProbeSeq(inst.scopeKey, role) ^ inst.probeSalt
+}
+
 // defaultLODScales is the binning ladder used by Timeline when the caller
 // does not pass WithLODScales. Spans 1 ms → 1 week so a single index can
 // serve everything from sub-second log streams to multi-month dashboards.
@@ -413,6 +437,9 @@ var defaultLODScales = []time.Duration{
 type Timeline struct {
 	ids      *c.WidgetIdStack
 	scopeKey string
+	// probeSalt makes this instance's register slots window-unique. See
+	// [timelineProbeSalt].
+	probeSalt uint64
 
 	intervals   []*layout.IntervalEvent
 	points      []*layout.PointEvent
@@ -1082,7 +1109,7 @@ func (inst *Timeline) renderBody() {
 	// not the single-slot R14 register, which is last-canvas-wins and went
 	// blind whenever another canvas-bearing widget rendered in the same
 	// frame. Same one-frame lag either way.
-	cp := c.CanvasPointerValue{HoverX: float32(math.NaN()), HoverY: float32(math.NaN())}
+	cp := canvasPointer{HoverX: float32(math.NaN()), HoverY: float32(math.NaN())}
 	if cur, ok := stateMgr.GetCanvasCursor(canvasH); ok {
 		cp.HoverX, cp.HoverY = cur.PosX, cur.PosY
 	}
@@ -1099,7 +1126,7 @@ func (inst *Timeline) renderBody() {
 	// last-capture-wins, and it made this strip render at the width of whatever
 	// panel captured after it (play's Detail pane, in the case that surfaced
 	// it). One-frame lag either way.
-	availW, _, availOk := c.CapturePaneSize(c.ProbeSeq(inst.scopeKey, "timeline-pane"))
+	availW, _, availOk := c.CapturePaneSize(inst.probeSeq("timeline-pane"))
 
 	effW := inst.effectiveContainerW(availW, availOk)
 	// Lane packing and the label band are view-independent (they read only
@@ -1499,10 +1526,21 @@ func (inst *Timeline) dropInteractivePin() {
 	}
 }
 
+// canvasPointer is this widget's view of its own canvas pointer for the
+// frame: the position from the per-canvas r24 row and the click edge from
+// the canvas's r7 response. It used to be c.CanvasPointerValue, the payload
+// of the single-slot r14 register — the widget stopped READING that register
+// when r24 landed, and r14 itself is now retired, so the carrier is local.
+type canvasPointer struct {
+	HoverX  float32
+	HoverY  float32
+	Clicked bool
+}
+
 // cursorInsideCanvas reports whether the cached pointer position lies
 // within the current canvas bounds. NaN coordinates (canvas not hovered
 // last frame) read as outside.
-func cursorInsideCanvas(cp c.CanvasPointerValue, effW, totalH float32) (yes bool) {
+func cursorInsideCanvas(cp canvasPointer, effW, totalH float32) (yes bool) {
 	if math.IsNaN(float64(cp.HoverX)) || math.IsNaN(float64(cp.HoverY)) {
 		return
 	}

@@ -287,70 +287,60 @@ func definitionsWalkersFetchers() []ir.NodeI {
 	// `viewHash` is a quantized hash of (center,zoom,size) — equal across
 	// frames when the camera hasn't moved meaningfully, so Go can skip its
 	// heatmap recompute on still cameras.
-	fetchers = append(fetchers, idl.NewFetcherNode("fetchR15WalkersCamera").
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchR15WalkersCameras").
 		WithApplyCodeClientRust(rustClientCode(`
-// Non-consuming read: multiple readers per frame (e.g. an overlay
-// emitter and an on-screen camera readout) must see the same value.
-// `+"`walkers_last_camera`"+` is only overwritten by OverlayPlugin when a new
-// walkersMap renders, so stale reads between map renders return the
-// most recent valid camera — the desired behaviour for Go-side heatmap
-// computation that runs on one-frame lag against the viewport.
-match self.walkers_last_camera.as_ref() {
-    Some(c) => {
-        self.io.write_plain_b(true)?;
-        self.io.write_plain_u64(c.map_id)?;
-        self.io.write_plain_f64(c.zoom)?;
-        self.io.write_plain_f64(c.center_lat)?;
-        self.io.write_plain_f64(c.center_lon)?;
-        self.io.write_plain_f64(c.min_lat)?;
-        self.io.write_plain_f64(c.min_lon)?;
-        self.io.write_plain_f64(c.max_lat)?;
-        self.io.write_plain_f64(c.max_lon)?;
-        self.io.write_plain_f32(c.screen_width_px)?;
-        self.io.write_plain_f32(c.screen_height_px)?;
-        self.io.write_plain_f64(c.hover_lat)?;
-        self.io.write_plain_f64(c.hover_lon)?;
-        self.io.write_plain_b(c.hover_valid)?;
-        self.io.write_plain_b(c.clicked)?;
-        self.io.write_plain_u64(c.view_hash)?;
-    }
-    None => {
-        self.io.write_plain_b(false)?;
-        self.io.write_plain_u64(0)?;
-        self.io.write_plain_f64(0.0)?;
-        self.io.write_plain_f64(0.0)?;
-        self.io.write_plain_f64(0.0)?;
-        self.io.write_plain_f64(0.0)?;
-        self.io.write_plain_f64(0.0)?;
-        self.io.write_plain_f64(0.0)?;
-        self.io.write_plain_f64(0.0)?;
-        self.io.write_plain_f32(0.0)?;
-        self.io.write_plain_f32(0.0)?;
-        self.io.write_plain_f64(f64::NAN)?;
-        self.io.write_plain_f64(f64::NAN)?;
-        self.io.write_plain_b(false)?;
-        self.io.write_plain_b(false)?;
-        self.io.write_plain_u64(0)?;
-    }
-}
+// Non-consuming read: several readers per frame (e.g. an overlay emitter and
+// an on-screen camera readout) must see the same value.
+//
+// RETAINED, not drained: `+"`walkers_cameras`"+` keeps each map's last camera
+// until that map renders again, so a reader between renders — Go-side heatmap
+// work runs a frame behind the viewport — still gets a valid camera. One entry
+// per map id ever rendered; the count is the number of walkers maps, so it is
+// bounded the way the dock's state map is.
+//
+// KEYED by map id. This was a single slot until 2026-08-04, which meant the
+// last map to render in a frame was the only one anyone could read: two maps
+// (two windows of one app, or play beside terrainscope) and a reader either
+// got the wrong camera or, once it checked the id, none at all. Callers now
+// look up their own map and cannot be taken over.
+//
+// Collected once so all 14 arrays iterate in the SAME order — HashMap order is
+// arbitrary but stable for an unmutated map, and this makes that explicit
+// rather than load-bearing.
+let cams: Vec<&WalkersCamera> = self.walkers_cameras.values().collect();
+let len = cams.len();
+self.io.write_plain_u64h(len, cams.iter().map(|c| c.map_id))?;
+self.io.write_plain_f64h(len, cams.iter().map(|c| c.zoom))?;
+self.io.write_plain_f64h(len, cams.iter().map(|c| c.center_lat))?;
+self.io.write_plain_f64h(len, cams.iter().map(|c| c.center_lon))?;
+self.io.write_plain_f64h(len, cams.iter().map(|c| c.min_lat))?;
+self.io.write_plain_f64h(len, cams.iter().map(|c| c.min_lon))?;
+self.io.write_plain_f64h(len, cams.iter().map(|c| c.max_lat))?;
+self.io.write_plain_f64h(len, cams.iter().map(|c| c.max_lon))?;
+self.io.write_plain_f32h(len, cams.iter().map(|c| c.screen_width_px))?;
+self.io.write_plain_f32h(len, cams.iter().map(|c| c.screen_height_px))?;
+self.io.write_plain_f64h(len, cams.iter().map(|c| c.hover_lat))?;
+self.io.write_plain_f64h(len, cams.iter().map(|c| c.hover_lon))?;
+// Two bools per row as a flag byte (bit0 hoverValid, bit1 clicked), the same
+// shape r24 uses for its modifiers.
+self.io.write_plain_u8h(len, cams.iter().map(|c| (c.hover_valid as u8) | ((c.clicked as u8) << 1)))?;
+self.io.write_plain_u64h(len, cams.iter().map(|c| c.view_hash))?;
 {{SendMessage}}
 `)).
-		AddReturnValue("found", ctabb.B).
-		AddReturnValue("mapId", ctabb.U64).
-		AddReturnValue("zoom", ctabb.F64).
-		AddReturnValue("centerLat", ctabb.F64).
-		AddReturnValue("centerLon", ctabb.F64).
-		AddReturnValue("minLat", ctabb.F64).
-		AddReturnValue("minLon", ctabb.F64).
-		AddReturnValue("maxLat", ctabb.F64).
-		AddReturnValue("maxLon", ctabb.F64).
-		AddReturnValue("screenWidthPx", ctabb.F32).
-		AddReturnValue("screenHeightPx", ctabb.F32).
-		AddReturnValue("hoverLat", ctabb.F64).
-		AddReturnValue("hoverLon", ctabb.F64).
-		AddReturnValue("hoverValid", ctabb.B).
-		AddReturnValue("clicked", ctabb.B).
-		AddReturnValue("viewHash", ctabb.U64).
+		AddReturnValue("mapIds", ctabb.U64h).
+		AddReturnValue("zooms", ctabb.F64h).
+		AddReturnValue("centerLats", ctabb.F64h).
+		AddReturnValue("centerLons", ctabb.F64h).
+		AddReturnValue("minLats", ctabb.F64h).
+		AddReturnValue("minLons", ctabb.F64h).
+		AddReturnValue("maxLats", ctabb.F64h).
+		AddReturnValue("maxLons", ctabb.F64h).
+		AddReturnValue("screenWidthPxs", ctabb.F32h).
+		AddReturnValue("screenHeightPxs", ctabb.F32h).
+		AddReturnValue("hoverLats", ctabb.F64h).
+		AddReturnValue("hoverLons", ctabb.F64h).
+		AddReturnValue("flags", ctabb.U8h).
+		AddReturnValue("viewHashes", ctabb.U64h).
 		Build())
 
 	return fetchers

@@ -118,7 +118,7 @@ func demoPipelineView(ids *c.WidgetIdStack, st *pipelineViewDemoState) {
 	// lands). Not CaptureAvailableSize — one process-wide slot, last capture of
 	// the frame wins, so a gallery showing two probing demos sizes each by the
 	// other.
-	availW, _, availOk := c.CapturePaneSize(c.ProbeSeq("pipelineview-demo", "pane"))
+	availW, _, availOk := c.CapturePaneSize(demoProbeSeq(ids, "pipelineview-demo", "pane"))
 	canvasW := float32(940)
 	if availOk && availW > 16 {
 		canvasW = availW - 8

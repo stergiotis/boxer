@@ -297,6 +297,34 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-08-04 — r14 retired, r15 keyed
+
+A sweep for registers with this ADR's shape — one slot per process where the
+identity is per widget — found the two the wheel work had left standing, and
+both are now settled. Neither changes this ADR's decision; they finish it.
+
+- **r14 (canvas pointer) is retired.** Every `paintCanvas` in a frame wrote it
+  in turn, so a reader got whichever canvas rendered last, and with an app open
+  in two windows, the other window's. By this point nothing in the Go fleet
+  still read it: r24 (per canvas id, drag-stable, with modifiers) covers the
+  position and the widget's own r7 response covers the click, which is what the
+  timeline and colorscale had already moved to. The fetcher, the three
+  interpreter fields and `StateManager.GetCanvasPointer` are gone. The
+  canvas-local hover this ADR ships inside the r23 row (see the refinement
+  below) no longer travels through r14 either — it is a local in the canvas
+  apply code, which is what the refinement wanted in the first place.
+- **r15 (walkers camera) is keyed by map id.** One slot meant the last map to
+  render in a frame was the only one any reader could see. play's map panel
+  read it unguarded and published another map's viewport as its own `vp_*`
+  signals; terrainscope compared `MapId` and so merely went blind instead.
+  `walkers_cameras` is now a retained `HashMap<u64, WalkersCamera>` — retained,
+  not drained, because a reader running a frame behind the viewport still needs
+  the last camera — drained into a per-handle snapshot by
+  `fetchR15WalkersCameras` and read as `GetWalkersCamera(handle) (v, ok)`.
+
+Registers that stay unscoped are the ones whose subject really is the whole
+viewport: r16/r17/r19/r20 (scroll, modifiers, zoom, pointer), as SD3 recorded.
+
 ### 2026-07-23 — implemented and live-verified (M1–M3, SD1–SD4)
 
 Shipped the same day as acceptance:

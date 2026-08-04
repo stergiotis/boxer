@@ -1,6 +1,8 @@
 package sqleditor
 
 import (
+	"sync/atomic"
+
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -165,12 +167,36 @@ type Editor struct {
 	// change re-seeds rather than carrying the old font's answer.
 	rowPx     float64
 	rowFontPt float32
+
+	// probeSalt is this editor's share of the register slot map, minted per
+	// construction. See [nextEditorSalt].
+	probeSalt uint64
+}
+
+// editorSeq numbers Editor constructions in this process; nextEditorSalt spaces
+// them out so each editor owns its register slots.
+var editorSeq atomic.Uint64
+
+// nextEditorSalt mints a per-editor slot salt. The IDSlot alone cannot separate
+// two editors that are not in the same app: embedders pass a constant
+// ("sqlEditor"), so two windows of one app hash to the same seq and read each
+// other's pane and row-height measurements — the r18 shape, surviving in the
+// seq-keyed register for as long as the seq ignores the instance. The tag keeps
+// another package's equal counter off these slots.
+func nextEditorSalt() (salt uint64) {
+	const editorSaltTag = 0x53716c45_64697421 // "SqlEdit!"
+	return (editorSeq.Add(1) * 0x9e3779b97f4a7c15) ^ editorSaltTag
 }
 
 // slotId derives a stable per-editor register slot from the IDSlot and a role,
-// so two editors in one app read their own measurements and not each other's.
-func slotId(idSlot, role string) (id uint64) {
-	return c.ProbeSeq("sqleditor#"+idSlot, role)
+// so two editors read their own measurements and not each other's — whether
+// they sit in one app or in two windows of it.
+func (inst *Editor) slotId(idSlot, role string) (id uint64) {
+	if inst.probeSalt == 0 {
+		// The zero-value Editor is a documented construction; mint on first use.
+		inst.probeSalt = nextEditorSalt()
+	}
+	return c.ProbeSeq("sqleditor#"+idSlot, role) ^ inst.probeSalt
 }
 
 // PaneHeight is the height that was free for the editor where it last rendered
@@ -214,14 +240,14 @@ func (inst *Editor) measureRowHeight(f Frame) {
 		inst.rowFontPt = pt
 		inst.rowPx = float64(pt) * rowHeightSeedFactor
 	}
-	c.MeasureTextSizeBind(slotId(f.IDSlot, "row-w"), slotId(f.IDSlot, "row-h"),
+	c.MeasureTextSizeBind(inst.slotId(f.IDSlot, "row-w"), inst.slotId(f.IDSlot, "row-h"),
 		rowProbeText, pt, true, nil, &inst.rowPx)
 }
 
 // New returns an editor. The zero value is also usable; New exists so a
 // construction site reads as one.
 func New() (inst *Editor) {
-	inst = &Editor{}
+	inst = &Editor{probeSalt: nextEditorSalt()}
 	return
 }
 
@@ -335,7 +361,7 @@ func (inst *Editor) Render(ids *c.WidgetIdStack, d Decoration) {
 	// by whichever unrelated panel captured after it — play's Detail pane,
 	// whose timeline captures the narrow side column, was the case that
 	// surfaced this. One-frame lag, like every register read.
-	if w, h, ok := c.CapturePaneSize(slotId(f.IDSlot, "pane")); ok && w > 0 {
+	if w, h, ok := c.CapturePaneSize(inst.slotId(f.IDSlot, "pane")); ok && w > 0 {
 		inst.paneW, inst.paneH = w, h
 	}
 	paneW := inst.paneW
