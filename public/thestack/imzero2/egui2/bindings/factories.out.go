@@ -98,6 +98,14 @@ func CaptureAvailableSize() {
 	r.SendIntermediate()
 }
 
+func CaptureUiAvailableRect(seq uint64) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdCaptureUiAvailableRect))
+	r.WriteUint64(seq)
+
+	r.SendIntermediate()
+}
+
 func CaptureUiRect(seq uint64) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdCaptureUiRect))

@@ -55,6 +55,13 @@ func definitionsSpecial() (specials []ir.NodeI) {
 	// so a Go-side widget can read the parent panel's available width/height
 	// next frame via fetchR18AvailableSize and auto-fit. NaN sentinels when
 	// no Ui is in scope (caller must invoke inside a panel / window body).
+	//
+	// SUPERSEDED by captureUiAvailableRect. r18 is one process-wide scalar and
+	// the frame's LAST capture wins, so two panels using it size each other,
+	// and no discipline at a single call site can prevent it — the convention
+	// that one designated widget "owns" the register decays the moment a panel
+	// is added. The seq-keyed op below reports the same rect's size per caller.
+	// Kept because the opcode is wire-visible.
 	specials = append(specials,
 		idl.NewProceduralNode("captureAvailableSize").
 			WithApplyCodeClientRust(rustClientCode(`
@@ -393,6 +400,47 @@ if {{EguiUiOptionalOuter}}.is_some() {
 if {{EguiUiOptionalOuter}}.is_some() {
     let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
     let r = ui.min_rect();
+    self.r21_ui_rect_seqs.push(seq);
+    self.r21_ui_rect_min_x.push(r.min.x);
+    self.r21_ui_rect_min_y.push(r.min.y);
+    self.r21_ui_rect_max_x.push(r.max.x);
+    self.r21_ui_rect_max_y.push(r.max.y);
+    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_min_x.len());
+    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_min_y.len());
+    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_max_x.len());
+    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_max_y.len());
+}
+`)).Build())
+	// captureUiAvailableRect — captureUiRect's sibling for FREE space: it
+	// snapshots ui.available_rect_before_wrap() into the same r21 vectors,
+	// keyed by seq, so one drain (fetchR21UiRects) carries both kinds.
+	//
+	// This is the per-caller replacement for captureAvailableSize, whose r18
+	// register is a single scalar that the LAST capture of a frame wins — two
+	// panels reading it end up sizing each other, which is a bug that reads as
+	// one pane inexplicably tracking another's width. The rect's SIZE is
+	// exactly ui.available_size() (egui defines that as this rect's size), so
+	// a caller porting off r18 reads the same number and also learns where it
+	// is.
+	//
+	// Caveats:
+	//   - It is the space left for the NEXT widget — from the layout cursor to
+	//     the Ui's max_rect — not the whole Ui. Capture it BEFORE placing the
+	//     content it is meant to size, or it reports what is left after that
+	//     content and the caller sizes against its own output.
+	//   - Shares r21 with captureUiRect, so one seq must mean one kind of rect
+	//     (Go-side last-write-wins if it does not).
+	//   - No-op with no Ui in scope: the seq stays absent from the drain, so a
+	//     reader sees ok=false rather than a zero rect.
+	specials = append(specials,
+		idl.NewProceduralNode("captureUiAvailableRect").
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("seq", ctabb.U64).
+				Build()).
+			WithApplyCodeClientRust(rustClientCode(`
+if {{EguiUiOptionalOuter}}.is_some() {
+    let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+    let r = ui.available_rect_before_wrap();
     self.r21_ui_rect_seqs.push(seq);
     self.r21_ui_rect_min_x.push(r.min.x);
     self.r21_ui_rect_min_y.push(r.min.y);

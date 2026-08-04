@@ -23,6 +23,7 @@ status: draft
 | Atoms | BuilderFactory | No | 0 | 0 | 20 | Retained |
 | Button | BuilderFactory | Yes | 0 | 1 | 8 | Immediate, Retained |
 | CaptureAvailableSize | Procedural | No | 0 | 0 | - | - |
+| CaptureUiAvailableRect | Procedural | No | 1 | 0 | - | - |
 | CaptureUiRect | Procedural | No | 1 | 0 | - | - |
 | Checkbox | BuilderFactory | Yes | 2 | 0 | 1 | Immediate |
 | CodeView | BuilderFactory | Yes | 0 | 1 | 4 | Immediate, Retained |
@@ -2963,6 +2964,19 @@ Block
 
 - **Type:** Procedural
 - **Identity:** No
+
+---
+
+### CaptureUiAvailableRect
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| seq | plain | u64 |
 
 ---
 
