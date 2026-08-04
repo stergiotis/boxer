@@ -137,7 +137,19 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 				titles,
 				no_scroll,
 			};
-			egui_dock::DockArea::new(&mut dock_state).show_inside(child_ui, &mut viewer);
+			// Key the library's own id derivation on the Go-side dock id, not
+			// egui_dock's default Id::new("egui_dock::DockArea") constant. A tab
+			// body is built with Ui::new(tab_body_id(dock_area_id, path, tab_id))
+			// (egui_dock show/leaf.rs), which deliberately does NOT mix in the
+			// parent ui id — so with the default constant two windows of the same
+			// app derive the SAME body ui, and the ScrollArea egui_dock wraps
+			// every body in (auto-id off that ui) shares one offset across them:
+			// scrolling one window scrolled the other. area_id is already the
+			// per-instance-salted widget id, so this separates every id below the
+			// dock as well.
+			egui_dock::DockArea::new(&mut dock_state)
+				.id(egui::Id::new(area_id))
+				.show_inside(child_ui, &mut viewer);
 		});
 
 		self.dock_states.insert(area_id, dock_state);

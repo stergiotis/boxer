@@ -2082,6 +2082,17 @@ impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
         false
     }
 
+    /// Key the tab body's ui id on the Go-assigned tab id rather than
+    /// egui_dock's default (`Id::new(self.title(tab).text())`). Titles here are
+    /// per-frame view state — play appends graph marks and renames a bound tab
+    /// after its node — so a title-derived id churns whenever the title does,
+    /// silently resetting that body's ScrollArea offset, and two tabs that
+    /// happen to share a title in one surface collide. The u64 is stable for
+    /// the life of the tab by construction (Go owns tab existence).
+    fn id(&mut self, tab: &mut u64) -> egui::Id {
+        egui::Id::new(*tab)
+    }
+
     /// egui_dock wraps every tab body in `ScrollArea::new(scroll_bars(tab))`
     /// (leaf.rs, default `[true, true]`). For a tab whose body owns its
     /// pointer/scroll interaction — e.g. a walkers map, which reads wheel and
@@ -2303,13 +2314,10 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // codeview producers share does not move.
     pub r24_styled_sections: Vec<text_edit_highlight::StyledSection>,
 
-    // PaintCanvas state (set by PaintCanvas, read by Go via fetcher)
-    pub r14_canvas_origin_x: f32,
-    pub r14_canvas_origin_y: f32,
-    // Pointer position relative to canvas origin (NaN if not hovering)
-    pub r14_canvas_hover_x: f32,
-    pub r14_canvas_hover_y: f32,
-    pub r14_canvas_clicked: bool,
+    // r14 (single-slot PaintCanvas pointer) is retired — see the note where
+    // its fetcher used to be, in the fetchers IDL. Per-canvas pointer state is
+    // r24; the canvas-local hover the wheel row carries is a local in the
+    // paintCanvas apply code.
 
     // ADR-0140 canvas wheel capture: per-id scroll/zoom (and canvas-local
     // hover) a paintCanvas owned this frame while the pointer was over it, via
@@ -2418,7 +2426,11 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub walkers_pending_h3_regions: Vec<H3Region>,
     pub walkers_pending_rasters: Vec<WalkersRaster>,
     pub walkers_states: std::collections::HashMap<u64, WalkersState>,
-    pub walkers_last_camera: Option<WalkersCamera>,
+    /// Last camera per map id, retained until that map renders again (a reader
+    /// running a frame behind the viewport still needs one). Keyed rather than
+    /// single-slot since 2026-08-04: one slot meant the last map to render in a
+    /// frame was the only one any reader could see.
+    pub walkers_cameras: std::collections::HashMap<u64, WalkersCamera>,
 
     // scrollingTexture (ADR-0009) — ring-buffer pixel widget; texture cache
     // keyed by widget id, caller-owned scroll head. Module: scrolling_texture.
@@ -2594,11 +2606,6 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r12_code_view_job: code_view::CodeViewJobData::default(),
             code_view_cache: code_view::CodeViewCache::new(),
             r24_styled_sections: Vec::with_capacity(8),
-            r14_canvas_origin_x: 0.0,
-            r14_canvas_origin_y: 0.0,
-            r14_canvas_hover_x: f32::NAN,
-            r14_canvas_hover_y: f32::NAN,
-            r14_canvas_clicked: false,
             r23_canvas_wheel_ids: Vec::with_capacity(16),
             r23_canvas_wheel_scroll_x: Vec::with_capacity(16),
             r23_canvas_wheel_scroll_y: Vec::with_capacity(16),
@@ -2646,7 +2653,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             walkers_pending_h3_regions: Vec::with_capacity(8),
             walkers_pending_rasters: Vec::with_capacity(4),
             walkers_states: std::collections::HashMap::new(),
-            walkers_last_camera: None,
+            walkers_cameras: std::collections::HashMap::new(),
             scrolling_texture: ScrollingTextureCache::new(),
             image_cache: ImageCache::new(),
             walkers_raster_cache: ImageCache::new(),
@@ -2784,8 +2791,9 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.graph_metrics_fr_last_disp.clear();
 
         // walkers — pending overlays leak into next frame if the map was
-        // culled. Clear them here; walkers_states and walkers_last_camera
-        // are NOT cleared (state persists; camera is drained by its fetcher).
+        // culled. Clear them here; walkers_states and walkers_cameras are NOT
+        // cleared — both persist per map id, and the camera fetch is a
+        // non-consuming read of what each map last reported.
         if !self.walkers_pending_markers.is_empty()
             || !self.walkers_pending_polylines.is_empty()
             || !self.walkers_pending_h3_choropleth.is_empty()
@@ -4944,7 +4952,18 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                             titles,
                             no_scroll,
                         };
+                        // Key the library's own id derivation on the Go-side dock id, not
+                        // egui_dock's default Id::new("egui_dock::DockArea") constant. A tab
+                        // body is built with Ui::new(tab_body_id(dock_area_id, path, tab_id))
+                        // (egui_dock show/leaf.rs), which deliberately does NOT mix in the
+                        // parent ui id — so with the default constant two windows of the same
+                        // app derive the SAME body ui, and the ScrollArea egui_dock wraps
+                        // every body in (auto-id off that ui) shares one offset across them:
+                        // scrolling one window scrolled the other. area_id is already the
+                        // per-instance-salted widget id, so this separates every id below the
+                        // dock as well.
                         egui_dock::DockArea::new(&mut dock_state)
+                            .id(egui::Id::new(area_id))
                             .show_inside(child_ui, &mut viewer);
                     });
 
@@ -6081,73 +6100,54 @@ self.apply_widget(w,u,f,Some(i));
                 self.io.write_plain_u64h(self.r10_false_ids.len(), self.r10_false_ids.drain(..))?;
                 self.io.flush()?;
             }
-            FuncProcId::FetchR14CanvasPointer => {
+            FuncProcId::FetchR15WalkersCameras => {
                 #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::FetchR14CanvasPointer");
+                puffin::profile_scope!("match FuncProcId::FetchR15WalkersCameras");
                 if d == 0 {
                     self.end_consume_message()?;
                 }
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                self.io.write_plain_f32(self.r14_canvas_hover_x)?;
-                self.io.write_plain_f32(self.r14_canvas_hover_y)?;
-                self.io.write_plain_b(self.r14_canvas_clicked)?;
-                self.io.flush()?;
-            }
-            FuncProcId::FetchR15WalkersCamera => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::FetchR15WalkersCamera");
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-
-                // Non-consuming read: multiple readers per frame (e.g. an overlay
-                // emitter and an on-screen camera readout) must see the same value.
-                // `walkers_last_camera` is only overwritten by OverlayPlugin when a new
-                // walkersMap renders, so stale reads between map renders return the
-                // most recent valid camera — the desired behaviour for Go-side heatmap
-                // computation that runs on one-frame lag against the viewport.
-                match self.walkers_last_camera.as_ref() {
-                    Some(c) => {
-                        self.io.write_plain_b(true)?;
-                        self.io.write_plain_u64(c.map_id)?;
-                        self.io.write_plain_f64(c.zoom)?;
-                        self.io.write_plain_f64(c.center_lat)?;
-                        self.io.write_plain_f64(c.center_lon)?;
-                        self.io.write_plain_f64(c.min_lat)?;
-                        self.io.write_plain_f64(c.min_lon)?;
-                        self.io.write_plain_f64(c.max_lat)?;
-                        self.io.write_plain_f64(c.max_lon)?;
-                        self.io.write_plain_f32(c.screen_width_px)?;
-                        self.io.write_plain_f32(c.screen_height_px)?;
-                        self.io.write_plain_f64(c.hover_lat)?;
-                        self.io.write_plain_f64(c.hover_lon)?;
-                        self.io.write_plain_b(c.hover_valid)?;
-                        self.io.write_plain_b(c.clicked)?;
-                        self.io.write_plain_u64(c.view_hash)?;
-                    }
-                    None => {
-                        self.io.write_plain_b(false)?;
-                        self.io.write_plain_u64(0)?;
-                        self.io.write_plain_f64(0.0)?;
-                        self.io.write_plain_f64(0.0)?;
-                        self.io.write_plain_f64(0.0)?;
-                        self.io.write_plain_f64(0.0)?;
-                        self.io.write_plain_f64(0.0)?;
-                        self.io.write_plain_f64(0.0)?;
-                        self.io.write_plain_f64(0.0)?;
-                        self.io.write_plain_f32(0.0)?;
-                        self.io.write_plain_f32(0.0)?;
-                        self.io.write_plain_f64(f64::NAN)?;
-                        self.io.write_plain_f64(f64::NAN)?;
-                        self.io.write_plain_b(false)?;
-                        self.io.write_plain_b(false)?;
-                        self.io.write_plain_u64(0)?;
-                    }
-                }
+                // Non-consuming read: several readers per frame (e.g. an overlay emitter and
+                // an on-screen camera readout) must see the same value.
+                //
+                // RETAINED, not drained: `walkers_cameras` keeps each map's last camera
+                // until that map renders again, so a reader between renders — Go-side heatmap
+                // work runs a frame behind the viewport — still gets a valid camera. One entry
+                // per map id ever rendered; the count is the number of walkers maps, so it is
+                // bounded the way the dock's state map is.
+                //
+                // KEYED by map id. This was a single slot until 2026-08-04, which meant the
+                // last map to render in a frame was the only one anyone could read: two maps
+                // (two windows of one app, or play beside terrainscope) and a reader either
+                // got the wrong camera or, once it checked the id, none at all. Callers now
+                // look up their own map and cannot be taken over.
+                //
+                // Collected once so all 14 arrays iterate in the SAME order — HashMap order is
+                // arbitrary but stable for an unmutated map, and this makes that explicit
+                // rather than load-bearing.
+                let cams: Vec<&WalkersCamera> = self.walkers_cameras.values().collect();
+                let len = cams.len();
+                self.io.write_plain_u64h(len, cams.iter().map(|c| c.map_id))?;
+                self.io.write_plain_f64h(len, cams.iter().map(|c| c.zoom))?;
+                self.io.write_plain_f64h(len, cams.iter().map(|c| c.center_lat))?;
+                self.io.write_plain_f64h(len, cams.iter().map(|c| c.center_lon))?;
+                self.io.write_plain_f64h(len, cams.iter().map(|c| c.min_lat))?;
+                self.io.write_plain_f64h(len, cams.iter().map(|c| c.min_lon))?;
+                self.io.write_plain_f64h(len, cams.iter().map(|c| c.max_lat))?;
+                self.io.write_plain_f64h(len, cams.iter().map(|c| c.max_lon))?;
+                self.io.write_plain_f32h(len, cams.iter().map(|c| c.screen_width_px))?;
+                self.io.write_plain_f32h(len, cams.iter().map(|c| c.screen_height_px))?;
+                self.io.write_plain_f64h(len, cams.iter().map(|c| c.hover_lat))?;
+                self.io.write_plain_f64h(len, cams.iter().map(|c| c.hover_lon))?;
+                // Two bools per row as a flag byte (bit0 hoverValid, bit1 clicked), the same
+                // shape r24 uses for its modifiers.
+                self.io.write_plain_u8h(
+                    len,
+                    cams.iter().map(|c| (c.hover_valid as u8) | ((c.clicked as u8) << 1)),
+                )?;
+                self.io.write_plain_u64h(len, cams.iter().map(|c| c.view_hash))?;
                 self.io.flush()?;
             }
             FuncProcId::FetchR16ScrollDelta => {
@@ -8785,18 +8785,17 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                     }
                     let (resp, mut painter) = ui.allocate_painter(desired, sense);
                     let origin = resp.rect.min;
-                    self.r14_canvas_origin_x = origin.x;
-                    self.r14_canvas_origin_y = origin.y;
-                    self.r14_canvas_clicked = resp.clicked();
-                    if let Some(hp) = resp.hover_pos() {
-                        self.r14_canvas_hover_x = hp.x - origin.x;
-                        self.r14_canvas_hover_y = hp.y - origin.y;
-                    } else {
-                        self.r14_canvas_hover_x = f32::NAN;
-                        self.r14_canvas_hover_y = f32::NAN;
-                    }
-                    // ADR-0149 M1: the per-id pointer row (r24) beside the legacy single-slot
-                    // r14. interact_pointer_pos first, so an active drag keeps reporting after
+                    // Canvas-local hover, in canvas coordinates, NaN when the pointer is
+                    // elsewhere. A LOCAL: its only reader is this canvas's own r23 wheel row
+                    // below. It used to be written to the r14 register, which was one slot for
+                    // the whole frame — every canvas overwrote the previous one's, so what a
+                    // reader got depended on render order, and r14 is retired.
+                    let (hover_x, hover_y) = match resp.hover_pos() {
+                        Some(hp) => (hp.x - origin.x, hp.y - origin.y),
+                        None => (f32::NAN, f32::NAN),
+                    };
+                    // ADR-0149 M1: the per-id pointer row (r24), keyed by canvas id.
+                    // interact_pointer_pos first, so an active drag keeps reporting after
                     // the pointer leaves the canvas (edge-crossing pan); hover_pos otherwise.
                     {
                         let pp = resp.interact_pointer_pos().or_else(|| resp.hover_pos());
@@ -8830,15 +8829,13 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                             wheel_scroll_y = sd.y;
                             ui.input_mut(|inp| inp.smooth_scroll_delta = egui::Vec2::ZERO);
                         }
-                        let hx = self.r14_canvas_hover_x;
-                        let hy = self.r14_canvas_hover_y;
                         self.r23_canvas_wheel_push(
                             i.value(),
                             wheel_scroll_x,
                             wheel_scroll_y,
                             wheel_zoom,
-                            hx,
-                            hy,
+                            hover_x,
+                            hover_y,
                         );
                     }
                     if let Some(op) = opacity {
@@ -13129,7 +13126,7 @@ egui::Window::new(label).id(i);
     // render_walkers_map — apply-time entry point for the `walkersMap` opcode.
     // Drains all pending overlay Vecs, creates/reuses per-id WalkersState
     // (HttpTiles + MapMemory), renders the Map widget with OverlayPlugin,
-    // captures camera+pointer state into `walkers_last_camera` for the
+    // captures camera+pointer state into `walkers_cameras` for the
     // fetcher, and pushes response flags into r7_* for fetchR7.
     #[allow(clippy::too_many_arguments)]
     pub fn render_walkers_map(
@@ -13339,7 +13336,7 @@ egui::Window::new(label).id(i);
         }
 
         if let Some(cam) = camera_captured {
-            self.walkers_last_camera = Some(cam);
+            self.walkers_cameras.insert(cam.map_id, cam);
         }
     }
 
