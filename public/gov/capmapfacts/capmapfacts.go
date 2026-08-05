@@ -1,17 +1,22 @@
 // Package capmapfacts encodes a business-capability corpus as `boxer.facts`
 // rows and writes them (ADR-0168 §SD1, §SD2).
 //
+// The unit is a **competence** everywhere boxer names it — "capability" is the
+// runtime's word here (ADR-0026 §SD6), and the corpus takes its own rather than
+// overload it. The vault keeps the literature's spelling; see
+// [github.com/stergiotis/boxer/public/gov/capmapcorpus] for where the two meet.
+//
 // It is the bridge between two packages that do not know about each other:
 // [github.com/stergiotis/boxer/public/gov/capmapcorpus] reads markdown and has
 // no idea it will become facts, and
 // [github.com/stergiotis/boxer/public/gov/capmapvocab] holds the membership
 // names with no opinion on what carries them. Everything about how a
-// capability lands in a columnar row lives here.
+// competence lands in a columnar row lives here.
 //
 // # Why not FactsStoreI
 //
 // The runtime's store interface is a closed per-kind surface — WriteGrant,
-// WriteAudit, WriteWorkingset — with no generic write. Adding WriteCapability
+// WriteAudit, WriteWorkingset — with no generic write. Adding WriteCompetence
 // to it would put a corpus concern into the keelson runtime and oblige every
 // implementer to carry two methods for a tool they do not use, so this package
 // encodes rows itself and hands the finished Arrow batches to a [RecordSinkI].
@@ -23,11 +28,11 @@
 //
 // The runtime mints fact ids from a per-process counter, which is right for an
 // append-only event trail and wrong here. A relation has to point at the
-// capability rows it joins, and a re-ingest of an unchanged vault should
+// competence rows it joins, and a re-ingest of an unchanged vault should
 // produce the same rows rather than a second set wearing new ids. So an id is
 // [DeriveId] over the row's natural key: stable across runs and across
 // processes, and computable for a relation's endpoints without first inserting
-// the capabilities and reading ids back.
+// the competences and reading ids back.
 package capmapfacts
 
 import (
@@ -58,12 +63,12 @@ type RecordSinkI interface {
 var QualifiedTable = factsschema.DatabaseName + "." + factsschema.TableName
 
 // Stats reports what an ingest encoded. Relations are counted separately from
-// capabilities because the two are different grains and a surprise in their
+// competences because the two are different grains and a surprise in their
 // ratio is usually the first sign a vault was pointed at wrongly.
 type Stats struct {
-	Capabilities int
-	Relations    int
-	Rows         int
+	Competences int
+	Relations   int
+	Rows        int
 }
 
 // DeriveId turns a natural key into the row's uint64 id.
@@ -83,7 +88,7 @@ func DeriveId(naturalKey []byte) (id uint64) {
 
 // relationNaturalKey identifies one relation by everything that makes it
 // distinct: the endpoints, what kind of link it is, and — for a body link —
-// which section it sat under, since the same capability may legitimately be
+// which section it sat under, since the same competence may legitimately be
 // cited from two sections and those are two relations.
 func relationNaturalKey(rel capmapcorpus.Relation) (key []byte) {
 	h := blake3.New(16, nil)
@@ -103,17 +108,17 @@ func relationNaturalKey(rel capmapcorpus.Relation) (key []byte) {
 // a call to time.Now so a test can assert on a fixed value and two ingests of
 // an unchanged vault differ only where the vault differs.
 func BuildRecords(corpus capmapcorpus.Corpus, now time.Time) (records []arrow.RecordBatch, stats Stats, err error) {
-	total := len(corpus.Capabilities) + len(corpus.Relations)
+	total := len(corpus.Competences) + len(corpus.Relations)
 	if total == 0 {
 		return nil, stats, nil
 	}
 	ent := dml.NewInEntityFacts(memory.NewGoAllocator(), total)
-	for i := range corpus.Capabilities {
-		encodeCapability(ent, corpus.Capabilities[i], now)
+	for i := range corpus.Competences {
+		encodeCompetence(ent, corpus.Competences[i], now)
 		if cErr := ent.CommitEntity(); cErr != nil {
-			return nil, stats, eh.Errorf("unable to commit capability %q: %w", corpus.Capabilities[i].Slug, cErr)
+			return nil, stats, eh.Errorf("unable to commit competence %q: %w", corpus.Competences[i].Slug, cErr)
 		}
-		stats.Capabilities++
+		stats.Competences++
 	}
 	for i := range corpus.Relations {
 		encodeRelation(ent, corpus.Relations[i], now)
@@ -126,7 +131,7 @@ func BuildRecords(corpus capmapcorpus.Corpus, now time.Time) (records []arrow.Re
 	if records, err = ent.TransferRecords(nil); err != nil {
 		return nil, stats, eh.Errorf("unable to transfer records: %w", err)
 	}
-	stats.Rows = stats.Capabilities + stats.Relations
+	stats.Rows = stats.Competences + stats.Relations
 	return records, stats, nil
 }
 
@@ -159,66 +164,66 @@ func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, t
 	return stats, nil
 }
 
-// encodeCapability writes one capability row: BeginEntity through the last
+// encodeCompetence writes one competence row: BeginEntity through the last
 // section, with no commit — the caller commits, matching the runtime's own
 // encoders so the batched and single paths cannot drift.
-func encodeCapability(ent *dml.InEntityFacts, capability capmapcorpus.Capability, now time.Time) {
-	nk := capability.NaturalKey
+func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence, now time.Time) {
+	nk := competence.NaturalKey
 	ent.BeginEntity().SetId(DeriveId(nk), nk).SetTimestamp(now)
 
 	sym := ent.GetSectionSymbol()
 	// The kind marker's value repeats the kind as text so a row is legible
 	// without resolving membership ids; the membership is what identifies it.
-	sym.BeginAttribute("capability").AddMembershipLowCardRef(id(capmapvocab.MembKindCapability)).EndAttribute()
-	sym.BeginAttribute(capability.Slug).AddMembershipLowCardRef(id(capmapvocab.MembCapSlug)).EndAttribute()
-	addSymbolIf(sym, capability.Domain, capmapvocab.MembCapDomain)
-	addSymbolIf(sym, capability.Catalog, capmapvocab.MembCapCatalog)
-	addSymbolIf(sym, capability.Owner, capmapvocab.MembCapOwner)
+	sym.BeginAttribute("competence").AddMembershipLowCardRef(id(capmapvocab.MembKindCompetence)).EndAttribute()
+	sym.BeginAttribute(competence.Slug).AddMembershipLowCardRef(id(capmapvocab.MembCompSlug)).EndAttribute()
+	addSymbolIf(sym, competence.Domain, capmapvocab.MembCompDomain)
+	addSymbolIf(sym, competence.Catalog, capmapvocab.MembCompCatalog)
+	addSymbolIf(sym, competence.Owner, capmapvocab.MembCompOwner)
 	// Lifecycle: one attribute per recorded phase, the phase riding as the
 	// membership's high-card parameter so who stays attached to which phase.
-	for _, ev := range capability.Lifecycle {
+	for _, ev := range competence.Lifecycle {
 		if ev.By == "" {
 			continue
 		}
 		sym.BeginAttribute(ev.By).AddMembershipMixedLowCardRef(
-			id(capmapvocab.MembCapLifecycleBy), []byte(ev.Phase)).EndAttribute()
+			id(capmapvocab.MembCompLifecycleBy), []byte(ev.Phase)).EndAttribute()
 	}
 	sym.EndSection()
 
 	str := ent.GetSectionStringArray()
-	addStringIf(str, capability.Name, capmapvocab.MembCapName)
-	addStringIf(str, capability.Abbrev, capmapvocab.MembCapAbbrev)
-	addStringIf(str, capability.Synopsis, capmapvocab.MembCapSynopsis)
-	addStringIf(str, capability.VaultPath, capmapvocab.MembCapVaultPath)
+	addStringIf(str, competence.Name, capmapvocab.MembCompName)
+	addStringIf(str, competence.Abbrev, capmapvocab.MembCompAbbrev)
+	addStringIf(str, competence.Synopsis, capmapvocab.MembCompSynopsis)
+	addStringIf(str, competence.VaultPath, capmapvocab.MembCompVaultPath)
 	str.EndSection()
 
 	// Scores are written unconditionally, sentinel included: "not assessed" is
 	// a value to select on, not an absence to infer from a missing attribute.
 	u8 := ent.GetSectionU8Array()
-	u8.BeginAttributeSingle(capability.Level).AddMembershipLowCardRef(id(capmapvocab.MembCapLevel)).EndAttribute()
-	u8.BeginAttributeSingle(capability.Maturity).AddMembershipLowCardRef(id(capmapvocab.MembCapMaturity)).EndAttribute()
-	u8.BeginAttributeSingle(capability.Pain).AddMembershipLowCardRef(id(capmapvocab.MembCapPain)).EndAttribute()
+	u8.BeginAttributeSingle(competence.Level).AddMembershipLowCardRef(id(capmapvocab.MembCompLevel)).EndAttribute()
+	u8.BeginAttributeSingle(competence.Maturity).AddMembershipLowCardRef(id(capmapvocab.MembCompMaturity)).EndAttribute()
+	u8.BeginAttributeSingle(competence.Pain).AddMembershipLowCardRef(id(capmapvocab.MembCompPain)).EndAttribute()
 	u8.EndSection()
 
-	if len(capability.Sections) > 0 {
+	if len(competence.Sections) > 0 {
 		// The heading rides as the high-card parameter because headings are
 		// authored text and cannot be registered names (ADR-0168 §SD5).
 		txt := ent.GetSectionTextArray()
-		for _, sec := range capability.Sections {
+		for _, sec := range competence.Sections {
 			txt.BeginAttributeSingle(sec.Text).AddMembershipMixedLowCardRef(
-				id(capmapvocab.MembCapSection), []byte(sec.Heading)).EndAttribute()
+				id(capmapvocab.MembCompSection), []byte(sec.Heading)).EndAttribute()
 		}
 		txt.EndSection()
 	}
 
-	if hasLifecycleTimes(capability.Lifecycle) {
+	if hasLifecycleTimes(competence.Lifecycle) {
 		tm := ent.GetSectionTimeArray()
-		for _, ev := range capability.Lifecycle {
+		for _, ev := range competence.Lifecycle {
 			if ev.At.IsZero() {
 				continue
 			}
 			tm.BeginAttributeSingle(ev.At).AddMembershipMixedLowCardRef(
-				id(capmapvocab.MembCapLifecycleAt), []byte(ev.Phase)).EndAttribute()
+				id(capmapvocab.MembCompLifecycleAt), []byte(ev.Phase)).EndAttribute()
 		}
 		tm.EndSection()
 	}
@@ -227,7 +232,7 @@ func encodeCapability(ent *dml.InEntityFacts, capability capmapcorpus.Capability
 // encodeRelation writes one relation row.
 //
 // The target appears twice on purpose: as a foreign key when it resolved to a
-// capability, and always as text. A broken link and a citation have a target
+// competence, and always as text. A broken link and a citation have a target
 // worth recording and no row to point at, so the text column is the one that
 // is never empty.
 func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.Time) {
@@ -245,7 +250,7 @@ func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.
 	fk := ent.GetSectionForeignKey()
 	fk.BeginAttribute(DeriveId(capmapcorpus.NaturalKey(rel.SourceSlug))).
 		AddMembershipLowCardRef(id(capmapvocab.MembRelSource)).EndAttribute()
-	if resolvesToCapability(rel.Resolution) {
+	if resolvesToCompetence(rel.Resolution) {
 		fk.BeginAttribute(DeriveId(capmapcorpus.NaturalKey(rel.Target))).
 			AddMembershipLowCardRef(id(capmapvocab.MembRelTarget)).EndAttribute()
 	}
@@ -258,9 +263,9 @@ func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.
 	}
 }
 
-// resolvesToCapability reports whether the relation's target is a capability
+// resolvesToCompetence reports whether the relation's target is a competence
 // in the corpus, and therefore has a row to point a foreign key at.
-func resolvesToCapability(r capmapcorpus.ResolutionE) (ok bool) {
+func resolvesToCompetence(r capmapcorpus.ResolutionE) (ok bool) {
 	return r == capmapcorpus.ResolutionDirect || r == capmapcorpus.ResolutionDirRef
 }
 

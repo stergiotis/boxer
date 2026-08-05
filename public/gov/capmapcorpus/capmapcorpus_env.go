@@ -15,27 +15,27 @@ import (
 // the vault cannot be found, so the message says what to set.
 const EnvVaultDirName = "BOXER_CAPMAP_VAULT"
 
-// conventionalVaultDir is where a checkout keeps its capability vault,
+// conventionalVaultDir is where a checkout keeps its competence vault,
 // mirroring how the decision corpus sits at doc/adr.
-var conventionalVaultDir = filepath.Join("doc", "capabilities")
+var conventionalVaultDir = filepath.Join("doc", "competences")
 
 // The corpus reads its location through the boxer-wide typed env registry
 // (ADR-0009 / config/env) rather than raw os.Getenv, so the variable shows up
 // in `env list` and on the CLI flag surface.
 //
-// Empty walks up from the working directory looking for doc/capabilities, so a
+// Empty walks up from the working directory looking for doc/competences, so a
 // process started anywhere inside a checkout finds it — and can be pointed at
 // a different one (a vault kept outside the tree, a review copy) when not.
 var envVaultDir = env.NewPath(env.Spec{
 	Name:        EnvVaultDirName,
-	Description: "business-capability vault directory to read as the corpus; empty finds the nearest doc/capabilities at or above the working directory",
+	Description: "business-capability vault directory to read as the corpus; empty finds the nearest doc/competences at or above the working directory",
 	Category:    env.CategoryDev,
 })
 
 // ResolveVault yields the directory to parse.
 //
 // It errors rather than guessing: a reader silently handed an empty directory
-// would see a corpus with no capabilities in it and no way to tell that apart
+// would see a corpus with no competences in it and no way to tell that apart
 // from a vault that is genuinely empty.
 func ResolveVault() (vaultDir string, err error) {
 	if vaultDir = envVaultDir.Get(); vaultDir != "" {
@@ -79,12 +79,12 @@ func isDir(path string) (ok bool) {
 //
 // It is a consistency device before it is a cache. A reader that exposes the
 // corpus as several tables reads them one at a time — a query joining
-// capabilities to relations calls Load twice — and an edit landing in between
+// competences to relations calls Load twice — and an edit landing in between
 // would produce a torn join: two tables describing different vaults, with no
 // error to show for it. Sharing one read across the window makes them one
 // snapshot.
 //
-// The window is short enough that a human cannot edit a capability and
+// The window is short enough that a human cannot edit a competence and
 // re-query inside it, so readers stay honestly live: they never serve an
 // answer that outlives a change by longer than this.
 const LoadWindow = 2 * time.Second

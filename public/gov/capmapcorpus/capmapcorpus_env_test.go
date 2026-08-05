@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// writeOneCapVault materialises a vault holding a single capability.
+// writeOneCapVault materialises a vault holding a single competence.
 func writeOneCapVault(t *testing.T, slug string) (root string) {
 	t.Helper()
 	root = t.TempDir()
@@ -56,32 +56,32 @@ func TestLoadYieldsNothingWhenVaultIsUnresolvable(t *testing.T) {
 	envVaultDir.SetForTest(t, filepath.Join(t.TempDir(), "does-not-exist"))
 	resetLoadMemo()
 	corpus := Load()
-	caps, rels := corpus.Capabilities, corpus.Relations
+	caps, rels := corpus.Competences, corpus.Relations
 	assert.Empty(t, caps)
 	assert.Empty(t, rels)
 }
 
 // Two reads inside the window are one snapshot — the property that keeps a
-// query joining capabilities to relations from tearing across an edit.
+// query joining competences to relations from tearing across an edit.
 func TestLoadSharesOneSnapshotWithinTheWindow(t *testing.T) {
 	root := writeOneCapVault(t, "alpha")
 	envVaultDir.SetForTest(t, root)
 	resetLoadMemo()
 
-	first := Load().Capabilities
+	first := Load().Competences
 	require.Len(t, first, 1)
 
-	// Add a capability the second read must not see: inside the window the
+	// Add a competence the second read must not see: inside the window the
 	// snapshot is reused, which is the whole point.
 	require.NoError(t, os.WriteFile(filepath.Join(root, "beta.md"),
 		[]byte("---\nname: beta\nlevel: 1\n---\n\n# Vision and Scope\n\nx\n"), 0o644))
 
-	second := Load().Capabilities
+	second := Load().Competences
 	require.Len(t, second, 1, "a read inside the window reuses the snapshot")
 	assert.Equal(t, &first[0], &second[0], "and returns the same backing array, not a copy")
 
-	// Past the window the corpus is re-read, so the new capability appears.
+	// Past the window the corpus is re-read, so the new competence appears.
 	resetLoadMemo()
-	third := Load().Capabilities
+	third := Load().Competences
 	assert.Len(t, third, 2)
 }

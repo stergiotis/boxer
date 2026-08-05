@@ -14,10 +14,15 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// capabilityFileName is the file a directory-backed capability is defined in —
+// markerFileName is the file a directory-backed competence is defined in —
 // analogous to index.html. Its slug is the enclosing directory's name, not
 // "capability".
-const capabilityFileName = "capability.md"
+//
+// The value is the vault's word, not boxer's: the tree is authored in Obsidian
+// against the business-capability literature, and renaming its files to match
+// boxer's vocabulary would break every other vault written to the convention.
+// The package doc has the rule.
+const markerFileName = "capability.md"
 
 // h1Re matches an h1 heading, which is what delimits a body section.
 var h1Re = regexp.MustCompile(`(?m)^#\s+(.+)$`)
@@ -29,7 +34,7 @@ var h1Re = regexp.MustCompile(`(?m)^#\s+(.+)$`)
 var wikilinkRe = regexp.MustCompile(`\[\[([^\[\]|]+)(?:\|[^\[\]]+)?\]\]`)
 
 // frontmatter mirrors the YAML stanza. It is a parse-only shape: every field
-// is copied into [Capability] or turned into a [Relation], and nothing outside
+// is copied into [Competence] or turned into a [Relation], and nothing outside
 // this file sees it.
 type frontmatter struct {
 	Name        string          `yaml:"name"`
@@ -74,16 +79,16 @@ type lifecycleFields struct {
 	RetiringAt    string `yaml:"lifecycle_retiring_at"`
 }
 
-// ParseDir reads a vault directory whole: its capabilities sorted by slug,
+// ParseDir reads a vault directory whole: its competences sorted by slug,
 // every relation they declare resolved against the set that was found, and the
-// markdown files that were not capabilities.
+// markdown files that were not competences.
 //
 // Sorting is not cosmetic: filesystem walk order is not stable across machines,
 // and callers downstream diff and ingest these. Relations follow their source.
 //
 // Two failure modes are treated differently on purpose. A file whose *name*
-// cannot be a capability slug is skipped and reported in [Corpus.Skipped] —
-// vaults routinely hold reference notes beside capabilities, and refusing the
+// cannot be a competence slug is skipped and reported in [Corpus.Skipped] —
+// vaults routinely hold reference notes beside competences, and refusing the
 // whole read over one would make the common layout unreadable. A file that
 // *is* addressable but whose content will not parse fails the call, because
 // that is an authoring error to fix and dropping it would understate the
@@ -92,7 +97,7 @@ func ParseDir(vaultDir string) (corpus Corpus, err error) {
 	type parsedFile struct {
 		path string
 		slug string
-		cap  Capability
+		comp Competence
 		rels []Relation
 	}
 
@@ -107,7 +112,7 @@ func ParseDir(vaultDir string) (corpus Corpus, err error) {
 		}
 		if d.IsDir() {
 			// .obsidian is the editor's own state — workspace layout, graph
-			// settings — and contains no capabilities.
+			// settings — and contains no competences.
 			if d.Name() == ".obsidian" {
 				return filepath.SkipDir
 			}
@@ -116,15 +121,31 @@ func ParseDir(vaultDir string) (corpus Corpus, err error) {
 		if !strings.HasSuffix(d.Name(), ".md") {
 			return nil
 		}
+		// A README is a directory's front page, and `readme` normalizes to a
+		// perfectly well-formed slug — so without this it is read as a
+		// competence, and any wikilink in its prose becomes a relation. That
+		// is not hypothetical: ADR-0168 §SD7 puts a committed README.md at the
+		// root of this repository's own vault, and the first parse of it
+		// reported 80 competences and an extra edge.
+		//
+		// Reported as skipped rather than dropped, so a vault where the file
+		// was meant to be a competence says so.
+		if isReadme(d.Name()) {
+			corpus.Skipped = append(corpus.Skipped, SkippedFile{
+				Path:   relativeTo(vaultDir, path),
+				Reason: "a README is a directory's front page, not a competence",
+			})
+			return nil
+		}
 		slug, slugErr := slugForPath(path)
 		if slugErr != nil {
 			corpus.Skipped = append(corpus.Skipped, SkippedFile{
 				Path:   relativeTo(vaultDir, path),
-				Reason: "name is not a capability slug",
+				Reason: "name is not a competence slug",
 			})
 			return nil
 		}
-		if d.Name() == capabilityFileName {
+		if d.Name() == markerFileName {
 			dirBacked[slug] = struct{}{}
 		}
 		files = append(files, parsedFile{path: path, slug: slug})
@@ -137,14 +158,14 @@ func ParseDir(vaultDir string) (corpus Corpus, err error) {
 	known := make(map[string]struct{}, len(files))
 	for i := range files {
 		if _, dup := known[files[i].slug]; dup {
-			return Corpus{}, eh.Errorf("duplicate capability slug %q at %s: slugs are the corpus's identity and must be unique",
+			return Corpus{}, eh.Errorf("duplicate competence slug %q at %s: slugs are the corpus's identity and must be unique",
 				files[i].slug, files[i].path)
 		}
 		known[files[i].slug] = struct{}{}
 	}
 
 	for i := range files {
-		files[i].cap, files[i].rels, err = parseFile(files[i].path, files[i].slug, vaultDir)
+		files[i].comp, files[i].rels, err = parseFile(files[i].path, files[i].slug, vaultDir)
 		if err != nil {
 			return Corpus{}, err
 		}
@@ -152,19 +173,26 @@ func ParseDir(vaultDir string) (corpus Corpus, err error) {
 
 	sort.Slice(files, func(a, b int) bool { return files[a].slug < files[b].slug })
 
-	corpus.Capabilities = make([]Capability, 0, len(files))
+	corpus.Competences = make([]Competence, 0, len(files))
 	nrels := 0
 	for i := range files {
 		nrels += len(files[i].rels)
 	}
 	corpus.Relations = make([]Relation, 0, nrels)
 	for i := range files {
-		corpus.Capabilities = append(corpus.Capabilities, files[i].cap)
+		corpus.Competences = append(corpus.Competences, files[i].comp)
 		corpus.Relations = append(corpus.Relations, files[i].rels...)
 	}
 	resolveRelations(corpus.Relations, known, dirBacked)
 	sort.Slice(corpus.Skipped, func(a, b int) bool { return corpus.Skipped[a].Path < corpus.Skipped[b].Path })
 	return corpus, nil
+}
+
+// isReadme reports whether a file name is a README, in any of the spellings a
+// tree actually uses. Case-insensitive because the file is written by whoever
+// set the directory up, not by the vault tooling.
+func isReadme(name string) (ok bool) {
+	return strings.EqualFold(name, "README.md")
 }
 
 // relativeTo renders path against the vault root, falling back to the absolute
@@ -176,20 +204,20 @@ func relativeTo(root, path string) (rel string) {
 	return path
 }
 
-// parseFile reads one markdown file into a capability and the relations it
+// parseFile reads one markdown file into a competence and the relations it
 // declares. The relations come back unresolved; ParseDir resolves them once
 // the whole slug set is known.
-func parseFile(path string, slug string, vaultDir string) (cap Capability, rels []Relation, err error) {
+func parseFile(path string, slug string, vaultDir string) (comp Competence, rels []Relation, err error) {
 	var data []byte
 	if data, err = os.ReadFile(path); err != nil {
-		return cap, nil, eh.Errorf("unable to read %q: %w", path, err)
+		return comp, nil, eh.Errorf("unable to read %q: %w", path, err)
 	}
 	var (
 		fm   frontmatter
 		body string
 	)
 	if fm, body, err = splitFrontmatter(string(data)); err != nil {
-		return cap, nil, eh.Errorf("unable to parse %q: %w", path, err)
+		return comp, nil, eh.Errorf("unable to parse %q: %w", path, err)
 	}
 
 	relPath, relErr := filepath.Rel(vaultDir, path)
@@ -197,7 +225,7 @@ func parseFile(path string, slug string, vaultDir string) (cap Capability, rels 
 		relPath = path
 	}
 
-	cap = Capability{
+	comp = Competence{
 		Slug:       slug,
 		NaturalKey: NaturalKey(slug),
 		VaultPath:  relPath,
@@ -213,13 +241,13 @@ func parseFile(path string, slug string, vaultDir string) (cap Capability, rels 
 	}
 	// A domain is a grouping label, not an identity, so an unconventional one
 	// is kept as written rather than refused.
-	cap.Domain, _ = NormalizeTarget(fm.Domain)
-	cap.Catalog = fm.Catalog
-	if cap.Catalog == "" {
-		// The catalog a capability belongs to is otherwise its top-level
+	comp.Domain, _ = NormalizeTarget(fm.Domain)
+	comp.Catalog = fm.Catalog
+	if comp.Catalog == "" {
+		// The catalog a competence belongs to is otherwise its top-level
 		// directory, which is how the vault groups imported frameworks.
 		if top, _, found := strings.Cut(relPath, string(os.PathSeparator)); found {
-			cap.Catalog = top
+			comp.Catalog = top
 		}
 	}
 
@@ -235,12 +263,12 @@ func parseFile(path string, slug string, vaultDir string) (cap Capability, rels 
 			rels = append(rels, rel)
 		}
 	}
-	rels = append(rels, sectionWikilinks(slug, cap.Sections)...)
-	return cap, rels, nil
+	rels = append(rels, sectionWikilinks(slug, comp.Sections)...)
+	return comp, rels, nil
 }
 
 // makeRelation builds one relation from a raw link target, pre-marking the
-// targets that cannot name a capability. ok is false only for an empty target,
+// targets that cannot name a competence. ok is false only for an empty target,
 // which carries nothing to record.
 //
 // A not-well-formed target is kept rather than dropped, with
@@ -249,7 +277,7 @@ func parseFile(path string, slug string, vaultDir string) (cap Capability, rels 
 // and Obligations sections exist to record, and resolving it would report a
 // quarter of this corpus's links as broken.
 func makeRelation(source, rawTarget string, kind RelationKindE, section string) (rel Relation, ok bool) {
-	trimmed, qualified := trimCapabilitySuffix(rawTarget)
+	trimmed, qualified := trimMarkerSuffix(rawTarget)
 	target, wellFormed := NormalizeTarget(trimmed)
 	if target == "" {
 		return rel, false
@@ -261,22 +289,23 @@ func makeRelation(source, rawTarget string, kind RelationKindE, section string) 
 	return rel, true
 }
 
-// capabilitySuffix is how a link addresses a directory-backed capability the
-// way Obsidian resolves it: the file is `{slug}/capability.md`, so the link
-// that actually follows is `[[{slug}/capability]]`.
-const capabilitySuffix = "/" + "capability"
+// markerSuffix is how a link addresses a directory-backed competence the way
+// Obsidian resolves it: the file is `{slug}/capability.md`, so the link that
+// actually follows is `[[{slug}/capability]]`. The vault's spelling, for the
+// same reason as [markerFileName].
+const markerSuffix = "/" + "capability"
 
-// trimCapabilitySuffix reduces an explicitly-qualified link to the slug it
+// trimMarkerSuffix reduces an explicitly-qualified link to the slug it
 // names, reporting whether it was written that way.
 //
-// Both spellings denote the same capability, so both must resolve to one
+// Both spellings denote the same competence, so both must resolve to one
 // target — otherwise a corpus that has been normalised to the qualified form
 // reports every one of those links as broken. The flag is kept because the two
 // are not equally correct: the bare form dangles in Obsidian and the qualified
 // form does not, which is the distinction [ResolutionDirRef] reports.
-func trimCapabilitySuffix(raw string) (out string, qualified bool) {
+func trimMarkerSuffix(raw string) (out string, qualified bool) {
 	trimmed := strings.TrimSpace(raw)
-	if base, found := strings.CutSuffix(trimmed, capabilitySuffix); found && base != "" {
+	if base, found := strings.CutSuffix(trimmed, markerSuffix); found && base != "" {
 		return base, true
 	}
 	return trimmed, false
@@ -284,7 +313,7 @@ func trimCapabilitySuffix(raw string) (out string, qualified bool) {
 
 // sectionWikilinks extracts every [[link]] from the body, tagged with the
 // section it was found under. The section is the point: it is what makes "what
-// does this capability's Standards section cite" a query rather than a scan.
+// does this competence's Standards section cite" a query rather than a scan.
 func sectionWikilinks(slug string, sections []Section) (rels []Relation) {
 	for _, sec := range sections {
 		for _, m := range wikilinkRe.FindAllStringSubmatch(sec.Text, -1) {
@@ -300,14 +329,14 @@ func sectionWikilinks(slug string, sections []Section) (rels []Relation) {
 // holds, in place.
 //
 // A wikilink whose target is directory-backed resolves as
-// [ResolutionDirRef] rather than [ResolutionDirect]: the capability exists
+// [ResolutionDirRef] rather than [ResolutionDirect]: the competence exists
 // here, but Obsidian looks for `{slug}.md` and will not follow it. The
 // frontmatter kinds are exempt — they are resolved by this model only and are
 // never followed by the editor, so the distinction would be noise.
 func resolveRelations(rels []Relation, known, dirBacked map[string]struct{}) {
 	for i := range rels {
 		// Already classified at parse time as naming something outside the
-		// corpus; no lookup can change that, since no capability could carry
+		// corpus; no lookup can change that, since no competence could carry
 		// such a slug.
 		if rels[i].Resolution == ResolutionExternal {
 			continue
@@ -316,7 +345,7 @@ func resolveRelations(rels []Relation, known, dirBacked map[string]struct{}) {
 			rels[i].Resolution = ResolutionUnresolved
 			continue
 		}
-		// A bare [[slug]] naming a directory-backed capability dangles in
+		// A bare [[slug]] naming a directory-backed competence dangles in
 		// Obsidian, which looks for {slug}.md. A link already written as
 		// [[slug/capability]] does not, so it is not flagged.
 		if _, isDir := dirBacked[rels[i].Target]; isDir && rels[i].Kind == RelationKindWikilink && !rels[i].qualified {
@@ -329,7 +358,7 @@ func resolveRelations(rels []Relation, known, dirBacked map[string]struct{}) {
 
 // UnresolvedRelations returns the relations whose target is not in the corpus
 // — the broken links. This is what the vault tooling used to precompute into
-// per-capability lint columns; as a filter over one grain it needs no pass and
+// per-competence lint columns; as a filter over one grain it needs no pass and
 // cannot go stale.
 func UnresolvedRelations(rels []Relation) (broken []Relation) {
 	for _, r := range rels {
@@ -341,8 +370,8 @@ func UnresolvedRelations(rels []Relation) (broken []Relation) {
 }
 
 // splitFrontmatter separates the YAML stanza from the markdown body. A file
-// with no stanza is an error rather than a body-only capability: every field
-// that identifies a capability lives in the frontmatter.
+// with no stanza is an error rather than a body-only competence: every field
+// that identifies a competence lives in the frontmatter.
 func splitFrontmatter(content string) (fm frontmatter, body string, err error) {
 	const open = "---\n"
 	if !strings.HasPrefix(content, open) {
@@ -423,7 +452,7 @@ var timestampLayouts = []string{
 // parseTimestamp yields the zero time for anything it cannot read, including
 // the epoch sentinel a previous exporter wrote for "unset". An unreadable date
 // is not an error: it is one absent lifecycle event in an otherwise usable
-// capability.
+// competence.
 func parseTimestamp(s string) (t time.Time) {
 	s = strings.TrimSpace(s)
 	if s == "" {

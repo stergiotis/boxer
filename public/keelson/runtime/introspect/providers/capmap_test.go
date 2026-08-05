@@ -12,9 +12,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
-// writeCapVault materialises a vault and points the corpus at it for the
+// writeCompVault materialises a vault and points the corpus at it for the
 // duration of the test.
-func writeCapVault(t *testing.T, files map[string]string) {
+func writeCompVault(t *testing.T, files map[string]string) {
 	t.Helper()
 	root := t.TempDir()
 	for rel, content := range files {
@@ -27,7 +27,7 @@ func writeCapVault(t *testing.T, files map[string]string) {
 
 func sampleVault() map[string]string {
 	return map[string]string{
-		"analytics/capability.md": "---\nname: Analytics\nlevel: 1\ndomain: boxer-toolbelt\ncatalog: boxer\n---\n\n" +
+		"analytics/competence.md": "---\nname: Analytics\nlevel: 1\ndomain: boxer-toolbelt\ncatalog: boxer\n---\n\n" +
 			"# Vision and Scope\n\nroot prose\n",
 		"analytics/robustness.md": "---\nname: Robustness\nabbrev: Rob\nlevel: 2\ndomain: boxer-toolbelt\ncatalog: boxer\n" +
 			"owner: Platform Lead\nmaturity: 3\npain: 0\nparent_ids:\n  - \"[[analytics]]\"\n---\n\n" +
@@ -49,17 +49,17 @@ func snapshotRows(t *testing.T, p introspect.Provider) (n int64) {
 // no checkout around it has no corpus, and that is a fact about the process.
 func TestCapmapProvidersAreEmptyWithoutAVault(t *testing.T) {
 	capmapcorpus.SetVaultForTest(t, filepath.Join(t.TempDir(), "does-not-exist"))
-	for _, p := range []introspect.Provider{capabilityProvider{}, capsectionProvider{}, caprelationProvider{}} {
+	for _, p := range []introspect.Provider{competenceProvider{}, competencesectionProvider{}, competencerelationProvider{}} {
 		assert.Zero(t, snapshotRows(t, p), "%s must be empty with no vault", p.Name())
 	}
 }
 
 func TestCapmapProvidersReadTheVault(t *testing.T) {
-	writeCapVault(t, sampleVault())
-	assert.Equal(t, int64(2), snapshotRows(t, capabilityProvider{}), "one row per capability")
-	assert.Equal(t, int64(3), snapshotRows(t, capsectionProvider{}), "one row per body section")
+	writeCompVault(t, sampleVault())
+	assert.Equal(t, int64(2), snapshotRows(t, competenceProvider{}), "one row per competence")
+	assert.Equal(t, int64(3), snapshotRows(t, competencesectionProvider{}), "one row per body section")
 	// parent + two body links from Activities + one citation from Standards.
-	assert.Equal(t, int64(4), snapshotRows(t, caprelationProvider{}), "one row per relation")
+	assert.Equal(t, int64(4), snapshotRows(t, competencerelationProvider{}), "one row per relation")
 }
 
 // The schema is the provider's contract: a pane resolves columns from it, so a
@@ -69,9 +69,9 @@ func TestCapmapSchemasCarryTheExpectedColumns(t *testing.T) {
 		p    introspect.Provider
 		want []string
 	}{
-		{capabilityProvider{}, []string{"slug", "name", "domain", "catalog", "level", "maturity", "pain", "fact_id"}},
-		{capsectionProvider{}, []string{"slug", "ordinal", "heading", "bytes", "text@text/markdown"}},
-		{caprelationProvider{}, []string{"source_slug", "target", "kind", "resolution", "section", "ncd", "source_fact_id", "target_fact_id"}},
+		{competenceProvider{}, []string{"slug", "name", "domain", "catalog", "level", "maturity", "pain", "fact_id"}},
+		{competencesectionProvider{}, []string{"slug", "ordinal", "heading", "bytes", "text@text/markdown"}},
+		{competencerelationProvider{}, []string{"source_slug", "target", "kind", "resolution", "section", "ncd", "source_fact_id", "target_fact_id"}},
 	} {
 		got := map[string]struct{}{}
 		for _, f := range tc.p.Schema().Fields() {
@@ -88,7 +88,7 @@ func TestCapmapSchemasCarryTheExpectedColumns(t *testing.T) {
 // it renders the cell as markdown rather than as a wall of text.
 func TestCapsectionTextDeclaresItsMediaType(t *testing.T) {
 	var found bool
-	for _, f := range (capsectionProvider{}).Schema().Fields() {
+	for _, f := range (competencesectionProvider{}).Schema().Fields() {
 		if f.Name == "text@text/markdown" {
 			found = true
 		}
@@ -99,7 +99,7 @@ func TestCapsectionTextDeclaresItsMediaType(t *testing.T) {
 // All three read one snapshot, so a query joining them cannot see two
 // different vaults.
 func TestCapmapProvidersAreLive(t *testing.T) {
-	for _, p := range []introspect.Provider{capabilityProvider{}, capsectionProvider{}, caprelationProvider{}} {
+	for _, p := range []introspect.Provider{competenceProvider{}, competencesectionProvider{}, competencerelationProvider{}} {
 		assert.Equal(t, introspect.FreshnessLive, p.Freshness(), "%s", p.Name())
 	}
 }

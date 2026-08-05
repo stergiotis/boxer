@@ -1,6 +1,11 @@
-// Package capmapvocab is the capability corpus's leeway natural-key
-// vocabulary: the memberships that tag a capability or a relation row in
+// Package capmapvocab is the competence corpus's leeway natural-key
+// vocabulary: the memberships that tag a competence or a relation row in
 // `boxer.facts` (ADR-0168 §SD1, §SD2, §SD6).
+//
+// The names say *competence*, not *capability*: boxer gives "capability" to
+// the runtime's security capabilities (ADR-0026), so the corpus takes its own
+// word (§SD6). The vault keeps the industry's; capmapcorpus is where the two
+// meet.
 //
 // Each constant below is a registered membership whose uint64 id — via
 // GetId().Value() — is what the generated DML builders'
@@ -53,7 +58,7 @@ import (
 var Contract = contract.NewVcsManagedContract()
 
 // NamingStyle is the canonical form for capmap membership names. It matches
-// the runtime vocabulary's, so a query joining capability facts to runtime
+// the runtime vocabulary's, so a query joining competence facts to runtime
 // facts reads the same way on both sides.
 const NamingStyle = naming.LowerSpinalCase
 
@@ -78,7 +83,7 @@ var NkRegistry = registry.MustNewNaturalKeyRegistry[*contract.VcsManagedContract
 	MembersTagValue.GetTagValue(), 32, NamingStyle, identifier.UntaggedId(0), Contract,
 )
 
-// Membership constants for `boxer.facts` rows carrying capability-corpus data.
+// Membership constants for `boxer.facts` rows carrying competence-corpus data.
 //
 // Ordering matters and is append-only: membership ids follow declaration
 // order, and rows already written carry them. A new membership goes at the end
@@ -86,46 +91,46 @@ var NkRegistry = registry.MustNewNaturalKeyRegistry[*contract.VcsManagedContract
 var (
 	// Kinds. The row's attribute value carries the kind label for
 	// readability; the membership id is what identifies which kind the row is.
-	MembKindCapability = NkRegistry.MustBegin("capmapKindCapability").End()
+	MembKindCompetence = NkRegistry.MustBegin("capmapKindCompetence").End()
 	MembKindRelation   = NkRegistry.MustBegin("capmapKindRelation").End()
 
-	// Capability identity and placement. Slug is the corpus's identity and is
+	// Competence identity and placement. Slug is the corpus's identity and is
 	// also what the row's natural key is derived from; it is a column as well
 	// because a query should not have to invert a digest.
-	MembCapSlug      = NkRegistry.MustBegin("capmapCapabilitySlug").End()
-	MembCapName      = NkRegistry.MustBegin("capmapCapabilityName").End()
-	MembCapAbbrev    = NkRegistry.MustBegin("capmapCapabilityAbbrev").End()
-	MembCapSynopsis  = NkRegistry.MustBegin("capmapCapabilitySynopsis").End()
-	MembCapDomain    = NkRegistry.MustBegin("capmapCapabilityDomain").End()
-	MembCapCatalog   = NkRegistry.MustBegin("capmapCapabilityCatalog").End()
-	MembCapOwner     = NkRegistry.MustBegin("capmapCapabilityOwner").End()
-	MembCapLevel     = NkRegistry.MustBegin("capmapCapabilityLevel").End()
-	MembCapVaultPath = NkRegistry.MustBegin("capmapCapabilityVaultPath").End()
+	MembCompSlug      = NkRegistry.MustBegin("capmapCompetenceSlug").End()
+	MembCompName      = NkRegistry.MustBegin("capmapCompetenceName").End()
+	MembCompAbbrev    = NkRegistry.MustBegin("capmapCompetenceAbbrev").End()
+	MembCompSynopsis  = NkRegistry.MustBegin("capmapCompetenceSynopsis").End()
+	MembCompDomain    = NkRegistry.MustBegin("capmapCompetenceDomain").End()
+	MembCompCatalog   = NkRegistry.MustBegin("capmapCompetenceCatalog").End()
+	MembCompOwner     = NkRegistry.MustBegin("capmapCompetenceOwner").End()
+	MembCompLevel     = NkRegistry.MustBegin("capmapCompetenceLevel").End()
+	MembCompVaultPath = NkRegistry.MustBegin("capmapCompetenceVaultPath").End()
 
 	// Assessment. Both carry the not-assessed sentinel rather than being
 	// omitted, so "unassessed" is a value a query can select on instead of an
 	// absence it has to infer.
-	MembCapMaturity = NkRegistry.MustBegin("capmapCapabilityMaturity").End()
-	MembCapPain     = NkRegistry.MustBegin("capmapCapabilityPain").End()
+	MembCompMaturity = NkRegistry.MustBegin("capmapCompetenceMaturity").End()
+	MembCompPain     = NkRegistry.MustBegin("capmapCompetencePain").End()
 
 	// Body prose. Section is a mixed low-card-ref: the membership says "this
 	// is a body section" and the high-card parameter carries the heading,
 	// because headings are authored text and cannot be registered names. This
 	// is the labelled-text shape ADR-0168 §SD5 adopts — the label rides the
 	// membership, the prose stays prose.
-	MembCapSection = NkRegistry.MustBegin("capmapCapabilitySection").End()
+	MembCompSection = NkRegistry.MustBegin("capmapCompetenceSection").End()
 
 	// Lifecycle. Both are mixed low-card-refs carrying the phase as their
 	// high-card parameter, which is what keeps who and when attached to the
 	// phase they belong to without eight pairs of registered names.
-	MembCapLifecycleBy = NkRegistry.MustBegin("capmapCapabilityLifecycleBy").End()
-	MembCapLifecycleAt = NkRegistry.MustBegin("capmapCapabilityLifecycleAt").End()
+	MembCompLifecycleBy = NkRegistry.MustBegin("capmapCompetenceLifecycleBy").End()
+	MembCompLifecycleAt = NkRegistry.MustBegin("capmapCompetenceLifecycleAt").End()
 
 	// Relation endpoints, on the foreignKey section (ADR-0109 multi-membership
 	// under distinct role memberships).
 	//
-	// Source always resolves — it is the capability the link was read from.
-	// Target is present only when the link resolved to a capability in the
+	// Source always resolves — it is the competence the link was read from.
+	// Target is present only when the link resolved to a competence in the
 	// corpus, which is why the target's text is carried separately: a broken
 	// link and a citation have a target worth recording and no fact to point
 	// at.
@@ -139,7 +144,7 @@ var (
 	MembRelResolution = NkRegistry.MustBegin("capmapRelationResolution").End()
 
 	// Section provenance for a body wikilink — which heading the link sat
-	// under, so "what does this capability's Standards section cite" is a
+	// under, so "what does this competence's Standards section cite" is a
 	// query rather than a scan.
 	MembRelSection = NkRegistry.MustBegin("capmapRelationSection").End()
 
@@ -151,12 +156,12 @@ var (
 // assert the invariants that matter — non-zero, unique, and disjoint from the
 // other vocabularies sharing the table.
 var AllMembs = []registry.RegisteredNaturalKey{
-	MembKindCapability, MembKindRelation,
-	MembCapSlug, MembCapName, MembCapAbbrev, MembCapSynopsis,
-	MembCapDomain, MembCapCatalog, MembCapOwner, MembCapLevel, MembCapVaultPath,
-	MembCapMaturity, MembCapPain,
-	MembCapSection,
-	MembCapLifecycleBy, MembCapLifecycleAt,
+	MembKindCompetence, MembKindRelation,
+	MembCompSlug, MembCompName, MembCompAbbrev, MembCompSynopsis,
+	MembCompDomain, MembCompCatalog, MembCompOwner, MembCompLevel, MembCompVaultPath,
+	MembCompMaturity, MembCompPain,
+	MembCompSection,
+	MembCompLifecycleBy, MembCompLifecycleAt,
 	MembRelSource, MembRelTarget,
 	MembRelTargetText, MembRelKind, MembRelResolution,
 	MembRelSection,

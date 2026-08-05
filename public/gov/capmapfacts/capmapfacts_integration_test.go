@@ -84,10 +84,10 @@ func TestIngestRoundTripsThroughClickHouse(t *testing.T) {
 
 	query := func(sql string) (out string) { return queryText(t, cli, ctx, sql) }
 
-	kindCap := capmapvocab.MembKindCapability.GetId().Value()
+	kindCap := capmapvocab.MembKindCompetence.GetId().Value()
 	kindRel := capmapvocab.MembKindRelation.GetId().Value()
-	slugMemb := capmapvocab.MembCapSlug.GetId().Value()
-	secMemb := capmapvocab.MembCapSection.GetId().Value()
+	slugMemb := capmapvocab.MembCompSlug.GetId().Value()
+	secMemb := capmapvocab.MembCompSection.GetId().Value()
 	srcMemb := capmapvocab.MembRelSource.GetId().Value()
 	tgtMemb := capmapvocab.MembRelTarget.GetId().Value()
 

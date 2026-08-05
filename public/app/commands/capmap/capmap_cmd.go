@@ -1,11 +1,15 @@
 // Package capmap is the `boxer capmap` command: it reads a business-capability
-// vault and writes it into `boxer.facts` as capability and relation rows
+// vault and writes it into `boxer.facts` as competence and relation rows
 // (ADR-0168).
+//
+// The vault says *capability*, boxer says *competence* — "capability" belongs
+// to the runtime's security capabilities here (§SD6). This command speaks
+// boxer's side of that boundary.
 //
 // Two verbs, deliberately split by whether they need a database:
 //
 //   - `parse` reads the vault and reports what is in it — counts, the files
-//     that were not capabilities, and the links that did not resolve. No
+//     that were not competences, and the links that did not resolve. No
 //     ClickHouse, so it works in a checkout with nothing running, and it is
 //     the corpus lint until the applet book lands.
 //   - `ingest` does the same read and then writes the rows.
@@ -52,7 +56,7 @@ const maxReported = 20
 func vaultFlag() cli.Flag {
 	return &cli.StringFlag{
 		Name:  "vault",
-		Usage: "capability vault directory; empty resolves " + capmapcorpus.EnvVaultDirName + " or the nearest doc/capabilities",
+		Usage: "competence vault directory; empty resolves " + capmapcorpus.EnvVaultDirName + " or the nearest doc/competences",
 	}
 }
 
@@ -60,7 +64,7 @@ func vaultFlag() cli.Flag {
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "capmap",
-		Usage: "read a business-capability vault; report it, or ingest it into boxer.facts as capability and relation rows",
+		Usage: "read a business-capability vault; report it, or ingest it into boxer.facts as competence and relation rows",
 		Subcommands: []*cli.Command{
 			{
 				Name:   "parse",
@@ -112,7 +116,7 @@ func actionParse(c *cli.Context) (err error) {
 	}
 	out := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(out, "vault\t%s\n", dir)
-	fmt.Fprintf(out, "capabilities\t%d\n", len(corpus.Capabilities))
+	fmt.Fprintf(out, "competences\t%d\n", len(corpus.Competences))
 	fmt.Fprintf(out, "relations\t%d\n", len(corpus.Relations))
 
 	byResolution := map[capmapcorpus.ResolutionE]int{}
@@ -140,7 +144,7 @@ func reportSkipped(skipped []capmapcorpus.SkippedFile) {
 	if len(skipped) == 0 {
 		return
 	}
-	fmt.Printf("\nskipped (not capabilities), showing %d of %d:\n", min(len(skipped), maxReported), len(skipped))
+	fmt.Printf("\nskipped (not competences), showing %d of %d:\n", min(len(skipped), maxReported), len(skipped))
 	for i, s := range skipped {
 		if i >= maxReported {
 			break
@@ -181,8 +185,8 @@ func actionIngest(c *cli.Context) (err error) {
 	if corpus, dir, err = readVault(c); err != nil {
 		return err
 	}
-	if len(corpus.Capabilities) == 0 {
-		return eh.Errorf("vault %q holds no capabilities; refusing to ingest an empty corpus", dir)
+	if len(corpus.Competences) == 0 {
+		return eh.Errorf("vault %q holds no competences; refusing to ingest an empty corpus", dir)
 	}
 
 	ctx := context.Background()
@@ -213,7 +217,7 @@ func actionIngest(c *cli.Context) (err error) {
 	if stats, err = capmapfacts.Ingest(ctx, corpus, sink, database+"."+table, time.Now().UTC()); err != nil {
 		return err
 	}
-	fmt.Printf("ingested %d rows into %s.%s from %s (%d capabilities, %d relations)\n",
-		stats.Rows, database, table, dir, stats.Capabilities, stats.Relations)
+	fmt.Printf("ingested %d rows into %s.%s from %s (%d competences, %d relations)\n",
+		stats.Rows, database, table, dir, stats.Competences, stats.Relations)
 	return nil
 }

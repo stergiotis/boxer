@@ -38,7 +38,7 @@ func RegisterStatic(r *introspect.Registry) (err error) {
 	for _, p := range []introspect.Provider{
 		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{}, extbinProvider{},
 		adrProvider{}, subtaskProvider{}, coderefProvider{}, adrcontentProvider{}, componentsProvider{},
-		capabilityProvider{}, capsectionProvider{}, caprelationProvider{},
+		competenceProvider{}, competencesectionProvider{}, competencerelationProvider{},
 		helpsectionsProvider{}, adrsectionsProvider{},
 	} {
 		if err = r.Register(p); err != nil {

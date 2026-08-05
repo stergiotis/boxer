@@ -8,10 +8,19 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
-// The business-capability corpus as three keelson tables — `capability` (one
-// row per capability), `capsection` (one row per body section) and
-// `caprelation` (one row per link between capabilities) — so a capability map
-// is queryable from any host pointed at this process (ADR-0168 §SD8).
+// The business-capability corpus as three keelson tables — `competence` (one
+// row per competence), `competencesection` (one row per body section) and
+// `competencerelation` (one row per link between them) — so a capability map is
+// queryable from any host pointed at this process (ADR-0168 §SD8).
+//
+// # Why the tables are not called `capability`
+//
+// They were, and it was wrong. `keelson('…')` is a flat namespace shared with
+// `apps`, `env`, `procs` and `windows`, and in it `capability` reads as the
+// runtime's own security capabilities — the ADR-0026 subjects `capslock`
+// audits. The corpus therefore takes its own word (§SD6): boxer says
+// **competence**, the vault keeps the literature's *business capability*, and
+// capmapcorpus is the boundary between them.
 //
 // # They read the vault, not boxer.facts
 //
@@ -26,7 +35,7 @@ import (
 // nothing caught the last time an aspect change invalidated six.
 //
 // Reading the vault has neither problem, and costs about 150 ms for a
-// ~1,700-capability tree, memoised for a short window by capmapcorpus.Load.
+// ~1,700-competence tree, memoised for a short window by capmapcorpus.Load.
 // The facts table keeps its own job: history, and joins on the ClickHouse side.
 //
 // # Like the ADR tables, unlike the rest
@@ -39,32 +48,32 @@ import (
 // corpus and that is a fact about the process; and the corpus root is pinned
 // by BOXER_CAPMAP_VAULT, discovered by walking up only when unset.
 
-// capabilityProvider exposes each capability as keelson.capability: the
+// competenceProvider exposes each competence as keelson.competence: the
 // frontmatter metadata, without the prose.
 //
-// The body lives in `capsection` rather than here for the reason `adrcontent`
+// The body lives in `competencesection` rather than here for the reason `adrcontent`
 // is split from `adr` — it is the bulk of the corpus by bytes, and a query
 // about maturity should not pay for it.
 //
-// fact_id is the id `boxer capmap ingest` writes for this capability, so a
+// fact_id is the id `boxer capmap ingest` writes for this competence, so a
 // reader who wants the persisted trail can join this table to boxer.facts
 // without knowing how the id is derived.
-type capabilityProvider struct{}
+type competenceProvider struct{}
 
-func (capabilityProvider) Name() string                         { return "capability" }
-func (capabilityProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
-func (capabilityProvider) Schema() *arrow.Schema                { return capabilityTable(nil).Schema() }
+func (competenceProvider) Name() string                         { return "competence" }
+func (competenceProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (competenceProvider) Schema() *arrow.Schema                { return competenceTable(nil).Schema() }
 
-func (capabilityProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
-	rows := capmapcorpus.Load().Capabilities
-	return capabilityTable(rows).Build(proj, len(rows)), nil
+func (competenceProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	rows := capmapcorpus.Load().Competences
+	return competenceTable(rows).Build(proj, len(rows)), nil
 }
 
-// capsectionProvider exposes each body section as keelson.capsection: one row
+// competencesectionProvider exposes each body section as keelson.competencesection: one row
 // per heading, in document order.
 //
-// One row per section rather than parallel arrays on `capability` because a
-// section is its own grain — "which capabilities have a Standards section", or
+// One row per section rather than parallel arrays on `competence` because a
+// section is its own grain — "which competences have a Standards section", or
 // the text of one heading across the corpus, are both filters here and array
 // gymnastics there.
 //
@@ -72,56 +81,62 @@ func (capabilityProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatc
 // pane that knows the convention renders the cell as markdown. That also means
 // it can only be written quoted:
 //
-//	SELECT slug, `text@text/markdown` FROM keelson('capsection') WHERE heading = 'Standards'
-type capsectionProvider struct{}
+//	SELECT slug, `text@text/markdown` FROM keelson('competencesection') WHERE heading = 'Standards'
+type competencesectionProvider struct{}
 
-func (capsectionProvider) Name() string                         { return "capsection" }
-func (capsectionProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
-func (capsectionProvider) Schema() *arrow.Schema                { return capsectionTable(nil).Schema() }
+func (competencesectionProvider) Name() string { return "competencesection" }
+func (competencesectionProvider) Freshness() introspect.FreshnessClass {
+	return introspect.FreshnessLive
+}
+func (competencesectionProvider) Schema() *arrow.Schema { return competencesectionTable(nil).Schema() }
 
-func (capsectionProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
-	rows := flattenSections(capmapcorpus.Load().Capabilities)
-	return capsectionTable(rows).Build(proj, len(rows)), nil
+func (competencesectionProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	rows := flattenSections(capmapcorpus.Load().Competences)
+	return competencesectionTable(rows).Build(proj, len(rows)), nil
 }
 
-// caprelationProvider exposes each link as keelson.caprelation — the corpus's
+// competencerelationProvider exposes each link as keelson.competencerelation — the corpus's
 // edge list, and its lint.
 //
 // `resolution` is the column to read before drawing conclusions from this
 // table. Only `unresolved` is a defect: `external` is a citation whose target
-// was never a capability, and on a real catalog those outnumber genuine broken
+// was never a competence, and on a real catalog those outnumber genuine broken
 // links several times over. `dirref` resolves here and dangles in Obsidian.
-type caprelationProvider struct{}
+type competencerelationProvider struct{}
 
-func (caprelationProvider) Name() string                         { return "caprelation" }
-func (caprelationProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
-func (caprelationProvider) Schema() *arrow.Schema                { return caprelationTable(nil).Schema() }
-
-func (caprelationProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
-	rows := capmapcorpus.Load().Relations
-	return caprelationTable(rows).Build(proj, len(rows)), nil
+func (competencerelationProvider) Name() string { return "competencerelation" }
+func (competencerelationProvider) Freshness() introspect.FreshnessClass {
+	return introspect.FreshnessLive
+}
+func (competencerelationProvider) Schema() *arrow.Schema {
+	return competencerelationTable(nil).Schema()
 }
 
-// capsectionRow is one flattened body section. It carries the owning slug so
+func (competencerelationProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	rows := capmapcorpus.Load().Relations
+	return competencerelationTable(rows).Build(proj, len(rows)), nil
+}
+
+// competencesectionRow is one flattened body section. It carries the owning slug so
 // the table stands on its own, and an ordinal so document order survives a
 // query that does not preserve row order.
-type capsectionRow struct {
+type competencesectionRow struct {
 	Slug    string
 	Ordinal int
 	Heading string
 	Text    string
 }
 
-func flattenSections(caps []capmapcorpus.Capability) (rows []capsectionRow) {
+func flattenSections(comps []capmapcorpus.Competence) (rows []competencesectionRow) {
 	n := 0
-	for i := range caps {
-		n += len(caps[i].Sections)
+	for i := range comps {
+		n += len(comps[i].Sections)
 	}
-	rows = make([]capsectionRow, 0, n)
-	for i := range caps {
-		for j, sec := range caps[i].Sections {
-			rows = append(rows, capsectionRow{
-				Slug: caps[i].Slug, Ordinal: j, Heading: sec.Heading, Text: sec.Text,
+	rows = make([]competencesectionRow, 0, n)
+	for i := range comps {
+		for j, sec := range comps[i].Sections {
+			rows = append(rows, competencesectionRow{
+				Slug: comps[i].Slug, Ordinal: j, Heading: sec.Heading, Text: sec.Text,
 			})
 		}
 	}
@@ -137,7 +152,7 @@ func isoOrEmpty(t interface{ IsZero() bool }, format func() string) (s string) {
 	return format()
 }
 
-func capabilityTable(rows []capmapcorpus.Capability) *introspect.Table {
+func competenceTable(rows []capmapcorpus.Competence) *introspect.Table {
 	return introspect.NewTable().
 		String("slug", func(i int) string { return rows[i].Slug }).
 		String("name", func(i int) string { return rows[i].Name }).
@@ -176,7 +191,7 @@ func capabilityTable(rows []capmapcorpus.Capability) *introspect.Table {
 		})
 }
 
-func capsectionTable(rows []capsectionRow) *introspect.Table {
+func competencesectionTable(rows []competencesectionRow) *introspect.Table {
 	return introspect.NewTable().
 		String("slug", func(i int) string { return rows[i].Slug }).
 		Int32("ordinal", func(i int) int32 { return int32(rows[i].Ordinal) }).
@@ -185,7 +200,7 @@ func capsectionTable(rows []capsectionRow) *introspect.Table {
 		String("text@text/markdown", func(i int) string { return rows[i].Text })
 }
 
-func caprelationTable(rows []capmapcorpus.Relation) *introspect.Table {
+func competencerelationTable(rows []capmapcorpus.Relation) *introspect.Table {
 	return introspect.NewTable().
 		String("source_slug", func(i int) string { return rows[i].SourceSlug }).
 		String("target", func(i int) string { return rows[i].Target }).
@@ -197,7 +212,7 @@ func caprelationTable(rows []capmapcorpus.Relation) *introspect.Table {
 			return capmapfacts.DeriveId(capmapcorpus.NaturalKey(rows[i].SourceSlug))
 		}).
 		Uint64("target_fact_id", func(i int) uint64 {
-			// Zero when the target is not a capability: there is no row to
+			// Zero when the target is not a competence: there is no row to
 			// point at, and a derived id would invite a join that silently
 			// matches nothing.
 			switch rows[i].Resolution {

@@ -88,6 +88,6 @@ func TestTagValueBaseIsTheAllocatedOne(t *testing.T) {
 // fail here rather than in a corpus somebody already ingested.
 func TestMembershipOrderIsAppendOnly(t *testing.T) {
 	require.GreaterOrEqual(t, len(capmapvocab.AllMembs), 2)
-	assert.Equal(t, "capmap-kind-capability", string(capmapvocab.AllMembs[0].GetNaturalKey()))
+	assert.Equal(t, "capmap-kind-competence", string(capmapvocab.AllMembs[0].GetNaturalKey()))
 	assert.Equal(t, "capmap-relation-ncd", string(capmapvocab.AllMembs[len(capmapvocab.AllMembs)-1].GetNaturalKey()))
 }

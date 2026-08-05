@@ -47,15 +47,15 @@ func (inst *captureSink) release() {
 
 var fixedNow = time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
 
-// sampleCorpus is a two-capability corpus exercising every branch the encoder
+// sampleCorpus is a two-competence corpus exercising every branch the encoder
 // has: a resolved parent, an unresolved link, a citation, and a scored
 // similarity.
 func sampleCorpus() (corpus capmapcorpus.Corpus) {
 	return capmapcorpus.Corpus{
-		Capabilities: []capmapcorpus.Capability{
+		Competences: []capmapcorpus.Competence{
 			{
 				Slug: "analytics", NaturalKey: capmapcorpus.NaturalKey("analytics"),
-				VaultPath: "analytics/capability.md", Name: "Analytics",
+				VaultPath: "analytics/competence.md", Name: "Analytics",
 				Domain: "boxer-toolbelt", Catalog: "boxer", Level: 1,
 				Maturity: capmapcorpus.NotAssessed, Pain: capmapcorpus.NotAssessed,
 				Sections: []capmapcorpus.Section{{Heading: "Vision and Scope", Text: "root prose"}},
@@ -97,10 +97,10 @@ func TestBuildRecordsEncodesEveryRow(t *testing.T) {
 		}
 	}()
 
-	assert.Equal(t, 2, stats.Capabilities)
+	assert.Equal(t, 2, stats.Competences)
 	assert.Equal(t, 4, stats.Relations)
 	assert.Equal(t, 6, stats.Rows)
-	assert.Equal(t, int64(6), totalRows(records), "one facts row per capability and per relation")
+	assert.Equal(t, int64(6), totalRows(records), "one facts row per competence and per relation")
 
 	// The schema is the facts schema, not something this package invents.
 	require.NotEmpty(t, records)
@@ -117,7 +117,7 @@ func TestBuildRecordsEmptyCorpusWritesNothing(t *testing.T) {
 
 // Ids follow the natural key, so two ingests of an unchanged vault produce the
 // same rows rather than a second set wearing fresh ids. This is what lets a
-// relation address its endpoints without inserting capabilities first and
+// relation address its endpoints without inserting competences first and
 // reading their ids back.
 func TestDeriveIdIsStableAndFollowsTheSlug(t *testing.T) {
 	a := capmapfacts.DeriveId(capmapcorpus.NaturalKey("analytics"))
