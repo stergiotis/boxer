@@ -43,6 +43,14 @@ var bookgodepFS embed.FS
 //go:embed bookpprof
 var bookpprofFS embed.FS
 
+// bookcapmapFS embeds the competence suite (apps/sqlapplet/bookcapmap/*.md) —
+// the ADR-0168 business-capability corpus as the four lenses its §SD9 replaces
+// the prototype's webapps with: the corpus at a glance, one competence at a
+// time, the hierarchy as a treemap, and the link lint.
+//
+//go:embed bookcapmap
+var bookcapmapFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -55,6 +63,13 @@ func init() {
 	}
 	if err := RegisterBook("pprof", help.MustSub(bookpprofFS, "bookpprof"), []app.TopicT{app.TopicObservability}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register pprof book")
+	}
+	// TopicCode: the corpus describes what the toolbelt can do, which is the
+	// shape of the repository at a coarser grain than packages. It is not
+	// TopicAbout — that topic is provenance and licence, not a queryable body
+	// of documents someone reads to find something out.
+	if err := RegisterBook("capmap", help.MustSub(bookcapmapFS, "bookcapmap"), []app.TopicT{app.TopicCode}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register capmap book")
 	}
 }
 
