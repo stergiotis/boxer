@@ -57,6 +57,12 @@ const stepHalfWidth int32 = 4
 // smoothed read as one series at two confidence levels, not two series.
 const faintAlpha uint32 = 0x55
 
+// edgeAlpha is the extrapolation-backed tail's alpha (see
+// [State.LineWithEdge]) — between the raw underlay and the settled curve, so
+// the tail reads as the same curve held less firmly rather than as a third
+// series.
+const edgeAlpha uint32 = 0xaa
+
 // State is one window's smoothing selection plus the caches derived from it.
 // Render-thread-only, like the per-window UI state it sits beside.
 type State struct {
@@ -135,6 +141,49 @@ func (inst *State) Line(p *implot.Plot, label string, t []float64, vals []float6
 	}
 	p.SetNextColor(cl.Literal()).SetNextWeight(weight)
 	p.Line(label, t, vals)
+}
+
+// LineWithEdge is [State.Line] with the extrapolation-backed tail drawn
+// distinctly. Convolution is undefined within a half-width of the data ends,
+// so [mssmooth.Kernel.SmoothE] extends the series by a weighted linear fit to
+// define them (ADR-0152, the paper's eq 17–18). On a series whose right edge
+// is the present, those trailing halfWidth values are therefore partly a
+// projection of the trend rather than a reading of it — and they are exactly
+// the values an eye goes to. They render at reduced alpha so the settled
+// curve and the projected tail are not read as one claim.
+//
+// The tail keeps the series label, like the raw underlay: one legend entry,
+// one visibility toggle (the package's existing commitment). What the fade
+// MEANS is the caller's to caption — a plot drawing this owes its reader that
+// sentence somewhere.
+//
+// With smoothing off, or on any smoothing error, this is [State.Line]: there
+// is no extrapolation to mark.
+func (inst *State) LineWithEdge(p *implot.Plot, label string, t []float64, vals []float64, cl color.Color, weight float32) {
+	m := int(inst.halfWidth)
+	if !inst.On || len(vals) <= 2*m+1 {
+		inst.Line(p, label, t, vals, cl, weight)
+		return
+	}
+	k := inst.ensureKernel()
+	if k == nil {
+		inst.Line(p, label, t, vals, cl, weight)
+		return
+	}
+	smoothed, err := k.SmoothE(vals, inst.buf(len(vals)))
+	if err != nil {
+		inst.Line(p, label, t, vals, cl, weight)
+		return
+	}
+	p.SetNextColor(cl.Literal()&^uint32(0xff) | faintAlpha).SetNextWeight(1.0)
+	p.Line(label, t, vals)
+	// The two smoothed segments SHARE the sample at the split, so the join is
+	// continuous rather than a one-pixel gap that reads as missing data.
+	cut := len(smoothed) - m
+	p.SetNextColor(cl.Literal()).SetNextWeight(weight + 0.5)
+	p.Line(label, t[:cut], smoothed[:cut])
+	p.SetNextColor(cl.Literal()&^uint32(0xff) | edgeAlpha).SetNextWeight(weight + 0.5)
+	p.Line(label, t[cut-1:], smoothed[cut-1:])
 }
 
 // ensureKernel returns the cached kernel, rebuilding when the half-width

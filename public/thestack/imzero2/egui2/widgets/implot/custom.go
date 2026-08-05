@@ -141,3 +141,29 @@ func (p *Plot) PlotAreaPrev() (x float32, y float32, w float32, h float32, ok bo
 	pr := p.st.prev
 	return float32(pr.px0), float32(pr.py0), float32(pr.plotW), float32(pr.plotH), true
 }
+
+// AxisRangePrev returns the axis range the plot held entering this frame —
+// what the last gesture (pan, wheel, box-zoom) left behind, before this
+// frame's Setup calls and autofit revise it. It is the range counterpart of
+// PlotAreaPrev, and carries the same one-frame lag for the same reason: a
+// caller that must decide WHAT to declare needs the viewport before End has
+// laid this frame out.
+//
+// The use it exists for is viewport-aware decimation — a caller holding more
+// samples than the axis has pixels reduces to what the range can show, which
+// it cannot do without knowing the range. ok is false until the plot has
+// rendered once (declare the full series on that first frame) and for a
+// degenerate range, so a caller never divides by a zero span.
+func (p *Plot) AxisRangePrev(axis AxisE) (vmin float64, vmax float64, ok bool) {
+	if p == nil || p.st == nil || !p.st.prevOk {
+		return 0, 0, false
+	}
+	ax := &p.st.x
+	if axis == AxisY1 {
+		ax = &p.st.y
+	}
+	if !ax.hasRange || !(ax.rng.Max > ax.rng.Min) {
+		return 0, 0, false
+	}
+	return ax.rng.Min, ax.rng.Max, true
+}
