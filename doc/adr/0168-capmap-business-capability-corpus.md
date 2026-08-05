@@ -215,15 +215,24 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
 - **Breaks.** SD4 changes the value-aspect and encoding-aspect segments of two
   physical column names in `boxer.facts` — the aspect bitmask is encoded in the
   name — so the existing table's columns no longer match the generated DDL.
-  Go-level section accessors are unchanged, so no calling code breaks.
-- **Path.** Regenerate, then drop and recreate `boxer.facts` from the emitted
-  DDL and re-ingest. Existing rows are development-stage data, and
+  Go-level section accessors are unchanged, but **hand-written read-back SQL
+  does break**: `chstore` and `queryrunfacts` spell physical column names out as
+  string constants rather than deriving them, and no generator touches those.
+  Six constants across `chstore/recentlogs.go`, `chstore/workingsets.go`,
+  `chstore/runsessions.go` and `queryrunfacts/readback.go` were stale after the
+  M1 regeneration; 106 such hardcoded names exist under `keelson/runtime`, so
+  any future aspect change must expect the same.
+- **Path.** Regenerate; fix the hand-written constants the guard test names;
+  then drop and recreate `boxer.facts` from the emitted DDL and re-ingest.
+  Existing rows are development-stage data, and
   [ADR-0106](./0106-identity-fibonacci-tags-build-tag-retirement.md) §SD8
   already set the precedent that in-repo encodings are re-ingested rather than
   dual-decoded.
 - **Regeneration.** `boxer runtimecodegen` for all four artifacts under
   `factsschema/`. No FFI boundary is involved, so nothing on the Rust side
-  rebuilds.
+  rebuilds. When `public/app` does not build, the four `codegen.Generate*`
+  entry points can be driven directly — they take an output path and import
+  nothing from the app.
 - **Old shape.** Removed outright at M1. There is no dual-decode path and none
   is planned.
 
@@ -239,6 +248,15 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   parity test goes red. Vault round-tripping is pinned by a parse-render test,
   which is what would catch SD5 being violated by a future AST decomposition.
   The default lane must stay green with no corpus and no ClickHouse present.
+  For SD4's blast radius specifically,
+  `TestHandwrittenColumnsMatchGeneratedSchema` (added by M1, in
+  `factsschema/ddl`) scans `keelson/runtime` for hardcoded physical column
+  literals and asserts each still exists in the generated block. It was
+  necessary because the tests that would otherwise catch the drift call
+  `t.Skipf` when ClickHouse is unreachable — so before it, a rename shipped
+  green on any machine without a live server and failed at runtime against a
+  re-created table. The guard needs no ClickHouse and fails vacuously-passing
+  by asserting it found something to check.
 - **Gap.** The serverless read path — facts-shaped Arrow through `file()` — has
   been reasoned about but not run; proving it is a step inside M4 rather than a
   standing lane. Nothing verifies that the corpus content is *correct*, only

@@ -239,7 +239,7 @@ func buildWorkingsetColumnExprs() (e columnExprsWorkingset) {
 		symValue   = "`tv:symbol:value:val:s:m:0:24:0::data`"
 		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
 		strLR      = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
-		strValue   = "`tv:stringArray:value:val:sh:g:0:0:0::data`"
+		strValue   = "`tv:stringArray:value:val:sh:g:0:x2:0::data`"
 		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
 		u64LR      = "`tv:u64Array:lr:lr:u64:2q:0:0:0::data`"
 		u64Value   = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"

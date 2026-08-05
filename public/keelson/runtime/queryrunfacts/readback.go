@@ -67,7 +67,7 @@ const (
 	colSymbolLrCard = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
 	colSymbolLmr    = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
 	colSymbolMrhp   = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
-	colStringValue  = "`tv:stringArray:value:val:sh:g:0:0:0::data`"
+	colStringValue  = "`tv:stringArray:value:val:sh:g:0:x2:0::data`"
 	colStringLr     = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
 	colStringLrCard = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
 	colU64Value     = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"
