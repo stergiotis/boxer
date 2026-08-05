@@ -342,6 +342,25 @@ statements, 2,697 / 4,977 covered — digit-identical to the covdata
 numbers, with all 1,107 executed functions of the 9.7 KiB counter blob
 resolving against the meta.
 
+## Update (2026-08-05, third) — M2 sampler landed
+
+`covsnap` gained the emission model — `Update` carries the
+absolute-cumulative contract of §SD3 (first fold and every
+`RestateEvery`-th fold are complete re-statements; delta ticks carry only
+newly covered units and changed rollups; an unchanged tick is a pure
+`RunStatus` heartbeat) — and with it the roaring dependency. `Accumulator`
+is the pure, clock-free fold engine (fully unit-tested on synthetic
+snapshots, including monotonicity under regressed counters and concurrent
+readers under the race detector); a nonzero-count fast path skips the
+per-unit walk for unchanged functions, sound because counters are
+monotone. `Sampler` wires the engine to `runtime/coverage`, refuses
+non-atomic builds at construction, and exposes the raw meta blob (for the
+§SD6 tee), status and covered set (for the §SD5 providers). The
+integration lane runs the real sampler inside a live instrumented probe
+binary — only the probe module is instrumented, so the sampler observes
+without self-observation — and checks the delta invariant
+`covered₁ + |delta| = covered₂` end to end.
+
 ## Status
 
 Proposed, 2026-08-05.
