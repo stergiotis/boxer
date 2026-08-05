@@ -490,6 +490,43 @@ WHERE bytes >= 419430400"
 	settle=2500
 }
 
+scene_08_series() {
+	desc="Series — numbers against a time axis (ADR-0163 M0): the typed claim (first temporal column, every numeric column a lane), the Δt classification with the scaffold its finding offers, and modified-sinc smoothing with its extrapolated tail drawn faded"
+	senv=(BOXER_PLAY_FOCUS_SERIES=1)
+	# One day of ADS-B traffic in five-minute buckets. Two lanes because the
+	# claim takes every numeric column, and these two are both counts — a
+	# shared y axis is honest only between comparable magnitudes, which is the
+	# tab's one composition rule.
+	#
+	# The window is a day rather than the fixture's whole week for the sake of
+	# the second capture: smoothing's extrapolated tail is a half-width of
+	# samples, and at ~290 points that is a visible stretch of the line rather
+	# than a few pixels.
+	#
+	# 287 buckets, not 288 — the fixture is missing one, which is the point.
+	# The status line says "regular with gaps" at 5 minutes and the pane offers
+	# the WITH FILL scaffold with the measured step already substituted; the
+	# line BREAKS at the hole rather than being drawn across it.
+	# toDateTime64 because toStartOfInterval yields a DateTime, which reaches
+	# Arrow as a bare UInt32 of epoch seconds — indistinguishable from a count,
+	# so the claim cannot take it (ADR-0163 Update 2026-08-05).
+	sql="SELECT toDateTime64(toStartOfInterval(time, INTERVAL 5 MINUTE), 3) AS t,
+       count()            AS positions,
+       uniqExact(icao)    AS aircraft
+FROM default.planes_mercator_sample100
+WHERE time >= '2026-07-05 00:00:00' AND time < '2026-07-06 00:00:00'
+GROUP BY t
+ORDER BY t"
+	# Two captures: the series as it lands, then with smoothing on. The second
+	# is what shows the live edge — the trailing half-width the boundary
+	# extrapolation defines rather than measures, faded so it is not read as
+	# the same claim as the rest of the curve.
+	steps='{"do":"capture","text":"08_series","settleMs":600}
+{"do":"click","name":"smooth"}
+{"do":"capture","text":"08_series_smoothed","settleMs":600}'
+	settle=2500
+}
+
 scene_09_projection() {
 	desc="Projection — dimensionality reduction over the numeric columns of a result, with the point cloud tied to the selection signal"
 	senv=(BOXER_PLAY_FOCUS_PROJECTION=1)

@@ -833,6 +833,84 @@ The threshold is a query decision, not a panel one: a roll-up you wrote is
 reproducible and shows up in the total, where a cell the renderer dropped for
 being too small to draw does neither.
 
+## A number against time (Series)
+
+The **Series** tab (ADR-0163) is the one panel that asks for no contract: give
+it a time column and a number and it draws them. The first temporal column is
+the x axis, every numeric column becomes a lane, and anything else is ignored.
+
+One cast is unavoidable, and the panel says so when it is missing: a plain
+`DateTime` reaches the client as a bare `UInt32` of epoch seconds, which
+nothing distinguishes from a count — so wrap the bucket in `toDateTime64(…, 3)`.
+`DateTime64` and `Date` carry their own types and need nothing.
+
+```sql
+SELECT toDateTime64(toStartOfMinute(event_time), 3) AS t,
+       avg(query_duration_ms)                       AS avg_ms,
+       quantile(0.99)(query_duration_ms)            AS p99_ms
+FROM system.query_log
+WHERE event_time > now() - INTERVAL 6 HOUR AND type > 1
+GROUP BY t
+ORDER BY t
+```
+
+Two lanes on one axis because both are milliseconds. Numbers of different
+magnitudes share an axis badly — split those into two queries and bind a second
+Series pane to the other, rather than watching one lane flatten the other.
+
+## Grids, gaps, and what the panel will not do for you
+
+The status line classifies the spacing before it draws: **regular**, **regular
+with gaps**, or **irregular**. That is a finding about the data, not an error —
+an irregular series still charts, time-true.
+
+What the panel never does is fill. A missing minute is a break in the line, not
+a segment drawn across it, because an interpolated sample is a value nothing
+measured — and on this tab a value is something a detector may later score. The
+fix is yours to write, and the refusal hint offers it with the measured step
+already substituted:
+
+```sql
+SELECT t, v
+FROM (
+    SELECT toDateTime64(toStartOfMinute(event_time), 3) AS t, count() AS v
+    FROM system.query_log
+    WHERE event_time > now() - INTERVAL 6 HOUR
+    GROUP BY t
+)
+ORDER BY t WITH FILL STEP INTERVAL 1 MINUTE
+```
+
+`WITH FILL` inserts the absent minutes as rows with a zero `v`. If the honest
+value is "unknown" rather than "zero", leave the gap: the break says something
+the zero would hide.
+
+## Long series, and why the picture is still exact
+
+Above a couple of points per pixel the panel draws a per-pixel **min/max
+envelope** — both extremes of every pixel column, rather than a selection of
+representative samples. The distinction matters on exactly the data you opened
+the panel for: a decimator that picks samples can drop a one-sample spike, and
+an envelope cannot. Hover, selection and every analysis read the full series
+regardless; only the drawing is reduced, and the status line says by how much.
+
+For a range too long to fetch at all, decimate in SQL instead — ClickHouse
+ships `lttb`, which returns real samples (never interpolated ones), at the cost
+of non-uniform spacing:
+
+```sql
+SELECT arrayJoin(lttb(2000)(t, v)) AS point
+FROM (
+    SELECT toDateTime64(toStartOfMinute(event_time), 3) AS t, count() AS v
+    FROM system.query_log
+    GROUP BY t
+)
+```
+
+Its output is deliberately not on a grid, so it is a way to *look* at a long
+range — not an input to analysis, which needs the spacing `WITH FILL` or
+`toStartOfInterval` gives it.
+
 ## Query outcomes (an alluvial over the query log)
 
 Where the server's own traffic goes: how a query arrived, what kind it was, and

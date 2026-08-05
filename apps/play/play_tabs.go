@@ -326,6 +326,13 @@ var builtinTabDefs = []builtinTabDef{
 	// stays local and a pinned frame publishes its label as a value.
 	{id: "icicle", dockID: dockTabIcicle, title: "Icicle", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelectionKey}},
+	// Series draws numbers against a time axis (ADR-0163) — the chart play
+	// had no carrier for. Its claim is TYPED rather than named, the one
+	// carve-out from the named-columns doctrine (§SD1): `SELECT t, v` is
+	// unambiguous, so requiring ceremony on it would buy nothing. Its rows
+	// ARE result rows, so a point click writes the ordinary row cursor.
+	{id: "series", dockID: dockTabSeries, title: "Series", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection}},
 	// The Treemap tab draws the result as nested areas (ADR-0166), over the
 	// same hierarchy contract the Icicle tab reads. Its drill position is a
 	// place in a view and is not published; a pinned LEAF publishes its label,
@@ -534,6 +541,15 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Panel = iciclePanel{driver: inst.icicleDriver}
 			spec.Render = func(f *TabFrame) {
 				scrollTab(func() { inst.renderIcicleTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
+			}
+		case "series":
+			// Scrolled for the Distribution tab's reason: a fixed-height plot
+			// box sized from the pane WIDTH, so a short leaf scrolls rather
+			// than clips, and implot zeroes the wheel delta while the pointer
+			// is over the plot so the two do not contend (ADR-0140).
+			spec.Panel = seriesPanel{driver: inst.seriesDriver}
+			spec.Render = func(f *TabFrame) {
+				scrollTab(func() { inst.renderSeriesTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
 			}
 		case "treemap":
 			// Scrolled for the same reason as its neighbours: the canvas is a

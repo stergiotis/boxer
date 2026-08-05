@@ -96,10 +96,8 @@ const (
 	dockTabExperiments uint64 = 20
 	dockTabDist        uint64 = 21
 	dockTabIcicle      uint64 = 22
-	// 23 is reserved for the Series tab of ADR-0163, which is proposed and
-	// still under review; taking the next free id keeps this cut from editing
-	// a live proposal.
-	dockTabTreemap uint64 = 24
+	dockTabSeries      uint64 = 23
+	dockTabTreemap     uint64 = 24
 )
 
 type PlayApp struct {
@@ -410,6 +408,15 @@ type PlayApp struct {
 	// observer shape and the same hierarchy contract as the Icicle tab, read as
 	// nested areas rather than depth rows — no lane, nothing to Close.
 	treemapDriver *treemapDriver
+
+	// seriesDriver is the ADR-0163 Series panel (Series dock tab): an observer
+	// of the active result under the typed (time, numbers) claim. Unlike the
+	// observers above it also reads two OPTIONAL CTEs by name — `scores` and
+	// `spans` (§SD1) — so it carries two lanes, closed in Close and forgotten
+	// on Run like the Sankey's.
+	seriesDriver     *SeriesDriver
+	seriesScoresLane *nodeLane
+	seriesSpansLane  *nodeLane
 
 	// flow is the ADR-0153 Flow dock tab: the active node's clause-level
 	// dataflow, derived statically from the split; the EXPLAIN lenses add
@@ -923,6 +930,10 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.distDriver = NewDistDriver(mk())
 	inst.icicleDriver = NewIcicleDriver(mk())
 	inst.treemapDriver = newTreemapDriver(mk())
+	// The scaffold seam is the PUBLIC delivery op, not a private reach into
+	// the editor: a pane that writes SQL into the buffer is exactly the
+	// snippet-class capability play_delivery.go was made public for.
+	inst.seriesDriver = NewSeriesDriver(mk(), func(sql string) { inst.InsertSqlAtCaret(sql) })
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
@@ -1002,6 +1013,14 @@ func (inst *PlayApp) Close() {
 		if inst.sankeyDriver.nodesLane != nil {
 			inst.sankeyDriver.nodesLane.close()
 		}
+	}
+	// The Series tab's two optional-CTE lanes are created on first demand, so
+	// both are nil until a buffer names `scores` or `spans` (ADR-0163 §SD1).
+	if inst.seriesScoresLane != nil {
+		inst.seriesScoresLane.close()
+	}
+	if inst.seriesSpansLane != nil {
+		inst.seriesSpansLane.close()
 	}
 	inst.flow.closeLanes()
 	inst.docs.close()
@@ -1496,6 +1515,8 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	inst.kanbanDriver.forgetLanes()
 	// The Sankey panel's `flows`/`nodes` CTEs are the same shape again.
 	inst.sankeyDriver.forgetLanes()
+	// And the Series panel's optional `scores`/`spans` CTEs (ADR-0163 §SD1).
+	inst.forgetSeriesLanes()
 	// The Flow tab's EXPLAIN lenses (ADR-0153) wrap this query on their own
 	// lanes; same reason again.
 	inst.flow.forgetLanes()
