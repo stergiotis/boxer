@@ -59,6 +59,14 @@ var bookcapmapFS embed.FS
 //go:embed bookcoverage
 var bookcoverageFS embed.FS
 
+// bookjsonbenchFS embeds the jsonbench-on-facts trial's result lenses
+// (apps/sqlapplet/bookjsonbench/*.md) — canned reads over the facts table
+// that `jsonbench results` writes, so the trial reports through the layer it
+// measures (doc/trials/jsonbench-on-facts/, protocol §6 Reporting).
+//
+//go:embed bookjsonbench
+var bookjsonbenchFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -83,6 +91,11 @@ func init() {
 	// from inside it — not TopicCode, which is what the repository is.
 	if err := RegisterBook("coverage", help.MustSub(bookcoverageFS, "bookcoverage"), []app.TopicT{app.TopicObservability}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register coverage book")
+	}
+	// TopicObservability, like pprof and coverage: measurements of what ran,
+	// not a description of what the repository is.
+	if err := RegisterBook("jsonbench", help.MustSub(bookjsonbenchFS, "bookjsonbench"), []app.TopicT{app.TopicObservability}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register jsonbench book")
 	}
 }
 

@@ -312,4 +312,23 @@ template:
   on latency at 1.27× storage.** Three references are now reported (A, A0,
   A00) because the answer depends on which one a general fact store should be
   held to, and only A00 is a shape such a store could actually have.
+- **M5 — results as facts + applet (2026-08-06):** both runs' timings and
+  sizes are loaded into a benchmark-local facts table by `jsonbench results`
+  (235 facts: 165 timings, 70 sizes) and read back by the **`jsonbench` book**
+  (`apps/sqlapplet/bookjsonbench/`) — overview, latency by arm, and the tax
+  ratios. §6's "the benchmark dogfoods the reporting layer it is measuring" is
+  satisfied literally: the pages resolve their values with
+  `LEEWAY_VALUE_BY_TAG_EQUAL` and re-align the ragged value lanes with
+  `coGather`/`raggedStarts`, which is the read path the trial spent two runs
+  measuring.
+  One friction worth its line: the result facts tag their attributes with
+  `LowCardRef` memberships, so a SQL page needs the **uint64 ids** —
+  `6917529027641081861` and friends. There is no server-side name→id lookup,
+  so the ids ride the pages as literals and `jsonbench vocab` exists only to
+  print them. Filed as:
+  **[pain leeway-ddl-codegen → proposed:leeway-vocab-introspection /
+  usability.self-descriptiveness / S3]** — a Ref-membership table cannot be
+  read by anyone who does not already hold the registry.
+  The run directories keep the numbers as the provenance record; the facts
+  table is the queryable copy, not the source of truth.
 - **Run dir:** [`./runs/2026-08-06-m4-10m/`](./runs/2026-08-06-m4-10m/)

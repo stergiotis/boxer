@@ -60,3 +60,26 @@ var (
 	// the path actually contains a "_".
 	MembJsonParams = NkRegistry.MustBegin("blueskyJsonParams").End()
 )
+
+// The trial's own results, as facts. The protocol asks for this explicitly
+// (§6 Reporting): domain numbers land as facts and are read back through an
+// applet, so the benchmark dogfoods the reporting layer it is measuring.
+//
+// Two kinds, because the two result shapes have different grains: one fact
+// per (run, arm, query, try) for a timing, one per (run, arm, metric) for a
+// size. Both carry run and arm so a page can pivot on either.
+var (
+	MembKindBenchTiming = NkRegistry.MustBegin("jsonbenchKindTiming").End()
+	MembKindBenchSize   = NkRegistry.MustBegin("jsonbenchKindSize").End()
+
+	MembBenchRun   = NkRegistry.MustBegin("jsonbenchRun").End()
+	MembBenchArm   = NkRegistry.MustBegin("jsonbenchArm").End()
+	MembBenchQuery = NkRegistry.MustBegin("jsonbenchQuery").End()
+	MembBenchTry   = NkRegistry.MustBegin("jsonbenchTry").End()
+
+	MembBenchSeconds     = NkRegistry.MustBegin("jsonbenchSeconds").End()
+	MembBenchMemoryBytes = NkRegistry.MustBegin("jsonbenchMemoryBytes").End()
+
+	MembBenchMetric      = NkRegistry.MustBegin("jsonbenchMetric").End()
+	MembBenchMetricValue = NkRegistry.MustBegin("jsonbenchMetricValue").End()
+)

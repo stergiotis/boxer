@@ -46,6 +46,8 @@ func main() {
 			chpackCommand(),
 			ddlCommand(),
 			ingestCommand(),
+			resultsCommand(),
+			vocabCommand(),
 		},
 	}
 	if err := app.Run(os.Args); err != nil {

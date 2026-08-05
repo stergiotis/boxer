@@ -245,6 +245,10 @@ Against **arm A0** (§4):
   indices over section value lanes cannot serve this workload.
 - **The 100M gate passes** (§9 Q6): ~77 GiB against 262 GiB free, ~2 h wall
   clock, dominated by the single-process facts ingest.
+- **Results are readable as data**: `jsonbench results` loads a run directory
+  into a facts table and the **`jsonbench` book**
+  ([`apps/sqlapplet/bookjsonbench/`](../../../apps/sqlapplet/bookjsonbench/))
+  reads it back — overview, latency by arm, and the tax ratios.
 
 The facts data model costs very little here. Almost everything the first run
 attributed to it belonged to how the queries were written and to the absence
