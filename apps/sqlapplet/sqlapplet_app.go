@@ -205,6 +205,25 @@ func attenuateTabs(inner *play.PlayApp, def *AppletDef, logger zerolog.Logger) (
 				return
 			}
 		}
+		// The first tab a document lists is the one the document is ABOUT, so
+		// that is the one that opens (ADR-0132 Update 2026-08-05). Without
+		// this a fresh dock leaf activates its own first tab, which is play's
+		// REGISTRATION order and starts at `table` — so a document whose whole
+		// point is a treemap or a flamegraph opened on a grid of the very
+		// columns that feed the picture.
+		//
+		// Only for an explicit list. Under `tabs: auto` there is no declared
+		// order to honour, and picking one would be inventing an opinion the
+		// document did not express.
+		//
+		// A failure is logged, not returned: every id here is a result-panel
+		// slug the parser already validated and attenuation just kept, so this
+		// cannot fail for a corpus document — and if it somehow does, opening
+		// on the wrong tab is not worth refusing to mount over.
+		if aerr := inner.ActivateTab(def.Tabs[0].ID); aerr != nil {
+			logger.Warn().Err(aerr).Str("tab", def.Tabs[0].ID).
+				Str("applet", def.Slug).Msg("sqlapplet: landing tab activation failed")
+		}
 	}
 	return
 }

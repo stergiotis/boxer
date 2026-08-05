@@ -105,3 +105,36 @@ func TestAttenuateTabsExplicitListCanAskForADefaultOffPanel(t *testing.T) {
 	assert.Contains(t, ids, "table")
 	assert.NotContains(t, ids, "network")
 }
+
+// landingTab reports which tab attenuation raised, via the launch composer —
+// the only reader play exports for "the tab play itself raised".
+func landingTab(t *testing.T, def *AppletDef) (id string) {
+	t.Helper()
+	inner := play.NewLivePlayApp(nil, "", appletMaxHistory)
+	require.NoError(t, attenuateTabs(inner, def, zerolog.Nop()))
+	return inner.ComposeLaunch().Tab
+}
+
+// The first tab a document lists is the one it opens on (ADR-0132 Update
+// 2026-08-05). Without this the dock activates its leaf's own first tab, which
+// is play's registration order and starts at `table` — so `bookcapmap/cap-map`
+// opened on a grid of the columns feeding its treemap, and `component-deps`,
+// `topology-map` and `profile-flame` each opened on something other than the
+// panel their prose is about.
+func TestAttenuateTabsOpensTheFirstListedTab(t *testing.T) {
+	assert.Equal(t, "treemap", landingTab(t, &AppletDef{Slug: "map", Tabs: []TabSel{{ID: "treemap"}, {ID: "table"}}}))
+	assert.Equal(t, "network", landingTab(t, &AppletDef{Slug: "graph", Tabs: []TabSel{{ID: "network"}, {ID: "table"}}}))
+	// A side-zone tab is a legitimate landing: the zones each activate their
+	// own first tab, so naming one raises it in its own leaf.
+	assert.Equal(t, "detail", landingTab(t, &AppletDef{Slug: "card", Tabs: []TabSel{{ID: "detail"}, {ID: "table"}}}))
+	// The common case is unchanged — a document that lists `table` first still
+	// gets `table`, which is what every applet did before.
+	assert.Equal(t, "table", landingTab(t, &AppletDef{Slug: "rows", Tabs: []TabSel{{ID: "table"}, {ID: "detail"}}}))
+}
+
+// `tabs: auto` declares no order, so there is nothing to honour and nothing is
+// raised — inventing an opinion the document did not express would be worse
+// than the dock's own default.
+func TestAttenuateTabsAutoRaisesNothing(t *testing.T) {
+	assert.Empty(t, landingTab(t, &AppletDef{Slug: "auto"}))
+}

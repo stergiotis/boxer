@@ -579,6 +579,46 @@ classification is now pinned by a test that enumerates play's registry, because
 the failure mode is silent: adding a panel to play quietly widens every
 applet's surface, and nothing else notices.
 
+## Update (2026-08-05) — an explicit `tabs:` list decides which tab opens
+
+§SD1 made `tabs:` a *set* — which panels an applet keeps. Nothing read its
+order, so the tab a window opened on came from the dock instead: a fresh leaf
+activates its own first tab, and that is play's registration order, which
+starts at `table`.
+
+The result was that four of the five books' most characteristic documents
+opened on the wrong thing. `bookcapmap/cap-map` is titled "Capability map" and
+is a treemap; it opened on a grid of the `id`/`parent`/`value` columns that
+feed the picture. `booktopo/component-deps` and `booktopo/topology-map` are
+graphs whose prose says so in the first sentence; both opened on a table.
+`bookpprof/profile-flame` is a flamegraph and opened on the stack rows behind
+it. In every case the document had already named the right panel first and was
+simply not being listened to.
+
+So the list is now ordered where it can be: **the first entry is the tab the
+applet opens on**, raised in `attenuateTabs` through the `ActivateTab` seam the
+editor-delivery ops already used. The set semantics are unchanged, and so is
+the tab strip's left-to-right order — registration order still decides where a
+tab sits, and only which one is *active* changes.
+
+Three boundaries, each deliberate:
+
+- **`tabs: auto` raises nothing.** There is no declared order to honour, and
+  choosing one would be inventing an opinion the document did not express.
+- **A side-zone tab is a legitimate landing.** Zones each activate their own
+  first tab, so `tabs: [detail, table]` raises Detail in its own leaf and
+  leaves the body zone alone.
+- **A failed activation is logged, not returned.** Every id reaching it is a
+  result-panel slug the parser validated and attenuation kept, so it cannot
+  fail for a corpus document — and opening on the wrong tab is not worth
+  refusing to mount over.
+
+This is a behaviour change for existing committed books, not just new ones. It
+was taken rather than adding a separate `active:` key because a second field
+would let a document say two contradictory things about the same list, and
+because every book in the corpus already listed its subject first — the order
+was carrying the intent all along.
+
 ## References
 
 Internal:
