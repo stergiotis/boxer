@@ -20,6 +20,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -418,7 +419,7 @@ func (inst *Widget) Render() (clicked CountryIdx, clickedOk bool) {
 			for range c.Horizontal().KeepIter() {
 				if inst.legend != nil {
 					inst.legend.Render()
-					c.AddSpace(16)
+					c.AddSpace(styletokens.GapSections(styletokens.DensityFromEnv()))
 				}
 				inst.renderReadout()
 			}

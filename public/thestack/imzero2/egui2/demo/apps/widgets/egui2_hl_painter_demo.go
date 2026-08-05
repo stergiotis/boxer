@@ -3,6 +3,7 @@ package widgets
 import (
 	"math"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
@@ -281,7 +282,7 @@ func demoPainterPolygons(ids *c.WidgetIdStack) {
 	// AA), with the Stroke() outline that used to be hard-coded off.
 	hxs, hys := polygonRing(80.0, 100.0, 48.0, 48.0, 6)
 	c.PaintPolygonFilled(hxs, hys, color.Hex(0x0066ffcc)).
-		Stroke(color.Hex(0x88bbffff), 2.0).Send()
+		Stroke(color.Hex(0x88bbffff), styletokens.StrokeStrong).Send()
 	c.PaintText(80.0, 160.0, 1, 0, "convex + Stroke()", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
 
 	// --- The same star with and without Concave(). The left one is the
@@ -296,7 +297,7 @@ func demoPainterPolygons(ids *c.WidgetIdStack) {
 	sxs2, sys2 := polygonRing(370.0, 100.0, 52.0, 22.0, 5)
 	c.PaintPolygonFilled(sxs2, sys2, color.Hex(0xff6600cc)).
 		Concave().
-		Stroke(color.Hex(0xff6600ff), 1.0).Send()
+		Stroke(color.Hex(0xff6600ff), styletokens.StrokeHair).Send()
 	c.PaintText(370.0, 160.0, 1, 0, "Concave() + Stroke()", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
 
 	// --- A reflex-cornered flow arrow: the everyday concave case.
@@ -304,7 +305,7 @@ func demoPainterPolygons(ids *c.WidgetIdStack) {
 	ays := []float32{215.0, 215.0, 195.0, 245.0, 295.0, 275.0, 275.0}
 	c.PaintPolygonFilled(axs, ays, color.Hex(0x44ffaacc)).
 		Concave().
-		Stroke(color.Hex(0x44ffaaff), 1.0).Send()
+		Stroke(color.Hex(0x44ffaaff), styletokens.StrokeHair).Send()
 	c.PaintText(120.0, 305.0, 1, 0, "notched arrow: Concave()", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
 
 	// --- The ellipse primitives, first shown here.
