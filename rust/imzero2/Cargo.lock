@@ -1165,11 +1165,11 @@ dependencies = [
 
 [[package]]
 name = "earcutr"
-version = "0.4.3"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79127ed59a85d7687c409e9978547cffb7dc79675355ed22da6b66fd5f6ead01"
+checksum = "afc28d89ac6cb489f679fcf51aaa62b4667bb0fb73a30f1d4d23949069707c07"
 dependencies = [
- "itertools 0.11.0",
+ "itertools",
  "num-traits",
 ]
 
@@ -1261,7 +1261,7 @@ dependencies = [
  "bitflags 2.13.1",
  "emath 0.35.0",
  "epaint 0.35.0",
- "itertools 0.14.0",
+ "itertools",
  "log",
  "nohash-hasher",
  "profiling",
@@ -1370,7 +1370,7 @@ dependencies = [
  "ahash",
  "egui 0.35.0",
  "enum-map",
- "itertools 0.14.0",
+ "itertools",
  "jiff",
  "log",
  "mime_guess2",
@@ -2674,15 +2674,6 @@ checksum = "25e659a4bb38e810ebc252e53b5814ff908a8c58c2a9ce2fae1bbec24cbf4e20"
 dependencies = [
  "memchr",
  "serde",
-]
-
-[[package]]
-name = "itertools"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
-dependencies = [
- "either",
 ]
 
 [[package]]
@@ -4069,7 +4060,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03da047801ff44bb6a4d407d4860c05fd70bb81714e6b2f3812603d5b145b042"
 dependencies = [
  "heck",
- "itertools 0.14.0",
+ "itertools",
  "log",
  "multimap",
  "petgraph",
@@ -4088,7 +4079,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools",
  "proc-macro2",
  "quote",
  "syn",
@@ -4152,7 +4143,7 @@ dependencies = [
  "bincode",
  "byteorder",
  "cfg-if",
- "itertools 0.14.0",
+ "itertools",
  "lz4_flex",
  "parking_lot",
  "serde",
