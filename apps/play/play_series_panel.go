@@ -190,6 +190,19 @@ type SeriesDriver struct {
 	scoreCall     *tsCall
 	scoreWindow   int32
 	scoreWindowOK bool
+	// The M3 adjudication state: the current input's identity, the verdicts
+	// read back for it, and the measured comparison they make possible.
+	inputHash string
+	labels    map[tsLabelKey]tsVerdictE
+	readout   tsScoreReadout
+	haveRead  bool
+	// adjudicate writes one verdict. Injected like `deliver`, so the driver
+	// reaches for a seam rather than for the app.
+	adjudicate func(row tsLabelRow)
+	// labelsErr mirrors the writer's last error (nil clears it).
+	labelsErr error
+	writing   bool
+
 	// xLinkMin/xLinkMax are the shared x range of the series plot and the
 	// score plot below it. A score is read AGAINST its series, so the two
 	// panning independently would be a picture of nothing.
@@ -206,6 +219,18 @@ type SeriesDriver struct {
 
 func NewSeriesDriver(ids *c.WidgetIdStack, deliver func(sql string)) (inst *SeriesDriver) {
 	return &SeriesDriver{ids: ids, deliver: deliver, smooth: trendsmooth.New(), decimate: true}
+}
+
+// noteSeriesLabels hands the driver this frame's adjudication context: which
+// input the labels belong to, what has been decided so far, and the seam a
+// verdict is written through.
+func (inst *SeriesDriver) noteSeriesLabels(hash string, labels map[tsLabelKey]tsVerdictE,
+	write func(row tsLabelRow), writing bool, err error) {
+	inst.inputHash = hash
+	inst.labels = labels
+	inst.adjudicate = write
+	inst.writing = writing
+	inst.labelsErr = err
 }
 
 func (inst *SeriesDriver) noteExecuted(t time.Time) { inst.pendingExecuted = t }
@@ -557,6 +582,7 @@ func (inst *SeriesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	inst.renderControls()
 	inst.renderGridFinding()
 	inst.renderSeriesOverlayChrome()
+	inst.renderSeriesAdjudication()
 	c.AddSpace(styletokens.GapItems(dens))
 
 	w := float32(seriesPlotMinW)
@@ -593,6 +619,11 @@ func (inst *SeriesDriver) rebuildOverlays(scoreRec arrow.RecordBatch, spanRec ar
 	}
 	sc.baseline, sc.baselineWhy = inst.buildSeriesBaseline()
 	inst.scores = sc
+	// The measured comparison, whenever there is something to measure. It is
+	// rebuilt from the labels every frame rather than cached: the labels
+	// change under the user's own clicks, and a stale readout beside a fresh
+	// verdict is worse than none.
+	inst.readout, inst.haveRead = buildSeriesReadout(sc.score, sc.baseline, sc.t, inst.labels)
 }
 
 // renderControls is the smoothing segment plus the envelope toggle.
@@ -904,6 +935,7 @@ func (inst *PlayApp) renderSeriesTab(rec arrow.RecordBatch, schema *arrow.Schema
 	// the detector's causality, and the window to compute the mandated
 	// baseline at (§SD5 S3).
 	inst.noteSeriesScoreCall()
+	inst.noteSeriesAdjudication()
 	inputs := map[ChannelID]channelInput{
 		chMain: {node: inst.resolvedTabNode("series"), rec: rec, schema: schema, sig: inst.frameSig},
 	}
@@ -956,6 +988,36 @@ func (inst *PlayApp) noteSeriesScoreCall() {
 	params := resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig)
 	window, wErr := tsIntArg(call, 2, params)
 	inst.seriesDriver.noteScoreCall(call, window, wErr == nil)
+}
+
+// noteSeriesAdjudication resolves what is being adjudicated and reads back
+// what has been decided about it (ADR-0163 §SD6).
+//
+// The identity is the INPUT — the compiled SQL and params behind the score
+// channel — not the buffer text. Two buffers that fuse to the same input over
+// the same data are the same series, so a verdict taken on one is honest
+// about the other; a buffer whose input changed is a different series, and
+// its old labels correctly stop applying rather than following the user
+// somewhere they no longer mean anything.
+func (inst *PlayApp) noteSeriesAdjudication() {
+	node, ok := findSplitNode(inst.currentSplit, seriesScoresNodeID)
+	if !ok || node.Client == nil {
+		inst.seriesDriver.noteSeriesLabels("", nil, nil, false, nil)
+		return
+	}
+	hash := tsInputHash(compileNodeFor(inst.currentSplit, node, inst.lastRunBound, inst.frameSig))
+	labels := inst.readSeriesLabels(hash)
+	writing, wrote, wErr := inst.seriesLabels.status()
+	// A completed write must show up without the user re-running anything, so
+	// the read lane forgets its memo once per write. The counter — rather than
+	// a flag — is what keeps that to exactly one forget per write.
+	if wrote != inst.seriesLabelsSeen {
+		inst.seriesLabelsSeen = wrote
+		if inst.seriesLabelsLane != nil {
+			inst.seriesLabelsLane.forget()
+		}
+	}
+	inst.seriesDriver.noteSeriesLabels(hash, labels, inst.seriesLabels.write, writing, wErr)
 }
 
 // forgetSeriesLanes drops the optional lanes' memos on Run, for the reason

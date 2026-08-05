@@ -962,6 +962,38 @@ Three things come with it whether or not you asked:
   so replaying it IS a backtest; `tsProfile` is two-sided and says so, because
   a two-sided score read as an alert history is hindsight wearing a uniform.
 
+## Adjudicating a flagged span, and the number it buys
+
+Under the extents is a row each, with **confirm** and **false alarm**. Marking
+one appends a row to `boxer.tslabels` — never an update, so changing your mind
+is recorded as a change of mind, with its own timestamp; the panel reads the
+latest verdict per span.
+
+A verdict is attached to the **compiled input**, not to the query text. Reword
+the buffer and the labels follow; change what the input actually computes, or
+the detector's window, and they correctly stop applying, because a span flagged
+at one window was not adjudicated at another.
+
+Once a span is confirmed the panel scores the detector AND its baseline on the
+adjudicated spans, and says which is ahead. That is the point of the exercise:
+the readout is equally able to report that the moving-average one-liner won, on
+your data, which is the only version of the claim worth having. It leads with
+VUS-PR and annotates VUS-ROC with its usable band — under the buffered measure
+a random scorer lands near 0.55 and a perfectly-located one near 0.92, so
+reading it as 0-to-1 flatters everything. A handful of spans is a reading
+rather than evidence, and the line says so until there are more.
+
+The table is ordinary SQL, so the labels are queryable like anything else:
+
+```sql
+SELECT input_hash, detector, window,
+       argMax(verdict, created_at) AS verdict,
+       count()                     AS revisions
+FROM boxer.tslabels
+GROUP BY input_hash, detector, window, span_from, span_to
+ORDER BY input_hash, span_from
+```
+
 ## Reading a client node, and why the sink cannot
 
 A `ts*` CTE is a **terminal leaf**: its output never exists as SQL, so nothing

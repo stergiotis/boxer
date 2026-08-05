@@ -418,6 +418,13 @@ type PlayApp struct {
 	seriesDriver     *SeriesDriver
 	seriesScoresLane *nodeLane
 	seriesSpansLane  *nodeLane
+	// seriesLabelsLane reads the adjudicated verdicts for the charted input
+	// (ADR-0163 §SD6); seriesLabels writes them.
+	seriesLabelsLane *nodeLane
+	seriesLabels     *tsLabelsWriter
+	// seriesLabelsSeen is the write counter the read lane was last refreshed
+	// at, so exactly one memo-forget follows each completed write.
+	seriesLabelsSeen uint64
 
 	// tsCollisions caches whether the server has functions whose names play's
 	// own `ts*` vocabulary shadows (ADR-0163 §SD4). Chrome only — the answer
@@ -941,6 +948,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	// snippet-class capability play_delivery.go was made public for.
 	inst.seriesDriver = NewSeriesDriver(mk(), func(sql string) { inst.InsertSqlAtCaret(sql) })
 	inst.tsCollisions = newTsCollisionProbe(client)
+	inst.seriesLabels = newTsLabelsWriter(client)
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
@@ -1029,6 +1037,9 @@ func (inst *PlayApp) Close() {
 	inst.tsCollisions.close()
 	if inst.seriesSpansLane != nil {
 		inst.seriesSpansLane.close()
+	}
+	if inst.seriesLabelsLane != nil {
+		inst.seriesLabelsLane.close()
 	}
 	inst.flow.closeLanes()
 	inst.docs.close()

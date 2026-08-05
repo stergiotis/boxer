@@ -579,6 +579,32 @@ SELECT * FROM base"
 	settle=4000
 }
 
+scene_08_series_adjudication() {
+	desc="Adjudication (ADR-0163 M3): one row per flagged extent with confirm / false-alarm, writing an append-only tslabels row — and, once a span is confirmed, the VUS readout scoring the detector against its own baseline on the adjudicated spans"
+	senv=(BOXER_PLAY_FOCUS_SERIES=1)
+	# The same buffer as the overlays scene: adjudication is about the spans,
+	# so it needs them on screen.
+	sql="WITH
+  base AS (
+    SELECT toDateTime64(toStartOfInterval(time, INTERVAL 5 MINUTE), 3) AS t,
+           count()                                                     AS v
+    FROM default.planes_mercator_sample100
+    GROUP BY t
+    ORDER BY t
+  ),
+  scores AS (SELECT tsAnomalyScores(t, v, 24) FROM base),
+  spans  AS (SELECT tsAnomalySpans(t, v, 24, 3) FROM base)
+SELECT * FROM base"
+	# Confirm the first extent, then capture: the write is append-only and the
+	# read lane forgets its memo on completion, so the recorded verdict and the
+	# readout it enables both appear without a re-run. The settle after the
+	# click is the round trip.
+	steps='{"do":"capture","text":"08_series_adjudication","settleMs":600}
+{"do":"click","name":"confirm #1"}
+{"do":"capture","text":"08_series_adjudication_recorded","settleMs":2500}'
+	settle=4000
+}
+
 scene_08_series_vocabulary_graph() {
 	desc="The same buffer read as a graph: the client node badged 'computed in play', the honesty caption naming what was actually sent, and the input CTE beneath it as ordinary SQL"
 	# A second launch rather than a click: the dock's tab strip is drawn by

@@ -3,6 +3,7 @@ package play
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -304,6 +305,90 @@ func warmUpRuns(warm []bool) (runs [][2]int) {
 		i = j
 	}
 	return
+}
+
+// renderSeriesAdjudication is the M3 affordance: one row per flagged extent,
+// with the two verdicts and whatever has already been decided about it.
+//
+// Deliberately minimal. It is the labels BOOTSTRAP — the thing that turns
+// "beats the one-liners" from an argument into a measurement — and the design
+// question it does not answer (are adjudications facts, and if so what is
+// their identity) is deferred to its own dialogue rather than guessed at here.
+func (inst *SeriesDriver) renderSeriesAdjudication() {
+	if len(inst.spans) == 0 || inst.adjudicate == nil {
+		return
+	}
+	if inst.haveRead {
+		// The readout goes ABOVE the buttons: a person about to adjudicate
+		// should see what the last verdicts already implied.
+		for rt := range c.RichTextLabel(seriesReadoutLine(inst.readout)) {
+			rt.Small().Weak()
+		}
+	}
+	for i := range inst.spans {
+		s := &inst.spans[i]
+		key := tsLabelKey{fromMS: int64(s.from * 1000), toMS: int64(s.to * 1000)}
+		current := inst.labels[key]
+		for range c.IdScope(inst.ids.PrepareSeq(uint64(0x5e21e5ad00 + i))) {
+			for range c.Horizontal().KeepIter() {
+				label := s.label
+				if label == "" {
+					label = "extent " + fmt.Sprint(i+1)
+				}
+				for rt := range c.RichTextLabel(label + " · " + formatEpochMS(int64(s.from*1000))) {
+					rt.Small().Weak()
+				}
+				// The extent's number rides ON the buttons, not only on the
+				// row: their ids are per-span scoped, but their accessible
+				// NAMES would otherwise be three identical "confirm"s, which
+				// is ambiguous to anything reading the control rather than
+				// looking at the row it sits in.
+				n := fmt.Sprint(i + 1)
+				inst.renderVerdictButton("confirm #"+n, tsVerdictConfirmed, current, key, s)
+				inst.renderVerdictButton("false alarm #"+n, tsVerdictFalseAlarm, current, key, s)
+				if current != tsVerdictNone {
+					for rt := range c.RichTextLabel("· recorded: " + current.String()) {
+						rt.Small().Weak()
+					}
+				}
+			}
+		}
+	}
+	if inst.labelsErr != nil {
+		for rt := range c.RichTextLabel("The last verdict did not save: " + inst.labelsErr.Error()) {
+			rt.Small().Weak()
+		}
+	}
+}
+
+// renderVerdictButton draws one verdict, selected when it is what the record
+// currently says. Clicking the verdict already recorded is allowed and writes
+// again — the table is append-only, so re-affirming is a real act with its own
+// timestamp rather than a no-op.
+func (inst *SeriesDriver) renderVerdictButton(label string, verdict tsVerdictE,
+	current tsVerdictE, key tsLabelKey, s *seriesSpan) {
+	if c.Button(inst.ids.PrepareStr("verdict-"+verdict.String()),
+		c.Atoms().Text(label).Keep()).
+		Selected(current == verdict).Small().FrameWhenInactive(false).Frame(true).
+		SendResp().HasPrimaryClicked() && !inst.writing {
+		inst.adjudicate(tsLabelRow{
+			InputHash: inst.inputHash,
+			SpanFrom:  formatSeriesLabelTime(key.fromMS),
+			SpanTo:    formatSeriesLabelTime(key.toMS),
+			Verdict:   verdict.String(),
+			Detector:  inst.scores.detector,
+			Window:    uint32(inst.scores.window),
+			Note:      s.label,
+		})
+	}
+}
+
+// formatSeriesLabelTime renders an epoch-ms moment as the UTC literal
+// ClickHouse parses into a DateTime64(3,'UTC'). Forced UTC, like every other
+// timestamp this feature reads or writes — a label whose meaning depended on
+// the writer's timezone would be worthless to the next reader.
+func formatSeriesLabelTime(ms int64) string {
+	return time.UnixMilli(ms).UTC().Format("2006-01-02 15:04:05.000")
 }
 
 // seriesOverlayCaption is the honesty line the overlays carry. It states the
