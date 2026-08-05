@@ -425,6 +425,12 @@ type PlayApp struct {
 	// seriesLabelsSeen is the write counter the read lane was last refreshed
 	// at, so exactly one memo-forget follows each completed write.
 	seriesLabelsSeen uint64
+	// fixtures is the ADR-0163 M4 fixture lab: generate a labelled synthetic
+	// series and publish it as ordinary ad-hoc datasets. Needs the bus, so it
+	// is inert in a session without capabilities.
+	fixtures     *fixtureState
+	fixtureSpec  fixtureSpec
+	fixturesSeen uint64
 
 	// tsCollisions caches whether the server has functions whose names play's
 	// own `ts*` vocabulary shadows (ADR-0163 §SD4). Chrome only — the answer
@@ -949,6 +955,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.seriesDriver = NewSeriesDriver(mk(), func(sql string) { inst.InsertSqlAtCaret(sql) })
 	inst.tsCollisions = newTsCollisionProbe(client)
 	inst.seriesLabels = newTsLabelsWriter(client)
+	inst.fixtures = &fixtureState{}
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())

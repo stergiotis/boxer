@@ -605,6 +605,16 @@ SELECT * FROM base"
 	settle=4000
 }
 
+scene_08_series_fixture() {
+	desc="The fixture lab (ADR-0163 M4): kind and seed, generating a labelled synthetic series published as ORDINARY ad-hoc datasets — fixture_series and fixture_truth, queried with keelson() like anything else, with no demo mode anywhere"
+	# No SQL: the lab is reachable from the empty workbench, which is when a
+	# series with known ground truth is worth most. The affordance renders
+	# only when the host carries an ad-hoc capability bus.
+	senv=(BOXER_PLAY_FOCUS_SERIES=1)
+	sql=""
+	settle=2000
+}
+
 scene_08_series_vocabulary_graph() {
 	desc="The same buffer read as a graph: the client node badged 'computed in play', the honesty caption naming what was actually sent, and the input CTE beneath it as ordinary SQL"
 	# A second launch rather than a click: the dock's tab strip is drawn by

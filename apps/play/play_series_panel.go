@@ -196,6 +196,15 @@ type SeriesDriver struct {
 	labels    map[tsLabelKey]tsVerdictE
 	readout   tsScoreReadout
 	haveRead  bool
+	// The M4 fixture lab's driver-side state: which fixture the affordance
+	// is set to, and the seam that publishes it.
+	fixture           fixtureSpec
+	fixtureSeeded     bool
+	publishFixtures   func(fixtureSpec)
+	fixturePublishing bool
+	fixtureSummary    string
+	fixtureErr        error
+
 	// adjudicate writes one verdict. Injected like `deliver`, so the driver
 	// reaches for a seam rather than for the app.
 	adjudicate func(row tsLabelRow)
@@ -583,6 +592,7 @@ func (inst *SeriesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	inst.renderGridFinding()
 	inst.renderSeriesOverlayChrome()
 	inst.renderSeriesAdjudication()
+	inst.renderFixtureLab()
 	c.AddSpace(styletokens.GapItems(dens))
 
 	w := float32(seriesPlotMinW)
@@ -926,6 +936,12 @@ func (inst *PlayApp) renderSeriesTab(rec arrow.RecordBatch, schema *arrow.Schema
 		for rt := range c.RichTextLabel("Run a query returning a time column and at least one number (ADR-0163) to draw a series.") {
 			rt.Small().Weak()
 		}
+		// The fixture lab belongs HERE too, and arguably most of all: an
+		// empty workbench is exactly when a labelled series with known
+		// ground truth is worth having, and a lab reachable only once you
+		// already have data would be a lab for people who do not need it.
+		inst.noteFixtureLab()
+		inst.seriesDriver.renderFixtureLab()
 		return
 	}
 	inst.seriesDriver.noteExecuted(executed)
@@ -936,6 +952,7 @@ func (inst *PlayApp) renderSeriesTab(rec arrow.RecordBatch, schema *arrow.Schema
 	// baseline at (§SD5 S3).
 	inst.noteSeriesScoreCall()
 	inst.noteSeriesAdjudication()
+	inst.noteFixtureLab()
 	inputs := map[ChannelID]channelInput{
 		chMain: {node: inst.resolvedTabNode("series"), rec: rec, schema: schema, sig: inst.frameSig},
 	}
@@ -1018,6 +1035,20 @@ func (inst *PlayApp) noteSeriesAdjudication() {
 		}
 	}
 	inst.seriesDriver.noteSeriesLabels(hash, labels, inst.seriesLabels.write, writing, wErr)
+}
+
+// noteFixtureLab hands the driver the lab's state and applies a completed
+// publish: the aliases bind and the scaffold lands in the buffer, once.
+func (inst *PlayApp) noteFixtureLab() {
+	if inst.fixtures == nil || inst.bus == nil {
+		// No bus, no ad-hoc capability, no lab. It disappears rather than
+		// offering a button that could never work.
+		inst.seriesDriver.noteFixtures(fixtureSpec{}, nil, false, "", nil)
+		return
+	}
+	inst.syncFixtures()
+	publishing, summary, _, err := inst.fixtures.status()
+	inst.seriesDriver.noteFixtures(inst.fixtureSpec, inst.publishFixture, publishing, summary, err)
 }
 
 // forgetSeriesLanes drops the optional lanes' memos on Run, for the reason

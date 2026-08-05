@@ -994,6 +994,28 @@ GROUP BY input_hash, detector, window, span_from, span_to
 ORDER BY input_hash, span_from
 ```
 
+## A fixture with known ground truth (the lab)
+
+The Series tab's **fixture lab** generates a labelled synthetic series from a
+kind and a seed, and publishes it as two ordinary ad-hoc datasets:
+`keelson('fixture_series')` with `t` and `v`, and `keelson('fixture_truth')`
+with the planted extents on the same `_tl_band_*` contract the detectors emit.
+
+There is no demo mode. The tables are queried like anything else, every panel
+behaves exactly as it does on real data, and nothing downstream knows the data
+is synthetic — which is the only way a workbench can tell you what it will do
+on yours. What the fixture adds is **ground truth**: the M3 readout scores a
+detector against a human's adjudication, and `fixture_truth` is a second
+opinion nobody had to earn, so the two can be compared.
+
+The generator is the one behind ADR-0150's scoring work, chosen because its
+fixtures avoid the four flaws that let a trivial detector look good on
+synthetic data — a detector that wins here has not simply learned that
+anomalies come last. Same (kind, seed), same series, every time.
+
+The lab needs the ad-hoc capability; without it the affordance is absent
+rather than offering a button that could not work.
+
 ## Reading a client node, and why the sink cannot
 
 A `ts*` CTE is a **terminal leaf**: its output never exists as SQL, so nothing
