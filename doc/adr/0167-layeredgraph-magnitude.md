@@ -143,6 +143,16 @@ The consequence is a seam change: `NodeLayout` carries a per-node `FontSize`,
 and the renderer prefers it over `Layout.FontSize`. The global stays as the
 fallback for every node that has no weight.
 
+One thing this mechanism does *not* get for free, found by looking at the drawn
+result. The engine already pads node boxes past Graphviz's default to absorb
+the difference between the metrics it lays out with and the font the painter
+draws in — and that error is proportional to the drawn text, so it grows with
+the font. A fixed pad calibrated for the layout-wide size is therefore
+outgrown by a scaled label, which the painter then clips at the box edge. The
+pad scales with the node's own font, relative to the layout-wide size, so an
+unweighted node keeps exactly the calibrated value and a weightless graph is
+laid out as before.
+
 *Kill clause:* if a caller needs box size decoupled from label size — a fixed
 grid of equal boxes with magnitude shown some other way — font scaling is the
 wrong mechanism and `fixedsize` returns.

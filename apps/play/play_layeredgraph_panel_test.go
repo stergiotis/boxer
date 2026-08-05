@@ -150,7 +150,7 @@ func edgeSet(m layeredgraph.GraphModel) map[[2]string]string {
 // noVerts is the zero vertices claim (no vertices CTE): idCol -1 disables the
 // vertex pass, so buildNetworkModel infers nodes from the edge endpoints.
 func noVerts() networkVerticesClaim {
-	return networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1}
+	return networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1}
 }
 
 func TestNetworkAcceptEdgesContract(t *testing.T) {
@@ -539,4 +539,79 @@ func TestNetworkMagnitudeBandIsTight(t *testing.T) {
 	below := styletokens.Sequential(styletokens.SequentialDefault(), lo-1.0/magnitudeBandSteps)
 	got := contrast.Ratio(below.R, below.G, below.B, bg.R, bg.G, bg.B)
 	assert.Less(t, got, want, "the step below the floor should be the unusable one")
+}
+
+// netWeightedVerts builds a vertices record carrying a numeric `weight`.
+func netWeightedVerts(t *testing.T, id []string, weight []float64) arrow.RecordBatch {
+	t.Helper()
+	fields := []arrow.Field{strField("id"), {Name: "weight", Type: arrow.PrimitiveTypes.Float64}}
+	wb := array.NewFloat64Builder(memory.NewGoAllocator())
+	defer wb.Release()
+	wb.AppendValues(weight, nil)
+	cols := []arrow.Array{netStrArr(t, id), wb.NewFloat64Array()}
+	return array.NewRecordBatch(arrow.NewSchema(fields, nil), cols, int64(len(id)))
+}
+
+// ADR-0167 M2: a vertex weight reaches the model and sets its own scale, kept
+// apart from the edge scale because the two need not share a unit.
+func TestNetworkBuildCarriesNodeWeight(t *testing.T) {
+	vr := netWeightedVerts(t, []string{"a", "b"}, []float64{3, 30})
+	vc, reason := resolveNetworkVertices(vr.Schema())
+	require.Empty(t, reason)
+	require.GreaterOrEqual(t, vc.weightCol, 0)
+
+	er := netWeightedEdges(t, []string{"a"}, []string{"b"}, []float64{500}, nil)
+	ec, _ := resolveNetworkEdges(er.Schema())
+	b := buildNetworkModel(er, ec, vr, vc)
+
+	byID := nodesByID(b.model)
+	assert.InDelta(t, 3.0, byID["a"].Weight, 1e-9)
+	assert.InDelta(t, 30.0, byID["b"].Weight, 1e-9)
+	assert.InDelta(t, 30.0, b.maxNodeWeight, 1e-9)
+	assert.InDelta(t, 500.0, b.maxWeight, 1e-9, "the edge scale is separate")
+}
+
+// The layout cache key must move with a node weight, because a node weight
+// scales its font and therefore its box (ADR-0167 §SD3). An edge weight must
+// NOT move it: it never reaches the engine, so re-laying out would be waste.
+func TestNetworkModelKeyTracksNodeWeightOnly(t *testing.T) {
+	base := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}},
+		Edges: []layeredgraph.Edge{{From: "a", To: "b"}},
+	}
+	k := func(m layeredgraph.GraphModel) string {
+		return networkModelKey(m, layeredgraph.RankDirTopBottom)
+	}
+
+	heavierNode := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{{ID: "a", Label: "A", Weight: 9}, {ID: "b", Label: "B"}},
+		Edges: base.Edges,
+	}
+	assert.NotEqual(t, k(base), k(heavierNode), "a node weight changes the layout")
+
+	heavierEdge := layeredgraph.GraphModel{
+		Nodes: base.Nodes,
+		Edges: []layeredgraph.Edge{{From: "a", To: "b", Weight: 9}},
+	}
+	assert.Equal(t, k(base), k(heavierEdge), "an edge weight does not — it never reaches the engine")
+}
+
+// A ramped node body sweeps the whole lightness range, so its label cannot use
+// one fixed ink. Whatever the ramp paints, the ink chosen for it must clear the
+// WCAG AA floor for body text.
+func TestNetworkInkOnRampStaysReadable(t *testing.T) {
+	palette := styletokens.SequentialDefault()
+	bandLo := networkMagnitudeBandLo(palette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
+
+	for i := range 21 {
+		w := float64(i) / 20
+		if w <= 0 {
+			continue
+		}
+		fill := networkNodeRamp(palette, bandLo, w, 1)
+		ink := networkInkOn(fill)
+		got := contrast.Ratio(ink.R, ink.G, ink.B, fill.R, fill.G, fill.B)
+		assert.GreaterOrEqualf(t, got, 4.5,
+			"weight %.2f: ink on #%02x%02x%02x is only %.2f:1", w, fill.R, fill.G, fill.B, got)
+	}
 }

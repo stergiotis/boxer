@@ -133,6 +133,34 @@ func networkMagnitudeBandLo(palette styletokens.SequentialE, bg styletokens.RGBA
 	return 0
 }
 
+// networkNodeRamp samples the magnitude ramp for one node weight. Shared by
+// the fill and the ink so the two cannot drift onto different colours, and it
+// carries the same square root the edge width and the edge ramp use.
+func networkNodeRamp(palette styletokens.SequentialE, bandLo float32, w float64, maxW float64) styletokens.RGBA8 {
+	t := float32(math.Sqrt(min(w, maxW) / maxW))
+	return styletokens.Sequential(palette, bandLo+(1-bandLo)*t)
+}
+
+// networkInkOn picks the label colour for a ramped node body: whichever of the
+// style's own ink and the dark extreme contrasts better with the fill.
+//
+// The group and tone palettes are all *Subtle background tones, chosen dark so
+// the one light ink reads on every one of them — a fixed pairing that works
+// because the palette is fixed. A magnitude ramp is not: it sweeps the whole
+// lightness range by construction, so its bright end would carry light ink on
+// a light fill. The view offers NodeText beside NodeFill for exactly this, and
+// choosing by measured contrast is what keeps the pairing honest as either the
+// palette or the theme moves.
+func networkInkOn(fill styletokens.RGBA8) styletokens.RGBA8 {
+	light, dark := styletokens.NeutralTextPrimary, styletokens.NeutralBgExtreme
+	lr := contrast.Ratio(light.R, light.G, light.B, fill.R, fill.G, fill.B)
+	dr := contrast.Ratio(dark.R, dark.G, dark.B, fill.R, fill.G, fill.B)
+	if dr > lr {
+		return dark
+	}
+	return light
+}
+
 // networkTone maps a `tone` cell to a design-system colour. The vocabulary is
 // the six semantic families — accent, info, success, warning, error, neutral —
 // and the *role* picks the variant: a vertex body is a background, so it takes
@@ -190,7 +218,7 @@ type networkEdgesClaim struct {
 }
 
 type networkVerticesClaim struct {
-	idCol, labelCol, groupCol, shapeCol, toneCol int
+	idCol, labelCol, groupCol, shapeCol, toneCol, weightCol int
 }
 
 // NetworkDriver owns the Network tab state: the two input lanes, the cached
@@ -330,7 +358,7 @@ func (inst layeredGraphPanel) Render(filled map[ChannelID]ChannelResult, emit Si
 	if !ok {
 		return
 	}
-	vc := networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1}
+	vc := networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1}
 	var vertRec arrow.RecordBatch
 	if v, has := filled[chVertices]; has {
 		if got, isC := v.Claim.(networkVerticesClaim); isC {
@@ -387,7 +415,7 @@ func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason str
 // required; a vertices CTE missing it is rejected, and because the channel is
 // optional the panel simply draws from the edges alone (endpoint inference).
 func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reason string) {
-	vc = networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1}
+	vc = networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1}
 	for ci, f := range schema.Fields() {
 		switch f.Name {
 		case networkIDCol:
@@ -400,6 +428,11 @@ func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reas
 			vc.shapeCol = ci
 		case networkToneCol:
 			vc.toneCol = ci
+		case networkWeightCol:
+			// Numeric-only, for the same reason the edge contract is.
+			if isNumericType(f.Type) {
+				vc.weightCol = ci
+			}
 		}
 	}
 	if vc.idCol < 0 {
@@ -416,12 +449,15 @@ type networkBuild struct {
 	// strokeOf colours an edge by its endpoints, the key view.RenderOpts'
 	// EdgeStroke hook is given. Only edges naming a tone appear.
 	strokeOf map[[2]string]color.Color
-	// maxWeight is the heaviest edge weight seen, or 0 when the result
-	// carries no `weight` column or nothing positive in it. It is what the
-	// magnitude channels normalise against (ADR-0167 §SD5) — the panel sees
-	// the whole result, where a book would have to compute this in SQL and
-	// restate it per query.
-	maxWeight float64
+	// maxWeight / maxNodeWeight are the heaviest edge and vertex weights
+	// seen, or 0 when that side carries no `weight` column or nothing
+	// positive in it. They are what the magnitude channels normalise against
+	// (ADR-0167 §SD5) — the panel sees the whole result, where a book would
+	// have to compute this in SQL and restate it per query. Kept apart
+	// because the two are different quantities: an edge's cost and a node's
+	// need not even share a unit.
+	maxWeight     float64
+	maxNodeWeight float64
 	capped    bool
 }
 
@@ -477,6 +513,12 @@ func buildNetworkModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec
 			}
 			if vc.shapeCol >= 0 {
 				node.Shape = parseNetworkShape(formatCell(vertRec, vc.shapeCol, row))
+			}
+			if vc.weightCol >= 0 {
+				if v, ok := quantityCellValue(vertRec, vc.weightCol, row); ok && v > 0 {
+					node.Weight = v
+					b.maxNodeWeight = max(b.maxNodeWeight, v)
+				}
 			}
 			nodes = append(nodes, node)
 			// An explicit tone wins over the group palette: `group` says
@@ -580,8 +622,15 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 		inst.layout = nil
 		eng, err := goccyengine.Shared()
 		if err == nil {
-			inst.layout, err = eng.Layout(context.Background(), b.model,
-				layeredgraph.LayoutOpts{RankDir: inst.rankDir, FontSize: 13})
+			opts := layeredgraph.LayoutOpts{RankDir: inst.rankDir, FontSize: 13}
+			if b.maxNodeWeight > 0 {
+				// A vertex weight scales the font its label is laid out at, so
+				// the box follows (ADR-0167 §SD3). The floor is this panel's
+				// own FontSize rather than the package default, so an
+				// unweighted-looking node stays the size it always was.
+				opts.NodeFontSize = layeredgraph.WeightFontSize(b.model, 13, 0)
+			}
+			inst.layout, err = eng.Layout(context.Background(), b.model, opts)
 		}
 		inst.layoutErr = err
 	}
@@ -621,12 +670,50 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 	w := min(max(paneW-12, 360), 1600)
 	h := min(max(w*float32(lh/lw), 200), 720)
 
+	seqPalette := styletokens.SequentialDefault()
+	style := view.DefaultStyle()
+	bandLo := networkMagnitudeBandLo(seqPalette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
+
+	// A vertex `weight` ramps the node body the same way it ramps an edge, and
+	// loses to the same two more-specific claims: the selection highlight, and
+	// an explicit tone or group.
+	nodeWeights := make(map[string]float64, len(b.model.Nodes))
+	if b.maxNodeWeight > 0 {
+		for _, n := range b.model.Nodes {
+			nodeWeights[n.ID] = n.Weight
+		}
+	}
 	fill := func(id string) (col color.Color, ok bool) {
 		if inst.selectedID != "" && id == inst.selectedID {
 			return color.Hex(styletokens.AccentDefault.AsHex()), true
 		}
-		col, ok = b.fillOf[id]
-		return
+		if col, ok = b.fillOf[id]; ok {
+			return
+		}
+		if b.maxNodeWeight <= 0 {
+			return
+		}
+		w, found := nodeWeights[id]
+		if !found || w <= 0 {
+			return
+		}
+		return color.Hex(networkNodeRamp(seqPalette, bandLo, w, b.maxNodeWeight).AsHex()), true
+	}
+	// Ink follows the fill, and only for the nodes the ramp actually painted:
+	// everything else keeps the style default, which the tone and group
+	// palettes were chosen against.
+	nodeInk := func(id string) (col color.Color, ok bool) {
+		if b.maxNodeWeight <= 0 || inst.selectedID == id {
+			return
+		}
+		if _, toned := b.fillOf[id]; toned {
+			return
+		}
+		w, found := nodeWeights[id]
+		if !found || w <= 0 {
+			return
+		}
+		return color.Hex(networkInkOn(networkNodeRamp(seqPalette, bandLo, w, b.maxNodeWeight)).AsHex()), true
 	}
 	// Edges carrying a `tone` are stroked with it; the rest keep the style
 	// default. Nothing overrides the selection highlight, which is a fill.
@@ -650,9 +737,6 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 			edgeWeights[[2]string{e.From, e.To}] = e.Weight
 		}
 	}
-	seqPalette := styletokens.SequentialDefault()
-	style := view.DefaultStyle()
-	bandLo := networkMagnitudeBandLo(seqPalette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
 	stroke := func(from, to string) (col color.Color, ok bool) {
 		key := [2]string{from, to}
 		if b.strokeOf != nil {
@@ -677,6 +761,7 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 		CanvasW:    w,
 		CanvasH:    h,
 		NodeFill:   fill,
+		NodeText:   nodeInk,
 		EdgeStroke: stroke,
 		EdgeWidth:  edgeWidth,
 		State:      &inst.view,
@@ -737,8 +822,12 @@ func (inst *NetworkDriver) statusLine() string {
 func networkModelKey(m layeredgraph.GraphModel, rd layeredgraph.RankDir) string {
 	h := fnv.New64a()
 	fmt.Fprintf(h, "rd|%d;", rd)
+	// A node's weight scales its font and therefore its box, so it is part of
+	// the layout's identity (ADR-0167 §SD3). An EDGE's weight deliberately is
+	// not: it never reaches the engine, so including it would only buy
+	// needless re-layouts.
 	for _, n := range m.Nodes {
-		fmt.Fprintf(h, "n|%s|%s|%d;", n.ID, n.Label, n.Shape)
+		fmt.Fprintf(h, "n|%s|%s|%d|%v;", n.ID, n.Label, n.Shape, n.Weight)
 	}
 	for _, e := range m.Edges {
 		fmt.Fprintf(h, "e|%s|%s|%s;", e.From, e.To, e.Label)
