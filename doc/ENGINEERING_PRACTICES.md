@@ -28,7 +28,7 @@ none combine multiple gates.
 
 | Workflow | Trigger | Entry point | Purpose |
 |---|---|---|---|
-| [lint.yaml](../.github/workflows/lint.yaml) | push to `main`, PRs | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `go vet`, staticcheck, errcheck, doclint, h3 wasm parity |
+| [lint.yaml](../.github/workflows/lint.yaml) | push to `main`, PRs | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `gofmt`, `go vet`, staticcheck, errcheck, doclint, h3 wasm parity |
 | [test.yaml](../.github/workflows/test.yaml) | manual dispatch, `v*` tags | [scripts/ci/gotest.sh](../scripts/ci/gotest.sh) | race + cover + JSON tests, tparse-formatted; post-test drift gate (generator tests rewrite in place, so the tree must end clean) |
 | [vuln.yaml](../.github/workflows/vuln.yaml) | every push | [scripts/ci/govuln.sh](../scripts/ci/govuln.sh) | `govulncheck -show verbose ./public/...` |
 | [licenses.yaml](../.github/workflows/licenses.yaml) | every push | [scripts/ci/license_gate.sh](../scripts/ci/license_gate.sh) | CycloneDX SBOM → in-tree policy gate |
@@ -48,6 +48,7 @@ emits a pass/warn/fail summary trailer.
 
 | Tool | Invocation | Status |
 |---|---|---|
+| `gofmt` | `-l` over the tree, generated files skipped by their header | error on drift |
 | `go vet` | direct, with build tags | error on findings |
 | [honnef.co/go/tools/cmd/staticcheck](https://pkg.go.dev/honnef.co/go/tools/cmd/staticcheck) | `-checks "all,-ST1000,-ST1003,..."` (style checks suppressed) | warn |
 | [github.com/kisielk/errcheck](https://pkg.go.dev/github.com/kisielk/errcheck) | exclusions for `fmt.Fprintf` / `strings.Builder` writers | warn |
@@ -56,7 +57,18 @@ emits a pass/warn/fail summary trailer.
 | [github.com/incu6us/goimports-reviser/v3](https://pkg.go.dev/github.com/incu6us/goimports-reviser/v3) | dev-only via [scripts/dev/goimports.sh](../scripts/dev/goimports.sh) | dev |
 
 Generated files (`*.gen.go`, `*.out.go`) are filtered post-hoc by grep since
-`go vet` has no native exclude flag.
+`go vet` has no native exclude flag. The `gofmt` step filters on the
+`// Code generated ... DO NOT EDIT.` header instead: two generated files match
+neither path pattern, and a generator owns the layout of what it emits.
+
+**When the `gofmt` step fails, read `gofmt -d` before running `gofmt -w`.**
+gofmt reformats doc comments, and its parser takes two kinds of ordinary prose
+punctuation for markup: `` `` `` and two single quotes become Unicode quotes,
+and a line-leading `+` becomes a `-` bullet. Both have falsified comments in
+this repo — one documenting SQL's doubled-quote escape, one where the `+`
+continued a sum and would have become a minus. Where the diff changes what a
+comment *says* rather than how it is spaced, fix the prose first: name the thing
+instead of spelling it, or rewrap so a `+` ends a line rather than starting one.
 
 Most reference Go repos (Kubernetes, GitLab Runner, Grafana) drive these
 checks through a meta-runner that bundles staticcheck/errcheck/govet and
@@ -296,7 +308,10 @@ in Go; the closest Go analogue is the published Uber Go style guide.
 The following are widely used in comparable Go projects but are not wired
 into this repository's CI:
 
-- `gofumpt` / `gci` formatting enforcement is absent.
+- `gofumpt` / `gci` are not adopted. Plain `gofmt` *is* enforced in CI as of
+  2026-08-06 (§ the linter table above); the stricter pair, and import grouping
+  in particular, remain a dev-only convenience via
+  [scripts/dev/goimports.sh](../scripts/dev/goimports.sh).
 - `nilaway` is wired up but currently commented out in
   [scripts/ci/lint.sh](../scripts/ci/lint.sh); the `dev/` script preserves
   the local runner.

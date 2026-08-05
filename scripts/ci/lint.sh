@@ -249,6 +249,43 @@ else
     step_end fail
 fi
 
+step_begin "gofmt"
+# Go formatting enforcement — plain `gofmt`, the baseline §9 defers to. It is
+# the Go counterpart of the rustfmt step below, and closes the gap
+# ENGINEERING_PRACTICES §10 recorded (gofumpt / gci stay unadopted). Drift had
+# reached 175 files before the tree was cleared on 2026-08-06.
+#
+# Generated files are skipped by their `Code generated ... DO NOT EDIT.` header
+# rather than by path: the two that drift match NEITHER of the `.out.go` /
+# `.gen.go` patterns the vet and staticcheck steps filter on
+# (`palette_generated.go`, `chaliases_gen.go`), and a generator owns the layout
+# of what it emits. The header is read from the first lines only, which is where
+# Go's own convention puts it — a file merely quoting the phrase is still checked.
+#
+# FIXING A FAILURE — read the diff before running `gofmt -w`. gofmt reformats
+# doc comments, and its parser takes two kinds of ordinary prose punctuation for
+# markup: `` and '' become Unicode quotes, and a line-leading + becomes a -
+# bullet. Both have already falsified comments in this repo — one documenting
+# SQL's doubled-quote escape, one where the + continued a sum and became a
+# minus. When `gofmt -d` changes what a comment SAYS rather than how it is
+# spaced, fix the prose first (name the thing instead of spelling it; rewrap so
+# a + ends a line rather than starting one), then format. See b8c1f701.
+gofmt_dirty=$(gofmt -l . 2>/dev/null || true)
+gofmt_out=""
+for f in $gofmt_dirty; do
+    head -n 5 "$f" | grep -qE '^// Code generated .* DO NOT EDIT\.$' && continue
+    gofmt_out+="$f"$'\n'
+done
+if [ -n "$gofmt_out" ]; then
+    echo "not gofmt-clean (run gofmt -d on each, then see the note above):"
+    printf '%s' "$gofmt_out"
+    rc=1
+    step_end fail
+else
+    echo "passed"
+    step_end pass
+fi
+
 step_begin "rustfmt"
 # Verifies every crate under ./rust is formatted with its OWN pinned rustfmt:
 # scripts/dev/fmt_rust.sh --check runs `cargo fmt --all --check` inside each crate
