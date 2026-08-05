@@ -402,6 +402,32 @@ the browser's three populations. All milestones M0–M4 are now built; open
 remain the fps-gate GUI run (with the live `keelson('coverage_pkgs')`
 check) and the deferrals — the §SD6 tee first among them.
 
+## Update (2026-08-06, third) — the fps gate ran; M0 is closed
+
+Live A/B on a headless-weston desktop pair (software GL, vsync off,
+`--launch imztop` as a continuously animating workload, one contended dev
+box — read the numbers as one rig's measurement, not a benchmark):
+baseline Go frame work sampled 5.4–9.1 ms (median ≈ 6 ms) at fps
+p50 60; the full-tree atomic build sampled 17.6–20.3 ms (≈ 3.2×) at fps
+p50 27. The frame path is leeway/widget hot-loop code, so the live factor
+lands almost exactly on the M0 microbenchmark's 3.3×/row. **Verdict: the
+opt-in stance stands as designed** — a full-tree atomic session stays
+interactively usable for diagnosis (~27 fps here) and is not a daily
+driver; `-coverpkg` narrowing is the lever when smoothness matters.
+
+The same run closed the deferred live checks. The sampler came up on the
+instrumented binary (`coverage.{host}.sample`, 5 s cadence) and
+`keelson('coverage_pkgs')` answered over the introspect `/query` endpoint
+with real data — 318 instrumented packages, 305 touched, 16,881/132,163
+statements (12.8%) after ~30 s of imztop — with `coverage_status` ticking
+monotonically between reads (samples 4→9). The M4 book ran live:
+`--launch "subject_alias = 'cov-map'"` rendered the treemap over the
+session's own coverage — 368 cells / 132.2k statements, all seven
+brackets, the module-trimmed tree, landing on the Treemap tab — with the
+`observability` subtree visibly brightest because the coverage pipeline
+covers itself. Every ADR milestone M0–M4 is now built and live-verified;
+the deferrals (§SD6 tee first) are what remains.
+
 ## Status
 
 Proposed, 2026-08-05.
