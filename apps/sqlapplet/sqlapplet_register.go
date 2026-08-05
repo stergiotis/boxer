@@ -51,6 +51,14 @@ var bookpprofFS embed.FS
 //go:embed bookcapmap
 var bookcapmapFS embed.FS
 
+// bookcoverageFS embeds the continuous-coverage suite
+// (apps/sqlapplet/bookcoverage/*.md) — canned lenses over the live
+// keelson.coverage_* tables of the ADR-0169 sampler: the totals, the
+// package treemap, and the uncovered-functions work list.
+//
+//go:embed bookcoverage
+var bookcoverageFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -70,6 +78,11 @@ func init() {
 	// of documents someone reads to find something out.
 	if err := RegisterBook("capmap", help.MustSub(bookcapmapFS, "bookcapmap"), []app.TopicT{app.TopicCode}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register capmap book")
+	}
+	// TopicObservability, like pprof: what a running process did, measured
+	// from inside it — not TopicCode, which is what the repository is.
+	if err := RegisterBook("coverage", help.MustSub(bookcoverageFS, "bookcoverage"), []app.TopicT{app.TopicObservability}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register coverage book")
 	}
 }
 
