@@ -80,9 +80,9 @@ func loadSbomComponents() (comps []sbomComponent) {
 // sbomProvider exposes the build SBOM as keelson.sbom.
 type sbomProvider struct{}
 
-func (sbomProvider) Name() string                        { return "sbom" }
+func (sbomProvider) Name() string                         { return "sbom" }
 func (sbomProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (sbomProvider) Schema() *arrow.Schema               { return sbomTable(nil).Schema() }
+func (sbomProvider) Schema() *arrow.Schema                { return sbomTable(nil).Schema() }
 
 func (sbomProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
 	comps := loadSbomComponents()
