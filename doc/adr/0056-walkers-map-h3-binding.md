@@ -118,6 +118,18 @@ Tile servers are Go-configurable at the call site via fluid methods (`.TileUrl`,
 
 ## Updates
 
+### 2026-08-04 — the camera register is keyed by map id (supersedes §SD3)
+
+§SD3 chose a single `walkers_last_camera` slot and rejected a per-id HashMap as complicating "the common (single-map) case for a rare multi-map need". The multi-map case turned out not to be rare: two windows of one app is the ordinary way these apps are used, and each window renders its own map into the same process-wide slot. The limitation §SD3 accepted knowingly was therefore reachable without anyone opening two different apps.
+
+Both failure modes were observed. play's Map panel read the slot unguarded and published *another* map's viewport as its own `vp_*` signals — wrong data, silently. terrainscope compared `MapId` first and so went blind instead, getting no camera at all rather than a wrong one. Neither app was doing anything unusual.
+
+**What changed.** `walkers_cameras` is a `HashMap<u64, WalkersCamera>`; `fetchR15WalkersCamera` became `fetchR15WalkersCameras`, returning 14 parallel arrays keyed by `mapIds[]`; Go reads one map's camera through `StateManager.GetWalkersCamera(handle)` rather than an ambient current-camera accessor. Entries are **retained** per id rather than drained, because a reader running a frame behind the viewport — the Go-side heatmap recompute — still needs the last one; `ok == false` now means "this map has never rendered", not "stale". One entry per map id ever rendered, so the map is bounded the way the dock's state map is.
+
+The workaround §SD3 pointed at — arrange for the map you care about to render last — is withdrawn, not merely unnecessary: it depends on a frame ordering nothing guarantees. [`SKILL.md §16.5`](../skills/imzero2/SKILL.md) carries the current contract and keeps the history, since code written against the old behaviour is still in the tree.
+
+Shipped in `525f50e9`, part of a sweep for process-wide UI state that two instances of an app share because an identity is a constant where it should name the instance. Recorded here on 2026-08-05, after the drift was noticed while aligning the skill — the ADR is the record of *why*, so the entry is dated to the change rather than to its recording.
+
 ### 2026-08-05 — TLS configuration for a custom tile server
 
 The Decision above says tile servers are Go-configurable at the call site, and left the fetch itself entirely to walkers. That is not enough for an https tile server whose certificate does not chain to a public root: walkers' client trusts the bundled webpki roots and only those, there is no system trust store to install a private CA into, and `SSL_CERT_FILE` is not consulted. A self-hosted GIS behind an internal CA was therefore unreachable over https regardless of whether its certificate was valid.
