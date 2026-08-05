@@ -151,8 +151,8 @@ func parenBody(body string, open int) string {
 }
 
 // skipSQLLiteral returns the index just past the single-quoted string literal
-// that starts at s[i] == '\'' (handling backslash escapes). Returns len(s)
-// when the literal is unterminated.
+// opening at s[i] — which must be the quote itself — handling backslash
+// escapes. Returns len(s) when the literal is unterminated.
 func skipSQLLiteral(s string, i int) int {
 	for k := i + 1; k < len(s); k++ {
 		if s[k] == '\\' && k+1 < len(s) {

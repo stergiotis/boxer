@@ -170,9 +170,9 @@ func extractSettingNameValue(pr *nanopass.ParseResult, expr *grammar1.SettingExp
 
 // chParamValue converts a SQL literal into the unquoted form expected by
 // ClickHouse's HTTP `param_*` channel. Outer single quotes are stripped from
-// string literals and the standard backslash escapes plus the doubled-quote
-// escape (`''`) are decoded; numbers, arrays, tuples, and other forms are
-// passed through verbatim.
+// string literals and the standard backslash escapes plus SQL's doubled-quote
+// escape are decoded; numbers, arrays, tuples, and other forms are passed
+// through verbatim.
 func chParamValue(literalSQL string) (out string) {
 	s := strings.TrimSpace(literalSQL)
 	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {

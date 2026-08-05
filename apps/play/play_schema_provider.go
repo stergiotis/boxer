@@ -66,8 +66,8 @@ type clientPassBinding struct {
 // factories in the standard pre-execute set (ADR-0108 §SD7, ADR-0116 §SD6,
 // ADR-0121 §SD7). The resolver learns each queried table's schema from
 // system.columns via the client itself (a cached, lazy probe), so friendly
-// handles like `symbol` or `` `geoPoint:lat` `` are rewritten to physical names
-// before a query ships: buildResidual passes the binding to
+// handles like `symbol` or a backtick-quoted `geoPoint:lat` are rewritten to
+// physical names before a query ships: buildResidual passes the binding to
 // ApplyBestEffortBound, which realises the factories against this client's live
 // endpoint. They live in passreg.Default (wired once per host by
 // RegisterDefaults), so — unlike the retired per-client registry — they also

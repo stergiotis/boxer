@@ -67,9 +67,9 @@ func buildParamPrelude(slots []paramSlot, values map[string]string) string {
 // play_extract_params.go (which strips outer quotes on the way back).
 //
 // Buckets:
-//   - empty string → `''`. CH treats `param_X=` (missing) as
-//     "param wasn't set" which doesn't round-trip cleanly with a
-//     deliberately cleared widget.
+//   - empty string → an empty quoted literal, i.e. two single quotes. CH
+//     treats `param_X=` (missing) as "param wasn't set" which doesn't
+//     round-trip cleanly with a deliberately cleared widget.
 //   - numeric type (Int*, UInt*, Float*, Decimal*) with numeric-shape
 //     value → verbatim. Non-numeric value falls through to the
 //     quoted-string bucket so CH gives a typed error rather than a
