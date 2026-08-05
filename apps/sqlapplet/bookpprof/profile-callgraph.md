@@ -31,6 +31,12 @@ nodes. Consecutive-frame pairs are deduplicated per stack
 (`arrayDistinct`), so a recursive call contributes one edge per stack, not
 one per frame.
 
+**Reading the widths.** An edge's thickness and colour both follow its
+`weight`, so the hot path is visible without reading a number. They order
+and emphasise — they are not a scale to measure against. Time is not
+conserved along a call chain, and a recursive call is a cycle, so the widths
+into a function need not sum to the width out of it.
+
 ```sql
 SET param_edge_cap = 150;
 
@@ -47,7 +53,8 @@ WITH
     LIMIT {edge_cap:UInt64}),
   edges AS (
     SELECT caller AS source, callee AS target,
-           concat(toString(round(w / 1e6, 1)), ' ms') AS label
+           concat(toString(round(w / 1e6, 1)), ' ms') AS label,
+           w AS weight
     FROM weights),
   vertices AS (
     SELECT fn AS id,
