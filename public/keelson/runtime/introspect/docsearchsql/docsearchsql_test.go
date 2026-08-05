@@ -58,6 +58,17 @@ func TestIdempotent(t *testing.T) {
 	}
 }
 
+func TestThesaurusReachesTheExpansion(t *testing.T) {
+	// `lcase` is a ClickHouse alias for `lower` (chaliases_gen.go, from
+	// the pinned engine): the spliced pattern must carry the canonical
+	// spelling as an alternation branch, so a docsearch for the alias
+	// finds documentation that only writes the real name.
+	out := expandOK(t, "SELECT * FROM docsearch('lcase')")
+	if !strings.Contains(out, "(?:lcase|lower)") {
+		t.Errorf("expansion should alternate the alias with its canonical name:\n%s", out)
+	}
+}
+
 func TestInvalidRegexTokenDegradesToLiteral(t *testing.T) {
 	out := expandOK(t, "SELECT * FROM docsearch('quantile(')")
 	if !strings.Contains(out, `'(?i)quantile\\('`) {

@@ -24,11 +24,12 @@ which is the version your queries here actually run on.
 The `docsearch('…')` argument is a pattern battery, compiled exactly as the
 Help center's search box compiles it: whitespace-separated case-insensitive
 RE2 patterns, all of which must hit a section for it to qualify; a token
-that is not a valid regex matches literally. Scoring mirrors the GUI tiers
-(title 8, heading 4, body 1 per pattern). The macro needs its query as a
-plain quoted string — it expands before parameters bind — so there is no
-params-strip widget here: edit the string inside `docsearch('…')` in the
-buffer and Run again.
+that is not a valid regex matches literally, and one naming a ClickHouse
+function alias or a launcher keyword also matches its canonical spelling
+(`lcase` finds `lower`). Scoring mirrors the GUI tiers (title 8, heading 4,
+body 1 per pattern). The macro needs its query as a plain quoted string —
+it expands before parameters bind — so there is no params-strip widget
+here: edit the string inside `docsearch('…')` in the buffer and Run again.
 
 ```md preamble
 Every pattern must hit. `ref` is the canonical reference — `help://…`,

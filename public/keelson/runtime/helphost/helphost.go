@@ -127,13 +127,14 @@ type HelpHost struct {
 	// truncates at render time instead. searchIndex builds lazily on
 	// first non-empty query and lives for the host's lifetime (books
 	// are immutable after parse); SetLibrary drops it.
-	searchText     string
-	searchQuery    string
-	searchBattery  search.Battery
-	searchHits     []search.Hit
-	searchCoverage search.Coverage
-	searchIndex    *search.Index
-	searchHl       regexedit.Edit
+	searchText      string
+	searchQuery     string
+	searchBattery   search.Battery
+	searchHits      []search.Hit
+	searchCoverage  search.Coverage
+	searchIndex     *search.Index
+	searchHl        regexedit.Edit
+	searchThesaurus search.Thesaurus
 }
 
 var _ app.AppI = (*HelpHost)(nil)
@@ -317,7 +318,13 @@ func (inst *HelpHost) renderSearchBox() {
 	if inst.searchIndex == nil {
 		inst.searchIndex = search.NewIndex(inst.lib)
 	}
-	inst.searchBattery = search.ParseQuery(q)
+	if inst.searchThesaurus == nil {
+		// Aliases from the pinned engine plus launcher keywords
+		// (ADR-0164 §SD7); the registry is frozen after init, so once
+		// per host instance is fresh enough.
+		inst.searchThesaurus = search.DefaultThesaurus()
+	}
+	inst.searchBattery = search.ParseQueryWith(q, inst.searchThesaurus)
 	inst.searchHits = inst.searchIndex.Search(inst.searchBattery, 0)
 	inst.searchCoverage = inst.searchIndex.Coverage(inst.searchHits)
 }
@@ -360,6 +367,11 @@ func (inst *HelpHost) renderSearchResults() {
 				rt.Small().Weak()
 			}
 			break
+		}
+	}
+	if hint := inst.searchBattery.AlternatesHint(); hint != "" {
+		for rt := range c.RichTextLabel("also matching: " + hint) {
+			rt.Small().Weak()
 		}
 	}
 	if len(inst.searchHits) == 0 {

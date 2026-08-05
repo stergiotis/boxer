@@ -28,11 +28,15 @@ import (
 // failed to compile as a regexp and was degraded to a quote-meta
 // literal match instead — surfaced so a UI can hint "matching
 // literally" rather than silently changing semantics mid-keystroke
-// (a half-typed `quantile(` must keep matching as text).
+// (a half-typed `quantile(` must keep matching as text). Alternates
+// are the thesaurus spellings folded into this pattern as alternation
+// branches (ADR-0164 §SD7) — also surfaced, so a UI can say what a hit
+// may have matched instead of the typed token.
 type PatternT struct {
-	Raw     string
-	Literal bool
-	re      *regexp.Regexp
+	Raw        string
+	Literal    bool
+	Alternates []string
+	re         *regexp.Regexp
 }
 
 // Matches reports whether the pattern occurs in text.
@@ -81,6 +85,30 @@ func (inst *Battery) IsZero() (zero bool) {
 	return
 }
 
+// AlternatesHint renders the thesaurus expansions that fired, for a
+// results header — "lcase → lower; htop → Process monitor" — or ""
+// when none did. Shared by the search surfaces so they describe the
+// same battery the same way; the transparency is the point (ADR-0164
+// §SD7): a hit a user cannot explain from what they typed should say
+// what it matched instead.
+func (inst *Battery) AlternatesHint() (s string) {
+	var b strings.Builder
+	for pi := range inst.Patterns {
+		p := &inst.Patterns[pi]
+		if len(p.Alternates) == 0 {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(p.Raw)
+		b.WriteString(" → ")
+		b.WriteString(strings.Join(p.Alternates, ", "))
+	}
+	s = b.String()
+	return
+}
+
 // Compile builds a battery from raw pattern tokens. Every token is
 // compiled case-insensitively; a token that is not a valid regexp
 // degrades to a quote-meta literal (PatternT.Literal) instead of
@@ -88,6 +116,16 @@ func (inst *Battery) IsZero() (zero bool) {
 // literal token reproduces launcher-style substring search exactly
 // (ADR-0158 §SD6 precedent).
 func Compile(tokens []string, requireAll bool) (b Battery) {
+	b = CompileWith(tokens, requireAll, nil)
+	return
+}
+
+// CompileWith is [Compile] with a thesaurus (ADR-0164 §SD7): a token
+// naming a known alias gains its alternates as alternation branches
+// inside its OWN pattern — `(?i)(?:lcase|lower)` — never as extra
+// battery entries, so RequireAll still means "every typed token must
+// hit", satisfiable by any spelling of it.
+func CompileWith(tokens []string, requireAll bool, th Thesaurus) (b Battery) {
 	b.RequireAll = requireAll
 	if len(tokens) == 0 {
 		return
@@ -98,12 +136,25 @@ func Compile(tokens []string, requireAll bool) (b Battery) {
 			continue
 		}
 		p := PatternT{Raw: tok}
-		re, err := regexp.Compile("(?i)" + tok)
-		if err != nil {
-			re = regexp.MustCompile("(?i)" + regexp.QuoteMeta(tok))
+		core := tok
+		if _, err := regexp.Compile("(?i)" + tok); err != nil {
+			core = regexp.QuoteMeta(tok)
 			p.Literal = true
 		}
-		p.re = re
+		src := "(?i)" + core
+		if alts := th.alternates(tok); len(alts) > 0 {
+			branches := make([]string, 0, len(alts)+1)
+			branches = append(branches, core)
+			for _, a := range alts {
+				branches = append(branches, altBranch(a))
+			}
+			src = "(?i)(?:" + strings.Join(branches, "|") + ")"
+			p.Alternates = alts
+		}
+		// Cannot fail: core is either a validated pattern or a quoted
+		// literal, alternates are quoted words — and any valid RE2
+		// expression stays valid inside a non-capturing group.
+		p.re = regexp.MustCompile(src)
 		b.Patterns = append(b.Patterns, p)
 	}
 	return
@@ -114,6 +165,12 @@ func Compile(tokens []string, requireAll bool) (b Battery) {
 // therefore mean AND, not "literal space" — the predictable search-box
 // reading; a literal multi-word phrase is reachable as `foo\s+bar`.
 func ParseQuery(q string) (b Battery) {
-	b = Compile(strings.Fields(q), true)
+	b = CompileWith(strings.Fields(q), true, nil)
+	return
+}
+
+// ParseQueryWith is [ParseQuery] enriched by a thesaurus.
+func ParseQueryWith(q string, th Thesaurus) (b Battery) {
+	b = CompileWith(strings.Fields(q), true, th)
 	return
 }

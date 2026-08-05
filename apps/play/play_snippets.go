@@ -60,7 +60,19 @@ var (
 	snippetDocCached *markdown.Doc
 	snippetSections  []help.SectionInfo
 	snippetIndex     *search.Index
+
+	// snippetThOnce/snippetTh memoise the thesaurus (ADR-0164 §SD7)
+	// separately from the doc parse: the app registry must be complete
+	// when it is built, and the first filter keystroke — well past
+	// init — is a safely late moment.
+	snippetThOnce sync.Once
+	snippetTh     search.Thesaurus
 )
+
+func snippetThesaurus() search.Thesaurus {
+	snippetThOnce.Do(func() { snippetTh = search.DefaultThesaurus() })
+	return snippetTh
+}
 
 func loadSnippetDoc() *markdown.Doc {
 	snippetDocOnce.Do(func() {
@@ -192,14 +204,21 @@ func (inst *PlayApp) renderSnippetsFilterRow() {
 			rt.Small().Weak()
 		}
 	}
+	if inst.snippetsAltHint != "" {
+		for rt := range c.RichTextLabel("also matching: " + inst.snippetsAltHint) {
+			rt.Small().Weak()
+		}
+	}
 	q := strings.TrimSpace(inst.snippetsFilter)
 	if q != inst.snippetsQuery {
 		inst.snippetsQuery = q
 		inst.snippetsAccepted = nil
 		inst.snippetsLiteral = false
+		inst.snippetsAltHint = ""
 		inst.snippetsCoverage = search.Coverage{}
 		if q != "" && snippetIndex != nil {
-			battery := search.ParseQuery(q)
+			battery := search.ParseQueryWith(q, snippetThesaurus())
+			inst.snippetsAltHint = battery.AlternatesHint()
 			for i := range battery.Patterns {
 				if battery.Patterns[i].Literal {
 					inst.snippetsLiteral = true

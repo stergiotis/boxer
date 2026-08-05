@@ -263,3 +263,94 @@ func TestDocCoverage(t *testing.T) {
 		t.Errorf(`accepted{""} should count exactly the doc-level region, got %+v`, c2)
 	}
 }
+
+func TestThesaurusAlternation(t *testing.T) {
+	th := Thesaurus{"lcase": {"lower"}}
+	b := CompileWith([]string{"lcase"}, true, th)
+	if len(b.Patterns) != 1 {
+		t.Fatalf("want one pattern, got %+v", b)
+	}
+	p := &b.Patterns[0]
+	if !p.Matches("SELECT LOWER(x)") || !p.Matches("lcase") {
+		t.Errorf("alternation should match either spelling")
+	}
+	if got := p.EffectiveSource(); !strings.Contains(got, "(?:lcase|lower)") {
+		t.Errorf("EffectiveSource = %q, want the alternation group", got)
+	}
+	if len(p.Alternates) != 1 || p.Alternates[0] != "lower" {
+		t.Errorf("Alternates = %+v", p.Alternates)
+	}
+	// RequireAll semantics survive: one typed token, one battery entry.
+	if !b.RequireAll || len(b.Patterns) != 1 {
+		t.Errorf("thesaurus must not grow the battery")
+	}
+	// A token with top-level alternation keeps its own semantics inside
+	// the group.
+	b2 := CompileWith([]string{"a|b"}, true, Thesaurus{"a|b": {"c"}})
+	p2 := &b2.Patterns[0]
+	for _, text := range []string{"xax", "xbx", "xcx"} {
+		if !p2.Matches(text) {
+			t.Errorf("alternated regex token should match %q", text)
+		}
+	}
+}
+
+func TestThesaurusMultiWordAlternate(t *testing.T) {
+	th := Thesaurus{"htop": {"Process monitor"}}
+	b := CompileWith([]string{"htop"}, true, th)
+	if !b.Patterns[0].Matches("the process   MONITOR pane") {
+		t.Errorf("multi-word alternate should match across whitespace runs")
+	}
+	if b.Patterns[0].Matches("process") {
+		t.Errorf("half a phrase must not match")
+	}
+}
+
+func TestThesaurusFromManifestsCore(t *testing.T) {
+	ms := []app.Manifest{
+		{Display: "Process monitor", Keywords: []string{"htop", "cpu", "load average", ""}},
+		{Display: "Process monitor", Keywords: []string{"htop"}}, // duplicate → dedup
+		{Display: "", Keywords: []string{"ghost"}},               // no display → nothing to offer
+	}
+	th := thesaurusFromManifests(ms)
+	if alts := th.alternates("HTOP"); len(alts) != 1 || alts[0] != "Process monitor" {
+		t.Errorf("htop alternates = %+v", alts)
+	}
+	if th.alternates("load average") != nil {
+		t.Errorf("multi-word keywords cannot be typed as one token and must be skipped")
+	}
+	if th.alternates("ghost") != nil {
+		t.Errorf("display-less manifest contributed an alternate")
+	}
+}
+
+func TestThesaurusCHFunctionsGenerated(t *testing.T) {
+	th := ThesaurusCHFunctions()
+	if len(th) == 0 {
+		t.Fatal("generated alias table is empty — regenerate chaliases_gen.go")
+	}
+	if alts := th.alternates("lcase"); len(alts) != 1 || alts[0] != "lower" {
+		t.Errorf("lcase alternates = %+v", alts)
+	}
+	for k, alts := range th {
+		for _, a := range alts {
+			if strings.EqualFold(k, a) {
+				t.Errorf("self-referential entry %q -> %q survived generation", k, a)
+			}
+		}
+	}
+}
+
+func TestDefaultThesaurusComposesAndSearchUsesIt(t *testing.T) {
+	if DefaultThesaurus().alternates("lcase") == nil {
+		t.Errorf("DefaultThesaurus should carry the CH alias table")
+	}
+	// End to end over the fixture corpus: a made-up alias reaches the
+	// section that only spells the canonical name.
+	idx := fixtureIndex(t)
+	th := Thesaurus{"maxarg": {"argMax"}}
+	hits := idx.Search(ParseQueryWith("maxarg", th), 0)
+	if len(hits) != 1 || hits[0].Ref.Section != "deduplicate-rows" {
+		t.Fatalf("thesaurus-enriched query should land on the canonical section, got %+v", hits)
+	}
+}

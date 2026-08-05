@@ -193,7 +193,11 @@ var arms = []arm{
 // patterns are guaranteed-valid RE2 (which is the subset hyperscan's
 // multiMatch* accepts; see search.PatternT.EffectiveSource).
 func expansionSQL(query string) (sub string, err error) {
-	battery := search.ParseQuery(query)
+	// The thesaurus rung (ADR-0164 §SD7) applies here too: the CH alias
+	// table is generated from the pinned engine (static, so the pass
+	// stays pure), and the launcher-keyword half reads the app registry
+	// — frozen after init in any process that expands queries.
+	battery := search.ParseQueryWith(query, search.DefaultThesaurus())
 	if battery.IsZero() {
 		err = eh.Errorf("docsearchsql: docsearch() query is empty")
 		return

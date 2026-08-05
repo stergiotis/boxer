@@ -167,6 +167,7 @@ type PlayApp struct {
 	snippetsQuery    string
 	snippetsAccepted map[string]bool
 	snippetsLiteral  bool
+	snippetsAltHint  string
 	snippetsCoverage search.Coverage
 	snippetsHl       regexedit.Edit
 

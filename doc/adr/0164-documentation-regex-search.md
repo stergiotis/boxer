@@ -147,9 +147,16 @@ source — which is precisely the designed fallback, not a degraded mode.
 - **Embeddings** — vector + model columns on the sections surface. Trigger:
   a golden-query-set evaluation (30–50 queries, recall@5) showing generated
   batteries materially behind on discovery-class queries.
-- **Static thesaurus** — alias expansion from `system.functions.alias_to`
-  and manifest keywords, as a zero-LLM battery enricher. Small; first
-  candidate after M2.
+- **Static thesaurus** — SHIPPED (M2b), and simpler than deferred: the
+  original entry assumed `system.functions.alias_to` needs a server
+  round-trip, but the alias set is a property of the engine *version*,
+  which this repository pins — so it is a generated table
+  (`chaliases_gen.go`, regenerated with the pin), joined by launcher
+  keywords at runtime. Alternates fold into the typed token's own
+  pattern as alternation (`(?i)(?:lcase|lower)`), so RequireAll
+  semantics survive, both executors inherit it through
+  `EffectiveSource`, and the surfaces disclose what fired ("also
+  matching: lcase → lower").
 - **In-body match highlighting** — parse-level feature (atoms are retained
   at parse); re-lowering per query is ~1 ms/10 KB and feasible but breaks
   parse-once/render-many. Trigger: users demonstrably losing the match
@@ -161,10 +168,9 @@ source — which is precisely the designed fallback, not a degraded mode.
   battery compile, section table, executor, ranking, context extraction.
 - **M1** — HelpHost search UI; `WithSectionFilter`; snippets filter box.
 - **M2** — `helpsections`/`adrsections` providers, `docsearch` macro over
-  the UNION with `system.documentation`, string-ref scheme. The thesaurus
-  ships separately (§SD7): it needs a server round-trip for
-  `system.functions.alias_to`, which is driver machinery, not macro
-  expansion.
+  the UNION with `system.documentation`, string-ref scheme.
+- **M2b** — the static thesaurus (§SD7): CH aliases generated from the
+  pinned engine + launcher keywords, applied by every battery consumer.
 - **M3** — text2regex generator under ADR-0139 (step b).
 - **M4** — golden query set; evaluation gates the embeddings deferral.
 
@@ -253,7 +259,7 @@ case.
 
 ## Status
 
-Proposed. M0–M2 implemented alongside this draft for review; M3+ pending
+Proposed. M0–M2b implemented alongside this draft for review; M3+ pending
 acceptance.
 
 ## References

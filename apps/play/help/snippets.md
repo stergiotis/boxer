@@ -470,7 +470,10 @@ and the executing engine's own `system.documentation` — so one query can
 land on a snippets section, an ADR §, and a ClickHouse function. The
 argument is a battery, exactly as the Help center's search box compiles it:
 whitespace-separated case-insensitive RE2 patterns, all of which must hit
-(a token that is not a valid regex matches literally). Scoring matches the
+(a token that is not a valid regex matches literally). A token naming a
+ClickHouse function alias or a launcher keyword also matches its canonical
+spelling — `lcase` finds docs that only write `lower` — folded into the
+token's own pattern, so "all must hit" is unchanged. Scoring matches the
 GUI tiers — title 8, heading 4, body 1 per pattern — and `ref` is the
 canonical reference (`help://…`, `adr://…`, `chdoc://…`). Edit the string
 inside `docsearch('…')` to change the query; `ORDER BY` and `LIMIT` are
