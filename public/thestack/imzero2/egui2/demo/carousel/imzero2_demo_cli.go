@@ -30,6 +30,8 @@ import (
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/covscrape"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -43,6 +45,7 @@ import (
 	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
@@ -454,6 +457,25 @@ func NewCommand() *cli.Command {
 				log.Warn().Err(godepErr).Msg("introspect: godep table registration failed")
 			}
 
+			// ADR-0169 §SD4: the coverage plane — on a -cover -covermode=atomic
+			// build, sample this process's counters and publish pre-aggregated
+			// updates; the live keelson.coverage_* tables read the sampler
+			// directly. Uninstrumented builds refuse construction: one line,
+			// tables stay empty. Process-lifetime, like the sysmetrics wiring.
+			var covSampler *coverage.Sampler
+			if bus != nil {
+				if covInterval, covEnabled := coveragebus.IntervalFromEnv(); covEnabled {
+					covPub := bus.NewClient(coveragebus.ServiceAppId, []runtimeapp.SubjectFilter{
+						{Pattern: coveragebus.SubjectWildcard, Direction: runtimeapp.CapDirectionPub},
+					})
+					if s, _, cerr := covscrape.StartCoverageSampler(gocontext.Background(), covPub, covscrape.DefaultHostToken(), covInterval, log.Logger); cerr != nil {
+						log.Info().Err(cerr).Msg("carousel: coverage sampling unavailable; coverage tables will be empty")
+					} else {
+						covSampler = s
+					}
+				}
+			}
+
 			// ADR-0094 §SD3/§SD4: expose keelson runtime state as ClickHouse-
 			// queryable tables over a loopback HTTP endpoint, and (when chlocal
 			// is up) back POST /query so a co-resident app (apps/play) can query
@@ -476,6 +498,10 @@ func NewCommand() *cli.Command {
 			// broker as the ad-hoc decryptor when it actually started.
 			if chlocalSvc != nil {
 				introspectDeps.Decryptor = chlocalSvc
+			}
+			// Same trap for the coverage sampler (ADR-0169 §SD5).
+			if covSampler != nil {
+				introspectDeps.Coverage = covSampler
 			}
 			introspectStop, introspectErr := introspecthost.Start(introspectDeps)
 			if introspectErr != nil {

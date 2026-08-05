@@ -97,6 +97,36 @@ func TestStart_RegistersWorkingsetsFromFacts(t *testing.T) {
 	}
 }
 
+// TestStart_CoverageTablesPresentWithoutSampler: an uninstrumented build
+// wires no sampler, and the three coverage tables must still exist, empty
+// (ADR-0169 §SD5) — the table names must not depend on the build lane.
+func TestStart_CoverageTablesPresentWithoutSampler(t *testing.T) {
+	Enabled.SetForTest(t, "true")
+	introspect.SetLocalQueryEndpoint("")
+
+	reg := introspect.NewRegistry()
+	stop, err := Start(Deps{Registry: reg, Log: zerolog.Nop()})
+	if err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+	t.Cleanup(func() { _ = stop(context.Background()) })
+
+	for _, name := range []string{"coverage_status", "coverage_pkgs", "coverage_funcs"} {
+		p, ok := reg.Lookup(name)
+		if !ok {
+			t.Fatalf("%s must register even without a sampler; tables = %v", name, reg.Names())
+		}
+		rec, err := p.Snapshot(introspect.AllColumns())
+		if err != nil {
+			t.Fatalf("%s Snapshot: %v", name, err)
+		}
+		if rec.NumRows() != 0 {
+			t.Fatalf("%s: expected an empty table, got %d rows", name, rec.NumRows())
+		}
+		rec.Release()
+	}
+}
+
 // TestStart_WorkingsetsPresentWithoutFacts: no store wired means an empty
 // table, not a missing one — the table name must not depend on the wiring.
 func TestStart_WorkingsetsPresentWithoutFacts(t *testing.T) {

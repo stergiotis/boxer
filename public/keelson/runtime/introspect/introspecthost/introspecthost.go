@@ -78,6 +78,12 @@ type Deps struct {
 	// than absent, so the set of table names does not depend on whether a
 	// store was wired.
 	Facts factsstore.FactsStoreI
+	// Coverage is the live coverage sampler, backing the
+	// keelson.coverage_* tables (ADR-0169 §SD5). nil is allowed — an
+	// uninstrumented build leaves the tables empty rather than absent, so
+	// the table names do not depend on the build lane. Beware the
+	// typed-nil interface trap: assign only a non-nil sampler.
+	Coverage introspectproviders.CoverageSourceI
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -114,6 +120,12 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// store answers with an empty table, so the table name is always there.
 	if e := introspectproviders.RegisterWorkingsets(reg, deps.Facts); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: workingsets provider registration failed")
+	}
+	// ADR-0169 §SD5: live coverage tables over the in-process sampler.
+	// Registered unconditionally — nil (an uninstrumented build) answers
+	// with empty tables.
+	if e := introspectproviders.RegisterCoverage(reg, deps.Coverage); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: coverage provider registration failed")
 	}
 	// ADR-0126 §SD5: a process-lifetime metric-plane consumer feeds the
 	// observed-topology tables (keelson.procs, keelson.sockets). imztop's
