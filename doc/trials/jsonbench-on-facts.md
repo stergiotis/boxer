@@ -18,21 +18,32 @@ status: draft
 > compile date — the benchmark evolves, so M0 pins an upstream commit and
 > re-verifies everything quoted here against it.
 
-# JSONBench on `boxer.facts` — measuring the data-centricity tax
+# JSONBench on `boxer.facts` — a toolbelt trial, and the data-centricity tax
 
 ## 1 Question and scope
 
-What does holding the JSONBench Bluesky corpus in the `boxer.facts` data
-model cost, against ClickHouse's native JSON type on the same hardware and
-engine version — in storage footprint, index effectiveness, and query
-latency, with and without secondary indices?
+Two questions, **equally weighted in this first trial** (the trials
+convention treats domain numbers as a side-product; this protocol elevates
+them):
 
-This page is a trial protocol (see the [directory convention](./README.md)):
-the first task-level probe of the quality practice — an external, published
+1. **The trial proper.** How well does the native toolbelt carry a
+   recreation of JSONBench — which gaps and frictions surface on the way,
+   and how short and how legible is the solution that emerges? The solution
+   artifacts (mapping declarations, translated queries, the results applet)
+   are committed and counted; every escape hatch is a finding, not a fix.
+2. **The side-product, co-equal here.** What does holding the JSONBench
+   Bluesky corpus in the `boxer.facts` data model cost, against ClickHouse's
+   native JSON type on the same hardware and engine version — in storage
+   footprint, index effectiveness, and query latency, with and without
+   secondary indices?
+
+This page is a trial protocol (see the [directory convention](./README.md));
+runs append to the [logbook](./jsonbench-on-facts.logbook.md). It is the
+first task-level probe of the quality practice — an external, published
 workload attempted with native idioms only, with friction filed as findings
 rather than worked around. The finding fact family and its ISO 25010
-classification are a forthcoming ADR; this page does not depend on it beyond
-the ledger convention in §7.
+classification are a forthcoming ADR; until it lands, the logbook carries
+the ledger (§7).
 
 In scope: reuse of the upstream dataset, queries, and measurement
 discipline; the mapping design space; four experiment arms; the tier ladder;
@@ -155,16 +166,25 @@ recorded results, not incidental.
   play/sqlapplet, grammar1 parse, canonicalize — exactly as any boxer
   workload would. Arm A may use `clickhouse-client` directly: it is the
   reference being measured against, not the idiom under test.
-- **Reporting.** Results land as facts and are read back through a results
-  book applet ([ADR-0132](../adr/0132-sqlapplet-sql-defined-applets.md)) —
-  the benchmark dogfoods the reporting layer it is measuring.
+- **Process measurement.** The solution itself is a result: artifacts are
+  committed, their size recorded (files, lines, passes touched), and manual
+  interventions counted — an escape hatch is by definition a finding.
+- **Reporting.** Domain results land as facts and are read back through a
+  results book applet
+  ([ADR-0132](../adr/0132-sqlapplet-sql-defined-applets.md)) — the benchmark
+  dogfoods the reporting layer it is measuring. Every run, at every
+  milestone, appends a logbook entry (date, build, hardware, findings,
+  outcome) per the directory convention.
 
 ## 7 Findings ledger
 
 Friction encountered while executing this plan is filed as findings —
 competence (per the corpus of
 [ADR-0168](../adr/0168-capmap-business-capability-corpus.md)) × quality
-characteristic — rather than silently worked around. Pre-registered
+characteristic — rather than silently worked around. Until the finding fact
+family lands, findings live in the
+[logbook](./jsonbench-on-facts.logbook.md), classified inline with the same
+two axes so later migration to facts is mechanical. Pre-registered
 candidates, so later readers can tell hypotheses from surprises: the Q3
 timezone dependency; grammar coverage of `IN [..]` array literals,
 `date_diff`, and `::String` casts; identity-minting throughput at DID

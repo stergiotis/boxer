@@ -12,9 +12,13 @@ status: draft
 # Trials
 
 Reproducible measurement protocols, in the sea-trials sense: standardized
-runs performed against a build and **repeated on later builds**, measuring
-the system against stated criteria. A page here describes *how to run the
-trial and what to record* — dataset, workload, arms, environment, metrics,
+runs performed against a build and **repeated on later builds**. A trial
+measures two things at once: the system's numbers under the workload, and —
+usually foremost — the toolbelt's fitness while *recreating* that workload
+with native idioms: which gaps surface, which frictions get filed, and how
+short the solution turns out to be. Which of the two leads varies per
+trial; the protocol must say. A page here describes *how to run the trial
+and what to record* — dataset, workload, arms, environment, metrics,
 acceptance gates — precisely enough that a later run is comparable with an
 earlier one.
 
@@ -32,15 +36,25 @@ What separates this directory from its neighbours:
 
 Consequences of that framing:
 
-- **Results are data, not prose.** A run's numbers land as facts and are
-  read back through applets; the protocol page keeps only a dated run log
-  (run id, build, one-line outcome). Committing result tables into the page
-  is the exception and needs a stated reason.
+- **Every run appends a logbook entry.** Each protocol has a companion
+  `<name>.logbook.md`: chronological, append-only. An entry records the
+  date, the build under test (repo commit, engine versions), the hardware
+  and environment (CPU, memory, storage class — never hostnames or personal
+  paths), what was attempted, the findings — gaps, frictions, elegance
+  notes — a one-line outcome, and pointers to result data. The logbook is
+  what makes two runs comparable and is the finding ledger's carrier until
+  findings-as-facts land.
+- **Numbers are data, not prose.** Domain results land as facts and are
+  read back through applets; a small result table inside a logbook entry is
+  the exception and needs a reason stated in the protocol.
+- **The solution is part of the result.** Artifacts the run produces
+  (mappings, queries, applets) are committed, so their size is countable
+  and their shape judgeable by a later reader.
 - **Friction is filed, not patched around.** A trial run that hits a gap in
   the toolbelt records a finding; the protocol does not grow workarounds.
 - **Protocols are versioned by ordinary edits.** A change that breaks
   comparability with earlier runs (new dataset tier, changed metric) must
-  say so in the run log.
+  say so in the logbook.
 - **Retirement is explicit.** A protocol no longer worth re-running is
   deleted, or moved to
   [`doc/adr-background-work/`](../adr-background-work/) as a snapshot if
