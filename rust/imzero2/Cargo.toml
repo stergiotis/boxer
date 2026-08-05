@@ -141,7 +141,7 @@ egui_table = "0.9.0"
 egui_dock = "0.20"
 egui_graphs = { version = "0.31", features = ["events"] }
 petgraph = { version = "0.8", default-features = false, features = ["stable_graph"] }
-png = "0.17"
+png = "0.18"
 walkers = "0.56"
 # Tile downloads for a custom .TileUrl source that needs TLS configuration
 # walkers cannot express (imzero2::walkers_tiles). Both crates are already in
