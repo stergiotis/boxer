@@ -454,8 +454,8 @@ func (inst *App) renderMap() {
 	inst.ids.PrepareStr("ts-map")
 	mw := c.WalkersMap(inst.ids, swissCenterLat, swissCenterLon, false).
 		Width(mapStageW).Height(mapStageH)
-	// Shared basemap tile server (BOXER_MAP_TILE_URL); unset keeps the widget's
-	// built-in OpenStreetMap source.
+	// Shared basemap tile server (BOXER_MAP_TILE_URL); unset keeps the
+	// OpenStreetMap default that variable carries.
 	mw = basemap.Apply(mw)
 	if inst.applyZoom {
 		mw = mw.SetZoom(inst.overrideZoom)

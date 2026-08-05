@@ -337,8 +337,9 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 
 	// The map (drains the overlay, reports the next camera). noTiles keeps it
 	// offline; with the basemap on, basemap.Apply picks the tile source — a
-	// self-hosted GIS when BOXER_MAP_TILE_URL is set, else the built-in OSM
-	// (needs network). Sizing: fill the (no-scroll, bounded) tab body so the
+	// self-hosted GIS when BOXER_MAP_TILE_URL is set, else the OpenStreetMap
+	// default that variable carries (needs network). Sizing: fill the
+	// (no-scroll, bounded) tab body so the
 	// whole map is always visible; a BOXER_PLAY_MAP_SIZE override pins fixed
 	// dims instead, keeping scripted captures deterministic across hosts.
 	mw := c.WalkersMap(inst.ids.PrepareStr("map"),

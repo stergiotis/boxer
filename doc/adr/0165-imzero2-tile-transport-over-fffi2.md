@@ -79,7 +79,7 @@ These are the reasons this is proposed rather than accepted; each needs a dialog
 
 **If accepted.** One egress point, configured where every other transport policy already lives. The renderer loses its direct `reqwest` dependency and, with it, the `danger_accept_invalid_certs` call. Non-HTTP tile sources become possible without further IDL surface. The Go side gains a tile pump with a lifecycle to own.
 
-**If not.** The status quo is workable — walkers' client plus `CustomHttpTiles` covers the deployments in view, and the `TileTransport` seam costs nothing to leave in place. The cost is paid per future transport concern, one IDL method at a time.
+**If not.** The status quo is workable — `BasemapTiles` covers the deployments in view, and the `TileTransport` seam costs nothing to leave in place. The cost is paid per future transport concern, one IDL method at a time.
 
 **Either way.** The seam already exists and the Go-side surface is unchanged by the swap, so this ADR does not block anything and nothing needs to be built in anticipation of it.
 
@@ -91,7 +91,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## References
 
-- [`doc/adr/0056-walkers-map-h3-binding.md`](./0056-walkers-map-h3-binding.md) — the walkers binding, and §SD12–SD15 for the TLS knobs and the `TileTransport` seam.
-- [`rust/imzero2/src/imzero2/walkers_tiles.rs`](../../rust/imzero2/src/imzero2/walkers_tiles.rs) — `TileTransport`, `HttpTransport`, `CustomHttpTiles`.
+- [`doc/adr/0056-walkers-map-h3-binding.md`](./0056-walkers-map-h3-binding.md) — the walkers binding, and §SD12–SD21 for the TLS knobs, the `TileTransport` seam, and the convergence onto one tile client.
+- [`rust/imzero2/src/imzero2/walkers_tiles.rs`](../../rust/imzero2/src/imzero2/walkers_tiles.rs) — `TileTransport`, `HttpTransport`, `BasemapTiles`.
 - [`doc/skills/imzero2-fetchers/SKILL.md`](../skills/imzero2-fetchers/SKILL.md) — the `Sync()`-only fetcher rule this design has to fit.
 - [`doc/adr/0009-environment-variable-registry.md`](./0009-environment-variable-registry.md) — the registry the tile knobs live in.

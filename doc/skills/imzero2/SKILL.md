@@ -1256,7 +1256,7 @@ Companion notes for the bindings in [`egui2_definition_d_walkers.go`](../../../p
 
 | What | IDL node | Shape |
 |---|---|---|
-| Basemap | `walkersMap` (plain widget) | `(id, initLat, initLon, noTiles) + .Width/.Height/.SetZoom/.CenterAt/.ZoomGesture/.Panning/.TileUrl/.TileAttribution/.TileMaxZoom/.TileSize` |
+| Basemap | `walkersMap` (plain widget) | `(id, initLat, initLon, noTiles) + .Width/.Height/.SetZoom/.CenterAt/.ZoomGesture/.Panning/.TileUrl/.TileAttribution/.TileAttributionUrl/.TileMaxZoom/.TileSize/.TileCaFile/.TileInsecureTls` |
 | Point marker | `mapMarker` (register-drain) | `(markerId, lat, lon) + .Label/.Color/.Radius` |
 | Polyline / closed ring | `mapPolyline` (register-drain) | `(lats[], lons[]) + .Stroke/.Closed` |
 | Bulk choropleth | `h3CellsColored` (register-drain) | `(cellIds[], rgbas[]) + .StrokeWidth/.StrokeColor` |
@@ -1347,10 +1347,12 @@ The canonical implementation lives in `egui2_hl_walkers_demo.go` (search for `ap
 
 ### 16.8 Custom tile servers
 
-* **`.TileUrl(template)`** — XYZ template with `{z}`, `{x}`, `{y}` placeholders. Empty (default) uses walkers' built-in `OpenStreetMap`.
+* **Don't call these directly in an app — use `widgets/basemap`.** `basemap.Apply(mw)` resolves the whole tile config from the `BOXER_MAP_TILE_*` env block (ADR-0009), so one deployment-level setting repoints every basemap. The methods below are what it sends; call them yourself only in a widget demo or a one-off.
+* **`.TileUrl(template)`** — XYZ template with `{z}`, `{x}`, `{y}` placeholders. Empty **at the widget level** falls back to walkers' built-in `OpenStreetMap` source, but `basemap.Apply` always sends a URL: `BOXER_MAP_TILE_URL` defaults to the OpenStreetMap endpoint, so the default server is stated in the env registry rather than hidden in Rust (ADR-0056 §SD16).
 * **No `{s}` subdomain rotation.** Replace `{s}` with a concrete subdomain (`a`, `b`, `c`) before passing the URL. This is a deliberate v1 cut; revisit if rate-limiting becomes a real problem.
-* **Change detection.** The Rust side hashes `(url, attribution, size, maxZoom, noTiles)` per map id. When the hash changes, `HttpTiles` is rebuilt in place; `MapMemory` (pan/zoom) survives. Logged at `INFO`.
-* **Attribution leaks once.** `walkers::sources::Attribution` requires `&'static str`. The custom-source bridge `Box::leak`s the user-supplied string **once at construction time**, not per `attribution()` call. Bounded growth in practice (one leak per unique attribution seen during the process lifetime).
+* **TLS: `.TileCaFile(path)` / `.TileInsecureTls(on)`** — the renderer's HTTP client trusts the bundled webpki roots and nothing else (no system trust store, `SSL_CERT_FILE` ignored), so an https tile server behind an internal CA needs one of these. The CA file must hold the **issuing CA**; a bare self-signed server certificate is not accepted as its own trust anchor and needs the insecure knob. `basemap.Apply` gates both on `BOXER_MAP_TILE_URL` being set *explicitly*, so neither can weaken the connection to the default public server (§SD17).
+* **Change detection.** The Rust side hashes `(url, attribution, attributionUrl, size, maxZoom, noTiles, caFile, insecureTls)` per map id. When the hash changes the tile source is rebuilt in place; `MapMemory` (pan/zoom) survives. Logged at `INFO`.
+* **Attribution leaks once.** `walkers::sources::Attribution` requires `&'static str`. The custom-source bridge `Box::leak`s the user-supplied strings **once at construction time**, not per `attribution()` call. Bounded growth in practice (one leak per unique attribution seen during the process lifetime).
 
 ### 16.9 `walkers::Position` coordinate order is `(lng, lat)` in constructors, not `(lat, lng)`
 
@@ -1370,10 +1372,13 @@ The canonical implementation lives in `egui2_hl_walkers_demo.go` (search for `ap
 * **Lazy init, do not panic.** `ensureH3()` returns an error instead of panicking; UI code that needs H3 should render a graceful fallback label (`"h3 runtime not ready"`) and skip the overlay. Burst-starting the runtime on frame 0 adds ~10–50 ms of wasm compile time — acceptable, but don't do it synchronously inside a hot render path if you care about first-paint latency.
 * **Resolution choice.** The demo uses the heuristic `h3ResForZoom(zoom) = clamp(round(zoom/2 - 1), 1, 12)`. Works for a rough "cells scale with view" mapping; real apps should tune (or precompute per-resolution cell sets and pick based on data size, not zoom).
 
-### 16.12 Tokio + reqwest pulled in by walkers
+### 16.12 Tiles are fetched by imzero2, not by walkers
 
-* **Footprint.** Walkers uses `reqwest` (rustls) + `tokio` (native only) for tile fetches. Binary grows by ~5 MB. Tokio is a direct dep on native; wasm build path omits it.
-* **Thread safety.** Walkers' tile fetches spawn tokio tasks; they only touch `egui::Context`'s repaint channel (itself `Send + Sync`). The ImZero2 single-thread rule for the Go-facing `c.*` API is unaffected.
+* **`walkers::HttpTiles` is never constructed.** `imzero2::walkers_tiles::BasemapTiles` implements walkers' public `Tiles` trait and is the only tile client (ADR-0056 §SD12, §SD19). walkers exposes no seam for TLS configuration — its client is built internally from `HttpOptions`, and `Fetch`/`TilesIo`/`TileFactory` are private to the crate — and two clients selected by an env knob meant the path a deployment ran was not the path anyone tested.
+* **One process-wide download pool.** Six worker threads in a `OnceLock`, shared by every map, logging `started the tile download pool` exactly once. walkers gives each `HttpTiles` its own runtime and its own six-download budget, so N maps meant 6N concurrent connections to one server; the pool makes the cap mean something at the level a tile server rate-limits at. A second start line would mean the pool had stopped being shared.
+* **Thread safety.** Workers touch only `egui::Context` (`Send + Sync`) — decoding and texture upload happen there deliberately, off the render thread, because a screenful is 20–40 PNG decodes. The ImZero2 single-thread rule for the Go-facing `c.*` API is unaffected.
+* **Footprint.** `reqwest` (rustls, `blocking`) and `lru` are direct deps; `tokio` still arrives via walkers on native. Binary grows by ~5 MB. The wasm build path omits tokio.
+* **User agent** is `boxer-imzero2/<version>`, not `walkers/<version>`. OpenStreetMap's tile usage policy wants an identifying agent with contact details; adding contact configuration is deferred (§SD21).
 
 ### 16.13 Resolution of common errors
 
@@ -1381,7 +1386,7 @@ The canonical implementation lives in `egui2_hl_walkers_demo.go` (search for `ap
 |---|---|---|
 | `late culled walkers map` | Parent block (window/collapsing header) was skipped this frame | Move the `walkersMap` out of a collapsing header, or use `.DefaultOpen(true)` and a wrapper that survives the 4-frame screenshot tour (see §12 CollapsingHeader pitfall) |
 | `walkers pending overlays leaked` | Register-drain overlays sent without a following `walkersMap` to drain them | Ensure overlay calls happen *before* the `walkersMap` opcode, in the same frame (see §16.2) |
-| `walkers tile config changed — rebuilt HttpTiles` (repeated) | Tile config signature changing every frame | Likely inadvertent (changing URL / attribution / zoom / size in a tight loop). Pin the config to a Go-side variable and only update on real user input |
+| `walkers tile config changed — rebuilt the tile source` (repeated) | Tile config signature changing every frame | Likely inadvertent (changing URL / attribution / zoom / size / TLS config in a tight loop). Pin the config to a Go-side variable and only update on real user input |
 | `h3 runtime init failed` | h3o-wasm artifact missing or wazero compile error | Verify boxer's `public/science/geo/h3/internal/h3o_wasm` has the built artifact (`.wasm` file); rebuild boxer if stale |
 
 ### 16.14 Known limitations — longer-term work
@@ -1390,7 +1395,7 @@ The canonical implementation lives in `egui2_hl_walkers_demo.go` (search for `ap
 - **Antimeridian culling** (§16.6) — wait for first real dataset to hit this; then add splitter in `bbox_of_rings`.
 - **Concave tessellation** (§16.7) — add `lyon_tessellation` dep only when a real ROI workflow demands smooth fills at country scale.
 - **`{s}` subdomain rotation** (§16.8) — add a `.TileSubdomains([]string)` method if public-tile rate-limiting becomes visible.
-- **`.TileAttributionUrl(url)`** — not exposed; walkers' attribution widget supports it but current binding ignores the URL slot.
+- **Tile transport still lives in the renderer** (§16.12) — [ADR-0165](../../adr/0165-imzero2-tile-transport-over-fffi2.md) proposes routing requests over FFFI2 into Go so there is one configured network egress point; the `TileTransport` trait is the seam it drops into.
 - **Per-id camera snapshots** (§16.5) — current single `walkers_last_camera` is ambiguous in multi-map frames. Could key by map id at the cost of a small HashMap per frame.
 - **Mapbox/Geoportal presets** — users can pass the right URL template with `.TileUrl` today; a named preset would save typing but adds little beyond that.
 - **Interactive ROI drawing** — v1 is display-only. Brush / click-to-draw / vertex-drag edit modes are scoped in the design but not implemented. Go owns drawing state by design (no Rust-side draw-tool state).
