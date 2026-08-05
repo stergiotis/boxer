@@ -716,9 +716,10 @@ func (inst *SeriesDriver) yLabel() (label string) {
 func (inst *SeriesDriver) statusLine() (line string) {
 	var b strings.Builder
 	// The readout register: this line is read AFTER the fact, where the digits
-	// are the point (ADR-0097 Update 2026-08-05). Lane and gap counts stay
-	// plain — both are small by construction, and Comma on a one-digit number
-	// is noise.
+	// are the point (ADR-0097 Update 2026-08-05). The lane, column and
+	// half-width counts stay plain — each is bounded by a cap, and Comma on a
+	// one-digit number is noise. The gap count in the grid hint is NOT bounded
+	// and takes the register; leave it grouped.
 	fmt.Fprintf(&b, "%s points · %d lane(s) · x %s (UTC)", humanize.Comma(int64(len(inst.t))), len(inst.lanes), inst.tLabel)
 	if len(inst.t) > 1 {
 		fmt.Fprintf(&b, " · %s → %s",
