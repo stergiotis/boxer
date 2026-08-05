@@ -284,6 +284,33 @@ limit.
 
 ## Updates
 
+### 2026-08-05 — a `weight` column, beside `tone` rather than instead of it
+
+[ADR-0167](./0167-layeredgraph-magnitude.md) adds an optional numeric `weight`
+to both contracts: on `edges` it drives stroke width, on `vertices` it scales
+the node's box, and on either it drives a sequential colour ramp sampled at the
+same normalised position so the channels cannot disagree.
+
+It is an added channel, not a re-use of §SD2's. `tone` is a *meaning*
+vocabulary — six semantic families where the query says what an element **is**
+— and no number of families expresses a magnitude. Where both are present the
+tone wins the colour, being the more specific claim, and the weight still
+drives the size. A `weight` that is not numeric is left unclaimed rather than
+parsed.
+
+Normalisation is the panel's: it sees the whole result and takes the maximum,
+where a book would have to compute it in SQL and restate it per query. The cost
+is recorded in ADR-0167 §SD5 — a per-result maximum cannot give a stable scale
+across two runs, so a before/after comparison is not something this contract
+supports today.
+
+Two things the ramp needed that the tone palette did not, both found by looking
+at the rendered panel rather than by design. It starts at the first palette
+position whose contrast against the background reaches the ordinary stroke's,
+so a small-but-known weight is never *less* visible than an unweighted element;
+and a ramped node body picks its label ink by measured contrast, because the
+group and tone palettes are all dark `*Subtle` tones and a ramp is not.
+
 ### 2026-08-01 — a value-carrying selection, and named tones
 
 Two §SD7 deferrals close, driven by the Go dependency applet suite (a master

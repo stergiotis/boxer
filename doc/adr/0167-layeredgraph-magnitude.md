@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-05
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-05
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0167: magnitude for `layeredgraph` — edge width, node scale, and a continuous ramp
 
@@ -231,12 +228,14 @@ reason. This is asserted by test, not by reading (§Verification plan).
 
 | # | Deliverable | Why here |
 | --- | --- | --- |
-| M1 | `Edge.Weight`, `RenderOpts.EdgeWidth`, `WeightWidth`, the panel's `weight` column on `edges`, and the colour ramp (§SD2, §SD4, §SD5) | touches only the renderer and the panel; no engine change, so the layout goldens cannot move |
-| M2 | `Node.Weight`, per-node font in the DOT emission, `NodeLayout.FontSize`, the renderer preferring it, and `vertices.weight` (§SD3) | changes what Graphviz is asked to lay out, so it can move geometry and wants its own verification pass |
+| M1 ✓ | `Edge.Weight`, `RenderOpts.EdgeWidth`, `WeightWidth`, the panel's `weight` column on `edges`, and the colour ramp (§SD2, §SD4, §SD5) | touches only the renderer and the panel; no engine change, so the layout goldens cannot move |
+| M2 ✓ | `Node.Weight`, per-node font in the DOT emission, `NodeLayout.FontSize`, the renderer preferring it, and `vertices.weight` (§SD3) | changes what Graphviz is asked to lay out, so it can move geometry and wants its own verification pass |
 
 M1 alone closes the strongest of the missing encodings and leaves the picture
 coherent; M2 is not a prerequisite for anything in M1. Splitting them is
-implementation staging — both are decided here.
+implementation staging — both are decided here. Both shipped 2026-08-05 (see
+§Status); the split still earned its keep, because M2's geometry change wanted
+a verification pass M1 did not.
 
 ## Surfaces — Tier 1
 
@@ -334,7 +333,27 @@ implementation staging — both are decided here.
 
 ## Status
 
-Proposed 2026-08-05. No code written.
+Accepted 2026-08-05, with both milestones built and verified the same day.
+
+- **M1** — `Edge.Weight` and `EdgeLayout.Weight` carrying it through the engine
+  without reaching the DOT emission; `view.RenderOpts.EdgeWidth` and
+  `view.WeightWidth`; the panel's `weight` column on `edges`, its
+  normalisation, and the colour ramp; `profile-callgraph` emitting the weight
+  it already computed.
+- **M2** — `Node.Weight`, `LayoutOpts.NodeFontSize` and `WeightFontSize`, the
+  per-node font in the DOT emission, `NodeLayout.FontSize` and the renderer
+  preferring it; the panel's `vertices.weight`, the node ramp with its paired
+  ink, and node weights entering the layout cache key; `profile-callgraph`
+  sizing its functions.
+
+Three details in the shipped code were found by looking at the drawn result
+rather than by design, and each is written up where it belongs — the ramp's
+legibility floor (§SD4), the ink paired with a ramped node body (§SD4's
+consequence, in the panel), and the box pad scaling with the font (§SD3).
+That is worth recording as a property of this kind of work: the encodings are
+about how a picture *reads*, and no test asserts that.
+
+§SD7's four deferrals are untouched.
 
 ## References
 

@@ -110,6 +110,31 @@ Accepted (2026-06-06, reviewed by p@stergiotis). The decision is in force; the `
 
 ## Updates
 
+### 2026-08-05 — an ordinal magnitude on both element types (ADR-0167)
+
+[ADR-0167](./0167-layeredgraph-magnitude.md) adds the widget's first magnitude
+vocabulary, additively: `Edge.Weight` and `Node.Weight`, an `EdgeWidth` hook on
+`view.RenderOpts` beside the three colour hooks, `LayoutOpts.NodeFontSize`, and
+a per-node `NodeLayout.FontSize`. Every existing consumer passes nothing, and
+the mappings decline universally when no element carries a weight, so a
+weightless graph lays out and renders exactly as before — asserted rather than
+argued.
+
+An edge's weight never reaches the DOT emission; a node's does, because
+magnitude scales the font its label is laid out at and Graphviz then fits the
+box to it. Two consequences for anyone caching layouts or reading this ADR's
+own text:
+
+- A caller that memoises a layout must key on **node** weights (play's Network
+  panel does). Edge weights deliberately stay out of such a key.
+- The note below on box metrics ends with "a gap the margin already hides".
+  That stops being true once fonts scale: the estimator's error is proportional
+  to the drawn text, so a scaled label outgrows a pad calibrated at the
+  layout-wide size and the painter clips it. The pad now scales with each
+  node's own font, *relative to the layout-wide size*, which leaves unweighted
+  nodes on exactly the calibrated value. The deferral itself still stands —
+  this widens the margin, it does not bypass the estimator.
+
 ### 2026-06-07 — why box metrics use Helvetica, not the render font
 
 `goccyengine` lays out every node with `fontname=Helvetica` while the painter draws the label in the UI sans font (Noto Sans). This is a **constraint of the embedded engine, not a free choice** — recorded so it is not re-investigated:
