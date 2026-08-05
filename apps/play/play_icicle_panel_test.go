@@ -118,7 +118,7 @@ func TestResolveIcicleColumnsFolded(t *testing.T) {
 
 	cl, reason := resolveIcicleColumns(rec.Schema())
 	require.Empty(t, reason)
-	assert.Equal(t, icicleModeFolded, cl.mode)
+	assert.Equal(t, hierModeFolded, cl.mode)
 	assert.Equal(t, 0, cl.stackCol)
 	assert.Equal(t, 1, cl.valueCol)
 	assert.Equal(t, -1, cl.unitCol, "an absent optional column resolves to -1")
@@ -135,7 +135,7 @@ func TestResolveIcicleColumnsNodes(t *testing.T) {
 
 	cl, reason := resolveIcicleColumns(rec.Schema())
 	require.Empty(t, reason)
-	assert.Equal(t, icicleModeNodes, cl.mode)
+	assert.Equal(t, hierModeNodes, cl.mode)
 	assert.Equal(t, 0, cl.idCol)
 	assert.Equal(t, 1, cl.parentCol)
 	assert.Equal(t, 2, cl.labelCol)
@@ -155,7 +155,7 @@ func TestResolveIcicleColumnsPrecedence(t *testing.T) {
 	defer both.Release()
 	cl, reason := resolveIcicleColumns(both.Schema())
 	require.Empty(t, reason)
-	assert.Equal(t, icicleModeFolded, cl.mode)
+	assert.Equal(t, hierModeFolded, cl.mode)
 
 	scalarStack := icicleTestRec(t,
 		icicleTestCol{name: "stack", str: []string{"a"}},
@@ -166,7 +166,7 @@ func TestResolveIcicleColumnsPrecedence(t *testing.T) {
 	defer scalarStack.Release()
 	cl, reason = resolveIcicleColumns(scalarStack.Schema())
 	require.Empty(t, reason)
-	assert.Equal(t, icicleModeNodes, cl.mode, "a scalar `stack` is not a path; the node contract still applies")
+	assert.Equal(t, hierModeNodes, cl.mode, "a scalar `stack` is not a path; the node contract still applies")
 }
 
 // The rejections are the pane's whole empty state, so each says what to do.
@@ -177,7 +177,7 @@ func TestResolveIcicleColumnsRejections(t *testing.T) {
 	)
 	defer scalarOnly.Release()
 	cl, reason := resolveIcicleColumns(scalarOnly.Schema())
-	assert.Equal(t, icicleModeNone, cl.mode)
+	assert.Equal(t, hierModeNone, cl.mode)
 	assert.Contains(t, reason, "splitByChar", "a mistyped `stack` is told how to become an array")
 
 	noValue := icicleTestRec(t,
@@ -185,13 +185,13 @@ func TestResolveIcicleColumnsRejections(t *testing.T) {
 	)
 	defer noValue.Release()
 	cl, reason = resolveIcicleColumns(noValue.Schema())
-	assert.Equal(t, icicleModeNone, cl.mode, "a claim missing `value` is not a claim")
+	assert.Equal(t, hierModeNone, cl.mode, "a claim missing `value` is not a claim")
 	assert.Contains(t, reason, "`value`")
 
 	neither := icicleTestRec(t, icicleTestCol{name: "x", num: []float64{1}})
 	defer neither.Release()
 	cl, reason = resolveIcicleColumns(neither.Schema())
-	assert.Equal(t, icicleModeNone, cl.mode)
+	assert.Equal(t, hierModeNone, cl.mode)
 	assert.Contains(t, reason, "`stack`")
 	assert.Contains(t, reason, "`parent`")
 }
@@ -216,7 +216,7 @@ func TestBuildIcicleFolded(t *testing.T) {
 
 	tr, st := buildIcicleTree(rec, cl)
 	require.NoError(t, tr.Validate())
-	assert.Equal(t, icicleModeFolded, st.mode)
+	assert.Equal(t, hierModeFolded, st.mode)
 	assert.Equal(t, 4, tr.Len(), "main, run, parse, emit — one node per distinct prefix")
 	assert.Equal(t, 4, st.nodes)
 	assert.Zero(t, st.droppedPath)
@@ -309,7 +309,7 @@ func TestBuildIcicleNodes(t *testing.T) {
 
 	tr, st := buildIcicleTree(rec, cl)
 	require.NoError(t, tr.Validate())
-	assert.Equal(t, icicleModeNodes, st.mode)
+	assert.Equal(t, hierModeNodes, st.mode)
 	require.Equal(t, 3, tr.Len())
 	assert.Equal(t, []string{"Leaf", "root", "Mid"}, tr.Labels,
 		"an empty `label` falls back to the id; the rest override it")

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/icicle"
@@ -21,23 +20,12 @@ import (
 // deferred "a generic `play` panel over a stack/value column convention" as one
 // of the two obvious next slices. This is that slice.
 //
-// TWO CONTRACTS, discriminated by the columns present, because the hierarchies
-// that reach a SQL result arrive in two shapes and neither converts to the
-// other in a line of SQL:
-//
-//   - FOLDED — `stack` (an Array) + `value`: one row per root-to-leaf path,
-//     the path carried as an array. The panel interns the paths into a trie and
-//     synthesises the interior frames. This is what a pprof capture already is
-//     (pprofarrow emits `stack List<String>` root-first, one row per unique
-//     stack, `value` that stack's own samples), and what any delimited path
-//     reaches with one splitByChar.
-//   - NODES — `id` + `parent` + `value`: one row per node, mapping 1:1 onto
-//     icicle.Tree. What a recursive CTE or a self-join emits, and the only one
-//     of the two in which an INTERIOR node can carry a value of its own.
-//
-// A folded `stack` wins when a schema satisfies both, being the more specific
-// claim; the status line names the mode it took rather than leaving the reader
-// to infer it from the picture.
+// The column contract it accepts — folded `stack`+`value`, or `id`/`parent`/
+// `value` — is no longer this panel's own: it moved to play_hierarchy.go when
+// the Treemap tab became its second reader (ADR-0166 §SD1). What stays here is
+// the icicle reading of it: the value axis, the depth rows, and the status line
+// that names the mode a result took rather than leaving it to be inferred from
+// the picture.
 //
 // SELECTION IS LOCAL, though the panel binds the active result (chMain) as
 // Table and World do and could therefore publish the row cursor. It does not:
@@ -48,63 +36,13 @@ import (
 // value rather than a cursor, which is also what a follow-up query wants:
 // `WHERE has(stack, {selection_key:String})`.
 
-const (
-	// The folded contract. `stack` must be list-typed; the elements are
-	// stringified, so an Array(UInt64) of ids is as good a path as an
-	// Array(String) of frame names.
-	icicleStackCol = "stack"
-
-	// The node contract. `parent` is the discriminator and `id` is what it
-	// refers to; an empty (or NULL) parent marks a root.
-	icicleIDCol     = "id"
-	icicleParentCol = "parent"
-	// label overrides the drawn text in node mode. Folded mode has no use for
-	// it — a frame's label IS its path element.
-	icicleLabelCol = "label"
-
-	// Shared by both contracts. value is required and is the frame's OWN
-	// quantity, excluding its children; unit is optional and only labels the
-	// value axis.
-	icicleValueCol = "value"
-	icicleUnitCol  = "unit"
-
-	// icicleMaxNodes bounds the tree. This is a cost limit, not a readability
-	// one: the view culls what cannot be seen (ADR-0160 §SD7), so a deep tree
-	// stays cheap to DRAW however big it is, but interning and laying it out
-	// are paid per node on every rebuild. Twenty thousand is inside the
-	// widget's stated envelope and above any profile this panel has been
-	// pointed at.
-	icicleMaxNodes = 20000
-	// icicleMaxDepth caps a single path. Deeper than this and the depth axis
-	// is a scrollbar with a picture attached; pprof truncates its own stacks
-	// well before here, so reaching it means a path column that is not really
-	// a hierarchy.
-	icicleMaxDepth = 256
-)
+// icicleForm is this pane's vocabulary in a shared reject message.
+var icicleForm = hierForm{noun: "flame view", elem: "frame"}
 
 // icicleIDSalt namespaces the panel's ui-rect probe — distinct from the other
 // panels' salts; the per-instance idSeed (nextVizSeed) keeps two live PlayApps
 // apart.
 const icicleIDSalt uint64 = 0x5a11c0de17f10006
-
-// icicleModeE is which contract a schema satisfied.
-type icicleModeE uint8
-
-const (
-	icicleModeNone icicleModeE = iota
-	icicleModeFolded
-	icicleModeNodes
-)
-
-func (m icicleModeE) String() string {
-	switch m {
-	case icicleModeFolded:
-		return "folded"
-	case icicleModeNodes:
-		return "nodes"
-	}
-	return "none"
-}
 
 // iciclePruneE is the layout-time pruning control, mapped onto
 // icicle.Options.MinFraction. Pruning is resolution-independent and
@@ -130,309 +68,30 @@ func (p iciclePruneE) fraction() float64 {
 	return 0
 }
 
-// icicleClaim is the resolved contract a schema yielded: the mode plus the
-// column indices Render consumes. -1 marks an absent optional column.
-type icicleClaim struct {
-	mode                       icicleModeE
-	stackCol                   int
-	idCol, parentCol, labelCol int
-	valueCol, unitCol          int
-}
+// icicleClaim and icicleStats are this pane's names for the shared hierarchy
+// contract (play_hierarchy.go). The contract is the same one the Treemap tab
+// resolves; only the reading of it differs.
+type (
+	icicleClaim = hierClaim
+	icicleStats = hierStats
+)
 
-// icicleStats is what one build noticed: the tree it produced and everything it
-// had to drop, demote or truncate to get there. Reported in the status line — a
-// picture scaled against a total must say when rows did not reach it.
-type icicleStats struct {
-	mode icicleModeE
-	// nodes is how many tree nodes the build produced, BEFORE layout-time
-	// pruning; the Report carries what survived it.
-	nodes int
-	// droppedValue counts rows whose value was missing, unreadable, negative
-	// or not finite. droppedPath counts rows carrying no usable path (folded)
-	// or no id (nodes).
-	droppedValue int
-	droppedPath  int
-	// droppedDup counts node-mode rows repeating an id already taken; the
-	// first row wins and the rest are a real loss, unlike two folded rows
-	// sharing a path, whose values simply sum.
-	droppedDup int
-	// reparented counts node-mode rows whose `parent` names no row in the
-	// result, or names themselves. They are laid out as ROOTS rather than
-	// dropped: a forest is a shape the widget draws (§SD1), so a subtree whose
-	// own root a WHERE clause filtered away still shows the value it carries.
-	reparented int
-	// truncated counts folded paths cut at icicleMaxDepth.
-	truncated int
-	// capped reports the node cap. Past it a folded path's value is attributed
-	// to the deepest ancestor already interned rather than dropped, so the
-	// picture understates DEPTH instead of quantity; a node-mode result stops
-	// reading rows, which does drop value, and says so.
-	capped bool
-	// droppedCapped counts the one case the cap DOES cost quantity: a folded
-	// row whose very first frame could not be interned, so there is no
-	// ancestor to attribute it to. Counted apart from droppedPath, which is
-	// about the row rather than about the cap.
-	droppedCapped int
-	// unit is the first non-empty `unit` cell, labelling the value axis.
-	unit string
-}
+// icicleMaxDepth is the shared path cap, named here because the status line
+// quotes it.
+const icicleMaxDepth = hierMaxDepth
 
-// icicleNodeKey identifies a trie node by its parent and its own label — the
-// interning key that turns one row per path into one node per distinct prefix.
-type icicleNodeKey struct {
-	parent int32
-	label  string
-}
-
-// icicleIsPathColumn reports whether a column can carry a path: any list of
-// anything, since the elements go through formatArrayElem. The three list
-// families are the ones play's formatter already cases.
-func icicleIsPathColumn(dt arrow.DataType) bool {
-	switch dt.(type) {
-	case *arrow.ListType, *arrow.LargeListType, *arrow.FixedSizeListType:
-		return true
-	}
-	return false
-}
-
-// icicleStackAt appends the non-null elements of the list cell at row to dst.
-// EMPTY elements are skipped: splitByChar('/', '/usr/bin') yields an empty
-// leading element, and an unnamed frame is not a frame. Skipping conserves the
-// total — the value still lands on the deepest element that survived — where
-// drawing an unlabelled rectangle would read as a rendering fault.
-//
-// ok is false for a null cell or a column that is not list-typed.
-func icicleStackAt(arr arrow.Array, row int, dst []string) (out []string, ok bool) {
-	out = dst
-	if arr == nil || row < 0 || row >= arr.Len() || arr.IsNull(row) {
-		return out, false
-	}
-	var inner arrow.Array
-	var beg, end int64
-	switch a := arr.(type) {
-	case *array.List:
-		beg, end = a.ValueOffsets(row)
-		inner = a.ListValues()
-	case *array.LargeList:
-		beg, end = a.ValueOffsets(row)
-		inner = a.ListValues()
-	case *array.FixedSizeList:
-		beg, end = a.ValueOffsets(row)
-		inner = a.ListValues()
-	default:
-		return out, false
-	}
-	for i := beg; i < end; i++ {
-		if inner.IsNull(int(i)) {
-			continue
-		}
-		if s := formatArrayElem(inner, i); s != "" {
-			out = append(out, s)
-		}
-	}
-	return out, true
-}
-
-// resolveIcicleColumns applies both contracts to a schema and reports which one
-// it satisfied. Pure and schema-only, so it can run every frame.
-//
-// The precedence is deliberate. A list-typed `stack` takes folded mode; failing
-// that, `id`+`parent` take node mode — which is also the fallback for a column
-// NAMED `stack` that is not a list, so a result that carries both a scalar
-// `stack` label and a real parent column still draws. Only when neither shape
-// is available does a mistyped `stack` become the message, because "wrap it in
-// an array" is a more useful thing to say than "add a stack column" to a query
-// that visibly has one.
+// resolveIcicleColumns resolves the shared contract in this pane's vocabulary.
 func resolveIcicleColumns(schema *arrow.Schema) (cl icicleClaim, reason string) {
-	cl = icicleClaim{stackCol: -1, idCol: -1, parentCol: -1, labelCol: -1, valueCol: -1, unitCol: -1}
-	stackIsPath := false
-	for ci, f := range schema.Fields() {
-		switch f.Name {
-		case icicleStackCol:
-			cl.stackCol = ci
-			stackIsPath = icicleIsPathColumn(f.Type)
-		case icicleIDCol:
-			cl.idCol = ci
-		case icicleParentCol:
-			cl.parentCol = ci
-		case icicleLabelCol:
-			cl.labelCol = ci
-		case icicleValueCol:
-			cl.valueCol = ci
-		case icicleUnitCol:
-			cl.unitCol = ci
-		}
-	}
-	switch {
-	case cl.stackCol >= 0 && stackIsPath:
-		cl.mode = icicleModeFolded
-	case cl.idCol >= 0 && cl.parentCol >= 0:
-		cl.mode = icicleModeNodes
-	case cl.stackCol >= 0:
-		reason = "The flame view's `stack` column must be an array of frames, outermost first — " +
-			"wrap it, e.g. `splitByChar('/', path) AS stack`."
-		return
-	default:
-		reason = "Run a query with a hierarchy to see a flame view: either a `stack` array plus a `value` " +
-			"— e.g. WITH s AS (SELECT splitByChar('/', path) AS stack, sum(bytes) AS value FROM t GROUP BY 1) " +
-			"SELECT * FROM s — or one row per node carrying `id`, `parent` and `value`."
-		return
-	}
-	if cl.valueCol < 0 {
-		cl.mode = icicleModeNone
-		reason = "The flame view needs a `value` column carrying each frame's own quantity — " +
-			"add one, e.g. `sum(bytes) AS value`."
-	}
-	return
+	return resolveHierarchy(schema, icicleForm)
 }
 
-// buildIcicleTree maps the result to the widget's columnar Tree, per the mode
-// the claim resolved.
+// buildIcicleTree builds the shared flat tree and presents it as the widget's
+// own type. The three columns are the same slices — icicle.Tree IS the shared
+// shape minus the colour channel, which this form has no room for: its fill
+// already encodes the frame name or the depth (ADR-0160 §SD6).
 func buildIcicleTree(rec arrow.RecordBatch, cl icicleClaim) (t icicle.Tree, st icicleStats) {
-	switch cl.mode {
-	case icicleModeFolded:
-		t, st = buildIcicleFolded(rec, cl)
-	case icicleModeNodes:
-		t, st = buildIcicleNodes(rec, cl)
-	default:
-		return
-	}
-	st.unit = icicleUnitOf(rec, cl)
-	return
-}
-
-// icicleUnitOf reads the first non-empty `unit` cell. One unit labels the whole
-// axis, so a result disagreeing with itself row to row is read by its first
-// answer rather than rejected — the column is a label, not a quantity.
-func icicleUnitOf(rec arrow.RecordBatch, cl icicleClaim) string {
-	if rec == nil || cl.unitCol < 0 {
-		return ""
-	}
-	for row := range rec.NumRows() {
-		if u := formatCell(rec, cl.unitCol, row); u != "" {
-			return truncateRunes(u, 24)
-		}
-	}
-	return ""
-}
-
-// buildIcicleFolded interns one row per root-to-leaf path into a trie. Two rows
-// carrying the same path SUM, which is the defined reading rather than an
-// anomaly: they are two measurements of one frame.
-//
-// Deterministic given the record — the interning walks rows in order — so the
-// layout key is stable frame to frame.
-func buildIcicleFolded(rec arrow.RecordBatch, cl icicleClaim) (t icicle.Tree, st icicleStats) {
-	st.mode = icicleModeFolded
-	if rec == nil {
-		return
-	}
-	stackArr := rec.Column(cl.stackCol)
-	intern := make(map[icicleNodeKey]int32, 1024)
-	var path []string
-	for row := range rec.NumRows() {
-		var ok bool
-		path, ok = icicleStackAt(stackArr, int(row), path[:0])
-		if !ok || len(path) == 0 {
-			st.droppedPath++
-			continue
-		}
-		v, valOK := quantityCellValue(rec, cl.valueCol, row)
-		if !valOK || v < 0 || math.IsInf(v, 0) || math.IsNaN(v) {
-			st.droppedValue++
-			continue
-		}
-		if len(path) > icicleMaxDepth {
-			path = path[:icicleMaxDepth]
-			st.truncated++
-		}
-		cur := int32(-1)
-		for _, lbl := range path {
-			key := icicleNodeKey{parent: cur, label: lbl}
-			at, seen := intern[key]
-			if !seen {
-				if len(t.Labels) >= icicleMaxNodes {
-					st.capped = true
-					break
-				}
-				at = int32(len(t.Labels))
-				t.Labels = append(t.Labels, lbl)
-				t.Parents = append(t.Parents, cur)
-				t.Self = append(t.Self, 0)
-				intern[key] = at
-			}
-			cur = at
-		}
-		if cur < 0 {
-			// The cap was reached before even this path's root could be
-			// interned, so there is nothing to attribute the value to. This is
-			// the only way a folded row loses its value to the cap.
-			st.droppedCapped++
-			continue
-		}
-		t.Self[cur] += v
-	}
-	st.nodes = t.Len()
-	return
-}
-
-// buildIcicleNodes maps one row per node. Two passes, because no ordering is
-// required of the result: demanding parents before children would reject the
-// shape a recursive CTE most naturally emits, and the widget imposes no such
-// order either (§SD1).
-func buildIcicleNodes(rec arrow.RecordBatch, cl icicleClaim) (t icicle.Tree, st icicleStats) {
-	st.mode = icicleModeNodes
-	if rec == nil {
-		return
-	}
-	index := make(map[string]int32, 256)
-	parentOf := make([]string, 0, 256)
-	for row := range rec.NumRows() {
-		if len(t.Labels) >= icicleMaxNodes {
-			st.capped = true
-			break
-		}
-		id := formatCell(rec, cl.idCol, row)
-		if id == "" {
-			st.droppedPath++
-			continue
-		}
-		if _, dup := index[id]; dup {
-			st.droppedDup++
-			continue
-		}
-		v, ok := quantityCellValue(rec, cl.valueCol, row)
-		if !ok || v < 0 || math.IsInf(v, 0) || math.IsNaN(v) {
-			st.droppedValue++
-			continue
-		}
-		label := id
-		if cl.labelCol >= 0 {
-			if l := formatCell(rec, cl.labelCol, row); l != "" {
-				label = l
-			}
-		}
-		index[id] = int32(len(t.Labels))
-		t.Labels = append(t.Labels, label)
-		t.Parents = append(t.Parents, -1)
-		t.Self = append(t.Self, v)
-		parentOf = append(parentOf, formatCell(rec, cl.parentCol, row))
-	}
-	for i, p := range parentOf {
-		if p == "" {
-			continue // a root, which is what an empty or NULL parent means
-		}
-		at, ok := index[p]
-		if !ok || at == int32(i) {
-			// An unknown parent, or a row naming itself — which Validate would
-			// reject the whole tree over. Demote to a root and count it.
-			st.reparented++
-			continue
-		}
-		t.Parents[i] = at
-	}
-	st.nodes = t.Len()
-	return
+	h, st := buildHierarchy(rec, cl)
+	return icicle.Tree{Labels: h.Labels, Parents: h.Parents, Self: h.Self}, st
 }
 
 // icicleTreeOpts is the layout half of the driver's controls.
@@ -846,7 +505,7 @@ func (inst *IcicleDriver) statusLine() string {
 		fmt.Fprintf(&b, " · %d path(s) cut at depth %d", inst.stats.truncated, icicleMaxDepth)
 	}
 	if inst.stats.capped {
-		fmt.Fprintf(&b, " · capped at %d frames (prune, or aggregate the tail)", icicleMaxNodes)
+		fmt.Fprintf(&b, " · capped at %d frames (prune, or aggregate the tail)", hierMaxNodes)
 		if inst.stats.droppedCapped > 0 {
 			fmt.Fprintf(&b, ", %d row(s) past it", inst.stats.droppedCapped)
 		}
