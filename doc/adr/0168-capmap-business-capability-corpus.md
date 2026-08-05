@@ -86,6 +86,17 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   makes an edge a property of one endpoint and has no place to put the
   relation's own attributes.
 
+  A relation carries how its target resolved, which is what retires the
+  precomputed lint columns: a broken link is a relation, not a finding. M2
+  found that this needs four states rather than two. Roughly a quarter of body
+  links are citations — `Jouppi-1990`, `GDPR-Art-17` — that no capability slug
+  could ever match, so they name something outside the corpus and are not
+  defects; and the two spellings of a link to a directory-backed capability
+  differ only in whether the link also resolves inside Obsidian. Collapsing
+  either distinction into "broken" buries the real findings: on the reference
+  corpus the honest count is 217 dangling links, against 1,481 pointing at
+  sibling note trees and 1,559 citations.
+
 - **SD3 — The vault stays authoritative; facts are derived.** Ingest rebuilds
   facts from markdown and is repeatable from scratch. Editing stays in the
   vault, so the corpus remains reviewable as a diff. Rejected: facts as the
@@ -140,7 +151,9 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
 
 - **M1 — `factsschema` aspects (SD4).** Regenerate the four artifacts.
 - **M2 — `public/gov/capmapcorpus`.** Vault parsing as a pure library; blake3
-  natural keys; strip the retired build tags; fix the two drifted assertions.
+  natural keys. The retired build tags and the drifted test assertions turned
+  out not to belong here: both sit in packages this port replaces rather than
+  carries, so neither is ported and neither needs fixing.
 - **M3 — the `capmap` vocabulary (SD6).**
 - **M4 — ingest.** `boxer capmap ingest --vault`, writing through the facts
   store interface so it works with or without a live ClickHouse.
