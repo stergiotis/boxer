@@ -341,6 +341,106 @@ ORDER BY value DESC"
 	settle=2500
 }
 
+scene_08_treemap() {
+	desc="Treemap — the same population the Icicle scene draws, read as nested areas (ADR-0166): area is the position count, colour is the typical altitude, and the drill navigation replaces the depth axis"
+	senv=(BOXER_PLAY_FOCUS_TREEMAP=1)
+	# Deliberately the icicle scene's query, one level shallower and with a
+	# `color`. Same contract, same population, so the pair shows what the two
+	# forms trade: the icicle keeps the order and the depth of a path, the
+	# treemap spends both dimensions on magnitude and has room for a second
+	# measure. Three levels rather than four because a treemap nests rather
+	# than stacking rows, and a fourth level lands below the minimum cell size
+	# at this window width.
+	#
+	# `color` is an average, so it is independent of the area: a small cell in
+	# a light colour is a fleet that is rare and flies high, which is the thing
+	# the area alone cannot say.
+	sql="WITH
+  ops AS (
+    SELECT ownOp
+    FROM default.planes_mercator_sample100
+    WHERE ownOp != '' AND t != '' AND desc != '' AND altitude > 0
+    GROUP BY ownOp
+    ORDER BY count() DESC
+    LIMIT 8
+  ),
+  legs AS (
+    SELECT ownOp AS op,
+           splitByChar(' ', desc)[1] AS maker,
+           t AS model,
+           altitude AS alt
+    FROM default.planes_mercator_sample100
+    WHERE ownOp IN (SELECT ownOp FROM ops)
+      AND t != '' AND desc != '' AND altitude > 0
+  )
+SELECT [op, maker, model] AS stack,
+       count()            AS value,
+       round(avg(alt))    AS color,
+       'positions'        AS unit
+FROM legs
+GROUP BY stack
+ORDER BY value DESC"
+	# Three captures: the root view, the same tree with every level nested at
+	# once, and a drill-in. The drill is what a treemap has instead of a depth
+	# axis, and the breadcrumb it leaves is how you get back out.
+	#
+	# The drill click is the ladder's LAST rung — a coordinate (ADR-0127 §SD4)
+	# — because a cell is an egui Frame with no accessible name, so no locator
+	# reaches one. It lands on the top-left container's HEADER strip, above its
+	# first child: leaf-click sensing is on, so a click inside a child pins that
+	# leaf instead of drilling the parent.
+	steps='{"do":"capture","text":"08_treemap","settleMs":600}
+{"do":"click","name":"full"}
+{"do":"capture","text":"08_treemap_all","settleMs":600}
+{"do":"click","name":"drill"}
+{"do":"click","x":200,"y":719}
+{"do":"capture","text":"08_treemap_drill","settleMs":600}'
+	settle=2500
+}
+
+scene_08_treemap_self() {
+	desc="Treemap — a container with a quantity of its own (ADR-0166 §SD3): every table under a mebibyte is rolled up into its database, which then gets a cell of its own inside its own box"
+	senv=(BOXER_PLAY_FOCUS_TREEMAP=1)
+	# The node contract, and the case the SELF CELL exists for. A treemap is
+	# subdivided by its children, so a container that also carries a quantity
+	# needs a rectangle for it — without one that quantity is redistributed
+	# among the children and every one of them reads too large.
+	#
+	# system.parts needs no fixture, and the roll-up is a real idiom rather
+	# than a contrivance: spend cells on the tables worth one, keep the tail's
+	# bytes at the database so the total still adds up.
+	#
+	# The threshold is 400 MiB rather than the snippet library's 1 MiB because
+	# this is a PICTURE of the invariant: it leaves `default` one child and an
+	# own value of ~12%, which is a cell you can see. At 1 MiB the own value is
+	# 0.003% of a box one 3 GiB table dominates — present, correct, and below
+	# the minimum cell size, which demonstrates nothing.
+	sql="WITH p AS (
+    SELECT database AS db, table AS tbl, sum(bytes_on_disk) AS bytes
+    FROM system.parts
+    WHERE active
+    GROUP BY db, tbl
+)
+SELECT concat('db:', db)                        AS id,
+       ''                                       AS parent,
+       db                                       AS label,
+       toFloat64(sumIf(bytes, bytes < 419430400)) AS value,
+       'bytes'                                    AS unit
+FROM p
+GROUP BY db
+UNION ALL
+SELECT concat('tbl:', db, '.', tbl) AS id,
+       concat('db:', db)            AS parent,
+       tbl                          AS label,
+       toFloat64(bytes)             AS value,
+       'bytes'                      AS unit
+FROM p
+WHERE bytes >= 419430400"
+	steps='{"do":"click","name":"full"}
+{"do":"capture","text":"08_treemap_self","settleMs":600}'
+	settle=2500
+}
+
 scene_09_projection() {
 	desc="Projection — dimensionality reduction over the numeric columns of a result, with the point cloud tied to the selection signal"
 	senv=(BOXER_PLAY_FOCUS_PROJECTION=1)
@@ -742,7 +842,11 @@ if [[ "$BUILD" == 1 ]]; then
 	# into its own target dir, separate from the desktop build.
 	[[ -x "$root/rust/imzero2/target/headless/release/imzero2" ]] ||
 		die "no headless client at rust/imzero2/target/headless/release/imzero2 — run rust/imzero2/build_rust_headless.sh"
-	cp -f "$root/rust/imzero2/target/headless/release/imzero2" "$BIN/imzero2" ||
+	# -p preserves the mtime, which the staleness guard below compares against.
+	# Without it the copy is stamped NOW, is therefore newer than any codegen,
+	# and the guard can never fire — which is how a stale client reached a tour
+	# silently on 2026-08-05 and read as a panel bug for half an hour.
+	cp -fp "$root/rust/imzero2/target/headless/release/imzero2" "$BIN/imzero2" ||
 		die "cannot copy the headless client"
 	# Staleness guard. The Go host is rebuilt from the tree just above; the
 	# Rust client is not, and a client older than the last egui2 codegen
