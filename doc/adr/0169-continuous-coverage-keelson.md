@@ -31,17 +31,21 @@ span, coverable units) is stable per build under a `MetaFileHash [16]byte`;
 each **counter blob** carries the same hash as its join key — precisely the
 periodic/once-per-run split required. Default scope is main-module packages
 (~498 packages, ~26k non-test functions here); granularity is per-block and
-not selectable, so aggregation is ours to do. In `set` mode (the default,
-cheapest) uncleared counters make coverage a **monotone** signal. The blob
-formats are toolchain-internal but small and versioned; the reference decoder
-stack is ~1,480 lines.
+not selectable, so aggregation is ours to do. Runtime counter snapshots are
+an atomic-mode capability — `WriteCounters` refuses `set`/`count` builds
+(only `WriteMeta*` works in every mode) — so the lane builds
+`-covermode=atomic`. Counters are never cleared, which makes coverage a
+**monotone** signal. The blob formats are toolchain-internal but small and
+versioned; the reference decoder stack is ~1,480 lines.
 
 In the tree today: a coverage seed exists —
 [`public/observability/coverage`](../../public/observability/coverage/coverage.go)
 traps SIGUSR1 and dumps meta+counter files, wired into both CLI hosts. Its
-flag probes cover support via `ClearCounters()`, which errors on `set`/`count`
-builds too, so the trap refuses every non-atomic cover build. There is no
-decode, no bus, no facts, no viewing. The acquisition pattern to mirror is
+flag probes cover support via `ClearCounters()` — the right acceptance set
+(the trap's `WriteCountersDir` is atomic-only too) but a side-effecting
+probe: it resets whatever counters the process accumulated before flag
+parsing, and its error text names the wrong mode. There is no decode, no
+bus, no facts, no viewing. The acquisition pattern to mirror is
 sysmetrics (pure-types package, collector-free bus package with a codec seam,
 wiring package, carousel hook, pure consumers); live introspect tables take
 constructor-injected in-process state; the freshest facts-ingestion recipe is
@@ -90,12 +94,14 @@ at unbounded periodic volume.
 
 ### SD1 — Opt-in cover build lane
 
-Coverage builds are a dev-script/env lane (`go build -cover`, `set` mode),
-not an entry in `./tags`. The sampler detects instrumentation at runtime by
-probing `WriteMeta` against a discarding writer and idles with one log line
-otherwise — no build tag. The existing `--coverageTrapDir` probe switches
-from `ClearCounters()` to the same `WriteMeta` probe, fixing its refusal of
-non-atomic builds. Instrumentation overhead (frame time, binary size,
+Coverage builds are a dev-script/env lane (`go build -cover
+-covermode=atomic` — the only mode whose counters can be snapshotted at
+runtime), not an entry in `./tags`. The sampler detects support at runtime
+by probing `WriteCounters` against a discarding writer and idles with one
+log line otherwise — no build tag, and no counter reset: the seed's
+`ClearCounters` probe had the same acceptance set but cleared accumulated
+counters as a side effect. Atomic increments are the costliest
+instrumentation flavor, which is why overhead (frame time, binary size,
 per-tick snapshot cost) is measured in M0 before anything ships further.
 
 ### SD2 — In-process decoder, pinned to the toolchain
@@ -200,6 +206,13 @@ except viewers that subscribe.
 - **Ad-hoc datasets** ([ADR-0134](0134-adhoc-datasets.md), the pprof route) —
   session-scoped and ephemeral by design; wrong for a durability requirement.
 - **Scalar-only or raw-counter storage** — rejected in the QOC.
+- **Sampling-derived coverage (a pprof adaptor)** — near-zero overhead and
+  needs no instrumented build, but it estimates the CPU-time distribution,
+  not set membership: a function's detection probability is roughly
+  1 − e^(−cpuTime·sampleRate), so µs-scale handlers, init and error paths —
+  the cold code coverage questions target — are precisely what a 100 Hz
+  profile never sees. Rejected as a substitute; kept as a possible
+  complement (Deferrals).
 - **Signal-trap-only status quo** — no decode, no aggregation, no view;
   whether the trap is retired once the sampler exists is left open.
 
@@ -228,13 +241,15 @@ except viewers that subscribe.
 
 - Go side only; the Rust render client is out of scope.
 - Coverage is process-scoped; per-app attribution inside the carousel is not
-  claimed (a per-scene mode via `atomic` + `ClearCounters` is a deferral).
+  claimed (a per-scene mode via `ClearCounters` between scenes is a
+  deferral — the lane is already atomic).
 
 ## Migration — Tier 1
 
 Purely additive; no data or schema migration. The `--coverageTrapDir` probe
-fix is a behaviour change only in that `set`/`count` builds stop being
-refused — previously they could not use the flag at all.
+fix changes no acceptance behaviour — atomic-only stands, since
+`WriteCountersDir` demands it — it only stops the probe from resetting
+accumulated counters and corrects the error text.
 
 ## Verification plan — Tier 1
 
@@ -253,9 +268,61 @@ the capmap-style fixture query gate.
 - Test-lane `GOCOVERDIR` ingest verb into the same kinds.
 - Per-line codeview highlighting (live tables already carry the data).
 - NATS bridge for external processes' coverage.
-- Per-scene tour attribution (`atomic` mode + `ClearCounters`).
+- Per-scene tour attribution (`ClearCounters` between scenes).
 - Retention/TTL stance for periodic sample kinds — travels with SD6.
 - Retiring the SIGUSR1 trap.
+- A pprof-derived `observed` kind for uninstrumented runs — profile stacks
+  folded onto the same global unit index (the pprofarrow pipeline already
+  exists), labeled as hotness visibility and never claimed as coverage.
+
+## Update (2026-08-05) — M0 measured
+
+M0 landed: `scripts/dev/cover-build.sh` (atomic lane; `BOXER_COVERLANE_COVERPKG`
+narrows the instrumented set), the `--coverageTrapDir` probe moved to a
+side-effect-free `coverage.ProbeRuntimeSupport()` (`WriteCounters` against a
+discarding writer; positive path verified on a live instrumented binary —
+note `--help` alone short-circuits before flag actions, probe via a
+subcommand), and a second seed defect surfaced and fixed: `SetupSignalTrap`
+created its output directories with `os.MkdirAll(dir, os.ModeDir)` —
+permission bits 000, so creating the nested directory always failed; now
+`0o755`. Trap writes now log duration and the underlying error.
+
+Measured (one dev machine, go1.26.5, warm build cache):
+
+- **Binary growth**: `boxer` 125.2 → 131.4 MB (+4.9%); `imzero2` host
+  85.6 → 91.2 MB (+6.5%).
+- **Real cardinality**: the `boxer` binary instruments **80,295 units /
+  141,285 statements**; meta blob 1.34 MiB (once per build); the counter
+  blob after a `--help` run is **9.7 KiB** — counter emission skips
+  never-executed functions, so periodic payloads scale with exercised code,
+  not binary size.
+- **Atomic instrumentation on leeway hot loops**: dml `BuildBatch`
+  0.65 → 2.3 µs/row at N=10k (≈3.3×) and 1.8 → 2.9 µs/row at N=100;
+  `AppendCommit` 0.65 → 2.3 µs (≈3.6×); readaccess scalar access
+  8.8 → 66 ns (≈7.5×); container iteration 0.14 → 0.52 µs (≈3.7×).
+  Small-N rows were noisy (one inverted); the steady-state rows carry the
+  signal.
+- **The narrowing lever works**: the same worst-case benches with
+  `-coverpkg=./public/keelson/...` (hot path uninstrumented) run at
+  baseline speed exactly (648 ns / 8.8 ns). Cost is strictly
+  per-instrumented-package.
+
+The atomic requirement is a deliberate upstream restriction, not an
+accident: all counter-related `runtime/coverage` APIs were restricted to
+atomic mode over relaxed-memory-model soundness (non-atomic counter reads
+can observe reordered stores), though only `ClearCounters`' package doc says
+so — the `WriteCounters` restriction lives in the source. Practitioner
+prior art on real-time Go coverage (periodic `WriteCountersDir` from a
+long-running service) uses the same build shape and publishes no overhead
+numbers — hence measuring them here.
+
+**Gate: still open.** The hot-loop factors are far above the "few percent"
+folklore and settle one thing — full-tree atomic instrumentation is a
+diagnosis lane, never an always-on default, and SD1's opt-in stance stands.
+The remaining M0 question is wall-clock frame time in a live GUI session
+(the Go side may not be hot-loop-dominated); that needs the
+fps-distribution comparison on an instrumented carousel. M1 (decoder) does
+not depend on that run.
 
 ## Status
 
