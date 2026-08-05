@@ -6,6 +6,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -88,10 +89,13 @@ func applyTsCall(call *tsCall, in arrow.RecordBatch, params map[string]string, a
 	}
 	n := int32(len(ts))
 	if call.Spec.MaxLen > 0 && n > call.Spec.MaxLen {
-		err = eh.Errorf("%s: the input has %d rows, past this function's %d-row ceiling — "+
+		// The readout register (ADR-0097 Update 2026-08-05): a refusal is read
+		// after the fact, and both numbers are what the reader sizes the cut
+		// against.
+		err = eh.Errorf("%s: the input has %s rows, past this function's %s-row ceiling — "+
 			"the algorithm is superlinear and the wait would stop being a wait. "+
 			"Aggregate to a coarser grid, or narrow the range, before the call",
-			call.Spec.Name, n, call.Spec.MaxLen)
+			call.Spec.Name, humanize.Comma(int64(n)), humanize.Comma(int64(call.Spec.MaxLen)))
 		return
 	}
 	switch call.Spec.Name {
@@ -142,15 +146,16 @@ func readTsInput(call *tsCall, in arrow.RecordBatch) (ts []int64, vals []float64
 	for row := range n {
 		ms, ok := temporalCellMS(tArr, row, false)
 		if !ok || tArr.IsNull(row) {
-			err = eh.Errorf("%s: row %d has no time in %q. The transform reads a series, and skipping a "+
-				"row would close a gap that is really there", call.Spec.Name, row, tName)
+			err = eh.Errorf("%s: row %s has no time in %q. The transform reads a series, and skipping a "+
+				"row would close a gap that is really there",
+				call.Spec.Name, humanize.Comma(int64(row)), tName)
 			return
 		}
 		v, got := numericCellValue(vArr, int64(row))
 		if !got {
-			err = eh.Errorf("%s: row %d has a NULL %q. Decide what the gap means in the input CTE — "+
+			err = eh.Errorf("%s: row %s has a NULL %q. Decide what the gap means in the input CTE — "+
 				"drop it, or fill it explicitly — rather than letting the analysis guess",
-				call.Spec.Name, row, vName)
+				call.Spec.Name, humanize.Comma(int64(row)), vName)
 			return
 		}
 		ts = append(ts, ms)

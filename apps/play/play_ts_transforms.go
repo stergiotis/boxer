@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/analytics/timeseries/damp"
 	"github.com/stergiotis/boxer/public/analytics/timeseries/matrixprofile"
 	"github.com/stergiotis/boxer/public/analytics/timeseries/mssmooth"
@@ -41,8 +42,13 @@ func tsApplySmooth(call *tsCall, ts []int64, vals []float64, params map[string]s
 		return
 	}
 	if int(halfWidth)*2+1 > len(vals) {
-		err = eh.Errorf("tsSmooth: halfWidth %d needs at least %d samples; the input has %d",
-			halfWidth, halfWidth*2+1, len(vals))
+		// All three are unbounded on THIS path — the failure is an oversized
+		// halfWidth — so all three take the readout register. The minimum-kernel
+		// refusal above stays plain: it fires only when halfWidth is below a
+		// single-digit minimum.
+		err = eh.Errorf("tsSmooth: halfWidth %s needs at least %s samples; the input has %s",
+			humanize.Comma(int64(halfWidth)), humanize.Comma(int64(halfWidth)*2+1),
+			humanize.Comma(int64(len(vals))))
 		return
 	}
 	kernel, err := mssmooth.NewKernelE(tsSmoothDegree, halfWidth)
