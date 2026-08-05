@@ -94,6 +94,64 @@ func Highlight(src string) (spans []Span) {
 	return
 }
 
+// HighlightTokens tokenizes src as whitespace-separated independent
+// patterns — the shape a battery search box holds (ADR-0164 §SD2:
+// space means AND, every token its own regex) — resetting group depth
+// at each token, and returns spans covering every byte of src exactly
+// once (separator bytes included, as CategoryLiteral).
+//
+// Same rationale as [HighlightLines], one level down: an unclosed `(`
+// in the first token must not mis-colour the second, and in a search
+// box a half-typed token routinely sits after finished ones.
+//
+// Separators are the ASCII whitespace bytes. The battery compiler
+// splits on unicode.IsSpace (strings.Fields), so an exotic Unicode
+// space is a token boundary there but painted as pattern bytes here —
+// acceptable, because this lexer is only a painter (ADR-0015): the
+// battery remains the authority on token boundaries and validity.
+func HighlightTokens(src string) (spans []Span) {
+	spans = make([]Span, 0, 16)
+	off := 0
+	n := len(src)
+	for off < n {
+		if isTokenSep(src[off]) {
+			end := off
+			for end < n && isTokenSep(src[end]) {
+				end++
+			}
+			spans = append(spans, Span{
+				Start:    int32(off),
+				Stop:     int32(end),
+				Text:     src[off:end],
+				Category: CategoryLiteral,
+			})
+			off = end
+			continue
+		}
+		end := off
+		for end < n && !isTokenSep(src[end]) {
+			end++
+		}
+		lx := newLexer(src[off:end])
+		lx.run()
+		for _, s := range lx.spans {
+			s.Start += int32(off)
+			s.Stop += int32(off)
+			spans = append(spans, s)
+		}
+		off = end
+	}
+	return
+}
+
+// isTokenSep reports whether b separates tokens in [HighlightTokens]:
+// the ASCII whitespace bytes a single- or multi-line search box can
+// actually hold.
+func isTokenSep(b byte) (ok bool) {
+	ok = b == ' ' || b == '\t' || b == '\n' || b == '\r'
+	return
+}
+
 // HighlightLines tokenizes src as one independent pattern per line,
 // resetting group depth at each newline, and returns spans covering
 // every byte of src exactly once (newline bytes included).

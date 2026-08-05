@@ -261,6 +261,32 @@ func TestHighlightLinesCoversTrailingNewlineAndEmptyLines(t *testing.T) {
 	}
 }
 
+func TestHighlightTokensAreIndependent(t *testing.T) {
+	const src = "(a b)"
+	spans := regexhighlight.HighlightTokens(src)
+	assertCoverage(t, src, spans)
+
+	// Token 1 leaves a group open; token 2 must not inherit it — its `)`
+	// is an unbalanced close, and `b` sits at depth 0, not depth 1.
+	if got := depthOfText(spans, "b"); got != 0 {
+		t.Errorf("token 2 body at depth %d, want 0 — depth must reset per token", got)
+	}
+	if got := catOf(t, spans, 4); got != regexhighlight.CategoryError {
+		t.Errorf("token 2 `)` classified as %s, want err — token 1's `(` must not carry over", catName(got))
+	}
+	// The separator run is covered, as plain literal bytes.
+	if got := catOf(t, spans, 2); got != regexhighlight.CategoryLiteral {
+		t.Errorf("separator classified as %s, want lit", catName(got))
+	}
+}
+
+func TestHighlightTokensCoversSeparatorRuns(t *testing.T) {
+	for _, src := range []string{"", " ", "a ", " a", "a  \tb", "\t \r\n", "a\nb"} {
+		spans := regexhighlight.HighlightTokens(src)
+		assertCoverage(t, src, spans)
+	}
+}
+
 func TestHighlightEmptyInput(t *testing.T) {
 	if spans := regexhighlight.Highlight(""); len(spans) != 0 {
 		t.Fatalf("Highlight(\"\") returned %d span(s), want none", len(spans))
@@ -288,6 +314,7 @@ func TestCoverageInvariantProperty(t *testing.T) {
 		src := b.String()
 		assertCoverage(t, src, regexhighlight.Highlight(src))
 		assertCoverage(t, src, regexhighlight.HighlightLines(src))
+		assertCoverage(t, src, regexhighlight.HighlightTokens(src))
 	})
 }
 

@@ -44,10 +44,18 @@ type Doc struct {
 // HeadingInfo is what callers feed to a help/TOC sidebar or a section
 // jump table; the inline styling (bold/italic/code spans inside the
 // heading) is intentionally flattened to plain text.
+//
+// ByteOffset is the offset of the heading's text within the source the
+// doc was parsed from (frontmatter included — goldmark segments are
+// absolute). It points at the text, not the `#` marker; consumers that
+// slice the source into per-section regions (ADR-0164) normalise to the
+// enclosing line start themselves. -1 for the degenerate heading with
+// no text lines (`##` alone), which also has empty Text and Slug.
 type HeadingInfo struct {
-	Text  string
-	Slug  string
-	Level uint8
+	Text       string
+	Slug       string
+	Level      uint8
+	ByteOffset int
 }
 
 // Frontmatter returns the YAML frontmatter parsed from the document
@@ -189,10 +197,45 @@ func (inst *Doc) renderCollect(ids *c.WidgetIdStack, actionLabels []string, acti
 		linkClicked:    ro.linkClicked,
 		actionAccept:   ro.actionAccept,
 	}
+	var visible []bool
+	if ro.sectionAccept != nil {
+		visible = visibleSegments(inst.segments, inst.headings, ro.sectionAccept)
+		// Skipped headings would desynchronise the scroll dispatch's
+		// heading ordinals (renderCtx.headingIdx), so a section filter
+		// disarms scroll-to-section outright — the documented
+		// incompatibility on [WithSectionFilter], enforced rather than
+		// left to the caller.
+		rc.scrollToSlug = ""
+	}
 	for i := range inst.segments {
+		if visible != nil && !visible[i] {
+			continue
+		}
 		inst.segments[i].render(&rc)
 	}
 	actions = rc.codeActions
+	return
+}
+
+// visibleSegments computes, per top-level segment, whether it renders
+// under the section filter. A section is a top-level heading and
+// everything after it up to the next top-level heading; the region
+// before the first heading is the doc-level section, slug "". Headings
+// nested inside containers (blockquotes, callouts, list items) are not
+// section boundaries — they stay with their enclosing section,
+// mirroring parseAndLower's side-table collection rule, which is also
+// what keeps the walk's heading ordinals aligned with Doc.headings.
+func visibleSegments(segments []segment, headings []HeadingInfo, accept func(slug string) bool) (visible []bool) {
+	visible = make([]bool, len(segments))
+	hIdx := 0
+	cur := accept("")
+	for i := range segments {
+		if segments[i].kind == segKindHeading && hIdx < len(headings) {
+			cur = accept(headings[hIdx].Slug)
+			hIdx++
+		}
+		visible[i] = cur
+	}
 	return
 }
 
@@ -202,10 +245,11 @@ func (inst *Doc) renderCollect(ids *c.WidgetIdStack, actionLabels []string, acti
 type RenderOpt func(*renderOptions)
 
 type renderOptions struct {
-	scrollToSlug string
-	linkClaims   func(url string) bool
-	linkClicked  func(label string, url string)
-	actionAccept func(text string, lang string) bool
+	scrollToSlug  string
+	linkClaims    func(url string) bool
+	linkClicked   func(label string, url string)
+	actionAccept  func(text string, lang string) bool
+	sectionAccept func(slug string) bool
 }
 
 // WithScrollToSection asks the next [Doc.Render] to schedule an egui
@@ -267,6 +311,37 @@ func WithLinkRouter(claims func(url string) bool, clicked func(label string, url
 func WithCodeActionFilter(accept func(text string, lang string) bool) (opt RenderOpt) {
 	opt = func(o *renderOptions) {
 		o.actionAccept = accept
+	}
+	return
+}
+
+// WithSectionFilter renders only the sections accept admits: the
+// doc-level region before the first heading is consulted as slug "",
+// and each top-level heading (with everything under it, to the next
+// top-level heading) as its [SlugHeading] slug. Filtering to a matched
+// section usually wants its subsections too — expanding the accepted
+// set to descendants is the caller's job (help/search.ExpandDescendants),
+// because only the caller knows its hit semantics. `accept` must be a
+// pure function of the slug for the frame, like the other With* hooks.
+//
+// Two consequences to design around (ADR-0164 §SD4):
+//
+//   - Skipping segments shifts the seq-derived ids of everything that
+//     still renders (the "ID derivation order" invariant in
+//     EXPLANATION.md), so wrap a filtered render in an IdScope keyed
+//     by the filter state — abandoning per-widget egui state on filter
+//     change is the accepted cost. Keep the UNfiltered path outside
+//     that scope so its state survives.
+//   - [WithScrollToSection] cannot work across skipped headings (the
+//     dispatch counts heading ordinals); combining them disarms the
+//     scroll rather than corrupting it.
+//
+// [CodeBlockAction.Index] stays the ordinal within the *rendered*
+// subset — consumers that key on it must not mix indices across
+// different filters.
+func WithSectionFilter(accept func(slug string) bool) (opt RenderOpt) {
+	opt = func(o *renderOptions) {
+		o.sectionAccept = accept
 	}
 	return
 }

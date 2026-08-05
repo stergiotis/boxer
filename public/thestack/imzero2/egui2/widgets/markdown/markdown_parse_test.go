@@ -1147,3 +1147,52 @@ func TestCodeActionFilterDefaultsToEverything(t *testing.T) {
 		t.Error("nil predicate means accept every block")
 	}
 }
+
+// Sections follow the parse-time heading side table: a top-level
+// heading opens a section, the doc-level region before the first
+// heading is slug "", and a heading nested inside a container is NOT a
+// boundary — it stays with its enclosing section (and, symmetrically,
+// is absent from Doc.Headings).
+func TestVisibleSegments_SectionMembership(t *testing.T) {
+	src := "preamble text\n\n" +
+		"## Alpha\n\nalpha body\n\n" +
+		"> ## Nested heading stays with alpha\n\n" +
+		"## Beta\n\nbeta body\n"
+	doc := Parse([]byte(src))
+	if len(doc.headings) != 2 || doc.headings[0].Slug != "alpha" || doc.headings[1].Slug != "beta" {
+		t.Fatalf("side table should hold the two top-level headings only, got %+v", doc.headings)
+	}
+	// Expected top-level lowering: para(preamble), heading(Alpha),
+	// para(alpha body), blockquote, heading(Beta), para(beta body).
+	want := []bool{false, true, true, true, false, false}
+	if len(doc.segments) != len(want) {
+		kinds := make([]segKindE, len(doc.segments))
+		for i := range doc.segments {
+			kinds[i] = doc.segments[i].kind
+		}
+		t.Fatalf("segment layout changed: %d segments, kinds %v — update `want`", len(doc.segments), kinds)
+	}
+	got := visibleSegments(doc.segments, doc.headings, func(slug string) bool { return slug == "alpha" })
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("visibility = %v, want %v", got, want)
+	}
+	pre := visibleSegments(doc.segments, doc.headings, func(slug string) bool { return slug == "" })
+	if !pre[0] || pre[1] || pre[3] {
+		t.Errorf("doc-level filter should keep only the preamble, got %v", pre)
+	}
+}
+
+// A section filter cannot coexist with scroll-to-section: skipped
+// headings would desynchronise the dispatch's heading ordinals, so
+// renderCollect disarms the scroll when a filter is present. Assert at
+// the option level (the render path needs a live FFFI sink).
+func TestVisibleSegments_FilterPresenceKnown(t *testing.T) {
+	var ro renderOptions
+	WithSectionFilter(func(string) bool { return true })(&ro)
+	if ro.sectionAccept == nil {
+		t.Fatal("WithSectionFilter did not install the predicate")
+	}
+	if ro.sectionAccept("anything") != true {
+		t.Error("predicate not passed through")
+	}
+}

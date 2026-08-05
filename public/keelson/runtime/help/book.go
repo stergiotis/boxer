@@ -15,10 +15,16 @@ import (
 // SectionInfo describes one top-level heading inside a help document.
 // Slug matches [markdown.SlugHeading] so [RefT.Section] values resolve
 // to the same key the markdown widget consumes for in-doc anchors.
+//
+// ByteOffset mirrors [markdown.HeadingInfo.ByteOffset]: the heading
+// text's offset within the bytes [BookI.Source] returns, -1 when the
+// heading has no text. It is what lets a search index (ADR-0164) slice
+// that source into per-section regions without re-parsing.
 type SectionInfo struct {
-	Slug  string
-	Text  string
-	Level uint8
+	Slug       string
+	Text       string
+	Level      uint8
+	ByteOffset int
 }
 
 // DocInfo is the static metadata of one help document. Populated at
@@ -229,9 +235,10 @@ func buildDocInfo(docPath string, md *markdown.Doc) (info DocInfo) {
 		info.Sections = make([]SectionInfo, len(headings))
 		for i := range headings {
 			info.Sections[i] = SectionInfo{
-				Slug:  headings[i].Slug,
-				Text:  headings[i].Text,
-				Level: headings[i].Level,
+				Slug:       headings[i].Slug,
+				Text:       headings[i].Text,
+				Level:      headings[i].Level,
+				ByteOffset: headings[i].ByteOffset,
 			}
 		}
 	}

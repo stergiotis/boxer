@@ -22,8 +22,11 @@
 //   - Resolve cross-app wikilinks. The markdown widget's
 //     [resolver.ResolverI] hook is where `[[appid/doc#section]]` will
 //     be lowered to RefT, also in a follow-up round.
-//   - Full-text search. The current index is title + heading + path;
-//     a body-text index is out of scope for M0.
+//
+// Full-text search over the corpus lives in the search sub-package
+// (pattern batteries over section-grained source slices, ADR-0164);
+// this package only records the byte offsets that make the slicing
+// possible ([SectionInfo.ByteOffset]).
 package help
 
 import (

@@ -3,6 +3,7 @@ package help
 import (
 	"embed"
 	"io/fs"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -100,10 +101,26 @@ func TestBook_Sections(t *testing.T) {
 	if len(info.Sections) != len(want) {
 		t.Fatalf("Sections: got %d, want %d — %+v", len(info.Sections), len(want), info.Sections)
 	}
+	src, srcOk := b.Source("overview")
+	if !srcOk {
+		t.Fatalf("Source(overview): not found")
+	}
+	prev := -1
 	for i := range want {
-		if info.Sections[i] != want[i] {
-			t.Errorf("Sections[%d]: got %+v, want %+v", i, info.Sections[i], want[i])
+		got := info.Sections[i]
+		if got.Slug != want[i].Slug || got.Text != want[i].Text || got.Level != want[i].Level {
+			t.Errorf("Sections[%d]: got %+v, want %+v", i, got, want[i])
 		}
+		// ByteOffset points at the heading's text in the raw source
+		// (not the `#` marker) and advances in document order.
+		if got.ByteOffset <= prev || got.ByteOffset >= len(src) {
+			t.Errorf("Sections[%d]: ByteOffset %d out of order or bounds (prev %d, len %d)",
+				i, got.ByteOffset, prev, len(src))
+		} else if head := string(src[got.ByteOffset:]); !strings.HasPrefix(head, got.Text) {
+			t.Errorf("Sections[%d]: source at ByteOffset %d starts %q, want heading text %q",
+				i, got.ByteOffset, head[:min(len(head), 24)], got.Text)
+		}
+		prev = got.ByteOffset
 	}
 }
 

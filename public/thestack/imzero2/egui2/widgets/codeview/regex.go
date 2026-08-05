@@ -44,6 +44,8 @@ var regexSpec highlighterSpec
 
 var regexListSpec highlighterSpec
 
+var regexTokensSpec highlighterSpec
+
 func init() {
 	defaultColor := internRgb(212, 212, 212) // light gray — plain literals
 	blue := internRgb(86, 156, 214)          // anchors: zero-width assertions
@@ -83,6 +85,11 @@ func init() {
 		gutterColor: internRgb(96, 96, 96),
 		plainColor:  defaultColor,
 	}
+	regexTokensSpec = highlighterSpec{
+		highlight:   regexTokensHighlight,
+		gutterColor: internRgb(96, 96, 96),
+		plainColor:  defaultColor,
+	}
 }
 
 func regexHighlight(src string) (out []section) {
@@ -94,6 +101,13 @@ func regexHighlight(src string) (out []section) {
 // colour the next (ADR-0015 §SD3).
 func regexListHighlight(src string) (out []section) {
 	return regexSpansToSections(regexhighlight.HighlightLines(src))
+}
+
+// regexTokensHighlight lexes one independent pattern per
+// whitespace-separated token — the shape a battery search box holds
+// (ADR-0164 §SD2). Same isolation rationale as the list flavour.
+func regexTokensHighlight(src string) (out []section) {
+	return regexSpansToSections(regexhighlight.HighlightTokens(src))
 }
 
 func regexSpansToSections(spans []regexhighlight.Span) (out []section) {
@@ -156,5 +170,21 @@ func BuildRegexList(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 func PrepareRegexList(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 	return memo.prepare(memoKey{lang: langRegexList, src: src}, func() typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 		return build(regexListSpec, src)
+	})
+}
+
+// BuildRegexTokens highlights a whitespace-separated battery of RE2
+// patterns (ADR-0164 §SD2) — one independent pattern per token, group
+// depth reset at each. Every call re-lexes; this is the editor path,
+// see [BuildRegex].
+func BuildRegexTokens(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
+	return build(regexTokensSpec, src)
+}
+
+// PrepareRegexTokens highlights a pattern battery through the package
+// memo (ADR-0125), keyed distinctly from the other regex flavours.
+func PrepareRegexTokens(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
+	return memo.prepare(memoKey{lang: langRegexTokens, src: src}, func() typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
+		return build(regexTokensSpec, src)
 	})
 }

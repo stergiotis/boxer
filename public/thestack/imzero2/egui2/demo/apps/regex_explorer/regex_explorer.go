@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 )
 
 // editorWidth is the desired width (egui points) for the pattern,
@@ -131,8 +132,13 @@ type App struct {
 	// (ADR-0015), rebuilt only when their buffer changes. Render-thread-
 	// confined, like the input state they mirror — see the mu comment
 	// above.
-	patternHl     highlightCache
-	patternListHl highlightCache
+	// The two pattern editors' highlight-job caches (one per box; the
+	// widget doc explains why they must not be shared). The syntax
+	// painting itself lives in widgets/regexedit since ADR-0164 §SD4
+	// made it reusable; validity stays with getCompiledRegexp
+	// (ADR-0054), not the painter.
+	patternHl     regexedit.Edit
+	patternListHl regexedit.Edit
 }
 
 // newApp builds one [App] — the unit of per-window state. clickhouse-local
@@ -277,18 +283,13 @@ func (inst *App) renderBody() {
 	}
 
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-pattern"), c.WidgetText().Text("Pattern (single regex — RE2 tabs)").Keep()).DefaultOpen(true).KeepIter() {
-		// CodeEditor() is not cosmetic here: the Rust highlight layouter
-		// resolves TextStyle::Monospace unconditionally, so without it
-		// the field's font would change the moment a character is typed
-		// and a job appears (ADR-0015 §SD6).
-		patternEdit := c.TextEdit(inst.ids.PrepareStr("pattern"), inst.pattern, false).
-			CodeEditor().
+		// regexedit sets CodeEditor() and attaches the highlight job
+		// (the monospace requirement is ADR-0015 §SD6, documented on
+		// regexedit.Edit.Prepare).
+		resp := inst.patternHl.Prepare(inst.ids.PrepareStr("pattern"), inst.pattern, false, regexedit.ModeSingle).
 			DesiredWidth(editorWidth).
-			HintText("regular expression")
-		if job, ok := inst.patternHighlightJob(inst.pattern); ok {
-			patternEdit = patternEdit.HighlightJob(job)
-		}
-		resp := patternEdit.SendRespVal(&inst.pattern)
+			HintText("regular expression").
+			SendRespVal(&inst.pattern)
 		if resp.HasGainedFocus() || resp.HasFocus() {
 			inst.lastFocusedInput = 0
 		}
@@ -296,15 +297,11 @@ func (inst *App) renderBody() {
 	}
 
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-patternlist"), c.WidgetText().Text("Multi patterns (one regex per line — VectorScan multiMatchAllIndices)").Keep()).DefaultOpen(true).KeepIter() {
-		listEdit := c.TextEdit(inst.ids.PrepareStr("patternList"), inst.patternList, true).
-			CodeEditor().
+		listResp := inst.patternListHl.Prepare(inst.ids.PrepareStr("patternList"), inst.patternList, true, regexedit.ModeList).
 			DesiredWidth(editorWidth).
 			DesiredRows(4).
-			HintText("pattern 1\npattern 2\n...")
-		if job, ok := inst.patternListHighlightJob(inst.patternList); ok {
-			listEdit = listEdit.HighlightJob(job)
-		}
-		listResp := listEdit.SendRespVal(&inst.patternList)
+			HintText("pattern 1\npattern 2\n...").
+			SendRespVal(&inst.patternList)
 		if listResp.HasGainedFocus() || listResp.HasFocus() {
 			inst.lastFocusedInput = 2
 		}

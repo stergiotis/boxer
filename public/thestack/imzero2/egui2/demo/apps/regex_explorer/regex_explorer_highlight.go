@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 )
 
 // compileResult pairs a compiled regexp with any compile error so both
@@ -381,7 +382,7 @@ func (inst *App) renderPatternCompileError(pattern string) {
 		return
 	}
 	if _, err := inst.getCompiledRegexp(inst.effectivePattern(pattern)); err != nil {
-		renderCompileErrorLabel("regex compile error: " + err.Error())
+		regexedit.ErrorLabel("regex compile error: " + err.Error())
 	}
 }
 
@@ -421,20 +422,8 @@ func (inst *App) renderPatternListCompileErrors(lines []multiLine) {
 	} else {
 		msg = "line " + strconv.Itoa(firstBadLine) + ": " + firstErr.Error() + " (and " + strconv.Itoa(badCount-1) + " more line(s) invalid)"
 	}
-	renderCompileErrorLabel(msg)
-}
-
-// renderCompileErrorLabel paints msg as dark text on the IDS error fill —
-// the visual "this is a compile error" affordance consistent with
-// regexr.com and most IDE regex widgets, restated through the IDS
-// semantic palette (ADR-0031 §SD2). Same fg-on-solid recipe as the badge
-// widget's Solid variant (commit 8e5d40f3): NeutralBgExtreme reads at
-// high contrast against the L≈0.80 ErrorDefault fill.
-func renderCompileErrorLabel(msg string) {
-	errFg := color.Hex(styletokens.NeutralBgExtreme.AsHex()).Keep()
-	errBg := color.Hex(styletokens.ErrorDefault.AsHex()).Keep()
-	atoms := c.Atoms()
-	for range atoms.StyledTextColored(errFg, errBg, msg) {
-	}
-	c.LabelAtoms(atoms.Keep()).Send()
+	// The error affordance moved to widgets/regexedit with the editor
+	// itself (ADR-0164 §SD4), so every regex input renders compile
+	// errors the same way.
+	regexedit.ErrorLabel(msg)
 }

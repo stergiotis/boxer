@@ -19,12 +19,17 @@
 package helphost
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
@@ -102,6 +107,33 @@ type HelpHost struct {
 	scrolledToApp     app.AppIdT
 	scrolledToDoc     string
 	scrolledToSection string
+
+	// renderedDocKey is the "<app>/<doc>" the reader pane last drew.
+	// The reader's ScrollArea keeps one scroll offset across doc
+	// switches (its egui id never changes), so without a reset a
+	// search jump into a doc without a section target would open the
+	// new doc at the old doc's offset — for short docs, past the end.
+	// One ScrollToCursor(0) per doc change fixes that (the Docs pane's
+	// `scrolled` guard pattern); a pending section scroll suppresses it.
+	renderedDocKey string
+
+	// Search state (ADR-0164 §SD4). searchText backs the box;
+	// searchQuery is the trimmed query searchHits were computed for —
+	// hits recompute on change, not per frame. searchBattery is kept
+	// so the results header can say when a token degraded to a literal
+	// match; searchHl is the box's highlight-job cache (regexedit).
+	// searchHits is UNcapped — searchCoverage is computed from it, and
+	// a display-truncated list would under-report; the results list
+	// truncates at render time instead. searchIndex builds lazily on
+	// first non-empty query and lives for the host's lifetime (books
+	// are immutable after parse); SetLibrary drops it.
+	searchText     string
+	searchQuery    string
+	searchBattery  search.Battery
+	searchHits     []search.Hit
+	searchCoverage search.Coverage
+	searchIndex    *search.Index
+	searchHl       regexedit.Edit
 }
 
 var _ app.AppI = (*HelpHost)(nil)
@@ -129,6 +161,14 @@ func (inst *HelpHost) SetLibrary(lib help.LibraryI) {
 		panic("helphost: SetLibrary(nil)")
 	}
 	inst.lib = lib
+	// The index is a snapshot of the previous library's corpus; drop
+	// it (and the hits computed from it) so the next query rebuilds
+	// against lib. searchText survives — the user's typing is not
+	// state of the library.
+	inst.searchIndex = nil
+	inst.searchQuery = ""
+	inst.searchHits = nil
+	inst.searchCoverage = search.Coverage{}
 }
 
 // OpenRef sets the selection to the named ref and expands the parent
@@ -218,15 +258,141 @@ func (inst *HelpHost) Frame(ctx app.FrameContextI) (err error) {
 // the header line is a SelectableLabel that toggles inst.expandedApps
 // on click; when expanded, the indented body lists every DocInfo as a
 // SelectableLabel that, on click, becomes the new selection.
+//
+// A non-empty search query flattens the nav into the cross-book hit
+// list instead (ADR-0164 §SD4) — the launcher's browse-vs-search shape
+// (ADR-0158). The query survives hit clicks so a reader can visit
+// several results; clearing it restores the book tree with the clicked
+// selection expanded.
 func (inst *HelpHost) renderNav() {
 	books := inst.lib.Books()
 	if len(books) == 0 {
 		c.Label("No help docs registered.\n\nApps populate Manifest.Help to ship help.").Send()
 		return
 	}
+	inst.renderSearchBox()
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+		if inst.searchQuery != "" {
+			inst.renderSearchResults()
+			continue
+		}
 		for _, b := range books {
 			inst.renderNavBook(b)
+		}
+	}
+}
+
+// renderSearchBox draws the query field and recomputes the hit list
+// when the trimmed query changed. The recompute is per keystroke, not
+// per frame — an RE2 sweep of the embedded corpus is well under a
+// millisecond (ADR-0164 §SD3), so there is no debounce and no async
+// hop. The index builds lazily on the first non-empty query; that
+// first build also pays each book's one-shot parse walk.
+func (inst *HelpHost) renderSearchBox() {
+	for range c.Horizontal().KeepIter() {
+		// The regexedit widget attaches the token-mode syntax
+		// highlighting (one independent pattern per token — the
+		// battery shape) and the monospace font that goes with it.
+		inst.searchHl.Prepare(inst.ids.PrepareStr("nav-search"), inst.searchText, false, regexedit.ModeTokens).
+			HintText("Search (regex, space = AND)").
+			SendRespVal(&inst.searchText)
+		if inst.searchText != "" {
+			if c.Button(inst.ids.PrepareStr("nav-search-clear"), c.Atoms().Text("×").Keep()).
+				SendResp().HasPrimaryClicked() {
+				inst.searchText = ""
+			}
+		}
+	}
+	q := strings.TrimSpace(inst.searchText)
+	if q == inst.searchQuery {
+		return
+	}
+	inst.searchQuery = q
+	if q == "" {
+		inst.searchBattery = search.Battery{}
+		inst.searchHits = nil
+		inst.searchCoverage = search.Coverage{}
+		return
+	}
+	if inst.searchIndex == nil {
+		inst.searchIndex = search.NewIndex(inst.lib)
+	}
+	inst.searchBattery = search.ParseQuery(q)
+	inst.searchHits = inst.searchIndex.Search(inst.searchBattery, 0)
+	inst.searchCoverage = inst.searchIndex.Coverage(inst.searchHits)
+}
+
+// searchDisplayCap bounds the rendered hit rows. The hit list itself
+// stays uncapped for the coverage meter; past the cap the reader needs
+// a narrower query, not more scrolling, and the truncation note says
+// exactly that.
+const searchDisplayCap = 100
+
+// searchCoverageBarWidth is explicit because a ProgressBar without
+// DesiredWidth takes everything before it in a Horizontal — the
+// documented trap.
+const searchCoverageBarWidth = 120.0
+
+// renderSearchCoverage draws the selectivity meter: how much of the
+// corpus the battery selects, as a byte-share bar with the numbers in
+// an adjacent label. The percentage never goes ON the bar —
+// ProgressBar paints its own text at the left edge where the low-
+// fraction pill sits under it, illegibly.
+func (inst *HelpHost) renderSearchCoverage() {
+	cov := inst.searchCoverage
+	for range c.Horizontal().KeepIter() {
+		c.ProgressBar(cov.Frac()).DesiredWidth(searchCoverageBarWidth).Send()
+		c.Label(strconv.Itoa(cov.SelSections) + "/" + strconv.Itoa(cov.TotalSections) +
+			" sections · " + strconv.Itoa(int(cov.Frac()*100+0.5)) + "% of corpus").Send()
+	}
+}
+
+// renderSearchResults draws the flattened hit list: one selectable row
+// per section hit (doc title › heading), with the book's display name
+// and the matching line underneath. Clicking a row is OpenRef — the
+// selection, nav expansion, and the reader's scroll-to-section all
+// reuse the existing plumbing.
+func (inst *HelpHost) renderSearchResults() {
+	inst.renderSearchCoverage()
+	for pi := range inst.searchBattery.Patterns {
+		if inst.searchBattery.Patterns[pi].Literal {
+			for rt := range c.RichTextLabel("some tokens are not valid regexps and match literally") {
+				rt.Small().Weak()
+			}
+			break
+		}
+	}
+	if len(inst.searchHits) == 0 {
+		c.Label("(no matches)").Send()
+		return
+	}
+	cur := inst.CurrentRef()
+	for i := range inst.searchHits {
+		if i == searchDisplayCap {
+			for rt := range c.RichTextLabel("(showing first " + strconv.Itoa(searchDisplayCap) +
+				" of " + strconv.Itoa(len(inst.searchHits)) + " — narrow the query)") {
+				rt.Small().Weak()
+			}
+			break
+		}
+		h := &inst.searchHits[i]
+		label := h.DocTitle
+		if h.Heading != "" && h.Heading != h.DocTitle {
+			label += " › " + h.Heading
+		}
+		// Ids are ordinal-keyed: ref strings are not unique (duplicate
+		// slugs) and uniqueness within the frame is what the id stack
+		// needs — a silent duplicate would swallow the row's clicks.
+		if c.SelectableLabel(inst.ids.PrepareStr("hit-"+strconv.Itoa(i)), h.Ref == cur, label).
+			SendResp().HasPrimaryClicked() {
+			inst.OpenRef(h.Ref)
+		}
+		detail := bookDisplay(h.Ref.AppId)
+		if h.Context != "" {
+			detail += " — " + h.Context
+		}
+		for rt := range c.RichTextLabel("    " + detail) {
+			rt.Small().Weak()
 		}
 	}
 }
@@ -325,6 +491,9 @@ func (inst *HelpHost) renderReader() {
 	// whichever signal the user is closer to.
 	inst.renderViewToggle()
 	c.Separator().Horizontal().Send()
+	docKey := string(inst.selectedAppId) + "/" + inst.selectedDoc
+	docChanged := docKey != inst.renderedDocKey
+	inst.renderedDocKey = docKey
 	switch inst.viewMode {
 	case ViewModeSource:
 		src, srcOk := b.Source(inst.selectedDoc)
@@ -332,10 +501,13 @@ func (inst *HelpHost) renderReader() {
 			c.Label("Source unavailable for " + inst.selectedDoc).Send()
 			return
 		}
-		renderSource(inst.ids, src)
+		renderSource(inst.ids, src, docChanged)
 	default:
 		section := inst.consumeScrollTarget()
-		renderRendered(inst.ids, doc, section, inst.bus)
+		// A doc change without a section target scrolls to the top
+		// exactly once (see renderedDocKey); a pending section scroll
+		// owns the position instead.
+		renderRendered(inst.ids, doc, section, docChanged && section == "", inst.bus)
 	}
 }
 
@@ -404,12 +576,15 @@ func (inst *HelpHost) renderViewToggle() {
 // abandons that state wholesale instead — see the "ID derivation order"
 // invariant in the markdown package's EXPLANATION.md. Generation 2 is
 // the addition of table rendering.
-func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, bus app.BusI) {
+func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, scrollTop bool, bus app.BusI) {
 	opts := make([]markdown.RenderOpt, 0, 1)
 	if scrollToSection != "" {
 		opts = append(opts, markdown.WithScrollToSection(scrollToSection))
 	}
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+		if scrollTop {
+			c.ScrollToCursor(0)
+		}
 		for range c.IdScope(ids.PrepareStr("doc-render-2")) {
 			if bus == nil {
 				doc.Render(ids, opts...)
@@ -441,9 +616,12 @@ func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection str
 // re-highlighted the whole document (~1.1 ms for a 10 KB doc). ADR-0125
 // made Prepare* memoise for real, which is what this comment always
 // assumed.
-func renderSource(ids *c.WidgetIdStack, src []byte) {
+func renderSource(ids *c.WidgetIdStack, src []byte, scrollTop bool) {
 	job := codeview.PrepareMarkdown(string(src))
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+		if scrollTop {
+			c.ScrollToCursor(0)
+		}
 		for range c.IdScope(ids.PrepareStr("doc-source")) {
 			c.CodeView(ids.PrepareSeq(0), job).Send()
 		}

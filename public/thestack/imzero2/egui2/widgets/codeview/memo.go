@@ -52,6 +52,10 @@ const (
 	// and the other as one independent pattern per line, so a shared key
 	// would serve either result for the other (ADR-0015 §SD3).
 	langRegexList
+	// langRegexTokens: one independent pattern per whitespace-separated
+	// token (ADR-0164 §SD2) — a third lexing of the same source that
+	// must not share a key with the other two.
+	langRegexTokens
 )
 
 // memoKey identifies one prepared result. src is part of the key rather than a

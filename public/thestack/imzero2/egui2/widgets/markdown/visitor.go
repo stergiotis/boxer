@@ -55,10 +55,15 @@ func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *co
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		if h, ok := child.(*ast.Heading); ok {
 			text := headingPlainText(h, src)
+			offset := -1
+			if h.Lines().Len() > 0 {
+				offset = h.Lines().At(0).Start
+			}
 			headings = append(headings, HeadingInfo{
-				Text:  text,
-				Slug:  SlugHeading(text),
-				Level: uint8(h.Level),
+				Text:       text,
+				Slug:       SlugHeading(text),
+				Level:      uint8(h.Level),
+				ByteOffset: offset,
 			})
 		}
 		seg, ok := lowerBlock(ctx, child)

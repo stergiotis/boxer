@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -34,6 +35,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
@@ -148,6 +150,21 @@ type PlayApp struct {
 	// entity, never the query result.
 	docs     *docsDriver
 	docsPane *docsPaneState
+
+	// Snippets-tab filter state (ADR-0164 §SD4). snippetsFilter backs the
+	// box; snippetsQuery is the trimmed query snippetsAccepted (matching
+	// section slugs, descendants expanded) was computed for — recompute on
+	// change, not per frame. snippetsLiteral flags a token that degraded
+	// to a literal match so the tab can say so; snippetsCoverage is how
+	// much of the snippets doc the accepted set selects (the filter's
+	// selectivity meter); snippetsHl is the filter box's regexedit
+	// highlight-job cache. Zero values = unfiltered.
+	snippetsFilter   string
+	snippetsQuery    string
+	snippetsAccepted map[string]bool
+	snippetsLiteral  bool
+	snippetsCoverage search.Coverage
+	snippetsHl       regexedit.Edit
 
 	// editor is the SQL editing surface (ADR-0147). It owns what follows
 	// from the buffer and the caret alone — the colour tiers, the statement
