@@ -19,7 +19,7 @@ incompatible things the *size* of a drawn element can be claiming.
 
 It deliberately carries no motivation and no snapshot of what is built. Those
 belong to whichever ADR is deciding something —
-[ADR-0167](../adr/0167-layeredgraph-edge-magnitude.md) is the first to lean on
+[ADR-0167](../adr/0167-layeredgraph-magnitude.md) is the first to lean on
 this page.
 
 ## 1 Three axes
@@ -134,20 +134,28 @@ should stay a hairline.
 
 | | structure | layout runs | size can mean |
 | --- | --- | --- | --- |
-| `layeredgraph` ([ADR-0069](../adr/0069-imzero2-layeredgraph-widget.md)) | recovered | host-side, Graphviz `dot` | absent; ordinal on edges once [ADR-0167](../adr/0167-layeredgraph-edge-magnitude.md) lands |
+| `layeredgraph` ([ADR-0069](../adr/0069-imzero2-layeredgraph-widget.md)) | recovered | host-side, Graphviz `dot` | absent; ordinal on both once [ADR-0167](../adr/0167-layeredgraph-magnitude.md) lands |
 | `graph` (egui_graphs) | none assumed | client-side simulation | absent |
 | `pipelineview` ([ADR-0119](../adr/0119-imzero2-pipelineview-widget.md)) | declared, a stage tree | host-side recursion | ordinal, on edges |
 | `sankey` ([ADR-0159](../adr/0159-imzero2-sankey-flow-widget.md)) | declared, validated acyclic | host-side | conserved |
 | `icicle` ([ADR-0160](../adr/0160-imzero2-icicle-flamegraph-widget.md)) | declared, as paths | host-side, plot space | ordinal |
 
-The first column is A1, the third is A2. Nothing in the tree sizes a *node* by
-a quantity except the conserved case, where node faces are stacked link widths
-and the size is a consequence of conservation rather than an encoding chosen
-for its own sake. Node sizing under an ordinal claim is therefore unexplored
-ground here, and it is a harder problem than edge width for a structural
-reason: an edge's width is a property of how it is stroked, so it concerns only
-the renderer, whereas a node's size changes what the layout engine must route
-around and therefore reaches back into layout.
+The first column is A1, the third is A2.
+
+Sizing an *edge* and sizing a *node* are not the same difficulty, and the
+asymmetry is structural rather than incidental. An edge's width is a property
+of how it is stroked: the routing is already decided, so width concerns only
+the renderer and cannot move anything. A node's size changes what the layout
+must leave room for and route around, so it necessarily reaches back into
+layout — which means a weighted drawing and its weightless twin are no longer
+the same picture.
+
+That gives node sizing a second question an edge never faces: what happens to
+the label. A layout engine that fits boxes to their labels can be asked to
+scale the *label* instead of the box, and the fit then follows for free; asking
+for a box size directly makes the box the magnitude and leaves the text to
+overflow a small one or float in a large one. The first keeps one story about
+how a label relates to its box; the second introduces a second.
 
 ## References
 
