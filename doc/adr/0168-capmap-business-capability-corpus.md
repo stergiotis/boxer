@@ -150,11 +150,28 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   the repo's gate. Rejected: committing the corpus now, which would decide both
   questions by accident.
 
-- **SD8 — The read path is keelson providers, not raw facts SQL.** Providers
-  decode memberships into flat columns, on the precedent set by the workingsets
-  provider — reading these otherwise means raw `boxer.facts` SQL plus knowledge
-  of the membership encoding. Rejected: letting applets query the physical
-  leeway columns, which would spread the encoding across every book.
+- **SD8 — The read path is keelson providers over the vault, not over the
+  facts table.** Three tables — `capability`, `capsection`, `caprelation` —
+  reading the corpus live on the `adr` providers' precedent (ADR-0122 §SD4):
+  registered statically, `FreshnessLive`, and empty rather than erroring
+  off-repo. Rejected: letting applets query physical leeway columns, which
+  would spread the encoding across every book.
+
+  This inverts what this ADR first said, which was that providers would decode
+  memberships out of `boxer.facts`. Two costs settled it. An applet whose table
+  only exists once an ingest has been run is the failure mode the pprof
+  datasets hit, and recovering from it took a rebinder that watches for the
+  data to appear. And decoding from SQL means hand-written leeway column
+  names, the coupling M1 found already spread across a hundred sites with
+  nothing guarding it. A live read has neither, and costs ~150 ms for a
+  ~1,700-capability tree against `capmapcorpus`'s existing snapshot window.
+  The ingest keeps its own job — history, and joins on the ClickHouse side —
+  and `capability.fact_id` carries the id it wrote, so the two surfaces can be
+  joined without knowing how the id is derived.
+
+  `capsection` is split from `capability` for the reason `adrcontent` is split
+  from `adr`: measured on the reference corpus the prose is 2.8× the metadata,
+  and a query about maturity should not pay for it.
 
 - **SD9 — No HTTP surface; the views are applets.** The prototype's four
   webapps are replaced by an applet book
@@ -192,7 +209,7 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
 | `boxer.facts` row vocabulary | Added — two fact kinds and their memberships | The new `capmap` vocabulary package; the providers that decode them |
 | TagValue allocation | Added — a second allocation, and the rule for making further ones | This ADR is the register; the vocabulary package's doc comment cites it |
 | Environment-variable registry ([ADR-0009](./0009-environment-variable-registry.md)) | Added — the corpus location | `doc/env-vars.md`; the package must be reachable from the `public/app` link graph or the spec stays invisible |
-| keelson table-name namespace ([ADR-0094](./0094-keelson-introspection-tables.md)) | Added — the capability and relation tables | The provider registration; the applet book's queries |
+| keelson table-name namespace ([ADR-0094](./0094-keelson-introspection-tables.md)) | Added — `capability`, `capsection`, `caprelation` | `RegisterStatic` and the name roster it is pinned by; the applet book's queries |
 | Exported Go API under `public/` | Added — `capmapcorpus`, `capmapvocab`, `capmapfacts` under `public/gov/`, and the `boxer capmap` command | Nothing yet; no downstream module compiles against them |
 
 ## Alternatives

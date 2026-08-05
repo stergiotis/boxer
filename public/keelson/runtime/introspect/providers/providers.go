@@ -1,7 +1,8 @@
 // Package providers implements the GUI-free introspection table
 // providers — env, apps, build, sbom (ADR-0094 §SD8), sql_passes
 // (ADR-0108 §SD5), extbin (ADR-0118), adr/subtask/coderef/adrcontent
-// (ADR-0122 §SD4), helpsections/adrsections (ADR-0164 §SD5) — and
+// (ADR-0122 §SD4), helpsections/adrsections (ADR-0164 §SD5),
+// capability/capsection/caprelation (ADR-0168 §SD8) — and
 // registers them into an introspect.Registry.
 // The two GUI-coupled providers (demos, windows) live with the runtime
 // wiring, where the egui2 host and its window-host instance exist, so
@@ -21,12 +22,15 @@ import (
 )
 
 // RegisterStatic registers the GUI-free providers (env, apps, build,
-// sbom, sql_passes, extbin, adr/subtask/coderef/adrcontent, components) into r
-// (ADR-0094 §SD8, ADR-0108 §SD5, ADR-0118, ADR-0122 §SD4, ADR-0126 §SD5).
+// sbom, sql_passes, extbin, adr/subtask/coderef/adrcontent,
+// capability/capsection/caprelation, components) into r
+// (ADR-0094 §SD8, ADR-0108 §SD5, ADR-0118, ADR-0122 §SD4, ADR-0126 §SD5,
+// ADR-0168 §SD8).
 //
-// The four ADR tables register unconditionally, like the rest: off-repo they
-// are empty rather than absent, so the set of table names does not depend on
-// where the process was started (see adr.go). Registering adrcontent costs
+// The ADR and capability tables register unconditionally, like the rest:
+// off-repo they are empty rather than absent, so the set of table names does
+// not depend on where the process was started (see adr.go and capmap.go).
+// Registering adrcontent costs
 // nothing until it is named in a query — it reads the corpus on Snapshot, not
 // here. The plane-fed topology tables (procs, sockets) are the exception —
 // they need a consumer, so they register via RegisterTopology.
@@ -34,6 +38,7 @@ func RegisterStatic(r *introspect.Registry) (err error) {
 	for _, p := range []introspect.Provider{
 		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{}, extbinProvider{},
 		adrProvider{}, subtaskProvider{}, coderefProvider{}, adrcontentProvider{}, componentsProvider{},
+		capabilityProvider{}, capsectionProvider{}, caprelationProvider{},
 		helpsectionsProvider{}, adrsectionsProvider{},
 	} {
 		if err = r.Register(p); err != nil {

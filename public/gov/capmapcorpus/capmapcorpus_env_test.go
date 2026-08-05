@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,12 +84,4 @@ func TestLoadSharesOneSnapshotWithinTheWindow(t *testing.T) {
 	resetLoadMemo()
 	third := Load().Capabilities
 	assert.Len(t, third, 2)
-}
-
-// resetLoadMemo drops the shared snapshot so a test observes a real read.
-// Expiring it by waiting would add LoadWindow to every such test.
-func resetLoadMemo() {
-	loadMu.Lock()
-	defer loadMu.Unlock()
-	loadedKey, loadedAt, loadedCorpus = "", time.Time{}, Corpus{}
 }

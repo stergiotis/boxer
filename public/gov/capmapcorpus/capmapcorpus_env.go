@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/stergiotis/boxer/public/config/env"
@@ -125,4 +126,31 @@ func Load() (corpus Corpus) {
 	}
 	loadedKey, loadedAt, loadedCorpus = vaultDir, time.Now(), corpus
 	return corpus
+}
+
+// resetLoadMemo drops the shared snapshot so the next Load performs a real
+// read. Waiting out [LoadWindow] would do the same and cost every caller the
+// window.
+func resetLoadMemo() {
+	loadMu.Lock()
+	defer loadMu.Unlock()
+	loadedKey, loadedAt, loadedCorpus = "", time.Time{}, Corpus{}
+}
+
+// SetVaultForTest points the corpus at dir for the duration of t.
+//
+// It exists because neither half of the state a test needs to control is
+// reachable from outside: the env handle caches its value on the first read
+// for the life of the process, so a plain t.Setenv is invisible once anything
+// has resolved the vault, and the load memo would serve the previous vault's
+// snapshot even after the variable changed. This resets both, and restores
+// them when the test ends.
+//
+// Following the same convention as [env.PathVar.SetForTest], which is why the
+// production file imports testing.
+func SetVaultForTest(t testing.TB, dir string) {
+	t.Helper()
+	envVaultDir.SetForTest(t, dir)
+	resetLoadMemo()
+	t.Cleanup(resetLoadMemo)
 }
