@@ -78,6 +78,17 @@ type RenderOpts struct {
 	// EdgeStroke overrides an edge's stroke colour by endpoints (e.g. to mark
 	// the active transition). Returning ok=false keeps the style default.
 	EdgeStroke func(from, to string) (col color.Color, ok bool)
+	// EdgeWidth overrides an edge's stroke width in pixels, given the ordinal
+	// quantity the layout carried through (0 when the edge has none).
+	// Returning ok=false keeps Style.EdgeStrokeW.
+	//
+	// This is the magnitude seam (ADR-0167 §SD2), and it is deliberately the
+	// same shape as pipelineview's: a host that knows what its numbers mean
+	// chooses the mapping, and WeightWidth is a ready-made one. Widths are
+	// pixels, not layout units — like Style.EdgeStrokeW and unlike
+	// Style.Rounding, so a hairline stays a hairline when the drawing is
+	// scaled down to fit. Optional.
+	EdgeWidth func(from, to string, weight float64) (w float32, ok bool)
 	// State, when non-nil, enables interactive pan/zoom: Render reads pointer
 	// drag (pan) and the zoom gesture (Ctrl+scroll / pinch / +/-) over the
 	// canvas and updates it in place. The caller holds one ViewState per graph
@@ -96,6 +107,60 @@ type ViewState struct {
 	lastPtrX float32
 	lastPtrY float32
 	dragging bool
+}
+
+// Magnitude stroke widths, in pixels. The minimum is the default edge stroke,
+// so the thinnest carrying edge looks like an ordinary one.
+const (
+	DefaultWeightMinW = 1.25
+	DefaultWeightMaxW = 8.0
+)
+
+// WeightWidth is a ready-made RenderOpts.EdgeWidth: it maps each edge's
+// ordinal weight onto [minW, maxW] against the heaviest edge in lay. Pass 0
+// for either bound to take the default above.
+//
+// The curve is a square root, and the reason is worth stating plainly: this is
+// a structure drawing, not a Sankey. Its edges share no baseline and its nodes
+// do not conserve, so width here orders and emphasises — it is not something
+// to read a quantity off (ADR-0167 §SD1). A linear map would additionally
+// collapse every edge but the largest to a hairline as soon as the weights
+// span orders of magnitude, which CPU nanoseconds and byte counts usually do.
+//
+// An edge whose weight is not positive keeps the default width, because the
+// model documents 0 as *unknown* rather than *none* — drawing it as a hairline
+// would assert something the caller did not say. If no edge carries a weight
+// the hook declines every edge, so a graph without weights renders exactly as
+// it did before.
+//
+// This is deliberately a near-copy of pipelineview/view.VolumeWidth rather
+// than a shared helper: the two widgets share an idiom and nothing else, and
+// coupling them for a few lines of curve would be the more expensive mistake.
+func WeightWidth(lay *layeredgraph.Layout, minW float32, maxW float32) func(from string, to string, weight float64) (float32, bool) {
+	if minW <= 0 {
+		minW = DefaultWeightMinW
+	}
+	if maxW <= 0 {
+		maxW = DefaultWeightMaxW
+	}
+	if maxW < minW {
+		maxW = minW
+	}
+	maxV := 0.0
+	if lay != nil {
+		for i := range lay.Edges {
+			if v := lay.Edges[i].Weight; v > maxV {
+				maxV = v
+			}
+		}
+	}
+	return func(_ string, _ string, weight float64) (float32, bool) {
+		if maxV <= 0 || weight <= 0 {
+			return 0, false
+		}
+		t := math.Sqrt(math.Min(weight, maxV) / maxV)
+		return minW + (maxW-minW)*float32(t), true
+	}
 }
 
 // RenderResult reports hit-testing from the previous frame: the node currently
@@ -193,7 +258,13 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 					col = c2
 				}
 			}
-			drawEdge(e, tf, col, st.EdgeStrokeW)
+			strokeW := st.EdgeStrokeW
+			if opts.EdgeWidth != nil {
+				if w, ok := opts.EdgeWidth(e.From, e.To, e.Weight); ok {
+					strokeW = w
+				}
+			}
+			drawEdge(e, tf, col, strokeW)
 			if e.LabelPos != nil && e.Label != "" {
 				lx, ly := tf(*e.LabelPos)
 				c.PaintText(lx, ly, 1, 1, e.Label, st.EdgeFontSize*float32(escale), st.EdgeText).Send()

@@ -208,6 +208,20 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel) (*layeredgraph.Layout, e
 		meta[n.ID] = n
 	}
 
+	// Edge weights come back from the model, not from Graphviz: they are never
+	// emitted (ADR-0167 §SD1 keeps them out of layout), so the laid-out DOT
+	// does not carry them. Keyed by the ordered pair, which is the model's own
+	// no-multigraph identity; a repeated pair keeps the first, matching how a
+	// repeated node id keeps the first occurrence's label.
+	type edgeKey struct{ from, to string }
+	emeta := make(map[edgeKey]float64, len(m.Edges))
+	for _, e := range m.Edges {
+		k := edgeKey{e.From, e.To}
+		if _, dup := emeta[k]; !dup {
+			emeta[k] = e.Weight
+		}
+	}
+
 	llx, lly, urx, ury := parseBB(g.GetStr("bb"))
 	out := &layeredgraph.Layout{Width: urx - llx, Height: ury - lly}
 	// Graphviz: lower-left origin, y-up. Convert to top-left origin, y-down.
@@ -269,7 +283,8 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel) (*layeredgraph.Layout, e
 							// labeled/unlabeled graphs hit this.
 							label = ""
 						}
-						el := layeredgraph.EdgeLayout{From: tName, To: hName, Label: label}
+						el := layeredgraph.EdgeLayout{From: tName, To: hName, Label: label,
+							Weight: emeta[edgeKey{tName, hName}]}
 						el.Points, el.ArrowHead = parseSpline(ed.GetStr("pos"), flip)
 						if lx, ly, ok := parsePoint(ed.GetStr("lp")); ok {
 							p := flip(lx, ly)

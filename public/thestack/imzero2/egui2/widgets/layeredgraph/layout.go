@@ -60,6 +60,16 @@ type Node struct {
 type Edge struct {
 	From, To string
 	Label    string
+	// Weight is an optional ORDINAL quantity carried by this edge: it orders
+	// and emphasises, and nothing here treats it as conserved or as comparable
+	// across drawings (ADR-0167 §SD1). 0 means *unknown*, not *none* — a
+	// renderer must not draw an unweighted edge as the thinnest one.
+	//
+	// The layout passes it through untouched: it does not influence rank
+	// assignment, ordering or routing, so a weighted graph and its weightless
+	// twin lay out identically. Rendering it is the view's business
+	// (view.RenderOpts.EdgeWidth).
+	Weight float64
 }
 
 // GraphModel is the directed graph to lay out.
@@ -103,6 +113,9 @@ type EdgeLayout struct {
 	Points    []Point
 	ArrowHead *Point
 	LabelPos  *Point
+	// Weight is the input Edge.Weight, carried through untouched so a renderer
+	// can map it without holding the input model alongside the layout.
+	Weight float64
 }
 
 // Layout is the positioned result. Width and Height are the overall bounding
