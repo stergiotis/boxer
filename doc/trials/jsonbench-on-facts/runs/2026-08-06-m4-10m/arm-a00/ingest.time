@@ -1,0 +1,314 @@
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject"
+	User time (seconds): 15.93
+	System time (seconds): 1.03
+	Percent of CPU this job got: 204%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:08.29
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1585208
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 1
+	Minor (reclaiming a frame) page faults: 367334
+	Voluntary context switches: 536
+	Involuntary context switches: 2098
+	Swaps: 0
+	File system inputs: 2552
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject"
+	User time (seconds): 15.86
+	System time (seconds): 1.15
+	Percent of CPU this job got: 215%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:07.90
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1755928
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 411256
+	Voluntary context switches: 506
+	Involuntary context switches: 2046
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject"
+	User time (seconds): 14.27
+	System time (seconds): 0.95
+	Percent of CPU this job got: 198%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:07.68
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1571296
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 375647
+	Voluntary context switches: 491
+	Involuntary context switches: 886
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject"
+	User time (seconds): 14.87
+	System time (seconds): 1.00
+	Percent of CPU this job got: 206%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:07.71
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1626736
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 381910
+	Voluntary context switches: 604
+	Involuntary context switches: 880
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+Error on processing query: Code: 117. DB::Exception: Cannot parse JSON object here: {"did":"did:plc:xpxsa5aviwecd7cv6bzbmr5n","time_us":1732209933222718,"kind":"commit","commit":{"rev":"3lbhyarblto2t","operation":"update","collection":"app.bsky.labeler.service","rkey":"self","record":{"$type":"app.bsky.labeler.service","createdAt":"2024-11-21T17:25:27.856Z","policies":{"labelValueDefinitions":[{"adultOnly":false,"blurs":"none","defaultSetting":"warn","identifier":"hipstersmoothie-bluesky-migrate","locales":[{"description":"A website to help people migrate to bsky\nhttps://github.com/hipstersmoothie/bluesky-migrate","lang":"en","name":"hipstersmoothie/bluesky-migrate"}],"severity":"inform"},{"adultOnly":false,"blurs":"none","defaultSetting":"warn","identifier":"intuit-auto","locales":[{"description":"Generate releases based on semantic version labels on pull requests.\nhttps://github.com/intuit/auto","lang":"en","name":"intuit/auto"}],"severity":"inform"},{"adultOnly":false,"blurs":"none","defaultSetting":"warn","identifier":"crablang-crab","locales":[{"description":"A... (JSON object is too long to display as a whole): (at row 91840)
+: (in file/uri (fd = 0)): While executing ParallelParsingBlockInputFormat: data for INSERT was parsed from stdin. (INCORRECT_DATA) (version 26.7.2.59 (official build))
+(query: INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject)
+Command exited with non-zero status 117
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject"
+	User time (seconds): 1.85
+	System time (seconds): 0.22
+	Percent of CPU this job got: 270%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.76
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 569272
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 2
+	Minor (reclaiming a frame) page faults: 111668
+	Voluntary context switches: 85
+	Involuntary context switches: 269
+	Swaps: 0
+	File system inputs: 8168
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 117
+first attempt failed for file_0005.json.gz; retrying with errors allowed
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0, input_format_allow_errors_num = 1000000000, input_format_allow_errors_ratio = 1 FORMAT JSONAsObject"
+	User time (seconds): 14.53
+	System time (seconds): 0.98
+	Percent of CPU this job got: 180%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:08.58
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1676996
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 389296
+	Voluntary context switches: 484
+	Involuntary context switches: 856
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+Error on processing query: Code: 117. DB::Exception: Cannot parse JSON object here: {"did":"did:plc:xpxsa5aviwecd7cv6bzbmr5n","time_us":1732210585401071,"kind":"commit","commit":{"rev":"3lbhyubaslf25","operation":"update","collection":"app.bsky.labeler.service","rkey":"self","record":{"$type":"app.bsky.labeler.service","createdAt":"2024-11-21T17:36:22.444Z","policies":{"labelValueDefinitions":[{"adultOnly":false,"blurs":"none","defaultSetting":"warn","identifier":"hipstersmoothie-bluesky-migrate","locales":[{"description":"A website to help people migrate to bsky\nhttps://github.com/hipstersmoothie/bluesky-migrate","lang":"en","name":"hipstersmoothie/bluesky-migrate"}],"severity":"inform"},{"adultOnly":false,"blurs":"none","defaultSetting":"warn","identifier":"intuit-auto","locales":[{"description":"Generate releases based on semantic version labels on pull requests.\nhttps://github.com/intuit/auto","lang":"en","name":"intuit/auto"}],"severity":"inform"},{"adultOnly":false,"blurs":"none","defaultSetting":"warn","identifier":"crablang-crab","locales":[{"description":"A... (JSON object is too long to display as a whole): (at row 17282)
+: (in file/uri (fd = 0)): While executing ParallelParsingBlockInputFormat: data for INSERT was parsed from stdin. (INCORRECT_DATA) (version 26.7.2.59 (official build))
+(query: INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject)
+Command exited with non-zero status 117
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject"
+	User time (seconds): 0.24
+	System time (seconds): 0.06
+	Percent of CPU this job got: 98%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.30
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 250244
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 30232
+	Voluntary context switches: 28
+	Involuntary context switches: 51
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 117
+first attempt failed for file_0006.json.gz; retrying with errors allowed
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0, input_format_allow_errors_num = 1000000000, input_format_allow_errors_ratio = 1 FORMAT JSONAsObject"
+	User time (seconds): 14.75
+	System time (seconds): 1.01
+	Percent of CPU this job got: 190%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:08.26
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1617872
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 379624
+	Voluntary context switches: 454
+	Involuntary context switches: 1073
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+Error on processing query: Code: 117. DB::Exception: Cannot parse JSON object here: {"did":"did:plc:xpxsa5aviwecd7cv6bzbmr5n","time_us":1732211827306996,"kind":"commit","commit":{"rev":"3lbhzz7ql322d","operation":"update","collection":"app.bsky.labeler.service","rkey":"self","record":{"$type":"app.bsky.labeler.service","createdAt":"2024-11-21T17:57:02.412Z","policies":{"labelValueDefinitions":[{"adultOnly":false,"blurs":"none","defaultSetting":"warn","identifier":"hipstersmoothie-bluesky-migrate","locales":[{"description":"A website to help people migrate to bsky\nhttps://github.com/hipstersmoothie/bluesky-migrate","lang":"en","name":"hipstersmoothie/bluesky-migrate"}],"severity":"inform"},{"adultOnly":false,"blurs":"none","defaultSetting":"warn","identifier":"intuit-auto","locales":[{"description":"Generate releases based on semantic version labels on pull requests.\nhttps://github.com/intuit/auto","lang":"en","name":"intuit/auto"}],"severity":"inform"},{"adultOnly":false,"blurs":"none","defaultSetting":"warn","identifier":"crablang-crab","locales":[{"description":"A... (JSON object is too long to display as a whole): (at row 752367)
+: (in file/uri (fd = 0)): While executing ParallelParsingBlockInputFormat: data for INSERT was parsed from stdin. (INCORRECT_DATA) (version 26.7.2.59 (official build))
+(query: INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject)
+Command exited with non-zero status 117
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject"
+	User time (seconds): 14.09
+	System time (seconds): 0.90
+	Percent of CPU this job got: 919%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:01.63
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1582836
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 365112
+	Voluntary context switches: 288
+	Involuntary context switches: 838
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 8
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 117
+first attempt failed for file_0007.json.gz; retrying with errors allowed
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0, input_format_allow_errors_num = 1000000000, input_format_allow_errors_ratio = 1 FORMAT JSONAsObject"
+	User time (seconds): 15.18
+	System time (seconds): 0.98
+	Percent of CPU this job got: 203%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:07.96
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1569528
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 363176
+	Voluntary context switches: 425
+	Involuntary context switches: 1796
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject"
+	User time (seconds): 15.31
+	System time (seconds): 0.98
+	Percent of CPU this job got: 173%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:09.37
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1629312
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 380662
+	Voluntary context switches: 500
+	Involuntary context switches: 1191
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject"
+	User time (seconds): 14.76
+	System time (seconds): 1.08
+	Percent of CPU this job got: 210%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:07.52
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1618980
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 388269
+	Voluntary context switches: 518
+	Involuntary context switches: 965
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+	Command being timed: "clickhouse-client --query=INSERT INTO jsonbench_a00_10m.bluesky SETTINGS min_insert_block_size_rows = 1000000, min_insert_block_size_bytes = 0 FORMAT JSONAsObject"
+	User time (seconds): 14.89
+	System time (seconds): 1.05
+	Percent of CPU this job got: 192%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:08.27
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1653732
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 393007
+	Voluntary context switches: 447
+	Involuntary context switches: 1016
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

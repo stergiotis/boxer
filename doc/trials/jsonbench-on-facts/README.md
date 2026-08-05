@@ -112,12 +112,22 @@ The arms:
 | Arm | What | JSONBench vocabulary |
 | --- | --- | --- |
 | A | upstream ClickHouse JSON entry, vendored DDL + queries, run locally | the reference |
+| A0 | arm A with the clustered index removed (`ORDER BY tuple()`) | *(added 2026-08-06)* like-for-like on the key |
+| A00 | plain `JSON`, no type hints, no index | *(added 2026-08-06)* the general-store reference |
 | B | facts as-is: `ORDER BY ts`, no secondary indices | unindexed |
 | C | B + data-skipping indices on kind / collection / subject columns | non-clustered |
 | D | *(optional)* facts clone re-keyed for the workload | clustered |
 
 Arm D exists to separate "wrong key" from "wrong model" and runs only if
 B and C leave an unexplained gap.
+
+**Arm A0 was added after the 10M run** and is now the primary reference for
+the facts comparison. Arm A sorts on exactly the five paths the queries touch;
+a facts table holding a mixture of document shapes cannot have that key,
+because most rows carry none of those paths. Measuring facts against arm A
+charges the data model for the benchmark's homogeneity. Arm A remains
+reported, as the upper bound on what a workload-shaped clustered index buys a
+single-schema table — 1.02–1.73× latency and 9.8 % storage at 10M.
 
 ## 5 Mapping design space
 
@@ -137,6 +147,15 @@ therefore changes storage size, not benchmark latency — which cleanly
 splits the experiment: latency comparisons need only the backbone; how
 deeply the long tail is mapped is a size-only sub-experiment (deep leeway
 map vs. payload-as-string, measured, not argued).
+
+The backbone's string-vs-symbol split likewise needs no sample-data
+inference: the pinned upstream DDL already encodes it in its typed-path
+hints ([the pin](./upstream/PIN.md) § The table). Read across to leeway:
+`kind`, `commit.operation`, and `commit.collection` are
+`LowCardinality(String)` upstream, so they belong in the `symbol`
+tagged-value section; `did` is a plain `String` upstream — deliberately
+un-dictionaried at millions of distinct users — and stays `string` (it is
+the subject-identity axis besides, §9 Q3); `time_us` is numeric-temporal.
 
 Ingest rides the existing lanes: RowDML native ingestion
 ([ADR-0089](../../adr/0089-rowdml-serialization-clickhouse-native-ingestion.md)),
@@ -188,6 +207,87 @@ candidates, so later readers can tell hypotheses from surprises: the Q3
 timezone dependency; grammar coverage of `IN [..]` array literals,
 `date_diff`, and `::String` casts; identity-minting throughput at DID
 cardinality; ingest-lane throughput at the 100M tier.
+
+## 7a Results so far
+
+**Latest — 2026-08-06, M4 at the 10M tier, arms A–D, cold runs measured**
+([logbook](./logbook.md),
+[`runs/2026-08-06-m4-10m/`](./runs/2026-08-06-m4-10m/)). All four arms hold
+9,999,994 documents and return byte-identical results.
+
+Three references are reported (§4), because the answer depends on which one a
+general fact store should be held to:
+
+| Reference | Declares | Facts + materialized backbone vs it |
+| --- | --- | --- |
+| A — the benchmark's entry | 5 typed paths + a clustered index on them | 1.03–1.4× slower |
+| A0 — index removed | 5 typed paths | 0.72–1.09× — parity |
+| **A00 — nothing declared** | — | **0.28–0.69× — 1.4–3.5× faster** |
+
+Only A00 is a shape a store holding a mixture of document shapes could
+actually have — and **the benchmark's own queries do not run against it**
+(`Dynamic` columns are refused by `GROUP BY` and by `IN`; Q3 cannot execute
+without a cast). That is the sharpest evidence that this workload is not posed
+for high-variability JSON.
+
+Against **arm A0** (§4):
+
+- **Storage: facts is 0.807× unindexed native JSON**; 0.958× with the backbone
+  materialized. The 1M tier's 1.44× *inverts* at scale.
+- **Latency with the five backbone paths materialized (arm D): 0.72–1.09×** —
+  parity, and faster on the two `did`-grouped queries. **Memory 0.99–1.15×.**
+  On a like-for-like key the facts model is at parity with ClickHouse's native
+  JSON type.
+- **Without materialization (arm B): 8.0–12.8×.** This is the whole remaining
+  gap, and it is the read path, not the model. §4's hypothesis holds at 10M —
+  arm B reads every granule on every query.
+- **Arm C prunes 2 granules of 2394.** Two tiers, same verdict: data-skipping
+  indices over section value lanes cannot serve this workload.
+- **The 100M gate passes** (§9 Q6): ~77 GiB against 262 GiB free, ~2 h wall
+  clock, dominated by the single-process facts ingest.
+
+The facts data model costs very little here. Almost everything the first run
+attributed to it belonged to how the queries were written and to the absence
+of a workload-shaped key — both fixable without touching the model.
+
+### The 1M run, and why its numbers no longer stand
+
+First run 2026-08-05 (M0–M3, 1M tier) — full entry in the
+[logbook](./logbook.md), evidence in
+[`runs/2026-08-05-m0-m3-1m/`](./runs/2026-08-05-m0-m3-1m/). **Its facts-arm
+figures are superseded**: the queries open-coded the lane arithmetic (~3×
+slower than the leeway query vocabulary), the run had no cold column, and 1M
+proved too small a tier for the storage comparison to mean anything. Arm A's
+numbers and the qualitative findings stand; the ratios below do not.
+
+All three arms return byte-identical results for all five queries. Against
+ClickHouse's native JSON type on the same box, holding the corpus in the facts
+model cost **1.44× storage, 9.2–15.3× hot latency, and 5.6–76× peak query
+memory** at 1M. The §4 hypothesis is **confirmed**: on the unmodified facts
+table every query reads every granule. Arm C's data-skipping indices are
+built and used by the planner but prune 1 granule of 245, and an on/off A/B on
+the same table shows no runtime difference — **arm C closes none of the gap**,
+because granule-level pruning cannot work on membership set semantics unless
+the rows are clustered by the filtered value.
+
+A same-day decomposition
+([`diagnostics.md`](./runs/2026-08-05-m0-m3-1m/diagnostics.md)) then relocated
+most of that tax. The leeway membership machinery is **8 %** of arm B's disk
+footprint; 81.5 % is the shredded values. And the latency and memory columns
+are dominated by resolving a value by its path *in SQL* — on Q1 that
+reconstruction alone costs 7× the time and 8× the memory, and removing it puts
+arm B within **2.4×** of arm A rather than 13.8×. The gap is mostly in the read
+path, not the data model.
+
+Two corrections to this protocol that the first run forced:
+
+- **§8 M0's "vendor" step is not performed and should not be.** JSONBench is
+  CC BY-NC-SA 4.0 and this repository is MIT. The step is satisfied by a
+  commit pin plus SHA-256 verification instead — see
+  [`upstream/PIN.md`](./upstream/PIN.md).
+- **§8 M6 (arm D) is no longer optional-on-an-unexplained-gap.** The B/C gap
+  is explained, and the explanation is an argument for re-keying, so arm D is
+  the natural next experiment rather than a contingency.
 
 ## 8 Milestone cut (each descope-able)
 

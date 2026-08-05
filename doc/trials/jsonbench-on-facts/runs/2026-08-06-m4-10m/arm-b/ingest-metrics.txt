@@ -1,0 +1,1 @@
+docs=9999994 attributes=121205987 nulls_dropped=10 undecodable_skipped=6 elapsed_s=330.551 docs_per_s=30252

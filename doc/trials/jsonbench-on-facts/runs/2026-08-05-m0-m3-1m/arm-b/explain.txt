@@ -1,0 +1,218 @@
+=== Q1 indexes=1 ===
+Output: arrayFirst(tuple(\'/commit/collection\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))), count()
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: count() DESC
+└──Aggregating
+   │  Keys: arrayFirst(tuple(\'/commit/collection\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data)))
+   │  Aggregates: count()
+   │  Skip merging: 0
+   └──ReadFromMergeTree (jsonbench_b_1m.facts)
+         Read type: Default
+         Parts: 3 | Granules: 200
+         Output: tv:symbol:value:val:s:m:0:24:0::data, tv:symbol:mrhp:mrhp:y:g:0:0:0::data, tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data
+         Indexes:
+           PrimaryKey
+             Condition: true
+             Parts: 3/3
+             Granules: 200/200
+           Ranges: 3
+
+=== Q1 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 27 → 1
+    MergeSortingTransform × 27
+      LimitsCheckingTransform × 27
+        PartialSortingTransform × 27
+          (Expression)
+          ExpressionTransform × 27
+            (Aggregating)
+            Resize 27 → 27
+              AggregatingTransform × 27
+                (Expression)
+                ExpressionTransform × 27
+                  (ReadFromMergeTree)
+                  MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 27 0 → 1
+
+=== Q2 indexes=1 ===
+Output: arrayFirst(tuple(\'/commit/collection\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(c UInt64, s UInt64 -> if(equals(c, 0_UInt8), \'\'_String, arrayElement(`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`, toUInt32(plus(minus(s, c), 1_UInt8)))), `tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`, arrayCumSum(`tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`))), count(), uniqExact(arrayFirst(tuple(\'/did\'), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:value:val:sh:g:0:x2:0::data, 1), tv:stringArray:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:stringArray:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:mrhp:mrhp:y:g:0:0:0::data, 1), tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data))))
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: count() DESC
+└──Aggregating
+   │  Keys: arrayFirst(tuple(\'/commit/collection\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(c UInt64, s UInt64 -> if(equals(c, 0_UInt8), \'\'_String, arrayElement(`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`, toUInt32(plus(minus(s, c), 1_UInt8)))), `tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`, arrayCumSum(`tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`)))
+   │  Aggregates: count(), uniqExact(arrayFirst(tuple(\'/did\'), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:value:val:sh:g:0:x2:0::data, 1), tv:stringArray:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:stringArray:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:mrhp:mrhp:y:g:0:0:0::data, 1), tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data))))
+   │  Skip merging: 0
+   └──ReadFromMergeTree (jsonbench_b_1m.facts)
+         Read type: Default
+         Parts: 3 | Granules: 200
+         Output: tv:symbol:value:val:s:m:0:24:0::data, arrayMap(c UInt64, s UInt64 -> if(equals(c, 0_UInt8), \'\'_String, arrayElement(`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`, toUInt32(plus(minus(s, c), 1_UInt8)))), `tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`, arrayCumSum(`tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`)), tv:stringArray:value:val:sh:g:0:x2:0::data, tv:stringArray:len:len:u64:28o:0:0:0::data, tv:stringArray:mrhp:mrhp:y:g:0:0:0::data, tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data
+         Prewhere filter
+         Prewhere filter column:  arrayFirst(tuple(\'/commit/operation\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) = \'create\' AND arrayFirst(tuple(\'/kind\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) = \'commit\'
+         Indexes:
+           PrimaryKey
+             Condition: true
+             Parts: 3/3
+             Granules: 200/200
+           Ranges: 3
+
+=== Q2 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 27 → 1
+    MergeSortingTransform × 27
+      LimitsCheckingTransform × 27
+        PartialSortingTransform × 27
+          (Expression)
+          ExpressionTransform × 27
+            (Aggregating)
+            Resize 27 → 27
+              AggregatingTransform × 27
+                (Expression)
+                ExpressionTransform × 27
+                  (Expression)
+                  ExpressionTransform × 27
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 27 0 → 1
+
+=== Q3 indexes=1 ===
+Output: arrayFirst(v String, p String -> equals(p, \'/commit/collection\'_String), `tv:symbol:value:val:s:m:0:24:0::data`, arrayMap(c UInt64, s UInt64 -> if(equals(c, 0_UInt8), \'\'_String, arrayElement(`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`, toUInt32(plus(minus(s, c), 1_UInt8)))), `tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`, arrayCumSum(`tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`))), toHour(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data))))), count()
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: toHour(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data))))) ASC, arrayFirst(v String, p String -> equals(p, \'/commit/collection\'_String), `tv:symbol:value:val:s:m:0:24:0::data`, arrayMap(c UInt64, s UInt64 -> if(equals(c, 0_UInt8), \'\'_String, arrayElement(`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`, toUInt32(plus(minus(s, c), 1_UInt8)))), `tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`, arrayCumSum(`tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`))) ASC
+└──Aggregating
+   │  Keys: arrayFirst(v String, p String -> equals(p, \'/commit/collection\'_String), `tv:symbol:value:val:s:m:0:24:0::data`, arrayMap(c UInt64, s UInt64 -> if(equals(c, 0_UInt8), \'\'_String, arrayElement(`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`, toUInt32(plus(minus(s, c), 1_UInt8)))), `tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`, arrayCumSum(`tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`))), toHour(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data)))))
+   │  Aggregates: count()
+   │  Skip merging: 0
+   └──ReadFromMergeTree (jsonbench_b_1m.facts)
+         Read type: Default
+         Parts: 3 | Granules: 200
+         Output: arrayFirst(v String, p String -> equals(p, \'/commit/collection\'_String), `tv:symbol:value:val:s:m:0:24:0::data`, arrayMap(c UInt64, s UInt64 -> if(equals(c, 0_UInt8), \'\'_String, arrayElement(`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`, toUInt32(plus(minus(s, c), 1_UInt8)))), `tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`, arrayCumSum(`tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data`))), tv:i64Array:value:val:i64h:g:0:0:0::data, tv:i64Array:len:len:u64:28o:0:0:0::data, tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data
+         Prewhere filter
+         Prewhere filter column:  arrayFirst(tuple(\'/commit/collection\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) IN (\'app.bsky.feed.post\', \'app.bsky.feed.repost\', \'app.bsky.feed.like\') AND arrayFirst(tuple(\'/commit/operation\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) = \'create\' AND arrayFirst(tuple(\'/kind\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) = \'commit\'
+         Indexes:
+           PrimaryKey
+             Condition: true
+             Parts: 3/3
+             Granules: 200/200
+           Ranges: 3
+
+=== Q3 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 27 → 1
+    MergeSortingTransform × 27
+      LimitsCheckingTransform × 27
+        PartialSortingTransform × 27
+          (Expression)
+          ExpressionTransform × 27
+            (Aggregating)
+            Resize 27 → 27
+              AggregatingTransform × 27
+                (Expression)
+                ExpressionTransform × 27
+                  (Expression)
+                  ExpressionTransform × 27
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 27 0 → 1
+
+=== Q4 indexes=1 ===
+Output: CAST(arrayFirst(tuple(\'/did\'), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:value:val:sh:g:0:x2:0::data, 1), tv:stringArray:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:stringArray:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:mrhp:mrhp:y:g:0:0:0::data, 1), tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data))) AS String), min(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data)))))
+
+Limit (preliminary LIMIT)
+│  Limit 3
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: min(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data))))) ASC
+   │  Limit 3
+   └──Aggregating
+      │  Keys: CAST(arrayFirst(tuple(\'/did\'), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:value:val:sh:g:0:x2:0::data, 1), tv:stringArray:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:stringArray:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:mrhp:mrhp:y:g:0:0:0::data, 1), tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data))) AS String)
+      │  Aggregates: min(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data)))))
+      │  Skip merging: 0
+      └──ReadFromMergeTree (jsonbench_b_1m.facts)
+            Read type: Default
+            Parts: 3 | Granules: 200
+            Output: tv:stringArray:value:val:sh:g:0:x2:0::data, tv:stringArray:len:len:u64:28o:0:0:0::data, tv:stringArray:mrhp:mrhp:y:g:0:0:0::data, tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data, tv:i64Array:value:val:i64h:g:0:0:0::data, tv:i64Array:len:len:u64:28o:0:0:0::data, tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data
+            Prewhere filter
+            Prewhere filter column:  arrayFirst(tuple(\'/commit/collection\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) = \'app.bsky.feed.post\' AND arrayFirst(tuple(\'/commit/operation\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) = \'create\' AND arrayFirst(tuple(\'/kind\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) = \'commit\'
+            Indexes:
+              PrimaryKey
+                Condition: true
+                Parts: 3/3
+                Granules: 200/200
+              Ranges: 3
+
+=== Q4 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 27 → 1
+      MergeSortingTransform × 27
+        LimitsCheckingTransform × 27
+          PartialSortingTransform × 27
+            (Expression)
+            ExpressionTransform × 27
+              (Aggregating)
+              Resize 27 → 27
+                AggregatingTransform × 27
+                  (Expression)
+                  ExpressionTransform × 27
+                    (Expression)
+                    ExpressionTransform × 27
+                      (ReadFromMergeTree)
+                      MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 27 0 → 1
+
+=== Q5 indexes=1 ===
+Output: CAST(arrayFirst(tuple(\'/did\'), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:value:val:sh:g:0:x2:0::data, 1), tv:stringArray:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:stringArray:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:mrhp:mrhp:y:g:0:0:0::data, 1), tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data))) AS String), dateDiff(\'milliseconds\', min(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data))))), max(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data))))))
+
+Limit (preliminary LIMIT)
+│  Limit 3
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: dateDiff(\'milliseconds\', min(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data))))), max(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data)))))) DESC
+   │  Limit 3
+   └──Aggregating
+      │  Keys: CAST(arrayFirst(tuple(\'/did\'), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:value:val:sh:g:0:x2:0::data, 1), tv:stringArray:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:stringArray:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:stringArray:mrhp:mrhp:y:g:0:0:0::data, 1), tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data))) AS String)
+      │  Aggregates: min(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data))))), max(fromUnixTimestamp64Micro(arrayFirst(tuple(\'/time_us\'), arrayMap(Capture[UInt8, Int64, Array(Int64), UInt8](UInt64, UInt64) -> Int64(0, 0, tv:i64Array:value:val:i64h:g:0:0:0::data, 1), tv:i64Array:len:len:u64:28o:0:0:0::data, arrayCumSum(tv:i64Array:len:len:u64:28o:0:0:0::data)), arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, 1), tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data)))))
+      │  Skip merging: 0
+      └──ReadFromMergeTree (jsonbench_b_1m.facts)
+            Read type: Default
+            Parts: 3 | Granules: 200
+            Output: tv:stringArray:value:val:sh:g:0:x2:0::data, tv:stringArray:len:len:u64:28o:0:0:0::data, tv:stringArray:mrhp:mrhp:y:g:0:0:0::data, tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data, tv:i64Array:value:val:i64h:g:0:0:0::data, tv:i64Array:len:len:u64:28o:0:0:0::data, tv:i64Array:mrhp:mrhp:y:g:0:0:0::data, tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data
+            Prewhere filter
+            Prewhere filter column:  arrayFirst(tuple(\'/commit/collection\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) = \'app.bsky.feed.post\' AND arrayFirst(tuple(\'/commit/operation\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) = \'create\' AND arrayFirst(tuple(\'/kind\'), tv:symbol:value:val:s:m:0:24:0::data, arrayMap(Capture[UInt8, String, Array(String), UInt8](UInt64, UInt64) -> String(0, \'\', tv:symbol:mrhp:mrhp:y:g:0:0:0::data, 1), tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data, arrayCumSum(tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data))) = \'commit\'
+            Indexes:
+              PrimaryKey
+                Condition: true
+                Parts: 3/3
+                Granules: 200/200
+              Ranges: 3
+
+=== Q5 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 27 → 1
+      MergeSortingTransform × 27
+        LimitsCheckingTransform × 27
+          PartialSortingTransform × 27
+            (Expression)
+            ExpressionTransform × 27
+              (Aggregating)
+              Resize 27 → 27
+                AggregatingTransform × 27
+                  (Expression)
+                  ExpressionTransform × 27
+                    (Expression)
+                    ExpressionTransform × 27
+                      (ReadFromMergeTree)
+                      MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 27 0 → 1
+

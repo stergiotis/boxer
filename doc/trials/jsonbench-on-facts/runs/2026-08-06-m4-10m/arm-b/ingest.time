@@ -1,0 +1,60 @@
+[90m2026-08-06T00:13:07+02:00[0m [32mINF[0m [1msampling for symbol routing[0m [36msample=[0m20000
+[90m2026-08-06T00:13:07+02:00[0m [32mINF[0m [1mrouting to the symbol section[0m [36mpaths=[0m[38;2;0;150;199m[]interface {}:11:11[0m[38;2;185;86;86m {[0m
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/commit/collection[0m[38;2;112;214;255m"[0m,
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/commit/operation[0m[38;2;112;214;255m"[0m,
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/commit/record/$type[0m[38;2;112;214;255m"[0m,
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/commit/record/avatar/$type[0m[38;2;112;214;255m"[0m,
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/commit/record/avatar/mimeType[0m[38;2;112;214;255m"[0m,
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/commit/record/embed/$type[0m[38;2;112;214;255m"[0m,
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/commit/record/embed/external/thumb/$type[0m[38;2;112;214;255m"[0m,
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/commit/record/embed/images/_/image/$type[0m[38;2;112;214;255m"[0m,
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/commit/record/embed/images/_/image/mimeType[0m[38;2;112;214;255m"[0m,
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/commit/record/facets/_/features/_/$type[0m[38;2;112;214;255m"[0m,
+  [38;2;112;214;255m"[0m[38;2;138;201;38m/kind[0m[38;2;112;214;255m"[0m,
+[38;2;185;86;86m}[0m
+[90m2026-08-06T00:13:07+02:00[0m [32mINF[0m [1mingesting[0m [36mfile=[0mfile_0001.json.gz
+[90m2026-08-06T00:13:36+02:00[0m [32mINF[0m [1mingesting[0m [36mfile=[0mfile_0002.json.gz
+[90m2026-08-06T00:14:05+02:00[0m [32mINF[0m [1mingesting[0m [36mfile=[0mfile_0003.json.gz
+[90m2026-08-06T00:14:37+02:00[0m [32mINF[0m [1mingesting[0m [36mfile=[0mfile_0004.json.gz
+[90m2026-08-06T00:15:10+02:00[0m [32mINF[0m [1mingesting[0m [36mfile=[0mfile_0005.json.gz
+[90m2026-08-06T00:15:13+02:00[0m [33mWRN[0m [1mskipping undecodable document[0m [36mfile=[0mfile_0005.json.gz [36mline=[0m91840
+  Error: unexpected end of JSON input
+[90m2026-08-06T00:15:13+02:00[0m [33mWRN[0m [1mskipping undecodable document[0m [36mfile=[0mfile_0005.json.gz [36mline=[0m91841
+  Error: invalid character 'e' looking for beginning of value
+[90m2026-08-06T00:15:43+02:00[0m [32mINF[0m [1mingesting[0m [36mfile=[0mfile_0006.json.gz
+[90m2026-08-06T00:15:44+02:00[0m [33mWRN[0m [1mskipping undecodable document[0m [36mfile=[0mfile_0006.json.gz [36mline=[0m17282
+  Error: unexpected end of JSON input
+[90m2026-08-06T00:15:44+02:00[0m [33mWRN[0m [1mskipping undecodable document[0m [36mfile=[0mfile_0006.json.gz [36mline=[0m17283
+  Error: invalid character 'e' looking for beginning of value
+[90m2026-08-06T00:16:15+02:00[0m [32mINF[0m [1mingesting[0m [36mfile=[0mfile_0007.json.gz
+[90m2026-08-06T00:16:44+02:00[0m [33mWRN[0m [1mskipping undecodable document[0m [36mfile=[0mfile_0007.json.gz [36mline=[0m752367
+  Error: unexpected end of JSON input
+[90m2026-08-06T00:16:44+02:00[0m [33mWRN[0m [1mskipping undecodable document[0m [36mfile=[0mfile_0007.json.gz [36mline=[0m752368
+  Error: invalid character 'e' looking for beginning of value
+[90m2026-08-06T00:16:53+02:00[0m [32mINF[0m [1mingesting[0m [36mfile=[0mfile_0008.json.gz
+[90m2026-08-06T00:17:27+02:00[0m [32mINF[0m [1mingesting[0m [36mfile=[0mfile_0009.json.gz
+[90m2026-08-06T00:18:02+02:00[0m [32mINF[0m [1mingesting[0m [36mfile=[0mfile_0010.json.gz
+[90m2026-08-06T00:18:38+02:00[0m [32mINF[0m [1mingest complete[0m [36mattributes=[0m121205987 [36mdocs=[0m9999994 [36mdocsPerSec=[0m30252.486761931697 [36melapsed=[0m330551.14043 [36mnullsDropped=[0m10 [36mundecodableSkipped=[0m6
+	Command being timed: "<jsonbench> ingest --database jsonbench_b_10m --data-dir <BLUESKY_DATA_DIR> --files 10 --batch 25000 --sample 20000"
+	User time (seconds): 223.90
+	System time (seconds): 38.87
+	Percent of CPU this job got: 79%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 5:30.79
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 384584
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 22132952
+	Voluntary context switches: 253000
+	Involuntary context switches: 38023
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 112
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

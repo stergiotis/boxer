@@ -1,0 +1,188 @@
+=== Q1 indexes=1 ===
+Output: data.commit.collection, count()
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: count() DESC
+└──Aggregating
+   │  Keys: data.commit.collection
+   │  Aggregates: count()
+   │  Skip merging: 0
+   └──ReadFromMergeTree (jsonbench_a0_10m.bluesky)
+         Read type: Default
+         Parts: 5 | Granules: 1225
+         Output: data.commit.collection
+
+=== Q1 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 32 → 1
+    MergeSortingTransform × 32
+      LimitsCheckingTransform × 32
+        PartialSortingTransform × 32
+          (Expression)
+          ExpressionTransform × 32
+            (Aggregating)
+            Resize 32 → 32
+              AggregatingTransform × 32
+                (Expression)
+                ExpressionTransform × 32
+                  (ReadFromMergeTree)
+                  MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q2 indexes=1 ===
+Output: data.commit.collection, count(), uniqExact(data.did)
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: count() DESC
+└──Aggregating
+   │  Keys: data.commit.collection
+   │  Aggregates: count(), uniqExact(data.did)
+   │  Skip merging: 0
+   └──ReadFromMergeTree (jsonbench_a0_10m.bluesky)
+         Read type: Default
+         Parts: 5 | Granules: 1225
+         Output: data.commit.collection, data.did
+         Prewhere filter
+         Prewhere filter column:  data.commit.operation = \'create\' AND data.kind = \'commit\'
+
+=== Q2 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 32 → 1
+    MergeSortingTransform × 32
+      LimitsCheckingTransform × 32
+        PartialSortingTransform × 32
+          (Expression)
+          ExpressionTransform × 32
+            (Aggregating)
+            Resize 32 → 32
+              AggregatingTransform × 32
+                (Expression)
+                ExpressionTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q3 indexes=1 ===
+Output: data.commit.collection, toHour(fromUnixTimestamp64Micro(data.time_us)), count()
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: toHour(fromUnixTimestamp64Micro(data.time_us)) ASC, data.commit.collection ASC
+└──Aggregating
+   │  Keys: data.commit.collection, toHour(fromUnixTimestamp64Micro(data.time_us))
+   │  Aggregates: count()
+   │  Skip merging: 0
+   └──ReadFromMergeTree (jsonbench_a0_10m.bluesky)
+         Read type: Default
+         Parts: 5 | Granules: 1225
+         Output: data.commit.collection, data.time_us
+         Prewhere filter
+         Prewhere filter column:  data.commit.collection IN (\'app.bsky.feed.post\', \'app.bsky.feed.repost\', \'app.bsky.feed.like\') AND data.commit.operation = \'create\' AND data.kind = \'commit\'
+
+=== Q3 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 32 → 1
+    MergeSortingTransform × 32
+      LimitsCheckingTransform × 32
+        PartialSortingTransform × 32
+          (Expression)
+          ExpressionTransform × 32
+            (Aggregating)
+            Resize 32 → 32
+              AggregatingTransform × 32
+                (Expression)
+                ExpressionTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q4 indexes=1 ===
+Output: CAST(data.did AS String), min(fromUnixTimestamp64Micro(data.time_us))
+
+Limit (preliminary LIMIT)
+│  Limit 3
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: min(fromUnixTimestamp64Micro(data.time_us)) ASC
+   │  Limit 3
+   └──Aggregating
+      │  Keys: CAST(data.did AS String)
+      │  Aggregates: min(fromUnixTimestamp64Micro(data.time_us))
+      │  Skip merging: 0
+      └──ReadFromMergeTree (jsonbench_a0_10m.bluesky)
+            Read type: Default
+            Parts: 5 | Granules: 1225
+            Output: data.did, data.time_us
+            Prewhere filter
+            Prewhere filter column:  data.commit.collection = \'app.bsky.feed.post\' AND data.commit.operation = \'create\' AND data.kind = \'commit\'
+
+=== Q4 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (Expression)
+                    ExpressionTransform × 32
+                      (ReadFromMergeTree)
+                      MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q5 indexes=1 ===
+Output: CAST(data.did AS String), dateDiff(\'milliseconds\', min(fromUnixTimestamp64Micro(data.time_us)), max(fromUnixTimestamp64Micro(data.time_us)))
+
+Limit (preliminary LIMIT)
+│  Limit 3
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: dateDiff(\'milliseconds\', min(fromUnixTimestamp64Micro(data.time_us)), max(fromUnixTimestamp64Micro(data.time_us))) DESC
+   │  Limit 3
+   └──Aggregating
+      │  Keys: CAST(data.did AS String)
+      │  Aggregates: min(fromUnixTimestamp64Micro(data.time_us)), max(fromUnixTimestamp64Micro(data.time_us))
+      │  Skip merging: 0
+      └──ReadFromMergeTree (jsonbench_a0_10m.bluesky)
+            Read type: Default
+            Parts: 5 | Granules: 1225
+            Output: data.did, data.time_us
+            Prewhere filter
+            Prewhere filter column:  data.commit.collection = \'app.bsky.feed.post\' AND data.commit.operation = \'create\' AND data.kind = \'commit\'
+
+=== Q5 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (Expression)
+                    ExpressionTransform × 32
+                      (ReadFromMergeTree)
+                      MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+

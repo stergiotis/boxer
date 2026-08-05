@@ -1,0 +1,59 @@
+--- Q1 ---
+    ┌─event──────────────────────┬───count─┐
+ 1. │ app.bsky.feed.like         │ 4673017 │ -- 4.67 million
+ 2. │ app.bsky.graph.follow      │ 3387006 │ -- 3.39 million
+ 3. │ app.bsky.feed.post         │  930269 │
+ 4. │ app.bsky.feed.repost       │  597193 │
+ 5. │ app.bsky.graph.block       │  142218 │
+ 6. │ app.bsky.actor.profile     │  118646 │
+ 7. │ app.bsky.graph.listitem    │   75984 │
+ 8. │                            │   53826 │
+ 9. │ app.bsky.graph.listblock   │   10467 │
+10. │ app.bsky.graph.starterpack │    3619 │
+11. │ app.bsky.graph.list        │    3414 │
+12. │ app.bsky.feed.threadgate   │    2554 │
+13. │ app.bsky.feed.postgate     │    1076 │
+14. │ app.bsky.feed.generator    │     686 │
+15. │ app.bsky.labeler.service   │      13 │
+16. │ app.kollective.catalog     │       6 │
+    └────────────────────────────┴─────────┘
+--- Q2 ---
+    ┌─event──────────────────────┬───count─┬──users─┐
+ 1. │ app.bsky.feed.like         │ 4631335 │ 694849 │
+ 2. │ app.bsky.graph.follow      │ 3220534 │ 463192 │
+ 3. │ app.bsky.feed.post         │  895614 │ 327190 │
+ 4. │ app.bsky.feed.repost       │  582487 │ 188549 │
+ 5. │ app.bsky.graph.block       │  139918 │  45808 │
+ 6. │ app.bsky.graph.listitem    │   72005 │   7097 │
+ 7. │ app.bsky.actor.profile     │   57530 │  54333 │
+ 8. │ app.bsky.graph.listblock   │    9994 │   5104 │
+ 9. │ app.bsky.graph.list        │    2495 │   1954 │
+10. │ app.bsky.feed.threadgate   │    2295 │   1608 │
+11. │ app.bsky.feed.postgate     │    1052 │    646 │
+12. │ app.bsky.graph.starterpack │     905 │    840 │
+13. │ app.bsky.feed.generator    │     150 │     74 │
+    └────────────────────────────┴─────────┴────────┘
+--- Q3 ---
+   ┌─event────────────────┬─hour_of_day─┬───count─┐
+1. │ app.bsky.feed.like   │          17 │ 1024657 │ -- 1.02 million
+2. │ app.bsky.feed.post   │          17 │  201824 │
+3. │ app.bsky.feed.repost │          17 │  133098 │
+4. │ app.bsky.feed.like   │          18 │ 2170794 │ -- 2.17 million
+5. │ app.bsky.feed.post   │          18 │  423474 │
+6. │ app.bsky.feed.repost │          18 │  270421 │
+7. │ app.bsky.feed.like   │          19 │ 1435884 │ -- 1.44 million
+8. │ app.bsky.feed.post   │          19 │  270316 │
+9. │ app.bsky.feed.repost │          19 │  178968 │
+   └──────────────────────┴─────────────┴─────────┘
+--- Q4 ---
+   ┌─user_id──────────────────────────┬──────────────first_post_ts─┐
+1. │ did:plc:yj3sjq3blzpynh27cumnp5ks │ 2024-11-21 17:25:49.000167 │
+2. │ did:plc:l5o3qjrmfztir54cpwlv2eme │ 2024-11-21 17:25:49.001905 │
+3. │ did:plc:s4bwqchfzm6gjqfeb6mexgbu │ 2024-11-21 17:25:49.003907 │
+   └──────────────────────────────────┴────────────────────────────┘
+--- Q5 ---
+   ┌─user_id──────────────────────────┬─activity_span─┐
+1. │ did:plc:doxhhgtxqiv47tmcovpbcqai │       7902219 │ -- 7.90 million
+2. │ did:plc:oqmcuym3iqvl5cpaxjw4idom │       7901847 │ -- 7.90 million
+3. │ did:plc:k3aqnyog5k4xk4p6p2xxeirl │       7900413 │ -- 7.90 million
+   └──────────────────────────────────┴───────────────┘

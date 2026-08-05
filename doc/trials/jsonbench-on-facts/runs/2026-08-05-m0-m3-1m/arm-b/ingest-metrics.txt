@@ -1,0 +1,1 @@
+docs=1000000 attributes=12045072 nulls_dropped=0 elapsed_s=26.723 docs_per_s=37420
