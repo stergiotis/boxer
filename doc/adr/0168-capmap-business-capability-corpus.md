@@ -118,14 +118,29 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   round-tripping (a goldmark AST is not losslessly re-renderable) and multiplies
   rows to answer questions nobody asks.
 
-- **SD6 — A `capmap` vocabulary with its own TagValue.** Mirrors
+- **SD6 — A `capmap` vocabulary with its own tag-value base.** Mirrors
   `public/keelson/runtime/vocab`: `capmap*`-prefixed natural keys in
-  `LowerSpinalCase`. Because nothing in the tree records which TagValues are
-  taken, this ADR also states the allocation rule: **TagValues are allocated
-  here, in the ADR that introduces the vocabulary, and the allocating ADR is
-  named in the vocabulary package's doc comment.** Rejected: registering into
+  `LowerSpinalCase`, at `public/gov/capmapvocab`. Rejected: registering into
   the runtime vocabulary, which would put corpus names in a namespace whose
   prefix promises process state.
+
+  Because nothing in the tree records which tag values are taken, this ADR is
+  the register, and the allocation is named in the vocabulary package's doc
+  comment where the next author will be standing. **Allocation is by base, not
+  by single value**: a registry mints `base + tv` for any even `tv`, so a base
+  reserves an open-ended range and "the next free integer" would place a new
+  vocabulary inside an existing one's growth path. The rule is therefore **the
+  next unused multiple of 16, owning the even offsets up to the following
+  multiple**. capmap takes **16**; two bases predate the rule and are
+  grandfathered at their present size, 1 (keelson vdd) and 2 (keelson runtime);
+  the next vocabulary takes 32.
+
+  Nothing but a test stands behind this. A collision does not fail to compile
+  or to write — it makes two unrelated facts wear one membership id and
+  quietly falsifies every query over either — so
+  `TestTagValuesAreDisjointFromOtherVocabularies` compares capmap's minted ids
+  against both other vocabularies, and is verified to fail when the base is
+  moved onto one of theirs.
 
 - **SD7 — The corpus lives in-tree but git-ignored.** `doc/capabilities/`,
   symmetric with `doc/adr/`, holding the boxer catalog only, with a committed
