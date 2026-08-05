@@ -385,6 +385,23 @@ with the still-open M0 fps run (same session, same build);
 `doc/env-vars.md` regeneration for the new knob is left for the next
 quiet-tree regen.
 
+## Update (2026-08-06, later) — M4 book landed
+
+`bookcoverage` is the sixth applet book (TopicObservability): cov-overview
+(the cumulative totals as one column), cov-map (the import-path tree as an
+ADR-0166 nodes-contract treemap — module prefix trimmed via a new
+`module_path` column on `coverage_pkgs`, subtree totals computed by prefix
+contribution rather than a join, coverage rendered as seven qualitative
+brackets because a continuous ratio ramp is still the open ADR-0166 check;
+`size_by = 'uncovered'` turns the map into a work list), and cov-uncovered
+(the function-grain work list with `pkg`/`show` knobs). The gate mirrors
+the capmap book: corpus assertions, a six-book mint (25 applets), and
+every buffer executed verbatim through the introspect engine over a
+fixture `CoverageSourceI`, asserting the trim/root/bracket behaviour and
+the browser's three populations. All milestones M0–M4 are now built; open
+remain the fps-gate GUI run (with the live `keelson('coverage_pkgs')`
+check) and the deferrals — the §SD6 tee first among them.
+
 ## Status
 
 Proposed, 2026-08-05.
