@@ -78,7 +78,7 @@ func TestRunsHistoryDriverRevealFiresOnce(t *testing.T) {
 func TestRunsHistoryDriverNilEndpoint(t *testing.T) {
 	d := newRunsHistoryDriver(nil)
 	require.Nil(t, d.fetch)
-	d.refresh()             // must not panic
+	d.refresh()              // must not panic
 	d.maybeRefreshOnReveal() // must not panic
 	_, err, inFlight, fetched, _ := d.snapshot()
 	require.NoError(t, err)

@@ -66,8 +66,8 @@ const (
 type temporalKind uint8
 
 const (
-	kindInstants temporalKind = iota // points → numbered flags
-	kindIntervals                    // spans → lane bars
+	kindInstants  temporalKind = iota // points → numbered flags
+	kindIntervals                     // spans → lane bars
 )
 
 type temporalSpan struct {

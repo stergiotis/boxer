@@ -12,8 +12,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/dustin/go-humanize"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/dustin/go-humanize"
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"

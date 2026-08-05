@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -18,7 +19,6 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
@@ -341,12 +341,12 @@ func clearAndSize(s []string, n int) []string {
 	return make([]string, n)
 }
 
-func (inst *attrExplodeSink) BeginScalarValue()                { inst.isCollection = false }
-func (inst *attrExplodeSink) EndScalarValue() error            { return inst.err }
-func (inst *attrExplodeSink) BeginHomogenousArrayValue(int)    { inst.isCollection = true }
-func (inst *attrExplodeSink) EndHomogenousArrayValue()         {}
-func (inst *attrExplodeSink) BeginSetValue(int)                { inst.isCollection = true }
-func (inst *attrExplodeSink) EndSetValue()                     {}
+func (inst *attrExplodeSink) BeginScalarValue()             { inst.isCollection = false }
+func (inst *attrExplodeSink) EndScalarValue() error         { return inst.err }
+func (inst *attrExplodeSink) BeginHomogenousArrayValue(int) { inst.isCollection = true }
+func (inst *attrExplodeSink) EndHomogenousArrayValue()      {}
+func (inst *attrExplodeSink) BeginSetValue(int)             { inst.isCollection = true }
+func (inst *attrExplodeSink) EndSetValue()                  {}
 
 // BeginValueItem starts a fresh item buffer — items become separate rows, so
 // (unlike the packed view) they are not joined.
@@ -355,7 +355,7 @@ func (inst *attrExplodeSink) EndValueItem() {
 	inst.curItems = append(inst.curItems, utfsafe.EnsureUTF8(inst.curBuf.String()))
 }
 
-func (inst *attrExplodeSink) Write(pp []byte) (int, error)      { return inst.curBuf.Write(pp) }
+func (inst *attrExplodeSink) Write(pp []byte) (int, error)       { return inst.curBuf.Write(pp) }
 func (inst *attrExplodeSink) WriteString(ss string) (int, error) { return inst.curBuf.WriteString(ss) }
 
 // BeginTags/EndTags are driven for the tag count even without MembershipSinkI;
@@ -651,7 +651,6 @@ func (inst *PlayApp) attrColWidths(schema *arrow.Schema, visCols []int, rows []a
 	}
 	return widths
 }
-
 
 // attrTableTag is the stable instance-tier scope for the attr grid's
 // column-width overrides, and the etable's id. One constant so the two

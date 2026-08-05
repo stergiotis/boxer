@@ -33,8 +33,8 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 		"kanban": dockTabKanban, "network": dockTabNetwork, "sankey": dockTabSankey,
 		"dist": dockTabDist, "icicle": dockTabIcicle, "series": dockTabSeries,
 		"treemap": dockTabTreemap,
-		"graph":  dockTabGraph,
-		"schema": dockTabSchema, "diagnostics": dockTabDiagnostics, "passes": dockTabPasses,
+		"graph":   dockTabGraph,
+		"schema":  dockTabSchema, "diagnostics": dockTabDiagnostics, "passes": dockTabPasses,
 		"docs": dockTabDocs, "flow": dockTabFlow, "detail": dockTabDetail,
 		"experiments": dockTabExperiments,
 	}

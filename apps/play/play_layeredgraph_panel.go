@@ -458,7 +458,7 @@ type networkBuild struct {
 	// need not even share a unit.
 	maxWeight     float64
 	maxNodeWeight float64
-	capped    bool
+	capped        bool
 }
 
 // buildNetworkModel maps the edges/vertices records to a directed GraphModel

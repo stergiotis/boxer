@@ -60,24 +60,24 @@ const distPaneProbeSalt uint64 = 0xd1570d15791b0001
 // distClaim is the panel's channel claim: resolved column indices (-1 when
 // an optional is absent) plus the row to highlight from the selection signal.
 type distClaim struct {
-	seriesCol, nCol, psCol, qsCol             int
-	nNullCol                                  int
-	xMinCol, xMaxCol                          int
-	meanCol, sdCol, skewCol, kurtCol          int
-	histLoCol, histHiCol, histWCol            int
-	estimatorCol                              int
-	selRow                                    int64
+	seriesCol, nCol, psCol, qsCol    int
+	nNullCol                         int
+	xMinCol, xMaxCol                 int
+	meanCol, sdCol, skewCol, kurtCol int
+	histLoCol, histHiCol, histWCol   int
+	estimatorCol                     int
+	selRow                           int64
 }
 
 // distSeries is one folded row of the contract.
 type distSeries struct {
-	label     string
-	n, nNull  int64
-	ps, qs    []float64
-	xMin, xMax       float64
-	haveExtremes     bool
-	hist             [3][]float64 // lo, hi, w — all or none
-	estimator        string
+	label        string
+	n, nNull     int64
+	ps, qs       []float64
+	xMin, xMax   float64
+	haveExtremes bool
+	hist         [3][]float64 // lo, hi, w — all or none
+	estimator    string
 }
 
 func (inst *distSeries) degenerate() bool {
@@ -89,10 +89,10 @@ func (inst *distSeries) degenerate() bool {
 type DistDriver struct {
 	ids *c.WidgetIdStack
 
-	series    []distSeries
-	foldErr   string // data-level reject (grid rules); whole-result, loud
-	sharedGrid bool  // every series carries the identical ps grid
-	haveHist   bool  // every series carries the histogram triplet
+	series     []distSeries
+	foldErr    string // data-level reject (grid rules); whole-result, loud
+	sharedGrid bool   // every series carries the identical ps grid
+	haveHist   bool   // every series carries the histogram triplet
 	truncated  int64
 
 	forExecuted     time.Time

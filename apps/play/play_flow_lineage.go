@@ -128,7 +128,7 @@ func (b *lineageBuilder) item(i int, it grammar1.IColumnsExprContext) {
 			detail += " · subquery inside — not traced"
 		}
 		if !b.a.addNode(flowNode{ID: outID, Kind: flowColumnOut,
-			Label: truncateRunes(label, flowLabelRunes),
+			Label:  truncateRunes(label, flowLabelRunes),
 			Detail: truncateRunes(detail, flowSnippetRunes), Start: start, End: end}) {
 			return
 		}

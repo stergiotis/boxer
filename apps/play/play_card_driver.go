@@ -41,8 +41,8 @@ type CardDriver struct {
 	schema  *arrow.Schema
 	driver  *streamreadaccess.Driver
 	emitter *leewaywidgets.Table2CardEmitter
-	usable  bool                          // false if the schema is not leeway-shaped
-	table   *common.TableDesc             // reconstructed leeway schema, nil when not leeway-shaped
+	usable  bool                           // false if the schema is not leeway-shaped
+	table   *common.TableDesc              // reconstructed leeway schema, nil when not leeway-shaped
 	classes []streamreadaccess.ColumnClass // per-Arrow-column leeway classification, nil when not leeway-shaped
 }
 

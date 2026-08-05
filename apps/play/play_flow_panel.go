@@ -66,10 +66,10 @@ type flowDriver struct {
 
 	// Lineage lens: its own memo over the same active node (both local
 	// lenses may alternate without invalidating each other).
-	lineageKey  string
+	lineageKey   string
 	lineageGraph flowGraph
-	lineageErr  error
-	lineageNote string
+	lineageErr   error
+	lineageNote  string
 
 	// Caret mode: the live split of the statement under the caret, memoised
 	// on its text — the same per-edit parse-cost class as the editor's own
@@ -458,7 +458,7 @@ type flowLensView uint8
 
 const (
 	flowViewGraph flowLensView = iota
-	flowViewText // the raw EXPLAIN output, indentation preserved
+	flowViewText               // the raw EXPLAIN output, indentation preserved
 )
 
 // flowSrcMode selects what the tab derives from.
