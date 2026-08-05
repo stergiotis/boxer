@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"math"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/contrast"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -47,6 +49,12 @@ const (
 	// forbidden dependency is not "category 4", it is an error. Shared by
 	// both contracts, like label.
 	networkToneCol = "tone"
+	// weight is the ORDINAL magnitude channel (ADR-0167): how *much* flowed
+	// along an edge, as opposed to what it means. It is the opposite kind of
+	// claim from `tone` and they compose — a weighted edge still takes its
+	// tone, because a semantic claim is the more specific one (§SD5).
+	// Numeric; non-positive is *unknown* and renders as an ordinary edge.
+	networkWeightCol = "weight"
 
 	// networkEdgesNodeID / networkVerticesNodeID are the CTEs the two channels
 	// bind to (§SD1). Nodes of the user's own split graph, demanded on their
@@ -83,6 +91,46 @@ var networkGroupPalette = []styletokens.RGBA8{
 
 func networkGroupColor(idx int) color.Color {
 	return color.Hex(networkGroupPalette[idx%len(networkGroupPalette)].AsHex())
+}
+
+// magnitudeBandSteps is how finely networkMagnitudeBandLo searches the ramp.
+// The band floor only has to be found to within a few percent — it is a
+// legibility threshold, not a value — and a coarse walk keeps this cheap
+// enough to run per render rather than being cached against a theme change.
+const magnitudeBandSteps = 40
+
+// networkMagnitudeBandLo is the palette position the weight ramp starts at:
+// the first one whose contrast against the drawing's background reaches the
+// ordinary edge stroke's.
+//
+// The rule it enforces is that **no weighted edge is less visible than an
+// unweighted one**. A sequential palette runs from one end of the lightness
+// range to the other, so on a dark surface its low end sinks into the
+// background — and an edge that carries a small but *known* weight would then
+// be harder to see than one carrying no weight at all, which is backwards.
+// (Measured against the dark theme's panel, the default stroke sits at 4.55:1
+// and Batlow only reaches that around t=0.5, so half the ramp is unusable.)
+//
+// Derived rather than pinned as a constant because both ends of the comparison
+// are theme tokens: under a light theme the palette's dark end is the visible
+// one and the floor lands elsewhere. The icicle's flame band (ADR-0160) solves
+// the same problem with fixed bounds, which it can because it owns its plot
+// surface; this ramp is drawn on whatever surface the style carries.
+//
+// No ceiling: the top of the ramp is the most visible colour available, which
+// is exactly what the heaviest edge should be.
+func networkMagnitudeBandLo(palette styletokens.SequentialE, bg styletokens.RGBA8, base styletokens.RGBA8) float32 {
+	want := contrast.Ratio(base.R, base.G, base.B, bg.R, bg.G, bg.B)
+	for i := range magnitudeBandSteps {
+		t := float32(i) / float32(magnitudeBandSteps)
+		s := styletokens.Sequential(palette, t)
+		if contrast.Ratio(s.R, s.G, s.B, bg.R, bg.G, bg.B) >= want {
+			return t
+		}
+	}
+	// Nothing in the ramp reaches it. Fall back to the whole range rather than
+	// collapsing to a single colour: a less legible ordering still orders.
+	return 0
 }
 
 // networkTone maps a `tone` cell to a design-system colour. The vocabulary is
@@ -138,7 +186,7 @@ func parseNetworkShape(s string) layeredgraph.NodeShape {
 // channel's schema yields in AcceptForChannel and Render consumes. -1 marks an
 // absent optional column.
 type networkEdgesClaim struct {
-	srcCol, tgtCol, labelCol, toneCol int
+	srcCol, tgtCol, labelCol, toneCol, weightCol int
 }
 
 type networkVerticesClaim struct {
@@ -297,7 +345,7 @@ func (inst layeredGraphPanel) Render(filled map[ChannelID]ChannelResult, emit Si
 // schema-only; source/target are read through formatCell (total over Arrow
 // types), so they carry no type requirement — a numeric id is a fine key.
 func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason string) {
-	ec = networkEdgesClaim{srcCol: -1, tgtCol: -1, labelCol: -1, toneCol: -1}
+	ec = networkEdgesClaim{srcCol: -1, tgtCol: -1, labelCol: -1, toneCol: -1, weightCol: -1}
 	for ci, f := range schema.Fields() {
 		switch f.Name {
 		case networkSourceCol:
@@ -308,6 +356,15 @@ func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason str
 			ec.labelCol = ci
 		case networkToneCol:
 			ec.toneCol = ci
+		case networkWeightCol:
+			// Claimed only when it can carry a quantity. A `weight` that is
+			// not numeric is far more likely to be a column that happens to
+			// share the name than a magnitude the author meant, and silently
+			// widening every edge off a parsed string would be the worse
+			// failure. Left unclaimed, it stays an ordinary result column.
+			if isNumericType(f.Type) {
+				ec.weightCol = ci
+			}
 		}
 	}
 	if ec.srcCol < 0 || ec.tgtCol < 0 {
@@ -359,7 +416,13 @@ type networkBuild struct {
 	// strokeOf colours an edge by its endpoints, the key view.RenderOpts'
 	// EdgeStroke hook is given. Only edges naming a tone appear.
 	strokeOf map[[2]string]color.Color
-	capped   bool
+	// maxWeight is the heaviest edge weight seen, or 0 when the result
+	// carries no `weight` column or nothing positive in it. It is what the
+	// magnitude channels normalise against (ADR-0167 §SD5) — the panel sees
+	// the whole result, where a book would have to compute this in SQL and
+	// restate it per query.
+	maxWeight float64
+	capped    bool
 }
 
 // buildNetworkModel maps the edges/vertices records to a directed GraphModel
@@ -474,6 +537,15 @@ func buildNetworkModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec
 					b.strokeOf[key] = col
 				}
 			}
+			if ec.weightCol >= 0 {
+				// A non-positive or unreadable cell leaves Weight at 0, which
+				// the widget reads as *unknown* and draws as an ordinary edge
+				// (ADR-0167 §SD2).
+				if v, ok := quantityCellValue(edgesRec, ec.weightCol, row); ok && v > 0 {
+					e.Weight = v
+					b.maxWeight = max(b.maxWeight, v)
+				}
+			}
 			edges = append(edges, e)
 		}
 	}
@@ -558,19 +630,55 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 	}
 	// Edges carrying a `tone` are stroked with it; the rest keep the style
 	// default. Nothing overrides the selection highlight, which is a fill.
+	//
+	// A `weight` adds the magnitude channels over the top (ADR-0167 §SD4):
+	// width from the shared mapping, and a sequential ramp sampled at the SAME
+	// normalised position so the two never disagree — a reader seeing a thick
+	// pale edge would have to decide which channel to believe. An explicit
+	// tone still wins the colour, being the more specific claim; it does not
+	// touch the width, so a toned edge still carries its magnitude.
+	weighted := b.maxWeight > 0
+	var edgeWidth func(from, to string, weight float64) (float32, bool)
+	var edgeWeights map[[2]string]float64
+	if weighted {
+		edgeWidth = view.WeightWidth(inst.layout, 0, 0)
+		// The colour hook is keyed by endpoints only, so it needs the weight
+		// looked up — off the layout, which carries it through for exactly
+		// this reason, rather than off a second copy in the build.
+		edgeWeights = make(map[[2]string]float64, len(inst.layout.Edges))
+		for _, e := range inst.layout.Edges {
+			edgeWeights[[2]string{e.From, e.To}] = e.Weight
+		}
+	}
+	seqPalette := styletokens.SequentialDefault()
+	style := view.DefaultStyle()
+	bandLo := networkMagnitudeBandLo(seqPalette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
 	stroke := func(from, to string) (col color.Color, ok bool) {
-		if b.strokeOf == nil {
+		key := [2]string{from, to}
+		if b.strokeOf != nil {
+			if col, ok = b.strokeOf[key]; ok {
+				return
+			}
+		}
+		if !weighted {
 			return
 		}
-		col, ok = b.strokeOf[[2]string{from, to}]
-		return
+		w, found := edgeWeights[key]
+		if !found || w <= 0 {
+			return
+		}
+		// Same square root as the width, so the channels stay in step, then
+		// mapped onto the legible part of the ramp.
+		t := float32(math.Sqrt(min(w, b.maxWeight) / b.maxWeight))
+		return color.Hex(styletokens.Sequential(seqPalette, bandLo+(1-bandLo)*t).AsHex()), true
 	}
 	res := view.Render(networkIDSalt+inst.idSeed, inst.layout, view.RenderOpts{
-		Style:      view.DefaultStyle(),
+		Style:      style,
 		CanvasW:    w,
 		CanvasH:    h,
 		NodeFill:   fill,
 		EdgeStroke: stroke,
+		EdgeWidth:  edgeWidth,
 		State:      &inst.view,
 	})
 	// A vertex click highlights it and publishes the id as `selection_key`;

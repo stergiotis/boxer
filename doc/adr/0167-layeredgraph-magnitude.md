@@ -159,8 +159,27 @@ the channels agree; a reader seeing a thick pale edge would otherwise have to
 decide which to believe. Per Cleveland & McGill, size outranks colour
 saturation, so colour is redundant encoding here rather than a second variable.
 
-*Kill clause:* if colour is ever asked to carry a *second* quantity, this
-agreement breaks and the channels need separating with a legend.
+**The ramp does not use the whole palette.** A sequential palette spans the
+full lightness range, so one of its ends sinks into whatever surface the
+drawing sits on — and an element carrying a small but *known* weight would then
+be harder to see than one carrying none, which inverts the encoding. The ramp
+therefore starts at the first palette position whose contrast against the
+background reaches the *default stroke's*, so no weighted element is less
+visible than an unweighted one. Measured against the dark theme's panel the
+default stroke sits at 4.55:1 and the default palette only reaches that around
+t≈0.5, so half the ramp is unusable there.
+
+That floor is **derived at render time**, not pinned as a constant, because
+both ends of the comparison are theme tokens: under a light theme the palette's
+dark end is the visible one and the floor lands elsewhere.
+[ADR-0160](./0160-imzero2-icicle-flamegraph-widget.md)'s flame band solves the
+same problem with fixed bounds, which it can because it owns its plot surface;
+this ramp is drawn on whatever surface the style carries. There is no ceiling:
+the far end of the ramp is the most visible colour available, which is what the
+heaviest element should be.
+
+*Kill clause:* if colour is ever asked to carry a *second* quantity, the
+agreement with size breaks and the channels need separating with a legend.
 
 ### SD5 — The panel takes a numeric column per element type, and normalises
 

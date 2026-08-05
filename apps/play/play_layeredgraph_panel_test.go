@@ -10,6 +10,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/contrast"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stretchr/testify/assert"
@@ -397,4 +399,144 @@ func keysOf(m map[string]layeredgraph.Node) (out []string) {
 		out = append(out, k)
 	}
 	return
+}
+
+// netWeightedEdges builds an edges record carrying a numeric `weight`
+// (+ `tone` when non-nil), the ADR-0167 §SD5 magnitude channel.
+func netWeightedEdges(t *testing.T, src, tgt []string, weight []float64, tone []string) arrow.RecordBatch {
+	t.Helper()
+	fields := []arrow.Field{strField("source"), strField("target"),
+		{Name: "weight", Type: arrow.PrimitiveTypes.Float64}}
+	wb := array.NewFloat64Builder(memory.NewGoAllocator())
+	defer wb.Release()
+	wb.AppendValues(weight, nil)
+	cols := []arrow.Array{netStrArr(t, src), netStrArr(t, tgt), wb.NewFloat64Array()}
+	if tone != nil {
+		fields = append(fields, strField("tone"))
+		cols = append(cols, netStrArr(t, tone))
+	}
+	return array.NewRecordBatch(arrow.NewSchema(fields, nil), cols, int64(len(src)))
+}
+
+func weightsOf(m layeredgraph.GraphModel) map[[2]string]float64 {
+	out := make(map[[2]string]float64, len(m.Edges))
+	for _, e := range m.Edges {
+		out[[2]string{e.From, e.To}] = e.Weight
+	}
+	return out
+}
+
+// A numeric `weight` reaches the model and sets the normalisation maximum the
+// magnitude channels scale against (ADR-0167 §SD5).
+func TestNetworkBuildCarriesEdgeWeight(t *testing.T) {
+	er := netWeightedEdges(t, []string{"a", "b"}, []string{"b", "c"}, []float64{5, 40}, nil)
+	ec, reason := resolveNetworkEdges(er.Schema())
+	require.Empty(t, reason)
+	require.GreaterOrEqual(t, ec.weightCol, 0, "a numeric `weight` must be claimed")
+
+	b := buildNetworkModel(er, ec, nil, noVerts())
+	w := weightsOf(b.model)
+	assert.InDelta(t, 5.0, w[[2]string{"a", "b"}], 1e-9)
+	assert.InDelta(t, 40.0, w[[2]string{"b", "c"}], 1e-9)
+	assert.InDelta(t, 40.0, b.maxWeight, 1e-9, "the heaviest edge is the scale")
+}
+
+// Zero is *unknown*, not *none*: it stays 0 on the model (which the widget
+// reads as "no override") and does not drag the maximum down.
+func TestNetworkBuildTreatsNonPositiveWeightAsUnknown(t *testing.T) {
+	er := netWeightedEdges(t, []string{"a", "b"}, []string{"b", "c"}, []float64{0, -3}, nil)
+	ec, _ := resolveNetworkEdges(er.Schema())
+	b := buildNetworkModel(er, ec, nil, noVerts())
+
+	for _, e := range b.model.Edges {
+		assert.Zero(t, e.Weight, "%s→%s", e.From, e.To)
+	}
+	assert.Zero(t, b.maxWeight, "no positive weight means no magnitude channel at all")
+}
+
+// A `weight` column that cannot carry a quantity is left unclaimed rather than
+// parsed: it is far likelier to be a column that happens to share the name.
+func TestNetworkRejectsNonNumericWeight(t *testing.T) {
+	er := netTonedEdges(t, []string{"a"}, []string{"b"}, []string{"error"})
+	fields := append(er.Schema().Fields(), strField("weight"))
+	cols := make([]arrow.Array, 0, len(fields))
+	for i := range int(er.NumCols()) {
+		cols = append(cols, er.Column(i))
+	}
+	cols = append(cols, netStrArr(t, []string{"heavy"}))
+	rec := array.NewRecordBatch(arrow.NewSchema(fields, nil), cols, er.NumRows())
+
+	ec, reason := resolveNetworkEdges(rec.Schema())
+	require.Empty(t, reason, "an unusable `weight` must not reject the whole contract")
+	assert.Equal(t, -1, ec.weightCol)
+	assert.Zero(t, buildNetworkModel(rec, ec, nil, noVerts()).maxWeight)
+}
+
+// ADR-0167 §SD5: the two claims compose. A weighted edge that also names a
+// tone keeps the tone for colour — the more specific claim — and keeps its
+// weight, so the magnitude still reaches the width.
+func TestNetworkToneAndWeightCompose(t *testing.T) {
+	er := netWeightedEdges(t, []string{"a"}, []string{"b"}, []float64{7}, []string{"error"})
+	ec, _ := resolveNetworkEdges(er.Schema())
+	b := buildNetworkModel(er, ec, nil, noVerts())
+
+	assert.Contains(t, b.strokeOf, [2]string{"a", "b"}, "the tone still colours the edge")
+	assert.InDelta(t, 7.0, weightsOf(b.model)[[2]string{"a", "b"}], 1e-9)
+}
+
+// ADR-0167 C1: a result with no `weight` column carries no magnitude anywhere,
+// so the panel installs no hooks and the drawing is what it always was.
+func TestNetworkWithoutWeightColumnHasNoMagnitude(t *testing.T) {
+	er := netEdges(t, []string{"a", "b"}, []string{"b", "c"}, nil)
+	ec, _ := resolveNetworkEdges(er.Schema())
+	assert.Equal(t, -1, ec.weightCol)
+
+	b := buildNetworkModel(er, ec, nil, noVerts())
+	assert.Zero(t, b.maxWeight)
+	for _, e := range b.model.Edges {
+		assert.Zero(t, e.Weight)
+	}
+}
+
+// ADR-0167 §SD4's legibility rule: the weight ramp starts where it is at least
+// as visible as an ordinary edge. A sequential palette spans the whole
+// lightness range, so its far end sinks into the background — and an edge
+// carrying a small but KNOWN weight must not end up harder to see than one
+// carrying no weight at all.
+func TestNetworkMagnitudeBandStaysAboveTheDefaultStroke(t *testing.T) {
+	bg, base := styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault
+	want := contrast.Ratio(base.R, base.G, base.B, bg.R, bg.G, bg.B)
+
+	for _, p := range []styletokens.SequentialE{
+		styletokens.SequentialDefault(), styletokens.SequentialBatlow, styletokens.SequentialLajolla,
+	} {
+		lo := networkMagnitudeBandLo(p, bg, base)
+		require.GreaterOrEqual(t, lo, float32(0))
+		require.Less(t, lo, float32(1))
+		// Every position the ramp can produce — the floor and everything above
+		// it — is at least as legible as the edge it replaces.
+		for i := range 21 {
+			tt := lo + (1-lo)*float32(i)/20
+			s := styletokens.Sequential(p, tt)
+			got := contrast.Ratio(s.R, s.G, s.B, bg.R, bg.G, bg.B)
+			assert.GreaterOrEqualf(t, got, want*0.98,
+				"palette %v at t=%.3f: %.2f:1 is below the default stroke's %.2f:1", p, tt, got, want)
+		}
+	}
+}
+
+// The floor is derived, not pinned: it is the FIRST usable position, so the
+// step below it must be unusable. That is what keeps the band from quietly
+// discarding legible range as palettes change.
+func TestNetworkMagnitudeBandIsTight(t *testing.T) {
+	bg, base := styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault
+	want := contrast.Ratio(base.R, base.G, base.B, bg.R, bg.G, bg.B)
+
+	lo := networkMagnitudeBandLo(styletokens.SequentialDefault(), bg, base)
+	if lo <= 0 {
+		t.Skip("the whole ramp is usable on this theme")
+	}
+	below := styletokens.Sequential(styletokens.SequentialDefault(), lo-1.0/magnitudeBandSteps)
+	got := contrast.Ratio(below.R, below.G, below.B, bg.R, bg.G, bg.B)
+	assert.Less(t, got, want, "the step below the floor should be the unusable one")
 }
