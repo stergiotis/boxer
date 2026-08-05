@@ -324,6 +324,24 @@ The remaining M0 question is wall-clock frame time in a live GUI session
 fps-distribution comparison on an instrumented carousel. M1 (decoder) does
 not depend on that run.
 
+## Update (2026-08-05, later) — M1 decoder landed
+
+`covsnap` (the pure decoded model: `MetaProfile` with the §SD3 global unit
+index assigned at decode, `CounterSnapshot`) plus the pinned decoders
+`DecodeMeta`/`DecodeCounters` beside the seed. Bounds-checked throughout:
+every prefix truncation and every single-byte flip of the fixtures decodes
+to an error, never a panic or an unbounded allocation; unknown format
+versions are refused; both counter flavors (ULEB128, raw u32) and both
+endiannesses are handled. Fixtures come from a two-package probe module the
+test builds itself (`BOXER_COVDECODE_REGEN=1` regenerates them after a
+toolchain bump); the integration-lane drift guard builds the probe with the
+live toolchain and reconciles unit, statement, covered-unit and
+covered-statement totals against `go tool covdata textfmt`. Validated at
+scale on the M0 boxer-binary blobs: 367 packages, 80,295 units / 141,285
+statements, 2,697 / 4,977 covered — digit-identical to the covdata
+numbers, with all 1,107 executed functions of the 9.7 KiB counter blob
+resolving against the meta.
+
 ## Status
 
 Proposed, 2026-08-05.
