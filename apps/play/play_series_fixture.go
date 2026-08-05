@@ -55,6 +55,20 @@ const (
 	fixturePublisher = "play/series-fixture"
 )
 
+// fixtureTimeType is the Arrow type the PUBLISHED tables carry. Microsecond,
+// not the millisecond the `ts*` outputs use: the ad-hoc store rejects a
+// coarser unit ("timestamp unit must be microsecond or nanosecond"), which is
+// its constraint rather than this feature's. Everything downstream reads a
+// timestamp through temporalCellMS, which is unit-aware, so the difference
+// stops here — and the fixture's own step is a whole minute, so no precision
+// is at stake either way.
+func fixtureTimeType() arrow.DataType {
+	return &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: "UTC"}
+}
+
+// fixtureSampleUS is sample i's timestamp in the published unit.
+func fixtureSampleUS(i int) int64 { return fixtureSampleMS(i) * 1000 }
+
 // fixtureEpoch is the synthetic series' first timestamp. A FIXED instant, not
 // now(): a fixture is meant to be reproducible from (kind, seed), and a series
 // whose timestamps moved every run would give the same data two identities —
@@ -78,6 +92,12 @@ type fixtureState struct {
 	err        error
 	// summary describes the last successful publish, for the chrome.
 	summary string
+	// seriesHandle / truthHandle are the MINTED handles the publish returned.
+	// They are what the buffer's keelson('<alias>') has to be rewritten to:
+	// the alias is the readable name, the handle is the dataset, and binding
+	// the alias to itself names something that was never published.
+	seriesHandle string
+	truthHandle  string
 	// generation counts successful publishes, so the caller can re-bind and
 	// re-run exactly once per publish.
 	generation uint64
@@ -89,14 +109,21 @@ func (inst *fixtureState) status() (publishing bool, summary string, gen uint64,
 	return inst.publishing, inst.summary, inst.generation, inst.err
 }
 
+// handles returns the minted handles of the last successful publish.
+func (inst *fixtureState) handles() (series string, truth string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.seriesHandle, inst.truthHandle
+}
+
 // buildFixtureArrow renders one generated fixture as the two Arrow IPC
 // streams the ad-hoc publish takes.
 //
-// The time column is DateTime64-shaped (a millisecond UTC timestamp) rather
-// than an integer, because that is what a temporal claim can actually read:
-// a ClickHouse DateTime arrives as a bare uint32 and cannot be told from a
-// count (ADR-0163 Update 2026-08-05). A fixture that published an unusable
-// time axis would fail in the one place it exists to work.
+// The time column is a TIMESTAMP rather than an integer, because that is what
+// a temporal claim can actually read: a ClickHouse DateTime arrives as a bare
+// uint32 and cannot be told from a count (ADR-0163 Update 2026-08-05). A
+// fixture that published an unusable time axis would fail in the one place it
+// exists to work. Its unit is fixtureTimeType's, which the store constrains.
 func buildFixtureArrow(fixture *adscore.Fixture, kind adscore.AnomalyKindE, alloc memory.Allocator) (series []byte, truth []byte, err error) {
 	series, err = encodeFixtureSeries(fixture, alloc)
 	if err != nil {
@@ -108,15 +135,15 @@ func buildFixtureArrow(fixture *adscore.Fixture, kind adscore.AnomalyKindE, allo
 
 func encodeFixtureSeries(fixture *adscore.Fixture, alloc memory.Allocator) (out []byte, err error) {
 	schema := arrow.NewSchema([]arrow.Field{
-		{Name: "t", Type: tsTimeType()},
+		{Name: "t", Type: fixtureTimeType()},
 		{Name: "v", Type: arrow.PrimitiveTypes.Float64},
 	}, nil)
-	tb := array.NewTimestampBuilder(alloc, tsTimeType().(*arrow.TimestampType))
+	tb := array.NewTimestampBuilder(alloc, fixtureTimeType().(*arrow.TimestampType))
 	vb := array.NewFloat64Builder(alloc)
 	defer tb.Release()
 	defer vb.Release()
 	for i, v := range fixture.Values {
-		tb.Append(arrow.Timestamp(fixtureSampleMS(i)))
+		tb.Append(arrow.Timestamp(fixtureSampleUS(i)))
 		vb.Append(v)
 	}
 	ta, va := tb.NewArray(), vb.NewArray()
@@ -133,14 +160,14 @@ func encodeFixtureSeries(fixture *adscore.Fixture, alloc memory.Allocator) (out 
 // which is what lets a reader put the two pictures side by side.
 func encodeFixtureTruth(fixture *adscore.Fixture, kind adscore.AnomalyKindE, alloc memory.Allocator) (out []byte, err error) {
 	schema := arrow.NewSchema([]arrow.Field{
-		{Name: timelineSlotBandFrom, Type: tsTimeType()},
-		{Name: timelineSlotBandTo, Type: tsTimeType()},
+		{Name: timelineSlotBandFrom, Type: fixtureTimeType()},
+		{Name: timelineSlotBandTo, Type: fixtureTimeType()},
 		{Name: timelineSlotBandLabel, Type: arrow.BinaryTypes.String},
 		{Name: timelineSlotBandColor, Type: arrow.BinaryTypes.String},
 		{Name: "kind", Type: arrow.BinaryTypes.String},
 	}, nil)
-	fb := array.NewTimestampBuilder(alloc, tsTimeType().(*arrow.TimestampType))
-	tb := array.NewTimestampBuilder(alloc, tsTimeType().(*arrow.TimestampType))
+	fb := array.NewTimestampBuilder(alloc, fixtureTimeType().(*arrow.TimestampType))
+	tb := array.NewTimestampBuilder(alloc, fixtureTimeType().(*arrow.TimestampType))
 	lb := array.NewStringBuilder(alloc)
 	cb := array.NewStringBuilder(alloc)
 	kb := array.NewStringBuilder(alloc)
@@ -151,8 +178,8 @@ func encodeFixtureTruth(fixture *adscore.Fixture, kind adscore.AnomalyKindE, all
 	defer kb.Release()
 	runs := fixtureTruthRuns(fixture.Labels)
 	for i, run := range runs {
-		fb.Append(arrow.Timestamp(fixtureSampleMS(run[0])))
-		tb.Append(arrow.Timestamp(fixtureSampleMS(run[1])))
+		fb.Append(arrow.Timestamp(fixtureSampleUS(run[0])))
+		tb.Append(arrow.Timestamp(fixtureSampleUS(run[1])))
 		lb.Append(fmt.Sprintf("planted #%d", i+1))
 		// A token NAME, never a hex literal: the band reader resolves names
 		// against a fixed map and draws nothing for one it cannot resolve.
@@ -240,20 +267,30 @@ func (inst *PlayApp) publishFixture(spec fixtureSpec) {
 	st.mu.Unlock()
 
 	go func() {
-		summary, err := doPublishFixture(inst.bus, spec)
+		res, err := doPublishFixture(inst.bus, spec)
 		st.mu.Lock()
 		st.publishing = false
 		st.err = err
 		if err == nil {
-			st.summary = summary
+			st.summary = res.summary
+			st.seriesHandle = res.seriesHandle
+			st.truthHandle = res.truthHandle
 			st.generation++
 		}
 		st.mu.Unlock()
 	}()
 }
 
+// fixturePublished is what one successful round produced: the minted handles
+// and the line the chrome shows.
+type fixturePublished struct {
+	seriesHandle string
+	truthHandle  string
+	summary      string
+}
+
 // doPublishFixture is one round: generate, encode, publish both datasets.
-func doPublishFixture(bus busPublisherI, spec fixtureSpec) (summary string, err error) {
+func doPublishFixture(bus busPublisherI, spec fixtureSpec) (out fixturePublished, err error) {
 	fixture, err := generateFixture(spec)
 	if err != nil {
 		return
@@ -267,17 +304,20 @@ func doPublishFixture(bus busPublisherI, spec fixtureSpec) (summary string, err 
 		Alias: fixtureSeriesAlias, ArrowIPCStream: seriesIPC, Publisher: fixturePublisher,
 	})
 	if err != nil {
-		return "", eh.Errorf("play: fixture: publish %s: %w", fixtureSeriesAlias, err)
+		return out, eh.Errorf("play: fixture: publish %s: %w", fixtureSeriesAlias, err)
 	}
 	truthRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
 		Alias: fixtureTruthAlias, ArrowIPCStream: truthIPC, Publisher: fixturePublisher,
 	})
 	if err != nil {
-		return "", eh.Errorf("play: fixture: publish %s: %w", fixtureTruthAlias, err)
+		return out, eh.Errorf("play: fixture: publish %s: %w", fixtureTruthAlias, err)
 	}
-	return fmt.Sprintf("%s: %d samples · %s: %d planted extent(s) · %.1f%% anomalous",
+	out.seriesHandle = seriesRes.Handle
+	out.truthHandle = truthRes.Handle
+	out.summary = fmt.Sprintf("%s: %d samples · %s: %d planted extent(s) · %.1f%% anomalous",
 		fixtureSeriesAlias, seriesRes.Rows, fixtureTruthAlias, truthRes.Rows,
-		fixture.AnomalyFraction()*100), nil
+		fixture.AnomalyFraction()*100)
+	return out, nil
 }
 
 // busPublisherI is the bus a publish rides. Named here so the publish round
@@ -296,12 +336,20 @@ func (inst *PlayApp) syncFixtures() {
 		return
 	}
 	inst.fixturesSeen = gen
-	// The aliases resolve to the newest dataset published under them, so a
-	// republish under the same alias is picked up by the same binding — which
-	// is what makes "generate again with another seed" a one-click act rather
-	// than a re-wiring.
-	for _, alias := range []string{fixtureSeriesAlias, fixtureTruthAlias} {
-		if bErr := inst.BindDataset(alias, alias); bErr != nil {
+	// The alias is the readable name a buffer writes; the HANDLE is the
+	// dataset the publish minted. BindDataset rewrites one to the other before
+	// the request leaves play, so binding an alias to itself would name a
+	// dataset that was never published — which is what left the pane on
+	// "Executing query…" the first time this ran.
+	seriesHandle, truthHandle := inst.fixtures.handles()
+	for _, b := range []struct{ alias, handle string }{
+		{fixtureSeriesAlias, seriesHandle},
+		{fixtureTruthAlias, truthHandle},
+	} {
+		if b.handle == "" {
+			continue
+		}
+		if bErr := inst.BindDataset(b.alias, b.handle); bErr != nil {
 			continue
 		}
 	}
@@ -380,7 +428,10 @@ func (inst *SeriesDriver) noteFixtures(spec fixtureSpec, publish func(fixtureSpe
 // the flagged extents — ordinary SQL over ordinary tables, which is the claim
 // the fixture lab exists to make good on.
 func fixtureScaffold() string {
-	return "-- ADR-0163 M4: the fixture is ordinary data. Nothing below knows it is synthetic.\n" +
+	// A leading newline: the scaffold is spliced AT THE CARET, which may sit
+	// mid-line, and a query welded onto the end of whatever was there reads as
+	// a mistake even when it parses.
+	return "\n-- ADR-0163 M4: the fixture is ordinary data. Nothing below knows it is synthetic.\n" +
 		"WITH\n" +
 		"  base AS (SELECT t, v FROM keelson('" + fixtureSeriesAlias + "') ORDER BY t),\n" +
 		"  scores AS (SELECT tsAnomalyScores(t, v, 64) FROM base),\n" +

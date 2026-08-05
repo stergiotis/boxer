@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -151,11 +152,16 @@ func TestPlayApp_RestorePersistedSql_EmptyValue_KeepsDefault(t *testing.T) {
 
 func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
-	// Four declared Caps: fs dialog + fs handle wildcard + chlocalbroker
+	// Five declared Caps: fs dialog + fs handle wildcard + chlocalbroker
 	// pool for the time-range evaluator + windowhost.open for the
-	// Save-as-applet launch (ADR-0135 §SD7). The applet-store save cap moved
+	// Save-as-applet launch (ADR-0135 §SD7) + adhoc.publish for the
+	// timeseries fixture lab (ADR-0163 §SD7). The applet-store save cap moved
 	// out with the O4 authoring form (now apps/sqlappletcreator).
-	require.Len(t, m.Caps, 4)
+	//
+	// The count is asserted on purpose: a capability is an authority this app
+	// is granted, so adding one has to be a deliberate edit here rather than
+	// something that rides along with a feature.
+	require.Len(t, m.Caps, 5)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)
@@ -164,6 +170,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	assert.Contains(t, patterns, fsbroker.HandleSubjectPrefix+">")
 	assert.Contains(t, patterns, "ch.local.exec."+timerangepicker.PoolName)
 	assert.Contains(t, patterns, windowhost.OpenSubject)
+	assert.Contains(t, patterns, adhocdata.SubjectPublish)
 	assert.NotContains(t, patterns, appletstore.SubjectSave)
 	// PersistedKeys → host-injected runtime.persist.play.> cap. Both keys
 	// are read-only now (ADR-0148 §SD8): the buffers are saved as a

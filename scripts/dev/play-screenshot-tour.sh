@@ -606,12 +606,35 @@ SELECT * FROM base"
 }
 
 scene_08_series_fixture() {
-	desc="The fixture lab (ADR-0163 M4): kind and seed, generating a labelled synthetic series published as ORDINARY ad-hoc datasets — fixture_series and fixture_truth, queried with keelson() like anything else, with no demo mode anywhere"
-	# No SQL: the lab is reachable from the empty workbench, which is when a
-	# series with known ground truth is worth most. The affordance renders
-	# only when the host carries an ad-hoc capability bus.
-	senv=(BOXER_PLAY_FOCUS_SERIES=1)
-	sql=""
+	desc="The fixture lab (ADR-0163 M4) from an EMPTY workbench: kind and seed, generating a labelled synthetic series published as ORDINARY ad-hoc datasets — fixture_series and fixture_truth, queried with keelson() like anything else, with no demo mode anywhere"
+	# An EMPTY autorun is what makes this the empty workbench, and it has to be
+	# the autorun rather than the buffer: BOXER_PLAY_SQL="" is deliberately
+	# treated as UNSET (app_register.go, tier 2), so an empty value falls
+	# through to the restored workingset and the pane opens on whatever the
+	# last session left. No run means no result, which is the state the Series
+	# tab shows its empty branch — and the lab — in.
+	#
+	# EMPTY, not 0: the knob is a non-empty test ("non-empty enables auto-run"),
+	# so BOXER_PLAY_AUTORUN=0 would turn it ON. The assignment lands after the
+	# runner's own BOXER_PLAY_AUTORUN=1 in the env list, and the last
+	# assignment for a name wins.
+	senv=(BOXER_PLAY_FOCUS_SERIES=1 BOXER_PLAY_AUTORUN=)
+	# A buffer that says what the window is showing. It never runs, so its only
+	# job is to not look like a stale query someone forgot to clear.
+	sql="-- Nothing has run yet. The fixture lab below generates a labelled
+-- series with known ground truth, and publishes it as ordinary tables."
+	# Two captures: the empty workbench with the lab, and what one click
+	# publishes — including the scaffold it splices into the buffer.
+	#
+	# The scene stops at the publish and does NOT Run the scaffold. Querying
+	# an ad-hoc dataset means resolving keelson('<handle>'), which only the
+	# keelson introspection endpoint can do; this tour points play at a plain
+	# ClickHouse (CLICKHOUSE_URL), which has never heard of the handle, so a
+	# Run here parks on "Executing query…" rather than failing. Capturing that
+	# would document a routing gap as if it were the feature.
+	steps='{"do":"capture","text":"08_series_fixture","settleMs":600}
+{"do":"click","name":"generate"}
+{"do":"capture","text":"08_series_fixture_generated","settleMs":3000}'
 	settle=2000
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -227,6 +228,11 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Pattern:   windowhost.OpenSubject,
 				Direction: app.CapDirectionPub,
 				Reason:    "open the applet creator window (ADR-0135 §SD7 / ADR-0132 O4)",
+			},
+			{
+				Pattern:   adhocdata.SubjectPublish,
+				Direction: app.CapDirectionPub,
+				Reason:    "publish the generated timeseries fixture as ad-hoc datasets (ADR-0163 §SD7)",
 			},
 		},
 		// PersistedKeys → host auto-injects the runtime.persist.play.>
