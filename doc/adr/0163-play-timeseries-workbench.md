@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-02
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-05
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0163: play timeseries workbench — Series panel and the `ts*` client vocabulary
 
@@ -52,13 +50,20 @@ anything else ignored; no temporal or no numeric column rejects with a
 reason. This is detection where *types* disambiguate — the named-columns
 doctrine ([ADR-0122](./0122-play-kanban-panel.md) §SD1) was motivated by
 same-typed ambiguity, which a time axis plus numeric lanes does not have.
-The panel is multi-channel in the Timeline mould: `chMain` (required, the
-charted result), `chScores` and `chSpans` (optional), auto-suggested from
-split nodes whose static shape matches and overridable via the Graph-view
-binding. Point click publishes the ordinary selection row cursor; box-zoom
-stays implot-native and re-renders from the client-held series. Irregular
-series render time-true. Display smoothing is `trendsmooth` (raw underlay,
-degree fixed at 4, half-width the only knob) with the extrapolation-backed
+The panel is multi-channel: `chMain` (required, the charted result),
+`chScores` and `chSpans` (optional), filled **by CTE name** — `scores`
+and `spans` — the way the Sankey panel takes its `flows` and `nodes`.
+Shape-matched auto-suggestion is rejected: choosing between two CTEs that
+are both `(t, score, warm_up)` is exactly the same-typed ambiguity the
+named-columns doctrine exists for, and the typed claim above carves out
+of that doctrine only where types genuinely disambiguate. Naming the CTEs
+also needs no per-channel binding override, which does not exist —
+`bindTab` binds a tab's primary channel only, and the Graph-view channel
+UI is ADR-0097 slice 4c, unbuilt. Point click publishes the ordinary
+selection row cursor; box-zoom stays implot-native and re-renders from
+the client-held series. Irregular series render time-true. Display
+smoothing is `trendsmooth` (raw underlay, degree fixed at 4, half-width
+the only knob) with the extrapolation-backed
 live edge rendered distinctly (S1). Rendering decimates through a
 per-pixel min/max envelope — render-only; hover, selection and analysis
 always read the full series (Q9).
@@ -74,8 +79,12 @@ points at aggregation). Fill is never applied client-side; the two
 refusal hints carry one-click scaffolds written into the buffer via the
 delivery ops — `GROUP BY toStartOfInterval(…)` and
 `ORDER BY t WITH FILL STEP …` (explicit NULL gaps) — with the measured Δt
-substituted. Timestamps are read back forced-UTC. Series longer than the
-package ceiling (~500k) refuse with the limit named.
+substituted. Timestamps are read back forced-UTC. The claim carries **no
+length limit**: the §SD1 envelope exists precisely to draw long series,
+and capping the display lane on an analysis constraint would cross the
+one-way analysis→display contract (S1). The ~500k ceiling is
+`matrixprofile`'s, and it binds the `ts*` functions (§SD3), which refuse
+with the limit named.
 
 ### §SD3 — the `ts*` vocabulary, v1 roster
 
@@ -92,14 +101,24 @@ discipline). v1 ships four:
 | `tsSmooth(t, v, halfWidth)` | `t, smooth` | MS kernel, degree 4; conditioning use (S8), not display |
 | `tsProfile(t, v, window)` | `t, profile` | z-normalised matrix profile; centre-attributed; two-sided |
 | `tsAnomalyScores(t, v, window)` | `t, score, warm_up` | DAMP `Config.Exact` left discords; **causal**; centre-attributed |
-| `tsAnomalySpans(t, v, window, k)` | `_tl_band_from, _tl_band_to, _tl_band_label, _tl_band_color, score` | top-k plateau extents; palette colours ([ADR-0156](./0156-qualitative-palette-dark-surface.md)) |
+| `tsAnomalySpans(t, v, window, k)` | `_tl_band_from, _tl_band_to, _tl_band_label, _tl_band_color, score` | top-k plateau extents; colour **token names** (below) |
 
 Outputs speak the consuming contract *directly* — under the terminal-leaf
 rule no downstream SQL can rename them, so `tsAnomalySpans` emits the
 Timeline band columns itself and its result feeds Timeline, chart overlays
-and Table unchanged. One value column per call in v1; multivariate waits
-for ADR-0150 M4. The registry (name → transform, output schema, causality
-flag, param spec) is play-local; a second consumer is the lift trigger.
+and Table unchanged. Three details of that contract bind the transform:
+`_tl_band_from` / `_tl_band_to` must be Arrow **Timestamp** arrays;
+`_tl_band_color` carries an **IDS dot-notation token name**
+(`warning.default`, `error.strong` — [ADR-0031](./0031-imzero2-design-system-color.md)
+§SD2, the vocabulary `apps/play/help/snippets.md` already documents for
+SQL authors), never a hex literal, because the reader resolves names
+against a fixed token map and drops a row whose colour misses — counted
+in the bands status line, but drawing nothing. The extra `score` column
+is safe: the reader indexes by name, so columns beyond the contract ride
+along untouched, and that tolerance is what makes the reuse work. One
+value column per call in v1; multivariate waits for ADR-0150 M4. The
+registry (name → transform, output schema, causality flag, param spec)
+is play-local; a second consumer is the lift trigger.
 
 ### §SD4 — client nodes on the graph
 
@@ -109,9 +128,17 @@ client name in any node's `DependsOn`, or a client call in sink position,
 is a loud error naming the fix ("bind a pane to the CTE"). Execution: a
 `tsExecutor` implementing `nodeExecutorI` wraps the wire executor — its
 `compiledNode.SQL` is the fused input CTE, so it executes the input on
-ClickHouse, transforms in Go, and returns Arrow; the lane's (SQL, params)
-memo key stays the identity unchanged, and supersession, staleness and
-last-good come with the lane. Computation is asynchronous with the lane's
+ClickHouse, transforms in Go, and returns Arrow. It is built **per node**,
+carrying that node's parsed call: `execute` receives only a `compiledNode`,
+which cannot name a transform, so one shared executor could not route.
+The lane's memo key must **fold the call text in**. Keying on (SQL, params)
+alone would alias `tsProfile(t, v, 64)` and `tsProfile(t, v, 128)` over an
+unchanged input to a single entry — the fused SQL is the input CTE, and the
+integer literals §SD3 permits never reach the params — so a re-parameterised
+call would read the previous window's result straight off the memo. (Run
+forgets bound lanes, which masks it there; the live recompute path this
+section relies on does not.) Supersession, staleness and last-good come
+with the lane unchanged. Computation is asynchronous with the lane's
 loading state. At classify time a cached `system.functions` probe warns
 when a `ts*` name shadows a real server UDF; the buffer vocabulary wins
 inside play.
@@ -176,7 +203,7 @@ seed) lands in M4.
 | Milestone | Content |
 |---|---|
 | **M0** | Series tab: typed claim, channels, envelope decimation, trendsmooth + live edge, row cursor; Δt validator, refusals, scaffold affordances |
-| **M1** | Vocabulary: registry, split classification, terminal-leaf errors, `tsExecutor`, the four functions, engine chrome, collision warn, pass-through pin |
+| **M1** | Vocabulary: registry, split classification, terminal-leaf errors, `tsExecutor` (per-node, call folded into the memo key), the four functions and their length ceiling, engine chrome, collision warn, pass-through pin |
 | **M2** | Overlays and honesty: score/span channels rendered, baselines default-on, warm-up shading, spans on Timeline via the existing contract |
 | **M3** | `tslabels` + adjudication UI + the VUS readout with usable-band annotation |
 | **M4** | Fixture lab: generator → ad-hoc dataset affordance |
@@ -267,6 +294,10 @@ vocabulary wins and the collision warning names the shadowing.
   the `matrixprofile`/`damp`/`mssmooth`/`adscore` packages through the
   executor (never oracling a function with itself); output-schema goldens;
   Δt classifier property tests including the jitter tolerance.
+- **Memo-key distinctness.** Two calls differing only in a literal
+  argument, over one unchanged input CTE, must not share a lane entry —
+  the §SD4 aliasing trap as a test. Paired with a band-contract case
+  asserting Timestamp extents and a colour token that resolves.
 - **Pass-through pin.** A corpus case proving CanonicalizeFull and the
   default pass registry leave `ts*` calls intact.
 - **Envelope property.** Per pixel bucket, rendered min/max equals source
@@ -279,7 +310,7 @@ vocabulary wins and the collision warning names the shadowing.
 
 ## Status
 
-Proposed 2026-08-02. Consumes the survey's settled dialogue (Q1–Q9);
+Accepted 2026-08-05. Consumes the survey's settled dialogue (Q1–Q9);
 supersedes nothing.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
