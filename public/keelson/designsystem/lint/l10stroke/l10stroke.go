@@ -21,11 +21,14 @@
 // L4's sharp-corners exemption); all other values must reach for
 // styletokens.StrokeHair / StrokeRegular / StrokeStrong by name.
 //
-// Out of scope for v1: c.PaintRectStroke(...) / c.PaintCircleStroke(...)
-// free functions. The positional shape (x1,y1,x2,y2,radius,color,width
-// vs cx,cy,r,color,width) requires receiver-specific arg-position
-// knowledge that the syntactic walker doesn't have. Defer to a v2 rule
-// or a Painter-API simplification first.
+// Painter free functions are a second trigger class: their coordinate
+// args are bare numeric literals too, so the inspect-every-arg approach
+// above would false-positive on cx/cy/rx/ry. Instead each registered
+// function carries its strokeWidth arg index (the per-name table idiom
+// L11 uses for durSecs). PaintEllipseStroke is registered; the
+// remaining painter strokes (c.PaintRectStroke / c.PaintCircleStroke)
+// stay unregistered — each addition is a deliberate trigger-surface
+// expansion whose callers must be swept in the same change.
 //
 // Allowlist files: the styletokens module itself, where the ladder
 // constants legitimately live. Line-level ignore via
@@ -58,6 +61,16 @@ var allowlistedPkgPathSuffixes = []string{
 // variations.
 var triggerSelectors = map[string]bool{
 	"Stroke": true,
+}
+
+// triggerFunctions maps painter free-function names to the 0-indexed
+// arg position where the strokeWidth float32 sits. Unlike the method
+// surface, the surrounding args are coordinates — also bare numeric
+// literals — so only the registered width position is inspected.
+// Registering a new function here expands the trigger surface: sweep
+// its callers in the same change.
+var triggerFunctions = map[string]int{
+	"PaintEllipseStroke": 5, // (cx, cy, rx, ry, col, strokeWidth)
 }
 
 // allowedLiterals are the values that may appear raw in stroke positions
@@ -95,7 +108,22 @@ func run(pass *analysis.Pass) (result interface{}, err error) {
 		if !ok {
 			return
 		}
-		if !triggerSelectors[sel.Sel.Name] {
+		name := sel.Sel.Name
+		var (
+			candidates []ast.Expr
+			display    string
+		)
+		switch widthIdx, isFn := triggerFunctions[name]; {
+		case triggerSelectors[name]:
+			candidates = call.Args
+			display = "." + name
+		case isFn:
+			if widthIdx >= len(call.Args) {
+				return
+			}
+			candidates = call.Args[widthIdx : widthIdx+1]
+			display = name
+		default:
 			return
 		}
 
@@ -103,7 +131,7 @@ func run(pass *analysis.Pass) (result interface{}, err error) {
 			file *ast.File
 			idx  *ignoreann.Index
 		)
-		for _, arg := range call.Args {
+		for _, arg := range candidates {
 			lit, ok := arg.(*ast.BasicLit)
 			if !ok {
 				continue
@@ -128,8 +156,8 @@ func run(pass *analysis.Pass) (result interface{}, err error) {
 			}
 
 			pass.ReportRangef(call,
-				"L10: raw literal %s in stroke-aware call .%s(); use a styletokens accessor (StrokeHair / StrokeRegular / StrokeStrong — ADR-0032 §SD4); annotate with // designlint:ignore=L10 (reason) if intentional",
-				lit.Value, sel.Sel.Name)
+				"L10: raw literal %s in stroke-aware call %s(); use a styletokens accessor (StrokeHair / StrokeRegular / StrokeStrong — ADR-0032 §SD4); annotate with // designlint:ignore=L10 (reason) if intentional",
+				lit.Value, display)
 		}
 		return
 	})

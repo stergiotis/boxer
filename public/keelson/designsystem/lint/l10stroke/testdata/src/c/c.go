@@ -29,3 +29,17 @@ func NewFrame() (f Frame)               { return }
 func NewH3Region() (h H3Region)         { return }
 func NewMapPolyline() (m MapPolyline)   { return }
 func NewTintedScope() (t TintedScope)   { return }
+
+// Free painter function: strokeWidth at arg index 5, everything before
+// it a coordinate or the color.
+type PaintEllipse struct{}
+
+func PaintEllipseStroke(cx float32, cy float32, rx float32, ry float32, col Color, strokeWidth float32) (p PaintEllipse) {
+	_ = cx
+	_ = cy
+	_ = rx
+	_ = ry
+	_ = col
+	_ = strokeWidth
+	return
+}

@@ -310,8 +310,8 @@ func demoPainterPolygons(ids *c.WidgetIdStack) {
 
 	// --- The ellipse primitives, first shown here.
 	c.PaintEllipseFilled(300.0, 245.0, 55.0, 30.0, color.Hex(0xaa44ffcc)).Send()
-	c.PaintEllipseStroke(300.0, 245.0, 55.0, 30.0, color.Hex(0xdd99ffff), 1.5).Send()
-	c.PaintEllipseStroke(410.0, 245.0, 30.0, 42.0, color.Hex(0x44ddffff), 2.0).Send()
+	c.PaintEllipseStroke(300.0, 245.0, 55.0, 30.0, color.Hex(0xdd99ffff), styletokens.StrokeRegular).Send()
+	c.PaintEllipseStroke(410.0, 245.0, 30.0, 42.0, color.Hex(0x44ddffff), styletokens.StrokeStrong).Send()
 	c.PaintText(345.0, 305.0, 1, 0, "ellipses: filled + stroked", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
 
 	c.PaintCanvas(ids.PrepareStr("painter-polygons"), 470.0, 330.0).
