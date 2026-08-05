@@ -120,6 +120,11 @@ egui_ltreeview = "0.8.0"
 roaring = "0.11.2"
 tracing = "0.1.43"
 tracing-subscriber = "0.3.22"
+# Bridges dependencies that log through the `log` crate (walkers, and it is not
+# alone) into the tracing subscriber. Declared directly rather than relying on
+# tracing-subscriber's builder `init()`, so the bridge's own level cap is ours
+# to set — see setup_tracing.
+tracing-log = "0.2"
 byteorder = "1.5.0"
 puffin_http = {version = "0.17.0", optional = true }
 puffin = {version = "0.20.0", optional = true }

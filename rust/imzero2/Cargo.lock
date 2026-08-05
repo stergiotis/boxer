@@ -2714,6 +2714,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tracing",
+ "tracing-log",
  "tracing-subscriber",
  "ttf-parser",
  "walkers",

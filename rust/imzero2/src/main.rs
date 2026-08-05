@@ -22,6 +22,22 @@ fn setup_tracing() {
         .compact()
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting tracing default failed");
+
+    // Dependencies that report through the `log` crate rather than `tracing`
+    // were being dropped entirely: nothing ever registered a `log` logger, and
+    // `set_global_default` — unlike the builder's own `init()` — does not
+    // install the bridge. walkers is the case that surfaced it, where a tile
+    // server that is down, rate-limiting, or serving garbage produced a grey
+    // map and complete silence.
+    //
+    // Bridged at Info, not Trace: walkers logs one `debug!` per tile decode and
+    // one `trace!` per download, which at 20-40 tiles a screenful is noise on
+    // the hot path, and every record below the cap is converted before it can
+    // be filtered. Warnings and errors — the ones worth waking up for — arrive.
+    if let Err(e) = tracing_log::LogTracer::builder().with_max_level(log::LevelFilter::Info).init()
+    {
+        tracing::warn!(error = %e, "could not bridge the log crate into tracing; dependency diagnostics will be dropped");
+    }
 }
 
 #[cfg(feature = "puffin")]
