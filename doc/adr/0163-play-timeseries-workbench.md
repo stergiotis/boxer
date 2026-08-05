@@ -308,6 +308,30 @@ vocabulary wins and the collision warning names the shadowing.
   ([ADR-0154](./0154-headless-carrier-tree-and-driver.md) lane); an
   integration-lane probe for the `system.functions` collision warning.
 
+## Update 2026-08-05 — the typed claim needs `DateTime64`, not `DateTime`
+
+Building M0 turned up a transport fact §SD1 had assumed away. A ClickHouse
+`DateTime` reaches Arrow as a bare **`uint32`** of epoch seconds — verified
+against a live server under both `output_format_arrow_use_native_writer=1`
+and `=0`, with no field metadata naming the source type. `DateTime64` arrives
+as a `timestamp` and `Date` as a `date32`; only the 32-bit `DateTime` loses
+its identity.
+
+That is decisive for §SD1's carve-out. The typed claim was justified on the
+grounds that a time axis plus numeric lanes carries no same-typed ambiguity —
+but accepting `uint32` as a time axis would make `SELECT id, count()` draw an
+id as time, which is exactly the ambiguity the named-columns doctrine exists
+for. So the claim accepts `DateTime64` / `Date` / Arrow `timestamp` only, and
+the reject names the cast (`toDateTime64(toStartOfMinute(t), 3)`) rather than
+a rename. The Timeline's shipped rule — "timestamps must be `DateTime64`" —
+turns out to be the same constraint, met earlier.
+
+The §SD2 scaffolds are affected and were corrected with it: the aggregation
+scaffold emits `toDateTime64(toStartOfInterval(…), 3)`, since without the
+cast the scaffold would have written SQL this panel then refuses. Nothing
+else in the decision moves — this narrows *which types* satisfy the claim,
+not what the claim is.
+
 ## Status
 
 Accepted 2026-08-05. Consumes the survey's settled dialogue (Q1–Q9);
