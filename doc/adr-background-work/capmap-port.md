@@ -97,6 +97,15 @@ A business-capability corpus cannot claim that word. The port keeps `capmap`
 as the subsystem name — a compound that does not collide — and names the
 corpus package `capmapcorpus`, mirroring `adrcorpus`.
 
+> **2026-08-05, after the fact.** This section stopped one level too high. It
+> settled the *package* names and said nothing about the **unit**, so the
+> implementation went on to call the model type `Capability` and the keelson
+> tables `capability` / `capsection` / `caprelation` — putting the word back in
+> the flattest shared namespace boxer has, which is the one place it collides
+> worst. ADR-0168 §SD6 now names the unit a **competence** and states the rule
+> the survey left implicit: boxer's names take the fresh word, the vault keeps
+> the literature's, and `capmapcorpus` is the boundary.
+
 ## 5. The facts model already carries almost everything
 
 The decisive question was whether the corpus should get bespoke Arrow tables or

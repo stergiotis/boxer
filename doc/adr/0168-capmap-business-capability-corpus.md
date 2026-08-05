@@ -15,12 +15,14 @@ date: 2026-08-05
 boxer has a governance ecosystem for one corpus — decisions. `adrcorpus` parses
 `doc/adr/`, `boxer adr` emits queryable tables, keelson providers serve the same
 tables in-process, and applet books carry the canned lenses. Nothing comparable
-exists for *capability management*: what the toolbelt can do, how mature each
-part is, where the pain is, and what depends on what.
+exists for *business-capability management*: what the toolbelt can do, how
+mature each part is, where the pain is, and what depends on what. (boxer calls
+the unit a **competence** — §SD6 says why the industry's word cannot be used
+here.)
 
 A standalone prototype answers that question already — vault markdown, a
 ClickHouse read model, an HTMX front end — and its corpus includes a catalog of
-boxer's own capabilities. Bringing it in makes boxer's self-description a
+boxer's own competences. Bringing it in makes boxer's self-description a
 first-class, queryable artifact rather than a document in another checkout.
 
 The measurements, the survey of what boxer already provides, and the reasoning
@@ -34,7 +36,7 @@ with no encoded difference.
 
 ## Design space (QOC)
 
-**Question.** Where do capability and relation facts live?
+**Question.** Where do competence and relation facts live?
 
 **Options.**
 
@@ -44,7 +46,7 @@ with no encoded difference.
 
 **Criteria.**
 
-- **C1** — Join reach: can a query relate capabilities to what the runtime knows about itself?
+- **C1** — Join reach: can a query relate competences to what the runtime knows about itself?
 - **C2** — Scope fidelity: does the table stay honest about what it claims to hold?
 - **C3** — Codegen and maintenance cost.
 
@@ -64,12 +66,13 @@ real cost and is paid explicitly in SD1.
 
 ## Decision
 
-We will model the capability corpus as facts in `boxer.facts`, keep the vault
+We will model the corpus as facts in `boxer.facts`, keep the vault
 authoritative, and expose the result through the same five-piece shape the ADR
-ecosystem uses. The subsystem is named `capmap`; it does not use the word
-*capability* for its Go packages.
+ecosystem uses. The subsystem is named `capmap`, after the artefact it builds —
+a capability map is what the literature calls the deliverable. The **unit** it
+holds is a *competence*, not a *capability*: §SD6 has the rule and why.
 
-- **SD1 — Two fact kinds in `boxer.facts`.** A capability fact and a relation
+- **SD1 — Two fact kinds in `boxer.facts`.** A competence fact and a relation
   fact, under a new `capmap*` vocabulary. This widens the table past its stated
   scope of app state, grants and audit records, recorded as a dated Update on
   [ADR-0026](./0026-app-runtime-and-capability-subjects.md) §SD6. Rejected
@@ -82,20 +85,29 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   multi-membership under distinct role memberships, its type (`parent`,
   `similar`, `wikilink`) on `symbol`, and a similarity score on `f64Array`.
   Level-4 multi-parenting stops being a special case — it is more rows.
-  Rejected: parent ids as a `u64Array` column on the capability fact, which
+  Rejected: parent ids as a `u64Array` column on the competence fact, which
   makes an edge a property of one endpoint and has no place to put the
   relation's own attributes.
 
   A relation carries how its target resolved, which is what retires the
   precomputed lint columns: a broken link is a relation, not a finding. M2
   found that this needs four states rather than two. Roughly a quarter of body
-  links are citations — `Jouppi-1990`, `GDPR-Art-17` — that no capability slug
+  links are citations — `Jouppi-1990`, `GDPR-Art-17` — that no competence slug
   could ever match, so they name something outside the corpus and are not
-  defects; and the two spellings of a link to a directory-backed capability
+  defects; and the two spellings of a link to a directory-backed competence
   differ only in whether the link also resolves inside Obsidian. Collapsing
-  either distinction into "broken" buries the real findings: on the reference
-  corpus the honest count is 217 dangling links, against 1,481 pointing at
-  sibling note trees and 1,559 citations.
+  either distinction into "broken" turns 3,257 apparent defects on the
+  reference corpus into 1,698 real candidates.
+
+  **`unresolved` is an upper bound, not the defect count**, and M6 measured by
+  how much. Of those 1,698, only 217 name nothing that exists anywhere; 1,481
+  point into the vault's sibling reference trees — `standards/`,
+  `technologies/` — which §"Point it at a competence tree" deliberately keeps
+  out of the read, because their names collide with competence names. A
+  fifth state would need the parser to be told where those trees are, so it is
+  not encoded; the applet book states the bound instead, and offers a
+  `cited_by` fan-in count as the usable signal, since a missing target named
+  once is a typo and one named a dozen times is a note that was never written.
 
 - **SD3 — The vault stays authoritative; facts are derived.** Ingest rebuilds
   facts from markdown and is repeatable from scratch. Editing stays in the
@@ -118,11 +130,33 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   round-tripping (a goldmark AST is not losslessly re-renderable) and multiplies
   rows to answer questions nobody asks.
 
-- **SD6 — A `capmap` vocabulary with its own tag-value base.** Mirrors
-  `public/keelson/runtime/vocab`: `capmap*`-prefixed natural keys in
-  `LowerSpinalCase`, at `public/gov/capmapvocab`. Rejected: registering into
-  the runtime vocabulary, which would put corpus names in a namespace whose
-  prefix promises process state.
+- **SD6 — The unit is a *competence*, and the vocabulary has its own
+  tag-value base.**
+
+  **The word first.** boxer already spends "capability" on the runtime's
+  security capabilities — ADR-0026's subjects, what `capslock` audits and a
+  `capabilitygrant` records — and the literature spends it on the thing this
+  corpus holds. One word for two unrelated ideas in one tree makes every
+  mention ambiguous, and the flat `keelson('…')` namespace is where that bites
+  hardest: a table called `capability` sitting beside `apps`, `env` and `procs`
+  reads as the runtime's, not the corpus's. So **everything boxer names says
+  competence** — the `Competence` model, the `capmapCompetence*` memberships,
+  the `competence` / `competencesection` / `competencerelation` tables.
+
+  **The vault does not.** It is authored in Obsidian against the
+  business-capability literature: its marker file is `capability.md` and its
+  links are `[[slug/capability]]`. Renaming those would fork the convention
+  every other vault of this kind follows, and buy nothing — the collision is
+  inside boxer, not in the vault. `capmapcorpus` is the translation point, and
+  says so in its package doc. Rejected: renaming the subsystem too, which would
+  churn five landed commits and an allocated tag-value base to relabel an
+  artefact whose industry name really is "capability map".
+
+  **The vocabulary.** Mirrors `public/keelson/runtime/vocab`:
+  `capmap*`-prefixed natural keys in `LowerSpinalCase`, at
+  `public/gov/capmapvocab`. Rejected: registering into the runtime vocabulary,
+  which would put corpus names in a namespace whose prefix promises process
+  state.
 
   Because nothing in the tree records which tag values are taken, this ADR is
   the register, and the allocation is named in the vocabulary package's doc
@@ -142,7 +176,7 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   against both other vocabularies, and is verified to fail when the base is
   moved onto one of theirs.
 
-- **SD7 — The corpus lives in-tree but git-ignored.** `doc/capabilities/`,
+- **SD7 — The corpus lives in-tree but git-ignored.** `doc/competences/`,
   symmetric with `doc/adr/`, holding the boxer catalog only, with a committed
   `README.md` and everything else ignored. Two catalogs are excluded: one
   derived from a private checkout, whose name must not enter a public tree, and
@@ -151,7 +185,8 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   questions by accident.
 
 - **SD8 — The read path is keelson providers over the vault, not over the
-  facts table.** Three tables — `capability`, `capsection`, `caprelation` —
+  facts table.** Three tables — `competence`, `competencesection`,
+  `competencerelation` —
   reading the corpus live on the `adr` providers' precedent (ADR-0122 §SD4):
   registered statically, `FreshnessLive`, and empty rather than erroring
   off-repo. Rejected: letting applets query physical leeway columns, which
@@ -164,12 +199,12 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   data to appear. And decoding from SQL means hand-written leeway column
   names, the coupling M1 found already spread across a hundred sites with
   nothing guarding it. A live read has neither, and costs ~150 ms for a
-  ~1,700-capability tree against `capmapcorpus`'s existing snapshot window.
+  ~1,700-competence tree against `capmapcorpus`'s existing snapshot window.
   The ingest keeps its own job — history, and joins on the ClickHouse side —
-  and `capability.fact_id` carries the id it wrote, so the two surfaces can be
+  and `competence.fact_id` carries the id it wrote, so the two surfaces can be
   joined without knowing how the id is derived.
 
-  `capsection` is split from `capability` for the reason `adrcontent` is split
+  `competencesection` is split from `competence` for the reason `adrcontent` is split
   from `adr`: measured on the reference corpus the prose is 2.8× the metadata,
   and a query about maturity should not pay for it.
 
@@ -191,25 +226,39 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   reports the corpus and needs no database. **Not** through `FactsStoreI` as
   first planned: that interface is a closed per-kind surface — twenty methods,
   `WriteGrant` through `WriteColumnWidth` — with no generic write, so using it
-  would mean adding `WriteCapability` to a keelson-runtime contract for a gov
+  would mean adding `WriteCompetence` to a keelson-runtime contract for a gov
   concern and obliging every implementer to carry methods for a tool it does
   not use. Encoding lives in `public/gov/capmapfacts` instead and hands
   finished Arrow batches to a one-method sink that `chclient.Client` already
   satisfies, which is also what lets the encoding be tested with no ClickHouse
   in reach.
 - **M5 — providers (SD8).**
-- **M6 — the applet book (SD9).**
-- **M7 — corpus and ignore rule (SD7).**
+- **M6 — the applet book (SD9).** Four lenses under `TopicCode`:
+  `comp-overview`, `comp-browser`, `comp-map`, `comp-lint`. The treemap lens is
+  the one §Deferrals left conditional, and ADR-0166 landing is what made it
+  buildable. Its `color` channel is the level-2 ancestor rather than `domain`,
+  measured: the shipped catalog has one domain, so colouring by it produces a
+  single-colour picture, while the branch gives thirteen. Building it also
+  found that an applet ignored its document's `tabs:` order and opened on the
+  dock's own first tab, so a treemap applet landed on a table — fixed in
+  [ADR-0132](./0132-sqlapplet-sql-defined-applets.md) (Update 2026-08-05),
+  which corrects three other books' landing tabs with it.
+- **M7 — corpus and ignore rule (SD7).** The committed `README.md` §SD7 asks
+  for turned out to parse *as a competence* — `readme` is a well-formed slug,
+  so nothing else caught it, and the first read reported 80 competences and a
+  relation the corpus never declared. `ParseDir` now skips it and reports it
+  as a skipped file.
 
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | `boxer.facts` column encoding (`factsschema`) | Reshaped — two sections gain value aspects, one gains a heavier codec | The four generated artifacts under `factsschema/`: `ddl/`, `dml/`, `dml_cbor/`, `ra/`, all via `boxer runtimecodegen` |
-| `boxer.facts` row vocabulary | Added — two fact kinds and their memberships | The new `capmap` vocabulary package; the providers that decode them |
+| `boxer.facts` row vocabulary | Added — two fact kinds and their memberships, named for the *competence* unit (§SD6) | The new `capmap` vocabulary package; the providers that decode them |
 | TagValue allocation | Added — a second allocation, and the rule for making further ones | This ADR is the register; the vocabulary package's doc comment cites it |
 | Environment-variable registry ([ADR-0009](./0009-environment-variable-registry.md)) | Added — the corpus location | `doc/env-vars.md`; the package must be reachable from the `public/app` link graph or the spec stays invisible |
-| keelson table-name namespace ([ADR-0094](./0094-keelson-introspection-tables.md)) | Added — `capability`, `capsection`, `caprelation` | `RegisterStatic` and the name roster it is pinned by; the applet book's queries |
+| keelson table-name namespace ([ADR-0094](./0094-keelson-introspection-tables.md)) | Added — `competence`, `competencesection`, `competencerelation` | `RegisterStatic` and the name roster it is pinned by; the applet book's queries |
+| Applet id namespace ([ADR-0132](./0132-sqlapplet-sql-defined-applets.md)) | Added — a fifth book, `capmap`, minting `cap-overview`, `cap-browser`, `cap-map`, `cap-lint` | The cross-book slug-collision test, which counts every minted applet |
 | Exported Go API under `public/` | Added — `capmapcorpus`, `capmapvocab`, `capmapfacts` under `public/gov/`, and the `boxer capmap` command | Nothing yet; no downstream module compiles against them |
 
 ## Alternatives
@@ -249,15 +298,18 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
 - SD4 renames physical columns, so the table must be rebuilt (§Migration).
 - Ingest against a live store needs ClickHouse, pushing part of the test surface
   into the integration lane.
-- The prototype's four webapps have no equivalent on day one; the treemap in
-  particular has no play panel, and that gap is real until its own decision is
-  taken.
+- Of the prototype's four webapps, two are replaced (browser, lint) and two are
+  deferred with the triage workflow (culler, cull-configer). The treemap gap
+  closed when ADR-0166 landed, and `cap-map` reads its nodes contract.
 
 ### Neutral
 
 - `capmap` joins `capslock` and `capabilitygrant` in a namespace where "cap"
-  now abbreviates two unrelated things. SD6's prefix rule keeps the membership
-  names apart; the package names carry the rest.
+  abbreviates two unrelated things. That is as far as the overlap goes: §SD6
+  gives the unit its own word, so nothing boxer names is called a capability
+  twice. The subsystem prefix is the one place the abbreviation is shared, and
+  it is shared with the artefact's industry name rather than with the runtime's
+  concept.
 - The corpus is present but unversioned, so a contributor's working tree and CI
   see different amounts of data. Providers are empty rather than erroring when
   the corpus is absent, which is the behaviour the ADR providers already
@@ -288,6 +340,15 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   nothing from the app.
 - **Old shape.** Removed outright at M1. There is no dual-decode path and none
   is planned.
+- **The §SD6 rename re-keys every row, and that was free exactly once.** The
+  natural-key domain separator went from `capmap.capability` to
+  `capmap.competence` and every membership natural key changed with it, so an
+  id derived before the rename does not match one derived after. It cost
+  nothing because no corpus had been ingested anywhere — the encoding had only
+  ever been exercised by tests and one integration run against a scratch
+  database. Doing it later would have meant a re-ingest of every store holding
+  the corpus, which is why the word was settled before the first real write
+  rather than after.
 
 ## Verification plan — Tier 1
 
@@ -318,11 +379,27 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   `foreignKey` (§SD2). It builds its own scratch database and never touches
   `boxer.facts`, since a test that dropped the runtime's table would destroy
   real state to check an encoding.
+  M6 added the book's own half of the gate. The corpus test pins the four
+  documents' shape; `TestCapmapBookQueriesExecute` then runs every buffer
+  verbatim — SET prelude included — through the introspect engine over the live
+  provider tables, which is what a parse cannot reach: a buffer that parses,
+  classifies and mints can still name a column that does not exist. It reads a
+  fixture vault rather than `doc/competences`, because that directory is
+  git-ignored and a test that only passed on a populated working tree would be
+  green for the wrong reason. The fixture carries the shapes the buffers reason
+  about — a directory-backed competence, a multi-parent level-4 leaf, an
+  interior node with prose of its own, and one relation of each resolution.
 - **Gap.** The serverless read path — facts-shaped Arrow through `file()` — has
   been reasoned about but not run; proving it is a step inside M4 rather than a
   standing lane. Nothing verifies that the corpus content is *correct*, only
-  that it parses, encodes and decodes; capability maturity and pain scores are
-  human judgements with no oracle.
+  that it parses, encodes and decodes; competence maturity and pain scores are
+  human judgements with no oracle. That gap is wider than it sounds: on the
+  reference corpus **nothing has been assessed at all** — every one of the
+  1,722 competences carries the `255` sentinel for both maturity and pain, and
+  none carries a lifecycle record. So the scoring half of what §Context calls
+  "how mature each part is, where the pain is" has a schema, an encoding and a
+  query surface, and no data. `cap-overview` reports the coverage rather than
+  averaging over an empty column.
 
 ## Deferrals
 
@@ -339,13 +416,13 @@ Each carries a trigger rather than a date.
 - **The triage/culling workflow.** A UI that mutates repo files is a distinct
   security posture and needs its own decision. Trigger: the read path proving
   the corpus is worth curating at that rate.
-- **A treemap panel for play.** Not deferred by this ADR — a play Treemap panel
-  is being decided separately in ADR-0166, in flight at the time of writing.
-  This corpus is a candidate consumer: a size-and-maturity hierarchy where path
-  order does not matter is the motivation
-  [ADR-0160](./0160-imzero2-icicle-flamegraph-widget.md) said a treemap would
-  need. If that panel lands, SD9's book gains a hierarchy lens; if it does not,
-  the book is unaffected.
+- **A treemap panel for play.** ~~Not deferred by this ADR~~ — settled. A play
+  Treemap panel was decided separately in ADR-0166, in flight at the time of
+  writing, and landed; SD9's book gained the hierarchy lens as this said it
+  would. It is sized by prose bytes rather than by maturity, since there is no
+  maturity to size by (§Verification plan), which makes it a
+  size-and-*structure* map rather than the size-and-maturity one
+  [ADR-0160](./0160-imzero2-icicle-flamegraph-widget.md) described.
 
 ## Status
 
