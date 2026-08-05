@@ -174,6 +174,32 @@ func (inst *nodeLane) forget() {
 	inst.loading = false
 }
 
+// abort stops the in-flight run WITHOUT re-arming it — the panel-facing Cancel.
+// The run is superseded the usual way (generation bump + context cancel), but
+// `wantKey` keeps naming the pair the lane was converging on, so the per-frame
+// demand that follows finds the lane already converged and starts nothing. That
+// is the whole difference from [nodeLane.forget], where clearing `wantKey` IS
+// the re-arm: a cancelled fetch stays cancelled until the demand itself changes
+// (on the Map, a pan or a control) or a force re-runs it.
+//
+// The memo is untouched, so the last-good result keeps serving and a cancel
+// leaves what is on screen alone. No-op when nothing is in flight.
+func (inst *nodeLane) abort() {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.closed || !inst.loading {
+		return
+	}
+	inst.gen++ // the in-flight completion is stale now
+	if inst.cancel != nil {
+		inst.cancel()
+		inst.cancel = nil
+	}
+	inst.loading = false
+	inst.progress = runstream.Progress{}
+	inst.progressFresh = false
+}
+
 // startLocked supersedes any in-flight run and kicks a new one. Caller holds mu.
 func (inst *nodeLane) startLocked(c compiledNode, demandKey string) {
 	inst.wantKey = demandKey

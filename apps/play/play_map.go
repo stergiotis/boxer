@@ -87,7 +87,19 @@ type MapDriver struct {
 	packBounds   [4]float64 // minLat, minLon, maxLat, maxLon the pixels cover
 	version      uint64     // bumped per re-pack → mapRaster contentVersion
 
+	// progress/frameProgress are this panel's own reading of its lane's in-band
+	// ticks (ADR-0115 plane A). The app's tracker follows `main`/the observed
+	// intermediate; the raster runs on the Map's own lane, so it needs its own —
+	// folded once per frame in syncProgress and drawn beside the Cancel.
+	progress      progressTracker
+	frameProgress progressView
+
 	loading bool
+	// cancelled says the last fetch was aborted at the Cancel button rather
+	// than having landed. It survives until a new run starts, so the status
+	// line can say why nothing is loading: silence after a Cancel reads as the
+	// button having done nothing.
+	cancelled bool
 	// Two error owners, so neither can latch a stale message (review finding):
 	// laneErr mirrors the lane's error EVERY demand (nil clears it); packErr
 	// belongs to the last repack attempt (cleared on success).
@@ -272,6 +284,7 @@ func (inst *MapDriver) mapHandle() widgethandle.WidgetHandle {
 // mapRaster overlay is a register-drain node, so it must be emitted BEFORE the
 // walkersMap that drains it.
 func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
+	inst.syncProgress()
 	inst.renderControls()
 
 	// Previous frame's camera for THIS map (refreshed at last frame's end).
@@ -304,8 +317,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 		params := resolveSignalNamesWithDefaults(inst.templateReads, nil, sig)
 		if hasViewportParams(params) {
 			view := inst.lane.demand(compiledNode{SQL: inst.template, Params: params})
-			inst.loading = view.loading
-			inst.laneErr = view.err // mirrored every demand — nil clears (no latch)
+			inst.noteLane(view)
 			if view.rec != nil {
 				if view.fingerprint != inst.lastPackedFP {
 					inst.repack(view.rec, view.params, view.fingerprint)
@@ -368,6 +380,43 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	mw.Send()
 }
 
+// noteLane mirrors one demand's lane state onto the panel. All three fields are
+// rewritten every demand so none can latch: the loading flag drives the
+// progress row, the error is the lane's own (nil clears it — the review finding
+// this shape came from), and a started run makes the cancel notice stale.
+func (inst *MapDriver) noteLane(view laneView) {
+	inst.loading = view.loading
+	if view.loading {
+		inst.cancelled = false
+	}
+	inst.laneErr = view.err
+}
+
+// syncProgress folds this frame's lane tick into the panel's estimator. Called
+// once per frame at the top of Render, before renderControls reads
+// frameProgress: the damped ETA is stateful, so folding the same remaining work
+// twice in a frame is only harmlessly wrong by accident of the damping rule.
+//
+// The lane id is the tracker's re-anchor witness and there is one lane here, so
+// it is constant; a NEW run on it re-anchors through the tracking gate instead
+// — the lane clears its fresh flag when a run starts, lands, or is aborted, and
+// a frame that observes fresh=false drops the tracking.
+func (inst *MapDriver) syncProgress() {
+	p, fresh := inst.lane.progressView()
+	inst.frameProgress = inst.progress.observe(time.Now(), "map", p, fresh)
+}
+
+// cancelFetch aborts the in-flight raster query. The lane keeps the demand key
+// it was converging on, so the per-frame demand does not immediately restart it
+// (see [nodeLane.abort]): the fetch stays cancelled until the viewport or a
+// control changes, or Refresh forces a re-run. The last-good raster keeps
+// drawing under it — a cancel stops the fetch, not the map.
+func (inst *MapDriver) cancelFetch() {
+	inst.lane.abort()
+	inst.loading = false
+	inst.cancelled = true
+}
+
 func (inst *MapDriver) renderControls() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("table").Send()
@@ -392,6 +441,22 @@ func (inst *MapDriver) renderControls() {
 		if c.Button(inst.ids.PrepareStr("map-refresh"),
 			c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
 			inst.requestRefresh()
+		}
+		// A raster fetch in flight gets the mini-UI the main query has in the
+		// top bar — spinner, Cancel, bar, numbers — pointed at THIS panel's
+		// lane. It rides this row rather than taking one of its own: the map
+		// fills what the controls leave, so a row that appears with the run
+		// would shrink the map, change vp_h, and re-key the demand (see
+		// renderLaneProgress). Beside Refresh the row height cannot move.
+		//
+		// This is also why statusLine has no loading case: the numbers here
+		// say it better, and the line below goes on reporting the last-good
+		// raster that is still on screen.
+		if inst.loading {
+			c.Separator().Vertical().Send()
+			if renderLaneProgress(inst.ids, "map-cancel", inst.frameProgress) {
+				inst.cancelFetch()
+			}
 		}
 	}
 	c.Label(inst.statusLine()).Send()
@@ -601,6 +666,11 @@ func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error)
 	return
 }
 
+// statusLine is the line under the controls. It carries no "loading" case: the
+// progress row above it is drawn under exactly that gate and says the same
+// thing with numbers, so while a fetch is in flight this line goes on reporting
+// the last-good raster (which is what is still on screen) or an error from the
+// run being retried — neither of which the row covers.
 func (inst *MapDriver) statusLine() string {
 	switch {
 	case inst.controlErr != "":
@@ -609,8 +679,8 @@ func (inst *MapDriver) statusLine() string {
 		return "query error: " + inst.laneErr.Error()
 	case inst.packErr != nil:
 		return "raster error: " + inst.packErr.Error()
-	case inst.loading:
-		return "rendering tile…"
+	case inst.cancelled:
+		return "fetch cancelled — pan, zoom, or Refresh to run again"
 	case inst.packW > 0:
 		return fmt.Sprintf("%d×%d raster · %s", inst.packW, inst.packH, builtinRenders[inst.renderIdx].name)
 	default:

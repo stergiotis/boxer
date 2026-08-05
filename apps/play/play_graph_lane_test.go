@@ -295,6 +295,55 @@ func TestNodeLaneFlipBackServesMemoWithoutReExecuting(t *testing.T) {
 	}, 150*time.Millisecond, 5*time.Millisecond, "B's cancelled completion must not land")
 }
 
+// abort is a cancel, not a force: the run stops, and the per-frame demand that
+// follows must NOT restart it — otherwise the Map's Cancel would be a re-run
+// button, since the panel re-demands the same pair every frame while the camera
+// is still. A changed demand does start again, and so does forget.
+func TestNodeLaneAbortStopsWithoutRestarting(t *testing.T) {
+	g := &gatedExecutor{gate: make(chan struct{}), build: func(string) arrow.RecordBatch { return int64Rec("n", 1) }}
+	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
+	defer lane.close()
+
+	v := lane.demand(compiledNode{SQL: "A"})
+	require.Nil(t, v.rec)
+	require.True(t, v.loading)
+	// A parks on the gate, so it is genuinely in flight when the Cancel lands.
+	require.Eventually(t, func() bool { return g.callCount() == 1 },
+		2*time.Second, time.Millisecond)
+
+	lane.abort()
+	close(g.gate) // release A: its ctx is cancelled and its completion discarded
+
+	view := lane.demand(compiledNode{SQL: "A"}) // the frame after the click
+	require.False(t, view.loading, "an aborted fetch stays aborted")
+	require.Nil(t, view.rec)
+	require.Never(t, func() bool {
+		v := lane.demand(compiledNode{SQL: "A"}) // every subsequent frame
+		if v.rec != nil {
+			v.rec.Release()
+		}
+		return v.loading
+	}, 150*time.Millisecond, 5*time.Millisecond, "the unchanged demand must not re-arm the lane")
+	require.Equal(t, 1, g.callCount(), "the cancelled run is the only execution")
+
+	// A changed demand (a pan) is a new pair, so it runs.
+	v = lane.demand(compiledNode{SQL: "B"})
+	require.True(t, v.loading)
+	waitLaneReady(t, lane, "B")
+	require.Equal(t, 2, g.callCount())
+
+	// And forget re-arms the lane the abort left converged (Refresh after a
+	// Cancel), even for a pair the memo now serves.
+	lane.forget()
+	v = lane.demand(compiledNode{SQL: "B"})
+	if v.rec != nil {
+		v.rec.Release()
+	}
+	require.True(t, v.loading)
+	waitLaneReady(t, lane, "B")
+	require.Equal(t, 3, g.callCount())
+}
+
 // A closed lane drops demands instead of resurrecting: a straggler frame during
 // Unmount must not start a query nothing will consume (review finding —
 // QueryStore had this guard, the lane didn't).

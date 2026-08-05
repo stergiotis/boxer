@@ -481,6 +481,52 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-08-05 — a lane-owning panel can show and cancel its own run: `nodeLane.abort`
+
+The Map (ADR-0096, on the param seam since slice 5c) runs its raster query on
+its own `nodeLane`, and had no in-flight surface at all: the query ran, and
+could only be waited out. Neither existing display site reaches it. The
+pane-progress strip is gated on `spec.Panel != nil && Zone == TabZoneBody` and
+the Map registers a nil `PanelI`; the top-bar bar and Cancel are wired to the
+`main`/observed-intermediate lane. The ticks were already there — `clientExecutor`
+is progress-aware and the lane's generation-guarded sink has fed
+`nodeLane.progressView` since ADR-0115 plane A — with nothing reading them.
+
+Two pieces, both small.
+
+**The estimator is per observed lane, not per app.** `progressTracker` folds
+ticks into a damped ETA and is re-anchored per run; a panel watching a different
+lane needs its own, folded once per frame before its controls render. The Map
+keeps one. `renderLaneProgress` is the shared drawing — spinner, Cancel, bar,
+numbers — and is written against any lane-owning panel, but only the Map adopts
+it here; the sankey, network, kanban, docs and bands lanes are unchanged.
+
+**It rides an existing control row, and that is not cosmetic.** Drawn as a row
+of its own it worked, briefly, and then re-entered through the layout: the map
+fills what the controls leave, so a row that appears with the run shrinks the
+map, which changes `vp_h`, which re-keys the demand. The first fetch superseded
+itself a debounce after starting, and hiding the row on Cancel started a fresh
+run — a Cancel undone by its own disappearance. Beside a control that is always
+there the row height is pinned and nothing moves. The general form: a panel that
+sizes its query off its own viewport cannot afford chrome that comes and goes
+with the query.
+
+**A cancel is not a force.** `nodeLane.forget` supersedes the in-flight run
+*and* clears `wantKey`, which is precisely the re-arm — the next demand
+re-executes. That is wrong for a Cancel: the Map re-demands the same (SQL,
+params) pair every frame while the camera is still, so a Cancel spelled as a
+forget would restart the query on the following frame and read as a no-op.
+`abort` therefore supersedes the run but leaves `wantKey` naming the pair the
+lane was converging on, so the demands that follow find it already converged and
+start nothing. The memo is untouched, so the last-good raster keeps drawing: a
+cancel stops the fetch, not the map. A pan changes the key and runs; Refresh
+still forces through `forget`.
+
+The panel's status line lost its `loading` case to the row (drawn under the same
+gate, it would only repeat what the bar says) and gained a "fetch cancelled"
+notice that survives until a run starts — silence after a click reads as the
+button having missed.
+
 ### 2026-08-01 — SQL tools leave the result strip (design): the zone becomes a kind, and the focus knobs stop being body-only
 
 Eighteen built-in tabs, thirteen of them in the body leaf, and five of the

@@ -31,8 +31,10 @@ import (
 // will take. [progressTracker] folds the ticks into a
 // [progressbar.Estimator] (Holt's double exponential smoothing plus display
 // damping — the estimator the CLI progress bar uses) so the counters gain a
-// smoothed rate and a non-oscillating ETA. One tracker per app, driven once
-// per frame from Render; every display site reads the resulting
+// smoothed rate and a non-oscillating ETA. One tracker per OBSERVED LANE,
+// driven once per frame: the app's follows `main`/the observed intermediate,
+// and a panel that runs its own node on its own [nodeLane] (ADR-0097 SD5) keeps
+// its own — see renderLaneProgress. Every display site reads the resulting
 // [progressView] rather than the raw tick.
 
 // progressView is one frame's answer about the run the panels are waiting
@@ -317,6 +319,42 @@ func (inst *PlayApp) renderPaneProgressStrip(numbers bool) {
 	c.AddSpace(pad)
 	c.Separator().Send()
 	c.AddSpace(pad)
+}
+
+// renderLaneProgress is renderTopBarProgress for a panel that runs its own node
+// on its own [nodeLane] (ADR-0097 SD5) rather than observing `main`: the same
+// spinner + Cancel + bar + numbers, against the panel's lane instead of the
+// app's. Such a panel used to have none of it — its query ran, and could only
+// be waited out.
+//
+// Emitted INSIDE the caller's existing control row, like the top bar's, and NOT
+// as a row of its own. A row that comes and goes with the run changes the
+// panel's height, and a panel that sizes a query off its own viewport then
+// re-keys its demand on the change: the Map's fetch superseded itself a debounce
+// after starting, and hiding the row on Cancel started a fresh one — a Cancel
+// undone by its own disappearance (seen live, 2026-08-05). Beside a control that
+// is always there, the row height is pinned and nothing moves.
+//
+// v is what the CALLER's tracker made of this frame's tick; the app's tracker
+// follows a different lane and cannot stand in for it. Returns true on the frame
+// Cancel is clicked — what cancelling means is the caller's, since the lane is
+// the caller's.
+func renderLaneProgress(ids *c.WidgetIdStack, cancelID string, v progressView) (cancelled bool) {
+	c.Spinner().Size(14).Send()
+	if c.Button(ids.PrepareStr(cancelID), c.Atoms().Text("Cancel").Keep()).
+		SendResp().HasPrimaryClicked() {
+		cancelled = true
+	}
+	if v.fresh {
+		renderProgressBar(v, paneProgressWidth)
+		diagWeak(formatProgressStrip(v))
+		return
+	}
+	// No tick yet — a run that just started, or an endpoint that streams none
+	// (chlocal, mocks). The animated bar reads as "running, no idea how far",
+	// which is all that is known.
+	renderProgressBar(progressView{}, paneProgressWidth)
+	return
 }
 
 // humanCount renders a row count with K/M/B/T suffixes (counts, unlike

@@ -108,6 +108,48 @@ func TestMapDriverRequestRefreshForcesRefetch(t *testing.T) {
 	}, 2*time.Second, time.Millisecond, "Refresh must re-execute the unchanged pair")
 }
 
+// Cancel stops the in-flight raster fetch and says so: the panel's per-frame
+// demand does not restart the pair it was cancelled on (that is what would make
+// Cancel a no-op with a still camera), and the notice survives until a run
+// actually starts — silence after a click reads as the button having missed.
+func TestMapCancelFetchStopsAndAnnounces(t *testing.T) {
+	exec := &gatedExecutor{gate: make(chan struct{}), build: func(string) arrow.RecordBatch {
+		return rgbaRec([]uint8{1}, []uint8{2}, []uint8{3}, []uint8{4})
+	}}
+	d := NewMapDriver(nil, nil)
+	d.lane.close()
+	d.lane = newNodeLane(exec, memory.NewGoAllocator(), 0)
+	defer d.lane.close()
+	node := compiledNode{SQL: "SELECT raster", Params: map[string]string{"param_vp_w": "4"}}
+
+	d.noteLane(d.lane.demand(node))
+	require.True(t, d.loading)
+	require.Eventually(t, func() bool { return exec.callCount() == 1 },
+		2*time.Second, time.Millisecond)
+
+	d.cancelFetch()
+	close(exec.gate) // release the cancelled run; its completion is discarded
+	require.False(t, d.loading)
+	require.Contains(t, d.statusLine(), "cancelled")
+
+	// The frames that follow re-demand the same pair — the still-camera case.
+	require.Never(t, func() bool {
+		v := d.lane.demand(node)
+		if v.rec != nil {
+			v.rec.Release()
+		}
+		return v.loading
+	}, 150*time.Millisecond, 5*time.Millisecond, "Cancel must not be a re-run")
+	require.Equal(t, 1, exec.callCount())
+
+	// A pan (new params) starts a run, which clears the notice — the same
+	// mirroring the lane error gets, so neither can latch.
+	panned := compiledNode{SQL: "SELECT raster", Params: map[string]string{"param_vp_w": "8"}}
+	d.noteLane(d.lane.demand(panned))
+	require.True(t, d.loading)
+	require.NotContains(t, d.statusLine(), "cancelled")
+}
+
 // The lane error is mirrored every demand and pack errors are owned by
 // repack, so neither can latch a stale message (review finding).
 func TestMapStatusLineDoesNotLatchErrors(t *testing.T) {
