@@ -25,8 +25,11 @@ template:
 - **Environment:** <CPU model, cores, memory, storage class, OS> — no
   hostnames or personal paths
 - **Attempted:** <what this run set out to do>
-- **Findings:** <gaps, frictions, elegance notes — each classified
-  competence × ISO 25010 characteristic>
+- **Findings:** one line per proximate obstacle, per the trials README's
+  *Finding classification*:
+  **[<relation> <competence-slug> / <characteristic> / S#]** <statement>
+  (evidence: <file in run dir>) — plus positive-maturity lines for
+  competences the run leaned on successfully
 - **Solution size:** <artifacts touched: files, lines — when applicable>
 - **Results:** <facts run ids / applet pointer / "none this run">
 - **Run dir:** <./runs/YYYY-MM-DD-slug/ — evidence backing this entry>

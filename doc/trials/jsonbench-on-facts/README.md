@@ -178,13 +178,16 @@ recorded results, not incidental.
 
 ## 7 Findings ledger
 
-Friction encountered while executing this plan is filed as findings —
-competence (per the corpus of
-[ADR-0168](../../adr/0168-capmap-business-capability-corpus.md)) × quality
-characteristic — rather than silently worked around. Until the finding fact
-family lands, findings live in the
-[logbook](./logbook.md), classified inline with the same
-two axes so later migration to facts is mechanical. Pre-registered
+Friction encountered while executing this plan is filed as findings rather
+than silently worked around — competence slug × relation
+(`missing` / `broken` / `pain`) × ISO 25010 characteristic, with severity
+and evidence, per the classification scheme in the
+[directory convention](../README.md). Competence slugs come from the corpus
+vault ([ADR-0168](../../adr/0168-capmap-business-capability-corpus.md));
+a `missing` finding anchors at the nearest existing competence and proposes
+a slug. Until the finding fact family lands, findings live in the
+[logbook](./logbook.md) in the convention's line format, so later migration
+to facts is mechanical. Pre-registered
 candidates, so later readers can tell hypotheses from surprises: the Q3
 timezone dependency; grammar coverage of `IN [..]` array literals,
 `date_diff`, and `::String` casts; identity-minting throughput at DID
