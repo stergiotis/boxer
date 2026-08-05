@@ -104,6 +104,7 @@ func (coveragePkgsProvider) Schema() *arrow.Schema {
 
 type covPkgRow struct {
 	path       string
+	modulePath string
 	covered    covsnap.PkgSample
 	totalUnits uint32
 	totalStmts uint32
@@ -124,6 +125,7 @@ func (p coveragePkgsProvider) Snapshot(proj introspect.Projection) (arrow.Record
 			pkg := &meta.Pkgs[i]
 			rows = append(rows, covPkgRow{
 				path:       pkg.Path,
+				modulePath: pkg.ModulePath,
 				covered:    sparse[uint32(i)],
 				totalUnits: pkg.NumUnits,
 				totalStmts: pkg.NumStmts,
@@ -137,6 +139,10 @@ func (p coveragePkgsProvider) Snapshot(proj introspect.Projection) (arrow.Record
 func coveragePkgsTable(rows []covPkgRow) *introspect.Table {
 	return introspect.NewTable().
 		String("pkg_path", func(i int) string { return rows[i].path }).
+		// The module prefix a book trims to get repository-relative paths
+		// (the coverage treemap's hierarchy is worthless with three
+		// hostname levels on top).
+		String("module_path", func(i int) string { return rows[i].modulePath }).
 		Uint64("covered_units", func(i int) uint64 { return uint64(rows[i].covered.CoveredUnits) }).
 		Uint64("total_units", func(i int) uint64 { return uint64(rows[i].totalUnits) }).
 		Uint64("covered_stmts", func(i int) uint64 { return uint64(rows[i].covered.CoveredStmts) }).

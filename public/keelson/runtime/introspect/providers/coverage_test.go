@@ -16,10 +16,10 @@ type fakeCoverageSource struct {
 	seq     uint64
 }
 
-func (f *fakeCoverageSource) Meta() *covsnap.MetaProfile        { return f.meta }
-func (f *fakeCoverageSource) Status() covsnap.RunStatus         { return f.status }
-func (f *fakeCoverageSource) CoveredBitmap() *roaring.Bitmap    { return f.covered.Clone() }
-func (f *fakeCoverageSource) Seq() uint64                       { return f.seq }
+func (f *fakeCoverageSource) Meta() *covsnap.MetaProfile     { return f.meta }
+func (f *fakeCoverageSource) Status() covsnap.RunStatus      { return f.status }
+func (f *fakeCoverageSource) CoveredBitmap() *roaring.Bitmap { return f.covered.Clone() }
+func (f *fakeCoverageSource) Seq() uint64                    { return f.seq }
 
 // covTestMeta builds a two-package profile with the global unit index
 // assigned the way DecodeMeta assigns it: pkg "m/a" funcs A g[0,3) with
@@ -118,12 +118,13 @@ func TestCoverageTablesOverFakeSource(t *testing.T) {
 	defer pkgs.Release()
 	require.EqualValues(t, 2, pkgs.NumRows())
 	require.Equal(t, "m/a", pkgs.Column(0).ValueStr(0))
-	require.Equal(t, "2", pkgs.Column(1).ValueStr(0)) // m/a covered_units
-	require.Equal(t, "5", pkgs.Column(2).ValueStr(0)) // m/a total_units
-	require.Equal(t, "3", pkgs.Column(3).ValueStr(0)) // m/a covered_stmts
+	require.Equal(t, "m", pkgs.Column(1).ValueStr(0)) // module_path
+	require.Equal(t, "2", pkgs.Column(2).ValueStr(0)) // m/a covered_units
+	require.Equal(t, "5", pkgs.Column(3).ValueStr(0)) // m/a total_units
+	require.Equal(t, "3", pkgs.Column(4).ValueStr(0)) // m/a covered_stmts
 	require.Equal(t, "m/b", pkgs.Column(0).ValueStr(1))
-	require.Equal(t, "1", pkgs.Column(1).ValueStr(1)) // m/b covered_units
-	require.Equal(t, "1", pkgs.Column(5).ValueStr(1)) // m/b covered_funcs
+	require.Equal(t, "1", pkgs.Column(2).ValueStr(1)) // m/b covered_units
+	require.Equal(t, "1", pkgs.Column(6).ValueStr(1)) // m/b covered_funcs
 
 	funcs, err := coverageFuncsProvider{src: src}.Snapshot(introspect.AllColumns())
 	require.NoError(t, err)
