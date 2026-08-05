@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/analytics/stats"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stergiotis/boxer/public/analytics/stats"
 )
 
 func newTestAnalyzer(t *testing.T, referenceText string) (inst *Analyzer) {

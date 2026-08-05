@@ -11,10 +11,10 @@ import (
 type selKind uint8
 
 const (
-	selNone selKind = iota
-	selPlainColumn   // a plain value column (indexed by plainCol)
-	selSection       // a tagged section as a whole (indexed by section)
-	selSectionColumn // a value column inside a tagged section (section + col)
+	selNone          selKind = iota
+	selPlainColumn           // a plain value column (indexed by plainCol)
+	selSection               // a tagged section as a whole (indexed by section)
+	selSectionColumn         // a value column inside a tagged section (section + col)
 )
 
 // selection identifies the tree node whose detail the right pane shows.

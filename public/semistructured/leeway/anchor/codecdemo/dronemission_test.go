@@ -13,12 +13,12 @@ import (
 // TestDroneMissionRoundTrip exercises the codecdemo end-to-end against
 // anchor's InEntityTestTable + ReadAccessTestTable*:
 //
-//   DroneMission slice
-//     → DroneMissionBuildEntities(*anchor.InEntityTestTable, ...)
-//     → TransferRecords → []arrow.RecordBatch
-//     → ReadAccess loaders
-//     → DroneMissionFillFromArrow(symbolReaders…, u64ArrayReaders…)
-//     → DroneMission slice
+//	DroneMission slice
+//	  → DroneMissionBuildEntities(*anchor.InEntityTestTable, ...)
+//	  → TransferRecords → []arrow.RecordBatch
+//	  → ReadAccess loaders
+//	  → DroneMissionFillFromArrow(symbolReaders…, u64ArrayReaders…)
+//	  → DroneMission slice
 //
 // Both BuildEntities and FillFromArrow are the schema-agnostic
 // generic helpers; the test passes anchor's concrete types directly,

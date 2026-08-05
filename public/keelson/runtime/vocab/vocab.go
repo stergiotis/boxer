@@ -116,10 +116,10 @@ var (
 	// "shutdown"); MembLifecycleTileKey carries the dock-host tile key
 	// on the u64 section so two tiles for the same app are
 	// distinguishable in the audit trail.
-	MembKindAppLifecycle     = NkRegistry.MustBegin("runtimeKindAppLifecycle").End()
-	MembLifecyclePhase       = NkRegistry.MustBegin("runtimeLifecyclePhase").End()
-	MembLifecycleStopReason  = NkRegistry.MustBegin("runtimeLifecycleStopReason").End()
-	MembLifecycleTileKey     = NkRegistry.MustBegin("runtimeLifecycleTileKey").End()
+	MembKindAppLifecycle    = NkRegistry.MustBegin("runtimeKindAppLifecycle").End()
+	MembLifecyclePhase      = NkRegistry.MustBegin("runtimeLifecyclePhase").End()
+	MembLifecycleStopReason = NkRegistry.MustBegin("runtimeLifecycleStopReason").End()
+	MembLifecycleTileKey    = NkRegistry.MustBegin("runtimeLifecycleTileKey").End()
 
 	// Log fields — applied on rows tagged MembKindLog by logbridge / chstore.
 	// MembLogLevel / MembLogCaller / MembLogService are low-cardinality

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // LifecycleFilter narrows the rows returned by LifecyclesByRun. RunId is
@@ -185,20 +185,20 @@ type columnExprsRun struct {
 
 func buildRunColumnExprs() (e columnExprsRun) {
 	const (
-		symValue    = "`tv:symbol:value:val:s:m:0:24:0::data`"
-		symLR       = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLRCard   = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		strValue    = "`tv:stringArray:value:val:sh:g:0:x2:0::data`"
-		strLR       = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
-		strLRCard   = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		u64Value    = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"
-		u64LR       = "`tv:u64Array:lr:lr:u64:2q:0:0:0::data`"
-		u64LRCard   = "`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		boolValue   = "`tv:bool:value:val:b:g:0:0:0::data`"
-		boolLR      = "`tv:bool:lr:lr:u64:2q:0:0:0::data`"
-		boolLRCard  = "`tv:bool:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		idCol       = "`id:id:u64:2k:0:0:`"
-		tsCol       = "`ts:ts:z64:2k:0:0:`"
+		symValue   = "`tv:symbol:value:val:s:m:0:24:0::data`"
+		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
+		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		strValue   = "`tv:stringArray:value:val:sh:g:0:x2:0::data`"
+		strLR      = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
+		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		u64Value   = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"
+		u64LR      = "`tv:u64Array:lr:lr:u64:2q:0:0:0::data`"
+		u64LRCard  = "`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		boolValue  = "`tv:bool:value:val:b:g:0:0:0::data`"
+		boolLR     = "`tv:bool:lr:lr:u64:2q:0:0:0::data`"
+		boolLRCard = "`tv:bool:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		idCol      = "`id:id:u64:2k:0:0:`"
+		tsCol      = "`ts:ts:z64:2k:0:0:`"
 	)
 	e.id = idCol
 	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", tsCol)
@@ -226,19 +226,19 @@ type columnExprsLifecycle struct {
 
 func buildLifecycleColumnExprs() (e columnExprsLifecycle) {
 	const (
-		symValue   = "`tv:symbol:value:val:s:m:0:24:0::data`"
-		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		symLMR     = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symMRHP    = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
-		strValue   = "`tv:stringArray:value:val:sh:g:0:x2:0::data`"
-		strLR      = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
-		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		u64Value   = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"
-		u64LR      = "`tv:u64Array:lr:lr:u64:2q:0:0:0::data`"
-		u64LRCard  = "`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		idCol      = "`id:id:u64:2k:0:0:`"
-		tsCol      = "`ts:ts:z64:2k:0:0:`"
+		symValue  = "`tv:symbol:value:val:s:m:0:24:0::data`"
+		symLR     = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
+		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		symLMR    = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
+		symMRHP   = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
+		strValue  = "`tv:stringArray:value:val:sh:g:0:x2:0::data`"
+		strLR     = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
+		strLRCard = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		u64Value  = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"
+		u64LR     = "`tv:u64Array:lr:lr:u64:2q:0:0:0::data`"
+		u64LRCard = "`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		idCol     = "`id:id:u64:2k:0:0:`"
+		tsCol     = "`ts:ts:z64:2k:0:0:`"
 	)
 	e.id = idCol
 	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", tsCol)

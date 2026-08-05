@@ -347,4 +347,3 @@ func printTourResult(res tour.Result, baselineDir, candidateDir string, threshol
 		fmt.Printf("  gate-below=off (triage-only run)\n")
 	}
 }
-

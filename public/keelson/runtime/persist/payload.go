@@ -1,9 +1,9 @@
 package persist
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/persistreply"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Subject grammar for runtime.persist per ADR-0026 §SD3:

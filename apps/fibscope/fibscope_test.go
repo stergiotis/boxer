@@ -223,7 +223,7 @@ func TestHumanizeExhaust(t *testing.T) {
 	assert.Contains(t, humanizeExhaust(1.46e9*yr), "Gyr")
 	// A wide tag at 10 MHz fills in milliseconds; a narrow tag at 100 Hz
 	// outlasts the universe — spot-check the two anchors used in the table.
-	assert.Contains(t, humanizeExhaust(float64(uint64(1)<<17-1)/1e7), "ms") // width 47 @ 10MHz
+	assert.Contains(t, humanizeExhaust(float64(uint64(1)<<17-1)/1e7), "ms")  // width 47 @ 10MHz
 	assert.Contains(t, humanizeExhaust(float64(uint64(1)<<62-1)/1e2), "Gyr") // width 2 @ 100Hz
 }
 

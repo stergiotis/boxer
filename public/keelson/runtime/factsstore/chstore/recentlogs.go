@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // LogFilter narrows the rows returned by RecentLogs. Every field is
@@ -71,7 +71,7 @@ func (inst *Store) RecentLogs(ctx context.Context, filter LogFilter) (rows []fac
 // — adding or reordering an expression here means updating both.
 type recentLogsColumnExprs struct {
 	id      string
-	tsSec    string
+	tsSec   string
 	appId   string
 	level   string
 	caller  string

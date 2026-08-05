@@ -34,11 +34,11 @@ func TestDefaultCodeS_Singleton(t *testing.T) {
 
 func TestStringVerbatimCode(t *testing.T) {
 	cases := []struct {
-		name      string
-		def       bool
-		body      string
-		wantUse   bool
-		wantBody  string
+		name     string
+		def      bool
+		body     string
+		wantUse  bool
+		wantBody string
 	}{
 		{"default flag true, empty body", true, "", true, ""},
 		{"default flag false, with body", false, "fn foo() {}", false, "fn foo() {}"},

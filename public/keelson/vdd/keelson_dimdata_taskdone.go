@@ -17,5 +17,5 @@ import (
 // the slice-of-u8 lane; `[]byte` is reserved for blob).
 var (
 	MembTaskResult = KeelsonHrNkRegistry.MustBegin("taskResult").
-			MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+		MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

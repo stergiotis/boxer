@@ -144,8 +144,8 @@ func TestExposeConditions(t *testing.T) {
 // passing through byte-identical.
 func TestExposeConditionsGates(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
+		name   string
+		input  string
 		reason string
 	}{
 		{name: "no where", input: "SELECT a FROM tt", reason: "no predicate to report on"},

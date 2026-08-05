@@ -17,8 +17,8 @@
 //   - For each non-overlapping K×K window (default K=8), compute:
 //     μx, μy, σx², σy², σxy
 //     SSIM_w = (2μxμy + c1)(2σxy + c2)
-//              ────────────────────────────────
-//              (μx² + μy² + c1)(σx² + σy² + c2)
+//     ────────────────────────────────
+//     (μx² + μy² + c1)(σx² + σy² + c2)
 //     with c1 = (k1·L)², c2 = (k2·L)², L = dynamic range,
 //     k1 = 0.01, k2 = 0.03 (Wang 2004 reference constants).
 //   - SSIM_image = mean over all windows.

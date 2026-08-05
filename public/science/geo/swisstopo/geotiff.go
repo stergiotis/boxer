@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"golang.org/x/image/tiff/lzw"
 	"fmt"
+	"golang.org/x/image/tiff/lzw"
 	"io"
 	"math"
 	"os"
@@ -65,8 +65,8 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 	}
 
 	// compute tile grid dimensions
-	tilesAcross := (pixelWidth + tiffTileWidth - 1) / tiffTileWidth   // 4
-	tilesDown := (pixelHeight + tiffTileLength - 1) / tiffTileLength   // 4
+	tilesAcross := (pixelWidth + tiffTileWidth - 1) / tiffTileWidth  // 4
+	tilesDown := (pixelHeight + tiffTileLength - 1) / tiffTileLength // 4
 	expectedTiles := tilesAcross * tilesDown
 
 	if int32(len(tileOffsets)) != expectedTiles {

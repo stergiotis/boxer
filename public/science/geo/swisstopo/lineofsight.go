@@ -9,14 +9,14 @@ import (
 // LOSResult contains the result of a line-of-sight analysis.
 type LOSResult struct {
 	Visible          bool
-	FromElev         float32  // terrain elevation at from point
-	ToElev           float32  // terrain elevation at to point
-	ObstructionDist  float64  // distance to first obstruction (0 if visible)
-	ObstructionElev  float32  // terrain elevation at obstruction point
+	FromElev         float32 // terrain elevation at from point
+	ToElev           float32 // terrain elevation at to point
+	ObstructionDist  float64 // distance to first obstruction (0 if visible)
+	ObstructionElev  float32 // terrain elevation at obstruction point
 	ObstructionCoord LV95Coord
-	ProfileDist      []float64  // distances along profile
-	ProfileElev      []float32  // terrain elevations
-	LOSElev          []float32  // LOS line elevations (for visualization)
+	ProfileDist      []float64 // distances along profile
+	ProfileElev      []float32 // terrain elevations
+	LOSElev          []float32 // LOS line elevations (for visualization)
 }
 
 // LineOfSight computes whether there is a clear line of sight between two points.

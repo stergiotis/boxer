@@ -14,9 +14,9 @@ func TestCanonicalAspectEnum(t *testing.T) {
 	require.EqualValues(t, len(AllAspects), int(MaxAspectExcl))
 	m := make([]string, 0, len(AllAspects))
 	for i := AspectE(0); i < MaxAspectExcl; i++ {
-		require.False(t, slices.Contains(m, i.String()),i.String())
+		require.False(t, slices.Contains(m, i.String()), i.String())
 		m = append(m, i.String())
-		require.True(t,naming.StylableName(i.String()).IsValid(), i.String())
+		require.True(t, naming.StylableName(i.String()).IsValid(), i.String())
 	}
 }
 func TestCanonicalAspectCoder(t *testing.T) {

@@ -65,12 +65,12 @@ func TestValidatePattern_OK(t *testing.T) {
 
 func TestValidatePattern_Reject(t *testing.T) {
 	cases := map[string]string{
-		"":         "empty",
-		".x":       "empty token",
-		"a..b":     "empty token",
-		"a.>.b":    "'>' must be last",
-		"a.@.b":    "invalid char",
-		"a.b ":     "invalid char", // trailing space
+		"":      "empty",
+		".x":    "empty token",
+		"a..b":  "empty token",
+		"a.>.b": "'>' must be last",
+		"a.@.b": "invalid char",
+		"a.b ":  "invalid char", // trailing space
 	}
 	for p, hint := range cases {
 		err := ValidatePattern(p)

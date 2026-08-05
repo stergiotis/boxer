@@ -290,12 +290,12 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel, opts layeredgraph.Layout
 			}
 			out.Nodes = append(out.Nodes, layeredgraph.NodeLayout{
 				FontSize: fontPt,
-				ID:     name,
-				Label:  label,
-				Shape:  md.Shape,
-				Center: flip(cx, cy),
-				W:      inchesToPoints(n.GetStr("width")),
-				H:      inchesToPoints(n.GetStr("height")),
+				ID:       name,
+				Label:    label,
+				Shape:    md.Shape,
+				Center:   flip(cx, cy),
+				W:        inchesToPoints(n.GetStr("width")),
+				H:        inchesToPoints(n.GetStr("height")),
 			})
 		}
 		n, err = g.NextNode(n)

@@ -98,9 +98,9 @@ func NewSimilarity(referenceText string, compressor CompressorI) (inst *Similari
 }
 
 func (inst *Similarity) InputText() string          { return inst.inputText }
-func (inst *Similarity) InputCompressedLen() uint64  { return inst.inputCompressedLen }
-func (inst *Similarity) HasDictOptimization() bool   { return inst.dictEncoder != nil }
-func (inst *Similarity) Encoder() CompressorI        { return inst.encoder }
+func (inst *Similarity) InputCompressedLen() uint64 { return inst.inputCompressedLen }
+func (inst *Similarity) HasDictOptimization() bool  { return inst.dictEncoder != nil }
+func (inst *Similarity) Encoder() CompressorI       { return inst.encoder }
 
 func (inst *Similarity) MeasureCompressedLength(text1 string, text2 string) (compressedLen uint64, err error) {
 	szWriter := inst.szWriter

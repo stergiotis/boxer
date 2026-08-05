@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // ServiceAppId is the synthetic AppId the persist service registers under.

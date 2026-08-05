@@ -2,9 +2,9 @@ package common
 
 import (
 	"encoding/binary"
-	"hash/fnv"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"hash/fnv"
 )
 
 // Well-known low-card ref IDs for the symbol section attributes.
@@ -33,9 +33,9 @@ var (
 
 // Well-known low-card ref IDs for the text section attributes.
 var (
-	lcrEncodingHint   = stableRef("encodingHint")
-	lcrValueSemantic  = stableRef("valueSemantic")
-	lcrUseAspect      = stableRef("useAspect")
+	lcrEncodingHint  = stableRef("encodingHint")
+	lcrValueSemantic = stableRef("valueSemantic")
+	lcrUseAspect     = stableRef("useAspect")
 )
 
 func stableRef(name string) uint64 {
@@ -122,4 +122,3 @@ func PopulateSchemaTable(entity *InEntitySystemTableColumns, ir *IntermediateTab
 	}
 	return
 }
-

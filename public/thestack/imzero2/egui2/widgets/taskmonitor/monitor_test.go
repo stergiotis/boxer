@@ -164,7 +164,7 @@ func TestInst_HistoryCappedByMaxHistory(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		opts := task.SpawnOpts{
-			Id: task.TaskIdT("t-cap-" + string(rune('a'+i))),
+			Id:   task.TaskIdT("t-cap-" + string(rune('a'+i))),
 			Kind: "k", OwnerAppId: "test.producer",
 		}
 		h, err := task.Spawn(context.Background(), f.producer, opts)

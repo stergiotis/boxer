@@ -68,11 +68,11 @@ func Ratio(fgR, fgG, fgB, bgR, bgG, bgB uint8) (r float64) {
 
 // Result is the per-pair grading.
 type Result struct {
-	Name     string
-	Kind     PairKind
-	Ratio    float64
-	AAPass   bool
-	AAAPass  bool
+	Name          string
+	Kind          PairKind
+	Ratio         float64
+	AAPass        bool
+	AAAPass       bool
 	FgR, FgG, FgB uint8
 	BgR, BgG, BgB uint8
 }

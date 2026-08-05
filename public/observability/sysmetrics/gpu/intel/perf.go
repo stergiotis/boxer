@@ -14,19 +14,21 @@ import (
 
 // PMU config-id encoding constants from drivers/gpu/drm/i915/i915_pmu.h.
 //
-//   config = (class << I915_PMU_CLASS_SHIFT)
-//          | (instance << I915_PMU_SAMPLE_BITS)
-//          | sample_kind
+//	config = (class << I915_PMU_CLASS_SHIFT)
+//	       | (instance << I915_PMU_SAMPLE_BITS)
+//	       | sample_kind
 //
 // where:
-//   I915_PMU_SAMPLE_BITS = 4
-//   I915_PMU_SAMPLE_INSTANCE_BITS = 8
-//   I915_PMU_CLASS_SHIFT = SAMPLE_BITS + SAMPLE_INSTANCE_BITS = 12
+//
+//	I915_PMU_SAMPLE_BITS = 4
+//	I915_PMU_SAMPLE_INSTANCE_BITS = 8
+//	I915_PMU_CLASS_SHIFT = SAMPLE_BITS + SAMPLE_INSTANCE_BITS = 12
 //
 // Sample kinds: 0=BUSY, 1=WAIT, 2=SEMA. We expose only BUSY.
 //
 // Non-engine ("other") counters live above the highest engine config id:
-//   ___I915_PMU_OTHER(gt, x) = ((__I915_PMU_ENGINE(0xff,0xff,0xf) + 1) + x) | (gt << 60)
+//
+//	___I915_PMU_OTHER(gt, x) = ((__I915_PMU_ENGINE(0xff,0xff,0xf) + 1) + x) | (gt << 60)
 //
 // I915_PMU_ENGINE(0xff, 0xff, 0xf) = (0xff << 12) | (0xff << 4) | 0xf = 0xfffff,
 // so the "other base" is 0x100000.
@@ -35,9 +37,9 @@ const (
 	configFreqRequested uint64 = 0x100001
 	configRC6Residency  uint64 = 0x100003
 
-	i915SampleBits     uint64 = 4
-	i915ClassShift     uint64 = 12
-	i915SampleBusy     uint64 = 0
+	i915SampleBits uint64 = 4
+	i915ClassShift uint64 = 12
+	i915SampleBusy uint64 = 0
 )
 
 // configEngineBusy returns the perf config id for the engine-busy

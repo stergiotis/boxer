@@ -34,8 +34,8 @@ type SemanticRole struct {
 
 // NeutralBlock holds the dark-theme neutral spine.
 type NeutralBlock struct {
-	Hue    float64           `toml:"hue"`
-	Chroma float64           `toml:"chroma"`
+	Hue    float64            `toml:"hue"`
+	Chroma float64            `toml:"chroma"`
 	Spine  map[string]float64 `toml:"spine"`
 }
 
@@ -47,13 +47,13 @@ type File struct {
 		Emit         []string `toml:"emit"`
 		Theme        string   `toml:"theme"`
 	} `toml:"meta"`
-	Neutral  NeutralBlock             `toml:"neutral"`
+	Neutral  NeutralBlock            `toml:"neutral"`
 	Semantic map[string]SemanticRole `toml:"semantic"`
 }
 
 // Token is one resolved color: OKLCh target, post-clip OKLCh, sRGB hex.
 type Token struct {
-	Name      string  // e.g., "neutral.spine.bg_panel" or "semantic.info.default"
+	Name      string // e.g., "neutral.spine.bg_panel" or "semantic.info.default"
 	TargetL   float64
 	TargetC   float64
 	Hue       float64

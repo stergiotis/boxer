@@ -22,7 +22,7 @@ func TestExpandPass_Basics(t *testing.T) {
 		"SELECT LW_ID_TAG_VALUE(id) FROM t",
 		"SELECT LW_ID_HAS_TAG(id, 42) FROM t",
 		"SELECT LW_ID_HAS_TAG(id, other_col) FROM t",
-		"SELECT lw_id_body(id) FROM t",   // case-insensitive
+		"SELECT lw_id_body(id) FROM t",     // case-insensitive
 		"SELECT \"LW_ID_BODY\"(id) FROM t", // quoting-insensitive
 		"SELECT LW_ID_BODY(bitOr(a, b)) + LW_ID_TAG_WIDTH(c) FROM t WHERE LW_ID_IS_VALID(a)",
 		"SELECT LW_ID_BODY(LW_ID_TAG_BITS(id)) FROM t", // nested: converges via fixpoint

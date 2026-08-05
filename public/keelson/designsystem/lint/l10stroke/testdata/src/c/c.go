@@ -5,10 +5,10 @@ package c
 
 type Color struct{}
 
-type Frame struct{}        // width-first: Stroke(width, col)
-type H3Region struct{}     // color-first: Stroke(col, width)
-type MapPolyline struct{}  // color-first: Stroke(col, width)
-type TintedScope struct{}  // width-first: Stroke(width, col)
+type Frame struct{}       // width-first: Stroke(width, col)
+type H3Region struct{}    // color-first: Stroke(col, width)
+type MapPolyline struct{} // color-first: Stroke(col, width)
+type TintedScope struct{} // width-first: Stroke(width, col)
 
 func Hex(v uint32) (cl Color) { _ = v; return }
 
@@ -25,10 +25,10 @@ func (TintedScope) Stroke(width float32, strokeCol Color) (t TintedScope) {
 	return
 }
 
-func NewFrame() (f Frame)               { return }
-func NewH3Region() (h H3Region)         { return }
-func NewMapPolyline() (m MapPolyline)   { return }
-func NewTintedScope() (t TintedScope)   { return }
+func NewFrame() (f Frame)             { return }
+func NewH3Region() (h H3Region)       { return }
+func NewMapPolyline() (m MapPolyline) { return }
+func NewTintedScope() (t TintedScope) { return }
 
 // Free painter functions: strokeWidth at a per-name arg index,
 // everything before it a coordinate, the rounding, or the color.

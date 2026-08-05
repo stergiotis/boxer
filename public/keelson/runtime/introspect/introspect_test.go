@@ -132,8 +132,10 @@ func TestValidTableName(t *testing.T) {
 // stubProvider is a minimal Provider for registry tests.
 type stubProvider struct{ name string }
 
-func (s *stubProvider) Name() string            { return s.name }
-func (s *stubProvider) Schema() *arrow.Schema    { return NewTable().String("x", func(int) string { return "" }).Schema() }
+func (s *stubProvider) Name() string { return s.name }
+func (s *stubProvider) Schema() *arrow.Schema {
+	return NewTable().String("x", func(int) string { return "" }).Schema()
+}
 func (s *stubProvider) Freshness() FreshnessClass { return FreshnessStatic }
 func (s *stubProvider) Snapshot(proj Projection) (arrow.RecordBatch, error) {
 	return NewTable().String("x", func(int) string { return "" }).Build(proj, 0), nil

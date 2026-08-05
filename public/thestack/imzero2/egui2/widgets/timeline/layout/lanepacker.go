@@ -157,8 +157,8 @@ func (h laneHeap) Less(i, j int) (less bool) {
 	less = h[i].laneIdx < h[j].laneIdx
 	return
 }
-func (h laneHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-func (h *laneHeap) Push(x any)        { *h = append(*h, x.(laneSlot)) }
+func (h laneHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h *laneHeap) Push(x any)   { *h = append(*h, x.(laneSlot)) }
 func (h *laneHeap) Pop() (popped any) {
 	old := *h
 	n := len(old)

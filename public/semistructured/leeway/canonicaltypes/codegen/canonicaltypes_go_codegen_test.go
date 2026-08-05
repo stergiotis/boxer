@@ -59,10 +59,10 @@ func TestGenerateGoCode_Network(t *testing.T) {
 		typeCode string
 		zero     string
 	}{
-		{"v", "uint32", "0"},              // IPv4 address: big-endian uint32 (ClickHouse IPv4 Arrow type)
-		{"w", "[16]byte", "[16]byte{}"},   // IPv6 address
-		{"vc", "[5]byte", "[5]byte{}"},    // IPv4 CIDR (addr + prefix byte)
-		{"wc", "[17]byte", "[17]byte{}"},  // IPv6 CIDR (addr + prefix byte)
+		{"v", "uint32", "0"},             // IPv4 address: big-endian uint32 (ClickHouse IPv4 Arrow type)
+		{"w", "[16]byte", "[16]byte{}"},  // IPv6 address
+		{"vc", "[5]byte", "[5]byte{}"},   // IPv4 CIDR (addr + prefix byte)
+		{"wc", "[17]byte", "[17]byte{}"}, // IPv6 CIDR (addr + prefix byte)
 		{"vh", "[]uint32", "[]uint32(nil)"},
 		{"wch", "[][17]byte", "[][17]byte(nil)"},
 	}

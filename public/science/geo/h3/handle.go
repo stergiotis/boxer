@@ -24,15 +24,15 @@ type Handle struct {
 	mod api.Module
 	mem api.Memory
 
-	fnExtAlloc      api.Function
-	fnExtFree       api.Function
-	fnLatLngToCell  api.Function
-	fnCellToLatLng  api.Function
-	fnCellToParent  api.Function
+	fnExtAlloc       api.Function
+	fnExtFree        api.Function
+	fnLatLngToCell   api.Function
+	fnCellToLatLng   api.Function
+	fnCellToParent   api.Function
 	fnCellToChildren api.Function
-	fnGridDisk      api.Function
-	fnCellToString  api.Function
-	fnStringToCell  api.Function
+	fnGridDisk       api.Function
+	fnCellToString   api.Function
+	fnStringToCell   api.Function
 	fnAreValid       api.Function
 	fnGetResolution  api.Function
 	fnPolygonToCells api.Function

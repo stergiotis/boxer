@@ -16,8 +16,8 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // DefaultInterval is the cadence the carousel uses when callers don't

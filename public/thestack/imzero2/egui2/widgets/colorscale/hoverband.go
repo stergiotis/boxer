@@ -24,12 +24,12 @@ import (
 // (via treemap.Colormap.Normalize) so the same band-half-width is visually
 // consistent across linear and log colormaps.
 type HoverBand struct {
-	cmap     *treemap.Colormap
-	base     treemap.ColoringI
-	valueFn  func(*layout.Node) float64
-	halfW    float64
-	active   bool
-	centerT  float64
+	cmap    *treemap.Colormap
+	base    treemap.ColoringI
+	valueFn func(*layout.Node) float64
+	halfW   float64
+	active  bool
+	centerT float64
 }
 
 // DefaultHalfWidth is the initial band half-width used by NewHoverBand —

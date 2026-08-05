@@ -19,10 +19,10 @@ func nearly(a, b, tol float64) (ok bool) {
 // thresholds are coarser than that anyway.
 func TestApcaReferenceVectors(t *testing.T) {
 	cases := []struct {
-		name                          string
-		textR, textG, textB           uint8
-		bgR, bgG, bgB                 uint8
-		wantLc                        float64
+		name                string
+		textR, textG, textB uint8
+		bgR, bgG, bgB       uint8
+		wantLc              float64
 	}{
 		// Canonical Myndex Beta 0.1.9 reference vectors.
 		{"black on white (BoW max)", 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 106.04},

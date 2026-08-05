@@ -6,8 +6,8 @@
 //
 // Each var row is two lines:
 //
-//   ●  [str]  🔒 NAME    value             --cliFlag
-//             description, small + muted, wraps to row width
+//	●  [str]  🔒 NAME    value             --cliFlag
+//	          description, small + muted, wraps to row width
 //
 // Status dot is accent-coloured when env.Lookup() reports set,
 // muted when unset. Type chip tone differentiates string/bool/int/
@@ -58,10 +58,10 @@ const descIndent = 28.0
 // frame would burn 40+ Color.Hex parses every frame for no benefit;
 // these tokens never change at runtime.
 var (
-	fgPrimary    = color.Hex(styletokens.NeutralTextPrimary.AsHex())
-	fgMuted      = color.Hex(styletokens.NeutralTextSecondary.AsHex())
-	fgAccent     = color.Hex(styletokens.AccentDefault.AsHex())
-	fgWarning    = color.Hex(styletokens.WarningDefault.AsHex())
+	fgPrimary     = color.Hex(styletokens.NeutralTextPrimary.AsHex())
+	fgMuted       = color.Hex(styletokens.NeutralTextSecondary.AsHex())
+	fgAccent      = color.Hex(styletokens.AccentDefault.AsHex())
+	fgWarning     = color.Hex(styletokens.WarningDefault.AsHex())
 	bgTransparent = color.Transparent
 )
 

@@ -48,45 +48,45 @@ import (
 type CategoryE int32
 
 const (
-	CategoryPlain          CategoryE = iota // unclassified prose / fallback
-	CategoryWhitespace                      // gaps, newlines, list continuation
-	CategoryHeadingMarker                   // leading `#`, `##`, ...
-	CategoryHeadingText                     // heading body
-	CategoryStrongDelim                     // `**`
-	CategoryStrongText                      // text inside `**...**`
-	CategoryEmphasisDelim                   // `*`
-	CategoryEmphasisText                    // text inside `*...*`
-	CategoryStrikeDelim                     // `~~`
-	CategoryStrikeText                      // text inside `~~...~~`
-	CategoryHighlightDelim                  // `==`
-	CategoryHighlightText                   // text inside `==...==`
-	CategoryInlineCodeDelim                 // single backtick
-	CategoryInlineCodeText                  // text inside `...`
-	CategoryFenceDelim                      // ` ``` ` or `~~~`
-	CategoryFenceLang                       // info-string token after fence
-	CategoryCodeBlockBody                   // body lines of a fenced/indented block
-	CategoryBlockquoteMarker                // leading `>` on a line
-	CategoryListMarker                      // `-`, `*`, `+`, `1.`, `2.`, ...
-	CategoryLinkPunct                       // `[`, `]`, `(`, `)`, `<`, `>` around links
-	CategoryLinkLabel                       // label text between `[` and `]`
-	CategoryLinkUrl                         // URL inside `(...)` or `<...>`
-	CategoryThematicBreak                   // standalone `---` / `***`
-	CategoryFrontmatterDelim                // YAML frontmatter `---` fences + `:`
-	CategoryFrontmatterKey                  // frontmatter key
-	CategoryFrontmatterValue                // frontmatter value
-	CategoryWikilinkPunct                   // `[[`, `]]`
-	CategoryWikilinkTarget                  // target text inside `[[...]]`
-	CategoryEmbedMarker                     // leading `!` of `![[...]]`
-	CategoryCalloutMarker                   // `> [!...]` scaffolding
-	CategoryCalloutType                     // callout type name (`note`, `warning`, ...)
-	CategoryCommentDelim                    // `%%`
-	CategoryCommentText                     // text inside `%%...%%`
-	CategoryRawHtml                         // raw HTML / HTMLBlock passthrough
-	CategoryTablePipe                       // `|` column separators
-	CategoryTableAlign                      // `:---`, `---:`, `:---:`, `---` in the align row
-	CategoryTableHeaderText                 // text inside header cells
-	CategoryTableCellText                   // text inside body cells
-	CategoryTaskMark                        // GFM `[ ]` / `[x]` task checkbox
+	CategoryPlain            CategoryE = iota // unclassified prose / fallback
+	CategoryWhitespace                        // gaps, newlines, list continuation
+	CategoryHeadingMarker                     // leading `#`, `##`, ...
+	CategoryHeadingText                       // heading body
+	CategoryStrongDelim                       // `**`
+	CategoryStrongText                        // text inside `**...**`
+	CategoryEmphasisDelim                     // `*`
+	CategoryEmphasisText                      // text inside `*...*`
+	CategoryStrikeDelim                       // `~~`
+	CategoryStrikeText                        // text inside `~~...~~`
+	CategoryHighlightDelim                    // `==`
+	CategoryHighlightText                     // text inside `==...==`
+	CategoryInlineCodeDelim                   // single backtick
+	CategoryInlineCodeText                    // text inside `...`
+	CategoryFenceDelim                        // ` ``` ` or `~~~`
+	CategoryFenceLang                         // info-string token after fence
+	CategoryCodeBlockBody                     // body lines of a fenced/indented block
+	CategoryBlockquoteMarker                  // leading `>` on a line
+	CategoryListMarker                        // `-`, `*`, `+`, `1.`, `2.`, ...
+	CategoryLinkPunct                         // `[`, `]`, `(`, `)`, `<`, `>` around links
+	CategoryLinkLabel                         // label text between `[` and `]`
+	CategoryLinkUrl                           // URL inside `(...)` or `<...>`
+	CategoryThematicBreak                     // standalone `---` / `***`
+	CategoryFrontmatterDelim                  // YAML frontmatter `---` fences + `:`
+	CategoryFrontmatterKey                    // frontmatter key
+	CategoryFrontmatterValue                  // frontmatter value
+	CategoryWikilinkPunct                     // `[[`, `]]`
+	CategoryWikilinkTarget                    // target text inside `[[...]]`
+	CategoryEmbedMarker                       // leading `!` of `![[...]]`
+	CategoryCalloutMarker                     // `> [!...]` scaffolding
+	CategoryCalloutType                       // callout type name (`note`, `warning`, ...)
+	CategoryCommentDelim                      // `%%`
+	CategoryCommentText                       // text inside `%%...%%`
+	CategoryRawHtml                           // raw HTML / HTMLBlock passthrough
+	CategoryTablePipe                         // `|` column separators
+	CategoryTableAlign                        // `:---`, `---:`, `:---:`, `---` in the align row
+	CategoryTableHeaderText                   // text inside header cells
+	CategoryTableCellText                     // text inside body cells
+	CategoryTaskMark                          // GFM `[ ]` / `[x]` task checkbox
 	categoryMax
 )
 

@@ -11,8 +11,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/urfave/cli/v2"
 )
 

@@ -8,11 +8,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
+	"github.com/stergiotis/boxer/public/identity/fibonacci"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/identity/fibonacci"
 	"github.com/urfave/cli/v2"
 )
 

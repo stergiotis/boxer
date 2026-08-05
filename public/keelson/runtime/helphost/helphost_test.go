@@ -16,8 +16,8 @@ func fixtureLibrary(t *testing.T) (lib help.LibraryI, appId app.AppIdT) {
 	t.Helper()
 	appId = "github.com/test/helphost-fixture"
 	fsys := fstest.MapFS{
-		"overview.md":      {Data: []byte("# Overview\n\nfixture body\n")},
-		"howto/replay.md":  {Data: []byte("# Replaying\n\nsteps go here\n")},
+		"overview.md":     {Data: []byte("# Overview\n\nfixture body\n")},
+		"howto/replay.md": {Data: []byte("# Replaying\n\nsteps go here\n")},
 	}
 	b, err := help.NewBook(appId, fsys)
 	if err != nil {

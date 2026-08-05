@@ -17,8 +17,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/hmi/progressbar"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	cli "github.com/urfave/cli/v2"
 )
 
@@ -389,7 +389,7 @@ type stacResponse struct {
 }
 
 type stacFeature struct {
-	Id     string                `json:"id"`
+	Id     string               `json:"id"`
 	Assets map[string]stacAsset `json:"assets"`
 }
 
@@ -596,5 +596,3 @@ func saveManifest(dest string, mf *manifest) (err error) {
 	}
 	return
 }
-
-

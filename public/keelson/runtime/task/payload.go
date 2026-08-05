@@ -1,13 +1,13 @@
 package task
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskcancel"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskcreated"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskdone"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskerror"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskprogress"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // TaskIdT is a per-task identifier. Generated as a nanoid by Spawn when

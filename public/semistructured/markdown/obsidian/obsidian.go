@@ -9,9 +9,9 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/wikilink"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/yuin/goldmark"
+	meta "github.com/yuin/goldmark-meta"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
-	meta "github.com/yuin/goldmark-meta"
 )
 
 // New creates a goldmark.Markdown instance configured with the requested

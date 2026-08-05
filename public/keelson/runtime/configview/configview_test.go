@@ -176,14 +176,14 @@ func TestCategoryIconCoversKnownCategories(t *testing.T) {
 	// ones land on a stable Phosphor glyph. Unknown categories fall
 	// back to PhCircle.
 	cases := map[env.CategoryE]string{
-		env.CategoryObservability:   icons.PhWaveform,
-		env.CategoryDev:             icons.PhCode,
-		env.CategoryDatabase:        icons.PhDatabase,
-		env.CategorySystem:          icons.PhDesktop,
-		env.CategoryE("anchor"):     icons.PhAnchor,
-		env.CategoryE("krypto"):     icons.PhKey,
-		env.CategoryE("runinfo"):    icons.PhTag,
-		env.CategoryE("__unknown"):  icons.PhCircle,
+		env.CategoryObservability:  icons.PhWaveform,
+		env.CategoryDev:            icons.PhCode,
+		env.CategoryDatabase:       icons.PhDatabase,
+		env.CategorySystem:         icons.PhDesktop,
+		env.CategoryE("anchor"):    icons.PhAnchor,
+		env.CategoryE("krypto"):    icons.PhKey,
+		env.CategoryE("runinfo"):   icons.PhTag,
+		env.CategoryE("__unknown"): icons.PhCircle,
 	}
 	for cat, want := range cases {
 		t.Run(string(cat), func(t *testing.T) {

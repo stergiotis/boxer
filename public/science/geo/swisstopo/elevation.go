@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	defaultCacheSize   int32   = 64
-	tilePixelSize      int32   = 500
-	tileResolutionM    float64 = 2.0
-	tileSizeM          float64 = 1000.0
+	defaultCacheSize int32   = 64
+	tilePixelSize    int32   = 500
+	tileResolutionM  float64 = 2.0
+	tileSizeM        float64 = 1000.0
 )
 
 // ElevationSampler provides elevation lookups from swissALTI3D 2m COG tiles.

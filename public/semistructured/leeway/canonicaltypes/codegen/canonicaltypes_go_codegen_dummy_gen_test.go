@@ -1,13 +1,12 @@
-
 // Code generated DO NOT EDIT
 package codegen
 
 import (
-	"testing"
 	"github.com/stretchr/testify/require"
+	"testing"
 	"time"
-
 )
+
 func TestGeneratedGoCodeOutput(t *testing.T) {
 	{
 		var u8 uint8

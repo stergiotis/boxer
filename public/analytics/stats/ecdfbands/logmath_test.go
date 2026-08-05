@@ -178,4 +178,3 @@ func TestBinomKLSecondOrderApproximation(t *testing.T) {
 			p, q, approx, exact)
 	}
 }
-

@@ -26,16 +26,16 @@ import (
 // treated as DefaultStyle() (detected via a non-positive NodeFontSize), so
 // RenderOpts{} renders with sensible defaults.
 type Style struct {
-	Background  color.Color // canvas background
-	NodeFill    color.Color
-	NodeStroke  color.Color
-	NodeText    color.Color
-	EdgeStroke  color.Color
-	EdgeText    color.Color
-	Highlight   color.Color // hovered-node border
-	NodeStrokeW float32
-	EdgeStrokeW float32
-	Rounding    float32 // box-node corner rounding (points, pre-scale)
+	Background   color.Color // canvas background
+	NodeFill     color.Color
+	NodeStroke   color.Color
+	NodeText     color.Color
+	EdgeStroke   color.Color
+	EdgeText     color.Color
+	Highlight    color.Color // hovered-node border
+	NodeStrokeW  float32
+	EdgeStrokeW  float32
+	Rounding     float32 // box-node corner rounding (points, pre-scale)
 	NodeFontSize float32 // points, pre-scale; node-label fallback when Layout.FontSize == 0
 	EdgeFontSize float32 // points, pre-scale
 }
@@ -407,8 +407,8 @@ func drawEdge(e layeredgraph.EdgeLayout, tf func(layeredgraph.Point) (float32, f
 		dx, dy := hx-bx, hy-by
 		l := float32(math.Hypot(float64(dx), float64(dy)))
 		if l > 0.5 {
-			ux, uy := dx/l, dy/l    // shaft direction (unit)
-			hw := l * 0.35          // half-width of the head base
+			ux, uy := dx/l, dy/l // shaft direction (unit)
+			hw := l * 0.35       // half-width of the head base
 			if hw < 2 {
 				hw = 2
 			}

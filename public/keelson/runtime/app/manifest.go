@@ -36,9 +36,10 @@ type AppIdT string
 // is not [A-Za-z0-9_-] with '_'. The result is one NATS subject token.
 //
 // Examples:
-//   "github.com/stergiotis/pebble2impl/.../apps/play" -> "play"
-//   "github.com/.../apps/widgets/table"               -> "table"
-//   "runtime.broker"                                  -> "runtime_broker"
+//
+//	"github.com/stergiotis/pebble2impl/.../apps/play" -> "play"
+//	"github.com/.../apps/widgets/table"               -> "table"
+//	"runtime.broker"                                  -> "runtime_broker"
 //
 // Hosts that register apps are responsible for ensuring distinct AppIds
 // produce distinct aliases; collisions would route to the wrong app.

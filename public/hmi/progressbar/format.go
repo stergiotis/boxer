@@ -39,7 +39,7 @@ func FormatETA(d time.Duration) string {
 		return fmt.Sprintf("~%dm", m)
 	default:
 		h := total / 3600
-		m := ((total%3600)+150)/300*5
+		m := ((total % 3600) + 150) / 300 * 5
 		if m >= 60 {
 			h++
 			m = 0

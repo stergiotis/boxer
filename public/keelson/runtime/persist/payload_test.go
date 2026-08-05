@@ -56,9 +56,9 @@ func TestParsePersistSubject_Rejects(t *testing.T) {
 		"runtime.persist.play.tabs",
 		"runtime.persist.play.tabs.get.extra",
 		"other.prefix.play.tabs.get",
-		"runtime.persist..tabs.get",   // empty alias
-		"runtime.persist.play..get",   // empty key
-		"runtime.persist.play.tabs.",  // empty op
+		"runtime.persist..tabs.get",  // empty alias
+		"runtime.persist.play..get",  // empty key
+		"runtime.persist.play.tabs.", // empty op
 	}
 	for _, s := range cases {
 		_, _, _, ok := parsePersistSubject(s)

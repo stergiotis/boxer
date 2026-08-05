@@ -8,16 +8,16 @@
 // https://www.w3.org/TR/css-color-4/#binsearch).
 //
 // Algorithm:
-//   1. If already in-gamut, return as-is.
-//   2. Compute per-channel-clipped projection. If the OKLab ΔE between
-//      the original and clipped is below JND (0.02), the clipped color
-//      is the answer.
-//   3. Otherwise bisect on C in OKLCh, holding L and h constant:
-//      - At each midpoint, project via per-channel clipping.
-//      - If ΔE_oklab(midpoint, clipped) < JND, the clipped projection
-//        is close enough; minimum bound moves up.
-//      - Else C is still too large; maximum bound moves down.
-//   4. Return the clipped projection of the final converged C.
+//  1. If already in-gamut, return as-is.
+//  2. Compute per-channel-clipped projection. If the OKLab ΔE between
+//     the original and clipped is below JND (0.02), the clipped color
+//     is the answer.
+//  3. Otherwise bisect on C in OKLCh, holding L and h constant:
+//     - At each midpoint, project via per-channel clipping.
+//     - If ΔE_oklab(midpoint, clipped) < JND, the clipped projection
+//     is close enough; minimum bound moves up.
+//     - Else C is still too large; maximum bound moves down.
+//  4. Return the clipped projection of the final converged C.
 //
 // L is never reduced (preserves contrast guarantees). Result is the
 // closest in-gamut sRGB triple to the original OKLCh target by OKLab

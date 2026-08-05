@@ -34,9 +34,9 @@ type AxisLayout struct {
 	Algorithm string  // e.g., "Talbot-Extended", "Heckbert"
 }
 
-func (inst AxisLayout) IterateTicks(fallbackFormatter func(tick float64) string) iter.Seq2[float64,string] {
+func (inst AxisLayout) IterateTicks(fallbackFormatter func(tick float64) string) iter.Seq2[float64, string] {
 	if len(inst.TickLabels) == len(inst.TickValues) {
-		return ragged.Zip2(inst.TickValues,inst.TickLabels)
+		return ragged.Zip2(inst.TickValues, inst.TickLabels)
 	}
 	return func(yield func(float64, string) bool) {
 		for _, t := range inst.TickValues {

@@ -197,9 +197,9 @@ func TestBook_EmptyFS(t *testing.T) {
 // etc.) instead of treating them as docs.
 func TestBook_IgnoresNonMarkdown(t *testing.T) {
 	fsys := fstest.MapFS{
-		"overview.md":      {Data: []byte("# Overview\n")},
-		"assets/diag.png":  {Data: []byte("not really a png")},
-		"meta.json":        {Data: []byte(`{"x":1}`)},
+		"overview.md":     {Data: []byte("# Overview\n")},
+		"assets/diag.png": {Data: []byte("not really a png")},
+		"meta.json":       {Data: []byte(`{"x":1}`)},
 	}
 	b, err := NewBook("github.com/test/mixed", fsys)
 	if err != nil {

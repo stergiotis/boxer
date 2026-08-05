@@ -23,8 +23,8 @@ func TestSink_Tail_RetainsAfterFlush(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
 	sink, err := logbridge.NewSink(store, logbridge.Config{
 		Capacity:      16,
-		FlushN:        1,                     // flush every event
-		FlushInterval: 5 * time.Millisecond,  // and quickly
+		FlushN:        1,                    // flush every event
+		FlushInterval: 5 * time.Millisecond, // and quickly
 		TailCapacity:  64,
 	})
 	require.NoError(t, err)

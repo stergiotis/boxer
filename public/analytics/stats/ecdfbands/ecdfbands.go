@@ -246,7 +246,6 @@ func CriticalValue(n int, alpha float64, method BandMethodE) (c float64, err err
 	return
 }
 
-
 // BandReady reports whether the (n, α, method) critical value is
 // already cached — i.e. whether a subsequent BandsForGrid /
 // BandsForSample returns without running the O(n²) inversion.

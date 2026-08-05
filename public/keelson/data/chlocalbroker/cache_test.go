@@ -104,7 +104,7 @@ func TestPoolCache_RefusesOversized(t *testing.T) {
 func TestExecOnPool_CacheHitOnSecondCall(t *testing.T) {
 	_, caller := newTestBroker(t)
 
-	first, err := ExecOnPool(context.Background(), caller,"cache_a", ExecRequest{
+	first, err := ExecOnPool(context.Background(), caller, "cache_a", ExecRequest{
 		SQL:       "SELECT 1",
 		Format:    "TabSeparated",
 		Cacheable: true,
@@ -116,7 +116,7 @@ func TestExecOnPool_CacheHitOnSecondCall(t *testing.T) {
 	assert.False(t, first.CacheHit, "first call must be a miss")
 	require.NoError(t, first.Close())
 
-	second, err := ExecOnPool(context.Background(), caller,"cache_a", ExecRequest{
+	second, err := ExecOnPool(context.Background(), caller, "cache_a", ExecRequest{
 		SQL:       "SELECT 1",
 		Format:    "TabSeparated",
 		Cacheable: true,
@@ -134,7 +134,7 @@ func TestExecOnPool_CacheBypassWhenFlagFalse(t *testing.T) {
 	_, caller := newTestBroker(t)
 
 	// First call seeds the cache.
-	r1, err := ExecOnPool(context.Background(), caller,"cache_b", ExecRequest{
+	r1, err := ExecOnPool(context.Background(), caller, "cache_b", ExecRequest{
 		SQL:       "SELECT 1",
 		Format:    "TabSeparated",
 		Cacheable: true,
@@ -146,7 +146,7 @@ func TestExecOnPool_CacheBypassWhenFlagFalse(t *testing.T) {
 
 	// Second call without Cacheable should not hit, even though
 	// the cache has a matching entry.
-	r2, err := ExecOnPool(context.Background(), caller,"cache_b", ExecRequest{
+	r2, err := ExecOnPool(context.Background(), caller, "cache_b", ExecRequest{
 		SQL:       "SELECT 1",
 		Format:    "TabSeparated",
 		Cacheable: false,
@@ -162,7 +162,7 @@ func TestExecOnPool_NonCacheableSqlNotCachedEvenWithFlag(t *testing.T) {
 	_, caller := newTestBroker(t)
 
 	// SET is not in the allowlisted prefixes.
-	r1, err := ExecOnPool(context.Background(), caller,"cache_c", ExecRequest{
+	r1, err := ExecOnPool(context.Background(), caller, "cache_c", ExecRequest{
 		SQL:       "SHOW DATABASES",
 		Format:    "TabSeparated",
 		Cacheable: true,
@@ -172,7 +172,7 @@ func TestExecOnPool_NonCacheableSqlNotCachedEvenWithFlag(t *testing.T) {
 	_, _ = io.ReadAll(r1)
 	require.NoError(t, r1.Close())
 
-	r2, err := ExecOnPool(context.Background(), caller,"cache_c", ExecRequest{
+	r2, err := ExecOnPool(context.Background(), caller, "cache_c", ExecRequest{
 		SQL:       "SELECT 1; -- mutation that prefix-matched is disallowed at handler",
 		Format:    "TabSeparated",
 		Cacheable: true,
@@ -188,7 +188,7 @@ func TestExecOnPool_CacheTTLExpiry(t *testing.T) {
 	svc, caller := newTestBroker(t)
 	svc.SetCacheConfig(CacheConfig{TTL: 80 * time.Millisecond, MaxEntries: 4})
 
-	r1, err := ExecOnPool(context.Background(), caller,"cache_ttl", ExecRequest{
+	r1, err := ExecOnPool(context.Background(), caller, "cache_ttl", ExecRequest{
 		SQL:       "SELECT 1",
 		Format:    "TabSeparated",
 		Cacheable: true,
@@ -201,7 +201,7 @@ func TestExecOnPool_CacheTTLExpiry(t *testing.T) {
 
 	time.Sleep(160 * time.Millisecond)
 
-	r2, err := ExecOnPool(context.Background(), caller,"cache_ttl", ExecRequest{
+	r2, err := ExecOnPool(context.Background(), caller, "cache_ttl", ExecRequest{
 		SQL:       "SELECT 1",
 		Format:    "TabSeparated",
 		Cacheable: true,
@@ -216,14 +216,14 @@ func TestExecOnPool_CacheTTLExpiry(t *testing.T) {
 func TestExecOnPool_CachesAreIsolatedPerPool(t *testing.T) {
 	_, caller := newTestBroker(t)
 
-	r1, err := ExecOnPool(context.Background(), caller,"iso_a", ExecRequest{SQL: "SELECT 1", Format: "TabSeparated", Cacheable: true})
+	r1, err := ExecOnPool(context.Background(), caller, "iso_a", ExecRequest{SQL: "SELECT 1", Format: "TabSeparated", Cacheable: true})
 	require.NoError(t, err)
 	require.NoError(t, r1.Err())
 	_, _ = io.ReadAll(r1)
 	_ = r1.Close()
 
 	// Same SQL on a different pool → first call must miss.
-	r2, err := ExecOnPool(context.Background(), caller,"iso_b", ExecRequest{SQL: "SELECT 1", Format: "TabSeparated", Cacheable: true})
+	r2, err := ExecOnPool(context.Background(), caller, "iso_b", ExecRequest{SQL: "SELECT 1", Format: "TabSeparated", Cacheable: true})
 	require.NoError(t, err)
 	require.NoError(t, r2.Err())
 	_, _ = io.ReadAll(r2)
@@ -237,12 +237,12 @@ func TestExecOnPool_CacheHitIsFast(t *testing.T) {
 	// cold-spawn (~40 ms) or warm-acquire (~8 ms) latency.
 	_, caller := newTestBroker(t)
 
-	_, _ = ExecOnPool(context.Background(), caller,"fast_hit", ExecRequest{
+	_, _ = ExecOnPool(context.Background(), caller, "fast_hit", ExecRequest{
 		SQL: "SELECT 1", Format: "TabSeparated", Cacheable: true,
 	})
 
 	start := time.Now()
-	r2, err := ExecOnPool(context.Background(), caller,"fast_hit", ExecRequest{
+	r2, err := ExecOnPool(context.Background(), caller, "fast_hit", ExecRequest{
 		SQL: "SELECT 1", Format: "TabSeparated", Cacheable: true,
 	})
 	elapsed := time.Since(start)
@@ -256,4 +256,3 @@ func TestExecOnPool_CacheHitIsFast(t *testing.T) {
 	// codec; the hot path through cache.get is microseconds.
 	assert.Less(t, elapsed, 5*time.Millisecond, "cache hit took %s — worker was likely touched", elapsed)
 }
-

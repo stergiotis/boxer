@@ -17,10 +17,10 @@ import (
 
 // Source is one cached published palette.
 type Source struct {
-	System  string             // e.g., "tailwind"
-	URL     string             // _source field
-	Date    string             // _retrieved field
-	Anchors map[string]string  // role/token name → "#rrggbb"
+	System  string            // e.g., "tailwind"
+	URL     string            // _source field
+	Date    string            // _retrieved field
+	Anchors map[string]string // role/token name → "#rrggbb"
 }
 
 // Collision records one matched hex.

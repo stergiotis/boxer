@@ -7,9 +7,9 @@ import (
 	"unique"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/unsafeperf"
 	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
+	"github.com/stergiotis/boxer/public/unsafeperf"
 	"github.com/zeebo/xxh3"
 )
 

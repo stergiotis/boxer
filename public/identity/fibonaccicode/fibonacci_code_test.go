@@ -10097,4 +10097,3 @@ func TestFindComma(t *testing.T) {
 		assert.Equal(t, i+1, FindFibonacciCodeCommaMsb(uint64(0b11)<<(64-i-2)))
 	}
 }
-

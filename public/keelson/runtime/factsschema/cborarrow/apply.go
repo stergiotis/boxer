@@ -12,9 +12,9 @@ package cborarrow
 import (
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 )
 
 // --- Schema-agnostic generic apply helpers. ---
@@ -133,14 +133,14 @@ func applyRangeSection[
 // per-section keyed by the logical column name (e.g. "value" for
 // single-value sections, "beginIncl"/"endExcl" for u32Range).
 type rowState struct {
-	hasId            bool
-	id               uint64
-	hasNaturalKey    bool
-	naturalKey       []byte
-	hasTs            bool
-	tsNanos          int64 // unix nanos (CH-canonical RowBinary DateTime64(9))
-	hasExpiresAt     bool
-	expiresAtNanos   int64 // unix nanos
+	hasId          bool
+	id             uint64
+	hasNaturalKey  bool
+	naturalKey     []byte
+	hasTs          bool
+	tsNanos        int64 // unix nanos (CH-canonical RowBinary DateTime64(9))
+	hasExpiresAt   bool
+	expiresAtNanos int64 // unix nanos
 
 	sec map[string]*sectionState
 }
@@ -322,4 +322,3 @@ func validateArrayShape(s *sectionState, section string, valLen int) (err error)
 	}
 	return
 }
-

@@ -355,10 +355,10 @@ func (inst *gatherFactsAndStacks) addError(err error, parentId uint64) error {
 		facts = make([]*errorFact, 0, 2)
 	}
 	facts = append(facts, &errorFact{
-		Msg:       err.Error(),
-		Id:        id,
-		ParentId:  parentId,
-		framePC:   framePC,
+		Msg:      err.Error(),
+		Id:       id,
+		ParentId: parentId,
+		framePC:  framePC,
 	})
 
 	switch et := err.(type) {

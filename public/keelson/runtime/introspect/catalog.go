@@ -22,7 +22,7 @@ func RegisterCatalog(r *Registry) (err error) {
 // tablesProvider exposes one row per registered table.
 type tablesProvider struct{ reg *Registry }
 
-func (*tablesProvider) Name() string             { return "tables" }
+func (*tablesProvider) Name() string              { return "tables" }
 func (*tablesProvider) Freshness() FreshnessClass { return FreshnessStatic }
 func (p *tablesProvider) Schema() *arrow.Schema   { return tablesTable(nil).Schema() }
 
@@ -41,7 +41,7 @@ func tablesTable(ps []Provider) *Table {
 // columnsProvider exposes one row per (table, column).
 type columnsProvider struct{ reg *Registry }
 
-func (*columnsProvider) Name() string             { return "columns" }
+func (*columnsProvider) Name() string              { return "columns" }
 func (*columnsProvider) Freshness() FreshnessClass { return FreshnessStatic }
 func (p *columnsProvider) Schema() *arrow.Schema   { return columnsTable(nil).Schema() }
 

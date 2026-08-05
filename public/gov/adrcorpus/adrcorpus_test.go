@@ -189,4 +189,3 @@ func TestScanAndAggregate(t *testing.T) {
 		t.Errorf("ADR-0001 qualifiers: want SD3, got %v", a1.CodeQualifiers)
 	}
 }
-

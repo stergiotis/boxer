@@ -15,12 +15,12 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
-	"github.com/stergiotis/boxer/public/unsafeperf"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/compiletime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/compiletime/docgen"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/compiletime/goserver"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/compiletime/rustclient"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition"
+	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
 var CodeGeneratorName = "TheStack (" + vcs.ModuleInfo() + ")"

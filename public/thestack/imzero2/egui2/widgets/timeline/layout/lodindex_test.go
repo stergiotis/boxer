@@ -87,9 +87,9 @@ func TestPickScale_SmallestScaleAtLeastMinPerPx(t *testing.T) {
 	}
 	idx := BuildLODIndex(nil, scales)
 	cases := []struct {
-		name              string
-		t0, t1            int64
-		pxWidth, wantIdx  int32
+		name             string
+		t0, t1           int64
+		pxWidth, wantIdx int32
 	}{
 		{"exactly_at_boundary", 0, 100, 10, 1},
 		{"just_above_finest", 0, 20, 10, 1},
@@ -257,9 +257,9 @@ func TestScaleMSForRange_MatchesPickScale(t *testing.T) {
 	}
 	idx := BuildLODIndex(nil, scales)
 	cases := []struct {
-		t0, t1   int64
-		pxWidth  int32
-		wantIdx  int32
+		t0, t1  int64
+		pxWidth int32
+		wantIdx int32
 	}{
 		{0, 100, 10, 1},
 		{0, 2000, 10, 3},

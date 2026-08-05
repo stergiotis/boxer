@@ -3,14 +3,14 @@ package violator
 import "c"
 
 func widthFirst() {
-	_ = c.NewFrame().Stroke(1.5, c.Hex(0xffffffff))    // want `L10: raw literal 1.5`
-	_ = c.NewFrame().Stroke(2, c.Hex(0xffffffff))      // want `L10: raw literal 2`
+	_ = c.NewFrame().Stroke(1.5, c.Hex(0xffffffff))     // want `L10: raw literal 1.5`
+	_ = c.NewFrame().Stroke(2, c.Hex(0xffffffff))       // want `L10: raw literal 2`
 	_ = c.NewTintedScope().Stroke(1, c.Hex(0xff00ffff)) // want `L10: raw literal 1`
 }
 
 func colorFirst() {
-	_ = c.NewH3Region().Stroke(c.Hex(0x123456ff), 1.5)        // want `L10: raw literal 1.5`
-	_ = c.NewMapPolyline().Stroke(c.Hex(0xabcdef00), 3)       // want `L10: raw literal 3`
+	_ = c.NewH3Region().Stroke(c.Hex(0x123456ff), 1.5)  // want `L10: raw literal 1.5`
+	_ = c.NewMapPolyline().Stroke(c.Hex(0xabcdef00), 3) // want `L10: raw literal 3`
 }
 
 func offLadder() {
@@ -44,10 +44,10 @@ func freeFunctionWidth() {
 func freeFunctionAllowed() {
 	_ = c.PaintEllipseStroke(80.0, 100.0, 48.0, 48.0, c.Hex(0xffffffff), 0) // sentinel "no stroke"
 	w := someStroke()
-	_ = c.PaintEllipseStroke(80.0, 100.0, 48.0, 48.0, c.Hex(0xffffffff), w)     // token-driven form
-	_ = c.PaintCircleStroke(120.0, 80.0, 24.0, c.Hex(0xffffffff), w)            // token-driven form
-	_ = c.PaintRectStroke(10.0, 10.0, 90.0, 60.0, 4.0, c.Hex(0xffffffff), w)    // rounding literal is L4's concern, not L10's
-	_ = c.PaintRectStroke(10.0, 10.0, 90.0, 60.0, 4.0, c.Hex(0xffffffff), 0.0)  // sentinel "no stroke"
+	_ = c.PaintEllipseStroke(80.0, 100.0, 48.0, 48.0, c.Hex(0xffffffff), w)    // token-driven form
+	_ = c.PaintCircleStroke(120.0, 80.0, 24.0, c.Hex(0xffffffff), w)           // token-driven form
+	_ = c.PaintRectStroke(10.0, 10.0, 90.0, 60.0, 4.0, c.Hex(0xffffffff), w)   // rounding literal is L4's concern, not L10's
+	_ = c.PaintRectStroke(10.0, 10.0, 90.0, 60.0, 4.0, c.Hex(0xffffffff), 0.0) // sentinel "no stroke"
 }
 
 func someStroke() (v float32) { v = 1.5; return }

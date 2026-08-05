@@ -58,6 +58,7 @@ func ConvertNameStyle[S ~string](name S, targetStyle NamingStyleE) (naming S) {
 	}
 	return
 }
+
 // IsStyleStable reports whether converting name into style lands on a name
 // that is itself spelled in that style — i.e. whether the conversion is a fixed
 // point there. It is false exactly for the lossy pairs ConvertNameStyle

@@ -94,5 +94,5 @@ var (
 	// where ad-hoc `keelson('<handle>')` datasets resolve (ADR-0094 §SD6 /
 	// ADR-0134). Symbol section: the set of endpoints is small and closed.
 	MembAppletCreateEndpoint = KeelsonHrNkRegistry.MustBegin("appletCreateEndpoint").
-				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+					MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

@@ -122,4 +122,3 @@ type BackgroundBand struct {
 	Color  uint32
 	Label  string
 }
-

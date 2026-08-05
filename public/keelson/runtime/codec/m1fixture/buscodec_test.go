@@ -6,8 +6,8 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/m1fixture"
 )
 

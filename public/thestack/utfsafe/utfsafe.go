@@ -1,7 +1,7 @@
 // Package utfsafe coerces arbitrary byte streams into UTF-8-valid
 // strings for the FFFI wire and other UTF-8-strict consumers.
 //
-// The boundary problem
+// # The boundary problem
 //
 // Go's `string` type carries arbitrary bytes — there is no UTF-8
 // enforcement at the language level. Several producers in this repo
@@ -22,7 +22,7 @@
 // Go-side boundary avoids both — and gives the operator a stable,
 // readable cell value to inspect the bad bytes.
 //
-// Cost model
+// # Cost model
 //
 // The common case (valid UTF-8) returns the input string unchanged
 // with ZERO allocations — the `utf8.ValidString` scan is the only cost

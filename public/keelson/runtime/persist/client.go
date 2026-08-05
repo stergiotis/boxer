@@ -1,8 +1,8 @@
 package persist
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Client adapts an app.BusI into the app.StorageI surface by translating

@@ -30,4 +30,3 @@ func NewAnonymousCloseWriter(f func() error, w func(p []byte) (n int, err error)
 
 var _ io.Closer = (*AnonymousCloseWriter)(nil)
 var _ io.Writer = (*AnonymousCloseWriter)(nil)
-

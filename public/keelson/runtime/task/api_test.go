@@ -46,9 +46,9 @@ func (inst *captureObserver) OnCreated(c taskcreated.TaskCreated) {
 	}
 }
 func (inst *captureObserver) OnProgress(taskprogress.TaskProgress) {}
-func (inst *captureObserver) OnDone(taskdone.TaskDone) {}
-func (inst *captureObserver) OnError(taskerror.TaskError) {}
-func (inst *captureObserver) OnCancel(taskcancel.TaskCancel) {}
+func (inst *captureObserver) OnDone(taskdone.TaskDone)             {}
+func (inst *captureObserver) OnError(taskerror.TaskError)          {}
+func (inst *captureObserver) OnCancel(taskcancel.TaskCancel)       {}
 
 func TestForApp_InjectsIdentityIntoTaskCreated(t *testing.T) {
 	busInst := inprocbus.NewInst(zerolog.Nop())

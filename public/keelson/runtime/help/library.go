@@ -5,9 +5,9 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
 // LibraryI is the registry of [BookI] values keyed by [app.AppIdT].
@@ -51,8 +51,8 @@ func NewLibrary() (l LibraryI) {
 }
 
 type library struct {
-	mu     sync.RWMutex
-	books  map[app.AppIdT]BookI
+	mu    sync.RWMutex
+	books map[app.AppIdT]BookI
 
 	syncMu sync.Mutex
 	synced bool

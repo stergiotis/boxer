@@ -112,8 +112,8 @@ func ExampleSetHeaderValue() {
 	headers := []kgo.RecordHeader{
 		{Key: "x", Value: []byte("1")},
 	}
-	headers = kafka.SetHeaderValue(headers, "y", []byte("2"))   // appends
-	headers = kafka.SetHeaderValue(headers, "x", []byte("99"))  // updates
+	headers = kafka.SetHeaderValue(headers, "y", []byte("2"))  // appends
+	headers = kafka.SetHeaderValue(headers, "x", []byte("99")) // updates
 	for _, h := range headers {
 		fmt.Printf("%s=%s\n", h.Key, h.Value)
 	}

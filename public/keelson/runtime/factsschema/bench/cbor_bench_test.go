@@ -114,15 +114,15 @@ func cborFixtureLog5(ent *cbordml.InEntityFacts, i int) (err error) {
 	str.EndSection()
 
 	i64sec := ent.GetSectionI64Array()
-	i64sec.BeginAttributeSingle(int64(-42 + i)).AddMembershipMixedLowCardRef(logFieldMembId, []byte("delta")).EndAttribute()
+	i64sec.BeginAttributeSingle(int64(-42+i)).AddMembershipMixedLowCardRef(logFieldMembId, []byte("delta")).EndAttribute()
 	i64sec.EndSection()
 
 	u64sec := ent.GetSectionU64Array()
-	u64sec.BeginAttributeSingle(uint64(i) * 7).AddMembershipMixedLowCardRef(logFieldMembId, []byte("count")).EndAttribute()
+	u64sec.BeginAttributeSingle(uint64(i)*7).AddMembershipMixedLowCardRef(logFieldMembId, []byte("count")).EndAttribute()
 	u64sec.EndSection()
 
 	f64sec := ent.GetSectionF64Array()
-	f64sec.BeginAttributeSingle(float64(i) / 3.0).AddMembershipMixedLowCardRef(logFieldMembId, []byte("ratio")).EndAttribute()
+	f64sec.BeginAttributeSingle(float64(i)/3.0).AddMembershipMixedLowCardRef(logFieldMembId, []byte("ratio")).EndAttribute()
 	f64sec.EndSection()
 
 	bsec := ent.GetSectionBool()

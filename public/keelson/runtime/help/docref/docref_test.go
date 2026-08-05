@@ -39,8 +39,8 @@ func TestParseRejects(t *testing.T) {
 	for _, s := range []string{
 		"",
 		"http://example.com",
-		"help://no-separator#s",  // missing '::'
-		"help://app::",           // empty doc
+		"help://no-separator#s", // missing '::'
+		"help://app::",          // empty doc
 		"adr://notanumber",
 		"chdoc://",
 		"chdoc://name#frag", // chdoc has no sections

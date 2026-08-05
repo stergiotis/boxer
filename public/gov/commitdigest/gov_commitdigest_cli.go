@@ -246,8 +246,8 @@ func newSummarizeCommand() *cli.Command {
 				Usage: "OpenAI-compatible API base URL (ollama, vllm)",
 			},
 			&cli.StringFlag{
-				Name:     "llm-model",
-				Usage:    "Model name for the LLM (required unless --dry-run)",
+				Name:  "llm-model",
+				Usage: "Model name for the LLM (required unless --dry-run)",
 			},
 			&cli.StringFlag{
 				Name:    "llm-apikey",

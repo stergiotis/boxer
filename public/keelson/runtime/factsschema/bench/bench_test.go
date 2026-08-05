@@ -12,12 +12,12 @@
 // Phases:
 //
 //   - Build              — dml.InEntityFacts builder only (BeginEntity →
-//                          GetSection*().BeginAttribute(...).EndAttribute()
-//                          → CommitEntity). No record transfer, no IPC.
+//     GetSection*().BeginAttribute(...).EndAttribute()
+//     → CommitEntity). No record transfer, no IPC.
 //   - BuildAndIPCEncode  — Build + TransferRecords + ipc.NewFileWriter
-//                          (the wire format chclient.InsertArrow ships).
+//     (the wire format chclient.InsertArrow ships).
 //   - RoundTrip          — BuildAndIPCEncode + ipc.NewFileReader +
-//                          ra.ReadAccessFacts.LoadFromRecord on every record.
+//     ra.ReadAccessFacts.LoadFromRecord on every record.
 //
 // Batch sizes: {1, 1000}. 1 mirrors today's chstore.Write* (one entity
 // per call); 1000 measures the amortized cost if batching ever lands.
@@ -154,15 +154,15 @@ func fixtureLog5(ent *dml.InEntityFacts, i int) (err error) {
 	// six-branch fan-out in chstore.writeLogTypedFields; we skip string
 	// because it already rides on the message section above.
 	i64sec := ent.GetSectionI64Array()
-	i64sec.BeginAttributeSingle(int64(-42 + i)).AddMembershipMixedLowCardRef(logFieldMembId, []byte("delta")).EndAttribute()
+	i64sec.BeginAttributeSingle(int64(-42+i)).AddMembershipMixedLowCardRef(logFieldMembId, []byte("delta")).EndAttribute()
 	i64sec.EndSection()
 
 	u64sec := ent.GetSectionU64Array()
-	u64sec.BeginAttributeSingle(uint64(i) * 7).AddMembershipMixedLowCardRef(logFieldMembId, []byte("count")).EndAttribute()
+	u64sec.BeginAttributeSingle(uint64(i)*7).AddMembershipMixedLowCardRef(logFieldMembId, []byte("count")).EndAttribute()
 	u64sec.EndSection()
 
 	f64sec := ent.GetSectionF64Array()
-	f64sec.BeginAttributeSingle(float64(i) / 3.0).AddMembershipMixedLowCardRef(logFieldMembId, []byte("ratio")).EndAttribute()
+	f64sec.BeginAttributeSingle(float64(i)/3.0).AddMembershipMixedLowCardRef(logFieldMembId, []byte("ratio")).EndAttribute()
 	f64sec.EndSection()
 
 	bsec := ent.GetSectionBool()

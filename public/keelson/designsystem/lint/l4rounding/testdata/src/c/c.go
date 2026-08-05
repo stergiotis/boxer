@@ -11,6 +11,6 @@ func (Frame) CornerRadius(px float32) (f Frame)             { _ = px; return }
 func (ProgressBar) CornerRadius(px uint8) (p ProgressBar)   { _ = px; return }
 func (TintedScope) CornerRadius(px float32) (t TintedScope) { _ = px; return }
 
-func NewFrame() (f Frame)               { return }
-func NewProgressBar() (p ProgressBar)   { return }
-func NewTintedScope() (t TintedScope)   { return }
+func NewFrame() (f Frame)             { return }
+func NewProgressBar() (p ProgressBar) { return }
+func NewTintedScope() (t TintedScope) { return }

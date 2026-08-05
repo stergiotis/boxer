@@ -24,9 +24,9 @@ import (
 	boxerenv "github.com/stergiotis/boxer/public/config/env"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
-	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 )
 
 // Config configures Bridge construction.

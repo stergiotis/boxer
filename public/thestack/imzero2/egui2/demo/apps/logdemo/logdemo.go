@@ -8,9 +8,9 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
-	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
 // levelTone mirrors the logviewer's per-level palette so the emit

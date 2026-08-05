@@ -37,4 +37,3 @@ func convertToCBOR(msg []byte) (retr []byte, err error) {
 	}
 	return
 }
-

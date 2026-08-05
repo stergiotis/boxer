@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	leewayddl "github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
@@ -41,7 +42,6 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 )
 
 const (

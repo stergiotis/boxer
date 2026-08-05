@@ -44,18 +44,18 @@ func TestParseNumstatLine_Malformed(t *testing.T) {
 
 func TestExtractSubjectType_ConventionalCommits(t *testing.T) {
 	cases := map[string]string{
-		"feat: add widget":            "feat",
-		"feat(scope): add widget":     "feat",
-		"feat!: breaking change":      "feat",
-		"feat(scope)!: breaking":      "feat",
-		"FIX: case insensitive":       "fix",
-		"refactor: rename":            "refactor",
-		"chore(deps): bump":           "chore",
-		"docs: update README":         "docs",
-		"test: add coverage":          "test",
-		"perf: faster hashmap":        "perf",
-		"build: new target":           "build",
-		"ci: update workflow":         "ci",
+		"feat: add widget":        "feat",
+		"feat(scope): add widget": "feat",
+		"feat!: breaking change":  "feat",
+		"feat(scope)!: breaking":  "feat",
+		"FIX: case insensitive":   "fix",
+		"refactor: rename":        "refactor",
+		"chore(deps): bump":       "chore",
+		"docs: update README":     "docs",
+		"test: add coverage":      "test",
+		"perf: faster hashmap":    "perf",
+		"build: new target":       "build",
+		"ci: update workflow":     "ci",
 	}
 	for subject, expected := range cases {
 		got := ExtractSubjectType(subject)
@@ -187,11 +187,11 @@ func TestRenderThreadRegistry(t *testing.T) {
 	threads := []Thread{
 		{
 			ID: "stopa-migration", Title: "stopa → boxer",
-			Span: ThreadSpan{Start: "2025-11-15", End: "2025-12-05"},
-			Summary: "Moved registry into boxer.",
+			Span:                ThreadSpan{Start: "2025-11-15", End: "2025-12-05"},
+			Summary:             "Moved registry into boxer.",
 			ComplexityDirection: "shed",
-			PathPrefixes: []string{"leeway/stopa", "public/thestack"},
-			AnchorCommits: []string{"8bf828bf", "5cc57878"},
+			PathPrefixes:        []string{"leeway/stopa", "public/thestack"},
+			AnchorCommits:       []string{"8bf828bf", "5cc57878"},
 		},
 	}
 	out := RenderThreadRegistry(threads)

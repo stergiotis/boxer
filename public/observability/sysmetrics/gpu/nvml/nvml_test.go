@@ -70,15 +70,15 @@ func TestSample_OneDevice_AllFields(t *testing.T) {
 
 func TestSample_PerFieldFailure_DoesNotAbort(t *testing.T) {
 	dev := fakeDev{
-		name:    "Tesla V100",
-		pciID:   "0x1db1",
-		gpu:     50,
-		mem:     20,
-		total:   16 << 30,
-		used:    4 << 30,
-		mw:      0,
-		tempC:   0,
-		gfxMHz:  0,
+		name:     "Tesla V100",
+		pciID:    "0x1db1",
+		gpu:      50,
+		mem:      20,
+		total:    16 << 30,
+		used:     4 << 30,
+		mw:       0,
+		tempC:    0,
+		gfxMHz:   0,
 		powerErr: errors.New("nvmlDeviceGetPowerUsage: NVML_ERROR_NOT_SUPPORTED"),
 		tempErr:  errors.New("nvmlDeviceGetTemperature: NVML_ERROR_UNKNOWN"),
 	}

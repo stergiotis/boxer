@@ -10,10 +10,10 @@ import (
 // fakeClock is a manually advanced time source for semanticTier tests.
 type fakeClock struct{ t time.Time }
 
-func (f *fakeClock) now() time.Time                { return f.t }
-func (f *fakeClock) advance(d time.Duration)       { f.t = f.t.Add(d) }
-func newFakeClock() *fakeClock                     { return &fakeClock{t: time.Unix(1000, 0)} }
-func spansFor(src string) []highlight.Span         { return highlight.HighlightLex(src) }
+func (f *fakeClock) now() time.Time          { return f.t }
+func (f *fakeClock) advance(d time.Duration) { f.t = f.t.Add(d) }
+func newFakeClock() *fakeClock               { return &fakeClock{t: time.Unix(1000, 0)} }
+func spansFor(src string) []highlight.Span   { return highlight.HighlightLex(src) }
 func waitIdleOrDone(t *testing.T, s *semanticTier) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

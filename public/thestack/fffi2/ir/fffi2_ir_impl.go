@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/compiletimeflags"
 )
 
 func (inst AbstractType) IsAbstract() bool {

@@ -59,10 +59,10 @@ func NewSeededFuncApp(m Manifest, render func(seed uint64) (err error)) (inst *S
 	return
 }
 
-func (inst *SeededFuncApp) Manifest() (m Manifest)                  { m = inst.manifest; return }
-func (inst *SeededFuncApp) Mount(ctx MountContextI) (err error)     { return }
-func (inst *SeededFuncApp) Unmount(ctx MountContextI) (err error)   { return }
-func (inst *SeededFuncApp) Frame(ctx FrameContextI) (err error)     { err = inst.render(inst.seed); return }
+func (inst *SeededFuncApp) Manifest() (m Manifest)                { m = inst.manifest; return }
+func (inst *SeededFuncApp) Mount(ctx MountContextI) (err error)   { return }
+func (inst *SeededFuncApp) Unmount(ctx MountContextI) (err error) { return }
+func (inst *SeededFuncApp) Frame(ctx FrameContextI) (err error)   { err = inst.render(inst.seed); return }
 
 // Seed exposes the per-instance seed. Tests assert that two Open()
 // calls produce SeededFuncApps with different seeds; production

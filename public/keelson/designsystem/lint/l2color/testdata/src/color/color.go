@@ -6,6 +6,6 @@ package color
 
 type Color struct{}
 
-func RGB(r, g, b uint8) (c Color)            { _, _, _ = r, g, b; return }
-func RGBA(r, g, b, a uint8) (c Color)        { _, _, _, _ = r, g, b, a; return }
-func Other(r, g, b uint8) (c Color)          { _, _, _ = r, g, b; return }
+func RGB(r, g, b uint8) (c Color)     { _, _, _ = r, g, b; return }
+func RGBA(r, g, b, a uint8) (c Color) { _, _, _, _ = r, g, b, a; return }
+func Other(r, g, b uint8) (c Color)   { _, _, _ = r, g, b; return }

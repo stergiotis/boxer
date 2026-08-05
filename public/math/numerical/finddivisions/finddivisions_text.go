@@ -21,6 +21,7 @@ type CachingTextMeasurer struct {
 	Hits     uint64
 	Misses   uint64
 }
+
 func (inst *CachingTextMeasurer) Reset() {
 	clear(inst.cache)
 	inst.Hits = 0

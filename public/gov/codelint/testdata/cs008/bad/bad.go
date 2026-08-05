@@ -2,7 +2,7 @@ package bad
 
 import "io"
 
-type IntAlias = int     // want CS008 here
+type IntAlias = int       // want CS008 here
 type StringAlias = string // want CS008 here
 
 type ReaderAlias = io.Reader // want CS008 here

@@ -63,16 +63,16 @@ const (
 // pointer-sized slot per enum value; the table is computed once at package
 // init.
 var sequentialLUTs = [...]*[256][3]uint8{
-	SequentialBatlow:   &data_encoding.Batlow,
-	SequentialLapaz:    &data_encoding.Lapaz,
-	SequentialOslo:     &data_encoding.Oslo,
-	SequentialLajolla:  &data_encoding.Lajolla,
-	SequentialViridis:  &data_encoding.Viridis,
-	SequentialMagma:    &data_encoding.Magma,
-	SequentialPlasma:   &data_encoding.Plasma,
-	SequentialInferno:  &data_encoding.Inferno,
-	SequentialBatlowK:  &data_encoding.BatlowK,
-	SequentialGrayC:    &data_encoding.GrayC,
+	SequentialBatlow:  &data_encoding.Batlow,
+	SequentialLapaz:   &data_encoding.Lapaz,
+	SequentialOslo:    &data_encoding.Oslo,
+	SequentialLajolla: &data_encoding.Lajolla,
+	SequentialViridis: &data_encoding.Viridis,
+	SequentialMagma:   &data_encoding.Magma,
+	SequentialPlasma:  &data_encoding.Plasma,
+	SequentialInferno: &data_encoding.Inferno,
+	SequentialBatlowK: &data_encoding.BatlowK,
+	SequentialGrayC:   &data_encoding.GrayC,
 }
 
 var divergingLUTs = [...]*[256][3]uint8{

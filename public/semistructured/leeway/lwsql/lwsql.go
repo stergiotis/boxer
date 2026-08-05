@@ -40,7 +40,7 @@ import (
 // physical column list) and cached for the session; negatives (non-leeway
 // tables) are cached too, so a table is probed at most once.
 type Resolver struct {
-	provider   passes.SchemaProviderI
+	provider         passes.SchemaProviderI
 	conditionSection naming.StylableName // folded; the condition section name
 
 	mu    sync.Mutex
@@ -94,9 +94,9 @@ func NewResolverWithConditionSection(provider passes.SchemaProviderI, section st
 		return
 	}
 	inst = &Resolver{
-		provider:   provider,
+		provider:         provider,
 		conditionSection: name,
-		cache:      make(map[string]*tableIndex, 8),
+		cache:            make(map[string]*tableIndex, 8),
 	}
 	return
 }

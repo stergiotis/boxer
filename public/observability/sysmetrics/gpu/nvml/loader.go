@@ -18,10 +18,10 @@ const (
 
 // NVML clock and sensor type constants. Matches nvml.h enums.
 const (
-	nvmlClockGraphics      uint32 = 0
-	nvmlTemperatureGPU     uint32 = 0
-	nvmlSensorTempCount    uint32 = 1
-	nvmlNameBufferSize            = 96 // generous; nvmlDeviceGetName uses NVML_DEVICE_NAME_V2_BUFFER_SIZE = 96
+	nvmlClockGraphics   uint32 = 0
+	nvmlTemperatureGPU  uint32 = 0
+	nvmlSensorTempCount uint32 = 1
+	nvmlNameBufferSize         = 96 // generous; nvmlDeviceGetName uses NVML_DEVICE_NAME_V2_BUFFER_SIZE = 96
 )
 
 // nvmlPciInfo mirrors the binary layout of nvmlPciInfo_t through the
@@ -57,17 +57,17 @@ type realNVML struct {
 	handle uintptr
 	closed bool
 
-	nvmlInit                  func() uint32
-	nvmlShutdown              func() uint32
-	nvmlDeviceGetCount        func(*uint32) uint32
-	nvmlDeviceGetHandleByIdx  func(uint32, *uintptr) uint32
-	nvmlDeviceGetName         func(uintptr, *byte, uint32) uint32
-	nvmlDeviceGetUtilization  func(uintptr, *nvmlUtilization) uint32
-	nvmlDeviceGetMemoryInfo   func(uintptr, *nvmlMemory) uint32
-	nvmlDeviceGetPowerUsage   func(uintptr, *uint32) uint32
-	nvmlDeviceGetTemperature  func(uintptr, uint32, *uint32) uint32
-	nvmlDeviceGetClockInfo    func(uintptr, uint32, *uint32) uint32
-	nvmlDeviceGetPciInfo      func(uintptr, *nvmlPciInfo) uint32
+	nvmlInit                 func() uint32
+	nvmlShutdown             func() uint32
+	nvmlDeviceGetCount       func(*uint32) uint32
+	nvmlDeviceGetHandleByIdx func(uint32, *uintptr) uint32
+	nvmlDeviceGetName        func(uintptr, *byte, uint32) uint32
+	nvmlDeviceGetUtilization func(uintptr, *nvmlUtilization) uint32
+	nvmlDeviceGetMemoryInfo  func(uintptr, *nvmlMemory) uint32
+	nvmlDeviceGetPowerUsage  func(uintptr, *uint32) uint32
+	nvmlDeviceGetTemperature func(uintptr, uint32, *uint32) uint32
+	nvmlDeviceGetClockInfo   func(uintptr, uint32, *uint32) uint32
+	nvmlDeviceGetPciInfo     func(uintptr, *nvmlPciInfo) uint32
 
 	deviceCount uint32
 	handles     []uintptr

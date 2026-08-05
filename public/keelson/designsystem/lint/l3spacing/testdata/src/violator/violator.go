@@ -3,15 +3,15 @@ package violator
 import "c"
 
 func raw() {
-	c.AddSpace(8.0)                       // want `L3: raw literal 8.0`
-	c.AddSpace(12)                        // want `L3: raw literal 12`
-	c.AddSpace(2)                         // want `L3: raw literal 2`
+	c.AddSpace(8.0) // want `L3: raw literal 8.0`
+	c.AddSpace(12)  // want `L3: raw literal 12`
+	c.AddSpace(2)   // want `L3: raw literal 2`
 }
 
 func chained() {
 	f := c.NewFrame()
-	_ = f.InnerMargin(8.0)                // want `L3: raw literal 8.0`
-	_ = f.OuterMargin(16)                 // want `L3: raw literal 16`
+	_ = f.InnerMargin(8.0) // want `L3: raw literal 8.0`
+	_ = f.OuterMargin(16)  // want `L3: raw literal 16`
 }
 
 func allowlistedHairline() {

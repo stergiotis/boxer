@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"unique"
 
-	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 )
 
 type RetainedElementId uint64

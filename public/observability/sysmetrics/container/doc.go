@@ -8,11 +8,11 @@
 //  1. /run/.containerenv exists → [EnginePodman]
 //  2. /.dockerenv exists       → [EngineDocker]
 //  3. /run/systemd/container   → content classified into [EngineSystemdNspawn]
-//                                or kept verbatim in Detail when unknown
+//     or kept verbatim in Detail when unknown
 //  4. /proc/1/cgroup contains  → kubepods → [EngineKubernetes]
-//                                docker   → [EngineDocker]
-//                                podman   → [EnginePodman]
-//                                lxc      → [EngineLXC]
+//     docker   → [EngineDocker]
+//     podman   → [EnginePodman]
+//     lxc      → [EngineLXC]
 //  5. otherwise                → [EngineNone]
 //
 // Provenance: btop src/btop_shared.cpp:295-313 (detect_container).

@@ -24,9 +24,9 @@ func TestSample_FullSysfs(t *testing.T) {
 		vramTotal:  "17179869184", // 16 GiB
 		vramUsed:   "1073741824",  // 1 GiB
 		hwmonName:  "amdgpu",
-		tempMilliC: "65000",       // 65°C
-		powerUW:    "12000000",    // 12 W
-		freqHz:     "1500000000",  // 1500 MHz
+		tempMilliC: "65000",      // 65°C
+		powerUW:    "12000000",   // 12 W
+		freqHz:     "1500000000", // 1500 MHz
 	})
 
 	c, err := rocm.New(rocm.Options{Sys: sysfs.New(root)})
@@ -51,7 +51,7 @@ func TestSample_FullSysfs(t *testing.T) {
 func TestSample_FreqFallback_FromPpDpmSclk(t *testing.T) {
 	root := newSysTree(t)
 	writeAMDCard(t, root, "card0", amdFixture{
-		pciID:    "0x1586",
+		pciID:     "0x1586",
 		ppDpmSclk: "0: 600Mhz \n1: 845Mhz *\n2: 2900Mhz \n",
 	})
 	c, err := rocm.New(rocm.Options{Sys: sysfs.New(root)})
@@ -147,7 +147,7 @@ func TestGenericSampler_RoundTrip(t *testing.T) {
 		pciID:    "0x1586",
 		busyPct:  "20",
 		vramUsed: "1024", vramTotal: "4096",
-		hwmonName: "amdgpu",
+		hwmonName:  "amdgpu",
 		tempMilliC: "55000",
 	})
 

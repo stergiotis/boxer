@@ -8,10 +8,10 @@ import (
 	"slices"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"golang.org/x/exp/constraints"
 )
 

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/hishamk/statetrooper"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // EdgeKey identifies a single transition from From to To. Comparable so it
@@ -47,14 +47,14 @@ type StateColorFn[T comparable] func(state T, isCurrent bool) styletokens.RGBA8
 // Construct via [NewMachine] + [Option]; declare valid transitions via
 // [Machine.AddRule]; drive runtime state with [Machine.Transition].
 type Machine[T comparable] struct {
-	fsm        *statetrooper.FSM[T]
-	rules      map[T][]T
-	order      []T
-	known      map[T]struct{}
-	labelFn    func(T) string
-	colorFn    StateColorFn[T]
-	edgeLabel  map[EdgeKey[T]]string
-	nodeId     map[T]uint64
+	fsm       *statetrooper.FSM[T]
+	rules     map[T][]T
+	order     []T
+	known     map[T]struct{}
+	labelFn   func(T) string
+	colorFn   StateColorFn[T]
+	edgeLabel map[EdgeKey[T]]string
+	nodeId    map[T]uint64
 }
 
 // Option configures a Machine at construction.

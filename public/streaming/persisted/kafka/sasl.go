@@ -53,7 +53,7 @@ var ErrUnsupportedSASLMechanism = errors.New("unsupported SASL mechanism")
 type SASLMechanismE uint8
 
 const (
-	SASLMechanismNone        SASLMechanismE = iota
+	SASLMechanismNone SASLMechanismE = iota
 	SASLMechanismPlain
 	SASLMechanismOAuthBearer
 	SASLMechanismSCRAMSHA256

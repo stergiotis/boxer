@@ -5,8 +5,8 @@ import (
 	"io"
 	"sort"
 
-	"github.com/yuin/goldmark/parser"
 	meta "github.com/yuin/goldmark-meta"
+	"github.com/yuin/goldmark/parser"
 )
 
 // GetFrontmatter extracts YAML frontmatter metadata from a parser.Context

@@ -8,7 +8,7 @@ import (
 
 // Defaults for Config fields per ADR-0028 §SD3.
 const (
-	DefaultBinaryPath          = "/usr/bin/clickhouse-local"
+	DefaultBinaryPath                        = "/usr/bin/clickhouse-local"
 	DefaultMinIdle             uint8         = 2
 	DefaultMaxConcurrent       uint8         = 8
 	DefaultSpawnConcurrency    uint8         = 2

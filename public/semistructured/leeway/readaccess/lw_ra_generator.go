@@ -1808,8 +1808,8 @@ func (inst *%s%s) Len() (nEntities int) {
 				subType       common.IntermediateColumnSubTypeE
 			}
 			type plainGroup struct {
-				scalarCols, haCols, setCols   []plainColInfo
-				firstHAField, firstSetField   string
+				scalarCols, haCols, setCols []plainColInfo
+				firstHAField, firstSetField string
 			}
 			plainByCls := make(map[string]*plainGroup)
 			var clsOrder []string

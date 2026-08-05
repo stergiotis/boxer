@@ -17,10 +17,10 @@ func TestParseHexHostPort(t *testing.T) {
 		{"00000000000000000000000000000000:0035", "::", 53, true},
 		// FFFF-mapped v4 as it appears in tcp6 tables.
 		{"0000000000000000FFFF00000100007F:0050", "::ffff:127.0.0.1", 80, true},
-		{"0100007F", "", 0, false},        // no port separator
-		{"0100007F:GGGG", "", 0, false},   // bad port hex
-		{"01007F:1F90", "", 0, false},     // odd/short ip hex
-		{"XX00007F:1F90", "", 0, false},   // bad ip hex
+		{"0100007F", "", 0, false},      // no port separator
+		{"0100007F:GGGG", "", 0, false}, // bad port hex
+		{"01007F:1F90", "", 0, false},   // odd/short ip hex
+		{"XX00007F:1F90", "", 0, false}, // bad ip hex
 	}
 	for _, tc := range cases {
 		addr, port, ok := parseHexHostPort(tc.in)

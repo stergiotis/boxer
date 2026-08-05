@@ -17,12 +17,12 @@ import (
 // TestE2E_LogdemoEmitsIntoSink wires the actual host chain that the
 // running carousel uses:
 //
-//   host logger ──► logbridge.Sink ──► tail buffer (+ factsstore)
-//        │
-//        └─► app.AppLogger(host logger, manifest.Id) ──► mountCtx.Log()
-//                                                        │
-//                                                        └─► inst.logger
-//                                                            (via Mount)
+//	host logger ──► logbridge.Sink ──► tail buffer (+ factsstore)
+//	     │
+//	     └─► app.AppLogger(host logger, manifest.Id) ──► mountCtx.Log()
+//	                                                     │
+//	                                                     └─► inst.logger
+//	                                                         (via Mount)
 //
 // emit() through inst.logger must land a decoded LogRow in the
 // Sink's tail buffer — that's exactly what the logviewer widget

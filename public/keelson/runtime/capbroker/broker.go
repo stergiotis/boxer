@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // BrokerAppId is the synthetic AppId the broker registers under on the bus.

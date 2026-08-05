@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 )
 
@@ -81,7 +81,7 @@ func TestNewService_RejectsNilBus(t *testing.T) {
 func TestExecOnPool_RoundTrip(t *testing.T) {
 	svc, caller := newTestBroker(t)
 
-	rep, err := ExecOnPool(context.Background(), caller,"scratchpad", ExecRequest{
+	rep, err := ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{
 		SQL:    "SELECT 1",
 		Format: "TabSeparated",
 	})
@@ -113,7 +113,7 @@ func TestExecOnPool_FormatVariations(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.format, func(t *testing.T) {
-			rep, err := ExecOnPool(context.Background(), caller,"scratchpad", ExecRequest{
+			rep, err := ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{
 				SQL:    "SELECT 1",
 				Format: tc.format,
 			})
@@ -130,7 +130,7 @@ func TestExecOnPool_FormatVariations(t *testing.T) {
 func TestExecOnPool_BadSQLReturnsErrorWithStderr(t *testing.T) {
 	_, caller := newTestBroker(t)
 
-	rep, err := ExecOnPool(context.Background(), caller,"scratchpad", ExecRequest{
+	rep, err := ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{
 		SQL:    "SELECT * FROM nonexistent_table_z_z_z",
 		Format: "TabSeparated",
 	})
@@ -143,7 +143,7 @@ func TestExecOnPool_BadSQLReturnsErrorWithStderr(t *testing.T) {
 func TestExecOnPool_StreamingRejectedInM2(t *testing.T) {
 	_, caller := newTestBroker(t)
 
-	rep, err := ExecOnPool(context.Background(), caller,"scratchpad", ExecRequest{
+	rep, err := ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{
 		SQL:       "SELECT 1",
 		Format:    "TabSeparated",
 		Streaming: true,
@@ -171,7 +171,7 @@ func TestExecOnPool_NoCapDenied(t *testing.T) {
 	// Caller without the cap.
 	caller := bus.NewClient("test.caller.no.cap", nil)
 
-	_, err = ExecOnPool(context.Background(), caller,"scratchpad", ExecRequest{
+	_, err = ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{
 		SQL:    "SELECT 1",
 		Format: "TabSeparated",
 	})
@@ -192,7 +192,7 @@ func TestExecOnPool_ConcurrentRequests(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rep, e := ExecOnPool(context.Background(), caller,"scratchpad", ExecRequest{
+			rep, e := ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{
 				SQL:    "SELECT 1",
 				Format: "TabSeparated",
 			})
@@ -226,13 +226,13 @@ func TestExecOnPool_ConcurrentRequests(t *testing.T) {
 func TestService_SeparatePoolsAreIsolated(t *testing.T) {
 	svc, caller := newTestBroker(t)
 
-	rep1, err := ExecOnPool(context.Background(), caller,"pool_a", ExecRequest{SQL: "SELECT 1", Format: "TabSeparated"})
+	rep1, err := ExecOnPool(context.Background(), caller, "pool_a", ExecRequest{SQL: "SELECT 1", Format: "TabSeparated"})
 	require.NoError(t, err)
 	require.NoError(t, rep1.Err())
 	_, _ = io.ReadAll(rep1)
 	_ = rep1.Close()
 
-	rep2, err := ExecOnPool(context.Background(), caller,"pool_b", ExecRequest{SQL: "SELECT 2", Format: "TabSeparated"})
+	rep2, err := ExecOnPool(context.Background(), caller, "pool_b", ExecRequest{SQL: "SELECT 2", Format: "TabSeparated"})
 	require.NoError(t, err)
 	require.NoError(t, rep2.Err())
 	_, _ = io.ReadAll(rep2)

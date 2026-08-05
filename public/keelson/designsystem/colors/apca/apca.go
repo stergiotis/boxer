@@ -7,15 +7,15 @@
 // M0b Amendment to ADR-0033).
 //
 // The algorithm:
-//   1. Convert sRGB to a per-APCA luminance (linear-sRGB ^ 2.4 then
-//      coefficient-weighted; *not* the WCAG 2.1 relative-luminance form).
-//   2. Soft-clamp very dark luminances (< 0.022) per the blkThrs / blkClmp
-//      parameters to model halation against true black.
-//   3. Apply the SAPC S-curve, signed by orientation (dark-on-light vs
-//      light-on-dark), with separate exponents per direction.
-//   4. Scale and offset; return Lc as a signed value in approximately
-//      [-108, 106]. Magnitude is what gates accessibility; sign carries
-//      orientation.
+//  1. Convert sRGB to a per-APCA luminance (linear-sRGB ^ 2.4 then
+//     coefficient-weighted; *not* the WCAG 2.1 relative-luminance form).
+//  2. Soft-clamp very dark luminances (< 0.022) per the blkThrs / blkClmp
+//     parameters to model halation against true black.
+//  3. Apply the SAPC S-curve, signed by orientation (dark-on-light vs
+//     light-on-dark), with separate exponents per direction.
+//  4. Scale and offset; return Lc as a signed value in approximately
+//     [-108, 106]. Magnitude is what gates accessibility; sign carries
+//     orientation.
 //
 // Reference: https://github.com/Myndex/SAPC-APCA (Beta 0.1.9 constants
 // quoted verbatim below). The APCA algorithm and constants are

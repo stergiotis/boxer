@@ -8,9 +8,9 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	cbor "github.com/fxamacker/cbor/v2"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 )
 
 // Convert reads sparse-CBOR-encoded boxer.facts rows from `in` (as
