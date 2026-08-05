@@ -13,23 +13,44 @@ type Rect struct {
 }
 
 // Node is a single element in the treemap hierarchy.
-// Leaf nodes have Size > 0 and no Children. Parent nodes
-// derive their size from the sum of their children.
+// Leaf nodes have Size > 0 and no Children. A parent's size is its own
+// Size plus the sum of its children's.
 type Node struct {
 	Name     string
 	Size     float64
 	Children []*Node
 }
 
-// TotalSize returns the recursive size of the subtree.
+// ownSize is a node's own contribution to its total: Size when that is a
+// positive, finite number, and 0 otherwise. A NaN or infinite Size is treated
+// as absent rather than propagated, since either one poisons every area
+// squarify derives from the total.
+func (inst *Node) ownSize() float64 {
+	if inst.Size > 0 && !math.IsInf(inst.Size, 1) {
+		return inst.Size
+	}
+	return 0
+}
+
+// TotalSize returns the recursive size of the subtree: the node's OWN Size plus
+// every descendant's.
+//
+// A parent's own size counts (ADR-0166 §SD3). It did not before — the sum ran
+// over children alone — which silently dropped the value of any node that had
+// both a size of its own and children, and made callers encode that value as a
+// synthetic child instead. Nodes whose interior Size is zero, which is every
+// caller in this tree at the time of the change, are unaffected.
+//
+// A childless node with a non-positive size still reports 1, so an unweighted
+// tree lays out evenly rather than degenerately.
 func (inst *Node) TotalSize() float64 {
 	if len(inst.Children) == 0 {
-		if inst.Size > 0 {
-			return inst.Size
+		if s := inst.ownSize(); s > 0 {
+			return s
 		}
 		return 1
 	}
-	s := 0.0
+	s := inst.ownSize()
 	for _, ch := range inst.Children {
 		s += ch.TotalSize()
 	}
@@ -39,6 +60,13 @@ func (inst *Node) TotalSize() float64 {
 // Layout maps each node to its computed rectangle.
 type Layout struct {
 	rects map[*Node]Rect
+	// selfNode/selfRect carry the rectangle reserved for the laid-out parent's
+	// OWN size. At most one node per Layout has one — the root of the call — so
+	// this is a pair rather than a second map: ComputeLayoutAt runs per level
+	// per frame, and the map it already allocates is the cost worth not
+	// doubling.
+	selfNode *Node
+	selfRect Rect
 }
 
 // RectOf returns the layout rectangle for a given node.
@@ -46,39 +74,57 @@ func (inst *Layout) RectOf(node *Node) Rect {
 	return inst.rects[node]
 }
 
+// SelfRectOf returns the rectangle reserved inside node's own box for node's
+// own Size, and the zero Rect when there is none — when node is a leaf, when
+// its Size is not positive, or when it is not the node this Layout was computed
+// for.
+//
+// A parent's own size needs a rectangle of its own because squarify normalises
+// the areas it is given to fill the box exactly: without one, a parent whose
+// own size merely inflated its total would have that size redistributed among
+// its children, which reads as children larger than they are (ADR-0166 §SD3).
+func (inst *Layout) SelfRectOf(node *Node) Rect {
+	if node != nil && node == inst.selfNode {
+		return inst.selfRect
+	}
+	return Rect{}
+}
+
 // ComputeLayout runs the squarify algorithm on the children of root,
 // placing them within the bounding box (0, 0, w, h).
 func ComputeLayout(root *Node, w, h float64) *Layout {
-	inst := &Layout{rects: make(map[*Node]Rect)}
-	if len(root.Children) == 0 {
-		inst.rects[root] = Rect{X: 0, Y: 0, W: w, H: h}
-		return inst
-	}
-	areas := make([]float64, len(root.Children))
-	for i, ch := range root.Children {
-		areas[i] = ch.TotalSize()
-	}
-	boxes := squarify(Rect{X: 0, Y: 0, W: w, H: h}, areas)
-	for i, ch := range root.Children {
-		inst.rects[ch] = boxes[i]
-	}
-	return inst
+	return ComputeLayoutAt(root, Rect{X: 0, Y: 0, W: w, H: h})
 }
 
-// ComputeLayoutAt runs squarify on root's children within an arbitrary bounding box.
+// ComputeLayoutAt runs squarify on root's children within an arbitrary bounding
+// box.
+//
+// When root carries a positive Size of its own, that size is squarified as one
+// more area alongside the children and the rectangle it lands on is recorded as
+// the layout's self rect (SelfRectOf). The children's rects therefore tile the
+// box MINUS that rectangle rather than the whole box, which is the point: the
+// parent's own quantity is drawn rather than dissolved into its children.
 func ComputeLayoutAt(root *Node, bounds Rect) *Layout {
 	inst := &Layout{rects: make(map[*Node]Rect)}
 	if len(root.Children) == 0 {
 		inst.rects[root] = bounds
 		return inst
 	}
-	areas := make([]float64, len(root.Children))
+	n := len(root.Children)
+	own := root.ownSize()
+	areas := make([]float64, n, n+1)
 	for i, ch := range root.Children {
 		areas[i] = ch.TotalSize()
+	}
+	if own > 0 {
+		areas = append(areas, own)
 	}
 	boxes := squarify(bounds, areas)
 	for i, ch := range root.Children {
 		inst.rects[ch] = boxes[i]
+	}
+	if own > 0 {
+		inst.selfNode, inst.selfRect = root, boxes[n]
 	}
 	return inst
 }

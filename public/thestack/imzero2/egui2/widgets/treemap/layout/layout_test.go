@@ -291,3 +291,157 @@ func TestHighestAR_FavoursSquareLayout(t *testing.T) {
 		t.Errorf("improved AR not finite: %v", improved)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// A node's own size (ADR-0166 §SD3)
+// ---------------------------------------------------------------------------
+
+func TestNodeTotalSize_ParentCountsItsOwnSize(t *testing.T) {
+	parent := &Node{Name: "p", Size: 5, Children: []*Node{
+		{Name: "a", Size: 10},
+		{Name: "b", Size: 30},
+	}}
+	if got := parent.TotalSize(); got != 45 {
+		t.Errorf("parent.TotalSize(): got %v want 45 (own 5 + children 40)", got)
+	}
+}
+
+func TestNodeTotalSize_OwnSizeRecursesThroughInteriorNodes(t *testing.T) {
+	tree := &Node{Name: "root", Size: 1, Children: []*Node{
+		{Name: "branch", Size: 2, Children: []*Node{
+			{Name: "leaf", Size: 4},
+		}},
+	}}
+	if got := tree.TotalSize(); got != 7 {
+		t.Errorf("nested own sizes: got %v want 7", got)
+	}
+}
+
+func TestNodeTotalSize_NonFiniteOwnSizeTreatedAsAbsent(t *testing.T) {
+	cases := map[string]float64{"nan": math.NaN(), "inf": math.Inf(1)}
+	for name, size := range cases {
+		t.Run(name, func(t *testing.T) {
+			parent := &Node{Name: "p", Size: size, Children: []*Node{{Name: "a", Size: 10}}}
+			if got := parent.TotalSize(); got != 10 {
+				t.Errorf("interior %s size: got %v want 10 (own size ignored)", name, got)
+			}
+			leaf := &Node{Name: "l", Size: size}
+			if got := leaf.TotalSize(); got != 1 {
+				t.Errorf("leaf %s size: got %v want 1 (fallback)", name, got)
+			}
+		})
+	}
+}
+
+// TestNodeTotalSize_ZeroInteriorSizeIsUnchanged pins ADR-0166's migration
+// claim: every caller in this tree sets Size on LEAVES only, so counting a
+// node's own size has to leave those trees bit-identical. Written as a test so
+// the claim is checked rather than asserted.
+func TestNodeTotalSize_ZeroInteriorSizeIsUnchanged(t *testing.T) {
+	tree := &Node{Name: "root", Children: []*Node{
+		{Name: "branch1", Children: []*Node{
+			{Name: "leaf1", Size: 5},
+			{Name: "leaf2", Size: 7},
+		}},
+		{Name: "branch2", Children: []*Node{
+			{Name: "leaf3", Size: 11},
+		}},
+		{Name: "leaf4", Size: 13},
+	}}
+	if got := tree.TotalSize(); got != 36 {
+		t.Errorf("interior-size-free tree: got %v want 36 (the pre-change value)", got)
+	}
+}
+
+func TestSelfRectOf_AbsentWithoutAnInteriorSize(t *testing.T) {
+	leaf := &Node{Name: "leaf", Size: 10}
+	if got := ComputeLayout(leaf, 100, 100).SelfRectOf(leaf); got != (Rect{}) {
+		t.Errorf("leaf self rect: got %+v want zero", got)
+	}
+
+	parent := &Node{Name: "p", Children: []*Node{{Name: "a", Size: 10}}}
+	lay := ComputeLayout(parent, 100, 100)
+	if got := lay.SelfRectOf(parent); got != (Rect{}) {
+		t.Errorf("zero-size parent self rect: got %+v want zero", got)
+	}
+	// The child still fills the whole box, as it did before the change.
+	if r := lay.RectOf(parent.Children[0]); math.Abs(r.W*r.H-10000) > 1e-3 {
+		t.Errorf("only child area: got %v want 10000", r.W*r.H)
+	}
+}
+
+func TestSelfRectOf_UnrelatedNodeGetsZeroRect(t *testing.T) {
+	parent := &Node{Name: "p", Size: 50, Children: []*Node{{Name: "a", Size: 50}}}
+	lay := ComputeLayout(parent, 100, 100)
+	other := &Node{Name: "other", Size: 50}
+	if got := lay.SelfRectOf(other); got != (Rect{}) {
+		t.Errorf("unrelated node: got %+v want zero", got)
+	}
+	if got := lay.SelfRectOf(nil); got != (Rect{}) {
+		t.Errorf("nil node: got %+v want zero", got)
+	}
+}
+
+// TestSelfRectOf_TakesItsShareAndChildrenTileTheRest is the invariant SD3
+// exists for: the parent's own quantity is DRAWN, not dissolved into its
+// children. Before the change the child below would have covered the whole
+// box and read as twice its value.
+func TestSelfRectOf_TakesItsShareAndChildrenTileTheRest(t *testing.T) {
+	child := &Node{Name: "a", Size: 30}
+	parent := &Node{Name: "p", Size: 10, Children: []*Node{child}}
+	lay := ComputeLayoutAt(parent, Rect{X: 0, Y: 0, W: 100, H: 100})
+
+	self := lay.SelfRectOf(parent)
+	kid := lay.RectOf(child)
+	selfArea, kidArea := self.W*self.H, kid.W*kid.H
+
+	// own 10 of a total 40 -> a quarter of the 10000 box.
+	if math.Abs(selfArea-2500) > 1e-3 {
+		t.Errorf("self area: got %v want 2500", selfArea)
+	}
+	if math.Abs(kidArea-7500) > 1e-3 {
+		t.Errorf("child area: got %v want 7500", kidArea)
+	}
+	if math.Abs((selfArea+kidArea)-10000) > 1e-3 {
+		t.Errorf("self+children must tile the box: got %v want 10000", selfArea+kidArea)
+	}
+	if rectsOverlap(self, kid) {
+		t.Errorf("self rect %+v overlaps child rect %+v", self, kid)
+	}
+}
+
+func TestSelfRectOf_DoesNotOverlapAnyChild(t *testing.T) {
+	parent := &Node{Name: "p", Size: 17}
+	for _, size := range []float64{1, 2, 3, 5, 8, 13, 21} {
+		parent.Children = append(parent.Children, &Node{Name: "leaf", Size: size})
+	}
+	bounds := Rect{X: 50, Y: 25, W: 200, H: 150}
+	lay := ComputeLayoutAt(parent, bounds)
+
+	self := lay.SelfRectOf(parent)
+	if self.W <= 0 || self.H <= 0 {
+		t.Fatalf("self rect must be positive-sized: %+v", self)
+	}
+	sum := self.W * self.H
+	for _, ch := range parent.Children {
+		r := lay.RectOf(ch)
+		if rectsOverlap(self, r) {
+			t.Errorf("self rect %+v overlaps %s %+v", self, ch.Name, r)
+		}
+		sum += r.W * r.H
+	}
+	if want := bounds.W * bounds.H; math.Abs(sum-want) > 1e-3 {
+		t.Errorf("self+children area: got %v want %v", sum, want)
+	}
+	if self.X < bounds.X-floatEps || self.Y < bounds.Y-floatEps ||
+		self.X+self.W > bounds.X+bounds.W+floatEps || self.Y+self.H > bounds.Y+bounds.H+floatEps {
+		t.Errorf("self rect %+v escapes bounds %+v", self, bounds)
+	}
+}
+
+// rectsOverlap reports whether two rects share interior area; edge contact is
+// not an overlap, which is exactly how abutting tiles meet.
+func rectsOverlap(a, b Rect) bool {
+	return a.X+a.W > b.X+floatEps && b.X+b.W > a.X+floatEps &&
+		a.Y+a.H > b.Y+floatEps && b.Y+b.H > a.Y+floatEps
+}
