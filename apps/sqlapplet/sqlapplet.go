@@ -148,6 +148,7 @@ var resultTabIDs = map[string]struct{}{
 	"sankey":     {},
 	"dist":       {},
 	"icicle":     {},
+	"treemap":    {},
 	"schema":     {},
 	"detail":     {},
 }

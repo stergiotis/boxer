@@ -326,6 +326,12 @@ var builtinTabDefs = []builtinTabDef{
 	// stays local and a pinned frame publishes its label as a value.
 	{id: "icicle", dockID: dockTabIcicle, title: "Icicle", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelectionKey}},
+	// The Treemap tab draws the result as nested areas (ADR-0166), over the
+	// same hierarchy contract the Icicle tab reads. Its drill position is a
+	// place in a view and is not published; a pinned LEAF publishes its label,
+	// for the Icicle's reason — a cell is a path prefix, not a row.
+	{id: "treemap", dockID: dockTabTreemap, title: "Treemap", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelectionKey}},
 	// Graph stays in the body against its classification: its input is the
 	// split and the signal store, so by the criterion above it is a tool pane,
 	// but its subject is the SESSION's reactive wiring rather than the
@@ -528,6 +534,17 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Panel = iciclePanel{driver: inst.icicleDriver}
 			spec.Render = func(f *TabFrame) {
 				scrollTab(func() { inst.renderIcicleTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
+			}
+		case "treemap":
+			// Scrolled for the same reason as its neighbours: the canvas is a
+			// fixed box sized from the pane WIDTH (the only dimension a
+			// non-contending probe yields), so a short leaf scrolls rather than
+			// clips. Unlike the plot panes there is no wheel contention to
+			// worry about — the cells are egui Frames, which do not capture
+			// scroll.
+			spec.Panel = treemapPanel{driver: inst.treemapDriver}
+			spec.Render = func(f *TabFrame) {
+				scrollTab(func() { inst.renderTreemapTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
 			}
 		case "graph":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphTab) }

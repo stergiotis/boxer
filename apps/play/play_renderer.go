@@ -96,6 +96,10 @@ const (
 	dockTabExperiments uint64 = 20
 	dockTabDist        uint64 = 21
 	dockTabIcicle      uint64 = 22
+	// 23 is reserved for the Series tab of ADR-0163, which is proposed and
+	// still under review; taking the next free id keeps this cut from editing
+	// a live proposal.
+	dockTabTreemap uint64 = 24
 )
 
 type PlayApp struct {
@@ -391,6 +395,11 @@ type PlayApp struct {
 	// folded `stack`+`value` contract or the `id`/`parent`/`value` one — no
 	// lane, nothing to Close.
 	icicleDriver *IcicleDriver
+
+	// treemapDriver is the ADR-0166 treemap panel (Treemap dock tab): the same
+	// observer shape and the same hierarchy contract as the Icicle tab, read as
+	// nested areas rather than depth rows — no lane, nothing to Close.
+	treemapDriver *treemapDriver
 
 	// flow is the ADR-0153 Flow dock tab: the active node's clause-level
 	// dataflow, derived statically from the split; the EXPLAIN lenses add
@@ -903,6 +912,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.sankeyDriver = NewSankeyDriver(mk(), client)
 	inst.distDriver = NewDistDriver(mk())
 	inst.icicleDriver = NewIcicleDriver(mk())
+	inst.treemapDriver = newTreemapDriver(mk())
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())

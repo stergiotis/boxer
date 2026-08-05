@@ -1,0 +1,693 @@
+package play
+
+import (
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
+)
+
+// play_treemap_panel.go is the Treemap dock tab (ADR-0166): the active result
+// as nested rectangles whose AREA is the value. It reads the same two column
+// contracts the Icicle tab does — play_hierarchy.go owns them — so a query that
+// draws as a flamegraph draws here unchanged, and the choice between the two is
+// about the question, not about the SQL.
+//
+// The two forms answer different questions and this one is for "what is big".
+// A treemap discards the ordering and the depth of a path, which is why the
+// pprof ladder chose the icicle for stack profiles; what it gives back is the
+// whole pane spent on magnitude, and a second data channel — `color` — that the
+// icicle has no room for.
+//
+// NAVIGATION AND SELECTION ARE LOCAL. Clicking a container drills into it and
+// clicking the breadcrumb drills back out; neither is published, because a
+// drill position is a place in a view rather than a fact about the result.
+// Clicking a leaf pins it and publishes its label as `selection_key`, matching
+// Network, Sankey and Icicle: in folded mode a cell is a path PREFIX, so it
+// spans many rows and no single row cursor would be honest about it.
+
+// treemapForm is this pane's vocabulary in a shared reject message.
+var treemapForm = hierForm{noun: "treemap", elem: "cell"}
+
+// treemapIDSalt namespaces the panel's ui-rect probe — distinct from the other
+// panels' salts; the per-instance idSeed (nextVizSeed) keeps two live PlayApps
+// apart.
+const treemapIDSalt uint64 = 0x5a11c0de17f10007
+
+const (
+	// treemapDepthStops is the length of the depth ramp. Eight matches the
+	// widget's own named palettes, which is what a caller-supplied palette is
+	// compared against.
+	treemapDepthStops = 8
+	// treemapValueStops samples the sequential palette for the numeric colour
+	// arm. Denser than the depth ramp because it encodes a continuum rather
+	// than a handful of levels.
+	treemapValueStops = 64
+	// treemapRootName labels the synthetic container a FOREST is wrapped in.
+	// Only used when the result has more than one root — a single-rooted tree
+	// is handed to the widget as-is, so its own root names the breadcrumb.
+	treemapRootName = "all"
+	// treemapMaxCatRunes bounds a category key in the status line.
+	treemapMaxCatRunes = 24
+)
+
+// treemapColorModeE is what a cell's fill encodes.
+type treemapColorModeE uint8
+
+const (
+	// treemapColorData — the `color` column, as a colormap or a category cycle.
+	// Falls through to the depth ramp for any node the column did not describe,
+	// which in folded mode is every synthesised interior node.
+	treemapColorData treemapColorModeE = iota
+	// treemapColorDepth — the depth ramp alone: structure rather than identity.
+	treemapColorDepth
+)
+
+// treemapNestingE is how much of the tree renders below the frontier.
+type treemapNestingE uint8
+
+const (
+	// treemapNestDrill — the frontier's children plus one preview level. The
+	// default, and what bounds the frame cost: cells are egui Frames, so the
+	// budget is the frontier's FANOUT rather than the tree's size.
+	treemapNestDrill treemapNestingE = iota
+	// treemapNestAll — the whole subtree at once, bounded only by the minimum
+	// cell size. Readable for a shallow tree and expensive for a wide one.
+	treemapNestAll
+)
+
+func (n treemapNestingE) depth() int {
+	if n == treemapNestAll {
+		return 0 // the widget's "unlimited", capped internally
+	}
+	return 1
+}
+
+// treemapColorInfo is what the colour channel resolved to for one built tree:
+// the numeric range a colormap spans, or the category keys a cycle was assigned
+// in first-seen order.
+type treemapColorInfo struct {
+	kind hierColorKindE
+	// min/max bound the numeric arm. Equal bounds are widened by
+	// treemapColorRange so a single-valued column does not divide by zero.
+	min, max float64
+	// cats maps a category key to its cycle index, and catOrder keeps the
+	// first-seen order the indices were handed out in — first-seen rather than
+	// sorted so adding a row cannot recolour the rows above it.
+	cats     map[string]int
+	catOrder []string
+	// wrapped counts categories past the palette's length, which share a hue
+	// with an earlier one. Counted rather than prevented: seven is the honest
+	// size of a CVD-safe qualitative set (ADR-0156), and a picture that is
+	// lying about a category should say how many.
+	wrapped int
+}
+
+// treemapDriver owns the Treemap tab state: the built tree, its pointer-tree
+// projection, the widget, and the locally-pinned leaf.
+type treemapDriver struct {
+	ids    *c.WidgetIdStack
+	idSeed uint64
+
+	tm *treemap.Treemap
+
+	colorMode treemapColorModeE
+	nesting   treemapNestingE
+
+	// Tree cache: the result identity (the executed timestamp, the same
+	// freshness token the pager, World and Kanban use) plus the schema the claim
+	// was resolved from. Interning a big result is per-node work and has no
+	// business running every frame.
+	tree        hierTree
+	stats       hierStats
+	forExecuted time.Time
+	forSchema   *arrow.Schema
+	treeGen     uint64
+
+	// root is the pointer tree the widget navigates; idxOf maps a node of it
+	// back to its hierTree index, which is how the colorings reach the colour
+	// channel from a *layout.Node they are handed.
+	root  *layout.Node
+	idxOf map[*layout.Node]int32
+	color treemapColorInfo
+
+	// selected is the click-pinned LEAF label, published as selection_key. The
+	// drill position is the widget's and is deliberately not mirrored here.
+	selected string
+
+	// pendingExecuted is stashed by renderTreemapTab before dispatch — the
+	// PanelI Render signature carries no result metadata (the World pane's
+	// noteExecuted handoff).
+	pendingExecuted time.Time
+}
+
+// newTreemapDriver builds the driver. It takes no client: like Table, World and
+// Icicle the panel reads the ACTIVE RESULT, so it has no lane of its own.
+func newTreemapDriver(ids *c.WidgetIdStack) (inst *treemapDriver) {
+	return &treemapDriver{ids: ids, idSeed: nextVizSeed()}
+}
+
+// noteExecuted hands the driver the active result's freshness token before
+// dispatch; the tree cache keys on it.
+func (inst *treemapDriver) noteExecuted(t time.Time) { inst.pendingExecuted = t }
+
+// treemapPanel is the PanelI face. Acceptance is schema-only and cheap — it runs
+// every frame — because both contracts are questions about column names and one
+// column's type, which the schema answers on its own.
+type treemapPanel struct {
+	driver *treemapDriver
+}
+
+func (inst treemapPanel) ID() PanelID { return "treemap" }
+
+func (inst treemapPanel) Channels() []ChannelSpec {
+	return []ChannelSpec{{ID: chMain, Required: true, Label: "cells"}}
+}
+
+func (inst treemapPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
+	if schema == nil {
+		reason = "Run a query with a `stack` array and a `value` (or `id`/`parent`/`value`) to see a treemap."
+		return
+	}
+	cl, r := resolveHierarchy(schema, treemapForm)
+	if r != "" {
+		reason = r
+		return
+	}
+	claim = cl
+	return
+}
+
+func (inst treemapPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
+	main, ok := filled[chMain]
+	if !ok {
+		return
+	}
+	cl, isClaim := main.Claim.(hierClaim)
+	if !isClaim {
+		return
+	}
+	inst.driver.render(main.Rec, main.Rec.Schema(), cl, emit)
+}
+
+// render builds the tree (cached on the result identity), projects it onto the
+// widget's pointer tree, draws it, and tracks the pinned leaf.
+func (inst *treemapDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl hierClaim, emit SignalEmitterI) {
+	if schema != inst.forSchema || !inst.pendingExecuted.Equal(inst.forExecuted) || inst.treeGen == 0 {
+		inst.tree, inst.stats = buildHierarchy(rec, cl)
+		inst.forSchema, inst.forExecuted = schema, inst.pendingExecuted
+		inst.treeGen++
+		inst.rebuildTree()
+		// A new tree invalidates a pin taken against the old one.
+		inst.selected = ""
+	}
+	inst.renderControls()
+
+	if inst.tree.Len() == 0 || inst.root == nil {
+		c.Label(inst.statusLine()).Send()
+		for rt := range c.RichTextLabel("No cells: every row was missing a path and an id, or carried a value " +
+			"that is not a finite, non-negative number.") {
+			rt.Small().Weak()
+		}
+		return
+	}
+
+	// The readouts go ABOVE the plot, as the Icicle tab's do and for the same
+	// reason: a hover is a register read and so is a frame behind anyway, and
+	// this keeps the total and the warnings where a pane too short for the
+	// picture cannot push them out of sight.
+	c.Label(inst.pointerLine()).Send()
+	c.Separator().Horizontal().Send()
+
+	sm := c.CurrentApplicationState.StateManager
+	probeSeq := treemapIDSalt ^ inst.idSeed ^ 0x1
+	c.CaptureUiRect(probeSeq)
+	paneW := float32(760)
+	if r, ok := sm.GetUiRect(probeSeq); ok && r.MaxX > r.MinX {
+		paneW = r.MaxX - r.MinX
+	}
+	w := min(max(paneW-12, 360), 1600)
+	// A squarer aspect than the Icicle's 0.31. That form spends its height on
+	// depth rows and scrolls past them; this one spends both dimensions on
+	// area, and a wide letterbox drives the squarify aspect ratios toward the
+	// slivers the algorithm exists to avoid.
+	h := min(max(w*0.56, 300), 620)
+
+	inst.ensureWidget()
+	inst.tm.SetContainerSize(w, h)
+	inst.tm.SetMaxNestingDepth(inst.nesting.depth())
+	inst.tm.Render()
+
+	// A clicked leaf is the pin; clicking the pinned one again clears it, so
+	// the gesture is its own undo. Container clicks are the widget's drill and
+	// never reach here. An empty key is the honest "nothing focused" value a
+	// query reading {selection_key:String} sees before anything is clicked.
+	if leaf := inst.tm.ClickedLeaf(); leaf != nil {
+		if leaf.Name == inst.selected {
+			inst.selected = ""
+		} else {
+			inst.selected = leaf.Name
+		}
+		if emit != nil {
+			emit.Emit(signalSelectionKey, inst.selected)
+		}
+	}
+
+	for rt := range c.RichTextLabel("hover a cell for its share; click a container to drill in, the breadcrumb " +
+		"to drill back out, a leaf to pin it") {
+		rt.Small().Weak()
+	}
+}
+
+// ensureWidget constructs the widget on first use. It is built here rather than
+// in the constructor because the coloring it takes depends on the first tree —
+// the numeric range and the category assignment both do.
+func (inst *treemapDriver) ensureWidget() {
+	if inst.tm != nil {
+		return
+	}
+	inst.tm = treemap.New(inst.ids, "play-treemap", inst.root,
+		treemap.WithColoring(inst.coloring()),
+		treemap.WithLeafClickSensing(true),
+		treemap.WithCellLabel(inst.cellLabel),
+		treemap.WithSelfCellLabel(inst.selfCellLabel),
+	)
+}
+
+// rebuildTree projects the flat tree onto the pointer tree the widget takes,
+// resolves the colour channel over it, and hands both to the widget.
+//
+// A FOREST is wrapped in a synthetic container. That container carries no size
+// of its own, so it invents no value — it exists because the widget navigates
+// from a single root, and a result with several roots is an ordinary shape
+// (§SD1's forest). A single-rooted tree is passed through unwrapped, so the
+// breadcrumb names the result's own root rather than a placeholder.
+func (inst *treemapDriver) rebuildTree() {
+	n := inst.tree.Len()
+	inst.idxOf = make(map[*layout.Node]int32, n)
+	if n == 0 {
+		inst.root, inst.color = nil, treemapColorInfo{}
+		return
+	}
+
+	nodes := make([]layout.Node, n)
+	var roots []*layout.Node
+	for i := range n {
+		nodes[i].Name = inst.tree.Labels[i]
+		nodes[i].Size = inst.tree.Self[i]
+		inst.idxOf[&nodes[i]] = int32(i)
+	}
+	for i := range n {
+		p := inst.tree.Parents[i]
+		if p < 0 || int(p) >= n || int(p) == i {
+			roots = append(roots, &nodes[i])
+			continue
+		}
+		nodes[p].Children = append(nodes[p].Children, &nodes[i])
+	}
+
+	switch len(roots) {
+	case 0:
+		// Every node claims a parent, so the parents form a cycle. The builders
+		// cannot produce this from either contract — a folded trie is acyclic by
+		// construction and node mode demotes an unresolvable parent to a root —
+		// but drawing nothing beats recursing forever if one ever does.
+		inst.root = nil
+	case 1:
+		inst.root = roots[0]
+	default:
+		inst.root = &layout.Node{Name: treemapRootName, Children: roots}
+	}
+	inst.color = inst.resolveColorInfo()
+	if inst.tm != nil && inst.root != nil {
+		inst.tm.SetRoot(inst.root)
+		inst.tm.SetColoring(inst.coloring())
+	}
+}
+
+// resolveColorInfo surveys the colour channel of the built tree: the range a
+// colormap spans, or the categories a cycle is assigned to.
+func (inst *treemapDriver) resolveColorInfo() (info treemapColorInfo) {
+	info.kind = inst.tree.ColorKind
+	switch info.kind {
+	case hierColorNumeric:
+		info.min, info.max = math.Inf(1), math.Inf(-1)
+		for _, v := range inst.tree.ColorNum {
+			if math.IsNaN(v) {
+				continue
+			}
+			info.min, info.max = math.Min(info.min, v), math.Max(info.max, v)
+		}
+		info.min, info.max = treemapColorRange(info.min, info.max)
+	case hierColorCategorical:
+		info.cats = make(map[string]int, 8)
+		for _, k := range inst.tree.ColorKey {
+			if k == "" {
+				continue
+			}
+			if _, seen := info.cats[k]; seen {
+				continue
+			}
+			idx := len(info.catOrder)
+			info.cats[k] = idx
+			info.catOrder = append(info.catOrder, k)
+			if idx >= styletokens.QualitativeCycleLen {
+				info.wrapped++
+			}
+		}
+	}
+	return
+}
+
+// treemapColorRange widens a degenerate numeric range. A column with one
+// distinct value, or none at all, would otherwise normalise to a division by
+// zero; widening puts every cell at the same point of the ramp instead, which
+// is the truthful picture of a constant column.
+func treemapColorRange(min, max float64) (lo, hi float64) {
+	if math.IsInf(min, 0) || math.IsInf(max, 0) {
+		return 0, 1
+	}
+	if max <= min {
+		return min, min + 1
+	}
+	return min, max
+}
+
+// coloring composes the depth ramp with the data layer. Depth is FIRST because
+// it always has an opinion and CompositeColoring is last-ok-wins, so the data
+// layer overrides it wherever the column described a node — and where it did
+// not (a synthesised interior node, an unreadable cell), the ramp shows through
+// rather than leaving a hole. The imztop Proc Map idiom.
+//
+// The data layer is wrapped in a ConditionalColoring reading the driver's mode,
+// so the colour switch is a draw-time decision that neither re-lays-out nor
+// rebuilds the widget.
+func (inst *treemapDriver) coloring() treemap.ColoringI {
+	depth := treemap.DepthColoring(treemapDepthPalette())
+	data := inst.dataColoring()
+	if data == nil {
+		return depth
+	}
+	return treemap.CompositeColoring(depth, treemap.ConditionalColoring(
+		func(treemap.CellInfo) bool { return inst.colorMode == treemapColorData },
+		data,
+	))
+}
+
+// dataColoring is the `color` column's layer, or nil when there is no usable
+// column — in which case the depth ramp is the whole coloring and the mode
+// switch has nothing to switch to.
+func (inst *treemapDriver) dataColoring() treemap.ColoringI {
+	switch inst.color.kind {
+	case hierColorNumeric:
+		return treemap.ContinuousColoring(treemapValuePalette(), func(n *layout.Node) float64 {
+			i, ok := inst.idxOf[n]
+			if !ok || int(i) >= len(inst.tree.ColorNum) {
+				return math.NaN() // no opinion; the depth ramp keeps the cell
+			}
+			return inst.tree.ColorNum[i]
+		}, inst.color.min, inst.color.max)
+	case hierColorCategorical:
+		return treemap.CategoricalColoring(treemapCategoryPalette(), func(n *layout.Node) int {
+			i, ok := inst.idxOf[n]
+			if !ok || int(i) >= len(inst.tree.ColorKey) {
+				return -1 // no opinion
+			}
+			idx, seen := inst.color.cats[inst.tree.ColorKey[i]]
+			if !seen {
+				return -1
+			}
+			return idx
+		})
+	}
+	return nil
+}
+
+// treemapDepthPalette is a neutral ramp, dark at the root and lighter inward.
+// Neutral rather than a hue ramp because depth is the BASE layer: when a colour
+// column is driving, the levels it did not describe must read as structure
+// without competing with the data channel. The topology panel's palette, for
+// the same reason.
+func treemapDepthPalette() (p []uint32) {
+	const tDark, tLight = 0.85, 0.32
+	p = make([]uint32, treemapDepthStops)
+	for i := range p {
+		t := tDark + (tLight-tDark)*float64(i)/float64(treemapDepthStops-1)
+		p[i] = rgba8ToHex(styletokens.Sequential(styletokens.SequentialGrayC, float32(t)))
+	}
+	return
+}
+
+// treemapValuePalette samples the user's sequential default for the numeric
+// colour arm — the same palette every other ordered-data encoding in the tree
+// reads (IDS_PALETTE_SEQUENTIAL).
+func treemapValuePalette() (p []uint32) {
+	s := styletokens.SequentialDefault()
+	p = make([]uint32, treemapValueStops)
+	for i := range p {
+		p[i] = rgba8ToHex(styletokens.Sequential(s, float32(i)/float32(treemapValueStops-1)))
+	}
+	return
+}
+
+// treemapCategoryPalette is the IDS qualitative cycle (ADR-0156, Okabe-Ito).
+// Seven entries is the honest count; a result with more categories wraps, and
+// the status line says how many did.
+func treemapCategoryPalette() (p []uint32) {
+	p = make([]uint32, styletokens.QualitativeCycleLen)
+	for i := range p {
+		p[i] = rgba8ToHex(styletokens.QualitativeCycle(i))
+	}
+	return
+}
+
+// rgba8ToHex packs an IDS colour as the 0xRRGGBBAA the treemap palettes take.
+func rgba8ToHex(c styletokens.RGBA8) uint32 {
+	return uint32(c.R)<<24 | uint32(c.G)<<16 | uint32(c.B)<<8 | uint32(c.A)
+}
+
+// cellLabel is a cell's secondary line: the subtree TOTAL, which is what its
+// area encodes.
+func (inst *treemapDriver) cellLabel(n *layout.Node) string {
+	return treemapQty(n.TotalSize(), inst.stats.unit)
+}
+
+// selfCellLabel is the secondary line of a container's own cell, which encodes
+// its OWN value rather than its subtree's (ADR-0166 §SD3).
+func (inst *treemapDriver) selfCellLabel(n *layout.Node) string {
+	return treemapQty(n.Size, inst.stats.unit)
+}
+
+// pointerLine describes what the pointer is over, falling back to the pinned
+// leaf and then to the tree's own summary.
+func (inst *treemapDriver) pointerLine() string {
+	if inst.tm == nil {
+		return inst.statusLine()
+	}
+	if n := inst.tm.HoveredNode(); n != nil {
+		return inst.describeNode(n)
+	}
+	if inst.selected != "" {
+		return "pinned: " + truncateRunes(inst.selected, 64)
+	}
+	return inst.statusLine()
+}
+
+// describeNode reads a cell by its share of the total, its own value, and its
+// category or measure when the colour column gave it one.
+func (inst *treemapDriver) describeNode(n *layout.Node) string {
+	var b strings.Builder
+	b.WriteString(truncateRunes(n.Name, 64))
+	total := n.TotalSize()
+	fmt.Fprintf(&b, " — %s", treemapQty(total, inst.stats.unit))
+	if root := inst.root; root != nil {
+		if rt := root.TotalSize(); rt > 0 {
+			fmt.Fprintf(&b, " (%.1f%%)", 100*total/rt)
+		}
+	}
+	if len(n.Children) > 0 {
+		fmt.Fprintf(&b, " · %d child(ren)", len(n.Children))
+		if n.Size > 0 {
+			fmt.Fprintf(&b, " · own %s", treemapQty(n.Size, inst.stats.unit))
+		}
+	}
+	if i, ok := inst.idxOf[n]; ok {
+		switch inst.color.kind {
+		case hierColorNumeric:
+			if int(i) < len(inst.tree.ColorNum) && !math.IsNaN(inst.tree.ColorNum[i]) {
+				fmt.Fprintf(&b, " · colour %s", treemapQty(inst.tree.ColorNum[i], ""))
+			}
+		case hierColorCategorical:
+			if int(i) < len(inst.tree.ColorKey) && inst.tree.ColorKey[i] != "" {
+				fmt.Fprintf(&b, " · %s", truncateRunes(inst.tree.ColorKey[i], treemapMaxCatRunes))
+			}
+		}
+	}
+	return b.String()
+}
+
+// renderControls draws the colour and nesting switches. Both are draw-time
+// only: neither rebuilds the tree, and the colour one does not even re-lay-out.
+//
+// The bars are StyleSelectable and emphatically NOT .Frameless() — the trap
+// ADR-0160 §SD9 documents, where a frameless segmented bar draws its selected
+// and unselected options identically. Groups are separated by AddSpace, never
+// by c.Separator(), which in a horizontal row is a vertical rule sized to the
+// pane's whole height.
+func (inst *treemapDriver) renderControls() {
+	gap := styletokens.GapSections(styletokens.DensityFromEnv())
+	for range c.HorizontalTop().KeepIter() {
+		c.Label("colour").Send()
+		if inst.color.kind == hierColorNone {
+			// Nothing to switch to: with no `color` column the depth ramp is the
+			// whole coloring. Saying so beats a two-option bar whose other
+			// option silently does nothing.
+			for rt := range c.RichTextLabel("depth (no `color` column)") {
+				rt.Small().Weak()
+			}
+		} else {
+			selector.Segmented(inst.ids, "treemap-color", &inst.colorMode).
+				Inline().
+				Style(selector.StyleSelectable).
+				Option(treemapColorData, treemapColorDataLabel(inst.color.kind)).
+				Option(treemapColorDepth, "depth").
+				SendResp()
+		}
+		c.AddSpace(gap)
+		c.Label("show").Send()
+		selector.Segmented(inst.ids, "treemap-nesting", &inst.nesting).
+			Inline().
+			Style(selector.StyleSelectable).
+			Option(treemapNestDrill, "drill").
+			// "full", not "all": a forest's synthetic container is named `all`
+			// and sits in the breadcrumb directly below this row, so two
+			// different meanings of the word would share one pane — and an
+			// accessibility-tree locator could not tell them apart either.
+			Option(treemapNestAll, "full").
+			SendResp()
+	}
+}
+
+// treemapColorDataLabel names the data option by what the column turned out to
+// be, so the bar says which encoding is on offer rather than a bare "colour".
+func treemapColorDataLabel(k hierColorKindE) string {
+	if k == hierColorCategorical {
+		return "category"
+	}
+	return "value"
+}
+
+// statusLine reports the tree's shape and everything the build noticed but
+// could not decide.
+func (inst *treemapDriver) statusLine() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d cells", inst.stats.nodes)
+	if inst.root != nil {
+		fmt.Fprintf(&b, " · %s total", treemapQty(inst.root.TotalSize(), inst.stats.unit))
+	}
+	fmt.Fprintf(&b, " · %s input", inst.stats.mode)
+	switch inst.color.kind {
+	case hierColorNumeric:
+		fmt.Fprintf(&b, " · colour %s–%s", treemapQty(inst.color.min, ""), treemapQty(inst.color.max, ""))
+	case hierColorCategorical:
+		fmt.Fprintf(&b, " · %d categor%s", len(inst.color.catOrder), plural(len(inst.color.catOrder), "y", "ies"))
+		if inst.color.wrapped > 0 {
+			fmt.Fprintf(&b, " (%d share a colour past the palette's %d)",
+				inst.color.wrapped, styletokens.QualitativeCycleLen)
+		}
+	}
+	if inst.stats.colorConflicts > 0 {
+		fmt.Fprintf(&b, " · %d cell(s) given two colours, first kept", inst.stats.colorConflicts)
+	}
+	if inst.stats.droppedPath > 0 {
+		fmt.Fprintf(&b, " · %d row(s) without a path", inst.stats.droppedPath)
+	}
+	if inst.stats.droppedValue > 0 {
+		fmt.Fprintf(&b, " · %d row(s) without a finite, non-negative value", inst.stats.droppedValue)
+	}
+	if inst.stats.droppedDup > 0 {
+		fmt.Fprintf(&b, " · %d duplicate id(s) dropped", inst.stats.droppedDup)
+	}
+	if inst.stats.reparented > 0 {
+		fmt.Fprintf(&b, " · %d row(s) with an unknown parent, drawn as roots", inst.stats.reparented)
+	}
+	if inst.stats.truncated > 0 {
+		fmt.Fprintf(&b, " · %d path(s) cut at depth %d", inst.stats.truncated, hierMaxDepth)
+	}
+	if inst.stats.capped {
+		fmt.Fprintf(&b, " · capped at %d cells (aggregate the tail)", hierMaxNodes)
+		if inst.stats.droppedCapped > 0 {
+			fmt.Fprintf(&b, ", %d row(s) past it", inst.stats.droppedCapped)
+		}
+	}
+	return b.String()
+}
+
+// plural picks a suffix. Small enough not to earn a dependency, and the status
+// line is the only caller.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
+// treemapQty formats a quantity for the status and pointer lines, suffixing the
+// unit when the result declared one. The job is only to keep a big total from
+// crowding the line out.
+func treemapQty(v float64, unit string) string {
+	var s string
+	switch av := math.Abs(v); {
+	case av >= 1e9:
+		s = strconv.FormatFloat(v/1e9, 'f', 1, 64) + "G"
+	case av >= 1e6:
+		s = strconv.FormatFloat(v/1e6, 'f', 1, 64) + "M"
+	case av >= 1e4:
+		s = strconv.FormatFloat(v/1e3, 'f', 1, 64) + "k"
+	default:
+		s = strconv.FormatFloat(v, 'g', 4, 64)
+	}
+	if unit != "" {
+		s += " " + unit
+	}
+	return s
+}
+
+// renderTreemapTab is the Treemap dock tab body (ADR-0166): the active result as
+// nested rectangles. A plain PanelI observer with the same guards as the World,
+// Kanban and Icicle tabs, plus the executed timestamp handed to the driver as
+// its tree-cache key.
+func (inst *PlayApp) renderTreemapTab(rec arrow.RecordBatch, schema *arrow.Schema, loading bool, err error, executed time.Time) {
+	if loading && rec == nil {
+		inst.renderResultsLoading()
+		return
+	}
+	if err != nil && rec == nil {
+		inst.renderResultsFailed()
+		return
+	}
+	if rec == nil {
+		for rt := range c.RichTextLabel("Run a query with a `stack` array and a `value` column — or one row per " +
+			"node with `id`, `parent` and `value` — to see a treemap.") {
+			rt.Small().Weak()
+		}
+		return
+	}
+	inst.treemapDriver.noteExecuted(executed)
+	reject := dispatchPanel(treemapPanel{driver: inst.treemapDriver}, map[ChannelID]channelInput{
+		chMain: {node: inst.resolvedTabNode("treemap"), rec: rec, schema: schema, sig: inst.frameSig},
+	}, inst.sigEmit)
+	if reject != "" {
+		for rt := range c.RichTextLabel(reject) {
+			rt.Small().Weak()
+		}
+	}
+}
