@@ -100,6 +100,15 @@ query change. `WithSectionFilter` and `WithScrollToSection` must not be
 combined: skipping headings desynchronises the scroll dispatch's heading
 ordinals.
 
+Both boxes are one input widget — `regexedit`, the pattern editor extracted
+from regex_explorer (ADR-0015 lexer, ADR-0130 highlight seam), in a token
+mode that lexes each whitespace-separated pattern independently so an
+unclosed group in one token cannot mis-colour the next. And both pair the
+battery with a **selectivity meter**: a byte-share progress bar of how much
+of the corpus the battery selects, section counts in an adjacent label
+(never on the bar — its own text is illegible at low fractions). The meter
+is computed from the uncapped hit set; only the rendered list truncates.
+
 ### §SD5 — facts-plane lane: the same battery in SQL
 
 The large corpora get one section-grained surface: `helpsections` (and
@@ -160,8 +169,12 @@ source — which is precisely the designed fallback, not a degraded mode.
 - `markdown.HeadingInfo.ByteOffset`, `markdown.WithSectionFilter` (widget
   package, additive).
 - `help.SectionInfo.ByteOffset`; new package `help/search` (Battery, Index,
-  Hit).
-- HelpHost search state + nav flattening; play Snippets filter state.
+  Hit, Coverage).
+- New widget `regexedit` (Edit + ErrorLabel), replacing regex_explorer's
+  private highlight caches; `regexhighlight.HighlightTokens` and the
+  codeview `BuildRegexTokens`/`PrepareRegexTokens` flavour behind it.
+- HelpHost search state + nav flattening; play Snippets filter state; a
+  coverage meter on both.
 - M2 adds: two introspection tables, the `docsearch` macro, the ref-string
   format.
 
