@@ -554,6 +554,31 @@ SELECT 1"
 	settle=3000
 }
 
+scene_08_series_overlays() {
+	desc="Series overlays (ADR-0163 M2): the detector's score on its own x-linked plot with the warm-up region shaded, the moving-average baseline drawn beside it BY DEFAULT, and the flagged extents as bands behind both"
+	senv=(BOXER_PLAY_FOCUS_SERIES=1)
+	# Three CTEs and a sink. `base` is the series the panel charts and the
+	# only thing ClickHouse runs; `scores` and `spans` are client nodes,
+	# filled into the panel's optional channels BY NAME (§SD1). The sink
+	# selects from base — NOT from a client node, which is a terminal leaf.
+	#
+	# A 24-sample window over the week's 2012 buckets leaves DAMP's 8×window
+	# training as a visible but small shaded prefix, which is what the warm-up
+	# chrome is for.
+	sql="WITH
+  base AS (
+    SELECT toDateTime64(toStartOfInterval(time, INTERVAL 5 MINUTE), 3) AS t,
+           count()                                                     AS v
+    FROM default.planes_mercator_sample100
+    GROUP BY t
+    ORDER BY t
+  ),
+  scores AS (SELECT tsAnomalyScores(t, v, 24) FROM base),
+  spans  AS (SELECT tsAnomalySpans(t, v, 24, 3) FROM base)
+SELECT * FROM base"
+	settle=4000
+}
+
 scene_08_series_vocabulary_graph() {
 	desc="The same buffer read as a graph: the client node badged 'computed in play', the honesty caption naming what was actually sent, and the input CTE beneath it as ordinary SQL"
 	# A second launch rather than a click: the dock's tab strip is drawn by

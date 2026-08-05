@@ -42,7 +42,13 @@ const (
 	// UTC tick labels live, so pushing them below the leaf's fold is the one
 	// clipping that actually costs the reader something.
 	seriesPlotHeight = 340
-	seriesPlotMinW   = 480
+	// seriesPlotHeightWithScores is the series box when a score plot shares
+	// the leaf below it (M2). The two together must leave the x tick labels
+	// of BOTH above the fold, and the series keeps the larger share: the
+	// score is read for where its peaks fall, which needs less height than
+	// reading a shape does.
+	seriesPlotHeightWithScores = 200
+	seriesPlotMinW             = 480
 	// seriesMaxLanes bounds the overlay. Beyond a dozen lines a shared axis
 	// stops being readable; the excess is counted in the status line rather
 	// than silently dropped.
@@ -172,6 +178,23 @@ type SeriesDriver struct {
 	forSchema       *arrow.Schema
 	pendingExecuted time.Time
 
+	// The M2 overlay channels, folded per result: the score lane with its
+	// mandated baseline, and the flagged extents. Empty when the buffer names
+	// no `scores` / `spans` CTE, which is the ordinary case.
+	scores       seriesScores
+	spans        []seriesSpan
+	spansSkipped int
+	// scoreCall is the client node behind the score channel, which is where
+	// the detector's name, its causality and its window live. Nil when the
+	// channel is filled by an ordinary CTE.
+	scoreCall     *tsCall
+	scoreWindow   int32
+	scoreWindowOK bool
+	// xLinkMin/xLinkMax are the shared x range of the series plot and the
+	// score plot below it. A score is read AGAINST its series, so the two
+	// panning independently would be a picture of nothing.
+	xLinkMin, xLinkMax float64
+
 	smooth *trendsmooth.State
 	// decimate is the §SD1 render-only envelope. Exposed as a toggle so the
 	// claim it makes — that it cannot drop an extreme — is checkable by eye
@@ -196,12 +219,10 @@ type seriesPanel struct {
 func (inst seriesPanel) ID() PanelID { return "series" }
 
 func (inst seriesPanel) Channels() []ChannelSpec {
-	// The optional channels are declared and filled here; DRAWING their
-	// overlays is M2 (scores under the series, spans as bands, baselines
-	// beside them). Declaring them now is what lets a buffer name its
-	// `scores` CTE before the overlay exists and see it accepted rather
-	// than ignored.
-	// deferred: M2 renders chScores / chSpans; M0 only resolves them.
+	// The optional channels carry the M2 overlays: a score lane on its own
+	// linked plot, and flagged extents as bands behind both. Both fill BY
+	// CTE NAME (§SD1) — `scores` and `spans` — the way the Sankey panel
+	// takes its `flows` and `nodes`.
 	return []ChannelSpec{
 		{ID: chMain, Required: true, Label: "series"},
 		{ID: chScores, Required: false, Label: "scores"},
@@ -235,7 +256,9 @@ func (inst seriesPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEm
 	if !ok {
 		return
 	}
-	inst.driver.render(main.Rec, main.Rec.Schema(), k, emit)
+	scores, _ := filled[chScores]
+	spans, _ := filled[chSpans]
+	inst.driver.render(main.Rec, main.Rec.Schema(), k, scores.Rec, spans.Rec, emit)
 }
 
 // resolveSeriesColumns applies §SD1's typed claim to a schema: x is the FIRST
@@ -510,8 +533,10 @@ func envelopeDecimate(t []float64, v []float64, xMin float64, xMax float64, widt
 
 // render folds the result (cached), draws the status line, the grid finding
 // and its scaffold, then the plot.
-func (inst *SeriesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k seriesClaim, emit SignalEmitterI) {
+func (inst *SeriesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k seriesClaim,
+	scoreRec arrow.RecordBatch, spanRec arrow.RecordBatch, emit SignalEmitterI) {
 	inst.rebuild(rec, schema, k)
+	inst.rebuildOverlays(scoreRec, spanRec)
 	if inst.foldErr != "" {
 		for rt := range c.RichTextLabel(inst.foldErr) {
 			rt.Small().Weak()
@@ -531,6 +556,7 @@ func (inst *SeriesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	c.AddSpace(styletokens.GapInline(dens))
 	inst.renderControls()
 	inst.renderGridFinding()
+	inst.renderSeriesOverlayChrome()
 	c.AddSpace(styletokens.GapItems(dens))
 
 	w := float32(seriesPlotMinW)
@@ -538,6 +564,35 @@ func (inst *SeriesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 		w = availW - 8
 	}
 	inst.renderPlot(w, k, emit)
+	if len(inst.scores.t) > 0 {
+		inst.renderSeriesScorePlot(w)
+	}
+}
+
+// rebuildOverlays folds the optional channels. Cheap enough to run per frame
+// — a score lane is one pass over the rows and the baseline is a moving
+// average — so it takes no cache of its own; the expensive fold is the series
+// itself, which rebuild memoises.
+func (inst *SeriesDriver) rebuildOverlays(scoreRec arrow.RecordBatch, spanRec arrow.RecordBatch) {
+	inst.scores = seriesScores{}
+	inst.spans, inst.spansSkipped = nil, 0
+	if spanRec != nil {
+		inst.spans, inst.spansSkipped = foldSeriesSpans(spanRec)
+	}
+	if scoreRec == nil {
+		return
+	}
+	sc, ok := foldSeriesScores(scoreRec)
+	if !ok {
+		return
+	}
+	if inst.scoreCall != nil {
+		sc.detector = inst.scoreCall.Spec.Name
+		sc.causal = inst.scoreCall.Spec.Causal
+		sc.window = inst.scoreWindow
+	}
+	sc.baseline, sc.baselineWhy = inst.buildSeriesBaseline()
+	inst.scores = sc
 }
 
 // renderControls is the smoothing segment plus the envelope toggle.
@@ -590,9 +645,21 @@ func (inst *SeriesDriver) renderGridFinding() {
 // renderPlot draws the lanes over a UTC time axis, decimating per pixel.
 func (inst *SeriesDriver) renderPlot(w float32, k seriesClaim, emit SignalEmitterI) {
 	inst.drawn, inst.sourced = 0, 0
-	for p := range implot.Scoped(inst.ids, "##play-series", w, seriesPlotHeight) {
+	h := float32(seriesPlotHeight)
+	if len(inst.scores.t) > 0 {
+		h = seriesPlotHeightWithScores
+	}
+	for p := range implot.Scoped(inst.ids, "##play-series", w, h) {
 		p.SetupAxisScale(implot.AxisX1, implot.ScaleTime)
+		if len(inst.scores.t) > 0 {
+			// Linked only when a score plot is below to link WITH: an
+			// unlinked single plot must keep its own autofit.
+			p.SetupAxisLinks(implot.AxisX1, &inst.xLinkMin, &inst.xLinkMax)
+		}
 		p.SetupAxes("", inst.yLabel(), implot.AxisFlagsNone, implot.AxisFlagsNone)
+		// Bands first: they are the background the series is read against,
+		// and implot draws in declaration order.
+		inst.renderSeriesSpans(p)
 
 		xMin, xMax, haveRange := p.AxisRangePrev(implot.AxisX1)
 		areaW := int(w)
@@ -831,6 +898,12 @@ func (inst *PlayApp) renderSeriesTab(rec arrow.RecordBatch, schema *arrow.Schema
 		return
 	}
 	inst.seriesDriver.noteExecuted(executed)
+	// What the score channel's node IS — a client call or an ordinary CTE —
+	// is resolved here, where the split and the resolved params both exist.
+	// The panel needs it for two things it cannot get from the score rows:
+	// the detector's causality, and the window to compute the mandated
+	// baseline at (§SD5 S3).
+	inst.noteSeriesScoreCall()
 	inputs := map[ChannelID]channelInput{
 		chMain: {node: inst.resolvedTabNode("series"), rec: rec, schema: schema, sig: inst.frameSig},
 	}
@@ -858,6 +931,33 @@ func (inst *PlayApp) renderSeriesTab(rec arrow.RecordBatch, schema *arrow.Schema
 	}
 }
 
+// noteSeriesScoreCall tells the driver what produced the score channel. A
+// `scores` CTE that is an ordinary query is perfectly legal — the channel is
+// filled by NAME, not by provenance — and then the panel simply has no
+// detector to label and no window to match a baseline to, which the chrome
+// says rather than guesses.
+func (inst *PlayApp) noteSeriesScoreCall() {
+	node, ok := findSplitNode(inst.currentSplit, seriesScoresNodeID)
+	if !ok || node.Client == nil {
+		inst.seriesDriver.noteScoreCall(nil, 0, false)
+		return
+	}
+	call := node.Client
+	// The window is the third argument of every scoring function in the
+	// roster, but the roster is meant to grow — so the position is CHECKED
+	// rather than assumed, and a future function shaped differently loses
+	// its baseline instead of panicking.
+	if len(call.Args) < 3 || call.Spec.Args[2].Kind != tsArgInt {
+		inst.seriesDriver.noteScoreCall(call, 0, false)
+		return
+	}
+	// A slot resolves through the same params the lane sends, so a window
+	// driven by a live signal moves the baseline with it.
+	params := resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig)
+	window, wErr := tsIntArg(call, 2, params)
+	inst.seriesDriver.noteScoreCall(call, window, wErr == nil)
+}
+
 // forgetSeriesLanes drops the optional lanes' memos on Run, for the reason
 // every other named-CTE panel does: the memo key is the SQL, which a re-Run
 // leaves unchanged, so a lane that failed transiently would stay stuck on the
@@ -882,9 +982,12 @@ func (inst *PlayApp) demandSeriesAux(nodeID NodeID, lane **nodeLane) (rec arrow.
 		*lane = newNodeLane(clientExecutor{client: inst.client, opts: newExecOptions("series-" + string(nodeID))},
 			memory.NewGoAllocator(), 0)
 	}
-	v := (*lane).demand(compiledNode{
-		SQL:    fuseNode(inst.currentSplit, nodeID),
-		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
-	})
+	// compileNodeFor, not a bare fuse: `scores` and `spans` are USUALLY client
+	// nodes, whose SQL is their input CTE and whose transform rides on the
+	// compiled node (ADR-0163 §SD4). Fusing the body instead would send
+	// `SELECT tsAnomalyScores(…)` to a server that has never heard of it —
+	// which is exactly what this did until M2 wired the overlays and the
+	// channels came back empty.
+	v := (*lane).demand(compileNodeFor(inst.currentSplit, node, inst.lastRunBound, inst.frameSig))
 	return v.rec, v.schema
 }

@@ -928,9 +928,15 @@ WITH
     GROUP BY t
     ORDER BY t
   ),
-  scored AS (SELECT tsAnomalyScores(t, v, 60) FROM base)
-SELECT 1
+  scores AS (SELECT tsAnomalyScores(t, v, 60) FROM base),
+  spans  AS (SELECT tsAnomalySpans(t, v, 60, 3) FROM base)
+SELECT * FROM base
 ```
+
+Those two CTE names are not decoration. The **Series** tab fills its optional
+channels BY NAME — `scores` and `spans` — the way the Sankey takes its `flows`
+and `nodes`, so calling them anything else leaves the overlays empty. The sink
+selects from `base`, which is the series being charted.
 
 Four functions ship. `tsSmooth(t, v, halfWidth)` and `tsProfile(t, v, window)`
 are two-sided — every value sees the whole series, so they describe the data
@@ -939,10 +945,27 @@ causal: each score uses only what came before it, which is what makes replaying
 it a backtest rather than a recap. `tsAnomalySpans(t, v, window, k)` reports the
 top-k flagged extents directly as Timeline bands.
 
+## What the overlays add, and what they refuse to leave out
+
+With those two CTEs present the Series tab draws the score on its own plot,
+x-linked to the series above it, and the flagged extents as bands behind both.
+Three things come with it whether or not you asked:
+
+- a **baseline** — a moving-average residual at the detector's own window,
+  drawn in grey beside the score. A detector's curve alone always looks
+  impressive; beside the one-liner it has to beat, it has to earn the
+  difference. If the panel cannot compute it, it says why rather than quietly
+  omitting it.
+- the **warm-up region shaded**, because a detector that has not trained yet
+  reports zeros, and a flat zero is indistinguishable from a quiet period.
+- a **causality label** from the function itself. `tsAnomalyScores` is causal,
+  so replaying it IS a backtest; `tsProfile` is two-sided and says so, because
+  a two-sided score read as an alert history is hindsight wearing a uniform.
+
 ## Reading a client node, and why the sink cannot
 
 A `ts*` CTE is a **terminal leaf**: its output never exists as SQL, so nothing
-downstream can select from it. `SELECT * FROM scored` is a loud error, not a
+downstream can select from it. `SELECT * FROM scores` is a loud error, not a
 silent empty — the fix is to point a pane at the CTE instead, from the Graph
 tab's *fill tab* row, and the error says so.
 
