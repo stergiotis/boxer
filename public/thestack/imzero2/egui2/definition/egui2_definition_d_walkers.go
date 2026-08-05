@@ -244,6 +244,11 @@ func definitionsWalkersWidgets() []*ir.BuilderFactoryNode {
 			// form; pass the source provider's required credit line.
 			BeginMethod("tileAttribution").Arg("text", ctabb.S).
 			CodeClientRust(rustClientCode("tile_attribution_text = text;\n")).EndMethod().
+			// Link target behind the attribution text. Most providers require
+			// the credit to link somewhere (OSM: its copyright page); empty
+			// renders the credit as plain text.
+			BeginMethod("tileAttributionUrl").Arg("url", ctabb.S).
+			CodeClientRust(rustClientCode("tile_attribution_url = url;\n")).EndMethod().
 			// Max zoom level for this tile source (default 19 when 0).
 			BeginMethod("tileMaxZoom").Arg("zoom", ctabb.U8).
 			CodeClientRust(rustClientCode("tile_max_zoom = zoom;\n")).EndMethod().
@@ -274,6 +279,7 @@ let mut zoom_gesture: bool = true;
 let mut panning: bool = true;
 let mut tile_url_template: String = String::new();
 let mut tile_attribution_text: String = String::new();
+let mut tile_attribution_url: String = String::new();
 let mut tile_max_zoom: u8 = 0;
 let mut tile_size: u32 = 0;
 let mut tile_ca_file: String = String::new();
@@ -285,7 +291,8 @@ self.render_walkers_map(
     init_lat, init_lon, no_tiles,
     width, height, fill_available, override_zoom, override_center,
     zoom_gesture, panning,
-    tile_url_template, tile_attribution_text, tile_max_zoom, tile_size,
+    tile_url_template, tile_attribution_text, tile_attribution_url,
+    tile_max_zoom, tile_size,
     tile_ca_file, tile_insecure_tls,
 );
 `)).

@@ -3,11 +3,17 @@ package basemap
 import "testing"
 
 // TestConfigured pins the switch play's Map panel keys its basemap-on default
-// on: unset or whitespace-only BOXER_MAP_TILE_URL is "no custom server", a
-// non-empty value flips it on.
+// on, and the one the TLS knobs are gated behind. Since BOXER_MAP_TILE_URL
+// gained an OpenStreetMap default it reports "the deployment named its own
+// server", not "a URL exists" — Get() always answers the latter now. Unset
+// must stay false, or play starts fetching public tiles unasked and a stray
+// insecure flag would apply to OpenStreetMap.
 func TestConfigured(t *testing.T) {
 	if Configured() {
-		t.Fatalf("Configured() = true with BOXER_MAP_TILE_URL unset")
+		t.Fatalf("Configured() = true with BOXER_MAP_TILE_URL unset; the OSM default must not read as operator intent")
+	}
+	if TileURL.Get() == "" {
+		t.Fatalf("TileURL.Get() = empty with BOXER_MAP_TILE_URL unset; want the OSM default")
 	}
 	TileURL.SetForTest(t, "   ") // whitespace-only trims to empty → unset
 	if Configured() {
@@ -16,6 +22,31 @@ func TestConfigured(t *testing.T) {
 	TileURL.SetForTest(t, "http://mygis/{z}/{x}/{y}.png")
 	if !Configured() {
 		t.Fatalf("Configured() = false with BOXER_MAP_TILE_URL set")
+	}
+}
+
+// TestOpenStreetMapDefaults pins the defaults against the values walkers'
+// built-in source hard-codes (sources/openstreetmap.rs, and the TileSource
+// trait's own tile_size/max_zoom). They are the whole point of expressing the
+// default server as env params: if they drift from what the renderer's
+// fallback would have produced, an unconfigured deployment silently changes
+// which tiles it fetches.
+func TestOpenStreetMapDefaults(t *testing.T) {
+	cases := []struct {
+		name, got, want string
+	}{
+		{"BOXER_MAP_TILE_URL", TileURL.Get(), "https://tile.openstreetmap.org/{z}/{x}/{y}.png"},
+		{"BOXER_MAP_TILE_ATTRIBUTION", TileAttribution.Get(), "OpenStreetMap contributors"},
+		{"BOXER_MAP_TILE_ATTRIBUTION_URL", TileAttributionURL.Get(), "https://www.openstreetmap.org/copyright"},
+	}
+	for _, tc := range cases {
+		if tc.got != tc.want {
+			t.Errorf("%s default = %q; want %q", tc.name, tc.got, tc.want)
+		}
+	}
+	// walkers' TileSource::max_zoom default, and what OSM actually serves.
+	if zoom, set := clampMaxZoom(TileMaxZoom.Get()); !set || zoom != 19 {
+		t.Errorf("BOXER_MAP_TILE_MAX_ZOOM default = (%d, %t); want (19, true)", zoom, set)
 	}
 }
 

@@ -133,6 +133,36 @@ The Decision above says tile servers are Go-configurable at the call site, and l
 
 **Consequences.** The renderer gains a direct `reqwest` dependency (already in the tree via walkers; only the `blocking` feature is new) and `lru`. Turning verification off is logged at `warn` with the URL, once per tile-source construction. Setting both knobs is not an error: insecure wins, the CA file is ignored, and that is warned about — the alternative, refusing to start, punishes a deployment mid-incident for a redundant variable.
 
+### 2026-08-05 — the default tile server becomes an env default
+
+The Decision left the unconfigured case to the renderer: empty URL template → `walkers::sources::OpenStreetMap`, hard-coded in Rust. That made the endpoint a deployment actually talks to invisible from Go — absent from `boxer env list` and from [`doc/env-vars.md`](../env-vars.md), and not overridable one field at a time.
+
+**Scope.** `BOXER_MAP_TILE_URL`, `_ATTRIBUTION` and `_MAX_ZOOM` gain OpenStreetMap defaults matching what walkers' built-in source hard-codes, and a new `BOXER_MAP_TILE_ATTRIBUTION_URL` carries the credit's link target. `basemap.Apply` therefore always sends `.TileUrl`, and the renderer's built-in-source branch is now reached only by a `walkersMap` built without `.TileUrl` at all — the widget demo, not this package. Same endpoint, same credit, same max zoom: the default is stated rather than implied, not changed.
+
+**Subsidiary design decisions (extending the SD series).**
+
+- **SD16 — `Configured()` switches from `Get()` to `Lookup()`.** It now reports "the deployment named its own tile server", not "a URL exists" — with a default, the latter distinguishes nothing. Without this, play's Map panel (which keys its basemap-on default on it) would start fetching public-internet tiles unasked, against the offline default it deliberately holds.
+- **SD17 — The TLS knobs gate on `Configured()`, not on a non-empty URL.** Those were the same predicate when the URL had no default and are not any more, and the difference is load-bearing: gating on non-empty would let a stray `BOXER_MAP_TILE_INSECURE_TLS` disable certificate verification against `tile.openstreetmap.org`. Neither knob applies until a deployment names its own server. Verified by running with the flag set and no URL — the renderer logs nothing and fetches normally.
+- **SD18 — Attribution gains a URL knob because the custom source would otherwise drop it.** `CustomTileSource` hard-coded `attribution_url: ""` while walkers' OSM source carries its copyright page. Routing the default through the env path without this would have quietly downgraded OSM's required credit from a link to bare text — an attribution regression introduced by a refactor, which is the kind that goes unnoticed.
+
+**Consequences.** Inserting `tileAttributionUrl` mid-list renumbered `walkersMap` method ids 10-13 to 11-14. The FFI is live process-to-process with no persisted stream, so this is safe *provided both sides are rebuilt together*; a stale renderer misreads the opcodes.
+
+### 2026-08-05 — one tile client, one download pool
+
+§SD12 kept `walkers::HttpTiles` for everything that needed no TLS configuration and used `CustomHttpTiles` only for what did. Two clients selected by an env knob means the path a deployment runs is not the path anyone tests, and setting a CA file silently changed the whole fetch stack — client, user agent, threading — not just the trust roots. This entry converges them.
+
+**What decided it was operability, and it was worse than a tidiness argument.** walkers reports through the `log` crate, and imzero2 registered no `log` logger at all: `main.rs` installed a tracing subscriber via `set_global_default`, which — unlike the builder's own `init()` — does not install the bridge. Every walkers diagnostic was going to the no-op logger. On the default tile path, a server that was down, rate-limiting, or serving garbage produced a grey map and complete silence.
+
+**Scope.** `BasemapTiles` (renamed from `CustomHttpTiles`) is now the only `Tiles` implementation; `walkers::HttpTiles` is never constructed. It takes an `Arc<dyn TileSource>`, so the no-`.TileUrl` case still uses walkers' own `sources::OpenStreetMap` for the endpoint and its attribution — nothing about the default is restated in Rust. The `WalkersTiles` enum goes away with the second implementation, and with it the `&mut` variance problem §SD12 worked around. Separately, `main.rs` now bridges `log` into `tracing`.
+
+**Subsidiary design decisions (extending the SD series).**
+
+- **SD19 — Downloads run on one process-wide pool, not per tile source.** walkers gives every `HttpTiles` its own runtime and its own six-download budget, so two maps meant twelve concurrent connections and the cap meant nothing at the level a server actually rate-limits — the client. A `OnceLock` pool of six workers makes the bound real and costs a fixed six threads however many maps a window opens. Jobs carry their own client, so per-map certificate policy still applies; a dead reply channel skips the job rather than ending the worker, since workers now serve every map.
+- **SD20 — The `log` bridge caps at Info, not Trace.** walkers logs one `debug!` per tile decode and one `trace!` per download; every record below the cap is converted before it can be filtered, so bridging everything would put allocation on the tile path to produce noise. Warnings and errors arrive, which is what was missing.
+- **SD21 — Accepting that one-day-old code became the only path.** The risk is real and was weighed against the silence above: a bug now reaches every map rather than only TLS-configured deployments. Mitigated by the implementation being ~200 lines with the cache and interpolation arithmetic unit-tested, by behaviour still mirroring `HttpTiles`, and by the failure mode being visible now rather than silent. The user agent also becomes ours (`boxer-imzero2/<version>`) rather than `walkers/0.56.0`, which is closer to what OpenStreetMap's tile usage policy asks for; making it configurable with contact details is deferred.
+
+**Consequences.** Verified live: the pool logs `started the tile download pool` exactly once with six workers; the default OpenStreetMap path fetches with no errors; and both TLS paths still work against a probe server — insecure serves tiles and warns once, the CA file serves tiles and adds roots with verification on.
+
 ## Status
 
 Accepted — 2026-04-23. Implementation shipped across commits `8669a813` (initial binding), `0556800f` (tile server config), `1bdbebc8` (RadioButton UX cleanup), `c5f163ba` (h3o-wazero integration + uniform heatmap), and `7162f955` (SKILL.md §16 + this ADR). Known limitations documented here and in [`SKILL.md §16`](../skills/imzero2/SKILL.md) are deferred work with explicit triggers — no blocker for the current scope.

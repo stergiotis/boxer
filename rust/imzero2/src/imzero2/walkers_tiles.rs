@@ -1,26 +1,38 @@
 // Tile sources for the walkers basemap binding (ADR-0056).
 //
-// Two things live here. CustomTileSource is the XYZ URL-template source Go
-// configures through .TileUrl; walkers' own HttpTiles renders it whenever no
-// TLS configuration is in play, and that path is untouched. CustomHttpTiles is
-// a second Tiles implementation, reached only when Go asked for TLS
-// configuration walkers cannot express.
+// imzero2 fetches every basemap tile through BasemapTiles, its own
+// implementation of walkers' public `Tiles` trait — walkers' own `HttpTiles`
+// is not used. Two reasons, one forced and one chosen.
 //
-// It exists because walkers 0.56 offers no seam for it. HttpTiles builds its
-// reqwest client internally from HttpOptions, which carries cache, user agent
-// and parallelism and nothing about certificates; the Fetch / TilesIo /
-// TileFactory types that would let us supply a client are private to the
-// crate. The client it builds trusts the webpki root bundle and only that —
-// there is no system trust store to install a private CA into and SSL_CERT_FILE
-// is not consulted — so an https tile server behind an internal CA is
-// unreachable, whether or not its certificate is otherwise valid.
+// Forced: walkers 0.56 offers no seam for TLS configuration. `HttpTiles` builds
+// its reqwest client internally from `HttpOptions`, which carries cache, user
+// agent and parallelism and nothing about certificates; the Fetch / TilesIo /
+// TileFactory types that would let us supply a client are private to the crate.
+// The client it builds trusts the webpki root bundle and only that — there is
+// no system trust store to install a private CA into and SSL_CERT_FILE is not
+// consulted — so an https tile server behind an internal CA is unreachable
+// however valid its certificate.
 //
-// Observable behaviour deliberately mirrors HttpTiles: a 256-entry LRU, six
-// parallel downloads, interpolation from lower zoom levels when a tile has not
-// arrived yet, and a None cache entry written at request time that doubles as
-// the in-flight marker and as the negative cache for a fetch that failed.
-// imzero2 constructs HttpTiles with default HttpOptions, so that is the whole
-// of the behaviour there is to match.
+// Chosen: one client rather than two selected by an env knob. The deciding
+// argument was operability. walkers reports through the `log` crate, and every
+// one of its diagnostics — a failed fetch, a dead IO thread, an undecodable
+// response — was being dropped, so the default tile path could fail and leave
+// nothing but a grey map behind. main.rs now bridges `log` into tracing, which
+// fixes the silence; keeping one client is what stops the two paths drifting
+// again in timeout, retry, proxy, user-agent and request-logging behaviour,
+// and leaves one call site for the transport swap below.
+//
+// Behaviour still mirrors `HttpTiles` deliberately: a 256-entry LRU per map,
+// interpolation from lower zoom levels while a tile is in flight, and a None
+// cache entry written at request time that doubles as the in-flight marker and
+// as the negative cache for a fetch that failed.
+//
+// Downloads run on ONE process-wide pool, not per map. walkers gives each
+// HttpTiles its own runtime and its own 6-download budget, so two maps meant
+// twelve concurrent connections and the cap meant nothing at the only level
+// anyone rate-limits at — the client. The pool makes MAX_PARALLEL_DOWNLOADS a
+// real process-wide bound, and costs a fixed six threads however many maps a
+// window ends up with.
 //
 // deferred: the download half sits behind TileTransport because it should not
 // stay in this process. Routing tile requests over FFFI2 into Go — which
@@ -31,15 +43,17 @@
 // interpolation and the entire Go-side surface are unaffected by that swap.
 
 use std::num::NonZeroUsize;
-use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Receiver, Sender, SyncSender, TrySendError};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use lru::LruCache;
 use walkers::sources::{Attribution, TileSource};
 use walkers::{Tile, TileId, TilePiece, Tiles};
 
-// Matches walkers' own cache size and parallelism, so a deployment that flips
-// the TLS knobs on does not also silently change how hard it hits its server.
+// Cache size matches walkers'. MAX_PARALLEL_DOWNLOADS also matches, but means
+// something stronger here: walkers applies it per tile source, this pool
+// applies it per process, which is the level a tile server actually rate-limits
+// at. Six is what browsers allow per host and what walkers' own default is.
 const TILE_CACHE_ENTRIES: usize = 256;
 const MAX_PARALLEL_DOWNLOADS: usize = 6;
 const TILE_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -97,13 +111,14 @@ fn leak_str(s: &str) -> &'static str {
 pub fn make_custom_tile_source(
     url_template: String,
     attribution: &str,
+    attribution_url: &str,
     tile_size: u32,
     max_zoom: u8,
 ) -> CustomTileSource {
     CustomTileSource {
         url_template,
         attribution_text: leak_str(attribution),
-        attribution_url: "",
+        attribution_url: leak_str(attribution_url),
         tile_size_: if tile_size == 0 { 256 } else { tile_size },
         max_zoom_: if max_zoom == 0 { 19 } else { max_zoom },
     }
@@ -128,8 +143,9 @@ pub struct TileTlsConfig {
 }
 
 impl TileTlsConfig {
-    /// True when the caller asked for something the stock walkers client
-    /// cannot do, which is exactly when [`CustomHttpTiles`] is worth building.
+    /// True when either knob is set. Used to report a configuration that
+    /// cannot apply — TLS settings reaching the built-in source, which Go
+    /// gates against but a direct `walkersMap` caller could still do.
     pub fn is_configured(&self) -> bool {
         self.insecure || !self.ca_file.is_empty()
     }
@@ -153,83 +169,123 @@ pub trait TileTransport: Send {
     fn poll(&mut self) -> Option<(TileId, Tile)>;
 }
 
-/// Downloads tiles over HTTP with a client this process configures, so the
-/// certificate policy in [`TileTlsConfig`] can be applied.
+/// One unit of work for the shared pool: everything a worker needs to fetch
+/// and decode a tile without knowing which map asked.
+struct TileJob {
+    tile_id: TileId,
+    url: String,
+    /// Cloned per job — `reqwest::blocking::Client` is an `Arc` inside, and the
+    /// per-map client is what carries that map's certificate policy.
+    client: reqwest::blocking::Client,
+    ctx: egui::Context,
+    reply: Sender<(TileId, Tile)>,
+}
+
+/// The process-wide download pool. Started on first use and never shut down;
+/// the threads park on an empty queue, so an app that opens no map pays for
+/// nothing.
+struct TilePool {
+    submit: SyncSender<TileJob>,
+}
+
+static TILE_POOL: OnceLock<TilePool> = OnceLock::new();
+
+fn tile_pool() -> &'static TilePool {
+    TILE_POOL.get_or_init(|| {
+        // Bounded at the worker count, like walkers' request channel: a full
+        // queue means "already downloading as much as we should", and the
+        // rejected tile is re-requested next frame, by which time the camera
+        // may have moved and made it irrelevant. Unbounded queueing would spend
+        // the whole download budget on tiles nobody is looking at after a pan.
+        let (submit, jobs) = std::sync::mpsc::sync_channel::<TileJob>(MAX_PARALLEL_DOWNLOADS);
+        // One receiver shared by all workers: whoever is free takes the next
+        // job. The lock is held only across `recv`, so idle workers block on the
+        // mutex and never while downloading.
+        let jobs = Arc::new(Mutex::new(jobs));
+        for i in 0..MAX_PARALLEL_DOWNLOADS {
+            let jobs = Arc::clone(&jobs);
+            let spawned = std::thread::Builder::new()
+                .name(format!("imzero2-tiles-{i}"))
+                .spawn(move || download_worker(&jobs));
+            if let Err(e) = spawned {
+                tracing::error!(error = %e, worker = i, "could not spawn a tile download worker");
+            }
+        }
+        // Once per process, however many maps open. A second line here would
+        // mean the pool had stopped being shared, which is the property the
+        // download budget depends on.
+        tracing::info!(
+            workers = MAX_PARALLEL_DOWNLOADS,
+            "started the tile download pool"
+        );
+        TilePool { submit }
+    })
+}
+
+/// Downloads tiles over HTTP with a client this process configures.
+///
+/// The client is per map, so the certificate policy in [`TileTlsConfig`] can be
+/// applied; the threads are not. This owns none — it hands jobs to the shared
+/// pool and collects finished tiles on its own channel.
 pub struct HttpTransport {
-    request_tx: SyncSender<TileId>,
-    tile_rx: Receiver<(TileId, Tile)>,
+    /// `None` when the client could not be built. Every request then reports
+    /// "not queued" and the map draws empty, rather than silently falling back
+    /// to an unconfigured client the operator did not ask for.
+    client: Option<reqwest::blocking::Client>,
+    source: Arc<dyn TileSource + Send + Sync>,
+    ctx: egui::Context,
+    reply_tx: Sender<(TileId, Tile)>,
+    reply_rx: Receiver<(TileId, Tile)>,
 }
 
 impl HttpTransport {
-    /// Spawns the download workers. They are detached: dropping the transport
-    /// drops `request_tx`, their `recv` fails, and each exits after finishing
-    /// whatever it had in flight.
-    pub fn new<S>(source: &Arc<S>, tls: &TileTlsConfig, egui_ctx: &egui::Context) -> Self
-    where
-        S: TileSource + Send + Sync + 'static,
-    {
-        // Bounded at the worker count, like walkers' request channel: a full
-        // queue means "already downloading as much as we should", and the
-        // rejected tile is re-requested on the next frame, by which time the
-        // camera may have moved and made it irrelevant. Unbounded queueing
-        // would spend the whole download budget on tiles nobody is looking at
-        // any more after a fast pan.
-        let (request_tx, request_rx) = std::sync::mpsc::sync_channel(MAX_PARALLEL_DOWNLOADS);
-        let (tile_tx, tile_rx) = std::sync::mpsc::channel();
-
-        match build_client(tls) {
-            Ok(client) => {
-                // One receiver shared by all workers: whoever is free takes the
-                // next id. The lock is held only across `recv`, so the other
-                // workers block on the mutex while idle and never while
-                // downloading.
-                let requests = Arc::new(Mutex::new(request_rx));
-                for i in 0..MAX_PARALLEL_DOWNLOADS {
-                    let requests = Arc::clone(&requests);
-                    let source = Arc::clone(source);
-                    let client = client.clone();
-                    let tile_tx = tile_tx.clone();
-                    let ctx = egui_ctx.clone();
-                    let spawned = std::thread::Builder::new()
-                        .name(format!("imzero2-tiles-{i}"))
-                        .spawn(move || {
-                            download_worker(&requests, &*source, &client, &tile_tx, &ctx);
-                        });
-                    if let Err(e) = spawned {
-                        tracing::error!(error = %e, "could not spawn tile download worker");
-                    }
-                }
-            }
+    pub fn new(
+        source: Arc<dyn TileSource + Send + Sync>,
+        tls: &TileTlsConfig,
+        egui_ctx: &egui::Context,
+    ) -> Self {
+        let client = match build_client(tls) {
+            Ok(client) => Some(client),
             Err(e) => {
-                // No workers: every request is dropped and no tile ever
-                // arrives, so the map draws empty rather than falling back to
-                // an unconfigured client the operator did not ask for.
                 tracing::error!(error = %e, "tile HTTP client could not be built; this map will show no tiles");
+                None
             }
-        }
-
+        };
+        let (reply_tx, reply_rx) = std::sync::mpsc::channel();
         Self {
-            request_tx,
-            tile_rx,
+            client,
+            source,
+            ctx: egui_ctx.clone(),
+            reply_tx,
+            reply_rx,
         }
     }
 }
 
 impl TileTransport for HttpTransport {
     fn request(&mut self, tile_id: TileId) -> bool {
-        match self.request_tx.try_send(tile_id) {
+        let Some(client) = &self.client else {
+            return false;
+        };
+        let job = TileJob {
+            tile_id,
+            url: self.source.tile_url(tile_id),
+            client: client.clone(),
+            ctx: self.ctx.clone(),
+            reply: self.reply_tx.clone(),
+        };
+        match tile_pool().submit.try_send(job) {
             Ok(()) => true,
-            // Full: already downloading as much as we should. Disconnected:
-            // every worker is gone, because the client failed to build or the
-            // threads died. Both answer "not queued", so nothing is cached as
-            // pending; neither panics inside a render loop the way walkers'
-            // own send-failure path does.
+            // Full: the process is already downloading as much as it should.
+            // Disconnected: every worker is gone. Both answer "not queued", so
+            // nothing is cached as pending; neither panics inside a render loop
+            // the way walkers' own send-failure path does.
             Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => false,
         }
     }
 
     fn poll(&mut self) -> Option<(TileId, Tile)> {
-        self.tile_rx.try_recv().ok()
+        self.reply_rx.try_recv().ok()
     }
 }
 
@@ -275,15 +331,10 @@ fn build_client(tls: &TileTlsConfig) -> reqwest::Result<reqwest::blocking::Clien
     builder.build()
 }
 
-fn download_worker<S>(
-    requests: &Mutex<Receiver<TileId>>,
-    source: &S,
-    client: &reqwest::blocking::Client,
-    tile_tx: &std::sync::mpsc::Sender<(TileId, Tile)>,
-    ctx: &egui::Context,
-) where
-    S: TileSource,
-{
+/// Pool worker. Serves every map in the process, so a dead reply channel (its
+/// map was dropped, or its tile config changed and it was rebuilt) skips the
+/// job rather than ending the thread.
+fn download_worker(jobs: &Mutex<Receiver<TileJob>>) {
     // `Style::default()` rather than `Style`: walkers' Style is a unit struct
     // only while its `mvt` feature is off, and this should not break the day
     // something turns it on.
@@ -293,79 +344,52 @@ fn download_worker<S>(
     )]
     let style = walkers::Style::default();
     loop {
-        let tile_id = {
-            let Ok(rx) = requests.lock() else {
+        let job = {
+            let Ok(rx) = jobs.lock() else {
                 // Poisoned by a panicking sibling; this worker is done.
                 return;
             };
             match rx.recv() {
-                Ok(tile_id) => tile_id,
-                // Transport dropped — the map is gone or its tile config
-                // changed and it was rebuilt.
+                Ok(job) => job,
+                // The pool is static, so this only happens at process teardown.
                 Err(_) => return,
             }
         };
 
-        let url = source.tile_url(tile_id);
-        let body = client
-            .get(&url)
+        let body = job
+            .client
+            .get(&job.url)
             .send()
             .and_then(reqwest::blocking::Response::error_for_status)
             .and_then(reqwest::blocking::Response::bytes);
         let body = match body {
             Ok(body) => body,
             Err(e) => {
-                tracing::warn!(url = %url, error = %e, "tile download failed");
+                tracing::warn!(url = %job.url, error = %e, "tile download failed");
                 continue;
             }
         };
 
         // Decode and upload here rather than on the render thread — this is
-        // the whole reason the workers exist and not just an async client.
-        match Tile::new(&body, &style, tile_id.zoom, ctx) {
+        // the whole reason the pool exists and not just an async client.
+        match Tile::new(&body, &style, job.tile_id.zoom, &job.ctx) {
             Ok(tile) => {
-                if tile_tx.send((tile_id, tile)).is_err() {
-                    return;
+                if job.reply.send((job.tile_id, tile)).is_err() {
+                    // That map is gone. Other maps still need this worker.
+                    continue;
                 }
                 // Without this a still map never repaints and the tile only
                 // appears the next time the user touches something.
-                ctx.request_repaint();
+                job.ctx.request_repaint();
             }
-            Err(e) => tracing::warn!(url = %url, error = %e, "tile could not be decoded"),
+            Err(e) => tracing::warn!(url = %job.url, error = %e, "tile could not be decoded"),
         }
     }
 }
 
-/// The tile source a walkers map draws from: walkers' own downloader, or ours
-/// when the TLS configuration requires it.
-///
-/// An enum rather than a `Box<dyn Tiles>` for a borrow-checker reason, not a
-/// stylistic one. `walkers::Map::new` takes `Option<&'b mut dyn Tiles>`, whose
-/// elided object lifetime is `'b` — the borrow of the retained state, which is
-/// not `'static`. A `&mut Box<dyn Tiles + 'static>` cannot be reborrowed to
-/// that, since `&mut T` is invariant in `T`. Coercing from a concrete variant
-/// can, which is what [`WalkersTiles::as_dyn`] does. It also saves the box.
-pub enum WalkersTiles {
-    /// walkers' downloader, for the built-in OpenStreetMap source and for any
-    /// custom source that needs no TLS configuration.
-    Walkers(walkers::HttpTiles),
-    /// Ours, for a custom source that does.
-    Custom(CustomHttpTiles),
-}
-
-impl WalkersTiles {
-    pub fn as_dyn(&mut self) -> &mut dyn Tiles {
-        match self {
-            Self::Walkers(t) => t,
-            Self::Custom(t) => t,
-        }
-    }
-}
-
-/// A [`Tiles`] implementation whose downloads run through a client this
-/// process configures. Used in place of `walkers::HttpTiles` when — and only
-/// when — [`TileTlsConfig::is_configured`] holds.
-pub struct CustomHttpTiles {
+/// The [`Tiles`] implementation every imzero2 basemap draws from, whatever its
+/// source: the OpenStreetMap default, a custom XYZ template, verified or not.
+pub struct BasemapTiles {
     attribution: Attribution,
     tile_size: u32,
     max_zoom: u8,
@@ -375,13 +399,16 @@ pub struct CustomHttpTiles {
     transport: Box<dyn TileTransport>,
 }
 
-impl CustomHttpTiles {
-    pub fn new(source: CustomTileSource, tls: &TileTlsConfig, egui_ctx: &egui::Context) -> Self {
+impl BasemapTiles {
+    pub fn new(
+        source: Arc<dyn TileSource + Send + Sync>,
+        tls: &TileTlsConfig,
+        egui_ctx: &egui::Context,
+    ) -> Self {
         let attribution = source.attribution();
         let tile_size = source.tile_size();
         let max_zoom = source.max_zoom();
-        let source = Arc::new(source);
-        let transport = Box::new(HttpTransport::new(&source, tls, egui_ctx));
+        let transport = Box::new(HttpTransport::new(source, tls, egui_ctx));
         Self {
             attribution,
             tile_size,
@@ -402,8 +429,7 @@ impl CustomHttpTiles {
     }
 
     /// Request `tile_id` unless it is already cached or already requested. A
-    /// saturated transport leaves the cache untouched so the next frame asks
-    /// again.
+    /// saturated pool leaves the cache untouched so the next frame asks again.
     fn make_sure_is_fetched(&mut self, tile_id: TileId) {
         if self.cache.contains(&tile_id) {
             return;
@@ -427,7 +453,7 @@ impl CustomHttpTiles {
     }
 }
 
-impl Tiles for CustomHttpTiles {
+impl Tiles for BasemapTiles {
     fn at(&mut self, tile_id: TileId) -> Option<TilePiece> {
         self.take_one_fetched();
 

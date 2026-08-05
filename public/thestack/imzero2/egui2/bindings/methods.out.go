@@ -4647,6 +4647,14 @@ func (inst WalkersMapFluid) TileAttribution(text string) WalkersMapFluid {
 	return inst
 }
 
+func (inst WalkersMapFluid) TileAttributionUrl(url string) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdTileAttributionUrl))
+	r.WriteString(url)
+
+	return inst
+}
+
 func (inst WalkersMapFluid) TileMaxZoom(zoom uint8) WalkersMapFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(WalkersMapMethodIdTileMaxZoom))

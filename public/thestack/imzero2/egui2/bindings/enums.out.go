@@ -903,19 +903,20 @@ const (
 const (
 	WalkersMapMethodIdBuild WalkersMapMethodIdE = 0
 
-	WalkersMapMethodIdWidth           WalkersMapMethodIdE = 1
-	WalkersMapMethodIdHeight          WalkersMapMethodIdE = 2
-	WalkersMapMethodIdFillAvailable   WalkersMapMethodIdE = 3
-	WalkersMapMethodIdSetZoom         WalkersMapMethodIdE = 4
-	WalkersMapMethodIdCenterAt        WalkersMapMethodIdE = 5
-	WalkersMapMethodIdZoomGesture     WalkersMapMethodIdE = 6
-	WalkersMapMethodIdPanning         WalkersMapMethodIdE = 7
-	WalkersMapMethodIdTileUrl         WalkersMapMethodIdE = 8
-	WalkersMapMethodIdTileAttribution WalkersMapMethodIdE = 9
-	WalkersMapMethodIdTileMaxZoom     WalkersMapMethodIdE = 10
-	WalkersMapMethodIdTileSize        WalkersMapMethodIdE = 11
-	WalkersMapMethodIdTileCaFile      WalkersMapMethodIdE = 12
-	WalkersMapMethodIdTileInsecureTls WalkersMapMethodIdE = 13
+	WalkersMapMethodIdWidth              WalkersMapMethodIdE = 1
+	WalkersMapMethodIdHeight             WalkersMapMethodIdE = 2
+	WalkersMapMethodIdFillAvailable      WalkersMapMethodIdE = 3
+	WalkersMapMethodIdSetZoom            WalkersMapMethodIdE = 4
+	WalkersMapMethodIdCenterAt           WalkersMapMethodIdE = 5
+	WalkersMapMethodIdZoomGesture        WalkersMapMethodIdE = 6
+	WalkersMapMethodIdPanning            WalkersMapMethodIdE = 7
+	WalkersMapMethodIdTileUrl            WalkersMapMethodIdE = 8
+	WalkersMapMethodIdTileAttribution    WalkersMapMethodIdE = 9
+	WalkersMapMethodIdTileAttributionUrl WalkersMapMethodIdE = 10
+	WalkersMapMethodIdTileMaxZoom        WalkersMapMethodIdE = 11
+	WalkersMapMethodIdTileSize           WalkersMapMethodIdE = 12
+	WalkersMapMethodIdTileCaFile         WalkersMapMethodIdE = 13
+	WalkersMapMethodIdTileInsecureTls    WalkersMapMethodIdE = 14
 )
 
 const (
