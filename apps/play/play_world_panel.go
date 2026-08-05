@@ -281,7 +281,7 @@ func (inst *WorldDriver) statusLine(numRows int64, valueCol int, schema *arrow.S
 		fmt.Fprintf(&b, " · %s rows unmatched", humanize.Comma(int64(inst.unmatched)))
 	}
 	if inst.dupes > 0 {
-		fmt.Fprintf(&b, " · %d duplicate rows (last wins)", inst.dupes)
+		fmt.Fprintf(&b, " · %s duplicate rows (last wins)", humanize.Comma(int64(inst.dupes)))
 	}
 	_ = numRows
 	return b.String()

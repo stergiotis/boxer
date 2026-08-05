@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -616,7 +617,8 @@ func (inst *flowDriver) renderLensText(lines []string, feed flowLensFeed) {
 	for _, ln := range lines {
 		flat = append(flat, strings.Split(ln, "\n")...)
 	}
-	c.Label(fmt.Sprintf("%d lines · raw %s output", len(flat), inst.lens.String())).Send()
+	c.Label(fmt.Sprintf("%s lines · raw %s output",
+		humanize.Comma(int64(len(flat))), inst.lens.String())).Send()
 	c.Separator().Horizontal().Send()
 	for _, ln := range flat {
 		if ln == "" {

@@ -819,7 +819,7 @@ func (inst *treemapDriver) describeNode(n *layout.Node) string {
 		}
 	}
 	if len(n.Children) > 0 {
-		fmt.Fprintf(&b, " · %d child(ren)", len(n.Children))
+		fmt.Fprintf(&b, " · %s child(ren)", humanize.Comma(int64(len(n.Children))))
 		if n.Size > 0 {
 			fmt.Fprintf(&b, " · own %s", treemapQty(n.Size, inst.stats.unit))
 		}
@@ -902,7 +902,7 @@ func treemapColorDataLabel(k hierColorKindE) string {
 // could not decide.
 func (inst *treemapDriver) statusLine() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d cells", inst.stats.nodes)
+	fmt.Fprintf(&b, "%s cells", humanize.Comma(int64(inst.stats.nodes)))
 	if inst.root != nil {
 		fmt.Fprintf(&b, " · %s total", treemapQty(inst.root.TotalSize(), inst.stats.unit))
 	}
@@ -918,13 +918,14 @@ func (inst *treemapDriver) statusLine() string {
 		}
 	}
 	if inst.inherited > 0 {
-		fmt.Fprintf(&b, " · %d coloured from below", inst.inherited)
+		fmt.Fprintf(&b, " · %s coloured from below", humanize.Comma(int64(inst.inherited)))
 	}
 	if inst.mixed > 0 {
-		fmt.Fprintf(&b, " · %d mixed", inst.mixed)
+		fmt.Fprintf(&b, " · %s mixed", humanize.Comma(int64(inst.mixed)))
 	}
 	if inst.stats.colorConflicts > 0 {
-		fmt.Fprintf(&b, " · %d cell(s) given two colours, first kept", inst.stats.colorConflicts)
+		fmt.Fprintf(&b, " · %s cell(s) given two colours, first kept",
+			humanize.Comma(int64(inst.stats.colorConflicts)))
 	}
 	if inst.stats.droppedPath > 0 {
 		fmt.Fprintf(&b, " · %s row(s) without a path", humanize.Comma(int64(inst.stats.droppedPath)))
@@ -933,16 +934,17 @@ func (inst *treemapDriver) statusLine() string {
 		fmt.Fprintf(&b, " · %s row(s) without a finite, non-negative value", humanize.Comma(int64(inst.stats.droppedValue)))
 	}
 	if inst.stats.droppedDup > 0 {
-		fmt.Fprintf(&b, " · %d duplicate id(s) dropped", inst.stats.droppedDup)
+		fmt.Fprintf(&b, " · %s duplicate id(s) dropped", humanize.Comma(int64(inst.stats.droppedDup)))
 	}
 	if inst.stats.reparented > 0 {
 		fmt.Fprintf(&b, " · %s row(s) with an unknown parent, drawn as roots", humanize.Comma(int64(inst.stats.reparented)))
 	}
 	if inst.stats.truncated > 0 {
-		fmt.Fprintf(&b, " · %d path(s) cut at depth %d", inst.stats.truncated, hierMaxDepth)
+		fmt.Fprintf(&b, " · %s path(s) cut at depth %d",
+			humanize.Comma(int64(inst.stats.truncated)), hierMaxDepth)
 	}
 	if inst.stats.capped {
-		fmt.Fprintf(&b, " · capped at %d cells (aggregate the tail)", hierMaxNodes)
+		fmt.Fprintf(&b, " · capped at %s cells (aggregate the tail)", humanize.Comma(hierMaxNodes))
 		if inst.stats.droppedCapped > 0 {
 			fmt.Fprintf(&b, ", %s row(s) past it", humanize.Comma(int64(inst.stats.droppedCapped)))
 		}

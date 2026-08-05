@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/dustin/go-humanize"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -562,8 +563,8 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 		} else if nRows > projectionMaxRows {
 			c.Separator().Vertical().Send()
 			for rt := range c.RichTextLabel(
-				fmt.Sprintf("will sample %d of %d (UMAP wall-clock cap)",
-					projectionMaxRows, nRows)) {
+				fmt.Sprintf("will sample %s of %s (UMAP wall-clock cap)",
+					humanize.Comma(projectionMaxRows), humanize.Comma(nRows))) {
 				rt.Small().Weak()
 			}
 		}
@@ -645,13 +646,13 @@ func formatEntityCountLabel(nRows int64, snap projectorSnapshot) (label string) 
 	switch snap.status {
 	case projectorStatusDone:
 		if snap.totalRows > int64(len(snap.coords)) {
-			label = fmt.Sprintf("%d of %d entities · sampled",
-				len(snap.coords), snap.totalRows)
+			label = fmt.Sprintf("%s of %s entities · sampled",
+				humanize.Comma(int64(len(snap.coords))), humanize.Comma(snap.totalRows))
 			return
 		}
-		label = fmt.Sprintf("%d entities", len(snap.coords))
+		label = fmt.Sprintf("%s entities", humanize.Comma(int64(len(snap.coords))))
 	default:
-		label = fmt.Sprintf("%d entities", nRows)
+		label = fmt.Sprintf("%s entities", humanize.Comma(nRows))
 	}
 	return
 }

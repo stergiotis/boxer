@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/dustin/go-humanize"
 )
 
 // play_flow_lens.go is the ADR-0153 lens layer: ClickHouse EXPLAIN outputs
@@ -259,8 +261,9 @@ func (ix explainPlanIndex) summary() string {
 		b.WriteString(" cond ")
 		b.WriteString(truncateRunes(ix.Condition, 48))
 	}
-	fmt.Fprintf(&b, " parts %d/%d granules %d/%d",
-		ix.SelectedParts, ix.InitialParts, ix.SelectedGranules, ix.InitialGranules)
+	fmt.Fprintf(&b, " parts %d/%d granules %s/%s",
+		ix.SelectedParts, ix.InitialParts,
+		humanize.Comma(int64(ix.SelectedGranules)), humanize.Comma(int64(ix.InitialGranules)))
 	return b.String()
 }
 

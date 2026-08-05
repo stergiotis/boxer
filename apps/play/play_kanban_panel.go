@@ -8,6 +8,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -517,8 +518,8 @@ func (inst *KanbanDriver) statusLine() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d cards · %d lanes", len(inst.model.Cards), len(inst.model.Columns))
 	if inst.truncated > 0 {
-		fmt.Fprintf(&b, " · %d more rows not shown (the board caps at %d — add a LIMIT or GROUP BY)",
-			inst.truncated, kanbanMaxCards)
+		fmt.Fprintf(&b, " · %s more rows not shown (the board caps at %d — add a LIMIT or GROUP BY)",
+			humanize.Comma(int64(inst.truncated)), kanbanMaxCards)
 	}
 	// A lanes node that failed must not read as "there were no declared
 	// lanes": the board silently falls back to row-derived lanes, which looks

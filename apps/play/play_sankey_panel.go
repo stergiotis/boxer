@@ -859,13 +859,13 @@ func (inst *SankeyDriver) statusLine() string {
 		fmt.Fprintf(&b, " · not alluvial: %s", inst.modeFallback)
 	}
 	if inst.stats.collapsed > 0 {
-		fmt.Fprintf(&b, " · %d duplicate flow(s) summed", inst.stats.collapsed)
+		fmt.Fprintf(&b, " · %s duplicate flow(s) summed", humanize.Comma(int64(inst.stats.collapsed)))
 	}
 	if inst.stats.droppedValue > 0 {
 		fmt.Fprintf(&b, " · %s row(s) without an endpoint or a positive value", humanize.Comma(int64(inst.stats.droppedValue)))
 	}
 	if inst.stats.droppedSelf > 0 {
-		fmt.Fprintf(&b, " · %d self-flow(s) dropped", inst.stats.droppedSelf)
+		fmt.Fprintf(&b, " · %s self-flow(s) dropped", humanize.Comma(int64(inst.stats.droppedSelf)))
 	}
 	if inst.stats.capped {
 		fmt.Fprintf(&b, " · capped at %d nodes / %d flows (add a LIMIT or aggregate)", sankeyMaxNodes, sankeyMaxLinks)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
 	"github.com/stergiotis/boxer/public/analytics/stats/letterval"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -552,8 +553,8 @@ func (inst *DistDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k d
 // cache key holds and the message does not re-fold every frame.
 func (inst *DistDriver) reject(row int64, label, why string) {
 	inst.series = []distSeries{}
-	inst.foldErr = fmt.Sprintf("Row %d (series %q) violates the distribution contract: %s. The panel draws nothing until every row is valid.",
-		row, label, why)
+	inst.foldErr = fmt.Sprintf("Row %s (series %q) violates the distribution contract: %s. The panel draws nothing until every row is valid.",
+		humanize.Comma(int64(row)), label, why)
 }
 
 func (inst *DistDriver) statusLine() string {
@@ -572,9 +573,9 @@ func (inst *DistDriver) statusLine() string {
 			estimators = append(estimators, e)
 		}
 	}
-	fmt.Fprintf(&b, "%d series · Σn %d", len(inst.series), totalN)
+	fmt.Fprintf(&b, "%d series · Σn %s", len(inst.series), humanize.Comma(int64(totalN)))
 	if totalNull > 0 {
-		fmt.Fprintf(&b, " (nulls %d)", totalNull)
+		fmt.Fprintf(&b, " (nulls %s)", humanize.Comma(int64(totalNull)))
 	}
 	fmt.Fprintf(&b, " · estimator: %s", strings.Join(estimators, ", "))
 	fmt.Fprintf(&b, " · band: DKW %.0f%% preview", (1-distBandAlpha)*100)
@@ -585,7 +586,8 @@ func (inst *DistDriver) statusLine() string {
 		b.WriteString(" · grids differ across series")
 	}
 	if inst.truncated > 0 {
-		fmt.Fprintf(&b, " · %d more series not shown (cap %d — GROUP BY coarser)", inst.truncated, distMaxSeries)
+		fmt.Fprintf(&b, " · %s more series not shown (cap %d — GROUP BY coarser)",
+			humanize.Comma(int64(inst.truncated)), distMaxSeries)
 	}
 	return b.String()
 }

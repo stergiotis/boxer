@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/dustin/go-humanize"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
@@ -3162,8 +3163,8 @@ func (inst *PlayApp) ensureColLabels(schema *arrow.Schema) {
 func historyLabel(e HistoryEntry) string {
 	sql := strings.ReplaceAll(e.SQL, "\n", " ")
 	sql = strings.Join(strings.Fields(sql), " ")
-	status := fmt.Sprintf("%dr %s",
-		e.NumRows, e.Elapsed.Round(time.Millisecond))
+	status := fmt.Sprintf("%sr %s",
+		humanize.Comma(e.NumRows), e.Elapsed.Round(time.Millisecond))
 	if e.ErrorText != "" {
 		status = "ERR"
 	}

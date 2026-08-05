@@ -526,6 +526,28 @@ and G is 10⁹ in every locale, which B is not. In flight a run now reads
 `Summary.String()` keeps raw digits: it is a Stringer for logs, where a count is
 grepped and parsed rather than read.
 
+**Completed across play, 2026-08-05.** The first pass reached the status bar and
+the panels' dropped-row notes; a survey of the remaining 112 `%d` sites found the
+same unbounded counts in panel status lines, refusals and list labels. The
+sweeping question — *which* of 112 — is settled by one mechanical test: **group a
+count only when it can exceed four digits**, because below 10,000 a comma adds
+nothing. That resolves against the caps the code already declares (kanban 2000,
+sankey 300/1500, flow 160, network 400/1000, dist 32 → plain; hier 20000,
+projection 10000 → grouped), and it leaves alone, by construction:
+
+- numbers that are not display at all — hash/cache-key builders, `LIMIT %d` in
+  generated SQL, `Summary.String()`;
+- config and code constants — depths, stages, palette length, pass counts,
+  DockIDs, HTTP status codes, type widths;
+- indices into a fixed structure — parse `line %d:%d`, a column index in an
+  internal error;
+- the result grid's per-row gutter label, which is a coordinate rather than a
+  magnitude, in a per-row render path.
+
+Bytes found in the sweep took `IBytes` with them: the rich-detail inline limit
+read `1048576 bytes is over the 1048576-byte inline limit` and now reads
+`1.0 MiB is over the 1.0 MiB inline limit`.
+
 ### 2026-08-05 — a lane-owning panel can show and cancel its own run: `nodeLane.abort`
 
 The Map (ADR-0096, on the param seam since slice 5c) runs its raster query on

@@ -6,6 +6,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -131,8 +132,8 @@ func (inst *PlayApp) renderDetailPane(rec arrow.RecordBatch, schema *arrow.Schem
 	for range c.Vertical().KeepIter() {
 		entityLabel, natKey := entityHeader(rec, row)
 
-		c.Label(fmt.Sprintf("detail · row %d / %d",
-			row+1, rec.NumRows())).Send()
+		c.Label(fmt.Sprintf("detail · row %s / %s",
+			humanize.Comma(row+1), humanize.Comma(rec.NumRows()))).Send()
 		c.Separator().Horizontal().Send()
 
 		for range c.Horizontal().KeepIter() {

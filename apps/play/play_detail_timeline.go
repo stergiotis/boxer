@@ -8,6 +8,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
@@ -442,7 +443,8 @@ func (inst temporalAttr) summary() string {
 		if len(inst.spans) == 1 {
 			return formatEpochMS(lo) + " … " + formatEpochMS(hi)
 		}
-		return fmt.Sprintf("%d windows · %s … %s", len(inst.spans), formatEpochMS(lo), formatEpochMS(hi))
+		return fmt.Sprintf("%s windows · %s … %s",
+			humanize.Comma(int64(len(inst.spans))), formatEpochMS(lo), formatEpochMS(hi))
 	default:
 		if len(inst.points) == 1 {
 			return formatEpochMS(inst.points[0])
@@ -451,7 +453,8 @@ func (inst temporalAttr) summary() string {
 		if !ok {
 			return ""
 		}
-		return fmt.Sprintf("%d items · %s … %s", len(inst.points), formatEpochMS(lo), formatEpochMS(hi))
+		return fmt.Sprintf("%s items · %s … %s",
+			humanize.Comma(int64(len(inst.points))), formatEpochMS(lo), formatEpochMS(hi))
 	}
 }
 
@@ -650,7 +653,7 @@ func (inst *DetailTimeline) renderLegend() {
 			}
 		}
 		if inst.dropped > 0 {
-			for rt := range c.RichTextLabel(fmt.Sprintf("+%d more not shown", inst.dropped)) {
+			for rt := range c.RichTextLabel(fmt.Sprintf("+%s more not shown", humanize.Comma(int64(inst.dropped)))) {
 				rt.Small().Weak()
 			}
 		}

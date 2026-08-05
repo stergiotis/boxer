@@ -9,6 +9,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
@@ -407,10 +408,10 @@ func (inst *TimelineDriver) bandsStatusLine() (s string) {
 	case inst.bandsMappedKey == "":
 		return "bands pending — run a query above"
 	}
-	parts := []string{fmt.Sprintf("%d bands", len(inst.bands))}
+	parts := []string{fmt.Sprintf("%s bands", humanize.Comma(int64(len(inst.bands))))}
 	if inst.bandsSkipped > 0 {
 		parts = append(parts,
-			fmt.Sprintf("%d skipped (unknown color or to<from)", inst.bandsSkipped))
+			fmt.Sprintf("%s skipped (unknown color or to<from)", humanize.Comma(int64(inst.bandsSkipped))))
 	}
 	return strings.Join(parts, " · ")
 }

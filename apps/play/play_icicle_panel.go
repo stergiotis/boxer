@@ -481,11 +481,11 @@ const icicleFramePathRunes = 96
 // noticed but could not decide.
 func (inst *IcicleDriver) statusLine() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d frames", inst.stats.nodes)
+	fmt.Fprintf(&b, "%s frames", humanize.Comma(int64(inst.stats.nodes)))
 	if lay := inst.layout; lay != nil {
 		fmt.Fprintf(&b, " · %d deep · %s total", lay.Report.Rows, icicleQty(lay.Report.Total, inst.stats.unit))
 		if lay.Report.Pruned > 0 {
-			fmt.Fprintf(&b, " · %d frame(s) pruned (%s)", lay.Report.Pruned,
+			fmt.Fprintf(&b, " · %s frame(s) pruned (%s)", humanize.Comma(int64(lay.Report.Pruned)),
 				icicleQty(lay.Report.PrunedValue, inst.stats.unit))
 		}
 	}
@@ -497,16 +497,17 @@ func (inst *IcicleDriver) statusLine() string {
 		fmt.Fprintf(&b, " · %s row(s) without a finite, non-negative value", humanize.Comma(int64(inst.stats.droppedValue)))
 	}
 	if inst.stats.droppedDup > 0 {
-		fmt.Fprintf(&b, " · %d duplicate id(s) dropped", inst.stats.droppedDup)
+		fmt.Fprintf(&b, " · %s duplicate id(s) dropped", humanize.Comma(int64(inst.stats.droppedDup)))
 	}
 	if inst.stats.reparented > 0 {
 		fmt.Fprintf(&b, " · %s row(s) with an unknown parent, drawn as roots", humanize.Comma(int64(inst.stats.reparented)))
 	}
 	if inst.stats.truncated > 0 {
-		fmt.Fprintf(&b, " · %d path(s) cut at depth %d", inst.stats.truncated, icicleMaxDepth)
+		fmt.Fprintf(&b, " · %s path(s) cut at depth %d",
+			humanize.Comma(int64(inst.stats.truncated)), icicleMaxDepth)
 	}
 	if inst.stats.capped {
-		fmt.Fprintf(&b, " · capped at %d frames (prune, or aggregate the tail)", hierMaxNodes)
+		fmt.Fprintf(&b, " · capped at %s frames (prune, or aggregate the tail)", humanize.Comma(hierMaxNodes))
 		if inst.stats.droppedCapped > 0 {
 			fmt.Fprintf(&b, ", %s row(s) past it", humanize.Comma(int64(inst.stats.droppedCapped)))
 		}

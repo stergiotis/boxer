@@ -11,6 +11,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -323,7 +324,8 @@ func buildRichEntry(d richDecl, raw string) *richEntry {
 		return e
 	}
 	if d.kind != richKindImage && len(raw) > richMaxTextBytes {
-		e.reason = fmt.Sprintf("%d bytes is over the %d-byte inline limit", len(raw), richMaxTextBytes)
+		e.reason = fmt.Sprintf("%s is over the %s inline limit",
+			humanize.IBytes(uint64(len(raw))), humanize.IBytes(richMaxTextBytes))
 		return e
 	}
 	switch d.kind {
