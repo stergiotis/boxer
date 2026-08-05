@@ -203,6 +203,12 @@ const (
 	CellStatePreview
 	// CellStateHovered — mouse pointer is over the cell this frame.
 	CellStateHovered
+	// CellStateSelf — the cell carries a container's OWN size rather than a
+	// child's (ADR-0166 §SD3). Its Node is the container itself, so a
+	// ColoringI or StyleI seeing this bit is being asked about the parent's
+	// own quantity, not about a distinct node. Never interactive: drilling
+	// into a node from inside itself has nowhere to go.
+	CellStateSelf
 )
 
 // Has reports whether every bit in flag is set in s.
@@ -349,6 +355,22 @@ func WithCellLabel(fn func(*layout.Node) string) Option {
 	return func(t *Treemap) { t.cellLabelFn = fn }
 }
 
+// WithSelfCellLabel supplies the secondary line for SELF cells — the cell a
+// container gets for its own size when it has one (ADR-0166 §SD3). fn is called
+// with the CONTAINER, and the number to format is its own Size rather than its
+// TotalSize.
+//
+// It does not default to WithCellLabel's fn. That one answers for a node's
+// total, which is precisely the wrong number on the cell that exists to show
+// the part of the total the container holds itself; printing it there would
+// make a container's own cell claim the container's whole weight.
+//
+// Validation tier: none — a nil fn (the default) leaves self cells with a name
+// and no value line.
+func WithSelfCellLabel(fn func(*layout.Node) string) Option {
+	return func(t *Treemap) { t.selfCellLabelFn = fn }
+}
+
 // cellDesc captures the per-frame state needed for the post-render
 // interaction pass. At most one of drillable (down) or drillUpTo>0 (up).
 type cellDesc struct {
@@ -387,6 +409,12 @@ type Treemap struct {
 	// rendered on a second de-emphasized line beneath each cell's name (see
 	// WithCellLabel). Returning "" suppresses the line for that cell.
 	cellLabelFn func(*layout.Node) string
+	// selfCellLabelFn is cellLabelFn's counterpart for self cells (see
+	// WithSelfCellLabel). Deliberately separate rather than falling back to
+	// cellLabelFn: that one is called with a container and answers for its
+	// TOTAL, which is the wrong number to print on the cell that exists to
+	// show the part of it the container holds itself.
+	selfCellLabelFn func(*layout.Node) string
 	// metrics supplies the measured label-height gates (see metrics.go).
 	metrics labelMetrics
 
@@ -495,6 +523,54 @@ func (t *Treemap) SetContainerSize(w, h float32) {
 // does not reset the user's drill position.
 func (t *Treemap) SetCellLabel(fn func(*layout.Node) string) {
 	t.cellLabelFn = fn
+}
+
+// SetColoring replaces the active ColoringI after construction (see
+// WithColoring). Mirrors SetCellLabel: colour is a draw-time decision, so a
+// host switching what a cell's fill encodes should not have to rebuild the
+// widget and lose the drill position with it.
+//
+// Validation tier: panic — a nil coloring is a programmer error, as it is in
+// WithColoring.
+func (t *Treemap) SetColoring(coloring ColoringI) {
+	if coloring == nil {
+		panic("treemap: SetColoring requires a non-nil ColoringI")
+	}
+	t.coloring = coloring
+}
+
+// SetMaxNestingDepth updates how many preview levels render below the frontier
+// after construction (see WithMaxNestingDepth). Like SetCellLabel it preserves
+// the breadcrumb, so toggling between the drill view and "show everything" does
+// not send the user back to the root.
+//
+// Validation tier: none — every int is meaningful, n<=0 being "all".
+func (t *Treemap) SetMaxNestingDepth(n int) {
+	t.maxNestingDepth = n
+}
+
+// SetRoot replaces the tree and resets the view to the root.
+//
+// The reset is not a convenience, it is the only honest option: a breadcrumb is
+// a list of *layout.Node pointers INTO the tree being replaced, so keeping it
+// would leave the widget focused on nodes the new tree does not contain. A
+// caller that wants to restore a position across a swap has to re-resolve it
+// against the new tree by name and call NavigateTo.
+//
+// Prefer this to constructing a new Treemap when the data changes: New re-runs
+// metrics.init, whose text measurements settle a frame late, so a rebuild costs
+// a frame of mis-gated labels. Options, style, coloring and container size all
+// survive.
+//
+// Validation tier: panic — a nil root is a programmer error, as it is in New.
+func (t *Treemap) SetRoot(root *layout.Node) {
+	if root == nil {
+		panic("treemap: SetRoot requires a non-nil root")
+	}
+	t.root = root
+	t.breadcrumb = []*layout.Node{root}
+	// A zoom in flight is interpolating from a rect in the tree just replaced.
+	t.anim.Cancel()
 }
 
 // Focused returns the current tail of the breadcrumb.
@@ -751,13 +827,19 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 	if t.filterSiblings && activeChild != nil {
 		// Temporarily swap node.Children so ComputeLayoutAt lays out
 		// only the active child, filling the entire available space.
-		origChildren := node.Children
-		node.Children = []*layout.Node{activeChild}
+		// node.Size goes with them: a self rect would take a share of the
+		// box the active child is supposed to fill entirely, which is the
+		// one thing this mode exists to guarantee.
+		origChildren, origSize := node.Children, node.Size
+		node.Children, node.Size = []*layout.Node{activeChild}, 0
 		children = node.Children
 		lay = layout.ComputeLayoutAt(node, bounds)
-		node.Children = origChildren
+		node.Children, node.Size = origChildren, origSize
 	} else {
 		lay = layout.ComputeLayoutAt(node, bounds)
+		// The container's own quantity, when it has one. Painted before the
+		// children so a nested recursion draws over it rather than under.
+		t.paintSelfCell(node, lay, bounds, depth, cellSeq, 6, zoomCellVSlack, 3, 2)
 	}
 
 	for _, child := range children {
@@ -879,6 +961,84 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 	}
 }
 
+// paintSelfCell draws the cell a container gets for its OWN size, if the layout
+// reserved one (ADR-0166 §SD3). A no-op for the trees that have none, which is
+// every tree whose interior nodes carry no size of their own.
+//
+// The cell is deliberately inert: no SenseClick, no drillable or drillUpTo, so
+// it is invisible to the interaction pass. Drilling into a node from inside
+// itself would have nowhere to go, and a self cell that consumed the click
+// would make the container's own area a dead zone in a picture where every
+// other rectangle navigates.
+//
+// It is still appended to t.cells, so HoveredNode reports the CONTAINER when
+// the pointer is over its own cell — the honest answer, and the one a host
+// reading a hover into a status line wants.
+func (t *Treemap) paintSelfCell(node *layout.Node, lay *layout.Layout, bounds layout.Rect, depth int, cellSeq *uint64, minPx, vSlack float64, marginX, marginY float32) {
+	r := lay.SelfRectOf(node)
+	if r.W < minPx || r.H < minPx {
+		return
+	}
+	// The self rect is squarified inside the same box as the children, so a
+	// bounds clamp is theirs too; this only guards the degenerate case where a
+	// caller passed a box the layout could not honour.
+	if r.W <= 0 || r.H <= 0 || bounds.W <= 0 || bounds.H <= 0 {
+		return
+	}
+
+	*cellSeq += 2
+	frameCreator, cellHandle := t.cellIds(*cellSeq)
+
+	resp := c.CurrentApplicationState.StateManager.GetResponse(cellHandle)
+	state := CellStateSelf | CellStateLeaf
+	if resp.HasHovered() {
+		state |= CellStateHovered
+	}
+	info := CellInfo{Node: node, Depth: depth, State: state}
+	visuals := t.style.Visuals(info)
+	colors, _ := t.coloring.Colors(info)
+	fill, strokeColor, textColor := t.resolveColors(colors, visuals, state)
+
+	t.cells = append(t.cells, cellDesc{
+		node: node, handle: cellHandle, rect: r, state: state, depth: depth,
+	})
+
+	cellW := float32(r.W)
+	cellH := float32(r.H)
+	showName := r.W > 35 && r.H > t.metrics.nameMinH(vSlack)
+	for range c.AllocateUiAtRect(float32(r.X), float32(r.Y), float32(r.X+r.W), float32(r.Y+r.H)).KeepIter() {
+		c.UiClipToMaxRect()
+		frame := c.Frame(frameCreator).
+			Fill(fill).
+			CornerRadius(visuals.CornerRadius).
+			Stroke(visuals.BorderWidth, strokeColor).
+			InnerMarginSides(marginX, marginX, marginY, marginY)
+		for range frame.KeepIter() {
+			// Matches the sibling cells' content-box arithmetic: the frame's
+			// two inner margins, less one pixel of slack.
+			c.UiSetMinWidth(cellW - 2*marginX - 1)
+			c.UiSetMinHeight(cellH - float32(vSlack))
+			if !showName {
+				continue
+			}
+			c.LabelAtoms(c.Atoms().
+				BeginRichTextColored(textColor, t.colorTransparentBg, node.Name).
+				End().Keep()).
+				Truncate().Send()
+			// rendersInner is false by construction: a self cell has no children
+			// to nest, which is the whole reason it exists as a separate cell.
+			if t.selfCellLabelFn != nil && r.H > t.metrics.valueMinH(vSlack) {
+				if sub := t.selfCellLabelFn(node); sub != "" {
+					c.LabelAtoms(c.Atoms().
+						BeginRichTextColored(textColor, t.colorTransparentBg, sub).
+						Small().Weak().End().Keep()).
+						Truncate().Send()
+				}
+			}
+		}
+	}
+}
+
 // previewDepth resolves the effective number of preview levels to render
 // below the frontier: maxNestingDepth when positive, else the "show all"
 // safety cap (WithMaxNestingDepth documents n<=0 as unlimited).
@@ -899,6 +1059,7 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 		return
 	}
 	lay := layout.ComputeLayoutAt(node, bounds)
+	t.paintSelfCell(node, lay, bounds, depth, cellSeq, 4, previewCellVSlack, 2, 1)
 
 	for _, child := range node.Children {
 		r := lay.RectOf(child)

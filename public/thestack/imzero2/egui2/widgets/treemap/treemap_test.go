@@ -713,3 +713,109 @@ func mustPanic(t *testing.T, name string, fn func()) {
 	}()
 	fn()
 }
+
+// =============================================================================
+// SetRoot and the self cell (ADR-0166)
+// =============================================================================
+
+func TestWithSelfCellLabel_SetAndIndependentOfCellLabel(t *testing.T) {
+	tm := &Treemap{}
+	if tm.selfCellLabelFn != nil {
+		t.Fatal("zero Treemap should have a nil selfCellLabelFn")
+	}
+	WithCellLabel(func(n *layout.Node) string { return "total:" + n.Name })(tm)
+	if tm.selfCellLabelFn != nil {
+		t.Fatal("WithCellLabel must not populate selfCellLabelFn: a self cell shows a node's OWN size, not its total")
+	}
+	WithSelfCellLabel(func(n *layout.Node) string { return "own:" + n.Name })(tm)
+	if got := tm.selfCellLabelFn(&layout.Node{Name: "x"}); got != "own:x" {
+		t.Fatalf("selfCellLabelFn not wired: got %q want %q", got, "own:x")
+	}
+	if got := tm.cellLabelFn(&layout.Node{Name: "x"}); got != "total:x" {
+		t.Fatalf("WithSelfCellLabel clobbered cellLabelFn: got %q", got)
+	}
+}
+
+func TestCellStateSelf_IsNeverInteractive(t *testing.T) {
+	s := CellStateSelf | CellStateLeaf
+	if s.Interactive() {
+		t.Error("a self cell must not be interactive: drilling into a node from inside itself has nowhere to go")
+	}
+	if !s.Has(CellStateSelf) {
+		t.Error("CellStateSelf must survive being OR-ed with CellStateLeaf")
+	}
+	// The new bit must not collide with an existing one.
+	for _, other := range []CellStateE{
+		CellStateDrillable, CellStateDrillUp, CellStateFocused, CellStateFrontier,
+		CellStateLeaf, CellStateOnPath, CellStateOffPath, CellStatePreview, CellStateHovered,
+	} {
+		if CellStateSelf&other != 0 {
+			t.Errorf("CellStateSelf collides with %v", other)
+		}
+	}
+}
+
+func TestSetRoot_ReplacesTreeAndResetsFocus(t *testing.T) {
+	oldChild := &layout.Node{Name: "old-child", Size: 10}
+	oldRoot := &layout.Node{Name: "old", Children: []*layout.Node{oldChild}}
+	tm := &Treemap{root: oldRoot, breadcrumb: []*layout.Node{oldRoot, oldChild}}
+
+	newChild := &layout.Node{Name: "new-child", Size: 5}
+	newRoot := &layout.Node{Name: "new", Children: []*layout.Node{newChild}}
+	tm.SetRoot(newRoot)
+
+	if tm.root != newRoot {
+		t.Fatal("SetRoot did not replace the root")
+	}
+	if got := tm.Depth(); got != 0 {
+		t.Errorf("Depth() after SetRoot = %d, want 0", got)
+	}
+	if got := tm.Focused(); got != newRoot {
+		t.Errorf("Focused() after SetRoot = %v, want the new root", got.Name)
+	}
+	// The stale path must be unreachable rather than silently accepted.
+	if tm.validPath([]*layout.Node{oldRoot, oldChild}) {
+		t.Error("a path into the replaced tree must not validate against the new one")
+	}
+}
+
+func TestSetRoot_PanicsOnNil(t *testing.T) {
+	root := &layout.Node{Name: "r"}
+	tm := &Treemap{root: root, breadcrumb: []*layout.Node{root}}
+	defer func() {
+		if recover() == nil {
+			t.Error("SetRoot(nil) should panic")
+		}
+	}()
+	tm.SetRoot(nil)
+}
+
+func TestSetRoot_CancelsAnAnimationInFlight(t *testing.T) {
+	root := &layout.Node{Name: "r"}
+	tm := &Treemap{root: root, breadcrumb: []*layout.Node{root}}
+	tm.anim.Start(layout.Rect{X: 1, Y: 2, W: 3, H: 4})
+	if !tm.anim.IsRunning() {
+		t.Fatal("precondition: animation should be running")
+	}
+	tm.SetRoot(&layout.Node{Name: "r2"})
+	if tm.anim.IsRunning() {
+		t.Error("SetRoot must cancel a zoom interpolating from a rect in the replaced tree")
+	}
+	if got := tm.anim.FromRect(); got != (layout.Rect{}) {
+		t.Errorf("cancelled anim should drop its from-rect, got %+v", got)
+	}
+}
+
+func TestAnimMachine_CancelIsIdempotent(t *testing.T) {
+	var m animMachine
+	m.Cancel() // idle -> no-op, must not panic on an invalid transition
+	if m.IsRunning() {
+		t.Error("cancelling an idle machine should leave it idle")
+	}
+	m.Start(layout.Rect{W: 1, H: 1})
+	m.Cancel()
+	m.Cancel()
+	if m.State() != AnimStateIdle {
+		t.Errorf("State() = %v, want idle", m.State())
+	}
+}

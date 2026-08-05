@@ -78,6 +78,18 @@ func (inst *animMachine) Start(fromRect layout.Rect) {
 	inst.target = !inst.target
 }
 
+// Cancel abandons an animation in flight, leaving the view at its destination.
+// Idempotent: cancelling an idle machine is a no-op rather than an invalid
+// transition. Used when the thing being animated toward no longer exists —
+// Treemap.SetRoot, where the from-rect belongs to the replaced tree.
+func (inst *animMachine) Cancel() {
+	if inst.state == AnimStateIdle {
+		return
+	}
+	inst.transition(AnimStateIdle)
+	inst.fromRect = layout.Rect{}
+}
+
 // TPtr returns a pointer to the egui-driven tween value so the renderer can
 // register it as a databinding target. The pointer must not be retained
 // across frames (animMachine may relocate in memory if the owner is reset).
