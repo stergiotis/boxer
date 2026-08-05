@@ -170,8 +170,16 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   out not to belong here: both sit in packages this port replaces rather than
   carries, so neither is ported and neither needs fixing.
 - **M3 — the `capmap` vocabulary (SD6).**
-- **M4 — ingest.** `boxer capmap ingest --vault`, writing through the facts
-  store interface so it works with or without a live ClickHouse.
+- **M4 — ingest.** `boxer capmap ingest --vault`, plus a `parse` verb that
+  reports the corpus and needs no database. **Not** through `FactsStoreI` as
+  first planned: that interface is a closed per-kind surface — twenty methods,
+  `WriteGrant` through `WriteColumnWidth` — with no generic write, so using it
+  would mean adding `WriteCapability` to a keelson-runtime contract for a gov
+  concern and obliging every implementer to carry methods for a tool it does
+  not use. Encoding lives in `public/gov/capmapfacts` instead and hands
+  finished Arrow batches to a one-method sink that `chclient.Client` already
+  satisfies, which is also what lets the encoding be tested with no ClickHouse
+  in reach.
 - **M5 — providers (SD8).**
 - **M6 — the applet book (SD9).**
 - **M7 — corpus and ignore rule (SD7).**
@@ -185,7 +193,7 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
 | TagValue allocation | Added — a second allocation, and the rule for making further ones | This ADR is the register; the vocabulary package's doc comment cites it |
 | Environment-variable registry ([ADR-0009](./0009-environment-variable-registry.md)) | Added — the corpus location | `doc/env-vars.md`; the package must be reachable from the `public/app` link graph or the spec stays invisible |
 | keelson table-name namespace ([ADR-0094](./0094-keelson-introspection-tables.md)) | Added — the capability and relation tables | The provider registration; the applet book's queries |
-| Exported Go API under `public/` | Added — `public/gov/capmapcorpus` and the vocabulary | Nothing yet; no downstream module compiles against them |
+| Exported Go API under `public/` | Added — `capmapcorpus`, `capmapvocab`, `capmapfacts` under `public/gov/`, and the `boxer capmap` command | Nothing yet; no downstream module compiles against them |
 
 ## Alternatives
 
@@ -285,6 +293,14 @@ ecosystem uses. The subsystem is named `capmap`; it does not use the word
   green on any machine without a live server and failed at runtime against a
   re-created table. The guard needs no ClickHouse and fails vacuously-passing
   by asserting it found something to check.
+  M4 landed that integration test:
+  `TestIngestRoundTripsThroughClickHouse` writes a corpus and reads it back as
+  SQL, asserting the three shapes a unit test cannot reach — a scalar decoded
+  by membership id, a section heading carried as a mixed membership's
+  high-card parameter (§SD5), and a relation joined to both endpoints through
+  `foreignKey` (§SD2). It builds its own scratch database and never touches
+  `boxer.facts`, since a test that dropped the runtime's table would destroy
+  real state to check an encoding.
 - **Gap.** The serverless read path — facts-shaped Arrow through `file()` — has
   been reasoned about but not run; proving it is a step inside M4 rather than a
   standing lane. Nothing verifies that the corpus content is *correct*, only

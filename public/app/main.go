@@ -5,6 +5,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/app/commands/adr"
+	"github.com/stergiotis/boxer/public/app/commands/capmap"
 	"github.com/stergiotis/boxer/public/app/commands/capslock"
 	"github.com/stergiotis/boxer/public/app/commands/codedriven"
 	"github.com/stergiotis/boxer/public/app/commands/compression"
@@ -100,6 +101,7 @@ func mainC() (exitCode int) {
 			// from their home packages above; adversarialreview/clarityrate are
 			// dropped (depended on the absent cmd/adversarial-review tree).
 			adr.NewCliCommand(),
+			capmap.NewCliCommand(),
 			capslock.NewCliCommand(),
 			codedriven.NewCliCommand(),
 			compression.NewCliCommand(),

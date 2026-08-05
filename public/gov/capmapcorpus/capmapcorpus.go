@@ -248,3 +248,24 @@ const (
 	// bibliographies. Counting them as broken links would bury the real ones.
 	ResolutionExternal
 )
+
+// String renders the resolution as the stable lower-case token consumers
+// store and query by.
+//
+// The names are part of the data once a corpus has been ingested, so they are
+// spelled out here rather than derived from the identifiers: renaming a
+// constant must not silently rewrite what a stored row says.
+func (inst ResolutionE) String() (s string) {
+	switch inst {
+	case ResolutionDirect:
+		return "direct"
+	case ResolutionDirRef:
+		return "dirref"
+	case ResolutionExternal:
+		return "external"
+	case ResolutionUnresolved:
+		return "unresolved"
+	default:
+		return "unknown"
+	}
+}
