@@ -361,6 +361,30 @@ binary — only the probe module is instrumented, so the sampler observes
 without self-observation — and checks the delta invariant
 `covered₁ + |delta| = covered₂` end to end.
 
+## Update (2026-08-06) — M3 bus plane and live tables landed
+
+`coveragebus` mirrors sysmetricsbus (subjects `coverage.{host}.sample`
+under `runtime.coverage`, interim-CBOR `Codec` seam with the covered set
+travelling as roaring serialization, `Producer` over an `UpdateSampler`
+interface, `Consumer`, the ADR-0009-registered `IMZERO2_COVERAGE_INTERVAL`
+knob — non-positive disables, unparsable falls back to the default rather
+than silently switching the lane off); `covscrape` wires the concrete
+sampler to it and reuses the metric plane's host-token rule. The three
+§SD5 tables serve over a constructor-injected `CoverageSourceI`:
+`coverage_status`, `coverage_pkgs` (zero-covered rows included, so
+"uncovered" is a WHERE clause, not an anti-join), `coverage_funcs`; a nil
+source yields empty tables, never absent ones. `covsnap.AggregateCovered`
+recomputes the rollups from a covered set in one two-pointer pass and is
+cross-checked against a full re-statement of the accumulator. The carousel
+starts the sampler beside the sysmetrics block behind the typed-nil guard.
+Verified headless: codec round-trips, a producer→inprocbus→consumer
+end-to-end under real capability enforcement, provider row-level tests,
+and the host-level empty-without-sampler gate. The literal
+`keelson('coverage_pkgs')` check on a live instrumented carousel rides
+with the still-open M0 fps run (same session, same build);
+`doc/env-vars.md` regeneration for the new knob is left for the next
+quiet-tree regen.
+
 ## Status
 
 Proposed, 2026-08-05.
