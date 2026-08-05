@@ -382,7 +382,9 @@ so this list is not read as still-open.)*
    spelling: M3 landed the `adhoc.resolve` subject, so a book declares
    `datasets:` and the applet binds the newest handle at open.*
 6. Edge-weight encoding in the graph tab — verify the override hooks reach
-   stroke width from panel input — §9. *Not verified, and not needed:
-   `profile-callgraph` took §9's stated worst case and puts the weight in
-   the edge label. Whether stroke width is reachable is still unanswered —
-   it is now an ADR-0129 question, not a pprof one.*
+   stroke width from panel input — §9. *Answered 2026-08-05, and the answer is
+   no: the override hooks are colour-only, and `layeredgraph`'s edge stroke
+   width is a single global. `profile-callgraph` took §9's stated worst case
+   and puts the weight in the edge label. What it would take to do better is
+   [graph-forms-and-magnitude](./graph-forms-and-magnitude.md), which is an
+   ADR-0069/0129 question rather than a pprof one.*
