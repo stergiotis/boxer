@@ -8,7 +8,6 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v2"
 )
-import "runtime/coverage"
 
 var CoverageFlags = []cli.Flag{
 	&cli.StringFlag{
@@ -17,10 +16,9 @@ var CoverageFlags = []cli.Flag{
 		Usage:    "Will write cover information to the dir whenever the program receives SIGUSR1. Use -cover -covermode=atomic to compile the program.",
 		Action: func(context *cli.Context, s string) error {
 			if s != "" {
-				// TODO there does not seem to be another method to find out if the program is compiled with -cover -covermode=count
-				err := coverage.ClearCounters()
+				err := ProbeRuntimeSupport()
 				if err != nil {
-					return eh.Errorf("program does not seem to be to be built with -cover -covermode=count flags (no cover support)")
+					return eh.Errorf("program has no runtime coverage snapshot support (build with -cover -covermode=atomic): %w", err)
 				}
 				sig := syscall.SIGUSR1
 				collector := NewCollector()
