@@ -23,9 +23,10 @@ func TestRegisterStandard(t *testing.T) {
 	require.NoError(t, RegisterStandard(r))
 
 	es := r.Entries(passreg.StagePreExecute)
-	require.Len(t, es, 2)
-	require.Equal(t, "ExpandDescriptiveStatistics", es[0].Pass.Name, "ADR-0161 expansion orders before LW_ID (75 < 100)")
-	require.Equal(t, "ExpandLwIdMacros", es[1].Pass.Name)
+	require.Len(t, es, 3)
+	require.Equal(t, "ExpandDescriptiveStatistics", es[0].Pass.Name, "ADR-0161 expansion orders first (75)")
+	require.Equal(t, "DocsearchExpand", es[1].Pass.Name, "ADR-0164 expansion between the two (80)")
+	require.Equal(t, "ExpandLwIdMacros", es[2].Pass.Name)
 	for _, e := range es {
 		require.NotEmpty(t, e.Description)
 		require.NotEmpty(t, e.Provenance)
@@ -34,7 +35,7 @@ func TestRegisterStandard(t *testing.T) {
 	// Registering twice into the same registry must fail loudly (duplicate
 	// key), not silently double the entries.
 	require.Error(t, RegisterStandard(r))
-	require.Len(t, r.Entries(passreg.StagePreExecute), 2)
+	require.Len(t, r.Entries(passreg.StagePreExecute), 3)
 }
 
 // TestStandardSetExpandsDescriptiveStatistics proves the ADR-0161 wiring end
@@ -61,6 +62,22 @@ func TestStandardSetExpandsLwIdMacros(t *testing.T) {
 	require.Contains(t, out, "FROM t", "surrounding query must survive")
 }
 
+// TestStandardSetExpandsDocsearch proves the ADR-0164 wiring end to end:
+// the macro leaves the pre-execute stage as the documentation-search
+// UNION, its keelson(...) references intact for the executor-boundary
+// pass.
+func TestStandardSetExpandsDocsearch(t *testing.T) {
+	r := passreg.NewRegistry()
+	require.NoError(t, RegisterStandard(r))
+
+	out := r.ApplyBestEffort(passreg.StagePreExecute, "SELECT * FROM docsearch('argMax') ORDER BY score DESC", zerolog.Nop())
+	require.NotContains(t, out, "docsearch", "macro call must be expanded")
+	require.Contains(t, out, "keelson('helpsections')")
+	require.Contains(t, out, "keelson('adrsections')")
+	require.Contains(t, out, "system.documentation")
+	require.Contains(t, out, "ORDER BY score DESC", "surrounding query must survive")
+}
+
 // TestStandardSetRegistersResolveColumnNamesFactory proves the leeway resolver
 // is registered as a late-bound Factory (ADR-0108 §SD7): it appears in the
 // catalog after identsql, and its Build accepts a ColumnResolverI binding while
@@ -69,8 +86,9 @@ func TestStandardSetRegistersResolveColumnNamesFactory(t *testing.T) {
 	r := passreg.NewRegistry()
 	require.NoError(t, RegisterStandard(r))
 
-	// Concrete entries are the two expansions; the resolver is a factory.
-	require.Len(t, r.Entries(passreg.StagePreExecute), 2)
+	// Concrete entries are the three expansions (descriptiveStatistics,
+	// docsearch, LW_ID_*); the resolver is a factory.
+	require.Len(t, r.Entries(passreg.StagePreExecute), 3)
 	fs := r.Factories(passreg.StagePreExecute)
 	require.Len(t, fs, 1)
 	f := fs[0]

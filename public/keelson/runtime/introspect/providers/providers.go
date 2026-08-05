@@ -1,7 +1,8 @@
 // Package providers implements the GUI-free introspection table
 // providers — env, apps, build, sbom (ADR-0094 §SD8), sql_passes
 // (ADR-0108 §SD5), extbin (ADR-0118), adr/subtask/coderef/adrcontent
-// (ADR-0122 §SD4) — and registers them into an introspect.Registry.
+// (ADR-0122 §SD4), helpsections/adrsections (ADR-0164 §SD5) — and
+// registers them into an introspect.Registry.
 // The two GUI-coupled providers (demos, windows) live with the runtime
 // wiring, where the egui2 host and its window-host instance exist, so
 // this package stays importable from headless contexts.
@@ -33,6 +34,7 @@ func RegisterStatic(r *introspect.Registry) (err error) {
 	for _, p := range []introspect.Provider{
 		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{}, extbinProvider{},
 		adrProvider{}, subtaskProvider{}, coderefProvider{}, adrcontentProvider{}, componentsProvider{},
+		helpsectionsProvider{}, adrsectionsProvider{},
 	} {
 		if err = r.Register(p); err != nil {
 			return

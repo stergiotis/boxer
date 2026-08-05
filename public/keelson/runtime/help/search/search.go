@@ -41,6 +41,18 @@ func (inst *PatternT) Matches(text string) (ok bool) {
 	return
 }
 
+// EffectiveSource returns the pattern text the compiled matcher
+// actually runs — `(?i)` plus Raw, quote-meta'd when the token
+// degraded to a literal. This is what the facts-plane executor
+// (ADR-0164 §SD5) splices into multiMatch*: RE2 rejected
+// backreferences and lookaround at Compile, so the returned text is
+// inside the subset hyperscan accepts, and both executors see the
+// same pattern byte for byte.
+func (inst *PatternT) EffectiveSource() (src string) {
+	src = inst.re.String()
+	return
+}
+
 // find returns the first match's byte bounds in text, ok=false when
 // absent. Used for context-line extraction.
 func (inst *PatternT) find(text string) (start int, end int, ok bool) {

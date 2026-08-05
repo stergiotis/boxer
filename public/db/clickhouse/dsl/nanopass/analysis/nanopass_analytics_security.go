@@ -115,6 +115,11 @@ var localTableFunctions = map[string]struct{}{
 	// local read: the `url()` it later expands to is pass-generated machinery,
 	// not authored egress (ADR-0132 §SD5).
 	"keelson": {},
+	// boxer's documentation-search macro (ADR-0164 §SD5), the same
+	// reasoning one level up: it expands to SELECTs over keelson(...)
+	// and system.documentation — local reads throughout, no authored
+	// egress can hide inside a quoted query string.
+	"docsearch": {},
 }
 
 // egressScalarFunctions is the denylist of scalar calls that reach outside

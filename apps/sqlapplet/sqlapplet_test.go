@@ -28,9 +28,16 @@ const sqlFence = "```sql\nSELECT * FROM keelson('env')\n```"
 func TestStarterBookCorpus(t *testing.T) {
 	defs, errs := ParseBook("sqlapplet", help.MustSub(bookFS, "book"))
 	require.Empty(t, errs)
-	require.Len(t, defs, 3)
+	require.Len(t, defs, 4)
 
-	recent, apps, env := defs[0], defs[1], defs[2]
+	docsSearch, recent, apps, env := defs[0], defs[1], defs[2], defs[3]
+	assert.Equal(t, "docs-search", docsSearch.Slug)
+	assert.Equal(t, EndpointIntrospection, docsSearch.Endpoint)
+	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "detail"}}, docsSearch.Tabs)
+	assert.Equal(t, analysis.QuerySecurityRead, docsSearch.Class, "docsearch('…') is a read like any SELECT")
+	assert.Equal(t, []app.TopicT{app.TopicAbout}, docsSearch.Topics, "frontmatter topics overrides the book default")
+	assert.Contains(t, docsSearch.Preamble, "Every pattern must hit")
+
 	assert.Equal(t, "runtime-apps", apps.Slug)
 	assert.Equal(t, "Runtime apps", apps.Title)
 	assert.NotEmpty(t, apps.Icon)
@@ -65,7 +72,7 @@ func TestMintStarterBook(t *testing.T) {
 	reg := app.NewRegistry()
 	minted, errs := mintBooks(reg, zerolog.Nop(), []registeredBook{{id: "sqlapplet", fsys: help.MustSub(bookFS, "book"), topics: []app.TopicT{app.TopicRuntime}}})
 	require.Empty(t, errs)
-	assert.Equal(t, 3, minted)
+	assert.Equal(t, 4, minted)
 
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "runtime-apps"))
 	require.True(t, ok)

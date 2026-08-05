@@ -91,7 +91,7 @@ func TestMintPprofBook(t *testing.T) {
 		{id: "pprof", fsys: help.MustSub(bookpprofFS, "bookpprof"), topics: []app.TopicT{app.TopicObservability}},
 	})
 	require.Empty(t, errs)
-	assert.Equal(t, 17, minted)
+	assert.Equal(t, 18, minted)
 
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "profile-top"))
 	require.True(t, ok)

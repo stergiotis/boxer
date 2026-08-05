@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
 )
 
 // RegisterStandard registers the standard set into r:
@@ -47,6 +48,18 @@ func RegisterStandard(r *passreg.Registry) (err error) {
 			Order:       75,
 			Description: "expand descriptiveStatistics(cols…) into the ADR-0161 distribution result contract",
 			Provenance:  "github.com/stergiotis/boxer/public/analytics/stats/distsql",
+		},
+		{
+			// Ordered between the distribution macro (75) and identsql
+			// (100). Nothing interacts — the expansion emits neither
+			// macro family — the fixed slot is for determinism alone.
+			// The keelson('…') references it emits are resolved later,
+			// at the executor boundary (keelsonsql Bare/URL pass).
+			Pass:        docsearchsql.ExpandPass,
+			Stage:       passreg.StagePreExecute,
+			Order:       80,
+			Description: "expand docsearch('query') into the ADR-0164 documentation search UNION",
+			Provenance:  "github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql",
 		},
 		{
 			Pass:        identsql.ExpandPass,

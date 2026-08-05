@@ -18,6 +18,7 @@ generator: go test, TestDqlPassRegistryGeneration
 | pre-execute | 40 | `StripComments` | false | strip comments from the shipped body |
 | pre-execute | 50 | `CanonicalizeFull` | false | rewrite the statement into canonical form |
 | pre-execute | 75 | `ExpandDescriptiveStatistics` | false | expand descriptiveStatistics(cols…) into the ADR-0161 distribution result contract |
+| pre-execute | 80 | `DocsearchExpand` | false | expand docsearch('query') into the ADR-0164 documentation search UNION |
 | pre-execute | 100 | `ExpandLwIdMacros` | false | expand LW_ID_* identity-macro calls into bit arithmetic |
 | pre-execute | 150 | `QualifyTables` | false | qualify unqualified table references with the anchor database |
 | pre-execute | 200 | `ResolveColumnNames` | true | resolve friendly leeway column handles to physical names |
@@ -29,6 +30,7 @@ generator: go test, TestDqlPassRegistryGeneration
 | 40 | `StripComments` | applied | true |
 | 50 | `CanonicalizeFull` | applied | true |
 | 75 | `ExpandDescriptiveStatistics` | applied | false |
+| 80 | `DocsearchExpand` | applied | false |
 | 100 | `ExpandLwIdMacros` | applied | false |
 | 150 | `QualifyTables` | applied | true |
 | 200 | `ResolveColumnNames` | applied | true |

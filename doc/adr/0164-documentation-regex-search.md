@@ -118,8 +118,9 @@ macro expands the battery to `multiMatchAllIndices` scoring with the same
 field weights as §SD3, the pattern array spliced as a typed literal
 (nanopass-marshalling). Play users reach it directly in the editor — the
 macro *is* the user exposure on this tier — and hits carry a string ref
-(`help://app/doc#slug`, `adr://0164#sd5`, `chdoc://quantileTDigest`) whose
-format this ADR freezes so rows written early stay navigable later.
+whose format the `help/docref` package freezes so rows written early stay
+navigable later: `help://<app-id>::<doc>#<slug>` (`::` because app ids are
+import paths and contain `/`), `adr://0164#sd5`, `chdoc://quantileTDigest`.
 
 The live-provider lane has no predicate pushdown (ADR-0094): acceptable for
 the bounded corpora named here, and the recorded boundary — an unbounded
@@ -160,7 +161,10 @@ source — which is precisely the designed fallback, not a degraded mode.
   battery compile, section table, executor, ranking, context extraction.
 - **M1** — HelpHost search UI; `WithSectionFilter`; snippets filter box.
 - **M2** — `helpsections`/`adrsections` providers, `docsearch` macro over
-  the UNION with `system.documentation`, string-ref scheme, thesaurus.
+  the UNION with `system.documentation`, string-ref scheme. The thesaurus
+  ships separately (§SD7): it needs a server round-trip for
+  `system.functions.alias_to`, which is driver machinery, not macro
+  expansion.
 - **M3** — text2regex generator under ADR-0139 (step b).
 - **M4** — golden query set; evaluation gates the embeddings deferral.
 
@@ -249,7 +253,7 @@ case.
 
 ## Status
 
-Proposed. M0+M1 implemented alongside this draft for review; M2+ pending
+Proposed. M0–M2 implemented alongside this draft for review; M3+ pending
 acceptance.
 
 ## References

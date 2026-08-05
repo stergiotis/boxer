@@ -71,7 +71,7 @@ func TestMintAllEmbeddedBooks(t *testing.T) {
 		{id: "topology", fsys: help.MustSub(booktopoFS, "booktopo"), topics: []app.TopicT{app.TopicTopology}},
 	})
 	require.Empty(t, errs)
-	assert.Equal(t, 9, minted)
+	assert.Equal(t, 10, minted)
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "topology-map"))
 	require.True(t, ok)
 	assert.Equal(t, "Topology map", m.Display)

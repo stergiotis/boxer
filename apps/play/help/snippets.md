@@ -460,6 +460,34 @@ WHERE c.`content@text/markdown` ILIKE '%airgap%'
 ORDER BY c.num
 ```
 
+## Search all the documentation at once (`docsearch`)
+
+The `ILIKE` above sweeps one corpus with one literal. `docsearch('…')`
+(ADR-0164) is a table-function macro that expands into one search over three
+corpora at section grain: the registered help books
+(`keelson('helpsections')`), the decision corpus (`keelson('adrsections')`),
+and the executing engine's own `system.documentation` — so one query can
+land on a snippets section, an ADR §, and a ClickHouse function. The
+argument is a battery, exactly as the Help center's search box compiles it:
+whitespace-separated case-insensitive RE2 patterns, all of which must hit
+(a token that is not a valid regex matches literally). Scoring matches the
+GUI tiers — title 8, heading 4, body 1 per pattern — and `ref` is the
+canonical reference (`help://…`, `adr://…`, `chdoc://…`). Edit the string
+inside `docsearch('…')` to change the query; `ORDER BY` and `LIMIT` are
+yours to write, the macro adds none.
+
+Same no-setup path as the ADR tables: point **Endpoint** at *Keelson
+introspection* and Run. `chdoc` rows then describe the in-process engine's
+ClickHouse version; run against a remote server and they describe *that*
+server's, which is the honest answer either way.
+
+```sql
+SELECT source, ref, title, heading, score, context
+FROM docsearch('deduplicate argMax')
+ORDER BY score DESC
+LIMIT 50
+```
+
 ## Decision graph (ADRs and the code that cites them)
 
 The same corpus as a node-link graph in the **Network** tab (ADR-0129), and the
