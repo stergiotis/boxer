@@ -481,6 +481,28 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-08-05 — the status bar says what a run read, and play's byte figures get their real units
+
+The Map's landed-run readout (next entry) made an omission in the main status
+bar legible. It reported `500 rows · 7ms · 39.9 KB read · 4s ago` — what came
+back, how long, how many bytes — but never how many *rows* the server read.
+Bytes alone say how much came off disk, not how much work that was, and the
+rate the two imply is what separates a query that was slow because it read a
+lot from one that was starved. Both now ride the `queryStateRows` case, in the
+spelling `formatRowRate` gives the panels, so a run reads the same wherever it
+is shown: `500 rows · 7ms · read 1,000 rows / 40 KiB · 150.6 k rows/s · 4s ago`
+— and that this `LIMIT 500` read a thousand rows is exactly the kind of fact
+the old line hid. The clause is dropped rather than printed as zeros on an
+endpoint that reports no summary. The line is FSM-keyed and shared with the
+Diagnostics "Last run" section, which gains the same.
+
+`humanBytes` is retired for `humanize.IBytes`. It divided by 1024 and labelled
+the result `KB`, so every byte figure play printed named a unit it was not —
+the "39.9 KB" above is 39.9 KiB. So every byte figure in play shifts label
+(progress line, pane strip, status bar, runs history, diagnostics), and values
+at ten units or more lose a decimal to humanize's rounding. A visible change to
+numbers people may recognise, taken over continuing to misname them.
+
 ### 2026-08-05 — a lane-owning panel can show and cancel its own run: `nodeLane.abort`
 
 The Map (ADR-0096, on the param seam since slice 5c) runs its raster query on

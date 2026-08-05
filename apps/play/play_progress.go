@@ -174,7 +174,7 @@ func formatProgressLine(v progressView) string {
 		b.WriteString(" rows")
 	}
 	b.WriteString(" · ")
-	b.WriteString(humanBytes(p.ReadBytes))
+	b.WriteString(humanize.IBytes(p.ReadBytes))
 	b.WriteString(" read")
 	if v.rate >= 1 {
 		b.WriteString(" · ")
@@ -187,7 +187,7 @@ func formatProgressLine(v progressView) string {
 	}
 	if p.MemoryUsage > 0 {
 		b.WriteString(" · mem ")
-		b.WriteString(humanBytes(p.MemoryUsage))
+		b.WriteString(humanize.IBytes(p.MemoryUsage))
 	}
 	if p.ElapsedNs > 0 {
 		b.WriteString(" · ")
@@ -409,16 +409,30 @@ func formatLaneStats(s laneStats) string {
 	if s.elapsed <= 0 {
 		return b.String()
 	}
-	if rate := float64(s.readRows) / s.elapsed.Seconds(); rate >= 1 {
+	if rate := formatRowRate(s.readRows, s.elapsed); rate != "" {
 		b.WriteString(" · ")
-		// SIWithDigits pads a bare magnitude with the space its (empty) unit
-		// would have taken; trimming keeps "500 rows/s" from doubling it.
-		b.WriteString(strings.TrimSpace(humanize.SIWithDigits(rate, 1, "")))
-		b.WriteString(" rows/s")
+		b.WriteString(rate)
 	}
 	b.WriteString(" · ")
 	b.WriteString(s.elapsed.Round(time.Millisecond).String())
 	return b.String()
+}
+
+// formatRowRate is play's one spelling of a rows-per-second figure — an SI
+// magnitude, since at a glance only the order matters — shared by the panel
+// readout and the status bar so a run reads the same in both. Empty when there
+// is no measurable rate: an unclocked run, or one too fast to divide.
+func formatRowRate(rows uint64, elapsed time.Duration) string {
+	if elapsed <= 0 {
+		return ""
+	}
+	rate := float64(rows) / elapsed.Seconds()
+	if rate < 1 {
+		return ""
+	}
+	// SIWithDigits pads a bare magnitude with the space its (empty) unit would
+	// have taken; trimming keeps "500 rows/s" from doubling it.
+	return strings.TrimSpace(humanize.SIWithDigits(rate, 1, "")) + " rows/s"
 }
 
 // humanCount renders a row count with K/M/B/T suffixes (counts, unlike

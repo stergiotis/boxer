@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -323,8 +324,21 @@ func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summ
 		}
 		return "executing…"
 	case queryStateRows:
-		s = fmt.Sprintf("%d rows · %s · %s read · %s",
-			numRows, elapsed.Round(time.Millisecond), humanBytes(summary.ReadBytes), humanizeAgo(executed))
+		// What the run returned, then what it cost. Read ROWS ride beside read
+		// bytes: bytes alone say how much came off disk but not how much work
+		// that was, and the rate the two imply is what distinguishes a query
+		// that was slow because it read a lot from one that was starved. The
+		// read clause is dropped rather than printed as zeros on an endpoint
+		// that reports no summary (chlocal, mocks).
+		s = fmt.Sprintf("%s rows · %s", humanize.Comma(numRows), elapsed.Round(time.Millisecond))
+		if summary.ReadRows > 0 || summary.ReadBytes > 0 {
+			s += fmt.Sprintf(" · read %s rows / %s",
+				humanize.Comma(int64(summary.ReadRows)), humanize.IBytes(summary.ReadBytes))
+		}
+		if rate := formatRowRate(summary.ReadRows, elapsed); rate != "" {
+			s += " · " + rate
+		}
+		s += " · " + humanizeAgo(executed)
 		// A capped result is indistinguishable from a whole one unless the
 		// line says so (R9), and the row count alone reads as the answer.
 		if truncation != "" {

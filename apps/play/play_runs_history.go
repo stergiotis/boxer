@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
@@ -274,10 +275,10 @@ func (inst *PlayApp) renderRunDetail(row queryrunfacts.HistoryRow) {
 	diagWeak(row.Ts.UTC().Format("2006-01-02 15:04:05") + " UTC · " + row.Event + " · " + row.Kind)
 	diagWeak("query_id " + row.QueryId)
 	line := fmt.Sprintf("duration %d ms · read %d rows / %s · result %d rows / %s · peak memory %s",
-		row.DurationMs, row.ReadRows, humanBytes(row.ReadBytes),
-		row.ResultRows, humanBytes(row.ResultBytes), humanBytes(row.MemoryPeak))
+		row.DurationMs, row.ReadRows, humanize.IBytes(row.ReadBytes),
+		row.ResultRows, humanize.IBytes(row.ResultBytes), humanize.IBytes(row.MemoryPeak))
 	if row.WrittenRows > 0 || row.WrittenBytes > 0 {
-		line += fmt.Sprintf(" · wrote %d rows / %s", row.WrittenRows, humanBytes(row.WrittenBytes))
+		line += fmt.Sprintf(" · wrote %d rows / %s", row.WrittenRows, humanize.IBytes(row.WrittenBytes))
 	}
 	diagWeak(line)
 	diagWeak(fmt.Sprintf("normalized hash %016x", row.NormalizedHash))

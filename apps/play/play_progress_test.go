@@ -190,10 +190,12 @@ func TestFormatProgressLine(t *testing.T) {
 	}
 	s := formatProgressLine(v)
 	require.Contains(t, s, "1.9B / 2.5B rows (77%)")
-	require.Contains(t, s, "14.5 GB read")
+	// Binary units, spelled as such: the divisor was always 1024 and the label
+	// used to say KB/GB (humanBytes, retired 2026-08-05 for humanize.IBytes).
+	require.Contains(t, s, "14 GiB read")
 	require.Contains(t, s, "1.2M rows/s")
 	require.Contains(t, s, "ETA 1m20s")
-	require.Contains(t, s, "mem 1.1 MB")
+	require.Contains(t, s, "mem 1.1 MiB")
 	require.Contains(t, s, "300ms")
 
 	// No total, no warm estimator: rows and bytes are all there is to say.

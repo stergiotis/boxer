@@ -3133,15 +3133,7 @@ func historyLabel(e HistoryEntry) string {
 	return truncateRunes(line, historyLabelChar)
 }
 
-func humanBytes(b uint64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := uint64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
-}
+// humanBytes retired 2026-08-05 for humanize.IBytes. It divided by 1024 and
+// labelled the result "KB", so every byte figure play printed named a unit it
+// was not: "39.9 KB" for 40,858 bytes is 39.9 KiB. The replacement spells the
+// binary units it actually computes.

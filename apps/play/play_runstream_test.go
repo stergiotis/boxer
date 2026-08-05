@@ -103,6 +103,27 @@ func TestQuerySummaryLineNamesTheCap(t *testing.T) {
 	assert.Contains(t, capped, "max_result_rows=100")
 }
 
+// The status bar's landed-run line: what came back, then what it cost — read
+// rows beside read bytes (bytes alone say how much came off disk, not how much
+// work it was) and the rate they imply, in the spelling the panels use.
+func TestQuerySummaryLineCarriesTheReadCost(t *testing.T) {
+	app := &PlayApp{queryFSM: newQueryFSM()}
+	app.queryFSM.Mirror(queryStateRunning)
+	app.queryFSM.Mirror(queryStateRows)
+
+	s := app.querySummaryLine(1_234, 2*time.Second,
+		Summary{ReadRows: 337_130, ReadBytes: 40_858}, timeRef(), nil, "")
+	assert.Contains(t, s, "1,234 rows · 2s")
+	assert.Contains(t, s, "read 337,130 rows / 40 KiB")
+	assert.Contains(t, s, "168.5 k rows/s")
+
+	// An endpoint that reports no summary (chlocal, mocks) says nothing about
+	// the read rather than claiming a zero one.
+	bare := app.querySummaryLine(100, time.Second, Summary{}, timeRef(), nil, "")
+	assert.NotContains(t, bare, "read")
+	assert.NotContains(t, bare, "rows/s")
+}
+
 // scriptedStream replays a fixed frame sequence, so a test can stage the
 // stream shapes a real engine produces without standing one up.
 type scriptedStream struct {
