@@ -238,3 +238,38 @@ func TestNewSamplerErrsInTestBinaries(t *testing.T) {
 	_, err := NewSampler(SamplerOptions{})
 	require.Error(t, err)
 }
+
+// AggregateCovered recomputes from scratch what the accumulator maintains
+// incrementally; a full re-statement is the meeting point where both views
+// must agree exactly.
+func TestAggregateCoveredMatchesAccumulator(t *testing.T) {
+	meta := synthMeta()
+	acc := NewAccumulator(meta, AccumulatorOptions{RestateEvery: 3})
+	_, err := acc.Fold(synthSnap(meta,
+		covsnap.FuncCounters{PkgIdx: 0, FuncIdx: 0, Counters: []uint32{1, 0, 1}},
+		covsnap.FuncCounters{PkgIdx: 1, FuncIdx: 0, Counters: []uint32{0, 0, 0, 1}},
+	), 1)
+	require.NoError(t, err)
+	_, err = acc.Fold(synthSnap(meta,
+		covsnap.FuncCounters{PkgIdx: 0, FuncIdx: 1, Counters: []uint32{0, 2}},
+		covsnap.FuncCounters{PkgIdx: 1, FuncIdx: 0, Counters: []uint32{1, 0, 0, 2}},
+	), 2)
+	require.NoError(t, err)
+	full, err := acc.Fold(synthSnap(meta), 3)
+	require.NoError(t, err)
+	require.True(t, full.Full)
+
+	aggPkgs, aggFuncs := covsnap.AggregateCovered(meta, acc.CoveredBitmap())
+	require.Equal(t, full.Pkgs, aggPkgs)
+	require.Equal(t, funcSampleSet(t, full.Funcs), funcSampleSet(t, aggFuncs))
+
+	// Empty and foreign inputs.
+	p, f := covsnap.AggregateCovered(meta, nil)
+	require.Empty(t, p)
+	require.Empty(t, f)
+	foreign := acc.CoveredBitmap()
+	foreign.Add(9999)
+	aggPkgs2, aggFuncs2 := covsnap.AggregateCovered(meta, foreign)
+	require.Equal(t, aggPkgs, aggPkgs2, "bits beyond the profile are ignored")
+	require.Equal(t, funcSampleSet(t, aggFuncs), funcSampleSet(t, aggFuncs2))
+}

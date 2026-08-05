@@ -84,6 +84,11 @@ func (inst *Sampler) Status() (status covsnap.RunStatus) {
 	return inst.acc.Status()
 }
 
+// Seq returns the number of samples folded so far.
+func (inst *Sampler) Seq() (seq uint64) {
+	return inst.acc.Seq()
+}
+
 // CoveredBitmap returns a clone of the cumulative covered set.
 func (inst *Sampler) CoveredBitmap() (covered *roaring.Bitmap) {
 	return inst.acc.CoveredBitmap()
