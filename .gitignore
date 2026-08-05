@@ -68,6 +68,14 @@ rust/*/target/
 # created in any working directory (the command takes --root), so not anchored.
 .adrcache/
 
+# The competence vault (ADR-0168 §SD7) — the business-capability corpus. It is
+# present in a working tree but unversioned: which catalogs may be published,
+# and under what licence, is not settled, and committing the tree now would
+# decide that by accident. Only the README is tracked — it says what belongs
+# here.
+/doc/competences/*
+!/doc/competences/README.md
+
 # Local Claude Code settings (machine-specific); the .claude/skills symlink stays tracked.
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
