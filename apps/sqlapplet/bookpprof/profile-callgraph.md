@@ -31,11 +31,15 @@ nodes. Consecutive-frame pairs are deduplicated per stack
 (`arrayDistinct`), so a recursive call contributes one edge per stack, not
 one per frame.
 
-**Reading the widths.** An edge's thickness and colour both follow its
-`weight`, so the hot path is visible without reading a number. They order
-and emphasise — they are not a scale to measure against. Time is not
-conserved along a call chain, and a recursive call is a cycle, so the widths
-into a function need not sum to the width out of it.
+**Reading the sizes.** An edge's thickness and a function's box both follow
+the time through them, so the hot path is visible without reading a number.
+They order and emphasise — they are not a scale to measure against. Time is
+not conserved along a call chain, and a recursive call is a cycle, so the
+widths into a function need not sum to the width out of it.
+
+Labels drop the package path onto a second line: a fully-qualified Go name is
+wide enough that a graph of them shrinks to fit and stops being readable. A
+click's Detail still shows the whole name.
 
 ```sql
 SET param_edge_cap = 150;
@@ -58,7 +62,9 @@ WITH
     FROM weights),
   vertices AS (
     SELECT fn AS id,
-           concat(fn, ' · ', toString(round(cum_ns / 1e6, 1)), ' ms') AS label
+           concat(replaceRegexpOne(fn, '^(.*/)?([^/]*)$', '\\2'), '\n',
+                  toString(round(cum_ns / 1e6, 1)), ' ms') AS label,
+           cum_ns AS weight
     FROM (
       SELECT arrayJoin(arrayDistinct(stack)) AS fn, sum(value) AS cum_ns
       FROM keelson('pprof_cpu')
