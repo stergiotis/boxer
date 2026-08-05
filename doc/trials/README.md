@@ -44,7 +44,8 @@ Each trial is a directory — a self-contained dossier:
 ```
 
 A run directory holds small, textual, provenance-grade evidence. Bulk
-results belong in the facts store; datasets are never committed.
+results belong in the facts store; datasets are never committed. New
+trials start from the skeletons in `doc/templates/trial/`.
 
 Consequences of that framing:
 

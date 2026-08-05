@@ -1,0 +1,82 @@
+---
+type: explanation
+audience: package maintainer
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** A measurement *plan*, not a result:
+> every number below is either quoted from a cited source or marked "to
+> measure". Do not cite as authoritative.
+
+> **Provenance.** Compiled <YYYY-MM-DD>, ahead of any measurement. Claims
+> are tiered: (a) statements about this repository were checked against the
+> working tree on the compile date; (b) statements about <the external
+> workload / upstream source> were fetched on the compile date — the first
+> milestone pins a commit and re-verifies everything quoted here.
+
+# <Trial name> — a toolbelt trial<, and <the domain question>>
+
+## 1 Question and scope
+
+<Per the directory convention the toolbelt question usually leads and the
+domain numbers are a side-product; if this trial weighs them differently,
+say so here.>
+
+1. **The trial proper.** How well does the native toolbelt carry
+   <the workload> — which gaps and frictions surface on the way, and how
+   short and how legible is the solution that emerges? Solution artifacts
+   are committed and counted; every escape hatch is a finding, not a fix.
+2. **The side-product.** <The domain question the numbers answer.>
+
+This page is a trial protocol (see the
+[directory convention](../README.md)); runs append to the
+[logbook](./logbook.md).
+
+In scope: <...>. Out of scope: <...>.
+
+## 2 The workload
+
+<Dataset / task / queries, with source and verification date. Quote what a
+run must reproduce, precisely enough that a later run is comparable; note
+what the first milestone must pin and re-verify.>
+
+## 3 System under test and arms
+
+<What is measured, in which configurations; an arms table when there is
+more than one. State the standing hypotheses a run confirms or refutes.>
+
+## 4 Method
+
+- **Environment.** <Engine versions, server TZ; hardware recorded at run
+  time — never hostnames or personal paths.>
+- **Per run:** <what is recorded — metrics, evidence files under the run
+  dir.>
+- **Idiom rule.** <Which arms must run through native paths, and which may
+  bypass them as reference points.>
+- **Process measurement.** The solution itself is a result: artifacts are
+  committed, their size recorded (files, lines), and manual interventions
+  counted — an escape hatch is by definition a finding.
+- **Reporting.** Domain results land as facts and are read back through
+  applets. Every run, at every milestone, appends a logbook entry (date,
+  build, hardware, findings, outcome) per the directory convention.
+
+## 5 Findings ledger
+
+Findings follow the classification scheme in the
+[directory convention](../README.md): competence slug × relation
+(`missing` / `broken` / `pain`) × ISO 25010 characteristic, severity
+S1–S4, evidence in the run dir. Pre-registered candidates, so later
+readers can tell hypotheses from surprises: <expected potholes>.
+
+## 6 Milestone cut (each descope-able)
+
+- **M0 — <name>.** <scope> Gate: <criterion>.
+- **M1 — <name>.** <scope>
+
+## 7 Open questions
+
+1. <...>
+
+Related: <links to ADRs and sibling documents>.

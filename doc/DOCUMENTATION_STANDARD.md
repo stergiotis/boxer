@@ -366,6 +366,9 @@ Canonical skeletons live under `doc/templates/`:
 - `doc/templates/TUTORIAL.md.tmpl`
 - `doc/templates/HOWTO.md.tmpl`
 - `doc/templates/adr/0000-template.md`
+- `doc/templates/trial/README.md.tmpl` (trial protocol; see
+  [doc/trials/](./trials/README.md))
+- `doc/templates/trial/logbook.md.tmpl`
 
 For reference, the ADR skeleton is:
 
