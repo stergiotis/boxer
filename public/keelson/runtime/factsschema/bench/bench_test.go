@@ -6,8 +6,8 @@
 //
 //   - Grant — chstore.WriteGrant: symbol×5 + bool×1.
 //   - State — chstore.WriteState: symbol×3 + blob×1.
-//   - Log5 — chstore.WriteLog with five typed fields: symbol×4 + string×1
-//     + per-field i64/u64/f64/bool/time mixed via writeLogTypedFields.
+//   - Log5 — chstore.WriteLog with five typed fields: symbol×4 + string×1 +
+//     per-field i64/u64/f64/bool/time mixed via writeLogTypedFields.
 //
 // Phases:
 //

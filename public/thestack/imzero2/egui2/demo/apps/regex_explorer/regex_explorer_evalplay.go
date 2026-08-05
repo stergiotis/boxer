@@ -95,7 +95,7 @@ type evalSnapshot struct {
 // not (pattern `a*` over "xyz" — four for Go, none for ClickHouse), so
 // keeping them would shift every match_idx and make the join compare
 // unrelated rows. A capture group that participated but matched the
-// empty string still gets a row, with matched=1 and text=''.
+// empty string still gets a row, with matched=1 and an empty text.
 func (inst *App) snapshotEval() (snap evalSnapshot, err error) {
 	if inst.haystack == "" {
 		err = eh.Errorf("nothing to hand off: the haystack is empty")
@@ -338,7 +338,7 @@ func (inst *App) openEvalPlayground(sql string) (err error) {
 // side it degrades to a plain SELECT that says so (ADR-0017 §SD3).
 //
 // `join_use_nulls = 1` is load-bearing, not decoration: without it a
-// missing side comes back as '' rather than NULL, which reads as
+// missing side comes back as the empty string rather than NULL, reading as
 // agreement on an empty string — the exact failure this surface exists to
 // expose.
 func buildEvalSQL(snap evalSnapshot, handles evalHandles) (sql string) {

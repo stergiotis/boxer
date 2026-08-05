@@ -35,7 +35,8 @@ const (
 //
 // Scope is written even when empty (the column tier): an always-present
 // attribute keeps the read uniform, and an absent one would read back as
-// '' anyway, so writing it costs nothing and removes a special case.
+// the empty string anyway, so writing it costs nothing and removes a
+// special case.
 func (inst *Store) WriteColumnWidth(row factsstore.ColumnWidthRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	ts := defaultTs(row.Ts)

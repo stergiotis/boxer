@@ -9,8 +9,8 @@
 //     regexsummary instance carries the toggle by default; there is no
 //     opt-in.
 //   - Level 2 (inspector window): a draggable [c.Window] containing the
-//     full [regex_explorer] body (cheatsheet panel, pattern + haystack
-//     + multi-pattern inputs, Test / List / Replace tabs, bottom status
+//     full [regex_explorer] body (cheatsheet panel, pattern + haystack +
+//     multi-pattern inputs, Test / List / Replace tabs, bottom status
 //     bar) plus the standard [inspector.ProvenanceChip]. Opened by
 //     clicking the toggle and closed by clicking it again or the
 //     window's title-bar X. A bezier connector (via

@@ -133,9 +133,9 @@ func buildColumnExprs() (e recentLogsColumnExprs) {
 // running prefix-sum of lrcard yields the lr-index for each value
 // position. Looking up our membership id in lr gives an lr-index;
 // finding that index in the cumulative-sum array yields the value
-// position. The whole pipeline is wrapped in `if(indexOf > 0, …, '')`
-// because `indexOf(lr, missing) = 0` would otherwise lead arrayElement
-// to misbehave on edge cases.
+// position. The whole pipeline is wrapped in an `if` on `indexOf > 0`
+// falling back to the empty string, because `indexOf(lr, missing) = 0`
+// would otherwise lead arrayElement to misbehave on edge cases.
 func pickLcrString(valueArr, lrArr, lrCardArr string, membershipId uint64) (expr string) {
 	idxInLr := fmt.Sprintf("indexOf(%s, %d)", lrArr, membershipId)
 	expr = fmt.Sprintf("if(%s > 0, arrayElement(%s, indexOf(arrayCumSum(%s), %s)), '')",

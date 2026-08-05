@@ -16,7 +16,7 @@ import (
 // no files (empty merges, typo-only commits) emit a single row with Path==""
 // as a sentinel so commit-level aggregations (countDistinct(commitHash)) still
 // see them. Trend-mining queries that want file-level joins should filter
-// `path <> ''`.
+// out the rows whose path is the empty string.
 type FlatCommitChange struct {
 	RepoName          string `json:"repoName"`
 	ChunkIndex        int32  `json:"chunkIndex"`

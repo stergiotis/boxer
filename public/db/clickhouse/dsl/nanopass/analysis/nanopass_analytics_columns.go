@@ -48,8 +48,8 @@ func ExtractColumns(pr *nanopass.ParseResult) (refs []ColumnRef) {
 }
 
 // decodePath decodes each segment of a dotted identifier and rejoins
-// them. Decoding the whole text instead would read the leading and
-// trailing quote of ``a`.`b`` as one pair and mangle the name.
+// them. Decoding the whole text instead would read the outermost
+// backticks of a quoted two-part name as one pair and mangle it.
 func decodePath(ids []grammar1.IIdentifierContext) (path string) {
 	if len(ids) == 1 {
 		return nanopass.DecodeIdentifier(ids[0].GetText())
