@@ -3,6 +3,7 @@ package play
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"sync"
@@ -213,6 +214,50 @@ func TestFormatProgressLine(t *testing.T) {
 	// The pane strip drops the memory/elapsed tail the status bar carries.
 	strip := formatProgressStrip(v)
 	require.Equal(t, "1.9B / 2.5B rows · 1.2M rows/s · ETA 1m20s", strip)
+}
+
+// The landed-run readout that takes the progress row's slot between fetches:
+// exact counts, an abbreviated rate, and the lane's wall clock.
+func TestFormatLaneStats(t *testing.T) {
+	require.Equal(t,
+		"5,000,000,000 rows read · 314,368 returned · 200 M rows/s · 25s",
+		formatLaneStats(laneStats{valid: true, readRows: 5_000_000_000, returned: 314_368,
+			elapsed: 25 * time.Second}))
+
+	// The clock is rounded to the millisecond, not printed raw.
+	require.Contains(t,
+		formatLaneStats(laneStats{valid: true, readRows: 12, returned: 4,
+			elapsed: 1500600 * time.Microsecond}),
+		"· 1.501s")
+
+	// Under an SI step the magnitude is spelled out, and the padding
+	// SIWithDigits leaves where its unit would go must not double the space.
+	require.Equal(t, "500 rows read · 500 returned · 500 rows/s · 1s",
+		formatLaneStats(laneStats{valid: true, readRows: 500, returned: 500, elapsed: time.Second}))
+
+	// A run with no clock (or one too fast to have a meaningful rate) still
+	// reports what it moved; an unmeasurable throughput is left unsaid rather
+	// than divided by zero.
+	require.Equal(t, "12 rows read · 4 returned",
+		formatLaneStats(laneStats{valid: true, readRows: 12, returned: 4}))
+}
+
+// The stats mirror the SERVED result every demand, so a failed or absent one
+// clears them rather than leaving the previous run's numbers under a new error.
+func TestStatsFromLaneMirrorsServedResult(t *testing.T) {
+	rec := int64Rec("n", 1, 2, 3)
+	defer rec.Release()
+
+	s := statsFromLane(laneView{key: "k", rec: rec, elapsed: 2 * time.Second,
+		summary: Summary{ReadRows: 100}})
+	require.True(t, s.valid)
+	require.Equal(t, uint64(100), s.readRows)
+	require.Equal(t, int64(3), s.returned)
+	require.Equal(t, 2*time.Second, s.elapsed)
+
+	require.False(t, statsFromLane(laneView{}).valid, "nothing served yet")
+	require.False(t, statsFromLane(laneView{key: "k", err: errors.New("boom")}).valid,
+		"a failed run has no accounting worth showing")
 }
 
 // progressTicks feeds the tracker a run at a constant rate: one tick per

@@ -93,6 +93,9 @@ type MapDriver struct {
 	// folded once per frame in syncProgress and drawn beside the Cancel.
 	progress      progressTracker
 	frameProgress progressView
+	// stats is the accounting of the fetch that produced the raster on screen,
+	// shown in the slot the progress row occupies while one is in flight.
+	stats laneStats
 
 	loading bool
 	// cancelled says the last fetch was aborted at the Cancel button rather
@@ -380,16 +383,18 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	mw.Send()
 }
 
-// noteLane mirrors one demand's lane state onto the panel. All three fields are
-// rewritten every demand so none can latch: the loading flag drives the
-// progress row, the error is the lane's own (nil clears it — the review finding
-// this shape came from), and a started run makes the cancel notice stale.
+// noteLane mirrors one demand's lane state onto the panel. Every field is
+// rewritten each demand so none can latch: the loading flag drives the progress
+// row, the error is the lane's own (nil clears it — the review finding this
+// shape came from), the stats belong to the served result, and a started run
+// makes the cancel notice stale.
 func (inst *MapDriver) noteLane(view laneView) {
 	inst.loading = view.loading
 	if view.loading {
 		inst.cancelled = false
 	}
 	inst.laneErr = view.err
+	inst.stats = statsFromLane(view)
 }
 
 // syncProgress folds this frame's lane tick into the panel's estimator. Called
@@ -452,11 +457,19 @@ func (inst *MapDriver) renderControls() {
 		// This is also why statusLine has no loading case: the numbers here
 		// say it better, and the line below goes on reporting the last-good
 		// raster that is still on screen.
-		if inst.loading {
+		//
+		// Between fetches the same slot carries what the last one cost, so the
+		// counters climbing during a run settle into the run's accounting
+		// rather than vanishing with it.
+		switch {
+		case inst.loading:
 			c.Separator().Vertical().Send()
 			if renderLaneProgress(inst.ids, "map-cancel", inst.frameProgress) {
 				inst.cancelFetch()
 			}
+		case inst.stats.valid:
+			c.Separator().Vertical().Send()
+			diagWeak(formatLaneStats(inst.stats))
 		}
 	}
 	c.Label(inst.statusLine()).Send()

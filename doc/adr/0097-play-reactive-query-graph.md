@@ -527,6 +527,20 @@ gate, it would only repeat what the bar says) and gained a "fetch cancelled"
 notice that survives until a run starts — silence after a click reads as the
 button having missed.
 
+**Between fetches the same slot carries what the last one cost**: rows read,
+rows returned, the throughput those imply, and the wall clock
+(`337,130 rows read · 349,184 returned · 158.6 k rows/s · 2.124s`). One slot,
+one story — the counters that climb during a run settle into its accounting
+rather than vanishing with it, and the panel stops being the only place in play
+where a query's cost is invisible after the fact. `returned` is the record's own
+row count rather than the summary's `ResultRows`: it is what the panel received,
+so it holds on an endpoint that reports no summary and cannot disagree with what
+is drawn. The clock is the lane's rather than the server's `ElapsedNs` — what
+the person waited, and what play's status bar already reports — so the
+throughput is end-to-end. Counts are exact (a statistics readout is where the
+digits are the point); only the rate is abbreviated. Formatting is
+`dustin/go-humanize`, already a direct dependency.
+
 ### 2026-08-01 — SQL tools leave the result strip (design): the zone becomes a kind, and the focus knobs stop being body-only
 
 Eighteen built-in tabs, thirteen of them in the body leaf, and five of the

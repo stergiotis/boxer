@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/hmi/progressbar"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
@@ -355,6 +356,69 @@ func renderLaneProgress(ids *c.WidgetIdStack, cancelID string, v progressView) (
 	// which is all that is known.
 	renderProgressBar(progressView{}, paneProgressWidth)
 	return
+}
+
+// laneStats is the accounting of the run that produced what a lane-owning
+// panel is currently drawing. It fills the slot renderLaneProgress occupies
+// while a run is in flight, so the row reads as one story: the counters climb
+// during, and settle into what the finished run cost.
+//
+// valid is false when no result has landed or the last one errored — the same
+// no-latch discipline the panels apply to the lane error, mirrored from the
+// view every demand rather than kept until something overwrites it.
+type laneStats struct {
+	valid    bool
+	readRows uint64
+	returned int64
+	elapsed  time.Duration
+}
+
+// statsFromLane lifts one demand's served result into [laneStats].
+//
+// `returned` is the record's own row count rather than the summary's
+// ResultRows: it is what the panel actually received, so it holds on an
+// endpoint that reports no summary at all (chlocal, mocks) and cannot disagree
+// with what is on screen.
+func statsFromLane(view laneView) (out laneStats) {
+	if view.key == "" || view.err != nil {
+		return
+	}
+	out.valid = true
+	out.readRows = view.summary.ReadRows
+	out.elapsed = view.elapsed
+	if view.rec != nil {
+		out.returned = view.rec.NumRows()
+	}
+	return
+}
+
+// formatLaneStats renders one landed run: rows read, rows returned, the
+// throughput those imply, and the wall clock.
+//
+// The clock is the lane's, not the server's ElapsedNs — it is what the person
+// waited, and it is the clock play's own status bar reports — so the
+// throughput is end-to-end rather than the server's internal rate. Counts are
+// exact (this is a statistics readout, where the digits are the point); only
+// the rate is abbreviated, where a magnitude is all anyone reads.
+func formatLaneStats(s laneStats) string {
+	var b strings.Builder
+	b.WriteString(humanize.Comma(int64(s.readRows)))
+	b.WriteString(" rows read · ")
+	b.WriteString(humanize.Comma(s.returned))
+	b.WriteString(" returned")
+	if s.elapsed <= 0 {
+		return b.String()
+	}
+	if rate := float64(s.readRows) / s.elapsed.Seconds(); rate >= 1 {
+		b.WriteString(" · ")
+		// SIWithDigits pads a bare magnitude with the space its (empty) unit
+		// would have taken; trimming keeps "500 rows/s" from doubling it.
+		b.WriteString(strings.TrimSpace(humanize.SIWithDigits(rate, 1, "")))
+		b.WriteString(" rows/s")
+	}
+	b.WriteString(" · ")
+	b.WriteString(s.elapsed.Round(time.Millisecond).String())
+	return b.String()
 }
 
 // humanCount renders a row count with K/M/B/T suffixes (counts, unlike
