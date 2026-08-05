@@ -198,6 +198,13 @@ func definitionsWalkersWidgets() []*ir.BuilderFactoryNode {
 	//   - .TileUrl("https://..."): custom XYZ template with {z}/{x}/{y}
 	//   - noTiles=true:             no basemap (virtual H3 canvas)
 	//
+	// TLS for a custom source, when its certificate does not chain to the
+	// client's bundled webpki roots (there is no system trust store in play):
+	//   - .TileCaFile("/etc/ssl/gis-ca.pem"): add roots, verification stays on
+	//   - .TileInsecureTls(true):             verification off; supersedes the above
+	// Both are inert without .TileUrl — the built-in OpenStreetMap source is
+	// fetched by walkers' own client, which neither method reaches.
+	//
 	// If the tile config (url / attribution / maxZoom / tileSize) changes
 	// for an existing map id across frames, HttpTiles is rebuilt — the
 	// tile cache is dropped and fresh downloads begin under the new URL.
@@ -243,6 +250,19 @@ func definitionsWalkersWidgets() []*ir.BuilderFactoryNode {
 			// Tile edge length in pixels (default 256 when 0).
 			BeginMethod("tileSize").Arg("size", ctabb.U32).
 			CodeClientRust(rustClientCode("tile_size = size;\n")).EndMethod().
+			// PEM bundle added to the trust roots for tile requests, for a
+			// server behind an internal CA. A path, not the bytes: this
+			// opcode ships every frame, and the client reads the file once
+			// per tile-source construction. Read client-side, so it names a
+			// file on the renderer's filesystem.
+			BeginMethod("tileCaFile").Arg("path", ctabb.S).
+			CodeClientRust(rustClientCode("tile_ca_file = path;\n")).EndMethod().
+			// Turn off certificate verification for tile requests. Only
+			// reaches a custom .TileUrl source — the built-in OpenStreetMap
+			// source is never built through the client this flag configures.
+			// Supersedes .TileCaFile.
+			BeginMethod("tileInsecureTls").Arg("on", ctabb.B).
+			CodeClientRust(rustClientCode("tile_insecure_tls = on;\n")).EndMethod().
 			Build()...).
 		WithConstructionCodeClientRust(rustClientCode(`0u8;
 let mut width: f32 = 600.0;
@@ -256,6 +276,8 @@ let mut tile_url_template: String = String::new();
 let mut tile_attribution_text: String = String::new();
 let mut tile_max_zoom: u8 = 0;
 let mut tile_size: u32 = 0;
+let mut tile_ca_file: String = String::new();
+let mut tile_insecure_tls: bool = false;
 `)).
 		WithApplyCodeClientRust(rustClientCode(`
 self.render_walkers_map(
@@ -264,6 +286,7 @@ self.render_walkers_map(
     width, height, fill_available, override_zoom, override_center,
     zoom_gesture, panning,
     tile_url_template, tile_attribution_text, tile_max_zoom, tile_size,
+    tile_ca_file, tile_insecure_tls,
 );
 `)).
 		WithSettingImmediate(true).

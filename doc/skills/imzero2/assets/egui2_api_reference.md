@@ -199,7 +199,7 @@ status: draft
 | Vertical | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | VerticalCentered | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | VerticalCenteredJustified | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
-| WalkersMap | BuilderFactory | Yes | 3 | 0 | 11 | Immediate, Retained |
+| WalkersMap | BuilderFactory | Yes | 3 | 0 | 13 | Immediate, Retained |
 | WarnIfDebugBuild | Procedural | No | 0 | 0 | - | - |
 | WidgetText | BuilderFactory | No | 0 | 0 | 1 | Retained |
 | WidgetsGlobalThemePreferenceButtons | Procedural | No | 0 | 0 | - | - |
@@ -2841,6 +2841,8 @@ Block
 - **TileAttribution**(text: s)
 - **TileMaxZoom**(zoom: u8)
 - **TileSize**(size: u32)
+- **TileCaFile**(path: s)
+- **TileInsecureTls**(on: b)
 
 #### Return Type
 

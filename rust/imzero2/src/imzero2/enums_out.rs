@@ -1429,6 +1429,8 @@ pub enum WalkersMapBuilderMethodId {
     TileAttribution = 9,
     TileMaxZoom = 10,
     TileSize = 11,
+    TileCaFile = 12,
+    TileInsecureTls = 13,
 }
 
 #[allow(dead_code)]

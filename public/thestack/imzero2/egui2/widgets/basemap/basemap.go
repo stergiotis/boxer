@@ -4,6 +4,9 @@
 // terrainscope) routes its tile configuration through here, so a deployment
 // points every basemap at a self-hosted GIS with a single BOXER_MAP_TILE_URL —
 // no per-app knob, and no traffic to tile.openstreetmap.org once it is set.
+// BOXER_MAP_TILE_CA_FILE and BOXER_MAP_TILE_INSECURE_TLS cover the case where
+// that GIS serves https under a certificate the renderer's bundled roots do
+// not chain to.
 package basemap
 
 import (
@@ -36,6 +39,24 @@ var (
 		Description: "highest zoom level served by BOXER_MAP_TILE_URL (1..255); 0 or unset keeps the widget default (19). Ignored unless BOXER_MAP_TILE_URL is set.",
 		Category:    env.CategoryE("boxer-map"),
 	})
+
+	// The two TLS knobs below exist because the renderer's HTTP client
+	// trusts the webpki root bundle and nothing else: there is no system
+	// trust store to add a private CA to, and SSL_CERT_FILE is ignored. A
+	// self-hosted GIS behind an internal CA is therefore unreachable over
+	// https without one of these. Prefer the CA file — it keeps
+	// certificate verification on.
+	TileCAFile = env.NewPath(env.Spec{
+		Name:        "BOXER_MAP_TILE_CA_FILE",
+		Description: "path to a PEM certificate bundle added to the trust roots when fetching from BOXER_MAP_TILE_URL, for a tile server behind an internal CA; certificate verification stays on. Must hold the issuing CA — a bare self-signed server certificate is not accepted as its own trust anchor, and needs BOXER_MAP_TILE_INSECURE_TLS instead. Ignored unless BOXER_MAP_TILE_URL is set, and superseded by BOXER_MAP_TILE_INSECURE_TLS.",
+		Category:    env.CategoryE("boxer-map"),
+	})
+
+	TileInsecureTLS = env.NewBool(env.Spec{
+		Name:        "BOXER_MAP_TILE_INSECURE_TLS",
+		Description: "disable TLS certificate verification for BOXER_MAP_TILE_URL tile requests. Accepts any certificate, so it also accepts an interceptor's: use it only against a tile server you control on a trusted network, and prefer BOXER_MAP_TILE_CA_FILE. Ignored unless BOXER_MAP_TILE_URL is set.",
+		Category:    env.CategoryE("boxer-map"),
+	})
 )
 
 // Configured reports whether a custom tile server is set (BOXER_MAP_TILE_URL
@@ -53,6 +74,17 @@ func Configured() bool {
 // (identical to never calling .TileUrl), so wiring Apply in is
 // behaviour-preserving for the unconfigured default. Tile size is left at the
 // widget default (256px), outside the configurable knob set.
+//
+// Every knob is gated on a non-empty url, the TLS pair included: the built-in
+// OpenStreetMap source keeps its verified public-internet fetch no matter what
+// else is in the environment, so a stray BOXER_MAP_TILE_INSECURE_TLS cannot
+// downgrade a deployment that never opted into a custom server.
+//
+// Apply runs once per frame per map, so it does no I/O — the CA file travels
+// as a path and is read renderer-side, once per tile-source construction. The
+// renderer also owns the precedence when both TLS knobs are set (insecure
+// wins, CA file ignored, warned once) because that is where the log line is
+// cheap; Go emitting it here would fire every frame.
 func Apply(mw c.WalkersMapFluid) c.WalkersMapFluid {
 	url := strings.TrimSpace(TileURL.Get())
 	if url == "" {
@@ -64,6 +96,12 @@ func Apply(mw c.WalkersMapFluid) c.WalkersMapFluid {
 	}
 	if zoom, set := clampMaxZoom(TileMaxZoom.Get()); set {
 		mw = mw.TileMaxZoom(zoom)
+	}
+	if ca := strings.TrimSpace(TileCAFile.Get()); ca != "" {
+		mw = mw.TileCaFile(ca)
+	}
+	if TileInsecureTLS.Get() {
+		mw = mw.TileInsecureTls(true)
 	}
 	return mw
 }

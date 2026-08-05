@@ -1172,79 +1172,23 @@ pub struct WalkersRasterRenderable {
     pub opacity: f32,
 }
 
-// Custom tile source — Go-supplied XYZ URL template with optional
-// attribution / max-zoom / tile-size overrides. The URL template must
-// contain `{z}`, `{x}`, `{y}` placeholders (no `{s}` subdomain rotation
-// in v1 — users who need load balancing can hard-code a single subdomain
-// or we add a subdomains Vec in a later rev).
-pub struct CustomTileSource {
-    url_template: String,
-    // walkers::sources::Attribution holds `&'static str`s; we leak the
-    // runtime-supplied strings once at construction time (see
-    // `make_custom_tile_source`) so long-lived apps with churning tile
-    // configs will see small, bounded memory growth per new source.
-    attribution_text: &'static str,
-    attribution_url: &'static str,
-    tile_size_: u32,
-    max_zoom_: u8,
-}
-
-impl walkers::sources::TileSource for CustomTileSource {
-    fn tile_url(&self, tile_id: walkers::TileId) -> String {
-        // String::replace is cheap enough at tile-request rates; if this
-        // becomes hot we can precompile the template into a Vec<Segment>.
-        self.url_template
-            .replace("{z}", &tile_id.zoom.to_string())
-            .replace("{x}", &tile_id.x.to_string())
-            .replace("{y}", &tile_id.y.to_string())
-    }
-    fn attribution(&self) -> walkers::sources::Attribution {
-        walkers::sources::Attribution {
-            text: self.attribution_text,
-            url: self.attribution_url,
-            logo_light: None,
-            logo_dark: None,
-        }
-    }
-    fn tile_size(&self) -> u32 {
-        self.tile_size_
-    }
-    fn max_zoom(&self) -> u8 {
-        self.max_zoom_
-    }
-}
-
-fn leak_str(s: &str) -> &'static str {
-    // Interning via a single static map would dedupe identical attributions;
-    // for v1 the unbounded leak is acceptable (tile config changes at most
-    // a handful of times in a realistic session). Revisit if it shows up
-    // in a heap profile.
-    Box::leak(s.to_owned().into_boxed_str())
-}
-
-fn make_custom_tile_source(
-    url_template: String,
-    attribution: String,
-    tile_size: u32,
-    max_zoom: u8,
-) -> CustomTileSource {
-    CustomTileSource {
-        url_template,
-        attribution_text: leak_str(&attribution),
-        attribution_url: "",
-        tile_size_: if tile_size == 0 { 256 } else { tile_size },
-        max_zoom_: if max_zoom == 0 { 19 } else { max_zoom },
-    }
-}
+// CustomTileSource, its attribution leak, and the boxer-owned Tiles
+// implementation live in imzero2::walkers_tiles.
+use crate::imzero2::walkers_tiles::{
+    CustomHttpTiles, TileTlsConfig, WalkersTiles, make_custom_tile_source,
+};
 
 // Stable signature of a tile config so we can detect changes across frames
-// and rebuild HttpTiles when the user switches tile servers.
+// and rebuild the tile source when the user switches tile servers. The TLS
+// pair is part of it: flipping either knob has to rebuild, since the HTTP
+// client is created once per tile source.
 pub fn tile_config_signature(
     url_template: &str,
     attribution: &str,
     tile_size: u32,
     max_zoom: u8,
     no_tiles: bool,
+    tls: &TileTlsConfig,
 ) -> u64 {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -1254,16 +1198,21 @@ pub fn tile_config_signature(
     tile_size.hash(&mut h);
     max_zoom.hash(&mut h);
     no_tiles.hash(&mut h);
+    tls.ca_file.hash(&mut h);
+    tls.insecure.hash(&mut h);
     h.finish()
 }
 
-// Per-widget retained state. HttpTiles is `None` when the user constructed
-// the map with `NoTiles()`. The outline cache is keyed by a hash of the
-// sorted cell set; it lets us skip dissolve work when a region's cell set
-// doesn't change between frames. `tile_signature` tracks the current tile
-// config so render_walkers_map can rebuild HttpTiles on change.
+// Per-widget retained state. The tile source is `None` when the user
+// constructed the map with `NoTiles()`, and otherwise one of the two
+// WalkersTiles variants — walkers' own HttpTiles for everything that needs no
+// TLS configuration, CustomHttpTiles for what does. The outline
+// cache is keyed by a hash of the sorted cell set; it lets us skip dissolve
+// work when a region's cell set doesn't change between frames.
+// `tile_signature` tracks the current tile config so render_walkers_map can
+// rebuild the tile source on change.
 pub struct WalkersState {
-    pub tiles: Option<walkers::HttpTiles>,
+    pub tiles: Option<WalkersTiles>,
     pub memory: walkers::MapMemory,
     pub region_outline_cache: std::collections::HashMap<u64, Vec<Vec<walkers::Position>>>,
     pub tile_signature: u64,
@@ -1276,6 +1225,7 @@ pub fn new_walkers_state(
     tile_size: u32,
     max_zoom: u8,
     no_tiles: bool,
+    tls: &TileTlsConfig,
 ) -> WalkersState {
     let tiles = build_walkers_tiles(
         ctx,
@@ -1284,6 +1234,7 @@ pub fn new_walkers_state(
         tile_size,
         max_zoom,
         no_tiles,
+        tls,
     );
     WalkersState {
         tiles,
@@ -1295,13 +1246,15 @@ pub fn new_walkers_state(
             tile_size,
             max_zoom,
             no_tiles,
+            tls,
         ),
     }
 }
 
-// Construct HttpTiles according to the supplied tile config. Empty url
-// template → built-in OSM source; non-empty → CustomTileSource;
-// no_tiles → None (no tiles drawn).
+// Construct the tile source according to the supplied tile config.
+// no_tiles → None (no tiles drawn); empty url template → built-in OSM source;
+// non-empty → CustomTileSource, fetched by walkers' own client unless the TLS
+// knobs are set, which walkers' client cannot honour (see walkers_tiles).
 pub fn build_walkers_tiles(
     ctx: &egui::Context,
     url_template: &str,
@@ -1309,23 +1262,47 @@ pub fn build_walkers_tiles(
     tile_size: u32,
     max_zoom: u8,
     no_tiles: bool,
-) -> Option<walkers::HttpTiles> {
+    tls: &TileTlsConfig,
+) -> Option<WalkersTiles> {
     if no_tiles {
         return None;
     }
     if url_template.is_empty() {
-        return Some(walkers::HttpTiles::new(
+        // The built-in source is public-internet OpenStreetMap under a
+        // publicly-issued certificate; the TLS knobs never reach it. Go gates
+        // them on a custom URL too, so arriving here with either one set means
+        // a direct .TileInsecureTls / .TileCaFile call at some other call site.
+        if tls.is_configured() {
+            tracing::warn!("tile TLS configuration ignored: it applies only to a custom tile URL");
+        }
+        return Some(WalkersTiles::Walkers(walkers::HttpTiles::new(
             walkers::sources::OpenStreetMap,
             ctx.clone(),
-        ));
+        )));
     }
-    let source = make_custom_tile_source(
-        url_template.to_owned(),
-        attribution.to_owned(),
-        tile_size,
-        max_zoom,
-    );
-    Some(walkers::HttpTiles::new(source, ctx.clone()))
+    let source = make_custom_tile_source(url_template.to_owned(), attribution, tile_size, max_zoom);
+    if !tls.is_configured() {
+        return Some(WalkersTiles::Walkers(walkers::HttpTiles::new(
+            source,
+            ctx.clone(),
+        )));
+    }
+    // Logged here rather than deeper down because this is the one place that
+    // has the URL, the config and a once-per-tile-config-change cadence. An
+    // operator turning verification off should find it in the log.
+    if tls.insecure {
+        if !tls.ca_file.is_empty() {
+            tracing::warn!(
+                ca_file = %tls.ca_file,
+                "tile CA bundle ignored — certificate verification is disabled"
+            );
+        }
+        tracing::warn!(
+            url = %url_template,
+            "TLS certificate verification is DISABLED for this tile server; any certificate is accepted"
+        );
+    }
+    Some(WalkersTiles::Custom(CustomHttpTiles::new(source, tls, ctx)))
 }
 
 // Fetcher-facing snapshot of the last rendered walkersMap's viewport +
@@ -12610,6 +12587,8 @@ self.apply_widget(w,u,f,Some(i));
                 let mut tile_attribution_text: String = String::new();
                 let mut tile_max_zoom: u8 = 0;
                 let mut tile_size: u32 = 0;
+                let mut tile_ca_file: String = String::new();
+                let mut tile_insecure_tls: bool = false;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(WalkersMapBuilderMethodId::from_repr)?;
@@ -12700,6 +12679,22 @@ self.apply_widget(w,u,f,Some(i));
                             let mut size = self.io.read_plain_u32()?;
                             tile_size = size;
                         }
+                        WalkersMapBuilderMethodId::TileCaFile => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match WalkersMapBuilderMethodId::TileCaFile");
+                            #[allow(unused_mut)]
+                            let mut path = self.io.read_plain_s()?;
+                            tile_ca_file = path;
+                        }
+                        WalkersMapBuilderMethodId::TileInsecureTls => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match WalkersMapBuilderMethodId::TileInsecureTls"
+                            );
+                            #[allow(unused_mut)]
+                            let mut on = self.io.read_plain_b()?;
+                            tile_insecure_tls = on;
+                        }
                     }
                 }
                 if d == 0 {
@@ -12726,6 +12721,8 @@ self.apply_widget(w,u,f,Some(i));
                     tile_attribution_text,
                     tile_max_zoom,
                     tile_size,
+                    tile_ca_file,
+                    tile_insecure_tls,
                 );
             }
             FuncProcId::WarnIfDebugBuild => {
@@ -13148,6 +13145,8 @@ egui::Window::new(label).id(i);
         tile_attribution: String,
         tile_max_zoom: u8,
         tile_size: u32,
+        tile_ca_file: String,
+        tile_insecure_tls: bool,
     ) {
         let _ = f;
         if u.is_none() {
@@ -13166,14 +13165,19 @@ egui::Window::new(label).id(i);
 
         // Ensure per-widget state exists — construct with the supplied tile
         // config on first sight. If the tile config signature changes
-        // on a later frame (Go switched tile servers) we rebuild HttpTiles
-        // in place without touching MapMemory or the outline cache.
+        // on a later frame (Go switched tile servers) we rebuild the tile
+        // source in place without touching MapMemory or the outline cache.
+        let tls = TileTlsConfig {
+            ca_file: tile_ca_file,
+            insecure: tile_insecure_tls,
+        };
         let wanted_sig = tile_config_signature(
             &tile_url_template,
             &tile_attribution,
             tile_size,
             tile_max_zoom,
             no_tiles,
+            &tls,
         );
         if !self.walkers_states.contains_key(&map_id) {
             let st = new_walkers_state(
@@ -13183,6 +13187,7 @@ egui::Window::new(label).id(i);
                 tile_size,
                 tile_max_zoom,
                 no_tiles,
+                &tls,
             );
             self.walkers_states.insert(map_id, st);
         } else {
@@ -13195,12 +13200,13 @@ egui::Window::new(label).id(i);
                     tile_size,
                     tile_max_zoom,
                     no_tiles,
+                    &tls,
                 );
                 st.tile_signature = wanted_sig;
                 tracing::info!(
                     map_id,
                     url = %tile_url_template,
-                    "walkers tile config changed — rebuilt HttpTiles"
+                    "walkers tile config changed — rebuilt the tile source"
                 );
             }
         }
@@ -13311,7 +13317,7 @@ egui::Window::new(label).id(i);
                 let tiles_opt = &mut state.tiles;
                 let memory = &mut state.memory;
                 let tiles_dyn: Option<&mut dyn walkers::Tiles> =
-                    tiles_opt.as_mut().map(|t| t as &mut dyn walkers::Tiles);
+                    tiles_opt.as_mut().map(WalkersTiles::as_dyn);
 
                 let map_widget = walkers::Map::new(tiles_dyn, memory, initial)
                     .zoom_gesture(zoom_gesture)

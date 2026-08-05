@@ -138,6 +138,12 @@ egui_graphs = { version = "0.31", features = ["events"] }
 petgraph = { version = "0.8", default-features = false, features = ["stable_graph"] }
 png = "0.17"
 walkers = "0.56"
+# Tile downloads for a custom .TileUrl source that needs TLS configuration
+# walkers cannot express (imzero2::walkers_tiles). Both crates are already in
+# the tree via walkers itself; `blocking` is the only feature that adds
+# anything, and it keeps the tile workers off the optional tokio dependency.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking"] }
+lru = "0.18"
 # Used by imzero2::svgexport to read the TTF `name` table at font-load time,
 # so SVG export can emit the real family name (e.g. "Noto Sans") instead of
 # the generic CSS keyword. Transitively present via ab_glyph; declared

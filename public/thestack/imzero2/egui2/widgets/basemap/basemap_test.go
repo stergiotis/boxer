@@ -19,6 +19,32 @@ func TestConfigured(t *testing.T) {
 	}
 }
 
+// TestTLSKnobsDefaultToVerifiedPublicRoots pins the safe default: with nothing
+// set, neither TLS knob is on, so a basemap fetches under ordinary certificate
+// verification. Apply gates both on BOXER_MAP_TILE_URL as well, which this
+// cannot observe through the fluid — that gating is asserted by reading Apply,
+// and restated renderer-side in build_walkers_tiles.
+func TestTLSKnobsDefaultToVerifiedPublicRoots(t *testing.T) {
+	if TileInsecureTLS.Get() {
+		t.Fatalf("BOXER_MAP_TILE_INSECURE_TLS defaults to true; verification must be on unless asked")
+	}
+	if TileCAFile.Get() != "" {
+		t.Fatalf("BOXER_MAP_TILE_CA_FILE defaults to %q; want empty", TileCAFile.Get())
+	}
+
+	// A CA file is a path, not the PEM itself — it is read renderer-side, once
+	// per tile-source construction, because the walkersMap opcode ships every
+	// frame.
+	TileCAFile.SetForTest(t, "/etc/ssl/gis-ca.pem")
+	if got := TileCAFile.Get(); got != "/etc/ssl/gis-ca.pem" {
+		t.Errorf("TileCAFile.Get() = %q; want the path unchanged", got)
+	}
+	TileInsecureTLS.SetForTest(t, "1")
+	if !TileInsecureTLS.Get() {
+		t.Errorf("TileInsecureTLS.Get() = false after being set to 1")
+	}
+}
+
 // TestClampMaxZoom covers the int64→uint8 mapping: non-positive is "unset"
 // (keep the widget default), and over-range saturates instead of wrapping.
 func TestClampMaxZoom(t *testing.T) {

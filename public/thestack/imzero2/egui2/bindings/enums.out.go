@@ -914,6 +914,8 @@ const (
 	WalkersMapMethodIdTileAttribution WalkersMapMethodIdE = 9
 	WalkersMapMethodIdTileMaxZoom     WalkersMapMethodIdE = 10
 	WalkersMapMethodIdTileSize        WalkersMapMethodIdE = 11
+	WalkersMapMethodIdTileCaFile      WalkersMapMethodIdE = 12
+	WalkersMapMethodIdTileInsecureTls WalkersMapMethodIdE = 13
 )
 
 const (

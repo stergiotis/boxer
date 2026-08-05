@@ -4663,6 +4663,22 @@ func (inst WalkersMapFluid) TileSize(size uint32) WalkersMapFluid {
 	return inst
 }
 
+func (inst WalkersMapFluid) TileCaFile(path string) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdTileCaFile))
+	r.WriteString(path)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) TileInsecureTls(on bool) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdTileInsecureTls))
+	r.WriteBool(on)
+
+	return inst
+}
+
 func (inst WalkersMapFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(WalkersMapMethodIdBuild))
