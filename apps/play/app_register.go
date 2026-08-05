@@ -311,6 +311,12 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// introspection retarget below, because the pack belongs to the real
 	// server, not the in-process /query endpoint.
 	installChPack(cfg.URL, cfg.User, cfg.Password, ctx.Log())
+	// The env target, remembered before the retarget below can overwrite it:
+	// it is what the switcher's "External (reset)" restores, and it has to
+	// keep meaning "the external server" even for a window that opened on
+	// the introspection plane. Reading it back off the client after the
+	// retarget is what made the reset a no-op precisely where it was needed.
+	externalURL := cfg.URL
 	// A launch config may retarget the endpoint (ADR-0135 §SD7): an
 	// EndpointIntrospection open binds the client to the in-process keelson
 	// `/query` endpoint so ad-hoc `keelson('<handle>')` datasets resolve
@@ -339,6 +345,9 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// is its own host, so — like the standalone CLI — it relies on that shared
 	// install rather than repeating it here.
 	inner := NewLivePlayApp(client, initSQL, 100)
+	// Restore the pre-retarget meaning of "External": NewPlayApp read it off
+	// the client, which by now may be pointed at the introspection plane.
+	inner.externalURL = externalURL
 	inner.AutoRun = AutoRun.Get() != ""
 	inner.ScreenshotPath = ScreenshotPath.Get()
 	inner.ExitOnShot = ExitOnShot.Get() != ""

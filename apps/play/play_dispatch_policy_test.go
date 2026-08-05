@@ -108,6 +108,23 @@ func TestKeelsonResolverRouting(t *testing.T) {
 			wantURL:   "",
 			reasonHas: "no endpoint serves both",
 		},
+		{
+			// A system-only read names nothing that carries placement, so
+			// it stays on the base — which means it reads the base engine's
+			// system tables, and those differ: clickhouse-local's
+			// system.parts is not the server's. Deliberate: routing it off
+			// the pin on a database name the policy calls meaningless would
+			// move a query the user pointed somewhere on purpose, and would
+			// make the introspection plane's own system tables unaskable.
+			// What the switcher owes it instead is saying which base is
+			// pinned, which renderEndpointSwitcher now does.
+			name:      "system-only stays on the base, whichever base that is",
+			sql:       "SELECT sum(bytes_on_disk) FROM system.parts WHERE active GROUP BY database",
+			local:     testLocal,
+			wantClass: dispatchClassManual,
+			wantURL:   testBase,
+			reasonHas: "names no keelson tables",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

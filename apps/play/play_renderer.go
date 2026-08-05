@@ -126,10 +126,19 @@ type PlayApp struct {
 	intermediateLane *nodeLane
 
 	// endpointDraft is the editable URL in the toolbar endpoint switcher;
-	// launchURL is the original target restored by "External (reset)". See
+	// externalURL is what "External (reset)" restores. See
 	// renderEndpointSwitcher and Client.SetURL (ADR-0094 §SD6).
+	//
+	// externalURL is the *external server*, never the in-process
+	// introspection plane. NewPlayApp seeds it from the client, which is
+	// right for a plain open and for the CLI; a launch config that retargets
+	// to introspection (ADR-0135 §SD7) opens the window already pointed at
+	// the local plane, so the launcher overrides it with the pre-retarget
+	// target. Seeding it from the live client there would redefine
+	// "External" as "wherever this window opened" — leaving the one state
+	// the button exists to leave with no way out.
 	endpointDraft string
-	launchURL     string
+	externalURL   string
 	// autoEndpoint installs the keelson-aware resolver (ADR-0141): a read
 	// that names only keelson tables goes to the in-process introspection
 	// plane instead of wherever the switcher points. Off leaves the static
@@ -851,19 +860,19 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	projFSM := newProjectorFSM()
 	queryFSM := newQueryFSM()
 	// client may be nil in tests and the legacy CLI path; the endpoint switcher
-	// is guarded behind a non-nil client in renderTopBar, so an empty launch
+	// is guarded behind a non-nil client in renderTopBar, so an empty external
 	// URL is harmless here.
-	launchURL := ""
+	externalURL := ""
 	if client != nil {
-		launchURL = client.URL()
+		externalURL = client.URL()
 	}
 	inst := &PlayApp{
 		ids:              mk(),
 		graph:            graph,
 		client:           client,
 		intermediateLane: newNodeLane(clientExecutor{client: client, opts: newExecOptions("intermediate")}, memory.NewGoAllocator(), 0),
-		endpointDraft:    launchURL,
-		launchURL:        launchURL,
+		endpointDraft:    externalURL,
+		externalURL:      externalURL,
 		autoEndpoint:     true,
 		density:          styletokens.DensityFromEnv(),
 		sql:              initialSQL,
@@ -1965,7 +1974,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 // menu offers the Auto preset, a manual URL, and two fixed presets: the
 // in-process keelson introspection /query endpoint (shown only when a
 // co-resident host published one via introspecthost.Start →
-// introspect.LocalQueryEndpoint, ADR-0094 §SD6) and the launch URL
+// introspect.LocalQueryEndpoint, ADR-0094 §SD6) and the external server
 // ("External"). Every widget uses an explicit stable id, so conditionally
 // showing the keelson preset never drifts the others' ids.
 //
@@ -1976,6 +1985,13 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 // necessarily went. It reports the *last* decision rather than resolving the
 // current buffer because resolving runs the client-side rewrites, which can
 // reach the network — not something to do per frame on the render thread.
+//
+// The menu names the pinned base unconditionally, and marks whichever preset
+// the base currently is. Under Auto the toolbar label stops reporting the
+// base, so the menu is the only place left to read it — and a query that
+// names neither a keelson table nor a plain one (`system.*` only: those
+// resolve on either engine, so they carry no placement signal) stays on the
+// base without saying which engine's `system` it read.
 func (inst *PlayApp) renderEndpointSwitcher() {
 	ids := inst.ids
 	// Installed unconditionally rather than on an observed change, for the
@@ -1988,18 +2004,35 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 		inst.client.SetResolver(nil)
 	}
 
-	label := fmt.Sprintf("%s  as %s", truncateRunes(inst.client.URL(), 40), inst.client.cfg.User)
+	base := inst.client.URL()
+	label := fmt.Sprintf("%s  as %s", truncateRunes(base, 40), inst.client.cfg.User)
+	full := fmt.Sprintf("%s  as %s", base, inst.client.cfg.User)
 	if inst.autoEndpoint {
 		if dec, ok := inst.client.LastDecision(); ok {
 			// No arrow glyph: the host font has no →, and it renders as tofu.
 			label = "auto: " + truncateRunes(dec.describe(), 72)
+			full = "auto — last run went to " + dec.describe() +
+				"\npinned base: " + base
 		} else {
-			label = "auto — no query run yet"
+			// Name the base even before the first run: under Auto it is
+			// still where anything that names no keelson table will go.
+			label = "auto (" + truncateRunes(base, 40) + ") — no query run yet"
+			full = "auto — nothing has run yet; a query naming no keelson " +
+				"table goes to the pinned base: " + base
 		}
 	}
-	c.Label(label).Truncate().Send()
+	// The label is truncated twice over (runes here, pixels by Truncate), and
+	// a host:port that differs only in its tail is exactly the case where
+	// that hurts. Hover carries the untruncated text.
+	for range c.HoverText(full).KeepIter() {
+		c.Label(label).Truncate().Send()
+	}
 
+	local := introspect.LocalQueryEndpoint()
 	for range c.MenuButton(c.Atoms().Text("Endpoint").Keep()).KeepIter() {
+		for rt := range c.RichTextLabel("pinned: " + base) {
+			rt.Small().Weak()
+		}
 		c.Checkbox(ids.PrepareStr("endpointAuto"), inst.autoEndpoint,
 			"Auto — send keelson-only reads to introspection").
 			SendRespVal(&inst.autoEndpoint)
@@ -2008,21 +2041,30 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 			SendRespVal(&inst.endpointDraft)
 		if c.Button(ids.PrepareStr("endpointApply"), c.Atoms().Text("Apply").Keep()).
 			SendResp().HasPrimaryClicked() {
-			inst.client.SetURL(strings.TrimSpace(inst.endpointDraft))
-			inst.clearAutoEndpoint()
+			inst.setEndpoint(strings.TrimSpace(inst.endpointDraft))
 		}
 		c.Separator().Send()
-		if ep := introspect.LocalQueryEndpoint(); ep != "" {
+		// Presets carry the URL they would pin and mark the one already
+		// pinned, so "which of these am I on?" is answerable without
+		// clicking one to find out.
+		if local != "" {
 			if c.Button(ids.PrepareStr("endpointKeelson"),
-				c.Atoms().Text("Keelson introspection").Keep()).
+				c.Atoms().Text("Keelson introspection — "+local).Keep()).
+				Selected(base == local).
 				SendResp().HasPrimaryClicked() {
-				inst.setEndpoint(ep)
+				inst.setEndpoint(local)
 			}
 		}
-		if c.Button(ids.PrepareStr("endpointExternal"),
-			c.Atoms().Text("External (reset)").Keep()).
-			SendResp().HasPrimaryClicked() {
-			inst.setEndpoint(inst.launchURL)
+		// Offered only when there is something to reset to: SetURL ignores an
+		// empty target, so a button that could only no-op is worse than an
+		// absent one — it reads as "reset is broken".
+		if inst.externalURL != "" {
+			if c.Button(ids.PrepareStr("endpointExternal"),
+				c.Atoms().Text("External (reset) — "+inst.externalURL).Keep()).
+				Selected(base == inst.externalURL).
+				SendResp().HasPrimaryClicked() {
+				inst.setEndpoint(inst.externalURL)
+			}
 		}
 	}
 }
@@ -2031,7 +2073,14 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 // frontend to drop its cached buffer so the new URL shows (the "Stubborn Text"
 // override — a programmatic write to an interactive-widget binding). Pinning
 // an endpoint by hand is an instruction, so it also turns Auto off.
+//
+// An empty target is refused whole rather than half-applied: Client.SetURL
+// ignores it, and turning Auto off around a pin that did not happen leaves the
+// switcher claiming a state nothing established.
 func (inst *PlayApp) setEndpoint(u string) {
+	if u == "" {
+		return
+	}
 	inst.client.SetURL(u)
 	inst.endpointDraft = u
 	c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.endpointDraft)
