@@ -37,8 +37,8 @@ them):
    footprint, index effectiveness, and query latency, with and without
    secondary indices?
 
-This page is a trial protocol (see the [directory convention](./README.md));
-runs append to the [logbook](./jsonbench-on-facts.logbook.md). It is the
+This page is a trial protocol (see the [directory convention](../README.md));
+runs append to the [logbook](./logbook.md). It is the
 first task-level probe of the quality practice — an external, published
 workload attempted with native idioms only, with friction filed as findings
 rather than worked around. The finding fact family and its ISO 25010
@@ -98,7 +98,7 @@ closes.
 
 The facts store's ClickHouse backend declares its table as
 `MergeTree() ORDER BY ts` — timestamp only, no subject or kind in the key
-([`chstore.go`](../../public/keelson/runtime/factsstore/chstore/chstore.go),
+([`chstore.go`](../../../public/keelson/runtime/factsstore/chstore/chstore.go),
 `defaultEngineClause`). The in-code rationale: latest-state readback sorts
 by `ts`, so a `ts` primary key turns that read into a sparse-index range
 scan. Q1–Q5 group and filter by collection and user, not time.
@@ -143,10 +143,10 @@ deeply the long tail is mapped is a size-only sub-experiment (deep leeway
 map vs. payload-as-string, measured, not argued).
 
 Ingest rides the existing lanes: RowDML native ingestion
-([ADR-0089](../adr/0089-rowdml-serialization-clickhouse-native-ingestion.md)),
+([ADR-0089](../../adr/0089-rowdml-serialization-clickhouse-native-ingestion.md)),
 with raw JSON staged per §9 Q5. Subject identity for DIDs — millions of
 distinct users at the 100M tier — exercises the identity path
-([ADR-0106](../adr/0106-identity-fibonacci-tags-build-tag-retirement.md))
+([ADR-0106](../../adr/0106-identity-fibonacci-tags-build-tag-retirement.md))
 at a cardinality it has not seen; ingest wall-clock and minting cost are
 recorded results, not incidental.
 
@@ -171,7 +171,7 @@ recorded results, not incidental.
   interventions counted — an escape hatch is by definition a finding.
 - **Reporting.** Domain results land as facts and are read back through a
   results book applet
-  ([ADR-0132](../adr/0132-sqlapplet-sql-defined-applets.md)) — the benchmark
+  ([ADR-0132](../../adr/0132-sqlapplet-sql-defined-applets.md)) — the benchmark
   dogfoods the reporting layer it is measuring. Every run, at every
   milestone, appends a logbook entry (date, build, hardware, findings,
   outcome) per the directory convention.
@@ -180,10 +180,10 @@ recorded results, not incidental.
 
 Friction encountered while executing this plan is filed as findings —
 competence (per the corpus of
-[ADR-0168](../adr/0168-capmap-business-capability-corpus.md)) × quality
+[ADR-0168](../../adr/0168-capmap-business-capability-corpus.md)) × quality
 characteristic — rather than silently worked around. Until the finding fact
 family lands, findings live in the
-[logbook](./jsonbench-on-facts.logbook.md), classified inline with the same
+[logbook](./logbook.md), classified inline with the same
 two axes so later migration to facts is mechanical. Pre-registered
 candidates, so later readers can tell hypotheses from surprises: the Q3
 timezone dependency; grammar coverage of `IN [..]` array literals,
@@ -211,7 +211,7 @@ cardinality; ingest-lane throughput at the 100M tier.
 ## 9 Open questions
 
 1. **Read discipline for the facts arms.** Workingset/argMax semantics
-   ([ADR-0148](../adr/0148-app-workingsets.md)) like every other boxer
+   ([ADR-0148](../../adr/0148-app-workingsets.md)) like every other boxer
    read, or append-only raw reads on the grounds that events are immutable?
    Whichever is chosen defines "the" facts number; running both would
    itself measure the versioning overhead.
@@ -225,12 +225,12 @@ cardinality; ingest-lane throughput at the 100M tier.
    privileges; upstream's exact procedure), and whether hot = min or
    median of N.
 5. **Raw staging.** Ad-hoc dataset store
-   ([ADR-0134](../adr/0134-adhoc-datasets.md)) vs. plain files at the edge
+   ([ADR-0134](../../adr/0134-adhoc-datasets.md)) vs. plain files at the edge
    — acquisition sits outside the native-idiom boundary, but where the
    bytes rest during ingest is a design choice.
 6. **The 100M gate.** Disk and wall-clock budget on the target machine,
    extrapolated from 10M actuals before committing.
 
-Related: [pprof-profiles-as-data](../adr-background-work/pprof-profiles-as-data.md),
-[ADR-0169](../adr/0169-continuous-coverage-keelson.md),
-[ADR-0109](../adr/0109-leeway-marshall-multi-membership-ref-tuples.md).
+Related: [pprof-profiles-as-data](../../adr-background-work/pprof-profiles-as-data.md),
+[ADR-0169](../../adr/0169-continuous-coverage-keelson.md),
+[ADR-0109](../../adr/0109-leeway-marshall-multi-membership-ref-tuples.md).

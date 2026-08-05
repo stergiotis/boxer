@@ -12,8 +12,10 @@ status: draft
 # JSONBench-on-facts — logbook
 
 Chronological, append-only record of runs of the
-[jsonbench-on-facts](./jsonbench-on-facts.md) trial, per the
-[directory convention](./README.md). Newest entry last. Entry template:
+[jsonbench-on-facts](./README.md) trial, per the
+[directory convention](../README.md). Newest entry last. Each entry's raw
+evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory. Entry
+template:
 
 ```markdown
 ## YYYY-MM-DD — <milestone / arm> — <one-line outcome>
@@ -27,6 +29,7 @@ Chronological, append-only record of runs of the
   competence × ISO 25010 characteristic>
 - **Solution size:** <artifacts touched: files, lines — when applicable>
 - **Results:** <facts run ids / applet pointer / "none this run">
+- **Run dir:** <./runs/YYYY-MM-DD-slug/ — evidence backing this entry>
 ```
 
 No runs yet.

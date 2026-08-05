@@ -34,10 +34,24 @@ What separates this directory from its neighbours:
   system. A trial is executed *on* the system, typically by an agent that
   did not build it, and its product is measurements and findings.
 
+Each trial is a directory — a self-contained dossier:
+
+```
+<trial>/
+  README.md            the protocol: how to run, what to record
+  logbook.md           chronological, append-only record of runs
+  runs/<YYYY-MM-DD-slug>/   one per run: the evidence backing its
+                       logbook entry — environment capture, pinned
+                       configs, EXPLAIN output, summary snapshots
+  <vendored material as needed, e.g. upstream/ for pinned workloads>
+```
+
+A run directory holds small, textual, provenance-grade evidence. Bulk
+results belong in the facts store; datasets are never committed.
+
 Consequences of that framing:
 
-- **Every run appends a logbook entry.** Each protocol has a companion
-  `<name>.logbook.md`: chronological, append-only. An entry records the
+- **Every run appends a logbook entry.** An entry records the
   date, the build under test (repo commit, engine versions), the hardware
   and environment (CPU, memory, storage class — never hostnames or personal
   paths), what was attempted, the findings — gaps, frictions, elegance
