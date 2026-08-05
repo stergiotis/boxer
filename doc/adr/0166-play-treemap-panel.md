@@ -99,18 +99,35 @@ Absent the column, colour falls back to depth, which is the widget's own default
 and encodes structure rather than a second measure.
 
 Interior nodes have no `color` of their own in folded mode — they are
-synthesised — so they take the neutral container fill the widget already paints,
-and the encoding is a leaf-level one. Making it inheritable is a defensible
-alternative that would have to pick a rule (first child? modal child?) for
-something the query never said.
+synthesised, and nothing in the result describes them. Left there, that has a
+cost the first captures made obvious and the design did not: **at the default
+nesting the picture was nearly colourless**, because SD5's frontier shows
+containers and the colour lived on the leaves below them. The encoding was only
+visible under `full`, which is not where a reader starts.
 
-That combination has a cost the captures made obvious and the design did not:
-**at the default nesting the picture is nearly colourless**, because SD5's
-frontier shows containers and the colour lives on the leaves below them. The
-`full` nesting shows the encoding properly. Neither the default nor the leaf
-rule is wrong on its own; together they mean a reader who wants the colour
-channel has to ask for it. Inheritance is the obvious fix and is deferred (SD6)
-rather than guessed at here.
+So an undescribed node **inherits** its colour from its descendants. A node's
+own colour always wins; inheritance fills silence and never overwrites what the
+query said. The two arms aggregate differently because the types do:
+
+- **Numeric** — the value-weighted mean of the children's effective colours,
+  weighted by the total each child occupies, since area is what the reader is
+  comparing. An unweighted mean would let a sliver outvote the subtree beside
+  it. Descendants with no colour are excluded from both sums rather than
+  counted as zero.
+- **Categorical** — inherited only when the described descendants **agree**. A
+  mean of nominal categories does not exist, and the modal one would claim a
+  category for a container that has several. A mixed container stays on the
+  depth ramp, which makes neutral mean "look inside" — a reading, where
+  "mostly `fs`" would be a claim the query never made.
+
+Both are counted in the status line (`N coloured from below`, `N mixed`), which
+is what makes the rule self-diagnosing: a picture that is still grey says how
+much of it is genuinely heterogeneous rather than leaving the reader to guess
+whether the encoding is working.
+
+Inheritance cannot widen the colormap's range or add a category — a weighted
+mean lies inside the range and an inherited key already exists — so the range
+survey still reads the result's own colours alone.
 
 A colour-free contract is rejected on C4: for the driving consumer, "how many"
 and "of what kind" are two questions, and area answers only the first.
@@ -186,9 +203,10 @@ Recorded so they do not gate this cut:
   removing it is a change to a shipped picture that wants its own capture to
   compare against.
 - **Drill-path preservation across a re-run** (SD4).
-- **Inherited `color` for synthesised interior nodes** (SD2). Wanted more than
-  the first draft thought: it is what would make the colour channel visible at
-  the default nesting, rather than only under `full`.
+- **A legend.** The colour channel now reaches the default view, which makes
+  the absence of a scale or a category key more visible than it was. The
+  pointer readout names a cell's colour and marks an inherited one, so nothing
+  is unreadable — but a legend is the obvious next thing.
 - **A treemap on the implot custom-item lane.** Batched rects and pointer-
   anchored zoom would lift the C5 ceiling, at the cost of re-rolling drill
   navigation as a layout re-root. The Frame-based widget is what exists; this
@@ -310,6 +328,10 @@ new.
   second cell **is** the invariant: without it the 429 MB would have been
   redistributed into the child, which would have read as 3.43 GiB.
 
+  The colour inheritance of SD2 is what the first `08_treemap` capture forced:
+  that pane was uniformly grey, and the same view now reads `43 coloured from
+  below` with the fleets separated by altitude at the default nesting.
+
   Two things the captures taught, neither of them predicted:
 
   - **A cell has no accessible name**, being an egui `Frame` with a label
@@ -336,7 +358,9 @@ alone, which is worse than changing nothing (see SD3) — so that decision recor
 what the code does rather than what was proposed.
 
 Both tour scenes captured the same day, including the one that exists only to
-show a self cell. Nothing in the verification plan is outstanding.
+show a self cell. SD2's inheritance was added after those captures showed the
+default view was colourless, and re-captured. Nothing in the verification plan
+is outstanding.
 
 ## References
 

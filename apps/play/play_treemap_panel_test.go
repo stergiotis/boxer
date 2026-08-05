@@ -219,10 +219,10 @@ func TestTreemapWithoutColorHasNoDataLayer(t *testing.T) {
 	assert.NotNil(t, inst.coloring(), "the depth ramp still colours every cell")
 }
 
-// A node the colour column did not describe must fall through to the depth ramp
-// rather than take an arbitrary colour. In folded mode that is every
-// synthesised interior node.
-func TestTreemapUndescribedNodeHasNoColorOpinion(t *testing.T) {
+// A synthesised interior node carries no colour of its OWN — nothing in the
+// result described it — and inherits one from below (ADR-0166 §SD2). The tree
+// keeps the distinction; the effective slices carry what is drawn.
+func TestTreemapInteriorInheritsFromBelow(t *testing.T) {
 	inst := treemapTestDriver(t,
 		icicleTestCol{name: "stack", paths: [][]string{{"a", "b"}}},
 		icicleTestCol{name: "value", num: []float64{1}},
@@ -233,14 +233,131 @@ func TestTreemapUndescribedNodeHasNoColorOpinion(t *testing.T) {
 
 	i, ok := inst.idxOf[inst.root]
 	require.True(t, ok)
-	assert.True(t, math.IsNaN(inst.tree.ColorNum[i]), "a synthesised node carries no colour")
+	assert.True(t, math.IsNaN(inst.tree.ColorNum[i]), "the RESULT gave it no colour")
+	assert.False(t, inst.ownColorAt(i))
+	assert.Equal(t, 9.0, inst.effColorNum[i], "and it inherits its only child's")
+	assert.Equal(t, 1, inst.inherited)
 
-	// ContinuousColoring reads NaN as "no opinion", which is what lets the
-	// composite fall back to the depth layer.
+	_, opinion := inst.dataColoring().Colors(treemapCellInfo(inst.root))
+	assert.True(t, opinion, "which is what stops the default view being colourless")
+}
+
+// A node with no described descendant at all still has no opinion, so the depth
+// ramp keeps it — inheritance fills silence, it does not invent.
+func TestTreemapNoDescribedDescendantStaysUncoloured(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "id", str: []string{"root", "kid"}},
+		icicleTestCol{name: "parent", str: []string{"", "root"}},
+		icicleTestCol{name: "value", num: []float64{1, 2}},
+		icicleTestCol{name: "color", num: []float64{math.Inf(1), math.Inf(1)}}, // both unreadable
+	)
+	require.NotNil(t, inst.root)
+	i := inst.idxOf[inst.root]
+	assert.True(t, math.IsNaN(inst.effColorNum[i]))
+	assert.Zero(t, inst.inherited)
 	_, opinion := inst.dataColoring().Colors(treemapCellInfo(inst.root))
 	assert.False(t, opinion)
-	_, opinion = inst.dataColoring().Colors(treemapCellInfo(inst.root.Children[0]))
-	assert.True(t, opinion, "the described leaf does get a colour")
+}
+
+// A node's OWN colour always wins: inheritance never overwrites what the query
+// said, even when the children disagree with it.
+func TestTreemapOwnColourBeatsInheritance(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "id", str: []string{"root", "kid"}},
+		icicleTestCol{name: "parent", str: []string{"", "root"}},
+		icicleTestCol{name: "value", num: []float64{1, 2}},
+		icicleTestCol{name: "color", num: []float64{100, 5}},
+	)
+	i := inst.idxOf[inst.root]
+	assert.True(t, inst.ownColorAt(i))
+	assert.Equal(t, 100.0, inst.effColorNum[i], "the row described this node; nothing below overrides it")
+	assert.Zero(t, inst.inherited)
+}
+
+// The numeric mean is weighted by what each child OCCUPIES, since area is what
+// the reader compares — an unweighted mean would let a sliver outvote the
+// subtree beside it.
+func TestTreemapNumericInheritanceIsValueWeighted(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"p", "big"}, {"p", "small"}}},
+		icicleTestCol{name: "value", num: []float64{90, 10}},
+		icicleTestCol{name: "color", num: []float64{100, 0}},
+	)
+	require.NotNil(t, inst.root)
+	i := inst.idxOf[inst.root]
+	// (90*100 + 10*0) / 100 = 90, not the unweighted 50.
+	assert.InDelta(t, 90.0, inst.effColorNum[i], 1e-9)
+}
+
+// Categories agree -> inherit. A mean of nominal categories does not exist, so
+// agreement is the only thing that can transfer.
+func TestTreemapCategoricalInheritsWhenDescendantsAgree(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"p", "a"}, {"p", "b"}}},
+		icicleTestCol{name: "value", num: []float64{1, 1}},
+		icicleTestCol{name: "color", str: []string{"fs", "fs"}},
+	)
+	require.NotNil(t, inst.root)
+	i := inst.idxOf[inst.root]
+	assert.Equal(t, "fs", inst.effColorKey[i])
+	assert.Equal(t, 1, inst.inherited)
+	assert.Zero(t, inst.mixed)
+}
+
+// Categories disagree -> the container stays on the depth ramp and is COUNTED.
+// Neutral then means "look inside", which is a reading; the modal category
+// would be a claim the query never made.
+func TestTreemapCategoricalMixedStaysNeutralAndIsCounted(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"p", "a"}, {"p", "b"}}},
+		icicleTestCol{name: "value", num: []float64{1, 1}},
+		icicleTestCol{name: "color", str: []string{"fs", "net"}},
+	)
+	require.NotNil(t, inst.root)
+	i := inst.idxOf[inst.root]
+	assert.Empty(t, inst.effColorKey[i])
+	assert.Zero(t, inst.inherited)
+	assert.Equal(t, 1, inst.mixed)
+	assert.Contains(t, inst.statusLine(), "1 mixed")
+
+	_, opinion := inst.dataColoring().Colors(treemapCellInfo(inst.root))
+	assert.False(t, opinion, "a mixed container must fall through to the depth ramp")
+}
+
+// Agreement propagates through a level that has no colour of its own, so a deep
+// single-category subtree colours all the way up.
+func TestTreemapCategoricalInheritanceIsTransitive(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"a", "b", "c"}, {"a", "b", "d"}}},
+		icicleTestCol{name: "value", num: []float64{1, 1}},
+		icicleTestCol{name: "color", str: []string{"exec", "exec"}},
+	)
+	require.NotNil(t, inst.root)
+	for _, path := range [][]string{{"a"}, {"a", "b"}} {
+		j := hierNodeByPath(inst.tree, path...)
+		require.GreaterOrEqual(t, j, 0)
+		assert.Equal(t, "exec", inst.effColorKey[j], "%v should inherit through", path)
+	}
+	assert.Equal(t, 2, inst.inherited)
+}
+
+// Inheritance cannot widen the range or add a category, which is why
+// resolveColorInfo may survey the result's own colours alone.
+func TestTreemapInheritanceStaysInsideTheSurveyedRange(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"p", "a"}, {"p", "b"}}},
+		icicleTestCol{name: "value", num: []float64{3, 7}},
+		icicleTestCol{name: "color", num: []float64{2, 8}},
+	)
+	assert.Equal(t, 2.0, inst.color.min)
+	assert.Equal(t, 8.0, inst.color.max)
+	for _, v := range inst.effColorNum {
+		if math.IsNaN(v) {
+			continue
+		}
+		assert.GreaterOrEqual(t, v, inst.color.min)
+		assert.LessOrEqual(t, v, inst.color.max)
+	}
 }
 
 func TestTreemapPalettesAreWellFormed(t *testing.T) {

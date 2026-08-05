@@ -139,6 +139,20 @@ type treemapDriver struct {
 	idxOf map[*layout.Node]int32
 	color treemapColorInfo
 
+	// effColorNum / effColorKey are the EFFECTIVE colour per flat index: the
+	// node's own where the result gave it one, otherwise what it inherited from
+	// its descendants (inheritColors). inst.tree keeps what the result actually
+	// said, so the readout can tell the two apart.
+	effColorNum []float64
+	effColorKey []string
+	// inherited counts nodes coloured from below; mixed counts containers left
+	// to the depth ramp because their described descendants disagreed. Both are
+	// in the status line, which is what makes the inheritance rule
+	// self-diagnosing: a picture that is still grey says how much of it is
+	// genuinely heterogeneous.
+	inherited int
+	mixed     int
+
 	// selected is the click-pinned LEAF label, published as selection_key. The
 	// drill position is the widget's and is deliberately not mirrored here.
 	selected string
@@ -326,6 +340,7 @@ func (inst *treemapDriver) rebuildTree() {
 	default:
 		inst.root = &layout.Node{Name: treemapRootName, Children: roots}
 	}
+	inst.inheritColors()
 	inst.color = inst.resolveColorInfo()
 	if inst.tm != nil && inst.root != nil {
 		inst.tm.SetRoot(inst.root)
@@ -333,8 +348,159 @@ func (inst *treemapDriver) rebuildTree() {
 	}
 }
 
+// inheritColors fills the effective colour of every node the `color` column did
+// not describe, from what its descendants say (ADR-0166 §SD2).
+//
+// It exists because without it the default view is nearly colourless: colour
+// attaches to the node a row's VALUE lands on, which in folded mode is a leaf,
+// while the drill nesting shows containers. The encoding was only visible under
+// `full`, which is not where a reader starts.
+//
+// A node's OWN colour always wins. Inheritance fills silence; it never
+// overwrites something the query said.
+//
+// The two arms aggregate differently because the data types do:
+//
+//   - NUMERIC — the value-weighted mean of the children's effective colours,
+//     weighted by the total each child occupies, since area is what the reader
+//     is comparing. An unweighted mean would let a sliver outvote the subtree
+//     next to it. Children with no effective colour are excluded from both
+//     sums rather than counted as zero.
+//   - CATEGORICAL — inherited only when the described descendants AGREE.
+//     A mean of nominal categories does not exist, and the modal one would
+//     claim a category for a container that has several. Leaving a mixed
+//     container to the depth ramp makes neutral mean "look inside", which is a
+//     reading; "mostly fs" is a claim the query never made.
+//
+// Post-order over the pointer tree, so a node is resolved after its children.
+// Written into the effective slices rather than into inst.tree, which stays the
+// record of what the result actually said — the pointer readout distinguishes
+// the two.
+func (inst *treemapDriver) inheritColors() {
+	inst.effColorNum, inst.effColorKey = nil, nil
+	inst.inherited, inst.mixed = 0, 0
+	n := inst.tree.Len()
+	if n == 0 || inst.root == nil {
+		return
+	}
+	switch inst.tree.ColorKind {
+	case hierColorNumeric:
+		inst.effColorNum = make([]float64, n)
+		copy(inst.effColorNum, inst.tree.ColorNum)
+	case hierColorCategorical:
+		inst.effColorKey = make([]string, n)
+		copy(inst.effColorKey, inst.tree.ColorKey)
+	default:
+		return
+	}
+
+	// resolve returns the node's effective colour and whether it has one.
+	var resolve func(*layout.Node) (num float64, key string, ok bool)
+	resolve = func(nd *layout.Node) (num float64, key string, ok bool) {
+		i, known := inst.idxOf[nd]
+		// An unknown node is the synthetic forest container: it has no row and
+		// no slot, so it can still aggregate but has nothing of its own.
+		if known {
+			switch inst.tree.ColorKind {
+			case hierColorNumeric:
+				if v := inst.effColorNum[i]; !math.IsNaN(v) {
+					for _, ch := range nd.Children {
+						resolve(ch) // still resolve the subtree below it
+					}
+					return v, "", true
+				}
+			case hierColorCategorical:
+				if k := inst.effColorKey[i]; k != "" {
+					for _, ch := range nd.Children {
+						resolve(ch)
+					}
+					return 0, k, true
+				}
+			}
+		}
+		if len(nd.Children) == 0 {
+			return 0, "", false
+		}
+
+		var wsum, vsum float64
+		var only string
+		agree, any := true, false
+		for _, ch := range nd.Children {
+			cn, ck, cok := resolve(ch)
+			if !cok {
+				continue
+			}
+			any = true
+			switch inst.tree.ColorKind {
+			case hierColorNumeric:
+				// Weight by what the child occupies, which is what its area is.
+				w := ch.TotalSize()
+				if w <= 0 || math.IsNaN(w) || math.IsInf(w, 0) {
+					continue
+				}
+				wsum += w
+				vsum += w * cn
+			case hierColorCategorical:
+				if only == "" {
+					only = ck
+					continue
+				}
+				if only != ck {
+					agree = false
+				}
+			}
+		}
+		if !any {
+			return 0, "", false
+		}
+		switch inst.tree.ColorKind {
+		case hierColorNumeric:
+			if wsum <= 0 {
+				return 0, "", false
+			}
+			num, ok = vsum/wsum, true
+		case hierColorCategorical:
+			if !agree || only == "" {
+				if known {
+					inst.mixed++
+				}
+				return 0, "", false
+			}
+			key, ok = only, true
+		}
+		if known && ok {
+			inst.inherited++
+			if inst.tree.ColorKind == hierColorNumeric {
+				inst.effColorNum[i] = num
+			} else {
+				inst.effColorKey[i] = key
+			}
+		}
+		return
+	}
+	resolve(inst.root)
+}
+
+// ownColorAt reports whether the RESULT described this node's colour, as
+// opposed to it having been inherited from below.
+func (inst *treemapDriver) ownColorAt(i int32) bool {
+	switch inst.tree.ColorKind {
+	case hierColorNumeric:
+		return int(i) < len(inst.tree.ColorNum) && !math.IsNaN(inst.tree.ColorNum[i])
+	case hierColorCategorical:
+		return int(i) < len(inst.tree.ColorKey) && inst.tree.ColorKey[i] != ""
+	}
+	return false
+}
+
 // resolveColorInfo surveys the colour channel of the built tree: the range a
 // colormap spans, or the categories a cycle is assigned to.
+//
+// It reads what the RESULT said (inst.tree) rather than the effective colours,
+// and that is sufficient rather than an oversight: an inherited numeric colour
+// is a weighted mean of values already in the range, and an inherited category
+// is a key that already exists. Neither can widen what this finds, so surveying
+// the smaller set gives the same answer.
 func (inst *treemapDriver) resolveColorInfo() (info treemapColorInfo) {
 	info.kind = inst.tree.ColorKind
 	switch info.kind {
@@ -410,18 +576,18 @@ func (inst *treemapDriver) dataColoring() treemap.ColoringI {
 	case hierColorNumeric:
 		return treemap.ContinuousColoring(treemapValuePalette(), func(n *layout.Node) float64 {
 			i, ok := inst.idxOf[n]
-			if !ok || int(i) >= len(inst.tree.ColorNum) {
+			if !ok || int(i) >= len(inst.effColorNum) {
 				return math.NaN() // no opinion; the depth ramp keeps the cell
 			}
-			return inst.tree.ColorNum[i]
+			return inst.effColorNum[i]
 		}, inst.color.min, inst.color.max)
 	case hierColorCategorical:
 		return treemap.CategoricalColoring(treemapCategoryPalette(), func(n *layout.Node) int {
 			i, ok := inst.idxOf[n]
-			if !ok || int(i) >= len(inst.tree.ColorKey) {
+			if !ok || int(i) >= len(inst.effColorKey) {
 				return -1 // no opinion
 			}
-			idx, seen := inst.color.cats[inst.tree.ColorKey[i]]
+			idx, seen := inst.color.cats[inst.effColorKey[i]]
 			if !seen {
 				return -1
 			}
@@ -519,15 +685,23 @@ func (inst *treemapDriver) describeNode(n *layout.Node) string {
 			fmt.Fprintf(&b, " · own %s", treemapQty(n.Size, inst.stats.unit))
 		}
 	}
+	// An inherited colour is marked as one. The cell is drawn from it either
+	// way, but a container whose colour came from below is not making the same
+	// claim as a leaf the result described, and the readout is where that
+	// difference can be said without a second visual channel.
 	if i, ok := inst.idxOf[n]; ok {
+		from := ""
+		if !inst.ownColorAt(i) {
+			from = " (inherited)"
+		}
 		switch inst.color.kind {
 		case hierColorNumeric:
-			if int(i) < len(inst.tree.ColorNum) && !math.IsNaN(inst.tree.ColorNum[i]) {
-				fmt.Fprintf(&b, " · colour %s", treemapQty(inst.tree.ColorNum[i], ""))
+			if int(i) < len(inst.effColorNum) && !math.IsNaN(inst.effColorNum[i]) {
+				fmt.Fprintf(&b, " · colour %s%s", treemapQty(inst.effColorNum[i], ""), from)
 			}
 		case hierColorCategorical:
-			if int(i) < len(inst.tree.ColorKey) && inst.tree.ColorKey[i] != "" {
-				fmt.Fprintf(&b, " · %s", truncateRunes(inst.tree.ColorKey[i], treemapMaxCatRunes))
+			if int(i) < len(inst.effColorKey) && inst.effColorKey[i] != "" {
+				fmt.Fprintf(&b, " · %s%s", truncateRunes(inst.effColorKey[i], treemapMaxCatRunes), from)
 			}
 		}
 	}
@@ -603,6 +777,12 @@ func (inst *treemapDriver) statusLine() string {
 			fmt.Fprintf(&b, " (%d share a colour past the palette's %d)",
 				inst.color.wrapped, styletokens.QualitativeCycleLen)
 		}
+	}
+	if inst.inherited > 0 {
+		fmt.Fprintf(&b, " · %d coloured from below", inst.inherited)
+	}
+	if inst.mixed > 0 {
+		fmt.Fprintf(&b, " · %d mixed", inst.mixed)
 	}
 	if inst.stats.colorConflicts > 0 {
 		fmt.Fprintf(&b, " · %d cell(s) given two colours, first kept", inst.stats.colorConflicts)
