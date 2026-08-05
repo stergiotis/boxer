@@ -25,6 +25,7 @@ the linked document wins.
 | Write or edit a doc / ADR | [doc/DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md) |
 | See *why* the architecture is the way it is | [doc/adr/](./doc/adr/) |
 | Read the analysis behind a decision — surveys, measurements, costed options | [doc/adr-background-work/](./doc/adr-background-work/) |
+| Run a trial — a reproducible measurement protocol repeated across builds | [doc/trials/](./doc/trials/) |
 | Configure behaviour via env vars | [doc/env-vars.md](./doc/env-vars.md) |
 | Run a task end to end | [doc/howto/](./doc/howto/) |
 | Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |

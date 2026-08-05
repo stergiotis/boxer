@@ -27,11 +27,12 @@ model cost, against ClickHouse's native JSON type on the same hardware and
 engine version — in storage footprint, index effectiveness, and query
 latency, with and without secondary indices?
 
-This is the first task-level probe of the quality practice: an external,
-published workload attempted with native idioms only, with friction filed as
-findings rather than worked around. The probe protocol itself (finding fact
-family, ISO 25010 classification) is a forthcoming ADR; this page does not
-depend on it beyond the ledger convention in §7.
+This page is a trial protocol (see the [directory convention](./README.md)):
+the first task-level probe of the quality practice — an external, published
+workload attempted with native idioms only, with friction filed as findings
+rather than worked around. The finding fact family and its ISO 25010
+classification are a forthcoming ADR; this page does not depend on it beyond
+the ledger convention in §7.
 
 In scope: reuse of the upstream dataset, queries, and measurement
 discipline; the mapping design space; four experiment arms; the tier ladder;
@@ -210,6 +211,6 @@ cardinality; ingest-lane throughput at the 100M tier.
 6. **The 100M gate.** Disk and wall-clock budget on the target machine,
    extrapolated from 10M actuals before committing.
 
-Related: [pprof-profiles-as-data](./pprof-profiles-as-data.md),
+Related: [pprof-profiles-as-data](../adr-background-work/pprof-profiles-as-data.md),
 [ADR-0169](../adr/0169-continuous-coverage-keelson.md),
 [ADR-0109](../adr/0109-leeway-marshall-multi-membership-ref-tuples.md).
