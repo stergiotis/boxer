@@ -729,6 +729,79 @@ share a name. `toFloat64` on both branches because a `UNION ALL` takes its
 column types from the first — a bare `0` there would make every table's byte
 count an integer cast of it.
 
+## The same hierarchy as area, and a second measure (Treemap)
+
+The **Treemap** tab (ADR-0166) reads exactly the columns the two blocks above
+produce — nothing here is a new contract. It spends both dimensions of the pane
+on magnitude instead of one, which is the trade: a treemap discards the order
+and the depth of a path, and gives back the room to say "what is big" and, at
+the same time, "of what kind".
+
+That second channel is an optional `color`. A **numeric** one drives a
+continuous ramp; a **string** one drives the qualitative cycle. It is read
+independently of `value`, so area and colour can disagree — which is the point,
+because a cell that is large and off-colour is the thing you were looking for.
+
+Here area is bytes and colour is the part format, so a table stored the
+unexpected way stands out without changing what the picture measures:
+
+```sql
+SELECT [disk_name, database, table] AS stack,
+       sum(bytes_on_disk)           AS value,
+       any(part_type)               AS color,
+       'bytes'                      AS unit
+FROM system.parts
+WHERE active
+GROUP BY stack
+ORDER BY value DESC
+```
+
+Swap `any(part_type) AS color` for `sum(rows) AS color` and the same picture
+answers a different question: which tables are big on disk *without* holding
+many rows. The cycle wraps past seven categories and the status line says how
+many shared a colour, so a `color` with fifty distinct values is telling you to
+group it first.
+
+## Rolling the tail up into its parent (a cell of one's own)
+
+A treemap is subdivided by its children, so a container that also has a
+quantity *of its own* needs a rectangle for it — otherwise that quantity is
+silently redistributed among the children and every one of them reads too
+large. Give an interior `id` a non-zero `value` and it gets one, labelled with
+its own name.
+
+The node contract is the one that can say this. Here every table under a
+mebibyte is dropped and its bytes are held at the database instead, so the
+picture keeps its total while spending cells only on the tables worth one:
+
+```sql
+WITH p AS (
+    SELECT database AS db, table AS tbl, sum(bytes_on_disk) AS bytes
+    FROM system.parts
+    WHERE active
+    GROUP BY db, tbl
+)
+SELECT concat('db:', db)                        AS id,
+       ''                                       AS parent,
+       db                                       AS label,
+       toFloat64(sumIf(bytes, bytes < 1048576)) AS value,
+       'bytes'                                  AS unit
+FROM p
+GROUP BY db
+UNION ALL
+SELECT concat('tbl:', db, '.', tbl) AS id,
+       concat('db:', db)            AS parent,
+       tbl                          AS label,
+       toFloat64(bytes)             AS value,
+       'bytes'                      AS unit
+FROM p
+WHERE bytes >= 1048576
+```
+
+The threshold is a query decision, not a panel one: a roll-up you wrote is
+reproducible and shows up in the total, where a cell the renderer dropped for
+being too small to draw does neither.
+
 ## Query outcomes (an alluvial over the query log)
 
 Where the server's own traffic goes: how a query arrived, what kind it was, and
