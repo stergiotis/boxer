@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/icicle"
@@ -490,16 +491,16 @@ func (inst *IcicleDriver) statusLine() string {
 	}
 	fmt.Fprintf(&b, " · %s input", inst.stats.mode)
 	if inst.stats.droppedPath > 0 {
-		fmt.Fprintf(&b, " · %d row(s) without a path", inst.stats.droppedPath)
+		fmt.Fprintf(&b, " · %s row(s) without a path", humanize.Comma(int64(inst.stats.droppedPath)))
 	}
 	if inst.stats.droppedValue > 0 {
-		fmt.Fprintf(&b, " · %d row(s) without a finite, non-negative value", inst.stats.droppedValue)
+		fmt.Fprintf(&b, " · %s row(s) without a finite, non-negative value", humanize.Comma(int64(inst.stats.droppedValue)))
 	}
 	if inst.stats.droppedDup > 0 {
 		fmt.Fprintf(&b, " · %d duplicate id(s) dropped", inst.stats.droppedDup)
 	}
 	if inst.stats.reparented > 0 {
-		fmt.Fprintf(&b, " · %d row(s) with an unknown parent, drawn as roots", inst.stats.reparented)
+		fmt.Fprintf(&b, " · %s row(s) with an unknown parent, drawn as roots", humanize.Comma(int64(inst.stats.reparented)))
 	}
 	if inst.stats.truncated > 0 {
 		fmt.Fprintf(&b, " · %d path(s) cut at depth %d", inst.stats.truncated, icicleMaxDepth)
@@ -507,7 +508,7 @@ func (inst *IcicleDriver) statusLine() string {
 	if inst.stats.capped {
 		fmt.Fprintf(&b, " · capped at %d frames (prune, or aggregate the tail)", hierMaxNodes)
 		if inst.stats.droppedCapped > 0 {
-			fmt.Fprintf(&b, ", %d row(s) past it", inst.stats.droppedCapped)
+			fmt.Fprintf(&b, ", %s row(s) past it", humanize.Comma(int64(inst.stats.droppedCapped)))
 		}
 	}
 	return b.String()

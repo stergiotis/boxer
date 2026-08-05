@@ -165,19 +165,26 @@ func TestQueryStoreProgressEndToEnd(t *testing.T) {
 	require.False(t, fresh)
 }
 
-// Every decimal tier gets its suffix — a trillion-row scan reads "1.5T",
-// not "1500.0B" (the review's last piece of trivia).
-func TestHumanCountTiers(t *testing.T) {
-	cases := map[uint64]string{
+// play's two registers for a count, and the rule that picks between them: SI
+// magnitudes for a number read while it moves, exact digits for one read after
+// the fact. Both come from go-humanize — the hand-rolled humanCount, which
+// spelled a billion "3.5B", retired 2026-08-05.
+func TestCountRegisters(t *testing.T) {
+	glance := map[uint64]string{
 		999:               "999",
-		1_500:             "1.5K",
-		2_500_000:         "2.5M",
-		3_500_000_000:     "3.5B",
-		1_500_000_000_000: "1.5T",
+		1_500:             "1.5 k",
+		2_500_000:         "2.5 M",
+		3_500_000_000:     "3.5 G",
+		1_500_000_000_000: "1.5 T",
 	}
-	for n, want := range cases {
-		require.Equal(t, want, humanCount(n), "n=%d", n)
+	for n, want := range glance {
+		require.Equal(t, want, countAtAGlance(n), "n=%d", n)
 	}
+	// No prefix leaves SIWithDigits' padding behind; it must not survive.
+	require.Equal(t, "999", countAtAGlance(999))
+
+	require.Equal(t, "1.2 M rows/s", formatRate(1_200_000))
+	require.Equal(t, "500 rows/s", formatRate(500))
 }
 
 func TestFormatProgressLine(t *testing.T) {
@@ -189,11 +196,11 @@ func TestFormatProgressLine(t *testing.T) {
 		rate: 1_200_000, eta: 80 * time.Second, etaValid: true,
 	}
 	s := formatProgressLine(v)
-	require.Contains(t, s, "1.9B / 2.5B rows (77%)")
+	require.Contains(t, s, "1.9 G / 2.5 G rows (77%)")
 	// Binary units, spelled as such: the divisor was always 1024 and the label
 	// used to say KB/GB (humanBytes, retired 2026-08-05 for humanize.IBytes).
 	require.Contains(t, s, "14 GiB read")
-	require.Contains(t, s, "1.2M rows/s")
+	require.Contains(t, s, "1.2 M rows/s")
 	require.Contains(t, s, "ETA 1m20s")
 	require.Contains(t, s, "mem 1.1 MiB")
 	require.Contains(t, s, "300ms")
@@ -206,16 +213,16 @@ func TestFormatProgressLine(t *testing.T) {
 	// legibly, then prefers the ETA, falling back to the rate and to the bare
 	// row count while both warm up.
 	require.Equal(t, "77% · ETA 1m20s", formatProgressBrief(v))
-	require.Equal(t, "1% · 1.2M rows/s",
+	require.Equal(t, "1% · 1.2 M rows/s",
 		formatProgressBrief(progressView{fresh: true, knownTotal: true, percent: 1, rate: 1_200_000}))
 	require.Equal(t, "1%", formatProgressBrief(progressView{fresh: true, knownTotal: true, percent: 1}))
-	require.Equal(t, "1.2M rows/s", formatProgressBrief(progressView{fresh: true, rate: 1_200_000}))
+	require.Equal(t, "1.2 M rows/s", formatProgressBrief(progressView{fresh: true, rate: 1_200_000}))
 	require.Equal(t, "12 rows",
 		formatProgressBrief(progressView{fresh: true, p: runstream.Progress{ReadRows: 12}}))
 
 	// The pane strip drops the memory/elapsed tail the status bar carries.
 	strip := formatProgressStrip(v)
-	require.Equal(t, "1.9B / 2.5B rows · 1.2M rows/s · ETA 1m20s", strip)
+	require.Equal(t, "1.9 G / 2.5 G rows · 1.2 M rows/s · ETA 1m20s", strip)
 }
 
 // The landed-run readout that takes the progress row's slot between fetches:

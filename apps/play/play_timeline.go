@@ -6,6 +6,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/dustin/go-humanize"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
@@ -252,7 +253,7 @@ func (inst *TimelineDriver) renderToolbar() {
 		// otherwise vanish without a trace.
 		if inst.eventsSkipped > 0 {
 			c.Separator().Vertical().Send()
-			for rt := range c.RichTextLabel(fmt.Sprintf("%d row(s) skipped (null or end<start)", inst.eventsSkipped)) {
+			for rt := range c.RichTextLabel(fmt.Sprintf("%s row(s) skipped (null or end<start)", humanize.Comma(int64(inst.eventsSkipped)))) {
 				rt.Small().Weak()
 			}
 		}

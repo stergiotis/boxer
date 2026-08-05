@@ -481,7 +481,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
-### 2026-08-05 — the status bar says what a run read, and play's byte figures get their real units
+### 2026-08-05 — the status bar says what a run read; play's numbers get one vocabulary
 
 The Map's landed-run readout (next entry) made an omission in the main status
 bar legible. It reported `500 rows · 7ms · 39.9 KB read · 4s ago` — what came
@@ -502,6 +502,29 @@ the "39.9 KB" above is 39.9 KiB. So every byte figure in play shifts label
 (progress line, pane strip, status bar, runs history, diagnostics), and values
 at ten units or more lose a decimal to humanize's rounding. A visible change to
 numbers people may recognise, taken over continuing to misname them.
+
+**And the counts follow.** `humanCount` — play's hand-rolled
+"1.5K / 2.5M / 3.5B / 1.5T" — is retired for go-humanize as well, which leaves
+**one vocabulary with two registers**, and a rule that picks between them by how
+the number is read:
+
+- read **while it moves** → an SI magnitude (`countAtAGlance`), because at a tick
+  every 250 ms the digits past the first are noise: the live progress line, the
+  top-bar brief, the pane strip;
+- read **after the fact** → exact, comma-grouped digits (`humanize.Comma`),
+  because there the digits are the point: the status bar's landed line, the panel
+  stats readout, the run and pin details, and the panels' dropped-row notes,
+  which were raw `%d` and are not bounded.
+
+Rates are always the glance register — nobody reads the units digit of a rate —
+and `formatRate` is the single spelling, shared by the live formatters and the
+landed readouts. SI rather than the "3.5B rows" a data person might say: the same
+lines carry SI rates and IEC bytes, so B-for-billion was the odd spelling out,
+and G is 10⁹ in every locale, which B is not. In flight a run now reads
+`693.6 M / 5 G rows · 192 M rows/s · ETA 22s`.
+
+`Summary.String()` keeps raw digits: it is a Stringer for logs, where a count is
+grepped and parsed rather than read.
 
 ### 2026-08-05 — a lane-owning panel can show and cancel its own run: `nodeLane.abort`
 

@@ -342,8 +342,8 @@ func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summ
 		// A capped result is indistinguishable from a whole one unless the
 		// line says so (R9), and the row count alone reads as the answer.
 		if truncation != "" {
-			s = fmt.Sprintf("%d rows, capped · %s · %s",
-				numRows, truncateRunes(truncation, 80), humanizeAgo(executed))
+			s = fmt.Sprintf("%s rows, capped · %s · %s",
+				humanize.Comma(numRows), truncateRunes(truncation, 80), humanizeAgo(executed))
 		}
 	case queryStateEmpty:
 		s = "0 rows · ran " + humanizeAgo(executed)
@@ -357,7 +357,7 @@ func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summ
 	// witness also fires on a moved referenced signal, with the buffer
 	// untouched.
 	case queryStateRowsStale:
-		s = fmt.Sprintf("%d rows · inputs changed", numRows)
+		s = fmt.Sprintf("%s rows · inputs changed", humanize.Comma(numRows))
 	case queryStateEmptyStale:
 		s = "0 rows · inputs changed"
 	case queryStateFailedStale:

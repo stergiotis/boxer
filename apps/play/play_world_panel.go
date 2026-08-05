@@ -8,6 +8,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/dustin/go-humanize"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/worldmap"
 )
@@ -277,7 +278,7 @@ func (inst *WorldDriver) statusLine(numRows int64, valueCol int, schema *arrow.S
 		b.WriteString(" · presence (no numeric column)")
 	}
 	if inst.unmatched > 0 {
-		fmt.Fprintf(&b, " · %d rows unmatched", inst.unmatched)
+		fmt.Fprintf(&b, " · %s rows unmatched", humanize.Comma(int64(inst.unmatched)))
 	}
 	if inst.dupes > 0 {
 		fmt.Fprintf(&b, " · %d duplicate rows (last wins)", inst.dupes)

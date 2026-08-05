@@ -15,6 +15,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
+	"github.com/dustin/go-humanize"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
@@ -674,7 +675,7 @@ func (inst *PlayApp) renderPinDetail(row pinRow) {
 		rt.Strong()
 	}
 	diagWeak(row.PinnedAt.UTC().Format("2006-01-02 15:04:05") + " UTC · " +
-		fmt.Sprintf("%d rows × %d cols", row.NumRows, row.NumCols))
+		fmt.Sprintf("%s rows × %d cols", humanize.Comma(int64(row.NumRows)), row.NumCols))
 	diagWeak("table " + row.DataTable + " · fingerprint " + fmt.Sprintf("%016x", row.Fingerprint))
 	if row.QueryId != "" || row.RunId != "" || row.Lane != "" {
 		parts := make([]string, 0, 3)

@@ -2,7 +2,6 @@ package play
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -167,9 +166,9 @@ func (inst *PlayApp) syncProgress() {
 func formatProgressLine(v progressView) string {
 	p := v.p
 	var b strings.Builder
-	b.WriteString(humanCount(p.ReadRows))
+	b.WriteString(countAtAGlance(p.ReadRows))
 	if v.knownTotal {
-		fmt.Fprintf(&b, " / %s rows (%d%%)", humanCount(p.TotalRowsToRead), v.percent)
+		fmt.Fprintf(&b, " / %s rows (%d%%)", countAtAGlance(p.TotalRowsToRead), v.percent)
 	} else {
 		b.WriteString(" rows")
 	}
@@ -178,8 +177,7 @@ func formatProgressLine(v progressView) string {
 	b.WriteString(" read")
 	if v.rate >= 1 {
 		b.WriteString(" · ")
-		b.WriteString(humanCount(uint64(v.rate)))
-		b.WriteString(" rows/s")
+		b.WriteString(formatRate(v.rate))
 	}
 	if v.etaValid {
 		b.WriteString(" · ETA ")
@@ -210,9 +208,9 @@ func formatProgressBrief(v progressView) string {
 	case v.etaValid:
 		tail = "ETA " + progressbar.FormatETA(v.eta)
 	case v.rate >= 1:
-		tail = humanCount(uint64(v.rate)) + " rows/s"
+		tail = formatRate(v.rate)
 	case !v.knownTotal:
-		tail = humanCount(v.p.ReadRows) + " rows"
+		tail = countAtAGlance(v.p.ReadRows) + " rows"
 	}
 	if tail != "" {
 		if b.Len() > 0 {
@@ -228,16 +226,15 @@ func formatProgressBrief(v progressView) string {
 // the status bar carries.
 func formatProgressStrip(v progressView) string {
 	var b strings.Builder
-	b.WriteString(humanCount(v.p.ReadRows))
+	b.WriteString(countAtAGlance(v.p.ReadRows))
 	if v.knownTotal {
 		b.WriteString(" / ")
-		b.WriteString(humanCount(v.p.TotalRowsToRead))
+		b.WriteString(countAtAGlance(v.p.TotalRowsToRead))
 	}
 	b.WriteString(" rows")
 	if v.rate >= 1 {
 		b.WriteString(" · ")
-		b.WriteString(humanCount(uint64(v.rate)))
-		b.WriteString(" rows/s")
+		b.WriteString(formatRate(v.rate))
 	}
 	if v.etaValid {
 		b.WriteString(" · ETA ")
@@ -435,19 +432,23 @@ func formatRowRate(rows uint64, elapsed time.Duration) string {
 	return strings.TrimSpace(humanize.SIWithDigits(rate, 1, "")) + " rows/s"
 }
 
-// humanCount renders a row count with K/M/B/T suffixes (counts, unlike
-// bytes, conventionally use decimal thousands).
-func humanCount(n uint64) string {
-	switch {
-	case n >= 1_000_000_000_000:
-		return fmt.Sprintf("%.1fT", float64(n)/1e12)
-	case n >= 1_000_000_000:
-		return fmt.Sprintf("%.1fB", float64(n)/1e9)
-	case n >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(n)/1e6)
-	case n >= 1_000:
-		return fmt.Sprintf("%.1fK", float64(n)/1e3)
-	default:
-		return strconv.FormatUint(n, 10)
-	}
+// countAtAGlance spells a count the way a number READ WHILE IT MOVES wants to
+// be spelled: an SI magnitude, because at a tick every 250 ms the digits past
+// the first are noise. Its counterpart is humanize.Comma, which play uses
+// wherever a count is read after the fact and the digits ARE the point — the
+// status bar's landed line, the panel stats readout, the run detail. One
+// vocabulary (go-humanize), two registers, chosen by how the number is read.
+//
+// SI rather than the "3.5B rows" a data person might say: the same lines carry
+// SI rates and IEC bytes, so B-for-billion was the odd spelling out — and G is
+// 10^9 in every locale, which B is not.
+func countAtAGlance(n uint64) string {
+	return strings.TrimSpace(humanize.SIWithDigits(float64(n), 1, ""))
+}
+
+// formatRate is play's one spelling of a rows-per-second figure, shared by the
+// live formatters and the landed readouts so a run reads the same during and
+// after. Always a glance magnitude: nobody reads the units digit of a rate.
+func formatRate(rate float64) string {
+	return strings.TrimSpace(humanize.SIWithDigits(rate, 1, "")) + " rows/s"
 }

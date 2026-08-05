@@ -9,6 +9,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sankey"
@@ -461,7 +462,7 @@ type SankeyDriver struct {
 	// pointer hit, since the readout line is drawn above the plot that produces
 	// it.
 	selected sankeyview.Hit
-	hover     sankeyview.Hit
+	hover    sankeyview.Hit
 
 	layout    *sankey.Layout
 	layoutKey string
@@ -861,7 +862,7 @@ func (inst *SankeyDriver) statusLine() string {
 		fmt.Fprintf(&b, " · %d duplicate flow(s) summed", inst.stats.collapsed)
 	}
 	if inst.stats.droppedValue > 0 {
-		fmt.Fprintf(&b, " · %d row(s) without an endpoint or a positive value", inst.stats.droppedValue)
+		fmt.Fprintf(&b, " · %s row(s) without an endpoint or a positive value", humanize.Comma(int64(inst.stats.droppedValue)))
 	}
 	if inst.stats.droppedSelf > 0 {
 		fmt.Fprintf(&b, " · %d self-flow(s) dropped", inst.stats.droppedSelf)
