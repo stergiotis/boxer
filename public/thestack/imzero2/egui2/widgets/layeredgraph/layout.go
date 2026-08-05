@@ -14,7 +14,10 @@
 // caller is free to fit/scale/translate them; nothing here assumes a viewport.
 package layeredgraph
 
-import "context"
+import (
+	"context"
+	"math"
+)
 
 // NodeShape is the drawn boundary of a node, rendered by the imzero2 painter.
 type NodeShape uint8
@@ -52,6 +55,16 @@ type Node struct {
 	ID    string
 	Label string // drawn text; empty means the ID is used
 	Shape NodeShape
+	// Weight is an optional ORDINAL quantity carried by this node, read the
+	// same way as Edge.Weight: it orders and emphasises, and 0 means
+	// *unknown* rather than *none* (ADR-0167 §SD1).
+	//
+	// Unlike an edge's, a node's weight DOES reach layout: it scales the font
+	// its label is laid out at (LayoutOpts.NodeFontSize), and the engine then
+	// fits the box to the scaled label as it always has. So a weighted graph
+	// and its weightless twin do not lay out identically, and a caller that
+	// caches layouts must key on the weights.
+	Weight float64
 }
 
 // Edge is one directed arc. From and To reference Node.ID values. v1 assumes
@@ -85,6 +98,58 @@ type LayoutOpts struct {
 	RankSep  float64 // inches between adjacent ranks (levels); 0 = engine default
 	NodeSep  float64 // inches between nodes within a rank;       0 = engine default
 	FontSize float64 // points, used to size node labels;         0 = engine default
+	// NodeFontSize maps a node's ordinal Weight to the font size its label is
+	// laid out at, in points. Returning ok=false — or leaving this nil — keeps
+	// FontSize, so an unweighted graph is laid out exactly as before.
+	//
+	// It is a caller-supplied mapping for the same reason the edge width is
+	// (ADR-0167 §SD1/§SD3): only the caller knows what its numbers mean.
+	// WeightFontSize is a ready-made one. It lives here rather than in the
+	// view because a node's size has to be decided before layout runs, where
+	// an edge's width is chosen when the edge is stroked.
+	NodeFontSize func(weight float64) (pt float64, ok bool)
+}
+
+// Magnitude font sizes, in points. The minimum is Graphviz's own default node
+// font size, so the lightest carrying node looks like an ordinary one.
+const (
+	DefaultWeightMinPt = 14.0
+	DefaultWeightMaxPt = 34.0
+)
+
+// WeightFontSize is a ready-made LayoutOpts.NodeFontSize: it maps each node's
+// ordinal weight onto [minPt, maxPt] against the heaviest node in m. Pass 0
+// for either bound to take the default above.
+//
+// The curve, the unknown-vs-none reading and the decline-everything case are
+// the same three judgements view.WeightWidth makes, for the same reasons; see
+// its doc comment. One difference is worth stating: a font size has a floor
+// the eye imposes rather than the design imposes, so minPt is Graphviz's
+// default rather than something smaller. Nodes below the mid-range therefore
+// order less finely than edges do — they cannot shrink, only fail to grow.
+func WeightFontSize(m GraphModel, minPt float64, maxPt float64) func(weight float64) (float64, bool) {
+	if minPt <= 0 {
+		minPt = DefaultWeightMinPt
+	}
+	if maxPt <= 0 {
+		maxPt = DefaultWeightMaxPt
+	}
+	if maxPt < minPt {
+		maxPt = minPt
+	}
+	maxV := 0.0
+	for i := range m.Nodes {
+		if v := m.Nodes[i].Weight; v > maxV {
+			maxV = v
+		}
+	}
+	return func(weight float64) (float64, bool) {
+		if maxV <= 0 || weight <= 0 {
+			return 0, false
+		}
+		t := math.Sqrt(math.Min(weight, maxV) / maxV)
+		return minPt + (maxPt-minPt)*t, true
+	}
 }
 
 // Point is a 2-D coordinate in the output space (see the package doc):
@@ -99,6 +164,12 @@ type NodeLayout struct {
 	Shape  NodeShape
 	Center Point
 	W, H   float64
+	// FontSize is the size this node's label was laid out at, in points, when
+	// it differs from Layout.FontSize — i.e. when a weight scaled it. 0 means
+	// the layout-wide size applies, which is the case for every node of an
+	// unweighted graph. A renderer paints the label at this size when set, for
+	// the same reason it honours Layout.FontSize: the box was fitted to it.
+	FontSize float64
 }
 
 // EdgeLayout is a routed edge. Points are the control points of the routed

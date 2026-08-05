@@ -158,3 +158,113 @@ func TestLayout_ReportsFontSize(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 14.0, def.FontSize, "unset font size reports the Graphviz default")
 }
+
+// ADR-0167 §SD3: a node's weight scales the font its label is laid out at, and
+// Graphviz fits the box to the scaled label — so a heavier node is physically
+// bigger AND its text still fits, which is the property that makes font
+// scaling the right mechanism rather than a fixed box size.
+func TestLayout_NodeWeightScalesTheBox(t *testing.T) {
+	e := newEngine(t)
+	m := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{
+			{ID: "small", Label: "same text", Weight: 1},
+			{ID: "big", Label: "same text", Weight: 100},
+		},
+		Edges: []layeredgraph.Edge{{From: "small", To: "big"}},
+	}
+	lay, err := e.Layout(context.Background(), m,
+		layeredgraph.LayoutOpts{NodeFontSize: layeredgraph.WeightFontSize(m, 0, 0)})
+	require.NoError(t, err)
+
+	byID := make(map[string]layeredgraph.NodeLayout, len(lay.Nodes))
+	for _, n := range lay.Nodes {
+		byID[n.ID] = n
+	}
+	small, big := byID["small"], byID["big"]
+	// Identical labels, so any size difference is the weight and nothing else.
+	assert.Greater(t, big.W, small.W, "the heavier node's box is wider")
+	assert.Greater(t, big.H, small.H, "the heavier node's box is taller")
+	assert.Greater(t, big.FontSize, small.FontSize, "and its label was laid out larger")
+	assert.Equal(t, layeredgraph.DefaultWeightMaxPt, big.FontSize, "the heaviest node takes the ceiling")
+}
+
+// The mechanism must be inert without weights: the same model laid out with
+// and without a mapping installed produces identical geometry, and every node
+// reports no per-node font so a renderer takes the layout-wide one.
+func TestLayout_WeightlessModelIsUnchanged(t *testing.T) {
+	e := newEngine(t)
+	m := trafficLight()
+
+	plain, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+	// A mapping IS installed here — it simply has no positive weight to act
+	// on, which is the case that must not perturb anything.
+	mapped, err := e.Layout(context.Background(), m,
+		layeredgraph.LayoutOpts{NodeFontSize: layeredgraph.WeightFontSize(m, 0, 0)})
+	require.NoError(t, err)
+
+	assert.Equal(t, plain.Width, mapped.Width)
+	assert.Equal(t, plain.Height, mapped.Height)
+	require.Len(t, mapped.Nodes, len(plain.Nodes))
+	for i := range plain.Nodes {
+		assert.Equal(t, plain.Nodes[i], mapped.Nodes[i], "node %d moved or resized", i)
+		assert.Zero(t, mapped.Nodes[i].FontSize, "an unweighted node reports no per-node font")
+	}
+	require.Len(t, mapped.Edges, len(plain.Edges))
+	for i := range plain.Edges {
+		assert.Equal(t, plain.Edges[i], mapped.Edges[i], "edge %d moved", i)
+	}
+}
+
+// A nil mapping is the pre-ADR-0167 caller, and weights it never set must not
+// reach layout through some other path.
+func TestLayout_NilMappingIgnoresWeights(t *testing.T) {
+	e := newEngine(t)
+	plainM := trafficLight()
+	weightedM := trafficLight()
+	for i := range weightedM.Nodes {
+		weightedM.Nodes[i].Weight = float64(i+1) * 10
+	}
+
+	plain, err := e.Layout(context.Background(), plainM, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+	weighted, err := e.Layout(context.Background(), weightedM, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+
+	assert.Equal(t, plain.Width, weighted.Width)
+	assert.Equal(t, plain.Nodes, weighted.Nodes, "weights without a mapping change nothing")
+}
+
+// The label-fit margin scales with a node's own font, because what it absorbs
+// (the layout-vs-render metric difference) is proportional to the drawn text.
+// An unweighted node must keep exactly the calibrated margin, which is what
+// keeps a weightless graph laid out as before.
+func TestNodeMarginScalesWithTheFont(t *testing.T) {
+	e := newEngine(t)
+	const label = "a fairly long node label that fills its box"
+	m := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{
+			{ID: "plain", Label: label},
+			{ID: "big", Label: label, Weight: 100},
+		},
+		Edges: []layeredgraph.Edge{{From: "plain", To: "big"}},
+	}
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{
+		FontSize: 13, NodeFontSize: layeredgraph.WeightFontSize(m, 13, 34)})
+	require.NoError(t, err)
+
+	byID := make(map[string]layeredgraph.NodeLayout, len(lay.Nodes))
+	for _, n := range lay.Nodes {
+		byID[n.ID] = n
+	}
+	plain, big := byID["plain"], byID["big"]
+	require.Greater(t, big.FontSize, 0.0, "the weighted node was scaled")
+
+	// The box must grow at least as fast as the font: if the margin stayed
+	// fixed the width ratio would lag the font ratio, which is exactly the
+	// case where the painter clips the label.
+	fontRatio := big.FontSize / 13.0
+	widthRatio := big.W / plain.W
+	assert.GreaterOrEqualf(t, widthRatio, fontRatio*0.99,
+		"box grew %.3fx for a %.3fx font — the margin did not follow", widthRatio, fontRatio)
+}

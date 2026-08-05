@@ -84,7 +84,7 @@ func (e *Engine) Layout(ctx context.Context, m layeredgraph.GraphModel, opts lay
 	if err != nil {
 		return nil, err
 	}
-	lay, err := parseLayout(dot, m)
+	lay, err := parseLayout(dot, m, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -94,11 +94,32 @@ func (e *Engine) Layout(ctx context.Context, m layeredgraph.GraphModel, opts lay
 	return lay, nil
 }
 
-// nodeMargin is the Graphviz node `margin` (inches, "x,y") applied to every
-// node. The horizontal component is bumped above Graphviz's 0.11 default so the
-// sans-metric label keeps a clear, consistent gap from the box border once the
-// painter draws it; the vertical component stays at the default.
-const nodeMargin = "0.16,0.055"
+// nodeMarginX / nodeMarginY are the Graphviz node `margin` (inches) at the
+// layout-wide font size. The horizontal component is bumped above Graphviz's
+// 0.11 default so the sans-metric label keeps a clear, consistent gap from the
+// box border once the painter draws it; the vertical component stays at the
+// default.
+const (
+	nodeMarginX = 0.16
+	nodeMarginY = 0.055
+)
+
+// nodeMarginFor scales the horizontal margin with a node's own font size.
+//
+// What the bump absorbs is the Helvetica-vs-Noto metric difference, and that
+// error is proportional to the drawn text — so it grows with the font. A
+// magnitude-scaled label (ADR-0167 §SD3) at 2.4× the layout font overruns a
+// margin calibrated for the layout font, and the painter clips it at the box
+// edge. Scaling relative to the LAYOUT-WIDE size rather than to some absolute
+// keeps an unweighted node at exactly the old margin, so a graph with no
+// weights is laid out byte-for-byte as before.
+func nodeMarginFor(nodePt float64, layoutPt float64) string {
+	scale := 1.0
+	if layoutPt > 0 && nodePt > layoutPt {
+		scale = nodePt / layoutPt
+	}
+	return fmt.Sprintf("%g,%g", nodeMarginX*scale, nodeMarginY)
+}
 
 // defaultFontSize mirrors Graphviz's own default node font size (points). Used
 // when LayoutOpts.FontSize is unset, so Layout.FontSize reports exactly the size
@@ -112,6 +133,19 @@ func effectiveFontSize(f float64) float64 {
 		return f
 	}
 	return defaultFontSize
+}
+
+// nodeFontSize resolves one node's layout font: the caller's weight mapping
+// when it accepts this node, else the layout-wide size. A mapping that returns
+// a non-positive size is treated as a decline rather than as an instruction to
+// draw nothing.
+func nodeFontSize(n layeredgraph.Node, opts layeredgraph.LayoutOpts) float64 {
+	if opts.NodeFontSize != nil {
+		if pt, ok := opts.NodeFontSize(n.Weight); ok && pt > 0 {
+			return pt
+		}
+	}
+	return effectiveFontSize(opts.FontSize)
 }
 
 // renderLaidOutDot constructs the Graphviz graph from the model and renders it
@@ -159,8 +193,14 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		// rendered font; the inner-margin bump (default is 0.11,0.055) then
 		// leaves a consistent gap so text never touches the frame.
 		gn.SetFontName("Helvetica")
-		_ = gn.SafeSet("margin", nodeMargin, "")
-		gn.SetFontSize(effectiveFontSize(opts.FontSize))
+		// A weighted node is laid out at a scaled font, and Graphviz fits the
+		// box to the scaled label — so magnitude arrives through the existing
+		// size-to-fit path rather than beside it, and a label can never
+		// overflow its own box (ADR-0167 §SD3). An unweighted node, or a nil
+		// mapping, keeps the layout-wide size.
+		nodePt := nodeFontSize(n, opts)
+		_ = gn.SafeSet("margin", nodeMarginFor(nodePt, effectiveFontSize(opts.FontSize)), "")
+		gn.SetFontSize(nodePt)
 		gnodes[n.ID] = gn
 	}
 
@@ -196,7 +236,7 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 // are taken from the input model (a node whose label equals its name may be
 // emitted with the "\N" default rather than an explicit label); only geometry
 // is read from Graphviz.
-func parseLayout(dot []byte, m layeredgraph.GraphModel) (*layeredgraph.Layout, error) {
+func parseLayout(dot []byte, m layeredgraph.GraphModel, opts layeredgraph.LayoutOpts) (*layeredgraph.Layout, error) {
 	g, err := graphviz.ParseBytes(dot)
 	if err != nil {
 		return nil, fmt.Errorf("goccyengine: reparse laid-out dot: %w", err)
@@ -239,7 +279,17 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel) (*layeredgraph.Layout, e
 			if label == "" {
 				label = name
 			}
+			// The scaled font is reported only when it differs from the
+			// layout-wide one, so an unweighted graph produces the zero value
+			// throughout and a renderer's fallback path is the common one.
+			// Recomputed rather than read back from the DOT: the mapping is
+			// pure, so this is the same number Graphviz was given.
+			var fontPt float64
+			if pt := nodeFontSize(md, opts); pt != effectiveFontSize(opts.FontSize) {
+				fontPt = pt
+			}
 			out.Nodes = append(out.Nodes, layeredgraph.NodeLayout{
+				FontSize: fontPt,
 				ID:     name,
 				Label:  label,
 				Shape:  md.Shape,

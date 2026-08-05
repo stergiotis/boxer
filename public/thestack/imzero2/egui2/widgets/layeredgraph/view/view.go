@@ -282,6 +282,13 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			cx, cy := tf(n.Center)
 			w := float32(n.W * escale)
 			h := float32(n.H * escale)
+			// A node whose weight scaled its font was laid out at that size,
+			// so paint it there — the same no-drift reason the layout-wide
+			// size wins over the style's (ADR-0167 §SD3).
+			fontPt := nodeFontPt
+			if n.FontSize > 0 {
+				fontPt = float32(n.FontSize)
+			}
 			fill := st.NodeFill
 			if opts.NodeFill != nil {
 				if c2, ok := opts.NodeFill(n.ID); ok {
@@ -295,7 +302,7 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 				}
 			}
 			drawNode(n.Shape, cx, cy, w, h, st, fill, hovered[n.ID])
-			c.PaintText(cx, cy, 1, 1, n.Label, nodeFontPt*float32(escale), txt).Send()
+			c.PaintText(cx, cy, 1, 1, n.Label, fontPt*float32(escale), txt).Send()
 			c.PaintSenseRegion(wis.PrepareStr(n.ID), cx-w/2, cy-h/2, w, h).Send()
 		}
 
