@@ -30,8 +30,8 @@ func NewH3Region() (h H3Region)         { return }
 func NewMapPolyline() (m MapPolyline)   { return }
 func NewTintedScope() (t TintedScope)   { return }
 
-// Free painter function: strokeWidth at arg index 5, everything before
-// it a coordinate or the color.
+// Free painter functions: strokeWidth at a per-name arg index,
+// everything before it a coordinate, the rounding, or the color.
 type PaintEllipse struct{}
 
 func PaintEllipseStroke(cx float32, cy float32, rx float32, ry float32, col Color, strokeWidth float32) (p PaintEllipse) {
@@ -39,6 +39,30 @@ func PaintEllipseStroke(cx float32, cy float32, rx float32, ry float32, col Colo
 	_ = cy
 	_ = rx
 	_ = ry
+	_ = col
+	_ = strokeWidth
+	return
+}
+
+type PaintCircle struct{}
+
+func PaintCircleStroke(cx float32, cy float32, radius float32, col Color, strokeWidth float32) (p PaintCircle) {
+	_ = cx
+	_ = cy
+	_ = radius
+	_ = col
+	_ = strokeWidth
+	return
+}
+
+type PaintRect struct{}
+
+func PaintRectStroke(minX float32, minY float32, maxX float32, maxY float32, rounding float32, col Color, strokeWidth float32) (p PaintRect) {
+	_ = minX
+	_ = minY
+	_ = maxX
+	_ = maxY
+	_ = rounding
 	_ = col
 	_ = strokeWidth
 	return

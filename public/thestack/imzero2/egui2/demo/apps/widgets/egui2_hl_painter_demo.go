@@ -100,7 +100,7 @@ func demoPainterShapes(ids *c.WidgetIdStack) {
 	c.PaintCircleFilled(220.0, 80.0, 25.0, color.Hex(0x4444ffcc)).Send()
 
 	// Stroked circle
-	c.PaintCircleStroke(320.0, 80.0, 35.0, color.Hex(0xffaa00ff), 2.0).Send()
+	c.PaintCircleStroke(320.0, 80.0, 35.0, color.Hex(0xffaa00ff), styletokens.StrokeStrong).Send()
 
 	// Filled rects
 	c.PaintRectFilled(40.0, 150.0, 140.0, 200.0, 5.0, color.Hex(0xff6600cc)).Send()
@@ -109,7 +109,7 @@ func demoPainterShapes(ids *c.WidgetIdStack) {
 	// but positionally they're the same as before
 
 	// Stroked rect
-	c.PaintRectStroke(280.0, 150.0, 380.0, 210.0, 8.0, color.Hex(0x00ff88ff), 2.0).Send()
+	c.PaintRectStroke(280.0, 150.0, 380.0, 210.0, 8.0, color.Hex(0x00ff88ff), styletokens.StrokeStrong).Send()
 
 	// Lines
 	c.PaintLine(40.0, 240.0, 200.0, 280.0, color.Hex(0xffff00ff), 2.0).Send()
@@ -331,7 +331,7 @@ func demoPainterClock(ids *c.WidgetIdStack, st *painterDemoState) {
 
 	// Clock face
 	c.PaintCircleFilled(cx, cy, radius, color.Hex(0x222233ff)).Send()
-	c.PaintCircleStroke(cx, cy, radius, color.Hex(0x8888aaff), 2.0).Send()
+	c.PaintCircleStroke(cx, cy, radius, color.Hex(0x8888aaff), styletokens.StrokeStrong).Send()
 
 	// Hour marks
 	for ih := 0; ih < 12; ih++ {
@@ -376,8 +376,8 @@ func demoPainterBezier(ids *c.WidgetIdStack) {
 	// control point markers + guide lines for the S-curve
 	c.PaintCircleFilled(30, 150, 4, color.Hex(0x44ddffaa)).Send()
 	c.PaintCircleFilled(370, 50, 4, color.Hex(0x44ddffaa)).Send()
-	c.PaintCircleStroke(130, 20, 3, color.Hex(0x44ddff66), 1.0).Send()
-	c.PaintCircleStroke(270, 180, 3, color.Hex(0x44ddff66), 1.0).Send()
+	c.PaintCircleStroke(130, 20, 3, color.Hex(0x44ddff66), styletokens.StrokeHair).Send()
+	c.PaintCircleStroke(270, 180, 3, color.Hex(0x44ddff66), styletokens.StrokeHair).Send()
 	c.PaintLine(30, 150, 130, 20, color.Hex(0x44ddff33), 0.5).Send()
 	c.PaintLine(270, 180, 370, 50, color.Hex(0x44ddff33), 0.5).Send()
 

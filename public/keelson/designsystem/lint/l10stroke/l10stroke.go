@@ -25,10 +25,11 @@
 // args are bare numeric literals too, so the inspect-every-arg approach
 // above would false-positive on cx/cy/rx/ry. Instead each registered
 // function carries its strokeWidth arg index (the per-name table idiom
-// L11 uses for durSecs). PaintEllipseStroke is registered; the
-// remaining painter strokes (c.PaintRectStroke / c.PaintCircleStroke)
-// stay unregistered — each addition is a deliberate trigger-surface
-// expansion whose callers must be swept in the same change.
+// L11 uses for durSecs). All three painter strokes are registered —
+// PaintCircleStroke / PaintEllipseStroke / PaintRectStroke. A new
+// painter surface with a stroke width joins the table the same way;
+// registration expands the trigger surface, so sweep the new callers
+// in the same change.
 //
 // Allowlist files: the styletokens module itself, where the ladder
 // constants legitimately live. Line-level ignore via
@@ -70,7 +71,9 @@ var triggerSelectors = map[string]bool{
 // Registering a new function here expands the trigger surface: sweep
 // its callers in the same change.
 var triggerFunctions = map[string]int{
+	"PaintCircleStroke":  4, // (cx, cy, radius, col, strokeWidth)
 	"PaintEllipseStroke": 5, // (cx, cy, rx, ry, col, strokeWidth)
+	"PaintRectStroke":    6, // (minX, minY, maxX, maxY, rounding, col, strokeWidth)
 }
 
 // allowedLiterals are the values that may appear raw in stroke positions

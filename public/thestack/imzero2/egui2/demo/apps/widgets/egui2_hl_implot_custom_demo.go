@@ -163,7 +163,7 @@ func init() {
 						if i == st.selected {
 							// Selection is the accent role, not a bare white.
 							c.PaintRectStroke(x0, y0, x1, y0+implotLaneH, 3,
-								color.Hex(styletokens.AccentStrong.AsHex()), 1.5).Send()
+								color.Hex(styletokens.AccentStrong.AsHex()), styletokens.StrokeRegular).Send()
 						}
 						if x1-x0 > float32(len(iv.name))*6.5+8 {
 							c.PaintText(x0+5, y0+implotLaneH/2, 0, 1, iv.name,
@@ -194,7 +194,7 @@ func init() {
 					c.PaintRectFilled(x+6, y-9, x+6+w, y+9, 3,
 						color.Hex(styletokens.NeutralBgPanel.AsHex()&^0xff|0xee)).Send()
 					c.PaintRectStroke(x+6, y-9, x+6+w, y+9, 3,
-						color.Hex(styletokens.NeutralBorderFaint.AsHex()), 1).Send()
+						color.Hex(styletokens.NeutralBorderFaint.AsHex()), styletokens.StrokeHair).Send()
 					c.PaintText(x+11, y, 0, 1, txt, 10.5,
 						color.Hex(styletokens.NeutralTextPrimary.AsHex())).Send()
 				})

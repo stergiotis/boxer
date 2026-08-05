@@ -3,6 +3,7 @@ package widgets
 import (
 	"fmt"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
@@ -103,7 +104,7 @@ func demoSenseRegionTest(ids *c.WidgetIdStack, st *senseRegionTestDemoState) {
 			c.PaintSenseRegion(senseAbsId, x, y, srTestCellW, srTestCellH).Send()
 
 			if sm.GetResponse(widgethandle.Make(senseAbsId.Derive())).HasHovered() {
-				c.PaintRectStroke(x-1, y-1, x+srTestCellW+1, y+srTestCellH+1, 6.0, color.Hex(0xffffffcc), 2.5).Send()
+				c.PaintRectStroke(x-1, y-1, x+srTestCellW+1, y+srTestCellH+1, 6.0, color.Hex(0xffffffcc), styletokens.StrokeStrong).Send()
 			}
 		}
 	}

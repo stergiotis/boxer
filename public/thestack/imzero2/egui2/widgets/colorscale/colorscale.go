@@ -347,7 +347,7 @@ func (inst *ColorScale) renderHorizontal() {
 	}
 
 	// --- Gradient border.
-	c.PaintRectStroke(0, 0, inst.width, gradientH, 0, color.Hex(inst.borderColor), 0.8).Send()
+	c.PaintRectStroke(0, 0, inst.width, gradientH, 0, color.Hex(inst.borderColor), styletokens.StrokeHair).Send()
 
 	// --- Tick marks + labels. Labels are center-anchored, except within an
 	// `edgeGuard` px of the left/right edges where we switch to left/right
@@ -453,7 +453,7 @@ func (inst *ColorScale) renderVertical() {
 	}
 
 	// --- Gradient border.
-	c.PaintRectStroke(0, 0, gradientW, inst.height, 0, color.Hex(inst.borderColor), 0.8).Send()
+	c.PaintRectStroke(0, 0, gradientW, inst.height, 0, color.Hex(inst.borderColor), styletokens.StrokeHair).Send()
 
 	// --- Tick marks + labels. Labels are vertically center-anchored, except within
 	// edgeGuard px of the top/bottom edges where we switch to top/bottom anchor so the

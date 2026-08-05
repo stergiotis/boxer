@@ -31,18 +31,23 @@ func tokenForm() {
 	_ = c.NewMapPolyline().Stroke(c.Hex(0xffffffff), w)
 }
 
-// free painter function: only the registered width position (index 5)
-// triggers — the coordinate args are bare numeric literals too and must
-// never be flagged.
+// free painter functions: only the registered per-name width position
+// triggers — the coordinate (and rect rounding) args are bare numeric
+// literals too and must never be flagged.
 func freeFunctionWidth() {
 	_ = c.PaintEllipseStroke(300.0, 245.0, 55.0, 30.0, c.Hex(0xdd99ffff), 1.5) // want `L10: raw literal 1.5`
 	_ = c.PaintEllipseStroke(410.0, 245.0, 30.0, 42.0, c.Hex(0x44ddffff), 2)   // want `L10: raw literal 2`
+	_ = c.PaintCircleStroke(120.0, 80.0, 24.0, c.Hex(0xffffffff), 1.5)         // want `L10: raw literal 1.5`
+	_ = c.PaintRectStroke(10.0, 10.0, 90.0, 60.0, 4.0, c.Hex(0xffffffff), 2)   // want `L10: raw literal 2`
 }
 
 func freeFunctionAllowed() {
 	_ = c.PaintEllipseStroke(80.0, 100.0, 48.0, 48.0, c.Hex(0xffffffff), 0) // sentinel "no stroke"
 	w := someStroke()
-	_ = c.PaintEllipseStroke(80.0, 100.0, 48.0, 48.0, c.Hex(0xffffffff), w) // token-driven form
+	_ = c.PaintEllipseStroke(80.0, 100.0, 48.0, 48.0, c.Hex(0xffffffff), w)     // token-driven form
+	_ = c.PaintCircleStroke(120.0, 80.0, 24.0, c.Hex(0xffffffff), w)            // token-driven form
+	_ = c.PaintRectStroke(10.0, 10.0, 90.0, 60.0, 4.0, c.Hex(0xffffffff), w)    // rounding literal is L4's concern, not L10's
+	_ = c.PaintRectStroke(10.0, 10.0, 90.0, 60.0, 4.0, c.Hex(0xffffffff), 0.0)  // sentinel "no stroke"
 }
 
 func someStroke() (v float32) { v = 1.5; return }

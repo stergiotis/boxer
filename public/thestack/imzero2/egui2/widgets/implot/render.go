@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -230,11 +231,11 @@ func (p *Plot) End() {
 			y0, y1 = y1, y0
 		}
 		c.PaintRectFilled(x0, y0, x1, y1, 0, color.Hex(colBoxFill)).Send()
-		c.PaintRectStroke(x0, y0, x1, y1, 0, color.Hex(colBoxStroke), 1.0).Send()
+		c.PaintRectStroke(x0, y0, x1, y1, 0, color.Hex(colBoxStroke), styletokens.StrokeHair).Send()
 	}
 	p.emitToolsClipped(tr, areaX, areaY, areaW, areaH)
 	c.PaintClipPop().Send()
-	c.PaintRectStroke(areaX, areaY, areaX+areaW, areaY+areaH, 0, color.Hex(colBorder), 1.0).Send()
+	c.PaintRectStroke(areaX, areaY, areaX+areaW, areaY+areaH, 0, color.Hex(colBorder), styletokens.StrokeHair).Send()
 
 	// --- Hover readout, ImPlot's mouse-position text, bottom-right
 	// corner. Suppressed on NoInputs plots (sparklines, inert popups):
@@ -543,7 +544,7 @@ func (p *Plot) emitLegend(leg []int, areaX, areaY float32, interactive bool) {
 	lh := pad*2 + float32(len(leg))*rowH
 	lx, ly := areaX+8, areaY+8
 	c.PaintRectFilled(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(colLegendBg)).Send()
-	c.PaintRectStroke(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(colBorder), 1.0).Send()
+	c.PaintRectStroke(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(colBorder), styletokens.StrokeHair).Send()
 	for row, si := range leg {
 		s := &p.series[si]
 		ry := ly + pad + float32(row)*rowH

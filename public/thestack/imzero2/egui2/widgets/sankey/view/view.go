@@ -630,7 +630,7 @@ func (s *state) drawNodes(dc implot.DrawCtx) {
 	for _, h := range [2]Hit{s.opts.Hover, s.opts.Selected} {
 		// normalizeOpts has already dropped an index the layout cannot hold.
 		if i := h.Node(); i >= 0 {
-			c.PaintRectStroke(s.rMinX[i], s.rMinY[i], s.rMaxX[i], s.rMaxY[i], 0, ring, 1.5).Send()
+			c.PaintRectStroke(s.rMinX[i], s.rMinY[i], s.rMaxX[i], s.rMaxY[i], 0, ring, styletokens.StrokeRegular).Send()
 		}
 	}
 }
