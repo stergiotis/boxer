@@ -48,7 +48,14 @@ SCENE_SETTLE_MS="${PLAYSHOT_SCENE_SETTLE_MS:-1800}"
 # rebuilt by whoever is working in the tree, and a Go host paired with a Rust
 # client from a different egui2 codegen desyncs the FFFI wire mid-frame ("FFFI
 # wire desync: opcode … does not decode to a known FuncProcId") — every scene
-# then captures a broken window. PLAYSHOT_BUILD=0 reuses what is already built.
+# then captures a broken window.
+#
+# PLAYSHOT_BUILD=0 does NOT mean "reuse the private pair": it switches BOTH
+# binaries to the SHARED rust/imzero2/ ones, which are whatever someone last
+# built there. So a run with it captures code that may be hours older than the
+# working tree, silently — a change under test simply does not appear, and the
+# capture looks like the feature is broken rather than absent. Use it only to
+# re-drive a trace against a build you know is current.
 BUILD="${PLAYSHOT_BUILD:-1}"
 BIN="${PLAYSHOT_BIN:-$OUT/bin}"
 CHECK_FIXTURES="${PLAYSHOT_CHECK_FIXTURES:-1}"
@@ -976,9 +983,23 @@ for fn in "${selected[@]}"; do
 	kids=$(pgrep -P "$app_pid" 2>/dev/null)
 	kill "$app_pid" $kids 2>/dev/null
 	wait "$app_pid" 2>/dev/null
+	# The RUST client owns the carrier socket and outlives the Go host it is a
+	# child of. Without waiting for the port to actually free, the next scene's
+	# client cannot bind, the connect-poll above finds the OLD listener still
+	# up, and the driver attaches to the PREVIOUS scene's app: it captures that
+	# scene's window and then fails to find this scene's widgets, which reads
+	# as a panel bug rather than a teardown race.
+	for _ in $(seq 1 40); do
+		(exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null || break
+		sleep 0.25
+	done
 	took=$((SECONDS - start))
 
-	shots=$(ls "$OUT/$name"*.png 2>/dev/null | wc -l)
+	# Only what THIS scene wrote. A plain $name*.png glob also matches a
+	# longer-named sibling scene (08_treemap vs 08_treemap_self) and counted
+	# stale files from earlier runs, so a scene that captured nothing could
+	# still report png.
+	shots=$(find "$OUT" -maxdepth 1 -name "$name*.png" -newer "$trace" 2>/dev/null | wc -l)
 	if [[ -n "$DRY" ]]; then
 		if ((rc == 0)); then
 			ok=$((ok + 1)); log "  ok   $name  (${took}s, dry run — anchors resolved)"
