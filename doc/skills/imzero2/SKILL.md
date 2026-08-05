@@ -1261,7 +1261,7 @@ Companion notes for the bindings in [`egui2_definition_d_walkers.go`](../../../p
 | Polyline / closed ring | `mapPolyline` (register-drain) | `(lats[], lons[]) + .Stroke/.Closed` |
 | Bulk choropleth | `h3CellsColored` (register-drain) | `(cellIds[], rgbas[]) + .StrokeWidth/.StrokeColor` |
 | Aggregated ROI outline | `h3Region` (register-drain) | `(cellIds[]) + .Fill/.Stroke/.Label` |
-| Viewport / pointer read-back | `fetchR15WalkersCamera` (fetcher) | `(found, mapId, zoom, center{Lat,Lon}, {min,max}{Lat,Lon}, screen{Width,Height}Px, hover{Lat,Lon,Valid}, clicked, viewHash)` |
+| Viewport / pointer read-back | `fetchR15WalkersCameras` (fetcher) | 14 parallel arrays keyed by `mapIds[]`; read one map's via `StateManager.GetWalkersCamera(handle) (WalkersCameraValue, ok)` |
 
 Two emission patterns trip up new walkers code routinely — read §16.2 (overlay ordering) and §16.3 (sticky `SetZoom`/`CenterAt` semantics) before writing or modifying a walkers demo. The remaining subsections are reference material for narrower gotchas.
 
@@ -1283,7 +1283,7 @@ c.MapPolyline(lats, lons).Stroke(color.Hex(0xffffffff), 2).Send()
 c.WalkersMap(ids.PrepareStr("m"), lat, lon, false).Width(w).Height(h).Send()
 ```
 
-If overlays must be computed from the visible viewport (e.g. a viewport-driven heatmap), emit them from the **previous** frame's camera via `StateManager.GetWalkersCamera()` and accept the one-frame lag — imperceptible at interactive cadence. The camera cannot be fetched inline during render; see `doc/skills/imzero2-fetchers/SKILL.md` for the deadlock rationale and §16.5 below for the multi-map ambiguity.
+If overlays must be computed from the visible viewport (e.g. a viewport-driven heatmap), emit them from the **previous** frame's camera via `StateManager.GetWalkersCamera()` and accept the one-frame lag — imperceptible at interactive cadence. The camera cannot be fetched inline during render; see `doc/skills/imzero2-fetchers/SKILL.md` for the deadlock rationale and §16.5 below for how to address a specific map.
 
 ### 16.3 `SetZoom` and `CenterAt` are sticky for one frame — gate them on an apply-once flag
 
@@ -1327,11 +1327,12 @@ The canonical implementation lives in `egui2_hl_walkers_demo.go` (search for `ap
 * **Cause.** Walkers' gesture handler reads `ui.input(|i| i.zoom_delta())` once per map and gates via `ui.ui_contains_pointer()` on the parent Ui, not the map's response rect. In overlapping or stacked layouts more than one parent Ui's rect can contain the pointer, so multiple maps apply the zoom delta. This is walkers-side, not ImZero2-side.
 * **Pattern.** For dashboards with multiple maps, keep zoom interactive on exactly one — call `.ZoomGesture(false)` on the others and mirror state explicitly: read the primary's camera via `StateManager.GetWalkersCamera()` and drive the secondaries with `.SetZoom(z).CenterAt(lat, lon)` every frame. (Driving every frame is appropriate here because the secondary is non-interactive by construction — for the user-interactive case, the per-frame override is a bug; see §16.3.)
 
-### 16.5 The camera fetcher returns the last-rendered map's viewport
+### 16.5 The camera fetcher is keyed by map id, and entries are retained
 
-* **Symptom.** `fetchR15WalkersCamera` called after rendering map B reports map A's viewport (or vice versa) with multiple maps in the frame.
-* **Cause.** `walkers_last_camera` is a single `Option<WalkersCamera>` written by the overlay plugin's `run()` at the end of each `walkersMap` render. The fetcher returns the last write. The fetcher does **not** take/consume — subsequent reads in the same frame see the same value.
-* **Pattern.** If you want a specific map's viewport, arrange for it to be the **last** `walkersMap` rendered in the frame before fetching; or (simpler) host overlays on a single map. The uniform-heatmap demo takes the second route — it emits overlays *before* the main map's render and reads the previous frame's camera, giving a one-frame lag on pan that's imperceptible at interactive rates.
+* **Pattern.** `StateManager.GetWalkersCamera(handle)` takes the map's widget handle and returns `(WalkersCameraValue, ok)`. Pass the handle of the map you mean; there is no ambient "current" camera to get wrong.
+* **Retained, not drained.** A map that did not render this frame keeps its last camera, because a reader running a frame behind the viewport — the Go-side heatmap recompute is the motivating case — still needs one. `ok == false` means that map has never rendered, not that it is stale. One entry per map id ever rendered, so the map is bounded the way the dock's state is.
+* **Non-consuming.** Several readers per frame (an overlay emitter and an on-screen camera readout) all see the same value.
+* **History.** This was a single `walkers_last_camera` slot until 2026-08-04, which meant the last map to render in a frame was the only one anyone could read: two maps — two windows of one app, or play beside terrainscope — and a reader either got the wrong camera or, once it checked the id, none at all. Code written against that era may still arrange for "my map renders last"; that workaround is no longer needed and the ordering it depends on is not guaranteed.
 
 ### 16.6 Antimeridian-crossing polygons are culled incorrectly
 
@@ -1342,7 +1343,8 @@ The canonical implementation lives in `egui2_hl_walkers_demo.go` (search for `ap
 ### 16.7 `h3Region` fill paints per-cell hexes, not a single tessellated polygon
 
 * **Symptom.** At low zoom levels with large cell counts (thousands of cells in a country-scale ROI), you can see the hex grid inside the filled area; fill performance drops roughly linearly with cell count.
-* **Cause.** `h3Region.Fill` is implemented by drawing each cell as a `egui::Shape::convex_polygon`. Concave tessellation of the dissolved outline would require `lyon_tessellation` (not yet a dep). Per-cell fill is honest at H3-native scales (hundreds of cells) and visually reveals the H3 grid — often desired.
+* **Cause.** `h3Region.Fill` is implemented by drawing each cell as a `egui::Shape::convex_polygon`. Filling the dissolved outline instead needs concave tessellation, which the binding does not do. Per-cell fill is honest at H3-native scales (hundreds of cells) and visually reveals the H3 grid — often desired.
+* **The escape hatch is cheaper than it was.** `earcutr` is now a dependency (ear-clip triangulation, added for the painter's `paintPolygonFilled(...).Concave()`), so a smooth fill no longer means taking a new dep — only routing `H3RegionRenderable.outline_rings` through it instead of `cell_boundaries`.
 * **Pattern.** For country-scale ROIs where you want a smooth fill, use `h3Region.Stroke(...)` only (omit `.Fill(...)`) and let the dissolved outline do the work. Or compact the cellset to the coarsest resolution that still bounds your area.
 
 ### 16.8 Custom tile servers
@@ -1382,9 +1384,9 @@ The canonical implementation lives in `egui2_hl_walkers_demo.go` (search for `ap
 
 ### 16.13 Resolution of common errors
 
-| Log line | Likely cause | Fix |
+| Symptom / log line | Likely cause | Fix |
 |---|---|---|
-| `late culled walkers map` | Parent block (window/collapsing header) was skipped this frame | Move the `walkersMap` out of a collapsing header, or use `.DefaultOpen(true)` and a wrapper that survives the 4-frame screenshot tour (see §12 CollapsingHeader pitfall) |
+| *(silent — the `late culled walkers map` line is commented out in `render_walkers_map`)* Map renders nothing and its overlays vanish | Parent block (window/collapsing header) was skipped this frame, so the widget was late-culled | Move the `walkersMap` out of a collapsing header, or use `.DefaultOpen(true)` and a wrapper that survives the 4-frame screenshot tour (see §12 CollapsingHeader pitfall). Uncomment the `tracing::debug!` to confirm before hunting elsewhere |
 | `walkers pending overlays leaked` | Register-drain overlays sent without a following `walkersMap` to drain them | Ensure overlay calls happen *before* the `walkersMap` opcode, in the same frame (see §16.2) |
 | `walkers tile config changed — rebuilt the tile source` (repeated) | Tile config signature changing every frame | Likely inadvertent (changing URL / attribution / zoom / size / TLS config in a tight loop). Pin the config to a Go-side variable and only update on real user input |
 | `h3 runtime init failed` | h3o-wasm artifact missing or wazero compile error | Verify boxer's `public/science/geo/h3/internal/h3o_wasm` has the built artifact (`.wasm` file); rebuild boxer if stale |
@@ -1393,10 +1395,9 @@ The canonical implementation lives in `egui2_hl_walkers_demo.go` (search for `ap
 
 - **Bug 2** (§16.4) — upstream walkers issue; needs a tighter `response.rect.contains(pointer_pos)` gate in walkers' own gesture handler.
 - **Antimeridian culling** (§16.6) — wait for first real dataset to hit this; then add splitter in `bbox_of_rings`.
-- **Concave tessellation** (§16.7) — add `lyon_tessellation` dep only when a real ROI workflow demands smooth fills at country scale.
+- **Concave tessellation** (§16.7) — route `h3Region.Fill` through the `earcutr` dep that already exists, when a real ROI workflow demands smooth fills at country scale.
 - **`{s}` subdomain rotation** (§16.8) — add a `.TileSubdomains([]string)` method if public-tile rate-limiting becomes visible.
 - **Tile transport still lives in the renderer** (§16.12) — [ADR-0165](../../adr/0165-imzero2-tile-transport-over-fffi2.md) proposes routing requests over FFFI2 into Go so there is one configured network egress point; the `TileTransport` trait is the seam it drops into.
-- **Per-id camera snapshots** (§16.5) — current single `walkers_last_camera` is ambiguous in multi-map frames. Could key by map id at the cost of a small HashMap per frame.
 - **Mapbox/Geoportal presets** — users can pass the right URL template with `.TileUrl` today; a named preset would save typing but adds little beyond that.
 - **Interactive ROI drawing** — v1 is display-only. Brush / click-to-draw / vertex-drag edit modes are scoped in the design but not implemented. Go owns drawing state by design (no Rust-side draw-tool state).
 
