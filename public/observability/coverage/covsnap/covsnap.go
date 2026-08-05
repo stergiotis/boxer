@@ -1,8 +1,14 @@
-// Package covsnap holds the decoded, pure-data model of Go coverage
-// meta-data and counter snapshots (ADR-0169 §SD2/§SD3). Like sysmsnap it is
-// stdlib-only so consumers (bus codec, providers, applets) can import the
-// types without pulling in the decoder or the runtime/coverage seam.
+// Package covsnap holds the pure-data model of Go coverage (ADR-0169
+// §SD2/§SD3): the decoded meta-data and counter snapshots, and the
+// sampler's pre-aggregated emission model. Like sysmsnap it carries no
+// collector or runtime/coverage dependency; beyond the stdlib it imports
+// only the roaring bitmap — covered-unit sets ARE roaring uint32 bitmaps,
+// the canonical Set-of-uint32 of the leeway model.
 package covsnap
+
+import (
+	"github.com/RoaringBitmap/roaring"
+)
 
 // CounterModeE mirrors the numeric covermode values of the coverage
 // meta-data file format (version 1); the values are part of the on-disk
@@ -135,4 +141,57 @@ type CounterSnapshot struct {
 	MetaHash [16]byte
 	Args     map[string]string
 	Funcs    []FuncCounters
+}
+
+// RunStatus is the always-emitted tier of an Update: absolute cumulative
+// totals of the run, cheap enough for every tick and sufficient for a
+// dashboard that holds no meta.
+type RunStatus struct {
+	CoveredUnits uint32
+	TotalUnits   uint32
+	CoveredStmts uint32
+	TotalStmts   uint32
+	CoveredFuncs uint32
+	TotalFuncs   uint32
+}
+
+// PkgSample is a changed-only per-package rollup: absolute cumulative
+// covered counts for the package at PkgIdx of the meta.
+type PkgSample struct {
+	PkgIdx       uint32
+	CoveredUnits uint32
+	CoveredStmts uint32
+	CoveredFuncs uint32
+}
+
+// FuncSample is a changed-only per-function rollup: the absolute cumulative
+// covered-unit count of the function at (PkgIdx, FuncIdx) of the meta. The
+// function's covered SET is the slice [UnitBase, UnitBase+len(Units)) of
+// the Update's Units bitmap (full updates) or of a consumer's accumulated
+// set.
+type FuncSample struct {
+	PkgIdx       uint32
+	FuncIdx      uint32
+	CoveredUnits uint32
+}
+
+// Update is one tick of the sampler (ADR-0169 §SD3). All values are
+// absolute cumulative — never increments — so a lossy transport heals on
+// the next full re-statement and readers never integrate.
+//
+// Full=true (the first tick and every re-statement): Units is the complete
+// cumulative covered set, Pkgs/Funcs list every covered package/function.
+// Full=false: Units holds only the units newly covered since the previous
+// tick, Pkgs/Funcs only the entries whose counts changed. An unchanged
+// tick emits Full=false with empty Units/Pkgs/Funcs — the Status heartbeat
+// still rides.
+type Update struct {
+	MetaHash        [16]byte
+	Seq             uint64
+	SampledAtUnixMs int64
+	Full            bool
+	Units           *roaring.Bitmap
+	Status          RunStatus
+	Pkgs            []PkgSample
+	Funcs           []FuncSample
 }
