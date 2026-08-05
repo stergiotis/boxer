@@ -287,6 +287,15 @@ free id rather than editing a live proposal.
 - Two hierarchy panels is two tabs every applet negotiates per frame — the exact
   cost `aae43bac` cited when it dropped M4. It is paid here against a consumer,
   which is what that kill asked for.
+- **A hierarchy that is really a DAG is flattened by the query, silently.** Both
+  contracts assume a tree. In node mode `parent` is one column, so a node with
+  several parents has to be reduced to one *before* the panel sees it — and
+  because the panel never sees the others, it cannot count what was dropped the
+  way it counts every other loss. In folded mode the same node arrives once per
+  path and becomes that many cells, so its value is counted once per path and
+  the total overstates the distinct one. Neither is detectable from what the
+  panel is handed; both are the query's to state. This is not hypothetical for
+  the driving consumer: its corpus is a DAG, and flattening it drops real edges.
 
 ### Neutral
 
