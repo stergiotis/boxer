@@ -1,13 +1,10 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-05
 ---
-
-> **Status: draft — pre-human-review.** This directory and the convention
-> described here were introduced 2026-08-05 and have not been reviewed.
 
 # Trials
 

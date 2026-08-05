@@ -1,13 +1,10 @@
 ---
 type: reference
 audience: package maintainer
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-05
 ---
-
-> **Status: draft — pre-human-review.** Not verified; do not cite as
-> authoritative.
 
 # JSONBench-on-facts — logbook
 

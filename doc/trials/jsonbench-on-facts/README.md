@@ -1,14 +1,10 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-05
 ---
-
-> **Status: draft — pre-human-review.** A measurement *plan*, not a result:
-> every number below is either quoted from upstream or marked "to measure".
-> Do not cite as authoritative.
 
 > **Provenance.** Compiled 2026-08-05, ahead of any measurement. Claims are
 > two-tiered: (a) statements about this repository were checked against the
