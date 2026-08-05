@@ -10,6 +10,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
@@ -57,7 +59,25 @@ const (
 	treemapRootName = "all"
 	// treemapMaxCatRunes bounds a category key in the status line.
 	treemapMaxCatRunes = 24
+	// treemapLegendW/H size the numeric colour bar. The height is not free:
+	// the widget spends 55% of it on the gradient, 5px on tick marks and the
+	// rest on labels, so at the 34 first tried the 10px labels ran past the
+	// bottom and were clipped mid-glyph. 48 leaves them a full line. The width
+	// is what keeps the SI-suffixed labels from colliding at the right end.
+	treemapLegendW = 360
+	treemapLegendH = 48
+	// treemapLegendTicks is below the widget's default of 6: these labels are
+	// SI-suffixed and so wider than the bare numbers that default assumes.
+	treemapLegendTicks = 5
+	// treemapSwatchPx is one categorical chip's side.
+	treemapSwatchPx = 10
+	// treemapLegendMaxCats caps the category key. A legend is not a table, and
+	// the status line carries the full count.
+	treemapLegendMaxCats = 12
 )
+
+// treemapLegendSalt namespaces the category swatches' frame ids.
+const treemapLegendSalt uint64 = 0x5a11c0de17f1000e
 
 // treemapColorModeE is what a cell's fill encodes.
 type treemapColorModeE uint8
@@ -138,6 +158,14 @@ type treemapDriver struct {
 	root  *layout.Node
 	idxOf map[*layout.Node]int32
 	color treemapColorInfo
+
+	// cmap is the colormap the numeric arm colours cells from, held so the
+	// legend can render the SAME instance rather than a lookalike built from
+	// the same numbers — which is what treemap.ContinuousColoringFromMap exists
+	// for. scale is the legend over it, rebuilt with the colormap because a
+	// ColorScale binds its Config at construction.
+	cmap  *treemap.Colormap
+	scale *colorscale.ColorScale
 
 	// effColorNum / effColorKey are the EFFECTIVE colour per flat index: the
 	// node's own where the result gave it one, otherwise what it inherited from
@@ -239,6 +267,7 @@ func (inst *treemapDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, c
 	// this keeps the total and the warnings where a pane too short for the
 	// picture cannot push them out of sight.
 	c.Label(inst.pointerLine()).Send()
+	inst.renderLegend()
 	c.Separator().Horizontal().Send()
 
 	sm := c.CurrentApplicationState.StateManager
@@ -342,6 +371,7 @@ func (inst *treemapDriver) rebuildTree() {
 	}
 	inst.inheritColors()
 	inst.color = inst.resolveColorInfo()
+	inst.rebuildColormap()
 	if inst.tm != nil && inst.root != nil {
 		inst.tm.SetRoot(inst.root)
 		inst.tm.SetColoring(inst.coloring())
@@ -493,6 +523,109 @@ func (inst *treemapDriver) ownColorAt(i int32) bool {
 	return false
 }
 
+// rebuildColormap rebuilds the numeric colormap and the legend bound to it.
+//
+// One Colormap instance serves both the cells and the legend, which is the
+// point of treemap.ContinuousColoringFromMap: a legend built from the same two
+// numbers rather than the same object would drift the moment either side
+// changed how it samples the palette, and a legend that disagrees with the
+// picture is worse than none.
+//
+// The ColorScale binds its Config at construction and has no setter, so it is
+// dropped here and rebuilt on the next render. That also drops its cached tick
+// axis, which is correct — the range it was computed for is gone.
+//
+// Only the colormap is built here. The widget is not: this runs from the tree
+// rebuild, which is pure data and reachable without a UI (its tests build a
+// driver with no id stack at all), while colorscale.New requires one.
+func (inst *treemapDriver) rebuildColormap() {
+	inst.cmap, inst.scale = nil, nil
+	if inst.color.kind != hierColorNumeric {
+		return
+	}
+	inst.cmap = treemap.NewColormap(treemapValuePalette(), inst.color.min, inst.color.max)
+}
+
+// ensureScale constructs the legend on first render after a colormap change,
+// mirroring ensureWidget.
+func (inst *treemapDriver) ensureScale() {
+	if inst.scale != nil || inst.cmap == nil {
+		return
+	}
+	inst.scale = colorscale.New(inst.ids, "play-treemap-legend", inst.cmap.Config(),
+		colorscale.WithSize(treemapLegendW, treemapLegendH),
+		colorscale.WithDesiredTicks(treemapLegendTicks),
+		// The colour column carries no unit of its own — `unit` labels the
+		// VALUE — so the ticks are bare numbers, SI-suffixed to keep a wide
+		// range from crowding the bar.
+		colorscale.WithLabelFormat(func(v float64) string { return treemapQty(v, "") }),
+	)
+}
+
+// renderLegend says what a fill means, for the mode that is actually on.
+//
+// Only for the data mode: the depth ramp encodes structure rather than
+// identity, so a key mapping its colours to depth numbers would be chrome
+// explaining an axis nobody reads off. And only when a `color` column resolved
+// — with none, the control row already says so in words.
+//
+// It sits ABOVE the canvas with the other readouts, for the reason ADR-0160
+// §SD9 gives: a pane too short for the picture must not push the thing that
+// explains it out of sight.
+func (inst *treemapDriver) renderLegend() {
+	if inst.colorMode != treemapColorData {
+		return
+	}
+	switch inst.color.kind {
+	case hierColorNumeric:
+		inst.ensureScale()
+		if inst.scale == nil {
+			return
+		}
+		inst.scale.Render()
+	case hierColorCategorical:
+		inst.renderCategoryKey()
+	}
+}
+
+// renderCategoryKey draws one swatch per category, in the first-seen order the
+// cycle was assigned in, so the key reads in the same order the picture
+// allocated its hues.
+//
+// Past the palette's length the swatches REPEAT, which is honest — that is what
+// the cells do — and the trailing note is what stops two identical chips
+// reading as a rendering fault. The list is capped because a key is a legend,
+// not a table; the status line carries the full count either way.
+func (inst *treemapDriver) renderCategoryKey() {
+	if len(inst.color.catOrder) == 0 {
+		return
+	}
+	gap := styletokens.GapItems(styletokens.DensityFromEnv())
+	for range c.HorizontalTop().KeepIter() {
+		for i, key := range inst.color.catOrder {
+			if i >= treemapLegendMaxCats {
+				for rt := range c.RichTextLabel(fmt.Sprintf("+%d more",
+					len(inst.color.catOrder)-treemapLegendMaxCats)) {
+					rt.Small().Weak()
+				}
+				break
+			}
+			// A square chip: there is no radius token, and a literal here would
+			// be one more number to keep in step with the cells it stands for.
+			swatch := c.Frame(inst.ids.PrepareSeq(treemapLegendSalt ^ uint64(i))).
+				Fill(color.Hex(styletokens.QualitativeCycle(i).AsHex()))
+			for range swatch.KeepIter() {
+				c.UiSetMinWidth(treemapSwatchPx)
+				c.UiSetMinHeight(treemapSwatchPx)
+			}
+			for rt := range c.RichTextLabel(truncateRunes(key, treemapMaxCatRunes)) {
+				rt.Small()
+			}
+			c.AddSpace(gap)
+		}
+	}
+}
+
 // resolveColorInfo surveys the colour channel of the built tree: the range a
 // colormap spans, or the categories a cycle is assigned to.
 //
@@ -574,13 +707,18 @@ func (inst *treemapDriver) coloring() treemap.ColoringI {
 func (inst *treemapDriver) dataColoring() treemap.ColoringI {
 	switch inst.color.kind {
 	case hierColorNumeric:
-		return treemap.ContinuousColoring(treemapValuePalette(), func(n *layout.Node) float64 {
+		if inst.cmap == nil {
+			return nil
+		}
+		// The SAME Colormap the legend renders, not a second one built from the
+		// same numbers (rebuildColormap).
+		return treemap.ContinuousColoringFromMap(inst.cmap, func(n *layout.Node) float64 {
 			i, ok := inst.idxOf[n]
 			if !ok || int(i) >= len(inst.effColorNum) {
 				return math.NaN() // no opinion; the depth ramp keeps the cell
 			}
 			return inst.effColorNum[i]
-		}, inst.color.min, inst.color.max)
+		})
 	case hierColorCategorical:
 		return treemap.CategoricalColoring(treemapCategoryPalette(), func(n *layout.Node) int {
 			i, ok := inst.idxOf[n]

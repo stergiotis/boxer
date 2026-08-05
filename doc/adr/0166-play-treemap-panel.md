@@ -129,6 +129,22 @@ Inheritance cannot widen the colormap's range or add a category — a weighted
 mean lies inside the range and an inherited key already exists — so the range
 survey still reads the result's own colours alone.
 
+**A legend, for the data mode only.** Numeric gets a `colorscale` gradient bar
+with a computed tick axis; categorical gets a row of swatches in the cycle order
+the hues were assigned, capped at twelve with the remainder counted. The depth
+mode gets none: it encodes structure rather than identity, and a key mapping its
+colours to depth numbers would be chrome explaining an axis nobody reads off.
+
+The bar renders the **same `Colormap` instance** the cells are coloured from,
+which is what `treemap.ContinuousColoringFromMap` exists for. A legend built
+from the same two numbers rather than the same object would drift the moment
+either side changed how it samples the palette, and a legend that disagrees with
+the picture it explains is worse than no legend.
+
+The legend sits above the canvas with the other readouts, for the reason
+ADR-0160 §SD9 gives: a pane too short for the picture must not push the thing
+that explains it out of sight.
+
 A colour-free contract is rejected on C4: for the driving consumer, "how many"
 and "of what kind" are two questions, and area answers only the first.
 
@@ -203,10 +219,11 @@ Recorded so they do not gate this cut:
   removing it is a change to a shipped picture that wants its own capture to
   compare against.
 - **Drill-path preservation across a re-run** (SD4).
-- **A legend.** The colour channel now reaches the default view, which makes
-  the absence of a scale or a category key more visible than it was. The
-  pointer readout names a cell's colour and marks an inherited one, so nothing
-  is unreadable — but a legend is the obvious next thing.
+- **A clickable legend.** Neither arm filters: a swatch does not isolate its
+  category and the bar does not brush a range. Both are the obvious next
+  gesture, and both want a decision about whether filtering is a view state or
+  a published signal — which is the question SD5 answered for navigation and
+  would have to answer again here.
 - **A treemap on the implot custom-item lane.** Batched rects and pointer-
   anchored zoom would lift the C5 ceiling, at the cost of re-rolling drill
   navigation as a layout re-root. The Frame-based widget is what exists; this
@@ -330,7 +347,18 @@ new.
 
   The colour inheritance of SD2 is what the first `08_treemap` capture forced:
   that pane was uniformly grey, and the same view now reads `43 coloured from
-  below` with the fleets separated by altitude at the default nesting.
+  below` with the fleets separated by altitude at the default nesting. That
+  scene also carries the numeric legend.
+
+  `08_treemap_category` is the categorical arm of both: the same fleets coloured
+  by an altitude band, so the swatch key draws and the agree-or-neutral rule is
+  visible — `3 categories · 30 coloured from below · 11 mixed`, with an operator
+  flying one band taking its hue and one flying several staying neutral.
+
+  The legend's size was a capture finding too. The widget spends 55% of its
+  height on the gradient and the rest on labels, so the first attempt at 34 px
+  clipped the tick labels mid-glyph and collided the last two; 360×48 with five
+  desired ticks is what fits SI-suffixed labels.
 
   Two things the captures taught, neither of them predicted:
 

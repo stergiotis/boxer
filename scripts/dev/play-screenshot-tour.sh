@@ -405,6 +405,48 @@ ORDER BY value DESC"
 	settle=2500
 }
 
+scene_08_treemap_category() {
+	desc="Treemap — a CATEGORICAL colour column (ADR-0166 §SD2): the qualitative key below the control row, and the inheritance rule that colours a container only when its descendants agree"
+	senv=(BOXER_PLAY_FOCUS_TREEMAP=1)
+	# The same fleets as 08_treemap, coloured by a BAND rather than a measure,
+	# so the other arm of `color` and the other legend both draw. It is also
+	# the clearest picture of the categorical inheritance rule: an operator
+	# flying one band throughout takes that band's hue, and one flying several
+	# — Delta, with Boeings in the middle band and Airbuses above it — stays on
+	# the neutral depth ramp, which is what "look inside" looks like.
+	sql="WITH
+  ops AS (
+    SELECT ownOp
+    FROM default.planes_mercator_sample100
+    WHERE ownOp != '' AND t != '' AND desc != '' AND altitude > 0
+    GROUP BY ownOp
+    ORDER BY count() DESC
+    LIMIT 8
+  ),
+  legs AS (
+    SELECT ownOp AS op,
+           splitByChar(' ', desc)[1] AS maker,
+           t AS model,
+           altitude AS alt
+    FROM default.planes_mercator_sample100
+    WHERE ownOp IN (SELECT ownOp FROM ops)
+      AND t != '' AND desc != '' AND altitude > 0
+  )
+SELECT [op, maker, model] AS stack,
+       count()            AS value,
+       multiIf(avg(alt) < 10000, 'low',
+               avg(alt) < 25000, 'mid',
+                                 'high') AS color,
+       'positions'        AS unit
+FROM legs
+GROUP BY stack
+ORDER BY value DESC"
+	steps='{"do":"capture","text":"08_treemap_category","settleMs":600}
+{"do":"click","name":"full"}
+{"do":"capture","text":"08_treemap_category_full","settleMs":600}'
+	settle=2500
+}
+
 scene_08_treemap_self() {
 	desc="Treemap — a container with a quantity of its own (ADR-0166 §SD3): every table under a mebibyte is rolled up into its database, which then gets a cell of its own inside its own box"
 	senv=(BOXER_PLAY_FOCUS_TREEMAP=1)

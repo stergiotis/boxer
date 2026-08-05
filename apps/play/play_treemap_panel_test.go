@@ -402,6 +402,72 @@ func TestTreemapEmptyResultHasNoRoot(t *testing.T) {
 	assert.NotContains(t, inst.statusLine(), "total")
 }
 
+// The legend and the cells must sample ONE Colormap. A legend built from the
+// same two numbers rather than the same object would drift the moment either
+// side changed how it samples the palette, and a legend that disagrees with the
+// picture it explains is worse than no legend.
+func TestTreemapLegendSharesTheCellColormap(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"p", "a"}, {"p", "b"}}},
+		icicleTestCol{name: "value", num: []float64{1, 1}},
+		icicleTestCol{name: "color", num: []float64{10, 90}},
+	)
+	require.NotNil(t, inst.cmap, "a numeric colour column builds a colormap")
+	lo, hi := inst.cmap.Range()
+	assert.Equal(t, inst.color.min, lo)
+	assert.Equal(t, inst.color.max, hi)
+
+	// Every cell colour the coloring can produce comes from that same instance,
+	// so sampling it directly reproduces them.
+	for _, v := range []float64{10, 50, 90} {
+		assert.Equal(t, inst.cmap.At(v), inst.cmap.Config().At(v),
+			"the legend reads Config(); the cells read the Colormap — same object, same answer")
+	}
+}
+
+// No numeric column, no colormap and no legend to build — the categorical and
+// absent arms must not leave a stale scale behind either.
+func TestTreemapColormapIsDroppedWhenNotNumeric(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"a"}}},
+		icicleTestCol{name: "value", num: []float64{1}},
+		icicleTestCol{name: "color", str: []string{"fs"}},
+	)
+	assert.Nil(t, inst.cmap)
+	assert.Nil(t, inst.scale, "a categorical result has a key, not a colour bar")
+
+	none := treemapTestDriver(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"a"}}},
+		icicleTestCol{name: "value", num: []float64{1}},
+	)
+	assert.Nil(t, none.cmap)
+	assert.Nil(t, none.scale)
+}
+
+// A rebuild must drop the old scale: a ColorScale binds its Config at
+// construction, so one kept across a range change would draw the previous
+// result's axis beside the new result's cells.
+func TestTreemapRebuildDropsTheStaleScale(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"a"}}},
+		icicleTestCol{name: "value", num: []float64{1}},
+		icicleTestCol{name: "color", num: []float64{5}},
+	)
+	require.NotNil(t, inst.cmap)
+	first := inst.cmap
+
+	// Stand in for a render having built the legend, then rebuild.
+	inst.scale = nil
+	inst.color.min, inst.color.max = 100, 200
+	inst.rebuildColormap()
+	require.NotNil(t, inst.cmap)
+	assert.NotSame(t, first, inst.cmap, "a new range is a new colormap")
+	assert.Nil(t, inst.scale, "and the legend bound to the old one is gone")
+	lo, hi := inst.cmap.Range()
+	assert.Equal(t, 100.0, lo)
+	assert.Equal(t, 200.0, hi)
+}
+
 // treemapCellInfo is the minimum a ColoringI needs to be asked about a node.
 // Depth and State are the widget's to fill in at render; the colorings under
 // test here read neither.
