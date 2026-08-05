@@ -79,10 +79,23 @@ func (inst *PlayApp) renderGraphNode(ids *c.WidgetIdStack, n splitNode) {
 	if n.Kind == splitNodeStatement {
 		kind = "sink"
 	}
+	// The engine badge (ADR-0163 §SD5). A client node's SQL is never sent, and
+	// the split is the only place that shows both engines at once — so the
+	// distinction belongs on the node's own header rather than in prose
+	// somewhere a reader would have to go looking for it.
+	if n.Client != nil {
+		kind = "CTE · computed in play"
+	}
 	header := fmt.Sprintf("%s · %s", n.ID, kind)
 	for range c.CollapsingHeader(ids.PrepareStr("graphNode-"+string(n.ID)),
 		c.WidgetText().Text(header).Keep()).DefaultOpen(true).KeepIter() {
 		for range c.Vertical().KeepIter() {
+			if n.Client != nil {
+				for rt := range c.RichTextLabel(clientNodeCaption(n.Client)) {
+					rt.Small().Weak()
+				}
+				inst.renderTsCollisionWarning(n.Client)
+			}
 			// Observe this node in the result panels (3d): clicking materialises
 			// it on the intermediate lane and the panels render its result.
 			observed := inst.observedNode == n.ID

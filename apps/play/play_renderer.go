@@ -418,6 +418,11 @@ type PlayApp struct {
 	seriesScoresLane *nodeLane
 	seriesSpansLane  *nodeLane
 
+	// tsCollisions caches whether the server has functions whose names play's
+	// own `ts*` vocabulary shadows (ADR-0163 §SD4). Chrome only — the answer
+	// never changes what runs, just what the panes say about it.
+	tsCollisions *tsCollisionProbe
+
 	// flow is the ADR-0153 Flow dock tab: the active node's clause-level
 	// dataflow, derived statically from the split; the EXPLAIN lenses add
 	// three lanes (closed in Close, forgotten on Run like the Network's).
@@ -934,6 +939,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	// the editor: a pane that writes SQL into the buffer is exactly the
 	// snippet-class capability play_delivery.go was made public for.
 	inst.seriesDriver = NewSeriesDriver(mk(), func(sql string) { inst.InsertSqlAtCaret(sql) })
+	inst.tsCollisions = newTsCollisionProbe(client)
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
@@ -1019,6 +1025,7 @@ func (inst *PlayApp) Close() {
 	if inst.seriesScoresLane != nil {
 		inst.seriesScoresLane.close()
 	}
+	inst.tsCollisions.close()
 	if inst.seriesSpansLane != nil {
 		inst.seriesSpansLane.close()
 	}
@@ -1092,10 +1099,8 @@ func (inst *PlayApp) activeSnapshot() (rec arrow.RecordBatch, schema *arrow.Sche
 			// split's signal edges) against the frame snapshot; names the
 			// last Run's prelude bound are constants and travel inside the
 			// fused SQL's SET prelude instead (slice 5a).
-			view := inst.intermediateLane.demand(compiledNode{
-				SQL:    fuseNode(split, inst.observedNode),
-				Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
-			})
+			view := inst.intermediateLane.demand(
+				compileNodeFor(split, node, inst.lastRunBound, inst.frameSig))
 			if view.rec != nil {
 				numRows = view.rec.NumRows()
 			}
@@ -2322,6 +2327,19 @@ func (inst *PlayApp) renderWirePreview() {
 			rt.Small().Weak()
 		}
 	default:
+		// The engine split, where "as sent" is the pane's whole claim
+		// (ADR-0163 §SD5). A buffer holding a client call ships text that
+		// mentions it — ClickHouse ignores an unused CTE — but the call
+		// itself is never executed there, and a pane titled "as sent" must
+		// not let that read as the server having done the analysis.
+		for _, n := range inst.currentSplit.Nodes {
+			if n.Client == nil {
+				continue
+			}
+			for rt := range c.RichTextLabel("`" + string(n.ID) + "`: " + clientNodeCaption(n.Client)) {
+				rt.Small().Weak()
+			}
+		}
 		// Multi-statement buffers ship one statement (ADR-0130 L3); say which,
 		// so the body below is never mistaken for the whole buffer.
 		if inst.wireStmtTotal > 1 {

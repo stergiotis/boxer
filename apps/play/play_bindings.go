@@ -168,10 +168,11 @@ func (inst *PlayApp) demandBoundNodes() (release func()) {
 			lane = newNodeLane(clientExecutor{client: inst.client, opts: newExecOptions("bound-" + string(nodeID))}, inst.graph.alloc, 0)
 			inst.boundLanes[nodeID] = lane
 		}
-		inst.boundViews[nodeID] = lane.demand(compiledNode{
-			SQL:    fuseNode(split, nodeID),
-			Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
-		})
+		// compileNodeFor, not a bare fuse: a client node's SQL is its INPUT
+		// CTE and its transform rides along (ADR-0163 §SD4). Binding a pane
+		// to the CTE is the sanctioned way to see one, so this is the path
+		// the terminal-leaf error points at.
+		inst.boundViews[nodeID] = lane.demand(compileNodeFor(split, node, inst.lastRunBound, inst.frameSig))
 	}
 
 	// Detail follows the selection's node by default (an explicit Detail

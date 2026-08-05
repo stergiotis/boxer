@@ -67,6 +67,12 @@ type splitNode struct {
 	// SELECT * FROM <id>` rather than executing the bare body (ADR-0097 SD9:
 	// the self-reference stays INSIDE the node — it is not a graph edge).
 	Recursive bool
+
+	// Client is set when the body is a `ts*` call (ADR-0163 §SD4): the node
+	// is computed IN PLAY, and its SQL never reaches ClickHouse. Its single
+	// DependsOn entry is the call's input CTE, which is what the wire
+	// executes on the node's behalf. Nil for every ordinary node.
+	Client *tsCall
 }
 
 // splitResult is the recovered node graph for an editor buffer.
@@ -136,7 +142,22 @@ func splitGraph(sql string) (res splitResult, err error) {
 	for i := range root.CTEDefs {
 		cte := root.CTEDefs[i]
 		body := cteBodyText(pr, cte)
+		// Client classification happens HERE, on the parsed body (ADR-0163
+		// §SD4), so a malformed call is a split error the Graph and
+		// Diagnostics tabs report before a run rather than a server error
+		// naming a function ClickHouse has never heard of. A UNION body has
+		// more than one branch scope and cannot be a single call.
+		var client *tsCall
+		if len(cte.Scopes) == 1 {
+			var cErr error
+			client, cErr = recognizeTsCall(pr, cte.Scopes[0])
+			if cErr != nil {
+				err = eh.Errorf("splitGraph: CTE %q: %w", cte.Name, cErr)
+				return
+			}
+		}
 		res.Nodes = append(res.Nodes, splitNode{
+			Client: client,
 			ID:     NodeID(cte.Name),
 			Kind:   splitNodeCTE,
 			SQL:    body,
@@ -184,7 +205,53 @@ func splitGraph(sql string) (res splitResult, err error) {
 	if err != nil {
 		return
 	}
+	err = checkClientLeaves(res)
+	if err != nil {
+		return
+	}
 	closeReads(res.Nodes, res.Sink)
+	return
+}
+
+// checkClientLeaves enforces ADR-0163 §SD4: a client node is a TERMINAL LEAF.
+// Nothing may read it — not another CTE, not the sink — because its output
+// never exists as SQL, so a reader would be asking ClickHouse for a table that
+// was never sent. Reaching for it is not a mistake to route around; it is the
+// trigger for the ADR-0097 SD13 materialization work, which is why the error
+// says what to do instead rather than degrading quietly.
+func checkClientLeaves(res splitResult) (err error) {
+	client := make(map[NodeID]*tsCall, 2)
+	for i := range res.Nodes {
+		if res.Nodes[i].Client != nil {
+			client[res.Nodes[i].ID] = res.Nodes[i].Client
+		}
+	}
+	if len(client) == 0 {
+		return
+	}
+	for i := range res.Nodes {
+		n := &res.Nodes[i]
+		for _, dep := range n.DependsOn {
+			call, isClient := client[dep]
+			if !isClient || dep == n.ID {
+				continue
+			}
+			if n.ID == res.Sink {
+				// The commonest way to reach this: writing the call and then
+				// selecting from it, which is what SQL habit suggests. Bind a
+				// pane to the CTE instead — the panels read nodes, not only
+				// the sink.
+				return eh.Errorf("splitGraph: the final SELECT reads %q, which is computed client-side "+
+					"by %s and is never sent to ClickHouse (ADR-0163 §SD4). Bind a pane to the %q CTE "+
+					"instead of selecting from it — in the Graph tab, or by naming it as a panel's channel",
+					string(dep), call.Spec.Name, string(dep))
+			}
+			return eh.Errorf("splitGraph: CTE %q reads %q, which is computed client-side by %s and is "+
+				"never sent to ClickHouse (ADR-0163 §SD4). A client call is a terminal leaf: nothing "+
+				"downstream can read it. Bind a pane to %q, or move the SQL that reads it upstream of the call",
+				string(n.ID), string(dep), call.Spec.Name, string(dep))
+		}
+	}
 	return
 }
 

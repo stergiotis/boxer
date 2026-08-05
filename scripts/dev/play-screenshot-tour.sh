@@ -527,6 +527,52 @@ ORDER BY t"
 	settle=2500
 }
 
+scene_08_series_vocabulary() {
+	desc="The ts* client vocabulary (ADR-0163 M1): a CTE whose body is tsAnomalyScores runs IN PLAY, not on ClickHouse — observed in the result panels, with the Graph tab's engine badge and the honesty caption naming what was actually sent"
+	# BOXER_PLAY_OBSERVE points the result panels at the client node. That is
+	# the sanctioned way to see one: a client call is a terminal leaf, so
+	# `SELECT * FROM scored` is a loud split error naming this fix instead.
+	senv=(BOXER_PLAY_FOCUS_TABLE=1 BOXER_PLAY_OBSERVE=scored)
+	# The input CTE is what the server runs; `scored` is what play computes
+	# from its result. Until M2 renders the overlays, the score lane arrives
+	# as an ordinary table — which is exactly what M1 claims to deliver.
+	#
+	# The whole week rather than one day, because DAMP trains on 8×window
+	# before it scores anything: at a 24-sample window that is 192 samples of
+	# warm-up, which would be most of a single day's 288 and would show a
+	# table of `warm_up true` rather than the scores.
+	sql="WITH
+  base AS (
+    SELECT toDateTime64(toStartOfInterval(time, INTERVAL 5 MINUTE), 3) AS t,
+           count()                                                     AS v
+    FROM default.planes_mercator_sample100
+    GROUP BY t
+    ORDER BY t
+  ),
+  scored AS (SELECT tsAnomalyScores(t, v, 24) FROM base)
+SELECT 1"
+	settle=3000
+}
+
+scene_08_series_vocabulary_graph() {
+	desc="The same buffer read as a graph: the client node badged 'computed in play', the honesty caption naming what was actually sent, and the input CTE beneath it as ordinary SQL"
+	# A second launch rather than a click: the dock's tab strip is drawn by
+	# egui_dock on the Rust side and is not in the accessibility tree, so the
+	# FOCUS knob is how a scripted capture reaches another tab.
+	senv=(BOXER_PLAY_FOCUS_GRAPH=1 BOXER_PLAY_OBSERVE=scored)
+	sql="WITH
+  base AS (
+    SELECT toDateTime64(toStartOfInterval(time, INTERVAL 5 MINUTE), 3) AS t,
+           count()                                                     AS v
+    FROM default.planes_mercator_sample100
+    GROUP BY t
+    ORDER BY t
+  ),
+  scored AS (SELECT tsAnomalyScores(t, v, 24) FROM base)
+SELECT 1"
+	settle=3000
+}
+
 scene_09_projection() {
 	desc="Projection — dimensionality reduction over the numeric columns of a result, with the point cloud tied to the selection signal"
 	senv=(BOXER_PLAY_FOCUS_PROJECTION=1)

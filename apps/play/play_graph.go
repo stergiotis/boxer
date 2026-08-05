@@ -129,6 +129,35 @@ type PanelI interface {
 type compiledNode struct {
 	SQL    string
 	Params map[string]string
+
+	// Client is a computation applied to SQL's result IN PLAY (ADR-0163
+	// §SD4), nil for every ordinary node. When set, SQL is the transform's
+	// INPUT rather than the node's own query — the node's real output exists
+	// only after Apply, and never as SQL at all.
+	//
+	// It rides on the compiled node rather than on the executor because the
+	// lanes are shared: one intermediate lane serves whichever node is
+	// observed, so an executor pinned to one node's transform could not
+	// follow. Its Key is part of the memo identity for a reason the SQL
+	// cannot cover — two calls differing only in a literal argument fuse to
+	// the SAME input SQL, so without it the second read serves the first's
+	// result.
+	Client clientTransformI
+}
+
+// clientTransformI is a client-side computation over a node's result. The
+// graph knows only these two things about it: how it identifies itself to the
+// memo, and how to run it. What it computes is the caller's business
+// (ADR-0163's `ts*` vocabulary is the first and, today, only implementation).
+type clientTransformI interface {
+	// Key identifies the transform for memoisation. Two transforms that
+	// would produce different output from one input MUST return different
+	// keys.
+	Key() string
+	// Apply transforms the executor's result. params carries the compiled
+	// node's resolved signal values, since a transform's own arguments may
+	// be `{name:Type}` slots. It must not retain or release in.
+	Apply(in arrow.RecordBatch, params map[string]string, alloc memory.Allocator) (out arrow.RecordBatch, err error)
 }
 
 // key is the memo identity of a compiled node: the SQL plus the sorted
@@ -160,6 +189,14 @@ func (inst compiledNode) key() (out string) {
 		b.WriteString(s)
 	}
 	writeLenPrefixed(inst.SQL)
+	// Unconditionally, even for the nil case: a component that appears only
+	// sometimes is a component two different nodes can agree to omit, which
+	// is the aliasing this encoding exists to rule out.
+	var transform string
+	if inst.Client != nil {
+		transform = inst.Client.Key()
+	}
+	writeLenPrefixed(transform)
 	for _, k := range names {
 		writeLenPrefixed(k)
 		writeLenPrefixed(inst.Params[k])

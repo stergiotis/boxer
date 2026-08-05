@@ -247,6 +247,23 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	} else {
 		rec, schema, summary, err = inst.exec.execute(ctx, c, inst.alloc)
 	}
+	// A client node's SQL is the transform's INPUT; its real output is what
+	// Apply returns (ADR-0163 §SD4). Running it HERE — after the executor,
+	// before the result is published — is what gives it the whole lane
+	// unchanged: memoisation, supersession, staleness, last-good, and the
+	// off-render-thread execution this goroutine already provides. The
+	// server's summary rides along, since what it describes (rows read,
+	// bytes) really did happen on the server.
+	if c.Client != nil && err == nil && rec != nil {
+		out, tErr := c.Client.Apply(rec, c.Params, inst.alloc)
+		rec.Release()
+		rec, err = out, tErr
+		if err != nil {
+			rec, schema = nil, nil
+		} else {
+			schema = rec.Schema()
+		}
+	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if gen != inst.gen {

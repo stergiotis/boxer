@@ -911,6 +911,51 @@ Its output is deliberately not on a grid, so it is a way to *look* at a long
 range — not an input to analysis, which needs the spacing `WITH FILL` or
 `toStartOfInterval` gives it.
 
+## Analysis you spell in SQL, run in play (the `ts*` vocabulary)
+
+A CTE whose whole body is a `ts*` call is computed **client-side** (ADR-0163).
+ClickHouse cannot express a matrix profile or a left-discord scan at all, so
+play runs those itself — but the invocation still lives in the buffer, which
+means it is recorded, replayable, pinnable and readable by anyone who opens
+the query later. Nothing is hidden in a panel control.
+
+```sql
+WITH
+  base AS (
+    SELECT toDateTime64(toStartOfMinute(event_time), 3) AS t, count() AS v
+    FROM system.query_log
+    WHERE event_time > now() - INTERVAL 12 HOUR
+    GROUP BY t
+    ORDER BY t
+  ),
+  scored AS (SELECT tsAnomalyScores(t, v, 60) FROM base)
+SELECT 1
+```
+
+Four functions ship. `tsSmooth(t, v, halfWidth)` and `tsProfile(t, v, window)`
+are two-sided — every value sees the whole series, so they describe the data
+but are not what an alert would have known. `tsAnomalyScores(t, v, window)` is
+causal: each score uses only what came before it, which is what makes replaying
+it a backtest rather than a recap. `tsAnomalySpans(t, v, window, k)` reports the
+top-k flagged extents directly as Timeline bands.
+
+## Reading a client node, and why the sink cannot
+
+A `ts*` CTE is a **terminal leaf**: its output never exists as SQL, so nothing
+downstream can select from it. `SELECT * FROM scored` is a loud error, not a
+silent empty — the fix is to point a pane at the CTE instead, from the Graph
+tab's *fill tab* row, and the error says so.
+
+The body is exactly `SELECT <one ts* call> FROM <one cte>`. A `WHERE`, an
+`ORDER BY` or a second select item is refused rather than ignored: the body is
+replaced by the transform, so anything else there would quietly do nothing.
+Shape the input in the input CTE, where it is visible and runs on the server.
+
+The Graph tab badges such a node *computed in play* and says what was actually
+sent; the Preview pane's **As sent to server** view says it again. If your
+server happens to have a function of the same name, play's wins inside play and
+the caption tells you so.
+
 ## Query outcomes (an alluvial over the query log)
 
 Where the server's own traffic goes: how a query arrived, what kind it was, and
