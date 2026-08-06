@@ -21,7 +21,14 @@ Runtime counter snapshots exist only in binaries built with
 `-cover -covermode=atomic` — `set`/`count` modes refuse them, and an
 uninstrumented binary just logs one line and leaves the tables empty.
 
-For the desktop GUI (the host `hmi.sh` runs):
+For the desktop GUI, `rust/imzero2/hmi_coverage.sh` does build-and-launch in
+one step (it forwards its arguments to `hmi.sh`):
+
+```sh
+cd rust/imzero2 && ./hmi_coverage.sh              # or: ./hmi_coverage.sh --launch play
+```
+
+By hand, the same thing is:
 
 ```sh
 cd rust/imzero2
