@@ -77,6 +77,15 @@ var bookjsonbenchFS embed.FS
 //go:embed bookcodevol
 var bookcodevolFS embed.FS
 
+// bookcatalogFS embeds the data-catalog suite
+// (apps/sqlapplet/bookcatalog/*.md) — canned lenses over the four ADR-0170
+// `boxer.tables_*` tables a `boxer datacatalog refresh` writes: what this
+// ClickHouse instance holds, which leeway tables share a schema, and which
+// opaque ones no panel knows how to draw yet.
+//
+//go:embed bookcatalog
+var bookcatalogFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -113,6 +122,12 @@ func init() {
 	// crosses into "what ran" reads the coverage tables to say so explicitly.
 	if err := RegisterBook("codevol", help.MustSub(bookcodevolFS, "bookcodevol"), []app.TopicT{app.TopicCode}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register code-volume book")
+	}
+	// TopicData: the subject is the ClickHouse instance's own contents — what
+	// tables exist and what shape they are — not the repository (TopicCode) and
+	// not what a process did (TopicObservability).
+	if err := RegisterBook("catalog", help.MustSub(bookcatalogFS, "bookcatalog"), []app.TopicT{app.TopicData}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register data-catalog book")
 	}
 }
 
