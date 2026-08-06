@@ -83,6 +83,11 @@ func TestCatalogBookCorpus(t *testing.T) {
 // bare `FROM tables_catalog` would resolve against whatever the endpoint's
 // default database happens to be — the failure the jsonbench book earned the
 // hard way.
+//
+// `system.*` is the one other database a chapter may read: the overview
+// re-reads system.tables to report how far the server has moved since the
+// snapshot, which is the whole reason these chapters run on a live endpoint
+// rather than the introspection plane.
 func TestCatalogBookNamesTheCatalogTables(t *testing.T) {
 	bySlug := catalogDefsBySlug(t)
 	referenced := make(map[string]struct{}, len(datacatalog.AllTables))
@@ -97,11 +102,15 @@ func TestCatalogBookNamesTheCatalogTables(t *testing.T) {
 				if strings.HasPrefix(ref, "(") || strings.Contains(ref, "(") {
 					continue // a subquery or a table function
 				}
-				if strings.Contains(ref, ".") {
-					assert.Truef(t, strings.HasPrefix(ref, datacatalog.DatabaseName+"."),
-						"%s: `FROM %s` reads outside %s", slug, ref, datacatalog.DatabaseName)
-					referenced[strings.TrimPrefix(ref, datacatalog.DatabaseName+".")] = struct{}{}
+				if !strings.Contains(ref, ".") {
+					continue // one of this chapter's own CTEs
 				}
+				if strings.HasPrefix(ref, "system.") {
+					continue
+				}
+				assert.Truef(t, strings.HasPrefix(ref, datacatalog.DatabaseName+"."),
+					"%s: `FROM %s` reads outside %s", slug, ref, datacatalog.DatabaseName)
+				referenced[strings.TrimPrefix(ref, datacatalog.DatabaseName+".")] = struct{}{}
 			}
 		}
 	}
@@ -139,4 +148,19 @@ func TestCatalogBookSurfacesTheRunStamp(t *testing.T) {
 		assert.Containsf(t, bySlug[slug].SQL, "run_id", "%s: no run stamp", slug)
 		assert.Containsf(t, bySlug[slug].SQL, "discovered_at", "%s: no discovery time", slug)
 	}
+}
+
+// A run stamp is something a reader has to think to check, and a dropped
+// database looks exactly like a live one until they do. The overview counts the
+// drift instead — both directions, because a table created since the run is as
+// misleading an absence as a dropped one is a presence.
+func TestCatalogBookOverviewCountsDrift(t *testing.T) {
+	sql := catalogDefsBySlug(t)["cat-overview"].SQL
+	assert.Contains(t, sql, "FROM system.tables",
+		"cat-overview: drift can only be measured against the live server")
+	assert.Contains(t, sql, " AS dropped_since")
+	assert.Contains(t, sql, " AS created_since")
+	// Drifted databases sort to the top: a zero column is scanned past, a
+	// non-zero first row is not.
+	assert.Contains(t, sql, "ORDER BY dropped_since + created_since DESC")
 }

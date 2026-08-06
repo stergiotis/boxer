@@ -16,10 +16,20 @@ What this ClickHouse instance holds, per database: how many tables, how many of
 them the leeway naming grammar could rebuild a schema from, and how many of the
 rest a play panel could render as they stand (ADR-0170).
 
-**This is a snapshot, not a live view.** The four `boxer.tables_*` tables are
-derived data, replaced whole by `boxer datacatalog refresh`; between runs they
-describe the instance as it was. The last two columns say when that was — if
-`discovered_at` is old, so is everything above it.
+**This is a snapshot, and `dropped_since` / `created_since` say how stale.** The
+four `boxer.tables_*` tables are derived data, replaced whole by
+`boxer datacatalog refresh`; between runs they describe the instance as it was.
+So this chapter checks itself: it re-reads `system.tables` live and counts, per
+database, the tables the catalog lists that are **gone** and the ones on the
+server it has **never seen**. Databases that have moved sort to the top. Two
+zeroes down the column mean everything else here is current; anything else means
+run a refresh before believing the row. `snapshot_age` is the same fact in
+coarser form.
+
+The other columns describe the catalog, not the server, and are therefore as old
+as the run: a database dropped since the refresh still contributes its `tables`
+and `leeway` counts. That is deliberate — the alternative is a chapter that
+silently under-reports rather than one that says how out of date it is.
 
 **"leeway" is a property of the column *names*, not of the data.** A table is
 leeway iff its physical column names parse under the naming convention, which
@@ -38,22 +48,46 @@ WITH
     SELECT any(run_id) AS run_id, max(discovered_at) AS at
     FROM boxer.tables_catalog
   ),
+  live AS (
+    SELECT database, name FROM system.tables
+    WHERE database NOT IN ('system', 'INFORMATION_SCHEMA', 'information_schema')
+  ),
   shaped AS (
     SELECT database, count(DISTINCT name) AS n
     FROM boxer.tables_opaque_shapes
     GROUP BY database
+  ),
+  merged AS (
+    SELECT database, name, toString(kind) AS kind, n_columns,
+           toUInt8(1) AS catalogued, toUInt8(0) AS still_there
+    FROM boxer.tables_catalog
+    UNION ALL
+    SELECT database, name, '' AS kind, toUInt32(0) AS n_columns,
+           toUInt8(0) AS catalogued, toUInt8(1) AS still_there
+    FROM live
+  ),
+  per_table AS (
+    SELECT database, name,
+           max(catalogued)  AS catalogued,
+           max(still_there) AS still_there,
+           max(kind)        AS kind,
+           max(n_columns)   AS n_columns
+    FROM merged
+    GROUP BY database, name
   )
 SELECT
-  c.database                    AS database,
-  count()                       AS tables,
-  countIf(c.kind = 'leeway')    AS leeway,
-  countIf(c.kind = 'opaque')    AS opaque,
-  any(s.n)                      AS opaque_with_a_shape,
-  sum(c.n_columns)              AS n_columns,
-  (SELECT run_id FROM run)      AS run_id,
-  (SELECT at FROM run)          AS discovered_at
-FROM boxer.tables_catalog AS c
-LEFT JOIN shaped AS s ON s.database = c.database
-GROUP BY c.database
-ORDER BY tables DESC, database
+  t.database                                       AS database,
+  countIf(t.catalogued = 1)                        AS tables,
+  countIf(t.kind = 'leeway')                       AS leeway,
+  countIf(t.kind = 'opaque')                       AS opaque,
+  any(s.n)                                         AS opaque_with_a_shape,
+  sum(t.n_columns)                                 AS n_columns,
+  countIf(t.catalogued = 1 AND t.still_there = 0)  AS dropped_since,
+  countIf(t.catalogued = 0 AND t.still_there = 1)  AS created_since,
+  (SELECT run_id FROM run)                         AS run_id,
+  formatReadableTimeDelta(now() - (SELECT at FROM run)) AS snapshot_age
+FROM per_table AS t
+LEFT JOIN shaped AS s ON s.database = t.database
+GROUP BY t.database
+ORDER BY dropped_since + created_since DESC, tables DESC, database
 ```

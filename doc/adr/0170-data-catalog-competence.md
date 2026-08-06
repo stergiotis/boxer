@@ -235,6 +235,18 @@ chapter (the catalog's to-do list). Shape attribute listings are recovered on
 demand with `arrayIntersect` over `tables_leeway.attr_keys`; no third shape
 table is materialized.
 
+The overview **measures its own staleness** rather than only stamping it. A
+`run_id` column is something a reader has to think to check, and a dropped
+database looks exactly like a live one until they do — which is how the first
+reader of this book was misled. Since the chapters run against a live server
+(`endpoint: default`), the overview re-reads `system.tables` and counts, per
+database, the tables the catalog lists that are gone and the ones on the server
+it has never seen, sorting the drifted databases to the top. Both directions,
+because a table created since the run is as misleading an absence as a dropped
+one is a presence. The remaining columns stay as old as the run, which is the
+honest reading: a chapter that silently corrected itself would under-report
+instead of saying how out of date it is.
+
 ## Alternatives
 
 Beyond the QOC kills: a separate `tables_leeway_shapes` table (derivable via
