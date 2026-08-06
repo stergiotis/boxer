@@ -138,6 +138,36 @@ Arm D's materialized columns add 274.7 MiB (+18.8 % over arm B), of which
 `did` alone is 210.1 MiB and `time_us` 47.8 MiB; `kind`,
 `commit_operation` and `commit_collection` together cost 6.6 MiB.
 
+## The two levers, isolated
+
+Arms B, D and E differ by one thing each, over identical data, so the ladder
+attributes cleanly. Hot seconds at 10M:
+
+| Q | B (as declared) | D (+materialized) | E (+re-keyed) | materialization | re-keying | both |
+| --- | --- | --- | --- | --- | --- | --- |
+| Q1 | 0.120 | 0.014 | 0.013 | 8.6× | 1.08× | **9.2×** |
+| Q2 | 1.012 | 0.265 | 0.224 | 3.8× | 1.18× | **4.5×** |
+| Q3 | 0.342 | 0.048 | 0.045 | 7.1× | 1.07× | **7.6×** |
+| Q4 | 0.753 | 0.055 | 0.033 | 13.7× | **1.67×** | **22.8×** |
+| Q5 | 0.826 | 0.060 | 0.034 | 13.8× | **1.76×** | **24.3×** |
+
+**Materialising the backbone is worth 3.8–13.8×** and costs 274.7 MiB
+(+18.8 % over arm B), four fifths of it `did`. It buys nothing structural —
+arm D still reads every granule — it just replaces a per-row path
+reconstruction with a column read.
+
+**Re-keying is worth a further 1.07–1.76×**, and *reduces* storage: arm E is
+1,575,922,975 bytes against arm D's 1,738,291,789, a 9.3 % saving, because
+sorting on low-cardinality columns compresses better. It is the only lever
+here that is free in both directions. The gain lands exactly where pruning
+lands — Q4 and Q5, which read 227 granules of 2,389 against arm D's 2,393 of
+2,393 — and is absent on Q1, which has no filter to prune on. Cold benefits
+about twice as much as hot (Q4 0.114 → 0.060 s).
+
+**Together they take arm B's 4.5–24.3× off the table**, and put facts at
+**0.59–1.18× of the benchmark's own entry** — faster on Q4 and Q5, within
+18 % on the rest — at 0.954× its storage.
+
 ## Latency — seconds, cold = try 1, hot = min(try 2, try 3)
 
 | Q | A cold | A hot | B cold | B hot | C hot | D cold | D hot | B/A | **D/A** |

@@ -46,6 +46,7 @@ func main() {
 			chpackCommand(),
 			ddlCommand(),
 			ingestCommand(),
+			resolveCommand(),
 			resultsCommand(),
 			vocabCommand(),
 		},

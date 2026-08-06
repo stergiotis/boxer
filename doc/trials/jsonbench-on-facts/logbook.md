@@ -447,4 +447,41 @@ template:
   both directions — run-to-run noise on a shared workstation, which is what a
   pure rename should look like. The tables above and the book's embedded rows
   are synced to the new evidence; the conclusions are unchanged.
+- **Arm E — re-keying, the last unspent lever (2026-08-06).** Arm D
+  materialises the backbone but keeps `ORDER BY ts` and prunes nothing. Arm E
+  is arm D sorted on those columns in the reference's own order, derived from
+  arm D's DDL so the two provably differ in the sort key alone (`arm-e.sh`).
+  This is the protocol's §4 arm D; it is lettered E because the trial had
+  already spent D on a read-path arm §4 did not anticipate.
+  **It prunes**: 227 granules of 2,389 on Q4/Q5, the same ~10× reduction arm A
+  gets, and the same fraction on Q2 and Q3.
+  With the two levers isolated over identical data:
+  **materialisation is worth 3.8–13.8×** at +18.8 % storage;
+  **re-keying a further 1.07–1.76×** and it *saves* 9.3 % storage, since
+  sorting low-cardinality columns compresses better. The gain lands exactly
+  where pruning lands (Q4/Q5) and is absent on unfiltered Q1 — which is the
+  attribution working. Together they take arm B's 4.5–24.3× off the table and
+  put facts at **0.59–1.18× of the benchmark's own entry**, faster on Q4 and
+  Q5, at 0.954× its storage.
+- **Column handles (2026-08-06, on review).** The facts queries spelled every
+  column physically (`tv:symbol:value:val:s:m:0:24:0::data`). ADR-0116's
+  `ResolveColumnNames` exists for exactly this and the trial had not used it —
+  the same discoverability finding, a third time. The queries now name
+  `` `symbol:value` ``, `` `stringArray:len` `` and so on, and `jsonbench
+  resolve` expands them against the target table before execution
+  (`measure.sh` does this when `RESOLVE` is set). Support columns resolve
+  alongside value columns, which is what makes the membership lanes reachable
+  by name. Arms B and C were re-measured through the resolver; results stay
+  byte-identical.
+  One real limit found on the way, filed:
+  **[missing nanopass-scope-resolution → proposed:resolve-column-names-with-aliases
+  / functional-suitability.functional-completeness / S3]** — a handle bound by
+  a `WITH <handle> AS alias` expression alias is **not** resolved; the pass
+  visits column references in a SELECT's own scope but not the WITH-expression
+  clause, so the handle ships unexpanded and the query fails
+  `UNKNOWN_IDENTIFIER`. Verified against the live pass: the same handle used
+  directly at its use site resolves. The trial's queries therefore inline the
+  handles instead of binding them, which measured free (0.123 s vs 0.126 s on
+  Q1) but costs the repetition the aliases existed to avoid.
+- **Verdict:** [`./runs/2026-08-06-m4-10m/verdict.md`](./runs/2026-08-06-m4-10m/verdict.md)
 - **Run dir:** [`./runs/2026-08-06-m4-10m/`](./runs/2026-08-06-m4-10m/)

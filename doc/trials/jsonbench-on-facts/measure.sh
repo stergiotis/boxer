@@ -45,7 +45,19 @@ drop_caches() {
 # read — multi-line, indented, commented — instead of as single 2,000-character
 # lines the runner loop happens to need. (Borrowed from the prior-art harness;
 # see runs/2026-08-05-m0-m3-1m/prior-art.md.)
-statements() { clickhouse format --oneline -n < "$QUERIES" | grep -v '^\s*$'; }
+#
+# RESOLVE, when set to a `jsonbench` binary, first expands leeway column
+# handles (`symbol:value`) to physical names via ADR-0116's ResolveColumnNames
+# pass. That is what lets the facts query files be written against section and
+# column names instead of `tv:symbol:value:val:s:m:0:24:0::data`. Arms whose
+# queries carry no handles are unaffected, so it is safe to leave set.
+statements() {
+  if [[ -n "${RESOLVE:-}" ]]; then
+    "$RESOLVE" resolve --database "$DB" "$QUERIES" | clickhouse format --oneline -n | grep -v '^\s*$'
+  else
+    clickhouse format --oneline -n < "$QUERIES" | grep -v '^\s*$'
+  fi
+}
 
 case "${1:-all}" in
 sizes | all)
