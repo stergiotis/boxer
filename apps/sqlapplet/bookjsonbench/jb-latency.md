@@ -11,70 +11,67 @@ tabs: [table]
 
 # JSONBench latency by arm
 
-Cold and hot runtimes for the five benchmark queries across every arm of the
-[jsonbench-on-facts trial](../../../doc/trials/jsonbench-on-facts/README.md),
-read out of the trial's own results-as-facts table. Cold is try 1 (measured
-after a page-cache drop); hot is `min(try 2, try 3)`, the reduction upstream's
-own site applies.
+The 10M-tier result of the
+[jsonbench-on-facts trial](../../../doc/trials/jsonbench-on-facts/README.md):
+how long each of the five benchmark queries takes on each arm, and what the
+facts arms cost against a reference you pick.
 
-Set `tier` to `2026-08-06-m4-10m` for the 10M run or `2026-08-05-m0-m3-1m` for
-the 1M smoke run. The 1M facts arms used an earlier, slower query form and are
-not comparable with the 10M ones — see the trial logbook.
+The numbers ride in the page. They are a committed summary of one run —
+`runs/2026-08-06-m4-10m/`, which holds the full per-try evidence — so this
+page answers without a dataset having been loaded on the server first. Cold is
+try 1, taken after a page-cache drop; hot is `min(try 2, try 3)`, the
+reduction upstream's own site applies. All arms held 9,999,994 documents and
+returned byte-identical results.
 
-The arms: `a` is the benchmark's own entry (five typed JSON paths, clustered
-on them); `a0` drops the index; `a00` drops the type hints as well and is the
-only shape a store holding a mixture of document shapes could have; `b` is
-boxer.facts as the live store declares it; `c` adds data-skipping indices; `d`
-materializes the five backbone paths.
+The arms:
 
-Reading this table needs the trial's membership ids, which are `LowCardRef`
-uint64s from the vcs-managed registry — `jsonbench vocab` prints them.
+| | |
+| --- | --- |
+| `a` | the benchmark's entry — five typed JSON paths, clustered on them |
+| `a0` | the same, clustered index removed |
+| `a00` | plain `JSON`, nothing declared — the only shape a store holding a mixture of document shapes could have |
+| `b` | boxer.facts as the live store declares it, `ORDER BY ts` |
+| `c` | `b` plus data-skipping indices |
+| `d` | `b` plus `MATERIALIZED` columns for the five backbone paths |
 
-If this page errors with `UNKNOWN_TABLE`, the results have not been loaded on
-this server. They are not committed — the run directories under
-`doc/trials/jsonbench-on-facts/runs/` hold the numbers as the provenance
-record, and the facts table is the queryable copy. To build it:
-
-    jsonbench chpack                                    # the ADR-0162 UDF pack
-    jsonbench ddl     --database jsonbench_results --apply
-    jsonbench results --database jsonbench_results \
-                      --run-dir doc/trials/jsonbench-on-facts/runs/<run>
+Set `ref` to the arm the ratio columns compare against. `a00` is the honest
+peer for a general fact store; `a` is the upper bound on what workload-specific
+schema knowledge buys, not a like-for-like comparison.
 
 ```sql
-SET param_tier = '2026-08-06-m4-10m';
-WITH
-  `tv:symbol:value:val:s:m:0:24:0::data`                                     AS symV,
-  `tv:symbol:lr:lr:u64:2q:0:0:0::data`                                       AS symT,
-  LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`) AS symI,
-  -- Array-valued sections flatten their values across attributes, so the
-  -- value lane needs re-aligning against `len` before it co-indexes with the
-  -- membership lanes (ADR-0162 raggedStarts + coGather).
-  coGather(`tv:i64Array:value:val:i64h:g:0:0:0::data`,
-           raggedStarts(`tv:i64Array:len:len:u64:28o:0:0:0::data`))          AS intV,
-  `tv:i64Array:lr:lr:u64:2q:0:0:0::data`                                     AS intT,
-  LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(`tv:i64Array:lrcard:lrcard:u64:4gw:0:0:0::data`) AS intI,
-  coGather(`tv:f64Array:value:val:f64h:gM:0:0:0::data`,
-           raggedStarts(`tv:f64Array:len:len:u64:28o:0:0:0::data`))          AS fV,
-  `tv:f64Array:lr:lr:u64:2q:0:0:0::data`                                     AS fT,
-  LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(`tv:f64Array:lrcard:lrcard:u64:4gw:0:0:0::data`) AS fI,
-  rows AS (
-    SELECT
-      LEEWAY_VALUE_BY_TAG_EQUAL(symV, symT, 6917529027641081862, symI) AS arm,
-      LEEWAY_VALUE_BY_TAG_EQUAL(symV, symT, 6917529027641081863, symI) AS query,
-      LEEWAY_VALUE_BY_TAG_EQUAL(intV, intT, 6917529027641081864, intI) AS try,
-      LEEWAY_VALUE_BY_TAG_EQUAL(fV,  fT,  6917529027641081865, fI)     AS secs,
-      LEEWAY_VALUE_BY_TAG_EQUAL(intV, intT, 6917529027641081866, intI) AS mem
-    FROM jsonbench_results.facts
-    WHERE LEEWAY_VALUE_BY_TAG_EQUAL(symV, symT, 6917529027641081859, symI) = 'jsonbenchTiming'
-      AND LEEWAY_VALUE_BY_TAG_EQUAL(symV, symT, 6917529027641081861, symI) = {tier:String}
+SET param_ref = 'a00';
+WITH m AS (
+  SELECT * FROM values(
+    'arm String, query String, cold_s Float64, hot_s Float64, hot_mem_b UInt64',
+    ('a',   'Q1', 0.013, 0.011,    5254388), ('a',   'Q2', 0.212, 0.192,  271802375),
+    ('a',   'Q3', 0.057, 0.043,  209509501), ('a',   'Q4', 0.070, 0.044,   94772988),
+    ('a',   'Q5', 0.079, 0.058,  105619094),
+    ('a0',  'Q1', 0.015, 0.013,    7522013), ('a0',  'Q2', 0.280, 0.253,  321663925),
+    ('a0',  'Q3', 0.057, 0.044,  158700442), ('a0',  'Q4', 0.094, 0.076,  292717962),
+    ('a0',  'Q5', 0.094, 0.070,  321052586),
+    ('a00', 'Q1', 0.082, 0.049,   77638455), ('a00', 'Q2', 0.449, 0.385,  526590089),
+    ('a00', 'Q3', 0.175, 0.159,  213949776), ('a00', 'Q4', 0.210, 0.197,  418649021),
+    ('a00', 'Q5', 0.218, 0.192,  427888354),
+    ('b',   'Q1', 0.167, 0.130,   36931668), ('b',   'Q2', 2.756, 2.449, 1165136289),
+    ('b',   'Q3', 0.360, 0.351,   73697584), ('b',   'Q4', 1.020, 0.907,  533755120),
+    ('b',   'Q5', 1.026, 0.899,  549587206),
+    ('c',   'Q1', 0.175, 0.137,   53622776), ('c',   'Q2', 2.338, 2.286, 1017837903),
+    ('c',   'Q3', 0.387, 0.359,  194707698), ('c',   'Q4', 0.854, 0.761,  532826958),
+    ('c',   'Q5', 0.847, 0.754,  548680864),
+    ('d',   'Q1', 0.029, 0.014,    8621352), ('d',   'Q2', 0.341, 0.265,  342948106),
+    ('d',   'Q3', 0.068, 0.048,  169761465), ('d',   'Q4', 0.114, 0.055,  297680544),
+    ('d',   'Q5', 0.114, 0.060,  317376496)
   )
+),
+r AS (SELECT query AS q, hot_s AS ref_s, hot_mem_b AS ref_m FROM m WHERE arm = {ref:String})
 SELECT
-  query,
-  arm,
-  round(anyIf(secs, try = 1), 3)                     AS cold_s,
-  round(minIf(secs, try > 1), 3)                     AS hot_s,
-  round(minIf(mem, try > 1) / 1048576, 1)            AS hot_mem_mib
-FROM rows
-GROUP BY query, arm
+  query                                      AS query,
+  arm                                        AS arm,
+  cold_s                                     AS cold_s,
+  hot_s                                      AS hot_s,
+  round(hot_mem_b / 1048576, 1)              AS hot_mem_mib,
+  round(hot_s / nullIf(ref_s, 0), 2)         AS vs_ref_latency,
+  round(hot_mem_b / nullIf(ref_m, 0), 2)     AS vs_ref_memory
+FROM m INNER JOIN r ON query = q
 ORDER BY query, arm
 ```

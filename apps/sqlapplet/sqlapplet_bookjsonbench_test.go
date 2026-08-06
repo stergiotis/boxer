@@ -1,6 +1,7 @@
 package sqlapplet
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -10,6 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// cteBinding matches a WITH-clause binding: an identifier introducing a
+// parenthesised subquery.
+var cteBinding = regexp.MustCompile(`(?i)(\w+)\s+AS\s*\(`)
 
 // TestBookJsonbenchRegistered guards the embed + RegisterBook pair: a book
 // whose directory is renamed or whose init is dropped fails silently at
@@ -41,19 +46,25 @@ func TestMintJsonbenchBook(t *testing.T) {
 			topics: []app.TopicT{app.TopicObservability}},
 	})
 	require.Empty(t, errs)
-	assert.Equal(t, 3, minted, "overview, latency, tax")
+	assert.Equal(t, 2, minted, "latency and sizes")
 }
 
-// TestJsonbenchPagesQualifyTheirTable is the regression this book earned the
-// hard way. The pages were first written with a bare `FROM facts`, which
-// resolves against whatever database the applet's endpoint defaults to — not
-// the benchmark-local results database. Hand-testing them with
-// `clickhouse-client --database=jsonbench_results` hid that completely: the SQL
-// was right and the deployment was wrong, and every page failed with
-// UNKNOWN_TABLE the moment a real applet ran it.
+// TestJsonbenchPagesAreSelfContained is the regression this book earned the
+// hard way, twice.
 //
-// So: no page may name a table without qualifying it.
-func TestJsonbenchPagesQualifyTheirTable(t *testing.T) {
+// The pages first read a benchmark-local results table through a bare
+// `FROM facts`, which resolves against whatever database the applet's endpoint
+// defaults to. Hand-testing them with
+// `clickhouse-client --database=jsonbench_results` hid it completely: the SQL
+// was right and the deployment was wrong, and every page failed UNKNOWN_TABLE
+// the moment a real applet ran it. Qualifying the reference fixed that but
+// left a worse property — the book only worked where someone had run a load
+// step by hand.
+//
+// So the pages now carry their numbers, and may not reference a stored table
+// at all: every `FROM` must name a CTE, a subquery, or the `values` table
+// function.
+func TestJsonbenchPagesAreSelfContained(t *testing.T) {
 	entries, err := bookjsonbenchFS.ReadDir("bookjsonbench")
 	require.NoError(t, err)
 	require.NotEmpty(t, entries)
@@ -72,13 +83,12 @@ func TestJsonbenchPagesQualifyTheirTable(t *testing.T) {
 			sql = after
 		}
 
-		// Names bound by the page's own WITH clauses are not tables.
+		// Names bound by the page's own WITH clauses are not tables. The
+		// binding occurs as `<name> AS (`, whether it opens the WITH list
+		// ("WITH s AS (") or continues it ("), r AS (").
 		ctes := make(map[string]struct{}, 8)
-		for _, line := range strings.Split(sql, "\n") {
-			f := strings.Fields(line)
-			if len(f) >= 3 && strings.EqualFold(f[1], "AS") && strings.HasPrefix(f[2], "(") {
-				ctes[strings.TrimSuffix(f[0], ",")] = struct{}{}
-			}
+		for _, m := range cteBinding.FindAllStringSubmatch(sql, -1) {
+			ctes[m[1]] = struct{}{}
 		}
 
 		for _, line := range strings.Split(sql, "\n") {
@@ -88,26 +98,22 @@ func TestJsonbenchPagesQualifyTheirTable(t *testing.T) {
 					continue
 				}
 				ref := strings.TrimRight(f[i+1], ",)")
-				// A subquery, a qualified reference, or one of this page's own
-				// CTEs is fine; a bare identifier that is none of those is the
-				// bug this test exists for.
-				if strings.HasPrefix(ref, "(") || strings.Contains(ref, ".") {
+				// A subquery, one of this page's own CTEs, or the values table
+				// function are all self-contained; anything else is a stored
+				// table this book must not depend on.
+				if strings.HasPrefix(ref, "(") || strings.HasPrefix(ref, "values(") {
 					continue
 				}
 				if _, ok := ctes[ref]; ok {
 					continue
 				}
-				assert.Failf(t, "unqualified table reference",
-					"%s: `FROM %s` does not name a database; use {db:Identifier}.<table>",
-					e.Name(), ref)
+				assert.Failf(t, "page depends on a stored table",
+					"%s: `FROM %s` reads something that must be loaded first; "+
+						"this book's pages carry their numbers", e.Name(), ref)
 			}
 		}
 
-		// The database is a literal, not a parameter, because grammar1 cannot
-		// parse an identifier parameter in FROM position — `{db:Identifier}`
-		// fails to classify, so an applet carrying it never mounts. Value
-		// parameters (`{tier:String}`) do parse and are used freely.
-		assert.Contains(t, sql, "FROM jsonbench_results.facts",
-			"%s: the results table must be qualified with its database", e.Name())
+		assert.Contains(t, sql, "FROM values(",
+			"%s: the page's numbers must ride in the page", e.Name())
 	}
 }

@@ -351,4 +351,16 @@ template:
     limitation. The database is a literal until it closes.
   Only minting the book through `mintBooks` caught the second; running the SQL
   by hand never would have.
+  **Both fixes left a worse property than either bug**, and the book was
+  reshaped again to remove it: qualifying the table made the pages correct but
+  still useless anywhere the benchmark data had not been loaded by hand. The
+  pages now **carry their numbers** — a committed `values(...)` summary of the
+  10M run — and reference no stored table at all, which a test enforces. Two
+  pages (`jb-sizes`, `jb-latency`) replace the three that read the facts
+  table.
+  `jsonbench results` and the results-as-facts table remain for the full
+  per-try set (165 timings, 70 sizes, queryable by run and arm), which is what
+  §6 Reporting asks for; the book simply no longer depends on it. The run
+  directories are still the provenance record, and the page summaries are
+  generated from them rather than retyped.
 - **Run dir:** [`./runs/2026-08-06-m4-10m/`](./runs/2026-08-06-m4-10m/)
