@@ -402,7 +402,10 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		// BOXER_PLAY_AUTORUN rather than overriding it with a
 		// meaningless false.
 		inner.SetLiveMain(launch.Live)
-		if launch.Tab != "" {
+		// The tab tier takes the SQL tiers' precedence: a caller's config wins,
+		// a RESTORED record loses to an explicit BOXER_PLAY_FOCUS_* knob. See
+		// launchTabActivates for what the missing half cost.
+		if launchTabActivates(launch.Tab, restored, focusedTabIDs()) {
 			if tabErr := inner.ActivateTab(launch.Tab); tabErr != nil {
 				// An unknown tab id is a degraded open, not a failed one
 				// (§SD7): warn and keep the default tab.

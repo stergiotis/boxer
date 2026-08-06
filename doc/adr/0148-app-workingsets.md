@@ -599,6 +599,31 @@ reasoning and the exit. Workingsets themselves are unaffected either way:
 `WorkingsetRow` is append-shaped, has no state view to lose, and stays on
 `boxer.facts`.
 
+## Update 2026-08-06 — the restored tab loses to an explicit focus knob
+
+§SD8 says play "inserts the restored tier into its documented precedence".
+That was done for the SQL buffer, where an env override outranks a restored
+record because the record is ambient state and the override is an instruction
+for *this* launch. It was not done for the `Tab` tier, which activated
+unconditionally — so a restored tab silently outranked every
+`BOXER_PLAY_FOCUS_*` knob.
+
+The cost was not cosmetic. Those knobs are the only way the screenshot tour
+chooses which pane a scene captures, so once a workingset had been written
+while the reader happened to be on the Icicle tab, every scene opened on Icicle
+regardless of what it asked for. The Distribution and Series scenes captured
+that tab's shape-reject text and their own gestures then found no widgets,
+which reads as a broken panel rather than as a tab that was never raised — it
+cost a bisect across four commits and a pristine-worktree check to establish
+that the panels were innocent. Any consumer of a workingset that also offers an
+explicit override has the same hazard: ambient state that outranks an
+instruction is indistinguishable from the instruction not working.
+
+The rule is now the SQL tiers' rule, in `launchTabActivates`: a caller's config
+states this window's whole intent and wins, a restored record still raises its
+tab on an ordinary open, and an explicit knob beats a restored record. Pinned
+by a test that reads the precedence table rather than the symptom.
+
 ## Status
 
 Accepted (2026-07-29). Implemented 2026-07-29.

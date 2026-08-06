@@ -395,6 +395,28 @@ func focusedTabIDs() (out []string) {
 	return
 }
 
+// launchTabActivates decides whether a launch config's Tab tier (ADR-0148 §SD8)
+// raises its tab, given how the window was opened and which BOXER_PLAY_FOCUS_*
+// knobs are set.
+//
+// The tiers are the SQL buffer's, and the answer is the same one: a CALLER's
+// config states this window's whole opening intent and outranks the env, but a
+// RESTORED record is ambient state the user did not ask for on this launch, so
+// an explicit override outranks IT. The tab tier was missing that second half —
+// it activated unconditionally — which let a workingset written when the reader
+// happened to be on some pane silently beat the focus knobs. That is not a
+// cosmetic loss: the knobs are how the screenshot tour chooses a pane at all,
+// so every scene captured whatever tab the last session left behind, and the
+// panel that should have been on screen looked broken instead of absent.
+//
+// Pure; the env read stays in focusedTabIDs.
+func launchTabActivates(tab string, restored bool, focused []string) (activate bool) {
+	if tab == "" {
+		return false
+	}
+	return !(restored && len(focused) > 0)
+}
+
 // zoneTabOrder maps one zone's specs to their dock ids with the first focused
 // tab among them moved to the front — a fresh dock leaf activates its first
 // tab. Pure; the env read stays in focusedTabIDs.

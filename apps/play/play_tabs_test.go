@@ -177,3 +177,35 @@ func TestFocusVarsDerivedFromEveryBuiltinTab(t *testing.T) {
 		assert.True(t, ok, "the non-body zones carry knobs too (%q)", id)
 	}
 }
+
+// The launch config's Tab tier follows the SQL buffer's precedence: a caller
+// states this window's intent and wins, a RESTORED record is ambient and loses
+// to an explicit focus knob.
+//
+// The missing half was a real outage rather than a nicety. A workingset written
+// while the reader happened to be on the Icicle tab silently outranked
+// BOXER_PLAY_FOCUS_DIST, so the screenshot tour opened every scene on Icicle:
+// the Distribution and Series scenes captured that tab's shape-reject text and
+// their own gestures then found no widgets, which reads as a broken panel
+// rather than as a tab that was never raised.
+func TestLaunchTabLosesToAFocusKnobOnlyWhenRestored(t *testing.T) {
+	// A caller-configured window: its tab is this launch's stated intent, so
+	// it wins even against a knob.
+	assert.True(t, launchTabActivates("icicle", false, nil))
+	assert.True(t, launchTabActivates("icicle", false, []string{"dist"}),
+		"a caller's config outranks the env, as its SQL does")
+
+	// A restored record: ambient. It still raises its tab on an ordinary open,
+	// which is the whole point of restoring one.
+	assert.True(t, launchTabActivates("icicle", true, nil))
+	assert.False(t, launchTabActivates("icicle", true, []string{"dist"}),
+		"an explicit knob outranks ambient restored state")
+	assert.False(t, launchTabActivates("icicle", true, []string{"icicle"}),
+		"the knob owns tab focus even when it happens to agree")
+
+	// No tab named, nothing to raise, whatever the tiers say.
+	for _, restored := range []bool{false, true} {
+		assert.False(t, launchTabActivates("", restored, nil))
+		assert.False(t, launchTabActivates("", restored, []string{"dist"}))
+	}
+}
