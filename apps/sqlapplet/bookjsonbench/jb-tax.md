@@ -34,6 +34,16 @@ Pick the reference with `ref`:
 And the facts arm with `arm`: `b` is the live store's own declaration, `d`
 adds `MATERIALIZED` columns for the five backbone paths.
 
+If this page errors with `UNKNOWN_TABLE`, the results have not been loaded on
+this server. They are not committed — the run directories under
+`doc/trials/jsonbench-on-facts/runs/` hold the numbers as the provenance
+record, and the facts table is the queryable copy. To build it:
+
+    jsonbench chpack                                    # the ADR-0162 UDF pack
+    jsonbench ddl     --database jsonbench_results --apply
+    jsonbench results --database jsonbench_results \
+                      --run-dir doc/trials/jsonbench-on-facts/runs/<run>
+
 ```sql
 SET param_tier = '2026-08-06-m4-10m';
 SET param_ref  = 'a00';
@@ -57,7 +67,7 @@ WITH
       LEEWAY_VALUE_BY_TAG_EQUAL(intV, intT, 6917529027641081864, intI) AS try,
       LEEWAY_VALUE_BY_TAG_EQUAL(fV,  fT,  6917529027641081865, fI)     AS secs,
       LEEWAY_VALUE_BY_TAG_EQUAL(intV, intT, 6917529027641081866, intI) AS mem
-    FROM facts
+    FROM jsonbench_results.facts
     WHERE LEEWAY_VALUE_BY_TAG_EQUAL(symV, symT, 6917529027641081859, symI) = 'jsonbenchTiming'
       AND LEEWAY_VALUE_BY_TAG_EQUAL(symV, symT, 6917529027641081861, symI) = {tier:String}
   ),

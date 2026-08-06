@@ -24,6 +24,16 @@ what workload-specific schema knowledge buys, not as a like-for-like peer.
 If a ratio column is empty, that run has no such reference arm — the 1M run
 predates both.
 
+If this page errors with `UNKNOWN_TABLE`, the results have not been loaded on
+this server. They are not committed — the run directories under
+`doc/trials/jsonbench-on-facts/runs/` hold the numbers as the provenance
+record, and the facts table is the queryable copy. To build it:
+
+    jsonbench chpack                                    # the ADR-0162 UDF pack
+    jsonbench ddl     --database jsonbench_results --apply
+    jsonbench results --database jsonbench_results \
+                      --run-dir doc/trials/jsonbench-on-facts/runs/<run>
+
 ```sql
 SET param_tier = '2026-08-06-m4-10m';
 WITH
@@ -39,7 +49,7 @@ WITH
       LEEWAY_VALUE_BY_TAG_EQUAL(symV, symT, 6917529027641081862, symI) AS arm,
       LEEWAY_VALUE_BY_TAG_EQUAL(symV, symT, 6917529027641081867, symI) AS metric,
       LEEWAY_VALUE_BY_TAG_EQUAL(intV, intT, 6917529027641081868, intI) AS value
-    FROM facts
+    FROM jsonbench_results.facts
     WHERE LEEWAY_VALUE_BY_TAG_EQUAL(symV, symT, 6917529027641081860, symI) = 'jsonbenchSize'
       AND LEEWAY_VALUE_BY_TAG_EQUAL(symV, symT, 6917529027641081861, symI) = {tier:String}
   ),

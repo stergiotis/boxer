@@ -331,4 +331,24 @@ template:
   read by anyone who does not already hold the registry.
   The run directories keep the numbers as the provenance record; the facts
   table is the queryable copy, not the source of truth.
+  **The book did not work when first committed, twice over**, and both were
+  the trial's own doing:
+  - **[pain — trial process / S3]** the pages named `FROM facts` unqualified.
+    Hand-testing them with `clickhouse-client --database=jsonbench_results`
+    hid it completely — the SQL was right and the deployment was wrong, and
+    every page failed `UNKNOWN_TABLE` under a real applet, whose endpoint
+    defaults elsewhere. Verifying a page means running it the way the applet
+    does, not the way that makes it pass. A regression test now rejects an
+    unqualified table reference in any page of this book.
+  - **[missing nanopass-pass-pipeline → proposed:grammar1-identifier-params /
+    functional-suitability.functional-completeness / S3]** the obvious fix —
+    making the database a page parameter — does not parse.
+    `FROM {db:Identifier}.facts` fails grammar1 with *no viable alternative at
+    input '{'*, so an applet carrying it never mounts; `FROM {db:Identifier}`
+    fails likewise. **Value** parameters (`{tier:String}`) parse fine and the
+    pages use them. ClickHouse itself accepts the identifier form — verified
+    against the live server — so this is a grammar1 gap, not a server
+    limitation. The database is a literal until it closes.
+  Only minting the book through `mintBooks` caught the second; running the SQL
+  by hand never would have.
 - **Run dir:** [`./runs/2026-08-06-m4-10m/`](./runs/2026-08-06-m4-10m/)
