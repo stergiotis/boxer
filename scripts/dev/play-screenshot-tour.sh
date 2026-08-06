@@ -648,6 +648,34 @@ scene_08_series_fixture() {
 	settle=2000
 }
 
+scene_07_keelson_introspection() {
+	desc="A keelson() read routed to the in-process introspection plane (ADR-0094 / ADR-0141): the dispatch resolver moves a keelson-only statement off the pinned ClickHouse and answers it from this process, which the toolbar names"
+	# The one path the tour never covered. Everything else here queries a
+	# server; this queries the HOST — same editor, same panes, a different
+	# engine — and the resolver is what decides that, per statement.
+	#
+	# keelson('env') is the canonical in-process table (the carousel wires
+	# /query specifically so a co-resident play can ask for it), it needs no
+	# fixture, and it is small enough to read in a screenshot.
+	senv=(BOXER_PLAY_FOCUS_TABLE=1)
+	# Two columns, ten rows. The pane emits accessibility nodes per cell and
+	# this table is wide (a registry entry carries its whole description), so
+	# an unbounded read pushed the tree past 2000 nodes and took the headless
+	# client down with it — the capture never got an acknowledgement.
+	sql="SELECT name, category FROM keelson('env') ORDER BY name LIMIT 10"
+	# The introspection round trip is a chlocal exec rather than a scan, so it
+	# wants more than the tour default.
+	#
+	# Not much more, though: at settle=9000 the headless client dropped the
+	# connection before the first capture and the driver failed with "unable
+	# to write frame". That ceiling is on the PRELUDE sleep — the idle stretch
+	# before any capture — not on settles generally; a 9 s settle on a later
+	# capture step, after the connection has carried traffic, is fine (the
+	# fixture scene does exactly that). Worth knowing before blaming a scene's
+	# query for a capture that never happened.
+	settle=4000
+}
+
 scene_08_series_vocabulary_graph() {
 	desc="The same buffer read as a graph: the client node badged 'computed in play', the honesty caption naming what was actually sent, and the input CTE beneath it as ordinary SQL"
 	# A second launch rather than a click: the dock's tab strip is drawn by
