@@ -1,0 +1,133 @@
+--- Q1 ---
+    ┌─path─────────────────────────────────────┬─section─┬─documents─┬─occurrences─┐
+ 1. │ /time_us                                 │ int64   │  99999968 │    99999968 │ -- 100.00 million
+ 2. │ /kind                                    │ symbol  │  99999968 │    99999968 │ -- 100.00 million
+ 3. │ /did                                     │ string  │  99999968 │    99999968 │ -- 100.00 million
+ 4. │ /commit/rkey                             │ string  │  99396533 │    99396533 │ -- 99.40 million
+ 5. │ /commit/collection                       │ symbol  │  99396533 │    99396533 │ -- 99.40 million
+ 6. │ /commit/operation                        │ symbol  │  99396533 │    99396533 │ -- 99.40 million
+ 7. │ /commit/rev                              │ string  │  99396533 │    99396533 │ -- 99.40 million
+ 8. │ /commit/record/$type                     │ symbol  │  96104934 │    96104934 │ -- 96.10 million
+ 9. │ /commit/cid                              │ string  │  96104934 │    96104934 │ -- 96.10 million
+10. │ /commit/record/createdAt                 │ string  │  96016188 │    96016188 │ -- 96.02 million
+11. │ /commit/record/subject/cid               │ string  │  49993539 │    49993539 │ -- 49.99 million
+12. │ /commit/record/subject/uri               │ string  │  49993539 │    49993539 │ -- 49.99 million
+13. │ /commit/record/subject                   │ string  │  36501038 │    36501038 │ -- 36.50 million
+14. │ /commit/record/text                      │ string  │   8378489 │     8378489 │ -- 8.38 million
+15. │ /commit/record/langs/_                   │ string  │   7386689 │     7420302 │ -- 7.42 million
+16. │ /commit/record/reply/root/cid            │ string  │   4274702 │     4274702 │ -- 4.27 million
+17. │ /commit/record/reply/root/uri            │ string  │   4274702 │     4274702 │ -- 4.27 million
+18. │ /commit/record/reply/parent/uri          │ string  │   4274702 │     4274702 │ -- 4.27 million
+19. │ /commit/record/reply/parent/cid          │ string  │   4274702 │     4274702 │ -- 4.27 million
+20. │ /commit/record/facets/_/features/_/$type │ symbol  │   1428664 │     2889556 │ -- 2.89 million
+    └──────────────────────────────────────────┴─────────┴───────────┴─────────────┘
+--- Q2 ---
+   ┌─path────────────────────────────────────────────────┬─sections───────────┬─documents─┐
+1. │ /commit/record/skyfeedBuilder/blocks/_/value        │ ['int64','string'] │      5856 │
+2. │ /commit/record/skyfeedBuilder/parent/blocks/_/value │ ['string','int64'] │        97 │
+   └─────────────────────────────────────────────────────┴────────────────────┴───────────┘
+--- Q3 ---
+   ┌─distinct_shapes─┬─documents─┐
+1. │            3197 │  99999968 │ -- 100.00 million
+   └─────────────────┴───────────┘
+--- Q4 ---
+   ┌─avg_attributes─┬─max_attributes─┬─avg_depth─┬─max_depth─┐
+1. │          12.01 │           1560 │       3.7 │        14 │
+   └────────────────┴────────────────┴───────────┴───────────┘
+--- Q5 ---
+   ┌─path────────────────────────────┬─occurrences─┐
+1. │ /commit/record/subject/uri      │         855 │
+2. │ /commit/record/reply/root/uri   │          30 │
+3. │ /commit/record/reply/parent/uri │          29 │
+4. │ /commit/record/embed/record/uri │           8 │
+   └─────────────────────────────────┴─────────────┘
+--- Q6 ---
+    ┌─path───────────────────────────────────┬─documents─┐
+ 1. │ /commit/record/reply/root/cid          │   2382235 │ -- 2.38 million
+ 2. │ /commit/record/reply/root/uri          │   2382235 │ -- 2.38 million
+ 3. │ /commit/record/reply/parent/uri        │   2382220 │ -- 2.38 million
+ 4. │ /commit/record/reply/parent/cid        │   2382220 │ -- 2.38 million
+ 5. │ /did                                   │    621515 │
+ 6. │ /identity/did                          │    491301 │
+ 7. │ /commit/record/facets/_/features/_/uri │    410814 │
+ 8. │ /commit/record/embed/external/uri      │    409510 │
+ 9. │ /commit/record/embed/images/_/alt      │    327348 │
+10. │ /commit/record/text                    │    179920 │
+    └────────────────────────────────────────┴───────────┘
+--- Q7 ---
+    ┌─path─────────────────────────────────────────────┬─occurrences─┐
+ 1. │ /commit/record/embed/$type                       │     2708269 │ -- 2.71 million
+ 2. │ /commit/record/embed/images/_/alt                │     1684954 │ -- 1.68 million
+ 3. │ /commit/record/embed/images/_/image/mimeType     │     1684954 │ -- 1.68 million
+ 4. │ /commit/record/embed/images/_/image/ref/$link    │     1684913 │ -- 1.68 million
+ 5. │ /commit/record/embed/images/_/image/size         │     1684913 │ -- 1.68 million
+ 6. │ /commit/record/embed/images/_/image/$type        │     1684913 │ -- 1.68 million
+ 7. │ /commit/record/embed/images/_/aspectRatio/width  │     1478996 │ -- 1.48 million
+ 8. │ /commit/record/embed/images/_/aspectRatio/height │     1478996 │ -- 1.48 million
+ 9. │ /commit/record/embed/external/uri                │      691340 │
+10. │ /commit/record/embed/external/title              │      691340 │
+    └──────────────────────────────────────────────────┴─────────────┘
+--- Q8 ---
+   ┌─langs_declared─┬───posts─┐
+1. │              1 │ 7358664 │ -- 7.36 million
+2. │              2 │   22438 │
+3. │              3 │    5586 │
+4. │              4 │       1 │
+   └────────────────┴─────────┘
+--- Q9 ---
+    ┌─primary_lang─┬───posts─┐
+ 1. │ en           │ 5576694 │ -- 5.58 million
+ 2. │ ja           │  466942 │
+ 3. │ pt           │  354326 │
+ 4. │ es           │  316588 │
+ 5. │ de           │  131153 │
+ 6. │ fr           │  126696 │
+ 7. │ ko           │   81102 │
+ 8. │ pl           │   47004 │
+ 9. │ nl           │   46378 │
+10. │ it           │   34303 │
+    └──────────────┴─────────┘
+--- Q10 ---
+   ┌─coord─────┬─facet_feature─┬─occurrences─┐
+1. │ 0000.0000 │ [0,0]         │     1428662 │ -- 1.43 million
+2. │ 0001.0000 │ [1,0]         │      502556 │
+3. │ 0002.0000 │ [2,0]         │      293416 │
+4. │ 0003.0000 │ [3,0]         │      181103 │
+5. │ 0004.0000 │ [4,0]         │      119705 │
+6. │ 0005.0000 │ [5,0]         │       80738 │
+7. │ 0006.0000 │ [6,0]         │       58536 │
+8. │ 0007.0000 │ [7,0]         │       43778 │
+   └───────────┴───────────────┴─────────────┘
+--- Q11 ---
+   ┌─collection───────────────┬─documents─┬─record_paths─┬─top_record_paths────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+1. │ app.bsky.feed.like       │  44994712 │           12 │ [('/commit/record/createdAt',99),('/commit/record/subject/uri',99),('/commit/record/$type',99),('/commit/record/subject/cid',99),('/commit/record/subject/$type',0.1),('/commit/record/text',0)]                            │
+2. │ app.bsky.graph.follow    │  36362556 │            4 │ [('/commit/record/$type',94.3),('/commit/record/createdAt',94.3),('/commit/record/subject',94.3),('/commit/record/type',0)]                                                                                                 │
+3. │ app.bsky.feed.post       │   8740921 │          355 │ [('/commit/record/text',95.9),('/commit/record/$type',95.9),('/commit/record/createdAt',95.9),('/commit/record/langs/_',84.5),('/commit/record/reply/root/uri',48.9),('/commit/record/reply/parent/cid',48.9)]              │
+4. │ app.bsky.feed.repost     │   5625691 │           14 │ [('/commit/record/createdAt',97.2),('/commit/record/$type',97.2),('/commit/record/subject/uri',97.2),('/commit/record/subject/cid',97.2),('/commit/record/subject/$type',0.1),('/commit/record/subject/likeCount',0)]       │
+5. │ app.bsky.graph.block     │   1433188 │            3 │ [('/commit/record/createdAt',98.2),('/commit/record/$type',98.2),('/commit/record/subject',98.2)]                                                                                                                           │
+6. │ app.bsky.actor.profile   │   1118161 │           34 │ [('/commit/record/$type',100),('/commit/record/displayName',100),('/commit/record/avatar/$type',99.1),('/commit/record/avatar/size',99.1),('/commit/record/avatar/ref/$link',99.1),('/commit/record/avatar/mimeType',99.1)] │
+7. │ app.bsky.graph.listitem  │    913702 │            7 │ [('/commit/record/subject',80.9),('/commit/record/$type',80.9),('/commit/record/list',80.9),('/commit/record/createdAt',80.9),('/commit/record/name',0.1),('/commit/record/purpose',0.1)]                                   │
+8. │ app.bsky.graph.listblock │     86211 │            3 │ [('/commit/record/subject',94.8),('/commit/record/$type',94.8),('/commit/record/createdAt',94.8)]                                                                                                                           │
+   └──────────────────────────┴───────────┴──────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+--- Q12 ---
+    ┌─path─────────────────────────────────────────────────────────────────┬─documents─┬─pct_of_corpus─┐
+ 1. │ /commit/record/embed/images/_/size                                   │         1 │      0.000001 │
+ 2. │ /commit/record/skyfeedBuilder/parent/parent/parent/blocks/_/sortType │         1 │      0.000001 │
+ 3. │ /commit/record/acceptsInteractions                                   │         1 │      0.000001 │
+ 4. │ /commit/record/skyfeedBuilder/parent/parent/parent/blocks/_/type     │         1 │      0.000001 │
+ 5. │ /commit/record/reply/root/record/embed/images/_/image/mimeType       │         1 │      0.000001 │
+ 6. │ /commit/record/skyfeedBuilder/parent/parent/parent/displayName       │         1 │      0.000001 │
+ 7. │ /commit/record/reply/root/embed/images/_/fullsize                    │         1 │      0.000001 │
+ 8. │ /commit/record/facets/_/features/_/external/thumb/size               │         1 │      0.000001 │
+ 9. │ /commit/record/reply/parent/quoteCount                               │         1 │      0.000001 │
+10. │ /commit/record/reply/root/record/embed/images/_/image/$type          │         1 │      0.000001 │
+11. │ /commit/record/reply/root/author/viewer/following                    │         1 │      0.000001 │
+12. │ /commit/record/skyfeedBuilder/parent/parent/blocks/_/target          │         1 │      0.000001 │
+13. │ /commit/record/reply/root/record/embed/$type                         │         1 │      0.000001 │
+14. │ /commit/record/skeetsAppHistory/data/_/2024-11-21T16:39:31.586Z      │         1 │      0.000001 │
+15. │ /commit/record/reply/root/record/reply/root/embed/images/_/alt       │         1 │      0.000001 │
+    └──────────────────────────────────────────────────────────────────────┴───────────┴───────────────┘
+--- Q13 ---
+   ┌─collection─────────────┬─created─┬─missing_created_at─┬─missing_type─┐
+1. │ app.bsky.actor.profile │  500177 │               8052 │            0 │
+   └────────────────────────┴─────────┴────────────────────┴──────────────┘
