@@ -101,6 +101,12 @@ each table by the card driver's probe: sniff the separator, attempt
 lifted out of play into the engine package so play and the catalog share one
 classifier. The catalog's own output tables are discovered like any others.
 
+One correction the lift forced: discovery accepts an *empty* column list and
+returns an empty table, which is vacuously a valid leeway schema. A table with
+no columns carries no evidence and is classified opaque instead
+(`datacatalog.ErrNoColumns`) — calling it leeway would put an attribute-less row
+into `tables_leeway` and an empty-set node into every pair it takes part in.
+
 **SD2 — Four derived tables in `boxer`, rebuilt whole per run.** Each run
 writes complete replacements (`CREATE OR REPLACE TABLE`, then insert), stamped
 `run_id` + `discovered_at`. The user-visible contract is three tables; a
@@ -110,10 +116,10 @@ leeway but does not parse" are visible rows rather than absences:
 ```text
 boxer.tables_catalog              -- every discovered table, both kinds
   database, name, engine String
-  kind Enum8('leeway','opaque')
+  kind Enum8('opaque'=0,'leeway'=1)
   n_columns UInt32
   normalized_schema String        -- §SD4 string, emitted for both kinds
-  classify_detail String          -- '' | first parse error (diagnostic)
+  classify_detail String          -- why this table has no tables_leeway row
   run_id String, discovered_at DateTime      ORDER BY (database, name)
 
 boxer.tables_leeway               -- restoration payload, kind='leeway' only
@@ -127,7 +133,7 @@ boxer.tables_leeway               -- restoration payload, kind='leeway' only
 
 boxer.tables_leeway_compatibility -- every unordered pair, (a) < (b)
   database_a, name_a, database_b, name_b String
-  relation Enum8('equal','subset','superset','overlap','disjoint')  -- a rel. b
+  relation Enum8('disjoint'=0,'overlap'=1,'subset'=2,'superset'=3,'equal'=4)
   shape_id UInt64                 -- fnv64a of intersection attr keys; 0 if disjoint
   n_common UInt32, jaccard Float32
   run_id, discovered_at            ORDER BY (database_a, name_a, database_b, name_b)
@@ -136,6 +142,21 @@ boxer.tables_opaque_shapes        -- one row per satisfied (opaque table, shape)
   database, name, shape String
   run_id, discovered_at                      ORDER BY (shape, database, name)
 ```
+
+Two details the schema fixes rather than leaving to insertion order. The `Enum8`
+values are pinned to the Go enums' numbers, so the number ClickHouse stores and
+the number the analysis computed are the same one; and `classify_detail` carries
+a single meaning throughout — *why this table has no `tables_leeway` row* — which
+is the parse failure for an opaque table, a normalization failure for a leeway
+one, and empty exactly when the row is there. A leeway table that fails to
+normalize is therefore a visible row rather than a silent absence, and one bad
+table does not cost the run.
+
+The destination database is a parameter (`TargetDatabase`, empty meaning
+`boxer`) even though the decision is that the catalog lives in `boxer`: what a
+run *reads* is not configurable, only where it writes. The payer is the
+integration lane — a run reads the whole server, so a test that also wrote where
+the real catalog lives would rebuild production state as a side effect.
 
 **SD3 — Restoration and relation reuse leeway's machinery verbatim, brute
 force.** `Relate` runs once per unordered pair — ~5,000 calls at n≈100, each
@@ -153,34 +174,57 @@ the intersection is the contained side, so its `shape_id` equals that side's
 AND-batteries of RE2 patterns over it.** The string: columns in
 `system.columns.position` order, `;` sentinels at both ends, each column
 `name:type;`. `LowCardinality(…)` is stripped, `Nullable(T)` becomes `T?`,
-types are otherwise ClickHouse-canonical verbatim; `\` escapes `;`, `:`, `\`
-in names. Example: `;ts:DateTime64(3);label:String?;value:Float64;`. A *known
+types are otherwise ClickHouse-canonical verbatim; `\` escapes `;`, `:`, `\` —
+in the type as well as the name, since an `Enum8` literal can carry a `;` and
+would otherwise split the string into a column that does not exist. The two
+readings coincide for every type that contains none of the three, which is
+every type in practice. The rewrite is top-level only: `Array(Nullable(String))`
+stays verbatim, because descending would need a real ClickHouse type parser
+(`Enum` literals, `Map`, named `Tuple`) and no seed shape needs it.
+Example: `;ts:DateTime64(3);label:String?;value:Float64;`. A *known
 shape* names the result contract a play panel could render with a trivial
 query, as a battery of Go-RE2 patterns that must **all** match — RE2 has no
 lookahead, so conjunction lives outside the regex (the position-independent
 "has a `lane` column and a `title` column" is two patterns, not one). Shapes
 are matched against opaque tables only: leeway physical names would match
 nonsense, and leeway tables reach panels through handles and UDF read forms
-instead. Seeds come from the shipped panel contracts — series (a
-DateTime-family column plus a numeric), sankey flows (`source`, `target`,
-numeric `value`), kanban cards (`lane`, `title`), network edges, distribution
-(any numeric) — with the battery itself the source of truth, not this list.
+instead. Seeds come from the shipped panel contracts, read out of the panels'
+own column constants rather than remembered: series (a DateTime-family column
+plus a numeric), sankey flows (`source`, `target`, numeric `value`), network
+edges (`source`, `target`), kanban cards (`lane`, `title`), the two hierarchy
+forms (`id`+`parent`+numeric `value`; Array-typed `stack`+numeric `value`), and
+distribution — which turned out to be the quantile-grid contract `series`, `n`,
+`ps`, `qs` rather than the "any numeric" this ADR first guessed. The battery
+itself is the source of truth, not this list.
 
-**SD5 — The battery is one Go package with two faces.** A `panel_shapes`
-introspection provider (columns `shape`, `pattern`, `ordinal`, `note`)
-registers alongside the coverage tables in
-[introspecthost](../../public/keelson/runtime/introspect/introspecthost/introspecthost.go),
-so `keelson('panel_shapes')` serves the vocabulary as data; the catalog CLI
-imports the same package and evaluates the same battery in Go. One definition,
-two consumers — and since the live-server expansion of `keelson(…)` is a
-`url()` source, a play session can join `keelson('panel_shapes')` against
-`boxer.tables_catalog` ad hoc, while `boxer.tables_opaque_shapes` is that join
-materialized for sessions where no introspection plane is up.
+**SD5 — The battery is one definition with two faces.** The shapes live in
+`public/gov/datacatalog/panelshapes`, which the catalog run imports and
+evaluates in Go; a `panel_shapes` introspection provider (columns `shape`,
+`pattern`, `ordinal`, `note`) serves the same list as data, so
+`keelson('panel_shapes')` answers what this build can recognise. Since the
+live-server expansion of `keelson(…)` is a `url()` source, a play session can
+join `keelson('panel_shapes')` against `boxer.tables_catalog` ad hoc, while
+`boxer.tables_opaque_shapes` is that join materialized for sessions where no
+introspection plane is up.
 
-**SD6 — The runner is a standalone CLI app**, `apps/datacatalog`, on the
-jsonbench pattern: `chclient`, `refresh` command, `--url/--user/--password`
-flags, `--dry-run` printing DDL and would-be row counts. Scheduling is out of
-scope (§Deferrals); a run is explicit.
+The provider is registered in the
+[introspection provider package](../../public/keelson/runtime/introspect/providers/),
+with every other introspection table, rather than inside `panelshapes`: capmap, adr
+and codevol all keep their data in a `public/gov` package and their provider
+there, and a reader looking for where a keelson table comes from looks there.
+The one-definition-two-faces point is unaffected — only the file moved.
+
+**SD6 — The runner is a `boxer` subcommand**, `boxer datacatalog`:
+`chclient`, a `refresh` verb, `--url/--user/--password/--database` flags,
+`--dry-run` printing DDL and would-be row counts, plus `shapes` and `ddl` verbs
+that need no server. Scheduling is out of scope (§Deferrals); a run is explicit.
+
+Not a standalone `apps/datacatalog` binary, which is what this ADR first
+specified on the jsonbench pattern:
+[CODINGSTANDARDS § Entry Points](../../CODINGSTANDARDS.md#entry-points) forbids
+new `main()`s for utilities, and `boxer capmap` — the same shape of tool, from
+the neighbouring ADR — is the precedent that rule produces. jsonbench is a trial
+artifact and says so in its own package doc; this is not one.
 
 **SD7 — Rendering rides the existing Sankey tab via a sqlapplet book.** A
 `bookcatalog` suite with three chapters: an inventory overview, the leeway
@@ -217,13 +261,18 @@ without the introspection plane up).
 
 ## Surfaces — Tier 1
 
-New surfaces only; no existing contract changes shape. The `boxer` database
-gains the four tables above (`tables_catalog`, `tables_leeway`,
-`tables_leeway_compatibility`, `tables_opaque_shapes`); the keelson dataset
-namespace gains `panel_shapes` (the plane's catalog lists it automatically);
-sqlapplet gains the `bookcatalog` suite (book id becomes a nav label); a new
-`apps/datacatalog` binary and a new engine package under `public/gov/` appear.
-No new environment variables.
+Additive, with one exception noted below. The `boxer` database gains the four
+tables above (`tables_catalog`, `tables_leeway`, `tables_leeway_compatibility`,
+`tables_opaque_shapes`); the keelson dataset namespace gains `panel_shapes` (the
+plane's catalog lists it automatically); sqlapplet gains the `bookcatalog` suite
+(book id becomes a nav label); `boxer` gains a `datacatalog` subcommand, and
+`public/gov/` a new engine package plus its `panelshapes` battery. No new
+environment variables.
+
+The exception is the one upstream addition: `common.TableOperations` exports
+`NormalizedCopy`, a wrapper over the existing private `normalizedCopy`, so the
+attribute keys are derived from the same normalized form `Relate` compares —
+otherwise two tables `Relate` calls equal could carry different schema hashes.
 
 ## Migration — Tier 1
 
@@ -251,14 +300,17 @@ instant but not across a `refresh` boundary; `run_id` detects that.
 - **M0 — engine package** `public/gov/datacatalog`: snapshot types, a
   `system.tables`/`system.columns` fetcher behind an interface, the classifier
   lifted from the card driver (play re-pointed at it), the normalized-string
-  builder. Unit tests only, no live ClickHouse.
+  builder. Unit tests only, no live ClickHouse. *Done.*
 - **M1 — analysis**: attribute keys, `schema_hash`/`shape_id`, the pair
-  matrix; `panelshapes` battery package with the seed set.
-- **M2 — persistence + CLI**: DDL, writer, `apps/datacatalog refresh`,
-  `--dry-run`; the integration-lane test.
-- **M3 — keelson surface**: `panel_shapes` provider + introspecthost wiring.
+  matrix; `panelshapes` battery package with the seed set. *Done.*
+- **M2 — persistence + CLI**: DDL, writer, `boxer datacatalog refresh`,
+  `--dry-run`; the integration-lane test. *Done.*
+- **M3 — keelson surface**: `panel_shapes` provider, registered with the rest
+  of the static set. *Done.*
 - **M4 — book**: `bookcatalog` chapters (inventory, Sankey hierarchy,
-  unmatched opaque); screenshot via the play recipe.
+  unmatched opaque). *Done, except the screenshot* — the play recipe needs a
+  private weston and a matching Go/Rust FFI pair, which the working tree did
+  not have.
 - **M5 — deferred**: see Deferrals.
 
 ## Deferrals
@@ -270,7 +322,11 @@ stands in); shape matching for *leeway* tables via their UDF read forms; a
 
 ## Status
 
-Proposed, pre-review. Implementation is planned as a handover; the milestone
+Proposed, pre-review — **implemented ahead of review at the author's request**,
+so this document is a living snapshot edited in place rather than a record of
+what was built to a settled decision. The §SD text above already carries the
+corrections implementation forced (the CLI's home, the provider's home, the
+zero-column case, the distribution contract, the escaping rule). The milestone
 survey with exact symbols and file paths is
 [data-catalog-competence.md](../adr-background-work/data-catalog-competence.md).
 

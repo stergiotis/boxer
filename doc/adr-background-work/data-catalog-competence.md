@@ -105,7 +105,7 @@ found code instead of re-deriving this survey. Line numbers are as of
 
 Target layout: engine in `public/gov/datacatalog` (a governance concern, the
 capmap precedent), battery in `public/gov/datacatalog/panelshapes`, CLI in
-`apps/datacatalog`, book in `apps/sqlapplet/bookcatalog`.
+`public/app/commands/datacatalog`, book in `apps/sqlapplet/bookcatalog`.
 
 **M0 — engine package.** Files: `snapshot.go` (types: table coordinate,
 column meta `{Name, Type, Position}`, fetcher interface), `classify.go` (the
@@ -130,18 +130,27 @@ RE2 has no lookahead — conjunction is the battery, never one pattern.
 
 **M2 — persistence + CLI.** `ddl.go` (four `CREATE OR REPLACE TABLE`
 statements per ADR §SD2, MergeTree, ORDER BY as listed), `writer.go`
-(chclient inserts), `run.go` (orchestrate: fetch → classify → analyze → match
-→ write; mint `run_id`, stamp `discovered_at`). `apps/datacatalog`: urfave/cli
-`refresh` with `--url/--user/--password/--dry-run` (dry-run prints DDL and
-would-be row counts). Integration test (`//go:build integration`, run by
+(chclient inserts), `fetch.go` (the live `FetcherI`), `run.go` (orchestrate:
+fetch → classify → analyze → match → write; mint `run_id`, stamp
+`discovered_at`). `public/app/commands/datacatalog`: urfave/cli `refresh` with
+`--url/--user/--password/--database/--dry-run` (dry-run prints DDL and
+would-be row counts), wired into `public/app/main.go` beside `capmap` — not a
+standalone `apps/datacatalog` main, see ADR §SD6.
+
+Integration test (`//go:build integration`, run by
 `scripts/ci/gotest-integration.sh`): scratch database, two related leeway
 tables + one opaque series-shaped table, run refresh, assert kinds, the
-`subset` pair, one shape row.
+containment pair, one shape row. It writes the catalog into the *scratch*
+database rather than `boxer` — a run reads the whole server, so a test that
+also wrote where the real catalog lives would rebuild production state as a
+side effect.
 
 **M3 — keelson surface.** `panel_shapes` provider (columns `shape`,
-`pattern`, `ordinal`, `note`; `FreshnessStatic`) implemented in
-`panelshapes` itself (it may import `introspect`; the reverse edge is the one
-to avoid) and registered in `introspecthost.go` beside `RegisterCoverage`.
+`pattern`, `ordinal`, `note`; `FreshnessStatic`) in
+`introspect/providers/panelshapes.go`, reading `panelshapes.Shapes()` and
+registered by `RegisterStatic` — it is a compile-time constant table, so it
+needs no host wiring. Adding it moves the roster assertion in
+`providers_test.go`.
 
 **M4 — book.** `bookcatalog` chapters, `endpoint: default`: an inventory
 overview; the Sankey hierarchy — sketch, to be refined against the panel:
@@ -166,8 +175,9 @@ AGENTS.md § Screenshots path 2 (play's `BOXER_PLAY_SCREENSHOT` family,
 ## Verification commands
 
 ```sh
-go build -tags="$(cat ./tags)" ./public/gov/datacatalog/... ./apps/datacatalog/...
-go test  -tags="$(cat ./tags)" ./public/gov/datacatalog/... ./apps/play/...
+go build -tags="$(cat ./tags)" ./public/gov/datacatalog/... ./public/app/...
+go test  -tags="$(cat ./tags)" ./public/gov/datacatalog/... ./apps/play/... \
+                               ./apps/sqlapplet/... ./public/keelson/runtime/introspect/...
 go mod tidy --diff
 ./scripts/ci/gotest-integration.sh        # integration lane (live ClickHouse)
 ```
@@ -175,17 +185,35 @@ go mod tidy --diff
 Never blanket-`gofmt -w` — the repo carries doc comments that gofmt mangles;
 format only the files touched and audit the diff.
 
-## Open questions for the implementer
+## Open questions — how they were answered
 
-- **`NormalizedCopy` export** — confirm the wrapper is acceptable upstream or
-  find an existing exported path to a normalized `TableDesc`.
-- **Insert path** — Arrow-batch sink vs SQL literal INSERTs (both cited
-  above); either is fine at this scale.
-- **Separator ambiguity** — a table parsing under both separators takes the
-  sniffed one; the card driver's choice is the contract. Worth one fixture.
-- **Engine coverage** — Views, MaterializedViews, Dictionary-engine tables
-  are discovered and land as `opaque` with whatever `system.columns` reports;
-  no special-casing in the first cut.
-- **`CREATE OR REPLACE` visibility** — readers mid-rebuild can see a
-  fresh-but-empty table; accepted by the ADR, but the book chapters should
-  surface `run_id`/`discovered_at` so staleness is visible.
+Kept for the record; the implementation landed 2026-08-06 and the ADR's §SD
+text carries the decisions.
+
+- **`NormalizedCopy` export** — taken. A three-line exported wrapper over the
+  existing private `normalizedCopy`, beside it in `lw_table_relation.go`. No
+  exported path to a normalized `TableDesc` existed.
+- **Insert path** — SQL literal INSERTs, batched 500 rows to a statement,
+  escaping through `marshalling.EscapeString`. The deciding reason was not
+  volume but the `Enum8` columns: a string literal is exactly what ClickHouse
+  wants for an enum, where an Arrow batch would need a mapping to get wrong.
+- **Separator ambiguity** — the sniffed separator is the contract, asserted by
+  a round-trip fixture under both `:` and `_`.
+- **Engine coverage** — as expected: Views and the rest land as `opaque` with
+  whatever `system.columns` reports, and a View's result columns are the right
+  thing to match a panel contract against.
+- **`CREATE OR REPLACE` visibility** — accepted; every chapter projects
+  `run_id` and `discovered_at`, and a book test pins that they do.
+
+Three things the survey did not anticipate:
+
+- **Zero-column tables.** `DiscoverTableFromColumnNames` accepts an empty name
+  list and returns an empty table — vacuously leeway. The classifier rejects it
+  explicitly (`ErrNoColumns`); see ADR §SD1.
+- **The distribution contract.** The ADR guessed "any numeric"; the shipped
+  panel demands `series`, `n`, `ps`, `qs`
+  (`public/analytics/stats/distsql/contract.go`). Read the constants.
+- **`AS columns` does not parse.** grammar1 rejects it: `COLUMNS` is
+  ClickHouse's column-matcher keyword, so a select alias spelled `columns`
+  fails the ADR-0132 §SD6 corpus gate with a `mismatched input ','` pointing at
+  the *next* line. Backticking works; renaming reads better.
