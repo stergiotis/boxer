@@ -1,14 +1,12 @@
 package play
 
 import (
-	"strings"
-
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/gov/datacatalog"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -88,48 +86,27 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	for i := 0; i < nFields; i++ {
 		colNames = append(colNames, schema.Field(i).Name)
 	}
-	// Pick the naming-convention separator from the schema. The leeway
-	// flat-name format spells nested tags as `<head><sep><tag>` (e.g.
-	// `metric:env`); the canonical separator is `:`, but ClickHouse
-	// table dumps mangle it to `_` because `:` is illegal in CH
-	// column identifiers. The first non-leading-underscore column
-	// settles the question: a `:` anywhere in the name picks the
-	// canonical convention, otherwise the CH-mangled fallback `_`.
-	//
-	// Columns whose name starts with `_` are reserved for later /
-	// implicit / opaque schema columns that aren't authored under
-	// either convention, so they can't be used as evidence either way
-	// — we skip them and look at the next column.
-	sep := "_"
-	for _, n := range colNames {
-		if strings.HasPrefix(n, "_") {
-			continue
-		}
-		if strings.ContainsRune(n, ':') {
-			sep = ":"
-		}
-		break
-	}
-	conv, err := ddl.NewHumanReadableNamingConvention(sep)
-	if err != nil {
-		return false
-	}
-	tblDesc, tableRowConfig, err := conv.DiscoverTableFromColumnNames(colNames)
-	if err != nil {
+	// Probe the schema with the shared classifier (ADR-0170 §SD1): sniff the
+	// naming-convention separator, attempt discovery, treat failure as
+	// "opaque, expected". The data catalog runs the same function over
+	// system.columns, so "is this leeway-shaped" has one answer in the
+	// codebase rather than two that drift apart.
+	cl := datacatalog.Classify(colNames)
+	if cl.Kind != datacatalog.KindLeeway {
 		// A non-leeway result (aggregation, join, arbitrary SQL) is an
 		// expected, fully-supported case — the caller renders the ad-hoc
 		// detail view. Debug, not Warn: a normal fallback, not a fault. The
 		// pointer cache above means this logs at most once per result schema.
-		log.Debug().Err(err).Msg("play: result not leeway-shaped — using ad-hoc view")
+		log.Debug().Err(cl.Err).Msg("play: result not leeway-shaped — using ad-hoc view")
 		return false
 	}
 	// Publish the reconstructed schema now, before the (heavier, and card-only)
 	// Driver construction: the Schema pane wants the TableDesc even on a schema
 	// where the Driver build later fails.
-	inst.table = &tblDesc
+	inst.table = cl.Table
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
 	ir := common.NewIntermediateTableRepresentation()
-	err = ir.LoadFromTable(&tblDesc, tech)
+	err := ir.LoadFromTable(cl.Table, tech)
 	if err != nil {
 		log.Warn().Err(err).Msg("play: ir load failed — falling back")
 		return false
@@ -138,11 +115,11 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	// this is published before the (heavier, card-only) Driver construction, so
 	// the Table pane's display modes still get the classification on a schema
 	// where the Driver build later fails. Keyed by Arrow column index.
-	inst.classes = streamreadaccess.ClassifyArrowColumns(ir, conv, schema, tableRowConfig)
+	inst.classes = streamreadaccess.ClassifyArrowColumns(ir, cl.Convention, schema, cl.RowConfig)
 	driver, err := streamreadaccess.NewDriverFromSchema(
-		&tblDesc, ir,
+		cl.Table, ir,
 		streamreadaccess.DefaultFormatters(),
-		schema, conv, tableRowConfig)
+		schema, cl.Convention, cl.RowConfig)
 	if err != nil {
 		log.Warn().Err(err).Msg("play: driver construction failed — falling back")
 		return false
