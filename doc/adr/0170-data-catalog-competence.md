@@ -309,25 +309,27 @@ instant but not across a `refresh` boundary; `run_id` detects that.
 
 ## Milestones
 
-- **M0 — engine package** `public/gov/datacatalog`: snapshot types, a
+- **M0 — engine package.** ✓ `public/gov/datacatalog`: snapshot types, a
   `system.tables`/`system.columns` fetcher behind an interface, the classifier
   lifted from the card driver (play re-pointed at it), the normalized-string
-  builder. Unit tests only, no live ClickHouse. *Done.*
-- **M1 — analysis**: attribute keys, `schema_hash`/`shape_id`, the pair
-  matrix; `panelshapes` battery package with the seed set. *Done.*
-- **M2 — persistence + CLI**: DDL, writer, `boxer datacatalog refresh`,
-  `--dry-run`; the integration-lane test. *Done.*
-- **M3 — keelson surface**: `panel_shapes` provider, registered with the rest
-  of the static set. *Done.*
-- **M4 — book**: `bookcatalog` chapters (inventory, Sankey hierarchy,
-  unmatched opaque). *Done, except the screenshot* — the play recipe needs a
-  private weston and a matching Go/Rust FFI pair, which the working tree did
-  not have.
+  builder. Unit tests only, no live ClickHouse.
+- **M1 — analysis.** ✓ Attribute keys, `schema_hash`/`shape_id`, the pair
+  matrix; `panelshapes` battery package with the seed set.
+- **M2 — persistence + CLI.** ✓ DDL, writer, `boxer datacatalog refresh`,
+  `--dry-run`; the integration-lane test.
+- **M3 — keelson surface.** ✓ `panel_shapes` provider, registered with the
+  rest of the static set.
+- **M4 — book.** ✓ `bookcatalog` chapters (inventory, Sankey hierarchy,
+  unmatched opaque), the overview measuring its own staleness. The screenshot
+  the milestone originally carried is descoped to §Deferrals rather than left
+  as a footnote on a shipped chapter.
 - **M5 — deferred**: see Deferrals.
 
 ## Deferrals
 
-Scheduled refresh (bgjob or bus tee); a per-run event row in `boxer.facts`;
+A book screenshot via the play recipe — it needs a private weston and a
+matching Go/Rust FFI pair, neither of which the implementing session had;
+scheduled refresh (bgjob or bus tee); a per-run event row in `boxer.facts`;
 transitive reduction of the subset graph (the book query's `HAVING` floor
 stands in); shape matching for *leeway* tables via their UDF read forms; a
 `tables_leeway_shapes` materialization.
