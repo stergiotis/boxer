@@ -626,12 +626,22 @@ scene_08_series_fixture() {
 	# Two captures: the empty workbench with the lab, and what one click
 	# publishes — including the scaffold it splices into the buffer.
 	#
-	# The scene stops at the publish and does NOT Run the scaffold. Querying
-	# an ad-hoc dataset means resolving keelson('<handle>'), which only the
-	# keelson introspection endpoint can do; this tour points play at a plain
-	# ClickHouse (CLICKHOUSE_URL), which has never heard of the handle, so a
-	# Run here parks on "Executing query…" rather than failing. Capturing that
-	# would document a routing gap as if it were the feature.
+	# The scene stops at the publish and does NOT Run the scaffold, because a
+	# Run parks on "Executing query…" forever. The cause is NOT routing, which
+	# was the first guess and is wrong: with the scaffold in the buffer the
+	# toolbar reads `auto: confined · http://127.0.0.1:35735/query · names
+	# only keelson tables (adhoc_…)`, so the dispatch resolver (ADR-0141)
+	# sends it to the introspection plane exactly as designed, and the debug
+	# log shows chlocal executing it there — three execs, 56 KB out, 66 ms.
+	#
+	# What does not happen is play CONSUMING that result: the lane stays in
+	# flight and the pane never leaves its loading state, at 4 s and at 9 s
+	# alike. So the defect is in the introspection READ path, downstream of
+	# every part this milestone owns. No tour scene has ever queried
+	# keelson() through play, so nothing else covers it either.
+	#
+	# Capturing the hang would document that defect as if it were this
+	# feature, so the scene shows what does work and stops.
 	steps='{"do":"capture","text":"08_series_fixture","settleMs":600}
 {"do":"click","name":"generate"}
 {"do":"capture","text":"08_series_fixture_generated","settleMs":3000}'
