@@ -490,6 +490,68 @@ WHERE bytes >= 419430400"
 	settle=2500
 }
 
+scene_08_distribution() {
+	desc="Distribution — a result read as a distribution rather than a table (ADR-0161): an ECDF with its simultaneous band per series, the shift function against a chosen baseline, and the letter-value boxen ladder — three readings of the same three series"
+	senv=(BOXER_PLAY_FOCUS_DIST=1)
+	# Table-free, so this scene needs no fixture and runs against whatever the
+	# Endpoint menu is pointed at. That is a property of the macro, not a
+	# contrivance: descriptiveStatistics expands BEFORE the query ships, into
+	# one UNION ALL branch per argument column, each carrying the original
+	# FROM/WHERE/GROUP BY — so what reaches the panel is the ordinary named
+	# contract (`series`, `n`, `ps`, `qs`), and hand-written SQL emitting those
+	# four columns is on exactly the same footing as the macro here.
+	#
+	# Three arms of one latency: a baseline, the baseline plus a constant, and
+	# the baseline scaled. The constants are chosen so both treatments land on
+	# the SAME mean (150 ms) — and, because E[Q] is the baseline mean, on the
+	# same W₁ as well. So the two scalar summaries the legend and the moments
+	# offer both report the two arms as identical, and only the shape of Δ(p)
+	# says that one arm moved everything by 30 ms while the other multiplied:
+	# the curves cross at the median and diverge either side of it. That is the
+	# reason this scene is a controlled comparison rather than a real dataset.
+	#
+	# Gaussian rather than the lognormal the snippets corpus uses. The grid
+	# runs to p = 1 − 1.5e-5, so a heavy right tail puts x_max two orders of
+	# magnitude above the bulk and every curve collapses onto the axis — the
+	# panel is being honest and the picture is unreadable, which is the wrong
+	# thing for a screenshot to teach. randNormal's second argument is the
+	# standard deviation, not the variance its reference names.
+	#
+	# Three series is also the band policy's boundary: up to three, every
+	# series carries its confidence band; beyond, only the selected one does.
+	sql="WITH
+  draws AS (
+    SELECT ['A baseline', 'B shift +30ms', 'C scale x1.25'][1 + (number % 3)] AS arm,
+           randNormal(120, 25)                                                AS draw
+    FROM numbers(3000000)
+  ),
+  trial AS (
+    SELECT arm,
+           multiIf(arm = 'B shift +30ms', draw + 30,
+                   arm = 'C scale x1.25', draw * 1.25,
+                   draw) AS latency_ms
+    FROM draws
+  )
+SELECT descriptiveStatistics(latency_ms)
+FROM trial
+GROUP BY arm"
+	# Three captures, one per view. The baseline is the SHARED selection, so
+	# the chip click is not decoration: it pins which arm the Δ curves are
+	# measured against, and it has to go by NAME because the row order out of
+	# a GROUP BY across the expansion's branches is not guaranteed — trusting
+	# row 0 would silently re-base the picture between runs.
+	#
+	# The click also publishes `selection`, which is what puts the same series
+	# in the Detail pane: this is a main-result panel, so the chip IS a row.
+	steps='{"do":"capture","text":"08_distribution","settleMs":600}
+{"do":"click","contains":"A baseline","comment":"pin the baseline by name, not by row order"}
+{"do":"click","name":"Shift"}
+{"do":"capture","text":"08_distribution_shift","settleMs":600}
+{"do":"click","name":"Boxen"}
+{"do":"capture","text":"08_distribution_boxen","settleMs":600}'
+	settle=2500
+}
+
 scene_08_series() {
 	desc="Series — numbers against a time axis (ADR-0163 M0): the typed claim (first temporal column, every numeric column a lane), the Δt classification with the scaffold its finding offers, and modified-sinc smoothing with its extrapolated tail drawn faded"
 	senv=(BOXER_PLAY_FOCUS_SERIES=1)
@@ -747,6 +809,62 @@ scene_13_diagnostics() {
 	sql="SELECT \`id:id\`, \`symbal:value\`, \`geoPoint:lattitude\`
 FROM anchor.facts
 LIMIT 20"
+}
+
+scene_14_docs() {
+	desc="Docs — the reference for what the caret is on, read from the server actually being queried (system.documentation): the look-up box that reaches a name the buffer does not have yet, and the kind selector a name carrying several kinds gets"
+	senv=(BOXER_PLAY_FOCUS_DOCS=1)
+	# The buffer is an ordinary aggregation, not the subject: the pane reads
+	# the editor's published caret entity rather than the result, so what is
+	# on screen beside it only has to look like work in progress.
+	sql="SELECT t AS aircraft_type, count() AS pings, argMax(icao, ground_speed) AS fastest
+FROM default.planes_mercator_sample100
+WHERE altitude > 0 AND t != ''
+GROUP BY t
+ORDER BY pings DESC
+LIMIT 15"
+	# The pane follows the caret by default; this scene drives the MANUAL
+	# look-up instead, for two reasons. It is the affordance for reaching a
+	# name that is not in the buffer yet — the case the box exists for — and
+	# it is the half a trace can actuate, since moving the caret onto a
+	# particular token means a coordinate click into the editor, the ladder's
+	# last rung, for a pane whose whole point is which NAME it resolved.
+	#
+	# focus and type are separate steps, per scene 30: egui applies an
+	# injected AccessKit focus request on the frame after it arrives, so text
+	# sent in the same batch goes to whatever had focus before and is dropped
+	# without an error.
+	#
+	# `Merge` is the name because it carries FIVE kinds on a 26.x server —
+	# aggregate-function combinator, table engine, table function, and two
+	# one-line metric entries — so the kind selector draws. The pane opens on
+	# the combinator and not on the engine: the lookup renders the kind enum
+	# to text inside its subquery, so the outer ORDER BY sorts the kind list
+	# alphabetically rather than by ordinal, and the first entry wins. Reading
+	# the enum's ordering off `system.documentation` directly predicts the
+	# wrong one — the tour captured the same page twice before this was
+	# checked against the pane.
+	#
+	# The second capture switches to the table engine, where the same name is
+	# a different thing entirely and the body carries several SQL fences —
+	# which is also what shows a doc block offering the Insert/Replace actions
+	# the Snippets tab uses.
+	#
+	# The look-up box is nameless — an untouched TextEdit has neither an
+	# accessible name nor a value — so it is addressed by role. It is the only
+	# text input in this scene, so a second one appearing is an ambiguity
+	# error rather than a silent pick of the wrong field.
+	#
+	# The settle rides on the TYPE step, not on the capture: settleMs pauses
+	# AFTER its step, so a capture carrying it shoots first and waits
+	# afterwards. The lookup is a lane round trip behind a debounce, and at the
+	# tour default of 350 ms this scene captured "Looking up Merge…" — an empty
+	# pane, with the trace still reporting ok because a PNG was written.
+	steps='{"do":"focus","role":"text_input","comment":"the look-up box, nameless so by role","settleMs":400}
+{"do":"type","role":"text_input","text":"Merge","settleMs":2500}
+{"do":"capture","text":"14_docs","settleMs":600}
+{"do":"click","name":"Table Engine","comment":"the same name, a different kind — not the one the pane opened on"}
+{"do":"capture","text":"14_docs_kind","settleMs":800}'
 }
 
 scene_14_snippets() {
@@ -1026,6 +1144,7 @@ fixtures() {
 	anchor.facts|apps/play/help/howto-example-queries.md — go test -tags="$(cat ./tags),integration" -run TestLeewayClickHouse ./public/semistructured/leeway/anchor/
 	default.planes_mercator_sample100|apps/play/demo/adsb/demo.sh
 	default.planes_mercator|apps/play/demo/adsb/demo.sh
+	system.documentation|nothing to load, but the server must be new enough — ClickHouse ships this table from 26.x, and on an older one the Docs scene captures the pane saying it has no answer
 	EOF
 }
 
