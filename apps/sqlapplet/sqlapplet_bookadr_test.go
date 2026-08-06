@@ -67,13 +67,22 @@ func TestAdrBookCorpus(t *testing.T) {
 	// bar — the panel refuses the pair as ambiguous and renders nothing.
 	assert.Contains(t, tl.SQL, " AS _tl_time,", "the events contract needs _tl_time")
 	assert.Contains(t, tl.SQL, " AS _tl_time_end", "intervals need _tl_time_end")
-	assert.Contains(t, tl.SQL, " AS _tl_intensity", "colour is the evidence count")
 	assert.NotContains(t, tl.SQL, "_tl_label", "a label beside _tl_time_end is rejected as ambiguous")
+	// No _tl_intensity, deliberately. Present, it turns every bar a different
+	// colour off a sequential ramp indexed by packing order — thirteen fills
+	// over two-thirds of the pane — and the ramp's low end sits at the panel's
+	// own luminance, hiding exactly the decisions with no code behind them.
+	// Measured on captures of both; the flat bar is the one that reads.
+	assert.NotContains(t, tl.SQL, "_tl_intensity",
+		"colour by evidence draws a quilt; the evidence columns carry it instead")
+	// The lane hint is equally deliberate: it puts every bar of a status on ONE
+	// row, where they overpaint each other and the count is lost.
+	assert.NotContains(t, tl.SQL, "_tl_lane", "a hinted lane overpaints its own bars")
 	// A Timestamp column is what the panel demands, and only DateTime64
 	// crosses Arrow as one — DateTime arrives as a bare integer and the panel
 	// rejects the schema.
 	assert.Contains(t, tl.SQL, "toDateTime64(proposed, 3, 'UTC')")
-	assert.Contains(t, tl.SQL, "toDateTime64(until, 3, 'UTC')")
+	assert.Contains(t, tl.SQL, "toDateTime64(greatest(until, addDays(proposed, 1)), 3, 'UTC')")
 
 	// The bands lane has its own disjoint slot inventory.
 	require.NotEmpty(t, tl.BandsSQL, "the review-day bands ride the `sql bands` fence")
@@ -146,10 +155,20 @@ func TestAdrBookQueries(t *testing.T) {
 		" toTypeName(_tl_time_end) LIKE 'Nullable(DateTime64(3,%UTC%'"+
 		" FROM ("+body+")"))
 
-	// An inverted interval is dropped by the panel, and intensity outside
-	// [0,1] clamps — both would lose information without saying so.
-	assert.Equal(t, "0\t0", query(pre+"\nSELECT countIf(until_on < proposed_on),"+
-		" countIf(_tl_intensity < 0 OR _tl_intensity > 1) FROM ("+body+")"))
+	// An inverted interval is dropped by the panel without saying so.
+	assert.Equal(t, "0", query(pre+"\nSELECT countIf(until_on < proposed_on) FROM ("+body+")"))
+
+	// Every drawn bar covers at least a whole day — at their true width the
+	// same-day decisions are one pixel — while `days` keeps reporting the real
+	// elapsed number, zero included.
+	assert.Equal(t, "0", query(pre+"\nSELECT countIf(dateDiff('day', _tl_time, _tl_time_end) < 1)"+
+		" FROM ("+body+")"), "a bar narrower than a day is a one-pixel mark")
+	assert.Equal(t, "1", query(pre+"\nSELECT countIf(days = 0) > 0 FROM ("+body+")"),
+		"widening the drawn bar must not inflate the reported duration")
+	// …and the widening is only ever a floor: a bar that already spans days
+	// keeps its own end.
+	assert.Equal(t, "0", query(pre+"\nSELECT countIf(days >= 1 AND toDate(_tl_time_end) != until_on)"+
+		" FROM ("+body+")"))
 
 	// A decision still under consideration runs to today; every settled one
 	// ends on a day that has already happened.
@@ -161,16 +180,16 @@ func TestAdrBookQueries(t *testing.T) {
 	assert.Equal(t, proposed+"\t1", query("SET param_span = 'review';\nSET param_status = 'proposed';\n"+
 		"SELECT count(), uniqExact(status) FROM ("+body+")"))
 
-	// The colour scale is pinned to the whole corpus before the filter: the
-	// same decision must keep its colour when the view narrows to its own
-	// status, or a filtered view would quietly re-rank the evidence.
-	num := query("SELECT num FROM keelson('adr') WHERE status = 'proposed' ORDER BY code_refs DESC, num ASC LIMIT 1")
-	require.NotEmpty(t, num)
-	pick := "SELECT round(_tl_intensity, 6) FROM (" + body + ") WHERE adr = concat('ADR-', leftPad('" + num + "', 4, '0'))"
-	assert.Equal(t,
-		query("SET param_span = 'review';\nSET param_status = 'all';\n"+pick),
-		query("SET param_span = 'review';\nSET param_status = 'proposed';\n"+pick),
-		"the evidence colour must not depend on the status filter")
+	// Identity leads the projection, and the drawn pair trails it. The Detail
+	// card lifts the temporal columns into a section of their own and lists
+	// the rest in column order, so a buffer opening with `_tl_time` puts a
+	// chart of four timestamps where the decision's number and title belong.
+	header, _, hErr := e.Query(context.Background(), pre+"\nSELECT * FROM ("+body+") LIMIT 0", "TSVWithNames")
+	require.NoError(t, hErr)
+	cols := strings.Split(strings.TrimSpace(string(header)), "\t")
+	require.GreaterOrEqual(t, len(cols), 3)
+	assert.Equal(t, []string{"adr", "title", "status"}, cols[:3], "identity first")
+	assert.Equal(t, []string{"_tl_time", "_tl_time_end"}, cols[len(cols)-2:], "the drawn pair last")
 
 	// The span knob measures a different thing, not a rescaled one: activity
 	// ends on the last dated edit, which for a still-open decision is on or
