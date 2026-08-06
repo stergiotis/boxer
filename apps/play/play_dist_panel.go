@@ -476,12 +476,19 @@ func (inst *DistDriver) renderShift(w float32, h float32) {
 
 func (inst *DistDriver) renderBoxen(w float32, h float32) {
 	for p := range implot.Scoped(inst.ids, "##play-dist-boxen", w, h) {
+		// Setup before the first item, or the plot locks it out and drops both
+		// calls at log level — which leaves the categorical argument axis to the
+		// default numeric locator, labelling the gaps between the columns.
 		positions := make([]float64, 0, len(inst.series))
 		labels := make([]string, 0, len(inst.series))
 		for i := range inst.series {
-			s := &inst.series[i]
 			positions = append(positions, float64(i))
-			labels = append(labels, s.label)
+			labels = append(labels, inst.series[i].label)
+		}
+		p.SetupAxisTicks(implot.AxisX1, positions, labels)
+		p.SetupAxes("", "value", implot.AxisFlagsNone, implot.AxisFlagsNone)
+		for i := range inst.series {
+			s := &inst.series[i]
 			if s.degenerate() {
 				continue
 			}
@@ -497,8 +504,6 @@ func (inst *DistDriver) renderBoxen(w float32, h float32) {
 			boxenplot.New("play-dist-boxen").SeriesName(s.label).
 				Render(p, float64(i), levels, extremes, letterval.BudgetFor(levels).Each)
 		}
-		p.SetupAxisTicks(implot.AxisX1, positions, labels)
-		p.SetupAxes("", "value", implot.AxisFlagsNone, implot.AxisFlagsNone)
 	}
 }
 
