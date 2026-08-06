@@ -35,20 +35,35 @@ import (
 // detector would then score.
 
 const (
-	// seriesPlotHeight is the fixed plot-box height; width follows the pane,
-	// as in the Distribution tab. Lower than that tab's box because this one
-	// carries more above it — a status line, the smoothing controls, and a
-	// grid finding with its scaffold button — and the x axis is where the
-	// UTC tick labels live, so pushing them below the leaf's fold is the one
-	// clipping that actually costs the reader something.
+	// seriesPlotHeight is the PREFERRED plot-box height — or, when a score
+	// plot shares the leaf (M2), of the two TOGETHER. Both dimensions follow
+	// the pane when the pane is smaller, as in the Distribution and Chart
+	// tabs. Lower than the Distribution tab's box because this one carries
+	// more above it: a status line, the smoothing controls, and a grid finding
+	// with its scaffold button.
+	//
+	// It was a FIXED height until 2026-08-06, and that was a bug — the same
+	// one the Chart tab carried (ADR-0172): implot draws the x tick labels
+	// along the BOTTOM of the plot box, so a box taller than its pane loses
+	// them, and the part of the y range below the clip reads as missing data
+	// rather than as a cropped view. Here the labels are the UTC time axis,
+	// which is the one clipping that costs the reader something structural —
+	// a series with no readable x axis is a shape with no when. The
+	// surrounding ScrollArea does not rescue it: implot captures the wheel
+	// while the pointer is over the plot (ADR-0140), so the reader has to move
+	// off the chart before the labels can be scrolled to.
 	seriesPlotHeight = 340
-	// seriesPlotHeightWithScores is the series box when a score plot shares
-	// the leaf below it (M2). The two together must leave the x tick labels
-	// of BOTH above the fold, and the series keeps the larger share: the
-	// score is read for where its peaks fall, which needs less height than
-	// reading a shape does.
-	seriesPlotHeightWithScores = 200
-	seriesPlotMinW             = 480
+	// seriesScoreShare is the score plot's share of that budget when it shares
+	// the leaf. A RATIO rather than a height of its own: two boxes stacked in
+	// one leaf clip the moment their SUM exceeds the pane, so what the pane
+	// answers is a budget to split, not a value either box may take. The
+	// series keeps the larger share — a score is read for WHERE its peaks
+	// fall, which needs less height than reading a shape does. 0.43 is the
+	// share the two fixed heights (200 series / 150 score) used to have.
+	seriesScoreShare = 0.43
+	seriesPlotMinW   = 480
+	// seriesPaneSlack keeps the last box off the pane's edge.
+	seriesPaneSlack = 8
 	// seriesMaxLanes bounds the overlay. Beyond a dozen lines a shared axis
 	// stops being readable; the excess is counted in the status line rather
 	// than silently dropped.
@@ -61,6 +76,20 @@ const (
 	// anything about — two points give one interval, which has no spread.
 	seriesMinGridPoints = 3
 )
+
+// seriesPlotMinH floors EACH box at the height below which implot clips its
+// own x tick labels: the gutters come out of the box, so a box under that
+// leaves the layout taller than the canvas and the bottom gutter — the time
+// axis — is what the canvas cuts. Read from the widget rather than guessed,
+// because a floor under it clips while the pane still looks roomy.
+//
+// It is not a readability floor and must not be raised into one. A floor set
+// where a plot stops being COMFORTABLE would overshoot a small pane and clip
+// the labels this sizing exists to keep; a cramped pair of plots honest about
+// their axes beats a roomy pair with the lower one's axis under the fold. Both
+// plots here label y only (`SetupAxes("", …)`), which is the cheapest gutter
+// configuration — 60pt at the time of writing.
+var seriesPlotMinH = implot.MinBoxHeight(false, false, true, 1)
 
 // seriesPaneProbeSalt namespaces the pane probe's register slot; threading it
 // through the instance id stack makes it window-unique, so two playgrounds
@@ -216,6 +245,12 @@ type SeriesDriver struct {
 	// score plot below it. A score is read AGAINST its series, so the two
 	// panning independently would be a picture of nothing.
 	xLinkMin, xLinkMax float64
+
+	// paneW/paneH is the last good answer from the pane probe. The probe
+	// reports nothing on the frame a hidden tab comes back — and this tab is
+	// Lazy — so sizing off the miss would flash the plots to their floor every
+	// time the reader switches to it. The last good answer is held instead.
+	paneW, paneH float32
 
 	smooth *trendsmooth.State
 	// decimate is the §SD1 render-only envelope. Exposed as a toggle so the
@@ -595,14 +630,49 @@ func (inst *SeriesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	inst.renderFixtureLab()
 	c.AddSpace(styletokens.GapItems(dens))
 
+	// Emitted HERE, after the chrome above the plots and before the first of
+	// them: the rect is the room left for the NEXT widget, so a probe placed
+	// between the two plots would size the second against the first's output.
+	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(seriesPaneProbeSalt).Derive()); ok {
+		inst.paneW, inst.paneH = availW, availH
+	}
 	w := float32(seriesPlotMinW)
-	if availW, _, _ := c.CapturePaneSize(inst.ids.PrepareHighEntropy(seriesPaneProbeSalt).Derive()); availW > seriesPlotMinW {
-		w = availW - 8
+	if inst.paneW > seriesPlotMinW {
+		w = inst.paneW - seriesPaneSlack
 	}
-	inst.renderPlot(w, k, emit)
-	if len(inst.scores.t) > 0 {
-		inst.renderSeriesScorePlot(w)
+	seriesH, scoreH := inst.plotHeights()
+	inst.renderPlot(w, seriesH, k, emit)
+	if scoreH > 0 {
+		inst.renderSeriesScorePlot(w, scoreH)
 	}
+}
+
+// plotHeights splits the leaf's vertical budget between the series plot and —
+// when a score channel is filled — the x-linked score plot below it. The pane
+// is a BUDGET, not a value either box takes: two boxes stacked in one leaf
+// clip as soon as their sum exceeds it, and the bottom edge is where implot
+// draws the x tick labels of BOTH (see seriesPlotHeight).
+//
+// Neither box goes under seriesPlotMinH. Splitting past it would buy nothing
+// — implot lays its gutters out at that size whatever height it is handed, so
+// a smaller box does not get a smaller plot, it gets its time axis clipped by
+// its own canvas. When the pane cannot hold two floored boxes the pair
+// overflows and the leaf's ScrollArea takes over; that is the honest failure,
+// since dropping the score plot to fit would hide data rather than cramp it.
+//
+// scoreH is zero when there is no score plot to draw, which is what the caller
+// reads to decide whether to draw one.
+func (inst *SeriesDriver) plotHeights() (seriesH float32, scoreH float32) {
+	budget := float32(seriesPlotHeight)
+	if inst.paneH > 0 && inst.paneH-seriesPaneSlack < budget {
+		budget = inst.paneH - seriesPaneSlack
+	}
+	if len(inst.scores.t) == 0 {
+		return max(budget, seriesPlotMinH), 0
+	}
+	scoreH = max(budget*seriesScoreShare, seriesPlotMinH)
+	seriesH = max(budget-scoreH, seriesPlotMinH)
+	return
 }
 
 // rebuildOverlays folds the optional channels. Cheap enough to run per frame
@@ -684,12 +754,8 @@ func (inst *SeriesDriver) renderGridFinding() {
 }
 
 // renderPlot draws the lanes over a UTC time axis, decimating per pixel.
-func (inst *SeriesDriver) renderPlot(w float32, k seriesClaim, emit SignalEmitterI) {
+func (inst *SeriesDriver) renderPlot(w float32, h float32, k seriesClaim, emit SignalEmitterI) {
 	inst.drawn, inst.sourced = 0, 0
-	h := float32(seriesPlotHeight)
-	if len(inst.scores.t) > 0 {
-		h = seriesPlotHeightWithScores
-	}
 	for p := range implot.Scoped(inst.ids, "##play-series", w, h) {
 		p.SetupAxisScale(implot.AxisX1, implot.ScaleTime)
 		if len(inst.scores.t) > 0 {

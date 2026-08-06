@@ -552,6 +552,44 @@ GROUP BY arm"
 	settle=2500
 }
 
+scene_08_distribution_small_pane() {
+	desc="Distribution in a SMALL window: the plot box follows the pane instead of a fixed height, so the ECDF and the boxen ladder each keep the x tick labels implot draws along their BOTTOM edge"
+	# The rest of the tour runs at 1920x1200, where a fixed-height plot box
+	# always fits and this class of bug is invisible. An applet window is
+	# ~900x660 and not resizable out of, which is where it was found — on the
+	# Chart tab first (ADR-0172), then here and on Series, the two tabs that
+	# fix carried the same fixed height.
+	senv=(BOXER_PLAY_FOCUS_DIST=1 BOXER_PLAY_WINDOW_SIZE=900x640)
+	# Response sizes rather than the sibling scene's latencies: ~340..550 kB,
+	# so nothing sits near zero. That matters for the boxen view, whose y axis
+	# IS the value — when the box overflowed its pane the clipped-off bottom
+	# read as a raised axis minimum and the lower letter-values looked absent.
+	# A distribution whose values reach zero puts the interesting end at the
+	# axis bottom and hides the clip entirely.
+	sql="WITH
+  draws AS (
+    SELECT ['A control', 'B treatment'][1 + (number % 2)] AS arm,
+           randNormal(420000, 18000)                      AS draw
+    FROM numbers(1000000)
+  ),
+  trial AS (
+    SELECT arm,
+           multiIf(arm = 'B treatment', draw * 1.08, draw) AS response_bytes
+    FROM draws
+  )
+SELECT descriptiveStatistics(response_bytes)
+FROM trial
+GROUP BY arm"
+	# Both views, because they clip differently: the ECDF loses the bottom of
+	# a curve whose y range is fixed at 0..1, the boxen loses the bottom of a
+	# value axis — which is the one that reads as missing data rather than as
+	# a cropped picture.
+	steps='{"do":"capture","text":"08_distribution_small_pane","settleMs":600}
+{"do":"click","name":"Boxen"}
+{"do":"capture","text":"08_distribution_small_pane_boxen","settleMs":600}'
+	settle=2500
+}
+
 scene_08_series() {
 	desc="Series — numbers against a time axis (ADR-0163 M0): the typed claim (first temporal column, every numeric column a lane), the Δt classification with the scaffold its finding offers, and modified-sinc smoothing with its extrapolated tail drawn faded"
 	senv=(BOXER_PLAY_FOCUS_SERIES=1)
@@ -639,6 +677,42 @@ scene_08_series_overlays() {
   spans  AS (SELECT tsAnomalySpans(t, v, 24, 3) FROM base)
 SELECT * FROM base"
 	settle=4000
+}
+
+scene_08_series_small_pane() {
+	desc="Series in a SMALL window with a score plot: the pane's height is a BUDGET the two x-linked plots split, so both keep the UTC tick labels implot draws along their bottom edge instead of the lower one being pushed under the fold"
+	# The hard case of the class the Chart tab surfaced (ADR-0172). This leaf
+	# can hold TWO plots, so the pane is not a height to assign but a budget to
+	# divide: with fixed boxes (200 + 150) the pair simply overflowed together,
+	# and the score plot — the lower one — lost its whole time axis first.
+	#
+	# 900x900 rather than the 900x640 its Distribution and Chart siblings use,
+	# and the difference is measured rather than chosen. This tab spends ~210pt
+	# above its plots — status line, smoothing controls, the score's honesty
+	# paragraph, the fixture-lab row — so the probe reports a 124pt pane at
+	# 900x820 and about 25pt at 900x640, where two floored boxes plus the slack
+	# (128pt) do not fit however they are split and the scene would picture the
+	# ScrollArea fallback instead of the fix. At 900x900 the probe reports
+	# 168pt, which is still far under the 350pt the two fixed boxes wanted: the
+	# bug reproduces here, it is simply also legible here.
+	senv=(BOXER_PLAY_FOCUS_SERIES=1 BOXER_PLAY_WINDOW_SIZE=900x900)
+	# Table-free, like the Chart small-pane scene, so it runs against whatever
+	# the Endpoint menu is pointed at: two days of five-minute buckets built
+	# from numbers(). toDateTime64 because the typed claim takes DateTime64 /
+	# Date / Arrow timestamp only (ADR-0163 Update 2026-08-05).
+	#
+	# ~360..490 kB per bucket, so the lane never approaches zero — a series
+	# whose values reach the axis bottom hides a clipped box, which is why the
+	# first charts looked at did not show the bug.
+	sql="WITH
+  base AS (
+    SELECT toDateTime64('2026-07-05 00:00:00', 3) + toIntervalMinute(5 * number) AS t,
+           420000 + 60000 * sin(number / 22.0) + (rand() % 9000)                 AS bytes_per_min
+    FROM numbers(576)
+  ),
+  scores AS (SELECT tsAnomalyScores(t, bytes_per_min, 24) FROM base)
+SELECT * FROM base"
+	settle=3000
 }
 
 scene_08_series_adjudication() {

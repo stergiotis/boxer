@@ -249,6 +249,16 @@ anything comfortable rather than at it, because a floor placed where a plot
 stops being *readable* would itself overshoot a small pane and re-clip the
 labels this sizing exists to keep.
 
+**The floor is the widget's own minimum, not a round number.** Giving the
+Distribution and Series tabs this same treatment (ADR-0161, ADR-0163) turned up
+a second way to lose these labels, pulling the opposite way: implot's gutters
+come out of the box height rather than from space outside it, so a box *shorter*
+than gutters-plus-minimum-area leaves the layout taller than its canvas, and
+what the canvas clips is the bottom gutter — the tick labels again. This panel's
+original 80 was chosen as "far below comfortable" without knowing where that
+bound sat, and cleared it by luck. `implot.MinBoxHeight` reports it (76pt for a
+both-axes-labelled plot), and all three tabs now floor at it.
+
 ### SD6 — Deferred, deliberately
 
 Stacked bars (§SD4) · a `mark` column (§SD3) · error bars and a second value

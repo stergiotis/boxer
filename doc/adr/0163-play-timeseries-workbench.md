@@ -332,6 +332,59 @@ cast the scaffold would have written SQL this panel then refuses. Nothing
 else in the decision moves — this narrows *which types* satisfy the claim,
 not what the claim is.
 
+## Update 2026-08-06 — the pane height is a budget the two plots split
+
+The Series plot was drawn in a fixed box: 340pt alone, 200pt with the M2 score
+plot's fixed 150pt below it. That is the clipping bug
+[ADR-0172](./0172-play-chart-panel.md) found on the Chart tab and
+[ADR-0161](./0161-play-distribution-panel.md) shares — implot draws the x tick
+labels along the *bottom* of the box, so a box taller than its pane loses them,
+and here those labels are the UTC time axis. A series with no readable x axis
+is a shape with no *when*, and the y range below the clip reads as missing
+samples. The `ScrollArea` does not rescue it (ADR-0140: implot captures the
+wheel while the pointer is over the plot).
+
+This leaf is the harder case, because it can hold **two** plots, so what the
+pane answers is a budget to divide rather than a height to assign — stacked
+boxes clip the moment their *sum* exceeds the pane, and the lower plot's axis
+goes first. `seriesPlotHeightWithScores` is therefore gone, replaced by a share
+of the budget (0.43, the ratio the two fixed heights had). The series keeps the
+larger part: a score is read for *where* its peaks fall, which needs less
+height than reading a shape does.
+
+Splitting the pane is only half of it, and the other half took two wrong turns
+worth recording, because both looked right and both were checked by screenshot:
+
+- A measured 124pt pane split 62/46 summed to 108 — inside the pane by every
+  check — and still clipped the score plot's time axis. The inference drawn was
+  that each plot spends a title row *outside* its box, and the budget was
+  charged a per-plot allowance for it.
+- That was wrong. implot's gutters come out of the box height, not from space
+  around it (`layoutFrame`), so the 46pt box was simply **under the height
+  below which a plot clips its own labels** — and charging the budget twice
+  made every box smaller, which is the direction that causes the clip rather
+  than avoids it.
+
+So there are two bounds, not one: a box taller than its pane is cut by the
+pane, and a box shorter than `implot.MinBoxHeight` is cut by its own canvas.
+Both floors are now read from the widget (60pt for these axes, which label y
+only) rather than guessed, and splitting past the floor is not attempted —
+implot lays its gutters out at that size whatever height it is handed, so a
+smaller box does not yield a smaller plot, only a clipped one. When the pane
+cannot hold two floored boxes the pair overflows and the leaf's ScrollArea
+takes over; dropping the score plot to fit would hide data rather than cramp
+it.
+
+`08_series_small_pane` pins 900×900 rather than the 900×640 its Distribution
+and Chart siblings use, and the difference is measured. This tab spends ~210pt
+above its plots — status line, smoothing controls, the score's honesty
+paragraph, the fixture-lab row — so the probe reports 124pt of pane at 900×820
+and about 25pt at 900×640, where two floored boxes plus the slack (128pt) do
+not fit however they are split, and the scene would picture the ScrollArea
+fallback rather than the fix. At 900×900 the probe reports 168pt, still far
+under the 350pt the two fixed boxes wanted: the bug reproduces there, it is
+simply also legible there.
+
 ## Status
 
 Accepted 2026-08-05. Consumes the survey's settled dialogue (Q1–Q9);

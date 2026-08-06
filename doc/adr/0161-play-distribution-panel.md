@@ -242,6 +242,47 @@ Structural kills live in §Design space. Additionally rejected:
   implementation. Whether 87 levels look sufficient at every zoom is
   review judgement.
 
+## Update 2026-08-06 — the plot box follows the pane, not a fixed height
+
+§SD5's sub-views were drawn in a fixed 420pt box whose width followed the
+pane. That is a bug, and it is the one [ADR-0172](./0172-play-chart-panel.md)
+found on the Chart tab: implot draws the x tick labels along the *bottom* of
+the plot box, so a box taller than its pane loses them, and the part of the y
+range below the clip reads as missing data rather than as a cropped view. In an
+applet window — ~900×660, and not resizable out of — a 420pt box had barely
+half a pane to sit in. The surrounding `ScrollArea` does not rescue it: implot
+captures the wheel while the pointer is over the plot (ADR-0140), so the labels
+cannot be scrolled to without first moving the pointer off the chart.
+
+All four views now take one computed height — one is drawn at a time — and the
+Chart tab's shape is copied wholesale: the preferred height, the pane when the
+pane is shorter, a floor set far below anything *comfortable* (a floor placed
+where a plot stops being readable would itself overshoot a small pane and
+re-clip the labels), and the probe's last good answer held on the driver
+because it reports nothing on the frame this `Lazy` tab comes back.
+
+Sizing to the pane is only half of it. There are **two** ways a pane-following
+plot loses its x tick labels, and they pull in opposite directions:
+
+- a box **taller** than its pane — the pane clips the box;
+- a box **shorter** than `implot.MinBoxHeight` — the box clips itself, because
+  the gutters carrying the labels come out of the box height rather than from
+  space outside it, and below that the layout simply exceeds its own canvas.
+
+An intermediate version of this fix charged the budget a second time for that
+chrome, on the theory that the axis title sat *outside* the box. It does not,
+and the extra charge pushed the box under the minimum — buying the second clip
+to avoid the first. The floor is now read from the widget
+(`implot.MinBoxHeight`, 76pt for these axes) instead of being a round number
+chosen for comfort, and the budget is simply the pane less the edge slack.
+
+`08_distribution_small_pane` pins a 900×640 window and charts two arms whose
+values sit around 420 kB, so nothing approaches zero: a distribution whose
+values reach the axis bottom hides a clipped box, which is why this went
+unnoticed. The rest of the tour runs at 1920×1200 where a fixed box always
+fits, so every scene is a picture of a *roomy* pane unless one is written
+otherwise.
+
 ## Status
 
 Accepted 2026-08-02. Milestones in §Migration; the four adjacent

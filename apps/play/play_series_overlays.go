@@ -34,10 +34,6 @@ import (
 //     have known.
 
 const (
-	// seriesScorePlotHeight is the linked score plot's box. Shorter than the
-	// series above it — the score is read for WHERE its peaks are, against a
-	// time axis the series already established.
-	seriesScorePlotHeight = 150
 	// seriesBandAlpha is the span bands' fill alpha. Recessive by IDS
 	// guidance: the series must stay legible through them, exactly as the
 	// Timeline's own bands are drawn under its events.
@@ -240,9 +236,14 @@ func (inst *SeriesDriver) renderSeriesSpans(p *implot.Plot) {
 // shading, on a plot whose x axis is LINKED to the series above — so panning
 // or zooming either keeps the two readable against each other, which is the
 // only way a score is read at all.
-func (inst *SeriesDriver) renderSeriesScorePlot(w float32) {
+//
+// The box is shorter than the series above it (seriesScoreShare) — a score is
+// read for WHERE its peaks are, against a time axis the series already
+// established — and it is passed in rather than fixed, because the two boxes
+// share one pane and clip together.
+func (inst *SeriesDriver) renderSeriesScorePlot(w float32, h float32) {
 	sc := &inst.scores
-	for p := range implot.Scoped(inst.ids, "##play-series-scores", w, seriesScorePlotHeight) {
+	for p := range implot.Scoped(inst.ids, "##play-series-scores", w, h) {
 		p.SetupAxisScale(implot.AxisX1, implot.ScaleTime)
 		p.SetupAxisLinks(implot.AxisX1, &inst.xLinkMin, &inst.xLinkMax)
 		p.SetupAxes("", "score", implot.AxisFlagsNone, implot.AxisFlagsNone)

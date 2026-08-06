@@ -46,11 +46,38 @@ const (
 	// distMaxBandsAll: bands paint on every series up to this many series;
 	// beyond, only the selected series carries its band (ADR-0161 §SD5).
 	distMaxBandsAll = 3
-	// distPlotHeight is the fixed plot-box height; width follows the pane
-	// (one-frame lag on the available-size probe, fine for a stable dock).
+	// distPlotHeight is the PREFERRED plot-box height; both dimensions follow
+	// the pane when the pane is smaller (one-frame lag on the probe, fine for
+	// a stable dock).
+	//
+	// It was a FIXED height until 2026-08-06, and that was a bug — the same one
+	// the Chart tab carried (ADR-0172): implot draws the x tick labels along
+	// the BOTTOM of the plot box, so a box taller than its pane loses them, and
+	// the part of the y range below the clip reads as missing data rather than
+	// as a cropped view. In an applet window (~900×660, and not resizable out
+	// of) a 420pt box had barely half a pane to sit in. The surrounding
+	// ScrollArea does not rescue it: implot captures the wheel while the
+	// pointer is over the plot (ADR-0140), so the reader has to move off the
+	// chart before the labels can be scrolled to.
 	distPlotHeight = 420
 	distPlotMinW   = 480
+	// distPaneSlack keeps the box off the pane's edge.
+	distPaneSlack = 8
 )
+
+// distPlotMinH floors the box at the height below which implot clips its own x
+// tick labels: the gutters come out of the box, so a box under that leaves the
+// layout taller than the canvas and the bottom gutter — the tick labels and
+// the axis title under them — is what the canvas cuts. Read from the widget
+// rather than guessed, because a floor under it clips while the pane still
+// looks roomy.
+//
+// It is not a readability floor and must not be raised into one: a floor set
+// where a view stops being COMFORTABLE would overshoot a small pane and clip
+// the labels this sizing exists to keep. Three of the four views label both
+// axes, which is the deeper gutter, so all four take that figure — 76pt at the
+// time of writing.
+var distPlotMinH = implot.MinBoxHeight(false, true, true, 1)
 
 // distPaneProbeSalt namespaces the pane probe's r21 slot; threading it through
 // the instance's id stack makes it window-unique, so two playgrounds size their
@@ -101,6 +128,12 @@ type DistDriver struct {
 
 	view     int // 0 ecdf, 1 shift, 2 boxen, 3 histogram
 	selected int // selected series index = the shift baseline
+
+	// paneW/paneH is the last good answer from the pane probe. The probe
+	// reports nothing on the frame a hidden tab comes back — and this tab is
+	// Lazy — so sizing off the miss would flash the plot to its floor every
+	// time the reader switches to it. The last good answer is held instead.
+	paneW, paneH float32
 }
 
 func NewDistDriver(ids *c.WidgetIdStack) (inst *DistDriver) {
@@ -305,20 +338,40 @@ func (inst *DistDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k di
 	// frame's last capture wins, and play's Detail pane renders after every
 	// body tab — so with a temporal row selected the plot was drawn at the
 	// width of the narrow side column.
-	w := float32(distPlotMinW)
-	if availW, _, _ := c.CapturePaneSize(inst.ids.PrepareHighEntropy(distPaneProbeSalt).Derive()); availW > distPlotMinW {
-		w = availW - 8
+	//
+	// Emitted HERE, after the chrome above the plot and before the plot
+	// itself: the rect is the room left for the NEXT widget, so a probe placed
+	// after the plot would size the plot against its own output.
+	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(distPaneProbeSalt).Derive()); ok {
+		inst.paneW, inst.paneH = availW, availH
 	}
+	w := float32(distPlotMinW)
+	if inst.paneW > distPlotMinW {
+		w = inst.paneW - distPaneSlack
+	}
+	// One view is drawn at a time, so all four take the same box.
+	h := inst.plotHeight()
 	switch inst.view {
 	case 1:
-		inst.renderShift(w)
+		inst.renderShift(w, h)
 	case 2:
-		inst.renderBoxen(w)
+		inst.renderBoxen(w, h)
 	case 3:
-		inst.renderHistogram(w)
+		inst.renderHistogram(w, h)
 	default:
-		inst.renderEcdf(w)
+		inst.renderEcdf(w, h)
 	}
+}
+
+// plotHeight is the plot box's height: the preferred one, or the pane when the
+// pane is shorter. A box taller than its pane is clipped at the bottom, taking
+// the x tick labels with it (see distPlotHeight).
+func (inst *DistDriver) plotHeight() (h float32) {
+	h = distPlotHeight
+	if inst.paneH > 0 && inst.paneH-distPaneSlack < h {
+		h = inst.paneH - distPaneSlack
+	}
+	return max(h, distPlotMinH)
 }
 
 // renderSelectors draws the view chips and the series chips. A series chip
@@ -362,8 +415,8 @@ func (inst *DistDriver) renderSelectors(emit SignalEmitterI, k distClaim) {
 	}
 }
 
-func (inst *DistDriver) renderEcdf(w float32) {
-	for p := range implot.Scoped(inst.ids, "##play-dist-ecdf", w, distPlotHeight) {
+func (inst *DistDriver) renderEcdf(w float32, h float32) {
+	for p := range implot.Scoped(inst.ids, "##play-dist-ecdf", w, h) {
 		p.SetupAxes("value", "F(x)", implot.AxisFlagsNone, implot.AxisFlagsNone)
 		for i := range inst.series {
 			s := &inst.series[i]
@@ -386,14 +439,14 @@ func (inst *DistDriver) renderEcdf(w float32) {
 // renderShift draws Δ(p) = Q_s(p) − Q_baseline(p) per non-baseline series,
 // with the conservative α/2+α/2 combined band (ADR-0161 §SD5) built by
 // inverting each series' DKW F-band through its grid oracle.
-func (inst *DistDriver) renderShift(w float32) {
+func (inst *DistDriver) renderShift(w float32, h float32) {
 	base := &inst.series[inst.selected]
 	baseOracle, err := distsql.NewGridOracle(base.ps, base.qs, base.n)
 	if err != nil {
 		return
 	}
 	epsBase := distsql.DkwEpsilon(base.n, distBandAlpha/2)
-	for p := range implot.Scoped(inst.ids, "##play-dist-shift", w, distPlotHeight) {
+	for p := range implot.Scoped(inst.ids, "##play-dist-shift", w, h) {
 		p.SetupAxes("p", "Δ value vs "+base.label, implot.AxisFlagsNone, implot.AxisFlagsNone)
 		for i := range inst.series {
 			s := &inst.series[i]
@@ -421,8 +474,8 @@ func (inst *DistDriver) renderShift(w float32) {
 	}
 }
 
-func (inst *DistDriver) renderBoxen(w float32) {
-	for p := range implot.Scoped(inst.ids, "##play-dist-boxen", w, distPlotHeight) {
+func (inst *DistDriver) renderBoxen(w float32, h float32) {
+	for p := range implot.Scoped(inst.ids, "##play-dist-boxen", w, h) {
 		positions := make([]float64, 0, len(inst.series))
 		labels := make([]string, 0, len(inst.series))
 		for i := range inst.series {
@@ -452,8 +505,8 @@ func (inst *DistDriver) renderBoxen(w float32) {
 // renderHistogram draws the optional server-side histogram triplet as a
 // density step (height = weight / width — variable-width bins mislead
 // otherwise; ADR-0161 §SD5).
-func (inst *DistDriver) renderHistogram(w float32) {
-	for p := range implot.Scoped(inst.ids, "##play-dist-hist", w, distPlotHeight) {
+func (inst *DistDriver) renderHistogram(w float32, h float32) {
+	for p := range implot.Scoped(inst.ids, "##play-dist-hist", w, h) {
 		p.SetupAxes("value", "density", implot.AxisFlagsNone, implot.AxisFlagsNone)
 		for i := range inst.series {
 			s := &inst.series[i]

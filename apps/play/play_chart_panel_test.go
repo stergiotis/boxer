@@ -431,13 +431,27 @@ func TestChartPlotHeightNeverExceedsPane(t *testing.T) {
 	assert.Equal(t, float32(255-chartPaneSlack), d.plotHeight())
 
 	// The property, over every pane the probe can plausibly report. It holds
-	// down to the floor; below that the box is degenerate either way and the
-	// pane's ScrollArea takes over, which is why the floor is set far under
-	// anything comfortable rather than at it.
+	// down to the floor; below that no height helps and the pane's ScrollArea
+	// takes over, which is why the floor is set far under anything comfortable
+	// rather than at it.
 	for _, pane := range []float32{chartPlotMinH + chartPaneSlack, 130, 255, 380, 500, 1000} {
 		d.paneH = pane
 		assert.LessOrEqualf(t, d.plotHeight(), pane,
 			"a %vpt pane must not get a taller box", pane)
+	}
+
+	// The SECOND way a pane-sized plot loses those labels, found while giving
+	// the Distribution and Series tabs the same treatment: implot's gutters
+	// come out of the box height rather than from space outside it, so a box
+	// under its minimum clips its own axis while the pane still looks roomy.
+	// The floor was originally an 80 picked as "far below comfortable", which
+	// cleared this bound by luck; it is read from the widget now.
+	assert.GreaterOrEqual(t, chartPlotMinH, implot.MinBoxHeight(false, true, true, 1),
+		"the floor must clear what a both-axes-labelled plot needs")
+	for _, pane := range []float32{20, 60, 130, 255, 1000} {
+		d.paneH = pane
+		assert.GreaterOrEqualf(t, d.plotHeight(), chartPlotMinH,
+			"a %vpt pane must not drive the box under implot's minimum", pane)
 	}
 }
 

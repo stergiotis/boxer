@@ -97,13 +97,7 @@ const (
 	// pointer is over the plot (ADR-0140), so the labels cannot be scrolled to
 	// without first moving the pointer off the chart.
 	chartPlotHeight = 380
-	// chartPlotMinH only keeps the box off a degenerate height; it is
-	// deliberately far below anything readable. A floor set where a plot stops
-	// being COMFORTABLE would overshoot a small pane and clip the very labels
-	// this sizing exists to keep — a cramped chart that is honest about its
-	// axis beats a roomy one with its bottom cut off.
-	chartPlotMinH = 80
-	chartPlotMinW = 480
+	chartPlotMinW   = 480
 	// chartPaneSlack keeps the box off the pane's edge.
 	chartPaneSlack = 8
 	// chartColorbarH is the colorscale legend's box under a heatmap, tall
@@ -116,6 +110,20 @@ const (
 	// chart rather than as a key.
 	chartColorbarMaxW = 640
 )
+
+// chartPlotMinH floors the box at the height below which implot clips its own
+// x tick labels. There are TWO ways a pane-sized plot loses them and this is
+// the second: a box taller than its pane is cut by the pane, and a box shorter
+// than this is cut by its own canvas, because the gutters come out of the box
+// height rather than sitting outside it. The original 80 was picked as "far
+// below comfortable" without knowing where that second bound was; it happened
+// to clear it. Reading it from the widget removes the coincidence.
+//
+// It is not a readability floor and must not be raised into one — a floor set
+// where a chart stops being COMFORTABLE would overshoot a small pane and clip
+// the labels this sizing exists to keep. Both axes are labelled here, the
+// deeper gutter configuration: 76pt at the time of writing.
+var chartPlotMinH = implot.MinBoxHeight(false, true, true, 1)
 
 // chartPaneProbeSalt namespaces the pane probe's register slot; threading it
 // through the instance id stack makes it window-unique, so two playgrounds

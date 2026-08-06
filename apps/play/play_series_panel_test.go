@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -333,5 +334,79 @@ func TestSeriesGridClassNames(t *testing.T) {
 		assert.NotEmpty(t, name)
 		assert.False(t, seen[name], "class names are distinct: %q", name)
 		seen[name] = true
+	}
+}
+
+// The series leaf can hold TWO plots — the series and its x-linked score plot
+// — so the pane's height is a budget they SPLIT, not a value either takes.
+// Stacked boxes clip as soon as their SUM exceeds the pane, and the bottom of
+// each box is where implot draws its x tick labels: here, the UTC time axis. A
+// series whose x axis is below the fold is a shape with no when, and the part
+// of the y range under the clip reads as missing samples rather than as a
+// cropped view. Same bug the Chart tab carried (ADR-0172), one plot harder.
+func TestSeriesPlotHeightsSplitThePane(t *testing.T) {
+	d := &SeriesDriver{}
+
+	// No score channel: one box, at the preferred height until the pane is
+	// shorter than it. The probe misses on the frame a Lazy tab comes back, so
+	// the driver holds its last good answer — a miss must not resize anything.
+	seriesH, scoreH := d.plotHeights()
+	assert.Equal(t, float32(seriesPlotHeight), seriesH, "before the probe lands, the preferred height")
+	assert.Zero(t, scoreH, "no score channel, no score box")
+
+	d.paneH = 1000
+	seriesH, _ = d.plotHeights()
+	assert.Equal(t, float32(seriesPlotHeight), seriesH,
+		"a tall pane does not stretch the box past its preferred height")
+
+	d.paneH = 255
+	seriesH, _ = d.plotHeights()
+	assert.Equal(t, float32(255-seriesPaneSlack), seriesH)
+
+	// With a score channel filled, the same budget is split — the series
+	// keeping the larger share, because a score is read for WHERE its peaks
+	// fall and that needs less height than reading a shape does.
+	d.scores = seriesScores{t: []float64{1, 2, 3}}
+	d.paneH = 0
+	seriesH, scoreH = d.plotHeights()
+	assert.Positive(t, scoreH, "a filled score channel gets a box")
+	assert.Greater(t, seriesH, scoreH, "the series keeps the larger share")
+
+	// The property, over every pane the pair can fit in at all: BOTH boxes,
+	// not merely either one. The smallest such pane is two floors plus the
+	// slack — under it no split fits and the leaf's ScrollArea takes over,
+	// which is the honest failure.
+	for _, pane := range []float32{2*seriesPlotMinH + seriesPaneSlack, 176, 200, 255, 340, 500, 1000} {
+		d.paneH = pane
+
+		d.scores = seriesScores{}
+		seriesH, scoreH = d.plotHeights()
+		assert.LessOrEqualf(t, seriesH+scoreH, pane, "one box must fit a %vpt pane", pane)
+
+		d.scores = seriesScores{t: []float64{1, 2, 3}}
+		seriesH, scoreH = d.plotHeights()
+		assert.LessOrEqualf(t, seriesH+scoreH, pane, "BOTH boxes must fit a %vpt pane", pane)
+	}
+
+	// The OTHER way these labels are lost, and the one that cost the most to
+	// find. implot's gutters come out of the box height rather than from space
+	// outside it, so a box under its minimum clips its own time axis while the
+	// pane still looks roomy — and splitting a tight budget past that floor
+	// buys nothing, because the gutters are laid out at the floor whatever
+	// height the box is handed. An earlier version of this split went
+	// proportional below the floor to keep the pair inside the pane; it simply
+	// traded a clip by the pane for a clip by the canvas.
+	assert.GreaterOrEqual(t, seriesPlotMinH, implot.MinBoxHeight(false, false, true, 1),
+		"the floor must clear what these axes need")
+	for _, pane := range []float32{20, 40, 100, 140, 176, 340, 1000} {
+		d.paneH = pane
+		d.scores = seriesScores{t: []float64{1, 2, 3}}
+		seriesH, scoreH = d.plotHeights()
+		assert.GreaterOrEqualf(t, seriesH, seriesPlotMinH, "series box, %vpt pane", pane)
+		assert.GreaterOrEqualf(t, scoreH, seriesPlotMinH, "score box, %vpt pane", pane)
+
+		d.scores = seriesScores{}
+		seriesH, _ = d.plotHeights()
+		assert.GreaterOrEqualf(t, seriesH, seriesPlotMinH, "lone box, %vpt pane", pane)
 	}
 }

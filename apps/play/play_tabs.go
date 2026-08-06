@@ -533,6 +533,14 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Panel = sankeyPanel{driver: inst.sankeyDriver}
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderSankeyTab) }
 		case "dist":
+			// Scrolled like its neighbours, but it does NOT rely on the scroll
+			// to reach its own content: the plot box is sized from the pane's
+			// HEIGHT as well as its width, because implot draws the x tick
+			// labels along the bottom of the box and a box taller than its
+			// pane loses them. Scrolling would not have rescued that — implot
+			// captures the wheel while the pointer is over the plot
+			// (ADR-0140), so the reader has to move off the chart first. The
+			// ScrollArea remains for the chrome above.
 			spec.Panel = distPanel{driver: inst.distDriver}
 			spec.Render = func(f *TabFrame) {
 				scrollTab(func() { inst.renderDistTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
@@ -549,10 +557,14 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 				scrollTab(func() { inst.renderIcicleTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
 			}
 		case "series":
-			// Scrolled for the Distribution tab's reason: a fixed-height plot
-			// box sized from the pane WIDTH, so a short leaf scrolls rather
-			// than clips, and implot zeroes the wheel delta while the pointer
-			// is over the plot so the two do not contend (ADR-0140).
+			// Scrolled for the Distribution tab's reason, and sized like it:
+			// the plot boxes follow the pane's HEIGHT as well as its width,
+			// because implot draws the x tick labels along the bottom of each
+			// box. This leaf can hold TWO — the series and its linked score
+			// plot — so the pane height is a budget they split rather than a
+			// value either takes. The ScrollArea does not rescue an overflow
+			// here either: implot zeroes the wheel delta while the pointer is
+			// over a plot (ADR-0140), so the reader has to move off it first.
 			spec.Panel = seriesPanel{driver: inst.seriesDriver}
 			spec.Render = func(f *TabFrame) {
 				scrollTab(func() { inst.renderSeriesTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
