@@ -100,14 +100,41 @@ query change. `WithSectionFilter` and `WithScrollToSection` must not be
 combined: skipping headings desynchronises the scroll dispatch's heading
 ordinals.
 
-Both boxes are one input widget — `regexedit`, the pattern editor extracted
-from regex_explorer (ADR-0015 lexer, ADR-0130 highlight seam), in a token
-mode that lexes each whitespace-separated pattern independently so an
-unclosed group in one token cannot mis-colour the next. And both pair the
-battery with a **selectivity meter**: a byte-share progress bar of how much
-of the corpus the battery selects, section counts in an adjacent label
-(never on the bar — its own text is illegible at low fractions). The meter
-is computed from the uncapped hit set; only the rendered list truncates.
+**App launcher**: the third surface, and the one whose corpus is not
+markdown. `windowhost`'s empty-state search box takes the same battery over
+the app registry — a manifest's `Display`, `Topics`, and `Keywords`, scored
+by the same strongest-tier-per-pattern rule as §SD3 with this corpus's own
+weights (display ×8, topic ×4, keyword ×2), `Id` still excluded because
+every entry would answer to "github". Its executor lives in `windowhost`,
+beside its corpus, exactly as §SD5's lives in `docsearchsql` beside the
+facts plane; what crosses is the battery.
+
+This surface *replaces* a matcher rather than adding one, which is why it
+belongs here and not only in ADR-0158: §Alternatives already names the
+launcher's substring pass as "the behaviour a degenerate battery
+reproduces exactly", so a one-word query means what it always meant. Its
+subsequence pass is retired outright (ADR-0158 §Update 2026-08-06); `g.*dep`
+is the written-down form of what it guessed at.
+
+All three boxes are one input widget — `regexedit`, the pattern editor
+extracted from regex_explorer (ADR-0015 lexer, ADR-0130 highlight seam), in
+a token mode that lexes each whitespace-separated pattern independently so
+an unclosed group in one token cannot mis-colour the next. The two markdown
+boxes pair the battery with a **selectivity meter**: a byte-share progress
+bar of how much of the corpus the battery selects, section counts in an
+adjacent label (never on the bar — its own text is illegible at low
+fractions), computed from the uncapped hit set while only the rendered list
+truncates. The launcher gets a bare count instead: its hits are app-sized
+things of no interesting weight, so the count is already the honest number
+and a bar would only assert a precision the corpus does not have.
+
+The launcher alone compiles its battery **without the thesaurus**. The
+manifest half of that table exists to carry a query typed in the user's
+vocabulary ("htop") to documentation written in an app's ("Process
+monitor") — and here `Keywords` is a matched field already, so the same
+bridge on the query side would only expand a token into a spelling of a
+manifest the executor was about to check anyway. The ClickHouse-alias half
+names SQL functions, which no app is called.
 
 ### §SD5 — facts-plane lane: the same battery in SQL
 
@@ -164,15 +191,24 @@ source — which is precisely the designed fallback, not a degraded mode.
 
 ## Milestones
 
-- **M0** — heading byte offsets (markdown + help); `help/search` package:
-  battery compile, section table, executor, ranking, context extraction.
-- **M1** — HelpHost search UI; `WithSectionFilter`; snippets filter box.
-- **M2** — `helpsections`/`adrsections` providers, `docsearch` macro over
-  the UNION with `system.documentation`, string-ref scheme.
-- **M2b** — the static thesaurus (§SD7): CH aliases generated from the
-  pinned engine + launcher keywords, applied by every battery consumer.
-- **M3** — text2regex generator under ADR-0139 (step b).
-- **M4** — golden query set; evaluation gates the embeddings deferral.
+Markers below are in the list shape `adrcorpus` parses (marker and title
+inside one `**` run); they previously closed the bold before the dash and so
+were invisible to the subtask board.
+
+- **M0 — heading byte offsets (markdown + help).** ✓ Plus the `help/search`
+  package: battery compile, section table, executor, ranking, context
+  extraction.
+- **M1 — HelpHost search UI.** ✓ `WithSectionFilter`; snippets filter box.
+- **M1b — launcher search box (§SD4).** ✓ The app registry as a third
+  battery corpus, replacing ADR-0158 §SD6's substring/subsequence matcher.
+- **M2 — the facts-plane lane.** ✓ `helpsections`/`adrsections` providers,
+  `docsearch` macro over the UNION with `system.documentation`, string-ref
+  scheme.
+- **M2b — the static thesaurus (§SD7).** ✓ CH aliases generated from the
+  pinned engine + launcher keywords, applied by every battery consumer that
+  wants one.
+- **M3 — text2regex generator** under ADR-0139 (step b).
+- **M4 — golden query set;** evaluation gates the embeddings deferral.
 
 ## Surfaces
 
@@ -185,6 +221,10 @@ source — which is precisely the designed fallback, not a degraded mode.
   codeview `BuildRegexTokens`/`PrepareRegexTokens` flavour behind it.
 - HelpHost search state + nav flattening; play Snippets filter state; a
   coverage meter on both.
+- `windowhost`'s launcher matcher (unexported): the `filterManifests` query
+  leg becomes a battery scan, and the function's query path now returns a
+  *ranked* slice rather than input order. ADR-0158 §SD6's
+  `matchManifestSearch` / `matchesSubsequence` are deleted.
 - M2 adds: two introspection tables, the `docsearch` macro, the ref-string
   format.
 
@@ -254,13 +294,18 @@ case.
   with their enclosing section.
 - HelpHost/snippets: state-level tests (hit → OpenRef plumbing); rendered
   behaviour via the demo/egui-mcp lane as usual.
+- Launcher: `windowhost_topics_test.go` gains battery cases (anchors,
+  alternation, space-means-AND, degrade-to-literal) and ranking cases
+  (tier order, tie-break). One test asserts the *absence* of subsequence
+  matching, so a future fuzzy tier has to argue with a test rather than
+  arrive by accident.
 - M2: schema-parity test between provider output and the `boxer adr` Arrow
   dump precedent; macro expansion goldens under nanopass tests.
 
 ## Status
 
-Proposed. M0–M2b implemented alongside this draft for review; M3+ pending
-acceptance.
+Proposed. M0–M2b implemented alongside this draft for review, M1b with
+them; M3+ pending acceptance.
 
 ## References
 

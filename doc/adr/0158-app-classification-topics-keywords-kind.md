@@ -454,6 +454,67 @@ Also worth recording: `registry.Demo.Category` (ADR-0057's screenshot-tour
 struct) is a *different* field and was left alone. §Surfaces did not
 distinguish the two, and a reader grepping `Category` will find both.
 
+### 2026-08-06 — §SD6's matcher is replaced by an ADR-0164 pattern battery
+
+§SD6 specified matching as "subsequence/fuzzy over `Display`, `Topics`, and
+`Keywords`", and that is what shipped: a lowercased substring pass over the
+three fields, then a subsequence pass over `Display` alone. That matcher is
+now a **pattern battery** ([ADR-0164](./0164-documentation-regex-search.md)
+§SD2/§SD4) — whitespace-separated case-insensitive RE2 patterns, every one
+required. The facet axes, the filter state, the chips, and the toggles are
+untouched; only the query leg of `filterManifests` changes.
+
+The decision this ADR recorded is not being reversed so much as absorbed.
+ADR-0164 was written with this ending in view: its §Alternatives kills
+"substring-only search (launcher-style)" as an end state while keeping it as
+"the behaviour a degenerate battery (one literal) reproduces exactly". A
+one-word query therefore still means what §SD6 meant by it, and the three
+matched fields are still the three §SD4 named.
+
+Three things do change, and the third is a removal:
+
+- **Space now means AND, not a literal space.** Each token is its own
+  pattern and each must hit some field, so `dependency go` finds what `go
+  dependency` finds, and `code explorer` can satisfy one token from
+  `Topics` and the other from `Display`. A literal phrase is reachable as
+  `foo\s+bar`.
+
+- **Hits are ranked.** A battery scores per pattern at the strongest field
+  tier it hits — display ×8, topic ×4, keyword ×2 — so an exact name match
+  outranks an app merely filed under the word, and ties fall back to the
+  Display-then-Id comparator the browse sections already use. This does not
+  disturb §SD10's deferred ranking: that deferral is about *frecency*, which
+  needs a launch record in `boxer.facts` and observes behaviour. Nothing
+  here observes anything — the score is a function of authored metadata,
+  computed per query.
+
+- **The subsequence pass is gone.** `gdep` no longer reaches "Go dependency
+  explorer"; `g.*dep` does. This is the one user-visible loss, and it was
+  chosen over the two ways of keeping it. Restricted to single-token
+  queries it would have been a second, invisible matching rule firing only
+  at a particular query shape — the kind of thing that makes a search box
+  feel arbitrary. Applied per token it compounds badly under AND: `go` is a
+  subsequence of nearly every display name containing a `g` before an `o`,
+  so a two-token query would have widened rather than narrowed. Explicit
+  elision costs three characters and is inspectable; the guess was neither.
+  A test asserts the absence, so restoring it means arguing with something.
+
+The launcher also acquires the `regexedit` box the other two ADR-0164
+surfaces use — token-mode syntax colouring, a clear button, and the
+"some tokens are not valid regexps and match literally" disclosure when a
+half-typed pattern degrades. It reports selectivity as a bare `N of M apps`
+count rather than the byte-share meter the markdown corpora carry, and it
+compiles its battery without the thesaurus; both differences are argued in
+ADR-0164 §SD4.
+
+One consequence worth naming for a future reader: `windowhost` now imports
+`help/search` and `regexedit`, and through the latter the ClickHouse
+highlighter and its generated grammar. Every package that imports
+`windowhost` already carried that chain via play or sqlapplet, so nothing
+grew in practice — but a future minimal host embedding the launcher alone
+would pay for it, and the remedy then is to lift the battery type into a
+leaf package, not to hand-roll a second matcher.
+
 ## References
 
 - [app-organization-and-launching.md](../adr-background-work/app-organization-and-launching.md)
