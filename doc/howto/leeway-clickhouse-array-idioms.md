@@ -246,7 +246,7 @@ unusually well because a SQL UDF is a macro: it is inlined into the query
 tree during analysis. Verified consequences:
 
 ```sql
-CREATE OR REPLACE FUNCTION raggedNest AS (vals, card) ->
+CREATE OR REPLACE FUNCTION RAGGED_NEST AS (vals, card) ->
     arrayMap((c, hi) -> arraySlice(vals, hi - c + 1, c), card, arrayCumSum(card))
 ```
 
@@ -257,7 +257,7 @@ CREATE OR REPLACE FUNCTION raggedNest AS (vals, card) ->
   `arrayExists(f, lane) AND has(lane, x)` inside one UDF keeps the pruning.
 - **Lambdas can be parameters.** A UDF may accept a lambda and forward it to
   a higher-order builtin —
-  `CREATE FUNCTION raggedExists AS (f, vals, card) -> arrayReduceInRanges('max', arrayMap((h, c) -> (h - c + 1, c), arrayCumSum(card), card), arrayMap(f, vals))`
+  `CREATE FUNCTION RAGGED_EXISTS AS (f, vals, card) -> arrayReduceInRanges('max', arrayMap((h, c) -> (h - c + 1, c), arrayCumSum(card), card), arrayMap(f, vals))`
   works — so the kernel lifts to the ragged case generically.
 - **UDFs compose.** A UDF body may call other UDFs (non-recursively), and
   constant arguments stay constant through inlining: even a constructed
@@ -268,8 +268,8 @@ CREATE OR REPLACE FUNCTION raggedNest AS (vals, card) ->
   DAG.
 - **Prefer fused bodies.** Materializing per-instance lists copies the
   stream; on a 5.6M-element shape the range-fused per-instance sum and
-  exists ran roughly 1.5–2.4× faster than their `raggedNest`-based
-  equivalents (26.7, single-threaded). Reserve `raggedNest` for genuinely
+  exists ran roughly 1.5–2.4× faster than their `RAGGED_NEST`-based
+  equivalents (26.7, single-threaded). Reserve `RAGGED_NEST` for genuinely
   nested outputs, evaluate each condition on the lane where it lives, and
   when broadcasting across the instance/element boundary carry a narrow
   lane (a bool mask), never a wide one (a string lane) — a wide broadcast
@@ -284,7 +284,7 @@ client-side expansion of the same bodies is an equivalent substitute there.
 
 The vocabulary ships as the co/ragged function pack
 ([ADR-0162](../adr/0162-leeway-co-ragged-function-pack.md)); play installs
-it at connect, and `SELECT leewayPackVersion()` reports the revision. Its
+it at connect, and `SELECT LEEWAY_PACK_VERSION()` reports the revision. Its
 value proposition is one comparison. Hand-woven, the intent, the offset
 bookkeeping, and the pruning guards travel separately — and the guards are
 the part call sites forget, at the every-granule-scanned cost measured
@@ -306,9 +306,9 @@ forgettable, because the fused ranges and the guards live inside the
 function bodies:
 
 ```sql
-SELECT raggedReduce('avg', vals, card)
+SELECT RAGGED_REDUCE('avg', vals, card)
 FROM t
-WHERE coExistsEq2("string:semanticType", 'myst', "string:short", 'abc')
+WHERE CO_EXISTS_EQ2("string:semanticType", 'myst', "string:short", 'abc')
 ```
 
 The two compile to identical plans (verified byte for byte via

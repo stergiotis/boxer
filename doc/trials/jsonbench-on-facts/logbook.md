@@ -182,7 +182,7 @@ template:
   queries open-coded the lane arithmetic. Two vocabularies for exactly that
   already existed and neither was used —
   [ADR-0162](../../adr/0162-leeway-co-ragged-function-pack.md)'s `chpack`
-  (`coGather`, `raggedStarts`, …; shipped in
+  (`CO_GATHER`, `RAGGED_STARTS`, …; shipped in
   `public/semistructured/leeway/chpack`, **not installed** on the trial
   server until now) and the older, already-installed
   `LEEWAY_VALUE_BY_TAG_EQUAL` / `LEEWAY_LU_MEMB_IDX_TO_VAL_IDX` UDFs.
@@ -319,7 +319,7 @@ template:
   ratios. §6's "the benchmark dogfoods the reporting layer it is measuring" is
   satisfied literally: the pages resolve their values with
   `LEEWAY_VALUE_BY_TAG_EQUAL` and re-align the ragged value lanes with
-  `coGather`/`raggedStarts`, which is the read path the trial spent two runs
+  `CO_GATHER`/`RAGGED_STARTS`, which is the read path the trial spent two runs
   measuring.
   One friction worth its line: the result facts tag their attributes with
   `LowCardRef` memberships, so a SQL page needs the **uint64 ids** —
@@ -363,4 +363,71 @@ template:
   §6 Reporting asks for; the book simply no longer depends on it. The run
   directories are still the provenance record, and the page summaries are
   generated from them rather than retyped.
+- **UDF-family analysis (2026-08-06, on review):** the trial used both UDF
+  families without examining how they relate. They are not alternatives:
+  **`chpack` (ADR-0162) is the lane algebra; the `LEEWAY_*` readback family
+  (ADR-0066,
+  `public/semistructured/leeway/marshall/clickhouse/readback/`) is the
+  leeway-schema-aware layer on top of it** — `HelperUDFsSQL()` emits the pack
+  first, and `LEEWAY_LU_MEMB_IDX_TO_VAL_IDX` / `LEEWAY_UNFLATTEN` have already
+  been retired onto `RAGGED_PARENT_IDS` / `RAGGED_NEST`.
+  What the readback family adds, measured on `jsonbench_b_10m`:
+  - **Correctness under non-uniform membership cardinality.** `CO_LOOKUP(keys,
+    lane, k)` is `lane[indexOf(keys, k)]` and assumes the two lanes are 1:1
+    co-indexed. On this table they are not — the kind tag carries zero `lmr`
+    memberships — and `CO_LOOKUP` silently returns `blueskyEvent` for every
+    row where `LEEWAY_VALUE_BY_TAG_EQUAL` returns the right collection. The
+    readback form routes through `RAGGED_PARENT_IDS`, so zero- and
+    multi-membership attributes resolve correctly.
+  - **Fusion.** `LEEWAY_VALUE_BY_TAG_EQUAL(v,t,k,m)` is exactly
+    `CO_LOOKUP(t, CO_GATHER(v, m), k)`, but the composition materialises a
+    broadcast lane per row where the fused body does one `indexOf` and two
+    scalar `arrayElement`s: **0.122 s vs 3.147 s**, a 26× difference on Q1 at
+    10M. ADR-0162 §SD4's "fused bodies beat materializing per-instance lists"
+    holds far harder here than the 1.5–2.4× it records.
+  - **`LEEWAY_LIST_BY_TAG_EQUAL`** does tag→slice in one call, combining the
+    membership indirection with the value lane's own raggedness. It is exactly
+    what `queries-facts.sql` hand-rolls as
+    `CO_GATHER(vals, RAGGED_STARTS(len))` + a tag lookup — and it is *more*
+    correct, returning the whole slice where the hand-rolled form silently
+    takes the first element only, the hazard that file's header documents.
+  Filed as:
+  **[pain leeway-read-access-codegen → proposed:leeway-query-vocabulary-discoverability
+  / usability.self-descriptiveness / S3]** — the same discoverability finding
+  as the chpack one above, one layer up: the purpose-built primitive for the
+  trial's central operation existed and was found only by review.
+  **[broken leeway-ddl-codegen → proposed:leeway-udf-provisioning-drift /
+  reliability.maturity / S3]** — the trial server carried a *stale* readback
+  family: `LEEWAY_LU_MEMB_IDX_TO_VAL_IDX`, retired in the repo, was still
+  installed, while `LEEWAY_LIST_BY_TAG_EQUAL`, `LEEWAY_LU_ATTR_BY_TAG` and
+  `LEEWAY_LU_MEMBS_OF_VAL_IDX` were absent. Every statement is
+  `CREATE OR REPLACE`, so nothing removes a retired function, and unlike
+  `chpack` the family carries no version marker to detect the skew.
+  **Consequence for this run, not yet acted on:** `queries-facts.sql` and
+  `queries-facts-skip.sql` name the retired `LEEWAY_LU_MEMB_IDX_TO_VAL_IDX`
+  and hand-roll `LEEWAY_LIST_BY_TAG_EQUAL`. Switching Q4 to the primitive
+  gives a byte-identical answer 15 % faster (0.859 s → 0.729 s). The arm-B and
+  arm-C numbers above were measured with the committed form and still
+  correspond to it; correcting the queries means re-measuring both.
+- **UDF naming aligned to UPPER_SNAKE (2026-08-06), arms B and C
+  re-measured.** The pack shipped camelCase (`coLookup`, `raggedStarts`)
+  beside the read-back family's UPPER_SNAKE, and since the two became one
+  stack a single expression routinely called both. The whole ADR-0162 roster
+  is renamed — `CO_LOOKUP`, `RAGGED_PARENT_IDS`, `LEEWAY_PACK_VERSION` — with
+  the `CO_`/`RAGGED_` prefixes kept so the algebra's two axes stay readable.
+  22 files, the §SD6 roster rewritten, and a dated Update on the ADR recording
+  it; `chpack.Version` is bumped to 2, which is what the marker is for.
+  Two things the rename surfaced, both now called out in the ADR:
+  `CREATE OR REPLACE` **cannot remove** a renamed function, so the 16 stale
+  camelCase functions had to be dropped explicitly — the provisioning-drift
+  finding above, reproduced deliberately. And this trial's queries still named
+  the retired `LEEWAY_LU_MEMB_IDX_TO_VAL_IDX`, which was *still installed* on
+  the server while absent from the repo; they now name `RAGGED_PARENT_IDS`
+  and the retired function is dropped, so the re-measure proves nothing
+  depended on it.
+  **Arms B and C were re-measured** against the renamed pack. Results stay
+  byte-identical to arm A, and hot runtimes move between −12 % and +12 % in
+  both directions — run-to-run noise on a shared workstation, which is what a
+  pure rename should look like. The tables above and the book's embedded rows
+  are synced to the new evidence; the conclusions are unchanged.
 - **Run dir:** [`./runs/2026-08-06-m4-10m/`](./runs/2026-08-06-m4-10m/)

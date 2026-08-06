@@ -95,7 +95,7 @@ added:
 
 Names and semantics lean on the built-in function family, which is modern
 and consistent enough to extend rather than replace: camelCase, lambda-first
-argument order (`raggedExists(f, vals, card)` mirrors
+argument order (`RAGGED_EXISTS(f, vals, card)` mirrors
 `arrayExists(f, arr)`), 1-based indexing, and ClickHouse's own suffix
 patterns as the template for variants (`arrayReduceInRanges` is the
 precedent). Two owned prefixes — `co` and `ragged` — group the pack in
@@ -109,7 +109,7 @@ builtin that already is the operation is used directly.
 
 Every pack predicate that implies a constant-membership condition embeds
 the corresponding `has`/`hasAny` conjunct in its own body (e.g.
-`coExistsEq2` carries `has(a, x) AND has(b, y)` beside its lambda). Measured
+`CO_EXISTS_EQ2` carries `has(a, x) AND has(b, y)` beside its lambda). Measured
 basis: multi-lane lambdas are opaque to index analysis (245/245 granules
 without the guard, 4/245 with it), only single-lane pure equality is
 rewritten by the server itself, and even builtin index support is
@@ -122,8 +122,8 @@ therefore cannot forget the pruner.
 No pack body materializes `Array(Array)` unless the function's codomain is
 genuinely nested. Per-run reductions and predicates go through
 `arrayReduceInRanges` over ranges derived from the lengths lane
-(`raggedExists` is range-max over a lifted boolean stream, not
-exists-over-nest). `raggedNest` stays in the pack as the explicit
+(`RAGGED_EXISTS` is range-max over a lifted boolean stream, not
+exists-over-nest). `RAGGED_NEST` stays in the pack as the explicit
 presentation-boundary operation, documented as such. Positivity (both
 descriptors are at least 1 on leeway data) means empty-run aggregate
 defaults are dead cases; the bodies remain total for foreign data that does
@@ -135,7 +135,7 @@ The pack is defined once in Go — name, parameters, body — and emitted as
 `CREATE OR REPLACE FUNCTION` statements. Installation is an idempotent
 reconcile at connect time (play startup, and appliance provisioning), the
 same reconcile-at-startup pattern other ClickHouse-adjacent state uses. A
-zero-argument marker function, `leewayPackVersion()`, returns the pack
+zero-argument marker function, `LEEWAY_PACK_VERSION()`, returns the pack
 revision so client/server skew is a query. Shipped names are **append-only
 in semantics**: a published function's meaning never changes; changed
 behavior gets a new name. Install performs a collision check — if a name
@@ -150,21 +150,21 @@ in v1.
 
 | function | definition |
 |---|---|
-| `coLookup(keys, lane, k)` | `lane[indexOf(keys, k)]` |
-| `coLookupNull(keys, lane, k)` | `NULL` when `indexOf(keys, k) = 0`, else the lookup |
-| `coGather(lane, sel)` | `arrayMap(i -> lane[i], sel)` |
-| `coArgSort(keys)` | permutation that sorts `keys` (argsort) |
-| `coArgMax(lane, keys)` | `arrayReduce('argMax', lane, keys)` |
-| `coExistsEq2(a, x, b, y)` | guarded two-lane equality existence (SD3) |
-| `raggedStarts(card)` | run start offsets, 1-based |
-| `raggedRanges(card)` | `(start, len)` tuples for `arrayReduceInRanges` |
-| `raggedParentIds(card)` | per-element instance index (broadcast carrier) |
-| `raggedIota(card)` | per-element position within its run |
-| `raggedNest(vals, card)` | per-instance lists; boundary op (SD4) |
-| `raggedReduce(agg, vals, card)` | `arrayReduceInRanges(agg, raggedRanges(card), vals)` |
-| `raggedExists(f, vals, card)` | range-max over `arrayMap(f, vals)` |
-| `raggedCount(f, vals, card)` | range-sum over `arrayMap(f, vals)` |
-| `raggedElem(vals, card, i, k)` | k-th value of instance i |
+| `CO_LOOKUP(keys, lane, k)` | `lane[indexOf(keys, k)]` |
+| `CO_LOOKUP_NULL(keys, lane, k)` | `NULL` when `indexOf(keys, k) = 0`, else the lookup |
+| `CO_GATHER(lane, sel)` | `arrayMap(i -> lane[i], sel)` |
+| `CO_ARG_SORT(keys)` | permutation that sorts `keys` (argsort) |
+| `CO_ARG_MAX(lane, keys)` | `arrayReduce('argMax', lane, keys)` |
+| `CO_EXISTS_EQ2(a, x, b, y)` | guarded two-lane equality existence (SD3) |
+| `RAGGED_STARTS(card)` | run start offsets, 1-based |
+| `RAGGED_RANGES(card)` | `(start, len)` tuples for `arrayReduceInRanges` |
+| `RAGGED_PARENT_IDS(card)` | per-element instance index (broadcast carrier) |
+| `RAGGED_IOTA(card)` | per-element position within its run |
+| `RAGGED_NEST(vals, card)` | per-instance lists; boundary op (SD4) |
+| `RAGGED_REDUCE(agg, vals, card)` | `arrayReduceInRanges(agg, RAGGED_RANGES(card), vals)` |
+| `RAGGED_EXISTS(f, vals, card)` | range-max over `arrayMap(f, vals)` |
+| `RAGGED_COUNT(f, vals, card)` | range-sum over `arrayMap(f, vals)` |
+| `RAGGED_ELEM(vals, card, i, k)` | k-th value of instance i |
 
 ### SD7 — The expression vocabulary never enters the literal-only MacroExpander
 
@@ -206,7 +206,7 @@ server-side only until a dedicated expression expander exists (SD8).
 ## Surfaces — Tier 1
 
 - New global SQL function names on every boxer-provisioned ClickHouse: the
-  SD6 roster plus `leewayPackVersion()`. Visible to every client via
+  SD6 roster plus `LEEWAY_PACK_VERSION()`. Visible to every client via
   `system.functions` (`origin = 'SQLUserDefined'`).
 - A Go spec-and-emitter package under `public/semistructured/leeway/`
   (exact home decided at implementation, adjacent to the ClickHouse DDL
@@ -259,7 +259,7 @@ server-side only until a dedicated expression expander exists (SD8).
 
 - Server state that must be reconciled: a window exists between a spec
   change and the next connect-time reconcile on servers reached by other
-  clients. `leewayPackVersion()` makes the skew observable; provisioning
+  clients. `LEEWAY_PACK_VERSION()` makes the skew observable; provisioning
   closes it.
 - A global, flat namespace claims names forever; the additive-only policy
   (SD5) is a real constraint on renaming mistakes.
@@ -275,7 +275,7 @@ server-side only until a dedicated expression expander exists (SD8).
 - The vocabulary is ClickHouse-specific by construction; DuckDB or Arrow
   equivalents would be separate packs over the same algebra.
 - The how-to and the algebra document already use the SD6 names
-  (`raggedNest`, `raggedExists`), so no committed prose changes on
+  (`RAGGED_NEST`, `RAGGED_EXISTS`), so no committed prose changes on
   acceptance.
 
 ## Migration — Tier 1
@@ -299,7 +299,7 @@ For acceptance, the implementation must add:
 - golden tests of the emitted `CREATE OR REPLACE FUNCTION` statements from
   the Go spec;
 - an integration-lane test (`//go:build integration`) that installs the
-  pack on a live server, asserts `leewayPackVersion()`, and re-runs the
+  pack on a live server, asserts `LEEWAY_PACK_VERSION()`, and re-runs the
   plan-identity and guard-pruning probes as regressions;
 - differential tests of pack calls against their handwritten expansions on
   randomized co/ragged data (positivity respected);
@@ -333,12 +333,44 @@ Accepted 2026-08-02. Changes now arrive as dated `## Update` sections.
 The reference note that the
 [read-back generator](./0066-leeway-dql-clickhouse-readback-generator.md)
 is unaffected is superseded in one particular: its hand-use helper
-`LEEWAY_UNFLATTEN` is retired in favor of `raggedNest`, and
+`LEEWAY_UNFLATTEN` is retired in favor of `RAGGED_NEST`, and
 `readback.HelperUDFsSQL()` now emits this pack's statements ahead of its
 own `LEEWAY_LU_*` family. The generator's *emitted* SQL remains pack-free.
 
 Later the same day the consolidation reached the generator's emissions:
-`LEEWAY_LU_MEMB_IDX_TO_VAL_IDX` retired onto `raggedParentIds`, so generated
+`LEEWAY_LU_MEMB_IDX_TO_VAL_IDX` retired onto `RAGGED_PARENT_IDS`, so generated
 read-back SQL now names pack functions and the sentence above about emitted
 SQL staying pack-free no longer holds. Provisioning is unchanged —
 `HelperUDFsSQL()` emits the pack first.
+
+## Update 2026-08-06 — one naming style: UPPER_SNAKE
+
+The roster shipped in camelCase (`coLookup`, `raggedStarts`) beside the
+read-back family's UPPER_SNAKE (`LEEWAY_VALUE_BY_TAG_EQUAL`,
+`LEEWAY_LU_ATTR_BY_TAG`). Since the previous Update the two are one stack —
+`HelperUDFsSQL()` provisions both, generated read-back SQL names pack
+functions, and a query written against leeway lanes routinely calls both in
+one expression. Two styles in one expression is a reader's problem with no
+compensating benefit, and the case boundary carried no information: nothing
+distinguishes a pack function from a read-back helper except which document
+you happen to have read.
+
+**Every pack function is renamed to UPPER_SNAKE** — `coLookup` →
+`CO_LOOKUP`, `raggedParentIds` → `RAGGED_PARENT_IDS`, `leewayPackVersion` →
+`LEEWAY_PACK_VERSION`, and so on for the whole roster. The `co`/`ragged`
+prefixes survive as `CO_`/`RAGGED_`, so the two axes of the algebra remain
+readable at a glance. The §SD6 table above is rewritten to the new names
+rather than left stale, since it is the roster's specification and a reader
+following it would otherwise write SQL that does not resolve.
+
+Nothing else changes: same bodies, same semantics, same dependency order,
+same macro-inlining properties. **`Version` is bumped to 2** — every name in
+the pack changed, which is exactly the skew `LEEWAY_PACK_VERSION()` exists to
+detect, and a server provisioned before this Update answers 1 while carrying
+none of the new names.
+
+The rename is not backward compatible and no aliases are installed. Because
+every statement is `CREATE OR REPLACE`, provisioning the new pack **leaves the
+old camelCase functions in place** on a server that had the previous one;
+they must be dropped explicitly. That is a property of SQL-UDF provisioning
+this ADR did not previously call out, and it applies to any future rename.

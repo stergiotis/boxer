@@ -49,7 +49,7 @@ nothing in between is written by hand.
 
 | Artifact | Shows |
 | --- | --- |
-| `card_anchor_dql_query{1..7}.sql` | The friendly-handle sources. 1–6 compute (ragged regrouping via the ADR-0162 pack's `raggedNest`, cross-domain H3 correlation, wordBag token search, silver/gold tier reshaping, integrity scanning); 7 is a plain retrieval read. |
+| `card_anchor_dql_query{1..7}.sql` | The friendly-handle sources. 1–6 compute (ragged regrouping via the ADR-0162 pack's `RAGGED_NEST`, cross-domain H3 correlation, wordBag token search, silver/gold tier reshaping, integrity scanning); 7 is a plain retrieval read. |
 | `card_anchor_dql_pipeline.go` | The pre-execute chain and its schema wiring: a `StaticSchemaProvider` fed from the generated Arrow schema, the `lwsql.Resolver`, and the stage list ending in `ValidateGrammar2`. |
 | `card_anchor_dql_test.go` | Regenerates the executable `card_anchor_dql_queryN.out.sql`, the stage-by-stage `card_anchor_dql_pipeline.out.md`, and the `card_anchor_dql_analysis.out.md` report (statement kind, security class, tables/columns/functions, ADR-0117 passthrough triage). Asserts zero unresolved handles, grammar2 validity, and idempotence. |
 | `card_anchor_dql_lwsql.out.md` | ADR-0121 selection conditions on query 7 in both naming modes (`cond_N` vs a physical `conditions` section), and `BuildLabels` mapping every physical column back to a display label. |

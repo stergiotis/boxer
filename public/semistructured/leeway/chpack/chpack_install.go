@@ -30,7 +30,7 @@ const featureProbeName = "leewayPackFeatureProbe"
 //  2. collision check — no roster name may resolve to a non-UDF server
 //     function (e.g. a builtin arriving with a server upgrade),
 //  3. CREATE OR REPLACE the roster in dependency order,
-//  4. verify leewayPackVersion() reports this build's Version.
+//  4. verify LEEWAY_PACK_VERSION() reports this build's Version.
 func Install(ctx context.Context, conn Conn) (err error) {
 	err = probeLambdaSupport(ctx, conn)
 	if err != nil {

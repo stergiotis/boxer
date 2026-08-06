@@ -15,7 +15,7 @@ var helperUDFsSQL string
 
 // HelperUDFsSQL returns the ClickHouse DDL that provisions the leeway DQL
 // read-back helpers: the co/ragged function pack (ADR-0162) first — level-2
-// unflattening is the pack's raggedNest — then the LEEWAY_LU_*
+// unflattening is the pack's RAGGED_NEST — then the LEEWAY_LU_*
 // index-mapping family, LEEWAY_VALUE_BY_TAG_EQUAL (scalar value by
 // membership) and LEEWAY_LIST_BY_TAG_EQUAL (array/set value by membership)
 // layered on it. Execute it once per database before running generated

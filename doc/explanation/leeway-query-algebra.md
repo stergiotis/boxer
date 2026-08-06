@@ -152,7 +152,7 @@ inherited — windows and re-chunking enter there.
 - **Nesting is the free-monoid reduction**; flattening is its inverse — both
   coercions under the list-lane definition.
 - **Broadcast** (instance data onto the element axis) is `gather_parent`.
-- **Per-run positions** (`raggedIota`) come from enumerate minus a broadcast
+- **Per-run positions** (`RAGGED_IOTA`) come from enumerate minus a broadcast
   of run starts.
 - **GROUP BY** is `sortPerm` + boundary detection (`lift`) + `mkDesc` +
   `reduce` — grouping is not primitive.
@@ -310,7 +310,7 @@ engine rather than macro-expanding.
 
 Verified against a live ClickHouse 26.7 during construction (executable
 forms in the how-to): the broadcast/parent-id constructor; per-run
-positions; the ragged join shape; the fused `raggedExists` body including
+positions; the ragged join shape; the fused `RAGGED_EXISTS` body including
 the empty-run boundary case; macro inlining being plan-identical and
 index-transparent; the index machinery recognizing enumerated syntactic
 shapes only (`indexOf(a,x) > 0` prunes, the equivalent `!= 0` does not) —

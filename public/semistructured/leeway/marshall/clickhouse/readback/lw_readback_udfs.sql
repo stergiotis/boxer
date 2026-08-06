@@ -3,7 +3,7 @@
 -- BEGIN_INCL bug fixed: it referenced an undefined _END) and extended with
 -- level-2 (value array/set) extraction. The family layers on the co/ragged
 -- function pack (ADR-0162): HelperUDFsSQL() emits the pack's statements
--- ahead of this file, and level-2 unflattening is the pack's raggedNest.
+-- ahead of this file, and level-2 unflattening is the pack's RAGGED_NEST.
 --
 -- A tagged section stores, per entity row, parallel arrays: a value array
 -- (one element per attribute for scalar sections; a flattened element array
@@ -20,7 +20,7 @@ CREATE OR REPLACE FUNCTION LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL AS (cardcol)
     arrayMap((s, c) -> (c > 0) * (s - c + 1), arrayCumSum(cardcol), cardcol);
 
 -- The inverse map (flattened membership position -> owning attribute index)
--- is the pack's raggedParentIds: [2,0,1,3] -> [1,1,3,4,4,4].
+-- is the pack's RAGGED_PARENT_IDS: [2,0,1,3] -> [1,1,3,4,4,4].
 
 -- Value broadcast: each membership position carries its owning attribute's
 -- value. (['a','b','c','d'], [2,0,1,3]) -> ['a','a','c','d','d','d'].
@@ -28,7 +28,7 @@ CREATE OR REPLACE FUNCTION LEEWAY_LU_VAL_BY_MEMB_IDX AS (valcol, cardcol) ->
     arrayFlatten(arrayMap((i, l) -> arrayWithConstant(l, valcol[i]), arrayEnumerate(cardcol), cardcol));
 
 -- Locate: attribute index carrying membership `tagval`, or 0 if absent.
--- `m2v` = raggedParentIds(cardcol), computed once per row.
+-- `m2v` = RAGGED_PARENT_IDS(cardcol), computed once per row.
 CREATE OR REPLACE FUNCTION LEEWAY_LU_ATTR_BY_TAG AS (tagcol, tagval, m2v) ->
     m2v[indexOf(tagcol, tagval)];
 
@@ -41,7 +41,7 @@ CREATE OR REPLACE FUNCTION LEEWAY_VALUE_BY_TAG_EQUAL AS (valcol, tagcol, tagval,
     valcol[LEEWAY_LU_ATTR_BY_TAG(tagcol, tagval, m2v)];
 
 -- Level-2 unflatten (flattened value array -> array-of-arrays by the length
--- column) is the pack's raggedNest, emitted ahead of this file.
+-- column) is the pack's RAGGED_NEST, emitted ahead of this file.
 
 -- List (array/set) value of the attribute tagged with `tagval`; [] if absent.
 -- `lencol` is the per-attribute element-count support column (len/card).

@@ -17,22 +17,22 @@ import (
 // mistake.
 func TestStatementsGolden(t *testing.T) {
 	expected := []string{
-		"CREATE OR REPLACE FUNCTION coLookup AS (keys, lane, k) -> arrayElement(lane, indexOf(keys, k))",
-		"CREATE OR REPLACE FUNCTION coLookupNull AS (keys, lane, k) -> if(indexOf(keys, k) = 0, NULL, arrayElement(lane, indexOf(keys, k)))",
-		"CREATE OR REPLACE FUNCTION coGather AS (lane, sel) -> arrayMap(i -> arrayElement(lane, i), sel)",
-		"CREATE OR REPLACE FUNCTION coArgSort AS (keys) -> arraySort(i -> arrayElement(keys, i), arrayEnumerate(keys))",
-		"CREATE OR REPLACE FUNCTION coArgMax AS (lane, keys) -> arrayReduce('argMax', lane, keys)",
-		"CREATE OR REPLACE FUNCTION coExistsEq2 AS (a, x, b, y) -> has(a, x) AND has(b, y) AND arrayExists((p, q) -> p = x AND q = y, a, b)",
-		"CREATE OR REPLACE FUNCTION raggedStarts AS (card) -> arrayMap((h, c) -> h - c + 1, arrayCumSum(card), card)",
-		"CREATE OR REPLACE FUNCTION raggedRanges AS (card) -> arrayMap((h, c) -> (h - c + 1, c), arrayCumSum(card), card)",
-		"CREATE OR REPLACE FUNCTION raggedParentIds AS (card) -> arrayFlatten(arrayMap((i, c) -> arrayWithConstant(c, i), arrayEnumerate(card), card))",
-		"CREATE OR REPLACE FUNCTION raggedIota AS (card) -> arrayMap((e, s) -> e - s + 1, arrayEnumerate(raggedParentIds(card)), coGather(raggedStarts(card), raggedParentIds(card)))",
-		"CREATE OR REPLACE FUNCTION raggedNest AS (vals, card) -> arrayMap((c, hi) -> arraySlice(vals, hi - c + 1, c), card, arrayCumSum(card))",
-		"CREATE OR REPLACE FUNCTION raggedReduce AS (agg, vals, card) -> arrayReduceInRanges(agg, raggedRanges(card), vals)",
-		"CREATE OR REPLACE FUNCTION raggedExists AS (f, vals, card) -> arrayReduceInRanges('max', raggedRanges(card), arrayMap(f, vals))",
-		"CREATE OR REPLACE FUNCTION raggedCount AS (f, vals, card) -> arrayReduceInRanges('sum', raggedRanges(card), arrayMap(f, vals))",
-		"CREATE OR REPLACE FUNCTION raggedElem AS (vals, card, i, k) -> arrayElement(vals, arrayElement(arrayCumSum(card), i) - arrayElement(card, i) + k)",
-		"CREATE OR REPLACE FUNCTION leewayPackVersion AS () -> 1",
+		"CREATE OR REPLACE FUNCTION CO_LOOKUP AS (keys, lane, k) -> arrayElement(lane, indexOf(keys, k))",
+		"CREATE OR REPLACE FUNCTION CO_LOOKUP_NULL AS (keys, lane, k) -> if(indexOf(keys, k) = 0, NULL, arrayElement(lane, indexOf(keys, k)))",
+		"CREATE OR REPLACE FUNCTION CO_GATHER AS (lane, sel) -> arrayMap(i -> arrayElement(lane, i), sel)",
+		"CREATE OR REPLACE FUNCTION CO_ARG_SORT AS (keys) -> arraySort(i -> arrayElement(keys, i), arrayEnumerate(keys))",
+		"CREATE OR REPLACE FUNCTION CO_ARG_MAX AS (lane, keys) -> arrayReduce('argMax', lane, keys)",
+		"CREATE OR REPLACE FUNCTION CO_EXISTS_EQ2 AS (a, x, b, y) -> has(a, x) AND has(b, y) AND arrayExists((p, q) -> p = x AND q = y, a, b)",
+		"CREATE OR REPLACE FUNCTION RAGGED_STARTS AS (card) -> arrayMap((h, c) -> h - c + 1, arrayCumSum(card), card)",
+		"CREATE OR REPLACE FUNCTION RAGGED_RANGES AS (card) -> arrayMap((h, c) -> (h - c + 1, c), arrayCumSum(card), card)",
+		"CREATE OR REPLACE FUNCTION RAGGED_PARENT_IDS AS (card) -> arrayFlatten(arrayMap((i, c) -> arrayWithConstant(c, i), arrayEnumerate(card), card))",
+		"CREATE OR REPLACE FUNCTION RAGGED_IOTA AS (card) -> arrayMap((e, s) -> e - s + 1, arrayEnumerate(RAGGED_PARENT_IDS(card)), CO_GATHER(RAGGED_STARTS(card), RAGGED_PARENT_IDS(card)))",
+		"CREATE OR REPLACE FUNCTION RAGGED_NEST AS (vals, card) -> arrayMap((c, hi) -> arraySlice(vals, hi - c + 1, c), card, arrayCumSum(card))",
+		"CREATE OR REPLACE FUNCTION RAGGED_REDUCE AS (agg, vals, card) -> arrayReduceInRanges(agg, RAGGED_RANGES(card), vals)",
+		"CREATE OR REPLACE FUNCTION RAGGED_EXISTS AS (f, vals, card) -> arrayReduceInRanges('max', RAGGED_RANGES(card), arrayMap(f, vals))",
+		"CREATE OR REPLACE FUNCTION RAGGED_COUNT AS (f, vals, card) -> arrayReduceInRanges('sum', RAGGED_RANGES(card), arrayMap(f, vals))",
+		"CREATE OR REPLACE FUNCTION RAGGED_ELEM AS (vals, card, i, k) -> arrayElement(vals, arrayElement(arrayCumSum(card), i) - arrayElement(card, i) + k)",
+		"CREATE OR REPLACE FUNCTION LEEWAY_PACK_VERSION AS () -> 2",
 	}
 	require.Equal(t, expected, chpack.Statements())
 }
@@ -44,9 +44,10 @@ func TestRosterInvariants(t *testing.T) {
 	fns := chpack.Functions()
 	require.NotEmpty(t, fns)
 
-	// Names are camelCase alphanumerics — also what makes splicing them
-	// into the collision-check SQL safe.
-	nameRe := regexp.MustCompile(`^[a-z][a-zA-Z0-9]*$`)
+	// Names are UPPER_SNAKE — one style across every leeway UDF family, so a
+	// reader never has to remember which pack a function came from. Also what
+	// makes splicing them into the collision-check SQL safe.
+	nameRe := regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 	seen := make(map[string]struct{}, len(fns))
 	for _, f := range fns {
 		require.Regexp(t, nameRe, f.Name)
@@ -54,8 +55,8 @@ func TestRosterInvariants(t *testing.T) {
 		require.Falsef(t, dup, "duplicate name %s", f.Name)
 		seen[f.Name] = struct{}{}
 
-		validPrefix := strings.HasPrefix(f.Name, "co") ||
-			strings.HasPrefix(f.Name, "ragged") ||
+		validPrefix := strings.HasPrefix(f.Name, "CO_") ||
+			strings.HasPrefix(f.Name, "RAGGED_") ||
 			f.Name == chpack.VersionFunctionName
 		require.Truef(t, validPrefix, "name %s outside the owned prefixes", f.Name)
 

@@ -534,7 +534,7 @@ assuming.
 ## Update 2026-08-02 — level-2 unflattening moves to the co/ragged pack
 
 `LEEWAY_UNFLATTEN` is retired from the helper family: level-2 unflattening
-is `raggedNest` from the
+is `RAGGED_NEST` from the
 [ADR-0162 function pack](./0162-leeway-co-ragged-function-pack.md), and
 `HelperUDFsSQL()` now emits the pack's statements ahead of the
 `LEEWAY_LU_*` family, so one execution provisions both layers (the
@@ -543,12 +543,12 @@ generator's emitted calls — `LEEWAY_LU_MEMB_IDX_TO_VAL_IDX`,
 `LEEWAY_VALUE_BY_TAG_EQUAL`, `LEEWAY_LIST_BY_TAG_EQUAL` — are unchanged.
 The passage above that generalizes the anchor unflatten UDF into
 `leeway_unflatten` is historical on both ends: the anchor showcase calls
-`raggedNest` directly, and this family no longer defines an unflatten of
+`RAGGED_NEST` directly, and this family no longer defines an unflatten of
 its own.
 
 Later the same day the locate map followed: `LEEWAY_LU_MEMB_IDX_TO_VAL_IDX`
-is retired too (its body was byte-identical to `raggedParentIds`), and the
-generator now emits `raggedParentIds(<cardcol>)` as the `m2v` argument — so
+is retired too (its body was byte-identical to `RAGGED_PARENT_IDS`), and the
+generator now emits `RAGGED_PARENT_IDS(<cardcol>)` as the `m2v` argument — so
 generated read-back SQL references pack names, with `HelperUDFsSQL()` (pack
 first, family second) remaining the one provisioning step.
 `LEEWAY_VALUE_BY_TAG_EQUAL` and `LEEWAY_LIST_BY_TAG_EQUAL` take the map as a

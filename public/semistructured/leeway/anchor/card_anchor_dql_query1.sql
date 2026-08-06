@@ -1,12 +1,12 @@
-/* Query 1 — attack types and their target ports, via the pack's raggedNest.
+/* Query 1 — attack types and their target ports, via the pack's RAGGED_NEST.
 
 Lists each cyber incident's attack type (the `symbol` section value) together
 with its target network ports, which ride the same attributes as low-cardinality
-ref memberships (`lr`). raggedNest — from the co/ragged function pack
+ref memberships (`lr`). RAGGED_NEST — from the co/ragged function pack
 (ADR-0162) that hosts reconcile at connect — regroups the flat `lr` stream by
 the per-attribute `lrcard` counts so it can be ARRAY-JOINed in parallel with
 the value column. Nesting at an ARRAY JOIN boundary is exactly the pack's
-documented use for raggedNest: the codomain is genuinely nested here.
+documented use for RAGGED_NEST: the codomain is genuinely nested here.
 
 Column references are friendly leeway handles (`section:column`, ADR-0116); the
 nanopass pipeline resolves them to physical names (see the .out.sql neighbour).
@@ -26,5 +26,5 @@ FROM facts
 -- parallel ARRAY JOIN: both lists carry one element per attribute
 ARRAY JOIN
     `symbol:value` AS attack_type,
-    raggedNest(`symbol:lr`, `symbol:lrcard`) AS target_ports
+    RAGGED_NEST(`symbol:lr`, `symbol:lrcard`) AS target_ports
 WHERE has(['DDOS', 'SQL_INJECTION', 'PORT_SCAN'], attack_type)

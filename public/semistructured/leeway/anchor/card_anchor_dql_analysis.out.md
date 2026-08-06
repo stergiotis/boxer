@@ -18,7 +18,7 @@ generator: go test, TestDqlAnalysisGeneration
 - tables: `anchor.facts`
 - passthrough tables (ADR-0117): (none)
 - columns (8 refs): `attack_type`, `id:id:u64:2k:0:0:`, `id:naturalKey:y:g:0:0:`, `target_ports`, `tv:symbol:lr:lr:u64:2q:0:0:0::data`, `tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`, `tv:symbol:value:val:s:m:0:24:0::data`
-- functions: `array`, `has`, `raggedNest`
+- functions: `RAGGED_NEST`, `array`, `has`
 
 ## card_anchor_dql_query2.sql
 
