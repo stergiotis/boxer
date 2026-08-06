@@ -685,28 +685,29 @@ scene_08_series_fixture() {
 	# job is to not look like a stale query someone forgot to clear.
 	sql="-- Nothing has run yet. The fixture lab below generates a labelled
 -- series with known ground truth, and publishes it as ordinary tables."
-	# Two captures: the empty workbench with the lab, and what one click
-	# publishes — including the scaffold it splices into the buffer.
+	# Three captures: the empty workbench with the lab, what one click
+	# publishes — including the scaffold it splices into the buffer — and the
+	# scaffold RUN, which is the claim in the desc and the only capture that
+	# makes it good: the fixture is queried with keelson() like any table.
 	#
-	# The scene stops at the publish and does NOT Run the scaffold, because a
-	# Run parks on "Executing query…" forever. The cause is NOT routing, which
-	# was the first guess and is wrong: with the scaffold in the buffer the
-	# toolbar reads `auto: confined · http://127.0.0.1:35735/query · names
-	# only keelson tables (adhoc_…)`, so the dispatch resolver (ADR-0141)
-	# sends it to the introspection plane exactly as designed, and the debug
-	# log shows chlocal executing it there — three execs, 56 KB out, 66 ms.
-	#
-	# What does not happen is play CONSUMING that result: the lane stays in
-	# flight and the pane never leaves its loading state, at 4 s and at 9 s
-	# alike. So the defect is in the introspection READ path, downstream of
-	# every part this milestone owns. No tour scene has ever queried
-	# keelson() through play, so nothing else covers it either.
-	#
-	# Capturing the hang would document that defect as if it were this
-	# feature, so the scene shows what does work and stops.
+	# WAIT on Run rather than sleeping a guessed duration. `settleMs` pauses
+	# AFTER its own step (carrierclient/trace.go), so a settleMs on the capture
+	# delays nothing before it — the shutter fires at the DEFAULT settle after
+	# the click, ~350 ms, and catches a query that is legitimately still in
+	# flight. That misread cost a day on 2026-08-06: the loading spinner it
+	# caught was recorded here as a hang in the introspection read path, and
+	# raising the number 4000 → 9000 changed nothing because the number was
+	# never in the path. There is no hang; the read finishes in ~0.3 s.
+	# play swaps Run for Cancel while a run is in flight, so "Run resolves
+	# again" is a precise "the result landed" — and the wait polls for it.
+	# apps/play/play_adhoc_read_e2e_test.go pins the same read headlessly.
 	steps='{"do":"capture","text":"08_series_fixture","settleMs":600}
 {"do":"click","name":"generate"}
-{"do":"capture","text":"08_series_fixture_generated","settleMs":3000}'
+{"do":"capture","text":"08_series_fixture_generated","settleMs":3000}
+{"do":"click","name":"Run"}
+{"do":"wait","name":"Run","comment":"Run is Cancel while the query runs, so this resolves when it lands"}
+{"do":"sleep","settleMs":800}
+{"do":"capture","text":"08_series_fixture_queried"}'
 	settle=2000
 }
 
