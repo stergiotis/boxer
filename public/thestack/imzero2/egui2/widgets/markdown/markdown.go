@@ -41,6 +41,14 @@ type Doc struct {
 // wikilink targets and section anchors collide on the same key. Level
 // is 1..6 (CommonMark ATX heading depth).
 //
+// A heading carrying an explicit anchor takes its Slug from that anchor
+// instead of from Text (`## Creating a table {#creating-a-table}` →
+// Slug "creating-a-table"), which is how a section keeps its link
+// target across a retitling. The anchor is sanitised the same way, so
+// Slug is in one form whatever its origin, and it is stripped from Text
+// — see [obsidian.FeatureHeadingAnchor] for the syntax and
+// [WithFeatures] to turn it off.
+//
 // HeadingInfo is what callers feed to a help/TOC sidebar or a section
 // jump table; the inline styling (bold/italic/code spans inside the
 // heading) is intentionally flattened to plain text.
@@ -415,7 +423,8 @@ func defaultConfig() (cfg config) {
 		obsidian.FeatureEmbed |
 		obsidian.FeatureCallout |
 		obsidian.FeatureHighlight |
-		obsidian.FeatureComment
+		obsidian.FeatureComment |
+		obsidian.FeatureHeadingAnchor
 	cfg.resolver = resolver.NoopResolver{}
 	cfg.imageMaxW = imageMaxDefaultW
 	cfg.imageMaxH = imageMaxDefaultH
@@ -425,8 +434,10 @@ func defaultConfig() (cfg config) {
 // WithFeatures overrides the default obsidian feature set. The default
 // covers everything the renderer can lower: frontmatter, GFM (tables /
 // strikethrough / footnotes / task lists), wikilinks, embeds, callouts,
-// ==highlight== and %%comment%% stripping. Math remains deferred — the
-// parser recognises it but the renderer drops it.
+// ==highlight== and %%comment%% stripping, and `{#anchor}` heading
+// anchors ([obsidian.FeatureHeadingAnchor], which feeds
+// [HeadingInfo.Slug]). Math remains deferred — the parser recognises it
+// but the renderer drops it.
 func WithFeatures(features obsidian.FeatureE) (opt Option) {
 	opt = func(cfg *config) {
 		cfg.features = features

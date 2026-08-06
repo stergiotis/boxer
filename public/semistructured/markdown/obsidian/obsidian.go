@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/yuin/goldmark"
 	meta "github.com/yuin/goldmark-meta"
+	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 )
@@ -22,7 +23,12 @@ import (
 // metadata with GetFrontmatter.
 func New(opts Options) (md goldmark.Markdown) {
 	exts := collectExtensions(opts)
-	md = goldmark.New(goldmark.WithExtensions(exts...))
+	gmOpts := make([]goldmark.Option, 0, 2)
+	gmOpts = append(gmOpts, goldmark.WithExtensions(exts...))
+	if parserOpts := collectParserOptions(opts); len(parserOpts) > 0 {
+		gmOpts = append(gmOpts, goldmark.WithParserOptions(parserOpts...))
+	}
+	md = goldmark.New(gmOpts...)
 	return
 }
 
@@ -46,6 +52,52 @@ func (inst *compositeExtender) Extend(m goldmark.Markdown) {
 	for _, ext := range collectExtensions(inst.opts) {
 		ext.Extend(m)
 	}
+	// Heading anchors are a parser option rather than an extension, so the
+	// composite extender has to reach for the parser itself — goldmark
+	// applies options added here on the next Parse, which is why this is
+	// equivalent to the WithParserOptions path [New] takes.
+	if parserOpts := collectParserOptions(inst.opts); len(parserOpts) > 0 {
+		m.Parser().AddOptions(parserOpts...)
+	}
+}
+
+// collectParserOptions returns the goldmark parser options implied by the
+// enabled features. Unlike the extension list this is usually empty — only
+// features goldmark implements natively (heading attributes) land here.
+func collectParserOptions(opts Options) (parserOpts []parser.Option) {
+	if opts.Features&FeatureHeadingAnchor != 0 {
+		parserOpts = append(parserOpts, parser.WithHeadingAttribute())
+	}
+	return
+}
+
+// HeadingAnchor returns the explicit `{#slug}` anchor of a heading parsed
+// with [FeatureHeadingAnchor], and whether the heading carried one. It is
+// the accessor for what that feature parses: goldmark stores the anchor as
+// the node's `id` attribute, holding raw bytes rather than a string.
+//
+// The anchor is returned as authored — callers that use it as a lookup key
+// alongside slugs derived from heading text are the ones that must
+// normalise (lower-case, spaces to dashes), because that normalisation is
+// the consumer's fragment convention, not the parser's.
+func HeadingAnchor(h *ast.Heading) (anchor string, ok bool) {
+	if h == nil {
+		return
+	}
+	v, has := h.AttributeString("id")
+	if !has {
+		return
+	}
+	switch t := v.(type) {
+	case []byte:
+		anchor = string(t)
+	case string:
+		anchor = t
+	default:
+		return
+	}
+	ok = anchor != ""
+	return
 }
 
 func collectExtensions(opts Options) (exts []goldmark.Extender) {

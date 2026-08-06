@@ -121,7 +121,8 @@ func Highlight(src []byte) (canonical string, spans []Span) {
 			obsidian.FeatureEmbed |
 			obsidian.FeatureCallout |
 			obsidian.FeatureHighlight |
-			obsidian.FeatureComment,
+			obsidian.FeatureComment |
+			obsidian.FeatureHeadingAnchor,
 	})
 	pc := obsidian.NewParserContext()
 	root := gm.Parser().Parse(text.NewReader(src), parser.WithContext(pc))
@@ -224,6 +225,18 @@ func (inst *renderer) renderHeading(h *ast.Heading) {
 	inst.emit(" ", CategoryWhitespace)
 	for c := h.FirstChild(); c != nil; c = c.NextSibling() {
 		inst.renderInline(c, CategoryHeadingText)
+	}
+	// An explicit `{#anchor}` is parsed off the heading text, so it has to
+	// be written back or the canonical form would drop the section's link
+	// target — lossy on syntax is the deal, lossy on content is not. It is
+	// re-emitted as authored (the sanitised form is the widget renderer's
+	// lookup key, not what the file says) and coloured as a link, there
+	// being no anchor category and a link being what it is.
+	if anchor, ok := obsidian.HeadingAnchor(h); ok {
+		inst.emit(" ", CategoryWhitespace)
+		inst.emit("{#", CategoryLinkPunct)
+		inst.emit(anchor, CategoryLinkUrl)
+		inst.emit("}", CategoryLinkPunct)
 	}
 	inst.emit("\n", CategoryWhitespace)
 }

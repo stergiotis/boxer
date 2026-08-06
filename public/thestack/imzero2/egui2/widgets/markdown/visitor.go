@@ -55,13 +55,23 @@ func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *co
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		if h, ok := child.(*ast.Heading); ok {
 			text := headingPlainText(h, src)
+			slug := SlugHeading(text)
+			if anchor, hasAnchor := obsidian.HeadingAnchor(h); hasAnchor {
+				// An explicit `{#anchor}` names the section instead of its
+				// title. It still goes through SlugHeading so every Slug in
+				// the side table is in the one sanitised form fragments are
+				// looked up by — an anchor written `{#Creating-A-Table}`
+				// would otherwise never match the `#creating-a-table` a
+				// wikilink resolves to.
+				slug = SlugHeading(anchor)
+			}
 			offset := -1
 			if h.Lines().Len() > 0 {
 				offset = h.Lines().At(0).Start
 			}
 			headings = append(headings, HeadingInfo{
 				Text:       text,
-				Slug:       SlugHeading(text),
+				Slug:       slug,
 				Level:      uint8(h.Level),
 				ByteOffset: offset,
 			})

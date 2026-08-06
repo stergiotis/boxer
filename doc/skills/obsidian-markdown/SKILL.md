@@ -76,7 +76,8 @@ md := goldmark.New(goldmark.WithExtensions(ext, myOtherExt))
 | `FeatureMath` | `1 << 6` | Reserved (not yet implemented) |
 | `FeatureGFM` | `1 << 7` | Tables, strikethrough, task lists (goldmark built-in) |
 | `FeatureFrontmatter` | `1 << 8` | YAML `---` frontmatter parsing |
-| `FeatureAll` | `(1<<9)-1` | All features enabled |
+| `FeatureHeadingAnchor` | `1 << 9` | `## Heading {#explicit-anchor}` → `<h2 id="explicit-anchor">` |
+| `FeatureAll` | `(1<<10)-1` | All features enabled |
 
 ### Wikilinks
 
@@ -225,6 +226,46 @@ Produces:
 ```
 
 Handles nested maps (recursive `<dl>`), arrays (`<ul>`), arrays of maps, nil values, booleans, and numerics. Keys are sorted alphabetically. All values are HTML-escaped.
+
+### Heading Anchors
+
+**Syntax:** a trailing `{#slug}` on an ATX or setext heading.
+
+```markdown
+## Creating a table {#creating-a-table}
+
+Creating a table {#creating-a-table}
+---
+```
+
+**HTML output:**
+```html
+<h2 id="creating-a-table">Creating a table</h2>
+```
+
+The `{#slug}` is stripped from the heading text and becomes the heading's
+`id`, so a section keeps its link target when it is retitled. Unlike the
+other features this one is goldmark's own (`parser.WithHeadingAttribute`),
+enabled as a parser option rather than an extension — which is why
+`Extension()` reaches for `m.Parser().AddOptions` in addition to adding
+extenders.
+
+The anchor must terminate the line, the pandoc / kramdown / Docusaurus
+convention: `## Creating a table {#creating-a-table}.` keeps the braces as
+literal text. Goldmark parses the general attribute form, so
+`{#id .class key=value}` also lands (id is what boxer's consumers read; the
+rest is carried on the node and ignored).
+
+Read the anchor off a heading node with:
+
+```go
+anchor, ok := obsidian.HeadingAnchor(h)  // h is *ast.Heading
+```
+
+The value is returned as authored. Consumers that use it as a lookup key
+alongside slugs derived from heading text normalise it themselves — the
+imzero2 markdown widget lower-cases it into `HeadingInfo.Slug`, so
+`{#Creating-A-Table}` and a `#creating-a-table` fragment collide on one key.
 
 ## ResolverI Interface
 

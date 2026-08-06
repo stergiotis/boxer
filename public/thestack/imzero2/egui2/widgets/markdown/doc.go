@@ -35,7 +35,9 @@
 // images (CommonMark `![alt](url)` and Obsidian `![[file.png]]` —
 // rendered via [bindings.Image] when [resolver.ResolverI.LoadImage]
 // returns ok; glyph-prefixed hyperlink fallback otherwise), GFM tables,
-// and frontmatter exposure (via [Doc.Frontmatter]).
+// explicit `{#anchor}` heading anchors (which name a section
+// independently of its title — see [HeadingInfo]), and frontmatter
+// exposure (via [Doc.Frontmatter]).
 //
 // Tables render through the native table op, which fixes every row to
 // one height: cell text does not wrap, taller content is clipped, a

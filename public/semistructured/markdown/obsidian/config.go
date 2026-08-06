@@ -17,8 +17,23 @@ const (
 	FeatureMath        FeatureE = 1 << 6
 	FeatureGFM         FeatureE = 1 << 7
 	FeatureFrontmatter FeatureE = 1 << 8
+	// FeatureHeadingAnchor enables explicit heading anchors: a trailing
+	// `{#slug}` on an ATX or setext heading, as in
+	//
+	//	## Creating a table {#creating-a-table}
+	//
+	// The `{#slug}` is stripped from the heading text and becomes the
+	// heading's `id`, so a heading can be retitled without invalidating the
+	// fragments that link to it. Retrieve it from a goldmark ast.Heading
+	// with [HeadingAnchor].
+	//
+	// The anchor must terminate the line — the pandoc / kramdown /
+	// Docusaurus convention goldmark implements. A heading ending in
+	// `{#slug}.` keeps the whole thing as literal text, which is also what
+	// leaves prose that happens to contain braces alone.
+	FeatureHeadingAnchor FeatureE = 1 << 9
 
-	FeatureAll FeatureE = (1 << 9) - 1
+	FeatureAll FeatureE = (1 << 10) - 1
 )
 
 // TagRenderE controls how tags are rendered in HTML.

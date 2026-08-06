@@ -6,12 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/stretchr/testify/require"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/text"
 )
 
 var updateGolden = flag.Bool("update-golden", false, "update golden files")
@@ -304,8 +308,77 @@ func TestGFM_Table(t *testing.T) {
 }
 
 // =============================================================================
+// Heading anchors
+// =============================================================================
+
+func TestHeadingAnchor_NamesTheHeading(t *testing.T) {
+	out := render(t, allFeatures(), "## Creating a table {#creating-a-table}")
+	require.Contains(t, out, `<h2 id="creating-a-table">Creating a table</h2>`)
+}
+
+func TestHeadingAnchor_Setext(t *testing.T) {
+	out := render(t, allFeatures(), "Creating a table {#creating-a-table}\n---")
+	require.Contains(t, out, `<h2 id="creating-a-table">Creating a table</h2>`)
+}
+
+// The anchor has to be the last thing on the line — the pandoc / kramdown /
+// Docusaurus convention. Anything after the closing brace, a sentence's full
+// stop included, leaves the braces as the literal text they are, which is
+// what keeps prose that merely contains them from being eaten.
+func TestHeadingAnchor_MustTerminateTheLine(t *testing.T) {
+	out := render(t, allFeatures(), "## Creating a table {#creating-a-table}.")
+	require.NotContains(t, out, `id="creating-a-table"`)
+	require.Contains(t, out, "Creating a table {")
+}
+
+// Case is carried through to the HTML `id` as authored; consumers that key
+// sections by a sanitised fragment normalise on their side (see the
+// HeadingAnchor doc comment and markdown.HeadingInfo).
+func TestHeadingAnchor_VerbatimInHTML(t *testing.T) {
+	out := render(t, allFeatures(), "## Mixed {#Creating-A-Table}")
+	require.Contains(t, out, `<h2 id="Creating-A-Table">Mixed</h2>`)
+}
+
+func TestHeadingAnchor_AccessorReadsGoldmarkAttribute(t *testing.T) {
+	md := New(allFeatures())
+	root := md.Parser().Parse(text.NewReader([]byte("## Creating a table {#creating-a-table}\n\n## Plain\n")))
+
+	var got []string
+	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+		h, isHeading := child.(*ast.Heading)
+		if !isHeading {
+			continue
+		}
+		anchor, ok := HeadingAnchor(h)
+		got = append(got, anchor+"/"+strconv.FormatBool(ok))
+	}
+	require.Equal(t, []string{"creating-a-table/true", "/false"}, got)
+	anchor, ok := HeadingAnchor(nil)
+	require.Empty(t, anchor)
+	require.False(t, ok)
+}
+
+// The composite extender reaches the parser through AddOptions rather than
+// New's WithParserOptions, so it gets its own coverage — a heading anchor
+// silently staying literal is exactly the kind of drift the two paths can
+// develop.
+func TestHeadingAnchor_CompositeExtenderPath(t *testing.T) {
+	md := goldmark.New(goldmark.WithExtensions(Extension(allFeatures())))
+	var buf bytes.Buffer
+	require.NoError(t, md.Convert([]byte("## Creating a table {#creating-a-table}"), &buf))
+	require.Contains(t, buf.String(), `<h2 id="creating-a-table">Creating a table</h2>`)
+}
+
+// =============================================================================
 // Feature toggle
 // =============================================================================
+
+func TestFeature_DisableHeadingAnchor(t *testing.T) {
+	opts := Options{Features: FeatureAll &^ FeatureHeadingAnchor}
+	out := render(t, opts, "## Creating a table {#creating-a-table}")
+	require.NotContains(t, out, `id="creating-a-table"`)
+	require.Contains(t, out, "Creating a table {")
+}
 
 func TestFeature_DisableWikilink(t *testing.T) {
 	opts := Options{Features: FeatureHighlight} // no wikilink
@@ -738,6 +811,7 @@ func TestShowcase(t *testing.T) {
 	require.Contains(t, html, `<table>`)
 	require.Contains(t, html, `type="checkbox"`)
 	require.Contains(t, html, `<del>`)
+	require.Contains(t, html, `<h2 id="code-samples">Code</h2>`)
 	require.Contains(t, html, `class="frontmatter"`)
 	require.Contains(t, html, `<dt>title</dt><dd>Feature Showcase</dd>`)
 	require.NotContains(t, html, "but this is hidden")

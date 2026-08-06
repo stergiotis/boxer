@@ -104,7 +104,7 @@ A paragraph with ==highlights==, [[wikilinks]], #tags, and %%hidden comments%% a
 > [!info] Integration Note
 > You can use ==highlights== and #tags inside callouts too.
 
-## Code
+## Code {#code-samples}
 
 Inline `code` and a block:
 

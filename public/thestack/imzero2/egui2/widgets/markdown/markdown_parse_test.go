@@ -155,6 +155,83 @@ func TestParse_Heading_AllLevels(t *testing.T) {
 	}
 }
 
+// An explicit `{#anchor}` names the section instead of its title: it is
+// stripped from the heading text and becomes the Slug, which is what lets a
+// heading be retitled without invalidating the fragments pointing at it.
+func TestParse_HeadingAnchor_NamesTheSection(t *testing.T) {
+	src := "## Creating a table {#creating-a-table}\n\nbody\n"
+	doc := Parse([]byte(src))
+	if len(doc.headings) != 1 {
+		t.Fatalf("headings: got %d want 1", len(doc.headings))
+	}
+	h := doc.headings[0]
+	if h.Text != "Creating a table" {
+		t.Errorf("Text: got %q want %q — the anchor belongs to the slug, not the title", h.Text, "Creating a table")
+	}
+	if h.Slug != "creating-a-table" {
+		t.Errorf("Slug: got %q want %q", h.Slug, "creating-a-table")
+	}
+	if h.Level != 2 {
+		t.Errorf("Level: got %d want 2", h.Level)
+	}
+	// ByteOffset still points at the heading text, not at the `#` marker:
+	// trimming the anchor moves the line's end, never its start.
+	if h.ByteOffset < 0 || !strings.HasPrefix(src[h.ByteOffset:], "Creating a table") {
+		t.Errorf("ByteOffset %d does not land on the heading text in %q", h.ByteOffset, src)
+	}
+}
+
+// The anchor is sanitised like a derived slug, so a Slug is in one form
+// whatever its origin — an anchor in another case would otherwise never match
+// the fragment a wikilink or docref resolves to.
+func TestParse_HeadingAnchor_SanitisedLikeADerivedSlug(t *testing.T) {
+	doc := Parse([]byte("## Mixed {#Creating-A-Table}\n"))
+	if len(doc.headings) != 1 || doc.headings[0].Slug != "creating-a-table" {
+		t.Fatalf("Slug: got %+v want slug %q", doc.headings, "creating-a-table")
+	}
+}
+
+// The anchor must terminate the line; a trailing full stop leaves the braces
+// as the literal text they are. Asserted so the strictness is a decision on
+// record rather than an accident of the upstream parser.
+func TestParse_HeadingAnchor_MustTerminateTheLine(t *testing.T) {
+	doc := Parse([]byte("## Creating a table {#creating-a-table}.\n"))
+	if len(doc.headings) != 1 {
+		t.Fatalf("headings: got %d want 1", len(doc.headings))
+	}
+	if doc.headings[0].Text != "Creating a table {#creating-a-table}." {
+		t.Errorf("Text: got %q, want the braces kept literal", doc.headings[0].Text)
+	}
+	if doc.headings[0].Slug == "creating-a-table" {
+		t.Error("Slug: a non-terminating anchor must not name the section")
+	}
+}
+
+func TestParse_HeadingAnchor_DisabledByFeatures(t *testing.T) {
+	cfg := defaultConfig()
+	doc := Parse([]byte("## Creating a table {#creating-a-table}\n"),
+		WithFeatures(cfg.features&^obsidian.FeatureHeadingAnchor))
+	if len(doc.headings) != 1 {
+		t.Fatalf("headings: got %d want 1", len(doc.headings))
+	}
+	if doc.headings[0].Text != "Creating a table {#creating-a-table}" {
+		t.Errorf("Text: got %q, want the anchor left in place with the feature off", doc.headings[0].Text)
+	}
+}
+
+// The section machinery keys on Slug, so an anchored heading is addressable
+// by its anchor — the payoff for a caller that filters or scrolls to a
+// section it linked to earlier.
+func TestParse_HeadingAnchor_SectionFilterKeysOnTheAnchor(t *testing.T) {
+	src := "## Creating a table {#creating-a-table}\n\nbody\n\n## Other\n\nother body\n"
+	doc := Parse([]byte(src))
+	got := visibleSegments(doc.segments, doc.headings, func(slug string) bool { return slug == "creating-a-table" })
+	want := []bool{true, true, false, false}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("visibility = %v, want %v", got, want)
+	}
+}
+
 func TestParse_FencedCodeBlock_LandsAsCodeBlockSegment(t *testing.T) {
 	src := "```go\nprintln(\"hi\")\n```\n"
 	doc := Parse([]byte(src))
