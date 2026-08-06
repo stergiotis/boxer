@@ -193,6 +193,16 @@ func niceNum(x float64, round bool) float64 {
 // pixel density, snap the step to a nice number, walk from the first
 // snapped major below the range, and fill three minor ticks per major
 // interval. Ticks outside the (sanitized) range are dropped.
+//
+// The major walk indexes (first + i·step) rather than accumulating
+// (major += step), and settles each value with snapTickDecimal before it is
+// labelled. Accumulation is not what a compensated sum would fix here: first
+// and step are each the nearest double to a decimal with no binary form, so
+// on an axis crossing zero their exact sum at the crossing is -5.55e-17
+// rather than 0 — which formatTick's scientific branch then prints. Upstream
+// guards the same case by snapping the straddling major to zero ("combat zero
+// formatting issues"); indexing costs no more and also keeps the tick one
+// step below zero, which that guard swallows on a tiny-magnitude axis.
 func locateTicks(rng Range, sizePx float32, dst []tick) []tick {
 	dst = dst[:0]
 	rng = rng.sanitize()
@@ -209,7 +219,19 @@ func locateTicks(rng Range, sizePx float32, dst []tick) []tick {
 	first := math.Floor(rng.Min/step) * step
 	prec := stepPrecision(step)
 	minorStep := step / nMinor
-	for major := first; major < rng.Max+0.5*step; major += step {
+	// The accumulating walk's bound, resolved to a count up front — an indexed
+	// walk needs one. A non-finite first or step (reachable only for a range up
+	// against the float64 ceiling) yields a non-finite count, where the walk
+	// would otherwise never advance past its first value.
+	count := math.Floor((rng.Max + 0.5*step - first) / step)
+	if math.IsNaN(count) || math.IsInf(count, 0) {
+		return dst
+	}
+	if count > maxLocatedMajors {
+		count = maxLocatedMajors
+	}
+	for i := 0; i <= int(count); i++ {
+		major := snapTickDecimal(first+float64(i)*step, step)
 		if rng.Contains(major) {
 			dst = append(dst, tick{value: major, major: true, label: formatTick(major, prec)})
 		}
@@ -221,6 +243,44 @@ func locateTicks(rng Range, sizePx float32, dst []tick) []tick {
 		}
 	}
 	return dst
+}
+
+// maxLocatedMajors bounds the located walk. nMajor caps at 12, so a legitimate
+// axis stays far below this; the cap is only here so a degenerate range cannot
+// spin the loop.
+const maxLocatedMajors = 64
+
+// snapTickDecimal settles one located major. Indexing bounds the walk's error
+// at a single rounding instead of letting it accumulate, but it does not
+// remove it — 3·0.4 is 1.2000000000000002 — so the value is rounded onto a
+// decimal grid ten decades below step's own decade: fine enough to leave every
+// digit a reader could care about untouched (the grid sits far below the step's
+// last significant digit, and far below one pixel on any axis), coarse enough
+// to erase the binary noise. The scale factor is a power of ten, so both the
+// multiply and the divide are single correctly rounded operations; outside the
+// exactly-representable range the value is returned as it came rather than
+// snapped onto a grid that is itself inexact.
+//
+// The zero case is the one that shows: a major only drift away from zero must
+// become zero, or formatTick's exact-equality guard misses it and the
+// scientific branch prints the drift. Snapping also normalises the negative
+// zero the rounding can produce. Both steps follow
+// finddivisions.GenerateTicksRobust, which answers the same question for the
+// standalone axis solvers.
+func snapTickDecimal(v float64, step float64) float64 {
+	if math.Abs(v) < step*1e-10 {
+		return 0
+	}
+	g := 10 - math.Floor(math.Log10(step))
+	if g < 0 || g > 22 {
+		return v
+	}
+	scale := math.Pow(10, g)
+	sv := v * scale
+	if math.IsInf(sv, 0) {
+		return v
+	}
+	return math.Round(sv) / scale
 }
 
 // filterTicksInRange copies the caller-supplied SetupAxisTicks ticks
@@ -365,9 +425,16 @@ func stepPrecision(step float64) int {
 
 // formatTick renders a tick value the way ImPlot's default formatter
 // ("%g"-family) reads: fixed decimals at the step's precision in the
-// human range, scientific outside it. The value is snapped to its own
-// precision first so accumulated float walk error never prints
-// (0.30000000000000004 renders as 0.3).
+// human range, scientific outside it. Both forms cap their digits, so float
+// walk error never reaches a printed one — 0.30000000000000004 renders as 0.3.
+//
+// The exception is a value that is only drift away from zero: the guard below
+// tests exact equality, so a near-zero value falls through to the scientific
+// branch and prints its own drift. Deciding that belongs to the caller with
+// the step in hand (snapTickDecimal) rather than here — prec cannot stand in
+// for it, since stepPrecision saturates at 12, and tools.go shares this
+// formatter for data coordinates at a fixed prec, where a value below the last
+// printed digit is small rather than zero.
 func formatTick(v float64, prec int) string {
 	if v == 0 {
 		return "0"

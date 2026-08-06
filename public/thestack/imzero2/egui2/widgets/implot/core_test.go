@@ -59,6 +59,82 @@ func TestTickLabelsExact(t *testing.T) {
 	}
 }
 
+func TestLocateTicksZeroCrossing(t *testing.T) {
+	// The major that lands on the crossing must be exactly zero. It used to
+	// arrive as the walk's own drift — -5.551115123125783e-17 for [-0.5, 0.5] at
+	// 450 px — which formatTick's scientific branch printed verbatim, so a
+	// boxenplot's argument axis read "-0.4 -0.2 -5.551e-17 0.2 0.4".
+	cases := []struct {
+		rng    Range
+		sizePx float32
+	}{
+		{Range{-0.5, 0.5}, 450}, {Range{-0.5, 0.5}, 600}, {Range{-0.45, 0.45}, 450},
+		{Range{-0.3, 0.3}, 450}, {Range{-0.6, 0.6}, 900}, {Range{-1, 1}, 900},
+		{Range{-7.3, 2.9}, 600}, {Range{-5e-5, 5e-5}, 600}, {Range{-1e6, 1e6}, 1200},
+	}
+	for _, tc := range cases {
+		zeros := 0
+		for _, tk := range locateTicks(tc.rng, tc.sizePx, nil) {
+			if !tk.major {
+				continue
+			}
+			if tk.value == 0 {
+				zeros++
+				if tk.label != "0" {
+					t.Errorf("%v at %gpx: zero major labelled %q", tc.rng, tc.sizePx, tk.label)
+				}
+				continue
+			}
+			// Any other major this close to zero is drift wearing a tick's label.
+			if math.Abs(tk.value) < 1e-9*tc.rng.Size() {
+				t.Errorf("%v at %gpx: major %g labelled %q is drift, not a tick",
+					tc.rng, tc.sizePx, tk.value, tk.label)
+			}
+		}
+		if zeros != 1 {
+			t.Errorf("%v at %gpx: %d majors at zero, want exactly 1", tc.rng, tc.sizePx, zeros)
+		}
+	}
+}
+
+func TestLocateTicksEndpointTick(t *testing.T) {
+	// The accumulating walk overshot Max by its own drift, so rng.Contains
+	// dropped the endpoint major; the indexed walk lands on it.
+	found := false
+	for _, tk := range locateTicks(Range{0.5, 1.5}, 900, nil) {
+		if tk.major && tk.label == "1.5" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("major tick at the range maximum missing")
+	}
+}
+
+func TestSnapTickDecimal(t *testing.T) {
+	cases := []struct {
+		name          string
+		v, step, want float64
+	}{
+		{"drift at the zero crossing", -5.551115123125783e-17, 0.2, 0},
+		{"one rounding of i*step", 1.2000000000000002, 0.4, 1.2},
+		{"walk noise below the step", 0.30000000000000004, 0.1, 0.3},
+		{"exact zero", 0, 0.2, 0},
+		// A genuinely tiny tick is not drift: it must survive to be labelled
+		// with the exponent it has earned.
+		{"legitimately small tick", -2e-7, 1e-7, -2e-7},
+		// Below 1e-12 the power-of-ten scale factor stops being exact, so the
+		// value is left as it came rather than snapped onto an inexact grid.
+		{"scale factor out of range", -2e-15, 1e-15, -2e-15},
+	}
+	for _, tc := range cases {
+		if got := snapTickDecimal(tc.v, tc.step); got != tc.want {
+			t.Errorf("%s: snapTickDecimal(%g, %g) = %.20g, want %.20g",
+				tc.name, tc.v, tc.step, got, tc.want)
+		}
+	}
+}
+
 func TestTransformRoundTrip(t *testing.T) {
 	tr := newTransform(Range{-3, 7}, Range{10, 250}, ScaleLinear, ScaleLinear, 40, 20, 500, 300)
 	for _, v := range []float64{-3, 0, 3.21, 7} {
