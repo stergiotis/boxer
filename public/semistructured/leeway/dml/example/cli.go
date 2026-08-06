@@ -23,29 +23,56 @@ import (
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/base62"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/urfave/cli/v2"
 	"lukechampine.com/blake3"
 )
 
-func splitPointer(ptr jsontext.Pointer, lc *bytes.Buffer, hc *bytes.Buffer) (lowCard []byte, highCard []byte, err error) {
+// splitPointer splits the JSON Pointer of the value dec has just read into the
+// two halves of a leeway attribute locator: the low-cardinality path, with each
+// array position replaced by "_", and the high-cardinality parameters carrying
+// the elided indices ([membership.AppendParams]).
+//
+//	/did                    ->  "/did"                    ""
+//	/commit/record/langs/1  ->  "/commit/record/langs/_"  "0001"
+//	/a/12/b/3               ->  "/a/_/b/_"                "000c.0003"
+//
+// Whether a pointer token is an array index is read off the decoder's own
+// stack rather than inferred from the token's spelling: pointer token j
+// addresses the container at stack level j, and [jsontext.Decoder.StackIndex]
+// reports whether that container is an object or an array. Inferring it from
+// "the token parses as a number" mis-shreds an object whose key happens to be
+// all digits — {"0": …} would land under "/_" with a bogus index parameter.
+func splitPointer(dec *jsontext.Decoder, ptr jsontext.Pointer, lc *bytes.Buffer, hc *bytes.Buffer) (lowCard []byte, highCard []byte, err error) {
 	lc.Reset()
 	hc.Reset()
+	level := 0
 	for ptk := range ptr.Tokens() {
-		var u uint64
-		_, err = strconv.ParseUint(ptk, 10, 64)
-		if err == nil {
-			if hc.Len() > 0 {
-				hc.WriteRune('.')
-			}
-			hc.WriteString(string(base62.Encode(u)))
-			lc.WriteString("/_")
-		} else {
-			err = nil
+		level++
+		if kind, _ := dec.StackIndex(level); kind != '[' {
 			lc.WriteRune('/')
 			lc.WriteString(ptk)
+			continue
 		}
+		var u uint64
+		u, err = strconv.ParseUint(ptk, 10, 64)
+		if err != nil {
+			err = eb.Build().Str("pointer", string(ptr)).Str("token", ptk).Int("level", level).Errorf("unable to parse array index: %w", err)
+			return
+		}
+		var enc [membership.ParamsIndexWidth]byte
+		var p []byte
+		p, err = membership.AppendParams(enc[:0], u)
+		if err != nil {
+			err = eb.Build().Str("pointer", string(ptr)).Int("level", level).Errorf("unable to encode array index: %w", err)
+			return
+		}
+		if hc.Len() > 0 {
+			hc.WriteByte(membership.ParamsSeparator)
+		}
+		hc.Write(p)
+		lc.WriteString("/_")
 	}
 	lowCard = lc.Bytes()
 	highCard = hc.Bytes()
@@ -107,7 +134,7 @@ func populateJsonEntity(dec *jsontext.Decoder, ent *InEntityJson, hasher hash.Ha
 			stack--
 		default:
 			if !isKey {
-				lowCardPtr, highCardPtr, err = splitPointer(ptr, lc, hc)
+				lowCardPtr, highCardPtr, err = splitPointer(dec, ptr, lc, hc)
 				if err != nil {
 					err = eb.Build().Str("pointer", string(ptr)).Errorf("unable to split json pointer in low- and high-card part")
 					return

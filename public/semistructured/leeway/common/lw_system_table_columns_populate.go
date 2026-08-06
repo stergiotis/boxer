@@ -1,8 +1,8 @@
 package common
 
 import (
-	"encoding/binary"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"hash/fnv"
 )
@@ -44,10 +44,14 @@ func stableRef(name string) uint64 {
 	return h.Sum64()
 }
 
-func ordinalParam(ordinal int) []byte {
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(buf, uint64(ordinal))
-	return buf
+// ordinalParam encodes an aspect's position within its set into the membership
+// params channel, in the canonical form ([membership.AppendParams]) rather than
+// a private binary layout — a raw little-endian uint64 rendered through
+// [membership.DefaultParamsFormatter], which is `string(raw)`, is eight
+// unprintable bytes.
+func ordinalParam(ordinal int) (raw []byte, err error) {
+	raw, err = membership.EncodeParams(uint64(ordinal))
+	return
 }
 
 // PopulateSchemaTable populates a system-table-columns InEntity from an IntermediateTableRepresentation.
@@ -94,20 +98,33 @@ func PopulateSchemaTable(entity *InEntitySystemTableColumns, ir *IntermediateTab
 
 			{ // text section — aspect sets
 				txt := entity.GetSectionText()
+				var p []byte
 				{ // encoding hints
 					for j, hint := range cp.EncodingHints[i].IterateAspects() {
-						txt.BeginAttribute(hint.String()).AddMembershipMixedLowCardRef(lcrEncodingHint, ordinalParam(j)).EndAttribute()
+						p, err = ordinalParam(j)
+						if err != nil {
+							return
+						}
+						txt.BeginAttribute(hint.String()).AddMembershipMixedLowCardRef(lcrEncodingHint, p).EndAttribute()
 					}
 				}
 				{ // value semantics
 					for j, sem := range cp.ValueSemantics[i].IterateAspects() {
-						txt.BeginAttribute(sem.String()).AddMembershipMixedLowCardRef(lcrValueSemantic, ordinalParam(j)).EndAttribute()
+						p, err = ordinalParam(j)
+						if err != nil {
+							return
+						}
+						txt.BeginAttribute(sem.String()).AddMembershipMixedLowCardRef(lcrValueSemantic, p).EndAttribute()
 					}
 				}
 				{ // use aspects (section-level)
 					if cc.UseAspects.IsValid() {
 						for j, asp := range cc.UseAspects.IterateAspects() {
-							txt.BeginAttribute(asp.String()).AddMembershipMixedLowCardRef(lcrUseAspect, ordinalParam(j)).EndAttribute()
+							p, err = ordinalParam(j)
+							if err != nil {
+								return
+							}
+							txt.BeginAttribute(asp.String()).AddMembershipMixedLowCardRef(lcrUseAspect, p).EndAttribute()
 						}
 					}
 				}
