@@ -581,3 +581,83 @@ template:
   numbers of record, and both it and the verdict remain `status: draft`
   pending human review.
 - **Run dir:** none — see *Environment* above.
+
+## 2026-08-06 — the canonical JSON mapping at 100M — a new arm; the leeway machinery is 2.3 % of the table, and two silent defects found
+
+- **Build under test:** boxer `69db7c3e` plus this entry's uncommitted work,
+  ClickHouse 26.7.2.59, JSONBench pin `e6c7c98d`
+- **Environment:** as the 10M run
+  ([`runs/2026-08-06-jsonmap-100m/environment.md`](./runs/2026-08-06-jsonmap-100m/environment.md)).
+- **Attempted:** load the descoped 100M tier under
+  `mapping.LoadJsonMapping` — the *canonical* leeway JSON mapping rather than
+  the `boxer.facts` schema arms B–E use — and find query scenarios the
+  benchmark's own five cannot express.
+- **Comparability:** this is a **new arm, not a re-run**. Its schema, read
+  vocabulary and sort key all differ from arms B–E (the environment note
+  tabulates how). Where it is compared against A/A0/A00/B those figures are
+  **cross-tier**, taken from the 10M run, except arm B which was rebuilt.
+- **Findings:**
+  - **[broken leeway-ddl-codegen → proposed:leeway-encoding-hint-defaults /
+    functional-suitability.functional-correctness / S3]** `LoadJsonMapping`
+    declared **no `AddColumnEncodingHints`** on its `bool` / `int64` /
+    `float64` value columns. An omitted hint is *not* a neutral default — the
+    generator deliberately emits no `CODEC` clause at all, so the column
+    silently inherits server-default LZ4 while the *support* lane beside it in
+    the same section gets `T64, ZSTD(3)` from the membership machinery. Nothing
+    in the mapping source makes the asymmetry visible. Measured on the 10M
+    `int64` lane: `DoubleDelta, ZSTD(3)` is **2.36× smaller** than the default
+    (56.67 → 23.98 MiB, 2.89× → 6.83×). **Fixed**, with the candidate table
+    recorded in the mapping's doc comment.
+    Worth recording separately: **the measurement contradicted the obvious
+    argument.** A leeway value lane is flattened across attributes, so
+    consecutive elements are different fields, which suggests delta encoding
+    should be useless and `T64` should win. `T64` is in fact *worse* than plain
+    `ZSTD(3)` here. The float hint remains **unvalidated** — this corpus is
+    essentially float-free and `FPC(12)` / `Gorilla` / `ZSTD(3)` returned
+    byte-identical sizes.
+  - **[pain — trial process / S3]** The storage comparison against the native
+    JSON arms charged this arm for `id:blake3hash`, a row-identity column the
+    A-family tables **do not have at all**, and wrote it at 32 bytes where the
+    facts arm writes 16. At 10M that is 320,110,328 B — **20.3 %** of the
+    table, at a 1.2× ratio because a hash is incompressible. **This is the
+    second time the trial has made this mistake**; the 1M diagnostics caught
+    `id:naturalKey` at 8.6 % and the rebuilt arm B reproduces exactly that
+    figure. Corrected by reporting as-loaded and minus-identity separately.
+  - **[missing nanopass-scope-resolution → proposed:resolve-column-names-in-cte-subqueries /
+    functional-suitability.functional-completeness / S3]** ADR-0116's
+    `ResolveColumnNames` does not descend into a `WITH (SELECT …) AS alias`
+    scalar subquery: the handle ships unexpanded and the query dies at the
+    server with `UNKNOWN_IDENTIFIER`. Worse, `--strict` does **not** catch it,
+    because the pass never visits those nodes to know they were there.
+    Verified adjacent-but-distinct from ledger row 13 (which was about a handle
+    *bound by* a WITH alias, fixed 2026-08-06): handles inside `FROM` and
+    `WHERE` subqueries resolve correctly. Worked around by repeating the
+    sub-select; not fixed.
+  - Positive maturity: **the leeway addressing machinery is 2.3 % of the
+    table** — every path, array coordinate and membership cardinality across
+    1,200,650,881 attributes costs ~337 MiB of 14.95 GB. `mvhp` compresses
+    99–140×, `lmvcard` 216–283×. The overhead objection to a shredded
+    representation does not survive measurement on this corpus.
+  - Positive maturity: the **canonical mapping needs no UDFs**. Arm B expresses
+    a path resolution as `LEEWAY_VALUE_BY_TAG_EQUAL` over `RAGGED_PARENT_IDS`,
+    and for its array-valued sections a second cumulative sum over `len`; here
+    every section is scalar and one verbatim membership per attribute makes
+    `lmv` co-index 1:1 with the value lane, so `value[indexOf(lmv, path)]` is
+    the entire vocabulary. Ledger rows 3, 4, 9 and 10 are structurally absent.
+  - Positive maturity: **sharding the ingest works** — 8 processes into one
+    table, 99,999,968 documents in 304 s (297k docs/s aggregate), against the
+    single-process 53,773 docs/s the 10M run projected to ~31 minutes. This is
+    what the 10M entry named as the thing to parallelise first.
+- **Solution size:** 599 hand-written lines of Go (`jsonbench_jsonmap.go` 254,
+  `jsonbench_jsonmap_ingest.go` 345) plus a 1,922-line generated builder; the
+  shredder is reused unchanged from the facts arm, which is why both arms
+  provably hold the same 121,205,987-attribute decomposition at 10M. Query
+  files: `queries-jsonmap.sql` 82, `queries-jsonmap-scenarios.sql` 270,
+  `queries-usp-{leeway,jsonv2}.sql`. **Manual interventions: one** — the
+  repeated sub-select forced by the resolver gap above.
+- **Results:** [`runs/2026-08-06-jsonmap-100m/results.md`](./runs/2026-08-06-jsonmap-100m/results.md)
+  and [`leeway-usp-experiments.md`](./leeway-usp-experiments.md). All five
+  benchmark queries are **byte-identical to the recorded arm A output** at 10M.
+  Storage, like-for-like at 10M: **0.915× the facts schema** and **1.061× of
+  unhinted native JSON**.
+- **Run dir:** [`./runs/2026-08-06-jsonmap-100m/`](./runs/2026-08-06-jsonmap-100m/)
