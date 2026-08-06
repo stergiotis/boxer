@@ -26,13 +26,22 @@ GitHub Actions workflows live under
 [.github/workflows](../.github/workflows). Each workflow handles one concern;
 none combine multiple gates.
 
-| Workflow | Trigger | Entry point | Purpose |
+**Every workflow runs on manual dispatch and on a `v*` tag, and nothing runs on
+an ordinary push or a pull request.** The Trigger column below records only what
+each adds to that baseline. Local runs of the same entry-point scripts are
+therefore the working gate; CI is the gate at a release. That follows from the
+AI-assisted, direct-to-`main` workflow §10 records, and it is the assumption to
+revisit first if the repo ever takes external contributions.
+
+| Workflow | Trigger adds | Entry point | Purpose |
 |---|---|---|---|
-| [lint.yaml](../.github/workflows/lint.yaml) | push to `main`, PRs | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `gofmt`, `go vet`, staticcheck, errcheck, doclint, h3 wasm parity |
-| [test.yaml](../.github/workflows/test.yaml) | manual dispatch, `v*` tags | [scripts/ci/gotest.sh](../scripts/ci/gotest.sh) | race + cover + JSON tests, tparse-formatted; post-test drift gate (generator tests rewrite in place, so the tree must end clean) |
-| [vuln.yaml](../.github/workflows/vuln.yaml) | every push | [scripts/ci/govuln.sh](../scripts/ci/govuln.sh) | `govulncheck -show verbose ./public/...` |
-| [licenses.yaml](../.github/workflows/licenses.yaml) | every push | [scripts/ci/license_gate.sh](../scripts/ci/license_gate.sh) | CycloneDX SBOM → in-tree policy gate |
-| [codestat.yaml](../.github/workflows/codestat.yaml) | push, PR, weekly cron | inline | `scc` line counts split human vs. LLM, dependency inventory, authorship attribution |
+| [lint.yaml](../.github/workflows/lint.yaml) | — | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `gofmt`, `go vet`, staticcheck, errcheck, doclint, h3 wasm parity |
+| [test.yaml](../.github/workflows/test.yaml) | — | [scripts/ci/gotest.sh](../scripts/ci/gotest.sh) | race + cover + JSON tests, tparse-formatted; post-test drift gate (generator tests rewrite in place, so the tree must end clean) |
+| [vuln.yaml](../.github/workflows/vuln.yaml) | — | [scripts/ci/govuln.sh](../scripts/ci/govuln.sh) | `govulncheck -show verbose ./public/...` |
+| [licenses.yaml](../.github/workflows/licenses.yaml) | — | [scripts/ci/license_gate.sh](../scripts/ci/license_gate.sh) | CycloneDX SBOM → in-tree policy gate |
+| [codestat.yaml](../.github/workflows/codestat.yaml) | weekly cron (Mon 06:00 UTC) | inline | `scc` line counts split human vs. LLM, dependency inventory, authorship attribution |
+| [codeql.yaml](../.github/workflows/codeql.yaml) | weekly cron (Tue 05:37 UTC) | GitHub CodeQL action | CodeQL security scan of the Go tree, built with the repo's build tags |
+| [scorecard.yaml](../.github/workflows/scorecard.yaml) | weekly cron (Tue 07:20 UTC), branch-protection changes | OSSF `scorecard-action` | supply-chain posture score, uploaded as SARIF to code scanning |
 
 Splitting CI per concern is the convention in larger Go projects
 (Kubernetes, etcd, Cockroach). Smaller Go projects more often consolidate
