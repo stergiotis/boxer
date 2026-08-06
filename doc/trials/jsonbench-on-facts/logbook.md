@@ -543,6 +543,29 @@ template:
   and are filed in §7b with the evidence a fix needs. Rows 1, 3 and 4 change
   the facts schema or add a package, so they need a design dialogue first, and
   this trial does not open one.
+- **Rows 12 and 13 fixed, same day.** Both landed with a regression test naming
+  the ledger row.
+  Row 13 was the smaller one: `WITH <expr> AS name SELECT …` parses as the
+  query-level `ctes` rule, which is a *sibling* of selectStmt, so a walk
+  anchored at a scope's Node could never reach it — the selectStmt-level
+  `withClause` was covered all along, which is why the gap looked arbitrary.
+  The pass now visits each `ctes` node once, against the first SELECT it
+  precedes.
+  Row 12 cost more than filing it suggested, in three ways worth recording for
+  the next person who reads "a one-line grammar fix": grammar2 needed the same
+  alternative, because a slot has no canonical form to be rewritten into and
+  `ValidateGrammar2` would otherwise reject any normalised query parameterised
+  on its database; three call sites were dereferencing
+  `tableIdentifier.Identifier()` with no nil check and would have panicked on
+  the first parameterised table, so the change added
+  `TableIdentifierName` / `DatabaseIdentifierName` and routed them through it;
+  and the grammars needed regenerating with a hand-provisioned ANTLR jar, which
+  the repo's `generate.sh` deliberately omits. A control regeneration of the
+  *unchanged* grammar was run first and came back byte-identical, so the
+  1,896-line generated diff is attributable to the change alone.
+  Verified: the full `./public/db/clickhouse/...` suite (including the parse
+  corpus, fuzz, round-trip-fidelity and semantic-equivalence lanes), plus play,
+  leeway and keelson data — 52 packages, no failures.
 - **Not done, deliberately:** the competence vault's `maturity` / `pain` fields
   are still `255` for every competence this trial exercised. The convention has
   those flip editorially, citing findings, and

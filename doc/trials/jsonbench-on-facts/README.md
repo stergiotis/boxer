@@ -232,8 +232,8 @@ the entry that filed it.
 | 9 | Resolving a value by path in SQL needs two independent cumulative-sum reconstructions, one over `lmrcard` and one over `len` | `pain leeway-read-access-codegen` / performance-efficiency.resource-utilisation / S3 | **halved on review** — only the `len` half is intrinsic to facts; the other half was this trial's own encoding choice |
 | 10 | Getting that second reconstruction wrong fails *silently* on this corpus — every attribute has `len = 1`, so a naive co-index returns correct answers here and wrong ones on any multi-element array | `pain leeway-read-access-codegen` / functional-suitability.functional-correctness / S2 | **open as a hazard**; `LEEWAY_LIST_BY_TAG_EQUAL` is the form that does not have it |
 | 11 | The facts DDL cannot be applied, or the table cloned, without `allow_suspicious_low_cardinality_types=1` | `pain leeway-ddl-codegen` / usability.operability / S4 | **open** — every client invocation in the harness carries the flag |
-| 12 | `FROM {db:Identifier}.facts` fails grammar1 with *no viable alternative*, so an applet carrying it never mounts; ClickHouse itself accepts the form | `missing nanopass-pass-pipeline → proposed:grammar1-identifier-params` / functional-suitability.functional-completeness / S3 | **open** — verified precisely: `paramSlot` is an alternative of `columnExpr` only, not of `tableExpr` / `tableIdentifier` / `databaseIdentifier` |
-| 13 | A column handle bound by a `WITH <handle> AS alias` expression alias is not resolved — the pass visits a SELECT's own scope but not the WITH-expression clause | `missing nanopass-scope-resolution → proposed:resolve-column-names-with-aliases` / functional-suitability.functional-completeness / S3 | **open** — no change to the pass since ADR-0116 landed it |
+| 12 | `FROM {db:Identifier}.facts` fails grammar1 with *no viable alternative*, so an applet carrying it never mounts; ClickHouse itself accepts the form | `missing nanopass-pass-pipeline → proposed:grammar1-identifier-params` / functional-suitability.functional-completeness / S3 | **fixed 2026-08-06** — `paramSlot` was an alternative of `columnExpr` only; it is now also one of `tableIdentifier` / `databaseIdentifier` in grammar1 **and** grammar2 |
+| 13 | A column handle bound by a `WITH <handle> AS alias` expression alias is not resolved — the pass visits a SELECT's own scope but not the WITH-expression clause | `missing nanopass-scope-resolution → proposed:resolve-column-names-with-aliases` / functional-suitability.functional-completeness / S3 | **fixed 2026-08-06** — the clause parses as the query-level `ctes` rule, a *sibling* of selectStmt; the pass now visits it against the first SELECT it precedes |
 | 14 | Applet pages named `FROM facts` unqualified; hand-testing them with `--database=` hid it completely, and every page failed `UNKNOWN_TABLE` under a real applet | `pain — trial process` / S3 | fixed; a regression test now rejects an unqualified table reference in the book |
 | 15 | The JSONBench query set does not port to unhinted JSON — `Dynamic` columns are refused by `GROUP BY` and by `IN`, and Q3 cannot execute without a cast | `note — workload, not toolbelt` / S3 | not actionable here; it bounds what the domain numbers can claim |
 
@@ -264,11 +264,20 @@ convention asks for in their own right:
 
 **Where the open rows go.** Rows 5–8 are one cluster — the SQL read surface is
 unversioned, undiscoverable and ungenerated — and are carried by
-[ADR-0171](../../adr/0171-leeway-sql-read-surface.md). Rows 12 and 13 are
-localized defects that the trigger list puts in neither ADR tier; they are
-filed here with the evidence a fix needs. Rows 1, 3 and 4 change the facts
-schema or add a package, so they need a design dialogue before an ADR, and
-none is opened by this trial.
+[ADR-0171](../../adr/0171-leeway-sql-read-surface.md). Rows 12 and 13 were
+localized defects that the trigger list puts in neither ADR tier, and both were
+**fixed on 2026-08-06**, each with a regression test naming this ledger row.
+Rows 1, 3 and 4 change the facts schema or add a package, so they need a design
+dialogue before an ADR, and none is opened by this trial.
+
+Row 12's fix is worth a line, because the re-check changed what it was: not a
+missing grammar rule but a misplaced one. `paramSlot` existed and was reachable
+only from `columnExpr`, which is why `{tier:String}` parsed and
+`{db:Identifier}` did not. Admitting it in table position also required
+grammar2 — a slot has no canonical form to be rewritten into, so
+`ValidateGrammar2` would otherwise reject any normalised query parameterised on
+its database — and nil-guarding three call sites that had been dereferencing
+`tableIdentifier.Identifier()` unconditionally.
 
 ## 7a Results so far
 
