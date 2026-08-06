@@ -48,7 +48,7 @@ template:
     `mapping.LoadJsonMapping` defines the canonical JSON→leeway *schema*, but
     boxer ships no shredder that turns a JSON document into rows under it —
     every leeway ingestion in this tree is hand-written per domain, so the
-    trial wrote its own walker (evidence: `apps/jsonbench/shred.go`, 130 lines;
+    trial wrote its own walker (evidence: `apps/jsonbench/jsonbench_shred.go`, 130 lines;
     `public/semistructured/leeway/mapping/` exports only schema constructors).
     **Downgraded S2→S3 on review:** a shredder for exactly this mapping exists
     as a CLI outside this repository (`prior-art.md`), so the gap is boxer-side
@@ -60,7 +60,7 @@ template:
     The canonical JSON mapping needs *verbatim* memberships because an open
     JSON corpus has no closed path vocabulary. The path had to be demoted into
     the high-cardinality parameter channel — the detour is most of the 3.68×
-    uncompressed-size inflation (evidence: `apps/jsonbench/vocab.go`;
+    uncompressed-size inflation (evidence: `apps/jsonbench/jsonbench_vocab.go`;
     `runs/2026-08-05-m0-m3-1m/results.md` § Size).
   - **[pain leeway-read-access-codegen / performance-efficiency.resource-utilisation / S3]**
     Reading one value out of a facts row in SQL needs *two* independent
@@ -127,7 +127,7 @@ template:
   - Positive maturity: **`leeway-ddl-codegen`** composed the benchmark-local
     table straight from `chstore.ComposeSetupSQL`, so arm B is provably the
     live store's own DDL rather than a hand-copied approximation
-    (`apps/jsonbench/ddl.go`, 84 lines).
+    (`apps/jsonbench/jsonbench_ddl.go`, 84 lines).
 - **Protocol deviations** (properties of the machine and the licence, not
   toolbelt findings):
   1. **Nothing from upstream is vendored.** JSONBench is CC BY-NC-SA 4.0 and
@@ -253,7 +253,7 @@ template:
     server (`jsonbench chpack`, pack v1, 16 functions) and its vocabulary plus
     the older `LEEWAY_VALUE_BY_TAG_EQUAL` UDFs expressed all five queries with
     no escape hatch.
-- **Solution size:** +38 lines (`apps/jsonbench/chpack.go`, a pack installer)
+- **Solution size:** +38 lines (`apps/jsonbench/jsonbench_chpack.go`, a pack installer)
   and +12 in the ingester for error tolerance; `queries-facts.sql` went from
   five 2,000-character lines to readable multi-line SQL, and `measure.sh`
   normalises via `clickhouse format --oneline -n`. Arm D gained a committed
