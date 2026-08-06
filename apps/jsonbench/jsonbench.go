@@ -32,24 +32,25 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/logging"
+	"github.com/stergiotis/boxer/public/observability/vcs"
 )
 
 func main() {
-	if err := logging.SetupConsoleLogger(os.Stderr); err != nil {
-		fmt.Fprintln(os.Stderr, "unable to set up logging:", err)
-		os.Exit(1)
-	}
 	app := &cli.App{
-		Name:  "jsonbench",
-		Usage: "shred the JSONBench Bluesky corpus into a boxer.facts-shaped table",
+		Name:    "jsonbench",
+		Usage:   "shred the JSONBench Bluesky corpus into a boxer.facts-shaped table",
+		Version: vcs.BuildVersionInfo(),
+		Flags:   logging.LoggingFlags,
 		Commands: []*cli.Command{
 			chpackCommand(),
 			ddlCommand(),
 			ingestCommand(),
+			jsonmapCommand(),
 			resolveCommand(),
 			resultsCommand(),
 			vocabCommand(),
 		},
+		Before: logging.Apply,
 	}
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal().Err(err).Msg("jsonbench failed")
@@ -172,7 +173,7 @@ func sampleSymbolPaths(file string, n int, ratio float64) (out map[string]struct
 	distinct := make(map[string]map[string]struct{}, 32)
 	total := make(map[string]int, 32)
 	shr := &shredder{}
-	err = eachDoc(file, uint64(n), func(doc map[string]any) error {
+	err = eachDoc(file, uint64(n), func(_ []byte, doc map[string]any) error {
 		for _, s := range shr.shred(doc) {
 			if s.kind != valueKindString {
 				continue
@@ -218,7 +219,12 @@ var undecodable uint64
 // eachDoc streams a gzipped JSON-lines file, decoding at most `limit`
 // documents (0 = all). Documents that fail to decode are counted in
 // [undecodable] and skipped.
-func eachDoc(file string, limit uint64, fn func(map[string]any) error) (err error) {
+//
+// The callback receives the raw line beside the decoded document because the
+// canonical-JSON-mapping arm identifies a row by the blake3 hash of the
+// document's own bytes (its `id:blake3hash` plain value). The slice is only
+// valid for the duration of the call — the scanner reuses its buffer.
+func eachDoc(file string, limit uint64, fn func(raw []byte, doc map[string]any) error) (err error) {
 	f, err := os.Open(file)
 	if err != nil {
 		err = eh.Errorf("open %s: %w", file, err)
@@ -246,7 +252,7 @@ func eachDoc(file string, limit uint64, fn func(map[string]any) error) (err erro
 				Uint64("line", line).Msg("skipping undecodable document")
 			continue
 		}
-		if err = fn(doc); err != nil {
+		if err = fn(sc.Bytes(), doc); err != nil {
 			return
 		}
 		seen++
@@ -279,7 +285,7 @@ type ingester struct {
 var errStopIngest = eh.Errorf("ingest limit reached")
 
 func (inst *ingester) ingestFile(ctx context.Context, file string) (err error) {
-	err = eachDoc(file, 0, func(doc map[string]any) error {
+	err = eachDoc(file, 0, func(_ []byte, doc map[string]any) error {
 		if inst.limit > 0 && inst.docs >= inst.limit {
 			return errStopIngest
 		}
@@ -350,8 +356,11 @@ func (inst *ingester) add(ctx context.Context, doc map[string]any) (err error) {
 
 	for _, t := range syms {
 		a := sym.BeginAttribute(t.s)
-		addPathMemberships(a.AddMembershipMixedLowCardRef, t)
+		err = addPathMemberships(a.AddMembershipMixedLowCardRef, t)
 		a.EndAttribute()
+		if err != nil {
+			return
+		}
 	}
 	sym.EndSection()
 
@@ -359,8 +368,11 @@ func (inst *ingester) add(ctx context.Context, doc map[string]any) (err error) {
 		sec := inst.ent.GetSectionStringArray()
 		for _, t := range strs {
 			a := sec.BeginAttributeSingle(t.s)
-			addPathMemberships(a.AddMembershipMixedLowCardRef, t)
+			err = addPathMemberships(a.AddMembershipMixedLowCardRef, t)
 			a.EndAttribute()
+			if err != nil {
+				return
+			}
 		}
 		sec.EndSection()
 	}
@@ -368,8 +380,11 @@ func (inst *ingester) add(ctx context.Context, doc map[string]any) (err error) {
 		sec := inst.ent.GetSectionI64Array()
 		for _, t := range ints {
 			a := sec.BeginAttributeSingle(t.i)
-			addPathMemberships(a.AddMembershipMixedLowCardRef, t)
+			err = addPathMemberships(a.AddMembershipMixedLowCardRef, t)
 			a.EndAttribute()
+			if err != nil {
+				return
+			}
 		}
 		sec.EndSection()
 	}
@@ -377,8 +392,11 @@ func (inst *ingester) add(ctx context.Context, doc map[string]any) (err error) {
 		sec := inst.ent.GetSectionF64Array()
 		for _, t := range floats {
 			a := sec.BeginAttributeSingle(t.f)
-			addPathMemberships(a.AddMembershipMixedLowCardRef, t)
+			err = addPathMemberships(a.AddMembershipMixedLowCardRef, t)
 			a.EndAttribute()
+			if err != nil {
+				return
+			}
 		}
 		sec.EndSection()
 	}
@@ -386,8 +404,11 @@ func (inst *ingester) add(ctx context.Context, doc map[string]any) (err error) {
 		sec := inst.ent.GetSectionBool()
 		for _, t := range bools {
 			a := sec.BeginAttribute(t.b)
-			addPathMemberships(a.AddMembershipMixedLowCardRef, t)
+			err = addPathMemberships(a.AddMembershipMixedLowCardRef, t)
 			a.EndAttribute()
+			if err != nil {
+				return
+			}
 		}
 		sec.EndSection()
 	}
@@ -408,11 +429,23 @@ func (inst *ingester) add(ctx context.Context, doc map[string]any) (err error) {
 // rides MembJsonPath; the elided array indices ride MembJsonParams as a second
 // membership on the same value, keeping the canonical scheme's lmv/mvhp split
 // intact inside a schema that has no verbatim membership channel.
-func addPathMemberships[T any](add func(uint64, []byte) T, t shredded) {
+//
+// An error here means the document holds an array longer than the params codec
+// can address ([membership.MaxParamsIndex]); it aborts the ingest rather than
+// silently dropping the position, which is the failure mode the codec exists to
+// rule out.
+func addPathMemberships[T any](add func(uint64, []byte) T, t shredded) (err error) {
 	add(MembJsonPath.GetId().Value(), []byte(t.path))
-	if p := formatParams(t.params); p != nil {
+	var p []byte
+	p, err = formatParams(t.params)
+	if err != nil {
+		err = eh.Errorf("path %s: %w", t.path, err)
+		return
+	}
+	if p != nil {
 		add(MembJsonParams.GetId().Value(), p)
 	}
+	return
 }
 
 func (inst *ingester) flush(ctx context.Context) (err error) {

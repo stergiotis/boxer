@@ -3,8 +3,10 @@ package main
 import (
 	"math"
 	"sort"
-	"strconv"
 	"strings"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 )
 
 // shredded is one (path, params, value) triple, the unit the canonical leeway
@@ -114,17 +116,27 @@ func (inst *shredder) emit(path string, s shredded) {
 }
 
 // formatParams renders the elided array indices as the high-cardinality
-// membership parameter: comma-joined, in path order.
-func formatParams(params []int) []byte {
+// membership parameter, in path order and in the canonical form
+// ([membership.AppendParams]) — one codec across every writer of the channel,
+// rather than the comma-joined decimal this trial used to invent for itself.
+//
+// Note for a re-run: this changes the bytes in the params lane against the runs
+// recorded in doc/trials/jsonbench-on-facts/runs/, which were loaded with the
+// decimal form. Only attributes under an array carry params at all, so the
+// difference is confined to that lane, but sizes are not byte-comparable across
+// the change.
+func formatParams(params []int) (raw []byte, err error) {
 	if len(params) == 0 {
-		return nil
+		return
 	}
-	b := make([]byte, 0, len(params)*3)
+	idx := make([]uint64, len(params))
 	for i, p := range params {
-		if i > 0 {
-			b = append(b, ',')
+		if p < 0 {
+			err = eh.Errorf("negative array index %d at position %d", p, i)
+			return
 		}
-		b = strconv.AppendInt(b, int64(p), 10)
+		idx[i] = uint64(p)
 	}
-	return b
+	raw, err = membership.EncodeParams(idx...)
+	return
 }
