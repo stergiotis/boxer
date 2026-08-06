@@ -55,6 +55,7 @@ var AllowedSpecialIds = map[string]bool{
 	"runtime.chlocal":          true,
 	"runtime.clipboard":        true,
 	"runtime.sysmetrics":       true,
+	"runtime.coverage":         true,
 	"runtime.adhoc":            true,
 	"runtime.windowhost":       true,
 	"runtime.workingset":       true,
