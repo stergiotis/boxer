@@ -166,6 +166,36 @@ func TestResolve_Idempotent(t *testing.T) {
 	}
 }
 
+// A handle bound by a WITH-expression alias must resolve. `WITH <expr> AS name`
+// parses as the query-level `ctes` rule, which is a *sibling* of selectStmt
+// rather than a descendant, so a walk anchored at the SELECT never reaches it.
+// Filed by the jsonbench-on-facts trial (README §7b row 13), whose queries had
+// to inline every handle to work around this.
+func TestResolve_HandleBoundByWithExpressionAlias(t *testing.T) {
+	out := runResolve(t, "WITH `symbol:value` AS sv SELECT sv FROM facts")
+	if !strings.Contains(out, qSymbol) {
+		t.Errorf("handle in a WITH-expression alias should resolve: %s", out)
+	}
+}
+
+func TestResolve_WithExpressionAliasStarExpands(t *testing.T) {
+	out := runResolve(t, "WITH `geoPoint:*` AS g SELECT 1 FROM facts")
+	if !strings.Contains(out, qLat) || !strings.Contains(out, qLng) {
+		t.Errorf("`:*` in a WITH-expression alias should expand: %s", out)
+	}
+}
+
+// The CTE form of WITH must keep working, and a CTE's *name* is not a handle.
+func TestResolve_WithCTEStillResolvesInsideAndOut(t *testing.T) {
+	out := runResolve(t, "WITH c AS (SELECT `symbol:value` FROM facts) SELECT `id:id` FROM facts")
+	if !strings.Contains(out, qSymbol) {
+		t.Errorf("handle inside a CTE body should resolve: %s", out)
+	}
+	if !strings.Contains(out, qId) {
+		t.Errorf("handle in the outer SELECT should resolve: %s", out)
+	}
+}
+
 func TestResolve_UnparseableBareColonIsError(t *testing.T) {
 	_, err := ResolveColumnNames(newFakeResolver(), "", nil).Run("SELECT geoPoint:lat FROM facts")
 	if err == nil {

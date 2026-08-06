@@ -83,9 +83,11 @@ func ResolveColumnNames(resolver ColumnResolverI, defaultDatabase string, sink f
 				err = eh.Errorf("ResolveColumnNames: %w", err)
 				return
 			}
-			for _, scope := range nanopass.FlattenScopes(scopes) {
+			flat := nanopass.FlattenScopes(scopes)
+			for _, scope := range flat {
 				resolveNamesInScope(rw, scope, resolver, sink)
 			}
+			resolveNamesInQueryCTEs(rw, pr, flat, resolver, sink)
 
 			result = nanopass.GetText(rw)
 			return
@@ -103,9 +105,15 @@ func ResolveColumnNames(resolver ColumnResolverI, defaultDatabase string, sink f
 // every column identifier it owns. Nested scopes are pruned; FlattenScopes
 // visits each one against its own table set.
 func resolveNamesInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, resolver ColumnResolverI, sink func(ColumnDiagnostic)) {
-	stmt := scope.Node
-	nanopass.WalkCST(stmt, func(ctx antlr.ParserRuleContext) bool {
-		if ctx != antlr.ParserRuleContext(stmt) && isScopeBoundary(ctx) {
+	resolveNamesUnder(rw, scope.Node, scope, resolver, sink)
+}
+
+// resolveNamesUnder resolves every column identifier under root against scope,
+// pruning nested scopes (which are visited separately, against their own table
+// sets). root itself is never treated as a boundary.
+func resolveNamesUnder(rw nanopass.RewriterI, root antlr.ParserRuleContext, scope *nanopass.SelectScope, resolver ColumnResolverI, sink func(ColumnDiagnostic)) {
+	nanopass.WalkCST(root, func(ctx antlr.ParserRuleContext) bool {
+		if ctx != root && isScopeBoundary(ctx) {
 			return false
 		}
 		identExpr, ok := ctx.(*grammar1.ColumnExprIdentifierContext)
@@ -115,6 +123,71 @@ func resolveNamesInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, res
 		resolveColumnIdentifier(rw, scope, resolver, sink, identExpr)
 		return false
 	})
+}
+
+// resolveNamesInQueryCTEs resolves handles in query-level WITH *expressions*.
+//
+// `WITH <expr> AS name SELECT …` parses as the query rule's `ctes`, which is a
+// sibling of selectUnionStmt rather than a child of selectStmt — so a walk
+// anchored at a scope's Node never reaches it, and a handle bound to an alias
+// shipped unexpanded and failed UNKNOWN_IDENTIFIER. (A selectStmt-level
+// `withClause` *is* inside that subtree and was already covered.)
+//
+// Each ctes node is resolved against the first SELECT it precedes: a
+// query-level WITH expression is visible to every UNION member and has to be
+// valid in all of them, so the first member's tables are the binding context.
+// CTE bodies (`WITH c AS (SELECT …)`) are pruned — they are scope boundaries
+// with their own entry in FlattenScopes.
+func resolveNamesInQueryCTEs(rw nanopass.RewriterI, pr *nanopass.ParseResult, flat []*nanopass.SelectScope, resolver ColumnResolverI, sink func(ColumnDiagnostic)) {
+	if pr.Tree == nil {
+		return
+	}
+	byNode := make(map[*grammar1.SelectStmtContext]*nanopass.SelectScope, len(flat))
+	for _, s := range flat {
+		byNode[s.Node] = s
+	}
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		ctes, ok := ctx.(*grammar1.CtesContext)
+		if !ok {
+			return true
+		}
+		if scope := scopeOfFirstSelect(ctx.GetParent(), byNode); scope != nil {
+			resolveNamesUnder(rw, ctes, scope, resolver, sink)
+		}
+		return false
+	})
+}
+
+// scopeOfFirstSelect finds the scope of the first selectStmt under query's
+// selectUnionStmt child. Returns nil when the query has no built scope — a
+// shape BuildScopes declined to model, which is left alone rather than guessed.
+func scopeOfFirstSelect(query antlr.Tree, byNode map[*grammar1.SelectStmtContext]*nanopass.SelectScope) (scope *nanopass.SelectScope) {
+	if query == nil {
+		return
+	}
+	queryCtx, ok := query.(*grammar1.QueryContext)
+	if !ok {
+		return
+	}
+	for i := 0; i < queryCtx.GetChildCount(); i++ {
+		union, ok := queryCtx.GetChild(i).(*grammar1.SelectUnionStmtContext)
+		if !ok {
+			continue
+		}
+		nanopass.WalkCST(union, func(ctx antlr.ParserRuleContext) bool {
+			if scope != nil {
+				return false
+			}
+			stmt, ok := ctx.(*grammar1.SelectStmtContext)
+			if !ok {
+				return true
+			}
+			scope = byNode[stmt]
+			return false
+		})
+		return
+	}
+	return
 }
 
 func resolveColumnIdentifier(rw nanopass.RewriterI, scope *nanopass.SelectScope, resolver ColumnResolverI, sink func(ColumnDiagnostic), identExpr *grammar1.ColumnExprIdentifierContext) {
