@@ -45,7 +45,10 @@ func RegisterStatic(r *introspect.Registry) (err error) {
 			return
 		}
 	}
-	return
+	// The ADR-0173 self-inspection tables take a source so tests can supply a
+	// fixture; nil means "the binary I am running in", which is what a host
+	// wants.
+	return RegisterCodevol(r, nil)
 }
 
 // RegisterDefaults registers the GUI-free providers into the

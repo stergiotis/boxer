@@ -5,6 +5,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
+	"github.com/stergiotis/boxer/public/code/analysis/golang/codevol"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/packageprops"
 	"github.com/stergiotis/boxer/public/packageprops/proptable"
@@ -17,18 +18,23 @@ type packagesProvider struct{ cache *cache }
 
 func (packagesProvider) Name() string                         { return "go_packages" }
 func (packagesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
-func (packagesProvider) Schema() *arrow.Schema                { return packagesTable(nil).Schema() }
+func (packagesProvider) Schema() *arrow.Schema                { return packagesTable(nil, nil).Schema() }
 
 func (inst packagesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
 	s := inst.cache.get()
-	return packagesTable(s).Build(proj, len(s.man.Packages)), nil
+	return packagesTable(s, inst.cache.vol).Build(proj, len(s.man.Packages)), nil
 }
 
-func packagesTable(s *snapshot) *introspect.Table {
+func packagesTable(s *snapshot, vol *volumeCache) *introspect.Table {
 	var rows []godepPackageRow
 	if s != nil {
 		rows = packageRows(s)
 	}
+	// The volume columns (ADR-0173 §SD3) are read through a separate cache
+	// that populates on first access. Introspect skips the getters of
+	// unprojected columns, so a query that does not select a volume column
+	// never triggers the ~2 s counting pass.
+	v := func(i int) codevol.Volume { return vol.get(rows[i].importPath) }
 	return introspect.NewTable().
 		// id is FNV-1a-64 of the import path (ADR-0064 §SD3): stable across
 		// runs, and the join key go_imports carries.
@@ -46,7 +52,21 @@ func packagesTable(s *snapshot) *introspect.Table {
 		// fan-in/fan-out ranking needs no traversal. Equal by construction to
 		// the matching go_imports counts.
 		Int64("num_imports", func(i int) int64 { return rows[i].numImports }).
-		Int64("num_imported_by", func(i int) int64 { return rows[i].numImportedBy })
+		Int64("num_imported_by", func(i int) int64 { return rows[i].numImportedBy }).
+		// Line volume (ADR-0173 §SD3), classified with go/scanner so that a
+		// "//" inside a string literal is not counted as a comment. Zero for
+		// every package when the counting pass could not run.
+		Int64("code_lines", func(i int) int64 { return int64(v(i).CodeLines) }).
+		Int64("comment_lines", func(i int) int64 { return int64(v(i).CommentLines) }).
+		Int64("blank_lines", func(i int) int64 { return int64(v(i).BlankLines) }).
+		// generated_files/generated_code separate machine-written source from
+		// what anyone typed — 40% of this module's own compiled lines are
+		// generated, and a total that hides it overstates authorship.
+		Int64("generated_files", func(i int) int64 { return int64(v(i).GeneratedFiles) }).
+		Int64("generated_code", func(i int) int64 { return int64(v(i).GeneratedCode) }).
+		// C, C++, assembly and headers compiled with a cgo package — invisible
+		// to any Go-only count.
+		Int64("other_lang_lines", func(i int) int64 { return int64(v(i).OtherLangLines) })
 }
 
 // godepPackageRow flattens a PackageNode to the column types the table

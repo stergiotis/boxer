@@ -65,6 +65,11 @@ type cache struct {
 	// production always gets the live collector below.
 	load func(context.Context) (godep.Manifest, error)
 
+	// vol backs the go_packages volume columns. Separate from the graph
+	// collection on purpose (ADR-0173 §SD3): it costs seconds and only a
+	// query that selects a volume column should pay for it.
+	vol *volumeCache
+
 	mu      sync.Mutex
 	started bool
 	startAt time.Time
@@ -73,7 +78,7 @@ type cache struct {
 }
 
 func newCache(cfg Config) (inst *cache) {
-	inst = &cache{cfg: cfg, budget: firstWaitBudget}
+	inst = &cache{cfg: cfg, budget: firstWaitBudget, vol: newVolumeCache(cfg)}
 	inst.load = func(ctx context.Context) (godep.Manifest, error) {
 		return godepcollect.New(godepcollect.Config{Dir: cfg.Root, Tags: cfg.Tags}).Load(ctx)
 	}

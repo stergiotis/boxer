@@ -19,7 +19,8 @@ func TestRegisterStatic(t *testing.T) {
 	require.NoError(t, RegisterStatic(r))
 	assert.Equal(t, []string{"adr", "adrcontent", "adrsections", "apps", "build",
 		"coderef", "competence", "competencerelation", "competencesection",
-		"components", "env", "extbin", "helpsections", "sbom", "sql_passes", "subtask"},
+		"components", "env", "extbin", "go_modules", "go_symbols", "helpsections",
+		"sbom", "sql_passes", "subtask"},
 		r.Names())
 }
 

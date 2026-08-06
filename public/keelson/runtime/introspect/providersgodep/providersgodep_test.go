@@ -61,7 +61,7 @@ func readyCache() (inst *cache) {
 }
 
 func TestPackagesTableRendersNodes(t *testing.T) {
-	rec := packagesTable(readyCache().snap).Build(introspect.AllColumns(), 2)
+	rec := packagesTable(readyCache().snap, nil).Build(introspect.AllColumns(), 2)
 	defer rec.Release()
 	require.EqualValues(t, 2, rec.NumRows())
 	assert.Equal(t, "github.com/example/mod/a", stringAt(t, rec, "import_path", 0))
