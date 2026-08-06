@@ -23,7 +23,7 @@ import (
 func CreateSchemaJson() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:blake3hash:y:g:0:0:", Nullable: false, Type: &arrow.BinaryType{}},
-		/* 001 */ arrow.Field{Name: "tv:bool:value:val:b:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BooleanType{})},
+		/* 001 */ arrow.Field{Name: "tv:bool:value:val:b:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BooleanType{})},
 		/* 002 */ arrow.Field{Name: "tv:bool:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
 		/* 003 */ arrow.Field{Name: "tv:bool:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
 		/* 004 */ arrow.Field{Name: "tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
@@ -41,11 +41,11 @@ func CreateSchemaJson() (schema *arrow.Schema) {
 		/* 016 */ arrow.Field{Name: "tv:symbol:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
 		/* 017 */ arrow.Field{Name: "tv:symbol:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
 		/* 018 */ arrow.Field{Name: "tv:symbol:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 019 */ arrow.Field{Name: "tv:float64:value:val:f64:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float64)},
+		/* 019 */ arrow.Field{Name: "tv:float64:value:val:f64:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float64)},
 		/* 020 */ arrow.Field{Name: "tv:float64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
 		/* 021 */ arrow.Field{Name: "tv:float64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
 		/* 022 */ arrow.Field{Name: "tv:float64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 023 */ arrow.Field{Name: "tv:int64:value:val:i64:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int64)},
+		/* 023 */ arrow.Field{Name: "tv:int64:value:val:i64:4o:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int64)},
 		/* 024 */ arrow.Field{Name: "tv:int64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
 		/* 025 */ arrow.Field{Name: "tv:int64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
 		/* 026 */ arrow.Field{Name: "tv:int64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
