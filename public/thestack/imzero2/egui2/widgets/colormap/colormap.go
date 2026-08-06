@@ -139,9 +139,25 @@ func (inst *Config) Normalize(value float64) (t float64) {
 }
 
 // At returns the interpolated palette colour (0xRRGGBBAA) for value — the
-// gradient sample a legend draws. Uses the same Normalize + palette lerp as Map,
-// so the legend matches the rendered texture exactly.
+// gradient sample a legend draws, and the per-cell colour the implot heatmap
+// routes take. Uses the same Normalize + palette lerp as Map, so the legend
+// matches the rendered texture exactly.
+//
+// NaN and ±Inf substitute BadColor, as they do in Map. Without that guard a
+// non-number reached paletteLerp as a NaN palette position, where int(NaN) is
+// math.MinInt64 and the palette index panicked — which is what a sparse
+// heatmap (a grid with a cell nothing filled) did to every caller.
+//
+// Values OUTSIDE [DataMin, DataMax] clamp to the palette endpoints here rather
+// than substituting UnderflowColor / OverflowColor as Map does. That
+// divergence is deliberate and is the reason this is not simply Map-of-one: At
+// is also the gradient sampler a legend walks and the fill a treemap cell
+// takes, and those callers want the endpoint colour — the substitution colours
+// default to transparent, which would blank them.
 func (inst *Config) At(value float64) uint32 {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return nrgbaToRGBAu32(inst.BadColor)
+	}
 	return paletteLerp(inst.Palette, inst.Normalize(value))
 }
 
@@ -289,10 +305,18 @@ func (inst *Config) Map(src []float32, dst []uint32) (stats ColumnStats) {
 // paletteLerp samples palette at t ∈ [0, 1] with per-channel linear
 // interpolation between the two nearest stops. t is assumed pre-clamped
 // by the caller; t outside [0, 1] clamps to the nearest endpoint.
+//
+// The low guard is spelled !(t > 0) rather than t <= 0 so that a NaN position
+// lands on the first stop instead of falling through to int(NaN) —
+// math.MinInt64 — and indexing out of range. Every caller is supposed to have
+// substituted a non-number before reaching here (At, Map), but an unexported
+// helper that panics on one is a trap for the next caller, and the negated
+// comparison costs nothing: it is the same branch, and identical for every
+// non-NaN input.
 func paletteLerp(palette []uint32, t float64) uint32 {
 	n := len(palette) - 1
 	switch {
-	case t <= 0:
+	case !(t > 0):
 		return palette[0]
 	case t >= 1:
 		return palette[n]

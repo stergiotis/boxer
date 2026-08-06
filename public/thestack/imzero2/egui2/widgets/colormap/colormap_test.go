@@ -200,4 +200,43 @@ func TestPaletteLerpClamps(t *testing.T) {
 	if got := paletteLerp(pal, 1.5); got != pal[1] {
 		t.Errorf("t>1 should clamp to palette[last], got %08x", got)
 	}
+	// A NaN position must land on a stop rather than reaching int(NaN) —
+	// math.MinInt64 — and indexing out of range. Callers are meant to have
+	// substituted before here; this is the guard that makes the helper safe
+	// for the one that forgets.
+	if got := paletteLerp(pal, math.NaN()); got != pal[0] {
+		t.Errorf("NaN should land on palette[0], got %08x", got)
+	}
+}
+
+// At is the SCALAR path, and until this test it did not share Map's
+// substitution of a non-number: NaN flowed through Normalize into paletteLerp
+// and panicked with index [-9223372036854775808]. A sparse heatmap — any grid
+// with a cell nothing filled — reached it through implot's two heatmap routes.
+func TestAtSubstitutesBadColorForNonNumbers(t *testing.T) {
+	cfg := NewConfig(Viridis8, 0.0, 1.0)
+	cfg.BadColor = color.NRGBA{R: 0x11, A: 0xff}
+	want := nrgbaToRGBAu32(cfg.BadColor)
+
+	for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if got := cfg.At(v); got != want {
+			t.Errorf("At(%v) = %08x, want BadColor %08x", v, got, want)
+		}
+	}
+
+	// The default BadColor is transparent, which is what makes an unfilled
+	// heatmap cell read as the surface behind it rather than as a value.
+	if got := NewConfig(Viridis8, 0.0, 1.0).At(math.NaN()); got != 0 {
+		t.Errorf("default BadColor should be transparent, got %08x", got)
+	}
+
+	// Out-of-range still CLAMPS here rather than substituting, which is the
+	// deliberate divergence from Map: At is also a gradient sampler, and the
+	// substitution colours default to transparent.
+	if got := cfg.At(-1); got != Viridis8[0] {
+		t.Errorf("under-range should clamp to palette[0], got %08x", got)
+	}
+	if got := cfg.At(2); got != Viridis8[len(Viridis8)-1] {
+		t.Errorf("over-range should clamp to palette[last], got %08x", got)
+	}
 }
