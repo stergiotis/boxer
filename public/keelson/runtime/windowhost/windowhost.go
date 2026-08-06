@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -20,6 +21,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 )
 
 // DebugRender, when set to a non-empty value, logs every window-body
@@ -206,6 +208,12 @@ type Inst struct {
 	// snapshot.
 	searchText string
 
+	// searchHl is the search box's regexedit highlight-job cache
+	// (ADR-0164 §SD4). One per box: two boxes sharing an Edit would
+	// evict each other's job every frame. Render-thread confined, like
+	// the searchText buffer it colours.
+	searchHl regexedit.Edit
+
 	// kindShown backs the launcher's provenance toggles (ADR-0158
 	// §SD5/§SD6): the controls that answer "show me the demos" now that
 	// provenance is no longer a browse section. One entry per app.AllKinds
@@ -324,6 +332,14 @@ func (inst launcherFilter) isInert() (ok bool) {
 	ok = strings.TrimSpace(inst.query) == "" &&
 		!inst.kinds.hidesAnything() &&
 		inst.topics.isInert()
+	return
+}
+
+// admits applies the two facet axes — kind and topic — to one manifest.
+// Split out because the query axis is scored rather than boolean, so the
+// two halves of the filter no longer read as one condition.
+func (inst launcherFilter) admits(m app.Manifest) (ok bool) {
+	ok = inst.kinds.shows(m.Kind) && inst.topics.showsAny(m.Topics)
 	return
 }
 
@@ -1304,85 +1320,42 @@ func groupByTopic(manifests []app.Manifest, only topicFilterT) (groups []manifes
 // are applied even when the query is empty: the chips and toggles govern
 // the sectioned browse view too, not just search hits.
 //
-// Ordering follows the input; callers control sort.
+// The query is a pattern battery (ADR-0164 §SD2, see windowhost_search.go),
+// scored per manifest. Ordering therefore depends on whether one was typed:
+// with a query the result is **ranked** (score descending, then Display,
+// then Id); without one it follows the input, and the caller sections and
+// sorts it. Both paths return a fresh slice unless the filter is inert.
 func filterManifests(manifests []app.Manifest, f launcherFilter) (hits []app.Manifest) {
 	if f.isInert() {
 		hits = manifests
 		return
 	}
-	qLower := strings.ToLower(strings.TrimSpace(f.query))
-	hits = make([]app.Manifest, 0, len(manifests))
-	for _, m := range manifests {
-		if !f.kinds.shows(m.Kind) {
-			continue
-		}
-		if !f.topics.showsAny(m.Topics) {
-			continue
-		}
-		if qLower != "" && !matchManifestSearch(m, qLower) {
-			continue
-		}
-		hits = append(hits, m)
-	}
-	return
-}
-
-// matchManifestSearch reports whether manifest m matches the pre-lowercased
-// query qLower (ADR-0158 §SD6). Three ways to match, cheapest first:
-// substring of the Display name, substring of any topic or keyword, or a
-// subsequence of the Display name.
-//
-// The subsequence pass is what makes initials and elisions work — "gdep"
-// reaches "Go dependency explorer" — and it is deliberately last, since it is
-// the loosest and would otherwise mask the reason a stricter rule already
-// matched. Keywords carry the synonyms a display name cannot (ADR-0158 §SD4):
-// "cpu" and "htop" reach the process monitor because its manifest says so.
-//
-// Id stays excluded: it is the full import path, so every entry would match
-// "github". Title is excluded as a longer-form variant of Display.
-func matchManifestSearch(m app.Manifest, qLower string) (ok bool) {
-	display := strings.ToLower(m.Display)
-	if strings.Contains(display, qLower) {
-		ok = true
-		return
-	}
-	for _, t := range m.Topics {
-		if strings.Contains(strings.ToLower(string(t)), qLower) {
-			ok = true
-			return
-		}
-	}
-	for _, kw := range m.Keywords {
-		if strings.Contains(strings.ToLower(kw), qLower) {
-			ok = true
-			return
-		}
-	}
-	ok = matchesSubsequence(display, qLower)
-	return
-}
-
-// matchesSubsequence reports whether needle's runes appear in haystack in
-// order, not necessarily adjacently. Both must already be lowercased. An
-// empty needle matches; a needle longer than the haystack cannot.
-//
-// Rune-wise rather than byte-wise so a multi-byte character in a display
-// name cannot be matched by half of itself.
-func matchesSubsequence(haystack string, needle string) (ok bool) {
-	if needle == "" {
-		ok = true
-		return
-	}
-	nr := []rune(needle)
-	i := 0
-	for _, hc := range haystack {
-		if hc == nr[i] {
-			i++
-			if i == len(nr) {
-				ok = true
-				return
+	b := launcherBattery(f.query)
+	if b.IsZero() {
+		hits = make([]app.Manifest, 0, len(manifests))
+		for _, m := range manifests {
+			if !f.admits(m) {
+				continue
 			}
+			hits = append(hits, m)
 		}
+		return
+	}
+	scored := make([]manifestHit, 0, len(manifests))
+	for _, m := range manifests {
+		if !f.admits(m) {
+			continue
+		}
+		score, ok := scoreManifest(m, &b)
+		if !ok {
+			continue
+		}
+		scored = append(scored, manifestHit{m: m, score: score})
+	}
+	sortManifestHits(scored)
+	hits = make([]app.Manifest, len(scored))
+	for i := range scored {
+		hits[i] = scored[i].m
 	}
 	return
 }
@@ -1413,11 +1386,23 @@ func (inst *Inst) renderEmptyState(ids *c.WidgetIdStack) {
 	for range c.Frame(ids.PrepareStr("empty-state-search-frame")).
 		InnerMarginSides(0, 0, pad, pad).
 		KeepIter() {
-		searchId := ids.PrepareStr("empty-state-search")
-		c.TextEdit(searchId, inst.searchText, false).
-			HintText("Search apps…").
-			DesiredWidth(360).
-			SendRespVal(&inst.searchText)
+		for range c.Horizontal().KeepIter() {
+			// regexedit is the same box the help nav and play's snippet
+			// filter use (ADR-0164 §SD4), in the token mode that lexes
+			// each whitespace-separated pattern independently — so an
+			// unclosed group in one token cannot mis-colour the next.
+			searchId := ids.PrepareStr("empty-state-search")
+			inst.searchHl.Prepare(searchId, inst.searchText, false, regexedit.ModeTokens).
+				HintText("Search apps (regex, space = AND)").
+				DesiredWidth(360).
+				SendRespVal(&inst.searchText)
+			if inst.searchText != "" {
+				if c.Button(ids.PrepareStr("empty-state-search-clear"), c.Atoms().Text("×").Keep()).
+					SendResp().HasPrimaryClicked() {
+					inst.searchText = ""
+				}
+			}
+		}
 	}
 	inst.renderKindToggles(ids, "empty-state")
 	inst.renderTopicChips(ids)
@@ -1446,13 +1431,42 @@ func (inst *Inst) renderEmptyState(ids *c.WidgetIdStack) {
 			return
 		}
 		hits := filterManifests(visible, launcherFilter{query: query})
+		renderSearchNotes(launcherBattery(query), len(hits), len(visible))
 		if len(hits) == 0 {
 			c.Label(inst.emptyResultHint()).Send()
 			return
 		}
-		sortManifestsByDisplay(hits)
+		// Already ranked by filterManifests — score first, Display for
+		// ties — so no re-sort here; sorting by Display would discard the
+		// ranking the battery just produced.
 		for _, m := range hits {
 			inst.renderEmptyStateEntry(ids, "hits", m, true)
+		}
+	}
+}
+
+// renderSearchNotes draws the two lines that describe what the battery
+// did: how selective it was, and whether any token silently stopped
+// being a regex.
+//
+// The selectivity readout is a bare count, not the byte-share progress
+// bar the help and snippet boxes carry. There the sections a battery
+// selects vary hugely in size, so a count would misreport how much
+// corpus a query actually admits; here every hit is one app-sized thing
+// and the count *is* the honest number.
+func renderSearchNotes(b search.Battery, nHits int, nTotal int) {
+	for rt := range c.RichTextLabel(strconv.Itoa(nHits) + " of " + strconv.Itoa(nTotal) + " apps") {
+		rt.Small().Weak()
+	}
+	for pi := range b.Patterns {
+		if b.Patterns[pi].Literal {
+			// Surfaced rather than silent (ADR-0164 §SD2): a half-typed
+			// `quantile(` keeps matching as text, and the user is told
+			// that is what happened.
+			for rt := range c.RichTextLabel("some tokens are not valid regexps and match literally") {
+				rt.Small().Weak()
+			}
+			break
 		}
 	}
 }

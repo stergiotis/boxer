@@ -99,7 +99,7 @@ func TestGroupByTopic_TieBrokenByIdWhenDisplayIdentical(t *testing.T) {
 		[]app.AppIdT{groups[0].Manifests[0].Id, groups[0].Manifests[1].Id})
 }
 
-// --- filterManifests / matchManifestSearch (ADR-0158 §SD6) ------------------
+// --- filterManifests (ADR-0158 §SD6, matching via ADR-0164 §SD2) ------------
 
 func TestFilterManifests_EmptyQueryReturnsInput(t *testing.T) {
 	in := []app.Manifest{mkTopicManifest("a", "A", app.TopicData)}
@@ -141,25 +141,9 @@ func TestFilterManifests_KeywordMatchesWhatTheNameDoesNot(t *testing.T) {
 	}
 }
 
-func TestFilterManifests_SubsequenceMatchOnDisplay(t *testing.T) {
-	in := []app.Manifest{
-		mkTopicManifest("a", "Go dependency explorer", app.TopicCode),
-		mkTopicManifest("b", "Terrain scope", app.TopicGeo),
-	}
-	assert.Equal(t, []string{"Go dependency explorer"}, displaysOf(filterManifests(in, launcherFilter{query: "gdep"})))
-}
-
 func TestFilterManifests_NoMatchReturnsEmpty(t *testing.T) {
 	in := []app.Manifest{mkTopicManifest("a", "Alpha", app.TopicData)}
 	assert.Empty(t, filterManifests(in, launcherFilter{query: "zzzz"}))
-}
-
-func TestFilterManifests_PreservesInputOrder(t *testing.T) {
-	in := []app.Manifest{
-		mkTopicManifest("c", "Charlie", app.TopicData),
-		mkTopicManifest("a", "Alpha", app.TopicData),
-	}
-	assert.Equal(t, []string{"Charlie", "Alpha"}, displaysOf(filterManifests(in, launcherFilter{query: "a"})))
 }
 
 func TestFilterManifests_IdNotMatched(t *testing.T) {
@@ -169,27 +153,128 @@ func TestFilterManifests_IdNotMatched(t *testing.T) {
 	assert.Empty(t, filterManifests(in, launcherFilter{query: "stergiotis"}))
 }
 
-func TestMatchesSubsequence(t *testing.T) {
-	cases := []struct {
-		haystack string
-		needle   string
-		want     bool
-	}{
-		{"go dependency explorer", "gdep", true},
-		{"go dependency explorer", "god", true},
-		{"go dependency explorer", "gz", false},
-		// Right letters, wrong order — subsequence is order-sensitive.
-		{"go dependency explorer", "xg", false},
-		{"abc", "", true},
-		{"abc", "abcd", false},
-		{"abc", "cba", false},
-		// Rune-wise, so a multi-byte glyph is never matched by half of it.
-		{"sträße", "stäe", true},
+// --- the battery query model (ADR-0164 §SD2) --------------------------------
+
+func TestFilterManifests_RegexTokenMatches(t *testing.T) {
+	in := []app.Manifest{
+		mkTopicManifest("a", "Go dependency explorer", app.TopicCode),
+		mkTopicManifest("b", "Terrain scope", app.TopicGeo),
+		mkTopicManifest("c", "Log viewer", app.TopicRuntime),
 	}
-	for _, tc := range cases {
-		assert.Equal(t, tc.want, matchesSubsequence(tc.haystack, tc.needle),
-			"matchesSubsequence(%q, %q)", tc.haystack, tc.needle)
+	// Anchors, alternation, and wildcards are the point of the battery: the
+	// elision the retired subsequence tier guessed at is now written down.
+	assert.Equal(t, []string{"Go dependency explorer"},
+		displaysOf(filterManifests(in, launcherFilter{query: `g.*dep`})))
+	assert.Equal(t, []string{"Go dependency explorer", "Terrain scope"},
+		displaysOf(filterManifests(in, launcherFilter{query: `explorer|scope`})))
+	assert.Equal(t, []string{"Log viewer"},
+		displaysOf(filterManifests(in, launcherFilter{query: `^log`})))
+}
+
+func TestFilterManifests_SubsequenceNoLongerMatches(t *testing.T) {
+	// The behaviour ADR-0158 §SD6 shipped and its 2026-08-06 Update retired:
+	// a plain token is a substring pattern, never an elision. Guarding it so
+	// a future "helpful" fuzzy tier has to argue with a test first.
+	in := []app.Manifest{mkTopicManifest("a", "Go dependency explorer", app.TopicCode)}
+	assert.Empty(t, filterManifests(in, launcherFilter{query: "gdep"}))
+}
+
+func TestFilterManifests_SpaceMeansAnd(t *testing.T) {
+	in := []app.Manifest{
+		mkTopicManifest("a", "Go dependency explorer", app.TopicCode),
+		mkTopicManifest("b", "Go packages", app.TopicCode),
 	}
+	// Every token must hit some field — and the fields differ per token, so
+	// "code" (a topic) AND "explorer" (the display name) is satisfiable.
+	assert.Equal(t, []string{"Go dependency explorer"},
+		displaysOf(filterManifests(in, launcherFilter{query: "code explorer"})))
+	// Order across tokens carries no meaning, unlike a single substring.
+	assert.Equal(t, []string{"Go dependency explorer"},
+		displaysOf(filterManifests(in, launcherFilter{query: "dependency go"})))
+	assert.Empty(t, filterManifests(in, launcherFilter{query: "go zzzz"}))
+}
+
+func TestFilterManifests_UncompilablePatternDegradesToLiteral(t *testing.T) {
+	// A half-typed pattern must keep matching as text rather than erroring
+	// or matching nothing mid-keystroke (ADR-0164 §SD2).
+	m := mkTopicManifest("a", "quantile(0.99) inspector", app.TopicData)
+	in := []app.Manifest{m, mkTopicManifest("b", "Log viewer", app.TopicRuntime)}
+	assert.Equal(t, []string{"quantile(0.99) inspector"},
+		displaysOf(filterManifests(in, launcherFilter{query: "quantile("})))
+
+	b := launcherBattery("quantile(")
+	require.Len(t, b.Patterns, 1)
+	assert.True(t, b.Patterns[0].Literal, "the degradation must be reported, not silent")
+}
+
+// --- ranking (ADR-0158 §SD6; frecency stays deferred under §SD10) -----------
+
+func TestFilterManifests_RanksDisplayOverTopicOverKeyword(t *testing.T) {
+	byKeyword := mkTopicManifest("kw", "Repo explorer", app.TopicUi)
+	byKeyword.Keywords = []string{"code"}
+	in := []app.Manifest{
+		byKeyword,
+		mkTopicManifest("topic", "Go packages", app.TopicCode),
+		mkTopicManifest("display", "Code volume", app.TopicUi),
+	}
+	assert.Equal(t,
+		[]string{"Code volume", "Go packages", "Repo explorer"},
+		displaysOf(filterManifests(in, launcherFilter{query: "code"})))
+}
+
+func TestFilterManifests_TiesBreakByDisplayThenId(t *testing.T) {
+	// Equal scores fall back to exactly where the unranked browse sections
+	// would have put them.
+	in := []app.Manifest{
+		mkTopicManifest("z", "Same", app.TopicData),
+		mkTopicManifest("c", "Charlie", app.TopicData),
+		mkTopicManifest("a", "Same", app.TopicData),
+	}
+	hits := filterManifests(in, launcherFilter{query: "a"})
+	assert.Equal(t, []string{"Charlie", "Same", "Same"}, displaysOf(hits))
+	assert.Equal(t, []app.AppIdT{"c", "a", "z"},
+		[]app.AppIdT{hits[0].Id, hits[1].Id, hits[2].Id})
+}
+
+func TestScoreManifest_StrongestTierWinsAndTiersDoNotAdd(t *testing.T) {
+	// One pattern hitting several fields still counts once, at the strongest
+	// tier — mirroring help/search's per-pattern scoring so the two
+	// executors cannot drift into different answers.
+	m := mkTopicManifest("a", "code volume", app.TopicCode)
+	m.Keywords = []string{"code"}
+	b := launcherBattery("code")
+	score, ok := scoreManifest(m, &b)
+	require.True(t, ok)
+	assert.Equal(t, weightManifestDisplay, score)
+
+	// Two tokens, two tiers, and now they do add — per pattern, not per field.
+	b2 := launcherBattery("volume code")
+	score2, ok2 := scoreManifest(m, &b2)
+	require.True(t, ok2)
+	assert.Equal(t, 2*weightManifestDisplay, score2)
+}
+
+func TestFilterManifests_FacetOnlyFilterKeepsInputOrder(t *testing.T) {
+	// Ranking is the query path's alone: with no query there are no scores
+	// to rank by, and the caller (groupByTopic) owns the sort.
+	ci, _ := topicIndex(app.TopicCode)
+	in := []app.Manifest{
+		mkTopicManifest("c", "Charlie", app.TopicCode),
+		mkTopicManifest("a", "Alpha", app.TopicCode),
+		mkTopicManifest("g", "Gamma", app.TopicGeo),
+	}
+	assert.Equal(t, []string{"Charlie", "Alpha"},
+		displaysOf(filterManifests(in, launcherFilter{topics: topicFilterT(0).toggledAt(ci)})))
+}
+
+func TestScoreManifest_EmptyBatteryQualifiesNothing(t *testing.T) {
+	// IsZero is the "no query" state: the browse view, never an all-corpus
+	// dump under a zero score.
+	m := mkTopicManifest("a", "Alpha", app.TopicData)
+	b := launcherBattery("   ")
+	require.True(t, b.IsZero())
+	_, ok := scoreManifest(m, &b)
+	assert.False(t, ok)
 }
 
 func TestTopicSuffix(t *testing.T) {
