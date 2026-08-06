@@ -502,6 +502,49 @@ func extractFromAliasExpr(aliasExpr *grammar1.TableExprAliasContext, parentScope
 	return nil
 }
 
+// TableIdentifierName returns the name a tableIdentifier gives its table.
+//
+// The name is normally a decoded identifier. It is a parameter slot's text
+// verbatim — `{t:Identifier}` — when the query parameterises its table, which
+// the grammar admits because ClickHouse substitutes there. A slot is not an
+// identifier, so it is neither decoded nor resolvable: no schema lookup will
+// match it, which is correct, because the real name is not known until the
+// server substitutes it.
+//
+// Returns "" for a nil node or a shape carrying neither child.
+func TableIdentifierName(tid *grammar1.TableIdentifierContext) (name string) {
+	if tid == nil {
+		return
+	}
+	if id := tid.Identifier(); id != nil {
+		name = DecodeIdentifier(id.GetText())
+		return
+	}
+	if ps := tid.ParamSlot(); ps != nil {
+		name = ps.GetText()
+	}
+	return
+}
+
+// DatabaseIdentifierName is [TableIdentifierName] for the database qualifier.
+func DatabaseIdentifierName(dbid grammar1.IDatabaseIdentifierContext) (name string) {
+	if dbid == nil {
+		return
+	}
+	ctx, ok := dbid.(*grammar1.DatabaseIdentifierContext)
+	if !ok {
+		return
+	}
+	if id := ctx.Identifier(); id != nil {
+		name = DecodeIdentifier(id.GetText())
+		return
+	}
+	if ps := ctx.ParamSlot(); ps != nil {
+		name = ps.GetText()
+	}
+	return
+}
+
 func tableSourceFromIdentifier(expr *grammar1.TableExprIdentifierContext) (ts *TableSource) {
 	for i := 0; i < expr.GetChildCount(); i++ {
 		child := expr.GetChild(i)
@@ -511,10 +554,10 @@ func tableSourceFromIdentifier(expr *grammar1.TableExprIdentifierContext) (ts *T
 		}
 		ts = &TableSource{
 			Node:  tid,
-			Table: DecodeIdentifier(tid.Identifier().GetText()),
+			Table: TableIdentifierName(tid),
 		}
 		if tid.DatabaseIdentifier() != nil {
-			ts.Database = DecodeIdentifier(tid.DatabaseIdentifier().GetText())
+			ts.Database = DatabaseIdentifierName(tid.DatabaseIdentifier())
 		}
 		return
 	}

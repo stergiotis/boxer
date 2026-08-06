@@ -57,8 +57,18 @@ func qualifyTablesInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, de
 		if !ok {
 			continue
 		}
-		// Splice the original identifier token text (which preserves the
-		// source's quoting); ts.Table is the decoded name and would lose it.
-		nanopass.ReplaceNode(rw, tid, defaultDB+"."+tid.Identifier().GetText())
+		// Splice the original token text (which preserves the source's
+		// quoting); ts.Table is the decoded name and would lose it. A
+		// parameterised table (`FROM {t:Identifier}`) has no Identifier child
+		// and qualifies just as well — `db.{t:Identifier}` is what ClickHouse
+		// substitutes into.
+		name := tid.Identifier()
+		if name == nil {
+			if ps := tid.ParamSlot(); ps != nil {
+				nanopass.ReplaceNode(rw, tid, defaultDB+"."+ps.GetText())
+			}
+			continue
+		}
+		nanopass.ReplaceNode(rw, tid, defaultDB+"."+name.GetText())
 	}
 }

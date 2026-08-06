@@ -272,7 +272,11 @@ tableExpr
     | tableExpr (alias | AS IDENTIFIER)  # TableExprAlias
     ;
 tableFunctionExpr: IDENTIFIER LPAREN tableArgList? RPAREN;
-tableIdentifier: (databaseIdentifier DOT)? IDENTIFIER;
+// Mirrors grammar1: a paramSlot is a canonical form in table position, because
+// ClickHouse substitutes `{name:Identifier}` there and canonicalization has
+// nothing to rewrite it into. ValidateGrammar2 would otherwise reject any
+// normalised query parameterised on its database or table.
+tableIdentifier: (databaseIdentifier DOT)? (IDENTIFIER | paramSlot);
 tableArgList: tableArgExpr (COMMA tableArgExpr)*;
 tableArgExpr
     : nestedIdentifier
@@ -282,7 +286,7 @@ tableArgExpr
 
 // Databases
 
-databaseIdentifier: IDENTIFIER;
+databaseIdentifier: IDENTIFIER | paramSlot;
 
 // Basics
 paramSlot: (LBRACE IDENTIFIER COLON columnTypeExpr RBRACE);

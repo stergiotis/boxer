@@ -35,9 +35,9 @@ func ExtractTables(pr *nanopass.ParseResult) (refs []TableRef) {
 	refs = make([]TableRef, 0, len(nodes))
 	for _, n := range nodes {
 		tid := n.(*grammar1.TableIdentifierContext)
-		ref := TableRef{Table: nanopass.DecodeIdentifier(tid.Identifier().GetText())}
+		ref := TableRef{Table: nanopass.TableIdentifierName(tid)}
 		if tid.DatabaseIdentifier() != nil {
-			ref.Database = nanopass.DecodeIdentifier(tid.DatabaseIdentifier().GetText())
+			ref.Database = nanopass.DatabaseIdentifierName(tid.DatabaseIdentifier())
 		}
 		refs = append(refs, ref)
 	}

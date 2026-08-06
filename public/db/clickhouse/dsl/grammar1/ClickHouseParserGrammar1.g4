@@ -248,7 +248,12 @@ tableExpr
     | tableExpr (alias | AS identifier)  # TableExprAlias
     ;
 tableFunctionExpr: identifier LPAREN tableArgList? RPAREN;
-tableIdentifier: (databaseIdentifier DOT)? identifier;
+// A paramSlot is admitted in table position because ClickHouse substitutes
+// `{name:Identifier}` there — `FROM {db:Identifier}.facts`, `FROM {t:Identifier}`.
+// Without it a query parameterised on its database or table cannot be parsed at
+// all, so an applet carrying one never mounts. Consumers must treat
+// `Identifier()` as optional here and fall back to `GetText()`.
+tableIdentifier: (databaseIdentifier DOT)? (identifier | paramSlot);
 tableArgList: tableArgExpr (COMMA tableArgExpr)*;
 // The columnExpr alternative admits expression arguments — row tuples
 // `values('a UInt8, b UInt8', (1, 2))`, arrays, arithmetic, function calls —
@@ -270,7 +275,7 @@ tableArgExpr
 
 // Databases
 
-databaseIdentifier: identifier;
+databaseIdentifier: identifier | paramSlot;
 
 // Basics
 paramSlot: (LBRACE identifier COLON columnTypeExpr RBRACE);
