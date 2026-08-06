@@ -262,6 +262,21 @@ func (inst *TableOperations) Relate(tbl1 *TableDesc, tbl2 *TableDesc) (rel Table
 	return
 }
 
+// NormalizedCopy deep-copies tbl and normalizes the copy, leaving the caller's
+// table untouched — the preamble Compare, IsSubset and Relate run before they
+// decide anything, exported for a consumer that needs the normalized table
+// itself rather than a verdict about it.
+//
+// The data catalog (ADR-0170 §SD3) is that consumer: it serializes each table's
+// columns into attribute keys and hashes them, and the keys have to come off
+// the same normalized form Relate compares, or two tables Relate calls equal
+// could carry different hashes.
+//
+// Not safe for concurrent use, see IsSubset.
+func (inst *TableOperations) NormalizedCopy(tbl *TableDesc) (out TableDesc, err error) {
+	return inst.normalizedCopy(tbl)
+}
+
 // normalizedCopy deep-copies tbl and normalizes the copy, leaving the caller's
 // table untouched. It is the preamble Compare, IsSubset and Relate share: every
 // structural comparison in this file is defined on normalized tables.
