@@ -1352,6 +1352,44 @@ untabled on purpose — the saves are append-only rows in `boxer.facts`, queried
 there directly, where a restored window's launch row also carries the caller
 `runtime.workingset`.
 
+## Live coverage of this process
+
+These need two things: a binary built with `-cover -covermode=atomic`
+(`rust/imzero2/hmi_coverage.sh` builds and launches one) and the **Endpoint**
+menu at *Keelson introspection*. On a plain build the tables exist and are
+empty. Coverage is cumulative since process start and monotone — drive a
+feature, re-run, watch the numbers move. The canned lenses are the coverage
+applets (Apps → Observability); these are the raw reads.
+
+```sql
+SELECT * FROM keelson('coverage_status')
+```
+
+The biggest gaps, package by package — sorted by untested statements, which is
+the map applet's `size_by = 'uncovered'` reading as a table.
+
+```sql
+SELECT pkg_path, covered_stmts, total_stmts,
+       total_stmts - covered_stmts AS uncovered_stmts,
+       round(100 * covered_stmts / nullIf(total_stmts, 0), 1) AS pct
+FROM keelson('coverage_pkgs')
+ORDER BY uncovered_stmts DESC
+LIMIT 25
+```
+
+Functions never entered in this session, in one corner of the tree — swap the
+pattern for yours. An error path no session exercises and a feature simply not
+driven yet look identical here, so the list is an upper bound on the gap, not
+a defect count.
+
+```sql
+SELECT func, src_file, total_stmts, total_units
+FROM keelson('coverage_funcs')
+WHERE pkg_path ILIKE '%play%' AND covered_units = 0
+ORDER BY total_stmts DESC
+LIMIT 50
+```
+
 ## ADS-B geo-raster (demo loader)
 
 These target `planes_mercator`, the aircraft-position table loaded by
