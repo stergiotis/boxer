@@ -674,3 +674,105 @@ slot 9 and disagreed after. The table is now sized per palette — seven under
 with the accessor across the wrap rather than only within the first ten
 slots. A slot therefore does *not* map to the same colour under both
 palettes, which the previous update's symmetry claim implied it would.
+
+## Update 2026-08-06 — tick labels are placed, not just drawn
+
+The port drew a tick label centred on its tick and left it there. That is
+what upstream does, and on a located numeric axis it is fine: the locator
+picks a tick count from the pixel density, and `formatTick`'s exponent form
+keeps labels short enough that they clear. On a *caller-supplied* axis it is
+not fine. `SetupAxisTicks` labels are data — a category axis names its bars —
+and `filterTicksInRange` drew every one that fell in range, at whatever
+spacing the range implied. Fifteen module names across the width the play
+Chart panel gives them is 56px a label against ~85px of text, and the band
+renders as a smear.
+
+Consumers had begun working around it in two directions at once: the Chart
+panel drops every categorical tick label past a `chartMaxTickLabels = 40`
+cap (and says so in its status line), and the data-catalog books shorten
+labels in SQL before the axis ever sees them
+(`apps/sqlapplet/bookcodevol/vol-top.md` truncates a module path to its last
+meaningful segment). Both are the widget's problem solved in the caller.
+
+**What lands.** A placement pass (`ticklabels.go`), applied per band — the
+strip under the plot area, the column beside it — with three answers tried
+in the order of what they cost the reader:
+
+1. **Locate fewer ticks.** For a located axis only, since there a tick is a
+   choice rather than data: `locateTicksFitted` re-runs the scale's locator
+   against a narrower effective axis until the widest label clears its slot.
+   Convergence comes from both ends, because a coarser step also carries
+   fewer digits. The loop is capped, which is what catches the locators that
+   ignore the size hint (log10 walks decades regardless).
+2. **Move the label and say where it came from.** Labels slide along the
+   band to the nearest arrangement that does not overlap and keeps their
+   order, stacking into extra lanes when one is not enough, each moved label
+   drawing a leader line back to its tick — Wolfram's `Callout` idiom. Three
+   lanes is the ceiling, and a short plot gets fewer: the band may take at
+   most a quarter of the canvas, because a caller that sizes a plot to its
+   pane can hand this one 80pt (ADR-0172) and a deep band would leave that
+   box a plot area of a few pixels.
+   The solver is the block-merge solution to ordered separation: a run of
+   colliding labels is merged into one rigid body and re-centred on the mean
+   of what its members wanted, which shares the correction instead of
+   pushing it all onto the later label (a greedy push walks a whole run off
+   to the right of the ticks it names).
+3. **Drop labels.** Only when no stacking fits: every k-th survives. Tick
+   marks and grid lines are never dropped, so the positions stay readable
+   where the names cannot.
+
+A band whose labels already fit is untouched — same text, same positions, no
+leader lines — which is the property that let the change land under an
+existing acceptance corpus rather than beside a new one.
+
+**Two things the implementation had to get right.** The bottom gutter grows
+with the lanes, and the gutter is upstream of the plot area the band is
+measured against, so `End` now runs the (pure) layout arithmetic twice when
+the band stacks — capped at the depth the first pass asked for, so the two
+passes cannot disagree. And the solver walks the band from one end to the
+other, so its candidates must arrive in *band* order: the y axis hands them
+over with pixels descending as values ascend, and read as one long overlap
+that folded the whole column into a single block at its mean. Caught by the
+first end-to-end layout test, which is also why `layoutFrame` was factored
+to paint nothing — it is now testable without a live StateManager.
+
+**Surfaces.** No exported API changed: no new flag, no new option, nothing
+for a caller to opt into or out of. `AxisFlagsNoTickLabels` remains the way
+to say "no labels here". The behaviour change is confined to where labels
+would otherwise have overlapped.
+
+**Verification.** Unit tests over the band (fitting bands untouched,
+displacement shared and symmetric, stacking preferred to thinning, thinning
+a plain stride, clamping, the degenerate over-wide label, band-order
+sorting, and a 4000-tick axis for the stride search) plus `layoutFrame`
+tests for the gutter feedback and the y gutter sized by surviving labels. A
+new gallery demo, `implot_tick_labels`, shows all three rungs in one static
+frame.
+
+The screenshot tour was run from two detached worktrees, pristine HEAD and
+HEAD plus the change, and diffed PNG by PNG. Of the 85 shared demos, three
+differ systematically — `boxenplot`, `icicle`, `terrainscope-sweep` — and
+all three differ in the same 20-to-27-pixel box: the label on the last x
+tick, which was being drawn past the canvas edge and losing its final glyph
+(`1200` rendering as `120` and a sliver), now sits a few pixels in and
+whole. The band clamps to the canvas, which is where that came from. The
+rest of the diff is a run-to-run noise floor of about five demos, measured
+by running the *same* binary twice under the same conditions; the noisy set
+is different every run and none of it is plot chrome.
+
+Two calibrations came out of looking at those diffs rather than from
+reasoning. The band's `lo`/`hi` bound the labels' *ink*, not their boxes —
+charging an edge label for the gap it keeps from a neighbour it does not
+have was displacing labels that fit. And a leader line is drawn only past a
+displacement of one glyph, because annotating a two-pixel edge clamp is
+noise; a label in a stacked lane draws one regardless, since the lane alone
+makes it ambiguous.
+
+**Not included.** Rotated tick labels, the conventional answer for a
+category axis, need an angle on the `paintText` opcode — an egui2 IDL
+change, so a Tier-1 decision of its own, and it would also retire the
+horizontal-y-label deviation. Recorded as deferred, not killed. The other
+label surfaces this pass did not touch: an axis tag paints over the tick
+label it covers, the horizontal y axis label and the title share the top
+gutter without arbitration, pie slice labels draw regardless of slice size,
+and annotations, inlay text and the legend place where the caller says.
