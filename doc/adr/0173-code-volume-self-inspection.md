@@ -177,6 +177,41 @@ others at acquisition time, when they cost almost nothing to keep. **(c) is
 chosen**: every row carries the artifact, the lens and the denominator it was
 measured under, and nothing in the schema invites a cross-artifact total.
 
+### Q3 — What magnitude does each lens report?
+
+Q2 settles *which population* is counted; this settles *what is counted about
+it*. Three magnitudes fall out of the instruments: the shipped lens reads a
+symbol table, whose only magnitude is bytes; the source lens reads files,
+whose magnitude is lines; the executed lens reads coverage counters, whose
+magnitude is statements. The split follows the lens, not the language —
+`rust_symbols` (§SD8) is bytes for the same reason `go_symbols` is.
+
+**Options.** *(a)* normalise everything to lines; *(b)* normalise everything
+to bytes; *(c)* report each instrument's native magnitude and refuse to
+convert.
+
+*(a)* and *(b)* both require a bytes-per-line factor, and the factor is not
+a constant. Measured across third-party modules of one `boxer` binary it
+ranges from **1.11 B/line** (`andybalholm/brotli`, whose lines are largely a
+static dictionary compiling to data rather than instructions) to **72.3
+B/line** (`apache/arrow-go/v18`, whose generics monomorphise into far more
+machine code than their source suggests) — a **65× spread**. Any single
+factor would fabricate a number the data does not contain. *(a)* also
+reintroduces the source-tree prerequisite that §SD2 exists to avoid.
+
+**(c) is chosen.** No column divides one magnitude into another, and no view
+places two of them on a shared axis — which is why the shipped-vs-executed
+applet sets bytes *beside* statements in a table rather than plotting them
+as two lanes of one chart.
+
+A binary does carry line information — the pclntab, which is how a panic
+prints `file:line`; it yields 95,820 functions with file and start line in
+~130 ms with no source tree. It is deliberately unused: it covers only lines
+that produced machine code, so declarations, constants, comments and
+eliminated code are absent by construction. It would add a fourth,
+systematically smaller "lines" magnitude whose only use would be the
+comparison this question rejects.
+
 ## Decision
 
 **The frame.** One table per (artifact, lens), keyed on that artifact's

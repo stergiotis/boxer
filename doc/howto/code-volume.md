@@ -43,7 +43,60 @@ rather than failing:
 The first two read the running binary, so they work on a deploy target
 where the toolchain-backed ones cannot run at all.
 
-## 3. Ad-hoc SQL
+## 3. Which unit am I looking at
+
+Three magnitudes appear across these tables, and none of them converts into
+another. Each lens reports in **its instrument's native unit**:
+
+| table | unit | because it reads |
+| --- | --- | --- |
+| `go_modules` | none — counts, versions, checksums | an inventory |
+| `go_symbols` | **bytes** (`text_bytes`, `data_bytes`) | the linker's symbol table |
+| `go_packages` volume columns | **lines** | source files |
+| `coverage_pkgs` | **statements** | the coverage counters |
+
+**Why the shipped lens is bytes and not lines.** A symbol is
+`(name, address, size, section)` — there is no line information in a symbol
+table, and size in bytes is the only magnitude it carries. Getting lines
+means reading the source, which is exactly the prerequisite that tier exists
+to avoid: `go_symbols` costs ~30 ms and needs no toolchain, no source tree
+and no module cache. Converting to lines would reintroduce the dependency
+the tier was built to eliminate.
+
+Bytes is also the *right* unit for the question that lens asks. Lines
+measure what somebody **wrote**; bytes measure what **shipped**, after
+dead-code elimination already discarded everything no entry point reaches.
+
+**The units are not convertible.** Bytes-per-line measured across
+third-party modules in one `boxer` binary:
+
+```
+ 1.11 B/line   andybalholm/brotli      (255,835 lines →   284,877 B)
+ 5.64 B/line   golang.org/x/net        ( 18,586 lines →   104,865 B)
+30.96 B/line   yuin/goldmark           (  9,928 lines →   307,372 B)
+72.30 B/line   apache/arrow-go/v18     (111,752 lines → 8,079,782 B)
+```
+
+A **65× spread**. Brotli's quarter-million lines are largely a static
+dictionary that compiles to *data*, not instructions; arrow's generics
+monomorphise into far more machine code than their source suggests. Any
+single conversion factor would be fabricated — which is why nothing here
+divides one unit into another, and why `vol-lenses` sets shipped bytes
+*beside* executed statements rather than combining them.
+
+**Never sum `text_bytes` and `data_bytes`** for the same reason in
+miniature: one zero-filled buffer in the standard library's FIPS module is
+tens of megabytes and swamps every real package.
+
+**A binary does carry line information** — the pclntab, which is how panics
+print `file:line`. Reading it yields 95,820 functions with file and start
+line in about 130 ms, no source tree needed. It is not used here, because it
+covers only lines that *produced machine code*: type declarations,
+constants, comments and eliminated code are absent from it by construction,
+so it would yield a fourth, systematically smaller "lines" number inviting
+exactly the false comparison the separate units exist to prevent.
+
+## 4. Ad-hoc SQL
 
 In the SQL Playground, switch Endpoint → *Keelson introspection*:
 
@@ -67,7 +120,7 @@ WHERE NOT is_main
   AND path NOT IN (SELECT module_path FROM keelson('go_symbols'));
 ```
 
-## 4. When a table is empty
+## 5. When a table is empty
 
 Empty is a fact about the build, not a query failure — check which one
 applies before assuming a defect:
@@ -85,15 +138,8 @@ applies before assuming a defect:
 - **`go_modules` with one row** — a `go test` binary. The toolchain omits
   the dependency list from test binaries; a `go build` binary carries it.
 
-## 5. Reading the numbers honestly
+## 6. Reading the numbers honestly
 
-- **`text_bytes` is machine code after dead-code elimination**; source lines
-  are what the compiler saw. A dependency large in source may be small in
-  the binary, which is why the two lenses disagree rather than one being
-  wrong.
-- **Never sum `text_bytes` and `data_bytes`.** One zero-filled buffer in the
-  standard library's FIPS module is tens of megabytes and swamps every real
-  package.
 - **Module attribution is exact, package attribution is not.** `pkg_path` is
   derived from symbol names and over-splits generic code; `module_path`
   resolves against the module list the binary itself declares, which is the
