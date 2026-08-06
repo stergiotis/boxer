@@ -339,6 +339,12 @@ var builtinTabDefs = []builtinTabDef{
 	// for the Icicle's reason — a cell is a path prefix, not a row.
 	{id: "treemap", dockID: dockTabTreemap, title: "Treemap", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelectionKey}},
+	// Chart draws the plain chart the specialised panes left uncovered
+	// (ADR-0172): a category against a count, a number against a number, a
+	// two-key grid against a third value. Like Table and Distribution its rows
+	// ARE result rows, so a click writes the ordinary row cursor.
+	{id: "chart", dockID: dockTabChart, title: "Chart", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection}},
 	// Graph stays in the body against its classification: its input is the
 	// split and the signal store, so by the criterion above it is a tool pane,
 	// but its subject is the SESSION's reactive wiring rather than the
@@ -561,6 +567,16 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Panel = treemapPanel{driver: inst.treemapDriver}
 			spec.Render = func(f *TabFrame) {
 				scrollTab(func() { inst.renderTreemapTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
+			}
+		case "chart":
+			// Scrolled for the Distribution tab's reason: a fixed-height plot
+			// box sized from the pane WIDTH (the only dimension a
+			// non-contending probe yields), so a short leaf scrolls rather
+			// than clips, and implot zeroes the wheel delta while the pointer
+			// is over the plot so the two do not contend (ADR-0140).
+			spec.Panel = chartPanel{driver: inst.chartDriver}
+			spec.Render = func(f *TabFrame) {
+				scrollTab(func() { inst.renderChartTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
 			}
 		case "graph":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphTab) }

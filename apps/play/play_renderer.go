@@ -99,6 +99,7 @@ const (
 	dockTabIcicle      uint64 = 22
 	dockTabSeries      uint64 = 23
 	dockTabTreemap     uint64 = 24
+	dockTabChart       uint64 = 25
 )
 
 type PlayApp struct {
@@ -409,6 +410,13 @@ type PlayApp struct {
 	// observer shape and the same hierarchy contract as the Icicle tab, read as
 	// nested areas rather than depth rows — no lane, nothing to Close.
 	treemapDriver *treemapDriver
+
+	// chartDriver is the ADR-0172 Chart panel (Chart dock tab): the plain
+	// chart — a category against a count, a number against a number, a
+	// two-key grid against a third value. Another observer of the active
+	// result, claiming `x` plus numeric lanes or `x`/`y`/`z` — no lane,
+	// nothing to Close.
+	chartDriver *ChartDriver
 
 	// seriesDriver is the ADR-0163 Series panel (Series dock tab): an observer
 	// of the active result under the typed (time, numbers) claim. Unlike the
@@ -949,6 +957,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.distDriver = NewDistDriver(mk())
 	inst.icicleDriver = NewIcicleDriver(mk())
 	inst.treemapDriver = newTreemapDriver(mk())
+	inst.chartDriver = NewChartDriver(mk())
 	// The scaffold seam is the PUBLIC delivery op, not a private reach into
 	// the editor: a pane that writes SQL into the buffer is exactly the
 	// snippet-class capability play_delivery.go was made public for.

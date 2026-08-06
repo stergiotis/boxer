@@ -758,6 +758,162 @@ SELECT 1"
 	settle=3000
 }
 
+scene_08_chart_bars() {
+	desc="Chart — the lanes reading (ADR-0172): a categorical x with two numeric columns, each labelled by its own column name, drawn as grouped bars and then as a line from the same claim"
+	senv=(BOXER_PLAY_FOCUS_CHART=1)
+	# The WIDE idiom: one lane per numeric column, no `series` needed. Both
+	# lanes are aircraft counts, which is the composition rule a shared y axis
+	# imposes — two magnitudes that are not comparable would flatten one.
+	# `t` is a LowCardinality(String), so the axis is CATEGORICAL and the
+	# distinct values take positions in the order ORDER BY put them.
+	sql="SELECT t                                      AS x,
+       uniqExactIf(icao, altitude >= 10000)   AS above_10k,
+       uniqExactIf(icao, altitude <  10000)   AS below_10k
+FROM default.planes_mercator_sample100
+WHERE t != ''
+GROUP BY x
+ORDER BY above_10k + below_10k DESC
+LIMIT 12"
+	# Two captures from one claim: the type-seeded default (Bar, because x is
+	# a category) and the same data under the Line chip.
+	steps='{"do":"capture","text":"08_chart_bars","settleMs":600}
+{"do":"click","name":"Line"}
+{"do":"capture","text":"08_chart_line","settleMs":600}'
+	settle=2000
+}
+
+scene_08_chart_series() {
+	desc="Chart — the LONG idiom (ADR-0172 §SD1): a series column splits the rows into one drawn series each, over a temporal x that takes implot's time axis"
+	senv=(BOXER_PLAY_FOCUS_CHART=1)
+	# toDateTime64 for the Series tab's reason (ADR-0163 Update 2026-08-05): a
+	# plain DateTime reaches Arrow as a bare UInt32 and nothing tells it from a
+	# count, so the temporal axis needs the cast to be recognised.
+	sql="SELECT toDateTime64(toStartOfInterval(time, INTERVAL 30 MINUTE), 3) AS x,
+       t                                                             AS series,
+       count()                                                       AS y
+FROM default.planes_mercator_sample100
+WHERE time >= '2026-07-05 00:00:00' AND time < '2026-07-06 00:00:00'
+  AND t IN ('A320', 'B738', 'A21N')
+GROUP BY x, series
+ORDER BY x"
+	settle=2000
+}
+
+scene_08_chart_heatmap() {
+	desc="Chart — the GRID reading (ADR-0172 §SD1): the x, y and z columns pivoted into a heatmap over the distinct keys, with the colorscale legend bound to the same colormap"
+	senv=(BOXER_PLAY_FOCUS_CHART=1)
+	# 24 x 7 ordinal cells. Both keys are numeric, so they sort ascending —
+	# a GROUP BY without an ORDER BY would otherwise arrive shuffled and the
+	# axes would read as noise.
+	sql="SELECT toHour(time)      AS x,
+       toDayOfWeek(time) AS y,
+       count()           AS z
+FROM default.planes_mercator_sample100
+GROUP BY x, y
+ORDER BY y, x"
+	settle=2000
+}
+
+scene_08_chart_heatmap_sparse() {
+	desc="Chart — a SPARSE grid: cells no row filled stay holes in the colormap's transparent BadColor rather than being drawn as a zero, which is a different claim"
+	senv=(BOXER_PLAY_FOCUS_CHART=1)
+	# Only the fastest traffic, which is not airborne in every hour of every
+	# weekday: 72 of the 168 cells have a row and the rest have none. Those 96
+	# fold to NaN and colorize through the BadColor, so the surface shows
+	# through — "nothing was observed here" reads differently from "zero were",
+	# and a heatmap that painted the low end of the ramp would say the second.
+	#
+	# This shape is also what crashed the panel before colormap.Config.At
+	# substituted for a non-number (index [-9223372036854775808] out of
+	# int(NaN)), so the scene is a regression capture as much as a feature one.
+	sql="SELECT toHour(time)      AS x,
+       toDayOfWeek(time) AS y,
+       count()           AS z
+FROM default.planes_mercator_sample100
+WHERE ground_speed > 560
+GROUP BY x, y
+ORDER BY y, x"
+	# The second capture points at a cell. A heatmap's legend row stands for
+	# the whole grid, so the built-in series highlight has nothing to single
+	# out — the CELL is what a reader is pointing at, and it outlines and reads
+	# out its two keys and its value. Coordinates rather than an anchor because
+	# the cells are painter-lane geometry with no accessibility node; hover
+	# state is a register read one frame behind, so the capture that follows
+	# sees it.
+	# Both readings of a cell: one that a row filled, and one that none did.
+	steps='{"do":"capture","text":"08_chart_heatmap_sparse","settleMs":600}
+{"do":"hover","x":576,"y":790}
+{"do":"capture","text":"08_chart_heatmap_hover","settleMs":600}
+{"do":"hover","x":690,"y":820}
+{"do":"capture","text":"08_chart_heatmap_hover_hole","settleMs":600}'
+	settle=2000
+}
+
+scene_08_chart_numeric() {
+	desc="Chart — a CONTINUOUS x (ADR-0172 §SD2): bar slots sized from the smallest gap between distinct x values, a NULL ending a lane rather than being drawn as a zero, and the Scatter and log-y chips"
+	senv=(BOXER_PLAY_FOCUS_CHART=1)
+	# 5000-foot altitude bands. x is an ordinary integer, so the axis is
+	# CONTINUOUS — the case the categorical scene above cannot show, and the one
+	# §SD4's bar geometry is defined against (slot = the smallest positive gap
+	# between distinct x, which is 5 here; the 50 -> 90 jump leaves a real hole
+	# on the axis rather than a compressed one).
+	#
+	# nullIf turns an EMPTY band into a NULL rather than a zero, which is the
+	# distinction the panel refuses to blur: no fast aircraft were seen above
+	# 50k feet, and "none observed" is not "zero of them". The fast lane ends at
+	# its last measured band instead of being drawn down to the axis.
+	sql="SELECT intDiv(altitude, 5000) * 5                            AS x,
+       nullIf(uniqExactIf(icao, ground_speed >= 400), 0)      AS fast,
+       nullIf(uniqExactIf(icao, ground_speed <  400), 0)      AS slow
+FROM default.planes_mercator_sample100
+WHERE altitude > 0
+GROUP BY x
+ORDER BY x"
+	# Three captures, each one click apart: the continuous-axis default (Line),
+	# the Scatter chip, then log y — offered here because every drawn value is
+	# strictly positive, and worth engaging because the lanes span two orders of
+	# magnitude.
+	steps='{"do":"capture","text":"08_chart_numeric","settleMs":600}
+{"do":"click","name":"Scatter"}
+{"do":"capture","text":"08_chart_scatter","settleMs":600}
+{"do":"click","name":"log y"}
+{"do":"capture","text":"08_chart_logy","settleMs":600}'
+	settle=2000
+}
+
+scene_08_chart_reject() {
+	desc="Chart — the SCHEMA-level reject (ADR-0172 §SD1): a result satisfying neither reading draws the contract and names its own columns back, and the dock strip carries the shape mark"
+	senv=(BOXER_PLAY_FOCUS_CHART=1)
+	# Numbers, but nothing named x — the commonest miss. The pane names the
+	# contract, offers a query shape that satisfies it, and then lists what THIS
+	# result actually carries, which is the half that makes the message about
+	# the query rather than about the documentation. The strip shows "Chart -"
+	# beside the other shape-contract tabs.
+	sql="SELECT database, name, total_rows, total_bytes
+FROM system.tables
+WHERE total_bytes > 0
+ORDER BY total_bytes DESC
+LIMIT 20"
+	settle=1500
+}
+
+scene_08_chart_duplicate() {
+	desc="Chart — the DATA-level reject (ADR-0172 §SD1): a repeated (x, y) cell rejects the WHOLE heatmap, naming the row and the cell, rather than letting the last row win"
+	senv=(BOXER_PLAY_FOCUS_CHART=1)
+	# The incomplete-GROUP-BY mistake: grouping by a third dimension the
+	# projection does not carry, so each (hour, day) cell arrives many times
+	# over — 12,217 rows for a 24 x 7 grid. The panel claims the result on its
+	# schema and then refuses it on its data, because last-write-wins would
+	# paint a matrix the query never asked for.
+	sql="SELECT toHour(time)      AS x,
+       toDayOfWeek(time) AS y,
+       count()           AS z
+FROM default.planes_mercator_sample100
+GROUP BY x, y, t
+ORDER BY y, x"
+	settle=1500
+}
+
 scene_09_projection() {
 	desc="Projection — dimensionality reduction over the numeric columns of a result, with the point cloud tied to the selection signal"
 	senv=(BOXER_PLAY_FOCUS_PROJECTION=1)

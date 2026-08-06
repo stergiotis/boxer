@@ -30,7 +30,7 @@ var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "
 // cannot prune it and it rides along on every applet. TestTabPolicyCoversEveryRegisteredTab
 // pins that, because the failure is silent: a new panel in play just quietly
 // appears in every applet window.
-var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "network", "sankey", "dist", "icicle", "treemap", "schema", "detail"}
+var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "network", "sankey", "dist", "icicle", "series", "treemap", "chart", "schema", "detail"}
 
 // autoOffResultTabIDs are result panels `tabs: auto` does NOT show. They are
 // still listable — an applet that names one in `tabs:` gets it — so this is a
@@ -47,12 +47,20 @@ var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "
 // `qs`, `hist_*`) come out of the `distsql` macro vocabulary, so a query either
 // asked for a distribution or carries none of them.
 //
+// Chart joins them on the same test (ADR-0172): its lanes reading needs a
+// column literally NAMED `x` and its grid reading `x`/`y`/`z`, which no corpus
+// query produces by accident — an applet that wants a chart aliases for it and
+// names the tab in `tabs:`.
+//
 // Icicle is deliberately NOT here. Its node contract is `id` + `parent` +
 // `value` — an ordinary hierarchy shape a recursive CTE can land on without
 // meaning to, like kanban's `lane` + `title` — so it earns the same per-frame
 // accept/reject the other shape panels take. Its folded contract is what a
 // pprof capture already is; `bookpprof/profile-flame.md` names it explicitly.
-var autoOffResultTabIDs = []string{"sankey", "dist"}
+// Series is not here either, and for the stronger version of that reason: its
+// claim is TYPED (a temporal column plus any number, ADR-0163 §SD1), which many
+// applet results satisfy without being written for it.
+var autoOffResultTabIDs = []string{"sankey", "dist", "chart"}
 
 // appletApp is the minted AppI: a fresh attenuated PlayApp per open window
 // (factory dispatch), built in Mount so env-configured connection details

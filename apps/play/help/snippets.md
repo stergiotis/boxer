@@ -833,6 +833,111 @@ The threshold is a query decision, not a panel one: a roll-up you wrote is
 reproducible and shows up in the total, where a cell the renderer dropped for
 being too small to draw does neither.
 
+## Bars, lines and a heatmap (Chart)
+
+The **Chart** tab (ADR-0172) is the plain chart the other panels leave
+uncovered. It claims four column names — `x`, `y`, `z` and `series` — and reads
+a result one of two ways depending on whether `z` is there.
+
+These blocks carry their own data, in the `values(...)` / `numbers(...)` style
+the Kanban and World sections use, so each one runs on any server and draws the
+same picture every time. The contract is about column names and types, not about
+a dataset — and a demo whose numbers move underfoot cannot show you what the
+axis did. Point them at your own tables by replacing the `FROM`.
+
+Without `z` it reads **lanes**: `x` is the key, and *every other numeric column*
+becomes a series labelled by its own column name. A `GROUP BY` with several
+aggregates is already that shape, so nothing needs restructuring:
+
+```sql
+SELECT * FROM values(
+  'x String, above_10k UInt32, below_10k UInt32',
+  ('A320', 736, 349),
+  ('B738', 922, 158),
+  ('A21N', 455, 166),
+  ('A20N', 419, 155),
+  ('B38M', 390,  66),
+  ('A319', 222, 129))
+```
+
+Two lanes, two legend entries reading `above_10k` and `below_10k` — the column
+names, with nothing else naming them. `x` is a string here, so the axis is
+**categorical**: the distinct values take positions in the order the rows
+arrived, which is why the bars come out in the order they are written above.
+That is deliberate — a string has no order of its own, so your `ORDER BY` is the
+one it gets, and the panel will not sort behind your back.
+
+A numeric or `DateTime64` `x` gets a **continuous** axis instead, the temporal
+one labelled in UTC, and then the spacing between keys is real:
+
+```sql
+SELECT * FROM values(
+  'x UInt16, fast Nullable(UInt32), slow Nullable(UInt32)',
+  ( 0,  114, 3905), ( 5,   75, 3725), (10,  166, 2759),
+  (15,  990, 2466), (20, 1855, 2022), (25, 2472, 1188),
+  (30, 3468,  814), (35, 4361, 1127), (40,  994,  229),
+  (45,   94,   21), (50, NULL,    2), (90, NULL,    1))
+```
+
+Two things follow from the axis being continuous. Bars take their width from
+the smallest gap between distinct `x` values — 5 here — so they cannot overlap a
+neighbour whatever the spacing is. And a hole in `x` stays a hole: nothing sits
+between 50 and 90, and the axis shows that emptiness where a categorical axis
+would have closed the distance up.
+
+The two `NULL`s are the other half of the same honesty. Nothing was measured for
+`fast` in the last two bands, and `NULL` is what stops the lane being drawn down
+to the axis and read as a zero somebody counted. The status line counts them.
+
+When the grouping key is a column rather than a set of aggregates, name it
+`series` and the rows split into one drawn series each:
+
+```sql
+SELECT * FROM values(
+  'x String, series String, y UInt32',
+  ('eu', 'read', 120), ('eu', 'write', 45),
+  ('us', 'read', 210), ('us', 'write', 80),
+  ('ap', 'read',  90), ('ap', 'write', 30))
+```
+
+Now the legend reads `read` and `write` — the values of `series`, not a column
+name — and each has its own three points. That is the same picture the wide form
+above draws; which one you write is decided by the shape your query already has,
+not by the panel.
+
+With `z` present the reading changes: `x` and `y` become the two cell keys and
+`z` the cell value, drawn as a heatmap with a colour legend under it.
+
+```sql
+SELECT number % 24                                          AS x,
+       intDiv(number, 24) + 1                               AS y,
+       toUInt32(50 + 30 * sin(number / 7) + 15 * cos(number / 3)) AS z
+FROM numbers(168)
+WHERE (number * 7) % 13 > 1
+```
+
+An hour-of-day by day-of-week grid, which is the shape a two-key `GROUP BY`
+produces. The cells are **ordinal** — one column per distinct `x`, one row per
+distinct `y`, all the same width — and the status line says so, because such a
+grid is a matrix and reading its spacing as a numeric scale would be reading
+something that is not there. Numeric keys sort ascending; string keys keep row
+order, as on the categorical axis above.
+
+The `WHERE` drops 26 of the 168 cells, and those stay **holes**: a cell no row
+filled is transparent, so the plot's own grid lines show through it. It is not
+drawn at the bottom of the colour ramp, because "nothing was observed here" and
+"the lowest value" are different claims. The status line counts the empty cells.
+
+Two refusals are worth knowing before you meet them. A `NULL` value breaks the
+line rather than being drawn across — the same rule the Series tab keeps, for
+the same reason. And a repeated `(x, y)` pair rejects the whole heatmap instead
+of letting the last row win: the fix is an aggregate over `z`, which is a
+decision only the query can make.
+
+Which mark is drawn is yours — the chips offer Bar, Line and Scatter (Heatmap
+alone for a grid), starting from whichever suits the resolved types. Bars for
+several series sit side by side within each slot.
+
 ## A number against time (Series)
 
 The **Series** tab (ADR-0163) is the one panel that asks for no contract: give
