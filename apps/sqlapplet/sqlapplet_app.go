@@ -47,10 +47,13 @@ var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "
 // `qs`, `hist_*`) come out of the `distsql` macro vocabulary, so a query either
 // asked for a distribution or carries none of them.
 //
-// Chart joins them on the same test (ADR-0172): its lanes reading needs a
-// column literally NAMED `x` and its grid reading `x`/`y`/`z`, which no corpus
-// query produces by accident — an applet that wants a chart aliases for it and
-// names the tab in `tabs:`.
+// Chart joins them, though the reason inverted under ADR-0172 §SD2 and is now
+// the stronger one. It used to be that its lanes reading needed a column
+// literally NAMED `x`, which no corpus query produces by accident. That reading
+// now numbers the rows when there is no `x`, so it claims ANY result carrying a
+// number — which is most of them, and would put a chart tab on applet windows
+// that never asked for one. An applet that wants a chart names the tab in
+// `tabs:`.
 //
 // Icicle is deliberately NOT here. Its node contract is `id` + `parent` +
 // `value` — an ordinary hierarchy shape a recursive CTE can land on without

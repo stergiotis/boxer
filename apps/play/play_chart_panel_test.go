@@ -90,11 +90,14 @@ func TestResolveChartColumnsGridAndRejects(t *testing.T) {
 	assert.Equal(t, 2, k.zCol)
 	assert.Empty(t, k.laneCols, "the grid reading has no lanes")
 
-	// No `x` at all: the reject names the contract AND this result's columns.
+	// Nothing numeric at all — the only schema-level reject the lanes reading
+	// still has, now that a missing `x` numbers the rows instead. It names the
+	// contract AND this result's columns.
 	_, reason = resolveChartColumns(arrow.NewSchema([]arrow.Field{
-		{Name: "v", Type: arrow.PrimitiveTypes.Float64}}, nil))
-	assert.Contains(t, reason, "`x` column")
-	assert.Contains(t, reason, "`v` float64", "the hint names what this result carries")
+		{Name: "name", Type: arrow.BinaryTypes.String},
+		{Name: "note", Type: arrow.BinaryTypes.String}}, nil))
+	assert.Contains(t, reason, "at least one numeric column")
+	assert.Contains(t, reason, "`name` utf8", "the hint names what this result carries")
 
 	// `x` but nothing to draw against it.
 	_, reason = resolveChartColumns(arrow.NewSchema([]arrow.Field{
@@ -114,6 +117,55 @@ func TestResolveChartColumnsGridAndRejects(t *testing.T) {
 		{Name: chartColX, Type: arrow.BinaryTypes.String},
 		{Name: chartColZ, Type: arrow.PrimitiveTypes.Float64}}, nil))
 	assert.Contains(t, reason, "`x`, `y` and `z`")
+	assert.Contains(t, reason, "no `y`")
+
+	// `z` and `y` but no `x`. The lanes reading numbers the rows when `x` is
+	// absent; the grid reading must NOT, so this stays a reject and says why.
+	_, reason = resolveChartColumns(arrow.NewSchema([]arrow.Field{
+		{Name: chartColY, Type: arrow.PrimitiveTypes.Uint8},
+		{Name: chartColZ, Type: arrow.PrimitiveTypes.Float64}}, nil))
+	assert.Contains(t, reason, "no `x`")
+	assert.Contains(t, reason, "every row would be its own cell")
+
+	// Neither key.
+	_, reason = resolveChartColumns(arrow.NewSchema([]arrow.Field{
+		{Name: chartColZ, Type: arrow.PrimitiveTypes.Float64}}, nil))
+	assert.Contains(t, reason, "no `x` and no `y`")
+}
+
+// §SD2: with no `x` column the rows number themselves. The claim is otherwise
+// the ordinary lanes reading — every number is still a lane, and a column that
+// is not a number is still not one, which is why a `GROUP BY k` whose key is a
+// string draws the ranking without drawing the key.
+func TestResolveChartColumnsImplicitX(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "name", Type: arrow.BinaryTypes.String},
+		{Name: "rows", Type: arrow.PrimitiveTypes.Uint64},
+	}, nil)
+	k, reason := resolveChartColumns(schema)
+	require.Empty(t, reason)
+	assert.Equal(t, chartReadingLanes, k.reading)
+	assert.Equal(t, -1, k.xCol, "there is no column to claim")
+	assert.Equal(t, chartAxisRow, k.xAxis)
+	assert.Equal(t, []int{1}, k.laneCols, "`name` is not numeric, so it is not a lane either")
+
+	// `series` still splits, and still never draws.
+	long := arrow.NewSchema([]arrow.Field{
+		{Name: chartColSeries, Type: arrow.BinaryTypes.String},
+		{Name: chartColY, Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+	k, reason = resolveChartColumns(long)
+	require.Empty(t, reason)
+	assert.Equal(t, chartAxisRow, k.xAxis)
+	assert.Equal(t, 0, k.seriesCol)
+	assert.Equal(t, []int{1}, k.laneCols)
+
+	// The reject that remains is about the VALUE, not about `x`: with no `x`
+	// the abscissa is free, so the message must not ask for one.
+	_, reason = resolveChartColumns(arrow.NewSchema([]arrow.Field{
+		{Name: "name", Type: arrow.BinaryTypes.String}}, nil))
+	assert.Contains(t, reason, "at least one numeric column to draw")
+	assert.NotContains(t, reason, "besides `x`")
 }
 
 // §SD2: a numeric or temporal key sorts ascending because it has an intrinsic
@@ -198,6 +250,79 @@ func TestChartFoldLanesLong(t *testing.T) {
 	assert.Equal(t, []float64{10, 30}, d.lanes[0].ys)
 	assert.Equal(t, []int64{1, 3}, d.lanes[1].rows, "each lane keeps its own result rows")
 	assert.True(t, d.logOK, "every value is strictly positive")
+}
+
+// §SD2: with no `x`, the rows take the abscissa 1, 2, 3 … in the order the
+// query returned them — the one order every result has. 1-based, because Detail
+// names the same row `row 1 / N`, so the number on the axis is the number a
+// click leads to.
+func TestChartFoldImplicitRowNumbers(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "name", Type: arrow.BinaryTypes.String},
+		{Name: "rows", Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+	rec := chartRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.StringBuilder).AppendValues([]string{"alpha", "bravo", "charlie"}, nil)
+		b.Field(1).(*array.Float64Builder).AppendValues([]float64{30, 20, 10}, nil)
+	})
+	defer rec.Release()
+
+	d, _ := chartFold(t, schema, rec)
+	require.Len(t, d.lanes, 1)
+	assert.Equal(t, "rows", d.lanes[0].label)
+	assert.Equal(t, []float64{1, 2, 3}, d.lanes[0].xs, "the rows number themselves, 1-based")
+	assert.Equal(t, []int64{0, 1, 2}, d.lanes[0].rows, "which is not the same as the row INDEX")
+	assert.Equal(t, 1.0, d.xMin)
+	assert.Equal(t, 3.0, d.xMax)
+	assert.Empty(t, d.catLabels, "an ordinal axis is not a categorical one — nothing is interned")
+	assert.Equal(t, 1.0, d.barSlot, "consecutive ordinals ARE a gap of one")
+	assert.False(t, d.xPerSeries)
+	assert.Equal(t, "row", d.xName)
+
+	// The abscissa is the panel's, not the query's, so the status line says so
+	// rather than naming a column that is not there.
+	assert.Contains(t, d.statusLine(), "the row number, in result order (implicit — the result has no `x`)")
+	assert.NotContains(t, d.statusLine(), "`row`", "there is no column called row to look for")
+}
+
+// The per-series form of the same rule: the numbering restarts inside each
+// group, so the groups OVERLAY on one abscissa the way they would on a real
+// key. A single global counter would lay them end to end, which draws the row
+// order rather than the groups.
+func TestChartFoldImplicitRowNumbersPerSeries(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: chartColSeries, Type: arrow.BinaryTypes.String},
+		{Name: chartColY, Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+	// Unequal groups, deliberately interleaved: the counter is per group, not
+	// per run of rows.
+	rec := chartRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.StringBuilder).AppendValues([]string{"a", "b", "a", "b", "a"}, nil)
+		b.Field(1).(*array.Float64Builder).AppendValues([]float64{10, 15, 20, 25, 30}, nil)
+	})
+	defer rec.Release()
+
+	d, _ := chartFold(t, schema, rec)
+	require.Len(t, d.lanes, 2)
+	assert.Equal(t, "a", d.lanes[0].label)
+	assert.Equal(t, []float64{1, 2, 3}, d.lanes[0].xs)
+	assert.Equal(t, []int64{0, 2, 4}, d.lanes[0].rows)
+	assert.Equal(t, []float64{1, 2}, d.lanes[1].xs, "the shorter group starts at 1 too")
+	assert.Equal(t, []int64{1, 3}, d.lanes[1].rows)
+	assert.True(t, d.xPerSeries)
+	assert.Equal(t, "row in series", d.xName)
+	assert.Contains(t, d.statusLine(), "the row number inside each `series`")
+}
+
+// §SD3: an implicit abscissa takes the continuous default, which is Line — with
+// no key to label them, what a numbered result shows is the shape of an ordered
+// sequence.
+func TestChartImplicitXDefaultsToLine(t *testing.T) {
+	d := NewChartDriver(c.NewWidgetIdStack())
+	d.reading, d.xAxis = chartReadingLanes, chartAxisRow
+	assert.Equal(t, chartMarkLine, d.activeMark())
+	assert.Equal(t, []chartMarkE{chartMarkLine, chartMarkBar, chartMarkScatter}, d.availableMarks(),
+		"and the other two stay one click away")
 }
 
 // §SD4: S bars share the slot, sit inside 0.8 of it, and stay in series order.

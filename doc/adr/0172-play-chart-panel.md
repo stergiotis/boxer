@@ -43,6 +43,7 @@ new is needed below the panel — this ADR is a *binding*, not a widget.
 | --- | --- | --- | --- |
 | How is the result claimed? | typed detection · named columns · a `mark` column | ADR-0122 §SD1 — naming settles same-typed ambiguity | named, bare (`x`/`y`/`z`/`series`) |
 | How are several series expressed? | wide (a column per series) · long (a `series` key) · both | both idioms reach a SQL result; neither converts in a line | both |
+| And when there is no `x`? | reject · number the rows globally · number them inside each `series` | a result's row order is an order, and the alternative is a tab that refuses the commonest `SELECT` of all | numbered, restarting per `series` |
 | Where does the mark come from? | chips · a `mark` column · inferred only | v1 wants no new contract surface | chips, seeded by type |
 | Bars with several series | grouped · stacked · both | stacking has no base-aware bar in the port | grouped; stacking deferred |
 | Heatmap cell geometry | ordinal keys · true numeric grid | a `GROUP BY x, y` result is a matrix, not a field | ordinal, said out loud |
@@ -53,14 +54,15 @@ new is needed below the panel — this ADR is a *binding*, not a widget.
 
 The claim is **named columns**, bare, per the ADR-0122 §SD1 doctrine the Kanban
 (`lane`+`title`), Distribution (`series`) and hierarchy (`value`) contracts
-already follow. `x` is required in both readings; the presence of a numeric `z`
-switches which reading applies.
+already follow. The presence of a numeric `z` switches which reading applies.
+The grid reading requires `x`; the lanes reading numbers the rows when it is
+absent (§SD2).
 
 **Lanes** — no `z`:
 
 | column | Arrow type | required | meaning |
 | --- | --- | --- | --- |
-| `x` | any | yes | the abscissa key (see §SD2) |
+| `x` | any | no — implied when absent | the abscissa key (see §SD2) |
 | *any other numeric column* | Int8‥64, UInt8‥64, Float16/32/64 | ≥1 | one lane; **the column name is the legend label** |
 | `series` | any | no | splits the rows into groups; stringified |
 
@@ -80,9 +82,14 @@ degenerate `SELECT a AS x, b AS y` draw without ceremony.
 Rejections are loud and name what *this* result carries, never a silent empty
 plot:
 
-- `z` present but not numeric, or `y` absent → the grid reading is named and the
-  fix is a cast or a rename.
-- no numeric column besides `x` → the lanes reading is named.
+- `z` present but not numeric, or a cell key absent → the grid reading is named
+  and the fix is a cast or a rename. A missing grid key is **not** filled in by
+  the row number the lanes reading uses: one cell key per row would put every
+  row in a column of its own, which is a diagonal, not a grid.
+- no numeric column at all → the lanes reading is named. With `x` present the
+  message asks for a number *besides `x`*; without one it asks only for the
+  number, because the abscissa is no longer the missing half and a reject that
+  asked for both would be about the contract rather than about this query.
 - in the grid reading, a repeated `(x, y)` pair → **the whole result is
   rejected**, naming the row and the duplicated cell, with `GROUP BY x, y` plus
   an aggregate as the fix. Last-wins would fabricate a matrix the query did not
@@ -118,12 +125,45 @@ the low end of the ramp, which is a measurement.
 - `x` **anything else** → a **categorical** axis: the distinct values in
   **first-appearance order** take positions 0, 1, 2, …, labelled through
   `SetupAxisTicks`.
+- **no `x` at all** → an implicit continuous axis: the rows are **numbered
+  1, 2, 3 … ascending in the order the query returned them**.
 
 First-appearance order rather than a sort, because a string has no intrinsic
 order and the query's `ORDER BY` is the only order it *does* have — sorting would
 silently override the author. Past `chartMaxTickLabels` distinct values the
 labels are dropped (they would overplot into an unreadable band) and the status
 line says so.
+
+**The implicit abscissa** is the same argument taken one step further: the row
+order is an order the result *has*, and a panel that refuses to draw without a
+column named `x` refuses `SELECT count() AS n … ORDER BY n DESC LIMIT 20` — a
+ranking, whose picture is the curve of its values against their rank. Aliasing a
+key `AS x` remains the way to get *labels*; the numbering is what happens when
+there is nothing to label with. Three properties make it honest rather than
+convenient:
+
+- It is **1-based**, because Detail names the same row `row 1 / N`. The number
+  on the axis is then the number a click leads to, and the alternative — the
+  0-based index the panel's own internals and its duplicate-cell reject use —
+  would have made the axis disagree with the pane the click opens.
+- It is **said out loud**: the status line reads `x: the row number, in result
+  order (implicit — the result has no \`x\`)`, and the axis title is `row` rather
+  than a backticked column name, because there is no such column to go looking
+  for in the result. An abscissa the panel invented must not read as one the
+  query supplied.
+- With a `series` column the numbering **restarts inside each group**, so the
+  groups overlay on one abscissa the way they would on a real key. A single
+  global counter would lay them end to end and draw the row order rather than
+  the groups. The cost is an alignment nothing measured — row 3 of one group is
+  drawn beside row 3 of another because they are both third — so the status line
+  says *that* instead: `the row number inside each \`series\``. Rejecting the
+  combination was the third option and is worse than either: `series` plus a
+  value is a shape a `GROUP BY` produces without effort, and refusing it teaches
+  nothing the disclosure does not.
+
+The **grid** reading does not participate. Numbering the rows there would make
+every row its own column — a diagonal matrix — so a missing `x` stays a reject
+(§SD1), naming that reason rather than the generic contract.
 
 Grid keys follow the same rule with one exception: **numeric and temporal keys
 sort ascending**, because they *do* have an intrinsic order and a `GROUP BY x, y`
@@ -140,7 +180,14 @@ the picture alone.
 | --- | --- | --- |
 | lanes, `x` categorical | Bar · Line · Scatter | Bar |
 | lanes, `x` continuous | Line · Bar · Scatter | Line |
+| lanes, `x` implicit (§SD2) | Line · Bar · Scatter | Line |
 | grid | Heatmap | Heatmap |
+
+The implicit abscissa takes the continuous row rather than the categorical one,
+which is a claim about what a numbered result *is*: with no key to label them,
+what the rows show is the shape of an ordered sequence. Bars are one click away
+and right for a short ranking; they are the wrong default for the hundred
+thousand the row cap allows, where one bar per row is a filled rectangle.
 
 Plus a `log y` **checkbox** (`log colour` in the grid reading), offered only when
 every drawn value is strictly positive — a log axis over a zero is a picture of
@@ -271,7 +318,7 @@ faceting into `implot` Subplots · a `chart(...)` macro in the
 
 | Surface | Change |
 | --- | --- |
-| SQL result contract | new: `x` (+ numeric lanes, optional `series`), or `x`/`y`/`z` |
+| SQL result contract | new: any numeric column (+ optional `x`, optional `series`), or `x`/`y`/`z` |
 | Dock tab | new `chart` / DockID 25 / "Chart", body zone |
 | Env | `BOXER_PLAY_FOCUS_CHART` (derived from the tab def; `doc/env-vars.md` regenerates) |
 | Signals | writes `selection` (+ the dispatcher's `selection_node` / `selection_id`) |
@@ -310,9 +357,16 @@ requires `n`/`ps`/`qs`, so no result satisfies both by accident).
 
 ### Negative
 
+- The claim is now **wide**: with `x` optional, every result carrying a number
+  satisfies the lanes reading, which is most of them. A `system.tables` listing
+  charts its byte counts against nothing in particular. This is the price of
+  §SD2's numbering and it is not a small one — the schema-level reject, which
+  was the commonest thing the tab said, is now reachable only by a result with
+  no number in it at all. Mitigated by the tab being one of many, by its mark
+  being informative rather than modal, and by the status line disclosing an
+  invented abscissa; **not** mitigated by anything that would make it narrower.
 - `x` and `y` are common column names, so results that never meant to be charted
-  will claim the tab. Mitigated only by the tab being one of many and its mark
-  being informative rather than modal.
+  claim the tab under a reading they did not intend.
 - Caps truncate rather than decimate, so a very large result is drawn partially
   and *counted*, where the Series tab would have drawn an envelope of all of it.
 - No stacked bars, which is the second thing a reader asks a bar chart for.
@@ -334,14 +388,27 @@ that enumerate the built-in tabs and must grow with it. No existing query,
 layout or contract changes meaning. DockID 25 is unused, so a persisted dock
 layout from an older build opens unchanged and gains the tab.
 
+§SD2's implicit abscissa is additive over the panel's own first cut in the same
+direction: a result the tab used to refuse now draws, and none that drew before
+draws differently — the numbering applies only where there was no `x` to project.
+The one thing it does change is a *reason* recorded elsewhere. `sqlapplet`'s
+`autoOffResultTabIDs` (ADR-0132) keeps Chart off the auto-shown set because "no
+corpus query produces a column literally named `x` by accident"; that premise is
+gone, and the conclusion is only stronger — an applet whose result carries any
+number would otherwise gain a chart tab it never asked for.
+
 ## Verification plan — Tier 1
 
 Unit (pure, no Arrow, no rendering where possible):
 
 1. `resolveChartColumns` over a schema table — lanes accepted, grid accepted,
-   every reject message reached, `series`/`x` never becoming lanes.
+   every reject message reached, `series`/`x` never becoming lanes. Including
+   §SD2's asymmetry: a missing `x` is accepted in the lanes reading and refused
+   in the grid one, each with its own message.
 2. Category interning: first-appearance order, positions dense from 0, tick
-   labels dropped past the cap.
+   labels dropped past the cap. And the implicit abscissa: 1-based, in row
+   order, restarting inside each `series` group over interleaved rows, with the
+   status line naming it as the panel's rather than the query's.
 3. Grid keys: numeric ascending, string first-appearance, row 0 = the top =
    the last y key, holes NaN.
 4. Duplicate-cell rejection names the row and the cell.
@@ -379,11 +446,15 @@ changes:
     capture apart, which is where §SD3's remaining two chips are evidenced —
     the log axis over lanes spanning two orders of magnitude being the case it
     exists for.
-12. **Done 2026-08-06.** The two reject TIERS, deliberately as separate scenes
-    because they behave differently. `08_chart_reject` is schema-level: numbers
-    but no `x`, so the panel never claims, the pane draws the contract plus the
-    result's own columns back, and the dock strip carries the **`Chart -`**
-    shape mark. `08_chart_duplicate` is data-level: an incomplete `GROUP BY`
+12. **Done 2026-08-06; scene re-cut when §SD2 landed.** The two reject TIERS,
+    deliberately as separate scenes because they behave differently.
+    `08_chart_reject` is schema-level: a result with **no number in it at all**,
+    so the panel never claims, the pane draws the contract plus the result's own
+    columns back, and the dock strip carries the **`Chart -`** shape mark. It
+    used to be "numbers but no `x`", which is the shape §SD2 now numbers and
+    draws — the scene had to move to keep showing a reject, and that move is
+    itself the measure of how much wider the claim got. `08_chart_duplicate` is
+    data-level: an incomplete `GROUP BY`
     repeating every cell, where the panel DOES claim on the schema and then
     refuses the whole result in-pane — naming the row, the cell and the
     `GROUP BY x, y` that fixes it — with **no** strip mark, because the shape
@@ -412,6 +483,24 @@ changes:
     caps (row truncation, series cap, the 40k-cell reject), and tick labels
     crowding when many long categories share a narrow pane — the cap is a
     count (40) where the constraint is really width.
+17. **Done 2026-08-06.** `08_chart_rownumber` — §SD2's implicit abscissa on the
+    shape that motivated it: a 30-row `GROUP BY` ranked by its own aggregate,
+    drawn as the curve of its values against their rank, axis titled `row` and
+    the status line reading `x: the row number, in result order (implicit — the
+    result has no \`x\`)`. Detail followed the cursor to `row 1 / 30`, which is
+    the point at x = 1 — the 1-based numbering agreeing with the pane a click
+    opens is the whole of that decision, and it is visible in the pair. Its
+    trace then clicks **Bar** and re-captures, the reading a short ranking
+    usually wants and the reason the chips stay offered on an invented axis.
+18. **Done 2026-08-06.** `08_chart_rownumber_series` — the same rule with a
+    `series` column: two interleaved runs of unequal length, numbered 1‥6 and
+    1‥4 inside their own groups, overlaid rather than laid end to end, with the
+    shorter run ENDING rather than being padded. Axis `row in series`, status
+    line `x: the row number inside each \`series\``.
+19. **Re-driven 2026-08-06.** `08_chart_bars` and `08_chart_heatmap` as controls
+    on the paths §SD2 restructured — the categorical status line and the 24 × 7
+    grid are unchanged, which is what says the optional `x` cost the explicit
+    one nothing.
 
 ## Status
 

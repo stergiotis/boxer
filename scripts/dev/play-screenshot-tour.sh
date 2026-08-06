@@ -974,18 +974,72 @@ scene_08_chart_small_pane() {
 	settle=1800
 }
 
+scene_08_chart_rownumber() {
+	desc="Chart — the IMPLICIT abscissa (ADR-0172 §SD2): a result with no x column numbers its own rows 1, 2, 3 in the order the query returned them, so an ordinary top-N draws as the ranking curve it is"
+	senv=(BOXER_PLAY_FOCUS_CHART=1)
+	# The shape that motivated the rule, and the commonest SELECT there is: a
+	# GROUP BY ranked by its own aggregate. Nothing here is named x, so before
+	# §SD2 this pane was a reject.
+	#
+	# `aircraft` is a string, so it is neither the abscissa (which is claimed by
+	# NAME) nor a lane (which must be a number) — the panel ignores it, and the
+	# picture is `positions` against rank. Aliasing it `AS x` is how you get the
+	# type labelled on the axis instead; the numbering is what happens when
+	# there is nothing to label with, not a substitute for asking.
+	sql="SELECT t       AS aircraft,
+       count() AS positions
+FROM default.planes_mercator_sample100
+WHERE t != ''
+GROUP BY aircraft
+ORDER BY positions DESC
+LIMIT 30"
+	# The continuous default (Line — a numbered result shows the shape of an
+	# ordered sequence), then Bar, which is what a short ranking usually wants
+	# and the reason the chips stay offered on an invented axis.
+	steps='{"do":"capture","text":"08_chart_rownumber","settleMs":600}
+{"do":"click","name":"Bar"}
+{"do":"capture","text":"08_chart_rownumber_bar","settleMs":600}'
+	settle=2000
+}
+
+scene_08_chart_rownumber_series() {
+	desc="Chart — the implicit abscissa with a series column (ADR-0172 §SD2): the numbering restarts inside each group, so unequal groups overlay rather than being laid end to end"
+	senv=(BOXER_PLAY_FOCUS_CHART=1)
+	# Two runs of unequal length, deliberately INTERLEAVED: the counter is per
+	# group, not per run of rows, so run A's fifth measurement is at x=5 even
+	# though row 9 of the result is where it arrived.
+	#
+	# The alignment is positional and nothing measured it — the k-th of one run
+	# is drawn beside the k-th of the other because they are both k-th — which
+	# is exactly what the status line says. The shorter run ENDS rather than
+	# being padded or stretched, which is the same no-fabrication rule a NULL
+	# gets.
+	sql="SELECT * FROM values(
+  'series String, latency_ms Float64',
+  ('run A', 82), ('run B', 140),
+  ('run A', 74), ('run B', 132),
+  ('run A', 79), ('run B', 121),
+  ('run A', 71), ('run B', 118),
+  ('run A', 68),
+  ('run A', 65))"
+	settle=1800
+}
+
 scene_08_chart_reject() {
 	desc="Chart — the SCHEMA-level reject (ADR-0172 §SD1): a result satisfying neither reading draws the contract and names its own columns back, and the dock strip carries the shape mark"
 	senv=(BOXER_PLAY_FOCUS_CHART=1)
-	# Numbers, but nothing named x — the commonest miss. The pane names the
-	# contract, offers a query shape that satisfies it, and then lists what THIS
-	# result actually carries, which is the half that makes the message about
-	# the query rather than about the documentation. The strip shows "Chart -"
-	# beside the other shape-contract tabs.
-	sql="SELECT database, name, total_rows, total_bytes
+	# A result with no NUMBER in it, which is what a schema-level reject takes
+	# now that §SD2 numbers the rows of one that has no x. This scene used to
+	# be "numbers but no x" — the commonest miss — and that result draws today.
+	#
+	# The pane names the contract, offers a query shape that satisfies it, and
+	# then lists what THIS result actually carries, which is the half that makes
+	# the message about the query rather than about the documentation. The strip
+	# shows "Chart -" beside the other shape-contract tabs.
+	sql="SELECT database, name, engine
 FROM system.tables
-WHERE total_bytes > 0
-ORDER BY total_bytes DESC
+WHERE database NOT IN ('INFORMATION_SCHEMA', 'information_schema')
+ORDER BY database, name
 LIMIT 20"
 	settle=1500
 }

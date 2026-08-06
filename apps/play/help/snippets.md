@@ -837,7 +837,9 @@ being too small to draw does neither.
 
 The **Chart** tab (ADR-0172) is the plain chart the other panels leave
 uncovered. It claims four column names — `x`, `y`, `z` and `series` — and reads
-a result one of two ways depending on whether `z` is there.
+a result one of two ways depending on whether `z` is there. Only the heatmap
+reading needs `x`: without it the rows number themselves, so anything carrying a
+number can be drawn.
 
 These blocks carry their own data, in the `values(...)` / `numbers(...)` style
 the Kanban and World sections use, so each one runs on any server and draws the
@@ -927,6 +929,31 @@ The `WHERE` drops 26 of the 168 cells, and those stay **holes**: a cell no row
 filled is transparent, so the plot's own grid lines show through it. It is not
 drawn at the bottom of the colour ramp, because "nothing was observed here" and
 "the lowest value" are different claims. The status line counts the empty cells.
+
+In the lanes reading `x` is optional. With no column claiming it the rows are
+**numbered 1, 2, 3 …** in the order the query returned them, which is the one
+order every result has — so an ordinary ranking draws without being aliased for:
+
+```sql
+SELECT * FROM values(
+  'name String, rows UInt64',
+  ('alpha', 1200000), ('bravo', 980000), ('charlie', 870000),
+  ('delta', 610000), ('echo', 520000), ('foxtrot', 348603))
+```
+
+`name` is a string, so it is neither the key (which is claimed by *name*, and
+nothing here is called `x`) nor a lane (which has to be a number). The picture
+is `rows` against rank, and the status line says the abscissa is the panel's
+rather than yours. Alias the key `AS x` when you want it *labelled* — the
+numbering is what happens when there is nothing to label with, not a way of
+avoiding the question.
+
+With a `series` column the numbering restarts inside each group, so groups of
+unequal length overlay instead of being laid end to end. The cost is an
+alignment nothing measured: the third row of one group is drawn beside the third
+of another because they are both third. The status line discloses that too. A
+heatmap gets no such courtesy — `x` and `y` there must be real columns, since
+numbering the rows would put every row in a column of its own.
 
 Two refusals are worth knowing before you meet them. A `NULL` value breaks the
 line rather than being drawn across — the same rule the Series tab keeps, for

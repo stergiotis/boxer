@@ -33,8 +33,12 @@ import (
 //     rows into groups. Both the wide idiom (a GROUP BY with several
 //     aggregates) and the long one (a GROUP BY with a grouping key) reach a
 //     result directly, and neither converts to the other in a line of SQL.
+//     `x` is OPTIONAL here: with no `x` column the rows are numbered 1, 2, 3 …
+//     in the order the query returned them (§SD2), which is the one order a
+//     result always has.
 //   - GRID — `x`, `y` and `z`: one row per cell, drawn as a heatmap over the
-//     distinct keys.
+//     distinct keys. Both keys must be real columns — a row number cannot
+//     stand in for one, since it would put every row in its own column.
 //
 // The names are claimed BY NAME, not by type: `series` is never a lane even
 // when it is numeric, and neither is `x`. A column named `y` is an ordinary
@@ -149,6 +153,15 @@ const (
 	chartAxisCategorical chartAxisE = iota
 	chartAxisNumeric
 	chartAxisTemporal
+	// chartAxisRow: there is NO `x` column, so the rows are numbered 1, 2, 3 …
+	// ascending in the order the query returned them — the one order every
+	// result has. It is 1-based because Detail names the same row `row 1 / N`,
+	// so the number on the axis is the number a click leads to. When a `series`
+	// column splits the rows the numbering restarts inside each group, which is
+	// what makes the groups overlay on a shared abscissa the way a real key
+	// would; the status line says so, because that alignment is positional and
+	// not something the result measured.
+	chartAxisRow
 )
 
 // chartMarkE is the drawn mark (§SD3). Which are offered is decided by the
@@ -223,16 +236,17 @@ type chartGrid struct {
 type ChartDriver struct {
 	ids *c.WidgetIdStack
 
-	reading   chartReadingE
-	lanes     []chartLane
-	grid      chartGrid
-	catLabels []string // the categorical x axis's ticks, in position order
-	xName     string
-	yName     string
-	zName     string
-	xAxis     chartAxisE
-	barSlot   float64 // the x-slot width a grouped bar chart divides (§SD4)
-	logOK     bool    // every drawn value is strictly positive
+	reading    chartReadingE
+	lanes      []chartLane
+	grid       chartGrid
+	catLabels  []string // the categorical x axis's ticks, in position order
+	xName      string
+	yName      string
+	zName      string
+	xAxis      chartAxisE
+	xPerSeries bool    // the implicit abscissa restarts inside each `series`
+	barSlot    float64 // the x-slot width a grouped bar chart divides (§SD4)
+	logOK      bool    // every drawn value is strictly positive
 	// The folded extents across every lane, which the fit margin is computed
 	// from. Held on the driver rather than per lane because the margin is a
 	// property of the plot, not of one series.
@@ -286,7 +300,7 @@ func (inst chartPanel) Channels() []ChannelSpec {
 
 func (inst chartPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
 	if schema == nil {
-		reason = "Run a query with an `x` column and a number to draw a chart."
+		reason = "Run a query with at least one numeric column to draw a chart."
 		return
 	}
 	k, reason := resolveChartColumns(schema)
@@ -324,15 +338,6 @@ func resolveChartColumns(schema *arrow.Schema) (k chartClaim, reason string) {
 			k.seriesCol = ci
 		}
 	}
-	if k.xCol < 0 {
-		reason = "A chart needs an `x` column — the key every value is drawn against " +
-			"(ADR-0172). Add `x` plus at least one number, e.g. " +
-			"`SELECT service AS x, count() AS errors FROM t GROUP BY x`, or " +
-			"`x`, `y` and `z` for a heatmap. " + chartShapeHint(schema)
-		return
-	}
-	k.xAxis = chartAxisFor(schema.Field(k.xCol).Type)
-
 	// A `z` column is the grid discriminator: with it, `x` and `y` are the
 	// cell keys and `z` is the value. It is claimed by name, so a `z` that
 	// cannot BE a cell value is a mistake worth naming rather than ignoring.
@@ -342,17 +347,31 @@ func resolveChartColumns(schema *arrow.Schema) (k chartClaim, reason string) {
 				"Cast it, or rename it if this result is not a grid.", schema.Field(k.zCol).Type)
 			return
 		}
-		if k.yCol < 0 {
+		// Both keys must be REAL columns. The lanes reading numbers the rows
+		// when `x` is absent, and that substitution is wrong here rather than
+		// merely unhelpful: one cell key per row puts every row in a column of
+		// its own, which is a diagonal, not a grid.
+		if k.yCol < 0 || k.xCol < 0 {
 			reason = "A heatmap needs `x`, `y` and `z` — the two cell keys and the cell value " +
 				"(ADR-0172), e.g. `SELECT toHour(ts) AS x, toDayOfWeek(ts) AS y, count() AS z " +
-				"FROM t GROUP BY x, y`. This result has `z` but no `y`."
+				"FROM t GROUP BY x, y`. This result has `z` but no " + chartMissingGridKeys(k) + ". " +
+				"A grid key is never filled in by the row number: every row would be its own cell."
 			return
 		}
 		k.reading = chartReadingGrid
+		k.xAxis = chartAxisFor(schema.Field(k.xCol).Type)
 		k.yAxis = chartAxisFor(schema.Field(k.yCol).Type)
 		return
 	}
 
+	// The lanes reading. `x` is optional: with no column claiming it the rows
+	// are numbered in the order the query returned them (§SD2), so an ordinary
+	// `SELECT count() AS n … ORDER BY n DESC` draws as the ranking it is.
+	if k.xCol >= 0 {
+		k.xAxis = chartAxisFor(schema.Field(k.xCol).Type)
+	} else {
+		k.xAxis = chartAxisRow
+	}
 	for ci, f := range schema.Fields() {
 		if ci == k.xCol || ci == k.seriesCol {
 			continue // claimed by name — never a lane, whatever its type
@@ -362,13 +381,34 @@ func resolveChartColumns(schema *arrow.Schema) (k chartClaim, reason string) {
 		}
 	}
 	if len(k.laneCols) == 0 {
-		reason = "A chart needs at least one numeric column besides `x` to draw against it. " +
-			"Every number in the result becomes a series labelled by its own column name. " +
-			chartShapeHint(schema)
+		if k.xCol >= 0 {
+			reason = "A chart needs at least one numeric column besides `x` to draw against it. " +
+				"Every number in the result becomes a series labelled by its own column name. " +
+				chartShapeHint(schema)
+			return
+		}
+		// Without `x` the abscissa is free — the rows number themselves — so
+		// what is missing is the value, and saying THAT is the difference
+		// between a message about the query and one about the contract.
+		reason = "A chart needs at least one numeric column to draw. With no `x` column the rows " +
+			"number themselves 1, 2, 3 … in the order the query returned them, but there is still " +
+			"nothing to draw against that. " + chartShapeHint(schema)
 		return
 	}
 	k.reading = chartReadingLanes
 	return
+}
+
+// chartMissingGridKeys names which cell keys a `z`-carrying result is short of,
+// so the reject is about this result rather than about the contract.
+func chartMissingGridKeys(k chartClaim) (missing string) {
+	switch {
+	case k.xCol < 0 && k.yCol < 0:
+		return "`x` and no `y`"
+	case k.xCol < 0:
+		return "`x`"
+	}
+	return "`y`"
 }
 
 // chartShapeHint names what the result actually carries (the Series tab's
@@ -534,6 +574,10 @@ func (inst *ChartDriver) availableMarks() (marks []chartMarkE) {
 		// is exactly as meaningful as the row order it follows.
 		return []chartMarkE{chartMarkBar, chartMarkLine, chartMarkScatter}
 	}
+	// The implicit row number takes the continuous default with the numeric
+	// axis, which is Line: with no key to label them, what a numbered result
+	// shows is the SHAPE of an ordered sequence — a ranking curve, most often —
+	// and a hundred thousand bars one pixel apart is a filled rectangle.
 	return []chartMarkE{chartMarkLine, chartMarkBar, chartMarkScatter}
 }
 
@@ -886,7 +930,18 @@ func (inst *ChartDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	inst.xMax, inst.yMax = math.Inf(-1), math.Inf(-1)
 	inst.reading = k.reading
 	inst.xAxis = k.xAxis
-	inst.xName = schema.Field(k.xCol).Name
+	inst.xPerSeries = k.xCol < 0 && k.seriesCol >= 0
+	// With no `x` the axis title says what the numbers on it are. It is not
+	// backticked anywhere it is printed as a column name would be, because
+	// there is no such column to look for in the result.
+	switch {
+	case k.xCol >= 0:
+		inst.xName = schema.Field(k.xCol).Name
+	case inst.xPerSeries:
+		inst.xName = "row in series"
+	default:
+		inst.xName = "row"
+	}
 
 	rows := rec.NumRows()
 	if rows > chartMaxRows {
@@ -963,6 +1018,13 @@ func (inst *ChartDriver) foldLanes(rec arrow.RecordBatch, schema *arrow.Schema, 
 	if k.xAxis == chartAxisCategorical {
 		keyer = newChartKeyer(chartAxisCategorical)
 	}
+	// One ordinal counter per group, for the implicit abscissa of a result with
+	// no `x` (§SD2). Numbering restarts inside each `series` rather than running
+	// once over the whole result, so the groups OVERLAY the way they would on a
+	// real key — a single global counter would lay them out end to end, which is
+	// a picture of the row order rather than of the groups. It costs one
+	// int64 per group, so it is allocated whether or not the axis needs it.
+	ordinals := make([]int64, len(groups))
 	group := 0
 	for row := range rows {
 		if k.seriesCol >= 0 {
@@ -971,7 +1033,8 @@ func (inst *ChartDriver) foldLanes(rec arrow.RecordBatch, schema *arrow.Schema, 
 		if group >= len(slotsOfGroup) {
 			continue
 		}
-		x := inst.foldX(rec, k, row, keyer)
+		ordinals[group]++
+		x := inst.foldX(rec, k, row, keyer, ordinals[group])
 		if !math.IsNaN(x) {
 			inst.xMin, inst.xMax = math.Min(inst.xMin, x), math.Max(inst.xMax, x)
 		}
@@ -1006,9 +1069,13 @@ func (inst *ChartDriver) foldLanes(rec arrow.RecordBatch, schema *arrow.Schema, 
 	inst.applyBarOffsets()
 }
 
-// foldX projects one x cell onto the axis §SD2 chose for it.
-func (inst *ChartDriver) foldX(rec arrow.RecordBatch, k chartClaim, row int64, keyer *chartKeyer) (x float64) {
+// foldX projects one x cell onto the axis §SD2 chose for it. ordinal is the
+// row's 1-based position within its own series, used only when the result
+// carries no `x` column at all.
+func (inst *ChartDriver) foldX(rec arrow.RecordBatch, k chartClaim, row int64, keyer *chartKeyer, ordinal int64) (x float64) {
 	switch k.xAxis {
+	case chartAxisRow:
+		return float64(ordinal)
 	case chartAxisNumeric:
 		v, ok := numericCellValue(rec.Column(k.xCol), row)
 		if !ok {
@@ -1029,7 +1096,10 @@ func (inst *ChartDriver) foldX(rec arrow.RecordBatch, k chartClaim, row int64, k
 // categorical axis, and the smallest positive gap between distinct x values on
 // a continuous one — the widest bars that cannot overlap their neighbours.
 func (inst *ChartDriver) computeBarSlot() (slot float64) {
-	if inst.xAxis == chartAxisCategorical {
+	// A categorical axis divides one, and so does the implicit row number:
+	// consecutive ordinals ARE a gap of one, so taking the short way out skips
+	// sorting every point of a hundred-thousand-row result to rediscover it.
+	if inst.xAxis == chartAxisCategorical || inst.xAxis == chartAxisRow {
 		return 1
 	}
 	xs := make([]float64, 0, inst.points)
@@ -1165,16 +1235,30 @@ func (inst *ChartDriver) statusLine() string {
 		for i := range inst.lanes {
 			nulls += inst.lanes[i].nulls
 		}
-		fmt.Fprintf(&b, "%d series · %s points · x: `%s`", len(inst.lanes),
-			humanize.Comma(int64(inst.points)), inst.xName)
+		fmt.Fprintf(&b, "%d series · %s points · x: ", len(inst.lanes),
+			humanize.Comma(int64(inst.points)))
 		switch inst.xAxis {
+		case chartAxisRow:
+			// Said out loud, because the abscissa is the panel's and not the
+			// query's: nothing in the result measured it. The per-series form
+			// says the extra part — that row 3 of one group is drawn beside row
+			// 3 of another because they are both third, not because anything
+			// says they belong together.
+			if inst.xPerSeries {
+				b.WriteString("the row number inside each `series` (implicit — the result has no `x`)")
+			} else {
+				b.WriteString("the row number, in result order (implicit — the result has no `x`)")
+			}
 		case chartAxisCategorical:
-			fmt.Fprintf(&b, " (%s categories, in row order)", humanize.Comma(int64(len(inst.catLabels))))
+			fmt.Fprintf(&b, "`%s` (%s categories, in row order)", inst.xName,
+				humanize.Comma(int64(len(inst.catLabels))))
 			if len(inst.catLabels) > chartMaxTickLabels {
 				fmt.Fprintf(&b, " · tick labels dropped past %d", chartMaxTickLabels)
 			}
 		case chartAxisTemporal:
-			b.WriteString(" (time, UTC)")
+			fmt.Fprintf(&b, "`%s` (time, UTC)", inst.xName)
+		default:
+			fmt.Fprintf(&b, "`%s`", inst.xName)
 		}
 		if nulls > 0 {
 			fmt.Fprintf(&b, " · %s nulls (the line breaks; nothing is interpolated)", humanize.Comma(int64(nulls)))
@@ -1211,8 +1295,8 @@ func (inst *PlayApp) renderChartTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		return
 	}
 	if rec == nil {
-		for rt := range c.RichTextLabel("Run a query with an `x` column and a number — or `x`, `y` and `z` " +
-			"for a heatmap (ADR-0172) — to see a chart.") {
+		for rt := range c.RichTextLabel("Run a query with at least one numeric column — plus an `x` to draw " +
+			"it against, or `x`, `y` and `z` for a heatmap (ADR-0172) — to see a chart.") {
 			rt.Small().Weak()
 		}
 		return
