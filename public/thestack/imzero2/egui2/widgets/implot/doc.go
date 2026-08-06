@@ -54,6 +54,16 @@
 // SetSeriesPalette for the data itself (IDS qualitative default,
 // upstream's Deep as PaletteDeep; palette.go). The two are independent.
 //
+// Tick labels are placed rather than simply drawn (ticklabels.go), which
+// upstream does not do: a label band that does not fit first locates fewer
+// ticks (for located axes, where a tick is a choice), then slides labels to
+// the nearest free spot and stacks the band into extra rows, drawing a
+// leader line from each moved label back to its tick, and only then drops
+// every k-th label. Tick marks and grid lines are never dropped. A band
+// whose labels already fit is untouched — same text, same positions, no
+// leader lines — so this shows up only where the alternative was an
+// unreadable smear (a category axis from SetupAxisTicks, typically).
+//
 // Known deviations from upstream:
 //   - Box-zoom is Shift+drag (upstream: right-drag). The response-flag
 //     register does not yet distinguish which button a drag uses.

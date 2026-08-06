@@ -63,60 +63,15 @@ func (p *Plot) End() {
 	st.onceApplied = true
 	st.writeLinks()
 
-	// --- Layout. Vertical gutters are label-independent, so the plot-area
-	// height is final immediately; the y ticks computed against it size the
-	// left gutter, and only then are the x ticks located against the final
-	// width (no iteration needed, see core.go locateTicks).
-	topGutter := float32(6.0)
-	if p.titleShown != "" {
-		topGutter = 24
-	} else if st.y.label != "" {
-		// The horizontal y label sits in the top gutter; without a title
-		// it still needs the band, or it clips above the canvas.
-		topGutter = 20
+	// --- Layout, ticks and label placement (layoutFrame). One pass settles
+	// it unless the x band stacks: extra lanes there deepen the bottom
+	// gutter, which moves everything above them, so that case re-runs the
+	// (pure) arithmetic against the depth the band asked for — capped at that
+	// depth, so the second pass cannot ask for more and oscillate.
+	areaX, areaY, areaW, areaH := p.layoutFrame(1, p.maxBandLanes())
+	if st.xBand.lanes > 1 {
+		areaX, areaY, areaW, areaH = p.layoutFrame(st.xBand.lanes, st.xBand.lanes)
 	}
-	bottomGutter := float32(6 + tickLen + 14)
-	if st.x.flags&AxisFlagsNoTickLabels != 0 {
-		bottomGutter = 6 // no label row to reserve (sparklines)
-	}
-	if st.x.label != "" {
-		bottomGutter += 16
-	}
-	areaH := p.h - topGutter - bottomGutter
-	if areaH < 16 {
-		areaH = 16
-	}
-	if len(p.yCustomTicks) > 0 {
-		st.ticksY = filterTicksInRange(st.y.rng, p.yCustomTicks, st.ticksY)
-	} else {
-		st.ticksY = locateTicksScaled(st.y.rng, areaH, st.y.scale, st.ticksY)
-	}
-	// The widest label, not the longest one: they part company as soon as a
-	// custom tick carries anything but digits.
-	widestY := float32(charW)
-	for i := range st.ticksY {
-		if w := EstimateTextWidth(st.ticksY[i].label, tickFontSize); w > widestY {
-			widestY = w
-		}
-	}
-	leftGutter := widestY + tickLen + 10
-	if st.y.flags&AxisFlagsNoTickLabels != 0 {
-		leftGutter = 8
-	}
-	if st.y.label != "" {
-		leftGutter += 16
-	}
-	rightGutter := float32(10.0)
-	areaW := p.w - leftGutter - rightGutter
-	if areaW < 16 {
-		areaW = 16
-	}
-	if len(p.xCustomTicks) > 0 {
-		st.ticksX = filterTicksInRange(st.x.rng, p.xCustomTicks, st.ticksX)
-	} else {
-		st.ticksX = locateTicksScaled(st.x.rng, areaW, st.x.scale, st.ticksX)
-	}
-	areaX, areaY := leftGutter, topGutter
 	tr := newTransform(st.x.rng, st.y.rng, st.x.scale, st.y.scale, areaX, areaY, areaW, areaH)
 
 	// --- Chrome: area fill, grid, tick marks + labels, axis labels, title.
@@ -150,9 +105,6 @@ func (p *Plot) End() {
 		}
 		px := tr.pxX(t.value)
 		c.PaintLine(px, areaY+areaH, px, areaY+areaH+tickLen, color.Hex(colBorder), 1.0).Send()
-		if st.x.flags&AxisFlagsNoTickLabels == 0 {
-			c.PaintText(px, areaY+areaH+tickLen+2, 1, 0, t.label, tickFontSize, color.Hex(colTickLabel)).Monospace().Send()
-		}
 	}
 	for i := range st.ticksY {
 		t := &st.ticksY[i]
@@ -161,10 +113,8 @@ func (p *Plot) End() {
 		}
 		py := tr.pxY(t.value)
 		c.PaintLine(areaX-tickLen, py, areaX, py, color.Hex(colBorder), 1.0).Send()
-		if st.y.flags&AxisFlagsNoTickLabels == 0 {
-			c.PaintText(areaX-tickLen-2, py, 2, 1, t.label, tickFontSize, color.Hex(colTickLabel)).Monospace().Send()
-		}
 	}
+	p.emitTickLabels(areaX, areaY, areaH)
 	if p.titleShown != "" {
 		c.PaintText(areaX+areaW/2, 4, 1, 0, p.titleShown, titleFontSize, color.Hex(colTitle)).Send()
 	}
@@ -174,7 +124,7 @@ func (p *Plot) End() {
 	if st.y.label != "" {
 		// The painter lane has no rotated text yet; the y label sits
 		// horizontally above the tick column (deviation noted in doc.go).
-		c.PaintText(2, topGutter-2, 0, 2, st.y.label, labelFontSize, color.Hex(colAxisLabel)).Send()
+		c.PaintText(2, areaY-2, 0, 2, st.y.label, labelFontSize, color.Hex(colAxisLabel)).Send()
 	}
 
 	// --- Legend interaction: last frame's flags for each entry's sense
@@ -282,6 +232,175 @@ func (p *Plot) End() {
 	st.prevOk = tr.valid()
 
 	p.emitContextMenu()
+}
+
+// layoutFrame resolves the plot area, this frame's ticks and both label
+// bands. lanes is the x band depth to reserve in the bottom gutter; maxLanes
+// the depth the band may use.
+//
+// The vertical gutters are label-independent, so the plot-area height is
+// final immediately; the y ticks computed against it place the y band, whose
+// surviving labels size the left gutter, and only then are the x ticks
+// located against the final width. Nothing here paints, and the only state it
+// writes is this frame's ticks and bands — which is what lets End run it
+// twice when the x band asks for a deeper gutter than it was given.
+func (p *Plot) layoutFrame(lanes, maxLanes int) (areaX, areaY, areaW, areaH float32) {
+	st := p.st
+	topGutter := float32(6.0)
+	if p.titleShown != "" {
+		topGutter = 24
+	} else if st.y.label != "" {
+		// The horizontal y label sits in the top gutter; without a title
+		// it still needs the band, or it clips above the canvas.
+		topGutter = 20
+	}
+	bottomGutter := float32(6) // no label row to reserve (sparklines)
+	if st.x.flags&AxisFlagsNoTickLabels == 0 {
+		bottomGutter = 6 + tickLen + 14 + float32(lanes-1)*tickLabelLaneH
+	}
+	if st.x.label != "" {
+		bottomGutter += 16
+	}
+	areaY = topGutter
+	areaH = max(p.h-topGutter-bottomGutter, 16)
+
+	if len(p.yCustomTicks) > 0 {
+		st.ticksY = filterTicksInRange(st.y.rng, p.yCustomTicks, st.ticksY)
+	} else {
+		st.ticksY = locateTicksScaled(st.y.rng, areaH, st.y.scale, st.ticksY)
+	}
+	if st.y.flags&AxisFlagsNoTickLabels != 0 {
+		st.yBand.begin(0)
+	} else {
+		// The y band packs vertically, so each label claims a line box rather
+		// than a width, and one lane is all there is — a second column would
+		// eat the gutter this band is about to size. pxY ignores the x half
+		// of the transform, which is what lets it run this early. The band
+		// runs half a line past the area at each end, exactly enough that a
+		// label centred on the first or last tick sits inside it: an axis
+		// whose labels already fit must come out of this pass untouched.
+		slack := float32(tickLabelLaneH) / 2
+		trY := newTransform(st.x.rng, st.y.rng, st.x.scale, st.y.scale, 0, areaY, 1, areaH)
+		cand := st.yBand.begin(countMajor(st.ticksY))
+		for i, m := 0, 0; i < len(st.ticksY); i++ {
+			if !st.ticksY[i].major {
+				continue
+			}
+			cand[m] = labelCand{tick: i, pos: trY.pxY(st.ticksY[i].value), width: tickLabelLaneH}
+			m++
+		}
+		st.yBand.layout(areaY-slack, areaY+areaH+slack, tickLabelGapY, 1)
+	}
+	// The widest label, not the longest one: they part company as soon as a
+	// custom tick carries anything but digits. Only the labels the band kept
+	// are measured — one it dropped must not go on charging for gutter.
+	widestY := float32(charW)
+	for _, pl := range st.yBand.place {
+		if w := EstimateTextWidth(st.ticksY[pl.tick].label, tickFontSize); w > widestY {
+			widestY = w
+		}
+	}
+	leftGutter := widestY + tickLen + 10
+	if st.y.flags&AxisFlagsNoTickLabels != 0 {
+		leftGutter = 8
+	} else if st.yBand.moved {
+		leftGutter += calloutRunPx
+	}
+	if st.y.label != "" {
+		leftGutter += 16
+	}
+	areaX = leftGutter
+	areaW = max(p.w-leftGutter-10, 16)
+
+	switch {
+	case len(p.xCustomTicks) > 0:
+		st.ticksX = filterTicksInRange(st.x.rng, p.xCustomTicks, st.ticksX)
+	case st.x.flags&AxisFlagsNoTickLabels != 0:
+		st.ticksX = locateTicksScaled(st.x.rng, areaW, st.x.scale, st.ticksX)
+	default:
+		// Located ticks are a choice rather than data, so an axis whose own
+		// labels would collide locates fewer of them instead of stacking.
+		st.ticksX = locateTicksFitted(st.x.rng, areaW, st.x.scale, tickLabelGap, st.ticksX)
+	}
+	if st.x.flags&AxisFlagsNoTickLabels != 0 {
+		st.xBand.begin(0)
+	} else {
+		trX := newTransform(st.x.rng, st.y.rng, st.x.scale, st.y.scale, areaX, areaY, areaW, areaH)
+		cand := st.xBand.begin(countMajor(st.ticksX))
+		for i, m := 0, 0; i < len(st.ticksX); i++ {
+			if !st.ticksX[i].major {
+				continue
+			}
+			cand[m] = labelCand{
+				tick:  i,
+				pos:   trX.pxX(st.ticksX[i].value),
+				width: EstimateTextWidth(st.ticksX[i].label, tickFontSize),
+			}
+			m++
+		}
+		// The band is the canvas, not the plot area: a label centred on the
+		// first or last tick has always overhung into the gutter beside it,
+		// and taking that away would displace labels that read fine today.
+		st.xBand.layout(1, p.w-1, tickLabelGap, maxLanes)
+	}
+	return areaX, areaY, areaW, areaH
+}
+
+// maxBandLanes bounds the x band's stacking by the canvas it is stacking
+// into. A caller that sizes a plot to its pane can hand this one very little
+// height — play floors a pane-sized box at 80pt (ADR-0172) — and three lanes
+// plus the gutters would leave that box with a plot area of a few pixels.
+// A quarter of the canvas is the most the names may take from the data.
+func (p *Plot) maxBandLanes() int {
+	return min(max(int(p.h/4/tickLabelLaneH), 1), labelBandMaxLanes)
+}
+
+func countMajor(ticks []tick) int {
+	n := 0
+	for i := range ticks {
+		if ticks[i].major {
+			n++
+		}
+	}
+	return n
+}
+
+// emitTickLabels draws both bands. Leader lines go first so a callout line
+// passes under the labels it crosses rather than over them (paint order is
+// z-order), and a label still sitting on its tick gets none — the tick mark
+// already says which one it is.
+func (p *Plot) emitTickLabels(areaX, areaY, areaH float32) {
+	st := p.st
+	bandTop := areaY + areaH + tickLen + 2
+	for _, pl := range st.xBand.place {
+		if pl.lane == 0 && !displaced(pl) {
+			continue
+		}
+		c.PaintLine(pl.at, areaY+areaH+tickLen, pl.center, bandTop+float32(pl.lane)*tickLabelLaneH,
+			color.Hex(colBorder), 1.0).Send()
+	}
+	for _, pl := range st.xBand.place {
+		c.PaintText(pl.center, bandTop+float32(pl.lane)*tickLabelLaneH, 1, 0,
+			st.ticksX[pl.tick].label, tickFontSize, color.Hex(colTickLabel)).Monospace().Send()
+	}
+	labelRight := areaX - tickLen - 2
+	if st.yBand.moved {
+		labelRight -= calloutRunPx
+	}
+	for _, pl := range st.yBand.place {
+		if !displaced(pl) {
+			continue
+		}
+		c.PaintLine(areaX-tickLen, pl.at, labelRight, pl.center, color.Hex(colBorder), 1.0).Send()
+	}
+	for _, pl := range st.yBand.place {
+		c.PaintText(labelRight, pl.center, 2, 1,
+			st.ticksY[pl.tick].label, tickFontSize, color.Hex(colTickLabel)).Monospace().Send()
+	}
+}
+
+func displaced(pl labelPlacement) bool {
+	return pl.center-pl.at > calloutMinPx || pl.at-pl.center > calloutMinPx
 }
 
 // emitSeries dispatches one frame-declared item to its renderer. All

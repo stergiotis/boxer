@@ -44,6 +44,14 @@ type implotM6State struct {
 	xs, a, b, c, d []float64
 }
 
+// implotTicksState carries the tick-label demo's three category axes: the
+// names, and the bar heights and positions that go under them.
+type implotTicksState struct {
+	few, some, many    []string
+	fewV, someV, manyV []float64
+	fewX, someX, manyX []float64
+}
+
 // implotM2State carries the M2 item-breadth demo's series.
 type implotM2State struct {
 	barXs, barYs     []float64
@@ -105,6 +113,60 @@ func init() {
 				p.Line("0.75·cos(x)", st.xs, st.cos)
 				p.Line("damped (NaN gap)", st.xs, st.damped)
 			}
+		},
+	})
+	registry.Register(registry.Demo{
+		Name:        "implot_tick_labels",
+		Category:    "Graphics & canvas",
+		Title:       icons.IconPaintBucket + " implot tick labels (callouts / stacking / thinning)",
+		Stage:       [2]float32{660, 690},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindMixed,
+		Description: "Category axes whose names do not fit, one rung of the label ladder each: eight sit centred on their ticks, fifteen slide and stack with a leader line back to the tick each names, forty-four thin to every k-th.",
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			// Module short names, the shape the data-catalog books put on a
+			// category axis (apps/sqlapplet/bookcodevol/vol-top.md).
+			names := []string{
+				"clickhouse-go", "arrow-go", "zerolog", "protobuf", "grpc",
+				"sqlite", "prometheus", "opentelemetry", "yaml.v3", "testify",
+				"crypto", "net-http2", "goldmark", "uuid", "compress",
+				"errors", "sync", "atomic", "unicode", "encoding",
+				"reflect", "runtime", "strconv", "bufio", "regexp",
+			}
+			st := &implotTicksState{}
+			fill := func(n int, wrap bool) ([]string, []float64, []float64) {
+				lbl := make([]string, n)
+				val := make([]float64, n)
+				pos := make([]float64, n)
+				for i := range n {
+					lbl[i] = names[i%len(names)]
+					if wrap && i >= len(names) {
+						lbl[i] += "-v2"
+					}
+					// A plausible ranking: geometric decay off the leader.
+					val[i] = 900 * math.Exp(-float64(i)/9)
+					pos[i] = float64(i)
+				}
+				return lbl, val, pos
+			}
+			st.few, st.fewV, st.fewX = fill(8, false)
+			st.some, st.someV, st.someX = fill(15, false)
+			st.many, st.manyV, st.manyX = fill(44, true)
+			return st
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			st := state.(*implotTicksState)
+			bars := func(title string, labels []string, xs, ys []float64, h float32) {
+				for p := range implot.Scoped(ids, title, 620, h) {
+					p.SetupAxisTicks(implot.AxisX1, xs, labels)
+					p.SetupAxisLimits(implot.AxisX1, -0.7, float64(len(xs))-0.3, implot.CondOnce)
+					p.SetupAxes("", "bytes", implot.AxisFlagsNone, implot.AxisFlagsAutoFit)
+					p.Bars("text_bytes", xs, ys, 0.7)
+				}
+			}
+			bars("8 names — they fit", st.few, st.fewX, st.fewV, 165)
+			bars("15 names — slid and stacked, with leader lines", st.some, st.someX, st.someV, 185)
+			bars("44 names — thinned to every k-th", st.many, st.manyX, st.manyV, 165)
 		},
 	})
 	registry.Register(registry.Demo{

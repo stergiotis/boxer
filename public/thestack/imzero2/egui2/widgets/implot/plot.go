@@ -86,6 +86,11 @@ type plotState struct {
 	scratchY []float32
 	ticksX   []tick
 	ticksY   []tick
+	// Tick-label placement, one band per axis (ticklabels.go). Retained
+	// with the rest of the frame scratch, not to carry state between
+	// frames — each frame's layout refills them from scratch.
+	xBand labelBand
+	yBand labelBand
 }
 
 var pool = make(map[uint64]*plotState, 8)
