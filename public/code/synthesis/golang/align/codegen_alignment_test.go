@@ -1,4 +1,4 @@
-package golang_test
+package align_test
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/code/synthesis/golang"
+	"github.com/stergiotis/boxer/public/code/synthesis/golang/align"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,7 +24,7 @@ import (
 // `betteralign.sh` run).
 func TestAlignAndFormatHeadOutGoIsAligned(t *testing.T) {
 	moduleRoot := findRepoRoot(t)
-	tags, err := golang.FindModuleBuildTags(moduleRoot)
+	tags, err := align.FindModuleBuildTags(moduleRoot)
 	require.NoError(t, err)
 
 	targets := []string{
@@ -43,7 +43,7 @@ func TestAlignAndFormatHeadOutGoIsAligned(t *testing.T) {
 				t.Skipf("git show failed (file not at HEAD?): %v", err)
 			}
 			abs := filepath.Join(moduleRoot, rel)
-			out, err := golang.AlignAndFormat(src, abs, tags)
+			out, err := align.AlignAndFormat(src, abs, tags)
 			require.NoError(t, err)
 			require.Equal(t, string(src), string(out),
 				"%s at HEAD is not in betteralign-optimal order", rel)
@@ -84,7 +84,7 @@ func TestWriteAlignedReplacesAtomically(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module scratch\n\ngo 1.24\n"), 0o644))
 	path := filepath.Join(dir, "gen.go")
 	src := []byte("package scratch\n\nconst Sentinel = 1\n")
-	require.NoError(t, golang.WriteAligned(path, src))
+	require.NoError(t, align.WriteAligned(path, src))
 
 	stop := make(chan struct{})
 	var missing, partial atomic.Int64
@@ -108,7 +108,7 @@ func TestWriteAlignedReplacesAtomically(t *testing.T) {
 		}
 	}()
 	for range 60 {
-		require.NoError(t, golang.WriteAligned(path, src))
+		require.NoError(t, align.WriteAligned(path, src))
 	}
 	close(stop)
 	wg.Wait()
@@ -134,13 +134,13 @@ func TestWriteAlignedPreservesMode(t *testing.T) {
 	path := filepath.Join(dir, "gen.go")
 	src := []byte("package scratch\n\nconst Sentinel = 1\n")
 
-	require.NoError(t, golang.WriteAligned(path, src))
+	require.NoError(t, align.WriteAligned(path, src))
 	fi, err := os.Stat(path)
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o644), fi.Mode().Perm(), "a new file gets the default mode")
 
 	require.NoError(t, os.Chmod(path, 0o755))
-	require.NoError(t, golang.WriteAligned(path, src))
+	require.NoError(t, align.WriteAligned(path, src))
 	fi, err = os.Stat(path)
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o755), fi.Mode().Perm(), "an existing file keeps its mode")

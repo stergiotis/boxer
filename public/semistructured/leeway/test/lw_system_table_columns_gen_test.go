@@ -5,7 +5,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/code/synthesis/golang"
+	"github.com/stergiotis/boxer/public/code/synthesis/golang/align"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
@@ -38,10 +38,10 @@ func getSystemTableColumnsDesc() (tableDesc common.TableDesc, err error) {
 // that used to precede the write left it missing for the whole align-and-
 // format pass, and a concurrent package load — capslock's, which loads every
 // package in the repo — failed with "no such file or directory" and an
-// undefined symbol from ../common. golang.WriteAligned replaces the file
+// undefined symbol from ../common. align.WriteAligned replaces the file
 // atomically, which needs no unlink.
 func writeFileSystemTableColumns(path string, code string, t *testing.T) {
-	err := golang.WriteAligned(path, unsafeperf.UnsafeStringToBytes(code))
+	err := align.WriteAligned(path, unsafeperf.UnsafeStringToBytes(code))
 	require.NoError(t, err)
 }
 

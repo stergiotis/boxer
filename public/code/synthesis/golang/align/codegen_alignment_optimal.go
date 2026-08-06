@@ -4,7 +4,7 @@
 // Reused here to keep `AlignAndFormat` self-contained; betteralign's exported
 // API is package-state-coupled and not suited to in-process use.
 
-package golang
+package align
 
 import (
 	"go/types"

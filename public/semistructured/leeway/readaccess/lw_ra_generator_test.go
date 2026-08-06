@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/code/synthesis/golang"
+	"github.com/stergiotis/boxer/public/code/synthesis/golang/align"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -83,7 +83,7 @@ func TestReadAccessGoClassBuilder(t *testing.T) {
 	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("test_table"), tblDesc, tableRowConfig, namingConvention)
 	require.NoError(t, err)
 
-	err = golang.WriteAligned("example/readaccess_testtable_ra.out.go", sourceCode)
+	err = align.WriteAligned("example/readaccess_testtable_ra.out.go", sourceCode)
 	require.NoError(t, err)
 }
 
@@ -140,7 +140,7 @@ func networkSampleTableDesc() (tbl common.TableDesc, err error) {
 // the wellFormed check (format.Source resolves no identifiers and type-checks
 // nothing), so the test also writes the classes into the compiled example package
 // as readaccess_nettable_ra.out.go: a `go build`/`go test` of that package then
-// fails to compile if any regression returns (golang.WriteAligned itself
+// fails to compile if any regression returns (align.WriteAligned itself
 // type-checks before writing). The RA classes reference no dml-generated types,
 // so this golden compiles standalone.
 func TestReadAccessNetworkGolden(t *testing.T) {
@@ -159,7 +159,7 @@ func TestReadAccessNetworkGolden(t *testing.T) {
 	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("net_table"), tblDesc, tableRowConfig, namingConvention)
 	require.NoError(t, err)
 
-	err = golang.WriteAligned("example/readaccess_nettable_ra.out.go", sourceCode)
+	err = align.WriteAligned("example/readaccess_nettable_ra.out.go", sourceCode)
 	require.NoError(t, err)
 
 	src := string(sourceCode)
@@ -178,7 +178,7 @@ func TestReadAccessNetworkGolden(t *testing.T) {
 // TestReadAccessNetworkDmlGolden generates the DML (write) side for the same
 // network table, so the compiled example package can drive a full
 // write→arrow→read round-trip (network_roundtrip_test.go) through the network
-// FixedSizeBinary columns. golang.WriteAligned type-checks the generated setters.
+// FixedSizeBinary columns. align.WriteAligned type-checks the generated setters.
 func TestReadAccessNetworkDmlGolden(t *testing.T) {
 	tblDesc, err := networkSampleTableDesc()
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestReadAccessNetworkDmlGolden(t *testing.T) {
 	// No unlink: WriteAligned replaces the file atomically, and this writes
 	// into the example/ package next door — removing it first leaves a window
 	// in which a concurrent package load of example/ sees it missing.
-	err = golang.WriteAligned(p, sourceCode)
+	err = align.WriteAligned(p, sourceCode)
 	require.NoError(t, err)
 }
 
@@ -269,7 +269,7 @@ func TestDmlSample(t *testing.T) {
 	// No unlink: WriteAligned replaces the file atomically, and this writes
 	// into the example/ package next door — removing it first leaves a window
 	// in which a concurrent package load of example/ sees it missing.
-	err = golang.WriteAligned(p, sourceCode)
+	err = align.WriteAligned(p, sourceCode)
 	require.NoError(t, err)
 }
 
