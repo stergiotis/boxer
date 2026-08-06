@@ -27,12 +27,12 @@ func godepDefsBySlug(t *testing.T) map[string]*AppletDef {
 	t.Helper()
 	defs, errs := ParseBook("godep", help.MustSub(bookgodepFS, "bookgodep"))
 	require.Empty(t, errs)
-	require.Len(t, defs, 4)
+	require.Len(t, defs, 5)
 	bySlug := make(map[string]*AppletDef, len(defs))
 	for _, d := range defs {
 		bySlug[d.Slug] = d
 	}
-	require.Len(t, bySlug, 4)
+	require.Len(t, bySlug, 5)
 	return bySlug
 }
 
@@ -86,7 +86,7 @@ func TestMintGodepBook(t *testing.T) {
 		{id: "godep", fsys: help.MustSub(bookgodepFS, "bookgodep"), topics: []app.TopicT{app.TopicCode}},
 	})
 	require.Empty(t, errs)
-	assert.Equal(t, 14, minted)
+	assert.Equal(t, 15, minted)
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "go-packages"))
 	require.True(t, ok)
 	assert.Equal(t, "Go packages", m.Display)

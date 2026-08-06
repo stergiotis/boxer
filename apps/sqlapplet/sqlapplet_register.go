@@ -67,6 +67,16 @@ var bookcoverageFS embed.FS
 //go:embed bookjsonbench
 var bookjsonbenchFS embed.FS
 
+// bookcodevolFS embeds the code-volume suite
+// (apps/sqlapplet/bookcodevol/*.md) — canned lenses over the ADR-0173
+// self-inspection tables keelson.go_modules and keelson.go_symbols: how much
+// of this binary is its own code and how much is somebody else's, the module
+// inventory ranked by contributed machine code, the same split as a treemap,
+// and the shipped-vs-executed contrast against the coverage tables.
+//
+//go:embed bookcodevol
+var bookcodevolFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -96,6 +106,13 @@ func init() {
 	// not a description of what the repository is.
 	if err := RegisterBook("jsonbench", help.MustSub(bookjsonbenchFS, "bookjsonbench"), []app.TopicT{app.TopicObservability}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register jsonbench book")
+	}
+	// TopicCode rather than TopicObservability: these tables describe what
+	// the binary is made of — a property of the code that shipped — even
+	// though they are read from the running process. The one applet that
+	// crosses into "what ran" reads the coverage tables to say so explicitly.
+	if err := RegisterBook("codevol", help.MustSub(bookcodevolFS, "bookcodevol"), []app.TopicT{app.TopicCode}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register code-volume book")
 	}
 }
 
