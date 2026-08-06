@@ -2,8 +2,8 @@
 // providers — env, apps, build, sbom (ADR-0094 §SD8), sql_passes
 // (ADR-0108 §SD5), extbin (ADR-0118), adr/subtask/coderef/adrcontent
 // (ADR-0122 §SD4), helpsections/adrsections (ADR-0164 §SD5),
-// capability/capsection/caprelation (ADR-0168 §SD8) — and
-// registers them into an introspect.Registry.
+// capability/capsection/caprelation (ADR-0168 §SD8), panel_shapes
+// (ADR-0170 §SD5) — and registers them into an introspect.Registry.
 // The two GUI-coupled providers (demos, windows) live with the runtime
 // wiring, where the egui2 host and its window-host instance exist, so
 // this package stays importable from headless contexts.
@@ -23,9 +23,9 @@ import (
 
 // RegisterStatic registers the GUI-free providers (env, apps, build,
 // sbom, sql_passes, extbin, adr/subtask/coderef/adrcontent,
-// capability/capsection/caprelation, components) into r
+// capability/capsection/caprelation, components, panel_shapes) into r
 // (ADR-0094 §SD8, ADR-0108 §SD5, ADR-0118, ADR-0122 §SD4, ADR-0126 §SD5,
-// ADR-0168 §SD8).
+// ADR-0168 §SD8, ADR-0170 §SD5).
 //
 // The ADR and capability tables register unconditionally, like the rest:
 // off-repo they are empty rather than absent, so the set of table names does
@@ -39,7 +39,7 @@ func RegisterStatic(r *introspect.Registry) (err error) {
 		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{}, extbinProvider{},
 		adrProvider{}, subtaskProvider{}, coderefProvider{}, adrcontentProvider{}, componentsProvider{},
 		competenceProvider{}, competencesectionProvider{}, competencerelationProvider{},
-		helpsectionsProvider{}, adrsectionsProvider{},
+		helpsectionsProvider{}, adrsectionsProvider{}, panelShapesProvider{},
 	} {
 		if err = r.Register(p); err != nil {
 			return
