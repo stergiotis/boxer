@@ -172,7 +172,9 @@ recorded results, not incidental.
   from the upstream run scripts at M0.
 - **Tier ladder.** 1M as smoke, 10M as the development tier, 100M as the
   real run — each tier gated on the previous one's disk and wall-clock
-  actuals (§9 Q6). 1B is descoped outright.
+  actuals (§9 Q6). 1B is descoped outright. **100M is descoped too, as of
+  2026-08-06** — the gate passes and the tier was never run; §8 M4 says what
+  that costs the result.
 - **Per query, per arm:** cold and hot runtimes, memory,
   `EXPLAIN indexes=1` pruning evidence (parts and marks read vs. total).
 - **Per arm:** data size, index size (from `system.parts` /
@@ -208,9 +210,69 @@ timezone dependency; grammar coverage of `IN [..]` array literals,
 `date_diff`, and `::String` casts; identity-minting throughput at DID
 cardinality; ingest-lane throughput at the 100M tier.
 
+### 7b The ledger, rolled up
+
+The [logbook](./logbook.md) stays the per-run record — a finding appears there
+in the entry that hit it, with the review that later moved it. This table is
+the deduplicated roll-up across both runs: one row per proximate obstacle,
+with the status each carried when the trial closed on 2026-08-06. **Open /
+fixed was re-checked against the tree at `b33bab3a`**, not carried over from
+the entry that filed it.
+
+| # | Finding | Class | Status at close |
+| --- | --- | --- | --- |
+| 1 | Nothing in-tree turns a JSON document into rows under `mapping.LoadJsonMapping`'s schema — every leeway ingestion here is hand-written per domain | `missing leeway → proposed:leeway-json-shredding` / functional-suitability.functional-completeness / S3 | **open** — `mapping/` still exports schema constructors only; needs a dialogue (new package) |
+| 2 | The trial's shredder aborted the whole ingest on the first undecodable document, where the reference loader skips and continues | `broken leeway-dml-codegen → proposed:leeway-json-shredding` / reliability.fault-tolerance / S2 | fixed in the trial's own ingester; recurs in whatever (1) becomes |
+| 3 | boxer.facts sections accept only Ref-shaped memberships; an open JSON corpus has no closed path vocabulary, so paths were demoted into the high-cardinality parameter channel | `broken leeway-dml-codegen` / functional-suitability.functional-appropriateness / S2 | **open** — facts schema change, Tier 1; needs a dialogue |
+| 4 | boxer.facts has no `null` / `undefined` section, so JSON nulls cannot round-trip | `missing leeway → proposed:leeway-json-shredding` / functional-suitability.functional-completeness / S4 | **open** — verified: 21 tagged-value sections, none of them null. 10 nulls dropped at 10M |
+| 5 | No tooling emits `MATERIALIZED` column definitions from a leeway schema, so a SQL consumer hand-writes them per path and keeps them in sync with physical column names | `missing leeway-ddl-codegen → proposed:leeway-sql-materialized-projections` / functional-suitability.functional-completeness / S3 | **open** — verified: no `MATERIALIZED` anywhere under `leeway/`. This is the lever worth 3.8–13.8× |
+| 6 | Nothing a task-level consumer walks — the leeway skills, `mapping`, the generated DML/RA packages — points at the SQL query vocabulary | `pain leeway → proposed:leeway-query-vocabulary-discoverability` / usability.user-error-protection / S2 | **open** — verified: zero mentions of `chpack` or the `LEEWAY_*` family across all three leeway skills. **Filed three times** (chpack, the read-back family, ADR-0116 column handles) |
+| 7 | The read-back UDF family carries no version marker, and every statement is `CREATE OR REPLACE`, so nothing detects or removes a retired function | `broken leeway-ddl-codegen → proposed:leeway-udf-provisioning-drift` / reliability.maturity / S3 | **open** — verified: `chpack` has `Version`/`LEEWAY_PACK_VERSION`, the read-back family has neither |
+| 8 | A Ref-membership table cannot be read by anyone who does not already hold the registry — there is no server-side name→id lookup, so ids ride SQL pages as uint64 literals | `pain leeway-ddl-codegen → proposed:leeway-vocab-introspection` / usability.self-descriptiveness / S3 | **open** — verified: no vocabulary table is reachable from SQL |
+| 9 | Resolving a value by path in SQL needs two independent cumulative-sum reconstructions, one over `lmrcard` and one over `len` | `pain leeway-read-access-codegen` / performance-efficiency.resource-utilisation / S3 | **halved on review** — only the `len` half is intrinsic to facts; the other half was this trial's own encoding choice |
+| 10 | Getting that second reconstruction wrong fails *silently* on this corpus — every attribute has `len = 1`, so a naive co-index returns correct answers here and wrong ones on any multi-element array | `pain leeway-read-access-codegen` / functional-suitability.functional-correctness / S2 | **open as a hazard**; `LEEWAY_LIST_BY_TAG_EQUAL` is the form that does not have it |
+| 11 | The facts DDL cannot be applied, or the table cloned, without `allow_suspicious_low_cardinality_types=1` | `pain leeway-ddl-codegen` / usability.operability / S4 | **open** — every client invocation in the harness carries the flag |
+| 12 | `FROM {db:Identifier}.facts` fails grammar1 with *no viable alternative*, so an applet carrying it never mounts; ClickHouse itself accepts the form | `missing nanopass-pass-pipeline → proposed:grammar1-identifier-params` / functional-suitability.functional-completeness / S3 | **open** — verified precisely: `paramSlot` is an alternative of `columnExpr` only, not of `tableExpr` / `tableIdentifier` / `databaseIdentifier` |
+| 13 | A column handle bound by a `WITH <handle> AS alias` expression alias is not resolved — the pass visits a SELECT's own scope but not the WITH-expression clause | `missing nanopass-scope-resolution → proposed:resolve-column-names-with-aliases` / functional-suitability.functional-completeness / S3 | **open** — no change to the pass since ADR-0116 landed it |
+| 14 | Applet pages named `FROM facts` unqualified; hand-testing them with `--database=` hid it completely, and every page failed `UNKNOWN_TABLE` under a real applet | `pain — trial process` / S3 | fixed; a regression test now rejects an unqualified table reference in the book |
+| 15 | The JSONBench query set does not port to unhinted JSON — `Dynamic` columns are refused by `GROUP BY` and by `IN`, and Q3 cannot execute without a cast | `note — workload, not toolbelt` / S3 | not actionable here; it bounds what the domain numbers can claim |
+
+Retracted, and kept visible because the retraction is the more useful record:
+
+- **[missing leeway-read-access-codegen → proposed:leeway-sql-read-access /
+  performance-efficiency.time-behaviour / S1]** — filed after the 1M run as
+  "resolving a value by path in SQL has no accelerated form". The claim that
+  nothing equivalent exists is **wrong**: a `MATERIALIZED` column resolving the
+  path at merge time is exactly that, and it took arm B's Q1 from 0.073 s /
+  194 MB to 0.008 s / 4.7 MB. Refiled narrower as row 5 above. This was the
+  trial's largest single error and it inflated the headline for a full run.
+
+Positive maturity — competences the runs leaned on successfully, which the
+convention asks for in their own right:
+
+- **`leeway-dml-codegen`** carried an ingestion shape it was not designed for
+  — arbitrary shredded JSON, 121.2M attributes across five sections at the 10M
+  tier — at 30,252 docs/s in 384 MB of RSS, with no generated-code changes and
+  no escape hatch.
+- **`leeway-ddl-codegen`** composed the benchmark table straight from
+  `chstore.ComposeSetupSQL`, so arm B is provably the live store's own DDL
+  rather than a hand-copied approximation.
+- **ADR-0162 `chpack`** installed cleanly on a live 26.7 server and, with the
+  read-back family, expressed all five queries with no escape hatch.
+- The resulting facts table is **smaller on disk** than ClickHouse's own JSON
+  type holding the same corpus.
+
+**Where the open rows go.** Rows 5–8 are one cluster — the SQL read surface is
+unversioned, undiscoverable and ungenerated — and are carried by
+[ADR-0171](../../adr/0171-leeway-sql-read-surface.md). Rows 12 and 13 are
+localized defects that the trigger list puts in neither ADR tier; they are
+filed here with the evidence a fix needs. Rows 1, 3 and 4 change the facts
+schema or add a package, so they need a design dialogue before an ADR, and
+none is opened by this trial.
+
 ## 7a Results so far
 
-**Latest — 2026-08-06, M4 at the 10M tier, arms A–D, cold runs measured**
+**Latest — 2026-08-06, M4 at the 10M tier, arms A–E, cold runs measured**
 ([logbook](./logbook.md),
 [`runs/2026-08-06-m4-10m/`](./runs/2026-08-06-m4-10m/)). All four arms hold
 9,999,994 documents and return byte-identical results.
@@ -243,8 +305,16 @@ Against **arm A0** (§4):
   arm B reads every granule on every query.
 - **Arm C prunes 2 granules of 2394.** Two tiers, same verdict: data-skipping
   indices over section value lanes cannot serve this workload.
+- **Re-keying is the second lever, and it is free (arm E).** Arm D still reads
+  every granule; arm E is arm D sorted on the materialized backbone and prunes
+  227 of 2,389 on Q4/Q5 — the same ~10× reduction arm A gets. Over identical
+  data the two levers isolate cleanly: **materialization is worth 3.8–13.8×**
+  at +18.8 % storage, **re-keying a further 1.07–1.76×** while *saving* 9.3 %.
+  Together they put facts at **0.59–1.18× of the benchmark's own entry**,
+  faster on Q4 and Q5, at 0.954× its storage.
 - **The 100M gate passes** (§9 Q6): ~77 GiB against 262 GiB free, ~2 h wall
-  clock, dominated by the single-process facts ingest.
+  clock, dominated by the single-process facts ingest. **The tier was
+  descoped rather than run** — §8 M4 says what that leaves unmeasured.
 - **Results are readable as data**: the **`jsonbench` book**
   ([`apps/sqlapplet/bookjsonbench/`](../../../apps/sqlapplet/bookjsonbench/))
   carries the 10M summary in its pages, so it answers without anything having
@@ -307,10 +377,36 @@ Two corrections to this protocol that the first run forced:
   hypothesis.
 - **M3 — arm C.** Add skipping indices; re-run; attribute the delta.
 - **M4 — scale.** 10M, then 100M behind the gate; repeat arms A–C.
+  **10M done; 100M descoped 2026-08-06.** The gate passes on both counts
+  (~77 GiB against 262 GiB free, ~2 h wall clock), so this is a judgement
+  about value, not feasibility: the trial's primary question — how the
+  toolbelt carries the workload — was answered at 10M, and arm E spent the
+  last untried lever. What 100M would still have bought is the scaling
+  direction of two ratios that moved between 1M and 10M: storage, which
+  *inverted* from 1.44× to 0.807×, and arm A's pruning advantage, which
+  widens with scale. Both are reported at one tier only, and any claim about
+  where they go next is extrapolation. Re-running is a matter of raising
+  `TIER`; the ingest is single-process and is the thing to parallelise first.
 - **M5 — results + write-up.** Results-as-facts, the book applet, findings
   filed; this page gains a Results section and a pointer to whatever ADR
-  the numbers end up informing.
-- **M6 — arm D** *(optional)*, only on an unexplained B/C gap.
+  the numbers end up informing. **Done** — §7a and §7b, the `jsonbench` book,
+  and [ADR-0171](../../adr/0171-leeway-sql-read-surface.md), which carries the
+  read-surface cluster.
+- **M6 — arm D** *(optional)*, only on an unexplained B/C gap. **Done, and
+  split in two.** The gap was explained rather than unexplained, and the
+  explanation argued for re-keying, so the arm ran: arm D is the read-path
+  half (materialize the backbone), arm E the key half (sort on it). They are
+  independent and additive, which is why they are separate arms.
+
+**Closed 2026-08-06, and not retired.** Every milestone is either done or
+descoped above, so the trial has no open work; the findings it produced are
+rolled up in §7b and the read-surface cluster is carried by ADR-0171. The
+protocol stays here rather than moving to
+[`doc/adr-background-work/`](../../adr-background-work/) because re-running it
+is the point: it is the quality practice's first task-level probe, and the
+thing most worth measuring on a later build is whether §7b's open rows have
+moved. A re-run should read §7a's comparability notes first — the facts arms'
+numbers are not comparable across the two runs already recorded.
 
 ## 9 Open questions
 

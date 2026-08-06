@@ -485,3 +485,76 @@ template:
   Q1) but costs the repetition the aliases existed to avoid.
 - **Verdict:** [`./runs/2026-08-06-m4-10m/verdict.md`](./runs/2026-08-06-m4-10m/verdict.md)
 - **Run dir:** [`./runs/2026-08-06-m4-10m/`](./runs/2026-08-06-m4-10m/)
+
+## 2026-08-06 — close-out — 100M descoped, the ledger rolled up, the read-surface cluster handed to ADR-0171
+
+- **Build under test:** boxer `b33bab3a`, ClickHouse 26.7.2.59, JSONBench pin
+  `e6c7c98d`
+- **Environment:** no measurements were taken. **This entry is not a run** — it
+  records decisions and a verification pass over findings the two runs above
+  produced, so it has no run directory and adds no numbers.
+- **Attempted:** close the trial — settle the 100M tier, consolidate the
+  findings ledger, and place the durable findings somewhere they can be acted
+  on.
+- **100M descoped.** The [§9 Q6](./README.md) gate passes on both counts
+  (~77 GiB against 262 GiB free, ~2 h wall clock), so this is a judgement about
+  value rather than feasibility, and it is recorded in the protocol at §6 and
+  §8 M4 rather than left implied. The primary question was answered at 10M and
+  arm E spent the last untried lever. What stays unmeasured: the scaling
+  direction of the two ratios that moved between 1M and 10M — storage, which
+  inverted from 1.44× to 0.807×, and arm A's pruning advantage, which widens
+  with scale. Both are now single-tier results and the protocol says so.
+- **Findings re-verified at `b33bab3a`, not carried over.** Every durable
+  finding was re-checked against the tree before being rolled up, because
+  several of the trial's own commits had changed the ground under them. Nine
+  are open, and each was confirmed by inspection rather than by memory of the
+  entry that filed it:
+  - no shredder in-tree (`mapping/` exports schema constructors only);
+  - facts has no `null` section (21 tagged-value sections, none of them null);
+  - Ref-only memberships;
+  - no `MATERIALIZED` emission anywhere under `public/semistructured/leeway/`;
+  - the read-back family carries no version marker, where `chpack` has
+    `Version` and `LEEWAY_PACK_VERSION`;
+  - no vocabulary lookup reachable from SQL;
+  - zero mentions of the SQL read vocabulary across all three leeway skills;
+  - `paramSlot` is an alternative of `columnExpr` only — **this is the precise
+    shape of the `{db:Identifier}` gap**, which the entry above recorded only
+    as a parse failure: the rule exists and is simply not reachable from
+    `tableExpr` / `tableIdentifier` / `databaseIdentifier`, which is why
+    `{tier:String}` parses and the identifier form does not;
+  - `ResolveColumnNames` unchanged since ADR-0116, so the WITH-alias gap
+    stands.
+  Two are fixed and recorded as such: the UDF naming split (`8ee2659e`) and the
+  hand-rolled ragged read (`86c762f3`).
+- **Ledger rolled up** into [README §7b](./README.md) — one row per proximate
+  obstacle across both runs, deduplicated, with the retracted S1 kept visible
+  because the retraction is the more useful record, and the positive-maturity
+  lines kept beside the frictions. This logbook stays the per-run record; §7b
+  is the cross-run view. The discoverability finding is shown once with its
+  three occurrences rather than three times, which is what makes it read as the
+  trial's central result rather than an incidental note.
+- **Findings placed.** Ledger rows 5–8 — no materialized-column emission, the
+  undiscoverable vocabulary, UDF provisioning drift, and vocabulary
+  introspection — are one cluster and are carried by
+  [ADR-0171](../../adr/0171-leeway-sql-read-surface.md) (proposed), which prices
+  each against this trial's measurements. Rows 12 and 13 (grammar1 `paramSlot`
+  placement, `ResolveColumnNames` WITH-aliases) sit in neither ADR tier per
+  [CODINGSTANDARDS § What triggers an ADR](../../../CODINGSTANDARDS.md#what-triggers-an-adr)
+  and are filed in §7b with the evidence a fix needs. Rows 1, 3 and 4 change
+  the facts schema or add a package, so they need a design dialogue first, and
+  this trial does not open one.
+- **Not done, deliberately:** the competence vault's `maturity` / `pain` fields
+  are still `255` for every competence this trial exercised. The convention has
+  those flip editorially, citing findings, and
+  [ADR-0168](../../adr/0168-capmap-business-capability-corpus.md) has no 0..5
+  rubric yet — authoring the rubric is a prerequisite, not part of this trial.
+  The recurring `proposed:leeway-query-vocabulary-discoverability` slug has now
+  been filed three times, which the [directory convention](../README.md) calls
+  the editorial signal to author a corpus entry; that too is left to the vault's
+  editor.
+- **Solution size:** no code this entry. Documentation only — the protocol's
+  §6/§7b/§8, this entry, and ADR-0171.
+- **Results:** unchanged; `runs/2026-08-06-m4-10m/results.md` remains the
+  numbers of record, and both it and the verdict remain `status: draft`
+  pending human review.
+- **Run dir:** none — see *Environment* above.
