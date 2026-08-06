@@ -293,6 +293,17 @@ func (inst *Application[U]) Run() (err error) {
 	return
 }
 
+// Shutdown asks the render loop to stop at the next frame boundary, so that
+// Run returns normally and its caller's deferred cleanup runs. It is safe to
+// call from any goroutine — including a signal handler — and is idempotent.
+//
+// It does not preempt an in-flight frame: a loop blocked reading from a wedged
+// client will not observe this. A caller that must bound the wait (a signal
+// handler, a supervisor) needs its own escalation path.
+func (inst *Application[U]) Shutdown() {
+	inst.shutdown.Store(true)
+}
+
 func (inst *Application[U]) shouldProceed() bool {
 	return !inst.shutdown.Load()
 }

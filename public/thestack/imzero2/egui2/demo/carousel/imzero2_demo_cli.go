@@ -53,6 +53,10 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
+// signalShutdownGrace bounds how long a signal-driven shutdown waits for the
+// render loop to reach a frame boundary before forcing the process down.
+const signalShutdownGrace = 10 * time.Second
+
 func NewCommand() *cli.Command {
 	cfg := &application.Config{
 		MainFontTTF:            "",
@@ -545,8 +549,30 @@ func NewCommand() *cli.Command {
 			sigCh := make(chan os.Signal, 1)
 			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 			go func() {
-				<-sigCh
+				sig := <-sigCh
+				log.Info().Str("signal", sig.String()).Msg("carousel: caught signal, shutting down")
+				// Reap before anything else: an armed
+				// --flightRecorderFlushOnSignal handler races this
+				// goroutine and calls os.Exit, which would skip the
+				// deferred reap above.
 				doReap()
+				// Ask the render loop to wind up, so Run returns and the
+				// remaining deferred cleanup (introspect stop) runs on the
+				// normal path.
+				application_.Shutdown()
+				// Shutdown only lands at a frame boundary, and a loop wedged
+				// on a client read never reaches one. Without this
+				// escalation the process survived both SIGINT and SIGTERM —
+				// signal.Notify had removed Go's default terminate
+				// disposition and nothing here replaced it — leaving SIGKILL
+				// as the only way out. SIGKILL runs no exit hooks, so an
+				// instrumented build also lost its coverage counters
+				// (ADR-0169); os.Exit does run them.
+				time.AfterFunc(signalShutdownGrace, func() {
+					log.Warn().Dur("grace", signalShutdownGrace).
+						Msg("carousel: shutdown did not complete within the grace period, forcing exit")
+					os.Exit(1)
+				})
 			}()
 
 			return mainE(application_, renderers)
