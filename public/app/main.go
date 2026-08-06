@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/capslock"
 	"github.com/stergiotis/boxer/public/app/commands/codedriven"
 	"github.com/stergiotis/boxer/public/app/commands/compression"
+	"github.com/stergiotis/boxer/public/app/commands/datacatalog"
 	"github.com/stergiotis/boxer/public/app/commands/datasource"
 	"github.com/stergiotis/boxer/public/app/commands/designsystem"
 	"github.com/stergiotis/boxer/public/app/commands/egui2gen"
@@ -105,6 +106,7 @@ func mainC() (exitCode int) {
 			capslock.NewCliCommand(),
 			codedriven.NewCliCommand(),
 			compression.NewCliCommand(),
+			datacatalog.NewCliCommand(),
 			datasource.NewCliCommand(),
 			designsystem.NewCliCommand(),
 			findAnchor.NewCliCommand(),
