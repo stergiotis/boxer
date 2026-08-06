@@ -776,3 +776,35 @@ label surfaces this pass did not touch: an axis tag paints over the tick
 label it covers, the horizontal y axis label and the title share the top
 gutter without arbitration, pie slice labels draw regardless of slice size,
 and annotations, inlay text and the legend place where the caller says.
+
+## Update 2026-08-06 (2) — the box's own minimum height is exported
+
+The gutters are taken out of the box, not added around it: `layoutFrame`
+subtracts them from `p.h` and floors the plot area, so a box shorter than
+gutters-plus-that-floor produces a layout taller than its canvas, and the canvas
+clips the bottom gutter — the x tick labels. That has always been true here and
+was never stated, which is how it was paid for twice.
+
+It surfaced through the callers. play's Chart, Distribution and Series tabs size
+their plot boxes to the pane so a box is never *taller* than what it is drawn in
+(ADR-0172), and giving the latter two that treatment produced a box that was
+*shorter* than this bound instead: a measured 124pt pane split into 62 and 46pt
+boxes, comfortably inside the pane by every check the caller could make, and the
+lower plot still lost its whole time axis. The reading taken at the time — that
+the axis titles sit outside the box and the caller owed extra room for them —
+was wrong, and the correction it motivated made every box smaller, which is the
+direction that causes this clip rather than avoids it.
+
+So `MinBoxHeight(hasTitle, hasXLabel, hasYLabel, lanes)` now reports the bound
+(`boxheight.go`), and `layoutFrame` computes its gutters from the same two
+helpers, so the answer cannot drift from the layout it describes. 60pt for a
+plot labelling y only, 76pt with both axes labelled, and 12 more per extra
+x-label lane — which is the arithmetic the pass above added, so a caller that
+floors at this figure is also proof against a stacked axis asking for more.
+`boxheight_test.go` pins it against the real `layoutFrame` rather than against a
+copy of the sums, including that `maxBandLanes`' quarter-of-the-canvas bound
+keeps stacking inside the box it stacks into.
+
+A caller may of course floor higher for readability. It must not floor lower,
+and a round number chosen for comfort is not evidence that it does not — the
+Chart tab's original 80 cleared the real 76 by luck.

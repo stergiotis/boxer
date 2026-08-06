@@ -246,23 +246,15 @@ func (p *Plot) End() {
 // twice when the x band asks for a deeper gutter than it was given.
 func (p *Plot) layoutFrame(lanes, maxLanes int) (areaX, areaY, areaW, areaH float32) {
 	st := p.st
-	topGutter := float32(6.0)
-	if p.titleShown != "" {
-		topGutter = 24
-	} else if st.y.label != "" {
-		// The horizontal y label sits in the top gutter; without a title
-		// it still needs the band, or it clips above the canvas.
-		topGutter = 20
-	}
-	bottomGutter := float32(6) // no label row to reserve (sparklines)
-	if st.x.flags&AxisFlagsNoTickLabels == 0 {
-		bottomGutter = 6 + tickLen + 14 + float32(lanes-1)*tickLabelLaneH
-	}
-	if st.x.label != "" {
-		bottomGutter += 16
-	}
+	// The gutters come out of the box (boxheight.go). The horizontal y label
+	// sits in the top one; without a title it still needs the band, or it
+	// clips above the canvas. Below MinBoxHeight the floor here is what binds,
+	// and the layout then exceeds the canvas — which is the caller's cue to
+	// keep its boxes off that height, not something this pass can fix.
+	topGutter := topGutterFor(p.titleShown != "", st.y.label != "")
+	bottomGutter := bottomGutterFor(st.x.label != "", st.x.flags&AxisFlagsNoTickLabels == 0, lanes)
 	areaY = topGutter
-	areaH = max(p.h-topGutter-bottomGutter, 16)
+	areaH = max(p.h-topGutter-bottomGutter, minPlotAreaH)
 
 	if len(p.yCustomTicks) > 0 {
 		st.ticksY = filterTicksInRange(st.y.rng, p.yCustomTicks, st.ticksY)
