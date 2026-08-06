@@ -86,6 +86,13 @@ var bookcodevolFS embed.FS
 //go:embed bookcatalog
 var bookcatalogFS embed.FS
 
+// bookadrFS embeds the decision-corpus suite (apps/sqlapplet/bookadr/*.md) —
+// canned lenses over the ADR-0122 §SD4 `keelson('adr')` family, which reads
+// this repository's decision records rather than the running process.
+//
+//go:embed bookadr
+var bookadrFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -128,6 +135,12 @@ func init() {
 	// not what a process did (TopicObservability).
 	if err := RegisterBook("catalog", help.MustSub(bookcatalogFS, "bookcatalog"), []app.TopicT{app.TopicData}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register data-catalog book")
+	}
+	// TopicAbout, the topic docs-search already claims for the same corpus:
+	// the subject is the project's own record of its decisions, not the code
+	// (TopicCode) and not the process (TopicRuntime).
+	if err := RegisterBook("adr", help.MustSub(bookadrFS, "bookadr"), []app.TopicT{app.TopicAbout}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register adr book")
 	}
 }
 
