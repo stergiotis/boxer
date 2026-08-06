@@ -85,10 +85,14 @@ type BackgroundBandProducer func(viewMinMS, viewMaxMS int64) iter.Seq[layout.Bac
 // zero-valued struct literal.
 type Visuals struct {
 	// Layout (pixel dimensions)
-	LaneHeight      float32
-	LaneGap         float32
-	AxisHeight      float32
-	RolloverRowH    float32
+	LaneHeight   float32
+	LaneGap      float32
+	AxisHeight   float32
+	RolloverRowH float32
+	// CornerRadius rounds the interval bars, and only those: the bands, the
+	// rug marks and the annotation flags each carry their own (0, 0, and a
+	// chip radius respectively). It defaults to RoundingNone — see
+	// DefaultVisuals for why a data mark is not a chip.
 	CornerRadius    float32
 	BarMinPx        float32
 	RugStripH       float32
@@ -140,11 +144,21 @@ type Visuals struct {
 // WithVisuals.
 func DefaultVisuals() (v Visuals) {
 	v = Visuals{
-		LaneHeight:        28,
-		LaneGap:           4,
-		AxisHeight:        22,
-		RolloverRowH:      16,
-		CornerRadius:      2,
+		LaneHeight:   28,
+		LaneGap:      4,
+		AxisHeight:   22,
+		RolloverRowH: 16,
+		// RoundingNone, not RoundingSm. The ladder reserves 2 px for
+		// "buttons, badges, inline chips" (ADR-0032 §SD3) and makes sharp
+		// corners the default; an interval bar is a data mark, not chrome,
+		// and rounding one costs twice over. Bars in a lane abut with only
+		// the data's own gap between them, so two rounded ends 2 px apart
+		// read as one ribbon with a notch pinched into it rather than as two
+		// intervals. And a bar narrower than 4×the radius has no straight
+		// edge left: at BarMinPx-ish widths — a same-day interval on a
+		// months-wide axis — it domes into a capsule that reads as a glyph
+		// someone chose rather than as a short span.
+		CornerRadius:      styletokens.RoundingNone,
 		BarMinPx:          1,
 		RugStripH:         24,
 		RugGap:            4,
