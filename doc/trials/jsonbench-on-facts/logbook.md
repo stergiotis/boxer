@@ -403,12 +403,29 @@ template:
   `LEEWAY_LU_MEMBS_OF_VAL_IDX` were absent. Every statement is
   `CREATE OR REPLACE`, so nothing removes a retired function, and unlike
   `chpack` the family carries no version marker to detect the skew.
-  **Consequence for this run, not yet acted on:** `queries-facts.sql` and
-  `queries-facts-skip.sql` name the retired `LEEWAY_LU_MEMB_IDX_TO_VAL_IDX`
-  and hand-roll `LEEWAY_LIST_BY_TAG_EQUAL`. Switching Q4 to the primitive
-  gives a byte-identical answer 15 % faster (0.859 s → 0.729 s). The arm-B and
-  arm-C numbers above were measured with the committed form and still
-  correspond to it; correcting the queries means re-measuring both.
+  **Acted on 2026-08-06:** the facts queries now use
+  `LEEWAY_LIST_BY_TAG_EQUAL` for the two array-valued sections instead of
+  hand-rolling `CO_GATHER(vals, RAGGED_STARTS(len))`, and arms B and C were
+  re-measured. Results stay byte-identical; hot runtimes drop **5–58 %**:
+
+  | | Q1 | Q2 | Q3 | Q4 | Q5 |
+  | --- | --- | --- | --- | --- | --- |
+  | arm B | −17.6 % | **−57.9 %** | +1.2 % | −15.9 % | −14.7 % |
+  | arm C | −5.0 % | **−55.6 %** | +1.5 % | −11.4 % | −16.3 % |
+
+  Q2 more than halves, in time and in memory (1,130 → 650 MB), because it
+  reads `/did` for every qualifying row: the hand-rolled form materialised the
+  whole re-aligned string lane per row where the primitive slices one
+  attribute. Q3 is unchanged — it touches only the small i64 lane, where the
+  gather cost was never material. The spot-check that prompted this predicted
+  15 % from Q4 alone and understated it by 4×.
+  The correction also removes the silent truncation the file's own header
+  warned about: `[1]` on a returned slice is an explicit choice where
+  `CO_GATHER(vals, RAGGED_STARTS(len))` dropped everything past the first
+  element without saying so.
+  **Arm B against A00 is now 2.1–3.7×** (was 2.1–5.9×), and against A
+  5.0–15.9×. Arm D is unaffected — its materialized columns never used the
+  vocabulary. Tables above and the book's rows are synced.
 - **UDF naming aligned to UPPER_SNAKE (2026-08-06), arms B and C
   re-measured.** The pack shipped camelCase (`coLookup`, `raggedStarts`)
   beside the read-back family's UPPER_SNAKE, and since the two became one

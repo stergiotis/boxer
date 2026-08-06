@@ -86,11 +86,11 @@ Hot seconds, all five reference variants beside the facts arms:
 
 | Q | A | A0 | A00 | B (facts) | D (facts + mat.) | D/A0 | **D/A00** |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Q1 | 0.011 | 0.013 | 0.049 | 0.142 | 0.014 | 1.08× | **0.29×** |
-| Q2 | 0.192 | 0.253 | 0.385 | 2.272 | 0.265 | 1.05× | **0.69×** |
-| Q3 | 0.043 | 0.044 | 0.159 | 0.334 | 0.048 | 1.09× | **0.30×** |
-| Q4 | 0.044 | 0.076 | 0.197 | 0.832 | 0.055 | 0.72× | **0.28×** |
-| Q5 | 0.058 | 0.070 | 0.192 | 0.837 | 0.060 | 0.86× | **0.31×** |
+| Q1 | 0.011 | 0.013 | 0.049 | 0.117 | 0.014 | 1.08× | **0.29×** |
+| Q2 | 0.192 | 0.253 | 0.385 | 0.957 | 0.265 | 1.05× | **0.69×** |
+| Q3 | 0.043 | 0.044 | 0.159 | 0.338 | 0.048 | 1.09× | **0.30×** |
+| Q4 | 0.044 | 0.076 | 0.197 | 0.700 | 0.055 | 0.72× | **0.28×** |
+| Q5 | 0.058 | 0.070 | 0.192 | 0.714 | 0.060 | 0.86× | **0.31×** |
 
 Peak memory, hot:
 
@@ -114,8 +114,8 @@ Two readings, and both are true:
   heterogeneous documents could actually be) it is **1.4–3.5× faster on every
   query and uses 0.11–0.79× the memory**, at 1.51× the storage.
 
-What remains in both readings is arm B — 2.1–5.9× against A00, 7.8–18.9× against
-A0 — and that is the read path, not the model.
+What remains in both readings is arm B — 2.1–3.7× against A00, 5.0–15.9× against
+A — and that is the read path, not the model.
 
 ## Size — facts is *smaller* than native JSON at this tier
 
@@ -142,11 +142,11 @@ Arm D's materialized columns add 274.7 MiB (+18.8 % over arm B), of which
 
 | Q | A cold | A hot | B cold | B hot | C hot | D cold | D hot | B/A | **D/A** |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Q1 | 0.013 | 0.011 | 0.180 | 0.142 | 0.120 | 0.029 | 0.014 | 12.9× | **1.27×** |
-| Q2 | 0.212 | 0.192 | 2.400 | 2.272 | 2.085 | 0.341 | 0.265 | 11.8× | **1.38×** |
-| Q3 | 0.057 | 0.043 | 0.354 | 0.334 | 0.344 | 0.068 | 0.048 | 7.8× | **1.12×** |
-| Q4 | 0.070 | 0.044 | 0.917 | 0.832 | 0.805 | 0.114 | 0.055 | 18.9× | **1.25×** |
-| Q5 | 0.079 | 0.058 | 0.967 | 0.837 | 0.841 | 0.114 | 0.060 | 14.4× | **1.03×** |
+| Q1 | 0.013 | 0.011 | 0.155 | 0.117 | 0.114 | 0.029 | 0.014 | 10.6× | **1.27×** |
+| Q2 | 0.212 | 0.192 | 1.091 | 0.957 | 0.925 | 0.341 | 0.265 | 5.0× | **1.38×** |
+| Q3 | 0.057 | 0.043 | 0.354 | 0.338 | 0.349 | 0.068 | 0.048 | 7.9× | **1.12×** |
+| Q4 | 0.070 | 0.044 | 0.804 | 0.700 | 0.713 | 0.114 | 0.055 | 15.9× | **1.25×** |
+| Q5 | 0.079 | 0.058 | 0.819 | 0.714 | 0.704 | 0.114 | 0.060 | 12.3× | **1.03×** |
 
 Cold/hot spreads are modest throughout — on NVMe, re-reading the few columns
 each query touches is cheap even from a dropped page cache.
@@ -156,10 +156,10 @@ each query touches is cheap even from a dropped page cache.
 | Q | A | B | D | B/A | D/A |
 | --- | --- | --- | --- | --- | --- |
 | Q1 | 5.3 MB | 37 MB | 8.6 MB | 7.0× | 1.6× |
-| Q2 | 272 MB | 1,130 MB | 343 MB | 4.2× | 1.3× |
+| Q2 | 272 MB | 650 MB | 343 MB | 2.4× | 1.3× |
 | Q3 | 209 MB | 74 MB | 170 MB | **0.35×** | **0.8×** |
-| Q4 | 95 MB | 526 MB | 298 MB | 5.5× | 3.1× |
-| Q5 | 106 MB | 554 MB | 317 MB | 5.2× | 3.0× |
+| Q4 | 95 MB | 527 MB | 298 MB | 5.6× | 3.1× |
+| Q5 | 106 MB | 534 MB | 317 MB | 5.1× | 3.0× |
 
 Arm B's memory is far better than the 1M run's 5.6–76× — that column was
 measuring the open-coded query form, not the model.
