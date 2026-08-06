@@ -102,3 +102,10 @@ applies before assuming a defect:
   whatever `-coverpkg` selected — by default the main module only, so a
   third-party module reading zero executed statements usually means "not
   instrumented", not "not executed".
+- **Every table here describes one Go binary.** The Rust render client is a
+  separate executable that no `go_*` table sees, and its answer is very
+  different — a few percent first-party against the Go binary's ~30%. Nor do
+  these tables separate what somebody wrote from what a generator emitted,
+  beyond the `generated` flag. Both are §SD8–§SD10 of
+  [ADR-0173](../adr/0173-code-volume-self-inspection.md) and are not built
+  yet; until they are, read every number on this page as "of the Go binary".
