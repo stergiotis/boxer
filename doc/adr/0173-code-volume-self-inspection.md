@@ -303,6 +303,51 @@ Untouched: `FactsStoreI` and the facts schema (SD7 defers persistence),
   gated — it is reported through the `attribution` column instead, because
   the only way to check it is the reconciliation the column says is absent.
 
+## Updates
+
+### 2026-08-06 — M0–M2 and the book landed; four refinements
+
+`codevol` (the pure analysis: `Modules`, `ReadSelfSymbols`, `CountFiles`),
+the `go_modules` / `go_symbols` providers, the `go_packages` volume columns
+behind their own lazy cache, and two applet suites —
+`bookcodevol` (4 applets) plus `go-volume` in the existing godep book.
+The live godep gate runs the source-volume buffer against this repository
+and reproduces the Context's numbers: third-party 1,263,112 code lines
+(exact match), first-party 397,982, ratio 3.17, 40.3% of first-party
+generated. Implementation changed four things:
+
+- **`go test` links the binary it runs without a symbol table.** Confirmed
+  by inspection: `go test -c` produces a `.symtab`, the binary `go test`
+  actually executes does not, so `ReadSelfSymbols` always fails under the
+  default lane. §SD2's tables are therefore untestable by self-reading, and
+  the providers take an injectable `CodevolSourceI` (the `CoverageSourceI`
+  pattern) so the gate can serve a fixture. Real-symbol assertions live in
+  the integration lane, which builds a binary and reads it.
+- **Module attribution is exact; package attribution is not.** §SD2
+  proposed reconciling symbol names against `go_packages`. Unnecessary: a
+  longest-prefix match against the module list the binary *already*
+  declares (§SD1) resolves the owning module exactly, with no second table
+  and no toolchain — and the module is the grain the first-vs-third
+  question is actually asked on. `pkg_path` stays heuristic and is labelled
+  as such; the `attribution` column became `module_attribution`.
+- **Laziness came for free from the projection.** `introspect.Table.Build`
+  only invokes getters for projected columns, so the volume columns' cost
+  falls only on a query that selects one — a cleaner guarantee than the
+  budget §SD3 assumed it would need. The pass runs its own `packages.Load`
+  rather than extending the graph collection, which also keeps machine-local
+  absolute paths out of the facts-bound manifest DTO.
+- **`keelson('build')` already carried the identity columns** §SD5 wanted
+  (`vcs_revision`, `vcs_modified`), so `go_modules` does not duplicate them.
+
+Two tables landed in the *static* provider set rather than beside
+`providersgodep`, which the ADR did not anticipate: `go_modules` and
+`go_symbols` have no heavy dependencies, so unlike `go_packages` they can
+ship in an appliance build. That is the tiering paying off in the place it
+was least expected — the cheap lenses answer where the expensive one is not
+even registered.
+
+Not built: §SD4 (`go_reach`), §SD6's treemap over source volume, §SD7.
+
 ## Status
 
 Proposed — awaiting review by the boxer maintainer.
