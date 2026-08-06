@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-06
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-06
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0170: the data-catalog competence — schema discovery, leeway restoration, and shape matching as boxer tables
 
@@ -336,12 +334,12 @@ stands in); shape matching for *leeway* tables via their UDF read forms; a
 
 ## Status
 
-Proposed, pre-review — **implemented ahead of review at the author's request**,
-so this document is a living snapshot edited in place rather than a record of
-what was built to a settled decision. The §SD text above already carries the
-corrections implementation forced (the CLI's home, the provider's home, the
-zero-column case, the distribution contract, the escaping rule). The milestone
-survey with exact symbols and file paths is
+Accepted 2026-08-06, with M0–M4 already shipped: the decision was implemented
+ahead of review, so the §SD text above states what was built rather than what
+was proposed before building corrected it (the CLI's home, the provider's home,
+the zero-column case, the distribution contract, the escaping rule). Changes now
+arrive as dated `## Update` sections. The milestone survey with exact symbols and
+file paths is
 [data-catalog-competence.md](../adr-background-work/data-catalog-competence.md).
 
 ## References
