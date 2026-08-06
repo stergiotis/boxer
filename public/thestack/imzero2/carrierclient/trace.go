@@ -26,8 +26,8 @@ import (
 
 // Step is one line of a trace.
 type Step struct {
-	// Do is the verb: click, type, set_value, focus, scroll_into_view, key,
-	// scroll, wait, capture, cadence, resize, note, sleep.
+	// Do is the verb: click, hover, type, set_value, focus, scroll_into_view,
+	// key, scroll, wait, capture, cadence, resize, note, sleep.
 	Do string `json:"do"`
 
 	// Anchor (ADR-0127 §SD4). Id wins; then name/contains plus role; nth
@@ -291,6 +291,17 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		}
 		// No anchor given: the coordinate rung, for a painter-only target.
 		return c.ClickAt(st.X, st.Y)
+	case "hover":
+		// Move the pointer without pressing. Coordinate-only, and for the
+		// same reason `click` keeps that rung: a hover affordance drawn on the
+		// painter lane — a heatmap cell, a plot's crosshair — has no
+		// accessibility node to anchor on. Hover state is read from a register
+		// one frame behind (ADR-0140), so a `capture` after this sees it.
+		//
+		// Without this verb no hover affordance in any imzero2 app was
+		// reachable from a trace at all, which is how a heatmap shipped with
+		// none: the tour could click a cell but never point at one.
+		return c.MoveMouse(st.X, st.Y)
 	case "type":
 		// Focus first: text goes to whatever egui thinks is focused, which
 		// without this is whatever the previous step left.
