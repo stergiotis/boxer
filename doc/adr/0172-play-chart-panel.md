@@ -235,6 +235,20 @@ Registration: tab `chart`, DockID 25, body zone, `Lazy` (a plot is a heavy body)
 `ShapeContract: true` (its rejection is worth the dock strip's `×` mark),
 `Writes: [signalSelection]`.
 
+**The plot box is sized from the pane's HEIGHT as well as its width.** A fixed
+height is what the Distribution and Series tabs use, and it is wrong: implot
+draws the x tick labels along the *bottom* of the box, so a box taller than its
+pane loses them, and the part of the y range below the clip reads as missing
+data rather than as a cropped view. In an applet window — ~900×660, and not
+resizable out of — a 380pt box in a ~255pt pane made a top-N ranking look like
+it had dropped two thirds of its bars and raised its baseline off zero. The
+surrounding `ScrollArea` does not rescue it either: implot captures the wheel
+while the pointer is over the plot (ADR-0140), so the labels cannot be scrolled
+to without first moving the pointer off the chart. The floor is set far below
+anything comfortable rather than at it, because a floor placed where a plot
+stops being *readable* would itself overshoot a small pane and re-clip the
+labels this sizing exists to keep.
+
 ### SD6 — Deferred, deliberately
 
 Stacked bars (§SD4) · a `mark` column (§SD3) · error bars and a second value
@@ -377,9 +391,17 @@ changes:
     checkbox, unchecked then checked, in the same pair. `08_chart_heatmap_sparse`
     gained two hover captures: a filled cell reading
     `x = 12 · y = 5 · z = 12` and a hole reading `x = 13 · y = 4 · no row`.
-15. Still open: the log control's *negative* case (absent when a non-positive
-    value is present), a click landing outside the selection tolerance, and the
-    caps (row truncation, series cap, the 40k-cell reject).
+15. **Done 2026-08-06.** `08_chart_small_pane` pins a 900×640 window through
+    `BOXER_PLAY_WINDOW_SIZE` and charts a top-N ranking, which is the pair of
+    conditions the bug needed: a pane shorter than the box, and data whose
+    values never approach zero. The rest of the tour runs at 1920×1200 where a
+    fixed-height box always fits, so the whole class was invisible to it —
+    every scene is a picture of a *roomy* pane unless one is written otherwise.
+16. Still open: the log control's *negative* case (absent when a non-positive
+    value is present), a click landing outside the selection tolerance, the
+    caps (row truncation, series cap, the 40k-cell reject), and tick labels
+    crowding when many long categories share a narrow pane — the cap is a
+    count (40) where the constraint is really width.
 
 ## Status
 

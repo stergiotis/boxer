@@ -83,10 +83,29 @@ const (
 	// goes through IncludeX/IncludeY rather than pinned limits, so a
 	// double-click refit and a legend toggle still take the ordinary path.
 	chartFitMargin = 0.05
-	// chartPlotHeight is the fixed plot-box height; the width follows the
-	// pane, as in the Distribution and Series tabs.
+	// chartPlotHeight is the PREFERRED plot-box height; both dimensions follow
+	// the pane when the pane is smaller.
+	//
+	// It used to be fixed, as it is in the Distribution and Series tabs, and
+	// that is a bug those tabs share: a box taller than its pane is clipped at
+	// the BOTTOM, which is exactly where implot draws the x tick labels. In an
+	// applet window (~900×660, and not resizable out of) a 380pt box in a
+	// ~255pt pane lost every category label, and the part of the y range below
+	// the clip read as missing bars — a top-N ranking looked like it had
+	// dropped two thirds of its rows and moved its baseline. The pane's
+	// ScrollArea does not save it either: implot captures the wheel while the
+	// pointer is over the plot (ADR-0140), so the labels cannot be scrolled to
+	// without first moving the pointer off the chart.
 	chartPlotHeight = 380
-	chartPlotMinW   = 480
+	// chartPlotMinH only keeps the box off a degenerate height; it is
+	// deliberately far below anything readable. A floor set where a plot stops
+	// being COMFORTABLE would overshoot a small pane and clip the very labels
+	// this sizing exists to keep — a cramped chart that is honest about its
+	// axis beats a roomy one with its bottom cut off.
+	chartPlotMinH = 80
+	chartPlotMinW = 480
+	// chartPaneSlack keeps the box off the pane's edge.
+	chartPaneSlack = 8
 	// chartColorbarH is the colorscale legend's box under a heatmap, tall
 	// enough for the gradient AND its tick labels. The grid reading takes it
 	// out of the plot rather than adding it below, so both readings occupy the
@@ -224,6 +243,12 @@ type ChartDriver struct {
 	mark     chartMarkE
 	markSet  bool // the reader picked; otherwise the default follows the data
 	logScale bool
+
+	// paneW/paneH is the last good answer from the pane probe. The probe
+	// reports nothing on the frame a hidden tab comes back — and this tab is
+	// Lazy — so sizing off the miss would flash the plot to its floor every
+	// time the reader switches to it. The last good answer is held instead.
+	paneW, paneH float32
 
 	// cm is the heatmap's colormap, kept across folds so the colorscale legend
 	// beside it stays bound to one Config (the widget's documented idiom); the
@@ -462,16 +487,21 @@ func (inst *ChartDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k c
 	c.AddSpace(styletokens.GapItems(dens))
 
 	// Seq-keyed pane probe, window-unique through the instance id stack (one
-	// frame behind, fine for a stable dock leaf).
+	// frame behind). Emitted HERE, after the chrome above the plot and before
+	// the plot itself: the rect is the room left for the NEXT widget, so a
+	// probe placed after the plot would size the plot against its own output.
+	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(chartPaneProbeSalt).Derive()); ok {
+		inst.paneW, inst.paneH = availW, availH
+	}
 	w := float32(chartPlotMinW)
-	if availW, _, _ := c.CapturePaneSize(inst.ids.PrepareHighEntropy(chartPaneProbeSalt).Derive()); availW > chartPlotMinW {
-		w = availW - 8
+	if inst.paneW > chartPlotMinW {
+		w = inst.paneW - chartPaneSlack
 	}
 	if inst.reading == chartReadingGrid {
-		inst.renderGrid(w, k, emit)
+		inst.renderGrid(w, inst.plotHeight(), k, emit)
 		return
 	}
-	inst.renderLanes(w, k, emit)
+	inst.renderLanes(w, inst.plotHeight(), k, emit)
 }
 
 // activeMark resolves the mark to draw: the reader's pick when it is still
@@ -575,11 +605,22 @@ func chartAxisPad(lo float64, hi float64) (pad float64) {
 	return math.Max(math.Abs(hi)*chartFitMargin, 1)
 }
 
+// plotHeight is the plot box's height: the preferred one, or the pane when the
+// pane is shorter. A box taller than its pane is clipped at the bottom, taking
+// the x tick labels with it (see chartPlotHeight).
+func (inst *ChartDriver) plotHeight() (h float32) {
+	h = chartPlotHeight
+	if inst.paneH > 0 && inst.paneH-chartPaneSlack < h {
+		h = inst.paneH - chartPaneSlack
+	}
+	return max(h, chartPlotMinH)
+}
+
 // renderLanes draws the lanes reading under the active mark. Every Setup call
 // precedes the first item, which is where the port stops accepting them.
-func (inst *ChartDriver) renderLanes(w float32, k chartClaim, emit SignalEmitterI) {
+func (inst *ChartDriver) renderLanes(w float32, h float32, k chartClaim, emit SignalEmitterI) {
 	mark := inst.activeMark()
-	for p := range implot.Scoped(inst.ids, "##play-chart-lanes", w, chartPlotHeight) {
+	for p := range implot.Scoped(inst.ids, "##play-chart-lanes", w, h) {
 		if inst.xAxis == chartAxisTemporal {
 			p.SetupAxisScale(implot.AxisX1, implot.ScaleTime)
 		}
@@ -639,7 +680,7 @@ func (inst *ChartDriver) echoSelection(p *implot.Plot, k chartClaim, mark chartM
 
 // renderGrid draws the grid reading as a heatmap plus the colorscale legend
 // bound to the same Config — without it the cells carry no readable magnitude.
-func (inst *ChartDriver) renderGrid(w float32, k chartClaim, emit SignalEmitterI) {
+func (inst *ChartDriver) renderGrid(w float32, h float32, k chartClaim, emit SignalEmitterI) {
 	g := &inst.grid
 	inst.cm.DataMin, inst.cm.DataMax = g.vmin, g.vmax
 	if !(inst.cm.DataMax > inst.cm.DataMin) {
@@ -651,7 +692,10 @@ func (inst *ChartDriver) renderGrid(w float32, k chartClaim, emit SignalEmitterI
 	if inst.logScale && inst.logOK {
 		inst.cm.Scale = colormap.ScaleLogE
 	}
-	for p := range implot.Scoped(inst.ids, "##play-chart-grid", w, chartPlotHeight-chartColorbarH) {
+	// The colorbar comes out of the same budget as the plot, so the pair
+	// occupies exactly what the lanes reading does and the legend never lands
+	// under the pane's fold.
+	for p := range implot.Scoped(inst.ids, "##play-chart-grid", w, max(h-chartColorbarH, chartPlotMinH)) {
 		if len(g.xLabels) <= chartMaxTickLabels {
 			p.SetupAxisTicks(implot.AxisX1, chartCellCenters(len(g.xLabels)), g.xLabels)
 		}

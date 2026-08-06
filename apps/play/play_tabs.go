@@ -569,11 +569,14 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 				scrollTab(func() { inst.renderTreemapTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
 			}
 		case "chart":
-			// Scrolled for the Distribution tab's reason: a fixed-height plot
-			// box sized from the pane WIDTH (the only dimension a
-			// non-contending probe yields), so a short leaf scrolls rather
-			// than clips, and implot zeroes the wheel delta while the pointer
-			// is over the plot so the two do not contend (ADR-0140).
+			// Scrolled like its neighbours, but it does NOT rely on the
+			// scroll to reach its own content: the plot box is sized from the
+			// pane's height as well as its width, because implot draws the x
+			// tick labels along the bottom of the box and a box taller than
+			// its pane loses them. Scrolling would not have rescued that —
+			// implot captures the wheel while the pointer is over the plot
+			// (ADR-0140), so the reader has to move off the chart first. The
+			// ScrollArea remains for the chrome above and the colorbar below.
 			spec.Panel = chartPanel{driver: inst.chartDriver}
 			spec.Render = func(f *TabFrame) {
 				scrollTab(func() { inst.renderChartTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })

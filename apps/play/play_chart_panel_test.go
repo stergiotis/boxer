@@ -412,6 +412,35 @@ func TestChartFitMarginKeepsBarBaseline(t *testing.T) {
 	assert.InDelta(t, 10.0, chartAxisPad(0, 200), 1e-9, "pad is 5% of 0..max, not of min..max")
 }
 
+// The plot box must never be taller than the pane it is drawn in. implot draws
+// the x tick labels along the BOTTOM of the box, so a box that overflows loses
+// them — and the part of the y range below the clip reads as missing data: a
+// top-N bar chart in an applet pane looked like it had dropped two thirds of
+// its rows and moved its baseline off zero, when in fact both were simply below
+// the fold.
+func TestChartPlotHeightNeverExceedsPane(t *testing.T) {
+	d := NewChartDriver(c.NewWidgetIdStack())
+	assert.Equal(t, float32(chartPlotHeight), d.plotHeight(),
+		"before the probe lands, the preferred height")
+
+	d.paneH = 1000
+	assert.Equal(t, float32(chartPlotHeight), d.plotHeight(),
+		"a tall pane does not stretch the box past its preferred height")
+
+	d.paneH = 255 // the applet result pane that surfaced this
+	assert.Equal(t, float32(255-chartPaneSlack), d.plotHeight())
+
+	// The property, over every pane the probe can plausibly report. It holds
+	// down to the floor; below that the box is degenerate either way and the
+	// pane's ScrollArea takes over, which is why the floor is set far under
+	// anything comfortable rather than at it.
+	for _, pane := range []float32{chartPlotMinH + chartPaneSlack, 130, 255, 380, 500, 1000} {
+		d.paneH = pane
+		assert.LessOrEqualf(t, d.plotHeight(), pane,
+			"a %vpt pane must not get a taller box", pane)
+	}
+}
+
 // §SD3: which marks are offered follows the resolved types, and the reader's
 // pick is honoured only while it stays available.
 func TestChartAvailableMarks(t *testing.T) {

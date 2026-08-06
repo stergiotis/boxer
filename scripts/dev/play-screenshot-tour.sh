@@ -881,6 +881,25 @@ ORDER BY x"
 	settle=2000
 }
 
+scene_08_chart_small_pane() {
+	desc="Chart in a SMALL window: the plot box follows the pane instead of a fixed height, so a top-N ranking keeps its zero baseline and every category label"
+	# The rest of the tour runs at 1920x1200, where a fixed-height plot box
+	# always fits and this class of bug is invisible. An applet window is
+	# ~900x660 and not resizable out of, which is where it was found.
+	senv=(BOXER_PLAY_FOCUS_CHART=1 BOXER_PLAY_WINDOW_SIZE=900x640)
+	# A ranking, so nothing sits near zero: when the box overflowed its pane
+	# the clipped-off bottom read as a raised axis minimum and the short bars
+	# looked absent. Data whose values reach zero hides the symptom, which is
+	# why the charts looked at first did not show it.
+	sql="SELECT * FROM values(
+  'x String, rows UInt64',
+  ('alpha', 1200000), ('bravo', 980000), ('charlie', 870000), ('delta', 610000),
+  ('echo', 520000), ('foxtrot', 348603), ('golf', 300000), ('hotel', 280000),
+  ('india', 250000), ('juliett', 210000), ('kilo', 190000), ('lima', 170000),
+  ('mike', 150000), ('november', 130000), ('oscar', 110000))"
+	settle=1800
+}
+
 scene_08_chart_reject() {
 	desc="Chart — the SCHEMA-level reject (ADR-0172 §SD1): a result satisfying neither reading draws the contract and names its own columns back, and the dock strip carries the shape mark"
 	senv=(BOXER_PLAY_FOCUS_CHART=1)
