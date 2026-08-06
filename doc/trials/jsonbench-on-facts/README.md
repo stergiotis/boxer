@@ -193,6 +193,33 @@ recorded results, not incidental.
   milestone, appends a logbook entry (date, build, hardware, findings,
   outcome) per the directory convention.
 
+### 6a Teardown
+
+Each arm script drops its own database before rebuilding it, so re-running one
+arm needs no cleanup. Nothing sweeps them all; a full run leaves one database
+per arm per tier (the 1M and 10M runs together left 13, ~11 GiB). To reclaim
+that, list first and drop second:
+
+```sh
+clickhouse-client -q "SELECT name FROM system.databases WHERE name LIKE 'jsonbench%' ORDER BY name"
+
+clickhouse-client -q "SELECT name FROM system.databases WHERE name LIKE 'jsonbench%'" \
+  | xargs -r -I{} clickhouse-client -q "DROP DATABASE IF EXISTS \`{}\`"
+```
+
+Dropping them loses nothing reproducible: the run directories are the numbers
+of record, the arm scripts rebuild from the raw corpus, and the `jsonbench`
+book carries its own committed summary rather than reading `jsonbench_results`.
+
+**The pattern deliberately does not catch the UDFs.** `chpack` and the
+`LEEWAY_*` read-back family install server-wide rather than into a
+`jsonbench_*` database, and they are a shipped repo capability
+([ADR-0162](../../adr/0162-leeway-co-ragged-function-pack.md)) that other work
+may be using — so a benchmark teardown has no business removing them. Removing
+them deliberately is awkward for the reason §7b row 7 files: the read-back
+family carries no version marker and every statement is `CREATE OR REPLACE`, so
+there is no reconcile step and the functions have to be dropped by name.
+
 ## 7 Findings ledger
 
 Friction encountered while executing this plan is filed as findings rather
