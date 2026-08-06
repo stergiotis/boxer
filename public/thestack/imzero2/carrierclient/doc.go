@@ -11,8 +11,8 @@
 // egui-mcp requires eframe, which the headless build exists to exclude, so the
 // carrier is the only seam a headless host has.
 //
-// The wire types in input.pb.go are generated from the canonical contract at
-// proto/boxer/imzero2/v1/input.proto, the same file the Rust host generates
+// The wire types in input_pb.out.go are generated from the canonical contract
+// at proto/boxer/imzero2/v1/input.proto, the same file the Rust host generates
 // from, so neither end can drift from it. Regenerate with:
 //
 //	go generate ./public/thestack/imzero2/carrierclient/
@@ -34,4 +34,4 @@
 // [ADR-0154]: https://github.com/stergiotis/boxer/blob/main/doc/adr/0154-headless-carrier-tree-and-driver.md
 package carrierclient
 
-//go:generate go run ./internal/protogen
+//go:generate sh -c "go run -tags=\"$(cat ../../../../tags)\" github.com/stergiotis/boxer/public/app protogen --protoRoot ../../../../proto --out input_pb.out.go"

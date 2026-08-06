@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/keelsoncodec"
 	"github.com/stergiotis/boxer/public/app/commands/keelsonddl"
 	"github.com/stergiotis/boxer/public/app/commands/key"
+	"github.com/stergiotis/boxer/public/app/commands/protogen"
 	"github.com/stergiotis/boxer/public/app/commands/queryrunsd"
 	"github.com/stergiotis/boxer/public/app/commands/runtimecodegen"
 	"github.com/stergiotis/boxer/public/app/commands/sample"
@@ -123,6 +124,7 @@ func mainC() (exitCode int) {
 			egui2gen.NewCliCommand(),
 			iconsgen.NewCliCommand(),
 			keelsoncodec.NewCliCommand(),
+			protogen.NewCliCommand(),
 		),
 		Before: logging.Apply,
 		After: func(context *cli.Context) error {
