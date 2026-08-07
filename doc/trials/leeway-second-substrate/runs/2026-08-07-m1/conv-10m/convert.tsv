@@ -1,0 +1,13 @@
+metric	value
+source_documents	9999994
+target_attributes	121205987
+attributes_per_document	12.121
+convert_seconds	3.926
+convert_peak_bytes	5275539561
+documents_per_second	2547120
+attributes_per_second	30872641
+source_bytes	1540236424
+target_bytes_premerge	1094783653
+target_bytes	1072833164
+target_over_source	0.6965
+source_mib_per_second	374.1

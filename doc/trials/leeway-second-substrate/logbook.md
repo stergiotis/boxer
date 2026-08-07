@@ -261,3 +261,98 @@ effects cancel: Y wins where a section predicate disappears (U5 0.67×, U8
   measured configurations), `sizes.tsv`.
 - **Run dir:** [`./runs/2026-08-07-m0/`](./runs/2026-08-07-m0/) — `arm-j/`,
   `arm-x/`, `arm-x-join/`, `arm-x2/`, `arm-x2-join/`, `arm-y/`
+
+## 2026-08-07 — M1 groundwork, and the packed→exploded conversion rate at 100M — 50.8 s, bounded memory, a footprint ratio stable to 0.2 % across a 10× scale-up
+
+- **Build under test:** boxer `f8032930`; ClickHouse 26.7.3.19.
+- **Environment:** as M0. Single local disk (`default`, `/srv/clickhouse`);
+  no multi-volume storage policy is configured on this server.
+- **Attempted:** two things. First the M1 groundwork — the 1M corpus in both
+  renderings, exported to Parquet, and a tiebroken oracle. Then, on the
+  question of whether the exploded form is affordable as a *maintained
+  redundancy* rather than an experiment: the conversion rate at 100M, and
+  whether either form's footprint diverges with scale.
+
+### M1 groundwork
+
+[`m1-setup.sh`](./m1-setup.sh) builds the 1M pair from a dense document id
+stamped before the split, so both Parquet files provably hold the same
+documents, and pins **ZSTD** on the Parquet side (README §7 Q1, decided before
+the numbers rather than after). **Both targets read both files** — arm P holds.
+`LowCardinality` arrives as plain `VARCHAR` / `Utf8`, which is the
+encoding-aspect loss §3a predicted, now observed.
+
+[`m1-packed.clickhouse.sql`](./m1-packed.clickhouse.sql) is the oracle: the
+sibling's two query sets run through `jsonbench resolve` to physical names —
+committed rather than resolved per comparison, because handle expansion goes
+through a ClickHouse parser and the ports cannot use it — then given
+deterministic tiebreaks on Q1/Q2/Q4/Q5/U1/U2/U4/U9. It is now byte-identical
+across `max_threads=1` and `max_threads=16`, which it was not before.
+
+### The conversion, measured
+
+[`convert.sh`](./convert.sh) does it in **one pass with no staging**: each
+section's three lanes are zipped into a tuple array, the four are concatenated
+and `ARRAY JOIN`ed once, so `rowNumberInAllBlocks()` is evaluated once per
+source row and every section agrees on which document is which. `arm-x.sh`
+needed a staged copy for that agreement, which would have charged the
+conversion a full extra pass. Verified equivalent to the four-insert build at
+1M on three independent checks — content multiset, per-document shape, and
+per-document fingerprint multiset all differ by zero rows, up to document
+renumbering.
+
+| tier | documents | attributes | convert | docs/s | attrs/s | peak | packed | exploded | ratio |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1M\* | 1,000,000 | 12,114,997 | 0.42 s | 2.37M | 28.7M | 1.99 GB | 239,893,800 B | 107,968,396 B | 0.450\* |
+| 10M | 9,999,994 | 121,205,987 | 3.93 s | 2.55M | 30.9M | 5.28 GB | 1,540,236,424 B | 1,072,833,164 B | **0.6965** |
+| 100M | 99,999,968 | 1,200,650,881 | **50.79 s** | 1.97M | 23.6M | **5.41 GB** | 14,960,053,637 B | 10,439,188,043 B | **0.6978** |
+
+\* The 1M packed source is a differently-constructed subset — a `LIMIT` of the
+10M table, sorted by `doc`, with the `doc` column's bytes subtracted — so its
+ratio is not on the same trend and is shown only for the rate. What moves it is
+the *packed* side still gaining compression efficiency at that size: 239.9 B
+per document at 1M against 154.0 at 10M and 149.6 at 100M. The exploded side is
+already flat there — 8.91, 8.85, 8.69 bytes per attribute.
+
+**Three results, against the assumption the question was posed under.**
+
+- **The rate is not a constraint.** 100M documents and 1.2 billion attributes
+  convert in **50.8 seconds**, reading 14.0 GiB at 281 MiB/s. Throughput falls
+  ~24 % from 10M to 100M (30.9M → 23.6M attributes/s), which is a slope worth
+  knowing but not one that changes the answer at this scale.
+- **Memory is bounded, not proportional.** Peak is **5.28 GB at 10M and 5.41 GB
+  at 100M** — a 2 % rise for a 10× row increase. The conversion streams; it
+  does not accumulate. This is the operationally important number, because it
+  is what says the conversion does not need a capacity plan of its own.
+- **The footprint ratio is stable and nothing diverges.** 0.6965 → 0.6978
+  across a 10× scale-up, a 0.2 % move. Per column, 10M → 100M against a 9.906×
+  row increase: `str` 9.72×, `doc` **10.17×**, `i64` 9.51×, `sym` 10.46×,
+  `mvhp` 9.37×, `path` 10.22×, `section` 10.27×. `doc` is the lane that had to
+  be watched — a dense id repeated 1.2 billion times — and it is linear, at
+  198.8 MB, 2.0 % of the exploded table. (`b` reads 19.3× on a 10 KB lane;
+  that is a near-empty column, not a divergence.)
+
+- **Findings:**
+  - **[note — capacity planning / S4]** Both representations are well-behaved
+    from 10M upward and the exploded form is the *smaller* of the two, so a
+    deployment carrying both plans for **1.70× the packed footprint**, not
+    2×. Below 10M the ratio is not yet settled, because the packed form is
+    still gaining compression efficiency; a capacity plan extrapolated from a
+    1M sample would be wrong in the safe direction.
+  - **[note — mechanism available, unmeasured / S4]** Placing the two tables on
+    different drives is expressible — MergeTree takes a `storage_policy`, and
+    ClickHouse's volume/disk configuration is where that lives — but **this
+    server has a single disk configured**, so the trial cannot measure the
+    read-parallelism benefit. Recorded as available, not as demonstrated.
+  - **[pain — trial process / S4]** `OPTIMIZE TABLE … FINAL` exceeded the
+    client's 300 s receive timeout at 100M while the merge itself completed;
+    a size read taken on the timeout would have been pre-merge. Sizes here are
+    taken after `system.merges` drains.
+  - **Positive maturity: none new.** No boxer code ran.
+- **Solution size:** [`m1-setup.sh`](./m1-setup.sh) ~90 lines,
+  [`convert.sh`](./convert.sh) ~110, [`m1-packed.clickhouse.sql`](./m1-packed.clickhouse.sql)
+  generated + tiebroken.
+- **Results:** `conversion-scaling.tsv`, `conv-10m/convert.tsv`,
+  `conv-100m/convert.tsv`, `corpus/corpus.tsv`. Q1 at 100M returns identical
+  counts from both representations.
+- **Run dir:** [`./runs/2026-08-07-m1/`](./runs/2026-08-07-m1/)

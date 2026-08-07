@@ -185,10 +185,59 @@ not carry `6917529027641081861` as a literal. The shape — a small table, a
 dictionary, or a UDF — is left open here; the trial only establishes that the
 absence is felt by anyone reading a Ref-membership table.
 
+### SD5 — An exploded companion table, as an explicitly redundant second representation
+
+SD3 materializes *paths* inside the packed table. This sub-decision is the
+larger sibling: a whole second representation of the same data — one row per
+attribute, `(doc, section, path, value…)` — maintained alongside the packed one,
+with the consumer choosing which to read. Storing the same data twice in two
+shapes to serve two query classes is an old database trick; what is new here is
+that leeway can generate both from one schema, and that the conversion is cheap
+enough to be unremarkable.
+
+The [second-substrate trial](../trials/leeway-second-substrate/README.md) priced
+it on the JSONBench Bluesky corpus (2026-08-07 logbook entry):
+
+- **Conversion:** 100M documents / 1.2 billion attributes in **50.8 s**, one
+  pass, no staging, reading 14.0 GiB at 281 MiB/s. Peak memory **5.41 GB
+  against 5.28 GB at 10M** — bounded, not proportional to row count.
+- **Footprint:** the exploded form is **0.6978× the packed form** at 100M and
+  0.6965× at 10M — a 0.2 % move across a 10× scale-up, with every column
+  growing 9.4–10.5× against a 9.906× row increase. Carrying both costs
+  **1.70×** the packed footprint, and capacity planning has a stable ratio to
+  plan against. Below the 10M tier the ratio is not yet settled and a plan
+  extrapolated from it errs on the safe side.
+- **What it buys:** the path becomes a sort-key prefix instead of a value
+  inside an array, which no packed layout can offer. Measured against the
+  packed table: 0.03× on a subtree-prefix census, 0.07× on a corpus-wide leaf
+  count, 0.18× on both a group-by-collection count and a discovered
+  array-degree query. It is at parity or better on four of the five JSONBench
+  queries and worse on one (2.19×).
+- **What it costs beyond storage:** memory. The exploded form is 2.7–13.2×
+  the packed form's peak on the document-reassembly queries and 69.8× on one
+  value-predicate query.
+
+Two things this sub-decision does **not** settle, and they are the work:
+
+- **How the redundancy is maintained.** Batch reconversion is what was
+  measured, and at 50.8 s per 100M it is affordable, but it leaves the copy
+  stale between runs. A ClickHouse `MATERIALIZED VIEW` carrying the same
+  `ARRAY JOIN` would maintain it on insert; that form is untested here.
+- **Who chooses which table a query reads.** Nothing routes automatically. The
+  trial's queries name their table, and a consumer that picks wrong gets the
+  worse of the two — which is the honest cost of redundancy and the reason
+  this is a sub-decision rather than a default.
+
+Placing the two representations on different drives — the read-parallelism
+argument that makes redundancy pay twice — is expressible via MergeTree's
+`storage_policy`, but was **not measured**: the trial's server has a single
+disk configured.
+
 **Ordering.** SD1 first: it is the cheapest and it closes the finding the trial
 was built to produce. SD2 second, because it protects every number anyone
-measures afterwards. SD3 and SD4 are independent and can be descoped without
-touching the others.
+measures afterwards. SD3, SD4 and SD5 are independent and can be descoped
+without touching the others. SD5 is the largest and the least urgent: it is a
+deployment option with a measured price, not a gap in the surface.
 
 ## Surfaces — Tier 1
 
@@ -197,6 +246,7 @@ touching the others.
 | `readback.HelperUDFsSQL()` (exported Go API under `public/`) | gains a version constant, a marker function, and a reconciling installer | the read-back generator's golden tests; any server already carrying the family |
 | leeway DDL generator (generated-code input) | gains `MATERIALIZED` projection emission | `go generate ./...` output for schemas that opt in |
 | keelson subjects and vocab (named registry) | SD4 exposes membership name→id to SQL readers | whatever carries the lookup; no change to how ids are minted |
+| leeway DDL generator (generated-code input) | SD5 only: gains exploded-companion DDL and its conversion statement | `go generate ./...` output for schemas that opt in; whatever maintains the copy |
 | `doc/skills/leeway-*` (documentation surface) | gains a pointer to the read surface | none |
 
 ## Alternatives

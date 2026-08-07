@@ -1,0 +1,4 @@
+file	bytes	rows
+packed.parquet	169275661	1000000
+exploded.parquet	153024478	12114997
+documents_in_exploded		1000000
