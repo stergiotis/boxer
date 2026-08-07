@@ -1,0 +1,4 @@
+arm	sorting_key	seconds	vs_best
+leeway multi-row (one row per attribute)	(path, doc)	0.29	1.0
+JSON type (plain, nothing declared)	(none)	0.63	2.2
+leeway one-row (one row per document)	(none)	2.07	7.1

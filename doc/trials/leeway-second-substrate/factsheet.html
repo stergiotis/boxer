@@ -54,6 +54,8 @@ Source: <a href="./README.md">the trial</a>, <a href="./logbook.md">logbook</a>.
     <em>the JSON type holds the same corpus in 10.31 GiB</em></div>
   <div class="stat win"><b>2 of 9</b><span>exploration queries the JSON type cannot express <em>at all</em></span>
     <em>leeway answers both in under 4 s</em></div>
+  <div class="stat win"><b>0.29 s</b><span>4-criteria lookup finding 7 events among 100M</span>
+    <em>JSON type 0.63 s; document-per-row 2.07 s</em></div>
   <div class="stat lose"><b>3.0&times;</b><span>slower on dashboard queries that name their paths</span>
     <em>measured at 10M; recoverable — see below</em></div>
 </div>
@@ -88,17 +90,41 @@ most. At 100M documents, on a full scan with no index on either side:</p>
     <tr><td>census of every path present</td><td class="num">3.17 s</td><td class="num">39.79 s</td><td class="num">12.6&times;</td></tr>
     <tr><td>sum every number, any path</td><td class="num">0.14 s</td><td class="num">—</td><td class="num"><strong>no expression</strong></td></tr>
     <tr><td>array degree of every array path</td><td class="num">3.41 s</td><td class="num">—</td><td class="num"><strong>no expression</strong></td></tr>
-    <tr><td>numeric predicate, any path</td><td class="num">0.11 s</td><td class="num">&gt; 27 min, abandoned</td><td class="num">—</td></tr>
+    <tr><td>numeric predicate, any path</td><td class="num">0.11 s</td><td class="num">1125.88 s</td><td class="num"><strong>10,235&times;</strong></td></tr>
   </tbody>
 </table>
 
 <p>The last three rows matter most. Two of these questions cannot be asked of
-the JSON type at any speed; a third was still running after 27 minutes and was
-abandoned. Schema-on-read inference is worse again — it can answer
+the JSON type at any speed, and the third takes 18.8 minutes against
+0.11&nbsp;seconds. Schema-on-read inference is worse again — it can answer
 <strong>6 of 14</strong> queries, because it types the stable backbone of a
 document and gives up on the part that actually varies.</p>
 
-<h3>2. The advantage widens with scale</h3>
+<h3>2. You filter on several fields and retrieve</h3>
+
+<p>The other log shape, and the first stage of any tiered query: filter on
+several attributes, return the matching events. Four criteria over 100M
+documents, 7 events out — the same corpus, three ways of storing it:</p>
+
+<table>
+  <thead><tr><th>arm</th><th>sort key</th><th class="num">seconds</th></tr></thead>
+  <tbody>
+    <tr><td><strong>leeway, one row per attribute</strong></td><td><code>(path, doc)</code></td><td class="num"><strong>0.29</strong></td></tr>
+    <tr><td>JSON type, plain</td><td>none</td><td class="num">0.63</td></tr>
+    <tr><td>leeway, one row per document</td><td>none</td><td class="num">2.07</td></tr>
+  </tbody>
+</table>
+
+<p>Stored one row per attribute, each criterion becomes a sorted-index seek and
+the four intersect: <strong>0.29 s to find 7 events among 100 million</strong>,
+2.2&times; ahead of the JSON type and 7.1&times; ahead of the document-per-row
+layout. This is the one place a sort key is in play, and it is the layout's
+whole point. Both layouts can be kept at once — converting 100M documents to
+the exploded form takes <strong>50.8 s at a bounded 5.4&nbsp;GB</strong>, and
+the copy is <em>smaller</em> than the original (0.70&times;), so carrying both
+costs 1.70&times; one.</p>
+
+<h3>3. The advantage widens with scale</h3>
 
 <p>Going from 10M to 100M documents — ten times the data — the two
 representations scale differently, and it is the JSON type that degrades:</p>
@@ -116,7 +142,7 @@ representations scale differently, and it is the JSON type that degrades:</p>
 above it. So the ratios reported here are a floor, not a ceiling: at 10M
 find-a-value was 695&times;, at 100M it is 786&times;.</p>
 
-<h3>3. Events are heterogeneous and the schema drifts</h3>
+<h3>4. Events are heterogeneous and the schema drifts</h3>
 
 <p>leeway holds a mixture of document shapes uniformly — that is what it is
 for. The comparison shapes do not: the fastest published JSON configuration
