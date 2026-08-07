@@ -370,33 +370,54 @@ leeway (234.72 s against 1.50 s); DuckDB's JSON type is **106×** behind
 leeway-native over the same six (237.55 s against 2.24 s), and 49–920× per
 individual query.
 
-### Which layout for a filter-and-retrieve query? — **Depends on selectivity, and the ordering inverts.**
+### Which layout for a filter-and-retrieve query? — **Whichever one is allowed an index; failing that, the exploded one.**
 
 The benchmark set is entirely aggregations, so this shape had to be asked for
-directly. Filter on several attributes and return the matching events — the
-first stage of any tiered design — at 100M documents, three densities:
+directly: filter on several attributes, return the matching events — the first
+stage of any tiered design.
 
-| criteria | events out | exploded, `(path, doc)` | JSON type | packed |
-| --- | --- | --- | --- | --- |
-| 4, incl. a rare user | 7 | **0.29 s** | 0.63 s | 2.07 s |
-| 4, incl. the top poster | 10,936 | **0.40 s** | 0.69 s | 2.18 s |
-| 3, no user filter | 8,377,929 | 1.95 s | **0.97 s** | 2.45 s |
+**A first reading of this was wrong and is corrected here.** It compared an
+exploded table sorted `(path, doc)` against a packed table and a JSON column
+that were both `ORDER BY tuple()`, and reported the exploded layout winning by
+2.2×. But a JSON column *can* be sorted on the paths a query filters, and this
+one was not. Given that index it prunes to **5 granules of 1225** and answers
+in **0.03 s**, against the exploded layout's 0.10 s — **3.3× the other way.**
+The original margin measured the index, not the layout.
 
-**The crossover sits between ~10⁴ and ~10⁶ events returned** on this corpus and
-hardware. Below it the exploded layout's sorted-index seeks pay — 2.2× ahead at
-7 events, still 1.7× ahead a thousand times denser. Above it they stop paying
-and the shredded JSON column wins by 2.0×. A tier-1 narrowing query lives below
-the crossover; a tier that does not narrow does not.
+Corrected, at 10M, four criteria, 7 events out:
 
-Two things do **not** depend on selectivity. **The packed layout is last at
-every density** — it is the wrong shape for retrieval, whichever way the other
-two fall. And **the winner is engine-dependent**: the exploded layout leads on
+| arm | sort key | | |
+| --- | --- | --- | --- |
+| JSON column, sorted on the four filter paths | workload-specific | **0.03 s** | prunes 5/1225 granules |
+| exploded, `(path, doc)` | workload-agnostic | 0.10 s | |
+| JSON column, unsorted | none | 0.10 s | |
+| packed | none *(cannot have one — the path is inside an array)* | 0.50 s | |
+
+So the answer splits on **whether the filter paths are known when the table is
+created**:
+
+- **Known** — sort the JSON or typed columns on them and nothing here beats it.
+  That index is workload-specific: it serves the paths it was built for.
+- **Not known** — `(path, doc)` on an exploded table is the workload-agnostic
+  alternative, and it beats every unindexed option. It is the only layout of
+  the three whose index helps a filter on *any* path.
+- **Packed is last in every configuration**, and cannot be given this index at
+  all, because the path lives inside an array. That is the one conclusion here
+  independent of indexing.
+
+Which returns the question to the trial's main axis: an index helps when the
+path is in the query, and the exploded layout is what you reach for when it is
+in the data. At 100M and low selectivity the ordering among the *unindexed*
+arms also inverts with density — exploded leads 2.2× at 7 events out and loses
+2.0× at 8.4M — but that ladder was run without giving the JSON arm its index
+and should be read as a comparison of unindexed layouts only.
+
+And the winner is engine-dependent regardless: the exploded layout leads on
 ClickHouse and DuckDB (2.3–5.0× at 10M) and *loses* on DataFusion by 1.4–1.5×,
-which has no sorted format to seek in. Deployment guidance here has to name the
-engine, not just the layout.
+which has no sorted format to seek in.
 
-This also bounds the aggregation result reported above: packed beats exploded
-by 1.1–2.2× on Q2–Q5, and those are all `GROUP BY` collapses. The axis is
+This also bounds the aggregation result above: packed beats exploded by
+1.1–2.2× on Q2–Q5, all of which are `GROUP BY` collapses. The axis is
 **retrieve against aggregate**, not discovery against serving.
 
 ### How big are the decisions? A band, and a long tail
