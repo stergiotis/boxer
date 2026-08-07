@@ -839,3 +839,53 @@ Three readings, none of which the trial had stated:
   `MAP` is 3.0× faster over the five benchmark paths and 3.2× slower over the
   three tail paths. The benchmark set never crosses that line, which is why
   M4's first reading looked one-sided.
+
+### Follow-up — the same three configurations on DataFusion
+
+The DuckDB table above has no exact DataFusion counterpart, because
+**DataFusion has no persistent native format.** It is a query engine over
+files; the nearest analogue to a native table is a `CREATE TABLE … AS SELECT`
+MemTable, which lives for one process. So the third column is a different kind
+of thing and is reported as such. Nor can DataFusion *produce* the
+schema-on-read shape — it ships no JSON functions (M0) — so that column reads a
+Parquet file DuckDB's inference wrote. Evidence:
+`m4-datafusion-configs.tsv`.
+
+| | Parquet (leeway shape) | in-memory (leeway shape) | Parquet (struct/MAP shape) |
+| --- | --- | --- | --- |
+| **footprint** | 1.14 GiB on disk | **11.8 GB RAM** | 0.99 GiB on disk |
+| Q1–Q5 total | 3.31 s | 1.63 s † | **0.65 s** |
+| U7 + T1 + T2 total | 0.30 s | **0.15 s** † | 2.31 s |
+
+† load-exclusive. The MemTable costs **1.23 s to build** and must be rebuilt
+every session; load-inclusive the same totals are 7.78 s and 3.84 s.
+
+- **The directional trade reproduces, with wider margins than DuckDB's.** The
+  struct shape is **5.1×** faster over the five benchmark paths and **7.7×**
+  slower over the three tail paths — against DuckDB's 3.0× and 3.2×. Same line,
+  crossed harder. Two engines now agree that where the path sits decides which
+  shape wins, which makes it a property of the shapes rather than of DuckDB.
+- **In-memory is ~10× the on-disk footprint** — 11.8 GB of Arrow against
+  1.14 GiB of Parquet+ZSTD — and buys 2.0× on the backbone and 2.0× on the tail
+  against scanning the file. Whether that is worth 10× the RAM and a 1.23 s
+  rebuild per session is a deployment question, not a data-model one, but it is
+  the closest DataFusion has to the native-format row and it is a much worse
+  trade than DuckDB's (2.2× storage for 1.3–1.7× latency).
+- **DataFusion cannot reach the fast column by itself.** The struct shape is
+  the only configuration here that beats DuckDB on the benchmark set, and
+  DataFusion has no way to build it: it needs an engine with JSON inference to
+  write the file first. As a consumer of someone else's Parquet it is
+  competitive; as a self-sufficient stack over raw JSON it cannot start.
+
+**And the UTF-8 defect reproduces on a second engine.** `CREATE TABLE … AS
+SELECT * FROM` the ClickHouse-written Parquet fails in DataFusion too:
+
+```text
+Parquet error: encountered non UTF-8 data: invalid utf-8 sequence of 1 bytes
+```
+
+Two of the three engines now refuse to materialise that file, and only a lazy
+scan that never touches `id:blake3hash` succeeds. The in-memory column above is
+measured with that one column excluded, matching the DuckDB native row. This
+removes any remaining doubt about which side of M3's `BLOB`-versus-`VARCHAR`
+disagreement is correct.

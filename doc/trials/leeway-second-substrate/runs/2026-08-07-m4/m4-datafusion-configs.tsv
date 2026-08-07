@@ -1,0 +1,12 @@
+query	class	df_parquet_s	df_memory_loadincl_s	df_memory_minus_load_s	df_struct_parquet_s
+Q1	backbone (named path)	0.14	1.28	0.05	0.03
+Q2	backbone (named path)	1.18	1.92	0.69	0.32
+Q3	backbone (named path)	0.36	1.52	0.29	0.07
+Q4	backbone (named path)	0.82	1.53	0.30	0.12
+Q5	backbone (named path)	0.81	1.53	0.30	0.11
+U7	tail (inference declined)	0.08	1.27	0.04	0.86
+T1 record/$type	tail (inference declined)	0.12	1.28	0.05	0.68
+T2 record/createdAt	tail (inference declined)	0.10	1.29	0.06	0.77
+— Q1..Q5 total	backbone	3.31	7.78	1.63	0.65
+— U7,T1,T2 total	tail	0.30	3.84	0.15	2.31
+— footprint	(10M docs)	1.14 GiB on disk	11.8 GB RAM	11.8 GB RAM	0.99 GiB on disk
