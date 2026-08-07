@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sort"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/apache/arrow-go/v18/parquet"
+	"github.com/apache/arrow-go/v18/parquet/compress"
+	"github.com/apache/arrow-go/v18/parquet/pqarrow"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 	"lukechampine.com/blake3"
@@ -16,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/apps/jsonbench/jsonmap"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	leewaydml "github.com/stergiotis/boxer/public/semistructured/leeway/dml"
 )
 
 func jsonmapIngestCommand() *cli.Command {
@@ -26,8 +32,23 @@ func jsonmapIngestCommand() *cli.Command {
 			&cli.StringFlag{Name: "url", Value: "http://localhost:8123/"},
 			&cli.StringFlag{Name: "user", Value: "default"},
 			&cli.StringFlag{Name: "password"},
-			&cli.StringFlag{Name: "database", Required: true},
+			&cli.StringFlag{Name: "database"},
 			&cli.StringFlag{Name: "table", Value: "json"},
+			&cli.StringFlag{
+				Name: "parquet-out",
+				// The second-substrate trial's arm W. With this set the ingest
+				// writes the same Arrow record batches to a Parquet file and
+				// never contacts ClickHouse, which is what makes the neutrality
+				// claim about leeway's writer rather than about the file format:
+				// the shredder, the generated builder and the record batches are
+				// unchanged, only the sink moves.
+				Usage: "write Parquet to this path instead of inserting into ClickHouse",
+			},
+			&cli.StringFlag{
+				Name:  "parquet-compression",
+				Value: "zstd",
+				Usage: "zstd or uncompressed; only with --parquet-out",
+			},
 			&cli.StringFlag{Name: "data-dir", Required: true},
 			&cli.IntFlag{Name: "files", Value: 1, Usage: "number of file_*.json.gz to ingest"},
 			&cli.IntFlag{
@@ -89,17 +110,38 @@ func runJsonmapIngest(cCtx *cli.Context) (err error) {
 	undecodable = 0
 
 	ing := &jsonmapIngester{
-		cli: chclient.New(chclient.Config{
-			URL:      cCtx.String("url"),
-			User:     cCtx.String("user"),
-			Password: cCtx.String("password"),
-		}, nil),
-		table:       cCtx.String("database") + "." + cCtx.String("table"),
 		alloc:       memory.NewGoAllocator(),
 		batch:       cCtx.Int("batch"),
 		symbolPaths: symbolPaths,
 		limit:       uint64(cCtx.Int("limit")),
 	}
+
+	pqOut := cCtx.String("parquet-out")
+	if pqOut == "" {
+		if cCtx.String("database") == "" {
+			err = eh.Errorf("one of --database or --parquet-out is required")
+			return
+		}
+		ing.cli = chclient.New(chclient.Config{
+			URL:      cCtx.String("url"),
+			User:     cCtx.String("user"),
+			Password: cCtx.String("password"),
+		}, nil)
+		ing.table = cCtx.String("database") + "." + cCtx.String("table")
+	} else {
+		var closePq func() error
+		closePq, err = ing.openParquet(pqOut, cCtx.String("parquet-compression"))
+		if err != nil {
+			return
+		}
+		defer func() {
+			cerr := closePq()
+			if err == nil {
+				err = cerr
+			}
+		}()
+	}
+
 	start := time.Now()
 	for _, f := range files {
 		log.Info().Str("file", filepath.Base(f)).Msg("ingesting")
@@ -166,8 +208,73 @@ type jsonmapIngester struct {
 	shr  shredder
 	held int
 
+	// pq is the arm-W sink. When it is set the ClickHouse client is nil and
+	// flush writes the batches to Parquet instead. recs is its scratch slice,
+	// reused across flushes.
+	pq   *pqarrow.FileWriter
+	recs []arrow.RecordBatch
+
 	docs  uint64
 	attrs uint64
+}
+
+// openParquet prepares the arm-W sink and returns its closer. The schema comes
+// from the generated builder, so the file's columns are the leeway DDL
+// pipeline's own output rather than a hand-written approximation — which is the
+// whole point of the arm.
+//
+// Note what is *not* passed to the writer: the schema's encoding aspects. The
+// mapping declares DoubleDelta on its int64 lane and low-cardinality on its
+// symbol lanes, and neither reaches the Parquet writer properties, because
+// nothing carries encoding aspects across that seam today. Measuring the cost
+// of that is arm W's job, not working around it here.
+func (inst *jsonmapIngester) openParquet(path string, compression string) (closer func() error, err error) {
+	var codec compress.Compression
+	switch compression {
+	case "zstd":
+		codec = compress.Codecs.Zstd
+	case "uncompressed":
+		codec = compress.Codecs.Uncompressed
+	default:
+		err = eh.Errorf("unknown --parquet-compression %q; want zstd or uncompressed", compression)
+		return
+	}
+	var f *os.File
+	f, err = os.Create(path)
+	if err != nil {
+		err = eh.Errorf("create %s: %w", path, err)
+		return
+	}
+	buf := bufio.NewWriterSize(f, 1<<20)
+	ent := jsonmap.NewInEntityJson(inst.alloc, inst.batch)
+	inst.ent = ent
+	inst.pq, err = pqarrow.NewFileWriter(ent.GetSchema(), buf,
+		parquet.NewWriterProperties(
+			parquet.WithAllocator(inst.alloc),
+			parquet.WithCompression(codec),
+		),
+		pqarrow.NewArrowWriterProperties(
+			pqarrow.WithAllocator(inst.alloc),
+			pqarrow.WithStoreSchema(),
+		))
+	if err != nil {
+		_ = f.Close()
+		err = eh.Errorf("create parquet writer for %s: %w", path, err)
+		return
+	}
+	log.Info().Str("path", path).Str("compression", compression).Msg("writing parquet")
+	closer = func() error {
+		if cerr := inst.pq.Close(); cerr != nil {
+			_ = f.Close()
+			return eh.Errorf("close parquet writer: %w", cerr)
+		}
+		if cerr := buf.Flush(); cerr != nil {
+			_ = f.Close()
+			return eh.Errorf("flush %s: %w", path, cerr)
+		}
+		return f.Close()
+	}
+	return
 }
 
 func (inst *jsonmapIngester) ingestFile(ctx context.Context, file string) (err error) {
@@ -322,6 +429,17 @@ func addVerbatimPath[T any](add func([]byte, []byte) T, t shredded) (err error) 
 
 func (inst *jsonmapIngester) flush(ctx context.Context) (err error) {
 	if inst.ent == nil || inst.held == 0 {
+		return
+	}
+	if inst.pq != nil {
+		// WriteArrowRecords transfers, writes and releases in one step — the
+		// same helper the leeway DML example uses, unchanged.
+		inst.recs, err = leewaydml.WriteArrowRecords(inst.ent, inst.recs[:0], nil, inst.pq)
+		if err != nil {
+			err = eh.Errorf("write parquet: %w", err)
+			return
+		}
+		inst.held = 0
 		return
 	}
 	var records []arrow.RecordBatch
