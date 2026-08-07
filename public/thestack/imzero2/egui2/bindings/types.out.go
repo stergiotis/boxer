@@ -122,6 +122,7 @@ type EndETableFluid struct {
 	idGen           WidgetIdCreatorI
 	deferredCells   *runtime.DeferredBlockScope
 	deferredHeaders *runtime.DeferredBlockScope
+	deferredRows    *runtime.DeferredBlockScope
 }
 type EndETableMethodIdE uint32
 

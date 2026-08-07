@@ -98,9 +98,13 @@ var (
 	selectionFill    = color.Hex(styletokens.AccentSubtle.AsHex())
 	selectionStroke  = color.Hex(styletokens.AccentDefault.AsHex())
 	transparentColor = color.Transparent
-	detailErrorFg    = color.Hex(styletokens.ErrorDefault.AsHex())
-	detailMutedFg    = color.Hex(styletokens.NeutralTextSecondary.AsHex())
-	detailBgClear    = color.Transparent
+	// stripeFill replaces egui_table's own Striped(true) zebra, which paints
+	// per cell in cell_ui — after row_ui — and so would cover the row block's
+	// tint. Same role as egui's faint_bg_color, taken from our tokens.
+	stripeFill    = color.Hex(styletokens.NeutralBgFaint.AsHex())
+	detailErrorFg = color.Hex(styletokens.ErrorDefault.AsHex())
+	detailMutedFg = color.Hex(styletokens.NeutralTextSecondary.AsHex())
+	detailBgClear = color.Transparent
 )
 
 // LogViewerApp is the per-tile AppI instance. Two open tiles produce
@@ -371,9 +375,18 @@ func (inst *LogViewerApp) renderFilterRow() {
 // maxRows*lvNumCols so raising maxRows cannot overlap them.
 const (
 	lvNumCols     = 5           // time, level, app, caller, message
-	lvIdCellBase  = 0x1000_0000 // per-cell TintedScope ids: base + row*lvNumCols + col
-	lvIdBadgeBase = 0x2000_0000 // per-row level-badge ids:  base + row
-	lvIdHdrBase   = 0x3000_0000 // per-column header ids:    base + col
+	lvIdCellBase  = 0x1000_0000 // per-cell padding-frame ids: base + row*lvNumCols + col
+	lvIdBadgeBase = 0x2000_0000 // per-row level-badge ids:    base + row
+	lvIdHdrBase   = 0x3000_0000 // per-column header ids:      base + col
+	lvIdRowBase   = 0x4000_0000 // per-row chrome-frame ids:   base + row
+
+	// lvRowHeight = 28 leaves room for the SizeSm Pill badge plus the
+	// PaddingInner top/bottom inner margin cellPad adds on every cell.
+	// Bumped from 26→28 to give cell content visible breathing room from
+	// the row gridlines (header padding uses the same budget via the
+	// Headers deferred block). rowChrome floors the row block to it so the
+	// backdrop covers the full row height rather than its content's.
+	lvRowHeight = 28.0
 )
 
 // renderTailTable virtualises the filtered rows via egui_table's
@@ -399,12 +412,7 @@ const (
 // Level column.
 func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 	const (
-		// rowHeight = 28 leaves room for the SizeSm Pill badge plus the
-		// PaddingInner top/bottom inner margin cellTint adds on every
-		// cell. Bumped from 26→28 to give cell content visible breathing
-		// room from the row gridlines (header padding uses the same
-		// budget via the Headers deferred block below).
-		rowHeight   = 28.0
+		rowHeight   = lvRowHeight
 		stickyHeads = 1
 		stickyCols  = 0
 	)
@@ -471,24 +479,25 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 		r := rows[i]
 		isSelected := selectedKey != "" && rowKey(r) == selectedKey
 		tint, hasTint := rowTint(r.Level)
-		clicked := false
 
-		// Each cell is wrapped in a TintedScope (leeway table2 pattern):
-		// a per-cell fill+stroke that, when summed across the row,
-		// reads as a contiguous outlined row across egui_table's
-		// natural inter-column gutters. SenseClick on every cell means
-		// any click anywhere in the row toggles selection — much more
-		// forgiving than a single SelectableLabel target.
+		// One row block owns the whole row's backdrop, outline and click
+		// target (ADR-0176 SD5). It replaces five per-cell TintedScopes whose
+		// fills and strokes had to be summed across egui_table's inter-column
+		// gutters to *look* like one row; a row block genuinely is one, so the
+		// tint and the selection outline are continuous by construction.
+		clicked := inst.rowChrome(et, i, hasTint, tint, isSelected)
+
+		// Cells now carry only their inset. The row block behind them paints
+		// the backdrop, so a transparent-filled Frame is all that is left —
+		// without the inset, content sits flush against the column gridlines.
 		et.BeginCells(uint64(i), 0)
-		if inst.cellTint(i, 0, hasTint, tint, isSelected, func() {
-			c.Label(r.Ts.Format("15:04:05.000")).Send()
-		}) {
-			clicked = true
-		}
+		inst.cellPad(i, 0, func() {
+			c.Label(r.Ts.Format("15:04:05.000")).Selectable(false).Send()
+		})
 		et.EndCells()
 
 		et.BeginCells(uint64(i), 1)
-		if inst.cellTint(i, 1, hasTint, tint, isSelected, func() {
+		inst.cellPad(i, 1, func() {
 			badge.New(inst.ids.PrepareSeq(lvIdBadgeBase+uint64(i)), levelLabel(r.Level)).
 				Tone(levelTone(r.Level)).
 				Variant(badge.VariantSolid).
@@ -496,42 +505,34 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 				Pill().
 				Monospace().
 				Send()
-		}) {
-			clicked = true
-		}
+		})
 		et.EndCells()
 
 		et.BeginCells(uint64(i), 2)
-		if inst.cellTint(i, 2, hasTint, tint, isSelected, func() {
-			c.Label(shortAppId(string(r.AppId))).Send()
-		}) {
-			clicked = true
-		}
+		inst.cellPad(i, 2, func() {
+			c.Label(shortAppId(string(r.AppId))).Selectable(false).Send()
+		})
 		et.EndCells()
 
 		et.BeginCells(uint64(i), 3)
-		if inst.cellTint(i, 3, hasTint, tint, isSelected, func() {
+		inst.cellPad(i, 3, func() {
 			callerAtoms := c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear, r.Caller).
 				Monospace().Small().End().Keep()
-			c.LabelAtoms(callerAtoms).Send()
-		}) {
-			clicked = true
-		}
+			c.LabelAtoms(callerAtoms).Selectable(false).Send()
+		})
 		et.EndCells()
 
 		et.BeginCells(uint64(i), 4)
-		if inst.cellTint(i, 4, hasTint, tint, isSelected, func() {
+		inst.cellPad(i, 4, func() {
 			if hasTint {
 				// On severe rows, give the message a touch of weight so it
 				// reads first when the eye scans the row.
 				msgAtoms := c.Atoms().BeginRichText(r.Message).Strong().End().Keep()
-				c.LabelAtoms(msgAtoms).Send()
+				c.LabelAtoms(msgAtoms).Selectable(false).Send()
 			} else {
-				c.Label(r.Message).Send()
+				c.Label(r.Message).Selectable(false).Send()
 			}
-		}) {
-			clicked = true
-		}
+		})
 		et.EndCells()
 
 		if clicked {
@@ -544,35 +545,41 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 			}
 		}
 	}
-	et.Striped(true).Send()
+	// No Striped(true): the etable's zebra is painted per cell, in cell_ui,
+	// which runs AFTER row_ui — it would paint over the row block's tint on
+	// odd rows and leave the tint showing only in the gutters. rowChrome
+	// paints the zebra itself so one place decides a row's backdrop.
+	et.Send()
 }
 
-// cellTint wraps body inside a TintedScope and returns whether the
-// cell was clicked this frame (one-frame-lag, standard r7-routed
-// response). Combining fill (row tint) and stroke (selection accent)
-// in one primitive matches leeway's table2 section-header bar
-// pattern: the per-cell stroke forms a continuous outlined row
-// across egui_table's column gutters, and the per-cell fill paints
-// the row backdrop.
+// rowChrome paints a row's backdrop and outline across the full row width and
+// returns whether the row was clicked (one-frame-lag, standard r7-routed
+// response). The Frame spans every column — including the gutters between them
+// — because UiSetMinWidthAvailable stretches it to the row Ui's available
+// width; a Frame otherwise sizes to its content, which for an empty one is
+// nothing at all.
 //
-// Layering rules:
-//   - selection beats tint: a selected warn row reads as "selected"
-//     first, so the fill flips to selectionFill even if hasTint.
-//   - non-selected, no-tint cells use a transparent fill so the
-//     egui_table Striped(true) zebra still shows through.
-//   - the stroke is invisible (width 0, transparent) when the row
-//     isn't selected, so non-selected rows don't get an accidental
-//     1px accent border.
+// Layering, unchanged from the per-cell version it replaces:
+//   - selection beats tint: a selected warn row reads as "selected" first.
+//   - otherwise a severity tint, else the zebra stripe on odd rows, else
+//     transparent.
+//   - the stroke is invisible (width 0, transparent) when the row isn't
+//     selected, so non-selected rows get no accidental accent border.
 //
-// KeepIter (not Send) provides the deferred PopIdFromStackChecked —
-// TintedScope.Send is a no-pop terminal, same hazard as Frame.Send.
-func (inst *LogViewerApp) cellTint(row, col int, hasTint bool, tint color.Color, selected bool, body func()) (clicked bool) {
+// The click sense is the row's, not the cells'. row_ui runs before the cells,
+// so this Frame sits BEHIND them in hit-test order and any interactive widget
+// in a cell would swallow the click — which is why every label in the row is
+// emitted Selectable(false). egui makes labels selectable by default, and a
+// selectable label senses click_and_drag.
+func (inst *LogViewerApp) rowChrome(et c.EndETableFluid, row int, hasTint bool, tint color.Color, selected bool) (clicked bool) {
 	fill := transparentColor
 	switch {
 	case selected:
 		fill = selectionFill
 	case hasTint:
 		fill = tint
+	case row%2 == 1:
+		fill = stripeFill
 	}
 	strokeWidth := float32(0)
 	stroke := transparentColor
@@ -580,16 +587,33 @@ func (inst *LogViewerApp) cellTint(row, col int, hasTint bool, tint color.Color,
 		strokeWidth = 1.5
 		stroke = selectionStroke
 	}
-	ts := c.TintedScope(inst.ids.PrepareSeq(lvIdCellBase+uint64(row)*lvNumCols+uint64(col)), fill).
-		Stroke(strokeWidth, stroke).
+	var fr c.FrameFluid
+	for range et.Rows(uint64(row)) {
+		fr = c.Frame(inst.ids.PrepareSeq(lvIdRowBase+uint64(row))).
+			Fill(fill).
+			Stroke(strokeWidth, stroke).
+			OuterMargin(0).
+			InnerMargin(0).
+			SenseClick()
+		for range fr.KeepIter() {
+			c.UiSetMinWidthAvailable()
+			c.UiSetMinHeight(lvRowHeight)
+		}
+	}
+	return c.CurrentApplicationState.StateManager.
+		GetResponseByIdRaw(fr.Id()).HasPrimaryClicked()
+}
+
+// cellPad insets cell content so it does not sit flush against the column
+// gridlines. It is what is left of cellTint once the row block owns the fill,
+// the stroke and the click sense.
+func (inst *LogViewerApp) cellPad(row, col int, body func()) {
+	for range c.Frame(inst.ids.PrepareSeq(lvIdCellBase + uint64(row)*lvNumCols + uint64(col))).
 		OuterMargin(0).
 		InnerMargin(styletokens.PaddingInner(inst.density)).
-		SenseClick()
-	for range ts.KeepIter() {
+		KeepIter() {
 		body()
 	}
-	clicked = ts.HasPrimaryClicked()
-	return
 }
 
 // renderDetailPane shows the operator-selected row. Called only

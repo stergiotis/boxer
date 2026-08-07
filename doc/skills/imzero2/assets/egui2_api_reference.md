@@ -98,7 +98,7 @@ status: draft
 | ImageRelease | BuilderFactory | Yes | 0 | 0 | 0 | Immediate |
 | Indent | BuilderFactory | Yes | 0 | 0 | 0 | Immediate, BlockIterator |
 | Label | BuilderFactory | No | 1 | 0 | 4 | Immediate, Retained |
-| LabelAtoms | BuilderFactory | No | 0 | 1 | 3 | Immediate, Retained |
+| LabelAtoms | BuilderFactory | No | 0 | 1 | 4 | Immediate, Retained |
 | LabelWidgetText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
 | MapMarker | BuilderFactory | No | 3 | 0 | 3 | Immediate |
 | MapPolyline | BuilderFactory | No | 2 | 0 | 2 | Immediate |
@@ -193,6 +193,7 @@ status: draft
 | UiSetMaxWidth | Procedural | No | 1 | 0 | - | - |
 | UiSetMinHeight | Procedural | No | 1 | 0 | - | - |
 | UiSetMinWidth | Procedural | No | 1 | 0 | - | - |
+| UiSetMinWidthAvailable | Procedural | No | 0 | 0 | - | - |
 | UiSetWidth | Procedural | No | 1 | 0 | - | - |
 | UiWithLayout | BuilderFactory | No | 0 | 0 | 10 | BlockIterator |
 | VectorSize | BuilderFactory | No | 0 | 0 | 1 | Retained |
@@ -703,6 +704,7 @@ Block
 
 - **Cells** — keys: (u64, u32)
 - **Headers** — keys: (u32, u32)
+- **Rows** — keys: (u64)
 
 #### Return Type
 
@@ -1197,6 +1199,7 @@ Label
 
 #### Builder Methods
 
+- **Selectable**(val: b)
 - **Wrap**()
 - **Truncate**()
 - **Extend**()
@@ -3340,6 +3343,13 @@ Block
 | Name | Kind | Type |
 |------|------|------|
 | width | plain | f32 |
+
+---
+
+### UiSetMinWidthAvailable
+
+- **Type:** Procedural
+- **Identity:** No
 
 ---
 

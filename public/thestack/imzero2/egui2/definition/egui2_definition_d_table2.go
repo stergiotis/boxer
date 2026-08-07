@@ -125,10 +125,17 @@ func definitionsEtBlock() []*ir.BuilderFactoryNode {
 			BeginMethod("applyWidths").Arg("epoch", ctabb.U32).
 			CodeClientRust(rustClientCode("apply_widths_epoch = Some(epoch);\n")).EndMethod().
 			Build()...).
-		// Deferred block maps: cells keyed by (row, col), headers keyed by (header_row, col)
+		// Deferred block maps: cells keyed by (row, col), headers keyed by
+		// (header_row, col), rows keyed by row.
+		//
+		// The maps are spliced by the generated Send() in DECLARATION ORDER,
+		// so the apply code below must read — and the culled else-arm must
+		// skip — cells, then headers, then rows. Reordering these lines
+		// without reordering both Rust sites desynchronises the stream.
 		WithReturnType(structEtDummy()).
 		WithDeferredBlockMap("cells", ctabb.U64, ctabb.U32).
 		WithDeferredBlockMap("headers", ctabb.U32, ctabb.U32).
+		WithDeferredBlockMap("rows", ctabb.U64).
 		WithSettingImmediate(true).
 		WithSettingRetained(true).
 		WithConstructionCodeClientRust(rustClientCode(`0u8;
@@ -156,6 +163,10 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// instead of a HashMap — eliminates per-block Vec allocations and hashing.
 	let cells = self.io.read_deferred_block_map_dense_u64_u32(num_rows, col_count)?;
 	let header_blocks = self.io.read_deferred_block_map_u32_u32()?;
+	// ADR-0176 SD5. Sparse HashMap rather than the dense slab cells use: a
+	// row block is optional (most tables emit none at all), so a slab of
+	// num_rows entries would cost more than it saves.
+	let row_blocks = self.io.read_deferred_block_map_u64()?;
 
 	let columns: Vec<egui_table::Column> = self.et_columns.drain(..).collect();
 	let header_texts: Vec<String> = self.et_header_texts.drain(..).collect();
@@ -233,14 +244,19 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// prepare() also pushes the visible (row, col) ranges into the
 	// r9_et_prefetch register so the Go side can, on the next frame, skip
 	// emitting cells that egui_table will immediately cull.
-	struct EtStripedDelegate<'sa, 'sb, 'sc, SR: std::io::BufRead, SW: std::io::Write> {
+	struct EtStripedDelegate<'sa, 'sb, 'sc, 'sd, SR: std::io::BufRead, SW: std::io::Write> {
 		inner: FffiTableDelegate<'sa, 'sb, 'sc, SR, SW>,
 		table_id: u64,
 		striped: bool,
 		selected_row: Option<u64>,
+		// ADR-0176 SD5/SD6: the row blocks, and the per-frame set of rows
+		// already replayed. The delegate is constructed fresh each frame, so
+		// the set needs no explicit reset.
+		rows: &'sd std::collections::HashMap<u64, Vec<u8>>,
+		replayed_rows: std::collections::HashSet<u64>,
 	}
-	impl<'sa, 'sb, 'sc, SR: std::io::BufRead, SW: std::io::Write> egui_table::TableDelegate
-		for EtStripedDelegate<'sa, 'sb, 'sc, SR, SW>
+	impl<'sa, 'sb, 'sc, 'sd, SR: std::io::BufRead, SW: std::io::Write> egui_table::TableDelegate
+		for EtStripedDelegate<'sa, 'sb, 'sc, 'sd, SR, SW>
 	{
 		fn prepare(&mut self, info: &egui_table::PrefetchInfo) {
 			let interp = &mut self.inner.interpreter;
@@ -254,6 +270,39 @@ if {{EguiUiOptionalOuter}}.is_some() {
 		}
 		fn header_cell_ui(&mut self, ui: &mut egui::Ui, cell: &egui_table::HeaderCellInfo) {
 			self.inner.header_cell_ui(ui, cell);
+		}
+		// ADR-0176 SD5/SD6. row_ui hands us a Ui spanning the whole row across
+		// every column, before that row's cells run — the seam a full-row
+		// background, hover or click sense needs, and the one that makes a row
+		// read as continuous across egui_table's inter-column gutters.
+		//
+		// The guard is not defensive: egui_table calls row_ui once per REGION,
+		// not once per row. region_ui runs for both the fully-scrollable half
+		// (right_bottom_ui) and the sticky-column half (left_bottom_ui), and
+		// its row_range is computed from the vertical extent WITHOUT
+		// consulting col_range. With num_sticky_cols = 0 the sticky region is
+		// zero-width but full-height, so its row loop still runs, and
+		// split_scroll.rs calls left_bottom_ui unconditionally.
+		//
+		// Replaying the block in both would emit every widget id inside it
+		// twice. That breaks nothing visible — egui hit-tests on its own auto
+		// ids — but r7 read-back is a flat map compacted newest-wins, so the
+		// first copy would read NilResponseFlags forever: a row that still
+		// renders and still accepts clicks while its handler never fires.
+		//
+		// First call wins, which is the right one: split_scroll.rs runs
+		// right_bottom_ui before left_bottom_ui, so the block lands in the
+		// region that is actually visible rather than the degenerate one.
+		fn row_ui(&mut self, ui: &mut egui::Ui, row_nr: u64) {
+			if !self.replayed_rows.insert(row_nr) {
+				return;
+			}
+			if let Some(block) = self.rows.get(&row_nr) {
+				if !block.is_empty() {
+					let ctx = ui.ctx().clone();
+					let _ = self.inner.interpreter.replay_deferred_block(&ctx, ui, block);
+				}
+			}
 		}
 		fn cell_ui(&mut self, ui: &mut egui::Ui, cell: &egui_table::CellInfo) {
 			let visuals = ui.style().visuals.clone();
@@ -287,6 +336,8 @@ if {{EguiUiOptionalOuter}}.is_some() {
 		table_id: {{Id}}.value(),
 		striped: striped_flag,
 		selected_row: selected_row_opt,
+		rows: &row_blocks,
+		replayed_rows: std::collections::HashSet::new(),
 	};
 
 	// Bound table.show() inside a child ui so egui_table's SplitScroll
@@ -407,6 +458,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	self.et_row_heights.clear();
 	self.io.skip_deferred_block_map_u64_u32()?;
 	self.io.skip_deferred_block_map_u32_u32()?;
+	self.io.skip_deferred_block_map_u64()?;
 }
 `)).
 		Build())

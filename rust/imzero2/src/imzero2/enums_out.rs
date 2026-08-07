@@ -182,17 +182,18 @@ pub enum FuncProcId {
     UiSetMaxWidth = fenums::FUNC_PROC_ID_OFFSET + 175,
     UiSetMinHeight = fenums::FUNC_PROC_ID_OFFSET + 176,
     UiSetMinWidth = fenums::FUNC_PROC_ID_OFFSET + 177,
-    UiSetWidth = fenums::FUNC_PROC_ID_OFFSET + 178,
-    UiWithLayout = fenums::FUNC_PROC_ID_OFFSET + 179,
-    VectorSize = fenums::FUNC_PROC_ID_OFFSET + 180,
-    Vertical = fenums::FUNC_PROC_ID_OFFSET + 181,
-    VerticalCentered = fenums::FUNC_PROC_ID_OFFSET + 182,
-    VerticalCenteredJustified = fenums::FUNC_PROC_ID_OFFSET + 183,
-    WalkersMap = fenums::FUNC_PROC_ID_OFFSET + 184,
-    WarnIfDebugBuild = fenums::FUNC_PROC_ID_OFFSET + 185,
-    WidgetText = fenums::FUNC_PROC_ID_OFFSET + 186,
-    WidgetsGlobalThemePreferenceButtons = fenums::FUNC_PROC_ID_OFFSET + 187,
-    Window = fenums::FUNC_PROC_ID_OFFSET + 188,
+    UiSetMinWidthAvailable = fenums::FUNC_PROC_ID_OFFSET + 178,
+    UiSetWidth = fenums::FUNC_PROC_ID_OFFSET + 179,
+    UiWithLayout = fenums::FUNC_PROC_ID_OFFSET + 180,
+    VectorSize = fenums::FUNC_PROC_ID_OFFSET + 181,
+    Vertical = fenums::FUNC_PROC_ID_OFFSET + 182,
+    VerticalCentered = fenums::FUNC_PROC_ID_OFFSET + 183,
+    VerticalCenteredJustified = fenums::FUNC_PROC_ID_OFFSET + 184,
+    WalkersMap = fenums::FUNC_PROC_ID_OFFSET + 185,
+    WarnIfDebugBuild = fenums::FUNC_PROC_ID_OFFSET + 186,
+    WidgetText = fenums::FUNC_PROC_ID_OFFSET + 187,
+    WidgetsGlobalThemePreferenceButtons = fenums::FUNC_PROC_ID_OFFSET + 188,
+    Window = fenums::FUNC_PROC_ID_OFFSET + 189,
 }
 #[allow(dead_code)]
 #[derive(strum::FromRepr, Debug, PartialEq)]
@@ -689,9 +690,10 @@ pub enum LabelBuilderMethodId {
 #[repr(u32)]
 pub enum LabelAtomsBuilderMethodId {
     Build = 0,
-    Wrap = 1,
-    Truncate = 2,
-    Extend = 3,
+    Selectable = 1,
+    Wrap = 2,
+    Truncate = 3,
+    Extend = 4,
 }
 
 #[allow(dead_code)]

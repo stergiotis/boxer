@@ -1255,8 +1255,10 @@ func (inst EndETableFluid) Send() {
 	r.WriteOpCode(uint32(EndETableMethodIdBuild))
 	r.SpliceDeferredBlockMap(inst.deferredCells)
 	r.SpliceDeferredBlockMap(inst.deferredHeaders)
+	r.SpliceDeferredBlockMap(inst.deferredRows)
 	inst.deferredCells.ReleaseWithHint()
 	inst.deferredHeaders.ReleaseWithHint()
+	inst.deferredRows.ReleaseWithHint()
 	r.SendIntermediate()
 }
 func (inst EndETableFluid) BeginCells(key0 uint64, key1 uint32) EndETableFluid {
@@ -1276,6 +1278,16 @@ func (inst EndETableFluid) BeginHeaders(key0 uint32, key1 uint32) EndETableFluid
 
 func (inst EndETableFluid) EndHeaders() EndETableFluid {
 	inst.deferredHeaders.End()
+	return inst
+}
+
+func (inst EndETableFluid) BeginRows(key0 uint64) EndETableFluid {
+	inst.deferredRows.Begin(key0)
+	return inst
+}
+
+func (inst EndETableFluid) EndRows() EndETableFluid {
+	inst.deferredRows.End()
 	return inst
 }
 
@@ -2191,6 +2203,14 @@ func (inst LabelFluid) Keep() typed.RetainedFffiHolderTyped[LabelS] {
 	r.WriteOpCode(uint32(LabelMethodIdBuild))
 	return typed.NewRetainedFffiHolderTyped[LabelS](r.BuildRetained())
 }
+func (inst LabelAtomsFluid) Selectable(val bool) LabelAtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsMethodIdSelectable))
+	r.WriteBool(val)
+
+	return inst
+}
+
 func (inst LabelAtomsFluid) Wrap() LabelAtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(LabelAtomsMethodIdWrap))

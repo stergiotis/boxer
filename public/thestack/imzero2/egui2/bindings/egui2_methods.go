@@ -669,6 +669,37 @@ func (inst EndETableFluid) Cells(key0 uint64, key1 uint32) iter.Seq[functional.N
 	}
 }
 
+// Rows opens a deferred row capture scope as an iterator (ADR-0176 SD5).
+// Replaces the BeginRows/EndRows pair.
+//
+//	for range et.Rows(row) {
+//	    c.Frame(ids.PrepareSeq(base + row)).Fill(bg).SenseClick().Send()
+//	}
+//
+// The body is replayed into a Ui spanning the WHOLE row across every column,
+// before that row's cells run. That makes it the seam for a full-row
+// background, hover or click sense — a row painted here reads as continuous
+// across egui_table's inter-column gutters, which per-cell painting cannot do.
+//
+// Because the row body runs first, its widgets sit BEHIND the cells in
+// hit-test order. A click-sensing frame here is therefore won by any
+// interactive widget in a cell above it (a button, a SelectableLabel) and wins
+// everywhere else in the row — which is usually what a selectable row wants,
+// but means a row sense cannot override a cell control.
+//
+// Emit row blocks under the same [EndETableFluid.VisibleRange] gate as cells:
+// a row block for a culled row is built and marshalled for nothing. The body
+// is replayed at most once per row per frame even though egui_table calls its
+// row hook once per region — see the row_ui guard in
+// egui2_definition_d_table2.go for why that matters and what it prevents.
+func (inst EndETableFluid) Rows(key0 uint64) iter.Seq[functional.NilIteratorValueType] {
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		inst.BeginRows(key0)
+		defer func() { inst.EndRows() }()
+		yield(functional.NilIteratorValue)
+	}
+}
+
 // --- iter.Seq-based scoping for NewTable (egui_extras::TableBuilder) ---
 
 // NewTableBody is the body-scope handle yielded by NewTableFluid.Body().

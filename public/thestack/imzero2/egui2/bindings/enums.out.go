@@ -183,17 +183,18 @@ const (
 	FuncProcIdUiSetMaxWidth                       FuncProcIdE = FuncProcIdOffset + 175
 	FuncProcIdUiSetMinHeight                      FuncProcIdE = FuncProcIdOffset + 176
 	FuncProcIdUiSetMinWidth                       FuncProcIdE = FuncProcIdOffset + 177
-	FuncProcIdUiSetWidth                          FuncProcIdE = FuncProcIdOffset + 178
-	FuncProcIdUiWithLayout                        FuncProcIdE = FuncProcIdOffset + 179
-	FuncProcIdVectorSize                          FuncProcIdE = FuncProcIdOffset + 180
-	FuncProcIdVertical                            FuncProcIdE = FuncProcIdOffset + 181
-	FuncProcIdVerticalCentered                    FuncProcIdE = FuncProcIdOffset + 182
-	FuncProcIdVerticalCenteredJustified           FuncProcIdE = FuncProcIdOffset + 183
-	FuncProcIdWalkersMap                          FuncProcIdE = FuncProcIdOffset + 184
-	FuncProcIdWarnIfDebugBuild                    FuncProcIdE = FuncProcIdOffset + 185
-	FuncProcIdWidgetText                          FuncProcIdE = FuncProcIdOffset + 186
-	FuncProcIdWidgetsGlobalThemePreferenceButtons FuncProcIdE = FuncProcIdOffset + 187
-	FuncProcIdWindow                              FuncProcIdE = FuncProcIdOffset + 188
+	FuncProcIdUiSetMinWidthAvailable              FuncProcIdE = FuncProcIdOffset + 178
+	FuncProcIdUiSetWidth                          FuncProcIdE = FuncProcIdOffset + 179
+	FuncProcIdUiWithLayout                        FuncProcIdE = FuncProcIdOffset + 180
+	FuncProcIdVectorSize                          FuncProcIdE = FuncProcIdOffset + 181
+	FuncProcIdVertical                            FuncProcIdE = FuncProcIdOffset + 182
+	FuncProcIdVerticalCentered                    FuncProcIdE = FuncProcIdOffset + 183
+	FuncProcIdVerticalCenteredJustified           FuncProcIdE = FuncProcIdOffset + 184
+	FuncProcIdWalkersMap                          FuncProcIdE = FuncProcIdOffset + 185
+	FuncProcIdWarnIfDebugBuild                    FuncProcIdE = FuncProcIdOffset + 186
+	FuncProcIdWidgetText                          FuncProcIdE = FuncProcIdOffset + 187
+	FuncProcIdWidgetsGlobalThemePreferenceButtons FuncProcIdE = FuncProcIdOffset + 188
+	FuncProcIdWindow                              FuncProcIdE = FuncProcIdOffset + 189
 )
 const (
 	AtomsMethodIdBuild AtomsMethodIdE = 0
@@ -526,9 +527,10 @@ const (
 const (
 	LabelAtomsMethodIdBuild LabelAtomsMethodIdE = 0
 
-	LabelAtomsMethodIdWrap     LabelAtomsMethodIdE = 1
-	LabelAtomsMethodIdTruncate LabelAtomsMethodIdE = 2
-	LabelAtomsMethodIdExtend   LabelAtomsMethodIdE = 3
+	LabelAtomsMethodIdSelectable LabelAtomsMethodIdE = 1
+	LabelAtomsMethodIdWrap       LabelAtomsMethodIdE = 2
+	LabelAtomsMethodIdTruncate   LabelAtomsMethodIdE = 3
+	LabelAtomsMethodIdExtend     LabelAtomsMethodIdE = 4
 )
 
 const (

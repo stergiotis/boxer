@@ -79,6 +79,25 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
+	// uiSetMinWidthAvailable — set_min_width(available_width()). The Go side
+	// cannot compute this: available width is a client-side layout fact, and
+	// the whole point of the interpreted-size mechanism is that Go ships an
+	// instruction instead of a number.
+	//
+	// Added for ADR-0176 SD5. A deferred row block gets a Ui spanning the
+	// whole row, but every widget in it sizes to its own content, so a row
+	// background or click sense drawn from Go covered only its own text.
+	// Nothing consumes the existing ScalarSize().AvailableWidth() holder, so
+	// there was no way to say "as wide as the row" at all.
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMinWidthAvailable").
+		WithApplyCodeClientRust(rustClientCode(`
+					if {{EguiUiOptionalOuter}}.is_some() {
+						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						let aw = ui.available_width();
+						ui.set_min_width(aw);
+					}
+`)).
+		Build())
 	widgets = append(widgets, idl.NewProceduralNode("uiSetMinHeight").
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("height", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
@@ -190,6 +209,13 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 		idl.NewBuilderFactoryNode("labelAtoms").
 			AddArguments(idl.NewArgumentsBuilder().EvaluatedArg("atoms", structAtoms()).Build()).
 			AddMethods(idl.NewMethodBuilder().
+				// Mirrors label.selectable, and exists for the same reason it
+				// matters there: egui defaults selectable_labels to true, and a
+				// selectable Label senses click_and_drag. Inside a row that is
+				// itself click-sensed (ADR-0176 SD7) the label is registered
+				// later, so it sits ABOVE the row sense and swallows the click.
+				// Selectable(false) hands the click back to the row.
+				BeginMethod("selectable").Arg("val", ctabb.B).CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.selectable(val);\n")).EndMethod().
 				BeginMethod("wrap").CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.wrap_mode(egui::TextWrapMode::Wrap);")).EndMethod().
 				BeginMethod("truncate").CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.wrap_mode(egui::TextWrapMode::Truncate);")).EndMethod().
 				BeginMethod("extend").CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.wrap_mode(egui::TextWrapMode::Extend);")).EndMethod().

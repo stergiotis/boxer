@@ -387,6 +387,7 @@ func EndETable(i WidgetIdCreatorI, numRows uint64, defaultRowHeight float32, num
 	inst.idGen = i
 	inst.deferredCells = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Cells"))
 	inst.deferredHeaders = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Headers"))
+	inst.deferredRows = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Rows"))
 
 	return
 }
@@ -2025,6 +2026,13 @@ func UiSetMinWidth(width float32) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdUiSetMinWidth))
 	r.WriteFloat32(width)
+
+	r.SendIntermediate()
+}
+
+func UiSetMinWidthAvailable() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiSetMinWidthAvailable))
 
 	r.SendIntermediate()
 }
