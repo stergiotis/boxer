@@ -563,3 +563,90 @@ file itself.
   column per engine), `m2-storage.tsv`, `m2-encoding-gap.tsv`,
   `m2-correctness.tsv`, per-configuration `timings.tsv` and `baseline.tsv`.
 - **Run dir:** [`./runs/2026-08-07-m2/`](./runs/2026-08-07-m2/)
+
+## 2026-08-07 — M3, arm W — leeway writes the Parquet itself; the bytes match to 0.45 % and the *types* do not
+
+- **Build under test:** boxer `1ee3266f` plus an uncommitted change to
+  `apps/jsonbench/jsonbench_jsonmap_ingest.go`; ClickHouse 26.7.3.19,
+  DuckDB v1.5.5. 1,000,000 documents, 12,045,072 attributes.
+- **Attempted:** the milestone that turns "the layout ports" into "leeway
+  writes it". A `--parquet-out` flag on `jsonbench jsonmap ingest` sends the
+  same Arrow record batches to `dml.WriteArrowRecords` and never contacts
+  ClickHouse; the schema comes from the generated builder's `GetSchema()`, so
+  the file's columns are the leeway DDL pipeline's own output. Both sinks were
+  then run over **the same source file with the same symbol routing** — the
+  earlier corpora could not serve as the control, because the M1/M2 packed
+  export holds a different 1M documents (12,114,997 attributes against
+  12,045,072 here) and a size or schema comparison across different documents
+  would mean nothing.
+
+**The gate is split.** Same row count, near-identical bytes, different types:
+
+| | leeway writer | ClickHouse export |
+| --- | --- | --- |
+| documents / attributes | 1,000,000 / 12,045,072 | identical |
+| Parquet bytes (ZSTD, no bloom) | 155,186,737 | 154,494,328 — **1.0045×** |
+| ingest | 13.28 s, 75,326 docs/s | 12.00 s, 83,355 docs/s |
+| row groups | 1 | 3 |
+| query results | **12 of 14 match byte-for-byte** | (reference) |
+| U4, U9 | **fail to bind** | run |
+
+- **Storage: the claim holds.** leeway's own writer lands within **0.45 %** of
+  ClickHouse's export of the same data, and picks the same encodings —
+  `RLE_DICTIONARY` on the low-cardinality lanes (`lmv`, `mvhp`, `symbol:value`),
+  `PLAIN` on the high-cardinality payload. The neutrality claim survives on
+  size: nothing about going through ClickHouse was making the file smaller.
+- **Types: it does not.** Every canonical-`y` (bytes) column arrives as
+  **`BLOB`** from leeway's writer and **`VARCHAR`** from ClickHouse's — the
+  path lanes `lmv`, the array-coordinate params `mvhp`, and the row identity
+  `id:blake3hash`. ClickHouse's DDL maps `y` to `String` and its Parquet writer
+  emits Utf8; leeway's Arrow schema types it Binary.
+
+**What the type difference costs, exactly.** Equality and `list_position`
+survive — DuckDB casts a string literal to BLOB for those — so twelve of the
+fourteen queries return byte-identical answers. The two that use a *string
+predicate on a path* do not bind at all:
+
+```text
+U4  Binder Error: No function matches the given name and argument types
+    'starts_with(BLOB, STRING_LITERAL)'
+U9  Binder Error: ... 'contains(BLOB, STRING_LITERAL)'
+```
+
+Both are path-shape queries — subtree prefix census and array-degree discovery
+— which is to say the two most characteristically *leeway* questions in the
+set, the ones the USP document builds its thesis on. A consumer reading the
+leeway-written file has to cast every path lane before it can ask them.
+
+- **Findings:**
+  - **[broken leeway-ddl-codegen → proposed:leeway-arrow-bytes-vs-text / functional-suitability.functional-appropriateness / S2]**
+    One leeway schema yields two different Parquet column types depending on
+    which writer wrote it: `BLOB` from `ddl/arrow` via `dml.WriteArrowRecords`,
+    `VARCHAR` from the ClickHouse DDL backend's export. Membership path lanes
+    hold text — JSON paths — and typing them as bytes makes `starts_with` and
+    `contains` inapplicable, which is exactly what path-shaped queries need.
+    Whether the fix belongs in the canonical type of a membership lane, in the
+    arrow backend's mapping of `y`, or in a text-vs-bytes value aspect is a
+    design question this trial does not settle; it only shows that the two
+    backends disagree and that the disagreement is load-bearing.
+  - **[note — writer parity / S4]** Writing Parquet in-process is **slightly
+    slower** than inserting into ClickHouse (75.3k against 83.4k docs/s), which
+    is the ZSTD work moving from the server into the ingesting process. Worth
+    knowing before treating a Parquet sink as the cheap path.
+  - **[note — trial process / S4]** The M1/M2 corpora could not act as the
+    control here: they hold a different 1M documents. The correct control is
+    the same source file through both sinks, which is what this run did.
+  - **Positive maturity: `dml.WriteArrowRecords` carried the sink unchanged.**
+    Arm W needed no change to the shredder, the generated builder, or the
+    record batches — a flag, a writer, and a branch in `flush`. The seam
+    README §3a claimed was free turned out to be free.
+- **Solution size:** ~95 lines added to
+  `apps/jsonbench/jsonbench_jsonmap_ingest.go` (a flag pair, `openParquet`, and
+  a branch in `flush`). No change to any package under `public/`.
+- **Results:** `m3-summary.tsv`, `m3-gate.tsv`, `m3-encodings.tsv`, and
+  per-statement output under `res-leeway-written/` and
+  `res-clickhouse-written/`. To reproduce the query comparison, point
+  `m1-run.sh`'s `CWD` at a directory holding the file under test named
+  `packed.parquet`; the two scaffolding directories that did so are not
+  committed, being symlinks to gitignored data.
+- **Run dir:** [`./runs/2026-08-07-m3/`](./runs/2026-08-07-m3/)

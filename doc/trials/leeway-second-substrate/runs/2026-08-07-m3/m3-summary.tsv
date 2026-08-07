@@ -1,0 +1,8 @@
+metric	leeway_writer	clickhouse_writer
+documents	1000000	1000000
+attributes	12045072	12045072
+ingest_seconds	13.276	11.997
+docs_per_second	75326	83355
+parquet_bytes	155186737	154494328
+row_groups	1	3
+bytes_ratio	1.0045	1.0000

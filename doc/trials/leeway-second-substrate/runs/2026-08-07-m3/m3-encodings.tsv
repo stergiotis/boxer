@@ -1,0 +1,28 @@
+col	leeway_encoding	leeway_mib	clickhouse_encoding	clickhouse_mib
+tv:string:value:val:s:g:0:0:0::, list, element	PLAIN+RLE	109.84	RLE+PLAIN	109.7
+id:blake3hash:y:g:0:0:	PLAIN+RLE	31.09	PLAIN	30.97
+tv:int64:value:val:i64:4o:0:0:0::, list, element	PLAIN+RLE	2.93	RLE+PLAIN	2.88
+tv:string:lmv:lmv:y:m:0:0:0::, list, element	RLE_DICTIONARY+PLAIN+RLE	1.21	RLE+PLAIN+RLE_DICTIONARY	1.07
+tv:symbol:value:val:s:m:0:0:0::, list, element	RLE_DICTIONARY+PLAIN+RLE	0.85	RLE+PLAIN+RLE_DICTIONARY	0.75
+tv:string:mvhp:mvhp:y:g:0:0:0::, list, element	RLE_DICTIONARY+PLAIN+RLE	0.58	RLE+PLAIN+RLE_DICTIONARY	0.53
+tv:symbol:lmv:lmv:y:m:0:0:0::, list, element	RLE_DICTIONARY+PLAIN+RLE	0.37	RLE+PLAIN+RLE_DICTIONARY	0.33
+tv:string:lmvcard:lmvcard:u64:4gw:0:0:0::, list, element	RLE_DICTIONARY+PLAIN+RLE	0.35	RLE+PLAIN+RLE_DICTIONARY	0.32
+tv:symbol:mvhp:mvhp:y:g:0:0:0::, list, element	RLE_DICTIONARY+PLAIN+RLE	0.21	RLE+PLAIN+RLE_DICTIONARY	0.2
+tv:int64:lmv:lmv:y:m:0:0:0::, list, element	RLE_DICTIONARY+PLAIN+RLE	0.19	RLE+PLAIN+RLE_DICTIONARY	0.18
+tv:int64:mvhp:mvhp:y:g:0:0:0::, list, element	RLE_DICTIONARY+PLAIN+RLE	0.14	RLE+PLAIN+RLE_DICTIONARY	0.14
+tv:symbol:lmvcard:lmvcard:u64:4gw:0:0:0::, list, element	RLE_DICTIONARY+PLAIN+RLE	0.14	RLE+PLAIN+RLE_DICTIONARY	0.13
+tv:int64:lmvcard:lmvcard:u64:4gw:0:0:0::, list, element	RLE_DICTIONARY+PLAIN+RLE	0.07	RLE+PLAIN+RLE_DICTIONARY	0.07
+tv:bool:lmv:lmv:y:m:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:bool:mvhp:mvhp:y:g:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:bool:value:val:b:g:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN	0.0
+tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:undefined:mvhp:mvhp:y:g:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:undefined:lmvcard:lmvcard:u64:4gw:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:float64:value:val:f64:g:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:float64:lmv:lmv:y:m:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:float64:lmvcard:lmvcard:u64:4gw:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:undefined:lmv:lmv:y:m:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:null:lmvcard:lmvcard:u64:4gw:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:null:lmv:lmv:y:m:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:float64:mvhp:mvhp:y:g:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0
+tv:null:mvhp:mvhp:y:g:0:0:0::, list, element	PLAIN+RLE	0.0	RLE+PLAIN+RLE_DICTIONARY	0.0

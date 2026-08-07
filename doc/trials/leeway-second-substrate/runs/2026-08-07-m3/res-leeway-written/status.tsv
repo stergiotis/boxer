@@ -1,0 +1,15 @@
+stmt	status	rows	note
+1	ok	15	
+2	ok	13	
+3	ok	3	
+4	ok	3	
+5	ok	3	
+6	ok	20	
+7	ok	20	
+8	ok	1	
+9	err	0	Binder Error: No function matches the given name and argument types 'starts_with(BLOB, STRING_LITERAL)'. You might need to add explicit type casts. Candidate functions: starts_with
+10	ok	1	
+11	ok	1	
+12	ok	1	
+13	ok	1	
+14	err	0	Binder Error: No function matches the given name and argument types 'contains(BLOB, STRING_LITERAL)'. You might need to add explicit type casts. Candidate functions: contains(VARCH

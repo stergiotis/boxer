@@ -1,0 +1,15 @@
+query	leeway_vs_clickhouse_written
+Q1	match
+Q2	match
+Q3	match
+Q4	match
+Q5	match
+U1	match
+U2	match
+U3	match
+U4	FAILED on the leeway-written file
+U5	match
+U6	match
+U7	match
+U8	match
+U9	FAILED on the leeway-written file

@@ -321,10 +321,15 @@ hypotheses from surprises:
   of bloom filters the native table has no equivalent of. Cold runs remain
   unavailable, so the cold column is absent rather than noisy.
   Details in the [logbook](./logbook.md).
-- **M3 — the writer.** A Parquet output path on `jsonbench jsonmap ingest`,
-  reusing `dml.WriteArrowRecords`. Gate: the file it writes and the file arm P
-  exported are equivalent — same schema, same row count, same query results.
-  This is the milestone that turns "the layout ports" into "leeway writes it".
+- **M3 — the writer.** ✓ **Done 2026-08-07, and the gate is split.** A
+  `--parquet-out` flag on `jsonbench jsonmap ingest` sends the same Arrow
+  record batches to `dml.WriteArrowRecords`, never contacting ClickHouse. Over
+  the same source file: same row count, bytes within **0.45 %**, same
+  encodings — but **not the same schema**. Every canonical-`y` column arrives
+  as `BLOB` from leeway's writer and `VARCHAR` from ClickHouse's, so twelve of
+  fourteen queries match byte-for-byte and the two that apply a string
+  predicate to a path (U4, U9) fail to bind. Filed, not worked around.
+  Details in the [logbook](./logbook.md).
 - **M4 — the USP counterpart** *(gated on M2, and the milestone H5 turns on)*.
   Arms N-text and N-struct, DuckDB only — M0 established that `datafusion-cli`
   ships no JSON functions at all, so the head-to-head has no third engine. This
