@@ -55,7 +55,7 @@ Source: <a href="./README.md">the trial</a>, <a href="./logbook.md">logbook</a>.
   <div class="stat win"><b>2 of 9</b><span>exploration queries the JSON type cannot express <em>at all</em></span>
     <em>leeway answers both in under 4 s</em></div>
   <div class="stat win"><b>0.29 s</b><span>4-criteria lookup finding 7 events among 100M</span>
-    <em>JSON type 0.63 s; document-per-row 2.07 s</em></div>
+    <em>JSON type 0.63 s — but it inverts at high density</em></div>
   <div class="stat lose"><b>3.0&times;</b><span>slower on dashboard queries that name their paths</span>
     <em>measured at 10M; recoverable — see below</em></div>
 </div>
@@ -103,26 +103,32 @@ document and gives up on the part that actually varies.</p>
 <h3>2. You filter on several fields and retrieve</h3>
 
 <p>The other log shape, and the first stage of any tiered query: filter on
-several attributes, return the matching events. Four criteria over 100M
-documents, 7 events out — the same corpus, three ways of storing it:</p>
+several attributes, return the matching events. 100M documents, three ways of
+storing them, at three predicate densities:</p>
 
 <table>
-  <thead><tr><th>arm</th><th>sort key</th><th class="num">seconds</th></tr></thead>
+  <thead><tr><th>criteria</th><th class="num">events out</th><th class="num">one row per attribute</th><th class="num">JSON type</th><th class="num">one row per document</th></tr></thead>
   <tbody>
-    <tr><td><strong>leeway, one row per attribute</strong></td><td><code>(path, doc)</code></td><td class="num"><strong>0.29</strong></td></tr>
-    <tr><td>JSON type, plain</td><td>none</td><td class="num">0.63</td></tr>
-    <tr><td>leeway, one row per document</td><td>none</td><td class="num">2.07</td></tr>
+    <tr><td>4, incl. a rare user</td><td class="num">7</td><td class="num"><strong>0.29 s</strong></td><td class="num">0.63 s</td><td class="num">2.07 s</td></tr>
+    <tr><td>4, incl. the top poster</td><td class="num">10,936</td><td class="num"><strong>0.40 s</strong></td><td class="num">0.69 s</td><td class="num">2.18 s</td></tr>
+    <tr><td>3, no user filter</td><td class="num">8,377,929</td><td class="num">1.95 s</td><td class="num"><strong>0.97 s</strong></td><td class="num">2.45 s</td></tr>
   </tbody>
 </table>
 
-<p>Stored one row per attribute, each criterion becomes a sorted-index seek and
-the four intersect: <strong>0.29 s to find 7 events among 100 million</strong>,
-2.2&times; ahead of the JSON type and 7.1&times; ahead of the document-per-row
-layout. This is the one place a sort key is in play, and it is the layout's
-whole point. Both layouts can be kept at once — converting 100M documents to
-the exploded form takes <strong>50.8 s at a bounded 5.4&nbsp;GB</strong>, and
-the copy is <em>smaller</em> than the original (0.70&times;), so carrying both
-costs 1.70&times; one.</p>
+<p><strong>Selectivity decides the winner, and the ordering inverts.</strong>
+Stored one row per attribute each criterion becomes a sorted-index seek and the
+four intersect — <strong>0.29 s to find 7 events among 100 million</strong>,
+2.2&times; ahead of the JSON type. A thousand times denser it still leads, by
+1.7&times;. But once the predicate returns 8.4&nbsp;million events the seeks
+stop paying and the shredded JSON column wins by 2.0&times;. The
+document-per-row layout is last at every density; it is the wrong shape for
+this query, whichever way the other two fall.</p>
+
+<p>This is the one place a sort key is in play — <code>(path,&nbsp;doc)</code>
+on the attribute-per-row table — and it is that layout's whole point. Both can
+be kept at once: converting 100M documents takes <strong>50.8 s at a bounded
+5.4&nbsp;GB</strong>, and the copy is <em>smaller</em> than the original
+(0.70&times;), so carrying both costs 1.70&times; one.</p>
 
 <h3>3. The advantage widens with scale</h3>
 
