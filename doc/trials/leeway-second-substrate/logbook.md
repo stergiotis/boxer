@@ -433,3 +433,133 @@ the distinction between layout and rendering is the thing to keep.
   `oracle/`, `duckdb-packed/`, `duckdb-exploded/`, `datafusion-packed/`,
   `datafusion-exploded/`.
 - **Run dir:** [`./runs/2026-08-07-m1/`](./runs/2026-08-07-m1/)
+
+## 2026-08-07 — M2, the reportable run at 10M — the formulation rule paid for itself on every engine, Parquet round-trips at parity, and one column costs the whole difference
+
+- **Build under test:** boxer `72f56db1`; ClickHouse 26.7.3.19, DuckDB v1.5.5,
+  datafusion-cli 54.1.0. 9,999,994 documents / 121,205,987 attributes.
+- **Environment:** as M0. **Cold runs unavailable** (no passwordless sudo), so
+  every latency below is hot = min(try 2, try 3) of 3 and the cold column is
+  *absent*. Timing is **process** wall clock via `/usr/bin/time`, uniform across
+  the three; startup baselines are recorded (`baseline.tsv`) and matter —
+  ClickHouse's client costs **0.03 s**, DuckDB's and DataFusion's are below the
+  timer's resolution. For ClickHouse the server-side figure is carried beside it
+  in `clickhouse.mem.tsv` and is the one to quote for that engine alone.
+- **Attempted:** nine configurations — three engines × {packed, exploded} plus
+  the join formulation of exploded on each — measured on the same 10M corpus,
+  and re-verified for correctness against the tiebroken oracle.
+
+**Correctness at 10M is what it was at 1M**, with one new divergence found and
+fixed (below): only Q1 in the exploded renderings (absent-path bucket) and U5
+(the Int64 overflow). `m2-correctness.tsv`.
+
+### The formulation rule paid for itself, and most on the engine I had not tested
+
+Regroup (`GROUP BY doc` + `CASE WHEN`) against join (semi-joins on the path
+prefix), hot seconds:
+
+| | ClickHouse | DuckDB | DataFusion |
+| --- | --- | --- | --- |
+| Q2 | 1.010 → 0.480 | 2.720 → **0.630** | 1.910 → 1.510 |
+| Q3 | 0.750 → 0.290 | 2.140 → **0.460** | 1.310 → 1.140 |
+| Q4 | 1.090 → 0.360 | 2.920 → **0.660** | 1.670 → 1.260 |
+| Q5 | 1.070 → 0.360 | 2.830 → **0.640** | 1.670 → 1.280 |
+
+The gap is **4.3–4.7× on DuckDB** — larger than on ClickHouse, where the error
+was first caught. Had M2 measured only the formulation I happened to write
+first, DuckDB's exploded rendering would have been reported roughly four times
+worse than it is. §4's rule was added after the arm X retraction; this is the
+run that shows it was not a one-off precaution.
+
+DataFusion gains least (1.1–1.3×), which is consistent with it having no sort
+key to prune on — only Parquet row-group statistics.
+
+### Cross-engine, at each side's best formulation
+
+Full table in `m2-latency.tsv`. Two readings, and the caveat first: ClickHouse
+reads its native MergeTree while the other two read Parquet, so this compares
+**stacks, not engines**, and ClickHouse additionally carries 0.03 s of client
+startup that hurts it most on the sub-100 ms queries.
+
+- **Packed layout.** ClickHouse leads on 12 of 14. DuckDB is 1.5–2.0× behind on
+  Q1–Q5 and 0.75–3.3× across the U-set; DataFusion 1.9–3.4× and 0.8–6.7×.
+- **Exploded layout.** DuckDB **beats ClickHouse on the path-oriented half** —
+  U3 0.010 s against 0.150, U6 0.000 against 0.030, U4 0.010 against 0.030,
+  Q1 0.020 against 0.040 — and loses the reassembly half (Q2 0.630 against
+  0.480). The split that arms X/Y found between layouts reappears here between
+  engines on the same layout.
+
+### Storage — and a correction I had to make mid-run
+
+The first storage number I computed said Parquet costs the exploded layout
+1.427× its native size. That was wrong, and comparing a like with an unlike:
+**ClickHouse's Parquet export writes bloom filters by default**
+(`output_format_parquet_write_bloom_filter=1`), which the native table does not
+have. They are 349.9 MiB of a 1460.0 MiB file — the exact gap between the sum
+of the column chunks and the file size, which is what prompted the check.
+
+| layout | ClickHouse native | Parquet, default | Parquet, no bloom | no-bloom ÷ native |
+| --- | --- | --- | --- | --- |
+| packed | 1,540,236,424 B | 1,696,159,022 B (1.101×) | 1,548,274,422 B | **1.005×** |
+| exploded | 1,072,833,164 B | 1,530,885,376 B (1.427×) | 1,164,039,241 B | **1.085×** |
+| exploded ÷ packed | 0.697 | 0.903 | **0.752** | |
+
+So the packed layout round-trips to Parquet at **parity**, the exploded layout
+costs **8.5 %**, and the exploded form's storage advantage survives the trip
+(0.697 → 0.752). Anyone sizing a Parquet export of leeway data should know the
+default costs +9.7 % on the packed layout and **+31.5 %** on the exploded one
+before any of this is measured.
+
+**And the 8.5 % is one column.** `m2-encoding-gap.tsv`:
+
+| col | ClickHouse codec | native | Parquet encoding | Parquet | Δ |
+| --- | --- | --- | --- | --- | --- |
+| `str` | ZSTD(3) | 978.2 MiB | PLAIN | 962.0 MiB | −16.2 |
+| **`doc`** | **DoubleDelta, ZSTD(3)** | **18.6 MiB** | **PLAIN** | **119.3 MiB** | **+100.7** |
+| `i64` | DoubleDelta, ZSTD(3) | 18.5 MiB | PLAIN+RLE_DICTIONARY | 22.4 MiB | +3.9 |
+| everything else | ZSTD(3) | 7.6 MiB | PLAIN+RLE_DICTIONARY | 5.7 MiB | −1.9 |
+
+The dense document id — a monotonically ascending integer, the single best case
+for delta encoding — is written **PLAIN**, at 6.4× its native size, and that one
+column more than accounts for the whole gap. `LowCardinality` survives fine:
+`path`, `sym` and `section` all get `RLE_DICTIONARY` and come out at or below
+their native size. **This is not a format limitation** — Parquet has
+`DELTA_BINARY_PACKED`, and ClickHouse's writer did not select it. It is a
+writer gap, which makes it a concrete target for M3, where leeway writes the
+file itself.
+
+- **Findings:**
+  - **[pain — trial process / S2]** The exploded rendering's regroup
+    formulation is 4.3–4.7× slower than its join formulation *on DuckDB* —
+    worse than the ClickHouse gap that prompted §4's rule. A cross-engine
+    comparison that fixes one formulation measures the author on every engine,
+    not just the one where the mistake was noticed.
+  - **[pain — trial process / S2]** Q5 diverged on DataFusion at 10M and **not
+    at 1M**. `(max − min) / 1000` truncates the difference where
+    `date_diff('millisecond', …)` counts millisecond boundaries crossed; the
+    two differ by one whenever the sub-millisecond parts do not order the same
+    way, which no row in the 1M sample hit and every row in the 10M top-3 did.
+    Fixed by dividing each side before subtracting, which reproduces the
+    boundary count exactly. **A smoke tier can pass a divergence through.**
+  - **[note — engine default, not toolbelt / S3]** ClickHouse's Parquet export
+    writes bloom filters by default, +31.5 % on the exploded layout. Worth
+    knowing before quoting any Parquet size, and it invalidated this run's
+    first storage number.
+  - **[missing leeway-ddl-codegen → proposed:leeway-parquet-encoding-aspects / performance-efficiency.resource-utilisation / S3]**
+    Round-tripping through ClickHouse's Parquet writer loses the `DoubleDelta`
+    encoding aspect and nothing else that matters — 8.5 % of the exploded
+    layout, concentrated in one column that Parquet could encode well. README
+    §7 Q2 asks whether a DDL backend is worth writing rather than relying on
+    schema inference; this is the first number on that question, and it says
+    the encoding aspects are worth carrying but the type mapping is not the
+    part at risk.
+  - **Positive maturity: the ports hold at 10× the tier.** All four reproduce
+    the oracle at 10M with the same two explained divergences as at 1M, after
+    the Q5 fix. Nothing about the translation degraded with scale.
+- **Solution size:** [`m2-bench.sh`](./m2-bench.sh) ~110 lines, and two
+  join-formulation query files (`m2-exploded-join.duckdb.sql`,
+  `m2-exploded-join.datafusion.sql`) at ~70 lines each.
+- **Results:** `m2-latency.tsv` (nine configurations plus a best-formulation
+  column per engine), `m2-storage.tsv`, `m2-encoding-gap.tsv`,
+  `m2-correctness.tsv`, per-configuration `timings.tsv` and `baseline.tsv`.
+- **Run dir:** [`./runs/2026-08-07-m2/`](./runs/2026-08-07-m2/)

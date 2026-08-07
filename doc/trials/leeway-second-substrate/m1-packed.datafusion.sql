@@ -78,8 +78,8 @@ LIMIT 3;
 
 -- Q5 — three longest activity spans
 SELECT coalesce(array_element(str_val, CAST(array_position(str_lmv, '/did') AS BIGINT)), '') AS user_id,
-       (max(coalesce(array_element(i64_val, CAST(array_position(i64_lmv, '/time_us') AS BIGINT)), 0))
-      - min(coalesce(array_element(i64_val, CAST(array_position(i64_lmv, '/time_us') AS BIGINT)), 0))) / 1000 AS activity_span
+       max(coalesce(array_element(i64_val, CAST(array_position(i64_lmv, '/time_us') AS BIGINT)), 0)) / 1000
+     - min(coalesce(array_element(i64_val, CAST(array_position(i64_lmv, '/time_us') AS BIGINT)), 0)) / 1000 AS activity_span
 FROM j
 WHERE coalesce(array_element(sym_val, CAST(array_position(sym_lmv, '/kind') AS BIGINT)), '') = 'commit'
   AND coalesce(array_element(sym_val, CAST(array_position(sym_lmv, '/commit/operation') AS BIGINT)), '') = 'create'

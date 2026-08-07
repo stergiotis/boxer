@@ -311,11 +311,16 @@ hypotheses from surprises:
   and U5, where ClickHouse and DataFusion silently overflow Int64 and DuckDB
   does not. Q3 compares only with `session_timezone=UTC` pinned (M0 finding 4).
   Details in the [logbook](./logbook.md).
-- **M2 — measure at 10M.** Sizes, cold and hot latency, physical plans, for
-  arms P / J-duck / J-df. This is the reportable run. The DuckDB-vs-DataFusion
-  pair also prices the higher-order rendering against the explosion one over
-  identical data, which is the closest this trial gets to a cost for the
-  lambda-free fallback.
+- **M2 — measure at 10M.** ✓ **Done 2026-08-07.** Nine configurations — three
+  engines × {packed, exploded} plus exploded's join formulation on each — hot
+  latency and storage, correctness re-verified. Headlines: the regroup/join
+  formulation gap is **4.3–4.7× on DuckDB**, larger than the ClickHouse gap
+  that prompted §4's rule; Parquet round-trips the packed layout at **parity**
+  (1.005×) and the exploded one at **1.085×**, all of which is one column's
+  lost delta encoding; and ClickHouse's default Parquet export adds **+31.5 %**
+  of bloom filters the native table has no equivalent of. Cold runs remain
+  unavailable, so the cold column is absent rather than noisy.
+  Details in the [logbook](./logbook.md).
 - **M3 — the writer.** A Parquet output path on `jsonbench jsonmap ingest`,
   reusing `dml.WriteArrowRecords`. Gate: the file it writes and the file arm P
   exported are equivalent — same schema, same row count, same query results.

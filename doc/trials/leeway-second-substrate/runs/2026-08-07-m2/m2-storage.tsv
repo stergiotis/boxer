@@ -1,0 +1,4 @@
+layout	clickhouse_native	parquet_default	parquet_no_bloom	nobloom_over_native	default_over_native
+packed	1540236424	1696159022	1548274422	1.005	1.101
+exploded	1072833164	1530885376	1164039241	1.085	1.427
+exploded_over_packed	0.697	0.903	0.752		

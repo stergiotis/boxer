@@ -1,0 +1,12 @@
+duckdb-exploded-join	Q1	1	0.59	2435800
+duckdb-exploded-join	Q1	2	0.63	2515708
+duckdb-exploded-join	Q1	3	0.63	2553848
+duckdb-exploded-join	Q2	1	0.43	1491540
+duckdb-exploded-join	Q2	2	0.47	1357988
+duckdb-exploded-join	Q2	3	0.46	1494900
+duckdb-exploded-join	Q3	1	0.71	2916224
+duckdb-exploded-join	Q3	2	0.67	2632384
+duckdb-exploded-join	Q3	3	0.66	2848312
+duckdb-exploded-join	Q4	1	0.70	2729748
+duckdb-exploded-join	Q4	2	0.64	2784260
+duckdb-exploded-join	Q4	3	0.69	2786340

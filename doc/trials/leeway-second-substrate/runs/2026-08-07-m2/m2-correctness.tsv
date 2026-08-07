@@ -1,0 +1,15 @@
+query	duckdb_packed	duckdb_exploded	datafusion_packed	datafusion_exploded
+Q1	match	DIFFERS(1)	match	DIFFERS(1)
+Q2	match	match	match	match
+Q3	match	match	match	match
+Q4	match	match	match	match
+Q5	match	match	match	match
+U1	match	match	match	match
+U2	match	match	match	match
+U3	match	match	match	match
+U4	match	match	match	match
+U5	DIFFERS(2)	DIFFERS(2)	match	match
+U6	match	match	match	match
+U7	match	match	match	match
+U8	match	match	match	match
+U9	match	match	match	match

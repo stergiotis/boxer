@@ -12,11 +12,16 @@
 --
 --   hour(make_timestamp(x))  ->  date_part('hour', to_timestamp_micros(x))
 --   min(make_timestamp(x))   ->  min(to_timestamp_micros(x))
---   date_diff('millisecond', min(t), max(t))  ->  (max(x) - min(x)) / 1000
+--   date_diff('millisecond', min(t), max(t))  ->  max(x)/1000 - min(x)/1000
 --
 -- the last because DataFusion has no date_diff, so the span is computed on the
--- raw microseconds instead. Everything else is byte-identical between the two
--- engines, which is the measure of what the exploded rendering costs to port.
+-- raw microseconds. Note *where* the division sits: `(max - min) / 1000`
+-- truncates the difference, while date_diff counts millisecond boundaries
+-- crossed, and the two differ by one whenever the sub-millisecond parts do not
+-- order the same way. Dividing each side first reproduces the boundary count
+-- exactly. That divergence did not appear at the 1M tier and appeared on all
+-- three rows at 10M. Everything else is byte-identical between the two engines,
+-- which is the measure of what the exploded rendering costs to port.
 --
 -- Document reassembly is `max(CASE WHEN path = ... THEN ... END)` rather than
 -- ClickHouse's `anyIf`, chosen because both targets have it and it needs no
@@ -85,7 +90,7 @@ LIMIT 3;
 
 -- Q5 — three longest activity spans
 SELECT did AS user_id,
-       (max(ts) - min(ts)) / 1000 AS activity_span
+       max(ts) / 1000 - min(ts) / 1000 AS activity_span
 FROM (
     SELECT doc,
            max(CASE WHEN path = '/commit/collection' THEN sym END) AS event,

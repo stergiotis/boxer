@@ -1,0 +1,12 @@
+datafusion-exploded-join	Q1	1	1.54	3285948
+datafusion-exploded-join	Q1	2	1.56	3348264
+datafusion-exploded-join	Q1	3	1.51	3409952
+datafusion-exploded-join	Q2	1	1.15	1465820
+datafusion-exploded-join	Q2	2	1.15	1512480
+datafusion-exploded-join	Q2	3	1.14	1488204
+datafusion-exploded-join	Q3	1	1.27	2450060
+datafusion-exploded-join	Q3	2	1.29	2466104
+datafusion-exploded-join	Q3	3	1.26	2498720
+datafusion-exploded-join	Q4	1	1.30	2482484
+datafusion-exploded-join	Q4	2	1.29	2515260
+datafusion-exploded-join	Q4	3	1.28	2505872
