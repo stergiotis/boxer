@@ -176,20 +176,23 @@ value-plus-path lane shape, just narrower — and rerunning the identical query,
 with no index anywhere:</p>
 
 <table>
-  <thead><tr><th>document-per-row layout</th><th class="num">bytes read</th><th class="num">seconds</th><th class="num">table size</th></tr></thead>
+  <thead><tr><th class="num">events out</th><th class="num">one lane per type</th><th class="num">backbone split out</th><th class="num">JSON type</th></tr></thead>
   <tbody>
-    <tr><td>one lane per type (as measured above)</td><td class="num">28.27 GiB</td><td class="num">1.32</td><td class="num">13.93 GiB</td></tr>
-    <tr><td><strong>backbone split into its own sections</strong></td><td class="num"><strong>4.49 GiB</strong></td><td class="num"><strong>0.09</strong></td><td class="num">19.49 GiB</td></tr>
+    <tr><td class="num">7</td><td class="num">1.33 s</td><td class="num"><strong>0.09 s</strong></td><td class="num">0.80 s</td></tr>
+    <tr><td class="num">10,936</td><td class="num">1.65 s</td><td class="num"><strong>0.55 s</strong></td><td class="num">1.04 s</td></tr>
+    <tr><td class="num">8,377,929</td><td class="num">2.27 s</td><td class="num">1.32 s</td><td class="num"><strong>1.08 s</strong></td></tr>
   </tbody>
 </table>
 
-<p><strong>6.3&times; fewer bytes and 14.7&times; faster</strong>, for
-<strong>1.40&times; the storage</strong>. It also passes both other layouts on
-this query — 4.49&nbsp;GiB against the JSON type's 12.21 and the sorted
-attribute-per-row table's 6.51 — <em>without an index of any kind</em>. The
-JSON type's per-path subcolumn is the limit of this idea; a leeway schema
-reaches it by declaring sections, and pays in lane overhead rather than in
-query time.</p>
+<p>At the selective end the split reads <strong>4.49&nbsp;GiB instead of
+28.27</strong> and runs <strong>14.7&times; faster</strong>, passing every other
+layout including the indexed one — with no index at all. The margin narrows as
+the predicate loosens (12.88&nbsp;GiB at 10,936 events, 22.61 at 8.4&nbsp;M,
+where nothing selective is left to skip) and the JSON type retakes the dense
+end by 1.2&times;. Storage cost throughout: <strong>1.40&times;</strong>,
+13.93&nbsp;GiB to 19.49. The JSON type's per-path subcolumn is the limit of
+this idea; a leeway schema chooses where on the spectrum to sit, and pays in
+lane overhead rather than in query time.</p>
 
 <p><em>Method note: the split table was derived from the packed one rather than
 re-ingested, so its lanes are the shape a leeway section produces without

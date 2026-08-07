@@ -1,0 +1,4 @@
+events_out	split_s	split_bytes	json_s	packed_prewhere_s	exploded_unsorted_s	exploded_sorted_s
+7	0.09	4.49 GiB	0.80	1.33	1.39	0.29
+10936	0.55	12.88 GiB	1.04	1.65	1.40	0.40
+8377929	1.32	22.61 GiB	1.08	2.27	4.26	1.95
