@@ -1,0 +1,40 @@
+label	status	result
+list_element	ok	b
+list_position	ok	2
+H3_position_absent	ok	<NULL>
+H3_index_by_null	ok	<NULL>
+H3_index_by_zero	ok	<EMPTY-OR-NULL>
+unnest	ok	3
+list_distinct	ok	[b, a]
+list_concat	ok	[a, b]
+flatten_nary	ok	[a, b, c]
+list_contains	ok	true
+list_transform	ok	[90mWARNING: [00m[90mDeprecated lambda arrow (->) detected. Please transition to the new lambda syntax, i.e.., lambda x, i: x + i, before DuckDB's next release. Use SET lambda_syntax='ENABLE_SINGLE
+list_filter	ok	[90mWARNING: [00m[90mDeprecated lambda arrow (->) detected. Please transition to the new lambda syntax, i.e.., lambda x, i: x + i, before DuckDB's next release. Use SET lambda_syntax='ENABLE_SINGLE
+list_reduce	ok	[90mWARNING: [00m[90mDeprecated lambda arrow (->) detected. Please transition to the new lambda syntax, i.e.., lambda x, i: x + i, before DuckDB's next release. Use SET lambda_syntax='ENABLE_SINGLE
+list_bool_or	ok	[90mWARNING: [00m[90mDeprecated lambda arrow (->) detected. Please transition to the new lambda syntax, i.e.., lambda x, i: x + i, before DuckDB's next release. Use SET lambda_syntax='ENABLE_SINGLE
+list_sum	ok	6
+list_len	ok	2
+count_equal	ok	[90mWARNING: [00m[90mDeprecated lambda arrow (->) detected. Please transition to the new lambda syntax, i.e.., lambda x, i: x + i, before DuckDB's next release. Use SET lambda_syntax='ENABLE_SINGLE
+starts_with	ok	true
+list_sort	ok	[1, 2, 3]
+H2_list_cumsum_builtin	err	Catalog Error: Scalar Function with name list_cumsum does not exist! Did you mean "list_sum"? LINE 1: SELECT list_cumsum([1,2,3]) ^
+H2_cumsum_by_slice	ok	[90mWARNING: [00m[90mDeprecated lambda arrow (->) detected. Please transition to the new lambda syntax, i.e.., lambda x, i: x + i, before DuckDB's next release. Use SET lambda_syntax='ENABLE_SINGLE
+H2_arg_sort_by_key	err	Binder Error: failed to bind function, either: This scalar function does not support lambdas! or: Referenced column "a" was not found because the FROM clause is missing
+H2_arg_max	ok	y
+make_timestamp_us	ok	2023-11-14 22:13:20
+H4_hour	ok	22
+H4_timestamp_is_naive	ok	2023-11-14 22:13:20
+date_diff_plural	ok	1000
+date_diff_singular	ok	1000
+count_distinct	ok	2
+in_list	ok	true
+read_parquet_fn	ok	0
+H5_json_extract_const	ok	1
+H5_json_extract_runtime	ok	1
+H5_json_keys	ok	[a, b]
+H5_json_structure	ok	{"a":"UBIGINT"}
+macro_define	ok	20
+lambda_arrow_deprecated	ok	[90mWARNING: [00m[90mDeprecated lambda arrow (->) detected. Please transition to the new lambda syntax, i.e.., lambda x, i: x + i, before DuckDB's next release. Use SET lambda_syntax='ENABLE_SINGLE
+lambda_new_syntax	ok	[2, 3]
+lambda_new_filter	ok	[ab]

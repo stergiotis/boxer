@@ -14,12 +14,14 @@ status: draft
 > three-tiered: (a) statements about this repository were checked against the
 > working tree on the compile date, paths cited; (b) the workload is inherited
 > wholesale from the [jsonbench-on-facts](../jsonbench-on-facts/README.md)
-> trial and its [pin](../jsonbench-on-facts/upstream/PIN.md); (c) **statements
-> about DuckDB and DataFusion are from prior knowledge and are unverified** —
-> neither binary is installed on the development box, no version is pinned, and
-> M0 exists to install them and check every capability claimed in §3 against the
-> actual builds. Where a §3 claim is load-bearing for the milestone cut it is
-> marked *(c, unverified)*.
+> trial and its [pin](../jsonbench-on-facts/upstream/PIN.md); (c) statements
+> about DuckDB and DataFusion were compiled from prior knowledge and were
+> unverified. **M0 ran on 2026-08-07 and checked them against pinned builds**
+> — DuckDB v1.5.5 and datafusion-cli 54.1.0 — so a claim still marked
+> *(c, unverified)* is one M0 did not reach. Evidence:
+> [`runs/2026-08-07-m0/`](./runs/2026-08-07-m0/), regenerable with
+> [`probe.sh`](./probe.sh); what it found is in the
+> [logbook](./logbook.md).
 
 # leeway on a second substrate — a toolbelt trial
 
@@ -36,7 +38,18 @@ exploration queries, measured — and it runs on exactly one substrate.
    seams leeway already has? Which seams hold, which turn out to be
    ClickHouse-shaped, and how much code is written on the way? The artifacts
    are committed and counted; every escape hatch is a finding, not a fix.
-2. **The side-product, secondary here.** Whether the numbers travel — storage
+2. **Does the USP verdict survive a change of engine?** The sibling trial's
+   [USP experiments](../jsonbench-on-facts/leeway-usp-experiments.md) put the
+   leeway shape head-to-head against ClickHouse's `JSON` type over nine
+   queries and concluded: *a JSON column is fast when the path is in the
+   query, a leeway table is fast when the path is in the data.* That thesis
+   rests on three structural facts about ClickHouse's JSON type (its §2), and
+   a structural fact about one engine is not a structural fact about JSON
+   columns. Re-running U1–U9 on a second engine is the cheapest available
+   test of which half of the thesis is about **leeway** and which half is
+   about **ClickHouse**. This is why U1–U9 are first-class here rather than
+   an appendix to Q1–Q5.
+3. **The side-product, least weighted.** Whether the numbers travel — storage
    and latency for the same corpus under the same queries on a different
    engine. Unlike the sibling trial, where the domain numbers were co-equal,
    here they are a by-product: three engines on one workstation compare
@@ -44,10 +57,18 @@ exploration queries, measured — and it runs on exactly one substrate.
 
 In scope: the **canonical leeway JSON mapping** arm of the sibling trial
 (its arm J), DuckDB as the primary target and DataFusion as a marginal-cost
-third point, the 1M and 10M tiers, Q1–Q5 and U1–U9. Out of scope: the
-`boxer.facts` arms (see §3, arm F — deliberately optional and last), the
-100M tier, `play`/`sqlapplet` integration, and any claim that this trial
-ranks engines.
+third point, the 1M and 10M tiers, **both query sets — Q1–Q5 (the benchmark)
+and U1–U9 (the USP set)** — and the JSON-side counterpart of the USP
+head-to-head. Out of scope: the `boxer.facts` arms (see §3, arm F —
+deliberately optional and last), the 100M tier, `play`/`sqlapplet`
+integration, and any claim that this trial ranks engines.
+
+**The two query sets ask different things and both are wanted.** Q1–Q5 is the
+benchmark: every path is named in the query, and it is the case a JSON column
+is built for. U1–U9 is the complement: the path is data, not syntax. The port
+is expected to be easy for Q1–Q5 (H1) and is *interesting* for U1–U9, because
+that is where the sibling trial's largest ratios live — 11× to 676×, and two
+queries with no expression on the JSON side at all.
 
 **Why the canonical mapping rather than facts.** The facts arm reaches
 `chstore.ComposeSetupSQL` for its DDL, needs
@@ -64,10 +85,18 @@ corpus at the pinned upstream commit, Q1–Q5 as translated for the canonical
 mapping in
 [`queries-jsonmap.sql`](../jsonbench-on-facts/queries-jsonmap.sql), and the
 nine exploration queries in
-[`queries-usp-leeway.sql`](../jsonbench-on-facts/queries-usp-leeway.sql).
+[`queries-usp-leeway.sql`](../jsonbench-on-facts/queries-usp-leeway.sql),
+matched statement for statement by its JSON-side counterpart
+[`queries-usp-jsonv2.sql`](../jsonbench-on-facts/queries-usp-jsonv2.sql).
 Tiers: 1M as smoke, 10M as the reportable tier. Nothing about the workload is
 re-derived here; if the sibling's pin moves, this trial's numbers move with it
 and the logbook must say so.
+
+The USP set's design and its ClickHouse-side results are in
+[leeway-usp-experiments.md](../jsonbench-on-facts/leeway-usp-experiments.md);
+this trial re-runs the leeway half on other engines and re-poses the JSON half,
+because the counterpart of ClickHouse's `JSON` type is a different object on
+each target (§3b, arm N).
 
 ## 3 System under test and arms
 
@@ -80,7 +109,7 @@ Stage by stage, with the seam named:
 | describe → IR → map | none — `common.TableDesc`, canonical types | free |
 | DDL | `ddl/clickhouse` behind `common.TechnologySpecificGeneratorI` ([`lw_types.go:207`](../../../public/semistructured/leeway/common/lw_types.go)); `ddl/arrow` and `ddl/golang` already implement the same interface | a new backend, or none at all if the target reads Parquet |
 | marshal / DML | the generated builders already emit Arrow record batches; `dml.WriteArrowRecords` already writes Parquet and Arrow IPC ([`lw_dml_arrow_utils.go`](../../../public/semistructured/leeway/dml/lw_dml_arrow_utils.go), used in [`dml/example/cli.go`](../../../public/semistructured/leeway/dml/example/cli.go)) | swap the sink |
-| query vocabulary | `chpack`'s fifteen SQL UDFs (ADR-0162) and the `LEEWAY_*` readback family — but see H1 | none for the canonical mapping; unknown for facts |
+| query vocabulary | `chpack`'s fifteen SQL UDFs (ADR-0162) and the readback UDF family — but see H1 | none for the canonical mapping; unknown for facts |
 | handle expansion | `jsonbench resolve` runs ADR-0116's pass through `nanopass`, a ClickHouse parser | ported query files carry physical column names, or something parser-free expands them |
 | native query path | grammar1 / nanopass | out of scope, as arm A was in the sibling trial |
 | `factsstore/chstore` | the live store's MergeTree DDL | avoided by scoping to the canonical mapping |
@@ -93,18 +122,28 @@ argument.
 
 ### 3b Arms
 
-| Arm | Engine | Data comes from | What it isolates |
-| --- | --- | --- | --- |
-| P | — | `FORMAT Parquet` out of the sibling trial's arm-J table | that the physical layout leaves ClickHouse at all |
-| J-duck | DuckDB | arm P | whether the read vocabulary ports |
-| J-df | DataFusion | arm P, same file | the marginal cost of a third engine once the file exists |
-| W | DuckDB | Parquet written by `jsonbench jsonmap ingest` | whether the *writer* is neutral, not just the layout |
-| N | DuckDB | the raw corpus via DuckDB's own JSON reader | a reference of the sibling trial's arm-A00 kind |
-| F | DuckDB | the facts layout | *optional and last* — the `RAGGED_*` question (H2) |
+| Arm | Engine | Data comes from | Query sets | What it isolates |
+| --- | --- | --- | --- | --- |
+| P | — | `FORMAT Parquet` out of the sibling trial's arm-J table | — | that the physical layout leaves ClickHouse at all |
+| J-duck | DuckDB | arm P | Q1–Q5, U1–U9 | whether the read vocabulary ports |
+| J-df | DataFusion | arm P, same file | Q1–Q5, U1–U9 | the marginal cost of a third engine once the file exists |
+| W | DuckDB | Parquet written by `jsonbench jsonmap ingest` | Q1–Q5 | whether the *writer* is neutral, not just the layout |
+| N-text | DuckDB | the raw corpus as `JSON` (text-backed) | Q1–Q5, U1–U9 | the USP counterpart: DuckDB's answer to ClickHouse's `JSON` type |
+| N-struct | DuckDB | the raw corpus via `read_json` auto-inference | Q1–Q5, U1–U9 | a **third shape** ClickHouse's comparison had no equivalent of |
+| F | DuckDB | the facts layout | Q1–Q5 | *optional and last* — the `RAGGED_*` question (H2) |
 
 Arm P before arm W is deliberate: the export is one statement and de-risks the
 whole query translation before any Go is written. Arm W is what makes the
 neutrality claim about leeway rather than about Parquet.
+
+**Arms N-text and N-struct are what make the USP question askable here**, and
+they are not one arm. ClickHouse's `JSON` is a shredded columnar type; DuckDB
+offers two different things and neither is that — a text-backed `JSON` type
+with a function library, and schema-on-read inference into `STRUCT` columns
+via `read_json`. The USP head-to-head therefore cannot be *transplanted*, only
+re-posed, and reporting both keeps the comparison from being rigged in either
+direction: N-text is the shape that tolerates a heterogeneous corpus,
+N-struct is the shape that is fast when it does not have to.
 
 ### 3c Standing hypotheses, pre-registered
 
@@ -131,6 +170,23 @@ neutrality claim about leeway rather than about Parquet.
 - **H4 — Q3 is timezone-incomparable by default.** Already pre-registered
   upstream for `toHour`; the target engines have their own answer, and the
   trial must pin both sides or drop Q3 from the comparison.
+- **H5 — part of the USP thesis is a fact about ClickHouse, not about JSON
+  columns.** The USP document's §2a rests on a hard limit: an enumerated path
+  cannot be used to *read* a ClickHouse `JSON` column, so every data-dependent
+  path query falls back to re-serialising and re-parsing per row. That is what
+  U3's 676× and U8's 176 s are made of. If another engine's JSON type accepts a
+  runtime path expression, those rows measure a ClickHouse limitation that
+  leeway routes around, and the portable half of the thesis is the narrower
+  claim about *lane width* (§2c) — which the memory column, flat at ~4.2 GB on
+  the JSON side against a 60× spread on the leeway side, supports independently.
+  U1/U2/U4/U6 and U9 are where that narrower claim gets retested.
+
+  **M0 has already answered the DuckDB half, before any arm ran** — see the
+  [logbook](./logbook.md) and `runs/2026-08-07-m0/`. It is stated here as a
+  hypothesis anyway, because the DataFusion half is open, because a re-run
+  follows this protocol rather than the logbook, and because the distinction
+  between what was predicted and what was found is the thing these documents
+  exist to keep.
 - **Note, not a hypothesis.** DuckDB has neither `MATERIALIZED` columns nor
   data-skipping indices *(c, unverified)*, so the sibling trial's two largest
   levers — worth 3.8–13.8× and 1.07–1.76× there — have no direct counterpart.
@@ -156,6 +212,19 @@ neutrality claim about leeway rather than about Parquet.
   record which was used. Storage is only comparable if the compression codec
   is pinned on both sides (§7 Q1); until it is, both figures are recorded and
   no ratio is quoted.
+- **Fairness controls, which do not transfer.** The USP run needed two
+  ClickHouse settings turned off — `use_query_condition_cache=0`, after the
+  cache reported a 100×-too-fast number, and `min_execution_speed=0`, because
+  the server otherwise *kills* the JSON-side value-anywhere query at 10 s. Both
+  are ClickHouse-specific, so the targets need their own audit rather than the
+  same flags: what caches a repeated predicate, and what aborts a slow query.
+  A ported number obtained without that audit is not comparable to the
+  ClickHouse one, and the run must say which controls it checked.
+- **The row-identity trap, inherited.** The canonical mapping's
+  `id:blake3hash` column is 20.3 % of the leeway table at 10M and has no
+  counterpart in any JSON-side arm, so a size comparison including it charges
+  leeway for something no query reads. The USP document reports sizes both ways
+  and this trial must too; §7 Q1 is the same question in the codec dimension.
 - **Idiom rule.** The ported queries run directly against each engine's CLI,
   as arm A did in the sibling trial. Handle expansion goes through a
   ClickHouse parser, so ported query files carry physical column names —
@@ -191,28 +260,41 @@ hypotheses from surprises:
 
 ## 6 Milestone cut (each descope-able)
 
-- **M0 — acquire and pin.** Install DuckDB and `datafusion-cli`, record
-  versions, and check every *(c, unverified)* claim in §3 against the actual
-  builds — list indexing, list-position, `unnest`, macro definition, and
-  DataFusion's list-lambda coverage in particular. Gate: both binaries execute
-  a trivial list query. If DataFusion lacks the lambda forms U1–U9 need,
-  descope arm J-df to Q1–Q5 and file the coverage finding rather than working
-  around it.
-- **M1 — export and translate.** Arm P at the 1M tier; translate Q1–Q5 and
-  U1–U9 for both targets; compare results against the sibling trial's
-  ClickHouse run. Gate: identical row counts, and identical values modulo H3's
-  absent-path divergence — which, if it appears, is recorded before it is
-  worked around.
+- **M0 — acquire and pin.** ✓ **Done 2026-08-07.** DuckDB v1.5.5 and
+  datafusion-cli 54.1.0 installed and pinned;
+  [`probe.sh`](./probe.sh) turned §3's capability claims into evidence. Gate
+  passed for both. **Its own descope instruction turned out to be wrong and is
+  superseded**: it said to cut arm J-df to Q1–Q5 if DataFusion lacked lambdas.
+  DataFusion lacks them entirely — 433 routines, no higher-order array function
+  under any spelling — but the probe showed the lane algebra survives by
+  explosion (`unnest` plus relational operators), so J-df keeps all of U1–U9 in
+  a **second rendering** rather than losing four of them. That rendering is now
+  part of M1. Details and findings in the [logbook](./logbook.md).
+- **M1 — export and translate.** Arm P at the 1M tier, then **three** query
+  renderings of the same two sets: DuckDB (higher-order, `lambda x:` syntax —
+  not the deprecated arrow), DataFusion (explosion-based), and the ClickHouse
+  originals as the oracle. Compare against the sibling trial's run. Gate:
+  identical row counts, and identical values modulo H3's absent-path
+  divergence — which M0 confirmed will appear, so the coalesce is written
+  deliberately and recorded, not discovered. Q3 is compared only after the
+  timezone offset is pinned (M0 finding 4).
 - **M2 — measure at 10M.** Sizes, cold and hot latency, physical plans, for
-  arms P / J-duck / J-df. This is the reportable run.
+  arms P / J-duck / J-df. This is the reportable run. The DuckDB-vs-DataFusion
+  pair also prices the higher-order rendering against the explosion one over
+  identical data, which is the closest this trial gets to a cost for the
+  lambda-free fallback.
 - **M3 — the writer.** A Parquet output path on `jsonbench jsonmap ingest`,
   reusing `dml.WriteArrowRecords`. Gate: the file it writes and the file arm P
   exported are equivalent — same schema, same row count, same query results.
   This is the milestone that turns "the layout ports" into "leeway writes it".
-- **M4 — the native-JSON reference** *(optional, gated on M2)*. Arm N, for a
-  reference of the arm-A00 kind. Descope-able because DuckDB's JSON type may
-  be a weak enough reference that the comparison says more about DuckDB than
-  about leeway (§7 Q3).
+- **M4 — the USP counterpart** *(gated on M2, and the milestone H5 turns on)*.
+  Arms N-text and N-struct, DuckDB only — M0 established that `datafusion-cli`
+  ships no JSON functions at all, so the head-to-head has no third engine. This
+  is where U3, U5, U8 and U9 — the sibling trial's 676×, and its two
+  *no expression exists* rows — get re-asked against an engine whose JSON type
+  accepts a runtime path. Still descope-able (§7 Q3), but no longer the
+  optional afterthought it was when the protocol was written: it is the arm
+  that decides how much of the USP thesis is portable.
 - **M5 — the facts layout** *(optional, gated on M0–M3 having stayed cheap)*.
   Arm F, which answers H2 and would need a second `chpack` emitter or a
   hand-written macro set. This is the milestone most likely to be worth

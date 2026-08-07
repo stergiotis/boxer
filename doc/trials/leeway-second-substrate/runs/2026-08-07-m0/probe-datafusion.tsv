@@ -1,0 +1,55 @@
+label	status	result
+list_element	ok	[{"make_array(Utf8(\"a\"),Utf8(\"b\"),Utf8(\"c\"))[Int64(2)]":"b"}]
+list_position	ok	[{"list_position(make_array(Utf8(\"a\"), Utf8(\"b\"), Utf8(\"c\")),Utf8(\"b\"))":2}]
+H3_position_absent	ok	[{"coalesce(list_position(make_array(Utf8(\"a\"), Utf8(\"b\")),Utf8(\"zz\")),Utf8(\"<NULL>\"))":"<NULL>"}]
+H3_index_by_null	ok	[{"coalesce(make_array(Utf8(\"a\"),Utf8(\"b\"))[NULL],Utf8(\"<NULL>\"))":"<NULL>"}]
+H3_index_by_zero	ok	[{"coalesce(make_array(Utf8(\"a\"),Utf8(\"b\"))[Int64(0)],Utf8(\"<EMPTY-OR-NULL>\"))":"<EMPTY-OR-NULL>"}]
+unnest	ok	[{"count(*)":3}]
+list_distinct	ok	[{"list_distinct(make_array(Utf8(\"a\"), Utf8(\"b\"), Utf8(\"a\")))":["a","b"]}]
+list_concat	ok	[{"list_concat(make_array(Utf8(\"a\")),make_array(Utf8(\"b\")))":["a","b"]}]
+flatten_nary	ok	[{"flatten(make_array(make_array(Utf8(\"a\")),make_array(Utf8(\"b\")),make_array(Utf8(\"c\"))))":["a","b","c"]}]
+list_contains	ok	[{"list_contains(make_array(Utf8(\"a\"), Utf8(\"b\")),Utf8(\"b\"))":true}]
+list_transform	err	Error: Schema error: No field named x.
+list_filter	err	Error: Schema error: No field named p.
+list_reduce	err	Error: Error during planning: Invalid function 'list_reduce'. Did you mean 'list_replace'?
+list_bool_or	err	Error: Error during planning: Invalid function 'list_bool_or'. Did you mean 'list_filter'?
+list_sum	err	Error: Error during planning: Invalid function 'list_sum'. Did you mean 'list_max'?
+list_len	err	Error: Error during planning: Invalid function 'len'. Did you mean 'ln'?
+count_equal	err	Error: Error during planning: Invalid function 'len'. Did you mean 'ln'?
+starts_with	ok	[{"starts_with(Utf8(\"/commit/record\"),Utf8(\"/commit/\"))":true}]
+list_sort	ok	[{"list_sort(make_array(Int64(3), Int64(1), Int64(2)))":[1,2,3]}]
+H2_list_cumsum_builtin	err	Error: Error during planning: Invalid function 'list_cumsum'. Did you mean 'list_dims'?
+H2_cumsum_by_slice	err	Error: Error during planning: Invalid function 'len'. Did you mean 'ln'?
+H2_arg_sort_by_key	err	Error: Schema error: No field named a.
+H2_arg_max	err	Error: Error during planning: Failed to coerce arguments to satisfy a call to 'array_element' function: coercion from List(Utf8), UInt64 to the signature ArraySignature(array, index) failed. No functi
+make_timestamp_us	err	Error: Error during planning: Invalid function 'make_timestamp'. Did you mean 'to_timestamp'?
+H4_hour	err	Error: Error during planning: Invalid function 'hour'. Did you mean 'corr'?
+H4_timestamp_is_naive	err	Error: Error during planning: Invalid function 'make_timestamp'. Did you mean 'to_timestamp'?
+date_diff_plural	err	Error: Error during planning: Invalid function 'date_diff'. Did you mean 'date_bin'?
+date_diff_singular	err	Error: Error during planning: Invalid function 'date_diff'. Did you mean 'date_bin'?
+count_distinct	ok	[{"count(DISTINCT x)":2}]
+in_list	ok	[{"Utf8(\"b\") IN Utf8(\"a\"), Utf8(\"b\")":true}]
+read_parquet_fn	ok	[{"count(*)":0}]
+H5_json_extract_const	err	Error: Error during planning: Invalid function 'json_extract'. Did you mean 'union_extract'?
+H5_json_extract_runtime	err	Error: Error during planning: Invalid function 'json_extract'. Did you mean 'union_extract'?
+H5_json_keys	err	Error: Error during planning: Invalid function 'json_keys'. Did you mean 'map_keys'?
+H5_json_structure	err	Error: Error during planning: Invalid function 'json_structure'. Did you mean 'struct'?
+macro_define	err	Error: This feature is not implemented: Unsupported SQL statement: CREATE OR REPLACE MACRO co_lookup(keys, lane, k) AS lane[list_position(keys, k)]
+lambda_arrow_deprecated	err	Error: Schema error: No field named x.
+lambda_new_syntax	err	Error: SQL error: ParserError("Expected: ), found: x at Line: 1, Column: 37")
+lambda_new_filter	err	Error: SQL error: ParserError("Expected: ), found: p at Line: 1, Column: 40")
+df_no_higher_order	ok	[{"count(*)":0}]
+df_routines_total	ok	[{"count(*)":433}]
+df_element_uncast	err	Error: Error during planning: Failed to coerce arguments to satisfy a call to 'array_element' function: coercion from List(Utf8), UInt64 to the signature ArraySignature(array, index) failed. No functi
+df_element_cast	ok	[{"make_array(Utf8(\"x\"),Utf8(\"y\"))[array_position(make_array(Utf8(\"/a\"),Utf8(\"/b\")),Utf8(\"/b\"))]":"y"}]
+df_H3_absent	ok	[{"coalesce(make_array(Utf8(\"x\"),Utf8(\"y\"))[array_position(make_array(Utf8(\"/a\"),Utf8(\"/b\")),Utf8(\"/zz\"))],Utf8(\"<NULL>\"))":"<NULL>"}]
+df_array_length	ok	[{"array_length(make_array(Utf8(\"a\"),Utf8(\"b\")))":2}]
+df_array_has	ok	[{"array_has(make_array(Utf8(\"a\"),Utf8(\"b\")),Utf8(\"b\"))":true}]
+df_array_distinct	ok	[{"array_distinct(make_array(Utf8(\"a\"),Utf8(\"b\"),Utf8(\"a\")))":["a","b"]}]
+df_flatten	ok	[{"flatten(make_array(make_array(Utf8(\"a\")),make_array(Utf8(\"b\"))))":["a","b"]}]
+df_Q3_hour	ok	[{"date_part(Utf8(\"hour\"),to_timestamp_micros(Int64(1700000000000000)))":22}]
+df_Q45_span_on_ints	ok	[{"Int64(1700000001000000) - Int64(1700000000000000) / Int64(1000)":1000}]
+df_U1_unnest_distinct	ok	[{"count(*)":2}]
+df_U4_rewrite	ok	[{"count(*)":1}]
+df_U5_rewrite	ok	[{"sum(v)":6}]
+df_U8_rewrite	ok	[{"count(*)":1}]
