@@ -95,3 +95,39 @@ func PrepareMarkdown(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 		return BuildMarkdown(src)
 	})
 }
+
+// mdSpansToSections resolves lex-tier spans against the shared markdown
+// palette. Both tiers speak the same [markdownhighlight.CategoryE] vocabulary,
+// so the colours a reader sees do not depend on which one produced them.
+func mdSpansToSections(spans []markdownhighlight.Span) (out []section) {
+	out = make([]section, len(spans))
+	for i, s := range spans {
+		out[i] = section{
+			start: uint32(s.Start),
+			stop:  uint32(s.Stop),
+			col:   mdColors[s.Category],
+		}
+	}
+	return
+}
+
+// BuildMarkdownLex highlights markdown source and returns a retained
+// CodeViewJob whose text is the source VERBATIM and whose sections index it
+// directly.
+//
+// This is the editing counterpart of [BuildMarkdown], and the difference is
+// the whole point: BuildMarkdown renders a canonicalised rewrite of its input,
+// which is right for a viewer and wrong for anything bound to a buffer someone
+// is typing into — the text would not be theirs and the offsets would not be
+// their bytes. Feed this one to [c.TextEditFluid.HighlightJob] (ADR-0130).
+//
+// No tab expansion, for the same reason [BuildSqlFromSpans] applies none: the
+// job's text has to stay byte-identical to the buffer the sections describe.
+//
+// There is deliberately no Prepare variant. Per-keystroke content is new by
+// construction, so the ADR-0125 memo would only churn its LRU; callers that
+// want to skip work on unchanged frames should cache the holder against the
+// text they built it from, which is one comparison.
+func BuildMarkdownLex(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
+	return buildFromSections(src, mdSpansToSections(markdownhighlight.HighlightLex([]byte(src))))
+}
