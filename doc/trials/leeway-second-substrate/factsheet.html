@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>leeway as a JSON and log-analytics representation — fact sheet</title>
+<link rel="stylesheet" href="../../../public/keelson/designsystem/web/ids.css">
+<style>
+  /* Fact-sheet-only additions. Everything else is IDS classless base. */
+  main { max-width: 62rem; margin: 0 auto; padding: var(--ids-space-6); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+           gap: var(--ids-space-4); margin: var(--ids-space-6) 0; }
+  .stat { border: var(--ids-border-hair) solid var(--ids-border-faint);
+          border-radius: var(--ids-radius-lg); padding: var(--ids-space-4);
+          background: var(--ids-bg-panel); }
+  .stat b { display: block; font-size: 1.9rem; line-height: 1.1; color: var(--ids-accent-strong); }
+  .stat span { display: block; color: var(--ids-text-secondary); font-size: 0.85rem;
+               margin-top: var(--ids-space-2); }
+  .stat em { display: block; color: var(--ids-text-disabled); font-size: 0.78rem;
+             font-style: normal; margin-top: var(--ids-space-1); }
+  .win b  { color: var(--ids-success-strong, var(--ids-accent-strong)); }
+  .lose b { color: var(--ids-warning-strong, var(--ids-error-strong)); }
+  .caveat { border-left: var(--ids-border-strong) solid var(--ids-warning, var(--ids-error));
+            background: var(--ids-warning-subtle, var(--ids-error-subtle));
+            padding: var(--ids-space-4); border-radius: var(--ids-radius-md);
+            margin: var(--ids-space-6) 0; }
+  table { width: 100%; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .lede { color: var(--ids-text-secondary); font-size: 1.05rem; }
+  footer { color: var(--ids-text-disabled); font-size: 0.82rem;
+           border-top: var(--ids-border-hair) solid var(--ids-border-faint);
+           margin-top: var(--ids-space-7); padding-top: var(--ids-space-4); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>leeway as a JSON and log-analytics representation</h1>
+
+<p class="lede">One page of measured results from the
+<a href="./README.md">leeway-on-a-second-substrate</a> trial. 10 million Bluesky
+Jetstream documents, 121.2 million attributes, three engines. Every latency is
+a hot run; there is no cold column, because the measuring box grants no
+passwordless cache drop. Detail and evidence: <a href="./logbook.md">logbook</a>.</p>
+
+<h2>The short version</h2>
+
+<p>leeway stores semi-structured data as flat typed lanes rather than as
+documents. Against a database's own JSON type it is <strong>about the same size
+on disk</strong>, <strong>several hundred times faster when the query does not
+know the path in advance</strong>, and <strong>about three times slower when it
+does</strong> — a gap that a materialised projection closes. It answers
+questions two of the three JSON types cannot express at all.</p>
+
+<div class="stats">
+  <div class="stat win"><b>695&times;</b><span>faster to find a value <em>anywhere</em></span>
+    <em>0.16 s vs 111.1 s — ClickHouse, 10M docs</em></div>
+  <div class="stat win"><b>156&times;</b><span>faster across six path-discovery queries</span>
+    <em>1.50 s vs 234.7 s — same engine, same data</em></div>
+  <div class="stat"><b>1.06&times;</b><span>the storage of ClickHouse's JSON type</span>
+    <em>1.13 GiB vs 1.07 GiB</em></div>
+  <div class="stat win"><b>0.54&times;</b><span>the storage of DuckDB's JSON type</span>
+    <em>2.46 GiB vs 4.56 GiB</em></div>
+  <div class="stat lose"><b>3.0&times;</b><span>slower on dashboard queries that name their paths</span>
+    <em>1.24 s vs 0.42 s — recoverable, see below</em></div>
+  <div class="stat"><b>2.1 %</b><span>of the table is leeway's addressing overhead</span>
+    <em>the rest is payload you would store anyway</em></div>
+</div>
+
+<h2>Why this matters for log analytics</h2>
+
+<p>Log and wide-event workloads have three properties that decide the
+comparison, and the measurements land on all three.</p>
+
+<h3>1. You search for values whose path you do not know</h3>
+
+<p>“Find this trace id / request id / user anywhere in the corpus” is the
+bread-and-butter log query. It is also the trial's single largest ratio.</p>
+
+<table>
+  <thead><tr><th>query</th><th class="num">leeway</th><th class="num">ClickHouse JSON</th><th class="num">ratio</th></tr></thead>
+  <tbody>
+    <tr><td>find a value at any path</td><td class="num">0.16 s</td><td class="num">111.14 s</td><td class="num"><strong>695&times;</strong></td></tr>
+    <tr><td>census of every path present</td><td class="num">0.36 s</td><td class="num">2.83 s</td><td class="num">7.9&times;</td></tr>
+    <tr><td>six such queries, total</td><td class="num">1.50 s</td><td class="num">234.72 s</td><td class="num"><strong>156&times;</strong></td></tr>
+    <tr><td>sum every number, any path</td><td class="num">0.04 s</td><td class="num">—</td><td class="num"><strong>no expression</strong></td></tr>
+    <tr><td>array degree of every array path</td><td class="num">0.40 s</td><td class="num">—</td><td class="num"><strong>no expression</strong></td></tr>
+  </tbody>
+</table>
+
+<p>The last two rows are the important ones: ClickHouse's JSON type cannot
+express those questions at all, at any speed. Schema-on-read inference is
+worse — it answers <strong>6 of 14</strong> queries, because it types the
+stable backbone of a document and gives up on the part that actually varies.</p>
+
+<h3>2. You retrieve candidate rows, then narrow</h3>
+
+<p>A tiered query — filter on several fields, return the matching events —
+is the other log shape. Stored one row per attribute, leeway turns each filter
+into a sorted-index seek:</p>
+
+<table>
+  <thead><tr><th>rows returned</th><th class="num">one row per document</th><th class="num">one row per attribute</th><th class="num">ratio</th></tr></thead>
+  <tbody>
+    <tr><td>7</td><td class="num">0.50 s</td><td class="num">0.10 s</td><td class="num"><strong>5.0&times;</strong></td></tr>
+    <tr><td>139,918</td><td class="num">0.54 s</td><td class="num">0.25 s</td><td class="num">2.2&times;</td></tr>
+    <tr><td>4,631,335</td><td class="num">0.67 s</td><td class="num">0.49 s</td><td class="num">1.4&times;</td></tr>
+  </tbody>
+</table>
+
+<p>The tighter the filter, the bigger the win. Both layouts can be kept at
+once: converting 100M documents to the exploded form takes <strong>50.8
+seconds at a bounded 5.4 GB of memory</strong>, and the copy is
+<em>smaller</em> than the original (0.70&times;), so carrying both costs
+1.70&times; one.</p>
+
+<h3>3. Events are heterogeneous and the schema drifts</h3>
+
+<p>leeway holds a mixture of document shapes uniformly — that is what it is
+for. The comparison shapes do not: ClickHouse's fastest JSON configuration
+declares five typed paths and <code>max_dynamic_paths&nbsp;=&nbsp;0</code>,
+buying its speed by giving flexibility back, and DuckDB's inference declined to
+type the varying subtree at all.</p>
+
+<h2>Semantics: a strict superset of JSON</h2>
+
+<p>JSON has six types. leeway's canonical type system covers temporal, network
+and decimal types with declared widths, and its mapping distinguishes
+<strong><code>null</code> from <code>undefined</code></strong> — a distinction
+JSON itself does not carry. An attribute can also belong to several orthogonal
+categories at once, where a JSON document gives it exactly one path.</p>
+
+<p>Two honest limits: the standard JSON mapping cannot tell an empty object or
+array from an absent one (a <code>Lossless</code> variant exists and adds
+those), and the multi-category capability was <em>not exercised by this
+trial</em> — every arm ran with exactly one category per attribute.</p>
+
+<h2>Portability</h2>
+
+<p>The same mapping and the same fourteen queries were run on ClickHouse,
+DuckDB and DataFusion. All fourteen reproduce the reference answers on every
+engine, with two explained differences. Latency spans a
+<strong>2.7&times;</strong> band across the three.</p>
+
+<p>DataFusion has <strong>no JSON type at all</strong> and not one higher-order
+array function among its 433 routines — leeway's data still reads there, in a
+rendering that uses no array functions whatsoever.</p>
+
+<h2>Where it loses, and what recovers it</h2>
+
+<p>When a query names its paths — the classic dashboard aggregate — a typed
+column beats leeway by <strong>3.0&times;</strong> (0.42 s against 1.24 s;
+it is the typing that wins, not the index, which is worth only 1.24&times;).</p>
+
+<p>That gap is recoverable rather than structural. The sibling trial measured
+the fix: materialising the queried paths as columns is worth
+<strong>3.8–13.8&times;</strong>, re-keying on them a further 1.07–1.76&times;,
+and together they put the leeway table at <strong>0.59–1.18&times; of
+JSONBench's own tuned ClickHouse entry at 0.954&times; its storage</strong> —
+parity, faster on two of the five queries.</p>
+
+<h2>How big are the decisions, generally?</h2>
+
+<p>Across 96 pairwise comparisons computed from the trial's own timings,
+<strong>62 % land inside 0.5–2.5&times;</strong>. But they are not evenly
+spread, and the ordering is the useful part:</p>
+
+<table>
+  <thead><tr><th>decision</th><th class="num">worst case</th><th>character</th></tr></thead>
+  <tbody>
+    <tr><td>which engine</td><td class="num">3&times;</td><td>the <em>cheapest</em> decision measured</td></tr>
+    <tr><td>how the query is written</td><td class="num">5&times;</td><td>tuning; fixable by a rewrite</td></tr>
+    <tr><td>storage format (Parquet vs native)</td><td class="num">1.36&times;</td><td>and Parquet is 2.2&times; smaller</td></tr>
+    <tr><td>row layout</td><td class="num">44&times;</td><td>mostly modest, with a tail</td></tr>
+    <tr><td><strong>representation</strong></td><td class="num"><strong>920&times;</strong></td><td>almost all cliff — 8 of 14 beyond 10&times;</td></tr>
+  </tbody>
+</table>
+
+<p>Spend the design attention on representation and on what the target can
+express; treat engine choice as cheap. That is close to the inverse of how such
+choices are usually sequenced.</p>
+
+<div class="caveat">
+<h2 style="margin-top:0">What this trial did <em>not</em> measure</h2>
+<p>The read profile above fits log analytics unusually well. The write and
+lifecycle half is untested, and it is the half log analytics leans on hardest:</p>
+<ul>
+  <li><strong>Ingest throughput</strong> — 75–83k documents/s, single process,
+      and already flagged as the first thing to parallelise. The workload here
+      is read-only; log analytics is ingest-dominated.</li>
+  <li><strong>No retention, partitioning, compaction, streaming append or
+      mutation</strong> of any kind.</li>
+  <li><strong>No concurrency</strong> — every figure is one query at a time —
+      and <strong>no cold-cache runs</strong>.</li>
+  <li><strong>Membership arity 1</strong> — the multi-category capability that
+      log events would lean on (service, level, region, tenant as orthogonal
+      axes) was never exercised, and raising it makes single-axis lookups
+      dearer, so it is a trade to measure rather than a win to assume.</li>
+</ul>
+<p>So: <strong>true on the read side, unproven on the write side.</strong>
+Closing it needs a sustained-ingest arm with retention and a time-ordered key,
+at arity greater than one — a different trial, on a corpus JSONBench cannot
+supply.</p>
+</div>
+
+<footer>
+<p>Source: <a href="./README.md">doc/trials/leeway-second-substrate</a>, milestones
+M0–M5, 2026-08-07. Numbers are hot runs at the 10M tier unless stated; per-run
+evidence under <code>runs/</code>. This page is a reading of that evidence for
+one audience — the trial page carries the caveats in full, including three
+corrections the trial made to its own earlier readings.</p>
+</footer>
+
+</main>
+</body>
+</html>
