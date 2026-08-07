@@ -58,25 +58,25 @@
    └──────────────────────────────────┴───────────────┘
 --- Q6 ---
     ┌─path────────────────────────────┬─documents─┐
- 1. │ /time_us                        │   9999994 │ -- 10.00 million
- 2. │ /did                            │   9999994 │ -- 10.00 million
+ 1. │ /did                            │   9999994 │ -- 10.00 million
+ 2. │ /time_us                        │   9999994 │ -- 10.00 million
  3. │ /kind                           │   9999994 │ -- 10.00 million
  4. │ /commit/rev                     │   9946168 │ -- 9.95 million
- 5. │ /commit/operation               │   9946168 │ -- 9.95 million
- 6. │ /commit/rkey                    │   9946168 │ -- 9.95 million
- 7. │ /commit/collection              │   9946168 │ -- 9.95 million
- 8. │ /commit/cid                     │   9681461 │ -- 9.68 million
- 9. │ /commit/record/$type            │   9681461 │ -- 9.68 million
+ 5. │ /commit/collection              │   9946168 │ -- 9.95 million
+ 6. │ /commit/operation               │   9946168 │ -- 9.95 million
+ 7. │ /commit/rkey                    │   9946168 │ -- 9.95 million
+ 8. │ /commit/record/$type            │   9681461 │ -- 9.68 million
+ 9. │ /commit/cid                     │   9681461 │ -- 9.68 million
 10. │ /commit/record/createdAt        │   9672174 │ -- 9.67 million
 11. │ /commit/record/subject/uri      │   5213822 │ -- 5.21 million
 12. │ /commit/record/subject/cid      │   5213822 │ -- 5.21 million
 13. │ /commit/record/subject          │   3442451 │ -- 3.44 million
 14. │ /commit/record/text             │    895763 │
 15. │ /commit/record/langs/_          │    820299 │
-16. │ /commit/record/reply/root/cid   │    476291 │
+16. │ /commit/record/reply/parent/cid │    476291 │
 17. │ /commit/record/reply/root/uri   │    476291 │
 18. │ /commit/record/reply/parent/uri │    476291 │
-19. │ /commit/record/reply/parent/cid │    476291 │
+19. │ /commit/record/reply/root/cid   │    476291 │
 20. │ /commit/record/embed/$type      │    306779 │
     └─────────────────────────────────┴───────────┘
 --- Q7 ---
@@ -84,21 +84,21 @@
  1. │ /did                            │ 9999994 │ -- 10.00 million
  2. │ /time_us                        │ 9999994 │ -- 10.00 million
  3. │ /kind                           │ 9999994 │ -- 10.00 million
- 4. │ /commit/rkey                    │ 9946168 │ -- 9.95 million
- 5. │ /commit/operation               │ 9946168 │ -- 9.95 million
- 6. │ /commit/collection              │ 9946168 │ -- 9.95 million
- 7. │ /commit/rev                     │ 9946168 │ -- 9.95 million
- 8. │ /commit/cid                     │ 9681461 │ -- 9.68 million
- 9. │ /commit/record/$type            │ 9681461 │ -- 9.68 million
+ 4. │ /commit/rev                     │ 9946168 │ -- 9.95 million
+ 5. │ /commit/rkey                    │ 9946168 │ -- 9.95 million
+ 6. │ /commit/operation               │ 9946168 │ -- 9.95 million
+ 7. │ /commit/collection              │ 9946168 │ -- 9.95 million
+ 8. │ /commit/record/$type            │ 9681461 │ -- 9.68 million
+ 9. │ /commit/cid                     │ 9681461 │ -- 9.68 million
 10. │ /commit/record/createdAt        │ 9672174 │ -- 9.67 million
 11. │ /commit/record/subject/cid      │ 5213822 │ -- 5.21 million
 12. │ /commit/record/subject/uri      │ 5213822 │ -- 5.21 million
 13. │ /commit/record/subject          │ 3442451 │ -- 3.44 million
 14. │ /commit/record/text             │  895763 │
 15. │ /commit/record/langs/_          │  820299 │
-16. │ /commit/record/reply/root/uri   │  476291 │
-17. │ /commit/record/reply/parent/uri │  476291 │
-18. │ /commit/record/reply/root/cid   │  476291 │
+16. │ /commit/record/reply/parent/uri │  476291 │
+17. │ /commit/record/reply/root/cid   │  476291 │
+18. │ /commit/record/reply/root/uri   │  476291 │
 19. │ /commit/record/reply/parent/cid │  476291 │
 20. │ /commit/record/embed/$type      │  306779 │
     └─────────────────────────────────┴─────────┘
@@ -109,8 +109,8 @@
 --- Q9 ---
     ┌─path─────────────────────────────────────────────┬─occurrences─┐
  1. │ /commit/record/embed/$type                       │      306779 │
- 2. │ /commit/record/embed/images/_/alt                │      182232 │
- 3. │ /commit/record/embed/images/_/image/mimeType     │      182232 │
+ 2. │ /commit/record/embed/images/_/image/mimeType     │      182232 │
+ 3. │ /commit/record/embed/images/_/alt                │      182232 │
  4. │ /commit/record/embed/images/_/image/size         │      182231 │
  5. │ /commit/record/embed/images/_/image/$type        │      182231 │
  6. │ /commit/record/embed/images/_/image/ref/$link    │      182231 │

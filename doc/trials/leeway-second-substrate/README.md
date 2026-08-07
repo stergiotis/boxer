@@ -137,15 +137,25 @@ Arm P before arm W is deliberate: the export is one statement and de-risks the
 whole query translation before any Go is written. Arm W is what makes the
 neutrality claim about leeway rather than about Parquet.
 
-**Arm X is on the home engine on purpose.** It is the rendering M0 was forced
-into on DataFusion — explosion plus ordinary relational operators — measured
-where the packed form is also available, so the two can be compared over
-identical data with the engine held constant. It ran on 2026-08-07 and is the
-one arm that has results; see the [logbook](./logbook.md). Its outcome reframes
-the trial's second question: the packed representation's advantage turns out
-to be neither storage nor path-oriented queries but **intra-document
-co-indexing**, and the exploded rendering is the one that ports to an engine
-with no array algebra at all.
+**Arms X and Y are on the home engine on purpose.** They are the rendering M0
+was forced into on DataFusion — explosion plus ordinary relational operators —
+measured where the packed form is also available, so the representations can be
+compared over identical data with the engine held constant. Both ran on
+2026-08-07 and are the only arms with results; see the
+[logbook](./logbook.md). Where they landed:
+
+- **Exploded is at parity or better on four of the five benchmark queries**
+  (Q1 0.18×, Q4 0.68×, Q5 0.72×, Q2 1.06×, Q3 2.19×) and far better on the
+  path-oriented USP queries (U4 0.03×, U9 0.18×, U6 0.07×), because the path
+  becomes a sort-key prefix instead of an array scan. It is also 0.70× on
+  disk. It remains worse on memory for the reassembly queries, 2.6–8.9×.
+- **One table per section (arm Y) is not worth doing**: 0.2 % storage against
+  the tagged-union form, query effects that cancel across the set, and it
+  costs the reader the section roster.
+- **A retraction sits in the logbook and is load-bearing for how this trial
+  reports anything further.** Arm X's first numbers compared *my SQL*, not the
+  representations — one formulation per arm, differing by 2–5×. §4's
+  formulation rule exists because of it.
 
 **Arms N-text and N-struct are what make the USP question askable here**, and
 they are not one arm. ClickHouse's `JSON` is a shredded columnar type; DuckDB
@@ -240,6 +250,15 @@ N-struct is the shape that is fast when it does not have to.
   as arm A did in the sibling trial. Handle expansion goes through a
   ClickHouse parser, so ported query files carry physical column names —
   which is a friction to file, not to fix here.
+- **A ratio needs the best formulation on both sides.** No number comparing two
+  representations may be quoted from one query formulation per side. Where a
+  layout admits more than one natural rendering — a join against a regroup, a
+  higher-order form against an explosion — each side is measured at its best
+  known form, and the alternatives are recorded alongside. This rule is here
+  because the first arm X entry broke it and was wrong by 2–5×, and because
+  the sibling trial's single largest error (its retracted S1) was the same
+  mistake in a different costume. A representation comparison that has not
+  searched formulations is measuring the author.
 - **Process measurement.** The solution itself is a result: artifacts are
   committed, their size recorded (files, lines), and manual interventions
   counted — an escape hatch is by definition a finding.

@@ -1,4 +1,0 @@
-arm	table	rows	bytes_on_disk	sort_key
-J	jsonbench_j2_10m.json	9999994	1540236424	tuple()
-X	jsonbench_x_10m.attrs	121205987	1073622852	(path, doc)
-X2	jsonbench_x2_10m.attrs	121205987	1382545797	(doc, path)

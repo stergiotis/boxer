@@ -1,0 +1,5 @@
+arm	layout	tables	rows	bytes_on_disk	sort_key
+J	packed, arrays per document	1	9999994	1540236424	tuple()
+X	exploded, tagged union	1	121205987	1073622852	(path, doc)
+X2	exploded, tagged union	1	121205987	1382545797	(doc, path)
+Y	exploded, one table per section	4	121205987	1071356651	(path, doc)
