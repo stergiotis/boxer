@@ -312,11 +312,25 @@ column beats leeway by <strong>3.0&times;</strong>. It is the typing that wins,
 not the index: removing the clustered index from the published entry costs only
 1.24&times;.</p>
 
-<p>The gap is recoverable rather than structural. Materialising the queried
-paths as columns is worth <strong>3.8–13.8&times;</strong>, re-keying on them a
-further 1.07–1.76&times;, and together they put the leeway table at
-<strong>0.59–1.18&times; of the published tuned entry at 0.954&times; its
-storage</strong> — parity, faster on two of the five benchmark queries.</p>
+<p>Both losses on this page are recoverable, and by the same kind of move:
+<strong>declare what the workload reads.</strong></p>
+
+<ul>
+  <li><strong>Materialise the queried paths as columns</strong> — worth
+      3.8–13.8&times;, re-keying on them a further 1.07–1.76&times;. Together
+      they put the leeway table at <strong>0.59–1.18&times; of the published
+      tuned entry at 0.954&times; its storage</strong>: parity, faster on two of
+      the five benchmark queries.</li>
+  <li><strong>Split the queried paths into their own sections</strong> — worth
+      <strong>14.7&times;</strong> on the selective retrieval, for a flat
+      1.40&times; storage, and enough to pass every other layout including the
+      indexed one with no index at all.</li>
+</ul>
+
+<p>Neither is exotic; both are schema declarations. What they have in common is
+that leeway's defaults optimise for <em>not knowing</em> the workload, and both
+levers spend a little of that generality back once you do. The JSON type's
+per-path subcolumn is the same trade made once, globally, at load time.</p>
 
 <h2>How big are the design decisions, generally?</h2>
 
@@ -331,6 +345,7 @@ and the ordering is the useful part:</p>
     <tr><td>how the query is written</td><td class="num">5&times;</td><td>tuning; fixable by a rewrite</td></tr>
     <tr><td>storage format (Parquet vs native)</td><td class="num">1.36&times;</td><td>and Parquet is 2.2&times; smaller</td></tr>
     <tr><td>row layout</td><td class="num">44&times;</td><td>mostly modest, with a tail</td></tr>
+    <tr><td>section layout <em>(within leeway)</em></td><td class="num">14.7&times;</td><td>a schema declaration, 1.40&times; storage</td></tr>
     <tr><td><strong>representation</strong></td><td class="num"><strong>920&times;</strong></td><td>almost all cliff — 8 of 14 beyond 10&times;</td></tr>
   </tbody>
 </table>
