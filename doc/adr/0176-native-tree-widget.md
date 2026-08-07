@@ -118,11 +118,22 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   tree would make every producer build one first. A third hierarchy shape in
   this repo would be one too many.
 
-- **SD2 — Expansion and selection live in a caller-owned `State`.** The widget
-  reads and mutates it; it never keeps hidden per-frame state and never leaves
-  authority in Rust. This is the kanban / layeredgraph `ViewState` / treemap
-  breadcrumb pattern, and it is what makes expansion persistable, restorable,
-  and settable from code — the single largest thing `egui_ltreeview` cannot do.
+- **SD2 — Expansion, selection and cursor live in a caller-owned `State`.** The
+  widget reads and mutates it; it never keeps hidden per-frame state and never
+  leaves authority in Rust. This is the kanban / layeredgraph `ViewState` /
+  treemap breadcrumb pattern, and it is what makes expansion persistable,
+  restorable, and settable from code — the single largest thing
+  `egui_ltreeview` cannot do.
+
+  **The cursor is a separate field from the selection**, carried from M1 even
+  though nothing moves it until [ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md)
+  lands. Keyboard navigation needs the distinction every file manager has —
+  the row the keyboard is *on* is not the row (or rows) that are *selected*,
+  or Shift+↓ cannot extend a range and ↓ cannot pass over a selected row
+  without changing what is selected. Adding it later would reshape `State`,
+  the flatten's `Row`, and every caller written against the old shape; adding
+  it now costs a field and a doc sentence. Until 0177, `Cursor` simply tracks
+  the last clicked row.
 
 - **SD3 — Flattening is pure and is where the tests live.** `layout.go` turns
   `(Tree, State)` into `[]Row{NodeIdx, Depth, HasChildren, Expanded, IsLastChild}`
@@ -163,12 +174,17 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   the row selects. This falls out of egui's hit-test order rather than needing
   arbitration.
 
-- **SD8 — Keyboard navigation is deferred, not designed.** There is no
-  general key-event channel in the bindings — `GetModifiers` and
-  `GetF1KeyPressed` are the whole surface — so arrow-key navigation needs a new
-  register and fetcher. That is a separate decision about input, not about
-  trees, and gating this widget on it would gate the light cut on the hardest
-  tenth. Pointer interaction ships first.
+- **SD8 — Keyboard navigation defers to its own ADR; the model hook is taken now.**
+  There is no general key-event channel in the bindings —
+  `GetModifiers`, `fetchF1KeyPressed` and `fetchCommandEnterPressed` are the
+  whole surface, and the latter two are deliberately hardcoded single
+  shortcuts. Arrow-key navigation needs a focus-scoped, consuming capture
+  primitive plus a register and fetcher: that is a decision about *input*,
+  reusable by any widget, not about trees, and it is specified in
+  [ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md). Pointer
+  interaction ships first. What this ADR does take on now is SD2's cursor
+  field — the one part of keyboard support that lives in the tree's own model
+  and would force a reshape if it arrived late.
 
 - **SD9 — Indent guides are deferred.** The vertical lines connecting a parent
   to its children want row-relative painting, which `row_ui` makes possible but
@@ -253,8 +269,9 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 - The widget inherits `endETable`'s constraints — including the
   `ETABLE_AUTOFIT_CAP_PX` heuristic, which a tree in a tall panel must override
   with `MaxHeight`.
-- No keyboard navigation until SD8's input work happens, which is a real
-  regression against `egui_ltreeview` for keyboard-first users.
+- No keyboard navigation until [ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md)
+  lands, which is a real regression against `egui_ltreeview` for keyboard-first
+  users. SD2's cursor field keeps the model ready but moves nothing on its own.
 
 ### Neutral
 
@@ -319,6 +336,7 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
 
 ## References
 
+- [ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md) — the keyboard capture primitive SD8 defers to; SD2's cursor is its hook in this widget.
 - [ADR-0151](./0151-table-column-width-overrides.md) — the etable column-width epoch protocol this widget inherits.
 - [ADR-0154](./0154-headless-carrier-tree-and-driver.md) — the headless driver the verification plan leans on.
 - [ADR-0160](./0160-imzero2-icicle-flamegraph-widget.md) — the columnar hierarchy input SD1 follows, and the model/layout/view split SD3 mirrors.
