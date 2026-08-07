@@ -931,6 +931,60 @@ possible at all.
 U9, excluded above because ClickHouse's JSON type has no expression for either.
 leeway answers both in well under a second on all three engines.
 
+### Follow-up — retrieve against aggregate, and a recommendation withdrawn
+
+The trial had been reading arms X and Y as *"exploded wins path-oriented
+questions, packed wins document reassembly"*, and I had turned that into
+deployment advice: multi-row is the discovery companion, one-row is the serving
+shape. **The advice was wrong, and the reason is that every multi-attribute
+query the trial had run was an aggregation.**
+
+Q2–Q5 do combine four and five attributes — the objection that they might not
+is answered, they do — but all four end in `GROUP BY` and collapse millions of
+documents to a handful of rows. Nothing here had asked the shape a tiered
+architecture opens with: **filter on several attributes and return the matching
+rows**. Measured (`m4-retrieve-vs-aggregate.tsv`), ClickHouse, same corpus,
+multi-row sorted `(path, doc)` and queried with semi-joins:
+
+| shape | matches | one-row | multi-row | |
+| --- | --- | --- | --- | --- |
+| retrieve, 4 filters incl. a `did` | 7 | 0.50 s | **0.10 s** | multi-row **5.0×** |
+| retrieve, 3 filters | 139,918 | 0.54 s | **0.25 s** | multi-row 2.2× |
+| retrieve, 3 filters | 895,614 | 0.58 s | **0.32 s** | multi-row 1.8× |
+| retrieve, 3 filters | 4,631,335 | 0.67 s | **0.49 s** | multi-row 1.4× |
+| aggregate (Q2–Q5) | ~8.4M scanned | **0.13–0.44 s** | 0.29–0.48 s | one-row 1.1–2.2× |
+
+**Multi-row wins retrieval at every selectivity measured**, and the margin grows
+as the filter tightens — 1.4× when it returns 4.6M rows, **5.0× when it returns
+seven**. The mechanism is visible in the shapes: one-row must evaluate
+`indexOf` — a scan of the path lane — once per predicate per row, ten million
+times over, and again per projected attribute; multi-row seeks each path range
+once on its sort key and intersects document ids.
+
+So the axis is not discovery against serving, and not selectivity on its own.
+It is **retrieve against aggregate**:
+
+- **Retrieve** — filter, then return rows: multi-row, 1.4–5.0×, better the more
+  selective the filter.
+- **Aggregate** — filter, then group and collapse: one-row, 1.1–2.2×, because
+  the reassembly is paid across the whole matched set and no per-row seek
+  advantage is left to recover it.
+
+**What this withdraws.** The reading that multi-row belongs to exploration and
+one-row to the serving layer does not survive. A tiered or hierarchical design
+whose first stage narrows a candidate set is a *retrieval* query, and that is
+multi-row's strongest measured case — the one ADR-0171 §SD5's companion table
+would serve, which the §SD5 text describes only as accelerating "some form of
+queries". This names them.
+
+- **Findings (added):**
+  - **[pain — trial process / S2]** The trial characterised two layouts from a
+    query set that is entirely aggregations, and a recommendation was made from
+    that characterisation. JSONBench has no retrieval query, so the shape was
+    invisible until it was asked for directly. **A workload's silence about a
+    query shape is not evidence about it** — the fourth confound of this family
+    here, after formulation, storage format and configuration labelling.
+
 ### Correction, same day — the ClickHouse row above was the wrong arm
 
 The table as first published invited the reading "DuckDB beats ClickHouse on

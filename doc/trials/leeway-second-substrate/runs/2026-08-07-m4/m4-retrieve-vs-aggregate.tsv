@@ -1,0 +1,9 @@
+query_shape	filters	matches	one_row_s	multi_row_s	winner	factor
+retrieve (project rows)	4 (+did)	7	0.50	0.10	multi-row	5.0
+retrieve (project rows)	3	139918	0.54	0.25	multi-row	2.2
+retrieve (project rows)	3	895614	0.58	0.32	multi-row	1.8
+retrieve (project rows)	3	4631335	0.67	0.49	multi-row	1.4
+aggregate Q2	4	8.4M scanned	0.44	0.48	one-row	1.1
+aggregate Q3	4	8.4M scanned	0.13	0.29	one-row	2.2
+aggregate Q4	5	8.4M scanned	0.26	0.36	one-row	1.4
+aggregate Q5	5	8.4M scanned	0.26	0.36	one-row	1.4
