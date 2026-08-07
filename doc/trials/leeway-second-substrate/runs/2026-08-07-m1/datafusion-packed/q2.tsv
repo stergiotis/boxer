@@ -1,0 +1,13 @@
+app.bsky.feed.like	463753	210530
+app.bsky.graph.follow	321214	97347
+app.bsky.feed.post	89403	63068
+app.bsky.feed.repost	58174	38327
+app.bsky.graph.block	13571	7627
+app.bsky.graph.listitem	7145	1606
+app.bsky.actor.profile	6087	6016
+app.bsky.graph.listblock	1053	747
+app.bsky.graph.list	224	212
+app.bsky.feed.threadgate	216	202
+app.bsky.feed.postgate	86	77
+app.bsky.graph.starterpack	85	85
+app.bsky.feed.generator	15	13

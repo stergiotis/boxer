@@ -302,14 +302,15 @@ hypotheses from surprises:
   explosion (`unnest` plus relational operators), so J-df keeps all of U1–U9 in
   a **second rendering** rather than losing four of them. That rendering is now
   part of M1. Details and findings in the [logbook](./logbook.md).
-- **M1 — export and translate.** Arm P at the 1M tier, then **three** query
-  renderings of the same two sets: DuckDB (higher-order, `lambda x:` syntax —
-  not the deprecated arrow), DataFusion (explosion-based), and the ClickHouse
-  originals as the oracle. Compare against the sibling trial's run. Gate:
-  identical row counts, and identical values modulo H3's absent-path
-  divergence — which M0 confirmed will appear, so the coalesce is written
-  deliberately and recorded, not discovered. Q3 is compared only after the
-  timezone offset is pinned (M0 finding 4).
+- **M1 — export and translate.** ✓ **Done 2026-08-07.** Arm P at the 1M tier,
+  then four ported renderings against the tiebroken oracle: DuckDB packed
+  (higher-order, `lambda x:`) and exploded, DataFusion packed
+  (`array_element`/`array_position`) and exploded. **The gate passes** —
+  every divergence is one of two explained classes, neither a translation
+  error: Q1's absent-path bucket, which only the *exploded* renderings lack,
+  and U5, where ClickHouse and DataFusion silently overflow Int64 and DuckDB
+  does not. Q3 compares only with `session_timezone=UTC` pinned (M0 finding 4).
+  Details in the [logbook](./logbook.md).
 - **M2 — measure at 10M.** Sizes, cold and hot latency, physical plans, for
   arms P / J-duck / J-df. This is the reportable run. The DuckDB-vs-DataFusion
   pair also prices the higher-order rendering against the explosion one over

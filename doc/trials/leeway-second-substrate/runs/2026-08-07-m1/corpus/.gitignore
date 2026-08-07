@@ -1,0 +1,5 @@
+# The M1 corpus itself is a dataset, and the trials convention does not commit
+# datasets — a run directory holds small, textual, provenance-grade evidence.
+# corpus.tsv records what the files were (sizes, row counts); m1-setup.sh
+# rebuilds them from the 10M ClickHouse table.
+*.parquet

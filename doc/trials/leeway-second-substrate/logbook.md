@@ -356,3 +356,80 @@ already flat there — 8.91, 8.85, 8.69 bytes per attribute.
   `conv-100m/convert.tsv`, `corpus/corpus.tsv`. Q1 at 100M returns identical
   counts from both representations.
 - **Run dir:** [`./runs/2026-08-07-m1/`](./runs/2026-08-07-m1/)
+
+## 2026-08-07 — M1, the ports — four renderings across three engines reproduce the oracle; the two divergences are an absent path and an integer overflow, and the overflow is ClickHouse's
+
+- **Build under test:** boxer `29c10591`; ClickHouse 26.7.3.19, DuckDB v1.5.5,
+  datafusion-cli 54.1.0, over the 1M Parquet corpus from the previous entry.
+- **Attempted:** M1 proper — translate both query sets for both targets in both
+  renderings, and compare every statement against the tiebroken oracle.
+  [`m1-run.sh`](./m1-run.sh) runs a file on any of the three engines and emits a
+  canonical per-statement result: all three are asked for CSV, then normalised
+  for the four things they spell differently (quoting, NULL, trailing zeros on
+  a rounded float, and DataFusion's ISO-8601 `T`). Nothing else is normalised,
+  so a real difference still shows as one.
+
+**The matrix** (`m1-comparison.tsv`), 14 statements each:
+
+| | DuckDB | DataFusion |
+| --- | --- | --- |
+| packed, higher-order | 13/14 — U5 | *(inexpressible: no lambdas)* |
+| packed, `array_element`/`array_position` | — | **14/14 exact** |
+| exploded, relational | 12/14 — Q1, U5 | 13/14 — Q1 |
+
+**The gate passes.** Every divergence falls into two explained classes and
+neither is a translation error:
+
+- **Q1, in the exploded renderings only, one row.** A document lacking
+  `/commit/collection` has no row to contribute, where the packed renderings
+  reproduce ClickHouse's `''` bucket exactly — 5,435 documents. This is a
+  property of the *layout*, not of the engine or the dialect: both packed ports
+  match, both exploded ports do not.
+- **U5, `sum` over every integer in the corpus.** This is not a rendering
+  difference. **ClickHouse silently overflows Int64** and returns
+  `-1783513317384783548`; DuckDB promotes to a 128-bit accumulator and returns
+  `1732210429611313068356`. Confirmed inside ClickHouse itself — widening the
+  lane to `Int128` reproduces DuckDB's answer exactly, and a `Float64`
+  accumulation agrees to the printed precision. **DataFusion wraps the same way
+  ClickHouse does**, so two of three engines are silently wrong and the port is
+  what exposed it.
+
+**Correction, and it was mine.** The M0 entry's second finding is right that
+DataFusion has no higher-order array function; I then over-read it into
+"the packed rendering is inexpressible there", and wrote that into a committed
+file header. It is wrong. The higher-order *rendering* is inexpressible; the
+packed *layout* reads fine, through `array_element` over `array_position` —
+neither of which is higher-order — plus `unnest` for the path-census set and
+`array_max` standing in for `arrayExists(v -> v > k)`, which works because that
+predicate is a comparison against a maximum. **That port is the only one of the
+four that matches the oracle on all fourteen statements.** The header is fixed;
+the distinction between layout and rendering is the thing to keep.
+
+- **Findings:**
+  - **[broken — workload, not toolbelt / functional-suitability.functional-correctness / S2]**
+    U5 as written overflows a 64-bit accumulator on this corpus. ClickHouse and
+    DataFusion wrap silently and disagree with DuckDB by 2^64. The sibling
+    trial's USP document reports a runtime for U5 and this trial compared its
+    *value* across arms X and Y — those comparisons remain valid, because both
+    sides wrapped identically, but the number itself is not the sum of the
+    corpus. Any future use of U5 as an oracle needs a widened accumulator.
+  - **[pain leeway-read-access-codegen → proposed:leeway-query-vocabulary-portability / portability.adaptability / S3]**
+    The whole of the packed read idiom ports to both targets, but not one
+    character of it ports *unchanged*: DuckDB needs `list_position` and a
+    coalesce, DataFusion needs `array_position`, a coalesce and a cast that the
+    composed form is a planning error without. Three engines, three spellings
+    of one idiom, and leeway documents one.
+  - **[pain — trial process / S4]** The prelude is passed as a single CLI
+    argument, so a leading `--` comment line reads as a flag to
+    `datafusion-cli`. Comments are now stripped from it.
+  - **Positive maturity: the tiebreaks hold.** Every statement that differed
+    between arms X and Y on ordering alone now agrees across three engines, and
+    the oracle is byte-identical across `max_threads` 1 and 16.
+- **Solution size:** the four ported query files total 566 lines against the
+  oracle's 102. The two exploded ports differ from each other by **26 lines of
+  a 144-line file**, and only in the temporal functions — which is the measured
+  cost of moving the exploded rendering between engines.
+- **Results:** `m1-comparison.tsv`, and per-engine per-statement output under
+  `oracle/`, `duckdb-packed/`, `duckdb-exploded/`, `datafusion-packed/`,
+  `datafusion-exploded/`.
+- **Run dir:** [`./runs/2026-08-07-m1/`](./runs/2026-08-07-m1/)
