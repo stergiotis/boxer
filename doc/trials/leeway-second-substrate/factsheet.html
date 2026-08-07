@@ -38,12 +38,10 @@
 
 <h1>100 million JSON documents on a laptop</h1>
 
-<p class="lede">leeway is a columnar mapping for semi-structured data. This page
-is one page of measured results against a database's own JSON type, over 100
-million Bluesky Jetstream events — 1.2&nbsp;billion individual attributes — on a
-single mobile workstation. All figures are hot runs; there is no cold column,
-because the box grants no passwordless cache drop.
-Source: <a href="./README.md">the trial</a> and its <a href="./logbook.md">logbook</a>.</p>
+<p class="lede">leeway is a columnar mapping for semi-structured data. Measured
+against a database's own JSON type over 100 million Bluesky Jetstream events —
+1.2&nbsp;billion attributes — on one laptop.
+Source: <a href="./README.md">the trial</a>, <a href="./logbook.md">logbook</a>.</p>
 
 <div class="stats">
   <div class="stat win"><b>1.4 s</b><span>find a value at <em>any</em> path, across 100M documents</span>
@@ -60,19 +58,18 @@ Source: <a href="./README.md">the trial</a> and its <a href="./logbook.md">logbo
     <em>measured at 10M; recoverable — see below</em></div>
 </div>
 
-<p class="rig"><strong>Rig.</strong> AMD Ryzen AI&nbsp;MAX+ PRO&nbsp;395, 32 cores,
-93.3&nbsp;GiB RAM — a laptop (DMI chassis type 10, battery present) — Fedora
-Linux&nbsp;44, kernel&nbsp;7.1.6, CPU governor <code>performance</code>.
-ClickHouse <strong>26.7.3.19</strong>, both arms in the same server.<br>
-<strong>No primary index, either side.</strong> Unlike the published
-jsonbench.com entry, which sorts on the five paths its queries touch, both
-tables here are <code>ORDER BY tuple()</code>. Verified: empty
-<code>sorting_key</code> in <code>system.tables</code>, and
-<code>EXPLAIN indexes=1</code> shows no index condition and all 14,000 granules
-read. The numbers below are what a full scan costs. <em>(One exception, flagged
-where it applies: the one-row-per-attribute variant does sort on
-<code>(path,&nbsp;doc)</code>, and that is exactly where its advantage comes
-from.)</em></p>
+<p class="rig">
+<strong>Rig</strong> — AMD Ryzen AI&nbsp;MAX+ PRO&nbsp;395, 32 cores,
+93.3&nbsp;GiB; laptop (DMI chassis type 10, battery present); Fedora
+Linux&nbsp;44, kernel&nbsp;7.1.6; governor <code>performance</code>.
+ClickHouse <strong>26.7.3.19</strong>, both arms one server.<br>
+<strong>Index</strong> — none either side: both <code>ORDER BY tuple()</code>,
+empty <code>sorting_key</code>, <code>EXPLAIN indexes=1</code> reads all 14,000
+granules. jsonbench.com's entry sorts on its five query paths. Exception: the
+one-row-per-attribute variant sorts on <code>(path,&nbsp;doc)</code>.<br>
+<strong>Method</strong> — hot wall clock of one client invocation, 3 tries,
+best of the last two; the two queries over 18&nbsp;minutes ran once. No cold
+column.</p>
 
 <h2>Why this shape suits logs and wide events</h2>
 
@@ -212,13 +209,9 @@ lifecycle half is untested, and it is the half log analytics leans on hardest:</
 </div>
 
 <footer>
-<p>Source: <a href="./README.md">doc/trials/leeway-second-substrate</a>, 2026-08-07.
-100M figures from <code>runs/2026-08-07-m6-100m/</code>; 10M figures and the
-cross-engine results from the earlier milestones. Ratios are hot-run wall clock
-of one client invocation, three tries, best of the last two — except the two
-JSON-type queries over 18 minutes, which were run once. This page is a reading
-of that evidence for one audience; the trial page carries the caveats in full,
-including four corrections the trial made to its own earlier readings.</p>
+<p><a href="./README.md">doc/trials/leeway-second-substrate</a>, 2026-08-07.
+100M: <code>runs/2026-08-07-m6-100m/</code>. 10M and cross-engine: earlier
+milestones. Full caveats and four self-corrections: the trial page.</p>
 </footer>
 
 </main>
