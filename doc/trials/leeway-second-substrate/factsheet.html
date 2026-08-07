@@ -55,7 +55,7 @@ Source: <a href="./README.md">the trial</a>, <a href="./logbook.md">logbook</a>.
   <div class="stat win"><b>2 of 9</b><span>exploration queries the JSON type cannot express <em>at all</em></span>
     <em>leeway answers both in under 4 s</em></div>
   <div class="stat win"><b>0.29 s</b><span>4-criteria lookup finding 7 events among 100M</span>
-    <em>unindexed arms only — an indexed JSON column does it in 0.03 s</em></div>
+    <em>unindexed arms only — an indexed JSON column does it in 0.03 s at 10M</em></div>
   <div class="stat lose"><b>3.0&times;</b><span>slower on dashboard queries that name their paths</span>
     <em>measured at 10M; recoverable — see below</em></div>
 </div>
@@ -161,7 +161,7 @@ it is not processing speed:</p>
   </tbody>
 </table>
 
-<p><strong>Every arm sustains 21.4–25.6 GiB/s</strong> and every duration is
+<p><strong>The four arms above sustain 21.4–25.6 GiB/s</strong> and each duration is
 within a few percent of proportional to bytes read. The query is
 bandwidth-bound: the layouts differ only in how much of the corpus a predicate
 obliges them to touch. The JSON type is not faster, it is <em>narrower</em> —
@@ -185,8 +185,10 @@ with no index anywhere:</p>
 </table>
 
 <p>At the selective end the split reads <strong>4.49&nbsp;GiB instead of
-28.27</strong> and runs <strong>14.7&times; faster</strong>, passing every other
-layout including the indexed one — with no index at all. The margin narrows as
+28.27</strong> and runs <strong>14.7&times; faster</strong> — more than its
+6.3&times; byte reduction predicts (&approx;50&nbsp;GiB/s, above the streamed-scan
+band, so the proportional model understates the lever here) — passing every
+other layout including the indexed one, with no index at all. The margin narrows as
 the predicate loosens (12.88&nbsp;GiB at 10,936 events, 22.61 at 8.4&nbsp;M,
 where nothing selective is left to skip) and the JSON type retakes the dense
 end by 1.2&times;. Storage cost throughout: <strong>1.40&times;</strong>,

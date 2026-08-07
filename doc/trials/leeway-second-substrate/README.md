@@ -397,11 +397,14 @@ value-plus-path shape — is worth far more. Rerun with every arm unindexed at
 | 8,377,929 | 2.27 s | 1.32 s | **1.08 s** | 4.26 s |
 
 **Why: the query is bandwidth-bound and the layouts differ only in volume.**
-`system.query_log` at the 7-event point shows every arm sustaining
-**21.4–25.6 GiB/s**, with durations within a few percent of proportional to
-bytes read — packed 28.27 GiB, JSON column 12.21, exploded-sorted 6.51, packed
-**split 4.49**. So the question is not which layout is faster but **how much of
-the corpus a predicate obliges it to touch**, and there are three levers:
+`system.query_log` at the 7-event point shows the full-lane arms sustaining
+**21.4–25.6 GiB/s**, durations within a few percent of proportional to bytes
+read — packed 28.27 GiB, JSON column 12.21, exploded-sorted 6.51. The split
+arm reads least, **4.49 GiB**, and beats the proportion on top: 0.09 s is
+≈50 GiB/s, so at that width something besides streaming bandwidth is helping
+— recorded, not explained; the ranking by bytes read is unchanged. So the
+question is not which layout is faster but **how much of the corpus a
+predicate obliges it to touch**, and there are three levers:
 
 - **An index.** `(path, doc)` on an exploded table is *workload-agnostic* — it
   helps a filter on any path, known in advance or not (0.29 s at 100M).
@@ -632,7 +635,7 @@ hypotheses from surprises:
   typing from indexing; retrieval measured across three densities with every
   arm at its best form; `read_bytes` instrumented; and the section-split arm,
   which was added because the read-bytes diagnostic implied a lever the
-  protocol had never considered.
+  protocol had never considered. Details in the [logbook](./logbook.md).
 
 **Closed 2026-08-07, and not retired.** Every milestone is done or descoped
 above and the trial has no open work. It stays here rather than moving to

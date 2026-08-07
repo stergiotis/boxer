@@ -1065,3 +1065,144 @@ queries"* — and it should never have read otherwise.
     family in this trial after formulation and storage format: **the label on a
     row has to say which configuration it is, not which system.** The
     `on_benchmark` column exists so the next reader cannot repeat it.
+
+## 2026-08-07 — M7, the 100M tier and the section lever — the USP gap widens with scale, the retrieval verdict took two corrections, and a schema lever the protocol never varied beats every index at the selective end
+
+*This entry was reconstructed after the trial closed, during a review that
+found the milestone had shipped its evidence into README §4a and the fact
+sheet without the logbook entry §4's reporting rule requires. Every number
+below was already committed in the run dir; the narrative is re-derived from
+that evidence and the §4a text. The run dir is named `m6-100m` because it
+predates the closing README edit that numbered this work M7, the write-up
+having taken M6; the committed name stands.*
+
+- **Build under test:** boxer `1fca52e0` … `78c4b1c5` (the evidence landed
+  across eight commits); ClickHouse 26.7.3.19; workload pin unchanged. No
+  boxer code ran — every arm is ClickHouse SQL over the M1-groundwork tables:
+  99,999,968 documents / 1,200,650,881 attributes, packed and exploded, plus
+  a plain-`JSON` arm holding the same documents for the other side.
+- **Environment:** as M0, with the CPU governor pinned to `performance` and
+  the form factor said plainly: a laptop (DMI chassis type 10, battery
+  present) — `environment.tsv`. Hot = min(try 2, try 3) of 3, cold absent;
+  the two JSON-side queries over 18 minutes ran once. Both document-per-row
+  arms `ORDER BY tuple()`; the attribute-per-row arm keeps `(path, doc)`
+  except where a row says unsorted.
+- **Attempted:** four things the 10M tier had left open. (1) Whether the USP
+  gap survives 10× the corpus. (2) The retrieval ladder at three predicate
+  densities with every arm at its best form — the retrieve-vs-aggregate
+  follow-up had measured that shape at 10M only. (3) `read_bytes`
+  instrumentation of the selective point, to say *why* the arms differ.
+  (4) The section-split arm that instrumentation implied.
+
+### The USP head-to-head at 100M — every ratio is wider
+
+Seven of the nine USP queries re-run at 100M (U2 and U7 were not re-run at
+this tier), leeway packed against plain `JSON`, both unindexed
+(`usp-100m.tsv`):
+
+| | leeway | JSON type | ratio | ratio at 10M |
+| --- | --- | --- | --- | --- |
+| U3 find a value anywhere | 1.42 s | 1,116.61 s | **786×** | 695× |
+| U8 numeric predicate, any path | 0.11 s | 1,125.88 s | **10,235×** | 2,783× |
+| U6 leaf count | 0.10 s | 39.89 s | 399× | 50.7× |
+| U4 subtree prefix census | 1.88 s | 39.92 s | 21.2× | 13.1× |
+| U1 path census | 3.17 s | 39.79 s | 12.6× | 7.9× |
+| U5 / U9 | 0.14 / 3.41 s | *no expression* | — | — |
+
+On 10× the documents leeway scales at or below linear (1.7–8.9× per query)
+and the JSON type at or above it (10.0–14.1×), so every ratio is wider at
+100M than at 10M. The 10M columns in `usp-100m.tsv` are this harness's own
+re-measure, not the USP document's figures — mixing harnesses is the error
+§4 exists to prevent.
+
+### Retrieval at three densities — two corrections before the number held
+
+The four-criteria filter-and-retrieve query
+([`queries-retrieve-4criteria.sql`](./queries-retrieve-4criteria.sql)), at
+three predicate densities. It took two corrections, both of the confound
+family the trial had already met four times:
+
+- **The first comparison gave only one arm an index.** Exploded sorted
+  `(path, doc)` had been put against packed and JSON arms at
+  `ORDER BY tuple()`, and won by 2.2×. A JSON column *can* be sorted on the
+  paths a query filters; so sorted, at 10M, it prunes to 5 granules of 1,225
+  and answers in 0.03 s against the exploded arm's 0.10 — 3.3× the other
+  way. The margin had measured the index. **Index parity** is the fifth
+  confound of the family, after formulation, storage format, configuration
+  labelling and workload silence: a layout comparison must give every arm
+  the index it admits, or none of them any.
+- **Packed was measured below its best form, twice.** Moving the selective
+  predicate into `PREWHERE` is worth 1.1–1.7× (2.30 → 1.33 s at the
+  selective point); splitting the five queried paths into their own sections
+  is worth far more (below). §4's rule had been read as covering query text
+  only; it has to cover the schema levers a representation offers.
+
+Every arm unindexed at 100M, packed at its best form
+(`retrieve-4criteria-100m.tsv`, `split-ladder-100m.tsv`; the sorted-exploded
+column is the one arm carrying an index, kept for reference):
+
+| events out | packed, one lane per type | packed, backbone split | JSON type | exploded, unsorted | *exploded, sorted* |
+| --- | --- | --- | --- | --- | --- |
+| 7 | 1.33 s | **0.09 s** | 0.80 s | 1.39 s | *0.29 s* |
+| 10,936 | 1.65 s | **0.55 s** | 1.04 s | 1.40 s | *0.40 s* |
+| 8,377,929 | 2.27 s | 1.32 s | **1.08 s** | 4.26 s | *1.95 s* |
+
+### Why — bytes obliged, and the lever that follows
+
+`system.query_log` at the 7-event point (`read-bytes-100m.tsv`): the
+full-lane arms all sustain 21.4–25.6 GiB/s, durations within a few percent
+of proportional to bytes read — exploded-unsorted 34.03 GiB, packed 28.27,
+JSON 12.21, exploded-sorted 6.51. The query is bandwidth-bound, and the
+layouts differ in how much of the corpus a predicate obliges them to touch.
+The JSON type is not faster — it is narrower, one subcolumn per path.
+
+Narrowness is a modelling choice leeway also has. The split arm moves the
+five queried paths into their own sections — the same value-plus-path lane
+shape, narrower — for a flat **1.40×** storage (13.93 → 19.49 GiB). At the
+selective point it reads **4.49 GiB** and answers in **0.09 s**: 14.7× the
+one-lane form, past every other arm including the indexed one, with no index
+at all. That is *more* than its 6.3× byte reduction predicts — ≈50 GiB/s,
+above the band — so at that width something besides streaming bandwidth
+helps; recorded, not explained. The gain tracks selectivity and is gone by
+8.4M events out, where the JSON type retakes the lead by 1.2×.
+
+- **Findings:**
+  - **[pain — trial process / S2]** Index parity: a layout comparison gave
+    one arm an index the others could also have had, and the margin measured
+    the index. Fifth confound of the family. Corrected by re-running every
+    arm unindexed, with the indexed-JSON point kept as a separately-labelled
+    10M measurement.
+  - **[pain — trial process / S3]** Packed was quoted below its best form
+    twice — `WHERE` for `PREWHERE`, and one-lane-per-type where the mapping
+    admits a split. The §4 rule's word "formulation" was being read as query
+    text only; a representation with a free schema lever has not been
+    measured until the lever has.
+  - **[note — data model / S2]** The section lever: 14.7× at the selective
+    end for a flat 1.40× storage and no index, from one schema declaration.
+    The JSON type's per-path subcolumn is this lever taken to its limit; a
+    leeway schema chooses where on the spectrum to sit and pays in lane
+    overhead rather than query time. One schema point, derived from the
+    packed table rather than re-ingested, one query — the mechanism and its
+    slope, not an optimum.
+  - **[note — mechanism, recorded not explained / S4]** The split arm beats
+    the bandwidth-proportional model that fits the four full-lane arms
+    (≈50 GiB/s against their 21.4–25.6 band). The ranking by bytes read is
+    unchanged.
+  - **[pain — trial process / S3]** Reproducibility is thinner here than in
+    the earlier milestones: the split table's DDL and the 100M plain-`JSON`
+    ingest statement are not committed — a re-run reconstructs them from
+    this entry and the fact sheet's method note. The retrieval query file is
+    committed.
+  - **[pain — trial process / S3]** This milestone initially shipped with no
+    logbook entry — its evidence went to §4a and the fact sheet directly,
+    and the entry above was reconstructed after close. Recorded so the gap
+    is visible rather than silently patched.
+  - **Positive maturity: none.** No boxer code ran in this milestone.
+- **Solution size:**
+  [`queries-retrieve-4criteria.sql`](./queries-retrieve-4criteria.sql)
+  ~77 lines, one statement per arm and density. The split DDL and the
+  plain-`JSON` 100M ingest were ad hoc; see the reproducibility finding.
+- **Results:** `usp-100m.tsv`, `retrieve-4criteria-100m.tsv`,
+  `read-bytes-100m.tsv`, `split-ladder-100m.tsv`, `storage-100m.tsv`,
+  `environment.tsv`.
+- **Run dir:** [`./runs/2026-08-07-m6-100m/`](./runs/2026-08-07-m6-100m/)
