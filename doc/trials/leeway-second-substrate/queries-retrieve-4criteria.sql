@@ -34,6 +34,29 @@ WHERE `tv:string:value:val:s:g:0:0:0::`[indexOf(`tv:string:lmv:lmv:y:m:0:0:0::`,
   AND `tv:symbol:value:val:s:m:0:0:0::`[indexOf(`tv:symbol:lmv:lmv:y:m:0:0:0::`, '/commit/operation')]  = 'create'
   AND `tv:symbol:value:val:s:m:0:0:0::`[indexOf(`tv:symbol:lmv:lmv:y:m:0:0:0::`, '/commit/collection')] = 'app.bsky.feed.post';
 
+-- === packed, same query, with PREWHERE ========================================
+-- The only formulation change that pays. `has()` on the high-cardinality value
+-- lane is a *superset* test — it ignores paths, so it cannot replace the exact
+-- checks, only precede them. In WHERE that buys nothing (2.01 s either way):
+-- the lanes are read for the exact check regardless. In PREWHERE ClickHouse
+-- reads the filter lane first and fetches the rest only for survivors — with 7
+-- of 100M surviving, the symbol, int64 and path lanes are never touched.
+--   2.01 s -> 1.34 s at 100M, and 1.34 s is about the cost of the bare
+--   find-a-value-anywhere scan (1.42 s), i.e. the floor for this layout
+--   without an index.
+-- hasAll() over the symbol lane adds nothing on top: the did predicate has
+-- already reduced the survivor set to nothing it can eliminate, and on a denser
+-- predicate it scans a lane that must be read anyway.
+SELECT `tv:int64:value:val:i64:4o:0:0:0::`[indexOf(`tv:int64:lmv:lmv:y:m:0:0:0::`, '/time_us')] AS time_us,
+       `tv:string:value:val:s:g:0:0:0::` [indexOf(`tv:string:lmv:lmv:y:m:0:0:0::`, '/did')]     AS did
+FROM json
+PREWHERE has(`tv:string:value:val:s:g:0:0:0::`, 'did:plc:yj3sjq3blzpynh27cumnp5ks')
+WHERE `tv:string:value:val:s:g:0:0:0::`[indexOf(`tv:string:lmv:lmv:y:m:0:0:0::`, '/did')]
+        = 'did:plc:yj3sjq3blzpynh27cumnp5ks'
+  AND `tv:symbol:value:val:s:m:0:0:0::`[indexOf(`tv:symbol:lmv:lmv:y:m:0:0:0::`, '/kind')]              = 'commit'
+  AND `tv:symbol:value:val:s:m:0:0:0::`[indexOf(`tv:symbol:lmv:lmv:y:m:0:0:0::`, '/commit/operation')]  = 'create'
+  AND `tv:symbol:value:val:s:m:0:0:0::`[indexOf(`tv:symbol:lmv:lmv:y:m:0:0:0::`, '/commit/collection')] = 'app.bsky.feed.post';
+
 -- === JSON type, nothing declared (arm A00) ====================================
 -- Subcolumns are Dynamic, so each needs an explicit cast; ORDER BY tuple().
 SELECT data.time_us::Int64 AS time_us, data.did::String AS did

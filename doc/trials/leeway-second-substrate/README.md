@@ -403,6 +403,16 @@ ladder should have been:
 | 10,936 | 1.40 s | **1.04 s** | 2.61 s |
 | 8,377,929 | 4.26 s | **1.08 s** | 2.51 s |
 
+One caveat on that table's last column: **packed is not at its best form
+there.** Moving the selective predicate into `PREWHERE` — `has()` on the value
+lane as a superset test, so the exact `indexOf` checks run only on survivors —
+takes the 7-event point from 2.01 s to **1.34 s**, about the cost of the bare
+find-a-value scan (1.42 s) and so the floor for this layout without an index.
+In `WHERE` the same predicate buys nothing, and `hasAll()` over the symbol lane
+buys nothing anywhere. It does not change the ordering — 1.34 s still trails
+the unindexed JSON column — but §4's formulation rule applies to this arm too,
+and the ladder was run before the better form was known.
+
 **The exploded layout's advantage was the index, all of it.** Stripped of it,
 the shredded JSON column is the fastest of the three at every density, and the
 exploded layout loses even to packed once the predicate is dense — a five-way
