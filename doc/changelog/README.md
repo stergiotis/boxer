@@ -1,10 +1,10 @@
 ---
 type: how-to
 audience: contributor
-status: draft
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-07
 ---
-
-> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
 # Compiling a changelog entry
 
@@ -14,7 +14,9 @@ date-range compilations, not release notes — a window may contain several tags
 or none. Each entry states its own scope in the opening paragraph (e.g.
 feature commits only vs. the full commit range) and carries a **Coverage and
 continuation** table so the next compilation can pick up exactly where the
-last one ended, with no gap and no overlap.
+last one ended, with no gap and no overlap. The oldest entry
+(2026-07-02 – 2026-07-16) has no such table — it predates the rule; chain from
+the newest entry, not from it.
 
 The `summarize_*.sh` scripts here are a separate, experimental lineage: they
 drive `gov commitdigest` through an external LLM and keep resume state under
@@ -46,8 +48,12 @@ drive `gov commitdigest` through an external LLM and keep resume state under
 4. **Group thematically**, not chronologically: by ADR arc and subsystem.
    Cite commit hashes for every claim and link ADRs relatively
    (`../adr/NNNN-….md`), marking the ones still **proposed** — read the
-   status from the ADR front-matter, don't assume. Where a prior entry
-   already details an overlapping arc, link it instead of re-telling.
+   status from the ADR front-matter, don't assume. Those markings go stale as
+   ADRs are accepted, so say in the scope paragraph when they were last
+   verified; re-check them whenever the entry is revisited, and write
+   "accepted since" rather than silently rewriting what was true at
+   compilation. Where a prior entry already details an overlapping arc, link
+   it instead of re-telling.
 
 5. **Write the entry** with the shape of the existing ones: front-matter
    (`type: reference`, `status: draft`), the mandatory draft banner, a scope
@@ -58,7 +64,12 @@ drive `gov commitdigest` through an external LLM and keep resume state under
    descriptive, no self-praise, no working-context leaks.
 
 6. **Commit by explicit path** (`git add <files>; git commit -- <files>`),
-   leaving `status: draft` until a human review flips it.
+   leaving `status: draft` until a human review flips it. The flip target is
+   `stable`, not `accepted` — these are descriptive docs, and `accepted`
+   belongs to the ADR state machine
+   ([DOCUMENTATION_STANDARD §4](../DOCUMENTATION_STANDARD.md)). It requires
+   `reviewed-by` + `reviewed-date` and removal of the draft banner; doclint
+   checks both.
 
 ## Cadence
 
