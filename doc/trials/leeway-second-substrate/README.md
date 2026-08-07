@@ -146,16 +146,18 @@ compared over identical data with the engine held constant. Both ran on
 
 - **Exploded is at parity or better on four of the five benchmark queries**
   (Q1 0.18×, Q4 0.68×, Q5 0.72×, Q2 1.06×, Q3 2.19×) and far better on the
-  path-oriented USP queries (U4 0.03×, U9 0.18×, U6 0.07×), because the path
+  path-oriented USP queries (U4 0.03×, U6 0.07×, U9 0.18×), because the path
   becomes a sort-key prefix instead of an array scan. It is also 0.70× on
-  disk. It remains worse on memory for the reassembly queries, 2.6–8.9×.
+  disk. **Memory is where it is consistently worse** — 2.7–13.2× on the
+  reassembly queries, 69.8× on U8.
 - **One table per section (arm Y) is not worth doing**: 0.2 % storage against
   the tagged-union form, query effects that cancel across the set, and it
   costs the reader the section roster.
 - **A retraction sits in the logbook and is load-bearing for how this trial
   reports anything further.** Arm X's first numbers compared *my SQL*, not the
-  representations — one formulation per arm, differing by 2–5×. §4's
-  formulation rule exists because of it.
+  representations — one formulation per arm, differing by 2–5× — and a second
+  claim about re-keying inverted under the same correction. §4's formulation
+  rule exists because of it.
 
 **Arms N-text and N-struct are what make the USP question askable here**, and
 they are not one arm. ClickHouse's `JSON` is a shredded columnar type; DuckDB
