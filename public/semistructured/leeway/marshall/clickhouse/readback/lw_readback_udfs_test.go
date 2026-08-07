@@ -49,29 +49,29 @@ func TestHelperUDFs_TruthTable(t *testing.T) {
 // TestHelperUDFs_SQLShape is a server-free guard on the provisioning DDL:
 // the co/ragged pack (ADR-0162) is layered underneath, the expected family
 // functions are present, LEEWAY_UNFLATTEN stays retired (level-2 unflatten
-// is the pack's RAGGED_NEST), and the inherited BEGIN_INCL bug (referencing
-// an undefined LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END) stays fixed.
+// is the pack's LW_RAGGED_NEST), and the inherited BEGIN_INCL bug (referencing
+// an undefined LW_LU_VAL_IDX_TO_MEMB_IDX_END) stays fixed.
 func TestHelperUDFs_SQLShape(t *testing.T) {
 	sql := HelperUDFsSQL()
 	for _, fn := range []string{
-		"RAGGED_NEST",
-		"RAGGED_PARENT_IDS",
-		"LEEWAY_PACK_VERSION",
-		"LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL",
-		"LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END_EXCL",
-		"LEEWAY_LU_VAL_BY_MEMB_IDX",
-		"LEEWAY_LU_ATTR_BY_TAG",
-		"LEEWAY_LU_MEMBS_OF_VAL_IDX",
-		"LEEWAY_VALUE_BY_TAG_EQUAL",
-		"LEEWAY_LIST_BY_TAG_EQUAL",
+		"LW_RAGGED_NEST",
+		"LW_RAGGED_PARENT_IDS",
+		"LW_PACK_VERSION",
+		"LW_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL",
+		"LW_LU_VAL_IDX_TO_MEMB_IDX_END_EXCL",
+		"LW_LU_VAL_BY_MEMB_IDX",
+		"LW_LU_ATTR_BY_TAG",
+		"LW_LU_MEMBS_OF_VAL_IDX",
+		"LW_VALUE_BY_TAG_EQUAL",
+		"LW_LIST_BY_TAG_EQUAL",
 	} {
 		if !strings.Contains(sql, "FUNCTION "+fn+" ") {
 			t.Errorf("HelperUDFsSQL missing CREATE FUNCTION %s", fn)
 		}
 	}
 	// The undefined-_END regression: BEGIN_INCL must derive from arrayCumSum,
-	// never call a LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END that no statement defines.
+	// never call a LW_LU_VAL_IDX_TO_MEMB_IDX_END that no statement defines.
 	if strings.Contains(sql, "VAL_IDX_TO_MEMB_IDX_END(") {
-		t.Errorf("HelperUDFsSQL references undefined LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END (the inherited bug)")
+		t.Errorf("HelperUDFsSQL references undefined LW_LU_VAL_IDX_TO_MEMB_IDX_END (the inherited bug)")
 	}
 }

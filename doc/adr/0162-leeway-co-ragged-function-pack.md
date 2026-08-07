@@ -73,7 +73,7 @@ evolvability.
 No single substrate wins every class, so the split is by what is being
 added:
 
-- **Expression-level vocabulary** (the co*/ragged* functions of SD6) ships
+- **Expression-level vocabulary** (the `LW_CO_*`/`LW_RAGGED_*` functions of SD6) ships
   as a **SQL-UDF pack** — option (b). It reaches both protocol populations,
   costs nothing at runtime (macro inlining), stays transparent to index
   analysis, and keeps the authored form intact in stored queries and
@@ -91,25 +91,33 @@ added:
   vocabulary: with the pack server-side, a proxy may fail open.
 - Options (c) and (d) are deferred behind explicit triggers (SD8).
 
-### SD2 — Pack conventions follow ClickHouse, with owned prefixes
+### SD2 — Pack conventions follow ClickHouse, under one owned namespace
 
-Names and semantics lean on the built-in function family, which is modern
-and consistent enough to extend rather than replace: camelCase, lambda-first
-argument order (`RAGGED_EXISTS(f, vals, card)` mirrors
-`arrayExists(f, arr)`), 1-based indexing, and ClickHouse's own suffix
-patterns as the template for variants (`arrayReduceInRanges` is the
-precedent). Two owned prefixes — `co` and `ragged` — group the pack in
-`system.functions`, signal leeway semantics (positivity, alignment), and
-keep clear of present and future builtin names. Exact-case spelling is
-mandatory everywhere (ClickHouse UDF names are case-sensitive; some builtin
-lookups are not). The pack wraps **compositions only, never renames**: a
-builtin that already is the operation is used directly.
+Semantics lean on the built-in function family, which is modern and
+consistent enough to extend rather than replace: lambda-first argument order
+(`LW_RAGGED_EXISTS(f, vals, card)` mirrors `arrayExists(f, arr)`), 1-based
+indexing, and ClickHouse's own suffix patterns as the template for variants
+(`arrayReduceInRanges` is the precedent).
+
+Names are UPPER_SNAKE under the single owned namespace `LW_`, with a family
+segment naming the axis — `LW_CO_*` for co-lanes, `LW_RAGGED_*` for ragged
+streams. The namespace groups the whole leeway vocabulary in
+`system.functions` regardless of which package declares it, signals leeway
+semantics (positivity, alignment), and keeps clear of present and future
+builtin names. Exact-case spelling is mandatory everywhere (ClickHouse UDF
+names are case-sensitive; some builtin lookups are not). The pack wraps
+**compositions only, never renames**: a builtin that already is the operation
+is used directly.
+
+*The case and namespace rules above are as amended by the Updates of
+2026-08-06 and 2026-08-07; the original decision was camelCase under bare
+`co`/`ragged` prefixes.*
 
 ### SD3 — Predicate functions bundle their sargable guards
 
 Every pack predicate that implies a constant-membership condition embeds
 the corresponding `has`/`hasAny` conjunct in its own body (e.g.
-`CO_EXISTS_EQ2` carries `has(a, x) AND has(b, y)` beside its lambda). Measured
+`LW_CO_EXISTS_EQ2` carries `has(a, x) AND has(b, y)` beside its lambda). Measured
 basis: multi-lane lambdas are opaque to index analysis (245/245 granules
 without the guard, 4/245 with it), only single-lane pure equality is
 rewritten by the server itself, and even builtin index support is
@@ -122,8 +130,8 @@ therefore cannot forget the pruner.
 No pack body materializes `Array(Array)` unless the function's codomain is
 genuinely nested. Per-run reductions and predicates go through
 `arrayReduceInRanges` over ranges derived from the lengths lane
-(`RAGGED_EXISTS` is range-max over a lifted boolean stream, not
-exists-over-nest). `RAGGED_NEST` stays in the pack as the explicit
+(`LW_RAGGED_EXISTS` is range-max over a lifted boolean stream, not
+exists-over-nest). `LW_RAGGED_NEST` stays in the pack as the explicit
 presentation-boundary operation, documented as such. Positivity (both
 descriptors are at least 1 on leeway data) means empty-run aggregate
 defaults are dead cases; the bodies remain total for foreign data that does
@@ -135,14 +143,20 @@ The pack is defined once in Go — name, parameters, body — and emitted as
 `CREATE OR REPLACE FUNCTION` statements. Installation is an idempotent
 reconcile at connect time (play startup, and appliance provisioning), the
 same reconcile-at-startup pattern other ClickHouse-adjacent state uses. A
-zero-argument marker function, `LEEWAY_PACK_VERSION()`, returns the pack
+zero-argument marker function, `LW_PACK_VERSION()`, returns the pack
 revision so client/server skew is a query. Shipped names are **append-only
 in semantics**: a published function's meaning never changes; changed
 behavior gets a new name. Install performs a collision check — if a name
 resolves to a builtin (e.g. after a server upgrade), install fails loudly
 for that name rather than shadowing or silently skipping.
 
-### SD6 — The v1 roster
+Install also **drops the names this repository has withdrawn**, from a list
+that is itself append-only (`chpack.RetiredNames`). `CREATE OR REPLACE`
+cannot remove a renamed function, so without this step every rename leaves
+its old roster installed and callable — see the 2026-08-07 Update, which is
+where the step came from.
+
+### SD6 — The roster
 
 Definitions below are denotational; the Go spec is normative, and the
 how-to carries executable forms. Everything not listed is deliberately not
@@ -150,21 +164,21 @@ in v1.
 
 | function | definition |
 |---|---|
-| `CO_LOOKUP(keys, lane, k)` | `lane[indexOf(keys, k)]` |
-| `CO_LOOKUP_NULL(keys, lane, k)` | `NULL` when `indexOf(keys, k) = 0`, else the lookup |
-| `CO_GATHER(lane, sel)` | `arrayMap(i -> lane[i], sel)` |
-| `CO_ARG_SORT(keys)` | permutation that sorts `keys` (argsort) |
-| `CO_ARG_MAX(lane, keys)` | `arrayReduce('argMax', lane, keys)` |
-| `CO_EXISTS_EQ2(a, x, b, y)` | guarded two-lane equality existence (SD3) |
-| `RAGGED_STARTS(card)` | run start offsets, 1-based |
-| `RAGGED_RANGES(card)` | `(start, len)` tuples for `arrayReduceInRanges` |
-| `RAGGED_PARENT_IDS(card)` | per-element instance index (broadcast carrier) |
-| `RAGGED_IOTA(card)` | per-element position within its run |
-| `RAGGED_NEST(vals, card)` | per-instance lists; boundary op (SD4) |
-| `RAGGED_REDUCE(agg, vals, card)` | `arrayReduceInRanges(agg, RAGGED_RANGES(card), vals)` |
-| `RAGGED_EXISTS(f, vals, card)` | range-max over `arrayMap(f, vals)` |
-| `RAGGED_COUNT(f, vals, card)` | range-sum over `arrayMap(f, vals)` |
-| `RAGGED_ELEM(vals, card, i, k)` | k-th value of instance i |
+| `LW_CO_LOOKUP(keys, lane, k)` | `lane[indexOf(keys, k)]` |
+| `LW_CO_LOOKUP_NULL(keys, lane, k)` | `NULL` when `indexOf(keys, k) = 0`, else the lookup |
+| `LW_CO_GATHER(lane, sel)` | `arrayMap(i -> lane[i], sel)` |
+| `LW_CO_ARG_SORT(keys)` | permutation that sorts `keys` (argsort) |
+| `LW_CO_ARG_MAX(lane, keys)` | `arrayReduce('argMax', lane, keys)` |
+| `LW_CO_EXISTS_EQ2(a, x, b, y)` | guarded two-lane equality existence (SD3) |
+| `LW_RAGGED_STARTS(card)` | run start offsets, 1-based |
+| `LW_RAGGED_RANGES(card)` | `(start, len)` tuples for `arrayReduceInRanges` |
+| `LW_RAGGED_PARENT_IDS(card)` | per-element instance index (broadcast carrier) |
+| `LW_RAGGED_IOTA(card)` | per-element position within its run |
+| `LW_RAGGED_NEST(vals, card)` | per-instance lists; boundary op (SD4) |
+| `LW_RAGGED_REDUCE(agg, vals, card)` | `arrayReduceInRanges(agg, LW_RAGGED_RANGES(card), vals)` |
+| `LW_RAGGED_EXISTS(f, vals, card)` | range-max over `arrayMap(f, vals)` |
+| `LW_RAGGED_COUNT(f, vals, card)` | range-sum over `arrayMap(f, vals)` |
+| `LW_RAGGED_ELEM(vals, card, i, k)` | k-th value of instance i |
 
 ### SD7 — The expression vocabulary never enters the literal-only MacroExpander
 
@@ -206,7 +220,7 @@ server-side only until a dedicated expression expander exists (SD8).
 ## Surfaces — Tier 1
 
 - New global SQL function names on every boxer-provisioned ClickHouse: the
-  SD6 roster plus `LEEWAY_PACK_VERSION()`. Visible to every client via
+  SD6 roster plus `LW_PACK_VERSION()`. Visible to every client via
   `system.functions` (`origin = 'SQLUserDefined'`).
 - A Go spec-and-emitter package under `public/semistructured/leeway/`
   (exact home decided at implementation, adjacent to the ClickHouse DDL
@@ -259,7 +273,7 @@ server-side only until a dedicated expression expander exists (SD8).
 
 - Server state that must be reconciled: a window exists between a spec
   change and the next connect-time reconcile on servers reached by other
-  clients. `LEEWAY_PACK_VERSION()` makes the skew observable; provisioning
+  clients. `LW_PACK_VERSION()` makes the skew observable; provisioning
   closes it.
 - A global, flat namespace claims names forever; the additive-only policy
   (SD5) is a real constraint on renaming mistakes.
@@ -275,7 +289,7 @@ server-side only until a dedicated expression expander exists (SD8).
 - The vocabulary is ClickHouse-specific by construction; DuckDB or Arrow
   equivalents would be separate packs over the same algebra.
 - The how-to and the algebra document already use the SD6 names
-  (`RAGGED_NEST`, `RAGGED_EXISTS`), so no committed prose changes on
+  (`LW_RAGGED_NEST`, `LW_RAGGED_EXISTS`), so no committed prose changes on
   acceptance.
 
 ## Migration — Tier 1
@@ -299,7 +313,7 @@ For acceptance, the implementation must add:
 - golden tests of the emitted `CREATE OR REPLACE FUNCTION` statements from
   the Go spec;
 - an integration-lane test (`//go:build integration`) that installs the
-  pack on a live server, asserts `LEEWAY_PACK_VERSION()`, and re-runs the
+  pack on a live server, asserts `LW_PACK_VERSION()`, and re-runs the
   plan-identity and guard-pruning probes as regressions;
 - differential tests of pack calls against their handwritten expansions on
   randomized co/ragged data (positivity respected);
@@ -374,3 +388,58 @@ every statement is `CREATE OR REPLACE`, provisioning the new pack **leaves the
 old camelCase functions in place** on a server that had the previous one;
 they must be dropped explicitly. That is a property of SQL-UDF provisioning
 this ADR did not previously call out, and it applies to any future rename.
+
+## Update 2026-08-07 — one namespace: `LW_`
+
+The previous Update unified the pack's *case* with the read-back family's.
+It left the *prefixes* alone, and that is where the remaining inconsistency
+was: four of them — `CO_`, `RAGGED_`, `LEEWAY_` and identsql's `LW_` — for
+one product, so nothing in a name said "this is boxer's" and no single
+question asked a server for the vocabulary it carries.
+
+**Every function moves under `LW_`**, keeping the family segment that names
+the axis: `CO_LOOKUP` → `LW_CO_LOOKUP`, `RAGGED_PARENT_IDS` →
+`LW_RAGGED_PARENT_IDS`, `LEEWAY_PACK_VERSION` → `LW_PACK_VERSION`. The
+read-back family (ADR-0066) moves the same way — `LEEWAY_VALUE_BY_TAG_EQUAL`
+→ `LW_VALUE_BY_TAG_EQUAL`, `LEEWAY_LU_*` → `LW_LU_*` — and identsql's
+`LW_ID_*` (ADR-0106) does not move at all: it already had the shape the rest
+now follow, `LW_` then a family segment then the operation. §SD2 and the §SD6
+roster above are rewritten rather than left stale.
+
+`Version` is bumped to **3**. Same bodies, same semantics, same dependency
+order, same macro-inlining properties.
+
+What the namespace buys, beyond a reader not having to remember which
+package a function came from: `WHERE name LIKE 'LW\_%'` is now the whole
+leeway vocabulary on a server. That is one query for the drift check
+[ADR-0171](./0171-leeway-sql-read-surface.md) §SD2 wants, and it is what
+lets a client say *installed* or *missing* per function rather than only
+listing what it happens to find.
+
+**The stale-function problem from the previous Update is now handled in
+code.** `Install` drops the names this repository has withdrawn, from an
+append-only list (`chpack.RetiredNames`) covering both earlier pack rosters,
+the read-back family's pre-namespace spellings, and the two functions retired
+outright on 2026-08-02. Last time 16 stale functions had to be dropped by
+hand; this time 23 names change and none do. The drop is best-effort and runs
+last, after the new roster has verified — a server must not be left with
+neither.
+
+That list is deliberately not the general reconcile. "Drop every `LW\_%`
+function the build does not declare" needs the full declared set, which spans
+`chpack`, the read-back family and `identsql`, and no package holds all
+three; that reconciler stays ADR-0171 §SD2's, still proposed. The list is the
+part that needed no new decision.
+
+**Not renamed:** the trial run artifacts under
+`doc/trials/jsonbench-on-facts/runs/`. They record which functions were
+installed on a server on a given day, including a retired one that was still
+there — the finding that motivated ADR-0171. Rewriting them would falsify the
+record; the trial's *protocol* files (`queries-*.sql`) are renamed, since
+those are meant to be re-run.
+
+**Verified against a live server.** Play was driven against ClickHouse 26.7
+after this change: `LW_PACK_VERSION` reports 3, the renamed roster resolves,
+and the pre-rename spellings are gone from the server — `CO_GATHER` does not
+appear among its 408 user-defined functions, where the previous rename would
+have left it. The drop step is what removed it.

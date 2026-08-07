@@ -114,11 +114,11 @@ the generator may emit `indexOf(M_R, L)` directly when it can prove alignment (I
 The full extraction for field `f` (section `S`, value subcolumn `V`, channel role `R`):
 
 ```
-m2v := RAGGED_PARENT_IDS(MC_R)               -- materialized position->attribute map
-a   := LEEWAY_LU_ATTR_BY_TAG(M_R, L, m2v)                -- level 1, 0 if absent
-out := LEEWAY_VALUE_BY_TAG_EQUAL(V, M_R, L, m2v)         (scalar:    V[a])
-     | LEEWAY_LIST_BY_TAG_EQUAL(V, LEN, M_R, L, m2v)     (homogenous array)
-     | LEEWAY_LIST_BY_TAG_EQUAL(V, SETCARD, M_R, L, m2v) (set)
+m2v := LW_RAGGED_PARENT_IDS(MC_R)               -- materialized position->attribute map
+a   := LW_LU_ATTR_BY_TAG(M_R, L, m2v)                -- level 1, 0 if absent
+out := LW_VALUE_BY_TAG_EQUAL(V, M_R, L, m2v)         (scalar:    V[a])
+     | LW_LIST_BY_TAG_EQUAL(V, LEN, M_R, L, m2v)     (homogenous array)
+     | LW_LIST_BY_TAG_EQUAL(V, SETCARD, M_R, L, m2v) (set)
 ```
 
 **Multi-subcolumn sections.** All subcolumns of one section share one membership grain, so
@@ -131,7 +131,7 @@ of a section's slots. Identical emitted text is therefore load-bearing for perfo
 
 ### Miss handling
 
-`indexOf` returns `0` on absence, and `LEEWAY_LU_ATTR_BY_TAG` propagates `0`. ClickHouse is
+`indexOf` returns `0` on absence, and `LW_LU_ATTR_BY_TAG` propagates `0`. ClickHouse is
 lenient where this relies on it — `array[0]` returns the element default and `arraySlice(arr,
 0, …)` returns `[]` (both verified) — so a missing scalar reads as `''`/`0` and a missing list
 as `[]` with no guard. Mandatory fields are gated by the presence prefilter (ADR-0066 (a)); for
@@ -143,41 +143,41 @@ The helper UDFs ship in [`lw_readback_udfs.sql`](./lw_readback_udfs.sql) (access
 consolidated from a downstream consumer's tag UDFs — with the inherited `BEGIN_INCL` bug fixed
 (it called an undefined `…_END`) — and layered on the co/ragged function pack (ADR-0162):
 `HelperUDFsSQL()` emits the pack's statements first, and level-2 unflattening is the pack's
-`RAGGED_NEST`. They are kind-independent (create once per database) and are
+`LW_RAGGED_NEST`. They are kind-independent (create once per database) and are
 verified by a truth-table run through `clickhouse-local` (`lw_readback_udfs_test.go`). Naming follows
-the inherited `LEEWAY_LU_*` ("Leeway LookUp") convention: "val idx" = attribute index, "memb idx"
+the inherited `LW_LU_*` ("Leeway LookUp") convention: "val idx" = attribute index, "memb idx"
 = flattened membership position.
 
-The locate primitive is the **materialized** position→attribute map (the pack's `RAGGED_PARENT_IDS`),
+The locate primitive is the **materialized** position→attribute map (the pack's `LW_RAGGED_PARENT_IDS`),
 built once per row and indexed — cheaper than a per-position `arrayFirstIndex`, and the form
 proven multi-membership-correct by the truth-table:
 
 ```
-RAGGED_PARENT_IDS(cardCol)        -- [2,0,1,3] -> [1,1,3,4,4,4]
-LEEWAY_LU_ATTR_BY_TAG(idCol, lit, m2v)        -- attribute carrying membership `lit` (0 if absent)
+LW_RAGGED_PARENT_IDS(cardCol)        -- [2,0,1,3] -> [1,1,3,4,4,4]
+LW_LU_ATTR_BY_TAG(idCol, lit, m2v)        -- attribute carrying membership `lit` (0 if absent)
                                               --   = m2v[indexOf(idCol, lit)]
 ```
 
 Value extraction composes the locate with the level-2 extraction (with
-`m2v = RAGGED_PARENT_IDS(cardCol)`, CSE'd across a section's fields; `lenCol` = the
+`m2v = LW_RAGGED_PARENT_IDS(cardCol)`, CSE'd across a section's fields; `lenCol` = the
 section's `len` for arrays or `card` for sets):
 
 ```
-LEEWAY_VALUE_BY_TAG_EQUAL(valCol, idCol, lit, m2v)            -- scalar:    valCol[attr]
-LEEWAY_LIST_BY_TAG_EQUAL(valCol, lenCol, idCol, lit, m2v)     -- array/set: the attr's sub-array
-LEEWAY_LU_MEMBS_OF_VAL_IDX(idCol, cardCol, attr)             -- the attr's membership set (aliasing-aware)
+LW_VALUE_BY_TAG_EQUAL(valCol, idCol, lit, m2v)            -- scalar:    valCol[attr]
+LW_LIST_BY_TAG_EQUAL(valCol, lenCol, idCol, lit, m2v)     -- array/set: the attr's sub-array
+LW_LU_MEMBS_OF_VAL_IDX(idCol, cardCol, attr)             -- the attr's membership set (aliasing-aware)
 ```
 
 *Worked* (a `u64Array` field on the low-card-ref channel, resolved id 2 — the form the round-trip
 test generates and runs):
 
 ```sql
-LEEWAY_LIST_BY_TAG_EQUAL(
+LW_LIST_BY_TAG_EQUAL(
     `tv:u64Array:value:val:u64h:g:0:0:0::data`,
     `tv:u64Array:len:len:u64:28o:0:0:0::data`,
     `tv:u64Array:lr:lr:u64:2q:0:0:0::data`,
     2,
-    RAGGED_PARENT_IDS(`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`))
+    LW_RAGGED_PARENT_IDS(`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`))
 ```
 
 **Generated artefacts** (`lw_readback_generator.go`, `Generator.Generate`):
@@ -197,7 +197,7 @@ LEEWAY_LIST_BY_TAG_EQUAL(
   ddl/clickhouse type generator.
 - *validator* — `countEqual(idCol, lit) = 1` per mandatory field (`<= 1` for Option; const adds
   a sub-array/value equality check). Exact but **index-blind**: embedded alone it forces a
-  full scan. `LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL/END_EXCL` give the per-attribute
+  full scan. `LW_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL/END_EXCL` give the per-attribute
   membership ranges the exact path uses; mixed/parametrized channels add the aligned parameter
   match (§Trade-offs).
 - *filter* — `presence AND validator`, the form to embed in WHERE: still the exact check, and
@@ -303,5 +303,5 @@ CI-friendly variant when no server is present.
 - [ADR-0008 — leeway marshall extensions](../../../../../../doc/adr/0008-leeway-marshall-extensions.md) — membership channels; the Cut-2 parametrized/mixed channels.
 - `streamreadaccess/EXPLANATION.md` — the column-major vs attribute-major layout and the cardinality-support reading the driver already does.
 - `marshallreflect/unmarshal.go` — the read-back behaviour that is this mapping's oracle.
-- `anchor/card_anchor_integration2_test.go` — the harness pattern. The anchor showcase's former unflatten UDF is retired, as is this family's `LEEWAY_UNFLATTEN`: both are the pack's `RAGGED_NEST` now (ADR-0162).
+- `anchor/card_anchor_integration2_test.go` — the harness pattern. The anchor showcase's former unflatten UDF is retired, as is this family's `LEEWAY_UNFLATTEN`: both are the pack's `LW_RAGGED_NEST` now (ADR-0162).
 - `common/lw_enums.go` — `ColumnRoleE` (`len`, `card`, `<role>card`, `cusum*`) and `MembershipSpecE`.

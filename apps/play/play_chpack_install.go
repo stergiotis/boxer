@@ -31,7 +31,7 @@ func installChPack(url, user, password string, logger zerolog.Logger) {
 			client := chclient.New(chclient.Config{URL: url, User: user, Password: password}, nil)
 			err := chpack.Install(ctx, client)
 			if err != nil {
-				logger.Warn().Err(err).Str("url", url).Msg("play: leeway function pack install failed; co*/ragged* names will be missing on this server")
+				logger.Warn().Err(err).Str("url", url).Msg("play: leeway function pack install failed; LW_* names will be missing on this server")
 				return
 			}
 			logger.Info().Str("url", url).Int("version", chpack.Version).Msg("play: leeway function pack reconciled")

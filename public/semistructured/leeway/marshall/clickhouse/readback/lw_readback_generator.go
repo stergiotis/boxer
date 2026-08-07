@@ -355,14 +355,14 @@ func (g *Generator) field(f *mappingplan.TaggedField, contract mappingplan.ReadC
 		return
 	}
 	lit := resolved.Identity().Literal
-	m2v := "RAGGED_PARENT_IDS(" + loc.cardCol + ")"
+	m2v := "LW_RAGGED_PARENT_IDS(" + loc.cardCol + ")"
 
 	var valExpr string
 	switch vinfo.subType {
 	case common.IntermediateColumnsSubTypeScalar:
-		valExpr = "LEEWAY_VALUE_BY_TAG_EQUAL(" + vinfo.col + ", " + idCol + ", " + lit + ", " + m2v + ")"
+		valExpr = "LW_VALUE_BY_TAG_EQUAL(" + vinfo.col + ", " + idCol + ", " + lit + ", " + m2v + ")"
 	case common.IntermediateColumnsSubTypeHomogenousArray, common.IntermediateColumnsSubTypeSet:
-		valExpr = "LEEWAY_LIST_BY_TAG_EQUAL(" + vinfo.col + ", " + loc.subtypeCol + ", " + idCol + ", " + lit + ", " + m2v + ")"
+		valExpr = "LW_LIST_BY_TAG_EQUAL(" + vinfo.col + ", " + loc.subtypeCol + ", " + idCol + ", " + lit + ", " + m2v + ")"
 	}
 
 	// A `,unit` field is a container column carrying exactly ONE element per
@@ -392,7 +392,7 @@ func (g *Generator) field(f *mappingplan.TaggedField, contract mappingplan.ReadC
 		//
 		// ConstValue is a single string and the write path marshals it through
 		// the scalar lane, so the value-equality check is a scalar comparison.
-		// On a non-scalar value column valExpr is an array (LEEWAY_LIST_BY_TAG)
+		// On a non-scalar value column valExpr is an array (LW_LIST_BY_TAG_EQUAL)
 		// and `array = 'const'` is a query-time CANNOT_READ_ARRAY_FROM_TEXT —
 		// reject at generation rather than emit SQL that fails when run. (The
 		// tag parser admits const on array string sections, but it has no

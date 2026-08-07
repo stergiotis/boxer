@@ -57,7 +57,7 @@ func TestIntegrationChpack(t *testing.T) {
 
 	t.Run("version marker", func(t *testing.T) {
 		require.Equal(t, fmt.Sprintf("%d", chpack.Version),
-			query(t, ctx, client, "SELECT LEEWAY_PACK_VERSION()"))
+			query(t, ctx, client, "SELECT LW_PACK_VERSION()"))
 	})
 
 	t.Run("correctness matrix", func(t *testing.T) {
@@ -65,23 +65,23 @@ func TestIntegrationChpack(t *testing.T) {
 		// zero-length runs pin the CH-boundary totality; leeway reads never
 		// produce them (positive descriptors).
 		cases := []struct{ expr, want string }{
-			{"CO_LOOKUP(['a','b'], [10, 20], 'b')", "20"},
-			{"CO_LOOKUP(['a','b'], [10, 20], 'zz')", "0"},
-			{"CO_LOOKUP_NULL(['a','b'], [10, 20], 'zz')", "\\N"},
-			{"CO_GATHER(['a','b','c'], [3, 1])", "['c','a']"},
-			{"CO_ARG_SORT([30, 10, 20])", "[2,3,1]"},
-			{"CO_ARG_MAX(['a','b'], [1, 5])", "b"},
-			{"CO_EXISTS_EQ2(['a','w'], 'a', ['y','v'], 'y')", "1"},
-			{"CO_EXISTS_EQ2(['a','w'], 'a', ['v','y'], 'y')", "0"},
-			{"RAGGED_STARTS([2, 0, 3])", "[1,3,3]"},
-			{"RAGGED_RANGES([2, 0, 3])", "[(1,2),(3,0),(3,3)]"},
-			{"RAGGED_PARENT_IDS([2, 0, 3])", "[1,1,3,3,3]"},
-			{"RAGGED_IOTA([2, 0, 3])", "[1,2,1,2,3]"},
-			{"RAGGED_NEST([1, 2, 3, 4, 5], [2, 0, 3])", "[[1,2],[],[3,4,5]]"},
-			{"RAGGED_REDUCE('sum', [1, 2, 3, 4, 5], [2, 0, 3])", "[3,0,12]"},
-			{"RAGGED_EXISTS(v -> v > 3, [1, 2, 3, 4, 5], [2, 0, 3])", "[0,0,1]"},
-			{"RAGGED_COUNT(v -> v > 2, [1, 2, 3, 4, 5], [2, 0, 3])", "[0,0,3]"},
-			{"RAGGED_ELEM([1, 2, 3, 4, 5], [2, 0, 3], 3, 2)", "4"},
+			{"LW_CO_LOOKUP(['a','b'], [10, 20], 'b')", "20"},
+			{"LW_CO_LOOKUP(['a','b'], [10, 20], 'zz')", "0"},
+			{"LW_CO_LOOKUP_NULL(['a','b'], [10, 20], 'zz')", "\\N"},
+			{"LW_CO_GATHER(['a','b','c'], [3, 1])", "['c','a']"},
+			{"LW_CO_ARG_SORT([30, 10, 20])", "[2,3,1]"},
+			{"LW_CO_ARG_MAX(['a','b'], [1, 5])", "b"},
+			{"LW_CO_EXISTS_EQ2(['a','w'], 'a', ['y','v'], 'y')", "1"},
+			{"LW_CO_EXISTS_EQ2(['a','w'], 'a', ['v','y'], 'y')", "0"},
+			{"LW_RAGGED_STARTS([2, 0, 3])", "[1,3,3]"},
+			{"LW_RAGGED_RANGES([2, 0, 3])", "[(1,2),(3,0),(3,3)]"},
+			{"LW_RAGGED_PARENT_IDS([2, 0, 3])", "[1,1,3,3,3]"},
+			{"LW_RAGGED_IOTA([2, 0, 3])", "[1,2,1,2,3]"},
+			{"LW_RAGGED_NEST([1, 2, 3, 4, 5], [2, 0, 3])", "[[1,2],[],[3,4,5]]"},
+			{"LW_RAGGED_REDUCE('sum', [1, 2, 3, 4, 5], [2, 0, 3])", "[3,0,12]"},
+			{"LW_RAGGED_EXISTS(v -> v > 3, [1, 2, 3, 4, 5], [2, 0, 3])", "[0,0,1]"},
+			{"LW_RAGGED_COUNT(v -> v > 2, [1, 2, 3, 4, 5], [2, 0, 3])", "[0,0,3]"},
+			{"LW_RAGGED_ELEM([1, 2, 3, 4, 5], [2, 0, 3], 3, 2)", "4"},
 		}
 		for _, c := range cases {
 			require.Equalf(t, c.want, query(t, ctx, client, "SELECT "+c.expr), "SELECT %s", c.expr)
@@ -92,7 +92,7 @@ func TestIntegrationChpack(t *testing.T) {
 		// A pack call and its handwritten expansion must produce the same
 		// actions DAG — the macro claim of ADR-0162, pinned as a regression.
 		src := " FROM (SELECT [1, 2, 3, 4, 5] AS vals, [2, 0, 3] AS card)"
-		packed := query(t, ctx, client, "EXPLAIN actions = 1 SELECT RAGGED_NEST(vals, card)"+src)
+		packed := query(t, ctx, client, "EXPLAIN actions = 1 SELECT LW_RAGGED_NEST(vals, card)"+src)
 		hand := query(t, ctx, client, "EXPLAIN actions = 1 SELECT arrayMap((c, hi) -> arraySlice(vals, hi - c + 1, c), card, arrayCumSum(card))"+src)
 		require.Equal(t, hand, packed)
 	})
@@ -130,7 +130,7 @@ func TestIntegrationChpack(t *testing.T) {
 			valsLit := intsLiteral(vals)
 			cardLit := intsLiteral(card)
 			got := query(t, ctx, client, fmt.Sprintf(
-				"SELECT RAGGED_REDUCE('sum', %s, %s), RAGGED_COUNT(v -> v > 0, %s, %s), RAGGED_EXISTS(v -> v > 0, %s, %s)",
+				"SELECT LW_RAGGED_REDUCE('sum', %s, %s), LW_RAGGED_COUNT(v -> v > 0, %s, %s), LW_RAGGED_EXISTS(v -> v > 0, %s, %s)",
 				valsLit, cardLit, valsLit, cardLit, valsLit, cardLit))
 			want := "[" + strings.Join(sums, ",") + "]\t[" + strings.Join(counts, ",") + "]\t[" + strings.Join(exists, ",") + "]"
 			require.Equalf(t, want, got, "vals=%s card=%s", valsLit, cardLit)
@@ -149,13 +149,13 @@ func TestIntegrationChpack(t *testing.T) {
 		require.NoError(t, client.Exec(ctx, "INSERT INTO "+db+".t SELECT number, if(number = 123456, ['needle', concat('t', toString(number % 997))], [concat('t', toString(number % 997)), concat('u', toString(number % 89))]), if(number = 123456, ['needle2', concat('v', toString(number % 991))], [concat('v', toString(number % 991)), concat('w', toString(number % 83))]) FROM numbers(500000)"))
 
 		require.Equal(t, "1", query(t, ctx, client,
-			"SELECT count() FROM "+db+".t WHERE CO_EXISTS_EQ2(a, 'needle', b, 'needle2')"))
+			"SELECT count() FROM "+db+".t WHERE LW_CO_EXISTS_EQ2(a, 'needle', b, 'needle2')"))
 
 		// The bundled guards must reach the bloom-filter skip indexes: the
 		// final granule selection has to be a strict subset. Without the
 		// guards the same predicate scanned every granule (ADR-0162 §SD3).
 		plan := query(t, ctx, client,
-			"EXPLAIN indexes = 1 SELECT count() FROM "+db+".t WHERE CO_EXISTS_EQ2(a, 'needle', b, 'needle2')")
+			"EXPLAIN indexes = 1 SELECT count() FROM "+db+".t WHERE LW_CO_EXISTS_EQ2(a, 'needle', b, 'needle2')")
 		require.Contains(t, plan, "Name: bfa")
 		// Skip stages chain: each Granules line reports selected/considered
 		// where "considered" is what the previous stage left. Pruning means

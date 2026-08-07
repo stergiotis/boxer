@@ -553,3 +553,22 @@ generated read-back SQL references pack names, with `HelperUDFsSQL()` (pack
 first, family second) remaining the one provisioning step.
 `LEEWAY_VALUE_BY_TAG_EQUAL` and `LEEWAY_LIST_BY_TAG_EQUAL` take the map as a
 parameter, so their bodies were never coupled to the retired name.
+
+## Update 2026-08-07 — the family moves under the `LW_` namespace
+
+The helper family is renamed onto the single leeway namespace decided in
+[ADR-0162](./0162-leeway-co-ragged-function-pack.md)'s 2026-08-07 Update:
+`LEEWAY_VALUE_BY_TAG_EQUAL` → `LW_VALUE_BY_TAG_EQUAL`,
+`LEEWAY_LIST_BY_TAG_EQUAL` → `LW_LIST_BY_TAG_EQUAL`, and the whole
+`LEEWAY_LU_*` lookup family → `LW_LU_*`. Bodies, parameters and semantics are
+unchanged, as is `HelperUDFsSQL()`'s signature and its pack-first ordering.
+
+This family still has no version marker of its own — that remains
+[ADR-0171](./0171-leeway-sql-read-surface.md) §SD2 — so a server carrying the
+old spellings is not detected by querying it. What closes the gap for this
+rename specifically is that `chpack.Install` now drops withdrawn names, and
+the list it drops from includes this family's pre-namespace spellings
+alongside the pack's. A host that provisions via `HelperUDFsSQL()` without
+also calling `chpack.Install` gets the new family installed and the old one
+left behind; that asymmetry is a consequence of provisioning and reconciling
+living in different places, and it is what §SD2 is for.

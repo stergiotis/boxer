@@ -661,3 +661,37 @@ template:
   Storage, like-for-like at 10M: **0.915× the facts schema** and **1.061× of
   unhinted native JSON**.
 - **Run dir:** [`./runs/2026-08-06-jsonmap-100m/`](./runs/2026-08-06-jsonmap-100m/)
+
+## 2026-08-07 — the query vocabulary moves under one `LW_` namespace — no re-measurement, and why
+
+- **What changed.** Every leeway SQL UDF the trial calls was renamed onto a
+  single namespace (ADR-0162 Update 2026-08-07): `CO_GATHER` →
+  `LW_CO_GATHER`, `RAGGED_PARENT_IDS` → `LW_RAGGED_PARENT_IDS`,
+  `LEEWAY_VALUE_BY_TAG_EQUAL` → `LW_VALUE_BY_TAG_EQUAL`,
+  `LEEWAY_LIST_BY_TAG_EQUAL` → `LW_LIST_BY_TAG_EQUAL`. Same bodies, same
+  dependency order. `chpack.Version` 2 → 3.
+- **What was touched here.** The protocol files — `queries-facts.sql`,
+  `queries-facts-skip.sql`, `queries-jsonmap.sql` — are renamed, because they
+  are meant to be re-run and against a current server the old spellings do
+  not resolve. Ledger rows 6, 7 and 10 in the README are re-spelled, row 7
+  with a note on what the drop step does and does not close.
+- **What was deliberately NOT touched.** Everything under `runs/`. Those
+  files record which functions were installed on a server on a given day —
+  including `LEEWAY_LU_MEMB_IDX_TO_VAL_IDX`, retired in the repository and
+  still present on the trial server, which is the observation ADR-0171 was
+  written around. Re-spelling a recorded observation to a name that did not
+  exist when it was made would destroy the evidence for the finding it
+  produced.
+- **No re-measurement.** The 2026-08-06 rename was re-measured (arms B and C,
+  ±12 %, workstation noise) and that measurement is what established a pure
+  rename is performance-neutral for SQL UDFs — they are macros, inlined at
+  analysis time, so the name never reaches the plan. That result carries; a
+  second identical experiment would be ceremony. **This means the numbers in
+  `runs/` were produced by SQL naming functions the current build no longer
+  installs.** Re-running the protocol against a server provisioned from this
+  build is the check, and it has not been done.
+- **Provisioning drift, one notch better.** `chpack.Install` now drops
+  withdrawn names, so this rename does not add 23 more stale functions to
+  whatever a server is already carrying — unlike its predecessor, which left
+  16 to be dropped by hand. Detection is still absent; see README ledger
+  row 7.

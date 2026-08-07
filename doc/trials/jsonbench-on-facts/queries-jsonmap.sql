@@ -10,8 +10,8 @@
 --     value[indexOf(lmv, '<path>')]
 --
 -- and that is the point of this arm. In the facts arm the same resolution
--- needs LEEWAY_VALUE_BY_TAG_EQUAL / LEEWAY_LIST_BY_TAG_EQUAL over
--- RAGGED_PARENT_IDS, because facts memberships are Ref-shaped (so the path
+-- needs LW_VALUE_BY_TAG_EQUAL / LW_LIST_BY_TAG_EQUAL over
+-- LW_RAGGED_PARENT_IDS, because facts memberships are Ref-shaped (so the path
 -- rides the parameter channel of a synthetic ref, and the membership lane does
 -- not co-index with the value lane) and its string/int sections are
 -- array-valued (so a second cumulative sum over `len` is needed to find an

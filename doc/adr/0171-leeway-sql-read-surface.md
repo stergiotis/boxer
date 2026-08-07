@@ -17,7 +17,7 @@ must assemble unaided:
 
 - **`chpack`** ([ADR-0162](./0162-leeway-co-ragged-function-pack.md)) — the lane
   algebra, 16 SQL UDFs in `public/semistructured/leeway/chpack`, carrying a
-  `Version` constant and a `LEEWAY_PACK_VERSION()` marker function.
+  `Version` constant and a `LW_PACK_VERSION()` marker function.
 - **the read-back family** ([ADR-0066](./0066-leeway-dql-clickhouse-readback-generator.md))
   — the leeway-schema-aware layer on top of it, emitted by `HelperUDFsSQL()` in
   `public/semistructured/leeway/marshall/clickhouse/readback/`.
@@ -27,6 +27,14 @@ must assemble unaided:
 
 Each is documented where it was built. Nothing names the three together, and
 nothing on the path a task-level consumer actually walks points at any of them.
+
+*Function names below are quoted as they were at the time each observation was
+made. The vocabulary moved under a single `LW_` namespace on 2026-08-07
+(ADR-0162's Update of that date) — `CO_GATHER` is now `LW_CO_GATHER`,
+`LEEWAY_VALUE_BY_TAG_EQUAL` is `LW_VALUE_BY_TAG_EQUAL`, and so on. The
+findings are about the surface, not the spellings, and rewriting a measured
+observation to a name that did not exist when it was measured would falsify
+it.*
 
 The [jsonbench-on-facts trial](../trials/jsonbench-on-facts/README.md) is the
 evidence. It recreated a published benchmark on `boxer.facts` using native
@@ -144,6 +152,21 @@ leeway-owned functions on the server that are not in it.
 This is the only sub-decision that turns a silent failure into a loud one, and
 the trial hit that failure twice.
 
+The 2026-08-07 namespace rename does two things for this sub-decision. It
+makes "leeway-owned functions on the server" a single question —
+`WHERE name LIKE 'LW\_%'` — where it previously meant enumerating four
+prefixes and hoping none was forgotten. And it ships the half of the
+reconcile that needed no new decision: `chpack.Install` now drops an
+append-only list of names this repository has withdrawn
+(`chpack.RetiredNames`), which is what kept the rename from leaving 23 stale
+functions behind the way its predecessor left 16.
+
+What remains for §SD2 is the part the list cannot do: catching a leeway-owned
+function that *no build ever declared* — a hand-installed extra, or a
+spelling from a fork. That needs the full declared set, which spans `chpack`,
+the read-back family and `identsql`; no package holds all three today, and
+deciding where it should live is this sub-decision's remaining work.
+
 ### SD3 — Materialized projections are emitted from the schema, not hand-written
 
 The DDL generator learns to emit `MATERIALIZED` column definitions for a named
@@ -230,7 +253,7 @@ touching the others.
 - **Breaks.** Nothing at rest. SD2's reconciling installer will drop
   leeway-owned functions on a server that the build no longer declares — which
   is its purpose, and is a behaviour change for any server carrying
-  hand-installed extras under a `LEEWAY_`/`CO_`/`RAGGED_` name.
+  hand-installed extras under an `LW_` name.
 - **Path.** Install the versioned family; the installer reports what it removed.
   Servers on the current family are reconciled on next install with no manual
   drop step — the manual step is what this removes.

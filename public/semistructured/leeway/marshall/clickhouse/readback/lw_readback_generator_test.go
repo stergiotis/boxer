@@ -136,10 +136,10 @@ func TestGenerator_Golden(t *testing.T) {
 		}
 	}
 	// Sym + WinBegin + WinEnd are scalar; Nums is the only list.
-	if n := strings.Count(a.Projection, "LEEWAY_VALUE_BY_TAG_EQUAL("); n != 3 {
+	if n := strings.Count(a.Projection, "LW_VALUE_BY_TAG_EQUAL("); n != 3 {
 		t.Errorf("want 3 scalar extracts, got %d:\n%s", n, a.Projection)
 	}
-	if n := strings.Count(a.Projection, "LEEWAY_LIST_BY_TAG_EQUAL("); n != 1 {
+	if n := strings.Count(a.Projection, "LW_LIST_BY_TAG_EQUAL("); n != 1 {
 		t.Errorf("want 1 list extract, got %d:\n%s", n, a.Projection)
 	}
 	// Presence carries only the memberships the writer always emits: mySym

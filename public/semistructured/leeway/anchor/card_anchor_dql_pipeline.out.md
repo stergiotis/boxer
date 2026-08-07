@@ -22,15 +22,15 @@ nothing is omitted. The final stage's output is the committed
 ### source (friendly handles)
 
 ```sql
-/* Query 1 — attack types and their target ports, via the pack's RAGGED_NEST.
+/* Query 1 — attack types and their target ports, via the pack's LW_RAGGED_NEST.
 
 Lists each cyber incident's attack type (the `symbol` section value) together
 with its target network ports, which ride the same attributes as low-cardinality
-ref memberships (`lr`). RAGGED_NEST — from the co/ragged function pack
+ref memberships (`lr`). LW_RAGGED_NEST — from the co/ragged function pack
 (ADR-0162) that hosts reconcile at connect — regroups the flat `lr` stream by
 the per-attribute `lrcard` counts so it can be ARRAY-JOINed in parallel with
 the value column. Nesting at an ARRAY JOIN boundary is exactly the pack's
-documented use for RAGGED_NEST: the codomain is genuinely nested here.
+documented use for LW_RAGGED_NEST: the codomain is genuinely nested here.
 
 Column references are friendly leeway handles (`section:column`, ADR-0116); the
 nanopass pipeline resolves them to physical names (see the .out.sql neighbour).
@@ -50,7 +50,7 @@ FROM facts
 -- parallel ARRAY JOIN: both lists carry one element per attribute
 ARRAY JOIN
     `symbol:value` AS attack_type,
-    RAGGED_NEST(`symbol:lr`, `symbol:lrcard`) AS target_ports
+    LW_RAGGED_NEST(`symbol:lr`, `symbol:lrcard`) AS target_ports
 WHERE has(['DDOS', 'SQL_INJECTION', 'PORT_SCAN'], attack_type)
 ```
 
@@ -66,26 +66,26 @@ SELECT
 FROM facts
  ARRAY JOIN
     `symbol:value` AS attack_type,
-    RAGGED_NEST(`symbol:lr`, `symbol:lrcard`) AS target_ports
+    LW_RAGGED_NEST(`symbol:lr`, `symbol:lrcard`) AS target_ports
 WHERE has(['DDOS', 'SQL_INJECTION', 'PORT_SCAN'], attack_type)
 ```
 
 ### after CanonicalizeFull
 
 ```sql
-SELECT "id:id" AS "id", "id:naturalKey" AS "incident_ticket", "attack_type", "target_ports" FROM "facts" ARRAY JOIN "symbol:value" AS "attack_type", "RAGGED_NEST"("symbol:lr", "symbol:lrcard") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
+SELECT "id:id" AS "id", "id:naturalKey" AS "incident_ticket", "attack_type", "target_ports" FROM "facts" ARRAY JOIN "symbol:value" AS "attack_type", "LW_RAGGED_NEST"("symbol:lr", "symbol:lrcard") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
 ```
 
 ### after QualifyTables
 
 ```sql
-SELECT "id:id" AS "id", "id:naturalKey" AS "incident_ticket", "attack_type", "target_ports" FROM "anchor"."facts" ARRAY JOIN "symbol:value" AS "attack_type", "RAGGED_NEST"("symbol:lr", "symbol:lrcard") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
+SELECT "id:id" AS "id", "id:naturalKey" AS "incident_ticket", "attack_type", "target_ports" FROM "anchor"."facts" ARRAY JOIN "symbol:value" AS "attack_type", "LW_RAGGED_NEST"("symbol:lr", "symbol:lrcard") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
 ```
 
 ### after ResolveColumnNames
 
 ```sql
-SELECT "id:id:u64:2k:0:0:" AS "id", "id:naturalKey:y:g:0:0:" AS "incident_ticket", "attack_type", "target_ports" FROM "anchor"."facts" ARRAY JOIN "tv:symbol:value:val:s:m:0:24:0::data" AS "attack_type", "RAGGED_NEST"("tv:symbol:lr:lr:u64:2q:0:0:0::data", "tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
+SELECT "id:id:u64:2k:0:0:" AS "id", "id:naturalKey:y:g:0:0:" AS "incident_ticket", "attack_type", "target_ports" FROM "anchor"."facts" ARRAY JOIN "tv:symbol:value:val:s:m:0:24:0::data" AS "attack_type", "LW_RAGGED_NEST"("tv:symbol:lr:lr:u64:2q:0:0:0::data", "tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
 ```
 
 ## card_anchor_dql_query2.sql
