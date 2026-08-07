@@ -977,6 +977,36 @@ multi-row's strongest measured case — the one ADR-0171 §SD5's companion table
 would serve, which the §SD5 text describes only as accelerating "some form of
 queries". This names them.
 
+**Does it hold on the other engines? Two of three.** The retrieval result above
+is ClickHouse-only, so it was re-run on the two targets over the same Parquet
+files — packed against exploded, identical query shapes, all forms verified to
+return the same 7 rows (`m4-retrieve-cross-engine.tsv`):
+
+| engine | selective (7 rows out) | | mid (896k rows out) | |
+| --- | --- | --- | --- | --- |
+| | one-row / multi-row | | one-row / multi-row | |
+| ClickHouse (native) | 0.50 / **0.10** | multi **5.0×** | 0.58 / **0.32** | multi 1.8× |
+| DuckDB (Parquet) | 0.85 / **0.37** | multi **2.3×** | 4.91 / **1.08** | multi **4.5×** |
+| DataFusion (Parquet) | **0.82** / 1.16 | **one-row 1.4×** | **0.94** / 1.41 | **one-row 1.5×** |
+
+**DataFusion inverts it.** Multi-row is 1.4–1.5× *slower* there, where it is
+2.3–5.0× faster on the other two. The exploded retrieval is five joins, and
+ClickHouse's sorted MergeTree and DuckDB both turn each leg into a cheap seek
+where DataFusion does not.
+
+This is the sharpest statement of a distinction the trial has been circling:
+**portability and performance are different properties of a rendering.** The
+exploded form uses no array function, no lambda and no UDF — which is precisely
+why DataFusion can run it at all, and why M0's descope was withdrawn. On
+DataFusion it is also the *slower* of the two. Being expressible everywhere
+does not make it fast everywhere, and the engine that most needs the portable
+rendering is the one that benefits least from it.
+
+One more thing the table shows in passing: **DuckDB's packed idiom degrades
+badly with output size** — 0.85 s for 7 rows, 4.91 s for 896k — while
+DataFusion's barely moves (0.82 → 0.94 s). Projecting through `list_position`
+is where DuckDB spends it.
+
 - **Findings (added):**
   - **[pain — trial process / S2]** The trial characterised two layouts from a
     query set that is entirely aggregations, and a recommendation was made from
@@ -984,6 +1014,10 @@ queries". This names them.
     invisible until it was asked for directly. **A workload's silence about a
     query shape is not evidence about it** — the fourth confound of this family
     here, after formulation, storage format and configuration labelling.
+  - **[note — engine, not toolbelt / S3]** The layout that wins retrieval is
+    engine-dependent: multi-row on ClickHouse and DuckDB, one-row on
+    DataFusion. Any deployment guidance from this trial has to name the engine,
+    not just the layout.
 
 ### Correction, same day — the ClickHouse row above was the wrong arm
 
