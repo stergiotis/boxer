@@ -138,13 +138,63 @@ Against DuckDB's text-backed JSON type, leeway is <em>half</em> the size.</p>
 <p>JSON has six types. leeway's canonical type system covers temporal, network
 and decimal types with declared widths, and its mapping distinguishes
 <strong><code>null</code> from <code>undefined</code></strong> — a distinction
-JSON itself does not carry. An attribute can also belong to several orthogonal
-categories at once, where a JSON document gives it exactly one path.</p>
+JSON itself does not carry.</p>
 
-<p>Two honest limits: the standard mapping cannot tell an empty object or array
-from an absent one (a <code>Lossless</code> variant adds those), and the
-multi-category capability was <strong>not exercised</strong> — every
-measurement here used exactly one category per attribute.</p>
+<h3>Memberships: gradual typing for the address</h3>
+
+<p>In JSON an attribute has exactly one address: its path, a string. In leeway
+the address is a <em>membership</em>, and there are <strong>8 membership
+specs</strong> spanning a range of strictness. You can start at the loose end
+and tighten later without touching the values.</p>
+
+<table>
+  <thead><tr><th>spec</th><th>what the address is</th><th>what it costs you</th></tr></thead>
+  <tbody>
+    <tr><td><code>…VerbatimHighCardParameters</code> <em>(used here)</em></td><td>the path as a literal string, plus a free-form parameter channel</td><td>nothing — no vocabulary to declare</td></tr>
+    <tr><td><code>LowCardVerbatim</code></td><td>a literal from a small set</td><td>dictionary encoding, nothing else</td></tr>
+    <tr><td><code>LowCardRef</code> / <code>HighCardRef</code></td><td>an id into a controlled vocabulary</td><td>you must define the vocabulary</td></tr>
+    <tr><td><code>…RefParametrized</code></td><td>a vocabulary id <em>plus</em> typed parameters</td><td>vocabulary + parameter schema</td></tr>
+  </tbody>
+</table>
+
+<p>And a section may carry <em>several</em> memberships at once, so an
+attribute can be addressed by path <em>and</em> by unit <em>and</em> by tenant
+<em>and</em> by role simultaneously — each independently queryable, co-indexed
+in the same row, no join. Primary and secondary membership sets are themselves
+declarable. <strong>This whole trial ran on one membership per attribute, the
+loosest spec in the table</strong> — the entry-level configuration — and still
+produced the numbers above.</p>
+
+<h3>Tagging: what a value <em>is</em>, and what it is <em>for</em></h3>
+
+<p>Beyond types, leeway carries two declarative tag vocabularies that a JSON
+column has no place to put:</p>
+
+<table>
+  <thead><tr><th>vocabulary</th><th class="num">tags</th><th>examples</th></tr></thead>
+  <tbody>
+    <tr><td><strong>value aspects</strong> — what a value is, per column</td><td class="num">61</td>
+        <td>scale of measurement (nominal / ordinal / interval / ratio); Unicode normalisation form and case-folding; natural vs surrogate vs content-addressable key; ML feature encodings and scalings; expected lifespan; anonymised; mandatory vs optional</td></tr>
+    <tr><td><strong>use aspects</strong> — what a section is for</td><td class="num">56</td>
+        <td>privacy, compliance, policy, security, risk, audit; lineage and provenance (activity / agent / entity / relation); slowly-changing-dimension strategy; source-of-truth class; log, metrics, observability; ownership and org role</td></tr>
+    <tr><td><strong>encoding aspects</strong> — how it should be stored</td><td class="num">23</td>
+        <td>delta / double-delta, dictionary, low-cardinality within or across records, light vs heavy general compression</td></tr>
+  </tbody>
+</table>
+
+<p>These are schema-level declarations, not conventions in a field name: the
+DDL generator consumes the encoding aspects, and the others travel with the
+data as machine-readable intent. Governance questions a JSON column answers
+with a naming convention and a wiki page — <em>which columns are personal
+data, which are the source of truth, which are ordinal and must not be
+averaged</em> — are declared here.</p>
+
+<p>Three honest limits: the standard mapping cannot tell an empty object or
+array from an absent one (a <code>Lossless</code> variant adds those);
+<strong>none of the tagging above was exercised by these measurements</strong>;
+and the multi-membership capability was not either — raising it makes
+single-address lookups dearer, so it is a trade to measure rather than a win to
+assume.</p>
 
 <h2>Portability</h2>
 
