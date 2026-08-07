@@ -467,6 +467,10 @@ numbers are not comparable across the two runs already recorded.
 6. **The 100M gate.** Disk and wall-clock budget on the target machine,
    extrapolated from 10M actuals before committing.
 
+Continued by [leeway on a second substrate](../leeway-second-substrate/README.md),
+which takes this trial's canonical-mapping arm and its query set to a
+different engine.
+
 Related: [pprof-profiles-as-data](../../adr-background-work/pprof-profiles-as-data.md),
 [ADR-0169](../../adr/0169-continuous-coverage-keelson.md),
 [ADR-0109](../../adr/0109-leeway-marshall-multi-membership-ref-tuples.md).
