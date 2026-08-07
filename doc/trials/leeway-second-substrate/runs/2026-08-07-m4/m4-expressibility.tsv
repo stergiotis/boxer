@@ -1,0 +1,4 @@
+arm	documents	expressible_of_14	notes
+leeway packed (DuckDB)	9999994	14	higher-order rendering
+N-text (JSON type)	10000000	14	json_extract runtime path + json_tree fullkey
+N-struct (inferred)	10000000	6	Q1-Q5 and U7 only; commit.record inferred as MAP(VARCHAR,JSON)

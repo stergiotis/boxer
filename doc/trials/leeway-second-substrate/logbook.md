@@ -650,3 +650,104 @@ leeway-written file has to cast every path lane before it can ask them.
   `packed.parquet`; the two scaffolding directories that did so are not
   committed, being symlinks to gitignored data.
 - **Run dir:** [`./runs/2026-08-07-m3/`](./runs/2026-08-07-m3/)
+
+## 2026-08-07 — M4, the USP counterpart — the thesis survives the change of engine, and the reason for half of it does not
+
+- **Build under test:** boxer `ba9f5b46`; DuckDB v1.5.5. 10,000,000 documents
+  from the same ten source files, against the leeway arms' 9,999,994.
+- **Environment:** as M0; hot = min(try 2, try 3) of 3, cold absent.
+- **Attempted:** the arm H5 turns on. The sibling trial's
+  [USP experiments](../jsonbench-on-facts/leeway-usp-experiments.md) argue *a
+  JSON column is fast when the path is in the query, a leeway table is fast
+  when the path is in the data*, and rest that on two structural facts about
+  ClickHouse's `JSON` type: an enumerated path cannot be used to **read** the
+  column (§2a), and enumeration stops at an array (§2b). This arm re-poses the
+  head-to-head on an engine with a different JSON type, in the two shapes
+  DuckDB actually offers.
+
+**H5 is confirmed: both structural facts are ClickHouse's, not JSON's.**
+DuckDB has `json_extract(doc, p)` with `p` a runtime expression, and
+`json_tree(doc)`, a table function that walks every node — descending into
+arrays — and reports each one's `fullkey`. The path *is* data. So arm N-text
+expresses **all fourteen queries**, including the two the USP document records
+as *no expression exists* (U5, U9) and the one it measures at 676× (U3).
+
+**And the thesis survives anyway, because the cost half is larger, not
+smaller:**
+
+| | leeway (DuckDB) | N-text | ×  | N-struct | × |
+| --- | --- | --- | --- | --- | --- |
+| Q1 | 0.120 s | 0.560 s | 5 | **0.050 s** | **0.42** |
+| Q2 | 0.650 s | 1.480 s | 2 | **0.200 s** | **0.31** |
+| Q3 | 0.210 s | 1.720 s | 8 | **0.070 s** | **0.33** |
+| Q4 / Q5 | 0.510 s | 1.24 / 1.26 s | 2 | **0.08 / 0.09 s** | **0.16** |
+| U1 | 1.180 s | 58.6 s | **50** | *none* | — |
+| U2 | 0.940 s | 62.7 s | **67** | *none* | — |
+| U3 | 0.270 s | 19.0 s | **70** | *none* | — |
+| U4 | 0.360 s | 26.7 s | **74** | *none* | — |
+| U5 | 0.030 s | 25.3 s | **843** | *none* | — |
+| U6 | 0.140 s | 42.9 s | **306** | *none* | — |
+| U7 | 0.070 s | 0.540 s | 8 | 0.170 s | 2.43 |
+| U8 | 0.030 s | 27.6 s | **920** | *none* | — |
+| U9 | 0.560 s | 27.3 s | **49** | *none* | — |
+
+Memory says it as loudly: N-text's path-in-data queries peak at **15–81 GiB**
+against leeway's **0.07–0.36 GiB**.
+
+**Three readings.**
+
+- **The first half of the thesis holds harder here than in the sibling trial.**
+  There, one query (U7) went to the JSON column, by 1.4×. Here **N-struct wins
+  every benchmark query outright** — 0.16–0.42× of the leeway rendering on
+  Q1–Q5 — because schema-on-read gives it plain typed columns. When the path is
+  in the query, a typed column is simply the right representation and leeway is
+  paying for generality it is not using.
+- **The second half holds too, and for a changed reason.** In ClickHouse the
+  path-in-data queries were slow or impossible because of the addressing model.
+  In DuckDB they are all possible and **49–920×** slower — against the sibling
+  trial's 11–676×. The verdict "the path is in the data" is not an artifact of
+  ClickHouse's JSON type; the *explanation* was.
+- **Schema-on-read types the backbone and abandons the tail.** Inference over
+  10M documents produced typed `did` / `time_us` / `kind` / `commit.{rev,
+  operation, collection, rkey, cid}` — and `commit.record` as
+  **`MAP(VARCHAR, JSON)`**. That is precisely the heterogeneous part, and it is
+  why N-struct answers **6 of 14** and only 1 of the 9 USP queries. Its speed
+  and its blindness have the same cause.
+
+**Storage** (`m4-storage.tsv`) — stack against stack, Parquet files against
+DuckDB's native format, so read it as an order of magnitude and not a ratio:
+leeway packed 1.44 GiB, leeway exploded 1.08, **N-struct 2.54, N-text 4.56**.
+Here the JSON shapes are *larger* than leeway; in the sibling trial's
+same-engine comparison jsonv2 was slightly smaller.
+
+- **Findings:**
+  - **[note — the USP thesis, refined / S2]** H5 holds: USP §2a and §2b describe
+    ClickHouse's JSON type, not JSON columns generally, and the document's
+    "no expression exists" rows are engine-specific. The thesis itself survives
+    on cost, with a wider margin than it was originally measured at. Worth
+    carrying back to the USP document as an Update if that trial is revisited.
+  - **[note — engine, not toolbelt / S3]** DuckDB's JSON reader **aborts the
+    whole read on the first malformed document** unless `ignore_errors=true` is
+    passed; the corpus contains one. This is the same class as the sibling
+    trial's ledger row 2, hit by a different reader.
+  - **[pain — trial process / S2]** The session scratchpad is **tmpfs**, i.e.
+    RAM-backed. A 7.2 GiB DuckDB database placed there competed with the
+    queries' own working set, a run was killed with no error message, and the
+    file was later wiped mid-milestone. Large working data belongs on
+    disk-backed storage; this arm's database was rebuilt on btrfs and every
+    number here comes from that.
+  - **[pain — trial process / S4]** `TRY_CAST` is required where a type
+    predicate and a cast appear in the same `WHERE`: DuckDB evaluated the cast
+    before the `type IN (...)` filter and failed on a string atom.
+  - **Positive maturity: none.** No boxer code ran in this arm.
+- **Solution size:** [`m4-ntext.duckdb.sql`](./m4-ntext.duckdb.sql) ~137 lines
+  for all fourteen; [`m4-nstruct.duckdb.sql`](./m4-nstruct.duckdb.sql) ~95, of
+  which more than half is the header recording what cannot be written.
+- **Results:** `m4-latency.tsv`, `m4-storage.tsv`, `m4-expressibility.tsv`, and
+  per-statement output under `res-ntext/` and `res-nstruct/`. Q1 differs from
+  the leeway arms by exactly **6 documents** in the absent-path bucket — the
+  ones leeway's ingest skipped as undecodable — and by nothing else; N-text and
+  N-struct are byte-identical to each other on it.
+- **Run dir:** [`./runs/2026-08-07-m4/`](./runs/2026-08-07-m4/). The DuckDB
+  database is a dataset and is not committed; `read_json_objects` /
+  `read_json` over the ten source files rebuild it in ~30 s.

@@ -1,0 +1,10 @@
+$.commit.record.skyfeedBuilder.blocks[*]._comment	19	19
+$.commit.record.skyfeedBuilder.blocks[*].tags[*]	10.045	44
+$.commit.record.skyfeedBuilder.parent.blocks[*].id	9.25	12
+$.commit.record.skyfeedBuilder.parent.blocks[*].type	9.25	12
+$.commit.record.skyfeedBuilder.parent.blocks[*]._comment	7	7
+$.commit.record.skyfeedBuilder.parent.blocks[*].withCounts	7	7
+$.commit.record.policies.labelValueDefinitions[*].locales[*].description	6.923	41
+$.commit.record.policies.labelValueDefinitions[*].locales[*].lang	6.923	41
+$.commit.record.policies.labelValueDefinitions[*].locales[*].name	6.923	41
+$.commit.record.skyfeedBuilder.blocks[*].id	6.371	26

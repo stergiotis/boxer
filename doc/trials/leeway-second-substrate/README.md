@@ -330,14 +330,17 @@ hypotheses from surprises:
   fourteen queries match byte-for-byte and the two that apply a string
   predicate to a path (U4, U9) fail to bind. Filed, not worked around.
   Details in the [logbook](./logbook.md).
-- **M4 — the USP counterpart** *(gated on M2, and the milestone H5 turns on)*.
-  Arms N-text and N-struct, DuckDB only — M0 established that `datafusion-cli`
-  ships no JSON functions at all, so the head-to-head has no third engine. This
-  is where U3, U5, U8 and U9 — the sibling trial's 676×, and its two
-  *no expression exists* rows — get re-asked against an engine whose JSON type
-  accepts a runtime path. Still descope-able (§7 Q3), but no longer the
-  optional afterthought it was when the protocol was written: it is the arm
-  that decides how much of the USP thesis is portable.
+- **M4 — the USP counterpart.** ✓ **Done 2026-08-07.** Arms N-text and
+  N-struct, DuckDB only. **H5 holds**: DuckDB's JSON type takes a runtime path
+  and `json_tree` walks into arrays, so both structural facts the USP thesis
+  rests on are ClickHouse's rather than JSON's — N-text expresses all fourteen
+  queries, including the two the sibling trial records as having no expression.
+  **The thesis survives on cost anyway, with a wider margin**: 49–920× on the
+  path-in-data queries against the sibling trial's 11–676×, at 15–81 GiB
+  against 0.07–0.36. And schema-on-read (N-struct) **beats leeway outright on
+  every benchmark query** (0.16–0.42×) while answering only 6 of 14, because
+  inference typed the backbone and left `commit.record` as
+  `MAP(VARCHAR, JSON)`. Details in the [logbook](./logbook.md).
 - **M5 — the facts layout** *(optional, gated on M0–M3 having stayed cheap)*.
   Arm F, which answers H2 and would need a second `chpack` emitter or a
   hand-written macro set. This is the milestone most likely to be worth

@@ -1,0 +1,5 @@
+arm	format	gib	vs_leeway_packed_parquet
+leeway packed (arm P, no bloom)	Parquet+ZSTD	1.44	1.00
+leeway exploded (arm X, no bloom)	Parquet+ZSTD	1.08	0.75
+N-struct (schema-on-read)	DuckDB native	2.54	1.76
+N-text (JSON type)	DuckDB native	4.56	3.17
