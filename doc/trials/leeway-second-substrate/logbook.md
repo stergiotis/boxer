@@ -810,3 +810,32 @@ buys — `starts_with` on a path lane — is bought with an invalid file.
     across two storage formats. The §4 rule says a ratio needs the best
     formulation on both sides; it should say the same about the storage format,
     and this run is the second time that has bitten.
+
+### Follow-up — the three DuckDB configurations, measured the same way
+
+The trial had accumulated DuckDB numbers from three harnesses and two storage
+formats. This settles them into one table (`m4-duckdb-configs.tsv`): the same
+eight queries, the same engine, three ways of holding the same 10M documents.
+The row-identity column is excluded throughout, because the native
+leeway-shaped table cannot hold it (see the UTF-8 finding above).
+
+| | Parquet (leeway shape) | native (leeway shape) | native (w/ MAP) |
+| --- | --- | --- | --- |
+| **storage** | **1.14 GiB** | 2.46 GiB | 2.54 GiB |
+| Q1–Q5 total | 1.88 s | 1.38 s | **0.46 s** |
+| U7 + T1 + T2 total | 0.26 s | **0.17 s** | 0.55 s |
+
+Three readings, none of which the trial had stated:
+
+- **Parquet is 2.2× smaller and 1.3–1.7× slower than DuckDB's own format**, for
+  identical data and identical queries. That is the whole cost of holding
+  leeway data in the portable format rather than the engine's, and it is a
+  clean trade rather than a defect: the arms that read Parquet were paying it
+  everywhere, unremarked.
+- **The two native shapes cost the same to store** — 2.46 against 2.54 GiB,
+  3 % apart. So schema-on-read does not buy a smaller table here; whatever it
+  wins it wins on access, not footprint.
+- **At equal storage the two shapes trade latency in opposite directions.**
+  `MAP` is 3.0× faster over the five benchmark paths and 3.2× slower over the
+  three tail paths. The benchmark set never crosses that line, which is why
+  M4's first reading looked one-sided.
