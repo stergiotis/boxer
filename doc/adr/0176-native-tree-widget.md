@@ -152,7 +152,31 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   `row_ui` by replaying the block. `read_deferred_block_map_u64` and
   `skip_deferred_block_map_u64` already exist (`rust/imzero2/src/fffi/io.rs:658`,
   `:674`), and the decorator already lives in the IDL apply string, so
-  `interpreter.rs` is not hand-edited. This is the whole of C5's cost.
+  `interpreter.rs` is not hand-edited.
+
+  The block maps are spliced by the generated `Send()` in **declaration
+  order**, so the apply code reads — and the culled else-arm skips — cells,
+  headers, rows. Reordering the IDL lines without reordering both Rust sites
+  desynchronises the stream.
+
+  **M0 found that the block map alone is not enough, and cost two more
+  primitives** — the estimate of "the whole of C5's cost" was wrong:
+
+  - **`uiSetMinWidthAvailable`.** Every Go widget sizes to its own content, so
+    a row background drawn from Go covered only its own text — the first live
+    probe rendered a ~60px stub per row instead of a row. `set_min_width` takes
+    an explicit float and available width is a client-side fact;
+    `ScalarSize().AvailableWidth()` exists but **nothing consumes it**, so
+    there was no way to express "as wide as the row" at all. Without this
+    `row_ui` is unusable from Go.
+  - **`labelAtoms.selectable`.** egui defaults `selectable_labels` to true and
+    a selectable label senses `click_and_drag`. Since `row_ui` runs *before*
+    the cells, a label is registered later and therefore sits above the row
+    sense and swallows its click. `label` already had `selectable`;
+    `labelAtoms` did not, so a rich-text cell could not hand the click back.
+
+  Both are small and generally useful, but they are new generated surface that
+  the Surfaces table did not anticipate.
 
 - **SD6 — The `row_ui` replay guards against a doubled call.** `row_ui` fires
   twice per visible row: `region_ui` is called from both `left_bottom_ui` and
@@ -218,6 +242,7 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | egui2 IDL — `endETable` (`egui2_definition_d_table2.go`) | added: `rows` deferred block map, keyed `U64` | regenerated `bindings/methods.out.go` + `factories.out.go`, regenerated region of `interpreter.rs`; both the Go binary and the Rust renderer rebuilt in the same commit |
+| egui2 IDL — `uiSetMinWidthAvailable` proc, `labelAtoms.selectable` method | added at M0 (see SD5) | same regeneration; adding IDL nodes **renumbers opcodes** (`enums.out.go`, `enums_out.rs`), so a stale binary on either side desyncs the wire |
 | egui2 IDL — `tree`, `nodeDir`, `nodeLeaf`, `nodeDirClose` | removed at M5 | `r3_node_cmds` register and `NodeCommand` enum in `interpreter.rs`, `prepare_next_frame` clear arm, the two demos |
 | `rust/imzero2/Cargo.toml` | `egui_ltreeview` dependency removed at M5 | `Cargo.lock`, the licence and vendor gates |
 | Exported Go API under `public/` | added: `widgets/tree` | nothing yet — no downstream module compiles against it on day one |
