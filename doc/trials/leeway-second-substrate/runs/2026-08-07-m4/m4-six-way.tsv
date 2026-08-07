@@ -1,8 +1,9 @@
-configuration	storage	path_in_query_Q1-Q5_s	path_in_data_U1U2U3U4U6U8_s
-ClickHouse jsonv2	1.07 GiB	0.72	234.72
-ClickHouse leeway	1.13 GiB	1.24	1.50
-DuckDB leeway (native)	2.46 GiB	1.38	not measured
-DuckDB leeway (parquet)	1.14 GiB	1.88	2.92
-DuckDB MAP (native)	2.54 GiB	0.46	NO EXPRESSION
-DataFusion leeway (pq)	1.14 GiB	3.31	2.66
-DataFusion MAP (pq)	0.99 GiB	0.65	NO EXPRESSION
+configuration	storage	Q1-Q5_s	USP_six_s	on_benchmark
+ClickHouse arm A (JSONBench entry)	1.54 GiB	0.34	not measured	yes — JSON type, 5 typed hints + clustered index
+ClickHouse arm A00 (plain JSON)	1.07 GiB	0.72	234.72	yes — JSON type, nothing declared
+ClickHouse leeway	1.13 GiB	1.24	1.50	no — schema-on-write
+DuckDB leeway (native)	2.46 GiB	1.38	2.24	no — schema-on-write
+DuckDB leeway (parquet)	1.14 GiB	1.88	2.92	no — schema-on-write
+DuckDB MAP (native)	2.54 GiB	0.46	NO EXPRESSION	no — schema-on-read into typed columns
+DataFusion leeway (parquet)	1.14 GiB	3.31	2.66	no — schema-on-write
+DataFusion MAP (parquet)	0.99 GiB	0.65	NO EXPRESSION	no — schema-on-read into typed columns

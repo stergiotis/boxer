@@ -930,3 +930,50 @@ possible at all.
 **The two U-queries no configuration in this table answers well** are U5 and
 U9, excluded above because ClickHouse's JSON type has no expression for either.
 leeway answers both in well under a second on all three engines.
+
+### Correction, same day — the ClickHouse row above was the wrong arm
+
+The table as first published invited the reading "DuckDB beats ClickHouse on
+JSONBench's own queries", which **contradicts jsonbench.com and is an artifact
+of two choices, both tilting the same way**.
+
+- **The ClickHouse row was arm A00** — plain `JSON`, no type hints, no index.
+  The sibling trial built that arm deliberately, as *the only shape a store
+  holding a mixture of document shapes could actually have* (its §4), which is
+  the right control for **this** trial's question and the wrong label for a
+  benchmark comparison. **The actual JSONBench entry is arm A**: five typed
+  path hints *and* a clustered index on them. Built here from the sibling
+  trial's committed `arm-a0/ddl-as-applied.sql` with the sort key restored,
+  9,999,994 rows, 1.54 GiB.
+- **The fastest DuckDB row is off-benchmark.** `MAP` is `read_json` schema
+  inference into typed `STRUCT` columns — schema-on-write, which JSONBench's
+  stay-JSON rule excludes. It is not a legal entry, so it was never competing
+  with ClickHouse on the benchmark's terms.
+
+Arm A measured on this harness, Q1–Q5: **0.34 s** — Q1 0.04, Q2 0.13, Q3 0.06,
+Q4 0.05, Q5 0.06. That is faster than every other configuration in the table,
+including both `MAP` shapes, and **the ordering now agrees with
+jsonbench.com**. The gap is wider than it looks: ClickHouse's client startup is
+0.03 s per query, so 0.15 s of that 0.34 s is process launch and the
+server-side total is ≈0.19 s, while DuckDB's and DataFusion's startup are below
+the timer's resolution.
+
+The corrected table is `m4-six-way.tsv`, which now carries an
+`on_benchmark` column so the distinction cannot be lost again. Also filled:
+DuckDB leeway **native** on the USP six, **2.24 s**, which the first table left
+blank because only the Parquet variant had been run on that set.
+
+**None of this moves the trial's own finding.** The two orderings are still
+near inverses: arm A wins Q1–Q5 at 0.34 s and cannot express U5 or U9 at all,
+while its unhinted sibling takes 234.72 s over the six USP queries it can
+express against leeway's 1.50. What changes is the headline — *"ClickHouse's
+tuned benchmark entry is the fastest thing here on the benchmark's own
+queries"* — and it should never have read otherwise.
+
+- **Findings (added):**
+  - **[pain — trial process / S2]** A cross-system table was published with one
+    engine represented by its deliberately-weakest arm, because that arm was
+    the trial's control for a different question. Third confound of the same
+    family in this trial after formulation and storage format: **the label on a
+    row has to say which configuration it is, not which system.** The
+    `on_benchmark` column exists so the next reader cannot repeat it.
