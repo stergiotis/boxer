@@ -252,8 +252,11 @@ N-struct is the shape that is fast when it does not have to.
   as arm A did in the sibling trial. Handle expansion goes through a
   ClickHouse parser, so ported query files carry physical column names —
   which is a friction to file, not to fix here.
-- **A ratio needs the best formulation on both sides.** No number comparing two
-  representations may be quoted from one query formulation per side. Where a
+- **A ratio needs the best formulation on both sides — and one storage format
+  across them.** No number comparing two representations may be quoted from one
+  query formulation per side, nor across two storage formats: M4 quoted
+  N-struct as 2.4× the leeway rendering on Q1 when the like-for-like figure is
+  1.6×, the rest being DuckDB-native against Parquet. Where a
   layout admits more than one natural rendering — a join against a regroup, a
   higher-order form against an explosion — each side is measured at its best
   known form, and the alternatives are recorded alongside. This rule is here
@@ -337,10 +340,13 @@ hypotheses from surprises:
   queries, including the two the sibling trial records as having no expression.
   **The thesis survives on cost anyway, with a wider margin**: 49–920× on the
   path-in-data queries against the sibling trial's 11–676×, at 15–81 GiB
-  against 0.07–0.36. And schema-on-read (N-struct) **beats leeway outright on
-  every benchmark query** (0.16–0.42×) while answering only 6 of 14, because
-  inference typed the backbone and left `commit.record` as
-  `MAP(VARCHAR, JSON)`. Details in the [logbook](./logbook.md).
+  against 0.07–0.36. And schema-on-read (N-struct) **beats leeway on every
+  benchmark query** — 1.6–2.6× like-for-like — while answering only 6 of 14,
+  because inference typed the backbone and left `commit.record` as
+  `MAP(VARCHAR, JSON)`. That win is exactly co-extensive with what inference
+  typed: **one step into the tail and it inverts, leeway winning 2.6–3.4×**,
+  because leeway's cost does not depend on where the path sits and N-struct's
+  does. Details in the [logbook](./logbook.md).
 - **M5 — the facts layout** *(optional, gated on M0–M3 having stayed cheap)*.
   Arm F, which answers H2 and would need a second `chpack` emitter or a
   hand-written macro set. This is the milestone most likely to be worth

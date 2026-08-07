@@ -1,0 +1,5 @@
+query	class	nstruct_s	leeway_native_s	winner	factor
+Q1	backbone (typed by inference)	0.05	0.08	nstruct	1.6
+Q2	backbone (typed by inference)	0.19	0.49	nstruct	2.6
+T1 commit.record/$type	tail (MAP(VARCHAR,JSON))	0.18	0.07	leeway	2.6
+T2 commit.record/createdAt	tail (MAP(VARCHAR,JSON))	0.17	0.05	leeway	3.4

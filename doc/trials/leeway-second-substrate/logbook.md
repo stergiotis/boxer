@@ -751,3 +751,62 @@ same-engine comparison jsonv2 was slightly smaller.
 - **Run dir:** [`./runs/2026-08-07-m4/`](./runs/2026-08-07-m4/). The DuckDB
   database is a dataset and is not committed; `read_json_objects` /
   `read_json` over the ten source files rebuild it in ~30 s.
+
+### Follow-up, same day — qualifying "N-struct beats leeway on every benchmark query"
+
+The claim above is true and two things about it were unexamined: how much of
+the margin is the *storage format* rather than the representation, and whether
+the win extends past the paths inference typed. Both were measured
+(`m4-backbone-vs-tail.tsv`), by loading the leeway packed Parquet into a DuckDB
+**native** table so the two sit in the same format, and by asking one query
+whose path is in the tail.
+
+| query | class | N-struct | leeway (native) | winner |
+| --- | --- | --- | --- | --- |
+| Q1 | backbone | 0.05 s | 0.08 s | N-struct, 1.6× |
+| Q2 | backbone | 0.19 s | 0.49 s | N-struct, 2.6× |
+| T1 `commit.record/$type` | tail | 0.18 s | **0.07 s** | **leeway, 2.6×** |
+| T2 `commit.record/createdAt` | tail | 0.17 s | **0.05 s** | **leeway, 3.4×** |
+
+- **About half the headline margin was format, not representation.** Q1 is
+  1.6× with both in DuckDB's native format against 2.4× when leeway is read
+  from Parquet. The M4 table compares a DuckDB table to a Parquet file, which
+  is what the ported arms actually do, but it is not a representation
+  comparison and should not be read as one.
+- **The win is exactly co-extensive with what inference typed.** All five
+  benchmark paths sit in the backbone. One step into `commit.record` and it
+  inverts.
+- **The structural difference is the flatness.** leeway costs 0.05–0.08 s on
+  single-path queries regardless of where the path sits; N-struct costs 0.05 s
+  on a typed column and ~0.17 s once it has to go through
+  `MAP(VARCHAR, JSON)` — 3.5× its own backbone cost. The benchmark set never
+  makes it pay that, because JSONBench names only stable paths.
+
+**A second finding fell out of the format-confound test, and it sharpens M3.**
+Loading the ClickHouse-written Parquet into a DuckDB table **fails**:
+
+```text
+Invalid Input Error: Invalid string encoding found in Parquet file ...
+value "\x8Bo\xFB\x89..." is not valid UTF8!
+```
+
+`id:blake3hash` holds raw 32-byte digests, and ClickHouse's export declares the
+column Utf8. A scan that never touches the value succeeds — which is why every
+query in M1 and M2 ran — but materialising it does not. So M3's finding is not
+symmetric after all: **leeway's `BLOB` is the correct typing and ClickHouse's
+`VARCHAR` produces a file that violates the Parquet string contract.** What M3
+recorded as a disagreement is a disagreement in which one side is right, and
+the inconvenient side is the right one. The convenience the ClickHouse typing
+buys — `starts_with` on a path lane — is bought with an invalid file.
+
+- **Findings (added):**
+  - **[broken leeway-ddl-codegen → proposed:leeway-arrow-bytes-vs-text / functional-suitability.functional-correctness / S2]**
+    Supersedes the severity, not the substance, of M3's finding: the ClickHouse
+    DDL backend's `y`→`String` mapping exports Parquet columns declared Utf8
+    that contain non-UTF-8 bytes, which DuckDB rejects on materialisation. Any
+    fix should keep leeway's `BLOB` for genuinely binary lanes and distinguish
+    the *path* lanes, which are text, rather than making everything Utf8.
+  - **[pain — trial process / S3]** A cross-representation ratio was quoted
+    across two storage formats. The §4 rule says a ratio needs the best
+    formulation on both sides; it should say the same about the storage format,
+    and this run is the second time that has bitten.
