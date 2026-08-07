@@ -299,7 +299,11 @@ func (inst *App) renderBody() {
 		inst.renderSource()
 	}
 	for range c.PanelCentralInside().KeepIter() {
-		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+		// Hscroll for the same reason as the source pane: markdown holds
+		// things that do not wrap — a wide table, a long fenced line — and an
+		// unscrollable horizontal axis would push their width back out into
+		// the window's minimum instead of scrolling them.
+		for range c.ScrollArea().Hscroll(true).Vscroll(true).AutoShrink(false, false).KeepIter() {
 			inst.renderPreview()
 		}
 	}
@@ -437,7 +441,20 @@ func (inst *App) renderSource() {
 	// AutoShrink(false, false) keeps the pane's full size rather than
 	// collapsing onto the content, so a short document still leaves the editor
 	// filling its pane instead of shrinking to a few lines.
-	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+	//
+	// Hscroll(true) is not about scrolling — the editor wraps, so its bar
+	// never appears. It is about which way the width flows. egui sizes a
+	// scroll-area axis by (direction_enabled, auto_shrink): (true, false)
+	// keeps the size it was OFFERED, while (false, false) reports
+	// max(available, content) — i.e. an unscrollable axis pushes its content
+	// width back out into the layout. With the horizontal axis pushing, the
+	// editor's desired width became part of the window's MINIMUM width, and
+	// since that desired width is itself derived from the window, the floor
+	// rose every time the window did and then blocked the way back: widen
+	// once, and the window could never be dragged narrow again. Enabling the
+	// axis severs that path — the editor takes the width it is given and
+	// reports nothing upward.
+	for range c.ScrollArea().Hscroll(true).Vscroll(true).AutoShrink(false, false).KeepIter() {
 		b := c.TextEdit(inst.ids.PrepareStr("editor"), inst.src, true).
 			CodeEditor().
 			DesiredWidth(width).

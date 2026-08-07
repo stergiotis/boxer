@@ -199,6 +199,20 @@ Six contracts fix the behaviour:
    Deriving the width instead means every window size maps to a share and
    nothing is retained to get stuck.
 
+   Deriving a width from the window is only safe if that width cannot flow
+   back into the window, and by default it does. egui sizes each scroll-area
+   axis by `(direction_enabled, auto_shrink)`: `(true, false)` keeps the size
+   it was offered, but `(false, false)` reports `max(available, content)` — so
+   an axis that cannot scroll pushes its content width back out into the
+   layout. Both panes therefore enable horizontal scrolling, not to scroll
+   (the editor wraps) but to sever that path. Left un-severed it closes a
+   loop: the editor's desired width joins the window's MINIMUM width, that
+   minimum is a share of the window, and the floor rises every time the
+   window does — so widening once permanently prevents narrowing back.
+   Measured before the fix: a widen-then-narrow cycle moved the floor 439pt →
+   582pt, and repeating it walked the window off the screen. After: 104.5pt →
+   105pt → 105.5pt over three cycles, which is layout rounding.
+
 "Dirty" is defined against the last checkpoint rather than against a file: the
 document is clean when restored and immediately after a successful clipboard
 export, and any edit sets it. With no file to be out of step with, this is the
@@ -328,9 +342,12 @@ visible before the work starts rather than discovered inside it.
   and the caret-driven scroll have no end-to-end coverage, only unit coverage
   of the logic beneath them — closing that needs a carrier-driven run
   ([ADR-0154](./0154-headless-carrier-tree-and-driver.md)), which is not
-  built. And the restore path's `OverrideDatabindingSPtr` ordering — the
-  reason it is applied at the widget's emit site rather than alongside the
-  other drained work — is checked only by inspection.
+  built. And the sizing contract has no automated net at all: every defect it
+  records — the unstated TextEdit dimensions, the SidePanel's destructive
+  clamp, the scroll-axis push-back — is an egui layout behaviour that only
+  appears in a live window under resize, and each was found by driving one.
+  A regression would be caught the same way, by hand, which is the weakest
+  part of this plan.
 
 ## Status
 
