@@ -889,3 +889,44 @@ scan that never touches `id:blake3hash` succeeds. The in-memory column above is
 measured with that one column excluded, matching the DuckDB native row. This
 removes any remaining doubt about which side of M3's `BLOB`-versus-`VARCHAR`
 disagreement is correct.
+
+### Follow-up — all six configurations, one harness, and why there is no single ranking
+
+The obvious question the three tables invite is which configuration is best.
+`m4-six-way.tsv` answers it, on one harness, over the two query dimensions the
+trial has been separating all along. The ClickHouse `JSON` arm
+(`jsonbench_a00_10m`, plain `JSON`, no type hints) was re-measured here rather
+than quoted from the USP document, because this harness reads that arm's
+path-census queries **~0.6× the document's figures** and mixing the two would
+repeat the error §4 exists to prevent.
+
+| configuration | storage | Q1–Q5 (path in the query) | U1,U2,U3,U4,U6,U8 (path in the data) |
+| --- | --- | --- | --- |
+| ClickHouse jsonv2 | 1.07 GiB | **0.72 s** | 234.72 s |
+| ClickHouse leeway | 1.13 GiB | 1.24 s | **1.50 s** |
+| DuckDB leeway (native) | 2.46 GiB | 1.38 s | — |
+| DuckDB leeway (Parquet) | 1.14 GiB | 1.88 s | 2.92 s |
+| DuckDB `MAP` (native) | 2.54 GiB | **0.46 s** | **no expression** |
+| DataFusion leeway (Parquet) | 1.14 GiB | 3.31 s | 2.66 s |
+| DataFusion `MAP` (Parquet) | 0.99 GiB | 0.65 s | **no expression** |
+
+The two orderings are close to inverses, and neither is a ranking of the
+configurations — both are rankings of *how well each configuration suits a
+question type*:
+
+- **Path in the query:** `MAP` shapes first (0.46 / 0.65 s), ClickHouse's JSON
+  third (0.72 s), leeway fourth to seventh (1.24–3.31 s).
+- **Path in the data:** leeway first on every engine (1.50–2.92 s), ClickHouse
+  JSON **156× behind** at 234.72 s, and the `MAP` shapes not on the board at
+  all — they cannot express any of the six.
+
+**Storage separates them far less than latency does.** Five of the seven rows
+sit between 0.99 and 1.14 GiB; the two outliers are DuckDB's native format at
+2.46–2.54 GiB, which is a format choice rather than a shape one. So a
+deployment picking between these is not trading disk — it is trading which
+question type it wants to be fast at, and whether it wants the other type to be
+possible at all.
+
+**The two U-queries no configuration in this table answers well** are U5 and
+U9, excluded above because ClickHouse's JSON type has no expression for either.
+leeway answers both in well under a second on all three engines.
