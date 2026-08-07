@@ -793,6 +793,32 @@ conservative pre-gate on any unfilled input (an auto-run is a
 convenience; the manual gates are the contract), and the prelude itself —
 trimming unused SET lines from a narrowed run remains unattempted.
 
+### 2026-08-07 — the self-reference rule learns IN's table operand
+
+A correctness pass prompted by `WITH t AS (SELECT 1) SELECT * FROM t1 WHERE
+a IN t UNION ALL SELECT * FROM t2`. The example itself analyses correctly —
+each arm's composition, the forward carry, all three channels — but its
+`IN t` form points at the one place the reference's *position* matters.
+grammar1 parses IN's right operand as a plain column expression, so a table
+operand there never reaches `scope.Tables`. Harmless for the hoist, which
+carries every item in scope without asking what references it — the example
+is the argument for that rule, since a referenced-only pruning built on the
+scopes would have dropped `t` from the very arm that needs it. But `selfRefs`
+derived from `scope.Tables` alone, so a recursive body naming itself in IN's
+operand — `… FROM numbers(3) WHERE number IN r` — went unmarked while the
+`FROM r` spelling was caught, and the narrowed run failed at the endpoint
+unannounced: the server (26.7) runs the IN-form original and rejects its
+narrowed body with `UNKNOWN_IDENTIFIER`.
+
+`selfRefs` now also reads `[GLOBAL] [NOT] IN` right operands off the CST and
+holds them to the same resolved-definition-contains-the-unit test. The rule
+stays narrow: only a bare, unqualified, single-segment identifier qualifies,
+and one resolving to no definition stays quiet — an array column is the
+ordinary reading of that position. The live self-reference tripwire runs both
+spellings now. Unhandled beside it: the function spelling `in(x, r)`, which
+nothing canonicalises away in the editor's buffer — left until a buffer shows
+it.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —

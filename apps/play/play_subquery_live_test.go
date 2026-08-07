@@ -187,22 +187,38 @@ func TestLiveSubqueryCorrelationIsMarkedBeforeTheServerRejects(t *testing.T) {
 // repair, and the contract is that the editor says so before the server
 // does. The server-side rejection is asserted too — not as contract, but as
 // a tripwire: an analyzer that learns to accept the shape fails this test
-// and flags the detection for relaxing.
+// and flags the detection for relaxing. Both spellings of the reference are
+// held to the contract: the FROM source, and IN's table operand — the form
+// grammar1 parses as a column expression, so its mark comes off the CST
+// rather than scope.Tables.
 func TestLiveSubquerySelfReferenceIsMarkedBeforeTheServerRejects(t *testing.T) {
 	url := liveClickHouseURL(t)
-	const marked = "WITH RECURSIVE r AS (SELECT 1 AS n UNION ALL SELECT n+1 FROM |r WHERE n < 3) SELECT max(n) AS m FROM r"
-	text, caret := caretAt(t, marked)
-	unit, ok := pickSubquery(parseSubqueryUnits(text), caret)
-	if !ok || unit.Root {
-		t.Fatal("case does not narrow")
-	}
-	if _, err := chQueryTSV(t, url, text); err != nil {
-		t.Fatalf("the original statement does not run — the case is broken: %v", err)
-	}
-	if len(unit.Unresolved) == 0 {
-		t.Fatal("the self-reference went unmarked — the narrowed run would fail at the endpoint with no warning")
-	}
-	if _, err := chQueryTSV(t, url, unit.compose(text)); err == nil {
-		t.Error("the composition now runs — the self-reference mark may be too strict for this server")
+	cases := []struct {
+		name   string
+		marked string
+	}{{
+		name:   "the FROM form",
+		marked: "WITH RECURSIVE r AS (SELECT 1 AS n UNION ALL SELECT n+1 FROM |r WHERE n < 3) SELECT max(n) AS m FROM r",
+	}, {
+		name:   "the IN form",
+		marked: "WITH RECURSIVE r AS (SELECT 1 AS n UNION ALL SELECT number + 1 AS n FROM numbers(3) WHERE number IN |r) SELECT max(n) AS m FROM r",
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			text, caret := caretAt(t, tc.marked)
+			unit, ok := pickSubquery(parseSubqueryUnits(text), caret)
+			if !ok || unit.Root {
+				t.Fatal("case does not narrow")
+			}
+			if _, err := chQueryTSV(t, url, text); err != nil {
+				t.Fatalf("the original statement does not run — the case is broken: %v", err)
+			}
+			if len(unit.Unresolved) == 0 {
+				t.Fatal("the self-reference went unmarked — the narrowed run would fail at the endpoint with no warning")
+			}
+			if _, err := chQueryTSV(t, url, unit.compose(text)); err == nil {
+				t.Error("the composition now runs — the self-reference mark may be too strict for this server")
+			}
+		})
 	}
 }

@@ -353,6 +353,26 @@ func TestSubqueryUnresolvedRefs(t *testing.T) {
 		name:   "an enclosing bind within the unit still suppresses",
 		marked: "SELECT 1 FROM t a WHERE a.k IN (SELECT (SELECT max(v.y) FROM v WHERE v.z = a.x) |FROM u a)",
 		want:   nil,
+	}, {
+		// The IN-table form of the same self-reference: grammar1 parses IN's
+		// right operand as a column expression, so scope.Tables never lists
+		// it and the mark comes off the CST. The original runs on the server;
+		// the narrowed body is UNKNOWN_IDENTIFIER (live-verified).
+		name:   "a recursive body naming itself via IN is marked too",
+		marked: "WITH RECURSIVE r AS (SELECT 1 AS n UNION ALL SELECT number + 1 AS n FROM numbers(3) WHERE number IN |r) SELECT max(n) AS m FROM r",
+		want:   []string{"r"},
+	}, {
+		// …while IN over a CTE defined OUTSIDE the unit travels with it and
+		// stays quiet — the definition ships, so the reference resolves.
+		name:   "IN over a hoisted CTE is not a self-reference",
+		marked: "WITH t AS (SELECT 1) SELECT * FROM t1 WHERE a IN |t UNION ALL SELECT * FROM t2",
+		want:   nil,
+	}, {
+		// A bare IN operand resolving to no definition is the ordinary
+		// array-column reading of that position and is left alone.
+		name:   "IN over a plain column stays quiet",
+		marked: "SELECT * FROM (SELECT * FROM u WHERE y IN |arr)",
+		want:   nil,
 	}}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

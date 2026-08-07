@@ -555,6 +555,17 @@ func unresolvedRefs(pr *nanopass.ParseResult, node antlr.ParserRuleContext, oute
 	return out
 }
 
+// enclosingScope returns the scope of the select nearest above ref, nil when
+// the nearest enclosing select has none (or there is no enclosing select).
+func enclosingScope(ref antlr.ParserRuleContext, scopes scopeIndex) *nanopass.SelectScope {
+	for p := ref.GetParent(); p != nil; p = p.GetParent() {
+		if sel, isSel := p.(*grammar1.SelectStmtContext); isSel {
+			return scopes[sel]
+		}
+	}
+	return nil
+}
+
 // boundAbove reports whether a qualifier resolves against the FROM/JOIN binds
 // of a select that both ENCLOSES the reference and lies WITHIN the unit — the
 // scopes that still surround the reference when the unit ships alone. The walk
@@ -569,17 +580,7 @@ func unresolvedRefs(pr *nanopass.ParseResult, node antlr.ParserRuleContext, oute
 // a nested scope's alias wrongly excusing a reference it does not enclose —
 // cannot happen here, since the walk only ever ascends.
 func boundAbove(pr *nanopass.ParseResult, ref antlr.ParserRuleContext, qualifier string, scopes scopeIndex, unit nanopass.SourceRange) bool {
-	var sel *grammar1.SelectStmtContext
-	for p := ref.GetParent(); p != nil; p = p.GetParent() {
-		if s, isSel := p.(*grammar1.SelectStmtContext); isSel {
-			sel = s
-			break
-		}
-	}
-	if sel == nil {
-		return false
-	}
-	for scope := scopes[sel]; scope != nil; scope = scope.Parent {
+	for scope := enclosingScope(ref, scopes); scope != nil; scope = scope.Parent {
 		if scope.Node == nil {
 			break
 		}
@@ -600,43 +601,97 @@ func boundAbove(pr *nanopass.ParseResult, ref antlr.ParserRuleContext, qualifier
 // correlated qualifier, the reference cannot resolve in the narrowed run and
 // is marked rather than discovered at the endpoint.
 //
+// Two positions can hold such a reference. FROM / JOIN sources come from
+// nanopass's scopes (TableSource.IsCTE). The right operand of IN — the NOT
+// and GLOBAL variants included — is read off the CST instead: grammar1
+// parses `x IN t` with a plain column expression on the right, so a table
+// operand there never reaches scope.Tables — while the server accepts the
+// recursive `IN r` form and rejects its narrowed body (live-verified),
+// exactly the unannounced failure this channel exists to pre-empt.
+//
 // Resolution comes from nanopass's scopes rather than a name comparison here.
 // The test is containment of the unit in the RESOLVED definition: a body's
 // reference binds to its own definition only under `WITH RECURSIVE` (the
 // self-entry BuildScopes plants, CTEDef.Recursive), while a non-recursive
 // rebinding resolves to an outer definition — one that does travel, and the
-// server agrees the outer binding answers — whose extent lies elsewhere.
+// server agrees the outer binding answers — whose extent lies elsewhere. A
+// bare IN operand resolving to no definition at all is left alone: an array
+// column is the ordinary reading of that position.
 func selfRefs(pr *nanopass.ParseResult, node antlr.ParserRuleContext, src nanopass.SourceRange, scopes scopeIndex) (out []nanopass.SourceRange) {
 	if len(scopes) == 0 {
 		return nil
 	}
+	// definesUnit reports whether name resolves, from scope, to a WITH
+	// definition whose extent contains the unit — the containment test above.
+	definesUnit := func(scope *nanopass.SelectScope, name string) bool {
+		def, found := scope.ResolveCTE(name)
+		if !found || def.Node == nil {
+			return false
+		}
+		dr := pr.SourceRangeOf(def.Node)
+		return !dr.Empty() && dr.Start <= src.Start && src.End <= dr.End
+	}
 	nanopass.WalkCST(node, func(ctx antlr.ParserRuleContext) bool {
-		sel, isSel := ctx.(*grammar1.SelectStmtContext)
-		if !isSel {
-			return true
-		}
-		scope := scopes[sel]
-		if scope == nil {
-			return true
-		}
-		for _, ts := range scope.Tables {
-			if !ts.IsCTE || ts.Node == nil {
-				continue
+		switch c := ctx.(type) {
+		case *grammar1.SelectStmtContext:
+			scope := scopes[c]
+			if scope == nil {
+				return true
 			}
-			def, found := scope.ResolveCTE(ts.Table)
-			if !found || def.Node == nil {
-				continue
+			for _, ts := range scope.Tables {
+				if !ts.IsCTE || ts.Node == nil {
+					continue
+				}
+				if !definesUnit(scope, ts.Table) {
+					continue
+				}
+				if r := pr.SourceRangeOf(ts.Node); !r.Empty() {
+					out = append(out, r)
+				}
 			}
-			if dr := pr.SourceRangeOf(def.Node); dr.Empty() || dr.Start > src.Start || src.End > dr.End {
-				continue
+		case *grammar1.ColumnExprPrecedence3Context:
+			if c.IN() == nil {
+				return true
 			}
-			if r := pr.SourceRangeOf(ts.Node); !r.Empty() {
+			operand := c.ColumnExpr(1)
+			name := bareIdentifierOf(operand)
+			if name == "" {
+				return true
+			}
+			scope := enclosingScope(c, scopes)
+			if scope == nil || !definesUnit(scope, name) {
+				return true
+			}
+			if r := pr.SourceRangeOf(operand); !r.Empty() {
 				out = append(out, r)
 			}
 		}
 		return true
 	})
 	return
+}
+
+// bareIdentifierOf returns the decoded name of a bare, unqualified,
+// single-segment identifier expression — the only shape that can reference a
+// CTE from IN's right operand — or "" for anything else.
+func bareIdentifierOf(expr grammar1.IColumnExprContext) string {
+	ident, isIdent := expr.(*grammar1.ColumnExprIdentifierContext)
+	if !isIdent {
+		return ""
+	}
+	col, isCol := ident.ColumnIdentifier().(*grammar1.ColumnIdentifierContext)
+	if !isCol || col.TableIdentifier() != nil {
+		return ""
+	}
+	nested, isNested := col.NestedIdentifier().(*grammar1.NestedIdentifierContext)
+	if !isNested {
+		return ""
+	}
+	ids := nested.AllIdentifier()
+	if len(ids) != 1 {
+		return ""
+	}
+	return nanopass.DecodeIdentifier(ids[0].GetText())
 }
 
 // ownWithClause returns the WITH clause the unit itself heads, or nil. Only a
