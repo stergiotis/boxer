@@ -1,0 +1,6 @@
+metric	leeway	jsonv2 (plain JSON)
+documents	99999968	99999968
+attributes	1200650881	-
+on disk	13.93 GiB	10.31 GiB
+on disk, excl. row identity	10.95 GiB	10.31 GiB
+sorting key	(none)	(none)

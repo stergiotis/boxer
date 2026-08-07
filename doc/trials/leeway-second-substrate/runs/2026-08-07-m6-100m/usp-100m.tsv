@@ -1,0 +1,8 @@
+query	leeway_100m_s	jsonv2_100m_s	ratio	leeway_10m_s	jsonv2_10m_s	ratio_10m
+U1 path census	3.17	39.79	12.6	0.36	2.83	7.9
+U3 find a value anywhere	1.42	1116.61	786	0.16	111.14	695
+U4 subtree prefix census	1.88	39.92	21.2	0.22	2.89	13.1
+U5 sum every number	0.14	NO EXPRESSION	-	0.04	NO EXPRESSION	-
+U6 leaf count	0.10	39.89	399	0.06	3.04	50.7
+U8 numeric predicate any path	0.11	not completed (>27 min)	-	0.04	111.34	2783
+U9 array degree	3.41	NO EXPRESSION	-	0.40	NO EXPRESSION	-

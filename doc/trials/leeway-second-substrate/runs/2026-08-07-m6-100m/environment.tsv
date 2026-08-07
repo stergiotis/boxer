@@ -1,0 +1,7 @@
+cpu	AMD Ryzen AI MAX+ PRO 395, 32 cores
+memory	93.3 GiB
+form factor	laptop (DMI chassis type 10, battery present)
+os	Fedora Linux 44, kernel 7.1.6
+cpu governor	performance
+clickhouse	26.7.3.19
+sorting key, both arms	ORDER BY tuple() — no primary index
