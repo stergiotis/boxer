@@ -1,0 +1,506 @@
+=== Q1 indexes=1 ===
+Output: tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/collection\')], count()
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: count() DESC
+└──Aggregating
+   │  Keys: tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/collection\')]
+   │  Aggregates: count()
+   │  Skip merging: 0
+   └──ReadFromMergeTree (jsonbench_j2_10m.json)
+         Read type: Default
+         Parts: 4 | Granules: 1400
+         Output: tv:symbol:value:val:s:m:0:0:0::, tv:symbol:lmv:lmv:y:m:0:0:0::
+
+=== Q1 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 32 → 1
+    MergeSortingTransform × 32
+      LimitsCheckingTransform × 32
+        PartialSortingTransform × 32
+          (Expression)
+          ExpressionTransform × 32
+            (Aggregating)
+            Resize 32 → 32
+              AggregatingTransform × 32
+                (Expression)
+                ExpressionTransform × 32
+                  (ReadFromMergeTree)
+                  MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q2 indexes=1 ===
+Output: tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/collection\')], count(), uniqExact(tv:string:value:val:s:g:0:0:0::[indexOf(tv:string:lmv:lmv:y:m:0:0:0::, \'/did\')])
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: count() DESC
+└──Aggregating
+   │  Keys: tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/collection\')]
+   │  Aggregates: count(), uniqExact(tv:string:value:val:s:g:0:0:0::[indexOf(tv:string:lmv:lmv:y:m:0:0:0::, \'/did\')])
+   │  Skip merging: 0
+   └──ReadFromMergeTree (jsonbench_j2_10m.json)
+         Read type: Default
+         Parts: 4 | Granules: 1400
+         Output: tv:symbol:value:val:s:m:0:0:0::, tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:value:val:s:g:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::
+         Prewhere filter
+         Prewhere filter column:  tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/operation\')] = \'create\' AND tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/kind\')] = \'commit\'
+
+=== Q2 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 32 → 1
+    MergeSortingTransform × 32
+      LimitsCheckingTransform × 32
+        PartialSortingTransform × 32
+          (Expression)
+          ExpressionTransform × 32
+            (Aggregating)
+            Resize 32 → 32
+              AggregatingTransform × 32
+                (Expression)
+                ExpressionTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q3 indexes=1 ===
+Output: arrayElement(`tv:symbol:value:val:s:m:0:0:0::`, indexOf(`tv:symbol:lmv:lmv:y:m:0:0:0::`, \'/commit/collection\'_String)), toHour(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')])), count()
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: toHour(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')])) ASC, arrayElement(`tv:symbol:value:val:s:m:0:0:0::`, indexOf(`tv:symbol:lmv:lmv:y:m:0:0:0::`, \'/commit/collection\'_String)) ASC
+└──Aggregating
+   │  Keys: arrayElement(`tv:symbol:value:val:s:m:0:0:0::`, indexOf(`tv:symbol:lmv:lmv:y:m:0:0:0::`, \'/commit/collection\'_String)), toHour(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')]))
+   │  Aggregates: count()
+   │  Skip merging: 0
+   └──ReadFromMergeTree (jsonbench_j2_10m.json)
+         Read type: Default
+         Parts: 4 | Granules: 1400
+         Output: arrayElement(`tv:symbol:value:val:s:m:0:0:0::`, indexOf(`tv:symbol:lmv:lmv:y:m:0:0:0::`, \'/commit/collection\'_String)), tv:int64:value:val:i64:4o:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::
+         Prewhere filter
+         Prewhere filter column:  tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/collection\')] IN (\'app.bsky.feed.post\', \'app.bsky.feed.repost\', \'app.bsky.feed.like\') AND tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/operation\')] = \'create\' AND tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/kind\')] = \'commit\'
+
+=== Q3 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 32 → 1
+    MergeSortingTransform × 32
+      LimitsCheckingTransform × 32
+        PartialSortingTransform × 32
+          (Expression)
+          ExpressionTransform × 32
+            (Aggregating)
+            Resize 32 → 32
+              AggregatingTransform × 32
+                (Expression)
+                ExpressionTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q4 indexes=1 ===
+Output: CAST(tv:string:value:val:s:g:0:0:0::[indexOf(tv:string:lmv:lmv:y:m:0:0:0::, \'/did\')] AS String), min(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')]))
+
+Limit (preliminary LIMIT)
+│  Limit 3
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: min(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')])) ASC
+   │  Limit 3
+   └──Aggregating
+      │  Keys: CAST(tv:string:value:val:s:g:0:0:0::[indexOf(tv:string:lmv:lmv:y:m:0:0:0::, \'/did\')] AS String)
+      │  Aggregates: min(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')]))
+      │  Skip merging: 0
+      └──ReadFromMergeTree (jsonbench_j2_10m.json)
+            Read type: Default
+            Parts: 4 | Granules: 1400
+            Output: tv:string:value:val:s:g:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:value:val:i64:4o:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::
+            Prewhere filter
+            Prewhere filter column:  tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/collection\')] = \'app.bsky.feed.post\' AND tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/operation\')] = \'create\' AND tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/kind\')] = \'commit\'
+
+=== Q4 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (Expression)
+                    ExpressionTransform × 32
+                      (ReadFromMergeTree)
+                      MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q5 indexes=1 ===
+Output: CAST(tv:string:value:val:s:g:0:0:0::[indexOf(tv:string:lmv:lmv:y:m:0:0:0::, \'/did\')] AS String), dateDiff(\'milliseconds\', min(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')])), max(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')])))
+
+Limit (preliminary LIMIT)
+│  Limit 3
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: dateDiff(\'milliseconds\', min(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')])), max(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')]))) DESC
+   │  Limit 3
+   └──Aggregating
+      │  Keys: CAST(tv:string:value:val:s:g:0:0:0::[indexOf(tv:string:lmv:lmv:y:m:0:0:0::, \'/did\')] AS String)
+      │  Aggregates: min(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')])), max(fromUnixTimestamp64Micro(tv:int64:value:val:i64:4o:0:0:0::[indexOf(tv:int64:lmv:lmv:y:m:0:0:0::, \'/time_us\')]))
+      │  Skip merging: 0
+      └──ReadFromMergeTree (jsonbench_j2_10m.json)
+            Read type: Default
+            Parts: 4 | Granules: 1400
+            Output: tv:string:value:val:s:g:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:value:val:i64:4o:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::
+            Prewhere filter
+            Prewhere filter column:  tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/collection\')] = \'app.bsky.feed.post\' AND tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/commit/operation\')] = \'create\' AND tv:symbol:value:val:s:m:0:0:0::[indexOf(tv:symbol:lmv:lmv:y:m:0:0:0::, \'/kind\')] = \'commit\'
+
+=== Q5 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (Expression)
+                    ExpressionTransform × 32
+                      (ReadFromMergeTree)
+                      MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q6 indexes=1 ===
+Output: arrayJoin(arrayDistinct(arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::))), count()
+
+Limit (preliminary LIMIT)
+│  Limit 20
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: count() DESC
+   │  Limit 20
+   └──Aggregating
+      │  Keys: arrayJoin(arrayDistinct(arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::)))
+      │  Aggregates: count()
+      │  Skip merging: 0
+      └──ReadFromMergeTree (jsonbench_j2_10m.json)
+            Read type: Default
+            Parts: 4 | Granules: 1400
+            Output: tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::
+
+=== Q6 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q7 indexes=1 ===
+Output: arrayJoin(arrayDistinct(tv:symbol:lmv:lmv:y:m:0:0:0::)), count()
+
+Limit (preliminary LIMIT)
+│  Limit 20
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: count() DESC
+   │  Limit 20
+   └──Filter (HAVING)
+      │  Filter column: count() > 0
+      └──Aggregating
+         │  Keys: arrayJoin(arrayDistinct(tv:symbol:lmv:lmv:y:m:0:0:0::)), materialize(\'symbol\')
+         │  Aggregates: count()
+         │  Skip merging: 0
+         └──Union
+            ├──ReadFromMergeTree (jsonbench_j2_10m.json)
+            │     Read type: Default
+            │     Parts: 4 | Granules: 1400
+            │     Output: tv:symbol:lmv:lmv:y:m:0:0:0::
+            ├──ReadFromMergeTree (jsonbench_j2_10m.json)
+            │     Read type: Default
+            │     Parts: 4 | Granules: 1400
+            │     Output: tv:string:lmv:lmv:y:m:0:0:0::
+            ├──ReadFromMergeTree (jsonbench_j2_10m.json)
+            │     Read type: Default
+            │     Parts: 4 | Granules: 1400
+            │     Output: tv:int64:lmv:lmv:y:m:0:0:0::
+            ├──ReadFromMergeTree (jsonbench_j2_10m.json)
+            │     Read type: Default
+            │     Parts: 4 | Granules: 1400
+            │     Output: tv:float64:lmv:lmv:y:m:0:0:0::
+            └──ReadFromMergeTree (jsonbench_j2_10m.json)
+                  Read type: Default
+                  Parts: 4 | Granules: 1400
+                  Output: tv:bool:lmv:lmv:y:m:0:0:0::
+
+=== Q7 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Filter)
+              FilterTransform × 32
+                (Aggregating)
+                Resize 160 → 32
+                  AggregatingTransform × 160
+                    StrictResize × 6 27 → 27
+                      (Union)
+                        (Expression)
+                        ExpressionTransform × 32
+                          (ReadFromMergeTree)
+                          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+                        (Expression)
+                        ExpressionTransform × 32
+                          (ReadFromMergeTree)
+                          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+                        (Expression)
+                        ExpressionTransform × 32
+                          (ReadFromMergeTree)
+                          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+                        (Expression)
+                        ExpressionTransform × 32
+                          (ReadFromMergeTree)
+                          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+                        (Expression)
+                        ExpressionTransform × 32
+                          (ReadFromMergeTree)
+                          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q8 indexes=1 ===
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──Filter ((WHERE + Change column names to column identifiers))
+   │  Filter column: has(tv:string:value:val:s:g:0:0:0::, \'did:plc:vwadmn5cx4d2rqxbxbjajzhx\')
+   └──ReadFromMergeTree (jsonbench_j2_10m.json)
+         Read type: Default
+         Parts: 4 | Granules: 1400
+         Output: tv:string:value:val:s:g:0:0:0::
+
+=== Q8 PIPELINE ===
+(Expression)
+ExpressionTransform × 32
+  (Aggregating)
+  Resize 32 → 32
+    AggregatingTransform × 32
+      (Expression)
+      ExpressionTransform × 32
+        (Filter)
+        FilterTransform × 32
+          (ReadFromMergeTree)
+          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q9 indexes=1 ===
+Output: arrayJoin(arrayFilter(tuple(\'/commit/record/embed/\'), arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::))), count()
+
+Limit (preliminary LIMIT)
+│  Limit 10
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: count() DESC
+   │  Limit 10
+   └──Aggregating
+      │  Keys: arrayJoin(arrayFilter(tuple(\'/commit/record/embed/\'), arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::)))
+      │  Aggregates: count()
+      │  Skip merging: 0
+      └──ReadFromMergeTree (jsonbench_j2_10m.json)
+            Read type: Default
+            Parts: 4 | Granules: 1400
+            Output: tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::
+
+=== Q9 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q10 indexes=1 ===
+Output: sum(arraySum(tv:int64:value:val:i64:4o:0:0:0::))
+
+Aggregating
+│  Keys:
+│  Aggregates: sum(arraySum(tv:int64:value:val:i64:4o:0:0:0::))
+│  Skip merging: 0
+└──ReadFromMergeTree (jsonbench_j2_10m.json)
+      Read type: Default
+      Parts: 4 | Granules: 1400
+      Output: tv:int64:value:val:i64:4o:0:0:0::
+
+=== Q10 PIPELINE ===
+(Expression)
+ExpressionTransform × 32
+  (Aggregating)
+  Resize 32 → 32
+    AggregatingTransform × 32
+      (Expression)
+      ExpressionTransform × 32
+        (ReadFromMergeTree)
+        MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q11 indexes=1 ===
+Output: sum(tv:symbol:lmv:lmv:y:m:0:0:0::.size0 + tv:string:lmv:lmv:y:m:0:0:0::.size0 + tv:int64:lmv:lmv:y:m:0:0:0::.size0 + tv:float64:lmv:lmv:y:m:0:0:0::.size0 + tv:bool:lmv:lmv:y:m:0:0:0::.size0)
+
+Aggregating
+│  Keys:
+│  Aggregates: sum(tv:symbol:lmv:lmv:y:m:0:0:0::.size0 + tv:string:lmv:lmv:y:m:0:0:0::.size0 + tv:int64:lmv:lmv:y:m:0:0:0::.size0 + tv:float64:lmv:lmv:y:m:0:0:0::.size0 + tv:bool:lmv:lmv:y:m:0:0:0::.size0)
+│  Skip merging: 0
+└──ReadFromMergeTree (jsonbench_j2_10m.json)
+      Read type: Default
+      Parts: 4 | Granules: 1400
+      Output: tv:symbol:lmv:lmv:y:m:0:0:0::.size0, tv:string:lmv:lmv:y:m:0:0:0::.size0, tv:int64:lmv:lmv:y:m:0:0:0::.size0, tv:float64:lmv:lmv:y:m:0:0:0::.size0, tv:bool:lmv:lmv:y:m:0:0:0::.size0
+
+=== Q11 PIPELINE ===
+(Expression)
+ExpressionTransform × 32
+  (Aggregating)
+  Resize 32 → 32
+    AggregatingTransform × 32
+      (Expression)
+      ExpressionTransform × 32
+        (ReadFromMergeTree)
+        MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q12 indexes=1 ===
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──Filter ((WHERE + Change column names to column identifiers))
+   │  Filter column: has(tv:string:lmv:lmv:y:m:0:0:0::, \'/commit/record/text\')
+   └──ReadFromMergeTree (jsonbench_j2_10m.json)
+         Read type: Default
+         Parts: 4 | Granules: 1400
+         Output: tv:string:lmv:lmv:y:m:0:0:0::
+
+=== Q12 PIPELINE ===
+(Expression)
+ExpressionTransform × 32
+  (Aggregating)
+  Resize 32 → 32
+    AggregatingTransform × 32
+      (Expression)
+      ExpressionTransform × 32
+        (Filter)
+        FilterTransform × 32
+          (ReadFromMergeTree)
+          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q13 indexes=1 ===
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──Filter ((WHERE + Change column names to column identifiers))
+   │  Filter column: arrayExists(tuple(1700000000000000), tv:int64:value:val:i64:4o:0:0:0::)
+   └──ReadFromMergeTree (jsonbench_j2_10m.json)
+         Read type: Default
+         Parts: 4 | Granules: 1400
+         Output: tv:int64:value:val:i64:4o:0:0:0::
+
+=== Q13 PIPELINE ===
+(Expression)
+ExpressionTransform × 32
+  (Aggregating)
+  Resize 32 → 32
+    AggregatingTransform × 32
+      (Expression)
+      ExpressionTransform × 32
+        (Filter)
+        FilterTransform × 32
+          (ReadFromMergeTree)
+          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q14 indexes=1 ===
+Output: arrayJoin(arrayMap(Capture[Array(String)](String) -> Tuple(String, UInt64)(arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::)), arrayDistinct(arrayFilter((\'/_\', 0), arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::))))).1, round(avg(arrayJoin(arrayMap(Capture[Array(String)](String) -> Tuple(String, UInt64)(arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::)), arrayDistinct(arrayFilter((\'/_\', 0), arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::))))).2), 3), max(arrayJoin(arrayMap(Capture[Array(String)](String) -> Tuple(String, UInt64)(arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::)), arrayDistinct(arrayFilter((\'/_\', 0), arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::))))).2)
+
+Limit (preliminary LIMIT)
+│  Limit 10
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: round(avg(arrayJoin(arrayMap(Capture[Array(String)](String) -> Tuple(String, UInt64)(arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::)), arrayDistinct(arrayFilter((\'/_\', 0), arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::))))).2), 3) DESC
+   │  Limit 10
+   └──Aggregating
+      │  Keys: arrayJoin(arrayMap(Capture[Array(String)](String) -> Tuple(String, UInt64)(arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::)), arrayDistinct(arrayFilter((\'/_\', 0), arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::))))).1
+      │  Aggregates: avg(arrayJoin(arrayMap(Capture[Array(String)](String) -> Tuple(String, UInt64)(arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::)), arrayDistinct(arrayFilter((\'/_\', 0), arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::))))).2), max(arrayJoin(arrayMap(Capture[Array(String)](String) -> Tuple(String, UInt64)(arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::)), arrayDistinct(arrayFilter((\'/_\', 0), arrayConcat(tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::))))).2)
+      │  Skip merging: 0
+      └──ReadFromMergeTree (jsonbench_j2_10m.json)
+            Read type: Default
+            Parts: 4 | Granules: 1400
+            Output: tv:symbol:lmv:lmv:y:m:0:0:0::, tv:string:lmv:lmv:y:m:0:0:0::, tv:int64:lmv:lmv:y:m:0:0:0::, tv:float64:lmv:lmv:y:m:0:0:0::, tv:bool:lmv:lmv:y:m:0:0:0::
+
+=== Q14 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+

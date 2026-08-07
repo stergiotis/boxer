@@ -130,11 +130,22 @@ argument.
 | W | DuckDB | Parquet written by `jsonbench jsonmap ingest` | Q1–Q5 | whether the *writer* is neutral, not just the layout |
 | N-text | DuckDB | the raw corpus as `JSON` (text-backed) | Q1–Q5, U1–U9 | the USP counterpart: DuckDB's answer to ClickHouse's `JSON` type |
 | N-struct | DuckDB | the raw corpus via `read_json` auto-inference | Q1–Q5, U1–U9 | a **third shape** ClickHouse's comparison had no equivalent of |
+| X | ClickHouse | arm J, exploded with `ARRAY JOIN` | Q1–Q5, U1–U9 | the third rendering: one row per attribute, no array functions at all |
 | F | DuckDB | the facts layout | Q1–Q5 | *optional and last* — the `RAGGED_*` question (H2) |
 
 Arm P before arm W is deliberate: the export is one statement and de-risks the
 whole query translation before any Go is written. Arm W is what makes the
 neutrality claim about leeway rather than about Parquet.
+
+**Arm X is on the home engine on purpose.** It is the rendering M0 was forced
+into on DataFusion — explosion plus ordinary relational operators — measured
+where the packed form is also available, so the two can be compared over
+identical data with the engine held constant. It ran on 2026-08-07 and is the
+one arm that has results; see the [logbook](./logbook.md). Its outcome reframes
+the trial's second question: the packed representation's advantage turns out
+to be neither storage nor path-oriented queries but **intra-document
+co-indexing**, and the exploded rendering is the one that ports to an engine
+with no array algebra at all.
 
 **Arms N-text and N-struct are what make the USP question askable here**, and
 they are not one arm. ClickHouse's `JSON` is a shredded columnar type; DuckDB

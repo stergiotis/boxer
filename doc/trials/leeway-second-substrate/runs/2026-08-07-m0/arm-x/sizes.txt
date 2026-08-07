@@ -1,0 +1,7 @@
+count 121205987
+total_size 1073622852
+data_size 1073382430
+index_size 226255
+uncompressed 5854579799
+parts 1
+marks 14797

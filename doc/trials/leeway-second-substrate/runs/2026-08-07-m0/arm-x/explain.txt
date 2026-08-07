@@ -1,0 +1,640 @@
+=== Q1 indexes=1 ===
+Output: sym, count()
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: count() DESC
+└──Aggregating
+   │  Keys: sym
+   │  Aggregates: count()
+   │  Skip merging: 0
+   └──ReadFromMergeTree (jsonbench_x_10m.attrs)
+         Read type: Default
+         Parts: 1 | Granules: 1215
+         Output: sym
+         Prewhere filter
+         Prewhere filter column:  path = \'/commit/collection\'
+         Indexes:
+           PrimaryKey
+             Keys:
+               path
+             Condition: (path in [\'/commit/collection\', \'/commit/collection\'])
+             Parts: 1/1
+             Granules: 1215/14796
+             Search Algorithm: binary search
+           Ranges: 1
+
+=== Q1 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 32 → 1
+    MergeSortingTransform × 32
+      LimitsCheckingTransform × 32
+        PartialSortingTransform × 32
+          (Expression)
+          ExpressionTransform × 32
+            (Aggregating)
+            Resize 32 → 32
+              AggregatingTransform × 32
+                (Expression)
+                ExpressionTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q2 indexes=1 ===
+Output: anyIf(sym, path = \'/commit/collection\'), count(), uniqExact(anyIf(str, path = \'/did\'))
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: count() DESC
+└──Aggregating
+   │  Keys: anyIf(sym, path = \'/commit/collection\')
+   │  Aggregates: count(), uniqExact(anyIf(str, path = \'/did\'))
+   │  Skip merging: 0
+   └──Filter ((WHERE + (Change column names to column identifiers + (Project names + Projection))))
+      │  Filter column: anyIf(sym, path = \'/kind\') = \'commit\' AND anyIf(sym, path = \'/commit/operation\') = \'create\'
+      └──Aggregating
+         │  Keys: doc
+         │  Aggregates: anyIf(sym, path = \'/commit/collection\'), anyIf(sym, path = \'/kind\'), anyIf(sym, path = \'/commit/operation\'), anyIf(str, path = \'/did\')
+         │  Skip merging: 0
+         └──ReadFromMergeTree (jsonbench_x_10m.attrs)
+               Read type: Default
+               Parts: 1 | Granules: 4872
+               Output: path, sym, str, doc
+               Prewhere filter
+               Prewhere filter column:  path IN (\'/commit/collection\', \'/kind\', \'/commit/operation\', \'/did\')
+               Indexes:
+                 PrimaryKey
+                   Keys:
+                     path
+                   Condition: (path in 4-element set)
+                   Parts: 1/1
+                   Granules: 4872/14796
+                   Search Algorithm: generic exclusion search
+                 Ranges: 3
+
+=== Q2 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 32 → 1
+    MergeSortingTransform × 32
+      LimitsCheckingTransform × 32
+        PartialSortingTransform × 32
+          (Expression)
+          ExpressionTransform × 32
+            (Aggregating)
+            Resize 32 → 32
+              AggregatingTransform × 32
+                (Expression)
+                ExpressionTransform × 32
+                  (Filter)
+                  FilterTransform × 64
+                    (Aggregating)
+                    Resize 32 → 32
+                      AggregatingTransform × 32
+                        (Expression)
+                        ExpressionTransform × 32
+                          (Expression)
+                          ExpressionTransform × 32
+                            (ReadFromMergeTree)
+                            MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q3 indexes=1 ===
+Output: anyIf(sym, path = \'/commit/collection\'), toHour(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\'))), count()
+
+Sorting (Sorting for ORDER BY)
+│  Sort description: toHour(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\'))) ASC, anyIf(sym, path = \'/commit/collection\') ASC
+└──Aggregating
+   │  Keys: anyIf(sym, path = \'/commit/collection\'), toHour(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\')))
+   │  Aggregates: count()
+   │  Skip merging: 0
+   └──Filter ((WHERE + (Change column names to column identifiers + (Project names + Projection))))
+      │  Filter column: anyIf(sym, path = \'/kind\') = \'commit\' AND anyIf(sym, path = \'/commit/operation\') = \'create\' AND anyIf(sym, path = \'/commit/collection\') IN (\'app.bsky.feed.post\', \'app.bsky.feed.repost\', \'app.bsky.feed.like\')
+      └──Aggregating
+         │  Keys: doc
+         │  Aggregates: anyIf(sym, path = \'/commit/collection\'), anyIf(sym, path = \'/kind\'), anyIf(sym, path = \'/commit/operation\'), anyIf(i64, path = \'/time_us\')
+         │  Skip merging: 0
+         └──ReadFromMergeTree (jsonbench_x_10m.attrs)
+               Read type: Default
+               Parts: 1 | Granules: 4872
+               Output: path, sym, i64, doc
+               Prewhere filter
+               Prewhere filter column:  path IN (\'/commit/collection\', \'/kind\', \'/commit/operation\', \'/time_us\')
+               Indexes:
+                 PrimaryKey
+                   Keys:
+                     path
+                   Condition: (path in 4-element set)
+                   Parts: 1/1
+                   Granules: 4872/14796
+                   Search Algorithm: generic exclusion search
+                 Ranges: 2
+
+=== Q3 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Sorting)
+  MergingSortedTransform 32 → 1
+    MergeSortingTransform × 32
+      LimitsCheckingTransform × 32
+        PartialSortingTransform × 32
+          (Expression)
+          ExpressionTransform × 32
+            (Aggregating)
+            Resize 32 → 32
+              AggregatingTransform × 32
+                (Expression)
+                ExpressionTransform × 32
+                  (Filter)
+                  FilterTransform × 96
+                    (Aggregating)
+                    Resize 32 → 32
+                      AggregatingTransform × 32
+                        (Expression)
+                        ExpressionTransform × 32
+                          (Expression)
+                          ExpressionTransform × 32
+                            (ReadFromMergeTree)
+                            MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q4 indexes=1 ===
+Output: anyIf(str, path = \'/did\'), min(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\')))
+
+Limit (preliminary LIMIT)
+│  Limit 3
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: min(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\'))) ASC
+   │  Limit 3
+   └──Aggregating
+      │  Keys: anyIf(str, path = \'/did\')
+      │  Aggregates: min(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\')))
+      │  Skip merging: 0
+      └──Filter ((WHERE + (Change column names to column identifiers + (Project names + Projection))))
+         │  Filter column: anyIf(sym, path = \'/kind\') = \'commit\' AND anyIf(sym, path = \'/commit/operation\') = \'create\' AND anyIf(sym, path = \'/commit/collection\') = \'app.bsky.feed.post\'
+         └──Aggregating
+            │  Keys: doc
+            │  Aggregates: anyIf(sym, path = \'/commit/collection\'), anyIf(sym, path = \'/kind\'), anyIf(sym, path = \'/commit/operation\'), anyIf(str, path = \'/did\'), anyIf(i64, path = \'/time_us\')
+            │  Skip merging: 0
+            └──ReadFromMergeTree (jsonbench_x_10m.attrs)
+                  Read type: Default
+                  Parts: 1 | Granules: 6093
+                  Output: path, sym, str, i64, doc
+                  Prewhere filter
+                  Prewhere filter column:  path IN (\'/commit/collection\', \'/kind\', \'/commit/operation\', \'/did\', \'/time_us\')
+                  Indexes:
+                    PrimaryKey
+                      Keys:
+                        path
+                      Condition: (path in 5-element set)
+                      Parts: 1/1
+                      Granules: 6093/14796
+                      Search Algorithm: generic exclusion search
+                    Ranges: 3
+
+=== Q4 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (Filter)
+                    FilterTransform × 96
+                      (Aggregating)
+                      Resize 32 → 32
+                        AggregatingTransform × 32
+                          (Expression)
+                          ExpressionTransform × 32
+                            (Expression)
+                            ExpressionTransform × 32
+                              (ReadFromMergeTree)
+                              MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q5 indexes=1 ===
+Output: anyIf(str, path = \'/did\'), dateDiff(\'milliseconds\', min(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\'))), max(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\'))))
+
+Limit (preliminary LIMIT)
+│  Limit 3
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: dateDiff(\'milliseconds\', min(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\'))), max(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\')))) DESC
+   │  Limit 3
+   └──Aggregating
+      │  Keys: anyIf(str, path = \'/did\')
+      │  Aggregates: min(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\'))), max(fromUnixTimestamp64Micro(anyIf(i64, path = \'/time_us\')))
+      │  Skip merging: 0
+      └──Filter ((WHERE + (Change column names to column identifiers + (Project names + Projection))))
+         │  Filter column: anyIf(sym, path = \'/kind\') = \'commit\' AND anyIf(sym, path = \'/commit/operation\') = \'create\' AND anyIf(sym, path = \'/commit/collection\') = \'app.bsky.feed.post\'
+         └──Aggregating
+            │  Keys: doc
+            │  Aggregates: anyIf(sym, path = \'/commit/collection\'), anyIf(sym, path = \'/kind\'), anyIf(sym, path = \'/commit/operation\'), anyIf(str, path = \'/did\'), anyIf(i64, path = \'/time_us\')
+            │  Skip merging: 0
+            └──ReadFromMergeTree (jsonbench_x_10m.attrs)
+                  Read type: Default
+                  Parts: 1 | Granules: 6093
+                  Output: path, sym, str, i64, doc
+                  Prewhere filter
+                  Prewhere filter column:  path IN (\'/commit/collection\', \'/kind\', \'/commit/operation\', \'/did\', \'/time_us\')
+                  Indexes:
+                    PrimaryKey
+                      Keys:
+                        path
+                      Condition: (path in 5-element set)
+                      Parts: 1/1
+                      Granules: 6093/14796
+                      Search Algorithm: generic exclusion search
+                    Ranges: 3
+
+=== Q5 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (Filter)
+                    FilterTransform × 96
+                      (Aggregating)
+                      Resize 32 → 32
+                        AggregatingTransform × 32
+                          (Expression)
+                          ExpressionTransform × 32
+                            (Expression)
+                            ExpressionTransform × 32
+                              (ReadFromMergeTree)
+                              MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q6 indexes=1 ===
+Output: path, uniqExact(doc)
+
+Limit (preliminary LIMIT)
+│  Limit 20
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: uniqExact(doc) DESC
+   │  Limit 20
+   └──Aggregating
+      │  Keys: path
+      │  Aggregates: uniqExact(doc)
+      │  Skip merging: 0
+      └──ReadFromMergeTree (jsonbench_x_10m.attrs)
+            Read type: Default
+            Parts: 1 | Granules: 14796
+            Output: path, doc
+            Indexes:
+              PrimaryKey
+                Condition: true
+                Parts: 1/1
+                Granules: 14796/14796
+              Ranges: 1
+
+=== Q6 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (ReadFromMergeTree)
+                    MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q7 indexes=1 ===
+Output: path, section, uniqExact(doc)
+
+Limit (preliminary LIMIT)
+│  Limit 20
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: uniqExact(doc) DESC
+   │  Limit 20
+   └──Filter (HAVING)
+      │  Filter column: uniqExact(doc) > 0
+      └──Aggregating
+         │  Keys: path, section
+         │  Aggregates: uniqExact(doc)
+         │  Skip merging: 0
+         └──ReadFromMergeTree (jsonbench_x_10m.attrs)
+               Read type: Default
+               Parts: 1 | Granules: 14796
+               Output: path, section, doc
+               Indexes:
+                 PrimaryKey
+                   Condition: true
+                   Parts: 1/1
+                   Granules: 14796/14796
+                 Ranges: 1
+
+=== Q7 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Filter)
+              FilterTransform × 32
+                (Aggregating)
+                Resize 32 → 32
+                  AggregatingTransform × 32
+                    (Expression)
+                    ExpressionTransform × 32
+                      (ReadFromMergeTree)
+                      MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q8 indexes=1 ===
+Output: uniqExact(doc)
+
+Aggregating
+│  Keys:
+│  Aggregates: uniqExact(doc)
+│  Skip merging: 0
+└──ReadFromMergeTree (jsonbench_x_10m.attrs)
+      Read type: Default
+      Parts: 1 | Granules: 14796
+      Output: doc
+      Prewhere filter
+      Prewhere filter column:  str = \'did:plc:vwadmn5cx4d2rqxbxbjajzhx\'
+      Indexes:
+        PrimaryKey
+          Condition: true
+          Parts: 1/1
+          Granules: 14796/14796
+        Ranges: 1
+
+=== Q8 PIPELINE ===
+(Expression)
+ExpressionTransform × 32
+  (Aggregating)
+  Resize 32 → 32
+    AggregatingTransform × 32
+      (Expression)
+      ExpressionTransform × 32
+        (Expression)
+        ExpressionTransform × 32
+          (ReadFromMergeTree)
+          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q9 indexes=1 ===
+Output: path, count()
+
+Limit (preliminary LIMIT)
+│  Limit 10
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: count() DESC
+   │  Limit 10
+   └──Aggregating
+      │  Keys: path
+      │  Aggregates: count()
+      │  Skip merging: 0
+      └──Filter ((WHERE + Change column names to column identifiers))
+         │  Filter column: startsWith(path, \'/commit/record/embed/\')
+         └──ReadFromMergeTree (jsonbench_x_10m.attrs)
+               Read type: Default
+               Parts: 1 | Granules: 296
+               Output: path
+               Indexes:
+                 PrimaryKey
+                   Keys:
+                     path
+                   Condition: (path in [\'/commit/record/embed/\', \'/commit/record/embed0\'))
+                   Parts: 1/1
+                   Granules: 296/14796
+                   Search Algorithm: binary search
+                 Ranges: 1
+
+=== Q9 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 26 → 1
+      MergeSortingTransform × 26
+        LimitsCheckingTransform × 26
+          PartialSortingTransform × 26
+            (Expression)
+            ExpressionTransform × 26
+              (Aggregating)
+              Resize 26 → 26
+                AggregatingTransform × 26
+                  (Expression)
+                  ExpressionTransform × 26
+                    (Filter)
+                    FilterTransform × 26
+                      (ReadFromMergeTree)
+                      MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 26 0 → 1
+
+=== Q10 indexes=1 ===
+Output: sum(i64)
+
+Aggregating
+│  Keys:
+│  Aggregates: sum(i64)
+│  Skip merging: 0
+└──ReadFromMergeTree (jsonbench_x_10m.attrs)
+      Read type: Default
+      Parts: 1 | Granules: 14796
+      Output: i64
+      Prewhere filter
+      Prewhere filter column:  section = \'int64\'
+      Indexes:
+        PrimaryKey
+          Condition: true
+          Parts: 1/1
+          Granules: 14796/14796
+        Ranges: 1
+
+=== Q10 PIPELINE ===
+(Expression)
+ExpressionTransform × 32
+  (Aggregating)
+  Resize 32 → 32
+    AggregatingTransform × 32
+      (Expression)
+      ExpressionTransform × 32
+        (Expression)
+        ExpressionTransform × 32
+          (ReadFromMergeTree)
+          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q11 indexes=1 ===
+Output: count()
+
+MergingAggregated
+│  Keys:
+│  Aggregates: count()
+└──ReadFromPreparedSource (Optimized trivial count)
+
+=== Q11 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (MergingAggregated)
+  MergingAggregatedTransform
+    (ReadFromPreparedSource)
+    SourceFromSingleChunk 0 → 1
+
+=== Q12 indexes=1 ===
+Output: uniqExact(doc)
+
+Aggregating
+│  Keys:
+│  Aggregates: uniqExact(doc)
+│  Skip merging: 0
+└──ReadFromMergeTree (jsonbench_x_10m.attrs)
+      Read type: Default
+      Parts: 1 | Granules: 110
+      Output: doc
+      Prewhere filter
+      Prewhere filter column:  path = \'/commit/record/text\'
+      Indexes:
+        PrimaryKey
+          Keys:
+            path
+          Condition: (path in [\'/commit/record/text\', \'/commit/record/text\'])
+          Parts: 1/1
+          Granules: 110/14796
+          Search Algorithm: binary search
+        Ranges: 1
+
+=== Q12 PIPELINE ===
+(Expression)
+ExpressionTransform × 15
+  (Aggregating)
+  Resize 15 → 15
+    AggregatingTransform × 15
+      (Expression)
+      ExpressionTransform × 15
+        (Expression)
+        ExpressionTransform × 15
+          (ReadFromMergeTree)
+          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 15 0 → 1
+
+=== Q13 indexes=1 ===
+Output: uniqExact(doc)
+
+Aggregating
+│  Keys:
+│  Aggregates: uniqExact(doc)
+│  Skip merging: 0
+└──ReadFromMergeTree (jsonbench_x_10m.attrs)
+      Read type: Default
+      Parts: 1 | Granules: 14796
+      Output: doc
+      Prewhere filter
+      Prewhere filter column:  section = \'int64\' AND i64 > 1700000000000000
+      Indexes:
+        PrimaryKey
+          Condition: true
+          Parts: 1/1
+          Granules: 14796/14796
+        Ranges: 1
+
+=== Q13 PIPELINE ===
+(Expression)
+ExpressionTransform × 32
+  (Aggregating)
+  Resize 32 → 32
+    AggregatingTransform × 32
+      (Expression)
+      ExpressionTransform × 32
+        (Expression)
+        ExpressionTransform × 32
+          (ReadFromMergeTree)
+          MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+
+=== Q14 indexes=1 ===
+Output: path, round(avg(count()), 3), max(count())
+
+Limit (preliminary LIMIT)
+│  Limit 10
+│  Offset 0
+└──Sorting (Sorting for ORDER BY)
+   │  Sort description: round(avg(count()), 3) DESC
+   │  Limit 10
+   └──Aggregating
+      │  Keys: path
+      │  Aggregates: avg(count()), max(count())
+      │  Skip merging: 0
+      └──Aggregating
+         │  Keys: doc, path
+         │  Aggregates: count()
+         │  Skip merging: 0
+         └──ReadFromMergeTree (jsonbench_x_10m.attrs)
+               Read type: Default
+               Parts: 1 | Granules: 14796
+               Output: path, doc
+               Prewhere filter
+               Prewhere filter column:  position(path, \'/_\') > 0
+               Indexes:
+                 PrimaryKey
+                   Condition: true
+                   Parts: 1/1
+                   Granules: 14796/14796
+                 Ranges: 1
+
+=== Q14 PIPELINE ===
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 32 → 1
+      MergeSortingTransform × 32
+        LimitsCheckingTransform × 32
+          PartialSortingTransform × 32
+            (Expression)
+            ExpressionTransform × 32
+              (Aggregating)
+              Resize 32 → 32
+                AggregatingTransform × 32
+                  (Expression)
+                  ExpressionTransform × 32
+                    (Aggregating)
+                    Resize 32 → 32
+                      AggregatingTransform × 32
+                        (Expression)
+                        ExpressionTransform × 32
+                          (Expression)
+                          ExpressionTransform × 32
+                            (ReadFromMergeTree)
+                            MergeTreeSelect(pool: ReadPool, algorithm: Thread) × 32 0 → 1
+

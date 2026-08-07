@@ -119,3 +119,107 @@ The workload pin is the sibling trial's
   a dialect difference, and the residue that is not — the higher-order
   functions — is what finding 2 is about.
 - **Run dir:** [`./runs/2026-08-07-m0/`](./runs/2026-08-07-m0/)
+
+## 2026-08-07 — arm X, the exploded rendering in ClickHouse — the two representations win opposite halves of the query set, and explosion is *smaller*
+
+- **Build under test:** boxer `6a6eb4f7`; ClickHouse 26.7.3.19. Source table
+  `jsonbench_j2_10m.json` — the fixed-codec canonical mapping the USP document
+  measured, 9,999,994 documents.
+- **Environment:** as the M0 entry. **Cold runs unavailable** — cache-dropping
+  needs passwordless sudo, which this box does not grant, so every number below
+  is hot = min(try 2, try 3) of 3, and the cold column is *absent*, not noisy.
+  Fairness controls from the USP document carried over:
+  `use_query_condition_cache=0`, `min_execution_speed=0`.
+- **Attempted:** materialise the exploded rendering — one row per attribute,
+  obtained with `ARRAY JOIN` — and measure it against the packed arm on the
+  same corpus and the same fourteen queries. M0 had found that DataFusion can
+  only express the lane algebra by explosion; this asks what that rendering
+  costs where both forms are measurable side by side.
+- **Preconditions asserted, not assumed.** `arm-x.sh` refuses to build unless,
+  for every section, the value lane co-lengths with the path lane and every
+  `lmvcard` is exactly 1. Both hold on the canonical mapping (violations=0 on
+  all four populated sections), which is what makes `ARRAY JOIN` lossless here
+  and would *not* hold on the facts arm.
+
+**Storage — the explosion is smaller, not larger:**
+
+| arm | rows | on disk | vs J |
+| --- | --- | --- | --- |
+| J — packed | 9,999,994 | 1,540,236,424 B | — |
+| X — exploded, `ORDER BY (path, doc)` | 121,205,987 | 1,073,622,852 B | **0.70×** |
+| X2 — exploded, `ORDER BY (doc, path)` | 121,205,987 | 1,382,545,797 B | 0.90× |
+
+Repeating a document id across 121.2M attributes costs 18.63 MiB, because a
+dense id ascending within each path group is what `DoubleDelta` is for (49.6×).
+`path` costs 212.76 KiB at 858× — it is the sort-key prefix, so it is runs. Two
+caveats keep this from being a clean win for explosion: arm J carries
+`id:blake3hash` (20.3 % of it, per USP §3a) which arm X replaces with the dense
+id, and **arm J is unsorted while arm X is sorted**, because a path inside an
+array cannot be a sort key. That asymmetry is not a flaw in the comparison —
+it is the thing being compared — but the storage number is not sort-neutral and
+must not be quoted as if it were.
+
+**Latency — the split is clean and it is the arm's whole result.** Full table
+in `exploded-summary.tsv`; hot seconds, X against J:
+
+| Explosion wins — path is the sort key | | Explosion loses — reassembly |  |
+| --- | --- | --- | --- |
+| U4 subtree prefix census | **0.02×** | Q3 hour histogram | 6.50× |
+| U6 leaf count | 0.07× | U8 numeric predicate, all int paths | 4.43× |
+| Q1 counts by collection | 0.16× | Q5 activity spans | 3.93× |
+| U9 array degree | 0.19× | Q4 earliest posters | 3.84× |
+| U7 constant-path presence | 0.46× | Q2 counts + distinct users | 2.45× |
+| U3 value anywhere | 0.67× | U1 path census | 1.44× |
+
+The mechanism is visible in the plans: arm X's Q1 reads **1,215 of 14,796
+granules** on the `path` prefix, where arm J reads every granule of every query
+(it is `ORDER BY tuple()`, and cannot be otherwise). The losing half is one
+shape — `GROUP BY doc` with `anyIf` to rebuild a document from its attributes,
+which is what the packed form gets for free by co-indexing within a row. The
+memory column says it louder than the time column: **11.7–18.1 GB against
+0.14–0.6 GB packed**, 24–84×.
+
+**Re-keying halves the penalty and does not remove it.** X2 sorts by
+`(doc, path)` so the reassembly runs in key order: Q2–Q5 drop from 2.45–6.50×
+to 1.65–3.29× and their memory from 24–84× to 9–27×. It never reaches parity,
+and it gives back the path-oriented half (U4 0.02× → 0.15×, Q1 0.16× → 0.52×).
+No exploded sort key wins both halves; the two orders are opposites.
+
+- **Findings:**
+  - **[note — data model, not toolbelt / S3]** On this corpus the packed
+    representation's advantage over one-row-per-attribute is **not storage and
+    not path queries** — it loses both — but *intra-document co-indexing*,
+    worth 1.65–3.29× time and 9–27× memory on multi-path queries even after
+    the exploded arm is re-keyed to favour them. Nothing in the repo states
+    that trade, and it is the load-bearing reason the arrays exist.
+  - **[pain leeway-read-access-codegen → proposed:leeway-query-vocabulary-portability / portability.adaptability / S3]**
+    The exploded rendering of all fourteen queries
+    ([`queries-exploded.sql`](./queries-exploded.sql)) contains no array
+    function, no lambda and no UDF — so it runs unchanged on an engine with
+    none of those, which M0 showed DataFusion to be. leeway has a rendering
+    that ports everywhere and nothing in the repo mentions it.
+  - **[pain — trial process / S3]** Three of the nine USP queries (U1, U4, U9)
+    are `LIMIT n` over tied values with no tiebreak, so two semantically
+    identical renderings return *different rows*. They cannot serve as a
+    cross-engine oracle as written; M1 needs a deterministic tiebreak added
+    before DuckDB and DataFusion are compared against ClickHouse.
+  - **[note — absent paths, third form / S4]** Q1's empty bucket does not
+    appear on the exploded arm: a document lacking `/commit/collection` has no
+    row rather than a defaulted one. With M0's DuckDB result this makes three
+    renderings and three behaviours for the same absent path — empty string,
+    NULL, and absent — none of which is wrong and no two of which agree.
+  - **Positive maturity: the canonical mapping's 1:1 shape.** `ARRAY JOIN` is
+    lossless here only because every membership is verbatim-1 and every value
+    lane is scalar. The mapping delivered that without special handling, and
+    the assertion in `arm-x.sh` passed on all four populated sections.
+- **Solution size:** [`arm-x.sh`](./arm-x.sh) (~130 lines) and
+  [`queries-exploded.sql`](./queries-exploded.sql) (~160 lines). No repo code
+  changed. One defect of my own, caught by result comparison and fixed: U2 had
+  projected `section`, which the upstream query groups by but does not select.
+- **Results:** all fourteen queries verified against arm J. U5/U6/U7/U8 are
+  byte-identical; U1/U2/U3 match once row order is normalised; U4 and U9 differ
+  only in which tied row `LIMIT` admitted (see the process finding above); Q1
+  differs by the absent-path bucket alone.
+  `exploded-summary.tsv`, `exploded-sizes.tsv`.
+- **Run dir:** [`./runs/2026-08-07-m0/`](./runs/2026-08-07-m0/) — `arm-x/`,
+  `arm-x2/`, `arm-j/`
