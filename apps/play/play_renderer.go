@@ -100,6 +100,7 @@ const (
 	dockTabSeries      uint64 = 23
 	dockTabTreemap     uint64 = 24
 	dockTabChart       uint64 = 25
+	dockTabVocabulary  uint64 = 26
 )
 
 type PlayApp struct {
@@ -279,6 +280,12 @@ type PlayApp struct {
 	// Passes-tab drawing state (play_passes_tab.go, ADR-0119 M3): the
 	// pipelineview layout cached on the pass-catalog fingerprint.
 	passesTab passesTabState
+	// Vocabulary-tab state (play_vocab_panel.go, ADR-0174): the filter and
+	// its accepted set; vocabHl is the filter box's regexedit state, held
+	// per-instance like snippetsHl for the same reason (the widget owns a
+	// compiled pattern across frames).
+	vocabTab vocabTabState
+	vocabHl  regexedit.Edit
 	// Per-buffer outcomes of the client-side rewrite (play_passes_tab.go),
 	// shared by the Passes and Diagnostics tabs and computed on first demand
 	// per frame — both tabs are lazy, so a session with neither open pays
@@ -444,6 +451,11 @@ type PlayApp struct {
 	// own `ts*` vocabulary shadows (ADR-0163 §SD4). Chrome only — the answer
 	// never changes what runs, just what the panes say about it.
 	tsCollisions *tsCollisionProbe
+
+	// vocab caches the endpoint's user-defined function set for the
+	// Vocabulary tab (ADR-0174 §SD2). Chrome only, like tsCollisions: it
+	// reports what is installed and never changes what runs.
+	vocab *vocabProbe
 
 	// flow is the ADR-0153 Flow dock tab: the active node's clause-level
 	// dataflow, derived statically from the split; the EXPLAIN lenses add
@@ -963,6 +975,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	// snippet-class capability play_delivery.go was made public for.
 	inst.seriesDriver = NewSeriesDriver(mk(), func(sql string) { inst.InsertSqlAtCaret(sql) })
 	inst.tsCollisions = newTsCollisionProbe(client)
+	inst.vocab = newVocabProbe(client)
 	inst.seriesLabels = newTsLabelsWriter(client)
 	inst.fixtures = &fixtureState{}
 	inst.flow = newFlowDriver(mk(), client)
@@ -1051,6 +1064,7 @@ func (inst *PlayApp) Close() {
 		inst.seriesScoresLane.close()
 	}
 	inst.tsCollisions.close()
+	inst.vocab.close()
 	if inst.seriesSpansLane != nil {
 		inst.seriesSpansLane.close()
 	}

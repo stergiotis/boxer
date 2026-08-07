@@ -278,6 +278,11 @@ var builtinTabDefs = []builtinTabDef{
 	// the delivery ops raise the editor leaf, so Snippets cannot hide itself
 	// with its own click.
 	{id: "snippets", dockID: dockTabSnippets, title: "Snippets", zone: TabZoneTools},
+	// Vocabulary is Snippets' sibling: same zone, same filter language, same
+	// Insert seam — a snippet is a statement you want, a vocabulary entry is a
+	// name you can use. Lazy, so a session that never opens it never runs the
+	// system.functions probe (ADR-0174 §SD2).
+	{id: "vocabulary", dockID: dockTabVocabulary, title: "Vocabulary", zone: TabZoneTools, lazy: true},
 	// Experiments drives one batch through a chosen leeway sink. It is a tool
 	// pane, not a result view: its default source is a built-in fixture, so it
 	// says something before a query has run and keeps saying it when the
@@ -626,6 +631,8 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			}
 		case "passes":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderPassesTab) }
+		case "vocabulary":
+			spec.Render = func(f *TabFrame) { scrollTab(inst.renderVocabularyTab) }
 		case "flow":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderFlowTab) }
 		case "docs":

@@ -551,6 +551,30 @@ cursor (good for a clause or the parameter prelude), and **Replace** swaps the w
 buffer (good for a whole-query starting point). Keep the editor visible while you
 click so Insert lands at the caret.
 
+### Vocabulary
+
+The functions a buffer can name, filtered the same way as Snippets, each with an
+**Insert** button that drops a call template at the caret. Three sections, split by
+where a name is actually evaluated — which is what decides how it fails:
+
+- **Server** — SQL user-defined functions, which exist only where somebody
+  installed them. The `LW_*` family is leeway's query vocabulary: `LW_CO_*` over
+  positionally aligned lanes, `LW_RAGGED_*` over flat streams with a lengths lane,
+  `LW_VALUE_BY_TAG_EQUAL` / `LW_LIST_BY_TAG_EQUAL` to read a tagged attribute, and
+  `LW_ID_*` over Fibonacci-tagged identifiers. Each row is marked `✓` or `MISSING`
+  against what the endpoint carries — a missing one needs provisioning, not a
+  different query. Functions the endpoint has that this build does not know about
+  are listed as `extra`.
+- **Client** — macros play rewrites into ordinary SQL before the statement leaves,
+  so they work against any endpoint, including one carrying no UDFs at all:
+  `descriptiveStatistics(...)`, `docsearch('...')`, `keelson('...')`, and `LW_ID_*`
+  (which is both — installable *and* expanded here).
+- **play** — the `ts*` family, computed locally over the rows a sub-query returns.
+  The server never sees the name.
+
+Until the endpoint has answered, server rows show `?` rather than a verdict: an
+unanswered probe is not the same as an empty server. Switching endpoints re-asks.
+
 ## Configuration
 
 Command-line flags (all optional):

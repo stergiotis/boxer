@@ -40,9 +40,15 @@ var ExpandDescriptiveStatistics = nanopass.LiftBodyPass("ExpandDescriptiveStatis
 		Writes:     nanopass.RegionBody,
 	})
 
-// macroName is the registry key; matching is case- and quoting-insensitive
-// via NormalizeCallName.
-const macroName = "descriptivestatistics"
+// FuncName is the macro's canonical spelling — what a user types and what a
+// vocabulary listing shows (ADR-0174 §SD3). Matching is case- and
+// quoting-insensitive, so this is the preferred spelling, not the only
+// accepted one. Named to match docsearchsql.FuncName and keelsonsql.FuncName.
+const FuncName = "descriptiveStatistics"
+
+// macroName is the registry key: FuncName normalised, which is what
+// NormalizeCallName produces for every accepted spelling.
+var macroName = nanopass.NormalizeCallName(FuncName)
 
 // estimator maps the optional leading string token to the quantiles call
 // and the provenance token the panel displays.

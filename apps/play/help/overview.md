@@ -46,6 +46,10 @@ derived from it, so you keep them open while typing:
   point here). When boxer's grammar can't parse the buffer, an `EXPLAIN AST`
   probe against the server distinguishes a boxer grammar gap from broken SQL.
 - **Snippets** — a library of ready-to-run fragments with Insert/Replace buttons.
+- **Vocabulary** — the functions this buffer can call, grouped by where each one
+  runs: installed on the endpoint, expanded by play before the statement ships,
+  or computed in play and never sent. Server functions are marked present or
+  missing against what the endpoint actually carries.
 
 **The result panes**, below — these are fed the query's rows:
 

@@ -414,7 +414,8 @@ package a function came from: `WHERE name LIKE 'LW\_%'` is now the whole
 leeway vocabulary on a server. That is one query for the drift check
 [ADR-0171](./0171-leeway-sql-read-surface.md) §SD2 wants, and it is what
 lets a client say *installed* or *missing* per function rather than only
-listing what it happens to find.
+listing what it happens to find — which is what play's vocabulary panel
+([ADR-0174](./0174-play-sql-vocabulary-panel.md)) does with it.
 
 **The stale-function problem from the previous Update is now handled in
 code.** `Install` drops the names this repository has withdrawn, from an

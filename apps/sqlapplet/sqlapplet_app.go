@@ -19,8 +19,10 @@ const appletMaxHistory = 25
 // its follow-caret half reads the editor the applet just removed. So is
 // Flow: it inspects how the buffer executes, not what it returned. And so is
 // Experiments: a sink playground whose default subject is a built-in fixture
-// rather than the applet's own result.
-var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments"}
+// rather than the applet's own result. And so is Vocabulary (ADR-0174): it
+// lists what a buffer could call, which an applet — a published query with no
+// editor — has no buffer for.
+var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments", "vocabulary"}
 
 // orderedResultTabIDs is resultTabIDs in play's registration order, for
 // deterministic removal when an explicit `tabs:` list prunes the set.
