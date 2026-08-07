@@ -362,6 +362,44 @@ func TestSourceWidth_BeforeTheProbeReports(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Source highlighting (M1)
+// ---------------------------------------------------------------------------
+
+func TestHighlightJob_CachesUntilTheTextChanges(t *testing.T) {
+	inst := &App{}
+
+	// An empty buffer has nothing to colour; the method is skipped so the hint
+	// text keeps rendering as it does without a job.
+	if _, ok := inst.highlightJob(); ok {
+		t.Fatal("an empty buffer should not produce a highlight job")
+	}
+
+	inst.src = "# Head\n\n**bold**\n"
+	if _, ok := inst.highlightJob(); !ok {
+		t.Fatal("a non-empty buffer should produce a highlight job")
+	}
+	assert.Equal(t, inst.src, inst.lexSrc, "the cache must record the text it describes")
+
+	// Unchanged text reuses the cached job rather than relexing.
+	inst.highlightJob()
+	assert.Equal(t, inst.src, inst.lexSrc)
+
+	// An edit invalidates it.
+	inst.src = "# Head\n\n**bolder**\n"
+	if _, ok := inst.highlightJob(); !ok {
+		t.Fatal("an edited buffer should produce a highlight job")
+	}
+	assert.Equal(t, inst.src, inst.lexSrc, "the cache must follow the buffer")
+
+	// Clearing the buffer clears the cache, so a stale job cannot outlive it.
+	inst.src = ""
+	if _, ok := inst.highlightJob(); ok {
+		t.Fatal("clearing the buffer should drop the job")
+	}
+	assert.Equal(t, "", inst.lexSrc)
+}
+
+// ---------------------------------------------------------------------------
 // Manifest
 // ---------------------------------------------------------------------------
 

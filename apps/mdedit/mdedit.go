@@ -35,8 +35,10 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
@@ -185,6 +187,13 @@ type App struct {
 	rowPx     float64
 	rowFontPt float32
 
+	// lexJob is the source-tier colour job and lexSrc the buffer it describes.
+	// Keyed by text rather than memoised: per-keystroke content is new by
+	// construction, so ADR-0125's LRU would only churn (ADR-0130 §6).
+	lexJob typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	lexOk  bool
+	lexSrc string
+
 	// status is the one-line report under the action bar.
 	status string
 
@@ -329,6 +338,32 @@ func (inst *App) renderBar() {
 	}
 }
 
+// highlightJob returns the source-tier colour job for the current buffer,
+// rebuilding it only when the text changed.
+//
+// The spans index the buffer's own bytes — the reason M1 needed a lexer rather
+// than the existing canonicalising highlighter, whose spans describe a rewrite
+// of the input and would colour the wrong bytes here. The Rust layouter
+// applies them advisorily and reconciles the one-frame staleness, so a job
+// built from last frame's text still lands correctly on this frame's
+// (ADR-0130 §Decision 2-3).
+func (inst *App) highlightJob() (job typed.RetainedFffiHolderTyped[c.CodeViewJobS], ok bool) {
+	if inst.lexOk && inst.lexSrc == inst.src {
+		return inst.lexJob, true
+	}
+	if inst.src == "" {
+		// An empty job would claim zero bytes of an empty buffer; skipping the
+		// method entirely leaves the hint text rendering as it does today.
+		inst.lexOk = false
+		inst.lexSrc = ""
+		return job, false
+	}
+	inst.lexJob = codeview.BuildMarkdownLex(inst.src)
+	inst.lexSrc = inst.src
+	inst.lexOk = true
+	return inst.lexJob, true
+}
+
 // sourceWidth is the source pane's width for this frame: a fixed share of the
 // measured window, floored so a narrow window still leaves something to write
 // in, and never more than half of what there is to divide.
@@ -403,13 +438,16 @@ func (inst *App) renderSource() {
 	// collapsing onto the content, so a short document still leaves the editor
 	// filling its pane instead of shrinking to a few lines.
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-		_ = c.TextEdit(inst.ids.PrepareStr("editor"), inst.src, true).
+		b := c.TextEdit(inst.ids.PrepareStr("editor"), inst.src, true).
 			CodeEditor().
 			DesiredWidth(width).
 			DesiredRows(rows).
 			HintText(hintEmpty).
-			ReportCursor().
-			SendRespValCursor(&inst.src, &inst.cursor)
+			ReportCursor()
+		if job, ok := inst.highlightJob(); ok {
+			b = b.HighlightJob(job)
+		}
+		_ = b.SendRespValCursor(&inst.src, &inst.cursor)
 
 		// The restore is applied HERE, immediately after the emit, and not in
 		// drainAsync with everything else. OverrideDatabindingSPtr resolves the

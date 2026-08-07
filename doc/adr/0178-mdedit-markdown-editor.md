@@ -63,6 +63,22 @@ says it is "for viewers, not for editor-source roundtripping". Fed to
 reconcile only shifts spans past a single edit region, not past a wholesale
 re-emission.
 
+The source tier M1 adds beside it (`HighlightLex`) is also the cheap one, by
+the same margin the SQL seam found between its lex and parse tiers — measured
+on the same machine, over synthetic documents of headings, styled prose,
+lists, fenced Go and callouts:
+
+| document | `HighlightLex` | `Highlight` (canonical) |
+| --- | --- | --- |
+| ~0.3 KB | 4.4 µs, 2 allocs | 65 µs, 484 allocs |
+| ~2.6 KB | 30 µs, 8 allocs | 213 µs, 1 278 allocs |
+| ~13 KB | 119 µs, 14 allocs | 928 µs, 4 774 allocs |
+
+About eight times faster and two orders of magnitude fewer allocations — the
+scanner's only allocation is its own span slice growing. At 13 KB it is 0.7 %
+of a 60 fps frame, so the per-keystroke path is not where this app's cost
+lives.
+
 **The Powerbox brokers are narrower than a classical editor assumes.**
 `clipboardbroker` serves `clipboard.write` and has no read subject.
 `fsbroker` mints read-mode and write-mode handles separately, and
@@ -191,7 +207,7 @@ only honest reading of the marker.
 ### Milestones
 
 - **M0 — the editing surface: split panes, live preview, caret-follows-preview, dirty marker, clipboard export, session restore.**
-- **M1 — source-offset markdown highlighting, wired through `textEdit.highlightJob`.**
+- **M1 — source-offset markdown highlighting, wired through `textEdit.highlightJob`.** ✓
 - **M2 — editing affordances: a formatting bar over `insertAtCursor`, an outline from `Doc.Headings()`, a word and reading-time readout.**
 - **M3 — find and replace: matches painted through `sectionStyled`, replace-all as a whole-buffer rebind.**
 - **M4 — file I/O through fsbroker.**
@@ -205,7 +221,7 @@ visible before the work starts rather than discovered inside it.
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | `app.DefaultRegistry` | added — one `RegisterFactory` under a new manifest | the carousel's side-effect import block, which is the single site pulling registered apps |
-| `markdownhighlight` exported API (M1) | added — a `HighlightLex` sibling returning spans into the *source* bytes, leaving `Highlight` untouched | a `codeview.BuildMarkdownLex` builder mapping its categories onto the existing `mdColors` palette |
+| `markdownhighlight` exported API (M1, shipped) | added — `HighlightLex`, returning spans into the *source* bytes; `Highlight` untouched | `codeview.BuildMarkdownLex`, resolving the same categories against the existing `mdColors` palette |
 | `textEdit` IDL (M3, blocked) | none proposed here | caret-jump-to-match needs a `setCursor` method, a sibling of `insertAtCursor`; until it exists, find navigates the preview and not the caret |
 
 ## Alternatives
@@ -257,8 +273,14 @@ visible before the work starts rather than discovered inside it.
   blobs. They become collectable once the superseded `Doc` is dropped, but the
   package was not written against a churn-heavy caller and this app is the
   first one.
-- Until M1, markdown source is edited without colour, which is a visible step
-  behind play's SQL editor on the same seam.
+- The source tier is a second reading of markdown syntax, beside goldmark's.
+  It is deliberately the shallower one — it recognises surface markers and
+  claims spans, never builds a tree — but it is still a place where the editor
+  and the preview can disagree about what a document says, and only the
+  preview is authoritative. The gap is bounded by what M1 declines to guess:
+  indented code blocks, reference links, setext headings and multi-line
+  emphasis all read as ordinary prose in the source pane while the preview
+  renders them.
 - Without file I/O the app cannot open what is already on disk, and the
   clipboard round-trip is the only way in or out besides its own persisted
   session.
