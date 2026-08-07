@@ -370,6 +370,36 @@ leeway (234.72 s against 1.50 s); DuckDB's JSON type is **106×** behind
 leeway-native over the same six (237.55 s against 2.24 s), and 49–920× per
 individual query.
 
+### What this trial did **not** exercise: membership arity
+
+Every number above was produced at **membership arity 1**. The canonical JSON
+mapping declares a single spec —
+`MembershipSpecMixedLowCardVerbatimHighCardParameters` — and `lmvcard` is
+uniformly 1 across the corpus, which `arm-x.sh` asserts before it will build.
+One membership, one member, per attribute: the path.
+
+That is not leeway's shape. The anchor showcase declares **four** specs on a
+single section (`card_anchor_schema.go`) — `LowCardRef`, `LowCardVerbatim`,
+`HighCardRef`, `MixedLowCardRefHighCardParameters` — so an attribute can be a
+member of several orthogonal categories at once, all co-indexed in the same
+row.
+
+**The consequence for the verdict is specific.** At arity 1 a leeway section is
+a slower way of doing what a typed column does: address one value on one named
+axis. That is the comparison Q1–Q5 makes, and typed columns win it — the
+numbers stand. What the trial cannot say anything about is the query shape
+arity > 1 exists for: *intersecting* axes, "values that are members of both X
+and Y, whatever their path", which in a typed-column layout needs either a join
+to a dimension table or one column per combination. The JSONBench corpus has no
+second axis to express, so no arm here could have tested it.
+
+The direction is not obviously favourable, either, and should not be assumed:
+raising arity makes the *single-axis* lookup more expensive, because the
+`lmvcard` cumulative-sum reconstruction that is dead in this corpus (every
+cardinality is 1) becomes live — which is the hazard the sibling trial's ledger
+row 10 files. So arity > 1 is a trade to be measured, not a rebuttal to hold in
+reserve. It is the trial's largest untested dimension and §7 Q6 carries it.
+
 **The one-line verdict.** leeway is neutral enough to move, at a 2–3× band and
 without loss of correctness, and it is not yet extracting what the engines
 offer. Against native JSON it trades a **3×** loss where the path is named for
@@ -478,6 +508,18 @@ hypotheses from surprises:
 5. **What a third engine would add.** DataFusion is included because the
    marginal cost is a second `SELECT` over a file that already exists. If that
    turns out to be false at M0, the trial is a two-engine trial and says so.
+6. **Membership arity — the largest untested dimension.** Every arm ran at
+   arity 1 (§4a), because the corpus offers exactly one axis per attribute: its
+   path. leeway's own schemas declare four membership specs on a section, and
+   the query shape that justifies them — intersecting two orthogonal axes
+   without a join — has no expression in this workload and therefore no
+   measurement here. Answering it needs a **different corpus**, not another
+   engine or another arm: one whose attributes genuinely carry several
+   queryable categories. Until then the trial's Q1–Q5 result should be read as
+   *"typed columns beat leeway at being a typed column"*, which is a narrower
+   claim than it first appears. Note the direction is not free: raising arity
+   makes the single-axis lookup more expensive, so this is a trade to measure.
+
 
 Related: [jsonbench-on-facts](../jsonbench-on-facts/README.md) — the sibling
 trial this one continues;
