@@ -370,84 +370,66 @@ leeway (234.72 s against 1.50 s); DuckDB's JSON type is **106×** behind
 leeway-native over the same six (237.55 s against 2.24 s), and 49–920× per
 individual query.
 
-### Which layout for a filter-and-retrieve query? — **Whichever one is allowed an index; failing that, the exploded one.**
+### Which layout for a filter-and-retrieve query? — **Whichever touches least of the corpus, and there are three ways to arrange that.**
 
 The benchmark set is entirely aggregations, so this shape had to be asked for
 directly: filter on several attributes, return the matching events — the first
-stage of any tiered design.
+stage of any tiered design. It took two corrections to get right.
 
-**A first reading of this was wrong and is corrected here.** It compared an
+**Correction 1 — the first comparison gave only one arm an index.** It put an
 exploded table sorted `(path, doc)` against a packed table and a JSON column
-that were both `ORDER BY tuple()`, and reported the exploded layout winning by
-2.2×. But a JSON column *can* be sorted on the paths a query filters, and this
-one was not. Given that index it prunes to **5 granules of 1225** and answers
-in **0.03 s**, against the exploded layout's 0.10 s — **3.3× the other way.**
-The original margin measured the index, not the layout.
+both `ORDER BY tuple()`, and reported the exploded layout winning by 2.2×. A
+JSON column *can* be sorted on the paths a query filters; given that index it
+prunes to **5 granules of 1225** and answers in **0.03 s** against the exploded
+layout's 0.10 s at 10M — 3.3× the other way. The margin had measured the index.
 
-Corrected. At 10M, four criteria, 7 events out, each arm given the index it
-can have:
+**Correction 2 — packed was measured below its best form, twice.** Moving the
+selective predicate into `PREWHERE` is worth 1.1–1.7×; and splitting the five
+queried paths into their own **sections** — narrower lanes, the same
+value-plus-path shape — is worth far more. Rerun with every arm unindexed at
+100M, packed at its best:
 
-| arm | index | |
-| --- | --- | --- |
-| JSON column, sorted on the four filter paths | workload-specific | **0.03 s** (prunes 5/1225 granules) |
-| exploded, `(path, doc)` | workload-agnostic | 0.10 s |
-| JSON column, unsorted | none | 0.10 s |
-| packed | **none possible** — the path is inside an array | 0.50 s |
+| events out | packed, one lane per type | **packed, backbone split out** | JSON type | exploded, unsorted |
+| --- | --- | --- | --- | --- |
+| 7 | 1.33 s | **0.09 s** | 0.80 s | 1.39 s |
+| 10,936 | 1.65 s | **0.55 s** | 1.04 s | 1.40 s |
+| 8,377,929 | 2.27 s | 1.32 s | **1.08 s** | 4.26 s |
 
-And with **every** arm unindexed at 100M, which is the like-for-like the first
-ladder should have been:
+**Why: the query is bandwidth-bound and the layouts differ only in volume.**
+`system.query_log` at the 7-event point shows every arm sustaining
+**21.4–25.6 GiB/s**, with durations within a few percent of proportional to
+bytes read — packed 28.27 GiB, JSON column 12.21, exploded-sorted 6.51, packed
+**split 4.49**. So the question is not which layout is faster but **how much of
+the corpus a predicate obliges it to touch**, and there are three levers:
 
-| events out | exploded, unsorted | JSON, unsorted | packed, `PREWHERE` |
-| --- | --- | --- | --- |
-| 7 | 1.39 s | **0.80 s** | 1.33 s |
-| 10,936 | 1.40 s | **1.04 s** | 1.65 s |
-| 8,377,929 | 4.26 s | **1.08 s** | 2.27 s |
+- **An index.** `(path, doc)` on an exploded table is *workload-agnostic* — it
+  helps a filter on any path, known in advance or not (0.29 s at 100M).
+  A sort key on a JSON or typed column is *workload-specific* — fastest of all
+  where the paths were known at table-creation time (0.03 s at 10M), and only
+  there.
+- **Section width.** Splitting the queried paths into their own sections costs
+  a flat **1.40×** storage (13.93 → 19.49 GiB) and buys **14.7×** at the
+  selective end, beating every other layout including the indexed one with no
+  index at all. The gain tracks selectivity and is gone by 8.4M events out.
+- **Per-path subcolumns**, which is what ClickHouse's JSON type does — the
+  section lever taken to its limit. leeway chooses where on that spectrum to
+  sit and pays in lane overhead rather than query time.
 
-Packed is shown at its best form: the selective predicate in `PREWHERE` —
-`has()` on the value lane as a superset test, so the exact `indexOf` checks run
-only on survivors. That is worth 1.7× at 7 events (2.30 → 1.33 s), 1.6× at
-10,936, and 1.1× at 8.4M — the gain tracks how many rows it lets the engine
-skip. In `WHERE` the same predicate buys nothing, and `hasAll()` buys nothing
-anywhere.
+Two conclusions survive every configuration. **The packed layout with one lane
+per type is last** wherever it is not split — the default mapping is the wrong
+shape for retrieval. And **the winner is engine-dependent**: the exploded
+layout leads on ClickHouse and DuckDB (2.3–5.0× at 10M) and *loses* on
+DataFusion by 1.4–1.5×, which has no sorted format to seek in.
 
-**All four arms move data at the same rate; only the volume differs.**
-`system.query_log` for the 7-event query at 100M: exploded-unsorted reads
-34.03 GiB in 1.56 s, packed 28.27 GiB in 1.32 s, the JSON column 12.21 GiB in
-0.54 s, exploded-sorted 6.51 GiB in 0.25 s — **21.4–25.6 GiB/s throughout**,
-and every duration within a few percent of proportional to bytes. So the JSON
-column is not faster, it is *narrower*: ClickHouse shreds each path into its
-own subcolumn, so a four-path query reads four subcolumns, where leeway's
-packed layout must read whole value and path lanes — every path's data, not
-just the four wanted. The sorted exploded arm reads least because its index
-skips granules outright, and its peak memory is 2.8 MiB against 101–139 MiB
-for the rest. Retrieval here is bandwidth-bound, and the layouts differ in
-how much of the corpus a predicate obliges them to touch.
+This bounds the aggregation result above: packed beats exploded by 1.1–2.2× on
+Q2–Q5, all `GROUP BY` collapses. The axis is **retrieve against aggregate**,
+not discovery against serving.
 
-**The exploded layout's advantage was the index, all of it.** Stripped of it,
-the shredded JSON column is the fastest of the three at every density, and the
-exploded layout loses even to packed once the predicate is dense — a five-way
-join over 1.2 billion rows costs more than a scan of 100 million.
-
-So for retrieval the layout does not decide the answer; **what index it permits
-does**:
-
-- **exploded** permits a *workload-agnostic* index — `(path, doc)` helps a
-  filter on any path, known or not. 0.29 s at 100M / 7 events out.
-- **a JSON or typed column** permits a *workload-specific* one — fastest of
-  all where the filter paths were known at table-creation time, and only there.
-- **packed permits none**, and is last in every configuration measured.
-
-Which returns the question to the trial's main axis: an index helps when the
-path is in the query; the exploded layout is what buys one when it is in the
-data.
-
-The winner is engine-dependent regardless: the exploded layout leads on
-ClickHouse and DuckDB (2.3–5.0× at 10M) and *loses* on DataFusion by 1.4–1.5×,
-which has no sorted format to seek in.
-
-This also bounds the aggregation result above: packed beats exploded by
-1.1–2.2× on Q2–Q5, all of which are `GROUP BY` collapses. The axis is
-**retrieve against aggregate**, not discovery against serving.
+*Scope: the split arm is one schema point, derived from the packed table rather
+than re-ingested, on one query. It shows the mechanism and roughly how it
+scales with selectivity — not the optimal section layout, nor the storage cost
+of a split chosen by a real workload rather than by the five paths this
+benchmark names.*
 
 ### How big are the decisions? A band, and a long tail
 
