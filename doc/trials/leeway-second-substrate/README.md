@@ -370,6 +370,49 @@ leeway (234.72 s against 1.50 s); DuckDB's JSON type is **106×** behind
 leeway-native over the same six (237.55 s against 2.24 s), and 49–920× per
 individual query.
 
+### How big are the decisions? A band, and a long tail
+
+Across every pairwise comparison the trial can compute from its own timings —
+96 of them, per query, hot, floored at the timer's 0.01 s resolution — the
+effects sort into a broad band and a tail:
+
+| design axis | n | 0.5–2.5× | 2.5–10× | >10× | worst |
+| --- | --- | --- | --- | --- | --- |
+| engine: ClickHouse vs DuckDB | 14 | 13 | 1 | 0 | 3× |
+| engine: DuckDB vs DataFusion | 14 | 13 | 1 | 0 | 3× |
+| formulation: regroup vs join | 12 | 5 | 7 | 0 | 5× |
+| layout: packed vs exploded | 42 | 26 | 11 | 5 | 44× |
+| representation: leeway vs a JSON type | 14 | 3 | 3 | **8** | **920×** |
+| **all** | **96** | **60 (62 %)** | 23 (24 %) | 13 (14 %) | |
+
+**62 % of everything measured lands inside 0.5–2.5×**, which is the band most
+of this trial's arguments live in. But the distribution is not uniform across
+the axes, and the ordering is the useful part:
+
+- **Which engine you pick is the least consequential decision here** — 26 of 28
+  comparisons inside the band, worst case 3×. On this workload the three
+  engines are far more alike than the choices made *within* any one of them.
+- **Formulation and storage format are tuning** — 2.5–5×, real but bounded, and
+  recoverable by rewriting a query rather than reloading data.
+- **Layout is where cliffs start** — mostly modest, with a tail to 44× on the
+  path-oriented queries.
+- **Representation is almost all cliff** — 8 of 14 comparisons beyond 10×, to
+  920×. Only 3 of 14 land in the band at all.
+
+**And the sharpest cliffs are not in this table, because they are not ratios.**
+A latency histogram cannot represent *inexpressible*, and the trial found that
+repeatedly: U5 and U9 have no expression on ClickHouse's JSON type; 8 of 14
+have none on schema-on-read; the entire higher-order rendering has none on
+DataFusion; U4 and U9 fail to bind against `BLOB`-typed path lanes; and two of
+three engines refuse to materialise a Parquet file whose string column is not
+valid UTF-8. Those are the decisions that cannot be tuned out afterwards, and
+they are invisible to any benchmark that only reports times for queries that
+ran.
+
+The practical reading: **spend the design attention on representation and on
+what the target can express, and treat engine choice as the cheap decision.**
+That is close to the inverse of how such choices are usually sequenced.
+
 ### Two readings the numbers only half support
 
 **"A portable format cannot yet replace a native one."** Half right, and the

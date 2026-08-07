@@ -1,0 +1,7 @@
+design_axis	n	in_0.5_2.5x	in_2.5_10x	beyond_10x	worst
+engine: ClickHouse vs DuckDB	14	13	1	0	3
+engine: DuckDB vs DataFusion	14	13	1	0	3
+formulation: regroup vs join	12	5	7	0	5
+layout: packed vs exploded	42	26	11	5	44
+representation: leeway vs JSON type	14	3	3	8	920
+ALL	96	60	23	13	920
