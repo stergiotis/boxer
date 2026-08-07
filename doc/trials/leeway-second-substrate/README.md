@@ -370,6 +370,35 @@ leeway (234.72 s against 1.50 s); DuckDB's JSON type is **106×** behind
 leeway-native over the same six (237.55 s against 2.24 s), and 49–920× per
 individual query.
 
+### Which layout for a filter-and-retrieve query? — **Depends on selectivity, and the ordering inverts.**
+
+The benchmark set is entirely aggregations, so this shape had to be asked for
+directly. Filter on several attributes and return the matching events — the
+first stage of any tiered design — at 100M documents, three densities:
+
+| criteria | events out | exploded, `(path, doc)` | JSON type | packed |
+| --- | --- | --- | --- | --- |
+| 4, incl. a rare user | 7 | **0.29 s** | 0.63 s | 2.07 s |
+| 4, incl. the top poster | 10,936 | **0.40 s** | 0.69 s | 2.18 s |
+| 3, no user filter | 8,377,929 | 1.95 s | **0.97 s** | 2.45 s |
+
+**The crossover sits between ~10⁴ and ~10⁶ events returned** on this corpus and
+hardware. Below it the exploded layout's sorted-index seeks pay — 2.2× ahead at
+7 events, still 1.7× ahead a thousand times denser. Above it they stop paying
+and the shredded JSON column wins by 2.0×. A tier-1 narrowing query lives below
+the crossover; a tier that does not narrow does not.
+
+Two things do **not** depend on selectivity. **The packed layout is last at
+every density** — it is the wrong shape for retrieval, whichever way the other
+two fall. And **the winner is engine-dependent**: the exploded layout leads on
+ClickHouse and DuckDB (2.3–5.0× at 10M) and *loses* on DataFusion by 1.4–1.5×,
+which has no sorted format to seek in. Deployment guidance here has to name the
+engine, not just the layout.
+
+This also bounds the aggregation result reported above: packed beats exploded
+by 1.1–2.2× on Q2–Q5, and those are all `GROUP BY` collapses. The axis is
+**retrieve against aggregate**, not discovery against serving.
+
 ### How big are the decisions? A band, and a long tail
 
 Across every pairwise comparison the trial can compute from its own timings —
