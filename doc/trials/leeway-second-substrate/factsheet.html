@@ -146,7 +146,42 @@ data. Both layouts can be kept at once — converting 100M documents takes
 <em>smaller</em> than the original (0.70&times;), so carrying both costs
 1.70&times; one.</p>
 
-<h3>3. The advantage widens with scale</h3>
+<h3>3. The cost is bytes moved — and that is a design lever</h3>
+
+<p>Instrumenting the same four-criteria lookup shows why the arms differ, and
+it is not processing speed:</p>
+
+<table>
+  <thead><tr><th>arm</th><th class="num">bytes read</th><th class="num">seconds</th><th class="num">GiB/s</th><th class="num">peak memory</th></tr></thead>
+  <tbody>
+    <tr><td>attribute-per-row, unsorted</td><td class="num">34.03 GiB</td><td class="num">1.56</td><td class="num">21.8</td><td class="num">101 MiB</td></tr>
+    <tr><td>document-per-row</td><td class="num">28.27 GiB</td><td class="num">1.32</td><td class="num">21.4</td><td class="num">139 MiB</td></tr>
+    <tr><td>JSON type</td><td class="num">12.21 GiB</td><td class="num">0.54</td><td class="num">22.5</td><td class="num">133 MiB</td></tr>
+    <tr><td>attribute-per-row, sorted</td><td class="num"><strong>6.51 GiB</strong></td><td class="num"><strong>0.25</strong></td><td class="num">25.6</td><td class="num"><strong>2.8 MiB</strong></td></tr>
+  </tbody>
+</table>
+
+<p><strong>Every arm sustains 21.4–25.6 GiB/s</strong> and every duration is
+within a few percent of proportional to bytes read. The query is
+bandwidth-bound: the layouts differ only in how much of the corpus a predicate
+obliges them to touch. The JSON type is not faster, it is <em>narrower</em> —
+ClickHouse gives each path its own subcolumn, so a four-path query reads four
+subcolumns, where the document-per-row layout must read whole value and path
+lanes: every path's data, not just the four wanted.</p>
+
+<p><strong>That is a tradeoff leeway can manage, because sections are a
+modelling choice.</strong> All paths of one type share a lane only because the
+mapping put them there. Route differently and the lanes narrow — the mapping
+already demonstrates it, having split low-cardinality paths into a
+<code>symbol</code> section of <strong>6.4 MiB</strong> beside a
+<code>string</code> section of <strong>978 MiB</strong>. Give the hot backbone
+its own section and a backbone query stops reading the tail; the JSON type's
+per-path subcolumn is the limit of that idea, and leeway can approach it as
+closely as the schema author cares to. <em>Untested here: no arm varied the
+section count, so this is a lever the measurement implies rather than one it
+demonstrates.</em></p>
+
+<h3>4. The advantage widens with scale</h3>
 
 <p>Going from 10M to 100M documents — ten times the data — the two
 representations scale differently, and it is the JSON type that degrades:</p>
@@ -164,7 +199,7 @@ representations scale differently, and it is the JSON type that degrades:</p>
 above it. So the ratios reported here are a floor, not a ceiling: at 10M
 find-a-value was 695&times;, at 100M it is 786&times;.</p>
 
-<h3>4. Events are heterogeneous and the schema drifts</h3>
+<h3>5. Events are heterogeneous and the schema drifts</h3>
 
 <p>leeway holds a mixture of document shapes uniformly — that is what it is
 for. The comparison shapes do not: the fastest published JSON configuration
