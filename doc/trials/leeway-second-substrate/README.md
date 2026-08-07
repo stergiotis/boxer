@@ -410,6 +410,19 @@ only on survivors. That is worth 1.7× at 7 events (2.30 → 1.33 s), 1.6× at
 skip. In `WHERE` the same predicate buys nothing, and `hasAll()` buys nothing
 anywhere.
 
+**All four arms move data at the same rate; only the volume differs.**
+`system.query_log` for the 7-event query at 100M: exploded-unsorted reads
+34.03 GiB in 1.56 s, packed 28.27 GiB in 1.32 s, the JSON column 12.21 GiB in
+0.54 s, exploded-sorted 6.51 GiB in 0.25 s — **21.4–25.6 GiB/s throughout**,
+and every duration within a few percent of proportional to bytes. So the JSON
+column is not faster, it is *narrower*: ClickHouse shreds each path into its
+own subcolumn, so a four-path query reads four subcolumns, where leeway's
+packed layout must read whole value and path lanes — every path's data, not
+just the four wanted. The sorted exploded arm reads least because its index
+skips granules outright, and its peak memory is 2.8 MiB against 101–139 MiB
+for the rest. Retrieval here is bandwidth-bound, and the layouts differ in
+how much of the corpus a predicate obliges them to touch.
+
 **The exploded layout's advantage was the index, all of it.** Stripped of it,
 the shredded JSON column is the fastest of the three at every density, and the
 exploded layout loses even to packed once the predicate is dense — a five-way

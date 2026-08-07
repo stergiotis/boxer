@@ -1,0 +1,5 @@
+arm	bytes_read	rows_read	seconds	GiB_per_s	peak_mem
+exploded, unsorted	34.03 GiB	6.00 G	1.56	21.8	101 MiB
+packed, PREWHERE	28.27 GiB	100 M	1.32	21.4	139 MiB
+JSON type, unsorted	12.21 GiB	100 M	0.54	22.5	133 MiB
+exploded, sorted (path,doc)	6.51 GiB	499 M	0.25	25.6	2.8 MiB
