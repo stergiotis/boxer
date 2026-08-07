@@ -273,6 +273,110 @@ N-struct is the shape that is fast when it does not have to.
   deliberately not repeated, because the numbers are a by-product (§1) and
   do not warrant a second reporting surface.
 
+## 4a Results — the verdict, 2026-08-07
+
+M0–M4 are done. Every number below is 10M documents, one harness, hot =
+min(try 2, try 3), **no cold column** (this box grants no passwordless sudo).
+Detail and evidence in the [logbook](./logbook.md); the consolidated table is
+`runs/2026-08-07-m4/m4-six-way.tsv`, which carries a `source` column because
+the Q1–Q5 and USP figures do not all come from the same sitting — run-to-run
+variance between them is 5–10 %, which is well inside every ratio quoted here
+but is not zero. Two figures recur:
+
+- **Q1–Q5** — the JSONBench set, where **every path is named in the query**.
+- **U1,U2,U3,U4,U6,U8** — the USP set, where **the path is in the data**. The
+  six ClickHouse's JSON type can express at all; leeway also answers U5 and U9,
+  which it cannot.
+
+### Is leeway reasonably technology-neutral? — **Yes, with a 2–3× band.**
+
+The same mapping, the same corpus, four renderings across three engines:
+Q1–Q5 spans **1.24 s (ClickHouse) → 3.31 s (DataFusion)**, a 2.7× band; the USP
+set spans **1.50 → 2.92 s**, 1.9×. No configuration failed, no cliff, and
+storage is 1.13–1.14 GiB everywhere except DuckDB's native format at 2.46 GiB —
+which is a *format* choice, not a shape one. More important than the latency:
+**all fourteen queries reproduce the ClickHouse oracle on every engine**, with
+exactly two explained divergences — the absent-path bucket in exploded
+renderings, and U5, whose disagreement is an Int64 overflow in the query rather
+than anything about leeway.
+
+### Is it unlocking the full potential of the underlying technology? — **No, not yet.**
+
+The data model ports; the engineering around it lags, in four measured ways.
+`ddl/arrow` types every bytes-lane `BLOB`, so `starts_with` and `contains` do
+not bind and **two of fourteen queries fail on leeway's own writer output**
+(M3). Encoding aspects do not cross the Parquet seam — the exploded table's
+dense id is written `PLAIN` where `DELTA_BINARY_PACKED` applies, **8.5 %** (M2),
+and leeway's writer passes no encoding properties either. `LowCardinality`
+survives only because a writer happened to choose `RLE_DICTIONARY`, not because
+leeway asked. And the lane algebra is written down only in its higher-order
+form, while the rendering that ports everywhere — explosion plus relational
+operators — is undocumented and is the *only* one DataFusion can run.
+
+### Are other columnar technologies expressive enough? — **Yes, in three different spellings.**
+
+DuckDB carries the higher-order rendering directly. DataFusion has **433
+routines and not one higher-order array function**, yet reads the packed layout
+exactly — `array_element` over `array_position`, `unnest` for the path census,
+`array_max` standing in for one `arrayExists` — and matched the oracle on
+**14 of 14**. The exploded rendering needs no array function at all. But
+**nothing ports unchanged**: DuckDB needs `list_position`, a coalesce and
+`lambda x:` (the `->` arrow is deprecated), DataFusion needs `array_position`, a
+coalesce and an explicit `CAST` without which the composed idiom is a planning
+error.
+
+### Are native JSON types as expressive as leeway? — **Entirely engine-dependent.**
+
+DuckDB's **is**: `json_extract(doc, p)` takes a runtime path and `json_tree`
+walks into arrays reporting `fullkey`, so all fourteen are expressible.
+ClickHouse's **is not** — U5 and U9 have no expression, and U3/U8 fall back to
+re-serialising each document to text. DataFusion has **no JSON type at all**.
+Schema-on-read is the least expressive of the three: **6 of 14**, and 1 of the
+9 USP queries, because inference typed the backbone and left the varying tail
+as `MAP(VARCHAR, JSON)`.
+
+### Do they bring a disk-space advantage? — **No; marginal at best, and it reverses.**
+
+ClickHouse's plain `JSON` is 1.07 GiB against leeway's 1.13 — **0.95×**, a 5 %
+edge. Its *tuned* entry is 1.54 GiB, **larger** than leeway. DuckDB's JSON type
+is 4.56 GiB against leeway's 2.46 — **1.9× larger**. There is no consistent
+advantage in either direction.
+
+### Do they bring a query-flexibility advantage? — **In ingest and evolution, not in query.**
+
+The real advantage is upstream of the query: no mapping to declare, no
+symbol-routing decision, no shredder, and new paths absorbed silently where
+leeway's mapping is a DDL change. On the query side there is no advantage and
+on ClickHouse a deficit. And the *fast* JSON configuration buys its speed by
+giving flexibility back — arm A declares `max_dynamic_paths = 0`, so anything
+outside its five named paths goes to shared data.
+
+### Do they bring a query-performance advantage? — **Decisively yes for named paths, catastrophically no for discovered ones.**
+
+Within ClickHouse, on identical documents:
+
+| | Q1–Q5 (path named) | USP six (path discovered) |
+| --- | --- | --- |
+| arm A — typed hints + clustered index | **0.34 s** | — |
+| arm A0 — typed hints, no index | **0.42 s** | — |
+| arm A00 — plain `JSON` | 0.72 s | 234.72 s |
+| leeway | 1.24 s | **1.50 s** |
+
+**It is the typing, not the index**: removing the clustered index costs only
+1.24× (0.34 → 0.42 s), so the JSON type's 3.0× advantage over leeway on named
+paths survives a like-for-like unindexed comparison. Even undeclared it wins,
+1.7×. Reverse the question and the same undeclared arm is **156× behind**
+leeway (234.72 s against 1.50 s); DuckDB's JSON type is **106×** behind
+leeway-native over the same six (237.55 s against 2.24 s), and 49–920× per
+individual query.
+
+**The one-line verdict.** leeway is neutral enough to move, at a 2–3× band and
+without loss of correctness, and it is not yet extracting what the engines
+offer. Against native JSON it trades a **3×** loss where the path is named for
+a **50–900×** win where it is not — which is the sibling trial's thesis,
+confirmed on two more engines, with the caveat that *which* of those regimes a
+workload lives in decides everything, and JSONBench lives entirely in the first.
+
 ## 5 Findings ledger
 
 Findings follow the classification scheme in the

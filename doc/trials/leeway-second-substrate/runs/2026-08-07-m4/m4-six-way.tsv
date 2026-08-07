@@ -1,9 +1,11 @@
-configuration	storage	Q1-Q5_s	USP_six_s	on_benchmark
-ClickHouse arm A (JSONBench entry)	1.54 GiB	0.34	not measured	yes — JSON type, 5 typed hints + clustered index
-ClickHouse arm A00 (plain JSON)	1.07 GiB	0.72	234.72	yes — JSON type, nothing declared
-ClickHouse leeway	1.13 GiB	1.24	1.50	no — schema-on-write
-DuckDB leeway (native)	2.46 GiB	1.38	2.24	no — schema-on-write
-DuckDB leeway (parquet)	1.14 GiB	1.88	2.92	no — schema-on-write
-DuckDB MAP (native)	2.54 GiB	0.46	NO EXPRESSION	no — schema-on-read into typed columns
-DataFusion leeway (parquet)	1.14 GiB	3.31	2.66	no — schema-on-write
-DataFusion MAP (parquet)	0.99 GiB	0.65	NO EXPRESSION	no — schema-on-read into typed columns
+configuration	storage	Q1-Q5_s	USP_six_s	on_benchmark	source
+ClickHouse arm A (JSONBench entry)	1.54 GiB	0.34	not measured	yes — JSON, 5 typed hints + clustered index	m4/arma
+ClickHouse arm A0 (typed, no index)	n/m	0.42	not measured	yes — JSON, 5 typed hints	m4/arma0
+ClickHouse arm A00 (plain JSON)	1.07 GiB	0.72	234.72	yes — JSON, nothing declared	m4/ch+jv-usp
+ClickHouse leeway	1.13 GiB	1.24	1.50	no — schema-on-write	m4/ch ; USP from m2/ch-packed
+DuckDB leeway (native)	2.46 GiB	1.38	2.24	no — schema-on-write	m4 three-config
+DuckDB leeway (parquet)	1.14 GiB	1.88	2.92	no — schema-on-write	m4 three-config ; USP from m2
+DuckDB JSON type (N-text)	4.56 GiB	6.26	237.55	yes — JSON retained	m4/ntext
+DuckDB MAP (native)	2.54 GiB	0.46	NO EXPRESSION	no — schema-on-read into typed columns	m4 three-config
+DataFusion leeway (parquet)	1.14 GiB	3.31	2.66	no — schema-on-write	m4/df ; USP from m2
+DataFusion MAP (parquet)	0.99 GiB	0.65	NO EXPRESSION	no — schema-on-read into typed columns	m4/df
