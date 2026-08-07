@@ -370,6 +370,38 @@ leeway (234.72 s against 1.50 s); DuckDB's JSON type is **106×** behind
 leeway-native over the same six (237.55 s against 2.24 s), and 49–920× per
 individual query.
 
+### Two readings the numbers only half support
+
+**"A portable format cannot yet replace a native one."** Half right, and the
+right half is not the latency. Over identical leeway data, Parquet costs
+**1.30–1.36×** against DuckDB's native format (1.88 vs 1.38 s on Q1–Q5,
+2.92 vs 2.24 s on the USP six) while being **2.16× smaller** (1.14 vs
+2.46 GiB), and it round-trips ClickHouse's native table at 1.005×. As a place
+to put bytes and scan them, Parquet is competitive and on storage ahead.
+
+What it does not carry is the **declarations** that make a native format fast:
+the encoding aspects (the exploded table's dense id written `PLAIN` instead of
+delta-packed, 8.5 %), the sort key (arm A's clustered index, worth 1.24×, has
+no Parquet expression at all), and — as M3 and M4 found — not even the column
+*types* reliably, since two writers disagreed `BLOB` against `VARCHAR` and one
+of them produced a file two engines refuse to materialise.
+
+The sharper form: **arm A's 3× advantage over leeway is typing, and Parquet can
+express typed columns perfectly well.** Nothing in the leeway → Parquet path
+pushes the declarations through. So this is less a limit of the portable format
+than a gap in what leeway hands it — which is the same finding as §4a's second
+answer, arriving from the other side.
+
+**"DataFusion is beaten by DuckDB by a wide margin."** True on one half of the
+workload and false on the other. Same Parquet file, same sitting: DuckDB is
+**1.75× faster on Q1–Q5** — but DataFusion is **0.91× on the USP six**, i.e.
+faster, winning U1 (0.68 vs 1.18 s) and U2 (0.74 vs 0.94 s), the two largest
+queries in that set, and losing the four small ones. Where DataFusion *is*
+widely behind is capability, not speed: no persistent native format at all (its
+in-memory analogue costs 11.8 GB of RAM and 1.23 s to rebuild every session),
+no JSON type, no higher-order array function, and no way to produce the
+schema-on-read shape it can nonetheless read.
+
 ### What this trial did **not** exercise: membership arity
 
 Every number above was produced at **membership arity 1**. The canonical JSON
