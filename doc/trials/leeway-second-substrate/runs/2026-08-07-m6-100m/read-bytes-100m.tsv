@@ -1,5 +1,5 @@
-arm	bytes_read	rows_read	seconds	GiB_per_s	peak_mem
-exploded, unsorted	34.03 GiB	6.00 G	1.56	21.8	101 MiB
-packed, PREWHERE	28.27 GiB	100 M	1.32	21.4	139 MiB
-JSON type, unsorted	12.21 GiB	100 M	0.54	22.5	133 MiB
-exploded, sorted (path,doc)	6.51 GiB	499 M	0.25	25.6	2.8 MiB
+arm	bytes_read	seconds	table_size	index
+document-per-row, one lane per type	28.27 GiB	1.32	13.93 GiB	none
+JSON type (per-path subcolumns)	12.21 GiB	0.54	10.31 GiB	none
+attribute-per-row, sorted	6.51 GiB	0.25	9.72 GiB	(path, doc)
+document-per-row, backbone split out	4.49 GiB	0.09	19.49 GiB	none

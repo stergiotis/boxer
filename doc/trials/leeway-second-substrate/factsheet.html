@@ -169,17 +169,32 @@ ClickHouse gives each path its own subcolumn, so a four-path query reads four
 subcolumns, where the document-per-row layout must read whole value and path
 lanes: every path's data, not just the four wanted.</p>
 
-<p><strong>That is a tradeoff leeway can manage, because sections are a
-modelling choice.</strong> All paths of one type share a lane only because the
-mapping put them there. Route differently and the lanes narrow — the mapping
-already demonstrates it, having split low-cardinality paths into a
-<code>symbol</code> section of <strong>6.4 MiB</strong> beside a
-<code>string</code> section of <strong>978 MiB</strong>. Give the hot backbone
-its own section and a backbone query stops reading the tail; the JSON type's
-per-path subcolumn is the limit of that idea, and leeway can approach it as
-closely as the schema author cares to. <em>Untested here: no arm varied the
-section count, so this is a lever the measurement implies rather than one it
-demonstrates.</em></p>
+<p><strong>That tradeoff is a modelling choice, and moving it works.</strong>
+All paths of one type share a lane only because the mapping put them there.
+Splitting the five queried paths into their own sections — the same
+value-plus-path lane shape, just narrower — and rerunning the identical query,
+with no index anywhere:</p>
+
+<table>
+  <thead><tr><th>document-per-row layout</th><th class="num">bytes read</th><th class="num">seconds</th><th class="num">table size</th></tr></thead>
+  <tbody>
+    <tr><td>one lane per type (as measured above)</td><td class="num">28.27 GiB</td><td class="num">1.32</td><td class="num">13.93 GiB</td></tr>
+    <tr><td><strong>backbone split into its own sections</strong></td><td class="num"><strong>4.49 GiB</strong></td><td class="num"><strong>0.09</strong></td><td class="num">19.49 GiB</td></tr>
+  </tbody>
+</table>
+
+<p><strong>6.3&times; fewer bytes and 14.7&times; faster</strong>, for
+<strong>1.40&times; the storage</strong>. It also passes both other layouts on
+this query — 4.49&nbsp;GiB against the JSON type's 12.21 and the sorted
+attribute-per-row table's 6.51 — <em>without an index of any kind</em>. The
+JSON type's per-path subcolumn is the limit of this idea; a leeway schema
+reaches it by declaring sections, and pays in lane overhead rather than in
+query time.</p>
+
+<p><em>Method note: the split table was derived from the packed one rather than
+re-ingested, so its lanes are the shape a leeway section produces without
+having gone through the mapping. Section count is a schema decision the trial
+otherwise never varied.</em></p>
 
 <h3>4. The advantage widens with scale</h3>
 
