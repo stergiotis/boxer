@@ -115,25 +115,33 @@ storing them, at three predicate densities:</p>
   </tbody>
 </table>
 
-<p><strong>Read that as a comparison of <em>unindexed</em> layouts only.</strong>
-The attribute-per-row table is sorted <code>(path,&nbsp;doc)</code>; the other
-two are not. A JSON column <em>can</em> be sorted on the paths a query filters,
-and given that index it prunes to <strong>5 granules of 1225</strong> and
-answers the same four-criteria lookup in <strong>0.03&nbsp;s</strong> — 3.3&times;
-ahead of the attribute-per-row layout, not behind it.</p>
+<p><strong>That table gave only one arm an index</strong> — the
+attribute-per-row table is sorted <code>(path,&nbsp;doc)</code>, the other two
+were not. Rerun with <em>every</em> arm unsorted, the ordering changes
+completely:</p>
 
-<p>So the real split is <strong>whether the filter paths are known when the
-table is created</strong>. Known: sort the JSON or typed columns on them and
-nothing here beats it — but that index serves only the paths it was built for.
-Not known: <code>(path,&nbsp;doc)</code> is the workload-agnostic alternative
-and beats every unindexed option, because it is the only one of the three whose
-index helps a filter on <em>any</em> path. The document-per-row layout is last
-in every configuration and cannot be given this index at all — the path lives
-inside an array.</p>
+<table>
+  <thead><tr><th class="num">events out</th><th class="num">attribute-per-row</th><th class="num">JSON type</th><th class="num">document-per-row</th></tr></thead>
+  <tbody>
+    <tr><td class="num">7</td><td class="num">1.39 s</td><td class="num"><strong>0.80 s</strong></td><td class="num">2.30 s</td></tr>
+    <tr><td class="num">10,936</td><td class="num">1.40 s</td><td class="num"><strong>1.04 s</strong></td><td class="num">2.61 s</td></tr>
+    <tr><td class="num">8,377,929</td><td class="num">4.26 s</td><td class="num"><strong>1.08 s</strong></td><td class="num">2.51 s</td></tr>
+  </tbody>
+</table>
+
+<p><strong>The advantage was the index, all of it.</strong> So for this query
+shape the layout does not decide the answer — <em>what index it permits</em>
+does. The attribute-per-row layout permits a <strong>workload-agnostic</strong>
+one: <code>(path,&nbsp;doc)</code> helps a filter on any path, known in advance
+or not, and gets the four-criteria lookup to 0.29&nbsp;s. A JSON or typed
+column permits a <strong>workload-specific</strong> one, fastest of all where
+the filter paths were known when the table was made (0.03&nbsp;s at 10M) and
+only there. The document-per-row layout permits <strong>none</strong> — the
+path lives inside an array — and is last in every configuration measured.</p>
 
 <p>Which is the same axis as the rest of this page: an index helps when the
-path is in the query; the exploded layout is what you reach for when it is in
-the data. Both layouts can be kept at once — converting 100M documents takes
+path is in the query; the exploded layout is what buys one when it is in the
+data. Both layouts can be kept at once — converting 100M documents takes
 <strong>50.8 s at a bounded 5.4&nbsp;GB</strong>, and the copy is
 <em>smaller</em> than the original (0.70&times;), so carrying both costs
 1.70&times; one.</p>

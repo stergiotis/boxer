@@ -1,4 +1,4 @@
-criteria	matches	multi_row_s	json_type_s	one_row_s	winner
-4 (incl. a rare did)	7	0.29	0.63	2.07	multi-row 2.2x
-4 (incl. the top poster)	10936	0.40	0.69	2.18	multi-row 1.7x
-3 (no did)	8377929	1.95	0.97	2.45	JSON type 2.0x
+events_out	exploded_unsorted_s	json_unsorted_s	packed_unsorted_s	exploded_SORTED_s
+7	1.39	0.80	2.30	0.29
+10936	1.40	1.04	2.61	0.40
+8377929	4.26	1.08	2.51	1.95

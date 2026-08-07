@@ -384,35 +384,44 @@ one was not. Given that index it prunes to **5 granules of 1225** and answers
 in **0.03 s**, against the exploded layout's 0.10 s — **3.3× the other way.**
 The original margin measured the index, not the layout.
 
-Corrected, at 10M, four criteria, 7 events out:
+Corrected. At 10M, four criteria, 7 events out, each arm given the index it
+can have:
 
-| arm | sort key | | |
+| arm | index | |
+| --- | --- | --- |
+| JSON column, sorted on the four filter paths | workload-specific | **0.03 s** (prunes 5/1225 granules) |
+| exploded, `(path, doc)` | workload-agnostic | 0.10 s |
+| JSON column, unsorted | none | 0.10 s |
+| packed | **none possible** — the path is inside an array | 0.50 s |
+
+And with **every** arm unindexed at 100M, which is the like-for-like the first
+ladder should have been:
+
+| events out | exploded, unsorted | JSON, unsorted | packed |
 | --- | --- | --- | --- |
-| JSON column, sorted on the four filter paths | workload-specific | **0.03 s** | prunes 5/1225 granules |
-| exploded, `(path, doc)` | workload-agnostic | 0.10 s | |
-| JSON column, unsorted | none | 0.10 s | |
-| packed | none *(cannot have one — the path is inside an array)* | 0.50 s | |
+| 7 | 1.39 s | **0.80 s** | 2.30 s |
+| 10,936 | 1.40 s | **1.04 s** | 2.61 s |
+| 8,377,929 | 4.26 s | **1.08 s** | 2.51 s |
 
-So the answer splits on **whether the filter paths are known when the table is
-created**:
+**The exploded layout's advantage was the index, all of it.** Stripped of it,
+the shredded JSON column is the fastest of the three at every density, and the
+exploded layout loses even to packed once the predicate is dense — a five-way
+join over 1.2 billion rows costs more than a scan of 100 million.
 
-- **Known** — sort the JSON or typed columns on them and nothing here beats it.
-  That index is workload-specific: it serves the paths it was built for.
-- **Not known** — `(path, doc)` on an exploded table is the workload-agnostic
-  alternative, and it beats every unindexed option. It is the only layout of
-  the three whose index helps a filter on *any* path.
-- **Packed is last in every configuration**, and cannot be given this index at
-  all, because the path lives inside an array. That is the one conclusion here
-  independent of indexing.
+So for retrieval the layout does not decide the answer; **what index it permits
+does**:
+
+- **exploded** permits a *workload-agnostic* index — `(path, doc)` helps a
+  filter on any path, known or not. 0.29 s at 100M / 7 events out.
+- **a JSON or typed column** permits a *workload-specific* one — fastest of
+  all where the filter paths were known at table-creation time, and only there.
+- **packed permits none**, and is last in every configuration measured.
 
 Which returns the question to the trial's main axis: an index helps when the
-path is in the query, and the exploded layout is what you reach for when it is
-in the data. At 100M and low selectivity the ordering among the *unindexed*
-arms also inverts with density — exploded leads 2.2× at 7 events out and loses
-2.0× at 8.4M — but that ladder was run without giving the JSON arm its index
-and should be read as a comparison of unindexed layouts only.
+path is in the query; the exploded layout is what buys one when it is in the
+data.
 
-And the winner is engine-dependent regardless: the exploded layout leads on
+The winner is engine-dependent regardless: the exploded layout leads on
 ClickHouse and DuckDB (2.3–5.0× at 10M) and *loses* on DataFusion by 1.4–1.5×,
 which has no sorted format to seek in.
 
