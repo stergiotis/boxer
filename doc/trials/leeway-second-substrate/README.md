@@ -6,9 +6,10 @@ status: draft
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
 ---
 
-> **Status: draft — pre-human-review.** A measurement *plan*, not a result:
-> every number below is either quoted from a cited source or marked "to
-> measure". Do not cite as authoritative.
+> **Status: draft — pre-human-review.** Not yet reviewed by a human; do not
+> cite as authoritative. **The measurement work is closed** (2026-08-07, §6):
+> §4a carries the verdict, and every number is reproducible from the scripts
+> and run directories here.
 
 > **Provenance.** Compiled 2026-08-07, ahead of any measurement. Claims are
 > three-tiered: (a) statements about this repository were checked against the
@@ -617,13 +618,36 @@ hypotheses from surprises:
   typed: **one step into the tail and it inverts, leeway winning 2.6–3.4×**,
   because leeway's cost does not depend on where the path sits and N-struct's
   does. Details in the [logbook](./logbook.md).
-- **M5 — the facts layout** *(optional, gated on M0–M3 having stayed cheap)*.
-  Arm F, which answers H2 and would need a second `chpack` emitter or a
-  hand-written macro set. This is the milestone most likely to be worth
-  skipping; skipping it leaves H2 open, which is an acceptable outcome and
-  should be said plainly in the logbook rather than left implied.
-- **M6 — write-up.** Logbook entry per milestone, findings filed, a results
-  section on this page, and a pointer to whatever the numbers end up informing.
+- **M5 — the facts layout** *(optional)*. ✗ **Descoped.** Arm F never ran, so
+  **H2 stays open**: whether the facts layout's `arrayCumSum`-dependent read
+  path ports is untested, and the canonical mapping's answer does not transfer
+  to it. Said plainly here rather than left implied.
+- **M6 — write-up.** ✓ **Done.** Logbook entry per milestone, findings filed,
+  §4a written, and the read-surface cluster carried by
+  [ADR-0171](../../adr/0171-leeway-sql-read-surface.md) — which gained §SD5,
+  the exploded companion table, priced by this trial's conversion measurement.
+- **M7 — the 100M tier and the section lever** *(added mid-trial)*. ✓ **Done.**
+  Both representations at 100M under a pinned CPU governor; a plain-JSON arm
+  built for the other side; the ClickHouse benchmark entry rebuilt to separate
+  typing from indexing; retrieval measured across three densities with every
+  arm at its best form; `read_bytes` instrumented; and the section-split arm,
+  which was added because the read-bytes diagnostic implied a lever the
+  protocol had never considered.
+
+**Closed 2026-08-07, and not retired.** Every milestone is done or descoped
+above and the trial has no open work. It stays here rather than moving to
+[`doc/adr-background-work/`](../../adr-background-work/) because re-running it
+is the point: the scripts rebuild every arm from the corpus, and the thing most
+worth measuring on a later build is whether the findings in §5 have moved.
+
+A re-run should read §4a's corrections first. **The trial reversed seven of its
+own published readings**, and the pattern is worth more than any single number:
+each time, a comparison had been run with one side at less than its best known
+form — one query formulation, one storage format, one arm's weakest
+configuration, one layout given an index the others could have had, one schema
+that had never been varied. §4's rule exists because of the first; it did not
+prevent the rest, because the rule can only be applied to a dimension somebody
+has thought of.
 
 ## 7 Open questions
 
