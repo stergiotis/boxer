@@ -24,7 +24,8 @@ SELECT
     type,
     query_duration_ms,
     read_rows,
-    substring(query, 1, 120) AS query_head
+    substring(query, 1, 120) AS query_head,
+    if(query_kind=='Select', query,'') AS "query@application/sql"
 FROM system.query_log
 WHERE type != 'QueryStart'
 ORDER BY event_time DESC
