@@ -1,6 +1,7 @@
 package gov
 
 import (
+	"github.com/stergiotis/boxer/public/gov/buildtags"
 	"github.com/stergiotis/boxer/public/gov/callsites"
 	"github.com/stergiotis/boxer/public/gov/codelint"
 	"github.com/stergiotis/boxer/public/gov/commitdigest"
@@ -19,6 +20,7 @@ func NewCliCommand() *cli.Command {
 		Subcommands: cli2.CommandsNilRemoved(
 			doclint.NewCliCommand(),
 			codelint.NewCliCommand(),
+			buildtags.NewCliCommand(),
 			filename.NewCliCommand(),
 			callsites.NewCliCommand(),
 			repo.NewCliCommand(),

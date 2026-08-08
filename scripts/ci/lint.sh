@@ -91,6 +91,26 @@ fi
 #     step_end pass
 # fi
 
+step_begin "buildtags"
+# Verifies ./tags against the contract boxer publishes to consumers through its
+# module pin (public/gov/buildtags): every required tag present, no retired tag
+# carried. Hard gate — the sets are declared in Go and a unit test already keeps
+# them aligned with this file, so a finding here means ./tags was edited to
+# something the contract rejects.
+#
+# The check matters more downstream than here: a consuming repository copies
+# ./tags by hand and has no other mechanism that would notice a retirement. Two
+# were observed carrying tag families retired by ADR-0083 and ADR-0106 months
+# earlier. Running it in boxer keeps the published contract honest.
+if out=$("$here/../../boxer.sh" gov buildtags --file "$here/../../tags" 2>&1); then
+    echo "$out"
+    step_end pass
+else
+    echo "$out"
+    rc=1
+    step_end fail
+fi
+
 step_begin "codelint"
 # Surfaces CS-prefixed violations of CODINGSTANDARDS.md detected via
 # go/analysis-based AST passes (ADR-0011). Warn-only while the in-tree
