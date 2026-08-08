@@ -75,6 +75,7 @@ func (inst *StepDoclint) Name() (s string) { return "doclint" }
 
 func (inst *StepDoclint) Run(ctx context.Context, cfg Config, w io.Writer) (status StatusE, err error) {
 	linter := doclint.NewDefaultLinter()
+	linter.SetExclude(cfg.Exclude)
 
 	status = StatusPass
 	for f, runErr := range linter.Run(cfg.docRoots()) {
@@ -248,8 +249,9 @@ func (inst *StepFileNaming) Name() (s string) { return "file-naming" }
 func (inst *StepFileNaming) Run(ctx context.Context, cfg Config, w io.Writer) (status StatusE, err error) {
 	var findings []filenaming.Finding
 	findings, err = filenaming.CheckE(filenaming.Config{
-		Dir:   cfg.root(),
-		Roots: cfg.NamingRoots,
+		Dir:     cfg.root(),
+		Roots:   cfg.NamingRoots,
+		Exclude: cfg.Exclude,
 	})
 	if err != nil {
 		return

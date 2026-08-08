@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -500,4 +501,34 @@ func TestParseFormatAndSeverity(t *testing.T) {
 	require.Equal(t, FindingSeverityError, s)
 	_, err = ParseSeverityE("panic")
 	require.Error(t, err)
+}
+
+// SetExclude is the per-repository policy surface that replaced a `grep -Ev`
+// duplicated between a consumer's lint script and its editor hook (ADR-0179).
+func TestSetExcludeDropsFindingsByPath(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "attic"), 0o755))
+	// Both lack front-matter, so both trip DL001.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "kept.md"), []byte("# kept\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "attic", "old.md"), []byte("# old\n"), 0o644))
+
+	count := func(l *Linter) (paths []string) {
+		paths = make([]string, 0, 4)
+		for f, err := range l.Run([]string{dir}) {
+			require.NoError(t, err)
+			if f.RuleId == "DL001" {
+				paths = append(paths, filepath.Base(f.Path))
+			}
+		}
+		return
+	}
+
+	plain := NewLinter()
+	plain.Register(NewRuleDL001())
+	assert.ElementsMatch(t, []string{"kept.md", "old.md"}, count(plain))
+
+	filtered := NewLinter()
+	filtered.Register(NewRuleDL001())
+	filtered.SetExclude([]string{"attic/"})
+	assert.Equal(t, []string{"kept.md"}, count(filtered))
 }

@@ -21,6 +21,10 @@ func NewCliCommand() *cli.Command {
 				Value: "human",
 				Usage: "output format: human | json",
 			},
+			&cli.StringSliceFlag{
+				Name:  "exclude",
+				Usage: "path pattern to skip (repeatable): a bare name or glob matches a basename, a trailing slash a directory at any depth, a pattern with a separator the whole relative path",
+			},
 			&cli.StringFlag{
 				Name:  "min-severity",
 				Value: "warn",
@@ -49,6 +53,7 @@ func doclintAction(ctx *cli.Context) (err error) {
 	}
 
 	linter := NewDefaultLinter()
+	linter.SetExclude(ctx.StringSlice("exclude"))
 
 	var rep ReporterI
 	rep, err = NewReporterE(format, os.Stdout)

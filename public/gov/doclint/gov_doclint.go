@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/extbin"
+	"github.com/stergiotis/boxer/public/gov/pathfilter"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -64,9 +65,11 @@ type RuleI interface {
 
 // Linter aggregates rules and runs them in sequence.
 //
-// Zero value is usable; rules are added via Register.
+// Zero value is usable; rules are added via Register and per-repository
+// exclusions via SetExclude.
 type Linter struct {
-	rules []RuleI
+	rules   []RuleI
+	exclude *pathfilter.Matcher
 }
 
 func NewLinter() (inst *Linter) {
@@ -101,12 +104,28 @@ func (inst *Linter) Register(r RuleI) {
 	inst.rules = append(inst.rules, r)
 }
 
+// SetExclude installs the repository's exclusion patterns (see
+// [github.com/stergiotis/boxer/public/gov/pathfilter] for the syntax).
+//
+// Findings whose path matches are dropped rather than the tree being pruned:
+// rules walk their own way — several resolve links across the tree, so a pruned
+// walk would make an excluded file look absent rather than ignored — and
+// filtering at the finding boundary is the one point every rule shares. The
+// cost is walking a tree whose findings are then discarded, which is small
+// against the trees repositories actually exclude.
+func (inst *Linter) SetExclude(patterns []string) {
+	inst.exclude = pathfilter.NewMatcher(patterns)
+}
+
 // Run executes every registered rule against the given roots and yields
 // findings as they are produced. A non-nil error aborts the run.
 func (inst *Linter) Run(roots []string) iter.Seq2[Finding, error] {
 	return func(yield func(Finding, error) bool) {
 		for _, r := range inst.rules {
 			for f, err := range r.Check(roots) {
+				if err == nil && !inst.exclude.IsEmpty() && inst.exclude.Match(f.Path) {
+					continue
+				}
 				if !yield(f, err) {
 					return
 				}

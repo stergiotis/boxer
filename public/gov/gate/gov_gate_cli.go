@@ -55,6 +55,10 @@ func NewCliCommand() *cli.Command {
 				Usage: "tree the naming rules audit (repeatable); empty means public, apps",
 			},
 			&cli.StringSliceFlag{
+				Name:  "exclude",
+				Usage: "path pattern the checks skip (repeatable): a bare name or glob matches a basename, a trailing slash a directory at any depth, a pattern with a separator the whole relative path",
+			},
+			&cli.StringSliceFlag{
 				Name:  "step",
 				Usage: "run only this step (repeatable); empty runs all",
 			},
@@ -103,6 +107,7 @@ func gateAction(ctx *cli.Context) (err error) {
 		EntryPointsBaseline: ctx.String("entry-points-baseline"),
 		NamingBaseline:      ctx.String("naming-baseline"),
 		NamingRoots:         ctx.StringSlice("naming-root"),
+		Exclude:             ctx.StringSlice("exclude"),
 		Steps:               want,
 	}
 

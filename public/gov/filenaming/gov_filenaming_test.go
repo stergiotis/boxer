@@ -154,3 +154,17 @@ func TestFindingStringIsTheBaselineFormat(t *testing.T) {
 	assert.Equal(t, "package:a/b", Finding{Rule: RuleN6, Path: "a/b"}.String())
 	assert.Equal(t, "app-prefix:apps/x/y.go", Finding{Rule: RuleN7, Path: "apps/x/y.go"}.String())
 }
+
+func TestExcludeSuppressesFindings(t *testing.T) {
+	dir := fixture(t, map[string]string{
+		"public/a/BadName.go":     "package a\n",
+		"public/vendored/Bad.go":  "package vendored\n",
+		"public/b/AlsoBadName.go": "package b\n",
+	})
+	f, err := CheckE(Config{Dir: dir, Exclude: []string{"vendored/"}})
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{
+		"file:public/a/BadName.go",
+		"file:public/b/AlsoBadName.go",
+	}, strs(f))
+}

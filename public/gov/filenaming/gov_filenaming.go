@@ -25,6 +25,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/gov/pathfilter"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -93,6 +94,10 @@ type Config struct {
 	// AppsDir is the tree N7 applies to, relative to Dir. Empty means
 	// "apps"; N7 is skipped when it does not exist.
 	AppsDir string
+	// Exclude are repository-specific exclusion patterns, on top of the
+	// generated-file and attic filters this package always applies. See
+	// [github.com/stergiotis/boxer/public/gov/pathfilter] for the syntax.
+	Exclude []string
 }
 
 func (inst Config) dir() (s string) {
@@ -234,6 +239,16 @@ func CheckE(cfg Config) (findings []Finding, err error) {
 		return
 	}
 	findings = make([]Finding, 0, 16)
+	excl := pathfilter.NewMatcher(cfg.Exclude)
+	if !excl.IsEmpty() {
+		kept := make([]string, 0, len(files))
+		for _, f := range files {
+			if !excl.Match(f) {
+				kept = append(kept, f)
+			}
+		}
+		files = kept
+	}
 
 	// N1 — file basenames.
 	dirs := make([]string, 0, len(files))
