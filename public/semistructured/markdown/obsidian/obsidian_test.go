@@ -220,6 +220,77 @@ func TestTag_NotHeading(t *testing.T) {
 	require.NotContains(t, out, `class="tag"`)
 }
 
+// TestTag_NeedsAWordBoundary covers the check the parser was missing:
+// goldmark fires an inline trigger at EVERY `#`, so without it a `#` glued to
+// the end of a word opened a tag. Obsidian reads those as part of the word,
+// and this repo's prose is full of them.
+func TestTag_NeedsAWordBoundary(t *testing.T) {
+	for _, input := range []string{
+		"Bare C#sharp in prose",
+		"a v#2 build",
+		"see foo#bar here",
+		"##double in flowing text",
+	} {
+		t.Run(input, func(t *testing.T) {
+			require.NotContains(t, render(t, allFeatures(), input), `class="tag"`)
+		})
+	}
+}
+
+// TestTag_BoundaryIsRuneAware guards the check being on runes rather than
+// bytes: a letter outside ASCII is still a letter, so a `#` glued to one is
+// still inside a word.
+func TestTag_BoundaryIsRuneAware(t *testing.T) {
+	require.NotContains(t, render(t, allFeatures(), "Ähnliches Wörtchen#tag"), `class="tag"`)
+}
+
+// TestTag_NotPurelyNumeric is Obsidian's own rule, and the one that decides
+// whether this extension is safe to enable over technical prose: `#4` is the
+// English "number four". Issue references, numbered open questions and
+// ordinals are by far the most common `#` in these documents, and every one of
+// them would otherwise render as a tag.
+func TestTag_NotPurelyNumeric(t *testing.T) {
+	for _, input := range []string{
+		"Open question #4 stays open",
+		"tracked upstream as #1158",
+		"resolves #12345",
+	} {
+		t.Run(input, func(t *testing.T) {
+			require.NotContains(t, render(t, allFeatures(), input), `class="tag"`)
+		})
+	}
+	// A digit is fine as long as something else is there — `#v2` is a tag.
+	require.Contains(t, render(t, allFeatures(), "ship #v2 now"), `class="tag"`)
+	require.Contains(t, render(t, allFeatures(), "ship #2fast now"), `class="tag"`)
+}
+
+// TestTag_LinkDestinationsAreUntouched is why the boundary rule is enough
+// rather than needing a position rule too: a `#fragment` inside a link target
+// never reaches the inline parser, so the hundreds of `](./doc.md#anchor)`
+// references across this repo's markdown are not at risk either way.
+func TestTag_LinkDestinationsAreUntouched(t *testing.T) {
+	out := render(t, allFeatures(), "See [the rule](./PRACTICES.md#enforcement) and [x](#local).")
+	require.NotContains(t, out, `class="tag"`)
+	require.Contains(t, out, `href="./PRACTICES.md#enforcement"`)
+	require.Contains(t, out, `href="#local"`)
+}
+
+// TestTag_CodeSpansAreUntouched — the other position that must stay literal.
+func TestTag_CodeSpansAreUntouched(t *testing.T) {
+	require.NotContains(t, render(t, allFeatures(), "a `code #span` b"), `class="tag"`)
+}
+
+// TestTag_HeadingAnchorBracesAreNotTags is the collision between two features
+// that both spell things with `#`. An anchor that does not terminate its line
+// stays literal text — and without the brace in the boundary set the tag
+// parser ate the inside of it, so the heading rendered as `Creating a table
+// {}.` and the reader lost what they wrote.
+func TestTag_HeadingAnchorBracesAreNotTags(t *testing.T) {
+	out := render(t, allFeatures(), "## Creating a table {#creating-a-table}.\n")
+	require.NotContains(t, out, `class="tag"`)
+	require.Contains(t, out, "{#creating-a-table}.")
+}
+
 // =============================================================================
 // Callouts
 // =============================================================================

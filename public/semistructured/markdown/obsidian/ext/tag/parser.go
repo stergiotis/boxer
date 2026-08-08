@@ -1,6 +1,8 @@
 package tag
 
 import (
+	"unicode"
+
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
@@ -22,15 +24,23 @@ func (inst *tagParser) Parse(parent ast.Node, block text.Reader, pc parser.Conte
 		return
 	}
 
-	// # must be preceded by whitespace or be at start of line to avoid
-	// conflicting with heading syntax (which is block-level) or anchor fragments.
-	// In inline context, goldmark won't call us for headings, but we still need
-	// to avoid matching things like foo#bar (CSS selectors, URL fragments).
-	if segment.Start > 0 {
-		// We need to check the byte before our trigger.
-		// Unfortunately goldmark doesn't give us direct access to previous bytes,
-		// but in inline context the trigger is only called after a boundary.
-		// We validate the first char after # to ensure it's a valid tag start.
+	// A tag opens at a word boundary. goldmark fires an inline trigger at
+	// EVERY `#` in the text, so `word#word` reaches here too — a URL fragment
+	// outside a link destination, a CSS selector, `C#sharp`. Obsidian reads
+	// those as part of the word they are attached to, and so do we.
+	//
+	// PrecendingCharacter reports '\n' at the start of the block, which is a
+	// boundary; it is rune-aware, so a letter in any script counts as a word
+	// character rather than only ASCII.
+	//
+	// Two punctuation marks are rejected as well. A preceding `#` keeps
+	// `##word` in flowing prose plain instead of splitting it into a stray `#`
+	// and a tag. A preceding `{` belongs to the attribute syntax `{#anchor}`
+	// that [obsidian.FeatureHeadingAnchor] owns — when the anchor does not
+	// terminate its line the braces stay literal text, and a tag parser
+	// eating the inside of them would delete what the reader wrote.
+	if prev := block.PrecendingCharacter(); prev == '#' || prev == '{' || isWordRune(prev) {
+		return
 	}
 
 	// First char after # must be a letter, digit, or underscore (not space, punctuation, or #)
@@ -52,12 +62,38 @@ func (inst *tagParser) Parse(parent ast.Node, block text.Reader, pc parser.Conte
 		return
 	}
 
+	// Obsidian requires at least one non-numeric character: `#4` is the
+	// English "number four", not a tag. Without this rule technical prose
+	// turns into tags wherever it counts things — issue references, numbered
+	// open questions, ordinals — which is the single largest source of false
+	// tags in the documents this parser is pointed at.
+	if isAllDigits(line[1:i]) {
+		return
+	}
+
 	n := &Node{
 		Tag: line[1:i],
 	}
 	_ = segment // segment used for offset tracking
 	block.Advance(i)
 	return n
+}
+
+// isWordRune reports whether r would make a preceding `#` part of a word
+// rather than the start of a tag.
+func isWordRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+// isAllDigits reports whether every byte of the tag body is 0-9. A tag body is
+// ASCII by construction ([isTagBodyChar]), so a byte scan is exact here.
+func isAllDigits(body []byte) bool {
+	for _, c := range body {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return len(body) > 0
 }
 
 func isTagChar(c byte) bool {
