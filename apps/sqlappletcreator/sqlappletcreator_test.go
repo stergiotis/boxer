@@ -144,6 +144,10 @@ type fakeFsBus struct {
 	wrote       []byte
 	grant       bool
 	grantReason string
+	// waits records the timeout each subject was requested with, so a test can
+	// assert the export asks for a HUMAN-length wait on the dialog. Under the
+	// transport default the picker times out while it is still on screen.
+	waits map[string]time.Duration
 }
 
 var _ app.BusI = (*fakeFsBus)(nil)
@@ -153,9 +157,16 @@ func (f *fakeFsBus) Subscribe(subject string, handler app.MsgHandlerFunc) (unsub
 	return
 }
 
-// RequestWithTimeout delegates: the fake answers instantly, so the wait
-// never matters here.
-func (f *fakeFsBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) ([]byte, error) {
+// RequestWithTimeout records the wait and then answers instantly. The wait is
+// the point of the record: a dialog answered by a person cannot use the
+// transport default, and nothing else in this test would notice if it did.
+func (f *fakeFsBus) RequestWithTimeout(subject string, payload []byte, d time.Duration) ([]byte, error) {
+	f.mu.Lock()
+	if f.waits == nil {
+		f.waits = make(map[string]time.Duration, 2)
+	}
+	f.waits[subject] = d
+	f.mu.Unlock()
 	return f.Request(subject, payload)
 }
 
@@ -230,4 +241,31 @@ func TestExportGuardsEmptyTitle(t *testing.T) {
 	bus.mu.Lock()
 	defer bus.mu.Unlock()
 	assert.Nil(t, bus.dialogReq, "no dialog opened without a title")
+}
+
+// TestExportWaitsLongEnoughForAPerson is the regression guard on a defect that
+// made the whole export unusable and was invisible to every other test here:
+// fs.dialog.write is answered when somebody finishes choosing in a file
+// picker, and the bus transport's default wait is five seconds. Under it the
+// export reported a timeout while the picker was still open. The fakes answer
+// instantly, so only the requested duration can show the difference.
+func TestExportWaitsLongEnoughForAPerson(t *testing.T) {
+	bus := &fakeFsBus{grant: true}
+	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 9", slug: "exp-applet", title: "Exp Applet", icon: "📄"}
+	inst.export()
+
+	require.Eventually(t, func() bool {
+		inst.mu.Lock()
+		defer inst.mu.Unlock()
+		return strings.Contains(inst.status, "exported")
+	}, 2*time.Second, 10*time.Millisecond)
+
+	bus.mu.Lock()
+	defer bus.mu.Unlock()
+	assert.Equal(t, fsbroker.DialogTimeout, bus.waits[fsbroker.SubjectDialogWrite],
+		"the save dialog waits on a person, not on a service")
+	assert.Equal(t, fsbroker.HandleOpTimeout, bus.waits["fs.handle.abc123.write"],
+		"the handle write has no human in it and should not wait like the dialog")
+	assert.Greater(t, bus.waits[fsbroker.SubjectDialogWrite], time.Minute,
+		"anything near the transport default fails while the picker is open")
 }

@@ -394,12 +394,20 @@ synchronously on the caller's own goroutine — an inline reply is already in th
 channel by the time `Request` reaches its select, so the timeout branch is
 never taken and the test passes whatever the timeout says.
 
-Adopted by mdedit ([ADR-0178](./0178-mdedit-markdown-editor.md) M4): ten
-minutes for a dialog, thirty seconds for the handle read/write ops the broker
-answers without a human. Finite rather than unbounded, so a picker nobody
-answers releases the goroutine instead of leaking it for the life of the
-window. `sqlappletcreator` is left as it is — the fix is available to it, but
-changing it belongs to whoever owns that flow.
+The two waits are `fsbroker.DialogTimeout` (ten minutes) and
+`fsbroker.HandleOpTimeout` (thirty seconds), exported beside the subjects
+rather than chosen per app: which requests wait on a person is a property of
+the subject, and the broker is the only party that knows it. Finite rather than
+unbounded, so a picker nobody answers releases the caller's goroutine instead
+of leaking it for the life of the window.
+
+Adopted by mdedit ([ADR-0178](./0178-mdedit-markdown-editor.md) M4) and by
+`sqlappletcreator`'s export, whose regression guard is the shape worth copying:
+the fake bus records the duration each subject was requested with, because the
+fakes answer instantly and nothing else in those tests can tell a five-second
+wait from a ten-minute one. **`capdemo` (`fs.dialog.read`, `fs.dialog.watch`)
+and play (`fs.dialog.read`) still carry the defect** — the fix is a one-line
+change each, left to whoever owns those flows.
 
 ### 2026-07-30 (later) — `runtime.persist` is a legacy channel under the data-centricity invariant
 

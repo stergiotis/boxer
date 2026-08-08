@@ -48,6 +48,33 @@ const (
 // ServiceAppId is the synthetic AppId the broker registers under.
 const ServiceAppId app.AppIdT = "runtime.fs"
 
+// DialogTimeout and HandleOpTimeout are what a CLIENT should pass to
+// [app.BusI.RequestWithTimeout] for the two kinds of request this service
+// answers. They live here, beside the subjects, because the thing that decides
+// them is a property of the subject rather than of the caller: only this
+// package knows which of its requests waits on a person.
+//
+// A `fs.dialog.*` request is not answered until somebody has found a folder,
+// typed a name and pressed Save. Under the transport default — five seconds,
+// the order of magnitude a NATS client uses — every dialog flow fails while
+// its picker is still on screen and the app reports a timeout for a dialog the
+// user is looking at. That is not hypothetical; it is what driving the desktop
+// host did to mdedit's Save, and every consumer here had the same defect
+// (ADR-0026, 2026-08-08).
+//
+// Finite rather than unbounded, so a picker nobody ever answers releases the
+// caller's goroutine instead of leaking it for the life of the window. Ten
+// minutes is well past the point where a dialog is still a live gesture.
+//
+// The handle ops are the opposite case — a filesystem call and a bus hop, no
+// human anywhere — so they get a bound generous for slow storage and far below
+// the dialog's, because a wedged filesystem should not look like a slow
+// reader.
+const (
+	DialogTimeout   = 10 * time.Minute
+	HandleOpTimeout = 30 * time.Second
+)
+
 // DefaultMaxReadBytes caps a single fs.handle.{uuid}.read response. The
 // whole file is buffered into memory (and again as the bus payload), so an
 // app granted a handle to a multi-gigabyte file — or an unbounded special

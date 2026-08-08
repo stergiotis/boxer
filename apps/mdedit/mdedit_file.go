@@ -35,7 +35,6 @@ package mdedit
 
 import (
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -59,23 +58,12 @@ const (
 	// be a sentence; a filename should not be.
 	maxSuggestedNameLen = 48
 
-	// dialogTimeout is how long a dialog request waits, and it is not a
-	// service latency — it is how long a person may take to find a folder,
-	// type a name and press Save. The transport default is five seconds,
-	// which fails while the picker is still on screen and reports "timeout"
-	// for a dialog the user is looking at; that is what driving this app
-	// found, and it applies to every fsbroker dialog consumer.
-	//
-	// Finite rather than unbounded so a picker nobody ever answers releases
-	// the goroutine instead of leaking it for the life of the window. Ten
-	// minutes is past the point where a forgotten dialog is a live gesture.
-	dialogTimeout = 10 * time.Minute
-
-	// transferTimeout covers the read and write ops, which are answered by
-	// the broker with no human in the way — a file system call and a bus
-	// round-trip. Well above what those cost and well below the dialog's
-	// wait, because a hung filesystem should not look like a slow reader.
-	transferTimeout = 30 * time.Second
+	// dialogTimeout and transferTimeout come from the broker rather than being
+	// chosen here: which of its requests waits on a person is a property of
+	// the subject, and fsbroker is what knows it. Named locally only so the
+	// call sites below read as prose.
+	dialogTimeout   = fsbroker.DialogTimeout
+	transferTimeout = fsbroker.HandleOpTimeout
 )
 
 // Hover help for the file row.

@@ -281,7 +281,7 @@ func (inst *App) export() {
 			inst.exportBusy = false
 			inst.mu.Unlock()
 		}()
-		rawReply, rerr := inst.bus.Request(fsbroker.SubjectDialogWrite, reqBytes)
+		rawReply, rerr := inst.bus.RequestWithTimeout(fsbroker.SubjectDialogWrite, reqBytes, fsbroker.DialogTimeout)
 		if rerr != nil {
 			inst.setStatus("file dialog: " + rerr.Error())
 			return
@@ -301,7 +301,7 @@ func (inst *App) export() {
 		}
 		// The write-handle op replies a DialogReply acking whether the bytes
 		// landed (unlike the read op, which replies the raw body).
-		writeReply, werr := inst.bus.Request(dr.HandleSubjectPrefix+".write", doc)
+		writeReply, werr := inst.bus.RequestWithTimeout(dr.HandleSubjectPrefix+".write", doc, fsbroker.HandleOpTimeout)
 		if werr != nil {
 			inst.setStatus("write: " + werr.Error())
 			return
