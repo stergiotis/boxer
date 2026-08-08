@@ -106,8 +106,8 @@ const (
 // box becomes visible.
 //
 // Phosphor is bundled and loaded by the client, so this depends on no fallback
-// chain at all. See also the `◈` co-section glyph in schemaview, the same
-// class of defect found from the other end (ADR-0176 verification notes).
+// chain at all. See also schemaview's co-section glyph, the same class of
+// defect found from the other end (ADR-0176 verification notes).
 var (
 	glyphCollapsed = icons.PhCaretRight
 	glyphExpanded  = icons.PhCaretDown

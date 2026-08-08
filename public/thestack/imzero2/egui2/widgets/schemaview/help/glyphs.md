@@ -33,7 +33,7 @@ Every section in the navigator begins with one glyph identifying its kind.
 - **◇ — tagged section.** A *payload* group: a named set of value columns
   addressed by tag, which may repeat per row. Most of a schema's substance
   lives in tagged sections.
-- **◈ — co-section group.** A tagged section that belongs to a named group of
+- **❖ — co-section group.** A tagged section that belongs to a named group of
   sections meant to be read together and sharing one membership axis — for
   example, several facets of one concept split across sibling sections. The
   group key is shown before the section name.

@@ -582,10 +582,24 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   window always showed it correctly: its chips are `Monospace()`.
 
   So the navigator now draws the category glyph as its own monospace run, with
-  the glyph carried beside the label in `navNode` rather than inside it. The
-  documented vocabulary is unchanged; only the face is. It fixes the tofu and
+  the glyph carried beside the label in `navNode` rather than inside it. That
   takes `◆` and `◇` off the fallback chain too — they rendered only because a
   CJK font happened to be loaded and happened to have them.
+
+  **And then the glyph itself had to go.** Rendering it faithfully showed the
+  second defect: `◈` is "white diamond containing black small diamond", and the
+  interior gap that distinguishes it from `◆` is sub-pixel at the size a row
+  draws it. Rasterised from the mono face it is byte-identical to `◆` at 12px
+  and at 14px, and only at 18px does any structure appear — which is why it
+  read the same as `◆` in the legend, where it had been rendering "correctly"
+  all along. A mark that cannot be told from its neighbour is not a mark. The
+  co-section glyph is now `❖`, which keeps the diamond family and carries a
+  visible interior at 13px; it changes with it in the TopologySpark card the
+  vocabulary is shared with, so the two do not drift.
+
+  Two defects, one glyph, found in the order tofu → illegible. The first hid
+  the second: a box that renders nothing cannot be observed to render the wrong
+  thing.
 
   **The header block replays twice**, the same way SD6's row block would
   without its guard: `header_cell_ui` runs for the sticky region as well as

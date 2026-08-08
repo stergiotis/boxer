@@ -15,22 +15,30 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
-// The navigator's category glyphs, documented in the help book and keyed by the
-// legend window. They are drawn in the MONOSPACE face, which is not decoration:
-// none of the three is in Noto Sans, so each resolves through the client's
-// fallback chain — and the CJK face that answers has ◆ and ◇ but NOT ◈, which
-// left the co-section glyph rendering as a tofu box. The mono font the client
-// loads covers all three, which is exactly why the legend window has always
-// shown ◈ correctly: its chips are Monospace().
+// The navigator's category glyphs, documented in the help book, keyed by the
+// legend window, and shared with the TopologySpark card that this vocabulary
+// came from.
 //
-// Keeping the vocabulary and changing the face fixes the tofu and takes ◆ and ◇
-// off the fallback chain at the same time — they render today only because a
-// CJK font happened to be loaded and happened to have them. See the imzero2
-// skill, §12 "Oversized, Off-Centre Glyph", for the general rule.
+// Two things about them are load-bearing rather than decorative.
+//
+// They are drawn in the MONOSPACE face. None of the three is in Noto Sans, so
+// each otherwise resolves through the client's fallback chain — and the CJK
+// face that answers has the first two but not the third, which left the
+// co-section glyph rendering as a tofu box. The mono font covers all three,
+// which is why the legend window always showed it correctly: its chips are
+// Monospace(). See the imzero2 skill, §12 "Oversized, Off-Centre Glyph".
+//
+// And the co-section glyph is ❖, not the ◈ it reads as in the spec. ◈ is
+// "white diamond containing black small diamond", and the interior gap that
+// distinguishes it from ◆ is SUB-PIXEL at the size a row draws it: rasterised
+// from this face at 12 and 14px it is byte-identical to ◆, and only at 18px
+// does any structure appear. A mark that cannot be told from its neighbour is
+// not a mark. ❖ keeps the diamond family and carries a visible interior at
+// 13px.
 const (
 	glyphPlainItemType  = "◆"
 	glyphTaggedSection  = "◇"
-	glyphCoSectionGroup = "◈"
+	glyphCoSectionGroup = "❖"
 )
 
 // navNode is the per-node metadata the navigator keeps alongside the columnar
@@ -42,7 +50,7 @@ type navNode struct {
 	// means a different node one frame to the next. The key is what the
 	// Model's own collapse state is filed under; see [Model.syncNav].
 	key string
-	// glyph is the section row's category mark (◆ / ◇ / ◈), or "" on a column
+	// glyph is the section row's category mark (◆ / ◇ / ❖), or "" on a column
 	// row. It rides beside the label rather than inside it because it has to
 	// be drawn in a DIFFERENT FACE — see [glyphPlainItemType].
 	glyph string
@@ -113,7 +121,7 @@ func (m *Model) buildNav() {
 	}
 
 	// Tagged sections, in declaration order. Co-grouped sections carry a
-	// ◈ <key> · prefix; standalone sections carry ◇.
+	// ❖ <key> · prefix; standalone sections carry ◇.
 	for i := range t.TaggedValuesSections {
 		sec := &t.TaggedValuesSections[i]
 		if !m.matchesSection(sec) {

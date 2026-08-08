@@ -64,7 +64,7 @@ func TestBuildNavShape(t *testing.T) {
 		"readings", "celsius",
 		"prov · audit ·∅",
 	}, m.navLabels)
-	assert.Equal(t, []string{"◆", "", "", "◇", "", "◈"},
+	assert.Equal(t, []string{"◆", "", "", "◇", "", "❖"},
 		[]string{m.navNodes[0].glyph, m.navNodes[1].glyph, m.navNodes[2].glyph,
 			m.navNodes[3].glyph, m.navNodes[4].glyph, m.navNodes[5].glyph},
 		"section rows carry a category glyph; column rows do not")

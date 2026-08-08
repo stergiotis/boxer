@@ -22,7 +22,7 @@ type legendEntry struct {
 var legendEntries = []legendEntry{
 	{"◆", badge.ToneInfo, "plain item-type section"},
 	{"◇", badge.TonePrimary, "tagged section"},
-	{"◈", badge.TonePrimary, "co-section group"},
+	{"❖", badge.TonePrimary, "co-section group"},
 	{"·", badge.ToneNeutral, "column / property separator"},
 	{"ˡ", badge.ToneNeutral, "low-card membership spec"},
 	{"ʰ", badge.ToneNeutral, "high-card membership spec"},
@@ -106,7 +106,7 @@ func renderLegendWindow(ids *c.WidgetIdStack, m *Model, scope string) {
 
 // renderLegendBody lays the glyphs out as a two-column grid: a toned chip
 // carrying the glyph, then its meaning. The chip tone echoes the detail-pane
-// category accent (◆ info, ◇/◈ accent, annotations neutral) so glyph colour
+// category accent (◆ info, ◇/❖ accent, annotations neutral) so glyph colour
 // reads the same wherever it appears.
 func renderLegendBody(ids *c.WidgetIdStack) {
 	for rt := range c.RichTextLabel("navigator glyphs") {

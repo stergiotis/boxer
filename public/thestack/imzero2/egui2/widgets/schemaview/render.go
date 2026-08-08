@@ -151,7 +151,7 @@ func renderNavHeader(ids *c.WidgetIdStack, m *Model, scope string) {
 }
 
 // renderSections draws the navigator as an outline: plain item-types (◆),
-// standalone tagged sections (◇), and co-grouped sections (◈, prefixed with
+// standalone tagged sections (◇), and co-grouped sections (❖, prefixed with
 // the group key) at the top level, each over its value columns. Selecting a
 // row drives the detail pane.
 //
@@ -339,12 +339,12 @@ func chipRow(ids *c.WidgetIdStack, key, label string, items []string, tone badge
 	c.EndRow()
 }
 
-// sectionGlyph picks the navigator glyph + tone for a tagged section: ◈ when it
+// sectionGlyph picks the navigator glyph + tone for a tagged section: ❖ when it
 // belongs to a co-section group, ◇ otherwise. Both carry the accent tone (the
 // tagged category colour).
 func sectionGlyph(sec *common.TaggedValuesSection) (glyph string, tone styletokens.RGBA8) {
 	if string(sec.CoSectionGroup) != "" {
-		return "◈", styletokens.AccentDefault
+		return glyphCoSectionGroup, styletokens.AccentDefault
 	}
 	return "◇", styletokens.AccentDefault
 }

@@ -19,7 +19,7 @@ import (
 // Legend:
 //   ◆name          plain section with its columns
 //   ◇N×⟨shape⟩     tagged section: N attributes, shape of first attribute
-//   ◈key[...]      co-section group
+//   ❖key[...]      co-section group
 //   s f64 u32 ...  column canonical types (short form)
 //   ∥4             homogenous array of 4 elements
 //   {3}            set of 3 elements
@@ -126,7 +126,7 @@ func (s *TopologySpark) BeginCoSectionGroup(name naming.Key) {
 	if s.line.Len() > 0 {
 		s.line.WriteByte(' ')
 	}
-	s.line.WriteString("◈")
+	s.line.WriteString("❖")
 	s.line.WriteString(name.String())
 	s.line.WriteByte('[')
 	s.inCoGroup = true

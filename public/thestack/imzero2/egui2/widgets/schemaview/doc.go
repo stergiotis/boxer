@@ -31,7 +31,7 @@
 //
 //	◆ plain item-type section
 //	◇ tagged section
-//	◈ co-section group
+//	❖ co-section group
 //	ˡ ʰ ᵐ  the section's MembershipSpec cardinality class (low / high /
 //	       mixed) — the spec, not an instance count
 //	·∅ a value-less (membership-only) section
