@@ -223,8 +223,37 @@ only honest reading of the marker.
 - **M0 — the editing surface: split panes, live preview, caret-follows-preview, dirty marker, clipboard export, session restore.**
 - **M1 — source-offset markdown highlighting, wired through `textEdit.highlightJob`.** ✓
 - **M2 — editing affordances: a formatting bar over `insertAtCursor`, an outline from `Doc.Headings()`, a word and reading-time readout.** ✓
-- **M3 — find and replace: matches painted through `sectionStyled`, replace-all as a whole-buffer rebind.**
+- **M3 — find and replace: matches painted through `sectionStyled`, replace-all as a whole-buffer rebind.** ✓
 - **M4 — file I/O through fsbroker.**
+
+M3 shipped as planned, plus two things the plan did not name. Replace-one is
+there beside replace-all — a find bar without it is a strange tool, and it is
+the same rebind with a one-element span list. And the colour job now depends on
+the match set, which is the milestone's one structural surprise: a styled
+overlay is merged into the format of every colour section it OVERLAPS, by
+design, so that the colour tier alone decides where sections begin
+(`text_edit_highlight.rs`, `apply_styles`). Since the markdown lexer coalesces
+runs of one category, a paragraph of prose is a single section — and a match
+inside it tinted the paragraph. The repair asked nothing of the seam: the app
+splits its own colour spans at every painted match boundary before building the
+job, so each match is its own section. Verified live, per-pixel: the background
+covers the match's bytes and stops there.
+
+Three limits M3 accepts rather than solves:
+
+- **No keyboard shortcut.** There is no general key channel across the seam —
+  only the dedicated `F1` and Ctrl+Enter drains — so the bar is opened from a
+  toggle and stepped with buttons. `lostFocus` cannot stand in for Enter: it
+  cannot tell Enter from a click away, and advancing the match because someone
+  clicked elsewhere is worse than not advancing at all.
+- **The overlay is windowed at 400 matches**, centred on the current one, since
+  each painted match costs a styled section AND a split in the colour job.
+  Navigation and replace read the full list, so "replace all" means all of
+  them, and the readout says when the painting is bounded.
+- **A replacement leaves the widget's own edit path.** What Ctrl+Z does after
+  one is egui's undoer's business — it snapshots the buffer on a timer, and an
+  externally rewritten buffer is just another state to it. Not arranged here,
+  and not relied on.
 
 ## Surfaces — Tier 1
 
@@ -238,6 +267,7 @@ visible before the work starts rather than discovered inside it.
 | `markdownhighlight` exported API (M1, shipped) | added — `HighlightLex`, returning spans into the *source* bytes; `Highlight` untouched | `codeview.BuildMarkdownLex`, resolving the same categories against the existing `mdColors` palette |
 | `codeview` exported API (M2, shipped) | added — `BuildMarkdownFromSpans`, the sibling of `BuildSqlFromSpans` | nothing; it lets a caller that already lexed (for the word count) colour the same text without lexing twice |
 | `textEdit` IDL (shipped, unblocking M3) | added — `setCursor(sel, focus)`, the inbound half of the caret channel, taking the packed word `reportCursor` emits | `PackCursorRange` beside the existing `UnpackCursorRange`; regenerated dispatch on both sides. Recorded on [ADR-0130](./0130-imzero2-textedit-highlight-seam.md) (2026-08-08), which owns the seam. It positions the caret but does NOT reveal it — an off-screen match can be selected, not scrolled to |
+| `sectionStyled` (M3, shipped) | reached, not changed — first sub-token consumer of a channel whose existing users (play's statement tint, its clause background) all paint regions | nothing on the seam. The consequence is the caller's: overlay boundaries have to exist as COLOUR boundaries, so mdedit splits its own spans rather than asking the layouter to split its sections. A second sub-token consumer would want the same helper, at which point it belongs in `codeview` rather than in an app |
 
 ## Alternatives
 
@@ -253,6 +283,17 @@ visible before the work starts rather than discovered inside it.
   a line-aware seam, not rejected. The inline actions have no such problem:
   `insertAtCursor` REPLACES the selection, so handing it the selection wrapped
   in markers turns "insert" into "wrap" with nothing new required.
+- **Regular expressions in the find bar.** Matching is literal. A regex find
+  wants its own error reporting, its own capture-group syntax in the
+  replacement, and a cost model for a pattern that matches everywhere — all of
+  which is a feature beside the one M3 is, rather than a switch on it. Trigger:
+  someone reaching for it on a real document.
+- **Enter to advance to the next match.** Deferred for want of a channel, not
+  by preference: there is no general keyboard drain across the seam, and the
+  one signal a TextEdit does report — `lostFocus` — cannot distinguish Enter
+  from a click somewhere else, so binding to it would advance the match
+  whenever the reader clicked away. Trigger: a general key channel, which is
+  the same thing a Ctrl+F toggle needs.
 - **Preview reparse gated on quiescence.** Deferred rather than rejected: the
   measured curve says it buys nothing below a few tens of KB, and it costs a
   state machine plus a stale-preview window. Trigger to revisit: a document
@@ -317,6 +358,19 @@ visible before the work starts rather than discovered inside it.
   previous frame, so a continuous window drag has them trailing by one frame.
   Self-correcting and settled by the time the drag stops, but it is the cost
   of Go not being able to ask egui for a size inline.
+- **Going to a find match selects it without revealing it.** `setCursor`
+  positions the caret and cannot scroll to it — egui scrolls to a selection
+  only when the widget changed it itself, and no byte-range-to-rect channel
+  exists (ADR-0130, 2026-08-08). A match below the fold is selected where the
+  reader cannot see it. The preview scrolling to the match's section is the
+  partial compensation, and it is the only one available from this side.
+- **The current match's background is mostly hidden while the editor has
+  focus**, because egui paints its selection fill over the galley's own
+  section background — and navigating to a match both selects it and takes
+  focus. Observed live: only the underline and a pixel of the fill at the row
+  edges survive. It matters where the selection is absent, which is every
+  frame after a replacement (which does not take focus) and any time the
+  reader is working in the bar rather than the buffer.
 
 ### Neutral
 
@@ -335,6 +389,15 @@ visible before the work starts rather than discovered inside it.
   exactly one capability). Plus an ADR-0057 registry `Demo` in
   `mdedit_tour.go`, which the widgets TestDriver captures as a PNG and an SVG
   on every tour run.
+
+  M3 adds to the same lane, and it is reachable there because every button
+  calls a helper rather than editing state inline: the scan and its case fold,
+  the index bookkeeping (wrapping, and the resume offset that stops a
+  replacement from landing inside what it just wrote), the splice, the paint
+  window, and the span split — whose assertion is that cutting changes where
+  sections begin and never what colour they are or which bytes they cover. The
+  tour scene opens the bar on a query matching twice, so a capture carries both
+  match tones and a fixture test fails if that query ever stops matching.
 - **What would fail.** A caret-to-heading regression turns the scroll guard
   into either a preview that never follows or one the reader cannot scroll by
   hand; both are assertable from the resolved slug alone, without rendering.
@@ -357,6 +420,17 @@ visible before the work starts rather than discovered inside it.
   appears in a live window under resize, and each was found by driving one.
   A regression would be caught the same way, by hand, which is the weakest
   part of this plan.
+
+  M3 sits on the same fault line and was checked the same way, by driving a
+  live window under `EGUI_INSPECTION` against a 60-match document: the overlay
+  covers a match's bytes and stops there rather than tinting the prose run
+  around it (read per-pixel, not by eye); stepping moves the warm tone;
+  `setCursor` selects the match it names; folding finds 60 with the case
+  toggle off and none with it on; and a replace-all round trip — every match
+  rewritten and rewritten back — left the buffer byte-identical, which is what
+  says the rebind and the databinding override hold rather than being quietly
+  reverted at the next Sync. None of that is automated, and a regression in
+  any of it would again be found by hand.
 
 ## Status
 

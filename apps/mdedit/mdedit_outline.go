@@ -105,9 +105,10 @@ func (inst *App) renderOutlineRow(h markdown.HeadingInfo, ord int) {
 				inst.pendingScroll = h.Slug
 				// Take the writer to the heading too, not just the reader.
 				// The caret goes to the LINE start so it sits before the `#`,
-				// which is where "go to this heading" means.
-				inst.pendingCaret = lineStart(inst.src, h.ByteOffset)
-				inst.pendingCaretOk = true
+				// which is where "go to this heading" means, and with focus
+				// because the gesture means "take me there".
+				off := lineStart(inst.src, h.ByteOffset)
+				inst.requestCaret(off, off, true)
 			}
 		}
 	}

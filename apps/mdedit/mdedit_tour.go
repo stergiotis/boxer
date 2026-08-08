@@ -24,8 +24,12 @@ const (
 	// scroll area of unbounded height, in which an unbounded child does not
 	// know where to stop. It has to leave room for the demo chrome the driver
 	// draws above the scene (title, badges, description, source link — about
-	// 200px) inside the Stage height below.
+	// 200px) AND for the three bar rows, inside the Stage height below.
 	galleryPaneH = float32(380)
+
+	// tourQuery is the scene's find query. Two occurrences in sampleDoc, which
+	// is the smallest number that shows both match tones at once.
+	tourQuery = "preview"
 )
 
 // sampleDoc is the scene's document. Small on purpose, and chosen to exercise
@@ -60,7 +64,7 @@ func init() {
 		Name:     "mdedit-split",
 		Category: "UX",
 		Title:    icons.PhMarkdownLogo + " mdedit — source beside preview",
-		Stage:    [2]float32{980, 620},
+		Stage:    [2]float32{980, 660},
 		Flags:    registry.DemoFlagNeedsLargeArea,
 		Kind:     registry.DemoKindMixed,
 		Description: "A markdown editing surface composed from pieces that already existed: the source is a " +
@@ -81,6 +85,12 @@ func mdTourInit(ids *c.WidgetIdStack) (state any) {
 	// The scene shows the outline column: it is half of what M2 added, and the
 	// gallery stage is wide enough to earn it.
 	inst.showOutline = true
+	// …and an open find bar with a query that hits twice, so the capture
+	// carries M3's two tones — the current match and the rest — and would show
+	// a regression in the colour-section split as a background bleeding across
+	// the prose around a match.
+	inst.find.show = true
+	inst.find.query = tourQuery
 	return inst
 }
 
@@ -102,8 +112,7 @@ func mdTourRender(ids *c.WidgetIdStack, state any) {
 // every screenshot and be broken in the gallery. A pinned-width column beside
 // an unconstrained one behaves in both.
 func (inst *App) renderGallery() {
-	inst.syncDoc()
-	inst.ensureLex()
+	inst.refreshDerived()
 	inst.renderBar()
 	// The size constraints sit on the columns, OUTSIDE the scroll areas. Set
 	// inside, they size the scrolled CONTENT instead of the viewport — the

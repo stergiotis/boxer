@@ -407,27 +407,27 @@ func TestEnsureLex_CachesUntilTheTextChanges(t *testing.T) {
 
 	// An empty buffer has nothing to colour; the method is skipped so the hint
 	// text keeps rendering as it does without a job.
-	inst.ensureLex()
-	if _, ok := inst.highlightJob(); ok {
+	inst.refreshDerived()
+	if inst.hlJobOk {
 		t.Fatal("an empty buffer should not produce a highlight job")
 	}
 
 	inst.src = "# Head\n\n**bold**\n"
-	inst.ensureLex()
-	if _, ok := inst.highlightJob(); !ok {
+	inst.refreshDerived()
+	if !inst.hlJobOk {
 		t.Fatal("a non-empty buffer should produce a highlight job")
 	}
 	assert.Equal(t, inst.src, inst.lexSrc, "the cache must record the text it describes")
 	assert.NotEmpty(t, inst.lexSpans, "the spans must be kept — the readout reads them")
 
 	// Unchanged text reuses the cached job rather than relexing.
-	inst.ensureLex()
+	inst.refreshDerived()
 	assert.Equal(t, inst.src, inst.lexSrc)
 
 	// An edit invalidates it.
 	inst.src = "# Head\n\n**bolder**\n"
-	inst.ensureLex()
-	if _, ok := inst.highlightJob(); !ok {
+	inst.refreshDerived()
+	if !inst.hlJobOk {
 		t.Fatal("an edited buffer should produce a highlight job")
 	}
 	assert.Equal(t, inst.src, inst.lexSrc, "the cache must follow the buffer")
@@ -435,13 +435,46 @@ func TestEnsureLex_CachesUntilTheTextChanges(t *testing.T) {
 	// Clearing the buffer clears everything derived from it, so no stale job,
 	// spans or readout can outlive the text they described.
 	inst.src = ""
-	inst.ensureLex()
-	if _, ok := inst.highlightJob(); ok {
+	inst.refreshDerived()
+	if inst.hlJobOk {
 		t.Fatal("clearing the buffer should drop the job")
 	}
 	assert.Equal(t, "", inst.lexSrc)
 	assert.Empty(t, inst.lexSpans)
 	assert.Equal(t, docStats{}, inst.stats)
+}
+
+// TestEnsureHighlight_RebuildsWhenTheMatchSetMoves pins the coupling M3 added:
+// the colour job is not a function of the text alone. A find match has to
+// become a boundary in the COLOUR tier for its overlay to land on its own
+// bytes, so moving to the next match rebuilds the job even though nothing
+// about the document changed.
+func TestEnsureHighlight_RebuildsWhenTheMatchSetMoves(t *testing.T) {
+	inst := &App{src: "alpha beta alpha beta alpha\n"}
+	inst.find.show = true
+	inst.find.query = "beta"
+	inst.refreshDerived()
+
+	require.Len(t, inst.find.matches, 2)
+	require.True(t, inst.hlJobOk)
+	require.True(t, inst.hlStyledOk, "matches must produce an overlay")
+	first := inst.hlKey
+
+	// A frame in which nothing moved must not rebuild.
+	inst.refreshDerived()
+	assert.Equal(t, first, inst.hlKey)
+
+	// Stepping to the other match moves the key, because which match is
+	// current decides which one is painted in the warmer tone.
+	inst.gotoMatch(1)
+	inst.refreshDerived()
+	assert.NotEqual(t, first, inst.hlKey)
+
+	// Closing the bar drops the overlay entirely.
+	inst.find.show = false
+	inst.refreshDerived()
+	assert.False(t, inst.hlStyledOk, "a closed find bar paints nothing")
+	assert.True(t, inst.hlJobOk, "the colours stay — only the overlay goes")
 }
 
 // ---------------------------------------------------------------------------

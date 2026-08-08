@@ -206,18 +206,39 @@ type App struct {
 	rowPx     float64
 	rowFontPt float32
 
-	// lexJob is the source-tier colour job, lexSpans the spans it was built
-	// from, and lexSrc the buffer both describe. Keyed by text rather than
-	// memoised: per-keystroke content is new by construction, so ADR-0125's
-	// LRU would only churn (ADR-0130 §6).
+	// lexSpans is the source tier's spans and lexSrc the buffer they describe.
+	// Keyed by text rather than memoised: per-keystroke content is new by
+	// construction, so ADR-0125's LRU would only churn (ADR-0130 §6).
 	//
-	// The spans are kept because the readout wants them too — counting prose
-	// words means knowing which bytes are prose, which is exactly what the
-	// lexer already decided. One lex serves both.
-	lexJob   typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-	lexOk    bool
+	// The spans are kept because two consumers want them — the colour job
+	// below and the prose readout, which counts words by asking which bytes
+	// the lexer decided were prose. One lex serves both.
 	lexSrc   string
+	lexOk    bool
 	lexSpans []markdownhighlight.Span
+
+	// hlJob is the colour job the editor is coloured from and hlStyled the
+	// find overlay riding on it, with hlKey the inputs both were built from.
+	//
+	// They share a gate because they share a dependency: a find match has to
+	// become a boundary in the COLOUR tier for its overlay to land on its own
+	// bytes rather than on the whole prose run around it (see mdedit_find.go).
+	// So the job moves when the match set moves, not only when the text does.
+	hlJob      typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	hlStyled   typed.RetainedFffiHolderTyped[c.StyledSectionsS]
+	hlJobOk    bool
+	hlStyledOk bool
+	hlKey      highlightKey
+	hlKeyOk    bool
+
+	// find is the find-and-replace bar's own state (M3).
+	find findState
+
+	// rebindSrc marks a buffer this app rewrote rather than the reader typed,
+	// so renderSource knows to drop the editor's cached copy after the emit.
+	// A flag rather than a direct call because the override has to happen
+	// where the databinding is registered — see App.rebindBuffer.
+	rebindSrc bool
 
 	// stats is the word / character / reading-time readout, recomputed with
 	// the spans.
@@ -227,10 +248,11 @@ type App struct {
 	// the TextEdit as insertAtCursor and cleared once emitted.
 	pendingInsert string
 
-	// pendingCaret is a BYTE offset the caret should move to, and pendingCaretOk
-	// whether there is one — a separate flag rather than a sentinel, so the
-	// zero value means "no request" and not "go to the start of the buffer".
-	pendingCaret   int
+	// pendingCaret is a caret move the app is asking the editor for, and
+	// pendingCaretOk whether there is one — a separate flag rather than a
+	// sentinel, so the zero value means "no request" and not "select the first
+	// character".
+	pendingCaret   caretRequest
 	pendingCaretOk bool
 
 	// status is the one-line report under the action bar.
@@ -260,6 +282,28 @@ type App struct {
 	restoreDone bool
 	restoreOk   bool
 	restoreText string
+}
+
+// caretRequest is a caret position the app asks the editor to take, in BYTE
+// offsets into the buffer — the unit everything Go knows about the document is
+// in. renderSource converts to the chars the caret channel speaks.
+//
+// Focus is a parameter rather than a behaviour, the ADR-0130 rule: an
+// unfocused TextEdit paints neither caret nor selection, so a gesture meaning
+// "take me there" has to ask for it — but taking focus for every move would
+// pull it out of the find field a keystroke at a time.
+type caretRequest struct {
+	Start int
+	Stop  int
+	Focus bool
+}
+
+// requestCaret queues a caret move for the next emit. One slot: a second
+// request in the same frame replaces the first rather than queueing behind it,
+// since only one of them can be where the caret ends up anyway.
+func (inst *App) requestCaret(start, stop int, focus bool) {
+	inst.pendingCaret = caretRequest{Start: start, Stop: stop, Focus: focus}
+	inst.pendingCaretOk = true
 }
 
 var _ app.AppI = (*App)(nil)
@@ -318,8 +362,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 func (inst *App) renderBody() {
 	inst.drainAsync()
-	inst.syncDoc()
-	inst.ensureLex()
+	inst.refreshDerived()
 	// Before any pane reads pendingScroll, so a caret move and an outline
 	// click in the same frame resolve in that order — the click wins, which is
 	// the one the reader just made.
@@ -335,6 +378,14 @@ func (inst *App) renderBody() {
 	for range c.PanelTopInside(inst.ids.PrepareStr("bar")).KeepIter() {
 		inst.renderBar()
 	}
+	// A replace in the bar above rewrote the buffer AFTER everything derived
+	// from it was computed. Recomputing here rather than leaving it to the
+	// next frame is what keeps the source pane from being handed a colour job
+	// and an overlay list describing the text it no longer holds — every gate
+	// is a comparison, so the frames where nothing was replaced pay four of
+	// them.
+	inst.refreshDerived()
+
 	// Panels must be declared before the central region claims what is left.
 	// renderSource owns its own scroll area so its pane probe measures the
 	// panel rather than the scrolled content.
@@ -411,12 +462,26 @@ func (inst *App) renderBar() {
 				SendRespVal(&inst.showOutline)
 		}
 
+		for range c.HoverText(tipFind).KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("find"), inst.find.show, findToggleLabel).
+				SendRespVal(&inst.find.show)
+		}
+
 		for range c.HoverText(tipStats).KeepIter() {
 			c.Label(inst.statsLine()).Send()
 		}
 
 		if inst.status != "" {
 			c.Label(inst.status).Send()
+		}
+	}
+
+	// Row three — find and replace, present only when asked for. Unlike the
+	// outline it has no width floor to meet: it is a row rather than a column,
+	// so a narrow window wraps it instead of starving a pane.
+	if inst.find.show {
+		for range c.HorizontalTop().KeepIter() {
+			inst.renderFindBar()
 		}
 	}
 }
@@ -438,8 +503,58 @@ func (inst *App) statsLine() (s string) {
 	return b.String()
 }
 
-// highlightJob returns the source-tier colour job for the current buffer,
-// rebuilding it only when the text changed.
+// refreshDerived brings everything computed FROM the buffer back into step
+// with it, in dependency order: the preview parse and the lex are independent,
+// the match list needs the buffer, and the colour job needs the match list.
+//
+// Every stage is gated on its own inputs, so calling this twice in a frame —
+// which renderBody does, because a replace can rewrite the buffer between the
+// bar and the panes — costs four comparisons when nothing moved. All of it
+// must run on the render goroutine: the parse and the job both issue FFI
+// opcodes as they build retained holders.
+func (inst *App) refreshDerived() {
+	inst.syncDoc()
+	inst.ensureLex()
+	inst.ensureMatches()
+	inst.ensureHighlight()
+}
+
+// ensureLex lexes the buffer once per change, for the two consumers that read
+// spans: the colour job below and the prose readout.
+func (inst *App) ensureLex() {
+	if inst.lexOk && inst.lexSrc == inst.src {
+		return
+	}
+	inst.lexSrc = inst.src
+	inst.lexOk = true
+	if inst.src == "" {
+		inst.lexSpans = nil
+		inst.stats = docStats{}
+		return
+	}
+	inst.lexSpans = markdownhighlight.HighlightLex([]byte(inst.src))
+	inst.stats = countStats(inst.src, inst.lexSpans)
+}
+
+// highlightKey is what the colour job and the find overlay are both built
+// from. Comparing it is the gate: equal keys mean equal output, so neither is
+// rebuilt.
+//
+// The find fields are in it because a match boundary has to become a COLOUR
+// boundary — see mdedit_find.go on why an overlay otherwise tints the whole
+// prose run it sits in. Which match is current is in it for the same reason:
+// the current one is painted differently, so moving to the next rebuilds both.
+type highlightKey struct {
+	src     string
+	query   string
+	fold    bool
+	showing bool
+	idx     int
+}
+
+// ensureHighlight builds the editor's colour job and the find overlay riding
+// on it. Must run on the render goroutine — both constructions issue FFI
+// opcodes.
 //
 // The spans index the buffer's own bytes — the reason M1 needed a lexer rather
 // than the existing canonicalising highlighter, whose spans describe a rewrite
@@ -447,31 +562,31 @@ func (inst *App) statsLine() (s string) {
 // applies them advisorily and reconciles the one-frame staleness, so a job
 // built from last frame's text still lands correctly on this frame's
 // (ADR-0130 §Decision 2-3).
-func (inst *App) highlightJob() (job typed.RetainedFffiHolderTyped[c.CodeViewJobS], ok bool) {
-	return inst.lexJob, inst.lexOk
-}
-
-// ensureLex lexes the buffer once per change and derives everything that reads
-// from it: the colour job and the prose readout. Must run on the render
-// goroutine — the job's construction issues FFI opcodes.
-func (inst *App) ensureLex() {
-	if inst.lexOk && inst.lexSrc == inst.src {
+func (inst *App) ensureHighlight() {
+	key := highlightKey{
+		src: inst.src, query: inst.find.query, fold: !inst.find.matchCase,
+		showing: inst.find.show, idx: inst.find.idx,
+	}
+	if inst.hlKeyOk && inst.hlKey == key {
 		return
 	}
+	inst.hlKey = key
+	inst.hlKeyOk = true
 	if inst.src == "" {
 		// An empty job would claim zero bytes of an empty buffer; skipping the
 		// method entirely leaves the hint text rendering as it does today.
-		inst.lexOk = false
-		inst.lexSrc = ""
-		inst.lexSpans = nil
-		inst.stats = docStats{}
+		inst.hlJobOk, inst.hlStyledOk = false, false
 		return
 	}
-	inst.lexSpans = markdownhighlight.HighlightLex([]byte(inst.src))
-	inst.lexJob = codeview.BuildMarkdownFromSpans(inst.src, inst.lexSpans)
-	inst.stats = countStats(inst.src, inst.lexSpans)
-	inst.lexSrc = inst.src
-	inst.lexOk = true
+	// Held across frames rather than rebuilt per frame, which is the opposite
+	// of what BuildStyledSections expects of a producer. Its "uncached" note
+	// is sized for play's handful of sections; a find can paint hundreds, and
+	// they move only when this key does.
+	secs := matchSections(inst.find.matches, inst.find.idx, maxPaintedMatches)
+	spans := splitSpansAt(inst.lexSpans, matchCuts(inst.find.matches, inst.find.idx, maxPaintedMatches))
+	inst.hlJob = codeview.BuildMarkdownFromSpans(inst.src, spans)
+	inst.hlJobOk = true
+	inst.hlStyled, inst.hlStyledOk = codeview.BuildStyledSections(secs)
 }
 
 // sourceWidth is the source pane's width for this frame: a fixed share of the
@@ -567,8 +682,15 @@ func (inst *App) renderSource() {
 			DesiredRows(rows).
 			HintText(hintEmpty).
 			ReportCursor()
-		if job, ok := inst.highlightJob(); ok {
-			b = b.HighlightJob(job)
+		if inst.hlJobOk {
+			b = b.HighlightJob(inst.hlJob)
+			// Only inside the branch, and that is not tidiness: the styled
+			// overlays reach the layouter through the highlight job, and a
+			// highlight job is the only thing that installs one. Sent without
+			// it they would be taken, dropped, and paint nothing.
+			if inst.hlStyledOk {
+				b = b.SectionStyled(inst.hlStyled)
+			}
 		}
 		// Hand the formatting bar's snippet to the widget, which splices it at
 		// its own persisted caret next frame and replaces any selection with
@@ -579,24 +701,34 @@ func (inst *App) renderSource() {
 			inst.pendingInsert = ""
 		}
 		// Move the caret where something asked it to go. One-shot: sent every
-		// frame it would pin the caret against the person typing. Focus is
-		// requested because an unfocused TextEdit paints no caret, and the
-		// gestures that move it — jumping to a heading — mean "take me
-		// there", not "remember this for later".
+		// frame it would pin the caret against the person typing. Whether it
+		// takes focus is the requester's call — jumping to a heading or a
+		// match means "take me there", a replacement means "the text moved",
+		// and only the first of those should pull focus out of wherever the
+		// reader is working.
 		if inst.pendingCaretOk {
-			off := byteToChar(inst.src, inst.pendingCaret)
-			b = b.SetCursor(c.PackCursorRange(off, off), true)
+			r := inst.pendingCaret
+			b = b.SetCursor(c.PackCursorRange(
+				byteToChar(inst.src, r.Start), byteToChar(inst.src, r.Stop)), r.Focus)
 			inst.pendingCaretOk = false
 		}
 		_ = b.SendRespValCursor(&inst.src, &inst.cursor)
 
-		// The restore is applied HERE, immediately after the emit, and not in
-		// drainAsync with everything else. OverrideDatabindingSPtr resolves the
-		// pointer through the databindings registered for THIS frame, and
-		// SendRespValCursor is what registers them — applied any earlier it
-		// would find nothing to override, and the frontend's cached (empty)
-		// buffer would win at the next Sync.
+		// Both overrides are applied HERE, immediately after the emit, and not
+		// in drainAsync with everything else. OverrideDatabindingSPtr resolves
+		// the pointer through the databindings registered for THIS frame, and
+		// SendRespValCursor is what registers them — applied any earlier they
+		// would find nothing to override, and the frontend's cached buffer
+		// would win at the next Sync.
 		inst.applyRestore()
+		if inst.rebindSrc {
+			// A find-and-replace rewrite (M3). Same mechanism as the restore,
+			// different origin: the editor is holding a buffer this app
+			// computed, so its own copy has to be dropped rather than pushed
+			// back over it.
+			c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.src)
+			inst.rebindSrc = false
+		}
 	}
 }
 
