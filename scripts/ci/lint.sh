@@ -93,16 +93,16 @@ fi
 
 step_begin "gov gate"
 # The composite gate boxer publishes to consuming repositories (ADR-0179):
-# buildtags, doclint, entry-points, codelint. This script no longer spells that
-# list out — public/gov/gate.DefaultSteps() is the single definition, so a step
-# added there reaches boxer and every consumer at once, and boxer breaks first
-# when it changes.
+# buildtags, doclint, entry-points, file-naming, codelint. This script no longer
+# spells that list out — public/gov/gate.DefaultSteps() is the single definition,
+# so a step added there reaches boxer and every consumer at once, and boxer
+# breaks first when it changes.
 #
 # gofmt and go vet stay above, outside the gate, on purpose: they must still run
 # on a tree too broken to build this binary.
 #
-# Four steps in one process rather than four boxer.sh invocations also stops the
-# binary being rebuilt per step (~24s -> ~5s here).
+# Five steps in one process rather than five separate boxer.sh invocations also
+# stops the binary being rebuilt per step (~38s -> ~18s here).
 #
 # The gate prints its own per-step summary; this script folds the whole thing
 # into one entry in its trailer. `if out=$(...)` is required under `set -e`,
@@ -111,6 +111,7 @@ gate_err=$(mktemp -t gate-err.XXXXXX)
 if out=$("$here/../../boxer.sh" gov gate \
         --tags "$tags" \
         --entry-points-baseline scripts/ci/entry-points-baseline.txt \
+        --naming-baseline scripts/ci/naming-baseline.txt \
         2>"$gate_err"); then
     rm -f "$gate_err"
     printf '%s\n' "$out"
@@ -154,29 +155,6 @@ if go build -tags "$tags" -o "$dl_bin" ./public/keelson/designsystem/lint/cmd/de
 else
     rm -f "$dl_bin"
     echo "designlint vettool failed to build"
-    rc=1
-    step_end fail
-fi
-
-step_begin "file-naming"
-# Enforces ADR-0048 Go file/package naming across ./public and ./apps:
-# N1 (file basenames snake_case lowercase), N6 (package names lowercase,
-# no underscores; external <pkg>_test exempt), N7 (files directly under
-# apps/<n>/ prefixed <n>_, with main.go/doc.go/app_register.go/<n>.go/
-# *_test.go exempt). --strict fails on any violation not grandfathered
-# in naming-baseline.txt, and on baseline lines that no longer violate
-# (forces baseline hygiene). Pure bash + POSIX tools, no Go build. Same
-# `if out=$(...)` capture as the entry-points step — required under
-# `set -e`, since --strict exits non-zero on findings.
-if out=$("$here/file-naming.sh" --baseline "$here/naming-baseline.txt" --strict 2>&1); then
-    if [ -n "$out" ]; then
-        echo "$out"
-    else
-        echo "passed"
-    fi
-    step_end pass
-else
-    echo "$out"
     rc=1
     step_end fail
 fi

@@ -45,6 +45,15 @@ func NewCliCommand() *cli.Command {
 				Value: "",
 				Usage: "file of grandfathered non-conformant main packages, relative to --root",
 			},
+			&cli.StringFlag{
+				Name:  "naming-baseline",
+				Value: "",
+				Usage: "file of grandfathered naming violations, relative to --root",
+			},
+			&cli.StringSliceFlag{
+				Name:  "naming-root",
+				Usage: "tree the naming rules audit (repeatable); empty means public, apps",
+			},
 			&cli.StringSliceFlag{
 				Name:  "step",
 				Usage: "run only this step (repeatable); empty runs all",
@@ -92,6 +101,8 @@ func gateAction(ctx *cli.Context) (err error) {
 		DocRoots:            ctx.StringSlice("doc-root"),
 		CodePatterns:        ctx.StringSlice("code-pattern"),
 		EntryPointsBaseline: ctx.String("entry-points-baseline"),
+		NamingBaseline:      ctx.String("naming-baseline"),
+		NamingRoots:         ctx.StringSlice("naming-root"),
 		Steps:               want,
 	}
 

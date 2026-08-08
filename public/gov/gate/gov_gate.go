@@ -90,6 +90,12 @@ type Config struct {
 	// EntryPointsBaseline names grandfathered non-conformant mains,
 	// relative to Root. Empty means no baseline.
 	EntryPointsBaseline string
+	// NamingBaseline names grandfathered naming violations, relative to
+	// Root. Empty means no baseline.
+	NamingBaseline string
+	// NamingRoots are the trees the naming rules audit, relative to Root.
+	// Empty means the package default (public, apps).
+	NamingRoots []string
 	// Steps restricts the run to these step names. Empty means all of them.
 	Steps []string
 }
@@ -222,6 +228,7 @@ func DefaultSteps() (steps []StepI) {
 		NewStepBuildTags(),
 		NewStepDoclint(),
 		NewStepEntryPoints(),
+		NewStepFileNaming(),
 		NewStepCodelint(),
 	}
 }

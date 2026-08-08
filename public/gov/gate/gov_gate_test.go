@@ -151,7 +151,7 @@ func TestValidateStepNamesE(t *testing.T) {
 // consumers from copying; a change to it is a change to the contract.
 func TestDefaultStepsIsThePublishedList(t *testing.T) {
 	assert.Equal(t,
-		[]string{"buildtags", "doclint", "entry-points", "codelint"},
+		[]string{"buildtags", "doclint", "entry-points", "file-naming", "codelint"},
 		stepNames(DefaultSteps()))
 }
 

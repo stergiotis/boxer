@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/buildtags"
 	"github.com/stergiotis/boxer/public/gov/codelint"
 	"github.com/stergiotis/boxer/public/gov/doclint"
+	"github.com/stergiotis/boxer/public/gov/filenaming"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"golang.org/x/tools/go/packages"
 )
@@ -227,6 +228,59 @@ func ValidateStepNamesE(steps []StepI, want []string) (err error) {
 			Str("unknown", strings.Join(unknown, ",")).
 			Str("known", strings.Join(stepNames(steps), ",")).
 			Errorf("unknown gate step")
+	}
+	return
+}
+
+// StepFileNaming applies the ADR-0048 Go file and package naming rules.
+//
+// Hard gate after baseline subtraction, in both directions: a new violation
+// fails, and so does a baseline entry that no longer reproduces. The second
+// half is what stops the baseline quietly accumulating dead exemptions.
+type StepFileNaming struct{}
+
+var _ StepI = (*StepFileNaming)(nil)
+
+func NewStepFileNaming() (inst *StepFileNaming) { return &StepFileNaming{} }
+
+func (inst *StepFileNaming) Name() (s string) { return "file-naming" }
+
+func (inst *StepFileNaming) Run(ctx context.Context, cfg Config, w io.Writer) (status StatusE, err error) {
+	var findings []filenaming.Finding
+	findings, err = filenaming.CheckE(filenaming.Config{
+		Dir:   cfg.root(),
+		Roots: cfg.NamingRoots,
+	})
+	if err != nil {
+		return
+	}
+
+	baselinePath := cfg.NamingBaseline
+	if baselinePath != "" && !filepath.IsAbs(baselinePath) {
+		baselinePath = filepath.Join(cfg.root(), baselinePath)
+	}
+	var baseline []string
+	baseline, err = filenaming.LoadBaselineE(baselinePath)
+	if err != nil {
+		return
+	}
+
+	fresh, stale := filenaming.Diff(findings, baseline)
+
+	status = StatusPass
+	if len(fresh) > 0 {
+		_, _ = fmt.Fprintf(w, "new naming violations (not in %s):\n", baselinePath)
+		for _, x := range fresh {
+			_, _ = fmt.Fprintf(w, "  %s\n", x)
+		}
+		status = StatusFail
+	}
+	if len(stale) > 0 {
+		_, _ = fmt.Fprintf(w, "baseline entries no longer violating (remove these lines from %s):\n", baselinePath)
+		for _, x := range stale {
+			_, _ = fmt.Fprintf(w, "  %s\n", x)
+		}
+		status = StatusFail
 	}
 	return
 }
