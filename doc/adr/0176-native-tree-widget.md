@@ -572,13 +572,20 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   client loads, not from the fallback chain.** Text can fall back; a control
   cannot, because its size and baseline are then whatever face answered.
 
-  **The `◈` co-section glyph renders as tofu in the proportional font.** Seen
-  while checking `schemaview`'s ported rows. It is not a port regression — the
-  label string is unchanged and the `CollapsingHeader` drew it the same way —
-  but it is visible now that the row is the widget's own: the legend window
-  gets the glyph because its chips are `Monospace()`, and the navigator does
-  not. A font-coverage matter, recorded here because this is where it was
-  found.
+  **The `◈` co-section glyph rendered as tofu, and is now drawn from the mono
+  face.** Found while checking `schemaview`'s ported rows and left recorded
+  rather than fixed at M3; fixed after M5, once the disclosure-glyph defect
+  showed it was the same root and not a curiosity. Reading the cmaps of every
+  face the client loads settles it exactly: Noto Sans has none of `◆ ◇ ◈`, the
+  CJK fallback has `◆` and `◇` but **not** `◈` — so that one had no face in the
+  chain at all — and the mono font has all three. That is also why the legend
+  window always showed it correctly: its chips are `Monospace()`.
+
+  So the navigator now draws the category glyph as its own monospace run, with
+  the glyph carried beside the label in `navNode` rather than inside it. The
+  documented vocabulary is unchanged; only the face is. It fixes the tofu and
+  takes `◆` and `◇` off the fallback chain too — they rendered only because a
+  CJK font happened to be loaded and happened to have them.
 
   **The header block replays twice**, the same way SD6's row block would
   without its guard: `header_cell_ui` runs for the sticky region as well as

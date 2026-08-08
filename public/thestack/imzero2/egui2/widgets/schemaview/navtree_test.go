@@ -56,11 +56,18 @@ func TestBuildNavShape(t *testing.T) {
 	m := NewModel(fixture())
 	m.buildNav()
 
+	// The category glyph is NOT in the label: it rides in navNode.glyph so the
+	// renderer can draw it in the monospace face, which is the only loaded one
+	// covering all three (see glyphPlainItemType).
 	assert.Equal(t, []string{
-		"◆ entity-id", "shard", "tenant",
-		"◇ readings", "celsius",
-		"◈ prov · audit ·∅",
+		"entity-id", "shard", "tenant",
+		"readings", "celsius",
+		"prov · audit ·∅",
 	}, m.navLabels)
+	assert.Equal(t, []string{"◆", "", "", "◇", "", "◈"},
+		[]string{m.navNodes[0].glyph, m.navNodes[1].glyph, m.navNodes[2].glyph,
+			m.navNodes[3].glyph, m.navNodes[4].glyph, m.navNodes[5].glyph},
+		"section rows carry a category glyph; column rows do not")
 	assert.Equal(t, []int32{-1, 0, 0, -1, 3, -1}, m.navParents,
 		"section headers are roots; their columns are children")
 	require.NoError(t, m.navTree().Validate())
@@ -97,7 +104,7 @@ func TestBuildNavFilterDropsWholeSections(t *testing.T) {
 	// Filtering is per-section: a section matched by one of its column names
 	// shows all of them, and a section that matches nothing disappears with
 	// its columns.
-	assert.Equal(t, []string{"◇ readings", "celsius"}, m.navLabels)
+	assert.Equal(t, []string{"readings", "celsius"}, m.navLabels)
 	assert.Equal(t, []int32{-1, 0}, m.navParents)
 }
 
@@ -133,7 +140,7 @@ func TestSyncNavSurvivesAFilterRenumberingTheNodes(t *testing.T) {
 	m.buildNav()
 	m.syncNav()
 
-	require.Equal(t, []string{"◇ readings", "celsius"}, m.navLabels,
+	require.Equal(t, []string{"readings", "celsius"}, m.navLabels,
 		"the section is now node 0, where the plain item-type used to be")
 	assert.False(t, m.navState.IsExpanded(0), "the collapse followed the section, not the index")
 	assert.True(t, m.navState.IsSelected(1), "and so did the selection")

@@ -15,6 +15,24 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
+// The navigator's category glyphs, documented in the help book and keyed by the
+// legend window. They are drawn in the MONOSPACE face, which is not decoration:
+// none of the three is in Noto Sans, so each resolves through the client's
+// fallback chain — and the CJK face that answers has ◆ and ◇ but NOT ◈, which
+// left the co-section glyph rendering as a tofu box. The mono font the client
+// loads covers all three, which is exactly why the legend window has always
+// shown ◈ correctly: its chips are Monospace().
+//
+// Keeping the vocabulary and changing the face fixes the tofu and takes ◆ and ◇
+// off the fallback chain at the same time — they render today only because a
+// CJK font happened to be loaded and happened to have them. See the imzero2
+// skill, §12 "Oversized, Off-Centre Glyph", for the general rule.
+const (
+	glyphPlainItemType  = "◆"
+	glyphTaggedSection  = "◇"
+	glyphCoSectionGroup = "◈"
+)
+
 // navNode is the per-node metadata the navigator keeps alongside the columnar
 // [tree.Tree]. One entry per node, indexed the same way.
 type navNode struct {
@@ -24,6 +42,10 @@ type navNode struct {
 	// means a different node one frame to the next. The key is what the
 	// Model's own collapse state is filed under; see [Model.syncNav].
 	key string
+	// glyph is the section row's category mark (◆ / ◇ / ◈), or "" on a column
+	// row. It rides beside the label rather than inside it because it has to
+	// be drawn in a DIFFERENT FACE — see [glyphPlainItemType].
+	glyph string
 	// typ is the terse canonical type shown after a column's name, or "" on a
 	// section row. It rides here rather than in the label so the row can draw
 	// it in its own weight without the name having to be re-split.
@@ -52,11 +74,11 @@ func (m *Model) buildNav() {
 	parents := m.navParents[:0]
 	nodes := m.navNodes[:0]
 
-	add := func(parent int32, key, label, typ string, sel selection) (node int32) {
+	add := func(parent int32, key, glyph, label, typ string, sel selection) (node int32) {
 		node = int32(len(labels))
 		labels = append(labels, label)
 		parents = append(parents, parent)
-		nodes = append(nodes, navNode{key: key, typ: typ, sel: sel})
+		nodes = append(nodes, navNode{key: key, glyph: glyph, typ: typ, sel: sel})
 		return
 	}
 
@@ -82,10 +104,10 @@ func (m *Model) buildNav() {
 			continue
 		}
 		base := "plain:" + it.String()
-		head := add(-1, base, "◆ "+it.String(), "", selection{})
+		head := add(-1, base, glyphPlainItemType, it.String(), "", selection{})
 		for _, i := range idxs {
 			name := t.PlainValuesNames[i].String()
-			add(head, base+":"+name, name, typeChip(t.PlainValuesTypes[i]),
+			add(head, base+":"+name, "", name, typeChip(t.PlainValuesTypes[i]),
 				selection{kind: selPlainColumn, plainCol: i})
 		}
 	}
@@ -98,9 +120,9 @@ func (m *Model) buildNav() {
 			continue
 		}
 		group := string(sec.CoSectionGroup)
-		label, idp := "◇ ", "sec:"
+		glyph, idp, label := glyphTaggedSection, "sec:", ""
 		if group != "" {
-			label, idp = "◈ "+group+" · ", "co:"+group+":"
+			glyph, idp, label = glyphCoSectionGroup, "co:"+group+":", group+" · "
 		}
 		label += sec.Name.String()
 		if b := membershipBadge(sec.MembershipSpec); b != "" {
@@ -110,10 +132,10 @@ func (m *Model) buildNav() {
 			label += " ·∅"
 		}
 		base := idp + sec.Name.String()
-		head := add(-1, base, label, "", selection{kind: selSection, section: i})
+		head := add(-1, base, glyph, label, "", selection{kind: selSection, section: i})
 		for ci := range sec.ValueColumnNames {
 			name := sec.ValueColumnNames[ci].String()
-			add(head, base+":"+name, name, typeChip(sec.ValueColumnTypes[ci]),
+			add(head, base+":"+name, "", name, typeChip(sec.ValueColumnTypes[ci]),
 				selection{kind: selSectionColumn, section: i, col: ci})
 		}
 	}

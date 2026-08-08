@@ -206,6 +206,13 @@ func renderSections(ids *c.WidgetIdStack, m *Model, availW, availH float32) {
 // sense region, so it would sit over it and swallow every click on its rect
 // (ADR-0176 SD7).
 func (m *Model) navCell(node int32) {
+	// The category glyph is its own run, in the monospace face — see
+	// glyphPlainItemType for why the face is load-bearing rather than stylistic.
+	if g := m.navNodes[node].glyph; g != "" {
+		c.LabelAtoms(c.Atoms().BeginRichText(g).Monospace().End().Keep()).
+			Selectable(false).Send()
+		c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+	}
 	c.Label(m.navLabels[node]).Selectable(false).Truncate().Send()
 	typ := m.navNodes[node].typ
 	if typ == "" {
