@@ -2213,6 +2213,12 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // block reads the persisted TextEditState it already loads for
     // insertAtCursor and pushes the sorted cursor char range as a packed u64.
     text_edit_pending_report_cursor: bool,
+    // Scratch slot for TextEditFluid.SetCursor: the inbound half of the caret
+    // channel, packed exactly like ReportCursor's outbound value (low half
+    // start, high half end, CHAR offsets). One-shot like insertAtCursor —
+    // applied only on frames the method is present, because a range re-applied
+    // every frame would pin the caret and make the editor unusable.
+    text_edit_pending_set_cursor: Option<(u64, bool)>,
     // ADR-0088 runtime codec pipeline: `setVideoPipeline` stashes the
     // requested codec here (0=H.264, 1=VP9, 2=AV1); the headless host drains
     // it after dispatch and re-points the encoder. `video_cap_*` are pushed
@@ -2567,6 +2573,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             text_edit_pending_styled: None,
             text_edit_pending_no_wrap: false,
             text_edit_pending_report_cursor: false,
+            text_edit_pending_set_cursor: None,
             r9_et_prefetch_ids: Vec::with_capacity(8),
             r9_et_prefetch_values: Vec::with_capacity(32),
             r10_true_ids: Vec::with_capacity(1024),
@@ -11969,6 +11976,15 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                             puffin::profile_scope!("match TextEditBuilderMethodId::ReportCursor");
                             self.text_edit_pending_report_cursor = true;
                         }
+                        TextEditBuilderMethodId::SetCursor => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TextEditBuilderMethodId::SetCursor");
+                            #[allow(unused_mut)]
+                            let mut sel = self.io.read_plain_u64()?;
+                            #[allow(unused_mut)]
+                            let mut focus = self.io.read_plain_b()?;
+                            self.text_edit_pending_set_cursor = Some((sel, focus));
+                        }
                     }
                 }
                 if d == 0 {
@@ -12032,6 +12048,41 @@ self.apply_widget(w,u,f,Some(i));
                         }
                     }
                     changed = true;
+                }
+                // setCursor: write the caret / selection the caller asked for.
+                //
+                // Placed HERE deliberately, between the two blocks it sits among. After the
+                // insert, so an explicit position wins over the caret the splice would have
+                // left behind when a frame carries both. Before the report, so this frame's
+                // report already reflects it and Go is never told a caret it just replaced.
+                //
+                // Both halves are clamped to the buffer and then sorted, so a stale range
+                // from a longer buffer lands at the end rather than panicking the char
+                // splice — this arrives from Go one frame after the text it described.
+                //
+                // What this does NOT do is scroll the caret into view. egui only scrolls when
+                // the widget has focus AND either the response changed or its selection
+                // changed (text_edit/builder.rs). That selection-changed test compares two
+                // reads of the same stored state within one frame, so a range stored from
+                // outside reads back equal and is invisible to it. Revealing an off-screen
+                // caret needs the galley, which lives on the other side of this seam.
+                if let Some((packed, want_focus)) = self.text_edit_pending_set_cursor.take() {
+                    if let Some(ctx) = u.as_deref().map(|ui| ui.ctx().clone()) {
+                        let end = text.chars().count();
+                        let a = ((packed & 0xffff_ffff) as usize).min(end);
+                        let b = ((packed >> 32) as usize).min(end);
+                        let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+                        let mut st =
+                            egui::text_edit::TextEditState::load(&ctx, i).unwrap_or_default();
+                        st.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                            egui::text::CCursor::new(lo),
+                            egui::text::CCursor::new(hi),
+                        )));
+                        st.store(&ctx, i);
+                        if want_focus {
+                            ctx.memory_mut(|m| m.request_focus(i));
+                        }
+                    }
                 }
                 // ADR-0130 L3 caret report: push the persisted cursor's sorted CHAR range
                 // packed low=start / high=end. Runs BEFORE the text push below, which moves

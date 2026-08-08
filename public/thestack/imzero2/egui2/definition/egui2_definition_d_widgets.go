@@ -524,6 +524,31 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				BeginMethod("reportCursor").
 				CodeClientRust(rustClientCode("self.text_edit_pending_report_cursor = true;\n")).
 				EndMethod().
+				// setCursor: the inbound half of the caret channel, taking the
+				// same packed u64 reportCursor emits (low half start, high
+				// half end, CHAR offsets) so a range read out of an editor can
+				// be written straight back into it. A collapsed caret is
+				// start == end.
+				//
+				// One-shot, like insertAtCursor and unlike reportCursor: it
+				// applies only on the frames Go sends it. Sent every frame it
+				// would pin the caret against the person typing.
+				//
+				// `focus` is separate on purpose. An unfocused TextEdit paints
+				// no caret, so a caller that wants the new position SEEN must
+				// ask for focus — but taking it unconditionally would break
+				// the obvious consumer: a find field that moves the caret per
+				// keystroke would pull focus out of itself and the user could
+				// not type a second character. So the caller decides, and
+				// find-as-you-type passes false until the user commits.
+				// The argument is `sel` and not `range`: the generator emits the
+				// IDL name verbatim into the Go signature, and `range` is a Go
+				// keyword — it produces a file that does not parse, which the
+				// generator reports as a formatting warning rather than an
+				// error.
+				BeginMethod("setCursor").Arg("sel", ctabb.U64).Arg("focus", ctabb.B).
+				CodeClientRust(rustClientCode("self.text_edit_pending_set_cursor = Some((sel, focus));\n")).
+				EndMethod().
 				Build()...).
 			WithConstructionCodeClientRust(rustClientCode("if multiline { egui::TextEdit::multiline(&mut text).id({{Id}}) } else { egui::TextEdit::singleline(&mut text).id({{Id}}) };\n")).
 			WithSettingImmediate(true).
@@ -578,6 +603,40 @@ if let Some(ins) = self.text_edit_pending_insert.take() {
 		}
 	}
 	changed = true;
+}
+// setCursor: write the caret / selection the caller asked for.
+//
+// Placed HERE deliberately, between the two blocks it sits among. After the
+// insert, so an explicit position wins over the caret the splice would have
+// left behind when a frame carries both. Before the report, so this frame's
+// report already reflects it and Go is never told a caret it just replaced.
+//
+// Both halves are clamped to the buffer and then sorted, so a stale range
+// from a longer buffer lands at the end rather than panicking the char
+// splice — this arrives from Go one frame after the text it described.
+//
+// What this does NOT do is scroll the caret into view. egui only scrolls when
+// the widget has focus AND either the response changed or its selection
+// changed (text_edit/builder.rs). That selection-changed test compares two
+// reads of the same stored state within one frame, so a range stored from
+// outside reads back equal and is invisible to it. Revealing an off-screen
+// caret needs the galley, which lives on the other side of this seam.
+if let Some((packed, want_focus)) = self.text_edit_pending_set_cursor.take() {
+	if let Some(ctx) = {{EguiUiOptionalOuter}}.as_deref().map(|ui| ui.ctx().clone()) {
+		let end = text.chars().count();
+		let a = ((packed & 0xffff_ffff) as usize).min(end);
+		let b = ((packed >> 32) as usize).min(end);
+		let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+		let mut st = egui::text_edit::TextEditState::load(&ctx, {{Id}}).unwrap_or_default();
+		st.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+			egui::text::CCursor::new(lo),
+			egui::text::CCursor::new(hi),
+		)));
+		st.store(&ctx, {{Id}});
+		if want_focus {
+			ctx.memory_mut(|m| m.request_focus({{Id}}));
+		}
+	}
 }
 // ADR-0130 L3 caret report: push the persisted cursor's sorted CHAR range
 // packed low=start / high=end. Runs BEFORE the text push below, which moves

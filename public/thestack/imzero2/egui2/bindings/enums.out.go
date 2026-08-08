@@ -861,6 +861,7 @@ const (
 	TextEditMethodIdSectionStyled  TextEditMethodIdE = 14
 	TextEditMethodIdNoWrapLayout   TextEditMethodIdE = 15
 	TextEditMethodIdReportCursor   TextEditMethodIdE = 16
+	TextEditMethodIdSetCursor      TextEditMethodIdE = 17
 )
 
 const (

@@ -793,6 +793,65 @@ conservative pre-gate on any unfilled input (an auto-run is a
 convenience; the manual gates are the contract), and the prelude itself —
 trimming unused SET lines from a narrowed run remains unattempted.
 
+### 2026-08-08 — `setCursor`: the caret channel gains its inbound half
+
+L3 shipped `reportCursor`, which tells Go where the caret is. Nothing told the
+editor where to put it, and §Alternatives' deferral of a caret-jump has been
+the standing blocker on find-and-replace ever since — most recently named as
+such by [ADR-0178](./0178-mdedit-markdown-editor.md), whose markdown editor
+also wants "go to this heading" and whose formatting bar is confined to inline
+wrapping for the same want of line-level positioning.
+
+`setCursor(sel u64, focus bool)` is that half, and it is deliberately the
+mirror image of the outbound one: the same packed word, low half start, high
+half end, CHAR offsets, sorted. A range read out of an editor can be written
+straight back into it, and a collapsed caret is start == end. `PackCursorRange`
+is the Go-side inverse of the existing `UnpackCursorRange`.
+
+Mechanically it is ADR-0063's idiom unchanged — a builder method stashes
+`(sel, focus)` on an interpreter scratch slot, and the TextEdit apply block
+takes it after `apply_widget` releases the `&mut text` borrow, clamps both
+halves to the buffer, sorts them, and stores a `CCursorRange` into
+`TextEditState` (load-or-default, since an editor that was never focused has
+no state). One-shot like `insertAtCursor` and unlike `reportCursor`: a range
+re-sent every frame would pin the caret against the person typing.
+
+Three details are load-bearing.
+
+- **It sits between the insert and the report.** After the insert, so an
+  explicit position wins over the caret a splice would otherwise have left,
+  when one frame carries both. Before the report, so the frame's report
+  already reflects it and Go is never told a caret it has just replaced.
+- **`focus` is a parameter and not a behaviour.** An unfocused TextEdit paints
+  no caret, so a caller that wants the move SEEN has to ask; but taking focus
+  unconditionally would break the first consumer anyone writes — a find field
+  moving the caret per keystroke would pull focus out of itself, and the user
+  could not type a second character. Find-as-you-type passes false and commits
+  with true.
+- **It does not scroll the caret into view, and cannot from here.** egui
+  scrolls only when the widget has focus and either the response changed or
+  its selection changed (`text_edit/builder.rs`), and that selection test
+  compares two reads of the same stored state within one frame — a range
+  stored from outside reads back equal and is invisible to it. Revealing an
+  off-screen caret needs the galley, which is on the far side of this seam.
+  This is the same wall the 2026-07-25 tethering entry hit from the other
+  direction: there is still no byte-range-to-rect channel. A find that jumps
+  to a match will select it and, if it is off-screen, say so rather than show
+  it, until a reveal channel exists.
+
+Two findings from the bring-up, both about the generator rather than the seam.
+An IDL argument named `range` emits a Go signature that does not parse, and
+the generator reports that as a *formatting warning*, not an error — so the
+first regeneration produced broken bindings and a zero exit. The argument is
+`sel`. And because the generator is built from the module it generates into,
+a broken binding blocks the rebuild that would fix it; breaking that cycle
+needs a throwaway hand-patch of the `.out.go` before regenerating over it.
+
+Verified live under the inspection tooling rather than by unit test, since
+what is being asserted is that egui honours the stored range: with the caret
+at the end of a document, clicking a heading in mdedit's outline and then
+typing one character put that character at the heading's line start.
+
 ### 2026-08-07 — the self-reference rule learns IN's table operand
 
 A correctness pass prompted by `WITH t AS (SELECT 1) SELECT * FROM t1 WHERE

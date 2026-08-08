@@ -100,6 +100,31 @@ func (inst TextEditFluid) SendRespValCursor(val *string, cursor *uint64) Respons
 func UnpackCursorRange(packed uint64) (start, end int) {
 	return int(packed & 0xffff_ffff), int(packed >> 32)
 }
+
+// PackCursorRange is the inverse of [UnpackCursorRange], for handing a range
+// to [TextEditFluid.SetCursor]. Pass start == end for a collapsed caret.
+//
+// Offsets are CHAR offsets, the same unit the report carries — convert from
+// byte offsets against your own copy of the buffer, never the live one.
+// Negatives clamp to zero and each half saturates at 32 bits, which is where
+// the wire format ends; Rust clamps again to the buffer it actually holds, so
+// a range describing a longer buffer lands at its end rather than out of it.
+func PackCursorRange(start, end int) (packed uint64) {
+	const half = int(0xffff_ffff)
+	clamp := func(v int) uint64 {
+		if v < 0 {
+			return 0
+		}
+		if v > half {
+			return uint64(half)
+		}
+		return uint64(v)
+	}
+	if start > end {
+		start, end = end, start
+	}
+	return clamp(start) | clamp(end)<<32
+}
 func (inst DragValueF64Fluid) SendRespVal(val *float64) ResponseFlagsE {
 	inst.Send()
 	s := CurrentApplicationState.StateManager

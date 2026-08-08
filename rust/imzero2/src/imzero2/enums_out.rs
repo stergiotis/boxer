@@ -1338,6 +1338,7 @@ pub enum TextEditBuilderMethodId {
     SectionStyled = 14,
     NoWrapLayout = 15,
     ReportCursor = 16,
+    SetCursor = 17,
 }
 
 #[allow(dead_code)]
