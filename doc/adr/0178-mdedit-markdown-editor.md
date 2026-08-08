@@ -251,7 +251,7 @@ Seven, added by M4:
 
 ### Milestones
 
-- **M0 — the editing surface: split panes, live preview, caret-follows-preview, dirty marker, clipboard export, session restore.**
+- **M0 — the editing surface: split panes, live preview, caret-follows-preview, dirty marker, clipboard export, session restore.** ✓
 - **M1 — source-offset markdown highlighting, wired through `textEdit.highlightJob`.** ✓
 - **M2 — editing affordances: a formatting bar over `insertAtCursor`, an outline from `Doc.Headings()`, a word and reading-time readout.** ✓
 - **M3 — find and replace: matches painted through `sectionStyled`, replace-all as a whole-buffer rebind.** ✓
