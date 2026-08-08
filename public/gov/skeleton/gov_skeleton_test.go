@@ -328,3 +328,35 @@ func TestLauncherWithoutTheSeamPassesNoStrayArgument(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ok\n", string(observed))
 }
+
+// The adoption ADR's path hardcodes a number. Seeding it into a repository that
+// already has an ADR corpus collides with whatever its ADR-0001 already is —
+// which is exactly what happened on the second real adoption.
+func TestAdoptionAdrIsNotSeededIntoAnExistingCorpus(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "doc", "adr"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "doc", "adr", "0001-something-else.md"),
+		[]byte("---\ntype: adr\n---\n\n# ADR-0001\n"), 0o644))
+
+	written, err := WriteE(dir, DefaultFiles(), testParams())
+	require.NoError(t, err)
+	assert.NotContains(t, written, "doc/adr/0001-adopt-boxer-standards.md")
+	_, statErr := os.Stat(filepath.Join(dir, "doc", "adr", "0001-adopt-boxer-standards.md"))
+	assert.True(t, os.IsNotExist(statErr), "must not collide with the existing ADR-0001")
+
+	// And a suppressed seed is not then reported as something the repository owes.
+	results, err := CheckE(dir, DefaultFiles(), testParams())
+	require.NoError(t, err)
+	for _, r := range results {
+		assert.NotEqual(t, "doc/adr/0001-adopt-boxer-standards.md", r.Path,
+			"a suppressed seed should not appear in the reconciliation at all")
+	}
+}
+
+func TestAdoptionAdrIsSeededIntoAnEmptyRepository(t *testing.T) {
+	dir := t.TempDir()
+	written, err := WriteE(dir, DefaultFiles(), testParams())
+	require.NoError(t, err)
+	assert.Contains(t, written, "doc/adr/0001-adopt-boxer-standards.md")
+}

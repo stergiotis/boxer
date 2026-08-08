@@ -51,10 +51,11 @@ func DefaultFiles() (files []File) {
 			Template:  tmplTags,
 		},
 		{
-			Path:      "doc/adr/0001-adopt-boxer-standards.md",
-			Ownership: OwnershipSeeded,
-			Mode:      0o644,
-			Template:  tmplAdoptionAdr,
+			Path:         "doc/adr/0001-adopt-boxer-standards.md",
+			Ownership:    OwnershipSeeded,
+			Mode:         0o644,
+			Template:     tmplAdoptionAdr,
+			SeedGuardDir: "doc/adr",
 		},
 	}
 }

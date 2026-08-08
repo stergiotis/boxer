@@ -140,6 +140,33 @@ type File struct {
 	Ownership OwnershipE
 	Mode      os.FileMode
 	Template  string
+	// SeedGuardDir, when set, suppresses seeding if that directory already
+	// holds any .md file.
+	//
+	// It exists for the adoption ADR, whose path hardcodes a number. In an
+	// empty repository doc/adr/0001-… is free; in one that already has a
+	// corpus it collides with whatever ADR-0001 already is, and a repository
+	// with an ADR corpus has either already recorded its adoption or will
+	// number that record itself. Seeding is for a repository that has not
+	// started, not for one that has.
+	SeedGuardDir string
+}
+
+// seedSuppressed reports whether f's guard directory already has content.
+func seedSuppressed(dir string, f File) (skip bool) {
+	if f.SeedGuardDir == "" {
+		return false
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, f.SeedGuardDir))
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+			return true
+		}
+	}
+	return false
 }
 
 // StatusE is what Check found for one file.
@@ -278,6 +305,9 @@ func CheckE(dir string, files []File, p Params) (results []Result, err error) {
 		r := Result{Path: rel, Ownership: f.Ownership}
 		got, readErr := os.ReadFile(filepath.Join(dir, rel))
 		switch {
+		case readErr != nil && os.IsNotExist(readErr) && seedSuppressed(dir, f):
+			// Suppressed seeds are neither present nor owed.
+			continue
 		case readErr != nil && os.IsNotExist(readErr):
 			r.Status = StatusAbsent
 		case readErr != nil:
@@ -318,6 +348,9 @@ func WriteE(dir string, files []File, p Params) (written []string, err error) {
 
 		if f.Ownership == OwnershipSeeded {
 			if _, statErr := os.Stat(full); statErr == nil {
+				continue
+			}
+			if seedSuppressed(dir, f) {
 				continue
 			}
 		}
