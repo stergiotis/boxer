@@ -50,6 +50,12 @@ func DefaultFiles() (files []File) {
 			Mode:      0o644,
 			Template:  tmplTags,
 		},
+		{
+			Path:      "doc/adr/0001-adopt-boxer-standards.md",
+			Ownership: OwnershipSeeded,
+			Mode:      0o644,
+			Template:  tmplAdoptionAdr,
+		},
 	}
 }
 
@@ -170,7 +176,13 @@ else
 fi
 
 echo ""
-if ! ./{{.Name}}.sh gov gate --tags "$tags"; then
+# Repository-specific exclusions live here, in one place, rather than as a
+# grep filter duplicated between this script and an editor hook.
+excludes=()
+# excludes+=(--exclude 'attic/')
+# excludes+=(--exclude '*.gen.md')
+
+if ! ./{{.Name}}.sh gov gate --tags "$tags" "${excludes[@]+"${excludes[@]}"}"; then
     rc=1
 fi
 
@@ -269,4 +281,97 @@ of general applicability belongs upstream in boxer instead.
 // is the failure this whole package exists to prevent. Repository-local tags are
 // appended by the consumer and never touched by a reconciliation.
 const tmplTags = `{{.RequiredTags}}
+`
+
+// tmplAdoptionAdr seeds the decision every consumer has to record: that boxer's
+// standards are authoritative here, and by reference rather than by copy.
+//
+// Seeded as proposed, not accepted — adopting is the consumer's decision to
+// make and review, not one boxer can make on their behalf. Flip it with
+// boxer's scripts/dev/adr-accept.sh once it has been read.
+//
+// It exists because the alternative is what happened: consumers wrote their own
+// adoption ADRs from a sibling repository's paraphrase, and one of them ended
+// up mandating a build-tag scheme boxer had already retired.
+const tmplAdoptionAdr = `---
+type: adr
+status: proposed
+date: YYYY-MM-DD
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+---
+
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+
+# ADR-0001: Adopt boxer's standards by reference
+
+## Context
+
+` + "`{{.Name}}`" + ` depends on
+[` + "`github.com/stergiotis/boxer`" + `](https://github.com/stergiotis/boxer)
+as a Go module. boxer carries a coding standard, a documentation standard
+(Diátaxis plus ADRs plus YAML front-matter), a template library, and the
+governance tooling that enforces them. This repository needs those to be
+*the* standards here, and needs a reader to know where the authoritative text
+lives.
+
+The choice this records is not whether to adopt them but how: by reference
+through the existing ` + "`go.mod`" + ` pin, or by copying the text in.
+
+## Decision
+
+We adopt boxer's ` + "`CODINGSTANDARDS.md`" + `,
+` + "`doc/DOCUMENTATION_STANDARD.md`" + ` and ` + "`doc/ENGINEERING_PRACTICES.md`" + `
+as authoritative, referenced through the ` + "`go.mod`" + ` pin. **No standard
+text is copied into this repository.** It is read at the resolved module
+directory:
+
+` + "```sh" + `
+scripts/boxer-path.sh     # go list -m -f '{{"{{"}}.Dir{{"}}"}}' github.com/stergiotis/boxer
+` + "```" + `
+
+Enforcement comes through the same pin rather than through copied scripts:
+` + "`scripts/ci/lint.sh`" + ` runs ` + "`gov gate`" + `, whose step list, rule
+sets and build-tag contract live upstream. The repository mechanics are emitted
+and reconciled by ` + "`gov skeleton`" + ` (boxer ADR-0179).
+
+The standard applies to **new code and meaningful rewrites**. Code predating
+this decision migrates in its own pass; drive-by renaming is not part of it.
+
+## Alternatives
+
+- **Copy the text in.** Rejected: drift is the failure this decision exists to
+  prevent. Bumping the pin would not bump a copy, and a verbatim copy would
+  import boxer-specific references that do not resolve here.
+- **Symlink to a sibling checkout.** Rejected as a committed artifact: a CI
+  checkout has no sibling boxer and the links dangle.
+- **Extract a third standards repository.** Rejected for now — it adds a
+  repository without a consumer that needs it.
+
+## Consequences
+
+### Positive
+
+- Bumping ` + "`github.com/stergiotis/boxer`" + ` picks up the current standards
+  and rules with no second edit here.
+- No duplicated standard text to let rot.
+
+### Negative
+
+- Reading the standard is not a single ` + "`cat`" + `; it needs the
+  ` + "`scripts/boxer-path.sh`" + ` resolution above.
+- A bump can introduce findings nobody here authored. Run
+  ` + "`scripts/ci/lint.sh`" + ` immediately after one.
+
+## Status
+
+Proposed — awaiting review.
+
+Status lifecycle: ` + "`Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`" + `.
+
+## References
+
+- [boxer ` + "`CODINGSTANDARDS.md`" + `](https://github.com/stergiotis/boxer/blob/main/CODINGSTANDARDS.md)
+- [boxer ` + "`doc/DOCUMENTATION_STANDARD.md`" + `](https://github.com/stergiotis/boxer/blob/main/doc/DOCUMENTATION_STANDARD.md)
+- [Diátaxis](https://diataxis.fr/)
 `
