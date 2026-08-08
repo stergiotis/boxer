@@ -9,6 +9,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/text"
 )
 
 // ---------------- stringifyFrontmatterValue --------------------------------
@@ -1338,5 +1341,71 @@ func TestParse_TagRulesAreTheParsers(t *testing.T) {
 	}
 	if doc.headings[0].Text != "C#sharp and open question #4" {
 		t.Errorf("heading text: got %q, want both left as prose", doc.headings[0].Text)
+	}
+}
+
+// TestParse_HeadingSlugKeepsFieldCarriedText covers the whole set at once: a
+// heading's text becomes its SLUG, and every node that keeps its text in a
+// field rather than in child Text nodes used to vanish from it. `## See
+// [[Some Page]]` sluggified to `see-`, which is not a name anything can link
+// to and not a section a scroll target can find.
+func TestParse_HeadingSlugKeepsFieldCarriedText(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"wikilink", "## See [[Some Page]]\n", "See Some Page"},
+		{"wikilink with alias", "## See [[Some Page|the alias]]\n", "See the alias"},
+		{"wikilink with heading", "## See [[Page#Sect]]\n", "See Page > Sect"},
+		{"embed", "## Shot ![[pic.png]]\n", "Shot pic.png"},
+		{"autolink", "## Visit <https://example.com>\n", "Visit https://example.com"},
+		{"tag", "## Release #v2 notes\n", "Release #v2 notes"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := Parse([]byte(tc.src))
+			if len(doc.headings) != 1 {
+				t.Fatalf("headings: got %d want 1", len(doc.headings))
+			}
+			if doc.headings[0].Text != tc.want {
+				t.Errorf("Text: got %q want %q", doc.headings[0].Text, tc.want)
+			}
+			if doc.headings[0].Slug == "" {
+				t.Error("Slug: empty — nothing can link to this section")
+			}
+		})
+	}
+}
+
+// TestParse_FieldCarriedNodesHaveNoChildren is the precondition
+// [fieldCarriedText] rests on. Both of its callers walk the whole subtree and
+// add the node's field text on the way past, so a node that ALSO carried its
+// text in child Text nodes would have it counted twice — a heading reading
+// "See Some PageSome Page". The parsers do not build children today; this
+// fails if one starts.
+func TestParse_FieldCarriedNodesHaveNoChildren(t *testing.T) {
+	cfg := defaultConfig()
+	gm := obsidian.New(obsidian.Options{Features: cfg.features, Resolver: cfg.resolver})
+	pc := obsidian.NewParserContext()
+	src := []byte("Text [[Page|alias]] and <https://x.example> and ![[p.png]] and #tag here\n")
+	root := gm.Parser().Parse(text.NewReader(src), parser.WithContext(pc))
+
+	seen := 0
+	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if _, ok := fieldCarriedText(n, src); ok {
+			seen++
+			if n.ChildCount() != 0 {
+				t.Errorf("%s has %d children; fieldCarriedText callers would double-count it",
+					n.Kind().String(), n.ChildCount())
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	if seen != 4 {
+		t.Errorf("fixture drift: matched %d field-carrying nodes, want 4", seen)
 	}
 }

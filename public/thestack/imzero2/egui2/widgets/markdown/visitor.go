@@ -96,18 +96,12 @@ func headingPlainText(h *ast.Heading, src []byte) (out string) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		switch t := n.(type) {
-		case *ast.Text:
+		if t, ok := n.(*ast.Text); ok {
 			sb.Write(t.Segment.Value(src))
-		case *tagext.Node:
-			// A tag carries its text on the node rather than in a child, so a
-			// Text-only walk drops it — and this text becomes the section's
-			// SLUG. Without this case, enabling tags would silently shorten
-			// the slug of every heading containing one (`## Release #v2` going
-			// from `release-v2` to `release-`) and break the fragment links
-			// and scroll targets that resolve against it.
-			sb.WriteByte('#')
-			sb.Write(t.Tag)
+			return ast.WalkContinue, nil
+		}
+		if s, ok := fieldCarriedText(n, src); ok {
+			sb.WriteString(s)
 		}
 		return ast.WalkContinue, nil
 	})
@@ -115,12 +109,36 @@ func headingPlainText(h *ast.Heading, src []byte) (out string) {
 	return
 }
 
-// Deliberately NOT enumerated above: wikilinks, embeds and autolinks also
-// carry their text on the node, so a heading containing one has always had a
-// shortened slug. Adding them would be the same one-line fix — and would
-// CHANGE slugs that documents already link to, which a tag case cannot do
-// because tags did not parse at all until they were enabled here. Left as it
-// is, recorded so the asymmetry reads as a decision.
+// fieldCarriedText returns the visible text of an inline node that keeps it in
+// a FIELD rather than in child [ast.Text] nodes, and whether n is one of them.
+//
+// This is the single enumeration of that set, and it is single on purpose. Two
+// walkers need it — [headingPlainText] for the heading text that becomes a
+// section's slug, and [flattenInlineText] for code spans, link labels and
+// table cells — and every time the set grew, only one of them learned about
+// it. That asymmetry is invisible: a node missing here does not fail, it
+// silently contributes nothing, so a table cell renders blank or a slug comes
+// out short. Adding a case in one place now fixes both.
+//
+// None of these nodes has children (asserted in the parse tests), so a caller
+// walking the subtree afterwards cannot double-count the text.
+func fieldCarriedText(n ast.Node, src []byte) (text string, ok bool) {
+	switch v := n.(type) {
+	case *ast.AutoLink:
+		return string(v.URL(src)), true
+	case *wikilink.Node:
+		return v.DisplayText(), true
+	case *tagext.Node:
+		return "#" + string(v.Tag), true
+	case *embed.Node:
+		out := string(v.Target)
+		if len(v.Heading) > 0 {
+			out += " > " + string(v.Heading)
+		}
+		return out, true
+	}
+	return "", false
+}
 
 // lowerBlock converts one block AST node into a segment. Unsupported
 // block kinds (raw HTML blocks, GFM footnote definitions, math and
@@ -491,12 +509,9 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 // (used for code spans, link labels and table cells, where embedded
 // styling is not preserved).
 //
-// Autolinks, wikilinks and embeds carry their visible text in node
-// fields rather than in child [ast.Text] nodes, so a plain Text/String
-// walk returns the empty string for them. They are enumerated here so a
-// subtree that consists only of such a node still flattens to something
-// the reader can see — without the extra cases, a table cell holding
-// `[[Page]]` would render blank.
+// The field-carrying nodes come from [fieldCarriedText], shared with
+// [headingPlainText] — without them a subtree consisting only of such a node
+// flattens to nothing, and a table cell holding `[[Page]]` renders blank.
 func flattenInlineText(parent ast.Node, src []byte) (out string) {
 	var buf bytes.Buffer
 	ast.Walk(parent, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -508,21 +523,9 @@ func flattenInlineText(parent ast.Node, src []byte) (out string) {
 			buf.Write(v.Segment.Value(src))
 		case *ast.String:
 			buf.Write(v.Value)
-		case *ast.AutoLink:
-			buf.Write(v.URL(src))
-		case *wikilink.Node:
-			buf.WriteString(v.DisplayText())
-		case *tagext.Node:
-			// Same reason as the three above: the text is on the node, not in
-			// a child, so a plain Text walk returns "" and a table cell
-			// holding only `#tag` would render blank.
-			buf.WriteByte('#')
-			buf.Write(v.Tag)
-		case *embed.Node:
-			buf.Write(v.Target)
-			if len(v.Heading) > 0 {
-				buf.WriteString(" > ")
-				buf.Write(v.Heading)
+		default:
+			if s, ok := fieldCarriedText(n, src); ok {
+				buf.WriteString(s)
 			}
 		}
 		return ast.WalkContinue, nil
