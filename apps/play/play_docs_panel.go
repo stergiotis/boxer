@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
@@ -67,7 +68,7 @@ func (inst *PlayApp) renderDocsTab() {
 	// pane never reflows around them.
 	for range c.Horizontal().KeepIter() {
 		if len(s.back) > 0 {
-			if c.Button(ids.PrepareStr("docsBack"), c.Atoms().Text("←").Keep()).
+			if c.Button(ids.PrepareStr("docsBack"), c.Atoms().Text(icons.PhArrowLeft).Keep()).
 				SendResp().HasPrimaryClicked() {
 				s.shown = s.back[len(s.back)-1]
 				s.back = s.back[:len(s.back)-1]

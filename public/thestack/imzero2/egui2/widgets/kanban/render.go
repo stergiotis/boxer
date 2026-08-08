@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -35,9 +36,13 @@ const (
 	emptyColumnHeaderClear float32 = 34
 )
 
-// showMoveButtons toggles the per-card ◀▶▲▼ footer. Off by default — the buttons
-// are not yet styled well enough, and drag-and-drop already moves cards; flip to
-// true to bring them back (they still work).
+// showMoveButtons toggles the per-card move footer. Off by default — the
+// buttons are not yet styled well enough, and drag-and-drop already moves
+// cards; flip to true to bring them back (they still work).
+//
+// One thing that made them look unstyled is now fixed: their glyphs were the
+// geometric triangles, which no loaded text font covers, so each was drawn by
+// whatever the fallback chain answered with. See renderControls.
 const showMoveButtons = false
 
 // CaptureUiRect seq bases for drag hit-testing. Distinctive high bases keep them
@@ -415,26 +420,35 @@ func rollupTone(done, total int) badge.ToneE {
 	return badge.ToneNeutral
 }
 
-// renderControls draws the compact move row. Edge buttons are omitted (no ◀ in
-// the first column, no ▶ in the last) rather than shown disabled.
+// renderControls draws the compact move row. Edge buttons are omitted (no left
+// control in the first column, no right control in the last) rather than shown
+// disabled.
+//
+// The glyphs come from the bundled Phosphor font rather than the geometric
+// triangles they replaced (◀▶▲▼, U+25C0/25B6/25B2/25BC). None of those four is
+// in Noto Sans, so each resolved through the fallback chain to the CJK face,
+// which draws them at ideographic full-em and centres them on the ideographic
+// box — visibly oversized and off the line the button sits on, and only on
+// hosts that load a CJK fallback. See the imzero2 skill, §12 "Oversized,
+// Off-Centre Glyph".
 func renderControls(ids *c.WidgetIdStack, card Card, atFirst, atLast bool, density styletokens.DensityE) (actCard uint64, act moveKind) {
 	c.AddSpace(styletokens.PaddingHair(density))
 	for range c.Horizontal().KeepIter() {
 		if !atFirst {
-			if c.Button(ids.PrepareStr("mL"), c.Atoms().Text("◀").Keep()).Small().SendResp().HasPrimaryClicked() {
+			if c.Button(ids.PrepareStr("mL"), c.Atoms().Text(icons.PhCaretLeft).Keep()).Small().SendResp().HasPrimaryClicked() {
 				actCard, act = card.ID, mvLeft
 			}
 		}
 		if !atLast {
-			if c.Button(ids.PrepareStr("mR"), c.Atoms().Text("▶").Keep()).Small().SendResp().HasPrimaryClicked() {
+			if c.Button(ids.PrepareStr("mR"), c.Atoms().Text(icons.PhCaretRight).Keep()).Small().SendResp().HasPrimaryClicked() {
 				actCard, act = card.ID, mvRight
 			}
 		}
 		c.AddSpace(styletokens.GapInline(density))
-		if c.Button(ids.PrepareStr("mU"), c.Atoms().Text("▲").Keep()).Small().SendResp().HasPrimaryClicked() {
+		if c.Button(ids.PrepareStr("mU"), c.Atoms().Text(icons.PhCaretUp).Keep()).Small().SendResp().HasPrimaryClicked() {
 			actCard, act = card.ID, mvUp
 		}
-		if c.Button(ids.PrepareStr("mD"), c.Atoms().Text("▼").Keep()).Small().SendResp().HasPrimaryClicked() {
+		if c.Button(ids.PrepareStr("mD"), c.Atoms().Text(icons.PhCaretDown).Keep()).Small().SendResp().HasPrimaryClicked() {
 			actCard, act = card.ID, mvDown
 		}
 	}

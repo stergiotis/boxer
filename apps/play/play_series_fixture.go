@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/timeseries/adscore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -378,7 +379,7 @@ func (inst *SeriesDriver) renderFixtureLab() {
 			}
 		}
 		c.Label(fmt.Sprintf("seed %d", inst.fixture.seed)).Send()
-		if c.Button(inst.ids.PrepareStr("fixture-seed"), c.Atoms().Text("↻").Keep()).
+		if c.Button(inst.ids.PrepareStr("fixture-seed"), c.Atoms().Text(icons.PhArrowClockwise).Keep()).
 			Small().SendResp().HasPrimaryClicked() {
 			// A counter, not a random draw: a fixture must be reproducible
 			// from what the affordance shows, and "seed 7" is something two
