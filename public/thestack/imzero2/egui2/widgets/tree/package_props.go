@@ -2,12 +2,13 @@ package tree
 
 import "github.com/stergiotis/boxer/public/packageprops"
 
-// PackageProps records this package's curated properties (ADR-0080).
-// Seeded by `wasmsurvey props generate`; curate by hand, then `wasmsurvey props verify`.
+// PackageProps records this package's curated properties (ADR-0080). The model
+// and the flatten are UI-free, but render.go's egui2 bindings dependency blocks
+// all WASM targets, as for every widget package.
 var PackageProps = packageprops.Props{
-	WASMWASI:         packageprops.WASMCompiles,
-	WASMJS:           packageprops.WASMCompiles,
-	WASMFreestanding: packageprops.WASMCompiles,
+	WASMWASI:         packageprops.WASMBlocked,
+	WASMJS:           packageprops.WASMBlocked,
+	WASMFreestanding: packageprops.WASMBlocked,
 }
 
 func init() {

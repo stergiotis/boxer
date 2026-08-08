@@ -146,6 +146,17 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   `ScrollToRow` for reveal-selection, and the column-width protocol come with
   it rather than being rebuilt.
 
+  **M2 found that a declared column width is not a width.** egui_table runs a
+  full sizing pass the first frame a table id exists and, for *resizable*
+  columns only, replaces the declared width with the widest cell actually laid
+  out, then stores that and reuses it forever (`table.rs:845` skips
+  non-resizable columns, `:861` does the shrink). Against a truncating label —
+  which lays out to whatever width it is given and reports that back — this is
+  not a fit but a collapse: the first live probe rendered a ~90px outline
+  column and stayed there. The widget therefore declares each width as the
+  column's range *minimum* as well as its current value. Growing past it, by
+  content or by a drag, still works.
+
 - **SD5 — `row_ui` becomes a deferred block map on `endETable`.**
   `WithDeferredBlockMap("rows", ctabb.U64)` generates `BeginRows(row)` /
   `EndRows()`; the existing locally-scoped `EtStripedDelegate` implements
@@ -221,15 +232,18 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 
 ### Milestones
 
-- **M0 — `row_ui` deferred block map on `endETable`.** The IDL declaration, the
+- **M0 — `row_ui` deferred block map on `endETable`.** ✓ The IDL declaration, the
   `row_ui` implementation with SD6's seen-set guard, and regeneration. Ported
   `logviewer` from five `TintedScope` cells to one row block, which is both the
   payoff and the proof the guard holds. Independently useful with no tree in
   sight.
-- **M1 — `model.go` + `layout.go`.** The columnar input, its validation, the
+- **M1 — `model.go` + `layout.go`.** ✓ The columnar input, its validation, the
   `State`, and the pure flatten with its test suite. No bindings import.
-- **M2 — `render.go`.** The etable renderer: row blocks, indent, disclosure,
-  selection, `VisibleRange` gating, reveal-selection via `ScrollToRow`.
+- **M2 — `render.go`.** ✓ The etable renderer: row blocks, indent, disclosure,
+  selection, `VisibleRange` gating, reveal-selection via `ScrollToRow`. `State`
+  gained a one-shot reveal request and the flatten scratch; `Column` /
+  `Input` / `Result` are the render surface, with host columns to the right of
+  the outline so M3's callers have somewhere to put a type or a count.
 - **M3 — Port the in-repo callers.** `fieldview`, `schemaview`,
   `componentview`, `configview`, one at a time, each verified in its own host.
 - **M4 — Demo + tour entry.** A registry `Demo` replacing `tree-view`, and the
@@ -245,7 +259,7 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 | egui2 IDL — `uiSetMinWidthAvailable` proc, `labelAtoms.selectable` method | added at M0 (see SD5) | same regeneration; adding IDL nodes **renumbers opcodes** (`enums.out.go`, `enums_out.rs`), so a stale binary on either side desyncs the wire |
 | egui2 IDL — `tree`, `nodeDir`, `nodeLeaf`, `nodeDirClose` | removed at M5 | `r3_node_cmds` register and `NodeCommand` enum in `interpreter.rs`, `prepare_next_frame` clear arm, the two demos |
 | `rust/imzero2/Cargo.toml` | `egui_ltreeview` dependency removed at M5 | `Cargo.lock`, the licence and vendor gates |
-| Exported Go API under `public/` | added: `widgets/tree` | nothing yet — no downstream module compiles against it on day one |
+| Exported Go API under `public/` | added: `widgets/tree` | nothing yet — no downstream module compiles against it on day one. `render.go` shares the package with the model rather than sitting in a `view/` subpackage the way icicle and sankey split theirs, so the package's ADR-0080 properties flip to `WASMBlocked` at M2 — the trade is a WASM-compilable flatten, which nothing wants, for one import at each of M3's four call sites |
 | imzero2 skill §7 "The Node & Tree System" | rewritten at M5 | `.claude/skills/imzero2/SKILL.md`; §13.1's register table loses its `r3_node_cmds` row |
 
 ## Alternatives
@@ -327,12 +341,14 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 ## Verification plan — Tier 1
 
 - **Lane.** Default `go test` for `layout_test.go` (SD3's flatten: ordering,
-  depth, collapse, forest roots, cycle and dangling-parent rejection). The
-  screenshot tour for the M4 demo. A headless scene (ADR-0154) for
-  click-to-select and click-to-expand.
-- **What would fail.** A flatten regression fails `go test` directly. An SD6
-  guard regression is the interesting one: doubled row ids do not break
-  rendering or clicking, so the observable is the headless scene's
+  depth, collapse, forest roots, cycle and dangling-parent rejection) and
+  `render_test.go` (the click-to-selection rules: replace, toggle, extend, and
+  the two ways an extend loses its anchor). The screenshot tour for the M4
+  demo. A headless scene (ADR-0154) for click-to-select and click-to-expand,
+  which needs M4's registered demo to drive and lands with it.
+- **What would fail.** A flatten or selection regression fails `go test`
+  directly. An SD6 guard regression is the interesting one: doubled row ids do
+  not break rendering or clicking, so the observable is the headless scene's
   click-to-select assertion going red while the tree still looks correct, plus
   `checkId`'s `id has already been used` WARN on the emitting frame. That
   asymmetry is why the scene asserts selection rather than appearance.
@@ -343,6 +359,22 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   adopter's — worth a note in the binding rather than a test, until something
   needs it. SD8's absent keyboard navigation is untested because it is
   unimplemented.
+
+  **Modified clicks cannot be driven.** M2 was verified live through egui-mcp,
+  which carries a modifier on the click event but does not set the frame's
+  modifier state, so a synthesized ctrl- or shift-click arrives unmodified and
+  reads as a plain one. `render_test.go` covers what each mode means and
+  `clickMode` — the register read it cannot exercise — is three lines. Held
+  modifiers are not a gap in the widget, but they are a gap in what any driver
+  here can assert about it.
+
+  **The header block replays twice**, the same way SD6's row block would
+  without its guard: `header_cell_ui` runs for the sticky region as well as
+  the scrollable one, and unlike `row_ui` it has no seen-set. Found while
+  measuring M2's columns — every header label appears twice in the
+  accessibility tree. It predates this ADR, affects every etable with deferred
+  headers rather than trees specifically, and has no read-back consumer today,
+  so it is recorded here rather than fixed as part of a tree milestone.
 
 ## Status
 

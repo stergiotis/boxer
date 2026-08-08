@@ -143,7 +143,19 @@ type State struct {
 	// extend a range and Down cannot pass over a selected row without changing
 	// what is selected. Every file manager makes this distinction; adding it
 	// later would reshape State and every caller written against the old one.
+	//
+	// Pointer selection does move it: a plain or ctrl click puts it on the row
+	// clicked, and a shift click leaves it on the anchor it extended from.
 	cursorP1 int32
+	// revealP1 is a pending [State.Reveal], stored node+1 for the same reason
+	// as cursorP1. The renderer consumes it.
+	revealP1 int32
+	// rows is the flatten scratch the renderer reuses frame to frame. It sits
+	// here because State is already the per-instance object the host retains,
+	// and a row slice reallocated on every frame is the one allocation a
+	// widget that exists to virtualise cannot justify. Nothing outside the
+	// package reads it — the renderer hands back the same slice, borrowed.
+	rows []Row
 }
 
 // IsExpanded reports whether node is open. Leaves are never open; the
@@ -253,4 +265,32 @@ func (s *State) SetCursor(node int32) {
 		return
 	}
 	s.cursorP1 = node + 1
+}
+
+// Reveal asks the next render to bring node into view: open its ancestors and
+// scroll its row to the middle of the viewport. It is a one-shot request the
+// render consumes, not a persistent setting, so a host sets it on an event —
+// a search hit, a restored selection, a jump from another panel — and does not
+// have to remember to clear it.
+//
+// A request rather than a pair of calls the host makes itself because both
+// halves are the renderer's: the ancestors must open *before* the frame's
+// flatten, and the scroll needs the row index that same flatten produces. A
+// negative node cancels a pending reveal.
+//
+// Only one reveal can be pending; a second call replaces the first. Revealing
+// a node that is not in the tree opens nothing and scrolls nowhere.
+func (s *State) Reveal(node int32) {
+	if node < 0 {
+		s.revealP1 = 0
+		return
+	}
+	s.revealP1 = node + 1
+}
+
+// takeReveal returns the pending reveal target and clears it, or -1.
+func (s *State) takeReveal() (node int32) {
+	node = s.revealP1 - 1
+	s.revealP1 = 0
+	return
 }
