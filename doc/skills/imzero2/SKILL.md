@@ -898,6 +898,27 @@ APIs with `egui::Ui` callbacks (like `egui_table::TableDelegate`) use `WithDefer
   }
   ```
 
+## Oversized, Off-Centre Glyph (Affordance Text Escaping to the Fallback Font)
+* **The Symptom:** A glyph used as a *control* — a disclosure triangle, an arrow on a move button, a status mark — renders visibly larger than the text beside it and sits above or below the line it should share. Everything else in the row is fine. It looks like a layout or padding bug, and no amount of alignment work fixes it, because the box is already centred: it is the ink *inside* the box that is wrong.
+* **The Cause:** The codepoint is not in the main font, so it resolves through the client's **fallback chain**. The host loads a CJK fallback (`--fallbackFontTTF`, which `hmi.sh` always passes), and a CJK face draws geometric shapes at ideographic full-em and centres them on the ideographic box rather than the Latin baseline. Measured on one scene with and without the fallback, everything else equal: `▶` (U+25B6, absent from Noto Sans) grew from **8px to 12px of ink and dropped 2px** below the label beside it.
+
+  Two things make this hard to catch. It is invisible on any host with a thinner font stack — the **headless lane loads no CJK fallback**, so a scene can verify a widget four times over and never show it. And the same codepoint is perfectly fine *inline in a label's own text run* (helphost's nav, kanban's move controls, the leewaywidgets section chevrons all do this), because there it inherits the run's metrics; it only misbehaves once it is a widget of its own.
+* **The Pattern:** **An affordance's glyph comes from a font the client loads, not from the fallback chain.** Text may fall back — that is what a fallback is for. A control may not, because its size and baseline then belong to whichever face happened to answer, which varies per host. In practice that means the bundled **Phosphor** font (`icons.Ph*`, loaded via `--phosphorFontTTF`) for anything inside a `Button` or standing alone as a control.
+  ```go
+  // WRONG: a control whose glyph is not in the text font — the fallback face
+  // decides its size and baseline, differently on every host.
+  glyph := "▶"
+  if expanded { glyph = "▼" }
+  c.Button(id, c.Atoms().Text(glyph).Keep()).Frame(false).Small().SendResp()
+
+  // RIGHT: a glyph from the font the client loads explicitly.
+  glyph := icons.PhCaretRight
+  if expanded { glyph = icons.PhCaretDown }
+  c.Button(id, c.Atoms().Text(glyph).Keep()).Frame(false).Small().SendResp()
+  ```
+  The same root shows up as its other failure mode — a plain **tofu box** where the fallback has no glyph at all. `◈` (U+25C8) does this in `schemaview`'s navigator while rendering correctly in its own legend a few pixels away, because the legend's chips are `Monospace()` and land on a different face. If a glyph looks wrong in one place and right in another, suspect the font before the layout.
+* **Diagnosing it:** run the same scene twice, once with `--fallbackFontTTF` and once without, and measure the glyph's ink box against the neighbouring label's. If the two runs disagree, it is the fallback chain and not your code. Found this way for ADR-0176's tree; the widget's `render.go` carries the numbers.
+
 ## Gallery Scroll-Host Layout — Side Panels Collapse, and the Tour Hides It
 * **The Symptom:** A widget-gallery demo puts a control column beside a filling content area with `c.PanelLeftInside(...)` + `c.PanelCentralInside()`. The screenshot tour looks perfect, but in the *interactive* gallery the left panel collapses to a sliver and clips its controls while the central area fills wide. Related symptoms from the same layout: a fixed-width output column (`UiSetMaxWidth`) strands dead space on the right of a wide window with its scrollbar floating mid-pane, and a `DockArea` overflows / clips instead of scrolling.
 * **The Cause:** The two demo hosts are not equivalent. The **TestDriver** (tour; `IMZERO2_SCREENSHOT_DIR` set) wraps each demo in a bounded `c.AllocateUiAtRect(0, 0, stageW, stageH)` — finite width **and** height, with a real region for side panels to claim. The **InteractiveDriver** (the gallery you click around in) wraps each demo in `c.ScrollArea().Vscroll(true).AutoShrink(false, false)` — full host width but **unbounded, scrollable height**, and **no CentralPanel region**. egui side panels (`SidePanel` / the `*Inside` variants) size against a CentralPanel region; inside a bare scroll area they get a degenerate width and clip. A `DockArea` (egui_dock fills its allocated rect) has no finite height to fill in the vscroll, so it clips. The tour's bounded rect papers over both — which is exactly why a tour-only "fix" readily regresses the gallery.
@@ -1140,6 +1161,8 @@ IMZERO2_SCREENSHOT_DIR=/tmp/screenshots bash hmi.sh
 Produces: `tables.png`, `plots.png`, `painter.png`, `treemap.png`, `sql.png`, `i18n.png`, `nerdfont.png`, `imzero2.png`, `debug_tools.png`, `colors_styling.png`.
 
 The tour uses a 4-phase state machine per window (setup → settle → capture → advance) to ensure layout is stable before each screenshot. The settle frame is necessary because collapse/uncollapse commands take effect on the next frame.
+
+**A capture only proves what its font stack can show.** Whatever lane you verify in — this tour, an `imzero2 drive` scene, an `egui-mcp` session — the run is only as representative as the fonts that host loaded. A headless scene launched without `--fallbackFontTTF` renders a *different* glyph for any codepoint missing from the main font than a desktop launch does, at a different size and baseline; §12 "Oversized, Off-Centre Glyph" is that defect, invisible across four rounds of headless verification and obvious in the first desktop screenshot. Pass the same font flags your users' host passes, or treat glyph appearance as unverified.
 
 ### 14.3 PaintCubicBezier
 
