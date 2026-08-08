@@ -222,7 +222,7 @@ only honest reading of the marker.
 
 - **M0 — the editing surface: split panes, live preview, caret-follows-preview, dirty marker, clipboard export, session restore.**
 - **M1 — source-offset markdown highlighting, wired through `textEdit.highlightJob`.** ✓
-- **M2 — editing affordances: a formatting bar over `insertAtCursor`, an outline from `Doc.Headings()`, a word and reading-time readout.**
+- **M2 — editing affordances: a formatting bar over `insertAtCursor`, an outline from `Doc.Headings()`, a word and reading-time readout.** ✓
 - **M3 — find and replace: matches painted through `sectionStyled`, replace-all as a whole-buffer rebind.**
 - **M4 — file I/O through fsbroker.**
 
@@ -236,7 +236,8 @@ visible before the work starts rather than discovered inside it.
 | --- | --- | --- |
 | `app.DefaultRegistry` | added — one `RegisterFactory` under a new manifest | the carousel's side-effect import block, which is the single site pulling registered apps |
 | `markdownhighlight` exported API (M1, shipped) | added — `HighlightLex`, returning spans into the *source* bytes; `Highlight` untouched | `codeview.BuildMarkdownLex`, resolving the same categories against the existing `mdColors` palette |
-| `textEdit` IDL (M3, blocked) | none proposed here | caret-jump-to-match needs a `setCursor` method, a sibling of `insertAtCursor`; until it exists, find navigates the preview and not the caret |
+| `codeview` exported API (M2, shipped) | added — `BuildMarkdownFromSpans`, the sibling of `BuildSqlFromSpans` | nothing; it lets a caller that already lexed (for the word count) colour the same text without lexing twice |
+| `textEdit` IDL (M3, blocked; also caps M2) | none proposed here | caret-jump-to-match needs a `setCursor` method, a sibling of `insertAtCursor`. The same gap is why M2's bar has no heading / list / quote button: those prefix a LINE, and `insertAtCursor` inserts at the caret |
 
 ## Alternatives
 
@@ -244,6 +245,14 @@ visible before the work starts rather than discovered inside it.
   apps whose panes are *alternatives* — writingstylescope, play. Source and
   preview are simultaneous by definition, and tabs would hide exactly the half
   that makes the other legible.
+- **Line-level formatting buttons (heading, list, blockquote) in M2.** They
+  prefix a line; `insertAtCursor` inserts at the caret, so they would only be
+  right with the caret already at the line start. Doing them properly means
+  rewriting the buffer Go-side, which contradicts §Decision 1 and costs the
+  widget's undo history — a worse trade than typing `## ` by hand. Deferred to
+  a line-aware seam, not rejected. The inline actions have no such problem:
+  `insertAtCursor` REPLACES the selection, so handing it the selection wrapped
+  in markers turns "insert" into "wrap" with nothing new required.
 - **Preview reparse gated on quiescence.** Deferred rather than rejected: the
   measured curve says it buys nothing below a few tens of KB, and it costs a
   state machine plus a stale-preview window. Trigger to revisit: a document

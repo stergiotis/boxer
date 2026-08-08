@@ -26,6 +26,7 @@
 package mdedit
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -40,6 +41,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
 )
 
 const (
@@ -122,6 +124,10 @@ const (
 	tipCopy  = "Copy the whole document to the clipboard. This is the only way text leaves the app — there is no file I/O in this cut."
 	tipDirty = "Whether the buffer differs from the last checkpoint: a completed copy to the clipboard, or the document restored when the window opened. With no file to be out of step with, that is the only thing the marker can honestly mean."
 
+	tipOutline = "Show the heading outline beside the preview; clicking a heading scrolls the preview to it. The column needs a window wide enough to spare it, and hides itself below that rather than starving the two panes doing the work."
+
+	tipStats = "Words, characters and a reading estimate over the PROSE only — fenced code bodies, markers, URLs, table rules and frontmatter are excluded, since none of them are read at prose speed. The estimate divides by 200 words a minute, a round convention rather than a measurement of anyone."
+
 	hintEmpty = "Write markdown here, or paste a document with Ctrl+V. The preview on the right updates as you type."
 )
 
@@ -165,8 +171,21 @@ type App struct {
 	docSrc string
 	docOk  bool
 
-	// scrolledSlug is the section the preview was last scrolled to.
-	scrolledSlug string
+	// caretSlug is the section the caret was last in. It exists ONLY as the
+	// baseline for change detection, and an outline click deliberately does
+	// not touch it: if a click moved it, the next frame would see the caret's
+	// real section as "changed" and drag the preview straight back.
+	caretSlug string
+
+	// pendingScroll is the section the preview should scroll to on the next
+	// render, set either by the caret entering a new section or by an outline
+	// click, and consumed by the render. One channel for both sources, so
+	// they cannot fight over the same frame.
+	pendingScroll string
+
+	// showOutline is the reader's toggle. The column also needs the window to
+	// be wide enough — see App.outlineVisible.
+	showOutline bool
 
 	// paneW/paneH are what the editor's pane probe reported last, held across
 	// frames so a frame in which the probe does not come back (the pane was
@@ -187,12 +206,26 @@ type App struct {
 	rowPx     float64
 	rowFontPt float32
 
-	// lexJob is the source-tier colour job and lexSrc the buffer it describes.
-	// Keyed by text rather than memoised: per-keystroke content is new by
-	// construction, so ADR-0125's LRU would only churn (ADR-0130 §6).
-	lexJob typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-	lexOk  bool
-	lexSrc string
+	// lexJob is the source-tier colour job, lexSpans the spans it was built
+	// from, and lexSrc the buffer both describe. Keyed by text rather than
+	// memoised: per-keystroke content is new by construction, so ADR-0125's
+	// LRU would only churn (ADR-0130 §6).
+	//
+	// The spans are kept because the readout wants them too — counting prose
+	// words means knowing which bytes are prose, which is exactly what the
+	// lexer already decided. One lex serves both.
+	lexJob   typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	lexOk    bool
+	lexSrc   string
+	lexSpans []markdownhighlight.Span
+
+	// stats is the word / character / reading-time readout, recomputed with
+	// the spans.
+	stats docStats
+
+	// pendingInsert is the formatting snippet a bar click produced, handed to
+	// the TextEdit as insertAtCursor and cleared once emitted.
+	pendingInsert string
 
 	// status is the one-line report under the action bar.
 	status string
@@ -280,6 +313,11 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 func (inst *App) renderBody() {
 	inst.drainAsync()
 	inst.syncDoc()
+	inst.ensureLex()
+	// Before any pane reads pendingScroll, so a caret move and an outline
+	// click in the same frame resolve in that order — the click wins, which is
+	// the one the reader just made.
+	inst.trackCaretSection()
 	inst.autosave()
 
 	// Probe the window before anything claims it, so the split below is a
@@ -298,6 +336,14 @@ func (inst *App) renderBody() {
 		ExactSize(inst.sourceWidth()).KeepIter() {
 		inst.renderSource()
 	}
+	// The outline is declared before the central region too, so its click can
+	// still reach the preview in the same frame.
+	if inst.outlineVisible() {
+		for range c.PanelRightInside(inst.ids.PrepareStr("outlinepane")).
+			ExactSize(inst.outlineWidth()).KeepIter() {
+			inst.renderOutline()
+		}
+	}
 	for range c.PanelCentralInside().KeepIter() {
 		// Hscroll for the same reason as the source pane: markdown holds
 		// things that do not wrap — a wide table, a long fenced line — and an
@@ -313,9 +359,18 @@ func (inst *App) renderBody() {
 // Panes
 // ---------------------------------------------------------------------------
 
-// renderBar draws the action row: the dirty marker, the clipboard export, and
-// whatever the last export reported. Callers own the enclosing panel.
+// renderBar draws the two action rows: formatting on top, document state
+// below. Callers own the enclosing panel.
 func (inst *App) renderBar() {
+	// Row one — formatting. A click's snippet is stashed rather than applied:
+	// it has to reach the TextEdit as a builder method on the widget itself,
+	// which renders later in this same frame.
+	for range c.HorizontalTop().KeepIter() {
+		if snippet := inst.renderFormatBar(); snippet != "" {
+			inst.pendingInsert = snippet
+		}
+	}
+
 	for range c.HorizontalTop().KeepIter() {
 		// The button renders unconditionally. Dropping it from the tree while
 		// a request is in flight would collapse the row and strobe it back on
@@ -336,10 +391,45 @@ func (inst *App) renderBar() {
 			Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).
 			Tooltip(tipDirty).Send()
 
+		// The outline toggle names its own count, so the button says what
+		// turning it on would show. It renders even when the window is too
+		// narrow to honour it — a control that disappears at some width is
+		// harder to understand than one that stays and has no effect — and
+		// the tooltip is where that is said.
+		var headings []markdown.HeadingInfo
+		if inst.doc != nil {
+			headings = inst.doc.Headings()
+		}
+		for range c.HoverText(tipOutline).KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("outline"), inst.showOutline, outlineSummary(headings)).
+				SendRespVal(&inst.showOutline)
+		}
+
+		for range c.HoverText(tipStats).KeepIter() {
+			c.Label(inst.statsLine()).Send()
+		}
+
 		if inst.status != "" {
 			c.Label(inst.status).Send()
 		}
 	}
+}
+
+// statsLine renders the readout. Reading time is omitted below a minute rather
+// than shown as "0 min" or rounded up to a minute a 20-word note does not
+// deserve.
+func (inst *App) statsLine() (s string) {
+	var b strings.Builder
+	b.WriteString(itoa(inst.stats.Words))
+	b.WriteString(" words · ")
+	b.WriteString(itoa(inst.stats.Chars))
+	b.WriteString(" chars")
+	if inst.stats.ReadMinutes > 0 && inst.stats.Words >= wordsPerMinute/4 {
+		b.WriteString(" · ~")
+		b.WriteString(itoa(inst.stats.ReadMinutes))
+		b.WriteString(" min read")
+	}
+	return b.String()
 }
 
 // highlightJob returns the source-tier colour job for the current buffer,
@@ -352,20 +442,30 @@ func (inst *App) renderBar() {
 // built from last frame's text still lands correctly on this frame's
 // (ADR-0130 §Decision 2-3).
 func (inst *App) highlightJob() (job typed.RetainedFffiHolderTyped[c.CodeViewJobS], ok bool) {
+	return inst.lexJob, inst.lexOk
+}
+
+// ensureLex lexes the buffer once per change and derives everything that reads
+// from it: the colour job and the prose readout. Must run on the render
+// goroutine — the job's construction issues FFI opcodes.
+func (inst *App) ensureLex() {
 	if inst.lexOk && inst.lexSrc == inst.src {
-		return inst.lexJob, true
+		return
 	}
 	if inst.src == "" {
 		// An empty job would claim zero bytes of an empty buffer; skipping the
 		// method entirely leaves the hint text rendering as it does today.
 		inst.lexOk = false
 		inst.lexSrc = ""
-		return job, false
+		inst.lexSpans = nil
+		inst.stats = docStats{}
+		return
 	}
-	inst.lexJob = codeview.BuildMarkdownLex(inst.src)
+	inst.lexSpans = markdownhighlight.HighlightLex([]byte(inst.src))
+	inst.lexJob = codeview.BuildMarkdownFromSpans(inst.src, inst.lexSpans)
+	inst.stats = countStats(inst.src, inst.lexSpans)
 	inst.lexSrc = inst.src
 	inst.lexOk = true
-	return inst.lexJob, true
 }
 
 // sourceWidth is the source pane's width for this frame: a fixed share of the
@@ -464,6 +564,14 @@ func (inst *App) renderSource() {
 		if job, ok := inst.highlightJob(); ok {
 			b = b.HighlightJob(job)
 		}
+		// Hand the formatting bar's snippet to the widget, which splices it at
+		// its own persisted caret next frame and replaces any selection with
+		// it (ADR-0063). Cleared here rather than on click, so a click that
+		// landed while this pane was not rendering is not silently dropped.
+		if inst.pendingInsert != "" {
+			b = b.InsertAtCursor(inst.pendingInsert)
+			inst.pendingInsert = ""
+		}
 		_ = b.SendRespValCursor(&inst.src, &inst.cursor)
 
 		// The restore is applied HERE, immediately after the emit, and not in
@@ -525,20 +633,34 @@ func (inst *App) syncDoc() {
 	inst.docOk = true
 }
 
-// takeScrollTarget resolves the caret's section and consumes the transition:
-// changed is true only on the frame the caret moves into a different section.
-// Call it exactly once per frame — a second call in the same frame would see
-// the transition already spent.
-func (inst *App) takeScrollTarget() (slug string, changed bool) {
+// trackCaretSection resolves the caret's section and, when it has changed
+// since last frame, queues a scroll to it. Call once per frame, before
+// anything that reads pendingScroll.
+//
+// It only ever queues on a CHANGE. Queuing every frame would re-issue the
+// scroll continuously and pin the preview against the reader's own scrolling,
+// which is the guard markdown.WithScrollToSection documents.
+func (inst *App) trackCaretSection() {
 	if inst.doc == nil {
 		return
 	}
 	caret, _ := c.UnpackCursorRange(inst.cursor)
-	slug, changed = scrollTarget(inst.src, inst.doc.Headings(), caret, inst.scrolledSlug)
-	if changed {
-		inst.scrolledSlug = slug
+	slug, changed := scrollTarget(inst.src, inst.doc.Headings(), caret, inst.caretSlug)
+	if !changed {
+		return
 	}
-	return
+	inst.caretSlug = slug
+	inst.pendingScroll = slug
+}
+
+// takeScrollTarget consumes the queued scroll target, whichever source set it.
+func (inst *App) takeScrollTarget() (slug string, ok bool) {
+	if inst.pendingScroll == "" {
+		return "", false
+	}
+	slug = inst.pendingScroll
+	inst.pendingScroll = ""
+	return slug, true
 }
 
 // ---------------------------------------------------------------------------

@@ -131,3 +131,15 @@ func mdSpansToSections(spans []markdownhighlight.Span) (out []section) {
 func BuildMarkdownLex(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 	return buildFromSections(src, mdSpansToSections(markdownhighlight.HighlightLex([]byte(src))))
 }
+
+// BuildMarkdownFromSpans serializes lex-tier spans somebody else already
+// computed, the same split [BuildSqlFromSpans] exists for. A caller that wants
+// the spans for its own purposes — counting prose words while skipping code
+// blocks, say — lexes once and passes the result here rather than lexing again
+// to colour the same text.
+//
+// `src` must be the exact text the spans describe; nothing is re-derived from
+// it and no tab expansion is applied.
+func BuildMarkdownFromSpans(src string, spans []markdownhighlight.Span) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
+	return buildFromSections(src, mdSpansToSections(spans))
+}

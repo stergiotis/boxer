@@ -16,7 +16,10 @@ const (
 	// gallerySrcW pins the source column in the demo scene. The live app uses
 	// a resizable side panel instead; see renderGallery for why the two hosts
 	// cannot share a layout.
-	gallerySrcW = float32(430)
+	gallerySrcW = float32(400)
+	// galleryOutlineW pins the outline column. The live app derives it from
+	// the window instead; here the stage width is fixed, so it is too.
+	galleryOutlineW = float32(150)
 	// galleryPaneH bounds both columns. The interactive gallery host is a
 	// scroll area of unbounded height, in which an unbounded child does not
 	// know where to stop. It has to leave room for the demo chrome the driver
@@ -75,6 +78,9 @@ func mdTourInit(ids *c.WidgetIdStack) (state any) {
 	inst.ids = ids
 	inst.src = sampleDoc
 	inst.saved = sampleDoc
+	// The scene shows the outline column: it is half of what M2 added, and the
+	// gallery stage is wide enough to earn it.
+	inst.showOutline = true
 	return inst
 }
 
@@ -97,6 +103,7 @@ func mdTourRender(ids *c.WidgetIdStack, state any) {
 // an unconstrained one behaves in both.
 func (inst *App) renderGallery() {
 	inst.syncDoc()
+	inst.ensureLex()
 	inst.renderBar()
 	// The size constraints sit on the columns, OUTSIDE the scroll areas. Set
 	// inside, they size the scrolled CONTENT instead of the viewport — the
@@ -111,9 +118,16 @@ func (inst *App) renderGallery() {
 			inst.renderSource()
 		}
 		for range c.Vertical().KeepIter() {
+			c.UiSetMinWidth(galleryOutlineW)
+			c.UiSetMaxWidth(galleryOutlineW)
 			c.UiSetMinHeight(galleryPaneH)
 			c.UiSetMaxHeight(galleryPaneH)
-			for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+			inst.renderOutline()
+		}
+		for range c.Vertical().KeepIter() {
+			c.UiSetMinHeight(galleryPaneH)
+			c.UiSetMaxHeight(galleryPaneH)
+			for range c.ScrollArea().Hscroll(true).Vscroll(true).AutoShrink(false, false).KeepIter() {
 				inst.renderPreview()
 			}
 		}

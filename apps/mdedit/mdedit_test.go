@@ -2,6 +2,8 @@ package mdedit
 
 import (
 	"errors"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
 )
 
 // ---------------------------------------------------------------------------
@@ -365,38 +368,224 @@ func TestSourceWidth_BeforeTheProbeReports(t *testing.T) {
 // Source highlighting (M1)
 // ---------------------------------------------------------------------------
 
-func TestHighlightJob_CachesUntilTheTextChanges(t *testing.T) {
+func TestEnsureLex_CachesUntilTheTextChanges(t *testing.T) {
 	inst := &App{}
 
 	// An empty buffer has nothing to colour; the method is skipped so the hint
 	// text keeps rendering as it does without a job.
+	inst.ensureLex()
 	if _, ok := inst.highlightJob(); ok {
 		t.Fatal("an empty buffer should not produce a highlight job")
 	}
 
 	inst.src = "# Head\n\n**bold**\n"
+	inst.ensureLex()
 	if _, ok := inst.highlightJob(); !ok {
 		t.Fatal("a non-empty buffer should produce a highlight job")
 	}
 	assert.Equal(t, inst.src, inst.lexSrc, "the cache must record the text it describes")
+	assert.NotEmpty(t, inst.lexSpans, "the spans must be kept — the readout reads them")
 
 	// Unchanged text reuses the cached job rather than relexing.
-	inst.highlightJob()
+	inst.ensureLex()
 	assert.Equal(t, inst.src, inst.lexSrc)
 
 	// An edit invalidates it.
 	inst.src = "# Head\n\n**bolder**\n"
+	inst.ensureLex()
 	if _, ok := inst.highlightJob(); !ok {
 		t.Fatal("an edited buffer should produce a highlight job")
 	}
 	assert.Equal(t, inst.src, inst.lexSrc, "the cache must follow the buffer")
 
-	// Clearing the buffer clears the cache, so a stale job cannot outlive it.
+	// Clearing the buffer clears everything derived from it, so no stale job,
+	// spans or readout can outlive the text they described.
 	inst.src = ""
+	inst.ensureLex()
 	if _, ok := inst.highlightJob(); ok {
 		t.Fatal("clearing the buffer should drop the job")
 	}
 	assert.Equal(t, "", inst.lexSrc)
+	assert.Empty(t, inst.lexSpans)
+	assert.Equal(t, docStats{}, inst.stats)
+}
+
+// ---------------------------------------------------------------------------
+// Formatting bar (M2)
+// ---------------------------------------------------------------------------
+
+func actionByKey(t *testing.T, key string) (act formatAction) {
+	t.Helper()
+	for _, a := range formatActions {
+		if a.key == key {
+			return a
+		}
+	}
+	t.Fatalf("no format action %q", key)
+	return
+}
+
+// TestFormatSnippet_WrapsTheSelection is the behaviour insertAtCursor makes
+// possible: the splice REPLACES the selection, so handing it the selection
+// wrapped in markers turns "insert" into "wrap".
+func TestFormatSnippet_WrapsTheSelection(t *testing.T) {
+	src := "make this word bold\n"
+	sel := strings.Index(src, "word")
+	got := formatSnippet(src, actionByKey(t, "bold"), sel, sel+len("word"))
+	assert.Equal(t, "**word**", got)
+}
+
+func TestFormatSnippet_NoSelectionUsesThePlaceholder(t *testing.T) {
+	// A collapsed caret has nothing to wrap, so the button still produces
+	// something — and something with a word in it to type over.
+	got := formatSnippet("some text\n", actionByKey(t, "italic"), 5, 5)
+	assert.Equal(t, "*italic*", got)
+}
+
+// TestFormatSnippet_SelectionIsCharOffsets guards the unit boundary. The caret
+// report is in CHARS; slicing the buffer with them directly would cut multibyte
+// text mid-rune and wrap the wrong span.
+func TestFormatSnippet_SelectionIsCharOffsets(t *testing.T) {
+	src := "ααα word\n" // each α is two bytes
+	// "word" is chars 4..8.
+	got := formatSnippet(src, actionByKey(t, "code"), 4, 8)
+	assert.Equal(t, "`word`", got)
+}
+
+func TestFormatSnippet_ReversedSelectionIsNormalised(t *testing.T) {
+	// A selection dragged right-to-left can arrive with start > end.
+	src := "make this word bold\n"
+	sel := strings.Index(src, "word")
+	got := formatSnippet(src, actionByKey(t, "bold"), sel+len("word"), sel)
+	assert.Equal(t, "**word**", got)
+}
+
+func TestFormatSnippet_LinkKeepsTheLabelAndLeavesTheUrl(t *testing.T) {
+	src := "see the docs here\n"
+	sel := strings.Index(src, "docs")
+	got := formatSnippet(src, actionByKey(t, "link"), sel, sel+len("docs"))
+	assert.Equal(t, "[docs](url)", got)
+}
+
+// TestFormatActions_AreInlineOnly pins the M2 descope: every action wraps a
+// span. A line-level action (heading, list, quote) cannot be correct through
+// insertAtCursor, which inserts at the caret and not at the line start, so one
+// appearing here means that decision was undone without being revisited.
+func TestFormatActions_AreInlineOnly(t *testing.T) {
+	for _, a := range formatActions {
+		assert.NotEmpty(t, a.open, "action %q has no opening marker", a.key)
+		assert.NotEmpty(t, a.placeholder, "action %q has no placeholder", a.key)
+		assert.NotContains(t, a.open, "\n", "action %q spans lines", a.key)
+		assert.NotContains(t, a.close, "\n", "action %q spans lines", a.key)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Readout (M2)
+// ---------------------------------------------------------------------------
+
+func TestCountStats_CountsProseNotMarkup(t *testing.T) {
+	src := "# Two words\n\nThree plain words here.\n"
+	st := countStats(src, markdownhighlight.HighlightLex([]byte(src)))
+	// "Two words" (2) + "Three plain words here." (4).
+	assert.Equal(t, 6, st.Words)
+	assert.Greater(t, st.Chars, 0)
+}
+
+// TestCountStats_SkipsFencedCode is the reason the readout reads spans instead
+// of the raw buffer: a technical document is mostly code by volume, and
+// counting it would inflate both the count and the reading estimate.
+func TestCountStats_SkipsFencedCode(t *testing.T) {
+	prose := "Just four plain words.\n"
+	withCode := prose + "\n```go\nfunc main() { println(\"a lot of code words here\") }\n```\n"
+
+	a := countStats(prose, markdownhighlight.HighlightLex([]byte(prose)))
+	b := countStats(withCode, markdownhighlight.HighlightLex([]byte(withCode)))
+	assert.Equal(t, a.Words, b.Words, "a fenced block must not add prose words")
+}
+
+func TestCountStats_SkipsFrontmatterAndUrls(t *testing.T) {
+	src := "---\ntitle: Some Long Title Here\n---\n\nTwo words\n"
+	st := countStats(src, markdownhighlight.HighlightLex([]byte(src)))
+	assert.Equal(t, 2, st.Words, "frontmatter is metadata, not prose")
+
+	withURL := "See [docs](https://example.com/a/very/long/path) now\n"
+	stURL := countStats(withURL, markdownhighlight.HighlightLex([]byte(withURL)))
+	// "See", "docs", "now" — the URL is not read.
+	assert.Equal(t, 3, stURL.Words)
+}
+
+func TestCountStats_ReadingTimeRoundsUp(t *testing.T) {
+	// One word still rounds to a whole minute; statsLine is what decides
+	// whether a minute is worth showing.
+	st := countStats("word\n", markdownhighlight.HighlightLex([]byte("word\n")))
+	assert.Equal(t, 1, st.Words)
+	assert.Equal(t, 1, st.ReadMinutes)
+
+	assert.Equal(t, docStats{}, countStats("", nil))
+}
+
+func TestStatsLine_OmitsReadingTimeForShortNotes(t *testing.T) {
+	inst := &App{stats: docStats{Words: 5, Chars: 20, ReadMinutes: 1}}
+	assert.NotContains(t, inst.statsLine(), "min read", "a five-word note is not a one-minute read")
+
+	inst.stats = docStats{Words: 400, Chars: 2000, ReadMinutes: 2}
+	assert.Contains(t, inst.statsLine(), "2 min read")
+}
+
+// ---------------------------------------------------------------------------
+// Outline (M2)
+// ---------------------------------------------------------------------------
+
+// TestOutlineClickDoesNotFightTheCaret is the reconciliation this pane needed.
+// Both the caret and an outline click scroll the preview; if a click moved the
+// caret's baseline, the next frame would see the caret's real section as
+// "changed" and drag the preview straight back off the heading just clicked.
+func TestOutlineClickDoesNotFightTheCaret(t *testing.T) {
+	inst := &App{caretSlug: "first"}
+
+	// The reader clicks "second" in the outline.
+	inst.pendingScroll = "second"
+	slug, ok := inst.takeScrollTarget()
+	assert.True(t, ok)
+	assert.Equal(t, "second", slug)
+
+	// The caret has not moved, so nothing re-queues and the preview stays put.
+	assert.Equal(t, "first", inst.caretSlug, "a click must not move the caret's baseline")
+	_, ok = inst.takeScrollTarget()
+	assert.False(t, ok, "the target is consumed once, not re-issued every frame")
+}
+
+func TestOutlineVisibility(t *testing.T) {
+	inst := &App{}
+	inst.winW = 1200
+
+	assert.False(t, inst.outlineVisible(), "off by default")
+
+	inst.showOutline = true
+	assert.True(t, inst.outlineVisible(), "on, in a wide window")
+
+	inst.winW = outlineMinWindowPx - 1
+	assert.False(t, inst.outlineVisible(), "a narrow window hides it rather than starving the panes")
+
+	inst.winW = outlineMinWindowPx
+	assert.True(t, inst.outlineVisible(), "the threshold is inclusive")
+}
+
+func TestOutlineSummaryCountsNamedHeadings(t *testing.T) {
+	hs := []markdown.HeadingInfo{
+		{Text: "First", Slug: "first", Level: 1, ByteOffset: 0},
+		{Text: "", Slug: "", Level: 2, ByteOffset: -1}, // degenerate `##`
+		{Text: "Second", Slug: "second", Level: 2, ByteOffset: 10},
+	}
+	assert.Equal(t, "Outline (2)", outlineSummary(hs))
+	assert.Equal(t, "Outline (0)", outlineSummary(nil))
+}
+
+func TestItoa(t *testing.T) {
+	for _, n := range []int{0, 1, 7, 10, 42, 999, 1234567} {
+		assert.Equal(t, strconv.Itoa(n), itoa(n))
+	}
 }
 
 // ---------------------------------------------------------------------------
