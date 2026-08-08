@@ -103,6 +103,10 @@ type Config struct {
 	// script and editor hook. See
 	// [github.com/stergiotis/boxer/public/gov/pathfilter] for the syntax.
 	Exclude []string
+	// Module is the Go module path, used to turn a package import path back
+	// into a repository-relative one so Exclude can be applied to it. Empty
+	// reads it from go.mod under Root.
+	Module string
 	// Steps restricts the run to these step names. Empty means all of them.
 	Steps []string
 }

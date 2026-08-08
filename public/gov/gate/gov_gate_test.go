@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -160,4 +162,15 @@ func TestStepBuildTagsReportsAMissingManifest(t *testing.T) {
 	_, err := NewStepBuildTags().Run(context.Background(),
 		Config{Root: t.TempDir()}, &buf)
 	require.Error(t, err, "an unreadable manifest is a step that could not run, not a clean one")
+}
+
+// An exclusion must apply to every step, not only the two that walk the
+// filesystem. Found on a real adoption whose research spikes are deliberately
+// outside its audited tree.
+func TestModuleOfReadsGoMod(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"),
+		[]byte("module example.com/owner/thing\n\ngo 1.26.0\n"), 0o644))
+	assert.Equal(t, "example.com/owner/thing", moduleOf(dir))
+	assert.Empty(t, moduleOf(t.TempDir()), "an unreadable go.mod matches package paths unmodified")
 }

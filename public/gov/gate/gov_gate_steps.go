@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/codelint"
 	"github.com/stergiotis/boxer/public/gov/doclint"
 	"github.com/stergiotis/boxer/public/gov/filenaming"
+	"github.com/stergiotis/boxer/public/gov/pathfilter"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"golang.org/x/tools/go/packages"
 )
@@ -181,6 +182,25 @@ func (inst *StepEntryPoints) Run(ctx context.Context, cfg Config, w io.Writer) (
 	if err != nil {
 		return
 	}
+	// An excluded path is excluded from every step, not just the two that
+	// walk the filesystem. A repository that puts research spikes outside its
+	// audited tree says so once, in one place.
+	excl := pathfilter.NewMatcher(cfg.Exclude)
+	if !excl.IsEmpty() {
+		module := cfg.Module
+		if module == "" {
+			module = moduleOf(cfg.root())
+		}
+		kept := make([]dev.EntryPointAudit, 0, len(audits))
+		for _, a := range audits {
+			rel := strings.TrimPrefix(a.PkgPath, module+"/")
+			if !excl.Match(rel) {
+				kept = append(kept, a)
+			}
+		}
+		audits = kept
+	}
+
 	if len(audits) == 0 {
 		status = StatusSkip
 		_, _ = fmt.Fprintln(w, "no main packages discovered")
@@ -289,4 +309,20 @@ func (inst *StepFileNaming) Run(ctx context.Context, cfg Config, w io.Writer) (s
 		status = StatusFail
 	}
 	return
+}
+
+// moduleOf reads the module path from go.mod under dir, best effort: an
+// unreadable go.mod simply means package paths are matched unmodified.
+func moduleOf(dir string) (module string) {
+	raw, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return ""
+	}
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		rest, found := strings.CutPrefix(strings.TrimSpace(line), "module ")
+		if found {
+			return strings.TrimSpace(rest)
+		}
+	}
+	return ""
 }
