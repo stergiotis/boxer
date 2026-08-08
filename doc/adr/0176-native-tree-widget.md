@@ -272,6 +272,37 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   because it is the one place the port is not behaviour-preserving, and because
   a future variable-height row would let both revert.
 
+- **SD13 — C4's "rows are addressable" was half true, and M4 paid the other
+  half.** The design scored O3 `++` on driveability because rows appear in the
+  AccessKit tree. They do. But a driver has to *find* a row and then *act* on
+  it, and the tree as built supports the first and not the second:
+
+  - **Finding** needs the accessible *value*. egui leaves a `Label`'s name
+    empty and puts its text in the value slot, and ADR-0154's `Locator`
+    matched the name only — so no tree row, and no static readout anywhere in
+    the repo, was reachable by any spelling of a name anchor. `value` /
+    `valueContains` are now additive fields beside `name` / `contains`, a
+    separate pair rather than a widening because a name anchor that silently
+    began matching values could turn a resolving anchor in an existing trace
+    into an ambiguous one. They want `role: "label"` beside them: egui emits a
+    `text_run` child under some of its labels carrying the same text, so a
+    bare value anchor resolves on one label and reports an ambiguity on the
+    next.
+  - **Acting** cannot go through an AccessKit action. SD7 puts the row's sense
+    region *behind* its cells so the disclosure control wins its own rect,
+    which leaves the row's label an ordinary non-interactive node — findable,
+    deaf to a click action. A `pointer: true` on an anchored `click` presses
+    the resolved node's bounds centre instead, which is what a human click
+    does. It is the rung between "resolve by anchor" and "click a literal
+    coordinate", and it was missing.
+
+  Both are ADR-0154 surfaces changed from here, and both are additive. What
+  they say about this widget is that SD7's arbitration, which is free and right
+  for a pointer, costs a driver the coordinate-free path for the row itself —
+  the disclosure control keeps it, being a real button. A row that a driver
+  must be able to actuate by node would need its own sense to be a widget with
+  a name, which is a larger change than M4 warranted.
+
 - **SD9 — Indent guides are deferred.** The vertical lines connecting a parent
   to its children want row-relative painting, which `row_ui` makes possible but
   which is decoration, not function. `IsLastChild` is carried in `Row` from M1
@@ -301,8 +332,12 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   it that were not in the design: every caller needs the same
   host-key-to-node-index projection (SD11), and two of the three had to give a
   wrapped second line up for a column (SD12).
-- **M4 — Demo + tour entry.** A registry `Demo` replacing `tree-view`, and the
-  node section of the imzero2 demo.
+- **M4 — Demo + tour entry.** ✓ A registry `Demo` (`tree`, "tree outline")
+  replacing `tree-view`, the node section of the imzero2 catch-all demo, and
+  the headless scene the verification plan wanted. The demo carries the
+  expand-all / collapse-all / reveal controls, because "the host owns the
+  state" is the claim that most needs showing. Driving the scene cost two
+  additive rungs on the ADR-0154 ladder — see SD13.
 - **M5 — Remove `egui_ltreeview`.** The IDL nodes, the `r3_node_cmds` register,
   the `NodeCommand` enum, the crate dependency, and the imzero2 skill's §7.
 
@@ -316,6 +351,8 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 | `rust/imzero2/Cargo.toml` | `egui_ltreeview` dependency removed at M5 | `Cargo.lock`, the licence and vendor gates |
 | Exported Go API under `public/` | added: `widgets/tree` | nothing yet — no downstream module compiles against it on day one. `render.go` shares the package with the model rather than sitting in a `view/` subpackage the way icicle and sankey split theirs, so the package's ADR-0080 properties flip to `WASMBlocked` at M2 — the trade is a WASM-compilable flatten, which nothing wants, for one import at each of M3's call sites |
 | Exported Go API under `public/` — `fieldview.Renderer.Render` | changed at M3: takes a new `*fieldview.State` first | the widget's expansion left egui's memory for the caller's hands (SD2), and a `Renderer` is a value whose setters copy, so view state could not ride along in it. Both call sites move with it: `logviewer` retains one `State` per instance, the demo one per sample list. The demo also needed a distinct `idPrefix` per list, which it should have had already — three lists through one prefix were sharing widget ids before the port |
+| `carrierclient` — `Locator.Value` / `.ValueContains`, `Step.Pointer` | added at M4 (see SD13) | the ADR-0154 trace vocabulary gains three fields; all three are additive, so every existing trace resolves exactly as before |
+| `scripts/dev/tree-widget-scene.sh` | added at M4 | the headless assertion the verification plan asks for; it needs a current `rust/imzero2/target/headless/release/imzero2`, and fails loudly rather than desyncing when the client predates the codegen |
 | imzero2 skill §7 "The Node & Tree System" | rewritten at M5 | `.claude/skills/imzero2/SKILL.md`; §13.1's register table loses its `r3_node_cmds` row |
 
 ## Alternatives
@@ -436,6 +473,48 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   `clickMode` — the register read it cannot exercise — is three lines. Held
   modifiers are not a gap in the widget, but they are a gap in what any driver
   here can assert about it.
+
+  **M4 built the scene, and it asserts state rather than pixels.**
+  `scripts/dev/tree-widget-scene.sh` launches the widget gallery through the
+  headless host with no compositor, narrows it to the tree demo, and then:
+  collapse-all leaves one row; clicking the root's disclosure control leaves
+  four; a pointer click on the *Chordata* row makes the readout say
+  `selected: [Chordata]` **and leaves the row count at four**, so selecting
+  did not fold anything; and the reveal button opens a species four ranks and
+  a phylum away and selects it. Each assertion is a `wait` that fails the run
+  when it never resolves, which is what makes an SD6 regression red — the
+  picture would still look right.
+
+  **The scene's capture caught a defect the assertions could not.** Reviewing
+  M4 by eye found the selection outline missing its BOTTOM edge on any row with
+  another row after it — top, left and right painted, the bottom not. The
+  assertions were all green, correctly: selection and expansion were working,
+  and only the drawing was wrong. Three explanations were ruled out by
+  measuring a headless capture at one pixel per point — the row below paints
+  nothing (its fill is `RGBA(0,0,0,0)` and its stroke width 0), the row Ui is
+  never clipped to its own rect (egui_table calls `shrink_clip_rect` for cells
+  and not for rows), and at stroke width 2 the edge was absent rather than
+  thinned. What is left is epaint's inside-stroke tessellation of a rect whose
+  height is exactly the row pitch; asking for a row height one point short
+  moves the stroke off that boundary and all four sides paint, with the fill
+  still covering the row so no seam appears between stripes. The workaround
+  and its ruled-out alternatives are written at `rowChrome`.
+
+  The lesson for the scene is not that it should assert pixels — it should not,
+  for the SD6 reason it exists — but that **a capture nobody looks at is not a
+  capture**. Its first version photographed the post-reveal state, in which the
+  selected row is scrolled out of the gallery window: green run, empty picture.
+  It now captures while the selected row is on screen, and the run prints what
+  to look at.
+
+  Two things it needed that are worth knowing before writing another one. The
+  demo body lays out **~3200 px down the gallery's scroll** when the gallery is
+  unfiltered, and an etable emits only its visible range, so every row but the
+  first was culled and a pointer press landed outside the window: the trace
+  filters the gallery and then `scroll_into_view`s the body. And the readout
+  line is deliberately sorted, because the selection is a set and map order is
+  arbitrary — an unsorted readout flickers between frames with nothing having
+  changed, which is precisely what a polling `wait` cannot tolerate.
 
   **M3's ports are covered by unit tests over their hierarchy builders and by
   live driving, not by scenes.** `schemaview`'s `navtree_test.go` asserts the

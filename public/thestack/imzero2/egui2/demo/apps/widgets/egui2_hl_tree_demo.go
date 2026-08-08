@@ -2,67 +2,86 @@ package widgets
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
 func init() {
 	registry.Register(registry.Demo{
-		Name:        "tree-view",
-		Category:    "Layout & widgets",
-		Title:       icons.IconTreeStructure + " tree view",
-		Stage:       [2]float32{1024, 700},
-		Flags:       registry.DemoFlagNeedsLargeArea,
-		Kind:        registry.DemoKindMixed,
-		Description: "NodeDir / NodeLeaf showcase on biological taxonomy: a hand-coded Carnivora subtree plus a recursive renderer driven by a Go data fixture covering Animalia.",
+		Name:     "tree",
+		Category: "Layout & widgets",
+		Title:    icons.IconTreeStructure + " tree outline",
+		Stage:    [2]float32{1024, 700},
+		Flags:    registry.DemoFlagNeedsLargeArea,
+		Kind:     registry.DemoKindMixed,
+		Description: "widgets/tree over a biological taxonomy: a columnar (Labels + Parents) hierarchy rendered as a virtualised outline. " +
+			"Expansion, selection and the keyboard cursor are Go state the host owns — so expand-all, collapse-all and reveal-a-node are ordinary calls, " +
+			"and the rows carry a host column beside the name. Click a row to select it, ctrl-click to add, the arrow or a double-click to fold.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
-			state = newTreeViewDemoState()
+			state = newTreeDemoState()
 			return
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
-			demoTreeView(ids, state.(*treeViewDemoState))
+			demoTree(ids, state.(*treeDemoState))
 		},
-		SourceFunc: demoTreeView,
+		SourceFunc: demoTree,
 	})
 }
 
 // =============================================================================
-// Tree view — NodeDir / NodeLeaf showcase + DX example.
+// tree outline — widgets/tree showcase + DX example (ADR-0176 M4).
 //
-// Two sections, both themed on biological taxonomy so the data is abstract
-// (no filesystem implications):
+// Themed on biological taxonomy so the data is abstract (no filesystem
+// implications) and genuinely hierarchical: Animalia down to species across
+// three phyla.
 //
-//   - hand-coded section: explicit NodeDir / NodeLeaf calls for a small
-//     subtree (Carnivora). Shows exactly what each level looks like.
-//   - data-driven section: a recursive renderer over a `taxon` struct
-//     fixture covering Animalia three phyla deep. Shows the realistic
-//     pattern for plugging real hierarchical data into the widgets.
+// What the demo is trying to show, in the order the sections appear:
 //
-// Both share the selection readout — clicking a leaf updates the displayed
-// "selected: …" line.
+//   - a hierarchy arrives as two parallel columns, not a pointer tree, and a
+//     producer that *has* a pointer tree flattens it once (buildTaxonTree);
+//   - expansion and selection live in a caller-owned State, so "expand all",
+//     "collapse all" and "reveal this node" are calls rather than wishes —
+//     which is the thing the egui_ltreeview binding this replaced could not do
+//     at all, its expansion living in Rust;
+//   - a row is not just a label: the host column carries a species count.
 // =============================================================================
 
-// taxon is the recursion fixture for the data-driven section. A nil/empty
-// Children slice means leaf; otherwise the node renders as a NodeDir.
+// taxon is the nested source fixture. It is deliberately NOT what the widget
+// takes — see buildTaxonTree, which flattens it once at init. Hierarchies in
+// this repo arrive flat (a recursive CTE's rows, a profile's stacks), and the
+// columnar input is the shape that serves them; a producer holding a pointer
+// tree pays one walk.
 type taxon struct {
 	Name     string
 	Children []taxon
 }
 
-// treeViewDemoState holds the per-window selection strings the
-// hand-coded and recursive trees each write back into. The animalia
-// fixture stays package-level because it's immutable read-only data.
-type treeViewDemoState struct {
-	selHand string
-	selRec  string
+// treeDemoState is the per-window view state. The tree.State is the whole of
+// it — there is no shadow copy of what is open, because the widget reads and
+// writes this one.
+type treeDemoState struct {
+	st tree.State
+	// revealTarget is the node the "reveal" button jumps to: a species buried
+	// two phyla and four ranks away from anything on screen once everything is
+	// collapsed.
+	revealTarget int32
+	lastAction   string
 }
 
-func newTreeViewDemoState() (st *treeViewDemoState) {
-	st = &treeViewDemoState{
-		selHand: "(none)",
-		selRec:  "(none)",
+func newTreeDemoState() (st *treeDemoState) {
+	st = &treeDemoState{revealTarget: taxonNodeOf("Danaus plexippus"), lastAction: "(nothing yet)"}
+	// Open the first two ranks so the demo lands on something legible rather
+	// than on three collapsed roots.
+	st.st.SetExpanded(0, true)
+	for i := range taxonTree.Len() {
+		if taxonTree.Parents[i] == 0 {
+			st.st.SetExpanded(int32(i), true)
+		}
 	}
 	return
 }
@@ -89,6 +108,7 @@ var (
 											{Name: "Panthera tigris"},
 											{Name: "Panthera onca"},
 											{Name: "Panthera pardus"},
+											{Name: "Acinonyx jubatus"},
 										},
 									},
 									{
@@ -180,162 +200,189 @@ var (
 			},
 		},
 	}
+
+	// The columnar form the widget takes, plus the per-node species count the
+	// host column shows. Built once: the fixture is immutable, and a demo that
+	// rebuilt its hierarchy every frame would be showing the wrong lesson.
+	taxonTree   tree.Tree
+	taxonLeaves []int
 )
+
+func init() {
+	taxonTree, taxonLeaves = buildTaxonTree(swAnimalKingdom)
+}
+
+// buildTaxonTree walks the nested fixture once into [tree.Tree]'s two columns,
+// and counts each node's species (leaf descendants) on the way back up.
+//
+// This is the whole of "how do I get my data in": append a label, append the
+// parent's index, recurse. Parents may appear in any order and several roots
+// are allowed, so a forest needs no invented root.
+func buildTaxonTree(root taxon) (t tree.Tree, leaves []int) {
+	var walk func(parent int32, tx taxon) (node int32, n int)
+	walk = func(parent int32, tx taxon) (node int32, n int) {
+		node = int32(len(t.Labels))
+		t.Labels = append(t.Labels, tx.Name)
+		t.Parents = append(t.Parents, parent)
+		leaves = append(leaves, 0)
+		if len(tx.Children) == 0 {
+			leaves[node] = 1
+			return node, 1
+		}
+		for _, child := range tx.Children {
+			_, cn := walk(node, child)
+			n += cn
+		}
+		leaves[node] = n
+		return node, n
+	}
+	walk(-1, root)
+	return t, leaves
+}
+
+// taxonNodeOf resolves a species name to its node index, or -1. Only used to
+// pin the reveal target at construction; names are unique in this fixture.
+func taxonNodeOf(name string) int32 {
+	for i, l := range taxonTree.Labels {
+		if l == name {
+			return int32(i)
+		}
+	}
+	return -1
+}
 
 // -----------------------------------------------------------------------------
 // Top-level demo
 // -----------------------------------------------------------------------------
 
-func demoTreeView(ids *c.WidgetIdStack, st *treeViewDemoState) {
-	for range c.CollapsingHeader(ids.PrepareStr("tv-hand"),
-		c.WidgetText().Text("hand-coded — explicit NodeDir / NodeLeaf calls").Keep()).
-		DefaultOpen(true).KeepIter() {
-		swTreeHandSection(ids, st)
-	}
-	// Default closed so the screenshot tour stays under the ~694 px viewport
-	// ceiling and still demonstrates the recursive pattern when expanded.
-	for range c.CollapsingHeader(ids.PrepareStr("tv-rec"),
-		c.WidgetText().Text("data-driven — recursive renderer over a Go fixture").Keep()).
-		KeepIter() {
-		swTreeRecursiveSection(ids, st)
-	}
-	for range c.CollapsingHeader(ids.PrepareStr("tv-readout"),
-		c.WidgetText().Text("selection readout").Keep()).
-		DefaultOpen(true).KeepIter() {
-		swTreeReadoutSection(ids, st)
-	}
+func demoTree(ids *c.WidgetIdStack, st *treeDemoState) {
+	treeControlsSection(ids, st)
+	treeOutlineSection(ids, st)
+	treeReadoutSection(st)
 }
 
 // -----------------------------------------------------------------------------
-// Hand-coded section — every node spelled out so the call shape is visible.
+// Controls — the point of host-owned state
 // -----------------------------------------------------------------------------
 
-func swTreeHandSection(ids *c.WidgetIdStack, st *treeViewDemoState) {
-	stdSection("subtree: Carnivora",
-		"two families × multiple species, written out node by node — click a species to select it")
+// treeControlsSection drives the outline from code. Every button here is one
+// call on the State the host already holds; none of it was expressible against
+// a tree whose expansion lived on the other side of the FFI.
+func treeControlsSection(ids *c.WidgetIdStack, st *treeDemoState) {
+	stdSection("driving the outline from Go",
+		"expansion, selection and the reveal request are all fields of a caller-owned tree.State")
 
-	for range c.NodeDir(ids.PrepareStr("h-carnivora"),
-		c.WidgetText().Text("Carnivora").Keep()).SendIter() {
-		for range c.NodeDir(ids.PrepareStr("h-felidae"),
-			c.WidgetText().Text("Felidae").Keep()).SendIter() {
-			for range c.NodeDir(ids.PrepareStr("h-panthera"),
-				c.WidgetText().Text("Panthera").Keep()).SendIter() {
-				swHandLeaf(ids, st, "h-leo", "Panthera leo")
-				swHandLeaf(ids, st, "h-tigris", "Panthera tigris")
-				swHandLeaf(ids, st, "h-onca", "Panthera onca")
-				swHandLeaf(ids, st, "h-pardus", "Panthera pardus")
-			}
-			for range c.NodeDir(ids.PrepareStr("h-acinonyx"),
-				c.WidgetText().Text("Acinonyx").Keep()).SendIter() {
-				swHandLeaf(ids, st, "h-jubatus", "Acinonyx jubatus")
-			}
+	for range c.Horizontal().KeepIter() {
+		if c.Button(ids.PrepareStr("tv-expand"), c.Atoms().Text("expand all").Keep()).
+			SendResp().HasPrimaryClicked() {
+			st.st.ExpandAll(taxonTree)
+			st.lastAction = "expand all"
 		}
-		for range c.NodeDir(ids.PrepareStr("h-canidae"),
-			c.WidgetText().Text("Canidae").Keep()).SendIter() {
-			for range c.NodeDir(ids.PrepareStr("h-canis"),
-				c.WidgetText().Text("Canis").Keep()).SendIter() {
-				swHandLeaf(ids, st, "h-lupus", "Canis lupus")
-				swHandLeaf(ids, st, "h-latrans", "Canis latrans")
-			}
-			for range c.NodeDir(ids.PrepareStr("h-vulpes"),
-				c.WidgetText().Text("Vulpes").Keep()).SendIter() {
-				swHandLeaf(ids, st, "h-vulvul", "Vulpes vulpes")
-			}
+		c.AddSpace(gapInline())
+		if c.Button(ids.PrepareStr("tv-collapse"), c.Atoms().Text("collapse all").Keep()).
+			SendResp().HasPrimaryClicked() {
+			st.st.CollapseAll()
+			st.lastAction = "collapse all"
+		}
+		c.AddSpace(gapInline())
+		// Reveal is the one that needs the widget's help: opening the
+		// ancestors has to happen before the frame's flatten, and the scroll
+		// needs the row index that same flatten assigns, so it is a request
+		// the render consumes rather than two calls made here.
+		if c.Button(ids.PrepareStr("tv-reveal"), c.Atoms().Text("reveal Danaus plexippus").Keep()).
+			SendResp().HasPrimaryClicked() {
+			st.st.Reveal(st.revealTarget)
+			st.st.SelectOnly(st.revealTarget)
+			st.lastAction = "reveal Danaus plexippus"
+		}
+		c.AddSpace(gapInline())
+		if c.Button(ids.PrepareStr("tv-clear"), c.Atoms().Text("clear selection").Keep()).
+			SendResp().HasPrimaryClicked() {
+			st.st.ClearSelection()
+			st.lastAction = "clear selection"
 		}
 	}
-	// Tree() drains every NodeDir / NodeLeaf / NodeDirClose queued above and
-	// renders them via egui_ltreeview. Without this drain the queue would
-	// stay populated and the nodes would never appear. Wrap in a bounded
-	// ScrollArea so the section keeps a predictable height and a second
-	// tree below has room to render.
-	for range c.ScrollArea().Vscroll(true).KeepIter() {
-		c.UiSetMaxHeight(220)
-		c.Tree(ids.PrepareStr("h-tree")).Send()
-	}
-}
-
-func swHandLeaf(ids *c.WidgetIdStack, st *treeViewDemoState, idStr, name string) {
-	if c.NodeLeaf(ids.PrepareStr(idStr),
-		c.WidgetText().Text(name).Keep()).
-		SendResp().HasNodelikeSelected() {
-		st.selHand = name
-	}
+	c.AddSpace(padInner())
 }
 
 // -----------------------------------------------------------------------------
-// Recursive section — drive NodeDir / NodeLeaf from a Go data structure.
+// The outline
 // -----------------------------------------------------------------------------
 
-func swTreeRecursiveSection(ids *c.WidgetIdStack, st *treeViewDemoState) {
-	stdSection("Animalia — six ranks, three phyla, rendered by recursion",
-		"renderTaxon dispatches NodeDir for inner nodes and NodeLeaf for species; click any species to select")
+func treeOutlineSection(ids *c.WidgetIdStack, st *treeDemoState) {
+	stdSection("Animalia — six ranks, three phyla",
+		"one row per visible node; collapsed subtrees and off-screen rows build nothing at all")
 
-	renderTaxon(ids, st, swAnimalKingdom)
-	// See swTreeHandSection — Tree() is the drain point that renders the
-	// queued node commands. Each Tree() call empties the queue, so two
-	// trees in the same demo each get their own subset of commands.
-	for range c.ScrollArea().Vscroll(true).KeepIter() {
-		c.UiSetMaxHeight(280)
-		c.Tree(ids.PrepareStr("rec-tree")).Send()
-	}
-}
-
-// renderTaxon is the canonical pattern for plugging hierarchical data into
-// the Node widgets: leaves go through NodeLeaf with click-to-select, inner
-// nodes open a SendIter scope and recurse over their children. The taxon
-// name doubles as the stable widget id since species names are globally
-// unique within Animalia — for non-unique names, thread a path or counter
-// through the recursion instead.
-func renderTaxon(ids *c.WidgetIdStack, st *treeViewDemoState, t taxon) {
-	if len(t.Children) == 0 {
-		if c.NodeLeaf(ids.PrepareStr("rec-"+t.Name),
-			c.WidgetText().Text(t.Name).Keep()).
-			SendResp().HasNodelikeSelected() {
-			st.selRec = t.Name
-		}
+	res := tree.Render(tree.Input{
+		Ids:      ids,
+		ScopeKey: "taxa",
+		Tree:     taxonTree,
+		State:    &st.st,
+		Outline: tree.Column{
+			Header:    "taxon",
+			Width:     420,
+			Resizable: true,
+		},
+		Columns: []tree.Column{{
+			Header: "species",
+			Width:  90,
+			Cell:   treeSpeciesCell,
+		}},
+		MaxHeight: 300,
+		Striped:   true,
+	})
+	if res.Err != nil {
 		return
 	}
-	for range c.NodeDir(ids.PrepareStr("rec-"+t.Name),
-		c.WidgetText().Text(t.Name).Keep()).SendIter() {
-		for _, child := range t.Children {
-			renderTaxon(ids, st, child)
-		}
+	if res.Toggled >= 0 {
+		st.lastAction = "toggled " + taxonTree.Labels[res.Toggled]
 	}
+	if res.Clicked >= 0 {
+		st.lastAction = "clicked " + taxonTree.Labels[res.Clicked]
+	}
+	if res.Activated >= 0 {
+		st.lastAction = "activated " + taxonTree.Labels[res.Activated]
+	}
+	c.AddSpace(padInner())
+	c.Label(fmt.Sprintf("%d nodes in the fixture, %d rows on screen",
+		taxonTree.Len(), len(res.Rows))).Send()
+}
+
+// treeSpeciesCell draws the host column: how many species sit under this node.
+// Blank on a species itself, where the answer is "it is one" and repeating it
+// down every leaf row would be noise.
+func treeSpeciesCell(node int32) {
+	if taxonLeaves[node] <= 1 {
+		return
+	}
+	c.Label(strconv.Itoa(taxonLeaves[node])).Selectable(false).Truncate().Send()
 }
 
 // -----------------------------------------------------------------------------
 // Selection readout
 // -----------------------------------------------------------------------------
 
-func swTreeReadoutSection(ids *c.WidgetIdStack, st *treeViewDemoState) {
-	for range c.Grid(ids.PrepareStr("tv-readout-grid")).NumColumns(2).KeepIter() {
-		for rt := range c.RichTextLabel("hand-coded selection") {
-			rt.Weak()
-		}
-		for rt := range c.RichTextLabel(st.selHand) {
-			rt.Monospace()
-		}
-		c.EndRow()
+// treeReadoutSection prints what is selected. It is also what the ADR-0176 M4
+// headless scene asserts against: a driver cannot read a tree row directly
+// (egui gives a Label no accessible name, only a value), so the scene watches
+// this line change instead.
+func treeReadoutSection(st *treeDemoState) {
+	stdSection("selection readout", "ctrl-click adds to the selection; shift-click extends from the last click")
 
-		for rt := range c.RichTextLabel("recursive selection") {
-			rt.Weak()
-		}
-		for rt := range c.RichTextLabel(st.selRec) {
-			rt.Monospace()
-		}
-		c.EndRow()
+	sel := st.st.Selection(nil)
+	names := make([]string, 0, len(sel))
+	for _, n := range sel {
+		names = append(names, taxonTree.Labels[n])
 	}
-	c.AddSpace(padInner())
-	c.Label(fmt.Sprintf("fixture size: %d species across the recursive tree",
-		countLeaves(swAnimalKingdom))).Send()
-}
-
-func countLeaves(t taxon) (n int) {
-	if len(t.Children) == 0 {
-		return 1
+	// Sorted because the selection is a set and map order is arbitrary — an
+	// unsorted readout would flicker between frames with nothing having
+	// changed, which is exactly what a driver waiting on this text cannot
+	// tolerate.
+	sort.Strings(names)
+	text := "(nothing)"
+	if len(names) > 0 {
+		text = fmt.Sprintf("%v", names)
 	}
-	for _, child := range t.Children {
-		n += countLeaves(child)
-	}
-	return
+	c.Label("selected: " + text).Send()
+	c.Label("last action: " + st.lastAction).Send()
 }

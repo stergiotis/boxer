@@ -32,11 +32,17 @@ type Step struct {
 
 	// Anchor (ADR-0127 §SD4). Id wins; then name/contains plus role; nth
 	// disambiguates. Absent for verbs that target no widget.
-	ID       uint64 `json:"id,omitempty"`
-	Name     string `json:"name,omitempty"`
-	Contains string `json:"contains,omitempty"`
-	Role     string `json:"role,omitempty"`
-	Nth      *int   `json:"nth,omitempty"`
+	//
+	// value / valueContains match the accessible value rather than the name,
+	// which is the only way to reach static text: egui leaves a Label's name
+	// empty and puts the text in the value. See [Locator].
+	ID            uint64 `json:"id,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Contains      string `json:"contains,omitempty"`
+	Value         string `json:"value,omitempty"`
+	ValueContains string `json:"valueContains,omitempty"`
+	Role          string `json:"role,omitempty"`
+	Nth           *int   `json:"nth,omitempty"`
 
 	// Text carries the payload of `type`, `set_value`, `key` and `capture`
 	// (the capture's file name) and the prose of `note`.
@@ -46,6 +52,23 @@ type Step struct {
 	// have no node. Also the scroll delta for `scroll`.
 	X float32 `json:"x,omitempty"`
 	Y float32 `json:"y,omitempty"`
+
+	// Pointer makes an anchored `click` press the resolved node's bounds
+	// centre with a synthetic pointer instead of sending it an AccessKit
+	// click action.
+	//
+	// It is the rung between "resolve by anchor" and "click a coordinate",
+	// and it exists for widgets whose clickable region is not the node the
+	// text lives in. A tree row is the case that found it: the row's sense
+	// region sits *behind* its cells so the disclosure control can win its own
+	// rect (ADR-0176 SD7), which leaves the row's label an ordinary
+	// non-interactive node — findable, but deaf to an action request. Aiming
+	// at where that label was drawn hits the region behind it.
+	//
+	// Prefer the default. An action request goes to the widget that declared
+	// it and does not care what is drawn on top; a pointer press is a
+	// position, and a tooltip or an overlay in the way will take it.
+	Pointer bool `json:"pointer,omitempty"`
 
 	// Modifiers is the key modifier bitmask (1=alt, 2=ctrl, 4=shift,
 	// 8=mac_cmd, 16=command), matching egui::Modifiers.
@@ -69,12 +92,16 @@ type Step struct {
 
 // hasAnchor reports whether the step names a widget at all.
 func (inst Step) hasAnchor() bool {
-	return inst.ID != 0 || inst.Name != "" || inst.Contains != "" || inst.Role != ""
+	return inst.ID != 0 || inst.Name != "" || inst.Contains != "" ||
+		inst.Value != "" || inst.ValueContains != "" || inst.Role != ""
 }
 
 // locator builds the anchor from a step.
 func (inst Step) locator() (loc Locator) {
-	loc = Locator{ID: inst.ID, Name: inst.Name, NameContains: inst.Contains, Role: inst.Role}
+	loc = Locator{
+		ID: inst.ID, Name: inst.Name, NameContains: inst.Contains,
+		Value: inst.Value, ValueContains: inst.ValueContains, Role: inst.Role,
+	}
 	if inst.Nth != nil {
 		loc.Nth, loc.HasNth = *inst.Nth, true
 	}
@@ -91,6 +118,10 @@ func (inst Step) describe() (s string) {
 		b.WriteString(" " + strconv.Quote(inst.Name))
 	case inst.Contains != "":
 		b.WriteString(" ~" + strconv.Quote(inst.Contains))
+	case inst.Value != "":
+		b.WriteString(" =" + strconv.Quote(inst.Value))
+	case inst.ValueContains != "":
+		b.WriteString(" ~=" + strconv.Quote(inst.ValueContains))
 	case inst.ID != 0:
 		b.WriteString(" #" + strconv.FormatUint(inst.ID, 10))
 	}
@@ -286,7 +317,12 @@ func requiresAnchor(do string) bool {
 func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 	switch st.Do {
 	case "click":
-		if node != nil {
+		switch {
+		case node != nil && st.Pointer:
+			// Anchored, but actuated where the node was drawn — see Step.Pointer.
+			x, y := nodeCentre(node)
+			return c.ClickAt(x, y)
+		case node != nil:
 			return c.ClickNode(node.GetId())
 		}
 		// No anchor given: the coordinate rung, for a painter-only target.

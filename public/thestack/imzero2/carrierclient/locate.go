@@ -29,6 +29,25 @@ type Locator struct {
 	// NameContains matches a substring of the accessible name — for labels
 	// carrying a live count or value that would defeat an exact match.
 	NameContains string
+	// Value and ValueContains match the accessible value, exactly or by
+	// substring.
+	//
+	// They exist because a large class of widgets has no accessible *name* at
+	// all: egui puts a Label's text in the value slot and leaves the label
+	// slot empty, so a plain label, a monospace readout or a tree row is
+	// unreachable by Name however it is spelled. Interactive widgets carry a
+	// name and are matched by it; static text is matched here.
+	//
+	// A separate pair rather than widening Name: a Name locator that silently
+	// started matching values could turn a resolving anchor in an existing
+	// trace into an ambiguous one, which fails the run. Opting in cannot.
+	//
+	// Pair them with Role: "label". egui emits a `text_run` child under some —
+	// not all — of its labels, carrying the same text as the label itself, so
+	// a bare value anchor resolves on one label and reports an ambiguity on
+	// the next for no reason the trace author can see.
+	Value         string
+	ValueContains string
 	// Role matches the AccessKit role ("button", "check_box", "text_input"…).
 	Role string
 	// Nth picks among several matches, 0-based. Without it, several matches is
@@ -50,12 +69,19 @@ func (inst Locator) Matches(n *TreeNode) bool {
 	if inst.NameContains != "" && !strings.Contains(n.GetName(), inst.NameContains) {
 		return false
 	}
+	if inst.Value != "" && n.GetValue() != inst.Value {
+		return false
+	}
+	if inst.ValueContains != "" && !strings.Contains(n.GetValue(), inst.ValueContains) {
+		return false
+	}
 	if inst.Role != "" && n.GetRole() != inst.Role {
 		return false
 	}
 	// A locator with no criterion at all would match every node; that is a
 	// caller bug rather than a wildcard.
-	return inst.Name != "" || inst.NameContains != "" || inst.Role != ""
+	return inst.Name != "" || inst.NameContains != "" ||
+		inst.Value != "" || inst.ValueContains != "" || inst.Role != ""
 }
 
 // Resolve returns the single node the locator selects.
@@ -122,6 +148,14 @@ func Center(n *TreeNode) (x, y float32) {
 
 // Path renders a node's ancestry as "root > … > node", for error messages and
 // for the readable half of a trace step.
+// nodeCentre is where a synthetic pointer aims at a resolved node — the last
+// rung of the ladder, reached from an anchor rather than from a literal. A
+// zero-sized node (one that was never laid out) yields its origin, which is
+// honest and misses, rather than a guess that lands somewhere arbitrary.
+func nodeCentre(n *TreeNode) (x, y float32) {
+	return n.GetX() + n.GetW()/2, n.GetY() + n.GetH()/2
+}
+
 func Path(snap *TreeSnapshot, n *TreeNode) (path string) {
 	byID := make(map[uint64]*TreeNode, len(snap.GetNodes()))
 	for _, x := range snap.GetNodes() {

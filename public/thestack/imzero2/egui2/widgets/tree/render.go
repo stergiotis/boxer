@@ -73,6 +73,11 @@ const (
 	// plus egui's button padding, which Go cannot measure and which moves with
 	// the theme.
 	discloseWidth float32 = 20
+	// rowOutlineInset is how much shorter than the row the chrome Frame's
+	// CONTENT is asked to be, so the selection outline's bottom edge does not
+	// sit on the row pitch. See rowChrome for what that fixes and for the
+	// three explanations it is not.
+	rowOutlineInset float32 = 1
 	// scrollAlignCenter is decode_scroll_align's egui::Align::Center. A
 	// revealed row lands mid-viewport with its neighbours around it, which is
 	// what makes the reveal legible; TOP would put it against the edge with no
@@ -419,6 +424,38 @@ func (in Input) renderHeaders(et c.EndETableFluid, density styletokens.DensityE)
 //
 // Selection beats the stripe, and the stroke is width 0 and transparent when
 // the row is not selected so nothing picks up an accidental border.
+//
+// # The content is a point shorter than the row, and that is what closes the outline
+//
+// Asking for the full rowH loses the selection outline's BOTTOM edge on every
+// row that has another row after it: top, left and right paint, the bottom
+// does not. It is the defect ADR-0176 M4 was reported with, and it is worth
+// the paragraph because the shape of it misleads.
+//
+// What it is not, each ruled out by measuring a headless capture at one pixel
+// per point:
+//
+//   - not the next row painting over it. An unselected, unstriped row's fill
+//     is RGBA(0,0,0,0) and its stroke is width 0, so it paints nothing at all;
+//     the row below the affected one is usually exactly that.
+//   - not the row's own clip. egui_table builds a row Ui with `max_rect` and,
+//     unlike the cell path, never calls `shrink_clip_rect` — and with the
+//     point taken off here the bottom edge lands one pixel BELOW the row and
+//     is drawn, which a clip would have removed.
+//   - not rasterisation losing a hairline. At stroke width 2 the bottom edge
+//     is absent entirely rather than thinned.
+//
+// What is left is inside epaint's `StrokeKind::Inside` tessellation of a rect
+// whose height is exactly the row pitch: the fill wins the bottom band and the
+// three other sides survive. Taking a point off the content height moves the
+// stroke off that boundary and all four sides paint — measured on both row
+// parities, and a single row with nothing below it draws correctly either way.
+// The fill still covers the row, since the frame paints its own rect rather
+// than the content's, so this leaves no seam between adjacent stripes.
+//
+// It is a workaround for a renderer detail, not a layout decision, and it is
+// pinned by `scripts/dev/tree-widget-scene.sh`'s capture: the reproduction is
+// select a row, expand its parent, look at the bottom edge.
 func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, r Row, rowH float32, selected bool) c.ResponseFlagsE {
 	fill := clearFill
 	switch {
@@ -442,7 +479,7 @@ func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, r Row, rowH float32, 
 			HoverCursorPointer()
 		for range fr.KeepIter() {
 			c.UiSetMinWidthAvailable()
-			c.UiSetMinHeight(rowH)
+			c.UiSetMinHeight(rowH - rowOutlineInset)
 		}
 	}
 	return c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id())

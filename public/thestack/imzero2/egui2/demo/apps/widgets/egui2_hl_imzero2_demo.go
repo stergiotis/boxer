@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
 // imzero2DemoState carries the per-window state for the catch-all
@@ -27,6 +28,25 @@ type imzero2DemoState struct {
 	myDragFloat      float64
 	dropDownSelected int
 	radioChoice      uint8
+	// treeState is the smoke-test outline's expansion and selection, which
+	// the host owns now that the tree is a Go widget (ADR-0176 SD2).
+	treeState     tree.State
+	treeSelection string
+}
+
+// imzero2DemoTree is the smoke-test hierarchy in the columnar form
+// [tree.Tree] takes: one label per node, one parent index per node, -1 for a
+// root. Written out literally rather than built from a nested struct, because
+// at this size the two columns *are* the readable form.
+//
+//	dir 0
+//	  dir 1
+//	    leaf 0  leaf 1  leaf 2
+//	  dir 2
+//	    leaf 3  leaf 4
+var imzero2DemoTree = tree.Tree{
+	Labels:  []string{"dir 0", "dir 1", "leaf 0", "leaf 1", "leaf 2", "dir 2", "leaf 3", "leaf 4"},
+	Parents: []int32{-1, 0, 1, 1, 1, 0, 5, 5},
 }
 
 func init() {
@@ -39,9 +59,12 @@ func init() {
 		Kind:        registry.DemoKindDX,
 		Description: "Mixed widget showcase: buttons, text-edit, slider, checkbox, radio, combobox, grid, scroll area, tree.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
-			state = &imzero2DemoState{
+			st := &imzero2DemoState{
 				dropDownSelected: -1,
+				treeSelection:    "(none)",
 			}
+			st.treeState.ExpandAll(imzero2DemoTree)
+			state = st
 			return
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
@@ -131,24 +154,22 @@ func renderImzero2Demo(ids *c.WidgetIdStack, st *imzero2DemoState) {
 		c.Label("F").Send()
 	}
 
-	for range c.NodeDir(ids.PrepareStr("d0"), c.WidgetText().Text("dir 0").Keep()).SendIter() {
-		for range c.NodeDir(ids.PrepareStr("d1"), c.WidgetText().Text("dir 1").Keep()).SendIter() {
-			if c.NodeLeaf(ids.PrepareStr("l0"), c.WidgetText().Text("leaf 0").Keep()).SendResp().HasNodelikeSelected() {
-				c.NodeLeaf(ids.PrepareStr("l0s"), c.WidgetText().Text("--- leaf 0 has is selected ---").Keep()).Send()
-			}
-			c.NodeLeaf(ids.PrepareStr("l1"), c.WidgetText().Text("leaf 1").Keep()).Send()
-			c.NodeLeaf(ids.PrepareStr("l2"), c.WidgetText().Text("leaf 2").Keep()).Send()
-		}
-		for range c.NodeDir(ids.PrepareStr("d2"), c.WidgetText().Text("dir 2").Keep()).SendIter() {
-			c.NodeLeaf(ids.PrepareStr("l3"), c.WidgetText().Text("leaf 3").Keep()).Send()
-			c.NodeLeaf(ids.PrepareStr("l4"), c.WidgetText().Text("leaf 4").Keep()).Send()
-		}
+	// The smoke-test tree: a forest in the widget's columnar form (ADR-0176).
+	// Emission and placement are the same call — the outline renders where
+	// Render is invoked — where the retired node binding queued commands into
+	// a process-global register that a separate Tree() drained somewhere else.
+	if res := tree.Render(tree.Input{
+		Ids:       ids,
+		ScopeKey:  "smoke-tree",
+		Tree:      imzero2DemoTree,
+		State:     &st.treeState,
+		MaxHeight: 180,
+	}); res.Clicked >= 0 {
+		st.treeSelection = imzero2DemoTree.Labels[res.Clicked]
 	}
-	for range c.ScrollArea().Vscroll(true).KeepIter() {
-		for range c.ScrollArea().Vscroll(true).KeepIter() {
-			c.Tree(ids.PrepareStr("tree")).Send()
-		}
+	c.Label("tree selection: " + st.treeSelection).Send()
 
+	for range c.ScrollArea().Vscroll(true).KeepIter() {
 		for range c.CollapsingHeader(ids.PrepareStr("section1"), c.WidgetText().Text("section 1").Keep()).KeepIter() {
 			c.Label("Hello section1").Send()
 			r := c.Button(ids.PrepareStr("section1-btn"), incrementLabelAtoms).SendResp()

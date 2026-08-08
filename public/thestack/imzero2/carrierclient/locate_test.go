@@ -103,3 +103,49 @@ func TestPathToleratesACycle(t *testing.T) {
 	a.Parent, b.Parent = 2, 1
 	assert.NotEmpty(t, Path(snap(a, b), a))
 }
+
+// valued is the shape a driver actually meets for static text: egui leaves a
+// Label's accessible name empty and puts the text in the value slot, so a Name
+// locator cannot reach it however it is spelled.
+func valued(id uint64, role, value string) *TreeNode {
+	return &TreeNode{Id: id, Role: role, Value: value, W: 40, H: 20}
+}
+
+func TestResolveByValueReachesANamelessLabel(t *testing.T) {
+	s := snap(valued(1, "label", "selected: Panthera leo"))
+	_, err := Resolve(s, Locator{Name: "selected: Panthera leo"})
+	require.Error(t, err, "the name slot is empty, so a Name locator finds nothing")
+
+	got, err := Resolve(s, Locator{Value: "selected: Panthera leo"})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), got.GetId())
+}
+
+func TestResolveByValueContains(t *testing.T) {
+	s := snap(valued(1, "label", "rows: 41"), valued(2, "label", "rows: 7"))
+	got, err := Resolve(s, Locator{ValueContains: "rows: 4"})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), got.GetId())
+}
+
+func TestResolveValueAndNameAreAnded(t *testing.T) {
+	// A widget carrying both — a named control whose value is its reading.
+	both := &TreeNode{Id: 1, Role: "slider", Name: "zoom", Value: "3", W: 40, H: 20}
+	s := snap(both, valued(2, "label", "3"))
+	got, err := Resolve(s, Locator{Name: "zoom", Value: "3"})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), got.GetId())
+
+	_, err = Resolve(s, Locator{Name: "zoom", Value: "4"})
+	require.Error(t, err, "the two criteria are ANDed, not tried in turn")
+}
+
+func TestResolveNameLocatorIgnoresValues(t *testing.T) {
+	// The reason value matching is its own pair rather than a widening of
+	// Name: an existing trace's resolving anchor must not become ambiguous
+	// because some label happens to carry the same text as a button.
+	s := snap(node(1, "button", "Run"), valued(2, "label", "Run"))
+	got, err := Resolve(s, Locator{Name: "Run"})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), got.GetId())
+}
