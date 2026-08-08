@@ -129,6 +129,11 @@ func (inst *StepCodelint) Run(ctx context.Context, cfg Config, w io.Writer) (sta
 	}
 
 	linter := codelint.NewDefaultLinter()
+	// Same exclusions as every other step. codelint reports absolute paths, so
+	// they are relativised against the root before matching.
+	excl := pathfilter.NewMatcher(cfg.Exclude)
+	absRoot, _ := filepath.Abs(cfg.root())
+
 	status = StatusPass
 	for f, runErr := range linter.Run(pkgs) {
 		if runErr != nil {
@@ -137,6 +142,15 @@ func (inst *StepCodelint) Run(ctx context.Context, cfg Config, w io.Writer) (sta
 		}
 		if f.Severity < codelint.FindingSeverityWarn {
 			continue
+		}
+		if !excl.IsEmpty() {
+			rel := f.Path
+			if r, relErr := filepath.Rel(absRoot, f.Path); relErr == nil {
+				rel = r
+			}
+			if excl.Match(rel) {
+				continue
+			}
 		}
 		_, _ = fmt.Fprintf(w, "%s:%d:%d  %s  %s  %s\n",
 			f.Path, f.Line, f.Col, f.RuleId, f.Severity.String(), f.Message)
