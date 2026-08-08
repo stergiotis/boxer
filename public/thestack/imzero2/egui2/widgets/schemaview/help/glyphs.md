@@ -11,8 +11,12 @@ title: Reading the schema inspector
 
 The schema inspector shows the *shape* of a Leeway table — its columns and how
 they are grouped — not the data in it. The left **structure** pane is a
-navigator: a flat list of collapsible sections, each headed by a glyph that
-names its kind. The right **detail** pane decodes whichever row you select.
+navigator: an outline of sections, each headed by a glyph that names its kind
+and each holding its value columns. The right **detail** pane decodes whichever
+row you select.
+
+Clicking a row selects it; clicking the ▶ / ▼ control on a section, or
+double-clicking the section row, opens and closes it.
 
 One small vocabulary of glyphs carries the structure at a glance. The **?**
 button in the navigator header opens the same key inline; this page is the long
@@ -55,8 +59,8 @@ appears in the detail pane under **membership**.
 
 ## Annotations
 
-- **· — separator.** Reads between a section and its columns or properties in a
-  row label; it carries no meaning of its own.
+- **· — separator.** Reads between a co-section's group key and the section
+  name; it carries no meaning of its own.
 - **·∅ — value-less section.** A tagged section that declares no value columns:
   it carries membership structure only. Its detail pane shows the membership
   spec, use aspects, and groups, but no column list.
@@ -66,6 +70,6 @@ appears in the detail pane under **membership**.
 Selecting a column shows its **canonical type** — expand the type inspector's
 pop-out for the layout, members, and Go codec — along with its **scope** and
 **item type**, and its **encoding hints** and **value semantics** as chips.
-Selecting a section, through its *properties* row or directly when the section
-is value-less, shows the membership spec, use aspects, and the co-section and
-streaming groups it belongs to.
+Selecting a section — its own row, whether or not it has columns under it —
+shows the membership spec, use aspects, and the co-section and streaming groups
+it belongs to.

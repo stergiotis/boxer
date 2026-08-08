@@ -1,25 +1,35 @@
 // Package fieldview renders a hierarchical list of typed key-value
-// pairs as a compact two-line-per-leaf inspector: name + kind tag on
-// one line, value (wrapping, monospace) below. Container kinds
-// (Object, Array) wrap their Children in a CollapsingHeader so deep
+// pairs as an outline: one row per field, name and kind tag in the
+// first column and the value (monospace) in the second. Container
+// kinds (Object, Array) hold their Children beneath them, so deep
 // trees stay collapsible.
 //
 // Originally lifted out of the logviewer's detail-pane fields
 // section, so any caller that holds a slice of typed fields — log
 // rows, card inspectors, debug dialogs — can render them with the
-// same look without re-implementing the per-kind formatting and the
-// wrap discipline that bounds horizontal width.
+// same look without re-implementing the per-kind formatting.
 //
 // Usage:
 //
-//	r := fieldview.New(ids, "card-fld").BytesMax(128)
-//	r.Render(fields)
+//	r := fieldview.New(ids, "card-fld").BytesMax(128)  // once
+//	r.Render(&state, fields)                           // per frame
 //
 // The Renderer is a value (not a pointer); fluent setters return a
-// modified copy so configurations are safe to share across instances.
-// All widget IDs are derived from the caller-supplied WidgetIdStack
-// under the per-Renderer idPrefix, so two viewers on the same id
-// stack don't collide.
+// modified copy, so a base configuration is safe to share and vary
+// per call:
+//
+//	base := fieldview.New(ids, "card").BytesMax(64)
+//	base.Render(&headerState, headerFields)
+//	base.ShowKind(false).Render(&footerState, footerFields)
+//
+// The [State] is the caller's, and one belongs to each place a list
+// is shown — it holds which containers are open. Two lists shown at
+// once need two States and two Renderers with different idPrefixes,
+// since the prefix scopes the widget ids.
+//
+// A row is one line high, so a value that does not fit truncates and
+// carries its full text as a tooltip; before ADR-0176 M3 the value
+// had its own wrapping line under the name.
 package fieldview
 
 import "time"

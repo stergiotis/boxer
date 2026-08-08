@@ -1,11 +1,10 @@
 package fieldview
 
 import (
-	"fmt"
-
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
 // detailMutedFg is the IDS NeutralTextSecondary token (ADR-0031 §SD2);
@@ -28,8 +27,11 @@ var (
 // build a "base" config once and customise per-call:
 //
 //	base := fieldview.New(ids, "card").BytesMax(64)
-//	base.Render(headerFields)
-//	base.ShowKind(false).Render(footerFields)   // local override
+//	base.Render(&headerState, headerFields)
+//	base.ShowKind(false).Render(&footerState, footerFields)
+//
+// View state is not config and does not travel in the copies: each
+// call takes the [State] belonging to the place it draws.
 type Renderer struct {
 	ids         *c.WidgetIdStack
 	idPrefix    string
@@ -37,6 +39,9 @@ type Renderer struct {
 	indent      float32
 	bytesMax    int
 	defaultOpen bool
+	nameWidth   float32
+	valueWidth  float32
+	maxHeight   float32
 	// density resolves IDS spacing tokens at the active preset
 	// (ADR-0032 §SD2); cached once at construction.
 	density styletokens.DensityE
@@ -55,8 +60,43 @@ func New(ids *c.WidgetIdStack, idPrefix string) (inst Renderer) {
 		indent:      12,
 		bytesMax:    64,
 		defaultOpen: true,
+		nameWidth:   defaultNameWidth,
+		valueWidth:  defaultValueWidth,
 		density:     styletokens.DensityFromEnv(),
 	}
+	return
+}
+
+// Column widths, both resizable so these are starting points rather
+// than rules. The name column fits a typical log field's key plus its
+// kind tag; the value column takes a short scalar without truncating.
+const (
+	defaultNameWidth  float32 = 220
+	defaultValueWidth float32 = 320
+)
+
+// NameWidth and ValueWidth set the two columns' starting widths in
+// points. Both are resizable at runtime, so these matter mainly for
+// the first frame and for a host that knows its own proportions.
+func (inst Renderer) NameWidth(v float32) (out Renderer) {
+	inst.nameWidth = v
+	out = inst
+	return
+}
+
+func (inst Renderer) ValueWidth(v float32) (out Renderer) {
+	inst.valueWidth = v
+	out = inst
+	return
+}
+
+// MaxHeight caps the vertical extent the field list claims. Leave it
+// 0 in a host that already bounds it; set it in a tall or unbounded
+// one, where the underlying table otherwise auto-fits to a 400 pt cap
+// that a long field list overruns.
+func (inst Renderer) MaxHeight(v float32) (out Renderer) {
+	inst.maxHeight = v
+	out = inst
 	return
 }
 
@@ -69,8 +109,9 @@ func (inst Renderer) ShowKind(v bool) (out Renderer) {
 	return
 }
 
-// Indent sets the per-leaf left padding before the value line, in
-// pixels. Default 12. Zero is allowed for a flat (no-indent) layout.
+// Indent sets the horizontal step per nesting level, in points.
+// Default 12. Zero is allowed and takes the outline's own default,
+// since a tree with no indent has no visible hierarchy.
 func (inst Renderer) Indent(v float32) (out Renderer) {
 	inst.indent = v
 	out = inst
@@ -86,82 +127,81 @@ func (inst Renderer) BytesMax(v int) (out Renderer) {
 	return
 }
 
-// DefaultOpen sets the initial collapsed/expanded state of container
-// CollapsingHeaders (Object / Array). Default true so a freshly-
-// rendered tree shows everything; set false for deep trees where
-// the initial summary should be terse.
+// DefaultOpen sets the collapsed/expanded state a container (Object
+// / Array) takes until the reader opens or closes it. Default true so
+// a freshly-rendered tree shows everything; set false for deep trees
+// where the initial summary should be terse. It is a default rather
+// than a seed — changing it still moves every container the reader
+// has not touched.
 func (inst Renderer) DefaultOpen(v bool) (out Renderer) {
 	inst.defaultOpen = v
 	out = inst
 	return
 }
 
-// Render draws the field list at the current ui scope. Iteration
-// order is the slice order; container fields recurse via the
-// CollapsingHeader path. No outer wrapper is added — the caller
-// owns whatever surrounding scope (CollapsingHeader, Frame, panel)
-// frames the viewer.
-func (inst Renderer) Render(fields []Field) {
-	for fi, f := range fields {
-		inst.renderField(fi, f, 0)
+// Render draws the field list at the current ui scope, into the
+// caller-owned state. Iteration order is the slice order; container
+// fields hold their children beneath them. No outer wrapper is added
+// — the caller owns whatever surrounding scope (CollapsingHeader,
+// Frame, panel) frames the viewer.
+//
+// A nil state renders a fully collapsed list, which is only useful
+// for a one-shot draw nobody interacts with; pass a retained *State
+// for anything the reader can open.
+func (inst Renderer) Render(state *State, fields []Field) {
+	if state == nil {
+		state = &State{}
 	}
+	inst.build(state, fields)
+	inst.syncState(state)
+	res := tree.Render(tree.Input{
+		Ids:      inst.ids,
+		ScopeKey: inst.idPrefix,
+		Tree:     tree.Tree{Labels: state.labels, Parents: state.parents},
+		State:    &state.st,
+		Indent:   inst.indent,
+		Outline: tree.Column{
+			Width:     inst.nameWidth,
+			Resizable: true,
+			Cell:      func(node int32) { inst.nameCell(state, node) },
+		},
+		Columns: []tree.Column{{
+			Width: inst.valueWidth,
+			Cell:  func(node int32) { inst.valueCell(state, node) },
+		}},
+		MaxHeight: inst.maxHeight,
+	})
+	inst.applyResult(state, res)
 }
 
-// renderField dispatches one Field to the leaf or container path.
-// depth is folded into the widget id so a deeply nested field can't
-// collide with a sibling at a different level (the path "0/1/2" and
-// "1/2" both produce idx 2 at their last step, but at different
-// depths — keying on (depth, idx) makes the id unique).
-func (inst Renderer) renderField(idx int, f Field, depth int) {
-	if f.IsContainer() {
-		inst.renderContainer(idx, f, depth)
+// nameCell draws the field's name and, when ShowKind is on, its typed-slot
+// tag. Both are Selectable(false): a selectable label senses click-and-drag
+// and is registered after the row's own sense region, so it would sit over it
+// and swallow clicks on its rect (ADR-0176 SD7).
+func (inst Renderer) nameCell(state *State, node int32) {
+	c.LabelAtoms(c.Atoms().BeginRichText(state.labels[node]).Strong().End().Keep()).
+		Selectable(false).Truncate().Send()
+	kind := state.nodes[node].kind
+	if kind == "" {
 		return
 	}
-	inst.renderLeaf(idx, f, depth)
+	c.AddSpace(styletokens.GapInline(inst.density))
+	c.LabelAtoms(c.Atoms().
+		BeginRichTextColored(detailMutedFg, transparentBgFv, "["+kind+"]").Small().End().
+		Keep()).Selectable(false).Truncate().Send()
 }
 
-// renderContainer emits a CollapsingHeader for an Object or Array
-// Field; child rendering happens inside the header body. Header
-// title shows "name [kind, N]" so the operator can tell containers
-// apart at a glance and knows how many children sit below.
-func (inst Renderer) renderContainer(idx int, f Field, depth int) {
-	title := f.Name
-	if inst.showKind {
-		title = fmt.Sprintf("%s  [%s, %d]", f.Name, kindName(f.Kind), len(f.Children))
+// valueCell draws the formatted value, monospace so digits and hex line up
+// down the column. It truncates rather than wrapping — the row is one line
+// high — and carries the full text as a tooltip, which is where a long JSON
+// string or a hex dump is now read.
+func (inst Renderer) valueCell(state *State, node int32) {
+	val := state.nodes[node].value
+	if val == "" {
+		return
 	}
-	hdrId := inst.ids.PrepareStr(fmt.Sprintf("%s-h-%d-%d", inst.idPrefix, depth, idx))
-	for range c.CollapsingHeader(hdrId, c.WidgetText().Text(title).Keep()).
-		DefaultOpen(inst.defaultOpen).
-		KeepIter() {
-		for ci, child := range f.Children {
-			inst.renderField(ci, child, depth+1)
-		}
+	atoms := c.Atoms().BeginRichText(val).Monospace().End().Keep()
+	for range c.HoverText(val).KeepIter() {
+		c.LabelAtoms(atoms).Selectable(false).Truncate().Send()
 	}
-}
-
-// renderLeaf emits the two-line layout: header row "name [kind]"
-// (compact, never grows wide because both atoms are short) and a
-// value row indented by inst.indent with LabelAtoms.Wrap so long
-// values word-wrap to the parent width instead of expanding it.
-func (inst Renderer) renderLeaf(idx int, f Field, depth int) {
-	for range c.Horizontal().KeepIter() {
-		nameAtoms := c.Atoms().BeginRichText(f.Name).Strong().End().Keep()
-		c.LabelAtoms(nameAtoms).Send()
-		if inst.showKind {
-			c.AddSpace(styletokens.GapInline(inst.density))
-			kindAtoms := c.Atoms().BeginRichTextColored(detailMutedFg, transparentBgFv,
-				"["+kindName(f.Kind)+"]").Small().End().Keep()
-			c.LabelAtoms(kindAtoms).Send()
-		}
-	}
-	for range c.Horizontal().KeepIter() {
-		if inst.indent > 0 {
-			c.AddSpace(inst.indent)
-		}
-		valAtoms := c.Atoms().BeginRichText(formatField(f, inst.bytesMax)).
-			Monospace().End().Keep()
-		c.LabelAtoms(valAtoms).Wrap().Send()
-	}
-	c.AddSpace(styletokens.PaddingHair(inst.density))
-	_ = depth
 }

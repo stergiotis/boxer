@@ -14,11 +14,20 @@ date: 2026-08-07
 
 imzero2 has had a tree since the `egui_ltreeview` binding landed. Nothing uses
 it. The only two call sites are demos — `egui2_hl_tree_demo.go` and the node
-section of `egui2_hl_imzero2_demo.go` — while four widgets that display
-hierarchies (`fieldview`, `schemaview`, `componentview`, and keelson's
-`configview`) each hand-roll a recursive `CollapsingHeader` instead. A binding
-with a demo and no adopter, sitting beside four hand-rolled reimplementations of
-what it does, is evidence about the binding rather than about the need.
+section of `egui2_hl_imzero2_demo.go` — while widgets that display hierarchies
+(`fieldview`, `schemaview`, and keelson's `configview`) each hand-roll a
+`CollapsingHeader` nest instead. A binding with a demo and no adopter, sitting
+beside hand-rolled reimplementations of what it does, is evidence about the
+binding rather than about the need.
+
+**M3 correction: three adopters, not four.** This paragraph originally counted
+`componentview` as a fourth. It is not a hierarchy — it is a one-level
+accordion whose bodies are arbitrary-height widget content supplied by a
+registered `RendererI` (its battery renderer draws a 115px radial gauge). A
+fixed-height tree row cannot host that, and porting it would mean redefining a
+published extension interface for every registered renderer in order to render
+a flat list. It stays a `CollapsingHeader` accordion, and M5 is unaffected: it
+never used `egui_ltreeview` either.
 
 The binding is a register-drain protocol, not a block
 (`definition/egui2_definition_d_blocks.go`). `nodeDir` / `nodeLeaf` /
@@ -221,6 +230,48 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   field — the one part of keyboard support that lives in the tree's own model
   and would force a reshape if it arrived late.
 
+- **SD11 — A caller keys its own state, and projects it onto `State` each
+  frame.** Found at M3, in all three ports. `State` keys on node indices —
+  SD1's columnar input has no other identity — and its doc says a host that
+  reorders should reset or remap. Every real caller reorders: schemaview and
+  configview rebuild their hierarchy on each filter keystroke, and fieldview
+  rebuilds it whenever the field list changes. Left alone, a section collapsed
+  before typing reopens as whichever section inherited its index, and a
+  selection lands on a different row.
+
+  The remedy each caller reached independently, so it is written down here as
+  the pattern rather than left to be rediscovered: keep expansion and selection
+  under a key the caller already has — a section id, a category name, an index
+  path — and rewrite `State` from it immediately before `Render`. The widget's
+  own mutations are then read back out of `Result` and filed under the key.
+  `State` becomes per-frame scratch and the caller stays the authority.
+
+  It also settles a question SD7 left open: what a click on a row that selects
+  nothing should do. Because the projection overwrites `State`'s selection
+  before it is ever drawn, such a click is free to mean something else, and in
+  both navigators it toggles — which is what clicking a `CollapsingHeader`
+  title did before. The caller suppresses it when `Result.Toggled` names the
+  same row, or a double-click would count three toggles instead of two.
+
+  A helper on `State` keyed by a caller-supplied string would remove the
+  boilerplate. Deferred rather than designed here: three call sites is thin
+  evidence for the shape of the key column, and the projection is a dozen
+  lines.
+
+- **SD12 — A one-line row costs a wrapped second line; the trade is a column
+  plus a tooltip.** Found at M3. `fieldview` drew each leaf as name-and-kind
+  over a wrapping value, and `configview` drew each variable as signals over a
+  wrapping description. Neither survives a fixed row height. Both took the same
+  treatment: the second line becomes its own column, truncated, with the full
+  text on hover.
+
+  What it costs is real — a long JSON value or a paragraph-length description
+  is no longer readable in place. What it buys is that values and descriptions
+  line up down the pane instead of each row being its own ragged block, which
+  is the shape these panes wanted; and the hover recovers the text. Recorded
+  because it is the one place the port is not behaviour-preserving, and because
+  a future variable-height row would let both revert.
+
 - **SD9 — Indent guides are deferred.** The vertical lines connecting a parent
   to its children want row-relative painting, which `row_ui` makes possible but
   which is decoration, not function. `IsLastChild` is carried in `Row` from M1
@@ -244,8 +295,12 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   gained a one-shot reveal request and the flatten scratch; `Column` /
   `Input` / `Result` are the render surface, with host columns to the right of
   the outline so M3's callers have somewhere to put a type or a count.
-- **M3 — Port the in-repo callers.** `fieldview`, `schemaview`,
-  `componentview`, `configview`, one at a time, each verified in its own host.
+- **M3 — Port the in-repo callers.** ✓ `schemaview`, `configview`, `fieldview`,
+  one at a time, each verified live in its own host. `componentview` is not a
+  tree and is not ported — see the Context correction. Two things came out of
+  it that were not in the design: every caller needs the same
+  host-key-to-node-index projection (SD11), and two of the three had to give a
+  wrapped second line up for a column (SD12).
 - **M4 — Demo + tour entry.** A registry `Demo` replacing `tree-view`, and the
   node section of the imzero2 demo.
 - **M5 — Remove `egui_ltreeview`.** The IDL nodes, the `r3_node_cmds` register,
@@ -259,11 +314,19 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 | egui2 IDL — `uiSetMinWidthAvailable` proc, `labelAtoms.selectable` method | added at M0 (see SD5) | same regeneration; adding IDL nodes **renumbers opcodes** (`enums.out.go`, `enums_out.rs`), so a stale binary on either side desyncs the wire |
 | egui2 IDL — `tree`, `nodeDir`, `nodeLeaf`, `nodeDirClose` | removed at M5 | `r3_node_cmds` register and `NodeCommand` enum in `interpreter.rs`, `prepare_next_frame` clear arm, the two demos |
 | `rust/imzero2/Cargo.toml` | `egui_ltreeview` dependency removed at M5 | `Cargo.lock`, the licence and vendor gates |
-| Exported Go API under `public/` | added: `widgets/tree` | nothing yet — no downstream module compiles against it on day one. `render.go` shares the package with the model rather than sitting in a `view/` subpackage the way icicle and sankey split theirs, so the package's ADR-0080 properties flip to `WASMBlocked` at M2 — the trade is a WASM-compilable flatten, which nothing wants, for one import at each of M3's four call sites |
+| Exported Go API under `public/` | added: `widgets/tree` | nothing yet — no downstream module compiles against it on day one. `render.go` shares the package with the model rather than sitting in a `view/` subpackage the way icicle and sankey split theirs, so the package's ADR-0080 properties flip to `WASMBlocked` at M2 — the trade is a WASM-compilable flatten, which nothing wants, for one import at each of M3's call sites |
+| Exported Go API under `public/` — `fieldview.Renderer.Render` | changed at M3: takes a new `*fieldview.State` first | the widget's expansion left egui's memory for the caller's hands (SD2), and a `Renderer` is a value whose setters copy, so view state could not ride along in it. Both call sites move with it: `logviewer` retains one `State` per instance, the demo one per sample list. The demo also needed a distinct `idPrefix` per list, which it should have had already — three lists through one prefix were sharing widget ids before the port |
 | imzero2 skill §7 "The Node & Tree System" | rewritten at M5 | `.claude/skills/imzero2/SKILL.md`; §13.1's register table loses its `r3_node_cmds` row |
 
 ## Alternatives
 
+- **Port `componentview` too (M3 as originally scoped).** Rejected once the
+  code was read: it is an accordion of arbitrary-height bodies, not a
+  hierarchy, and a fixed-height row cannot hold a 115px gauge. Making it fit
+  would mean redefining the public `RendererI` so every registered renderer
+  emits a row, and moving the gauge and chip rows into a detail pane beside the
+  tree — a large change to a published extension point, to render a flat list
+  of three components. Descoped and recorded rather than gating M3 on it.
 - **Keep `egui_ltreeview` and extend the binding (O1).** Every gap in Context
   is upstream of the binding — expansion state, row content, and the action
   stream are all owned by the crate. Closing them means either patching the
@@ -292,8 +355,11 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   restorable, and settable from code.
 - Collapsed subtrees and off-screen rows cost nothing, where today a fully
   collapsed `egui_ltreeview` still marshals every node every frame.
-- Rows can carry badges, counts, columns, and controls, so the four hand-rolled
-  `CollapsingHeader` trees have something to converge on.
+- Rows can carry badges, counts, columns, and controls, so the hand-rolled
+  `CollapsingHeader` trees have something to converge on. At M3 all three took
+  it: `schemaview` moved its type chip out of the label into its own weight,
+  `configview` became a three-column table of name, value and description, and
+  `fieldview` put its value in a column beside the name.
 - `logviewer` sheds its per-cell tint workaround at M0, and the inter-column
   gutter seam goes with it.
 - One fewer Rust dependency, one fewer global register, and one fewer
@@ -323,10 +389,13 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 
 ## Migration — Tier 1
 
-- **Breaks.** Nothing at M0 through M4 — the `rows` block map is additive and
-  the existing tree binding is untouched. At M5, `c.Tree`, `c.NodeDir`,
-  `c.NodeLeaf`, and `c.NodeDirClose` stop existing, along with the
-  `NodeCommandS` retained type and `ResponseFlagsE.HasNodelikeSelected`.
+- **Breaks.** Nothing at M0 through M2 — the `rows` block map is additive and
+  the existing tree binding is untouched. M3 breaks one exported signature,
+  `fieldview.Renderer.Render`, which gains a leading `*State`; both in-repo
+  callers move with it in the same commit and no downstream module compiles
+  against the package. At M5, `c.Tree`, `c.NodeDir`, `c.NodeLeaf`, and
+  `c.NodeDirClose` stop existing, along with the `NodeCommandS` retained type
+  and `ResponseFlagsE.HasNodelikeSelected`.
 - **Path.** Replace a `NodeDir` / `NodeLeaf` recursion plus its `Tree()` drain
   with one `tree.Render` call carrying `Labels` / `Parents` and a caller-owned
   `State`. Only the two demos are affected; no app and no `public/` package
@@ -367,6 +436,38 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   `clickMode` — the register read it cannot exercise — is three lines. Held
   modifiers are not a gap in the widget, but they are a gap in what any driver
   here can assert about it.
+
+  **M3's ports are covered by unit tests over their hierarchy builders and by
+  live driving, not by scenes.** `schemaview`'s `navtree_test.go` asserts the
+  row order and parentage the CollapsingHeader nest produced, the stable keys,
+  the per-node selection, and — the part SD11 exists for — that a collapse and
+  a selection survive a filter renumbering every node. What no unit test
+  reaches is the rendering, so each port was driven through egui-mcp in its own
+  host: full-row click-to-select past the label text, arrow-to-toggle, click on
+  a grouping row toggling, expansion surviving a live filter keystroke, and the
+  truncate-plus-hover the SD12 columns depend on. `configview` and `fieldview`
+  have no equivalent builder test yet — their hierarchy is a flatter shape and
+  the assertions would restate the code — which is a thinner net than
+  `schemaview`'s and is worth closing if either grows a second grouping rule.
+
+  **A single-column tree wants its column measured, not declared.** M2's SD4
+  fix stops egui_table shrinking a column below its declared width; it does not
+  make the column follow its pane. In `schemaview`'s navigator the outline is
+  the only column, so a declared width left the rest of the pane empty and the
+  row's selection outline — which spans the table's columns, not the pane —
+  stopped short of the edge. The fix is to feed the column the pane width from
+  `CapturePaneSize` and mark it **non-resizable**, since egui_table only leaves
+  a non-resizable column's declared width alone; it then tracks the dock
+  splitter as it is dragged. A tree that is one column wide should expect to do
+  this.
+
+  **The `◈` co-section glyph renders as tofu in the proportional font.** Seen
+  while checking `schemaview`'s ported rows. It is not a port regression — the
+  label string is unchanged and the `CollapsingHeader` drew it the same way —
+  but it is visible now that the row is the widget's own: the legend window
+  gets the glyph because its chips are `Monospace()`, and the navigator does
+  not. A font-coverage matter, recorded here because this is where it was
+  found.
 
   **The header block replays twice**, the same way SD6's row block would
   without its guard: `header_cell_ui` runs for the sticky region as well as

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
 // selKind discriminates what the navigator selection points at, so the
@@ -40,6 +41,22 @@ type Model struct {
 	// the navigator header). The window's title-bar close writes back here via
 	// an R10 databinding, so it stays a plain widget-owned bool.
 	legendOpen bool
+
+	// collapsed holds the sections the reader has closed, keyed by
+	// [navNode.key]. Absent means open, which is what the CollapsingHeader
+	// navigator's DefaultOpen(true) meant before the port.
+	collapsed map[string]bool
+	// navState is the tree widget's view state. It is rewritten from collapsed
+	// and sel before every render ([Model.syncNav]) rather than being an
+	// authority of its own, because it keys on node indices and the filter
+	// renumbers those on every keystroke.
+	navState tree.State
+	// navLabels / navParents / navNodes are [Model.buildNav]'s scratch: the
+	// hierarchy is rebuilt every frame — the filter can change on any of them —
+	// so the slices are retained and refilled rather than reallocated.
+	navLabels  []string
+	navParents []int32
+	navNodes   []navNode
 }
 
 // NewModel binds a schema and selects a sensible default node so the detail
@@ -98,10 +115,4 @@ func (m *Model) matchesSection(sec *common.TaggedValuesSection) bool {
 		names = append(names, n.String())
 	}
 	return m.matches(names...)
-}
-
-// isSel reports whether s is the current selection (used to highlight the
-// active navigator row). selection is comparable, so a value compare suffices.
-func (m *Model) isSel(s selection) bool {
-	return m.sel == s
 }

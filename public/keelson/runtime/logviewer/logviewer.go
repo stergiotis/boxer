@@ -139,6 +139,12 @@ type LogViewerApp struct {
 	// instance so its idPrefix scopes the widget ids it allocates;
 	// per-frame Render calls don't re-build state.
 	fv fieldview.Renderer
+	// fvState is the field viewer's expansion state, which the widget
+	// stopped keeping in egui's memory when it moved to the native
+	// tree (ADR-0176 M3). It is retained across rows deliberately: a
+	// reader who opens a nested object and then walks the log wants
+	// the next row's equivalent field open too.
+	fvState fieldview.State
 
 	// ev renders the structured boxer-error chain in the detail
 	// pane. Same per-instance lifecycle as fv — constructed in
@@ -764,7 +770,7 @@ func (inst *LogViewerApp) renderDetailPane() {
 			for range c.CollapsingHeader(inst.ids.PrepareStr("d-fields"),
 				c.WidgetText().Text(fmt.Sprintf("fields (%d)", len(r.Fields))).Keep()).
 				DefaultOpen(true).KeepIter() {
-				inst.fv.Render(toFieldviewFields(r.Fields))
+				inst.fv.Render(&inst.fvState, toFieldviewFields(r.Fields))
 			}
 		}
 	}

@@ -30,6 +30,10 @@ type fieldviewDemoState struct {
 	defaultOpen bool
 	indent      uint64
 	bytesMax    uint64
+	// One State per section: view state belongs to a place a list is
+	// shown, not to the Renderer, which is a value the three sections
+	// share (ADR-0176 M3).
+	stPrim, stNested, stLong fieldview.State
 }
 
 // Sample fixtures built once at package init so the per-frame cost of
@@ -69,7 +73,9 @@ func init() {
 // demoFieldView renders the config row at the top, then three
 // CollapsingHeader-wrapped sample sections, each driven by a
 // per-frame Renderer assembled from the live config — Renderer is a
-// value type so this is allocation-free.
+// value type so this is allocation-free. The three differ in their
+// idPrefix as well as their State: the prefix scopes the widget ids,
+// so sharing one across three lists would give them the same rows.
 func demoFieldView(ids *c.WidgetIdStack, st *fieldviewDemoState) {
 	for range c.Horizontal().KeepIter() {
 		c.Checkbox(ids.PrepareStr("fv-show-kind"), st.showKind, "ShowKind").
@@ -92,28 +98,30 @@ func demoFieldView(ids *c.WidgetIdStack, st *fieldviewDemoState) {
 	}
 	c.Separator().Horizontal().Send()
 
-	r := fieldview.New(ids, "fv-demo").
-		ShowKind(st.showKind).
-		Indent(float32(st.indent)).
-		BytesMax(int(st.bytesMax)).
-		DefaultOpen(st.defaultOpen)
+	cfg := func(prefix string) fieldview.Renderer {
+		return fieldview.New(ids, prefix).
+			ShowKind(st.showKind).
+			Indent(float32(st.indent)).
+			BytesMax(int(st.bytesMax)).
+			DefaultOpen(st.defaultOpen)
+	}
 
 	for range c.CollapsingHeader(ids.PrepareStr("fv-sec-prim"),
 		c.WidgetText().Text("Primitives — one of every kind").Keep()).
 		DefaultOpen(true).KeepIter() {
-		r.Render(fvSamplePrimitives)
+		cfg("fv-prim").Render(&st.stPrim, fvSamplePrimitives)
 	}
 	c.AddSpace(gapInline())
 	for range c.CollapsingHeader(ids.PrepareStr("fv-sec-nested"),
 		c.WidgetText().Text("Hierarchical — nested object + array").Keep()).
 		DefaultOpen(true).KeepIter() {
-		r.Render(fvSampleNested)
+		cfg("fv-nested").Render(&st.stNested, fvSampleNested)
 	}
 	c.AddSpace(gapInline())
 	for range c.CollapsingHeader(ids.PrepareStr("fv-sec-long"),
-		c.WidgetText().Text("Long values — wrap demo").Keep()).
+		c.WidgetText().Text("Long values — truncate + hover demo").Keep()).
 		DefaultOpen(true).KeepIter() {
-		r.Render(fvSampleLong)
+		cfg("fv-long").Render(&st.stLong, fvSampleLong)
 	}
 }
 

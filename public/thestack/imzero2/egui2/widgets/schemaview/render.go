@@ -9,11 +9,11 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
-	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypesummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
 // Input is the per-frame render request. The widget is pure: it renders the
@@ -42,8 +42,24 @@ type Input struct {
 	FillHost bool
 }
 
+// navTypeFg / navTypeBg tone the terse canonical type trailing a column's name
+// in the navigator, sharing the secondary-text role with every other muted
+// annotation in the design system (ADR-0031).
+var (
+	navTypeFg = color.Hex(styletokens.NeutralTextSecondary.AsHex())
+	navTypeBg = color.Transparent
+)
+
 const (
 	navWidth = 340.0 // filter-box width hint inside the (now resizable) navigator pane
+	// navOutlineWidth is the outline column's floor, used until the pane probe
+	// answers and whenever the pane is narrower than this. Wide enough for a
+	// section name and its membership badge.
+	navOutlineWidth = 300.0
+	// navScrollbarGutter is held back from the measured pane width so the
+	// outline column plus egui_table's vertical scrollbar fit without pushing a
+	// horizontal one in beneath them. egui_table budgets 16px for it.
+	navScrollbarGutter = 18.0
 
 	// Dock tab ids — reserved high so they never collide with anything the
 	// host might add. The navigator leaf splits the detail leaf off to its
@@ -81,12 +97,19 @@ func Render(in Input) {
 
 			for range dock.Tab(navTabID, "structure") {
 				// Header (title + legend toggle + filter) is pinned above the
-				// scroll so the filter stays usable while a long schema scrolls;
-				// only the section list lives inside the ScrollArea.
+				// outline so the filter stays usable while a long schema
+				// scrolls. There is no ScrollArea around the outline: the tree
+				// renders through an etable, which brings its own scroll and
+				// culls to it. Wrapping it in one would give the pane two
+				// scrollbars and hand the table an unbounded parent, which is
+				// the case its 400px auto-fit cap exists for.
+				//
+				// The probe sits after the header so it measures what is left
+				// for the outline, and answers one frame late — see
+				// renderSections on the first frame's fallback.
 				renderNavHeader(in.Ids, m, scope)
-				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-					renderSections(in.Ids, m)
-				}
+				availW, availH, _ := c.CapturePaneSize(c.ProbeSeq(scope, "nav-pane"))
+				renderSections(in.Ids, m, availW, availH)
 			}
 			for range dock.Tab(detailTabID, "detail") {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
@@ -127,77 +150,71 @@ func renderNavHeader(ids *c.WidgetIdStack, m *Model, scope string) {
 	c.AddSpace(styletokens.PaddingInner(density))
 }
 
-// renderSections draws the navigator as a flat list of collapsible headers:
-// plain item-types (◆), standalone tagged sections (◇), and co-grouped
-// sections (◈, prefixed with the group key). Column rows inside each header
-// are selectable and drive the detail pane. CollapsingHeader + SelectableLabel
-// are used rather than egui_ltreeview: the flat-drain tree mis-renders this
-// wider, multi-root shape (the shipped tree demos only feed it a single
-// deeply-nested root).
-func renderSections(ids *c.WidgetIdStack, m *Model) {
-	t := m.Table
-
-	// Plain item-types — one ◆ header per type present.
-	for _, it := range common.AllPlainItemTypes {
-		var idxs []int
-		names := []string{it.String()}
-		for i, pit := range t.PlainValuesItemTypes {
-			if pit == it {
-				idxs = append(idxs, i)
-				names = append(names, t.PlainValuesNames[i].String())
-			}
-		}
-		if len(idxs) == 0 || !m.matches(names...) {
-			continue
-		}
-		for range c.CollapsingHeader(ids.PrepareStr("plain:"+it.String()), label("◆ "+it.String())).DefaultOpen(true).KeepIter() {
-			for _, i := range idxs {
-				colRow(ids, m,
-					"plain:"+it.String()+":"+t.PlainValuesNames[i].String(),
-					t.PlainValuesNames[i].String()+"  "+typeChip(t.PlainValuesTypes[i]),
-					selection{kind: selPlainColumn, plainCol: i})
-			}
-		}
+// renderSections draws the navigator as an outline: plain item-types (◆),
+// standalone tagged sections (◇), and co-grouped sections (◈, prefixed with
+// the group key) at the top level, each over its value columns. Selecting a
+// row drives the detail pane.
+//
+// The hierarchy is the native tree widget's (ADR-0176 M3), which replaced a
+// hand-rolled CollapsingHeader + SelectableLabel navigator. What that buys
+// here is virtualisation — only the rows on screen build widgets, where before
+// every column of every open section did — a selection highlight that spans
+// the row rather than just its label, and expansion state Go owns and can
+// persist. The earlier egui_ltreeview binding was not an option for this
+// shape: it mis-rendered a wide, multi-root forest.
+//
+// availW / availH are the navigator pane's measured size, and both matter.
+// Without a height the table falls back to an auto-fit capped at
+// ETABLE_AUTOFIT_CAP_PX, which a schema of any size overruns. Without a width
+// the single outline column would be a fixed slab with the pane's remaining
+// width dead beside it, and a row's selection outline — which spans the
+// table's columns, not the pane — would stop short of the pane edge. The probe
+// answers one frame late and not at all on the first, where both fall back.
+//
+// That is also why the column is not resizable: there is nothing to its right
+// to trade width with, and egui_table only leaves a non-resizable column's
+// declared width alone, so this is what lets it track the pane as the reader
+// drags the dock splitter.
+func renderSections(ids *c.WidgetIdStack, m *Model, availW, availH float32) {
+	outlineW := float32(navOutlineWidth)
+	if w := availW - navScrollbarGutter; w > outlineW {
+		outlineW = w
 	}
-
-	// Tagged sections, in declaration order. Co-grouped sections carry a
-	// ◈ <key> · prefix; standalone sections carry ◇.
-	for i := range t.TaggedValuesSections {
-		sec := &t.TaggedValuesSections[i]
-		if !m.matchesSection(sec) {
-			continue
-		}
-		key := string(sec.CoSectionGroup)
-		head, idp := "◇ ", "sec:"
-		if key != "" {
-			head, idp = "◈ "+key+" · ", "co:"+key+":"
-		}
-		head += sec.Name.String()
-		if b := membershipBadge(sec.MembershipSpec); b != "" {
-			head += " " + b
-		}
-		if len(sec.ValueColumnNames) == 0 {
-			head += " ·∅"
-		}
-		base := idp + sec.Name.String()
-		for range c.CollapsingHeader(ids.PrepareStr(base), label(head)).DefaultOpen(true).KeepIter() {
-			colRow(ids, m, base+"#props", "· properties", selection{kind: selSection, section: i})
-			for ci := range sec.ValueColumnNames {
-				colRow(ids, m,
-					base+":"+sec.ValueColumnNames[ci].String(),
-					sec.ValueColumnNames[ci].String()+"  "+typeChip(sec.ValueColumnTypes[ci]),
-					selection{kind: selSectionColumn, section: i, col: ci})
-			}
-		}
-	}
+	m.buildNav()
+	m.syncNav()
+	res := tree.Render(tree.Input{
+		Ids:      ids,
+		ScopeKey: "nav",
+		Tree:     m.navTree(),
+		State:    &m.navState,
+		Outline: tree.Column{
+			Width: outlineW,
+			Cell:  m.navCell,
+		},
+		MaxHeight: availH,
+	})
+	m.applyNav(res)
 }
 
-// colRow renders one selectable navigator row; clicking it updates the
-// selection that the detail pane reads.
-func colRow(ids *c.WidgetIdStack, m *Model, id, text string, sel selection) {
-	if c.SelectableLabel(ids.PrepareStr(id), m.isSel(sel), text).SendResp().HasPrimaryClicked() {
-		m.sel = sel
+// navCell draws one navigator row: the node's label, then a column's terse
+// canonical type after it — weak and small, so the name stays what the eye
+// lands on and the type is there to confirm rather than to scan. Before the
+// port the two were concatenated into one label with two spaces between them.
+//
+// Both labels are Selectable(false). That is load-bearing rather than tidy: a
+// selectable label senses click-and-drag and is registered after the row's own
+// sense region, so it would sit over it and swallow every click on its rect
+// (ADR-0176 SD7).
+func (m *Model) navCell(node int32) {
+	c.Label(m.navLabels[node]).Selectable(false).Truncate().Send()
+	typ := m.navNodes[node].typ
+	if typ == "" {
+		return
 	}
+	c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+	c.LabelAtoms(c.Atoms().
+		BeginRichTextColored(navTypeFg, navTypeBg, typ).Small().End().
+		Keep()).Selectable(false).Truncate().Send()
 }
 
 // renderDetail draws the property pane for the current selection: a
@@ -370,11 +387,6 @@ func renderTypeBlock(ids *c.WidgetIdStack, ct canonicaltypes.PrimitiveAstNodeI) 
 }
 
 // --- formatting helpers ---
-
-// label is the WidgetText holder the CollapsingHeader takes.
-func label(s string) typed.RetainedFffiHolderTyped[c.WidgetTextS] {
-	return c.WidgetText().Text(s).Keep()
-}
 
 func gridRow(lbl, value string) {
 	for rt := range c.RichTextLabel(lbl) {

@@ -30,8 +30,8 @@ func init() {
 
 // tourInit builds a configview instance bound to the host-supplied id stack
 // and pins the capture scene: no filter, Database category pre-expanded. The
-// CollapsingHeader open state is seeded from expandedCat rather than persisted
-// egui memory, so the rendered scene is stable regardless of prior interaction.
+// section's open state is seeded from expandedCat rather than from anything
+// persisted, so the rendered scene is stable regardless of prior interaction.
 func tourInit(ids *c.WidgetIdStack) (state any) {
 	inst := newInstance(manifest)
 	inst.ids = ids

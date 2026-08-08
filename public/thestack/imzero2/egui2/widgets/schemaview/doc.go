@@ -53,10 +53,10 @@
 // Polymorphic on the selected node, headed by the node's navigator glyph (in
 // its category tone) and a kind chip. A column leaf shows scope, item-type,
 // the canonical type via the [canonicaltypesummary] inspector, and its
-// encoding hints / value semantics. A section — reached via its "properties"
-// leaf, or directly when it is value-less — shows its membership spec decoded,
-// use aspects, co-section + streaming groups, and value-column count. Aspect
-// sets render as toned chips (one per aspect) rather than comma-joined text.
+// encoding hints / value semantics. A section — selected by clicking its own
+// row — shows its membership spec decoded, use aspects, co-section + streaming
+// groups, and value-column count. Aspect sets render as toned chips (one per
+// aspect) rather than comma-joined text.
 //
 // # Scope
 //

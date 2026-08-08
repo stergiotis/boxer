@@ -1,19 +1,20 @@
 // Package configview renders the boxer/public/config/env registry as
 // a read-only inspector. Layout: a search/Only-set/Reveal-sensitive
-// header above a ScrollArea of category sections; each section is a
-// CollapsingHeader carrying a Phosphor icon + set/total count, with
-// per-var rows below.
+// header above an outline of category sections, each carrying a
+// Phosphor icon + set/total count and holding its variables.
 //
-// Each var row is two lines:
+// Each var is one row across three columns:
 //
-//	●  [str]  🔒 NAME    value             --cliFlag
-//	          description, small + muted, wraps to row width
+//	●  [str]  🔒 NAME  │  value      --cliFlag  │  description
 //
 // Status dot is accent-coloured when env.Lookup() reports set,
 // muted when unset. Type chip tone differentiates string/bool/int/
 // duration/path/categorial-string. Lock icon (Warning-coloured)
 // prefixes sensitive vars. Value is monospace; sensitive values
 // mask to "********" unless the operator toggles "Reveal sensitive".
+// The description truncates to its column with the full text on
+// hover — it wrapped to a second line before the widget moved to the
+// native tree (ADR-0176 M3), whose rows are one line high.
 //
 // Read-only by design (v1). Re-reads env.All() and env.LookupVar()
 // each frame (~40 entries; cheap).
@@ -33,6 +34,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
 // maskedSensitive replaces a sensitive variable's value/default when
@@ -50,9 +52,29 @@ const unsetMarker = "<unset>"
 // horizontal scrolling; 96 keeps the row inside the 720-pt window.
 const valueDisplayMax = 96
 
-// descIndent budgets the left padding before the description line so
-// it lines up under the variable name rather than the status dot.
-const descIndent = 28.0
+// Column widths. The name column fits the longest BOXER_* / IMZERO2_*
+// identifier plus its dot, chip and lock; the value column fits a
+// typical host:port or path. Both are resizable, so these are starting
+// points rather than rules. The description takes whatever is left of
+// the measured panel width, floored at descColMinWidth so it does not
+// vanish in a narrow window — below that the table scrolls sideways
+// instead.
+const (
+	nameColWidth        = 340.0
+	valueColWidth       = 260.0
+	descColMinWidth     = 220.0
+	varsScrollbarGutter = 18.0
+)
+
+// varsPaneProbeSalt namespaces the panel-size probe's r21 register slot
+// (ADR-0009 §probe seq), derived under the instance's id stack so two
+// inspectors in one frame measure their own panels.
+const varsPaneProbeSalt uint64 = 0xc0f1_6117_0176_0001
+
+// idBadgeBase namespaces the per-row type chips' widget ids. The high
+// half is the ADR number, which makes a stray id recognisable in a
+// checkId warning.
+const idBadgeBase uint64 = 0x0176_0a00_0000_0000
 
 // Token-derived colors cached at package init. Re-resolving each
 // frame would burn 40+ Color.Hex parses every frame for no benefit;
@@ -86,8 +108,24 @@ type App struct {
 	// collapsed; matching a CategoryE pre-expands that one section.
 	// The screenshot tour mutates this to capture a stable
 	// "category-expanded" scene without depending on persisted
-	// CollapsingHeader memory.
+	// widget memory.
 	expandedCat env.CategoryE
+
+	// expanded holds the categories the operator has opened, keyed by
+	// category name, and selected is the variable name of the
+	// highlighted row. Both are string-keyed rather than indexed
+	// because the filter rebuilds the hierarchy on every keystroke —
+	// see [App.syncTree].
+	expanded map[string]bool
+	selected string
+	// navState is the tree widget's view state, rewritten from the two
+	// fields above before every render rather than being an authority
+	// of its own. navLabels / navParents / navNodes are
+	// [App.buildTree]'s retained scratch.
+	navState   tree.State
+	navLabels  []string
+	navParents []int32
+	navNodes   []varNode
 }
 
 var _ app.AppI = (*App)(nil)
@@ -121,21 +159,54 @@ func (inst *App) render() (err error) {
 		inst.renderFilterRow()
 	}
 	for range c.PanelCentralInside().KeepIter() {
-		// AutoShrink(false, false): collapse/expand of a category
-		// CollapsingHeader mustn't ripple the wrapping Window.
-		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-			specs := applyFilter(env.All(), inst.filter)
-			if len(specs) == 0 {
-				inst.renderEmptyState()
-				return
-			}
-			buckets := groupByCategory(specs)
-			for ci, b := range buckets {
-				inst.renderCategory(ci, b)
-			}
+		specs := applyFilter(env.All(), inst.filter)
+		if len(specs) == 0 {
+			inst.renderEmptyState()
+			return
 		}
+		// There is no ScrollArea here any more: the tree renders through
+		// an etable, which brings its own scroll and culls the rows
+		// outside it. Wrapping it in one would give the panel two
+		// scrollbars and hand the table an unbounded parent, which is
+		// the case its 400px auto-fit cap exists for.
+		availW, availH, _ := c.CapturePaneSize(inst.ids.PrepareHighEntropy(varsPaneProbeSalt).Derive())
+		inst.renderVarTree(groupByCategory(specs), availW, availH)
 	}
 	return
+}
+
+// renderVarTree draws the category / variable outline.
+//
+// availW / availH are the panel's measured size. The height keeps the table
+// from falling back to its 400px auto-fit; the width goes to the description
+// column, which takes whatever the name and value columns leave. The probe
+// answers one frame late and not at all on the first, where both fall back to
+// the constants.
+func (inst *App) renderVarTree(buckets []bucket, availW, availH float32) {
+	inst.buildTree(buckets)
+	inst.syncTree()
+	descW := float32(descColMinWidth)
+	if w := availW - nameColWidth - valueColWidth - varsScrollbarGutter; w > descW {
+		descW = w
+	}
+	res := tree.Render(tree.Input{
+		Ids:      inst.ids,
+		ScopeKey: "vars",
+		Tree:     inst.navTree(),
+		State:    &inst.navState,
+		Outline: tree.Column{
+			Header:    "variable",
+			Width:     nameColWidth,
+			Resizable: true,
+			Cell:      inst.renderNameCell,
+		},
+		Columns: []tree.Column{
+			{Header: "value", Width: valueColWidth, Resizable: true, Cell: inst.renderValueCell},
+			{Header: "description", Width: descW, Cell: inst.renderDescCell},
+		},
+		MaxHeight: availH,
+	})
+	inst.applyTree(res)
 }
 
 // renderEmptyState surfaces a muted line when the filter narrows
@@ -168,110 +239,113 @@ func (inst *App) renderFilterRow() {
 	c.AddSpace(styletokens.PaddingHair(inst.density))
 }
 
-// renderCategory draws one section: header (icon + name + N/total
-// counts) plus a per-var row below the header when expanded.
-func (inst *App) renderCategory(idx int, b bucket) {
-	setCount := 0
-	for _, s := range b.specs {
-		if isSet(s) {
-			setCount++
-		}
-	}
-	icon := categoryIcon(b.cat)
-	title := fmt.Sprintf("%s  %s  (%d / %d set)", icon, b.cat, setCount, len(b.specs))
-	hdrId := inst.ids.PrepareStr(fmt.Sprintf("cat-%d", idx))
-	defaultOpen := inst.expandedCat != "" && b.cat == inst.expandedCat
-	for range c.CollapsingHeader(hdrId, c.WidgetText().Text(title).Keep()).
-		DefaultOpen(defaultOpen).
-		KeepIter() {
-		for vi, s := range b.specs {
-			inst.renderVarRow(idx, vi, s)
-		}
-	}
+// categoryLabel is a section row's text: the category's Phosphor icon, its
+// name, and how many of its variables are set. The count is what makes a
+// collapsed section still worth reading.
+func categoryLabel(cat env.CategoryE, setCount, total int) string {
+	return fmt.Sprintf("%s  %s  (%d / %d set)", categoryIcon(cat), cat, setCount, total)
 }
 
-// renderVarRow draws the two-line var entry. Line 1 packs the
-// quick-scan signals (set/type/sensitive/name/value/flag); line 2
-// is the description (muted, wraps).
-func (inst *App) renderVarRow(catIdx, vIdx int, s env.Spec) {
-	raw, set := lookupValue(s)
-	valueText := truncate(maskValue(s, raw, set, inst.filter.RevealSensitive), valueDisplayMax)
+// renderNameCell draws the outline column: the quick-scan signals that used to
+// open the row's first line — set dot, type chip, sensitivity lock — and then
+// the variable name. A category row draws its own label, since the tree hands
+// the whole outline column to this one function.
+//
+// Every label is emitted Selectable(false): a selectable label senses
+// click-and-drag and is registered after the row's own sense region, so it
+// would sit over it and swallow clicks on its own rect (ADR-0176 SD7). The
+// type chip is a real button and legitimately takes the pointer over its
+// rect — that is the price of its tooltip, and it is 30px of a row.
+func (inst *App) renderNameCell(node int32) {
+	n := &inst.navNodes[node]
+	if !n.isVar {
+		c.Label(inst.navLabels[node]).Selectable(false).Truncate().Send()
+		return
+	}
+	s := n.spec
+	_, set := lookupValue(s)
 
-	for range c.Horizontal().KeepIter() {
-		// Status dot — accent for set, muted for unset.
-		inst.renderStatusDot(set)
-		c.AddSpace(styletokens.GapInline(inst.density))
+	inst.renderStatusDot(set)
+	c.AddSpace(styletokens.GapInline(inst.density))
 
-		// Type chip — tone differentiates the typed-handle family
-		// at a glance (Success for bool, Info for numeric/categorial,
-		// Neutral for string/path).
-		badge.New(inst.ids.PrepareStr(fmt.Sprintf("t-%d-%d", catIdx, vIdx)),
-			typeShortLabel(s.Type)).
-			Tone(typeTone(s.Type)).
-			Variant(badge.VariantSoft).
-			Size(badge.SizeSm).
-			Monospace().
-			Tooltip(string(s.Type)).
-			Send()
-		c.AddSpace(styletokens.GapInline(inst.density))
+	// Type chip — tone differentiates the typed-handle family at a glance
+	// (Success for bool, Info for numeric/categorial, Neutral for
+	// string/path).
+	badge.New(inst.ids.PrepareSeq(idBadgeBase+uint64(node)), typeShortLabel(s.Type)).
+		Tone(typeTone(s.Type)).
+		Variant(badge.VariantSoft).
+		Size(badge.SizeSm).
+		Monospace().
+		Tooltip(string(s.Type)).
+		Send()
+	c.AddSpace(styletokens.GapInline(inst.density))
 
-		// Lock icon for sensitive vars — Warning-coloured glyph,
-		// rendered via the Phosphor font (ADR-0044). Drawing
-		// attention here so a screenshot/screenshare reviewer knows
-		// to be careful with what's masked.
-		if s.Sensitive {
-			c.LabelAtoms(c.Atoms().
-				BeginRichTextColored(fgWarning, bgTransparent, icons.PhLock).End().
-				Keep()).Send()
-			c.AddSpace(styletokens.GapInline(inst.density))
-		}
-
-		// Name — Strong + monospace so it lines up with the value.
+	// Lock icon for sensitive vars — Warning-coloured glyph, rendered via the
+	// Phosphor font (ADR-0044). Drawing attention here so a screenshot /
+	// screenshare reviewer knows to be careful with what's masked.
+	if s.Sensitive {
 		c.LabelAtoms(c.Atoms().
-			BeginRichText(s.Name).Strong().Monospace().End().
-			Keep()).Send()
-		c.AddSpace(styletokens.GapItems(inst.density))
-
-		// Value — colour cues: muted for <unset>, primary for set.
-		// Wrapped in a HoverText scope when there's a default or a
-		// declared origin to surface; the dense row deliberately
-		// omits both for layout calm, so the tooltip is where the
-		// operator picks them up.
-		valueColor := fgPrimary
-		if !set {
-			valueColor = fgMuted
-		}
-		valueAtomsKept := c.Atoms().
-			BeginRichTextColored(valueColor, bgTransparent, valueText).Monospace().End().
-			Keep()
-		tip := valueTooltip(s, inst.filter.RevealSensitive)
-		if tip != "" {
-			for range c.HoverText(tip).KeepIter() {
-				c.LabelAtoms(valueAtomsKept).Send()
-			}
-		} else {
-			c.LabelAtoms(valueAtomsKept).Send()
-		}
-
-		// CLI flag chip — only when the spec declares one; small +
-		// muted so it doesn't compete with the value.
-		if s.CliFlagName != "" {
-			c.AddSpace(styletokens.GapItems(inst.density))
-			c.LabelAtoms(c.Atoms().
-				BeginRichTextColored(fgMuted, bgTransparent, s.CliFlagName).Small().Monospace().End().
-				Keep()).Send()
-		}
+			BeginRichTextColored(fgWarning, bgTransparent, icons.PhLock).End().
+			Keep()).Selectable(false).Send()
+		c.AddSpace(styletokens.GapInline(inst.density))
 	}
 
-	if s.Description != "" {
-		for range c.Horizontal().KeepIter() {
-			c.AddSpace(descIndent)
-			c.LabelAtoms(c.Atoms().
-				BeginRichTextColored(fgMuted, bgTransparent, s.Description).Small().End().
-				Keep()).Wrap().Send()
-		}
+	c.LabelAtoms(c.Atoms().
+		BeginRichText(s.Name).Strong().Monospace().End().
+		Keep()).Selectable(false).Truncate().Send()
+}
+
+// renderValueCell draws the value and, after it, the CLI flag that also sets
+// this variable. Colour cues: muted for <unset>, primary for set. The tooltip
+// carries the default and the declared origin, which the dense row leaves out
+// for layout calm.
+func (inst *App) renderValueCell(node int32) {
+	n := &inst.navNodes[node]
+	if !n.isVar {
+		return
 	}
-	c.AddSpace(styletokens.PaddingHair(inst.density))
+	s := n.spec
+	raw, set := lookupValue(s)
+	valueColor := fgPrimary
+	if !set {
+		valueColor = fgMuted
+	}
+	atoms := c.Atoms().
+		BeginRichTextColored(valueColor, bgTransparent,
+			truncate(maskValue(s, raw, set, inst.filter.RevealSensitive), valueDisplayMax)).
+		Monospace().End().
+		Keep()
+	if tip := valueTooltip(s, inst.filter.RevealSensitive); tip != "" {
+		for range c.HoverText(tip).KeepIter() {
+			c.LabelAtoms(atoms).Selectable(false).Truncate().Send()
+		}
+	} else {
+		c.LabelAtoms(atoms).Selectable(false).Truncate().Send()
+	}
+	if s.CliFlagName == "" {
+		return
+	}
+	c.AddSpace(styletokens.GapItems(inst.density))
+	c.LabelAtoms(c.Atoms().
+		BeginRichTextColored(fgMuted, bgTransparent, s.CliFlagName).Small().Monospace().End().
+		Keep()).Selectable(false).Truncate().Send()
+}
+
+// renderDescCell draws the description, which before the port was a second
+// wrapped line under the name. A tree row is one line high, so it truncates
+// and carries the full text as a tooltip — the trade the port makes for
+// descriptions that line up down the pane.
+func (inst *App) renderDescCell(node int32) {
+	n := &inst.navNodes[node]
+	if !n.isVar || n.spec.Description == "" {
+		return
+	}
+	atoms := c.Atoms().
+		BeginRichTextColored(fgMuted, bgTransparent, n.spec.Description).Small().End().
+		Keep()
+	for range c.HoverText(n.spec.Description).KeepIter() {
+		c.LabelAtoms(atoms).Selectable(false).Truncate().Send()
+	}
 }
 
 // renderStatusDot draws ●/○ via the Phosphor font with the
