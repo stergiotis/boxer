@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/licensegate"
 	"github.com/stergiotis/boxer/public/gov/llmtag"
 	"github.com/stergiotis/boxer/public/gov/repo"
+	"github.com/stergiotis/boxer/public/gov/skeleton"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/urfave/cli/v2"
 )
@@ -23,6 +24,7 @@ func NewCliCommand() *cli.Command {
 			codelint.NewCliCommand(),
 			buildtags.NewCliCommand(),
 			gate.NewCliCommand(),
+			skeleton.NewCliCommand(),
 			filename.NewCliCommand(),
 			callsites.NewCliCommand(),
 			repo.NewCliCommand(),

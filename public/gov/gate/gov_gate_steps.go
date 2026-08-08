@@ -269,7 +269,11 @@ func (inst *StepFileNaming) Run(ctx context.Context, cfg Config, w io.Writer) (s
 
 	status = StatusPass
 	if len(fresh) > 0 {
-		_, _ = fmt.Fprintf(w, "new naming violations (not in %s):\n", baselinePath)
+		if baselinePath == "" {
+			_, _ = fmt.Fprintln(w, "naming violations:")
+		} else {
+			_, _ = fmt.Fprintf(w, "new naming violations (not in %s):\n", baselinePath)
+		}
 		for _, x := range fresh {
 			_, _ = fmt.Fprintf(w, "  %s\n", x)
 		}
