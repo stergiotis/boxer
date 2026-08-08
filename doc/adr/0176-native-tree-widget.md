@@ -552,6 +552,26 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   splitter as it is dragged. A tree that is one column wide should expect to do
   this.
 
+  **The disclosure glyph escaped to the CJK fallback.** Reported after M5 as
+  "too big and not centred vertically", and it is one cause: `▶` / `▼`
+  (U+25B6 / U+25BC) are not in Noto Sans, so they fall through to the CJK face,
+  which draws them at ideographic full-em and centres them on the ideographic
+  box rather than the Latin baseline. Measured on one scene with and without
+  `--fallbackFontTTF`, everything else equal: the ink grows from 8px to 12px
+  and drops 2px below the label beside it. It therefore appears on every
+  desktop launch and on no run of the headless lane, which loads no CJK
+  fallback — which is why four rounds of headless verification never showed it.
+  The fix is the Phosphor caret pair the client loads explicitly, as
+  `canonicaltypeedit` already uses for its own disclosure: ink 5px, offset
+  0.5px. The scene's `click` anchor was the glyph, so it broke on the change
+  and had to be repointed — a trace rotting loudly, which is the property
+  ADR-0154 claims for them.
+
+  The two glyph defects in these notes share a root and suggest a rule the
+  repo does not have: **an affordance's glyph should come from a font the
+  client loads, not from the fallback chain.** Text can fall back; a control
+  cannot, because its size and baseline are then whatever face answered.
+
   **The `◈` co-section glyph renders as tofu in the proportional font.** Seen
   while checking `schemaview`'s ported rows. It is not a port regression — the
   label string is unchanged and the `CollapsingHeader` drew it the same way —

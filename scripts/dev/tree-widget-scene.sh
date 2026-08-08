@@ -122,7 +122,7 @@ cat >"$trace" <<'EOF'
 {"do":"wait","valueContains":", 1 rows on screen","role":"label","comment":"CollapseAll left only the root"}
 
 {"do":"note","text":"--- click-to-expand: the disclosure control, not the row ---"}
-{"do":"click","name":"▶","comment":"the only collapsed control on screen is the root's"}
+{"do":"click","name":"\ue13a","comment":"Phosphor caret-right — the only collapsed disclosure control on screen is the root's. A PUA codepoint because the glyph comes from the bundled icon font, not the text font: the solid triangles it replaced escaped to the CJK fallback (see render.go)"}
 {"do":"wait","valueContains":", 4 rows on screen","role":"label","comment":"Animalia opened over its three phyla"}
 
 {"do":"note","text":"--- click-to-select: the row, past its label, by pointer ---"}

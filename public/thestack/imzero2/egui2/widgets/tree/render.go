@@ -48,6 +48,7 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
@@ -85,13 +86,31 @@ const (
 	scrollAlignCenter uint8 = 2
 )
 
-// The disclosure glyphs. Solid triangles rather than the chevrons a file
-// manager might use, because these are already the repo's collapse glyphs
-// (helphost's nav, kanban's move controls) and are known to render in the
-// default font.
-const (
-	glyphCollapsed = "▶"
-	glyphExpanded  = "▼"
+// The disclosure glyphs, from the Phosphor icon font the client loads
+// explicitly — the same pair `canonicaltypeedit` uses for its own disclosure.
+//
+// They started as the solid triangles U+25B6 / U+25BC, on the reasoning that
+// those are already the repo's collapse glyphs (helphost's nav, kanban's move
+// controls). That reasoning was right about the repo and wrong about the font:
+// those two codepoints are NOT in Noto Sans, so they fall through the fallback
+// chain to the CJK face, which draws them at ideographic full-em and centres
+// them on the ideographic box rather than the Latin baseline. Measured on one
+// scene with and without `--fallbackFontTTF`, everything else equal: the ink
+// grows from 8px to 12px and drops 2px below the label it sits beside. That is
+// exactly what a reader sees as "too big and not centred", and it appears only
+// on hosts that load a CJK fallback — which every desktop launch does.
+//
+// The glyphs the precedents use are fine where those precedents put them:
+// inline in a label's own text run, where they inherit the run's metrics. In a
+// Button they are a widget of their own, and a fallback face's idea of the em
+// box becomes visible.
+//
+// Phosphor is bundled and loaded by the client, so this depends on no fallback
+// chain at all. See also the `◈` co-section glyph in schemaview, the same
+// class of defect found from the other end (ADR-0176 verification notes).
+var (
+	glyphCollapsed = icons.PhCaretRight
+	glyphExpanded  = icons.PhCaretDown
 )
 
 // Id sequence bases, one per widget kind, so two kinds cannot land on the same
