@@ -91,54 +91,38 @@ fi
 #     step_end pass
 # fi
 
-step_begin "buildtags"
-# Verifies ./tags against the contract boxer publishes to consumers through its
-# module pin (public/gov/buildtags): every required tag present, no retired tag
-# carried. Hard gate — the sets are declared in Go and a unit test already keeps
-# them aligned with this file, so a finding here means ./tags was edited to
-# something the contract rejects.
+step_begin "gov gate"
+# The composite gate boxer publishes to consuming repositories (ADR-0179):
+# buildtags, doclint, entry-points, codelint. This script no longer spells that
+# list out — public/gov/gate.DefaultSteps() is the single definition, so a step
+# added there reaches boxer and every consumer at once, and boxer breaks first
+# when it changes.
 #
-# The check matters more downstream than here: a consuming repository copies
-# ./tags by hand and has no other mechanism that would notice a retirement. Two
-# were observed carrying tag families retired by ADR-0083 and ADR-0106 months
-# earlier. Running it in boxer keeps the published contract honest.
-if out=$("$here/../../boxer.sh" gov buildtags --file "$here/../../tags" 2>&1); then
-    echo "$out"
-    step_end pass
-else
-    echo "$out"
-    rc=1
-    step_end fail
-fi
-
-step_begin "codelint"
-# Surfaces CS-prefixed violations of CODINGSTANDARDS.md detected via
-# go/analysis-based AST passes (ADR-0011). Warn-only while the in-tree
-# fallout is being cleared; promotion of individual rules to error
-# severity is per-rule, in a separate commit, once residual count
-# reaches zero. Same `if out=$(...)` pattern as doclint below —
-# required because the script runs under `set -e`.
+# gofmt and go vet stay above, outside the gate, on purpose: they must still run
+# on a tree too broken to build this binary.
 #
-# stderr is captured to a temp file rather than discarded. boxer.sh logs a
-# completion line there on every run, so folding it into $out with 2>&1 would
-# turn a clean run into a spurious "warn" — but when the underlying build
-# fails, that stream is the ONLY place the compile error appears while $out is
-# empty, leaving the step reporting "fail" with no diagnostics at all. Replayed
-# on the failure path only. Same for the entry-points and doclint steps below.
-codelint_err=$(mktemp -t codelint-err.XXXXXX)
-if out=$("$here/../../boxer.sh" gov codelint --tags "$tags" --min-severity warn ./public/... 2>"$codelint_err"); then
-    rm -f "$codelint_err"
-    if [ -n "$out" ]; then
-        echo "$out"
+# Four steps in one process rather than four boxer.sh invocations also stops the
+# binary being rebuilt per step (~24s -> ~5s here).
+#
+# The gate prints its own per-step summary; this script folds the whole thing
+# into one entry in its trailer. `if out=$(...)` is required under `set -e`,
+# since the gate exits non-zero on any failing step.
+gate_err=$(mktemp -t gate-err.XXXXXX)
+if out=$("$here/../../boxer.sh" gov gate \
+        --tags "$tags" \
+        --entry-points-baseline scripts/ci/entry-points-baseline.txt \
+        2>"$gate_err"); then
+    rm -f "$gate_err"
+    printf '%s\n' "$out"
+    if printf '%s' "$out" | grep -q 'warnings:'; then
         step_end warn
     else
-        echo "passed"
         step_end pass
     fi
 else
-    echo "$out"
-    cat "$codelint_err"
-    rm -f "$codelint_err"
+    printf '%s\n' "$out"
+    cat "$gate_err"
+    rm -f "$gate_err"
     rc=1
     step_end fail
 fi
@@ -174,33 +158,6 @@ else
     step_end fail
 fi
 
-step_begin "entry-points"
-# Enforces CODINGSTANDARDS.md "Entry Points": every `package main`
-# discovered under ./... must import github.com/urfave/cli/v2 and
-# reference both logging.Apply (wired as cli.App.Before) and
-# vcs.BuildVersionInfo.
-# --strict makes the audit fail CI on any non-conformant main.
-# --baseline points at a file listing grandfathered packages (empty
-# in boxer today; the mechanism exists for parity with pebble2impl's
-# CI wiring and as a documented escape hatch). Same `if out=$(...)`
-# pattern as the other boxer.sh-based steps — required under `set -e`.
-entry_points_err=$(mktemp -t entry-points-err.XXXXXX)
-if out=$("$here/../../boxer.sh" dev entry-points --tags "$tags" --baseline "$here/entry-points-baseline.txt" --strict 2>"$entry_points_err"); then
-    rm -f "$entry_points_err"
-    if [ -n "$out" ]; then
-        echo "$out"
-    else
-        echo "passed"
-    fi
-    step_end pass
-else
-    echo "$out"
-    cat "$entry_points_err"
-    rm -f "$entry_points_err"
-    rc=1
-    step_end fail
-fi
-
 step_begin "file-naming"
 # Enforces ADR-0048 Go file/package naming across ./public and ./apps:
 # N1 (file basenames snake_case lowercase), N6 (package names lowercase,
@@ -220,33 +177,6 @@ if out=$("$here/file-naming.sh" --baseline "$here/naming-baseline.txt" --strict 
     step_end pass
 else
     echo "$out"
-    rc=1
-    step_end fail
-fi
-
-step_begin "doclint"
-# Surfaces all warn-and-above doclint findings. Only error-severity
-# findings set rc=1 (warnings are visible but non-blocking, consistent
-# with the staticcheck/errcheck/nilaway sections above). See doc/
-# DOCUMENTATION_STANDARD.md §8 for the full invariant table.
-#
-# The 'if' wrapper is required because the script runs under `set -e`:
-# a direct `out=$(...)` assignment would abort the script when doclint
-# exits non-zero on error-severity findings.
-doclint_err=$(mktemp -t doclint-err.XXXXXX)
-if out=$("$here/../../boxer.sh" gov doclint --min-severity warn . 2>"$doclint_err"); then
-    rm -f "$doclint_err"
-    if [ -n "$out" ]; then
-        echo "$out"
-        step_end warn
-    else
-        echo "passed"
-        step_end pass
-    fi
-else
-    echo "$out"
-    cat "$doclint_err"
-    rm -f "$doclint_err"
     rc=1
     step_end fail
 fi

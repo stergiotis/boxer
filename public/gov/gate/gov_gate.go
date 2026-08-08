@@ -1,0 +1,274 @@
+// Package gate is the composite lint gate boxer publishes to the repositories
+// that consume it (ADR-0179).
+//
+// The problem it solves is that the *step list* was the copied artifact. The
+// checks themselves — doclint, codelint, the entry-point audit, the build-tag
+// contract — are already Go, already repo-agnostic, and already reach a
+// consumer through the go.mod pin. What each consumer had to copy was the
+// knowledge of which of them to run, in what order, at what severity, and which
+// ones are fatal: several hundred lines of shell that drifted between boxer and
+// its consumers while every rule inside it stayed in sync.
+//
+// A gate assembled here and composed into a consumer's own entry point makes
+// that list a pinned artifact. boxer runs the same command over its own tree,
+// so a change to the list breaks boxer first.
+//
+// Deliberately absent: gofmt and go vet. Both must still run on a tree too
+// broken to compile the gate binary itself, so they stay in the thin shell
+// wrapper that invokes this (ADR-0179 § Decision). A gate that cannot run is a
+// gate that cannot tell you why.
+package gate
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"strings"
+	"time"
+)
+
+// StatusE is the outcome of one step.
+//
+// Warn exists because several checks are calibrated rather than settled —
+// codelint is warn-only while its in-tree fallout is cleared, and doclint
+// separates advisory findings from errors. A warn is visible in the trailer and
+// does not fail the run.
+type StatusE uint8
+
+const (
+	StatusPass StatusE = 1
+	StatusWarn StatusE = 2
+	StatusFail StatusE = 3
+	StatusSkip StatusE = 4
+)
+
+var AllStatuses = []StatusE{
+	StatusPass,
+	StatusWarn,
+	StatusFail,
+	StatusSkip,
+}
+
+func (inst StatusE) String() (s string) {
+	switch inst {
+	case StatusPass:
+		s = "pass"
+	case StatusWarn:
+		s = "warn"
+	case StatusFail:
+		s = "fail"
+	case StatusSkip:
+		s = "skip"
+	default:
+		s = "unknown"
+	}
+	return
+}
+
+// Config is what a repository declares about itself.
+//
+// It is a Go struct rather than a configuration file because a consumer already
+// links boxer: a struct literal in its entry point is typed, checked by the
+// compiler, and pinned by go.sum (ADR-0179 § Decision).
+//
+// The zero value is usable and means "a repository laid out like boxer": tags
+// read from ./tags, documents linted from the working directory, Go code from
+// ./public/..., no entry-point baseline.
+type Config struct {
+	// Root is the repository root. Empty means the working directory.
+	Root string
+	// Tags are the build tags to load Go packages under. Empty means read
+	// them from TagsFile.
+	Tags []string
+	// TagsFile is the tag manifest, relative to Root. Empty means "tags".
+	TagsFile string
+	// DocRoots are the trees doclint walks. Empty means Root.
+	DocRoots []string
+	// CodePatterns are the package patterns codelint loads. Empty means
+	// "./public/...".
+	CodePatterns []string
+	// EntryPointsBaseline names grandfathered non-conformant mains,
+	// relative to Root. Empty means no baseline.
+	EntryPointsBaseline string
+	// Steps restricts the run to these step names. Empty means all of them.
+	Steps []string
+}
+
+func (inst Config) root() (s string) {
+	if inst.Root == "" {
+		return "."
+	}
+	return inst.Root
+}
+
+func (inst Config) tagsFile() (s string) {
+	if inst.TagsFile == "" {
+		return "tags"
+	}
+	return inst.TagsFile
+}
+
+func (inst Config) docRoots() (s []string) {
+	if len(inst.DocRoots) == 0 {
+		return []string{inst.root()}
+	}
+	return inst.DocRoots
+}
+
+func (inst Config) codePatterns() (s []string) {
+	if len(inst.CodePatterns) == 0 {
+		return []string{"./public/..."}
+	}
+	return inst.CodePatterns
+}
+
+// StepI is one check in the gate.
+//
+// Run writes its own findings to w and reports a status. A returned error means
+// the step could not be executed — a missing file, a package set that would not
+// load — as distinct from a step that ran and found problems, which is
+// StatusFail with nil error. Conflating the two is what makes a broken gate
+// look like a clean tree.
+type StepI interface {
+	Name() string
+	Run(ctx context.Context, cfg Config, w io.Writer) (status StatusE, err error)
+}
+
+// StepResult records what one step did.
+type StepResult struct {
+	Name     string
+	Status   StatusE
+	Duration time.Duration
+	// Err is set when the step could not run at all.
+	Err error
+}
+
+// Report is the outcome of a whole gate run.
+type Report struct {
+	Steps []StepResult
+	Total time.Duration
+}
+
+// Failed reports whether the run should set a non-zero exit code. A step that
+// could not run counts as a failure: an unexecuted check is not a passing one.
+func (inst Report) Failed() (bad bool) {
+	for _, s := range inst.Steps {
+		if s.Status == StatusFail || s.Err != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (inst Report) names(want StatusE) (out []string) {
+	out = make([]string, 0, len(inst.Steps))
+	for _, s := range inst.Steps {
+		if s.Status == want {
+			out = append(out, s.Name)
+		}
+	}
+	return
+}
+
+// WriteTrailer renders the per-step summary and the closing line, in the format
+// boxer's lint.sh established.
+func (inst Report) WriteTrailer(w io.Writer) {
+	maxw := 4
+	for _, s := range inst.Steps {
+		if len(s.Name) > maxw {
+			maxw = len(s.Name)
+		}
+	}
+
+	_, _ = fmt.Fprintln(w, "")
+	_, _ = fmt.Fprintln(w, "=== summary ===")
+	for _, s := range inst.Steps {
+		_, _ = fmt.Fprintf(w, "%-*s  %-4s  %7.2fs\n", maxw, s.Name, s.Status.String(), s.Duration.Seconds())
+	}
+
+	var b strings.Builder
+	b.Grow(128)
+	fmt.Fprintf(&b, "total: %.2fs", inst.Total.Seconds())
+	exit := 0
+	if inst.Failed() {
+		exit = 1
+	}
+	fmt.Fprintf(&b, "  exit %d", exit)
+	if f := inst.names(StatusFail); len(f) > 0 {
+		b.WriteString("  failing: ")
+		b.WriteString(strings.Join(f, " "))
+	}
+	if f := inst.names(StatusWarn); len(f) > 0 {
+		b.WriteString("  warnings: ")
+		b.WriteString(strings.Join(f, " "))
+	}
+	if f := inst.names(StatusSkip); len(f) > 0 {
+		b.WriteString("  skipped: ")
+		b.WriteString(strings.Join(f, " "))
+	}
+
+	_, _ = fmt.Fprintln(w, "")
+	_, _ = fmt.Fprintln(w, b.String())
+}
+
+// DefaultSteps is the published step list — the artifact this package exists to
+// stop consumers from copying.
+//
+// Order is deliberate: cheap and self-contained first, so a stale tag manifest
+// or a malformed document is reported in under a second rather than after the
+// package loads that dominate the run.
+func DefaultSteps() (steps []StepI) {
+	return []StepI{
+		NewStepBuildTags(),
+		NewStepDoclint(),
+		NewStepEntryPoints(),
+		NewStepCodelint(),
+	}
+}
+
+// Run executes steps in order, writing each step's banner and findings to w,
+// and returns the report. It does not write the trailer; callers that want it
+// call [Report.WriteTrailer].
+//
+// A step that cannot run does not abort the others. The gate's value is a
+// complete picture of a tree's state, and a caller that stops at the first
+// failure produces a queue of one-at-a-time fixes instead.
+func Run(ctx context.Context, cfg Config, steps []StepI, w io.Writer) (rep Report) {
+	want := make(map[string]struct{}, len(cfg.Steps))
+	for _, n := range cfg.Steps {
+		want[n] = struct{}{}
+	}
+
+	rep.Steps = make([]StepResult, 0, len(steps))
+	t0 := time.Now()
+	for _, s := range steps {
+		if len(want) > 0 {
+			if _, ok := want[s.Name()]; !ok {
+				continue
+			}
+		}
+
+		_, _ = fmt.Fprintln(w, "")
+		_, _ = fmt.Fprintf(w, "=== %s ===\n", s.Name())
+
+		st0 := time.Now()
+		status, err := s.Run(ctx, cfg, w)
+		dur := time.Since(st0)
+
+		if err != nil {
+			_, _ = fmt.Fprintf(w, "step could not run: %v\n", err)
+			status = StatusFail
+		} else if status == StatusPass {
+			_, _ = fmt.Fprintln(w, "passed")
+		}
+
+		rep.Steps = append(rep.Steps, StepResult{
+			Name:     s.Name(),
+			Status:   status,
+			Duration: dur,
+			Err:      err,
+		})
+	}
+	rep.Total = time.Since(t0)
+	return
+}

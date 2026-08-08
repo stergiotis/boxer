@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/commitdigest"
 	"github.com/stergiotis/boxer/public/gov/doclint"
 	"github.com/stergiotis/boxer/public/gov/filename"
+	"github.com/stergiotis/boxer/public/gov/gate"
 	"github.com/stergiotis/boxer/public/gov/licensegate"
 	"github.com/stergiotis/boxer/public/gov/llmtag"
 	"github.com/stergiotis/boxer/public/gov/repo"
@@ -21,6 +22,7 @@ func NewCliCommand() *cli.Command {
 			doclint.NewCliCommand(),
 			codelint.NewCliCommand(),
 			buildtags.NewCliCommand(),
+			gate.NewCliCommand(),
 			filename.NewCliCommand(),
 			callsites.NewCliCommand(),
 			repo.NewCliCommand(),

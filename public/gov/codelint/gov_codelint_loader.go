@@ -9,8 +9,14 @@ import (
 )
 
 // LoadConfig controls how the driver loads packages for analysis.
+//
+// Dir is the directory the patterns resolve against; empty means the process
+// working directory. An embedder linting a tree it did not chdir into — the
+// composite gate run against another repository root — must set it, or the
+// relative patterns silently resolve somewhere else.
 type LoadConfig struct {
 	Ctx       context.Context
+	Dir       string
 	BuildTags []string
 	Tests     bool
 }
@@ -33,6 +39,7 @@ func LoadPackagesE(cfg LoadConfig, roots ...string) (pkgs []*packages.Package, e
 			packages.NeedImports |
 			packages.NeedCompiledGoFiles,
 		Context: cfg.Ctx,
+		Dir:     cfg.Dir,
 		Tests:   cfg.Tests,
 	}
 	if len(cfg.BuildTags) > 0 {
