@@ -1,6 +1,8 @@
 package play
 
 import (
+	"time"
+
 	"bytes"
 	"testing"
 
@@ -206,6 +208,12 @@ func (inst *recordingBus) Publish(subject string, payload []byte) error { return
 
 func (inst *recordingBus) Subscribe(subject string, h app.MsgHandlerFunc) (func(), error) {
 	return func() {}, nil
+}
+
+// RequestWithTimeout delegates: the fake answers instantly, so the wait
+// never matters here.
+func (inst *recordingBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) ([]byte, error) {
+	return inst.Request(subject, payload)
 }
 
 func (inst *recordingBus) Request(subject string, payload []byte) (reply []byte, err error) {

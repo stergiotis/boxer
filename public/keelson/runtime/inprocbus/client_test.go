@@ -181,3 +181,48 @@ func TestClient_AllocateInbox_UniquePerCall(t *testing.T) {
 		seen[inbox] = struct{}{}
 	}
 }
+
+// TestRequestWithTimeout_HonoursTheCallerSTimeout is the regression this
+// method was written to fix and then reintroduced by renaming the function
+// without using its new parameter — the select still waited the Inst default,
+// so a caller asking for longer got the default and a file dialog failed while
+// the picker was still on screen. Compiles and vets clean either way; only a
+// test that actually waits can tell.
+func TestRequestWithTimeout_HonoursTheCallerSTimeout(t *testing.T) {
+	inst := newInst(t)
+	inst.SetRequestTimeout(20 * time.Millisecond)
+
+	responder := inst.NewClient("responder", []app.SubjectFilter{
+		{Pattern: "slow.op", Direction: app.CapDirectionSub, Reason: "test"},
+		{Pattern: InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "test"},
+	})
+	// The reply goes out from a GOROUTINE, not inline. inprocbus dispatches a
+	// publish to its subscribers synchronously on the caller's own goroutine,
+	// so an inline reply is already sitting in the channel by the time Request
+	// reaches its select — the timeout branch is never taken and the test
+	// passes whatever the timeout says. Answering off-thread is what makes the
+	// wait real.
+	_, err := responder.Subscribe("slow.op", func(msg *app.Msg) {
+		reply := msg.Reply
+		go func() {
+			// Well after the Inst default, well inside what the caller asks.
+			time.Sleep(120 * time.Millisecond)
+			_ = responder.Publish(reply, []byte("late but welcome"))
+		}()
+	})
+	require.NoError(t, err)
+
+	caller := inst.NewClient("caller", []app.SubjectFilter{
+		{Pattern: "slow.op", Direction: app.CapDirectionPub, Reason: "test"},
+	})
+
+	// The default would have given up at 20ms.
+	reply, err := caller.RequestWithTimeout("slow.op", nil, 3*time.Second)
+	require.NoError(t, err, "the caller's longer timeout must be the one that applies")
+	assert.Equal(t, "late but welcome", string(reply))
+
+	// And a non-positive duration still means "use the default", which the
+	// slow responder outlasts.
+	_, err = caller.RequestWithTimeout("slow.op", nil, 0)
+	require.Error(t, err, "d <= 0 must fall back to the Inst default")
+}

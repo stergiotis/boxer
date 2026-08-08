@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -26,6 +28,10 @@ func (inst *NoopBus) Subscribe(subject string, handler MsgHandlerFunc) (unsubscr
 func (inst *NoopBus) Request(subject string, payload []byte) (reply []byte, err error) {
 	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1 (subject=%s)", subject)
 	return
+}
+
+func (inst *NoopBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) (reply []byte, err error) {
+	return inst.Request(subject, payload)
 }
 
 // NoopStorage is a StorageI that errors on every call. Used by M1 hosts

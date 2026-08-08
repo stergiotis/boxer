@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	"github.com/rs/zerolog"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -130,6 +132,25 @@ type BusI interface {
 	Publish(subject string, payload []byte) (err error)
 	Subscribe(subject string, handler MsgHandlerFunc) (unsubscribe func(), err error)
 	Request(subject string, payload []byte) (reply []byte, err error)
+	// RequestWithTimeout is Request with the caller naming the wait instead
+	// of the transport.
+	//
+	// It exists because one class of request is bounded by a HUMAN rather
+	// than by a service: an fs.dialog.{read,write} is answered when someone
+	// finishes choosing in a file picker, which is not a five-second
+	// operation. Under the transport default those flows fail while the
+	// picker is still open, and the app is told "timeout" for a dialog the
+	// user is looking at (found by driving mdedit's Save; the same latency
+	// bound applies to every fsbroker dialog consumer).
+	//
+	// The alternative — raising the transport's default — makes every
+	// request in the process wait as long as the slowest human, which is the
+	// wrong trade for the many requests answered by a service in
+	// milliseconds. A caller that knows what it is waiting for is the only
+	// one positioned to say.
+	//
+	// d <= 0 means "use the transport default", so it degrades to Request.
+	RequestWithTimeout(subject string, payload []byte, d time.Duration) (reply []byte, err error)
 }
 
 // BusProvider mints per-app BusI clients over a concrete transport. The host

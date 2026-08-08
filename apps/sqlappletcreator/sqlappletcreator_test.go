@@ -34,6 +34,13 @@ func (f *fakeSaveBus) Publish(subject string, payload []byte) (err error) { retu
 func (f *fakeSaveBus) Subscribe(subject string, handler app.MsgHandlerFunc) (unsubscribe func(), err error) {
 	return
 }
+
+// RequestWithTimeout delegates: the fake answers instantly, so the wait
+// never matters here.
+func (f *fakeSaveBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) ([]byte, error) {
+	return f.Request(subject, payload)
+}
+
 func (f *fakeSaveBus) Request(subject string, payload []byte) (reply []byte, err error) {
 	f.mu.Lock()
 	f.gotSubject = subject
@@ -145,6 +152,13 @@ func (f *fakeFsBus) Publish(subject string, payload []byte) (err error) { return
 func (f *fakeFsBus) Subscribe(subject string, handler app.MsgHandlerFunc) (unsubscribe func(), err error) {
 	return
 }
+
+// RequestWithTimeout delegates: the fake answers instantly, so the wait
+// never matters here.
+func (f *fakeFsBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) ([]byte, error) {
+	return f.Request(subject, payload)
+}
+
 func (f *fakeFsBus) Request(subject string, payload []byte) (reply []byte, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

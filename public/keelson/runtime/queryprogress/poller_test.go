@@ -45,6 +45,12 @@ func (inst *fakeBus) Subscribe(string, app.MsgHandlerFunc) (func(), error) {
 	panic("queryprogress must not subscribe")
 }
 
+// RequestWithTimeout delegates: the fake answers instantly, so the wait
+// never matters here.
+func (inst *fakeBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) ([]byte, error) {
+	return inst.Request(subject, payload)
+}
+
 func (inst *fakeBus) Request(string, []byte) ([]byte, error) {
 	panic("queryprogress must not make requests")
 }

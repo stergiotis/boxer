@@ -359,6 +359,48 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-08-08 — `BusI.RequestWithTimeout`: a request bounded by a person, not by a service
+
+`BusI.Request` waits whatever the transport was configured for — five seconds
+in-proc, mirroring the NATS client's order of magnitude. That is the right
+default for a request a service answers, and the wrong one for the request
+class §SD7 introduced: an `fs.dialog.{read,write}` is answered when somebody
+finishes choosing in a file picker.
+
+The consequence was live and total rather than marginal. Driving mdedit's Save
+under the desktop host, the picker opened, the suggested filename arrived, and
+the app reported `save failed: bus request: request timeout` while the dialog
+was still on screen waiting to be answered. Every fsbroker dialog consumer sits
+on this — `sqlappletcreator`'s export has the same shape and the same latent
+failure; it had simply never been driven slowly enough to see it.
+
+`RequestWithTimeout(subject, payload, d)` is added to `BusI`, with `d <= 0`
+meaning "the transport default" so it degrades to `Request`. Additive: no
+existing caller changes, and the three implementations (`inprocbus.Client`,
+`natsbus.Client`, `NoopBus`) each gained a few lines. Raising the transport
+default instead was rejected — it makes every request in the process wait as
+long as the slowest human, when almost all of them are answered by a service in
+milliseconds and should fail fast when they are not. The caller is the only
+party that knows which kind of wait it is in.
+
+Two findings worth keeping. The first cut renamed `Request` to
+`RequestWithTimeout` and threaded the parameter through the signature without
+using it — the select still waited the Inst default. It compiled, vetted and
+passed every existing test, and failed identically in the live app; only a test
+that actually waits can see it, so there is now one, and it was checked to fail
+against the unfixed code. The second: writing that test needs the responder to
+reply from a GOROUTINE, because inprocbus dispatches a publish to subscribers
+synchronously on the caller's own goroutine — an inline reply is already in the
+channel by the time `Request` reaches its select, so the timeout branch is
+never taken and the test passes whatever the timeout says.
+
+Adopted by mdedit ([ADR-0178](./0178-mdedit-markdown-editor.md) M4): ten
+minutes for a dialog, thirty seconds for the handle read/write ops the broker
+answers without a human. Finite rather than unbounded, so a picker nobody
+answers releases the goroutine instead of leaking it for the life of the
+window. `sqlappletcreator` is left as it is — the fix is available to it, but
+changing it belongs to whoever owns that flow.
+
 ### 2026-07-30 (later) — `runtime.persist` is a legacy channel under the data-centricity invariant
 
 **§SD3's values are `[]byte` by construction, and §SD6 rejected exactly that shape one level up.** With the facts backend wired (the Update below), persist writes now land in `boxer.facts` — so the channel satisfies "state lives in the facts table" and fails "state is modelled as facts". [ADR-0148](./0148-app-workingsets.md)'s Update of the same date makes the second half a rule rather than a preference, which reclassifies this subject family: it stays wired, stays durable, and stays the right answer for the referenced-content path §SD1 of that ADR describes, but it is no longer where new app state should be sent. State that needs to survive gets a modelled fact kind, as workingsets did.

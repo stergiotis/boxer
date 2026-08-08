@@ -84,7 +84,16 @@ func (inst *Client) Subscribe(subject string, handler app.MsgHandlerFunc) (unsub
 }
 
 func (inst *Client) Request(subject string, payload []byte) (reply []byte, err error) {
-	m, rerr := inst.nc.Request(subject, payload, inst.requestTimeout)
+	return inst.RequestWithTimeout(subject, payload, 0)
+}
+
+// RequestWithTimeout waits d rather than the connection's configured default.
+// A non-positive d means "the default", which is what Request passes.
+func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Duration) (reply []byte, err error) {
+	if d <= 0 {
+		d = inst.requestTimeout
+	}
+	m, rerr := inst.nc.Request(subject, payload, d)
 	if rerr != nil {
 		err = eh.Errorf("natsbus: request %q: %w", subject, rerr)
 		return

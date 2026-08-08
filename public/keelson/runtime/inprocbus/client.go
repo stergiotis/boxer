@@ -127,6 +127,15 @@ func (inst *Client) Subscribe(subject string, handler app.MsgHandlerFunc) (unsub
 }
 
 func (inst *Client) Request(subject string, payload []byte) (reply []byte, err error) {
+	return inst.RequestWithTimeout(subject, payload, 0)
+}
+
+// RequestWithTimeout waits d rather than the Inst's configured default. A
+// non-positive d means "the default", which is what Request passes.
+func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Duration) (reply []byte, err error) {
+	if d <= 0 {
+		d = inst.inst.currentRequestTimeout()
+	}
 	start := time.Now()
 	defer func() {
 		sink := inst.inst.currentAuditSink()
@@ -181,7 +190,7 @@ func (inst *Client) Request(subject string, payload []byte) (reply []byte, err e
 	select {
 	case reply = <-replyCh:
 		return
-	case <-time.After(inst.inst.currentRequestTimeout()):
+	case <-time.After(d):
 		err = eb.Build().Str("subject", subject).Errorf("bus request: %w", ErrTimeout)
 		return
 	}

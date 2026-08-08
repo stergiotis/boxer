@@ -1,6 +1,8 @@
 package play
 
 import (
+	"time"
+
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -33,6 +35,13 @@ func (f *fakeOpenBus) Publish(subject string, payload []byte) (err error) { retu
 func (f *fakeOpenBus) Subscribe(subject string, handler app.MsgHandlerFunc) (unsubscribe func(), err error) {
 	return
 }
+
+// RequestWithTimeout delegates: the fake answers instantly, so the wait
+// never matters here.
+func (f *fakeOpenBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) ([]byte, error) {
+	return f.Request(subject, payload)
+}
+
 func (f *fakeOpenBus) Request(subject string, payload []byte) (reply []byte, err error) {
 	f.gotSubject = subject
 	f.gotPayload = payload
