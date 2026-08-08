@@ -11,6 +11,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
 )
@@ -669,16 +670,41 @@ func TestManifestRegisters(t *testing.T) {
 	assert.Equal(t, app.SurfaceWindowed, got.Surface)
 }
 
-// TestManifestDeclaresOnlyTheClipboardCap pins ADR-0178's claim that the first
-// cut reaches exactly one subject. An fs.* cap appearing here means file I/O
-// arrived without the decision that was supposed to precede it, and a cap the
-// app never exercises is the §SD10 gate's other failure mode.
-func TestManifestDeclaresOnlyTheClipboardCap(t *testing.T) {
-	require.Len(t, manifest.Caps, 1)
-	cap := manifest.Caps[0]
-	assert.Equal(t, clipboardbroker.SubjectWrite, cap.Pattern)
-	assert.Equal(t, app.CapDirectionPub, cap.Direction)
-	assert.NotEmpty(t, cap.Reason, "a cap needs a reason")
+// TestManifestDeclaresExactlyTheThreeBrokerSubjects pins the app's standing
+// authority. It was one subject through M3 and is three from M4, and the list
+// is asserted exactly rather than by presence: a cap the app never exercises
+// is the §SD10 gate's other failure mode, so growth has to be deliberate
+// enough to edit a test for.
+func TestManifestDeclaresExactlyTheThreeBrokerSubjects(t *testing.T) {
+	want := []string{
+		clipboardbroker.SubjectWrite,
+		fsbroker.SubjectDialogRead,
+		fsbroker.SubjectDialogWrite,
+	}
+	got := make([]string, 0, len(manifest.Caps))
+	for _, c := range manifest.Caps {
+		got = append(got, c.Pattern)
+		assert.Equal(t, app.CapDirectionPub, c.Direction, "cap %q", c.Pattern)
+		assert.NotEmpty(t, c.Reason, "a cap needs a reason: %q", c.Pattern)
+	}
+	assert.ElementsMatch(t, want, got)
+}
+
+// TestManifestDoesNotDeclareAWildcardHandleCap is the one worth keeping
+// sharpest. A granted file handle is addressed under `fs.handle.{uuid}.>`, and
+// the tempting way to reach it is a static `fs.handle.>` in the manifest —
+// which is what a sibling app does. It is not needed: the broker adds the
+// narrow per-handle cap to the live client when the USER approves a dialog and
+// revokes it on close, so the static wildcard would only convert a
+// user-approved, per-file, revocable grant into standing authority over every
+// handle the broker ever mints. The end-to-end tests in mdedit_file_test.go
+// run on exactly these caps, which is what proves the wildcard is unnecessary
+// rather than merely undesirable.
+func TestManifestDoesNotDeclareAWildcardHandleCap(t *testing.T) {
+	for _, c := range manifest.Caps {
+		assert.NotContains(t, c.Pattern, fsbroker.HandleSubjectPrefix,
+			"handle caps are granted dynamically by the broker, never declared")
+	}
 }
 
 // TestManifestPersistsTheDocument guards the one thing standing between a

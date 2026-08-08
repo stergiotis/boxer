@@ -5,21 +5,35 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
 
 // manifest is the per-process AppI descriptor. Static; every newApp() returns
 // the same Manifest value.
 //
-// One declared capability. clipboard.write is the document's only way out; the
-// way IN is egui's own paste, which happens inside the TextEdit and needs no
-// capability at all — the asymmetry is the broker's, which serves no read
-// subject (ADR-0178 §Context). There is deliberately no fs.* cap: this cut
-// does not touch the filesystem.
+// Three declared capabilities, and the interesting one is the capability that
+// is NOT here.
+//
+// clipboard.write is the document's way out to the clipboard; the way IN is
+// egui's own paste, which happens inside the TextEdit and needs no capability
+// at all — the asymmetry is the broker's, which serves no read subject
+// (ADR-0178 §Context).
+//
+// fs.dialog.read and fs.dialog.write are the two file gestures (M4), and they
+// authorise ASKING, not reaching: each one opens a picker the user must
+// approve, and neither names a path. `fs.handle.>` is deliberately absent even
+// though a granted handle is addressed under it — the broker adds the narrow
+// `fs.handle.{uuid}.>` to this app's live cap set at the moment the user
+// approves, and revokes it on close (fsbroker.Service.Resolve). Declaring the
+// wildcard statically would trade that for standing authority over every
+// handle the broker ever mints, in exchange for nothing: the dynamic grant is
+// what the flows actually run on.
 //
 // PersistedKeys makes the host inject runtime.persist.{ownAlias}.> rather than
-// the app repeating the cap boilerplate. It is what keeps a no-file-I/O editor
-// from losing its document when the window closes.
+// the app repeating the cap boilerplate. It survives the window where a file
+// handle does not — handles die with the bus client — so the store stays the
+// crash net beside the file rather than being replaced by it.
 var manifest = app.Manifest{
 	Id:       "github.com/stergiotis/boxer/apps/mdedit",
 	Version:  "0.1.0",
@@ -39,7 +53,17 @@ var manifest = app.Manifest{
 		{
 			Pattern:   clipboardbroker.SubjectWrite,
 			Direction: app.CapDirectionPub,
-			Reason:    "mdedit: copy the document to the clipboard — the only way text leaves the app",
+			Reason:    "mdedit: copy the document to the clipboard",
+		},
+		{
+			Pattern:   fsbroker.SubjectDialogRead,
+			Direction: app.CapDirectionPub,
+			Reason:    "mdedit: Open — raise the file picker to load a document the user chooses",
+		},
+		{
+			Pattern:   fsbroker.SubjectDialogWrite,
+			Direction: app.CapDirectionPub,
+			Reason:    "mdedit: Save — raise the save picker; later saves reuse the granted handle",
 		},
 	},
 	PersistedKeys: []string{docKey},

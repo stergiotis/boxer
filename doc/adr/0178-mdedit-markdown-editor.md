@@ -163,17 +163,20 @@ Six contracts fix the behaviour:
    names and `helphost` already implements. Line-for-line sync is not
    available: the preview is a segment tree with no byte-to-y mapping, and
    nothing in the IDL reports one.
-4. **The first cut has no file I/O.** Text enters by native egui paste into
-   the focused TextEdit — no broker, no capability — and leaves through a
-   `clipboard.write` request under a declared Cap. This is the input idiom
-   `writingstylescope` already established for markdown, and it keeps the app
-   off the fsbroker read/write handle asymmetry entirely until there is a
-   reason to take it on.
+4. **The first cut has no file I/O** (M0–M3; M4 adds it, below). Text entered
+   by native egui paste into the focused TextEdit — no broker, no capability —
+   and left through a `clipboard.write` request under a declared Cap. This is
+   the input idiom `writingstylescope` already established for markdown, and it
+   kept the app off the fsbroker read/write handle asymmetry entirely until
+   there was a reason to take it on.
 5. **The buffer survives the window.** The document is persisted to the app's
    own keelson store under a `PersistedKeys` entry, which the host turns into
    the `runtime.persist.{ownAlias}.>` cap. Without it a no-file-I/O editor
    loses its content on close; with it the app is a durable scratchpad. This
    is the app's own store, not the filesystem — the Powerbox is untouched.
+   M4's file handles do NOT replace it: a handle dies with the bus client, so
+   the store remains the thing that survives a close, and the file is where the
+   reader deliberately put a copy.
 6. **Every dimension of the editing surface is derived from a measurement, and
    none of it is left to egui's retained layout state.** Both halves of this
    are load-bearing, and both were found by driving the live app rather than
@@ -215,8 +218,36 @@ Six contracts fix the behaviour:
 
 "Dirty" is defined against the last checkpoint rather than against a file: the
 document is clean when restored and immediately after a successful clipboard
-export, and any edit sets it. With no file to be out of step with, this is the
-only honest reading of the marker.
+export, and any edit sets it. Through M3, with no file to be out of step with,
+that was the only honest reading of the marker. M4 adds two more checkpoints —
+a successful save and a successful open — without changing the rule: the
+checkpoint is the last time the buffer reached somewhere the reader put it, and
+what it records is the snapshot that actually landed, not the buffer as it
+stands when the acknowledgement arrives.
+
+Seven, added by M4:
+
+7. **The app is never told which file it has.** `DialogReply` carries a handle
+   subject prefix; the path stays inside the broker ([ADR-0026](./0026-app-runtime-and-capability-subjects.md) §SD7).
+   So the editor can say that a document is bound to a file and not which one
+   — no title, no directory, no way to tell two documents apart. The name it
+   puts in the save dialog is a suggestion derived from the first heading, and
+   it is deliberately not remembered afterwards, because the user may have
+   typed something else and echoing it back would present a guess as a fact.
+8. **Saving asks once.** A read handle can never write (§SD7 again), so opening
+   a document does not give the app anywhere to save it: the first Save raises
+   a dialog and every later Save reuses the granted handle in silence. This is
+   the portal-style behaviour §Alternatives chose over asking fsbroker for a
+   read-write mode, and the reuse works because a handle lives until it is
+   closed rather than being spent on one write.
+9. **The wildcard handle cap is declined.** A granted handle is addressed under
+   `fs.handle.{uuid}.>`, and the obvious move — which a sibling app makes — is
+   to declare `fs.handle.>` statically. It is not needed: the broker adds the
+   narrow per-handle cap to the app's live client at the moment the USER
+   approves, and revokes it on close. Declaring the wildcard would convert a
+   user-approved, per-file, revocable grant into standing authority over every
+   handle the broker ever mints. The end-to-end tests run on the manifest's own
+   caps, which is what makes this a demonstrated claim rather than a hope.
 
 ### Milestones
 
@@ -224,7 +255,17 @@ only honest reading of the marker.
 - **M1 — source-offset markdown highlighting, wired through `textEdit.highlightJob`.** ✓
 - **M2 — editing affordances: a formatting bar over `insertAtCursor`, an outline from `Doc.Headings()`, a word and reading-time readout.** ✓
 - **M3 — find and replace: matches painted through `sectionStyled`, replace-all as a whole-buffer rebind.** ✓
-- **M4 — file I/O through fsbroker.**
+- **M4 — file I/O through fsbroker.** ✓ Open, Save and Save as over the two
+  dialog subjects, portal-style. Two things the plan did not anticipate, both
+  from the broker rather than from the app. The handle cap turned out to be
+  granted dynamically on approval, so the manifest declares the two dialog
+  subjects and nothing else — narrower than the sibling app this flow was
+  modelled on. And the read op answers with the file's raw bytes on success but
+  a CBOR refusal on failure, sharing one channel with no framing, so something
+  had to tell them apart; the discriminator is a decode attempt, sound because
+  the encoded refusal begins with a UTF-8 continuation byte that no valid text
+  can start with. A test pins that leading byte, since the argument is the only
+  thing holding the two apart.
 
 M3 shipped as planned, plus two things the plan did not name. Replace-one is
 there beside replace-all — a find bar without it is a strange tool, and it is
@@ -272,6 +313,7 @@ visible before the work starts rather than discovered inside it.
 | `headingPlainText` / heading slugs (shipped) | fixed — wikilinks, embeds and autolinks in a heading now reach its text, where they were dropped. A heading like `## See [[Some Page]]` sluggified to `see-`, which nothing could link to | `fieldCarriedText`, one enumeration of the nodes that keep their text in a field, now shared with `flattenInlineText`. That sharing is the actual fix: the set had grown twice and only one walker learned each time, and the failure is silent — a missing node contributes nothing rather than erroring. Measured before changing it: **zero** headings anywhere in the working tree, gitignored trees included, contain such a node, so no existing slug moved |
 | `obsidian` tag parser (shipped) | narrowed — a word-boundary rule, Obsidian's not-purely-numeric rule, and `{`/`#` rejected as openers. Strictly declines more than before; nothing that parsed as a tag stops doing so except what was never meant to be one | the competence doc, whose "intentionally permissive" claim was true of both extensions and is now true only of `==highlight==`. Measured before changing it: across committed markdown, 76 `#` in flowing prose, of which ~70 were `#4`-style numeric references |
 | `markdownhighlight` categories (shipped) | added — `CategoryTagMarker`, `CategoryTagText`, appended after the existing values | `codeview.mdColors`, sized by `CategoryCount`. Appending is load-bearing: inserting among the existing values renumbers the ones after it and silently repaints documents in the wrong colours rather than failing to compile |
+| `app.BusI` (M4, shipped) | added — `RequestWithTimeout`, because a dialog request is bounded by a person and the transport default failed it while the picker was still open. Additive; no existing caller changes | the three implementations (`inprocbus`, `natsbus`, `NoopBus`) and five test fakes. Recorded on [ADR-0026](./0026-app-runtime-and-capability-subjects.md) (2026-08-08), which owns the seam. `sqlappletcreator` has the same latent failure and is deliberately left alone |
 
 ## Alternatives
 
@@ -357,9 +399,31 @@ visible before the work starts rather than discovered inside it.
   tiers reach the same verdict on the same input rather than each being
   checked alone. Nothing structural stops the next divergence — only that
   test.
-- Without file I/O the app cannot open what is already on disk, and the
-  clipboard round-trip is the only way in or out besides its own persisted
-  session.
+- **The editor cannot name the file it is bound to** (M4). The broker hands
+  over a handle and keeps the path, so the bar can show that a document has a
+  file and never which one, and two windows editing two files look identical.
+  Changing that means widening `DialogReply` with a display name, which is a
+  Powerbox decision and not one an app should make on its way past. Until then
+  the honest surface is a badge that says "file bound" and nothing more.
+- **A save is a whole-file truncate.** `handleWrite` is `os.WriteFile`
+  create-or-truncate, and the payload is the entire buffer, so there is no
+  partial write and no incremental save. Fine at the sizes an editor sees, and
+  the same assumption the reparse policy already makes.
+- **A file binding does not survive the window.** Handles die with the bus
+  client, so reopening a persisted document and pressing Save asks where to put
+  it again — even though the reader saved it to a file minutes earlier. The
+  persisted buffer is not lost, only the knowledge of where it came from, and
+  recovering it would mean persisting a path the app is never given.
+- **An open replaces the buffer with no undo.** It is a whole-buffer rebind
+  outside the widget's edit path, and the autosave carries the new document
+  over the persisted one within seconds, so there is nothing to go back to.
+  Guarded rather than merely documented: on a modified document the first Open
+  refuses and says so, and a second click proceeds. Two clicks rather than a
+  confirmation dialog because the only dialog facility here is the picker
+  itself, and rather than a flat refusal because a scratch buffer should not
+  have to be saved somewhere before it can be discarded. The arming is disarmed
+  by the reader typing, so it cannot latch and turn a later, unrelated Open
+  into the silent discard it exists to prevent.
 - **The split is not draggable.** Pinning the source pane with `ExactSize` is
   what makes it recover from a resize, and it costs the handle: the reader
   cannot widen the source at the preview's expense. A draggable split that
@@ -389,16 +453,20 @@ visible before the work starts rather than discovered inside it.
 - Scroll sync is heading-granular by construction. A document without headings
   gets no sync at all, which is the correct degenerate behaviour rather than a
   gap to fill.
-- The app declares exactly one capability in M0 (`clipboard.write`), plus the
-  persist cap the host injects from `PersistedKeys`.
+- The app declared exactly one capability through M3 (`clipboard.write`) and
+  three from M4 (adding `fs.dialog.read` and `fs.dialog.write`), plus the
+  persist cap the host injects from `PersistedKeys` and the per-handle cap the
+  broker grants and revokes around each approved dialog. Every one of them
+  authorises ASKING rather than reaching: none names a path, and the three
+  static ones cannot reach a file without a user approving a picker first.
 
 ## Verification plan — Tier 1
 
 - **Lane.** Default `go test` for the pure-Go logic — the char-to-byte caret
   conversion and its clamping, caret-offset-to-heading resolution including
   the line-start normalisation, the slug-changed scroll guard, the checkpoint
-  transitions, and the manifest (it validates, it registers, and it declares
-  exactly one capability). Plus an ADR-0057 registry `Demo` in
+  transitions, and the manifest (it validates, it registers, and its cap list
+  is asserted exactly). Plus an ADR-0057 registry `Demo` in
   `mdedit_tour.go`, which the widgets TestDriver captures as a PNG and an SVG
   on every tour run.
 
@@ -410,13 +478,29 @@ visible before the work starts rather than discovered inside it.
   sections begin and never what colour they are or which bytes they cover. The
   tour scene opens the bar on a query matching twice, so a capture carries both
   match tones and a fixture test fails if that query ever stops matching.
+  M4 goes further than the lane's usual reach and runs against a REAL
+  `fsbroker.Service` over the in-process bus, wired with the manifest's own
+  caps and nothing else. That is deliberate: what is most likely to be wrong in
+  file I/O is not this app's arithmetic but its beliefs about the broker, and a
+  stub would agree with whatever the app assumed. So the tests assert the
+  seam's behaviour rather than a mock of it — that the two dialog caps suffice
+  (which is what demonstrates the wildcard handle cap is unnecessary), that a
+  bound document raises no second dialog, that a cancelled "Save as" keeps the
+  binding it already had, and that the checkpoint records what landed rather
+  than what the buffer holds when the ack arrives.
 - **What would fail.** A caret-to-heading regression turns the scroll guard
   into either a preview that never follows or one the reader cannot scroll by
   hand; both are assertable from the resolved slug alone, without rendering.
-  A capability creeping into the manifest — an `fs.*` pattern above all —
-  fails the manifest test, which is the tripwire on file I/O arriving without
-  the decision that should precede it. A layout or lowering regression shows
-  up as a changed tour capture.
+  A capability creeping into the manifest fails the cap-list test — which
+  through M3 was the tripwire on file I/O arriving at all, and from M4 is the
+  narrower tripwire on the app's standing authority growing past the two
+  dialog subjects; a static `fs.handle.>` has its own test refusing it. If the
+  broker ever grants a read-write handle mode, the read-handle-cannot-write
+  test fails, which is the signal to revisit the portal-style save flow rather
+  than discover the change by surprise. And if the read op's refusal frame ever
+  becomes something a text file could begin with, the leading-byte test fails
+  before a refusal can be mistaken for a document. A layout or lowering
+  regression shows up as a changed tour capture.
 - **Gap.** Three, all accepted for now. The measured parse costs are not
   regression-tested — no benchmark gate guards the table above, so a slowdown
   inside goldmark or the lowering would pass unnoticed; the numbers inform a

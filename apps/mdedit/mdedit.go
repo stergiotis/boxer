@@ -36,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
@@ -131,9 +132,14 @@ const (
 	hintEmpty = "Write markdown here, or paste a document with Ctrl+V. The preview on the right updates as you type."
 )
 
-// atomsCopy is the Copy button's label, built once — identical retained bytes
-// across frames intern to one blob.
-var atomsCopy = c.Atoms().Text("Copy to clipboard").Keep()
+// Bar button labels, built once — identical retained bytes across frames
+// intern to one blob.
+var (
+	atomsCopy   = c.Atoms().Text("Copy to clipboard").Keep()
+	atomsOpen   = c.Atoms().Text(icons.PhFolderOpen + " Open").Keep()
+	atomsSave   = c.Atoms().Text(icons.PhFloppyDisk + " Save").Keep()
+	atomsSaveAs = c.Atoms().Text("Save as…").Keep()
+)
 
 // App is the per-window mdedit instance.
 type App struct {
@@ -240,6 +246,23 @@ type App struct {
 	// where the databinding is registered — see App.rebindBuffer.
 	rebindSrc bool
 
+	// confirmDiscard is the armed half of Open's two-click confirmation, and
+	// confirmDiscardSrc the buffer it was armed against — typing disarms it.
+	// See App.clearDiscardConfirm.
+	confirmDiscard    bool
+	confirmDiscardSrc string
+
+	// writeHandle is the fs.handle.{uuid} prefix a save dialog granted, empty
+	// until the reader has chosen a file. Holding it is what makes the second
+	// and every later Save silent (ADR-0178 M4).
+	//
+	// It is NOT the file's identity — the broker never tells the app the path
+	// — and it does not survive the window: handles are revoked when the app's
+	// bus client goes, so a restored document asks where to save again. The
+	// persisted buffer is what survives, which is the point of keeping the
+	// app's own store beside the file rather than instead of it.
+	writeHandle string
+
 	// stats is the word / character / reading-time readout, recomputed with
 	// the spans.
 	stats docStats
@@ -282,6 +305,13 @@ type App struct {
 	restoreDone bool
 	restoreOk   bool
 	restoreText string
+
+	// One in-flight file gesture at a time (M4). A dialog is a human deciding
+	// in a picker, so the window between claiming and finishing is long enough
+	// that a second click is a real possibility rather than a theoretical one.
+	fileBusy bool
+	fileDone bool
+	fileRes  fileResult
 }
 
 // caretRequest is a caret position the app asks the editor to take, in BYTE
@@ -362,6 +392,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 func (inst *App) renderBody() {
 	inst.drainAsync()
+	inst.clearDiscardConfirm()
 	inst.refreshDerived()
 	// Before any pane reads pendingScroll, so a caret move and an outline
 	// click in the same frame resolve in that order — the click wins, which is
@@ -429,6 +460,39 @@ func (inst *App) renderBar() {
 	}
 
 	for range c.HorizontalTop().KeepIter() {
+		// File row (M4). Every button renders unconditionally and drops the
+		// click while something is in flight, for the same reason the copy
+		// button below does — and more so here, since a file dialog is open
+		// for as long as a person takes to decide.
+		openClicked, saveClicked, saveAsClicked := false, false, false
+		for range c.HoverText(tipOpen).KeepIter() {
+			openClicked = c.Button(inst.ids.PrepareStr("open"), atomsOpen).SendResp().HasPrimaryClicked()
+		}
+		for range c.HoverText(tipSave).KeepIter() {
+			saveClicked = c.Button(inst.ids.PrepareStr("save"), atomsSave).SendResp().HasPrimaryClicked()
+		}
+		for range c.HoverText(tipSaveAs).KeepIter() {
+			saveAsClicked = c.Button(inst.ids.PrepareStr("saveas"), atomsSaveAs).SendResp().HasPrimaryClicked()
+		}
+		if !inst.fileInFlight() {
+			switch {
+			case openClicked:
+				inst.openFile()
+			case saveAsClicked:
+				inst.saveFile(true)
+			case saveClicked:
+				inst.saveFile(false)
+			}
+		}
+
+		// Whether there is a file, never which one — the broker hands over a
+		// handle and keeps the path, so naming it would be a guess.
+		if inst.fileBound() {
+			badge.New(inst.ids.PrepareStr("file"), "file bound").
+				Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).
+				Tooltip(tipFileBound).Send()
+		}
+
 		// The button renders unconditionally. Dropping it from the tree while
 		// a request is in flight would collapse the row and strobe it back on
 		// milliseconds later; the click is ignored instead.
@@ -906,7 +970,13 @@ func (inst *App) drainAsync() {
 	inst.exportDone = false
 	perDone, perErr, perText := inst.persistDone, inst.persistErr, inst.persistedText
 	inst.persistDone = false
+	fileDone, fileRes := inst.fileDone, inst.fileRes
+	inst.fileDone = false
 	inst.mu.Unlock()
+
+	if fileDone {
+		inst.applyFileResult(fileRes)
+	}
 
 	if expDone {
 		switch {
