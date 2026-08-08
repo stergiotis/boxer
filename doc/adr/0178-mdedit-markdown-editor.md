@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-07
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0178: mdedit — a markdown editor composed from the existing reading and editing seams
 
@@ -354,10 +352,12 @@ visible before the work starts rather than discovered inside it.
   should not ride in on an app. Trigger: a flow that must replace the whole
   buffer without the user's own paste gesture.
 - **Adding a read-write handle mode to fsbroker** so one dialog serves open
-  and save. Same reasoning, and out of M0's scope entirely; M4 will instead
-  accept portal-style behaviour, where the first save raises a write dialog
-  pre-filled through the existing `SuggestedName` hint and every later save
-  reuses the granted handle.
+  and save. Same reasoning, and out of M0's scope entirely. M4 took the
+  portal-style behaviour instead: the first save raises a write dialog
+  pre-filled through the existing `SuggestedName` hint, and every later save
+  reuses the granted handle. That rests on the handle outliving a single
+  write, which it does — `handleWrite` does not close, so reuse needed nothing
+  from the broker.
 - **A WYSIWYG or hybrid-preview editor.** The preview's segment tree has no
   inverse mapping from rendered geometry back to source bytes, and building one
   means either a second lowering that tracks provenance or a per-block editing
@@ -531,7 +531,8 @@ visible before the work starts rather than discovered inside it.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-08-08, with M0–M4 shipped. Changes now arrive as dated
+`## Update` sections rather than in-place edits.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
