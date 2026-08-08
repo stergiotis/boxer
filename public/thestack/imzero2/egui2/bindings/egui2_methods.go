@@ -31,25 +31,12 @@ func (inst ButtonFluid) SendResp() ResponseFlagsE {
 	inst.Send()
 	return CurrentApplicationState.StateManager.GetResponseByIdRaw(inst.id)
 }
-func (inst NodeLeafFluid) SendResp() ResponseFlagsE {
-	inst.Send()
-	return CurrentApplicationState.StateManager.GetResponseByIdRaw(inst.id)
-}
 func (inst RadioButtonFluid) SendRespVal(val *bool) ResponseFlagsE {
 	inst.Send()
 	s := CurrentApplicationState.StateManager
 	id := inst.id
 	s.AddR10Databinding(id, val)
 	return s.GetResponseByIdRaw(id)
-}
-func (inst NodeDirFluid) SendIter() iter.Seq[functional.NilIteratorValueType] {
-	return func(yield func(functional.NilIteratorValueType) bool) {
-		inst.Send()
-		defer func() {
-			NodeDirClose(0).Send()
-		}()
-		yield(functional.NilIteratorValue)
-	}
 }
 func (inst SliderF64Fluid) SendRespVal(val *float64) ResponseFlagsE {
 	inst.Send()

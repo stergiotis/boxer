@@ -494,13 +494,43 @@ The inline sub-protocol eliminates these issues: everything is scoped within a s
 
 ---
 
-# 7. The Node & Tree System
+# 7. Trees
 
-This system decouples **Logical Hierarchy** from **Visual Rendering**.
+Hierarchies are drawn by `widgets/tree`, a Go widget over `endETable`
+(ADR-0176). There is no tree in the bindings and no node register: `NodeDir`,
+`NodeLeaf`, `NodeDirClose` and `Tree` were removed with the `egui_ltreeview`
+crate, and their register `r3_node_cmds` with them.
 
-1.  **The Register**: Calling `NodeDir` or `NodeLeaf` does not draw immediately. It populates a "Node Register" on the client.
-2.  **The Flush**: Calling `components.Tree(id).Send()` takes everything in the current Register, renders it as a tree-view, and **clears the register**.
-3.  **The Scope**: `NodeDir(...).SendIter()` automatically handles the nesting depth within the register.
+The input is **columnar, not a pointer tree** — one label per node and one
+parent index per node, `-1` for a root, several roots allowed, any order:
+
+```go
+t := tree.Tree{
+    Labels:  []string{"dir 0", "dir 1", "leaf 0", "dir 2", "leaf 1"},
+    Parents: []int32{-1, 0, 1, 0, 3},
+}
+res := tree.Render(tree.Input{
+    Ids: ids, ScopeKey: "files", Tree: t, State: &st.treeState,
+    Outline: tree.Column{Header: "name", Width: 320, Resizable: true},
+    MaxHeight: 300,
+})
+if res.Clicked >= 0 { /* … */ }
+```
+
+Three things follow from the design and are worth knowing before you use it:
+
+1.  **The host owns the state.** Expansion, selection and the keyboard cursor
+    live in a caller-held `tree.State`, so expand-all, collapse-all, reveal-a-node
+    and persistence are ordinary calls. Nothing is stashed on the Rust side.
+2.  **`State` keys on node INDICES**, which is the only identity a columnar
+    input has. If your tree is rebuilt with a different shape — a filter that
+    runs on every keystroke, a reloaded document — key your own expansion and
+    selection on something stable and project it onto `State` before each
+    `Render`, reading the widget's own changes back out of `Result`. See
+    ADR-0176 SD11; all three in-repo callers do this.
+3.  **Rows are virtualised and one line high.** A collapsed subtree and an
+    off-screen row build nothing. A value that needs two lines wants a second
+    column and a tooltip, not a taller row (SD12).
 
 ---
 
@@ -626,24 +656,17 @@ func RenderDemoWindow() {
 			c.Label("F").Send()
 		}
 
-		for range c.NodeDir(ids.PrepareStr(""), c.WidgetText().Text("dir 0").Keep()).SendIter() {
-			for range c.NodeDir(ids.PrepareStr(""), c.WidgetText().Text("dir 1").Keep()).SendIter() {
-				if c.NodeLeaf(ids.PrepareStr(""), c.WidgetText().Text("leaf 0").Keep()).SendResp().HasNodelikeSelected() {
-					c.NodeLeaf(ids.PrepareStr(""), c.WidgetText().Text("--- leaf 0 has is selected ---").Keep()).Send()
-				}
-				c.NodeLeaf(ids.PrepareStr(""), c.WidgetText().Text("leaf 1").Keep()).Send()
-				c.NodeLeaf(ids.PrepareStr(""), c.WidgetText().Text("leaf 2").Keep()).Send()
-			}
-			for range c.NodeDir(ids.PrepareStr(""), c.WidgetText().Text("dir 2").Keep()).SendIter() {
-				c.NodeLeaf(ids.PrepareStr(""), c.WidgetText().Text("leaf 3").Keep()).Send()
-				c.NodeLeaf(ids.PrepareStr(""), c.WidgetText().Text("leaf 4").Keep()).Send()
-			}
+		// A hierarchy is a Go widget over an etable — see §7. It draws where
+		// it is called, so there is no register to drain and no ScrollArea to
+		// wrap it in; it brings its own.
+		if res := tree.Render(tree.Input{
+			Ids: ids, ScopeKey: "smoke-tree", Tree: demoTree,
+			State: &treeState, MaxHeight: 180,
+		}); res.Clicked >= 0 {
+			selected = demoTree.Labels[res.Clicked]
 		}
-		for range c.ScrollArea().Vscroll(true).KeepIter() {
-			for range c.ScrollArea().Vscroll(true).KeepIter() {
-				c.Tree(ids.PrepareSeq(0xaaaa)).Send()
-			}
 
+		for range c.ScrollArea().Vscroll(true).KeepIter() {
 			for range c.CollapsingHeader(ids.PrepareStr("section 1"), c.WidgetText().Text("section 1").Keep()).KeepIter() {
 				c.Label("hello section1").Send()
 				r := c.Button(ids.PrepareSeq(0xcaffe), incrementLabelAtoms).SendResp()
@@ -671,7 +694,7 @@ func RenderDemoWindow() {
 
 1.  **Ghost Interactions**: If clicking "Button A" triggers "Button B", you have an **ID Collision**. Check if you are using identical labels in the same scope without an `IdScope`.
 2.  **Focus Loss**: If a text field loses focus as soon as you type, your ID is **unstable**. Check if your ID is derived from a string that changes based on the input text.
-3.  **Missing Nodes**: If nodes aren't appearing in your Tree, ensure you aren't calling `Tree()` before the `NodeDir` loops finish, or that you aren't mixing node registers intended for different trees.
+3.  **A tree row shows but does not respond**: the row's click sense sits *behind* its cells so the disclosure control can win its own rect, so a label emitted `Selectable(true)` (egui's default) sits over the row and swallows every click on its own rect. Emit cell labels `Selectable(false)`. A driver hits the same wall from the other side — the row's label is an ordinary node with no accessible name, findable by `value` and deaf to an AccessKit action; press its bounds centre instead (ADR-0176 SD13).
 4.  **Layout Jumps**: Ensure Absolute widgets (like Windows) use `AbsoluteLabelDefinedIdG` to avoid being shifted by the relative stack of a parent container.
 5.  **Silent `SendResp`**: A widget renders, visibly reacts to the click, and its handler never runs — `SendResp()` keeps returning `NilResponseFlags`. The id is not reaching the read-back map under the value you look it up by. In order of likelihood: (a) **two widgets share one id** — r7 is a flat map and `Sync` keeps the last writer, so every earlier twin reads nothing; grep the log for `id has already been used`. (b) **The id is not stable across frames** — responses arrive one frame late, so an id salted by a per-frame counter is looked up after it has already changed. (c) **You are reading a different id than you emitted** — `sm.GetResponse(widgethandle.Make(...))` needs the same value the widget put on the wire; call `Derive()` on the creator rather than reconstructing the number by hand. Note that clicking is *not* evidence the id is right: egui hit-tests on its own auto-ids, so a wrong or duplicated id still renders and still accepts input. See §3 for the derivation contract.
 
@@ -943,7 +966,6 @@ The Rust interpreter maintains a set of **global registers** that act as staging
 | **Table columns** | `table_columns` | `TableColumn` | `Table` drain node |
 | **Table headers** | `table_header_texts` | `TableHeaderText` | `Table` drain node |
 | **Table cells** | `table_cells` | `TableCellText`, `TableCellRichText` | `Table` drain node |
-| **Node commands** | `r3_node_cmds` | `NodeDir`, `NodeLeaf` | `Tree` drain node |
 
 ### Register Lifecycle Within a Frame
 

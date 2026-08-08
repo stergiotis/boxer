@@ -36,7 +36,6 @@ use crate::imzero2::svgexport::{
     ExportState, ExportStateHandle, LinkZonesHandle, TexturePixelCache, TexturePixelCacheHandle,
 };
 use crate::imzero2::text_edit_highlight;
-use egui_ltreeview::{NodeBuilder, NodeConfig, TreeView};
 use std::collections::HashMap;
 use std::io::{BufReader, Cursor, Read};
 
@@ -49,11 +48,6 @@ pub struct ScreenshotRequest {
     pub rect: Option<egui::Rect>,
 }
 
-enum NodeCommand<'a, NodeIdType> {
-    NodeDir(NodeBuilder<'a, NodeIdType>),
-    NodeLeaf(NodeBuilder<'a, NodeIdType>),
-    NodeDirClose(usize),
-}
 // see https://www.reddit.com/r/rust/comments/18os4tg/optionmerge_with_as_a_useful_analogue_to/
 fn merge_left<T>(left: Option<T>, right: Option<T>) -> Option<T> {
     match (left, right) {
@@ -2166,7 +2160,6 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
 
     r0_atoms: egui::Atoms<'a>,
     r1_widget_text: egui::WidgetText,
-    r3_node_cmds: Vec<NodeCommand<'a, u64>>,
     r5_id_set: roaring::RoaringTreemap, // inactive
 
     r7_ids: Vec<u64>,
@@ -2554,7 +2547,6 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             io: ImZeroFffiIo::new(r, w),
             r0_atoms: egui::Atoms::default(),
             r1_widget_text: egui::WidgetText::default(),
-            r3_node_cmds: Vec::with_capacity(STACK_INITIAL_CAPACITY),
             r5_id_set: roaring::RoaringTreemap::new(),
             r7_ids: Vec::with_capacity(1024),
             r7_responses: Vec::with_capacity(1024),
@@ -2683,16 +2675,6 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     }
     pub fn prepare_next_frame(&mut self) {
         self.io.reset_counts();
-        {
-            if !self.r3_node_cmds.is_empty() {
-                tracing::debug!(
-                    len = self.r3_node_cmds.len(),
-                    "r3_node_cmds is not empty (unused tree commands), clearing"
-                );
-            }
-            self.r3_node_cmds.clear();
-        }
-
         {
             if !self.r7_ids.is_empty() {
                 tracing::debug!(
@@ -8633,77 +8615,6 @@ egui::Grid::new(i);
                 // apply
                 self.new_table_row_heights.push(height);
             }
-            FuncProcId::NodeDir => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::NodeDir");
-                // arguments
-                let i = self.read_id()?;
-
-                let label = {
-                    let (f2, _) = self.read_from_repr(FuncProcId::from_repr)?;
-                    let u2: &mut Option<&mut egui::Ui> = &mut None;
-                    if u2.is_some() {
-                        self.interpret_inner(c, u2, &f2, d + 1)?;
-                    } else {
-                        self.interpret_inner(c, u, &f2, d + 1)?;
-                    }
-
-                    std::mem::take(&mut self.r1_widget_text)
-                };
-                // construct
-
-                #[allow(unused_mut)]
-let mut w = // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-egui_ltreeview::NodeBuilder::dir(i.value()).label(label);
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                self.r3_node_cmds.push(NodeCommand::NodeDir(w));
-            }
-            FuncProcId::NodeDirClose => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::NodeDirClose");
-                // arguments
-                #[allow(unused_mut)]
-                let mut child_count = self.io.read_plain_u32()?;
-                // construct
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                self.r3_node_cmds.push(NodeCommand::NodeDirClose(child_count as usize));
-            }
-            FuncProcId::NodeLeaf => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::NodeLeaf");
-                // arguments
-                let i = self.read_id()?;
-
-                let label = {
-                    let (f2, _) = self.read_from_repr(FuncProcId::from_repr)?;
-                    let u2: &mut Option<&mut egui::Ui> = &mut None;
-                    if u2.is_some() {
-                        self.interpret_inner(c, u2, &f2, d + 1)?;
-                    } else {
-                        self.interpret_inner(c, u, &f2, d + 1)?;
-                    }
-
-                    std::mem::take(&mut self.r1_widget_text)
-                };
-                // construct
-
-                #[allow(unused_mut)]
-let mut w = // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                self.r3_node_cmds.push(NodeCommand::NodeLeaf(w));
-            }
             FuncProcId::PaintAbsoluteOverlay => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::PaintAbsoluteOverlay");
@@ -12286,81 +12197,6 @@ self.apply_widget(w,u,f,Some(i));
                     }
                 } else {
                     self.interpret_outer(c, &mut None)?;
-                }
-            }
-            FuncProcId::Tree => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::Tree");
-                // arguments
-                let i = self.read_id()?;
-                // construct
-
-                #[allow(unused_mut)]
-                let mut w = egui_ltreeview::TreeViewSettings::default();
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                if u.is_some() {
-                    let ui = u.as_mut().unwrap();
-                    // egui_ltreeview 0.7 quirk: TreeViewBuilder::close_dir reads ui.clip_rect()
-                    // and calls Rect::clamp on it (builder.rs draw_indent_hint). Rect::clamp
-                    // panics in f32::clamp when the rect is negative (min > max) or NaN. A
-                    // negative clip can appear inside nested ScrollAreas when the inner
-                    // content is pinched horizontally by the outer scrollbar's reservation.
-                    // Skip the tree in that case; queued node commands are drained by
-                    // prepare_next_frame so the protocol stream stays balanced.
-                    let clip = ui.clip_rect();
-                    if clip.is_finite() && !clip.is_negative() {
-                        let tree = TreeView::new(i);
-                        let mut closed_ids = Vec::with_capacity(32); // NOTE: necessary as state.node_states is private
-                        let mut state =
-                            egui_ltreeview::TreeViewState::load(ui, i).unwrap_or_default();
-                        let (response, _actions) =
-                            tree.with_settings(w).show_state(ui, &mut state, |tv| {
-                                for cmd in self.r3_node_cmds.drain(..) {
-                                    match cmd {
-                                        NodeCommand::NodeDir(node) => {
-                                            let id = *node.id();
-                                            if !tv.node(node) {
-                                                closed_ids.push(id);
-                                            }
-                                        }
-                                        NodeCommand::NodeLeaf(node) => {
-                                            tv.node(node);
-                                        }
-                                        NodeCommand::NodeDirClose(child_count) => {
-                                            tv.close_dir_in(child_count);
-                                        }
-                                    }
-                                }
-                            });
-                        for s in state.selected().iter() {
-                            self.r7_push(*s, ResponseFlags::NODELIKE_SELECTED);
-                        }
-                        for id in closed_ids.drain(..) {
-                            self.r7_push(id, ResponseFlags::BLOCK_SKIPPED);
-                        }
-                        state.store(ui, i);
-                        //for action in actions {
-                        //	match action {
-                        //		egui_ltreeview::Action::Activate(egui_ltreeview::Activate {selected , modifiers: _}) => {
-                        //			for s in selected.iter() {
-                        //				self.r7_push(*s, ResponseFlags::NODELIKE_ACTIVATED);
-                        //			}
-                        //		},
-                        //		egui_ltreeview::Action::SetSelected(selected) => {
-                        //			for s in selected.iter() {
-                        //				self.r7_push(*s, ResponseFlags::NODELIKE_ACTIVATED);
-                        //			}
-                        //		},
-                        //		_ => {
-                        //		}
-                        //	}
-                        //}
-                        let _ = response;
-                    }
                 }
             }
             FuncProcId::UiClipToMaxRect => {

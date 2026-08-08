@@ -695,13 +695,15 @@ func (inst *Inst) renderBreadcrumbs(ids *c.WidgetIdStack) {
 // The currently-selected file(s) show as "selected" buttons via
 // .Selected(true) so users see the active pick before committing.
 //
-// Buttons (rather than NodeLeaf) are deliberate. egui_ltreeview's
-// selection set persists across frames, so HasNodelikeSelected fires
-// on every frame the node is in the selected set — not only on the
-// click. That re-fires our pendingCwd / inst.selected updates after
-// every navigation, walking ".." up to "/" or snapping back to the
-// last-clicked directory. Buttons have one-shot HasPrimaryClicked
-// semantics, which is what we need.
+// Buttons are deliberate, and the reason outlived the widget that
+// prompted it. The retired egui_ltreeview binding reported its
+// selection as a per-frame STATE, so a picked node re-fired every
+// frame it stayed picked — which walked pendingCwd ".." up to "/".
+// Buttons have one-shot HasPrimaryClicked semantics, which is what a
+// navigation needs. widgets/tree (ADR-0176) reports Result.Clicked as
+// the one-shot event this wants, so it is now a candidate here; what
+// keeps the buttons is that a picker lists ONE directory at a time,
+// which is a list and not a hierarchy.
 func (inst *Inst) renderListing(ids *c.WidgetIdStack) {
 	cached, ok := inst.cache[inst.cwd]
 	if !ok {

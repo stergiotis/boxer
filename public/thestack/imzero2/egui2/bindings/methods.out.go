@@ -2528,36 +2528,6 @@ func (inst NewTableRowHeightFluid) Send() {
 
 	r.SendIntermediate()
 }
-func (inst NodeDirFluid) Send() {
-	r := inst.r
-
-	r.SendIntermediate()
-}
-func (inst NodeDirFluid) Keep() typed.RetainedFffiHolderTyped[NodeCommandS] {
-	r := inst.r
-
-	return typed.NewRetainedFffiHolderTyped[NodeCommandS](r.BuildRetained())
-}
-func (inst NodeDirCloseFluid) Send() {
-	r := inst.r
-
-	r.SendIntermediate()
-}
-func (inst NodeDirCloseFluid) Keep() typed.RetainedFffiHolderTyped[NodeCommandS] {
-	r := inst.r
-
-	return typed.NewRetainedFffiHolderTyped[NodeCommandS](r.BuildRetained())
-}
-func (inst NodeLeafFluid) Send() {
-	r := inst.r
-
-	r.SendIntermediate()
-}
-func (inst NodeLeafFluid) Keep() typed.RetainedFffiHolderTyped[NodeCommandS] {
-	r := inst.r
-
-	return typed.NewRetainedFffiHolderTyped[NodeCommandS](r.BuildRetained())
-}
 func (inst PaintArrowFluid) Send() {
 	r := inst.r
 
@@ -4441,11 +4411,6 @@ func (inst TintedScopeFluid) KeepIter() iter.Seq[functional.NilIteratorValueType
 		yield(functional.NilIteratorValue)
 
 	}
-}
-func (inst TreeFluid) Send() {
-	r := inst.r
-
-	r.SendIntermediate()
 }
 func (inst UiWithLayoutFluid) MainDirLeftToRight() UiWithLayoutFluid {
 	r := inst.r

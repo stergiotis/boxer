@@ -37,8 +37,12 @@ const (
 	// later, like any r7-derived signal.
 	WindowTopmostResponseFlags ResponseFlagsE = 1 << 21
 
-	NodelikeSelectedFlags ResponseFlagsE = 1 << 30
-	BlockSkippedFlags     ResponseFlagsE = 1 << 31
+	// Bit 30 is free. It was NodelikeSelectedFlags, the egui_ltreeview
+	// binding's only read-back, retired with the binding in ADR-0176. Left as
+	// a hole rather than reused: these bits are a wire contract with the Rust
+	// side (fenums.rs), and a bit that changes meaning is the kind of change
+	// that compiles on both sides and lies at runtime.
+	BlockSkippedFlags ResponseFlagsE = 1 << 31
 )
 
 var AllResponseFlags = []ResponseFlagsE{
@@ -64,7 +68,6 @@ var AllResponseFlags = []ResponseFlagsE{
 	ShouldCloseResponseFlags,
 	IsTooltipOpenResponseFlags,
 	WindowTopmostResponseFlags,
-	NodelikeSelectedFlags,
 	BlockSkippedFlags,
 }
 
@@ -166,9 +169,6 @@ func (inst ResponseFlagsE) HasIsTooltipOpen() bool {
 func (inst ResponseFlagsE) HasWindowTopmost() bool {
 	return inst.Has(WindowTopmostResponseFlags)
 }
-func (inst ResponseFlagsE) HasNodelikeSelected() bool {
-	return inst.Has(NodelikeSelectedFlags)
-}
 func (inst ResponseFlagsE) HasBlockSkipped() bool {
 	return inst.Has(BlockSkippedFlags)
 }
@@ -235,9 +235,6 @@ func (inst ResponseFlagsE) ClearShouldClose() ResponseFlagsE {
 func (inst ResponseFlagsE) ClearIsTooltipOpen() ResponseFlagsE {
 	return inst.Clear(IsTooltipOpenResponseFlags)
 }
-func (inst ResponseFlagsE) ClearNodelikeSelected() ResponseFlagsE {
-	return inst.Clear(NodelikeSelectedFlags)
-}
 func (inst ResponseFlagsE) ClearBlockSkipped() ResponseFlagsE {
 	return inst.Clear(BlockSkippedFlags)
 }
@@ -303,9 +300,6 @@ func (inst ResponseFlagsE) SetShouldClose() ResponseFlagsE {
 }
 func (inst ResponseFlagsE) SetIsTooltipOpen() ResponseFlagsE {
 	return inst.Set(IsTooltipOpenResponseFlags)
-}
-func (inst ResponseFlagsE) SetNodelikeSelected() ResponseFlagsE {
-	return inst.Set(NodelikeSelectedFlags)
 }
 func (inst ResponseFlagsE) SetBlockSkipped() ResponseFlagsE {
 	return inst.Set(BlockSkippedFlags)

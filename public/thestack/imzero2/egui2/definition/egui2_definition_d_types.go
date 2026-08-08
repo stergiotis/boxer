@@ -52,9 +52,6 @@ func structTimeRangePicker() ir.ConcreteType {
 func structPassthrough() ir.ConcreteType {
 	return ir.NewConcreteType("passthrough")
 }
-func structNodeCommand() ir.ConcreteType {
-	return ir.NewConcreteType("nodeCommand")
-}
 func structColor32() ir.ConcreteType {
 	return ir.NewConcreteType("color32")
 }

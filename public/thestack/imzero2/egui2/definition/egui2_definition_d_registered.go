@@ -1,32 +1,23 @@
 package definition
 
 import (
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/ir"
-	"github.com/stergiotis/boxer/public/thestack/fffi2/ir/idl"
 )
 
+// definitionsRegistered holds nodes whose apply pushes into a process-global
+// register that some later call drains, rather than drawing where they are
+// emitted.
+//
+// It is empty, and that is the intended state. Its only occupants were
+// `nodeDir` / `nodeLeaf` / `nodeDirClose`, drained by `tree` — the
+// egui_ltreeview binding retired in ADR-0176. The shape it represents is the
+// one that ADR ruled against: emission decoupled from placement, so two trees
+// in one frame had to alternate, and Go re-marshalled every node every frame
+// because the expansion state lived on the Rust side.
+//
+// The category stays because the generator takes one slice per category and an
+// empty one costs nothing — and because a future node that genuinely needs a
+// drain protocol should land here, next to this note about what it implies.
 func definitionsRegistered() (registered []*ir.BuilderFactoryNode) {
-	registered = make([]*ir.BuilderFactoryNode, 0, 32)
-	registered = append(registered, idl.NewBuilderFactoryNode("nodeDir").
-		WithIdentityId(true).
-		AddArguments(idl.NewArgumentsBuilder().EvaluatedArg("label", structWidgetText()).Build()).
-		WithSettingImmediate(true).WithSettingRetained(true).
-		WithConstructionCodeClientRust(rustClientCode("egui_ltreeview::NodeBuilder::dir({{Id}}.value()).label(label);\n")).
-		WithApplyCodeClientRust(rustClientCode("self.r3_node_cmds.push(NodeCommand::NodeDir({{Instance}}));\n")).
-		WithReturnType(structNodeCommand()).Build())
-	registered = append(registered, idl.NewBuilderFactoryNode("nodeLeaf").
-		WithIdentityId(true).
-		WithSettingImmediate(true).WithSettingRetained(true).
-		AddArguments(idl.NewArgumentsBuilder().EvaluatedArg("label", structWidgetText()).Build()).
-		WithConstructionCodeClientRust(rustClientCode("egui_ltreeview::NodeBuilder::leaf({{Id}}.value()).label(label);\n")).
-		WithApplyCodeClientRust(rustClientCode("self.r3_node_cmds.push(NodeCommand::NodeLeaf({{Instance}}));\n")).
-		WithReturnType(structNodeCommand()).Build())
-	registered = append(registered, idl.NewBuilderFactoryNode("nodeDirClose").
-		WithSettingImmediate(true).WithSettingRetained(true).
-		AddArguments(idl.NewArgumentsBuilder().PlainArg("childCount", ctabb.U32).Build()).
-		WithConstructionCodeClientRust(ir.EmptyCode).
-		WithApplyCodeClientRust(rustClientCode("self.r3_node_cmds.push(NodeCommand::NodeDirClose(child_count as usize));\n")).
-		WithReturnType(structNodeCommand()).Build())
-	return
+	return nil
 }

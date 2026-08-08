@@ -9,69 +9,6 @@ import (
 
 func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 	blocks = make([]*ir.BuilderFactoryNode, 0, 64)
-	blocks = append(blocks, idl.NewBuilderFactoryNode("tree").
-		WithIdentityId(true).
-		WithSettingImmediate(true).
-		WithConstructionCodeClientRust(rustClientCode("egui_ltreeview::TreeViewSettings::default();\n")).
-		WithApplyCodeClientRust(rustClientCode(`if {{EguiUiOptionalOuter}}.is_some() {
-	let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
-	// egui_ltreeview 0.7 quirk: TreeViewBuilder::close_dir reads ui.clip_rect()
-	// and calls Rect::clamp on it (builder.rs draw_indent_hint). Rect::clamp
-	// panics in f32::clamp when the rect is negative (min > max) or NaN. A
-	// negative clip can appear inside nested ScrollAreas when the inner
-	// content is pinched horizontally by the outer scrollbar's reservation.
-	// Skip the tree in that case; queued node commands are drained by
-	// prepare_next_frame so the protocol stream stays balanced.
-	let clip = ui.clip_rect();
-	if clip.is_finite() && !clip.is_negative() {
-	let tree = TreeView::new({{Id}});
-	let mut closed_ids = Vec::with_capacity(32); // NOTE: necessary as state.node_states is private
-    let mut state = egui_ltreeview::TreeViewState::load(ui, {{Id}}).unwrap_or_default();
-	let (response, _actions) = tree.with_settings({{Instance}}).show_state(ui, &mut state, |tv| {
-		for cmd in self.r3_node_cmds.drain(..) {
-			match cmd {
-				NodeCommand::NodeDir(node) => {
-					let id = *node.id();
-					if !tv.node(node) {
-						closed_ids.push(id);
-					}
-				}
-				NodeCommand::NodeLeaf(node) => {
-					tv.node(node);
-				}
-				NodeCommand::NodeDirClose(child_count) => {
-					tv.close_dir_in(child_count);
-				}
-			}
-		}
-	});
-    for s in state.selected().iter() {
-        self.r7_push(*s, ResponseFlags::NODELIKE_SELECTED);
-    }
-    for id in closed_ids.drain(..) {
-	    self.r7_push(id, ResponseFlags::BLOCK_SKIPPED);
-    }
-    state.store(ui,i);
-    //for action in actions {
- 	//	match action {
- 	//		egui_ltreeview::Action::Activate(egui_ltreeview::Activate {selected , modifiers: _}) => {
- 	//			for s in selected.iter() {
- 	//				self.r7_push(*s, ResponseFlags::NODELIKE_ACTIVATED);
- 	//			}
- 	//		},
- 	//		egui_ltreeview::Action::SetSelected(selected) => {
- 	//			for s in selected.iter() {
- 	//				self.r7_push(*s, ResponseFlags::NODELIKE_ACTIVATED);
- 	//			}
- 	//		},
- 	//		_ => {
- 	//		}
- 	//	}
- 	//}
-	let _ = response;
-	}
-}
-`)).Build())
 	blocks = append(blocks,
 		idl.NewBuilderFactoryNode("window").
 			WithIdentityId(true).

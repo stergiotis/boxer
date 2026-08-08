@@ -112,9 +112,6 @@ status: draft
 | NewTable | BuilderFactory | Yes | 0 | 0 | 8 | Immediate, Retained |
 | NewTableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
 | NewTableRowHeight | BuilderFactory | No | 1 | 0 | 0 | Immediate |
-| NodeDir | BuilderFactory | Yes | 0 | 1 | 0 | Immediate, Retained |
-| NodeDirClose | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
-| NodeLeaf | BuilderFactory | Yes | 0 | 1 | 0 | Immediate, Retained |
 | PaintAbsoluteOverlay | Procedural | No | 0 | 0 | - | - |
 | PaintArrow | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintCanvas | BuilderFactory | Yes | 2 | 0 | 5 | Immediate, Retained |
@@ -185,7 +182,6 @@ status: draft
 | TextEdit | BuilderFactory | Yes | 2 | 0 | 17 | Immediate |
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
-| Tree | BuilderFactory | Yes | 0 | 0 | 0 | Immediate |
 | UiClipToMaxRect | Procedural | No | 0 | 0 | - | - |
 | UiDisable | Procedural | No | 0 | 0 | - | - |
 | UiSetHeight | Procedural | No | 1 | 0 | - | - |
@@ -1405,60 +1401,6 @@ NewTableColumn
 #### Return Type
 
 NewTableHeight
-
----
-
-### NodeDir
-
-- **Type:** BuilderFactory
-- **Identity:** Yes
-- **Features:** Immediate, Retained
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| label | evaluated | WidgetText (concrete) |
-
-#### Return Type
-
-NodeCommand
-
----
-
-### NodeDirClose
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate, Retained
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| childCount | plain | u32 |
-
-#### Return Type
-
-NodeCommand
-
----
-
-### NodeLeaf
-
-- **Type:** BuilderFactory
-- **Identity:** Yes
-- **Features:** Immediate, Retained
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| label | evaluated | WidgetText (concrete) |
-
-#### Return Type
-
-NodeCommand
 
 ---
 
@@ -2722,18 +2664,6 @@ TimeRangePicker
 - **Stroke**(width: f32, strokeCol: u32)
 - **OuterMargin**(width: f32)
 - **InnerMargin**(width: f32)
-
-#### Return Type
-
-Block
-
----
-
-### Tree
-
-- **Type:** BuilderFactory
-- **Identity:** Yes
-- **Features:** Immediate
 
 #### Return Type
 

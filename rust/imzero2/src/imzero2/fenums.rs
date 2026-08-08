@@ -41,7 +41,11 @@ bitflags::bitflags! {
         // not about a response), so populate() below does not touch it.
         const WINDOW_TOPMOST = 1u32 << 21;
 
-        const NODELIKE_SELECTED = 1u32 << 30;
+        // Bit 30 is FREE. It was NODELIKE_SELECTED, the egui_ltreeview
+        // binding's only read-back, retired with the binding in ADR-0176.
+        // Left as a hole rather than reused: the flags are a wire contract
+        // with Go, and a bit that changes meaning is the kind of change that
+        // compiles on both sides and lies at runtime.
         const BLOCK_SKIPPED = 1u32 << 31;
     }
 }

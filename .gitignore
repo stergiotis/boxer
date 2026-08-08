@@ -84,3 +84,8 @@ rust/*/target/
 # server, so it is developer-environment state, not shared project config.
 # Anchored — the repo-root file only.
 /crush.json
+
+# Scratch output from the dev capture scripts — scripts/dev/play-screenshot-tour.sh
+# and scripts/dev/tree-widget-scene.sh default their OUT here, and each builds a
+# private Go host and Rust client into it (>100 MB a run).
+/tmp/

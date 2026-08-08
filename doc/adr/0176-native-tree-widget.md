@@ -338,8 +338,13 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   expand-all / collapse-all / reveal controls, because "the host owns the
   state" is the claim that most needs showing. Driving the scene cost two
   additive rungs on the ADR-0154 ladder — see SD13.
-- **M5 — Remove `egui_ltreeview`.** The IDL nodes, the `r3_node_cmds` register,
-  the `NodeCommand` enum, the crate dependency, and the imzero2 skill's §7.
+- **M5 — Remove `egui_ltreeview`.** ✓ The IDL nodes, the `r3_node_cmds`
+  register, the `NodeCommand` enum, the crate dependency, and the imzero2
+  skill's §7. Two things came off with them that the plan did not name: the
+  `registered` IDL category, now empty and kept as the place a future
+  drain-protocol node would land, with a note about what that shape implies;
+  and `ResponseFlagsE`'s bit 30, left as a hole rather than reused (see
+  Migration).
 
 ## Surfaces — Tier 1
 
@@ -443,6 +448,13 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   stream desynchronises at the first `endETable`.
 - **Old shape.** Removed outright at M5, gated on M3 landing. Not deprecated
   first — a deprecation period serves downstream consumers, and there are none.
+
+- **The response-flag bit is retired, not recycled.** `NODELIKE_SELECTED` was
+  bit 30 of `ResponseFlags` on both sides of the wire. M5 leaves it unused
+  rather than handing it to the next flag that wants a bit: the flags are a
+  contract between `fenums.rs` and `egui2_enums.go`, and a bit that changes
+  meaning is the kind of change that compiles on both sides and lies at
+  runtime. Both files carry the note; bit 31 (`BLOCK_SKIPPED`) is unaffected.
 
 ## Verification plan — Tier 1
 
@@ -558,7 +570,24 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 
 ## Status
 
-Proposed — awaiting review.
+Proposed — awaiting review. M0–M5 are built; what the review is for is the
+decision, not the delivery.
+
+- **M0** — `row_ui` as a deferred block map, with SD6's seen-set guard;
+  `logviewer` off its per-cell tint workaround.
+- **M1/M2** — the columnar model, the host-owned `State`, the pure flatten, and
+  the etable renderer.
+- **M3** — `schemaview`, `configview` and `fieldview` ported.
+  `componentview` is not a tree and stays a `CollapsingHeader` accordion; the
+  Context paragraph that counted it as a fourth adopter is corrected in place.
+- **M4** — the `tree` demo, the catch-all demo's node section, and
+  `scripts/dev/tree-widget-scene.sh`. Cost two additive rungs on ADR-0154's
+  anchor ladder (SD13), and its capture caught the outline defect the
+  assertions could not.
+- **M5** — `egui_ltreeview` gone: the IDL nodes, the register, the enum, the
+  crate. Verified on both lanes with the Go host and both Rust clients rebuilt
+  together — the headless scene passes with no wire desync, and the desktop
+  gallery renders the ported outlines with no id collisions.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

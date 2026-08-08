@@ -116,7 +116,6 @@ binary_rw = "4.1.0"
 thiserror = "2.0.17"
 strum = { version = "0.27", features = ["derive"] }
 bitflags = "2.9.4"
-egui_ltreeview = "0.8.0"
 roaring = "0.11.2"
 tracing = "0.1.43"
 tracing-subscriber = "0.3.22"

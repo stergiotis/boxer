@@ -154,12 +154,12 @@ func (inst *App) renderGallery() {
 // with selectable leaves. Selecting a leaf flips inst.selectedView; the
 // central pane reads that on the next frame.
 //
-// CollapsingHeader + SelectableLabel rather than the egui_ltreeview
-// flat-drain (NodeDir/NodeLeaf/Tree): that surface mis-renders a wide,
-// multi-root tree like this one (three top-level categories), and it is
-// wrapped in no ScrollArea so it survives a width-pinned gallery column,
-// where a ScrollArea collapses to its first child (SKILLS.md nav-layout
-// gotchas). The list is tiny — 3 groups, 4 leaves — so a host-level scroll
+// CollapsingHeader + SelectableLabel rather than widgets/tree: this list is
+// tiny (3 groups, 4 leaves) and the outline's etable brings a scroll of its
+// own, where this nav is wrapped in no ScrollArea so it survives a
+// width-pinned gallery column — there a ScrollArea collapses to its first
+// child (SKILLS.md nav-layout gotchas). A hierarchy worth virtualising
+// belongs on the widget; this one is not. The list is tiny — so a host-level scroll
 // is enough for tall windows.
 func (inst *App) renderViewTree() {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("catVisual"), c.WidgetText().Text("Visual").Keep()).DefaultOpen(true).KeepIter() {

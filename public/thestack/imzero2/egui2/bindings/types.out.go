@@ -309,25 +309,6 @@ type NewTableRowHeightFluid struct {
 }
 type NewTableRowHeightMethodIdE uint32
 
-type NodeDirFluid struct {
-	r     *typed.RetainedFffiBuilder
-	id    uint64
-	idGen WidgetIdCreatorI
-}
-type NodeDirMethodIdE uint32
-
-type NodeDirCloseFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type NodeDirCloseMethodIdE uint32
-
-type NodeLeafFluid struct {
-	r     *typed.RetainedFffiBuilder
-	id    uint64
-	idGen WidgetIdCreatorI
-}
-type NodeLeafMethodIdE uint32
-
 type PaintArrowFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -660,13 +641,6 @@ type TintedScopeFluid struct {
 }
 type TintedScopeMethodIdE uint32
 
-type TreeFluid struct {
-	r     *typed.RetainedFffiBuilder
-	id    uint64
-	idGen WidgetIdCreatorI
-}
-type TreeMethodIdE uint32
-
 type UiWithLayoutFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -804,8 +778,6 @@ type NewTableColumnS struct{}
 type NewTableDummyS struct{}
 
 type NewTableHeightS struct{}
-
-type NodeCommandS struct{}
 
 type PaintCanvasS struct{}
 

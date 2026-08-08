@@ -911,52 +911,6 @@ func NewTableRowHeight(height float32) (inst NewTableRowHeightFluid) {
 	return
 }
 
-func NodeDir(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS]) (inst NodeDirFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdNodeDir))
-	v := i.Derive()
-	r.WriteWidgetId(checkId(v))
-	r.SpliceRetained(label.Untype())
-
-	inst = NodeDirFluid{
-		r: r,
-	}
-
-	inst.id = v
-	inst.idGen = i
-
-	return
-}
-
-func NodeDirClose(childCount uint32) (inst NodeDirCloseFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdNodeDirClose))
-	r.WriteUint32(childCount)
-
-	inst = NodeDirCloseFluid{
-		r: r,
-	}
-
-	return
-}
-
-func NodeLeaf(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS]) (inst NodeLeafFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdNodeLeaf))
-	v := i.Derive()
-	r.WriteWidgetId(checkId(v))
-	r.SpliceRetained(label.Untype())
-
-	inst = NodeLeafFluid{
-		r: r,
-	}
-
-	inst.id = v
-	inst.idGen = i
-
-	return
-}
-
 func PaintAbsoluteOverlay() {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdPaintAbsoluteOverlay))
@@ -1951,22 +1905,6 @@ func TintedScope(i WidgetIdCreatorI, col color.Color) (inst TintedScopeFluid) {
 	color.PutAsU32(r, col)
 
 	inst = TintedScopeFluid{
-		r: r,
-	}
-
-	inst.id = v
-	inst.idGen = i
-
-	return
-}
-
-func Tree(i WidgetIdCreatorI) (inst TreeFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdTree))
-	v := i.Derive()
-	r.WriteWidgetId(checkId(v))
-
-	inst = TreeFluid{
 		r: r,
 	}
 
