@@ -2710,7 +2710,7 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 		// shape of SELECT the panel expects without leaving the tab.
 		for range c.Vertical().KeepIter() {
 			c.Label("Run a query to see the timeline.").Send()
-			c.AddSpace(8)
+			c.AddSpace(styletokens.GapItems(styletokens.DensityFromEnv()))
 			inst.timeline.RenderContractHelp()
 		}
 		return
@@ -2753,7 +2753,7 @@ func (inst *PlayApp) renderTimelineReject(reason string) {
 		for rt := range c.RichTextLabel(reason) {
 			rt.Strong()
 		}
-		c.AddSpace(8)
+		c.AddSpace(styletokens.GapItems(styletokens.DensityFromEnv()))
 		inst.timeline.RenderContractHelp()
 	}
 }

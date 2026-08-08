@@ -215,7 +215,7 @@ func (inst *experimentsDriver) renderGuide() {
 func (inst *experimentsDriver) renderControls() {
 	gap := styletokens.GapSections(styletokens.DensityFromEnv())
 	for range c.HorizontalTop().KeepIter() {
-		c.Label("source").Send()
+		c.Label("source").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "exp-source", &inst.source).
 			Inline().
 			Frameless().
@@ -224,7 +224,7 @@ func (inst *experimentsDriver) renderControls() {
 			Option(experimentsSourceResult, "result").
 			SendResp()
 		c.AddSpace(gap)
-		c.Label("sink").Send()
+		c.Label("sink").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "exp-sink", &inst.sink).
 			Inline().
 			Frameless().

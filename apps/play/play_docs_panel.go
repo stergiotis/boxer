@@ -77,7 +77,7 @@ func (inst *PlayApp) renderDocsTab() {
 		}
 		c.Checkbox(ids.PrepareStr("docsFollow"), s.follow, "Follow caret").
 			SendRespVal(&s.follow)
-		c.Label("look up").Send()
+		c.Label("look up").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		c.TextEdit(ids.PrepareStr("docsManual"), s.manual, false).
 			HintText("name").
 			SendRespVal(&s.manual)

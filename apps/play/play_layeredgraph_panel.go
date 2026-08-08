@@ -789,7 +789,7 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 // the layout cache, so the next frame re-lays-out.
 func (inst *NetworkDriver) renderControls() {
 	for range c.Horizontal().KeepIter() {
-		c.Label("layout").Send()
+		c.Label("layout").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "rank-dir", &inst.rankDir).
 			Inline().
 			Style(selector.StyleSelectable).

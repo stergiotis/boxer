@@ -424,7 +424,7 @@ func (inst *MapDriver) cancelFetch() {
 
 func (inst *MapDriver) renderControls() {
 	for range c.Horizontal().KeepIter() {
-		c.Label("table").Send()
+		c.Label("table").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		c.TextEdit(inst.ids.PrepareStr("map-table"), inst.table, false).
 			DesiredWidth(240).SendRespVal(&inst.table)
 		c.SliderF64(inst.ids.PrepareStr("map-sampling"), inst.sampling, 1, 100).

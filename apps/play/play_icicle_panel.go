@@ -384,7 +384,7 @@ func (inst *IcicleDriver) renderControls() {
 			Option(icicle.OrientFlame, "flame").
 			SendResp()
 		c.AddSpace(gap)
-		c.Label("order").Send()
+		c.Label("order").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "icicle-order", &inst.order).
 			Inline().
 			Style(selector.StyleSelectable).
@@ -393,7 +393,7 @@ func (inst *IcicleDriver) renderControls() {
 			Option(icicle.OrderInput, "input").
 			SendResp()
 		c.AddSpace(gap)
-		c.Label("colour").Send()
+		c.Label("colour").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "icicle-color", &inst.colorBy).
 			Inline().
 			Style(selector.StyleSelectable).
@@ -401,7 +401,7 @@ func (inst *IcicleDriver) renderControls() {
 			Option(icicleview.ColorByDepth, "depth").
 			SendResp()
 		c.AddSpace(gap)
-		c.Label("prune").Send()
+		c.Label("prune").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "icicle-prune", &inst.prune).
 			Inline().
 			Style(selector.StyleSelectable).

@@ -622,7 +622,9 @@ func (inst *flowDriver) renderLensText(lines []string, feed flowLensFeed) {
 	c.Separator().Horizontal().Send()
 	for _, ln := range flat {
 		if ln == "" {
-			c.AddSpace(6)
+			// A blank source line in the dump. On the spacing ladder so it
+			// scales with density like the text around it does.
+			c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
 			continue
 		}
 		for rt := range c.RichTextLabel(ln) {
@@ -741,7 +743,7 @@ func (inst *flowDriver) nodeFill(g flowGraph, id string) (col color.Color, ok bo
 // renders off-pane cannot be clicked by anyone.
 func (inst *flowDriver) renderControls(active NodeID) {
 	for range c.Horizontal().KeepIter() {
-		c.Label("lens").Send()
+		c.Label("lens").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		// The framed segmented skin (the package default), not the frameless
 		// one the secondary toggles use: the lens is the pane's primary
 		// mode switch, and the frame is what says "this is a control" at a
@@ -758,14 +760,14 @@ func (inst *flowDriver) renderControls(active NodeID) {
 			SendResp()
 	}
 	for range c.Horizontal().KeepIter() {
-		c.Label("source").Send()
+		c.Label("source").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "flow-src", &inst.srcMode).
 			Inline().
 			Style(selector.StyleSelectable).
 			Option(flowSrcRun, "run").
 			Option(flowSrcCaret, "caret").
 			SendResp()
-		c.Label("layout").Send()
+		c.Label("layout").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "flow-rank-dir", &inst.rankDir).
 			Inline().
 			Style(selector.StyleSelectable).
@@ -773,7 +775,7 @@ func (inst *flowDriver) renderControls(active NodeID) {
 			Option(layeredgraph.RankDirTopBottom, "top-down").
 			SendResp()
 		if inst.lens.remote() {
-			c.Label("view").Send()
+			c.Label("view").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 			selector.Segmented(inst.ids, "flow-lens-view", &inst.lensView).
 				Inline().
 				Style(selector.StyleSelectable).

@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
@@ -216,7 +217,12 @@ func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineCon
 func (inst *TimelineDriver) RenderContractHelp() {
 	for range c.Vertical().KeepIter() {
 		c.Label("Timeline column contract — return one of these shapes:").Send()
-		c.AddSpace(4)
+		// PaddingInner rather than GapInline: the ladder's gap family starts at
+		// 6px and this is a sub-gap holding a heading against its own list,
+		// where 6 reads as a paragraph break. Taking the magnitude one step
+		// down keeps the spacing where it was AND makes it scale with density,
+		// which a bare literal never did.
+		c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
 		for _, line := range []string{
 			"  Points       _tl_time",
 			"  Intervals    _tl_time + _tl_time_end  (+ optional _tl_lane, _tl_intensity)",
@@ -226,7 +232,7 @@ func (inst *TimelineDriver) RenderContractHelp() {
 				rt.Monospace()
 			}
 		}
-		c.AddSpace(4)
+		c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
 		for rt := range c.RichTextLabel(
 			"Timestamps must be DateTime64(N); strings for labels and lanes. " +
 				"The Snippets tab carries a ready-made query for each shape, and one for the background-bands overlay.") {

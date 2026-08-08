@@ -315,6 +315,34 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## Updates
 
+### 2026-08-08 — §SD8 casing: the lowercase field caption is an idiom, and L1 v1 cannot see it
+
+L1 flags a lowercase first letter in `c.Label(LIT)`, and its own package
+comment says v1 is deliberately narrow — it cannot identify the enclosing
+widget, so a Button label and a field caption look alike to it, with the
+per-widget policy deferred to a v2 AST context walker.
+
+Clearing play's standing findings made the gap concrete. All sixteen were the
+same shape: a short caption immediately before a control, in a dense control
+row whose own options are lowercase too — `c.Label("lens")` ahead of a
+segmented selector offering `statement | ast | plan`. Capitalising only the
+caption would make it louder than the options it introduces, which is a worse
+row, not a more cohesive one.
+
+Whether that is an idiom or a local accident was measured rather than assumed:
+across `apps/` and the widget packages, the caption-immediately-before-a-control
+pattern is **18 lowercase to 2**, and the two exceptions (imztop's "Filter",
+the file picker's "File name:") are both standalone captions rather than
+members of a lowercase control row. So the idiom is fleet-wide, which is what
+§SD8 asks for, and the sixteen sites carry
+`// designlint:ignore=L1 (field caption; lowercase matches its control's own
+options)` rather than being rewritten.
+
+This is a note about the RULE's resolution, not a change to §SD8's policy:
+Title Case for buttons and Sentence case for menu items stand. What v2's
+context walker should learn from it is that "field caption preceding a
+control" is a third case, and its casing follows the control it labels.
+
 ### 2026-05-16 — Path landings: keelson namespace + `cmd/designsystem` consolidation
 
 Records three deviations from the §SD2 / §SD9 / §SD11 / §SD14 path proposals that landed during M1 / M2 implementation. No design decision in §SD1–§SD10 is modified; the §SD11 layout sketch is superseded by the paths recorded here.

@@ -858,7 +858,7 @@ func (inst *treemapDriver) describeNode(n *layout.Node) string {
 func (inst *treemapDriver) renderControls() {
 	gap := styletokens.GapSections(styletokens.DensityFromEnv())
 	for range c.HorizontalTop().KeepIter() {
-		c.Label("colour").Send()
+		c.Label("colour").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		if inst.color.kind == hierColorNone {
 			// Nothing to switch to: with no `color` column the depth ramp is the
 			// whole coloring. Saying so beats a two-option bar whose other
@@ -875,7 +875,7 @@ func (inst *treemapDriver) renderControls() {
 				SendResp()
 		}
 		c.AddSpace(gap)
-		c.Label("show").Send()
+		c.Label("show").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "treemap-nesting", &inst.nesting).
 			Inline().
 			Style(selector.StyleSelectable).

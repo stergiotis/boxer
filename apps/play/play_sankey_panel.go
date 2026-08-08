@@ -769,7 +769,7 @@ func (inst *SankeyDriver) selectedNodeID() string {
 func (inst *SankeyDriver) renderControls(stagesGiven bool) {
 	gap := styletokens.GapSections(styletokens.DensityFromEnv())
 	for range c.HorizontalTop().KeepIter() {
-		c.Label("mode").Send()
+		c.Label("mode").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "sankey-mode", &inst.choice).
 			Inline().
 			Style(selector.StyleSelectable).
@@ -778,7 +778,7 @@ func (inst *SankeyDriver) renderControls(stagesGiven bool) {
 			Option(sankeyChoiceAlluvial, "alluvial").
 			SendResp()
 		c.AddSpace(gap)
-		c.Label("fill").Send()
+		c.Label("fill").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "sankey-fill", &inst.fill).
 			Inline().
 			Style(selector.StyleSelectable).

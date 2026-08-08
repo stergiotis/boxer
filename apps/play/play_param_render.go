@@ -188,9 +188,11 @@ func (inst *PlayApp) renderParamSlots() {
 			// would move every inner widget's id with it, and with it the
 			// editor state egui holds per id.
 			row := c.Frame(inst.ids.PrepareStr("paramClaim:" + subset[0].Name)).
-				Fill(color.Transparent).InnerMargin(2)
+				Fill(color.Transparent).InnerMargin(styletokens.PaddingHair(styletokens.DensityFromEnv()))
 			if inst.caretOnClaim(subset) {
-				row = row.Stroke(1.0, styleCaretRowMark)
+				// Hairline: the outline marks the row without competing with the
+				// text inside it, which the paragraph on styleCaretRowMark records.
+				row = row.Stroke(styletokens.StrokeHair, styleCaretRowMark)
 			}
 			for range row.KeepIter() {
 				for range c.Horizontal().KeepIter() {
