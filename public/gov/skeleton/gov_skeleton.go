@@ -355,6 +355,20 @@ func WriteE(dir string, files []File, p Params) (written []string, err error) {
 			}
 		}
 
+		// Never write through a symlink. Following one clobbers a file at a
+		// path this package does not believe it owns — a real repository had
+		// <name>.sh symlinked to its actual launcher, and a naive write
+		// replaced that launcher instead. The target could equally point
+		// outside the repository.
+		if fi, lstatErr := os.Lstat(full); lstatErr == nil && fi.Mode()&os.ModeSymlink != 0 {
+			dest, _ := os.Readlink(full)
+			err = eb.Build().
+				Str("path", rel).
+				Str("target", dest).
+				Errorf("refusing to write through a symlink; remove it, or point --name at the real file")
+			return
+		}
+
 		err = os.MkdirAll(filepath.Dir(full), 0o755)
 		if err != nil {
 			err = eb.Build().Str("path", full).Errorf("mkdir: %w", err)

@@ -379,3 +379,20 @@ func TestLintWrapperSourcesGateFlags(t *testing.T) {
 			"an unset array must not expand to a stray empty argument")
 	}
 }
+
+// Writing through a symlink clobbers a file at a path this package does not
+// own. A real repository had <name>.sh symlinked to its actual launcher.
+func TestWriteRefusesToFollowASymlink(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real-launcher.sh")
+	require.NoError(t, os.WriteFile(real, []byte("#!/bin/bash\necho original\n"), 0o755))
+	require.NoError(t, os.Symlink("real-launcher.sh", filepath.Join(dir, "thing.sh")))
+
+	_, err := WriteE(dir, DefaultFiles(), testParams())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "symlink")
+
+	body, readErr := os.ReadFile(real)
+	require.NoError(t, readErr)
+	assert.Equal(t, "#!/bin/bash\necho original\n", string(body), "the symlink target must be untouched")
+}
