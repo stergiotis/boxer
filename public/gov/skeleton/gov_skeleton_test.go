@@ -272,3 +272,59 @@ func TestEmittedMarkdownSatisfiesDoclint(t *testing.T) {
 		}
 	}
 }
+
+// The launcher carries a seam for the same reason lint.sh does: the second
+// repository to adopt this had coverage instrumentation in its launcher, and a
+// template that silently dropped it would have been a functional regression.
+func TestLauncherHonoursTheLocalSeam(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash unavailable")
+	}
+	dir := t.TempDir()
+	p := testParams()
+	_, err := WriteE(dir, DefaultFiles(), p)
+	require.NoError(t, err)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "scripts", "dev"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "dev", "launcher-local.sh"),
+		[]byte("EXTRA_BUILD_FLAGS+=(-cover)\nexport SEAM_RAN=1\n"), 0o644))
+
+	// Stub `go` so the launcher's build is observable without a real toolchain.
+	bin := filepath.Join(dir, "stubbin")
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"),
+		[]byte("#!/bin/bash\necho \"go $* seam=${SEAM_RAN:-0}\" > \"$(dirname \"$0\")/../observed.txt\"\ntouch \"${!#}\" 2>/dev/null || true\nexit 0\n"), 0o755))
+
+	cmd := exec.Command("bash", filepath.Join(dir, "thing.sh"))
+	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+	_ = cmd.Run() // the stubbed build produces no runnable binary; only the flags matter
+
+	observed, err := os.ReadFile(filepath.Join(dir, "observed.txt"))
+	require.NoError(t, err, "the launcher did not reach its go build")
+	assert.Contains(t, string(observed), "-cover", "EXTRA_BUILD_FLAGS was not passed through")
+	assert.Contains(t, string(observed), "seam=1", "the seam file was not sourced")
+}
+
+// Without the seam file the launcher must still build cleanly — an empty
+// EXTRA_BUILD_FLAGS array must not expand to a stray empty argument.
+func TestLauncherWithoutTheSeamPassesNoStrayArgument(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash unavailable")
+	}
+	dir := t.TempDir()
+	_, err := WriteE(dir, DefaultFiles(), testParams())
+	require.NoError(t, err)
+
+	bin := filepath.Join(dir, "stubbin")
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"),
+		[]byte("#!/bin/bash\nfor a in \"$@\"; do [ -z \"$a\" ] && { echo EMPTY-ARG > \"$(dirname \"$0\")/../observed.txt\"; exit 3; }; done\necho ok > \"$(dirname \"$0\")/../observed.txt\"\nexit 0\n"), 0o755))
+
+	cmd := exec.Command("bash", filepath.Join(dir, "thing.sh"))
+	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+	_ = cmd.Run()
+
+	observed, err := os.ReadFile(filepath.Join(dir, "observed.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "ok\n", string(observed))
+}

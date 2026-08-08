@@ -65,15 +65,26 @@ const tmplLauncher = `#!/bin/bash
 # {{.Name}}'s single entry point: build {{.AppPackage}} under this
 # repository's build tags and run it. Every CLI surface — utilities, linters,
 # code generators — is a subcommand there rather than an ad-hoc main().
+# Repository-local build flags and environment go in
+# scripts/dev/launcher-local.sh, which is sourced when present and is never
+# generated or reconciled. It may export variables and may append to
+# EXTRA_BUILD_FLAGS -- coverage instrumentation is the usual reason.
 set -euo pipefail
 
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
 
+EXTRA_BUILD_FLAGS=()
+if [ -f scripts/dev/launcher-local.sh ]; then
+    # shellcheck source=/dev/null
+    . scripts/dev/launcher-local.sh
+fi
+
 app=$(mktemp)
 trap 'rm -f -- "$app"' EXIT
 
-go build -tags "$(tr -d '\n' < tags)" -o "$app" {{.AppPackage}} 1>&2
+go build "${EXTRA_BUILD_FLAGS[@]+"${EXTRA_BUILD_FLAGS[@]}"}" \
+    -tags "$(tr -d '\n' < tags)" -o "$app" {{.AppPackage}} 1>&2
 exec "$app" "$@"
 `
 
