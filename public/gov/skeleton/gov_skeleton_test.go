@@ -360,3 +360,22 @@ func TestAdoptionAdrIsSeededIntoAnEmptyRepository(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, written, "doc/adr/0001-adopt-boxer-standards.md")
 }
+
+// A repository whose Go tree is not laid out like boxer's must be able to say
+// so without editing the generated wrapper. Found on the second adoption, whose
+// code lives under src/go rather than public.
+func TestLintWrapperSourcesGateFlags(t *testing.T) {
+	p := testParams()
+	for _, f := range DefaultFiles() {
+		rel, content, err := RenderE(f, p)
+		require.NoError(t, err)
+		if rel != "scripts/ci/lint.sh" {
+			continue
+		}
+		body := string(content)
+		assert.Contains(t, body, "gate-flags.sh", "no seam for repository-specific gate configuration")
+		assert.Contains(t, body, "GATE_FLAGS", "the seam sets no variable the gate call uses")
+		assert.Contains(t, body, `"${GATE_FLAGS[@]+"${GATE_FLAGS[@]}"}"`,
+			"an unset array must not expand to a stray empty argument")
+	}
+}

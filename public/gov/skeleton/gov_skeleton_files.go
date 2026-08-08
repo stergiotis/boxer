@@ -188,13 +188,23 @@ else
 fi
 
 echo ""
-# Repository-specific exclusions live here, in one place, rather than as a
-# grep filter duplicated between this script and an editor hook.
-excludes=()
-# excludes+=(--exclude 'attic/')
-# excludes+=(--exclude '*.gen.md')
+# Repository-local gate configuration — package patterns for a tree that is not
+# laid out like boxer's, exclusions, baselines — goes in scripts/ci/
+# gate-flags.sh, which is sourced when present and is never generated or
+# reconciled. It may append to GATE_FLAGS, e.g.
+#
+#   GATE_FLAGS+=(--code-pattern ./src/go/...)
+#   GATE_FLAGS+=(--exclude 'attic/' --exclude 'experiments/')
+#   GATE_FLAGS+=(--naming-baseline scripts/ci/naming-baseline.txt)
+#
+# Keeping it out of this file is what lets this file stay generated.
+GATE_FLAGS=()
+if [ -f "$here/gate-flags.sh" ]; then
+    # shellcheck source=/dev/null
+    . "$here/gate-flags.sh"
+fi
 
-if ! ./{{.Name}}.sh gov gate --tags "$tags" "${excludes[@]+"${excludes[@]}"}"; then
+if ! ./{{.Name}}.sh gov gate --tags "$tags" "${GATE_FLAGS[@]+"${GATE_FLAGS[@]}"}"; then
     rc=1
 fi
 
