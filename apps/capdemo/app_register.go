@@ -18,12 +18,18 @@ import (
 //     subscribes to fs.> and replies on the request inbox.
 //   - fs.dialog.watch — request the folder-watch picker. Pub only;
 //     the broker mints a HandleModeWatch handle on Resolve.
-//   - fs.handle.> — publish read/watch/unwatch/close requests on any
-//     granted handle. Declared eagerly; the broker also augments the
-//     client's caps with the narrower fs.handle.{uuid}.> on Resolve
-//     (CapDirectionBoth for watch handles, so .event subscribe is
-//     allowed). Future commits can narrow this manifest cap once a
-//     "request-specific narrow grant" path is preferred.
+//   - fs.handle.> — deliberately NOT declared, which is as much the point
+//     of the demo as the two above. It used to be, "eagerly", with a note
+//     that a request-specific narrow grant would be preferable; that is
+//     what the broker was already doing. Resolve adds the narrow
+//     fs.handle.{uuid}.> to this client the moment the USER approves a
+//     dialog and revokes it on close (CapDirectionBoth for watch handles,
+//     so the .event subscribe is allowed — a half this manifest never
+//     carried anyway, since its entry was Pub only). Declaring the
+//     wildcard therefore bought nothing and cost the distinction between
+//     a per-file, revocable, user-approved authority and a standing one
+//     over every handle the broker ever mints. The round-trip tests run
+//     on these caps alone, watch included, which is what shows it.
 //   - PersistedKeys → host auto-injects runtime.persist.{ownAlias}.>
 //     so the app doesn't repeat the boilerplate cap pattern. The
 //     scratchpad key is the single value this demo persists.
@@ -51,11 +57,6 @@ var manifest = app.Manifest{
 			Pattern:   fsbroker.SubjectDialogWatch,
 			Direction: app.CapDirectionPub,
 			Reason:    "demo: request a folder-watch dialog via Powerbox",
-		},
-		{
-			Pattern:   fsbroker.HandleSubjectPrefix + ">",
-			Direction: app.CapDirectionPub,
-			Reason:    "demo: publish read/watch/unwatch/close on the granted handle",
 		},
 		{
 			Pattern:   clipboardbroker.SubjectWrite,

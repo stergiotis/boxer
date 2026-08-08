@@ -163,15 +163,25 @@ func TestApp_PersistSet_NoStorage_Errors(t *testing.T) {
 }
 
 func TestManifest_DeclaresExpectedCaps(t *testing.T) {
-	require.Len(t, manifest.Caps, 4)
+	require.Len(t, manifest.Caps, 3)
 	patterns := make([]string, 0, len(manifest.Caps))
 	for _, cap := range manifest.Caps {
 		patterns = append(patterns, cap.Pattern)
 	}
 	assert.Contains(t, patterns, fsbroker.SubjectDialogRead)
 	assert.Contains(t, patterns, fsbroker.SubjectDialogWatch)
-	assert.Contains(t, patterns, fsbroker.HandleSubjectPrefix+">")
 	assert.Contains(t, patterns, clipboardbroker.SubjectWrite)
+	// No static fs.handle.> — the broker adds the narrow fs.handle.{uuid}.>
+	// to this app's live client when the USER approves a dialog and revokes it
+	// on close, so declaring the wildcard would trade a per-file, revocable,
+	// user-approved grant for standing authority over every handle the broker
+	// ever mints. The round-trip tests above run on exactly these caps —
+	// including the watch flow, whose .event Subscribe needs the Sub half the
+	// dynamic grant carries and this manifest never had.
+	for _, cap := range manifest.Caps {
+		assert.NotContains(t, cap.Pattern, fsbroker.HandleSubjectPrefix,
+			"handle caps are granted dynamically, never declared")
+	}
 	require.Len(t, manifest.PersistedKeys, 1)
 	assert.Equal(t, scratchpadKey, manifest.PersistedKeys[0])
 }

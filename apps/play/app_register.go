@@ -215,11 +215,6 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Reason:    "Load .sql via Powerbox picker",
 			},
 			{
-				Pattern:   fsbroker.HandleSubjectPrefix + ">",
-				Direction: app.CapDirectionPub,
-				Reason:    "read file contents through granted handle",
-			},
-			{
 				Pattern:   chlocalbroker.SubjectExecPrefix + timerangepicker.PoolName,
 				Direction: app.CapDirectionPub,
 				Reason:    "evaluate user time-range expressions (ADR-0016 Phase 4)",

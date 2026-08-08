@@ -36,11 +36,6 @@ var manifest = app.Manifest{
 			Direction: app.CapDirectionPub,
 			Reason:    "Export as .md via the Powerbox save dialog (ADR-0132 O4 'B')",
 		},
-		{
-			Pattern:   fsbroker.HandleSubjectPrefix + ">",
-			Direction: app.CapDirectionPub,
-			Reason:    "write the composed document through the granted file handle",
-		},
 	},
 	LaunchKind: appletcreatecfg.Kind,
 }

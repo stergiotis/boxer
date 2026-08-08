@@ -2,6 +2,8 @@ package sqlappletcreator
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 )
 
 // fakeSaveBus captures the applet.store.save request the creator makes and
@@ -268,4 +271,62 @@ func TestExportWaitsLongEnoughForAPerson(t *testing.T) {
 		"the handle write has no human in it and should not wait like the dialog")
 	assert.Greater(t, bus.waits[fsbroker.SubjectDialogWrite], time.Minute,
 		"anything near the transport default fails while the picker is open")
+}
+
+// TestExport_RunsOnTheManifestCapsAlone is the check the fake bus above cannot
+// make: it answers every subject regardless of authority, so it would keep
+// passing after the manifest lost a cap the flow actually needs.
+//
+// The manifest deliberately does NOT declare fs.handle.> — the broker adds the
+// narrow fs.handle.{uuid}.> to this app's live client when the USER approves
+// the save dialog, and revokes it on close, so the wildcard would only convert
+// a per-file, revocable, user-approved grant into standing authority over
+// every handle the broker ever mints. This runs the whole export against a
+// REAL broker wired with exactly the manifest's caps, which is what turns that
+// from an assumption into a demonstration.
+func TestExport_RunsOnTheManifestCapsAlone(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	bus.SetRequestTimeout(2 * time.Second)
+	fs, err := fsbroker.NewService(bus, zerolog.Nop())
+	require.NoError(t, err)
+	defer fs.Close()
+
+	busC := bus.NewClient(app.AppIdT(manifest.Id), manifest.Caps)
+	inst := &App{bus: busC, log: zerolog.Nop(), sql: "SELECT 7", slug: "caps-check", title: "Caps Check", icon: "📄"}
+
+	path := filepath.Join(t.TempDir(), "caps-check.md")
+	inst.export()
+
+	var reqId string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if pending := fs.Pending(); len(pending) == 1 {
+			reqId = pending[0].Id
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	require.NotEmpty(t, reqId, "the save dialog must reach the broker on the manifest's caps")
+	_, err = fs.Resolve(reqId, path)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		inst.mu.Lock()
+		defer inst.mu.Unlock()
+		return strings.Contains(inst.status, "exported")
+	}, 2*time.Second, 10*time.Millisecond, "the handle write must be permitted by the dynamic grant alone")
+
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(got), "```sql\nSELECT 7\n```")
+}
+
+// TestManifest_DeclaresNoWildcardHandleCap keeps the narrowing from being
+// undone by a future flow that finds it easier to declare the wildcard than to
+// trust the grant.
+func TestManifest_DeclaresNoWildcardHandleCap(t *testing.T) {
+	for _, c := range manifest.Caps {
+		assert.NotContains(t, c.Pattern, fsbroker.HandleSubjectPrefix,
+			"handle caps are granted dynamically by the broker, never declared")
+	}
 }

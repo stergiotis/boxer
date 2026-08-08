@@ -43,15 +43,18 @@ func setupPlayWithCapsTimeout(t *testing.T, busTimeout time.Duration) (inst *Pla
 	require.NoError(t, err)
 
 	id := app.AppIdT("github.com/stergiotis/boxer/apps/play")
-	caps := []app.SubjectFilter{
-		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub,
-			Reason: "Load .sql via Powerbox"},
-		{Pattern: fsbroker.HandleSubjectPrefix + ">", Direction: app.CapDirectionPub,
-			Reason: "read granted handle"},
-		// Host-injected for PersistedKeys=[lastSql].
-		{Pattern: persist.SubjectPrefix + id.SubjectAlias() + ".>", Direction: app.CapDirectionPub,
-			Reason: "test fixture: persist auto-inject"},
-	}
+	// The MANIFEST's own caps, not a hand-copy of them. A copy drifts, and it
+	// drifted in exactly the direction that matters: it kept granting
+	// fs.handle.> after the manifest stopped declaring it, so the round-trip
+	// test below would have gone on passing on an authority the real app no
+	// longer has. Only the host-injected persist cap is added, because the
+	// windowhost derives that one from PersistedKeys rather than the manifest.
+	caps := append([]app.SubjectFilter(nil), (&PlayLauncher{}).Manifest().Caps...)
+	caps = append(caps, app.SubjectFilter{
+		Pattern:   persist.SubjectPrefix + id.SubjectAlias() + ".>",
+		Direction: app.CapDirectionPub,
+		Reason:    "test fixture: persist auto-inject",
+	})
 	busC := bus.NewClient(id, caps)
 	storage, err := persist.NewClient(busC, id)
 	require.NoError(t, err)
@@ -159,22 +162,31 @@ func TestPlayApp_RestorePersistedSql_EmptyValue_KeepsDefault(t *testing.T) {
 
 func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
-	// Five declared Caps: fs dialog + fs handle wildcard + chlocalbroker
-	// pool for the time-range evaluator + windowhost.open for the
-	// Save-as-applet launch (ADR-0135 §SD7) + adhoc.publish for the
-	// timeseries fixture lab (ADR-0163 §SD7). The applet-store save cap moved
-	// out with the O4 authoring form (now apps/sqlappletcreator).
+	// Four declared Caps: fs dialog + chlocalbroker pool for the time-range
+	// evaluator + windowhost.open for the Save-as-applet launch (ADR-0135
+	// §SD7) + adhoc.publish for the timeseries fixture lab (ADR-0163 §SD7).
+	// The applet-store save cap moved out with the O4 authoring form (now
+	// apps/sqlappletcreator); the fs.handle.> wildcard came out once the
+	// broker's dynamic per-handle grant was shown to be sufficient.
 	//
 	// The count is asserted on purpose: a capability is an authority this app
 	// is granted, so adding one has to be a deliberate edit here rather than
 	// something that rides along with a feature.
-	require.Len(t, m.Caps, 5)
+	require.Len(t, m.Caps, 4)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)
 	}
 	assert.Contains(t, patterns, fsbroker.SubjectDialogRead)
-	assert.Contains(t, patterns, fsbroker.HandleSubjectPrefix+">")
+	// No static fs.handle.> — the broker grants the narrow fs.handle.{uuid}.>
+	// when the USER approves the picker and revokes it on close, so the
+	// wildcard would only convert a per-file, revocable grant into standing
+	// authority over every handle. TestPlayApp_LoadFromPicker_RoundTrip runs
+	// on exactly these caps, which is what shows it is unnecessary.
+	for _, cap := range m.Caps {
+		assert.NotContains(t, cap.Pattern, fsbroker.HandleSubjectPrefix,
+			"handle caps are granted dynamically, never declared")
+	}
 	assert.Contains(t, patterns, "ch.local.exec."+timerangepicker.PoolName)
 	assert.Contains(t, patterns, windowhost.OpenSubject)
 	assert.Contains(t, patterns, adhocdata.SubjectPublish)

@@ -359,6 +359,37 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-08-08 (later) — no app declares `fs.handle.>`; the dynamic grant is the whole story
+
+§SD7's grant model has two halves, and only one of them was being used. `Resolve`
+adds the narrow `fs.handle.{uuid}.>` to the requesting client the moment the
+USER approves a dialog — `CapDirectionBoth` for watch handles, so the `.event`
+subscribe is covered — and `handleClose` revokes it. Every app nonetheless
+declared a static `fs.handle.>` in its manifest as well.
+
+That static cap was doing nothing except widening the app. It converted a
+per-file, revocable, user-approved authority into a standing one over every
+handle the broker ever mints, for the lifetime of the process. capdemo's
+manifest comment had already spotted it — "future commits can narrow this
+manifest cap once a request-specific narrow grant path is preferred" — without
+noticing that the broker was already doing exactly that.
+
+All four consumers now declare only the `fs.dialog.*` subjects they use:
+mdedit (which never declared it), `sqlappletcreator`, `capdemo` and play. The
+tests are what make this a demonstration rather than a reading of the code —
+each app's round-trip runs against a real broker wired with the manifest's own
+caps and nothing else, capdemo's watch flow included, and each has a guard
+refusing a pattern containing `fs.handle.`.
+
+Two things that only surfaced by doing it. capdemo's static entry was `Pub`
+only, so its `.event` subscribe had *always* depended on the dynamic grant's
+`Both` — the manifest cap could not have carried that flow even in principle.
+And play's test fixture hand-copied the manifest's caps rather than reading
+them, so it kept granting the wildcard after the manifest stopped declaring it;
+the round-trip would have gone on passing on an authority the real app no
+longer had. It now reads `Manifest().Caps` directly, which is the shape any
+cap-sensitive fixture wants.
+
 ### 2026-08-08 — `BusI.RequestWithTimeout`: a request bounded by a person, not by a service
 
 `BusI.Request` waits whatever the transport was configured for — five seconds
