@@ -34,6 +34,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
@@ -584,7 +585,7 @@ func (inst *App) renderStatsTable(recWidth int) {
 	for i, cl := range classes {
 		marker := ""
 		if cl.Width == recWidth {
-			marker = "►"
+			marker = icons.PhCaretRight
 			markerRow = i
 		}
 		c.TableCellText(marker).Send()

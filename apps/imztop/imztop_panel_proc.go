@@ -3,6 +3,7 @@ package imztop
 import (
 	"cmp"
 	"fmt"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"slices"
 	"strings"
 
@@ -214,9 +215,9 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 			inst.setProcFilter(inst.procFilterDraft)
 		}
 		c.AddSpace(inst.spaceOuter())
-		treeLabel := "tree ▸"
+		treeLabel := "tree " + icons.PhCaretRight
 		if view.Tree {
-			treeLabel = "tree ▾"
+			treeLabel = "tree " + icons.PhCaretDown
 		}
 		if c.Button(inst.ids.PrepareStr("proc-tree-tgl"), c.Atoms().Text(treeLabel).Keep()).
 			Selected(view.Tree).

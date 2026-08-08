@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -60,46 +61,46 @@ func calloutTheme(typ string) (theme calloutThemeE, glyph string) {
 	switch strings.ToLower(typ) {
 	case "note":
 		theme = calloutThemeNote
-		glyph = "📝"
+		glyph = icons.PhNotePencil
 	case "info":
 		theme = calloutThemeNote
-		glyph = "ℹ"
+		glyph = icons.PhInfo
 	case "abstract", "summary", "tldr":
 		theme = calloutThemeNote
-		glyph = "📑"
+		glyph = icons.PhBookmarks
 	case "todo":
 		theme = calloutThemeNote
-		glyph = "☐"
+		glyph = icons.PhSquare
 	case "example":
 		theme = calloutThemeNote
-		glyph = "📋"
+		glyph = icons.PhClipboard
 	case "tip", "hint", "important":
 		theme = calloutThemeTip
-		glyph = "💡"
+		glyph = icons.PhLightbulb
 	case "success", "check", "done":
 		theme = calloutThemeTip
-		glyph = "✓"
+		glyph = icons.PhCheck
 	case "question", "help", "faq":
 		theme = calloutThemeNote
-		glyph = "❓"
+		glyph = icons.PhQuestion
 	case "warning", "caution", "attention":
 		theme = calloutThemeWarning
-		glyph = "⚠"
+		glyph = icons.PhWarning
 	case "failure", "fail", "missing":
 		theme = calloutThemeDanger
-		glyph = "✗"
+		glyph = icons.PhX
 	case "danger", "error":
 		theme = calloutThemeDanger
-		glyph = "⛔"
+		glyph = icons.PhProhibit
 	case "bug":
 		theme = calloutThemeDanger
-		glyph = "🐞"
+		glyph = icons.PhBug
 	case "quote", "cite":
 		theme = calloutThemeQuote
-		glyph = "❝"
+		glyph = icons.PhQuotes
 	default:
 		theme = calloutThemeDefault
-		glyph = "•"
+		glyph = icons.PhDot
 	}
 	return
 }

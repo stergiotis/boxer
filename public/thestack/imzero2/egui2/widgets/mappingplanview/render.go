@@ -490,7 +490,7 @@ func renderTupleElem(ids *c.WidgetIdStack, m *Model, e *TupleElemRow) (remove bo
 				for range c.HorizontalTop().KeepIter() {
 					kind := "◇ value"
 					if e.IsMembership {
-						kind = "⚑ @membership"
+						kind = icons.PhFlag + " @membership"
 					}
 					for rt := range c.RichTextLabel(kind) {
 						rt.Small().Monospace()
@@ -687,7 +687,7 @@ func renderRowFlags(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 func rowCategory(r *FieldRow) (glyph, word string, col styletokens.RGBA8) {
 	switch {
 	case r.IsTuple:
-		return "⧉", "tuple", styletokens.SuccessDefault
+		return icons.PhCopy, "tuple", styletokens.SuccessDefault
 	case r.IsConst:
 		return "▪", "const", styletokens.WarningDefault
 	case r.Membership == "":

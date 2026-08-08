@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
@@ -138,7 +139,7 @@ func ProvenanceChip(p Provenance) {
 		// "↳" is the visual binding cue — same glyph used in the
 		// bezier-connector demo's overlay caption so the affordance
 		// reads as one consistent vocabulary.
-		c.Label("↳").Send()
+		c.Label(icons.PhArrowElbowDownRight).Send()
 		if p.Subject != "" {
 			c.LabelAtoms(c.Atoms().BeginRichText(p.Subject).Monospace().End().Keep()).Send()
 		}

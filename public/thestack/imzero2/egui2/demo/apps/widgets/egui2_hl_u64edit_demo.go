@@ -3,6 +3,7 @@ package widgets
 import (
 	"fmt"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 )
@@ -79,7 +80,7 @@ func demoU64Edit(ids *c.WidgetIdStack) {
 		c.DragValueU64(ids.PrepareStr("u64-drag"), u64demoDrag).
 			Hexadecimal(16, false, false).Speed(0).
 			SendRespVal(&u64demoDrag)
-		c.Label("✗ f64→i64 clamp: shows 7fffffffffffffff, not …f00d").Send()
+		c.Label(icons.PhX + " f64→i64 clamp: shows 7fffffffffffffff, not …f00d").Send()
 	}
 
 	c.Separator().Send()

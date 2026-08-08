@@ -1371,7 +1371,7 @@ func filterManifests(manifests []app.Manifest, f launcherFilter) (hits []app.Man
 // rationale.
 func (inst *Inst) renderEmptyState(ids *c.WidgetIdStack) {
 	c.Label("No applications open.").Send()
-	c.Label("Pick one below, or use the Apps ▾ menu in the top bar.").Send()
+	c.Label("Pick one below, or use the Apps " + icons.PhCaretDown + " menu in the top bar.").Send()
 	c.AddSpace(styletokens.GapItems(inst.density))
 	manifests := inst.registry.AllManifests()
 	if len(manifests) == 0 {
@@ -1523,7 +1523,7 @@ func (inst *Inst) renderTopicChips(ids *c.WidgetIdStack) {
 			// An explicit reset: with several chips on, clicking each one
 			// off again is tedious, and "no chips" is not otherwise
 			// reachable in one gesture.
-			if c.Button(ids.PrepareStr("topic-chip-clear"), c.Atoms().Text("✕ Clear").Keep()).
+			if c.Button(ids.PrepareStr("topic-chip-clear"), c.Atoms().Text(icons.PhX+" Clear").Keep()).
 				SendResp().HasPrimaryClicked() {
 				inst.topicFilter = 0
 			}
@@ -1731,7 +1731,7 @@ func (inst *Inst) renderKindMenu(ids *c.WidgetIdStack) {
 	inst.ensureKindShown()
 	for range c.MenuButton(c.Atoms().Text("Show").Keep()).KeepIter() {
 		for i, k := range app.AllKinds {
-			mark := "✔ "
+			mark := icons.PhCheck + " "
 			if !inst.kindShown[i] {
 				// An en-space, not a plain space: it advances the same
 				// width as the check mark, so the labels stay aligned

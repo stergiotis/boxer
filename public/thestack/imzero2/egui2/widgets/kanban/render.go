@@ -186,7 +186,7 @@ func RenderLegend(legend []DotKind) {
 // whole multi-widget Horizontal in HoverText was tried first and silently
 // dropped its content, so the swatch dot stays outside the wrap.
 func renderLegendEntry(dk DotKind) {
-	for rt := range c.RichTextLabelColored(dk.Color, color.Transparent, "●") {
+	for rt := range c.RichTextLabelColored(dk.Color, color.Transparent, icons.PhDot) {
 		rt.Small()
 	}
 	if dk.Tooltip == "" {
@@ -303,11 +303,11 @@ func renderCard(in Input, m *Model, ci int, colW float32, atFirst, atLast bool, 
 				for range c.Horizontal().KeepIter() {
 					switch {
 					case card.ParentID != 0:
-						for rt := range c.RichTextLabel("↳") {
+						for rt := range c.RichTextLabel(icons.PhArrowElbowDownRight) {
 							rt.Weak()
 						}
 					case card.Accent.Kind() != color.ColorKindNone:
-						for rt := range c.RichTextLabelColored(card.Accent, color.Transparent, "●") {
+						for rt := range c.RichTextLabelColored(card.Accent, color.Transparent, icons.PhDot) {
 							rt.Small()
 						}
 					}
@@ -404,7 +404,7 @@ func renderRelations(ids *c.WidgetIdStack, m *Model, card Card) {
 		return
 	}
 	if done, total := m.rollup(card.ID); total > 0 {
-		badge.New(ids.PrepareStr("kids"), "◱ "+strconv.Itoa(done)+"/"+strconv.Itoa(total)).
+		badge.New(ids.PrepareStr("kids"), icons.PhSquareHalfBottom+" "+strconv.Itoa(done)+"/"+strconv.Itoa(total)).
 			Tone(rollupTone(done, total)).
 			Variant(badge.VariantSoft).
 			Size(badge.SizeSm).
@@ -687,7 +687,7 @@ func renderSwimlaneHeader(ids *c.WidgetIdStack, m *Model, density styletokens.De
 		title := s.label
 		if s.parent != nil {
 			if s.parent.Accent.Kind() != color.ColorKindNone {
-				for rt := range c.RichTextLabelColored(s.parent.Accent, color.Transparent, "●") {
+				for rt := range c.RichTextLabelColored(s.parent.Accent, color.Transparent, icons.PhDot) {
 					rt.Small()
 				}
 			}
@@ -700,7 +700,7 @@ func renderSwimlaneHeader(ids *c.WidgetIdStack, m *Model, density styletokens.De
 		// own cards for a field/Standalone lane).
 		c.AddSpace(styletokens.GapInline(density))
 		done, total := m.rollupOfIdxs(s.cardIdxs)
-		badge.New(ids.PrepareStr("roll"), "◱ "+strconv.Itoa(done)+"/"+strconv.Itoa(total)).
+		badge.New(ids.PrepareStr("roll"), icons.PhSquareHalfBottom+" "+strconv.Itoa(done)+"/"+strconv.Itoa(total)).
 			Tone(rollupTone(done, total)).
 			Variant(badge.VariantSoft).
 			Size(badge.SizeSm).

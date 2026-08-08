@@ -475,7 +475,7 @@ func swDragValueSection(ids *c.WidgetIdStack, st *standardWidgetsDemoState) {
 		"good for small magnitudes only: DragValue is f64-backed, so values > 2^53 round; Prefix/Suffix wrap the rendered value")
 	for range c.Horizontal().KeepIter() {
 		c.DragValueU64(ids.PrepareStr("dv-u"), st.dragU).
-			Speed(1.0).Prefix("⌀ ").Suffix(" px").
+			Speed(1.0).Prefix(icons.PhCircleDashed + " ").Suffix(" px").
 			SendRespVal(&st.dragU)
 		c.Label(fmt.Sprintf("= %d", st.dragU)).Send()
 	}

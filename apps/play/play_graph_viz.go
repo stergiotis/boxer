@@ -312,7 +312,7 @@ func (inst *PlayApp) renderSystemGraph() {
 			inst.observedNode = id
 		}
 	}
-	for rt := range c.RichTextLabel("constants ▭ and signals ⬭ feed queries ▭ feed panels ▭; panel writes loop back (accent). drag pans, ctrl+scroll zooms; click a query node to observe it") {
+	for rt := range c.RichTextLabel("constants and signals feed queries feed panels; panel writes loop back (accent). drag pans, ctrl+scroll zooms; click a query node to observe it") {
 		rt.Small().Weak()
 	}
 }

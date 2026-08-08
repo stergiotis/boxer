@@ -15,6 +15,7 @@ package runtimestatus
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
@@ -119,9 +120,9 @@ func renderStatusSegment(ids *c.WidgetIdStack, name string, active bool, capId s
 	// the clickable variant. The "✓"/"✗" glyph still differentiates.
 	var glyph string
 	if active {
-		glyph = "✓"
+		glyph = icons.PhCheck
 	} else {
-		glyph = "✗"
+		glyph = icons.PhX
 	}
 	if c.SelectableLabel(ids.PrepareStr("seg-"+capId), false, name+" "+glyph).
 		SendResp().HasPrimaryClicked() {
@@ -151,10 +152,10 @@ func monoStatus(name string, active bool) {
 	var glyph string
 	var col color.Color
 	if active {
-		glyph = "✓"
+		glyph = icons.PhCheck
 		col = color.Hex(styletokens.SuccessDefault.AsHex())
 	} else {
-		glyph = "✗"
+		glyph = icons.PhX
 		col = color.Hex(styletokens.ErrorDefault.AsHex())
 	}
 	c.LabelAtoms(
