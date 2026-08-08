@@ -21,6 +21,29 @@ func NewLinter() (inst *Linter) {
 	return
 }
 
+// NewDefaultLinter returns a Linter carrying every shipped CS rule.
+//
+// This is the rule set `gov codelint` runs, and the one an embedder — the
+// composite gate, a consuming repository's own entry point — gets by default.
+// It exists so those callers cannot silently diverge from the command: a rule
+// added here reaches all of them at once.
+func NewDefaultLinter() (inst *Linter) {
+	inst = NewLinter()
+	inst.Register(NewRuleCS001())
+	inst.Register(NewRuleCS002())
+	inst.Register(NewRuleCS003())
+	inst.Register(NewRuleCS004())
+	inst.Register(NewRuleCS005())
+	inst.Register(NewRuleCS006())
+	inst.Register(NewRuleCS007())
+	inst.Register(NewRuleCS008())
+	inst.Register(NewRuleCS009())
+	inst.Register(NewRuleCS010())
+	inst.Register(NewRuleCS011())
+	inst.Register(NewRuleCS012())
+	return
+}
+
 func (inst *Linter) Register(r RuleI) {
 	inst.rules = append(inst.rules, r)
 }

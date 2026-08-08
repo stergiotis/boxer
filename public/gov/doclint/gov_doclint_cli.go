@@ -48,17 +48,7 @@ func doclintAction(ctx *cli.Context) (err error) {
 		roots = []string{"."}
 	}
 
-	linter := NewLinter()
-	linter.Register(NewRuleDL001())
-	linter.Register(NewRuleDL003())
-	linter.Register(NewRuleDL004())
-	linter.Register(NewRuleDL005())
-	linter.Register(NewRuleDL006())
-	linter.Register(NewRuleDL007())
-	linter.Register(NewRuleDL008())
-	linter.Register(NewRuleDL009())
-	linter.Register(NewRuleDL010())
-	linter.Register(NewRuleDL011())
+	linter := NewDefaultLinter()
 
 	var rep ReporterI
 	rep, err = NewReporterE(format, os.Stdout)

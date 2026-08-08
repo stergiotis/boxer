@@ -74,6 +74,29 @@ func NewLinter() (inst *Linter) {
 	return
 }
 
+// NewDefaultLinter returns a Linter carrying every shipped rule.
+//
+// This is the rule set `gov doclint` runs, and the one an embedder — the
+// composite gate, an editor hook, a consuming repository's own entry point —
+// gets by default. It exists so those callers cannot silently diverge from the
+// command: a rule added here reaches all of them at once.
+//
+// DL002 is absent because no such rule ships; the numbering is historical.
+func NewDefaultLinter() (inst *Linter) {
+	inst = NewLinter()
+	inst.Register(NewRuleDL001())
+	inst.Register(NewRuleDL003())
+	inst.Register(NewRuleDL004())
+	inst.Register(NewRuleDL005())
+	inst.Register(NewRuleDL006())
+	inst.Register(NewRuleDL007())
+	inst.Register(NewRuleDL008())
+	inst.Register(NewRuleDL009())
+	inst.Register(NewRuleDL010())
+	inst.Register(NewRuleDL011())
+	return
+}
+
 func (inst *Linter) Register(r RuleI) {
 	inst.rules = append(inst.rules, r)
 }

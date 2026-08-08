@@ -1,9 +1,11 @@
 package dev
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/types"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -57,24 +59,55 @@ func newEntryPointsSubcommand() *cli.Command {
 	}
 }
 
-func entryPointsAction(ctx *cli.Context) (err error) {
-	root := ctx.String("root")
-	strict := ctx.Bool("strict")
-	baselinePath := ctx.String("baseline")
+// EntryPointsConfig parameterises [AuditEntryPointsE].
+//
+// Root is the directory packages are loaded from; BaselinePath, when non-empty,
+// names a file of grandfathered package import paths (see [loadBaseline]).
+type EntryPointsConfig struct {
+	Root         string
+	BaselinePath string
+	Tags         []string
+}
 
-	tags := make([]string, 0, 8)
-	if t := ctx.String("tags"); t != "" {
-		for x := range strings.SplitSeq(t, ",") {
-			x = strings.TrimSpace(x)
-			if x != "" {
-				tags = append(tags, x)
-			}
-		}
+// EntryPointAudit is one `package main` measured against the three checks
+// CODINGSTANDARDS.md "Entry Points" requires.
+//
+// Baselined records whether the package is grandfathered, not whether it
+// passes; a baselined package with all three checks true is simply Conformant.
+type EntryPointAudit struct {
+	PkgPath   string
+	CliOK     bool
+	LoggingOK bool
+	VcsOK     bool
+	Baselined bool
+}
+
+func (inst EntryPointAudit) Conformant() (ok bool) {
+	return inst.CliOK && inst.LoggingOK && inst.VcsOK
+}
+
+// Failing reports whether this entry point should fail a strict audit — not
+// conformant and not grandfathered.
+func (inst EntryPointAudit) Failing() (bad bool) {
+	return !inst.Conformant() && !inst.Baselined
+}
+
+// AuditEntryPointsE loads every package under cfg.Root and measures each
+// `package main` against the entry-point standard.
+//
+// Results are sorted by import path so callers render a stable table. The
+// audit is reported, not enforced: deciding what a failure costs belongs to
+// the caller, which is what lets the CLI, the composite gate and a consuming
+// repository share one implementation.
+func AuditEntryPointsE(ctx context.Context, cfg EntryPointsConfig) (audits []EntryPointAudit, err error) {
+	root := cfg.Root
+	if root == "" {
+		root = "."
 	}
 
 	baseline := make(map[string]struct{}, 0)
-	if baselinePath != "" {
-		baseline, err = loadBaseline(baselinePath)
+	if cfg.BaselinePath != "" {
+		baseline, err = loadBaseline(cfg.BaselinePath)
 		if err != nil {
 			return
 		}
@@ -87,39 +120,25 @@ func entryPointsAction(ctx *cli.Context) (err error) {
 			packages.NeedTypes |
 			packages.NeedTypesInfo |
 			packages.NeedImports,
-		Context: ctx.Context,
+		Context: ctx,
 		Dir:     root,
 	}
-	if len(tags) > 0 {
-		pcfg.BuildFlags = []string{"-tags=" + strings.Join(tags, ",")}
+	if len(cfg.Tags) > 0 {
+		pcfg.BuildFlags = []string{"-tags=" + strings.Join(cfg.Tags, ",")}
 	}
 
 	var pkgs []*packages.Package
 	pkgs, err = packages.Load(pcfg, "./...")
 	if err != nil {
-		err = eb.Build().Str("root", root).Strs("tags", tags).Errorf("unable to load packages: %w", err)
+		err = eb.Build().Str("root", root).Strs("tags", cfg.Tags).Errorf("unable to load packages: %w", err)
 		return
 	}
 
-	mains := make([]*packages.Package, 0, len(pkgs))
+	audits = make([]EntryPointAudit, 0, 8)
 	for _, p := range pkgs {
-		if p.Name == "main" {
-			mains = append(mains, p)
+		if p.Name != "main" {
+			continue
 		}
-	}
-	sort.Slice(mains, func(i, j int) bool { return mains[i].PkgPath < mains[j].PkgPath })
-
-	if len(mains) == 0 {
-		log.Info().Str("root", root).Strs("tags", tags).Msg("no main packages discovered")
-		return
-	}
-
-	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "ENTRY POINT\tCLI/V2\tLOGGING.APPLY\tBUILDVERSIONINFO\tSTATUS")
-
-	failCount := uint64(0)
-	baselinedCount := uint64(0)
-	for _, p := range mains {
 		if len(p.Errors) > 0 {
 			log.Warn().
 				Str("pkg", p.PkgPath).
@@ -128,27 +147,82 @@ func entryPointsAction(ctx *cli.Context) (err error) {
 				Msg("package has load errors; audit may be incomplete")
 		}
 		_, cliOK := p.Imports[urfaveCliV2ImportPath]
-		loggingOK := packageReferencesFunc(p, loggingApplyFQN)
-		vcsOK := packageCallsFunc(p, buildVersionInfoFQN)
-		conformant := cliOK && loggingOK && vcsOK
 		_, isBaselined := baseline[p.PkgPath]
+		audits = append(audits, EntryPointAudit{
+			PkgPath:   p.PkgPath,
+			CliOK:     cliOK,
+			LoggingOK: packageReferencesFunc(p, loggingApplyFQN),
+			VcsOK:     packageCallsFunc(p, buildVersionInfoFQN),
+			Baselined: isBaselined,
+		})
+	}
+	sort.Slice(audits, func(i, j int) bool { return audits[i].PkgPath < audits[j].PkgPath })
+	return
+}
+
+// WriteEntryPointsTable renders audits as the aligned table the CLI and the
+// composite gate both print.
+func WriteEntryPointsTable(w io.Writer, audits []EntryPointAudit) {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "ENTRY POINT\tCLI/V2\tLOGGING.APPLY\tBUILDVERSIONINFO\tSTATUS")
+	for _, a := range audits {
 		var status string
 		switch {
-		case conformant:
+		case a.Conformant():
 			status = "ok"
-		case isBaselined:
+		case a.Baselined:
 			status = "baselined"
-			baselinedCount++
 		default:
 			status = "fail"
-			failCount++
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.PkgPath, mark(cliOK), mark(loggingOK), mark(vcsOK), status)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", a.PkgPath, mark(a.CliOK), mark(a.LoggingOK), mark(a.VcsOK), status)
 	}
 	_ = tw.Flush()
+}
+
+func entryPointsAction(ctx *cli.Context) (err error) {
+	root := ctx.String("root")
+	strict := ctx.Bool("strict")
+
+	tags := make([]string, 0, 8)
+	if t := ctx.String("tags"); t != "" {
+		for x := range strings.SplitSeq(t, ",") {
+			x = strings.TrimSpace(x)
+			if x != "" {
+				tags = append(tags, x)
+			}
+		}
+	}
+
+	var audits []EntryPointAudit
+	audits, err = AuditEntryPointsE(ctx.Context, EntryPointsConfig{
+		Root:         root,
+		BaselinePath: ctx.String("baseline"),
+		Tags:         tags,
+	})
+	if err != nil {
+		return
+	}
+
+	if len(audits) == 0 {
+		log.Info().Str("root", root).Strs("tags", tags).Msg("no main packages discovered")
+		return
+	}
+
+	WriteEntryPointsTable(os.Stdout, audits)
+
+	failCount := uint64(0)
+	baselinedCount := uint64(0)
+	for _, a := range audits {
+		if a.Failing() {
+			failCount++
+		} else if a.Baselined && !a.Conformant() {
+			baselinedCount++
+		}
+	}
 
 	log.Info().
-		Int("mains", len(mains)).
+		Int("mains", len(audits)).
 		Uint64("fail", failCount).
 		Uint64("baselined", baselinedCount).
 		Bool("strict", strict).
