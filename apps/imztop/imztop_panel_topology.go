@@ -181,7 +181,7 @@ func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 	}
 
 	for range c.Horizontal().KeepIter() {
-		c.Label("boxes nest package → cache → core → thread · drag a box to drill in · hover for details").Send()
+		c.Label("Boxes nest package → cache → core → thread · drag a box to drill in · hover for details").Send()
 	}
 	c.AddSpace(inst.spaceInner())
 

@@ -123,18 +123,18 @@ func (inst *App) renderForm() {
 			}
 
 			for range c.Horizontal().KeepIter() {
-				c.Label("slug").Send()
+				c.Label("slug").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 				c.TextEdit(ids.PrepareStr("slug"), inst.slug, false).
 					HintText("lowercase-dashes").
 					SendRespVal(&inst.slug)
 			}
 			for range c.Horizontal().KeepIter() {
-				c.Label("title").Send()
+				c.Label("title").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 				c.TextEdit(ids.PrepareStr("title"), inst.title, false).
 					SendRespVal(&inst.title)
 			}
 			for range c.Horizontal().KeepIter() {
-				c.Label("icon").Send()
+				c.Label("icon").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 				c.TextEdit(ids.PrepareStr("icon"), inst.icon, false).
 					SendRespVal(&inst.icon)
 			}

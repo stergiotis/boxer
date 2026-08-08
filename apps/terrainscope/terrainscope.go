@@ -60,6 +60,13 @@ const (
 	// overlapping bands read as a haze rather than a wall of colour.
 	envelopeBandAlpha = uint8(0x10)
 
+	// rayLineAlpha and visFanAlpha are the opacities the ray lines and the map
+	// fan carried before their hues moved onto the IDS ramp, kept as they were:
+	// this change is about WHERE the colour comes from, not about how much of
+	// the terrain underneath it should show through.
+	rayLineAlpha = uint8(0xcc)
+	visFanAlpha  = uint8(0xee)
+
 	// sweepSeed fixes the Monte-Carlo draw so identical parameters yield an
 	// identical ensemble — the band and probabilities don't flicker between
 	// recomputes of the same selection.
@@ -863,47 +870,56 @@ func centerRayIndex(angleDeg []float64) (idx int) {
 	return
 }
 
-// rayColorAt returns a blue→red ramp colour for ray i of n (the profile-line
-// colour, so bearings stay distinguishable).
-func rayColorAt(i int, n int) (col color.Color) {
-	if n <= 1 {
-		return color.Hex(0xffee44ff)
-	}
-	frac := float64(i) / float64(n-1)
-	r := lerpByte(0x33, 0xff, frac)
-	b := lerpByte(0xff, 0x33, frac)
-	return color.RGBA(r, 0x55, b, 0xcc)
-}
-
-// rayFillRGBA is rayColorAt as a packed 0xRRGGBBAA with an explicit alpha,
-// for the translucent envelope polygons.
-func rayFillRGBA(i int, n int, alpha uint8) (rgba uint32) {
-	var r, b uint8 = 0xee, 0x44
+// rayTone is the shared ramp behind the two ray colours. Bearings are ORDERED,
+// so the encoding is sequential, and it comes from the IDS data-encoding
+// palette rather than a hand-rolled interpolation (ADR-0031 §SD6). Batlow is
+// the IDS default and perceptually uniform, so equal steps in bearing read as
+// equal steps in colour — which the previous blue→red lerp did not give, since
+// its midpoint collapsed towards grey.
+//
+// A single ray has no ordering to encode, so it takes the ramp's midpoint.
+func rayTone(i int, n int) (rgba styletokens.RGBA8) {
+	t := float32(0.5)
 	if n > 1 {
-		frac := float64(i) / float64(n-1)
-		r = lerpByte(0x33, 0xff, frac)
-		b = lerpByte(0xff, 0x33, frac)
+		t = float32(i) / float32(n-1)
 	}
-	return uint32(r)<<24 | uint32(0x55)<<16 | uint32(b)<<8 | uint32(alpha)
+	return styletokens.Sequential(styletokens.SequentialBatlow, t)
 }
 
-// visProbColor maps a visibility probability in [0,1] to a red→amber→green
-// ramp for the map fan (0 = blocked from every sampled centre, 1 = clear).
+// paletteAlpha re-alphas an IDS palette sample.
+//
+// RGBA8.AsHex packs 0xRRGGBBAA, which is exactly what color.Hex consumes, so
+// swapping the low byte takes the hue from the palette and the opacity from
+// the caller. Worth the helper: the alternative is color.RGBA(t.R, t.G, t.B,
+// a), which reads as hand-written colour to both a reader and the L2 rule even
+// though every component came from the ramp.
+func paletteAlpha(t styletokens.RGBA8, alpha uint8) (col color.Color) {
+	return color.Hex(t.AsHex()&^uint32(0xff) | uint32(alpha))
+}
+
+// rayColorAt returns the profile-line colour for ray i of n.
+func rayColorAt(i int, n int) (col color.Color) {
+	return paletteAlpha(rayTone(i, n), rayLineAlpha)
+}
+
+// rayFillRGBA is rayColorAt as a packed 0xRRGGBBAA with an explicit alpha, for
+// the translucent envelope polygons. It MUST stay on the same ramp: the
+// envelope is the band around the line of the same bearing, and two ramps
+// would colour one ray two ways.
+func rayFillRGBA(i int, n int, alpha uint8) (rgba uint32) {
+	return rayTone(i, n).AsHex()&^uint32(0xff) | uint32(alpha)
+}
+
+// visProbColor maps a visibility probability in [0,1] to the map fan's colour
+// (0 = blocked from every sampled centre, 1 = clear).
+//
+// From the IDS sequential palette rather than the previous red→amber→green
+// lerp (ADR-0031 §SD6), and the change is not only about where colours come
+// from: red-to-green is the one ramp that disappears for the commonest form of
+// colour-vision deficiency, and this encodes the panel's primary quantity.
+// Batlow separates on lightness as well as hue, so the ordering survives.
 func visProbColor(p float64) (col color.Color) {
-	if p < 0 {
-		p = 0
-	}
-	if p > 1 {
-		p = 1
-	}
-	r := lerpByte(0xdd, 0x33, p)
-	g := lerpByte(0x33, 0xdd, p)
-	return color.RGBA(r, g, 0x44, 0xee)
-}
-
-func lerpByte(lo float64, hi float64, frac float64) (out uint8) {
-	v := lo + frac*(hi-lo)
-	return uint8(min(255, max(0, int(v+0.5))))
+	return paletteAlpha(styletokens.Sequential(styletokens.SequentialBatlow, float32(p)), visFanAlpha)
 }
 
 func f32sToF64(in []float32) (out []float64) {

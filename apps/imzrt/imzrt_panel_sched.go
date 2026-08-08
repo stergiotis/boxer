@@ -114,7 +114,7 @@ func (inst *App) renderSchedPanel(snap *PublishedSnapshot) {
 func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 	buckets := snap.SchedLatColBuckets
 	if len(buckets) < 3 {
-		c.Label("scheduling-latency data not yet available…").Send()
+		c.Label("Scheduling-latency data not yet available…").Send()
 		return
 	}
 	st := &inst.schedSpectro
@@ -210,8 +210,11 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 		xw = float32(spectroWidthSlots)
 	}
 	inst.renderSpectroXTicks(snap.HistTimeUnixSec, xw)
-	c.Label("y: latency (log) · x: time, newest right").Send()
-	c.Label("colour = goroutines waiting per interval (log):").Send()
+	// Both axis letters capitalised, not just the leading one: the rule sees
+	// only the first character, but a reader sees the whole line, and "Y: …
+	// · x: …" is inconsistent in a way the original lowercase pair was not.
+	c.Label("Y: latency (log) · X: time, newest right").Send()
+	c.Label("Colour = goroutines waiting per interval (log):").Send()
 	st.legend.Render()
 }
 

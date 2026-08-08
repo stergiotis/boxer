@@ -102,7 +102,7 @@ func tourRenderStateful(ids *c.WidgetIdStack, state any) {
 	}
 	snap := s.Latest()
 	if snap == nil {
-		c.Label("imzrt: waiting for first sample…").Send()
+		c.Label("Imzrt: waiting for first sample…").Send()
 		return
 	}
 	st.app.renderTourScene(snap, s, st.scene)

@@ -25,7 +25,7 @@ func (inst *App) renderPressurePanel(snap *PublishedSnapshot) {
 	}
 
 	for range c.Horizontal().KeepIter() {
-		c.Label("share of time stalled · some = any task, full = all non-idle tasks").Send()
+		c.Label("Share of time stalled · some = any task, full = all non-idle tasks").Send()
 	}
 	c.AddSpace(inst.spaceInner())
 

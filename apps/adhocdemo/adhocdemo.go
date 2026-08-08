@@ -151,7 +151,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 			if statusErr != "" {
 				c.Label("ad-hoc demo unavailable: " + statusErr).Send()
 			} else {
-				c.Label("preparing…").Send()
+				c.Label("Preparing…").Send()
 			}
 		}
 		return

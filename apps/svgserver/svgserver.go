@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
@@ -155,7 +156,10 @@ func renderReport(title string, body string) {
 	c.Separator().Send()
 	for line := range strings.SplitSeq(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
 		if strings.TrimSpace(line) == "" {
-			c.AddSpace(4)
+			// A blank line in the rendered body. On the ladder at the magnitude
+			// it already had, so it scales with density instead of staying 4px
+			// while the text around it grows.
+			c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
 			continue
 		}
 		c.Label(line).Send()

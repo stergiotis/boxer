@@ -118,7 +118,7 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 	inst.smooth.BeginFrame()
 	if snap == nil {
 		for range c.PanelCentralInside().KeepIter() {
-			c.Label("imzrt: waiting for first sample…").Send()
+			c.Label("Imzrt: waiting for first sample…").Send()
 		}
 		return
 	}
@@ -155,7 +155,7 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 
 func renderInitErrorPanel(err error) {
 	for range c.PanelCentralInside().KeepIter() {
-		c.Label("imzrt: sampler init failed").Send()
+		c.Label("Imzrt: sampler init failed").Send()
 		c.Label(err.Error()).Send()
 	}
 }

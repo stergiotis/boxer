@@ -24,18 +24,6 @@ func TestCenterRayIndex(t *testing.T) {
 	}
 }
 
-func TestLerpByte(t *testing.T) {
-	assert.Equal(t, uint8(0), lerpByte(0, 255, 0))
-	assert.Equal(t, uint8(255), lerpByte(0, 255, 1))
-	assert.Equal(t, uint8(128), lerpByte(0, 255, 0.5)) // 127.5 rounds up
-	// Out-of-range fractions clamp into [0,255].
-	assert.Equal(t, uint8(255), lerpByte(0, 255, 2.0))
-	assert.Equal(t, uint8(0), lerpByte(0, 255, -1.0))
-	// Descending ramp.
-	assert.Equal(t, uint8(255), lerpByte(255, 0, 0))
-	assert.Equal(t, uint8(0), lerpByte(255, 0, 1))
-}
-
 func TestF32sToF64(t *testing.T) {
 	assert.Equal(t, []float64{}, f32sToF64([]float32{}))
 	got := f32sToF64([]float32{1.5, -2.25, 0})

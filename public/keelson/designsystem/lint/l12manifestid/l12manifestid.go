@@ -61,6 +61,14 @@ var AllowedSpecialIds = map[string]bool{
 	"runtime.workingset":       true,
 	"runtime.introspect.query": true,
 	"runtime.introspect.topo":  true,
+	// runtime.appletstore — the applet store service (ADR-0132 O4). Same class
+	// as every entry above and simply missed when it landed: it mints its own
+	// bus client and namespaces its persisted documents under this id's
+	// SubjectAlias, so it is a runtime service that happens to be declared
+	// inside apps/sqlapplet rather than that app's manifest id. The rule was
+	// reading the declaring package's import path and correctly finding they
+	// differ; what was wrong was the list, not the constant.
+	"runtime.appletstore": true,
 }
 
 // Analyzer is the L12 default analyzer used by the designlint binary.
