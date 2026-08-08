@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"reflect"
 	"strings"
 	"testing"
@@ -945,8 +946,8 @@ func TestParse_CommonMarkImage_WithoutLoader_FallsBackToHyperlink(t *testing.T) 
 	if found == nil {
 		t.Fatal("expected runKindLink fallback")
 	}
-	if !strings.HasPrefix(found.label, "🖼 ") {
-		t.Errorf("fallback label glyph: got %q want 🖼 prefix", found.label)
+	if !strings.HasPrefix(found.label, icons.PhImage+" ") {
+		t.Errorf("fallback label glyph: got %q want the PhImage prefix", found.label)
 	}
 	if found.url != "pic.png" {
 		t.Errorf("fallback url: got %q want %q", found.url, "pic.png")
@@ -1057,8 +1058,8 @@ func TestParse_CommonMarkImage_EmptyAlt_FallsBackToURLLabel(t *testing.T) {
 	if found == nil {
 		t.Fatal("expected runKindLink fallback for empty-alt CommonMark image")
 	}
-	if found.label != "🖼 pic.png" {
-		t.Errorf("fallback label: got %q want %q", found.label, "🖼 pic.png")
+	if found.label != icons.PhImage+" pic.png" {
+		t.Errorf("fallback label: got %q want %q", found.label, icons.PhImage+" pic.png")
 	}
 }
 

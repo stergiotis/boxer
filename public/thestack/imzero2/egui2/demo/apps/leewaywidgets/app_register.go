@@ -4,6 +4,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
 
 // manifest is the static AppI descriptor every instance returns. Kept
@@ -14,7 +15,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Leeway widgets tour",
 	Title:    "leeway widgets — fixture showcase",
-	Icon:     "🧪",
+	Icon:     icons.PhFlask,
 	Topics:   []app.TopicT{app.TopicData, app.TopicUi},
 	Keywords: []string{"leeway", "columnar", "schema", "mapping"},
 	Kind:     app.KindDemo,

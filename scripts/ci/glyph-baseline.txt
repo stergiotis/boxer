@@ -1,0 +1,49 @@
+# Accepted tofu — glyphs that no font imzero2 loads can draw, and that are NOT
+# defects. Read by `scripts/dev/glyph-audit.py --baseline`, which fails only on
+# a site absent from here.
+#
+# One `U+XXXX<tab>path` per site. The line number is deliberately absent, so an
+# edit above a site does not churn this file; the cost is that moving a glyph
+# WITHIN a file keeps its acceptance.
+#
+# Before adding an entry, be sure the site is not drawn by imzero2. Emoji app
+# icons and gallery titles looked like this category and were not: they render
+# in the launcher and in window title bars, and each was an empty box until
+# they moved to Phosphor.
+
+# --- terminal / generated TEXT, never handed to a renderer ---
+# wasmsurvey writes a report to an io.Writer; the tree trailer is for a terminal.
+U+21B3	public/code/analysis/golang/wasmsurvey/report.go
+# store_emit generates SQL/Go source; ⋈ is a join marker in a comment it emits.
+U+22C8	public/storage/recordstore/gen/store_emit.go
+# eh formats error chains as text for logs and stderr.
+U+25C4	public/observability/eh/eh_format.go
+
+# --- a deliberate font-fallback showcase ---
+# The SQL demo renders scripts and symbols precisely to show what the fallback
+# chain does and does not cover. Tofu here is the demo doing its job; replacing
+# these would delete the thing being demonstrated.
+U+2699	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+269B	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+26A1	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1E6	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1E8	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1E9	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1EA	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1EB	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1ED	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1EF	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1F0	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1F5	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1F7	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+U+1F1F8	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go
+
+# --- MONOSPACE runs; the audit's chain detection is per-line ---
+# Each of these is drawn in a Monospace() run, where DejaVu Sans Mono covers it.
+# The audit reports them because the Monospace() call sits on the NEXT line —
+# the false positive its own docstring names. Verified with `--mono`.
+U+2717	public/thestack/imzero2/egui2/widgets/errorview/viewer.go
+U+27E6	public/semistructured/leeway/card/leeway_card_braillespark.go
+U+27E7	public/semistructured/leeway/card/leeway_card_braillespark.go
+U+27E8	public/semistructured/leeway/card/leeway_card_topospark.go
+U+27E9	public/semistructured/leeway/card/leeway_card_topospark.go

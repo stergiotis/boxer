@@ -2,6 +2,7 @@ package sqlappletcreator
 
 import (
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -20,7 +21,7 @@ var manifest = app.Manifest{
 	Version:      "0.1.0",
 	Display:      "SQL applet creator",
 	Title:        "SQL applet creator",
-	Icon:         "🧩",
+	Icon:         icons.PhPuzzlePiece,
 	Topics:       []app.TopicT{app.TopicSql},
 	Keywords:     []string{"applet", "author", "publish", "save"},
 	Surface:      app.SurfaceWindowed,

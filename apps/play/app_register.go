@@ -2,6 +2,7 @@ package play
 
 import (
 	"embed"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
@@ -186,7 +187,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		Version:  "0.1.0",
 		Display:  "SQL playground",
 		Title:    "SQL Playground",
-		Icon:     "🛢",
+		Icon:     icons.PhDatabase,
 		Topics:   []app.TopicT{app.TopicSql, app.TopicData},
 		Keywords: []string{"query", "queries", "playground", "editor", "clickhouse", "ide"},
 		Surface:  app.SurfaceWindowed,

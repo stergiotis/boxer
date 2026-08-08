@@ -17,7 +17,7 @@ var manifest = runtimeapp.Manifest{
 	Version:  "0.1.0",
 	Display:  "IDS showcase",
 	Title:    "IDS token catalogue",
-	Icon:     "🎨",
+	Icon:     icons.PhPalette,
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicUi},
 	Keywords: []string{"design system", "tokens", "ids", "spacing", "density"},
 	Kind:     runtimeapp.KindDemo,

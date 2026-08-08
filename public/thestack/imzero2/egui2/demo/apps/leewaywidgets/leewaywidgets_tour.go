@@ -9,6 +9,7 @@
 package leewaywidgets_demo
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
@@ -23,13 +24,13 @@ var leewayScenes = []struct {
 	kind  registry.DemoKindE
 	desc  string
 }{
-	{"leewaywidgets-table2", viewKeyTable2, "🧪 Leeway — table2 card", registry.DemoKindUX,
+	{"leewaywidgets-table2", viewKeyTable2, icons.PhFlask + " Leeway — table2 card", registry.DemoKindUX,
 		"A leeway fixture rendered as a Table2 card: viridis-encoded columns built from the declarative TableDesc."},
-	{"leewaywidgets-json", viewKeyJSON, "🧪 Leeway — JSON card", registry.DemoKindMixed,
+	{"leewaywidgets-json", viewKeyJSON, icons.PhFlask + " Leeway — JSON card", registry.DemoKindMixed,
 		"The same fixture in its canonical JSON card form (JsonCardEmitter), syntax-highlighted."},
-	{"leewaywidgets-schema", viewKeySchemaGo, "🧪 Leeway — schema.go", registry.DemoKindDX,
+	{"leewaywidgets-schema", viewKeySchemaGo, icons.PhFlask + " Leeway — schema.go", registry.DemoKindDX,
 		"fixture_schema.go — the declarative TableDesc that drives the table2 and JSON views."},
-	{"leewaywidgets-fixture", viewKeyFixtureGo, "🧪 Leeway — fixture.go", registry.DemoKindDX,
+	{"leewaywidgets-fixture", viewKeyFixtureGo, icons.PhFlask + " Leeway — fixture.go", registry.DemoKindDX,
 		"fixture.go — the data populator and driver wiring behind the fixture."},
 }
 

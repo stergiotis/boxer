@@ -5,6 +5,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -16,7 +17,7 @@ var manifest = runtimeapp.Manifest{
 	Version:  "0.1.0",
 	Display:  "Regex explorer",
 	Title:    "Regex Explorer",
-	Icon:     "🔍",
+	Icon:     icons.PhMagnifyingGlass,
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicCode},
 	Keywords: []string{"regex", "regexp", "pattern", "match", "text"},
 	Surface:  runtimeapp.SurfaceWindowed,

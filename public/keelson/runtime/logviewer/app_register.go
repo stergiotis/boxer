@@ -2,6 +2,7 @@ package logviewer
 
 import (
 	"embed"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 
 	"github.com/rs/zerolog/log"
 
@@ -21,7 +22,7 @@ var manifest = runtimeapp.Manifest{
 	Version:  "0.1.0",
 	Display:  "Log viewer",
 	Title:    "Log Viewer",
-	Icon:     "📜",
+	Icon:     icons.PhScroll,
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicRuntime, runtimeapp.TopicObservability},
 	Keywords: []string{"log", "logs", "zerolog", "trace", "level"},
 	Surface:  runtimeapp.SurfaceWindowed,

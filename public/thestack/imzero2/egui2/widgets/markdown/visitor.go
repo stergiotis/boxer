@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"bytes"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"strings"
 	"unicode/utf8"
 
@@ -470,7 +471,7 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 			if label == "" {
 				label = url
 			}
-			b.emitLink("🖼 "+label, url)
+			b.emitLink(icons.PhImage+" "+label, url)
 		}
 	case *embed.Node:
 		target := string(v.Target)
@@ -487,9 +488,9 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 		if isImage && b.emitImage(ref) {
 			break
 		}
-		glyph := "📄 "
+		glyph := icons.PhFile + " "
 		if isImage {
-			glyph = "🖼 "
+			glyph = icons.PhImage + " "
 		}
 		label := glyph + target
 		if heading != "" {
