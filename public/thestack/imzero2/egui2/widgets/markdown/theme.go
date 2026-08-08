@@ -26,6 +26,14 @@ var (
 	// immediately above the call — ignoreann covers only lines N and N+1.
 	// designlint:ignore=L2 (transparent; the palette has no absence-of-fill token)
 	linkBg = color.RGBA(0, 0, 0, 0)
+	// An Obsidian `#tag` names a place in a vault rather than styling the
+	// prose it sits in, so it takes the same Info role a link does — "this
+	// points elsewhere" — over the Subtle tint of the same family. A tint
+	// rather than the full Default fill the highlight pen uses: a document can
+	// carry a dozen tags in a line, and a dozen bright blocks would read as
+	// the point of the sentence instead of as its filing.
+	tagFg = color.Hex(styletokens.InfoDefault.AsHex())
+	tagBg = color.Hex(styletokens.InfoSubtle.AsHex())
 )
 
 // calloutThemeE selects a callout color family. Obsidian's vocabulary

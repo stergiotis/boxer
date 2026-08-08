@@ -641,8 +641,77 @@ func (inst *lexer) tryInline(p, end int, base CategoryE) (next int, ok bool) {
 		return inst.lexLink(p, end, base)
 	case '<':
 		return inst.lexAutolink(p, end, base)
+	case '#':
+		return inst.lexTag(p, end, base)
 	}
 	return p, false
+}
+
+// lexTag claims an Obsidian `#tag`, including the nested `#a/b/c` form.
+//
+// The two rules below are the parser's, restated: this tier is a second
+// reading of the same syntax, and the place it is allowed to differ is in what
+// it declines to recognise, never in what it claims. A tag opens only at a
+// word boundary — `C#sharp` and `foo#bar` are words, not tags — and a purely
+// numeric body is the English "number four", not a tag, which is what keeps
+// `#4` and an issue reference from colouring as one.
+//
+// Headings never reach here: atxLevel already refuses `#` without a following
+// space at the start of a line, which is the same rule read from the other
+// side.
+func (inst *lexer) lexTag(p, end int, base CategoryE) (next int, ok bool) {
+	if p > 0 && isTagBoundaryByte(inst.src[p-1]) {
+		return p, false
+	}
+	body := p + 1
+	if body >= end || !isTagStartByte(inst.src[body]) {
+		return p, false
+	}
+	q := body
+	for q < end && isTagBodyByte(inst.src[q]) {
+		q++
+	}
+	// A trailing `/` belongs to no segment, so it is not part of the tag.
+	if inst.src[q-1] == '/' {
+		q--
+	}
+	if q <= body || allDigitsIn(inst.src, body, q) {
+		return p, false
+	}
+	inst.emit(p, base)
+	inst.emit(body, CategoryTagMarker)
+	inst.emit(q, CategoryTagText)
+	return q, true
+}
+
+// isTagBoundaryByte reports whether a byte immediately before `#` makes it
+// part of the preceding word rather than the start of a tag.
+//
+// A byte test, where the parser's is a rune test: any UTF-8 continuation or
+// lead byte is >= 0x80 and counts as a word byte here, which reaches the same
+// verdict for a letter in any script without decoding one.
+// `{` is in the set for the same reason the parser has it: `{#anchor}` is the
+// heading-anchor syntax, not a tag inside braces.
+func isTagBoundaryByte(c byte) (yes bool) {
+	return c >= 0x80 || c == '_' || c == '#' || c == '{' ||
+		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+}
+
+func isTagStartByte(c byte) (yes bool) {
+	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+}
+
+func isTagBodyByte(c byte) (yes bool) {
+	return isTagStartByte(c) || c == '-' || c == '/'
+}
+
+func allDigitsIn(src []byte, start, stop int) (yes bool) {
+	for i := start; i < stop; i++ {
+		if src[i] < '0' || src[i] > '9' {
+			return false
+		}
+	}
+	return stop > start
 }
 
 // lexCodeSpan claims a backtick-delimited run, closed by a run of the SAME

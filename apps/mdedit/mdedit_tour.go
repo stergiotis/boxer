@@ -49,6 +49,9 @@ Some **bold** prose with *emphasis*, a ` + "`code span`" + `, and a
 
 ## Notes
 
+Filed under #release/notes — and note that C#sharp and issue #4 are prose,
+not tags.
+
 > [!note] No file I/O
 > Text arrives by paste and leaves by copy.
 

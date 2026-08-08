@@ -164,4 +164,8 @@ var proseCategories = map[markdownhighlight.CategoryE]bool{
 	markdownhighlight.CategoryTableHeaderText: true,
 	markdownhighlight.CategoryTableCellText:   true,
 	markdownhighlight.CategoryCalloutType:     true,
+	// A tag's body counts, its `#` does not — the same split the heading
+	// marker and its text get. `#project/frontend` is a word the writer chose
+	// and reads as one; the marker is punctuation that files it.
+	markdownhighlight.CategoryTagText: true,
 }

@@ -98,6 +98,10 @@ var corpus = []struct {
 	{"half-typed wikilink", "see [[Some No\n"},
 	{"half-typed callout", "> [!no\n"},
 	{"lone brackets", "[ ] ( ) [[ ]] ** __ ~~ == %%\n"},
+	{"tags", "#project and #a/b/c and #kebab-tag here\n"},
+	{"tag-shaped prose", "C#sharp, foo#bar, open question #4, issue #1158\n"},
+	{"half-typed tag", "a #\n"},
+	{"tag at end of buffer", "trailing #tag"},
 	{"multibyte", "héllo wörld — em dash, ünicode ***bold***\n"},
 	{"emoji", "🎉 party ***time*** 🎉\n"},
 	{"tabs", "\t- indented with a tab\n"},
@@ -293,6 +297,77 @@ func TestHighlightLex_CalloutHeader(t *testing.T) {
 	}
 	if cat, _ := catAt(spans, 0); cat != CategoryBlockquoteMarker {
 		t.Errorf("leading `>`: got category %d, want CategoryBlockquoteMarker (%d)", cat, CategoryBlockquoteMarker)
+	}
+}
+
+// TestHighlightLex_Tag covers the marker/body split and the nested form.
+func TestHighlightLex_Tag(t *testing.T) {
+	src := "See #project/frontend and #kebab-tag today\n"
+	spans := HighlightLex([]byte(src))
+	checkInvariants(t, src, spans)
+
+	if s := spanOver(src, spans, "project/frontend"); s == nil || s.Category != CategoryTagText {
+		t.Fatalf("nested tag body: %+v", s)
+	}
+	if s := spanOver(src, spans, "kebab-tag"); s == nil || s.Category != CategoryTagText {
+		t.Fatalf("hyphenated tag body: %+v", s)
+	}
+	if cat, ok := catAt(spans, strings.Index(src, "#project")); !ok || cat != CategoryTagMarker {
+		t.Fatalf("tag marker: %v %v", cat, ok)
+	}
+}
+
+// TestHighlightLex_TagRulesMatchTheParser is the agreement this tier owes the
+// preview. It is a second reading of the same syntax, so the place it may
+// differ is in what it declines to recognise — never in what it claims. Both
+// of these would otherwise be false tags, and this repo's prose is full of
+// them: `#` glued to a word, and the English "number four".
+func TestHighlightLex_TagRulesMatchTheParser(t *testing.T) {
+	src := "C#sharp, foo#bar, open question #4, issue #1158, and #real\n"
+	spans := HighlightLex([]byte(src))
+	checkInvariants(t, src, spans)
+
+	for _, notATag := range []string{"sharp", "bar", "4", "1158"} {
+		at := strings.Index(src, "#"+notATag)
+		if at < 0 {
+			t.Fatalf("fixture drift: %q not in %q", "#"+notATag, src)
+		}
+		if cat, ok := catAt(spans, at); ok && (cat == CategoryTagMarker || cat == CategoryTagText) {
+			t.Errorf("#%s was claimed as a tag", notATag)
+		}
+	}
+	if s := spanOver(src, spans, "real"); s == nil || s.Category != CategoryTagText {
+		t.Fatalf("a real tag on the same line must still be claimed: %+v", s)
+	}
+}
+
+// TestHighlightLex_TagAgreesWithHighlight pins the two tiers to the same
+// verdict on the same input. They read markdown independently — that is the
+// cost ADR-0178 records — so a rule added to one and not the other is exactly
+// how the source pane and the preview come to disagree about a document.
+func TestHighlightLex_TagAgreesWithHighlight(t *testing.T) {
+	for _, src := range []string{
+		"a #real tag here\n",
+		"C#sharp is not a tag\n",
+		"open question #4 is not a tag\n",
+		"#a/b/c nested\n",
+	} {
+		lexHasTag := false
+		for _, s := range HighlightLex([]byte(src)) {
+			if s.Category == CategoryTagText {
+				lexHasTag = true
+			}
+		}
+		canonHasTag := false
+		_, spans := Highlight([]byte(src))
+		for _, s := range spans {
+			if s.Category == CategoryTagText {
+				canonHasTag = true
+			}
+		}
+		if lexHasTag != canonHasTag {
+			t.Errorf("%q: lex tier says tag=%v, canonical tier says tag=%v", src, lexHasTag, canonHasTag)
+		}
 	}
 }
 

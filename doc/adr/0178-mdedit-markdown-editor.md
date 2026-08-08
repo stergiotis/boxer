@@ -268,6 +268,9 @@ visible before the work starts rather than discovered inside it.
 | `codeview` exported API (M2, shipped) | added — `BuildMarkdownFromSpans`, the sibling of `BuildSqlFromSpans` | nothing; it lets a caller that already lexed (for the word count) colour the same text without lexing twice |
 | `textEdit` IDL (shipped, unblocking M3) | added — `setCursor(sel, focus)`, the inbound half of the caret channel, taking the packed word `reportCursor` emits | `PackCursorRange` beside the existing `UnpackCursorRange`; regenerated dispatch on both sides. Recorded on [ADR-0130](./0130-imzero2-textedit-highlight-seam.md) (2026-08-08), which owns the seam. It positions the caret but does NOT reveal it — an off-screen match can be selected, not scrolled to |
 | `sectionStyled` (M3, shipped) | reached, not changed — first sub-token consumer of a channel whose existing users (play's statement tint, its clause background) all paint regions | nothing on the seam. The consequence is the caller's: overlay boundaries have to exist as COLOUR boundaries, so mdedit splits its own spans rather than asking the layouter to split its sections. A second sub-token consumer would want the same helper, at which point it belongs in `codeview` rather than in an app |
+| `markdown` widget default feature set (shipped) | added — `obsidian.FeatureTag`, so `#tag` renders as a tag rather than as prose. Reaches every consumer of the widget, helphost above all | the `tagext.Node` case in `emitInline`, without which the feature DELETES tags (an unenumerated inline node hits the default branch and is dropped, and a tag carries its text in a field with no children); the same case in `flattenInlineText` and in `headingPlainText` — the last of those keeps heading slugs from shortening, which would have moved existing scroll targets and fragment links |
+| `obsidian` tag parser (shipped) | narrowed — a word-boundary rule, Obsidian's not-purely-numeric rule, and `{`/`#` rejected as openers. Strictly declines more than before; nothing that parsed as a tag stops doing so except what was never meant to be one | the competence doc, whose "intentionally permissive" claim was true of both extensions and is now true only of `==highlight==`. Measured before changing it: across committed markdown, 76 `#` in flowing prose, of which ~70 were `#4`-style numeric references |
+| `markdownhighlight` categories (shipped) | added — `CategoryTagMarker`, `CategoryTagText`, appended after the existing values | `codeview.mdColors`, sized by `CategoryCount`. Appending is load-bearing: inserting among the existing values renumbers the ones after it and silently repaints documents in the wrong colours rather than failing to compile |
 
 ## Alternatives
 
@@ -345,6 +348,14 @@ visible before the work starts rather than discovered inside it.
   indented code blocks, reference links, setext headings and multi-line
   emphasis all read as ordinary prose in the source pane while the preview
   renders them.
+
+  `#tag` was on that list and came off it, which is where the cost of the
+  second reading showed itself: the rule had to be written twice, once in the
+  goldmark parser and once in the scanner, and a rule added to one and not the
+  other is exactly how the two panes come to disagree. A test asserts the two
+  tiers reach the same verdict on the same input rather than each being
+  checked alone. Nothing structural stops the next divergence — only that
+  test.
 - Without file I/O the app cannot open what is already on disk, and the
   clipboard round-trip is the only way in or out besides its own persisted
   session.

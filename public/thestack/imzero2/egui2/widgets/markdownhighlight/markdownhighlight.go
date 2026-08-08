@@ -37,6 +37,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/comment"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/embed"
 	highlightext "github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/highlight"
+	tagext "github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/tag"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/wikilink"
 	"github.com/yuin/goldmark/ast"
 	east "github.com/yuin/goldmark/extension/ast"
@@ -87,8 +88,16 @@ const (
 	CategoryTableHeaderText                   // text inside header cells
 	CategoryTableCellText                     // text inside body cells
 	CategoryTaskMark                          // GFM `[ ]` / `[x]` task checkbox
+	CategoryTagMarker                         // leading `#` of an Obsidian `#tag`
+	CategoryTagText                           // tag body, `/`-separated for `#a/b`
 	categoryMax
 )
+
+// New categories are appended HERE, at the end, and never inserted among the
+// existing ones: [CategoryCount] sizes fixed-length palette arrays in
+// consumers, and an inserted value would renumber every category after it —
+// silently repainting a document in the wrong colours rather than failing to
+// compile.
 
 // CategoryCount is the number of CategoryE values — sized for palette
 // arrays in consumers.
@@ -122,6 +131,7 @@ func Highlight(src []byte) (canonical string, spans []Span) {
 			obsidian.FeatureCallout |
 			obsidian.FeatureHighlight |
 			obsidian.FeatureComment |
+			obsidian.FeatureTag |
 			obsidian.FeatureHeadingAnchor,
 	})
 	pc := obsidian.NewParserContext()
@@ -339,6 +349,12 @@ func (inst *renderer) renderInline(n ast.Node, plainCat CategoryE) {
 		}
 		inst.emit(target, CategoryWikilinkTarget)
 		inst.emit("]]", CategoryWikilinkPunct)
+	case *tagext.Node:
+		// The tag body is carried verbatim on the node — the parser does not
+		// normalise case or shape — so the canonical form is the input's own
+		// spelling, unlike the emphasis and list markers around it.
+		inst.emit("#", CategoryTagMarker)
+		inst.emitBytes(v.Tag, CategoryTagText)
 	case *comment.Node:
 		// Obsidian's comment parser doesn't preserve the inner text —
 		// only that a comment existed. Emit a placeholder so the marker

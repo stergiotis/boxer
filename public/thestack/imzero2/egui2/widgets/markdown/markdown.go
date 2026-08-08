@@ -424,6 +424,7 @@ func defaultConfig() (cfg config) {
 		obsidian.FeatureCallout |
 		obsidian.FeatureHighlight |
 		obsidian.FeatureComment |
+		obsidian.FeatureTag |
 		obsidian.FeatureHeadingAnchor
 	cfg.resolver = resolver.NoopResolver{}
 	cfg.imageMaxW = imageMaxDefaultW
@@ -434,10 +435,15 @@ func defaultConfig() (cfg config) {
 // WithFeatures overrides the default obsidian feature set. The default
 // covers everything the renderer can lower: frontmatter, GFM (tables /
 // strikethrough / footnotes / task lists), wikilinks, embeds, callouts,
-// ==highlight== and %%comment%% stripping, and `{#anchor}` heading
-// anchors ([obsidian.FeatureHeadingAnchor], which feeds
+// ==highlight== and %%comment%% stripping, `#tag` spans, and `{#anchor}`
+// heading anchors ([obsidian.FeatureHeadingAnchor], which feeds
 // [HeadingInfo.Slug]). Math remains deferred — the parser recognises it
 // but the renderer drops it.
+//
+// Enabling a feature the lowering does not handle is worse than leaving it
+// off: an unrecognised inline node reaches the default branch of emitInline
+// and is silently DROPPED, so the text disappears from the document rather
+// than rendering unstyled. Every flag in the default set has a case.
 func WithFeatures(features obsidian.FeatureE) (opt Option) {
 	opt = func(cfg *config) {
 		cfg.features = features

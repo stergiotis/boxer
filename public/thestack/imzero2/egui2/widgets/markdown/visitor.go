@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/comment"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/embed"
 	highlightext "github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/highlight"
+	tagext "github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/tag"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/wikilink"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -95,14 +96,31 @@ func headingPlainText(h *ast.Heading, src []byte) (out string) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		if t, ok := n.(*ast.Text); ok {
+		switch t := n.(type) {
+		case *ast.Text:
 			sb.Write(t.Segment.Value(src))
+		case *tagext.Node:
+			// A tag carries its text on the node rather than in a child, so a
+			// Text-only walk drops it — and this text becomes the section's
+			// SLUG. Without this case, enabling tags would silently shorten
+			// the slug of every heading containing one (`## Release #v2` going
+			// from `release-v2` to `release-`) and break the fragment links
+			// and scroll targets that resolve against it.
+			sb.WriteByte('#')
+			sb.Write(t.Tag)
 		}
 		return ast.WalkContinue, nil
 	})
 	out = sb.String()
 	return
 }
+
+// Deliberately NOT enumerated above: wikilinks, embeds and autolinks also
+// carry their text on the node, so a heading containing one has always had a
+// shortened slug. Adding them would be the same one-line fix — and would
+// CHANGE slugs that documents already link to, which a tag case cannot do
+// because tags did not parse at all until they were enabled here. Left as it
+// is, recorded so the asymmetry reads as a decision.
 
 // lowerBlock converts one block AST node into a segment. Unsupported
 // block kinds (raw HTML blocks, GFM footnote definitions, math and
@@ -363,6 +381,10 @@ const (
 	styleCode          styleE = 1 << 2
 	styleStrikethrough styleE = 1 << 3
 	styleHighlight     styleE = 1 << 4
+	// styleTag is the Obsidian `#tag` pill. It does not propagate into
+	// children the way the others do — a tag has none — but it rides the same
+	// bitmask so a tag inside emphasis keeps the emphasis.
+	styleTag styleE = 1 << 5
 )
 
 // emitInline walks one inline AST node and dispatches into the builder.
@@ -392,6 +414,13 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 		walkInlineChildren(ctx, v, b, parentStyle|styleStrikethrough)
 	case *highlightext.Node:
 		walkInlineChildren(ctx, v, b, parentStyle|styleHighlight)
+	case *tagext.Node:
+		// The tag node carries its text in a FIELD and has no children, so
+		// there is nothing for walkInlineChildren to walk: without this case
+		// the default branch would silently swallow the tag and the reader
+		// would see a gap where they wrote one. The `#` is re-emitted here
+		// because the parser consumed it into the node.
+		b.emitText("#"+string(v.Tag), parentStyle|styleTag)
 	case *ast.CodeSpan:
 		b.emitText(flattenInlineText(v, ctx.src), parentStyle|styleCode)
 	case *ast.Link:
@@ -483,6 +512,12 @@ func flattenInlineText(parent ast.Node, src []byte) (out string) {
 			buf.Write(v.URL(src))
 		case *wikilink.Node:
 			buf.WriteString(v.DisplayText())
+		case *tagext.Node:
+			// Same reason as the three above: the text is on the node, not in
+			// a child, so a plain Text walk returns "" and a table cell
+			// holding only `#tag` would render blank.
+			buf.WriteByte('#')
+			buf.Write(v.Tag)
 		case *embed.Node:
 			buf.Write(v.Target)
 			if len(v.Heading) > 0 {
@@ -643,6 +678,28 @@ func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
 	plain := style == styleNone && fontSize == 0 && !headingStrong
 	if plain {
 		inst.cur = inst.cur.Text(s)
+		return
+	}
+
+	// A tag is checked before the highlight pen so that `==#tag==` reads as a
+	// highlighted region rather than losing the pen to the tag's own tint —
+	// the outer mark is the author's emphasis, the inner tint is filing.
+	if style&styleHighlight == 0 && style&styleTag != 0 {
+		for rt := range inst.cur.StyledTextColored(tagFg, tagBg, s) {
+			if fontSize > 0 {
+				rt = rt.Size(fontSize)
+			}
+			if headingStrong || style&styleStrong != 0 {
+				rt = rt.Strong()
+			}
+			if style&styleEmphasis != 0 {
+				rt = rt.Italics()
+			}
+			if style&styleStrikethrough != 0 {
+				rt = rt.Strikethrough()
+			}
+			_ = rt
+		}
 		return
 	}
 

@@ -1273,3 +1273,70 @@ func TestVisibleSegments_FilterPresenceKnown(t *testing.T) {
 		t.Error("predicate not passed through")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Obsidian tags
+// ---------------------------------------------------------------------------
+
+// TestParse_TagSurvivesLowering is the trap this feature had to clear before
+// it could be enabled: an inline node the lowering does not enumerate reaches
+// emitInline's default branch and is SILENTLY DROPPED, and a tag carries its
+// text in a field rather than in child Text nodes — so turning the parser
+// feature on without the lowering case would have deleted the tag from the
+// document instead of rendering it unstyled.
+func TestParse_TagSurvivesLowering(t *testing.T) {
+	doc := Parse([]byte("## Release #v2 notes\n\nFiled under #project/frontend today.\n"))
+
+	if len(doc.headings) != 1 {
+		t.Fatalf("headings: got %d want 1", len(doc.headings))
+	}
+	// The heading's text becomes its SLUG, so a dropped tag here is a broken
+	// scroll target and a broken fragment link, not only a missing word.
+	if doc.headings[0].Text != "Release #v2 notes" {
+		t.Errorf("heading text: got %q, want the tag kept", doc.headings[0].Text)
+	}
+	// Stated as an equality against the feature being OFF rather than as a
+	// literal slug: what has to hold is that turning tags on moved no existing
+	// section's address, and a hardcoded slug would assert SlugHeading's
+	// sanitisation instead — a different contract, owned elsewhere.
+	cfg := defaultConfig()
+	off := Parse([]byte("## Release #v2 notes\n"), WithFeatures(cfg.features&^obsidian.FeatureTag))
+	if len(off.headings) != 1 {
+		t.Fatalf("headings with the feature off: got %d want 1", len(off.headings))
+	}
+	if doc.headings[0].Slug != off.headings[0].Slug {
+		t.Errorf("slug moved when tags were enabled: %q with, %q without",
+			doc.headings[0].Slug, off.headings[0].Slug)
+	}
+}
+
+// TestParse_TagInATableCellIsNotBlank covers the other flattener — the one
+// whose doc comment already records this exact failure mode for wikilinks and
+// embeds: a cell whose entire content is a node carrying its text in a field
+// renders empty unless the flattener knows about it.
+func TestParse_TagInATableCellIsNotBlank(t *testing.T) {
+	doc := Parse([]byte("| topic | tag |\n|---|---|\n| one | #alpha |\n"))
+	seg := tableSeg(t, doc)
+	found := false
+	for _, cell := range seg.tableCells {
+		if strings.Contains(cell, "#alpha") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("a cell holding only a tag rendered blank: %+v", seg.tableCells)
+	}
+}
+
+// TestParse_TagRulesAreTheParsers pins the two rules that make the feature
+// safe to have on by default over technical prose, at the level a reader of
+// this package cares about: what survives into the document.
+func TestParse_TagRulesAreTheParsers(t *testing.T) {
+	doc := Parse([]byte("# C#sharp and open question #4\n"))
+	if len(doc.headings) != 1 {
+		t.Fatalf("headings: got %d want 1", len(doc.headings))
+	}
+	if doc.headings[0].Text != "C#sharp and open question #4" {
+		t.Errorf("heading text: got %q, want both left as prose", doc.headings[0].Text)
+	}
+}

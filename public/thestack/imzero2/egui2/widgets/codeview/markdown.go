@@ -57,6 +57,11 @@ func init() {
 	mdColors[markdownhighlight.CategoryEmbedMarker] = bang
 	mdColors[markdownhighlight.CategoryCalloutMarker] = blue
 	mdColors[markdownhighlight.CategoryCalloutType] = teal
+	// Tags share the wikilink family: both are a reference to somewhere else
+	// in a vault rather than a piece of styled prose, and colouring them alike
+	// says so. The marker takes the dimmer end, as every other delimiter does.
+	mdColors[markdownhighlight.CategoryTagMarker] = purple
+	mdColors[markdownhighlight.CategoryTagText] = lightBlue
 	mdColors[markdownhighlight.CategoryCommentDelim] = dimGreen
 	mdColors[markdownhighlight.CategoryCommentText] = dimGreen
 	mdColors[markdownhighlight.CategoryRawHtml] = gray
