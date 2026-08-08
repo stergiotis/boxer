@@ -27,6 +27,30 @@ func charToByte(src string, charOff int) (byteOff int) {
 	return len(src)
 }
 
+// byteToChar converts a byte offset into src to a CHAR offset, the unit the
+// caret channel speaks in both directions. Inverse of charToByte, clamped the
+// same way.
+func byteToChar(src string, byteOff int) (charOff int) {
+	if byteOff <= 0 {
+		return 0
+	}
+	n := 0
+	for i := range src {
+		if i == byteOff {
+			return n
+		}
+		if i > byteOff {
+			// byteOff fell INSIDE the previous rune. A caret cannot sit
+			// mid-character, so it belongs to that rune and not the next one
+			// — rounding up would place it one character past where the byte
+			// offset pointed.
+			return n - 1
+		}
+		n++
+	}
+	return n
+}
+
 // lineStart returns the byte offset of the first byte of the line containing
 // off.
 func lineStart(src string, off int) (start int) {

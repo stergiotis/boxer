@@ -97,10 +97,17 @@ func (inst *App) renderOutlineRow(h markdown.HeadingInfo, ord int) {
 			if c.SelectableLabel(inst.ids.PrepareStr("row"), inst.caretSlug == h.Slug, label).
 				SendResp().HasPrimaryClicked() {
 				// Set the scroll target WITHOUT touching caretSlug. The caret
-				// has not moved, so leaving its baseline alone is what stops
-				// the next frame from dragging the preview straight back to
-				// the section the caret is in.
+				// has not moved YET — the request below moves it, and the
+				// caret's own baseline updates when the editor reports back.
+				// Moving it here instead would make the next frame read the
+				// caret's real section as changed and drag the preview
+				// straight back off the heading just clicked.
 				inst.pendingScroll = h.Slug
+				// Take the writer to the heading too, not just the reader.
+				// The caret goes to the LINE start so it sits before the `#`,
+				// which is where "go to this heading" means.
+				inst.pendingCaret = lineStart(inst.src, h.ByteOffset)
+				inst.pendingCaretOk = true
 			}
 		}
 	}

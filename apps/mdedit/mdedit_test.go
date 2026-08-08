@@ -80,6 +80,40 @@ func TestLineStart(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// byteToChar
+// ---------------------------------------------------------------------------
+
+// TestByteToChar_RoundTripsWithCharToByte pins the pair the caret channel
+// needs in both directions: the report arrives in chars, everything Go knows
+// about the document is in bytes, and setCursor takes chars back.
+func TestByteToChar_RoundTripsWithCharToByte(t *testing.T) {
+	for _, src := range []string{
+		"plain ascii text",
+		"héllo wörld — em dash",
+		"🎉 emoji 🎉 mixed",
+		"",
+	} {
+		for charOff := 0; charOff <= len([]rune(src)); charOff++ {
+			b := charToByte(src, charOff)
+			if got := byteToChar(src, b); got != charOff {
+				t.Fatalf("%q char %d -> byte %d -> char %d", src, charOff, b, got)
+			}
+		}
+	}
+}
+
+func TestByteToChar_Clamps(t *testing.T) {
+	const src = "héllo" // 5 runes, 6 bytes
+	assert.Equal(t, 0, byteToChar(src, -3))
+	assert.Equal(t, 0, byteToChar(src, 0))
+	assert.Equal(t, 5, byteToChar(src, 999))
+	// Byte 2 is the second byte of é, which belongs to char 1 — an interior
+	// byte must not report the NEXT char, or a caret set from it lands past
+	// the character the offset pointed into.
+	assert.Equal(t, 1, byteToChar(src, 2))
+}
+
+// ---------------------------------------------------------------------------
 // headingSlugAt
 // ---------------------------------------------------------------------------
 

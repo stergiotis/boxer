@@ -237,7 +237,7 @@ visible before the work starts rather than discovered inside it.
 | `app.DefaultRegistry` | added — one `RegisterFactory` under a new manifest | the carousel's side-effect import block, which is the single site pulling registered apps |
 | `markdownhighlight` exported API (M1, shipped) | added — `HighlightLex`, returning spans into the *source* bytes; `Highlight` untouched | `codeview.BuildMarkdownLex`, resolving the same categories against the existing `mdColors` palette |
 | `codeview` exported API (M2, shipped) | added — `BuildMarkdownFromSpans`, the sibling of `BuildSqlFromSpans` | nothing; it lets a caller that already lexed (for the word count) colour the same text without lexing twice |
-| `textEdit` IDL (M3, blocked; also caps M2) | none proposed here | caret-jump-to-match needs a `setCursor` method, a sibling of `insertAtCursor`. The same gap is why M2's bar has no heading / list / quote button: those prefix a LINE, and `insertAtCursor` inserts at the caret |
+| `textEdit` IDL (shipped, unblocking M3) | added — `setCursor(sel, focus)`, the inbound half of the caret channel, taking the packed word `reportCursor` emits | `PackCursorRange` beside the existing `UnpackCursorRange`; regenerated dispatch on both sides. Recorded on [ADR-0130](./0130-imzero2-textedit-highlight-seam.md) (2026-08-08), which owns the seam. It positions the caret but does NOT reveal it — an off-screen match can be selected, not scrolled to |
 
 ## Alternatives
 

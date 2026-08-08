@@ -227,6 +227,12 @@ type App struct {
 	// the TextEdit as insertAtCursor and cleared once emitted.
 	pendingInsert string
 
+	// pendingCaret is a BYTE offset the caret should move to, and pendingCaretOk
+	// whether there is one — a separate flag rather than a sentinel, so the
+	// zero value means "no request" and not "go to the start of the buffer".
+	pendingCaret   int
+	pendingCaretOk bool
+
 	// status is the one-line report under the action bar.
 	status string
 
@@ -571,6 +577,16 @@ func (inst *App) renderSource() {
 		if inst.pendingInsert != "" {
 			b = b.InsertAtCursor(inst.pendingInsert)
 			inst.pendingInsert = ""
+		}
+		// Move the caret where something asked it to go. One-shot: sent every
+		// frame it would pin the caret against the person typing. Focus is
+		// requested because an unfocused TextEdit paints no caret, and the
+		// gestures that move it — jumping to a heading — mean "take me
+		// there", not "remember this for later".
+		if inst.pendingCaretOk {
+			off := byteToChar(inst.src, inst.pendingCaret)
+			b = b.SetCursor(c.PackCursorRange(off, off), true)
+			inst.pendingCaretOk = false
 		}
 		_ = b.SendRespValCursor(&inst.src, &inst.cursor)
 
