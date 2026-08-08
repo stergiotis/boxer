@@ -23,9 +23,16 @@ import (
 // drive the picker resolution from the main goroutine; cleanup closes
 // both services.
 func setupApp(t *testing.T) (a *App, fsSvc *fsbroker.Service, cleanup func()) {
+	return setupAppTimeout(t, 2*time.Second)
+}
+
+// setupAppTimeout is setupApp with the transport's default request wait as a
+// parameter, so a test can make that default deliberately too short and prove
+// the dialog paths do not rely on it.
+func setupAppTimeout(t *testing.T, busTimeout time.Duration) (a *App, fsSvc *fsbroker.Service, cleanup func()) {
 	t.Helper()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	bus.SetRequestTimeout(2 * time.Second)
+	bus.SetRequestTimeout(busTimeout)
 	fs, err := fsbroker.NewService(bus, zerolog.Nop())
 	require.NoError(t, err)
 	ps, err := persist.NewService(bus, zerolog.Nop(), persist.NewMemoryBackend())
@@ -346,4 +353,85 @@ func TestApp_FsWatch_StopReleasesSubscription(t *testing.T) {
 		"no new events should append after Stop; got %d before, %d after",
 		preStop, len(a.watchEvents))
 	_ = fsSvc // keep service alive across the assertion window
+}
+
+// TestRunPick_OutlastsTheTransportDefault and its watch twin are the
+// regression guards on a defect the round-trip tests above cannot see, because
+// they resolve the dialog immediately: fs.dialog.* is answered when somebody
+// finishes choosing in a picker, and the bus transport's own default is far
+// shorter than a person. Under it both flows failed with "request timeout"
+// while the dialog was still on screen.
+//
+// The default is set deliberately tiny and the dialog held well past it. A
+// path that waits the transport default fails; one that asks for
+// fsbroker.DialogTimeout does not.
+func TestRunPick_OutlastsTheTransportDefault(t *testing.T) {
+	a, fsSvc, cleanup := setupAppTimeout(t, 40*time.Millisecond)
+	defer cleanup()
+
+	tmpFile := filepath.Join(t.TempDir(), "slow-pick.txt")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("read me late"), 0600))
+
+	done := make(chan struct{})
+	go func() {
+		a.runPick()
+		close(done)
+	}()
+	resolveSlowly(t, fsSvc, tmpFile)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runPick did not finish after a slow Resolve")
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	assert.Empty(t, a.fileErr, "a dialog answered slowly is not an error")
+	assert.Equal(t, "read me late", string(a.previewBytes))
+}
+
+func TestRunWatchPick_OutlastsTheTransportDefault(t *testing.T) {
+	a, fsSvc, cleanup := setupAppTimeout(t, 40*time.Millisecond)
+	defer cleanup()
+
+	dir := t.TempDir()
+	done := make(chan struct{})
+	go func() {
+		a.runWatchPick()
+		close(done)
+	}()
+	resolveSlowly(t, fsSvc, dir)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runWatchPick did not finish after a slow Resolve")
+	}
+
+	a.mu.Lock()
+	watchErr := a.watchErr
+	a.mu.Unlock()
+	assert.Empty(t, watchErr, "a watch dialog answered slowly is not an error")
+	a.runWatchStop()
+}
+
+// resolveSlowly waits for the pending dialog, then holds it well past the
+// tiny transport default before answering — standing in for a person reading
+// the picker.
+func resolveSlowly(t *testing.T, fsSvc *fsbroker.Service, path string) {
+	t.Helper()
+	var reqId string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if pending := fsSvc.Pending(); len(pending) == 1 {
+			reqId = pending[0].Id
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	require.NotEmpty(t, reqId)
+	time.Sleep(300 * time.Millisecond)
+	_, err := fsSvc.Resolve(reqId, path)
+	require.NoError(t, err)
 }

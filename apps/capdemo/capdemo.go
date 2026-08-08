@@ -295,7 +295,7 @@ func (inst *App) runPick() {
 	inst.setBusy(true)
 	defer inst.setBusy(false)
 
-	rawReply, rerr := inst.bus.Request(fsbroker.SubjectDialogRead, nil)
+	rawReply, rerr := inst.bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
 	if rerr != nil {
 		inst.setFileErr("fs.dialog.read: " + rerr.Error())
 		return
@@ -311,7 +311,7 @@ func (inst *App) runPick() {
 	}
 
 	readSubj := dr.HandleSubjectPrefix + ".read"
-	body, rerr := inst.bus.Request(readSubj, nil)
+	body, rerr := inst.bus.RequestWithTimeout(readSubj, nil, fsbroker.HandleOpTimeout)
 	if rerr != nil {
 		inst.mu.Lock()
 		inst.lastHandlePrefix = dr.HandleSubjectPrefix
@@ -340,7 +340,7 @@ func (inst *App) runClose(handlePrefix string) {
 	if inst.bus == nil {
 		return
 	}
-	_, _ = inst.bus.Request(handlePrefix+".close", nil)
+	_, _ = inst.bus.RequestWithTimeout(handlePrefix+".close", nil, fsbroker.HandleOpTimeout)
 	inst.mu.Lock()
 	inst.lastHandlePrefix = ""
 	inst.previewBytes = nil
@@ -505,7 +505,7 @@ func (inst *App) runWatchPick() {
 		return
 	}
 
-	rawReply, rerr := inst.bus.Request(fsbroker.SubjectDialogWatch, nil)
+	rawReply, rerr := inst.bus.RequestWithTimeout(fsbroker.SubjectDialogWatch, nil, fsbroker.DialogTimeout)
 	if rerr != nil {
 		inst.setWatchErr("fs.dialog.watch: " + rerr.Error())
 		return
@@ -548,7 +548,7 @@ func (inst *App) runWatchPick() {
 		reqPayload = payload
 	}
 
-	watchReply, werr := inst.bus.Request(dr.HandleSubjectPrefix+".watch", reqPayload)
+	watchReply, werr := inst.bus.RequestWithTimeout(dr.HandleSubjectPrefix+".watch", reqPayload, fsbroker.HandleOpTimeout)
 	if werr != nil {
 		unsubscribe()
 		inst.setWatchErr("watch start: " + werr.Error())
@@ -591,7 +591,7 @@ func (inst *App) runWatchStop() {
 	inst.watchUnsubscribe = nil
 	inst.mu.Unlock()
 	if prefix != "" {
-		_, _ = inst.bus.Request(prefix+".unwatch", nil)
+		_, _ = inst.bus.RequestWithTimeout(prefix+".unwatch", nil, fsbroker.HandleOpTimeout)
 	}
 	if unsub != nil {
 		unsub()
@@ -615,7 +615,7 @@ func (inst *App) runWatchClose() {
 	inst.watchEvents = nil
 	inst.mu.Unlock()
 	if prefix != "" {
-		_, _ = inst.bus.Request(prefix+".close", nil)
+		_, _ = inst.bus.RequestWithTimeout(prefix+".close", nil, fsbroker.HandleOpTimeout)
 	}
 	if unsub != nil {
 		unsub()

@@ -27,9 +27,16 @@ import (
 // persist cap, then constructs PlayApp with the caps already attached.
 // Mirrors capdemo's setupApp test fixture.
 func setupPlayWithCaps(t *testing.T) (inst *PlayApp, fsSvc *fsbroker.Service, cleanup func()) {
+	return setupPlayWithCapsTimeout(t, 2*time.Second)
+}
+
+// setupPlayWithCapsTimeout is setupPlayWithCaps with the transport's default
+// request wait as a parameter, so a test can make that default deliberately
+// too short and prove the picker path does not rely on it.
+func setupPlayWithCapsTimeout(t *testing.T, busTimeout time.Duration) (inst *PlayApp, fsSvc *fsbroker.Service, cleanup func()) {
 	t.Helper()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	bus.SetRequestTimeout(2 * time.Second)
+	bus.SetRequestTimeout(busTimeout)
 	fs, err := fsbroker.NewService(bus, zerolog.Nop())
 	require.NoError(t, err)
 	ps, err := persist.NewService(bus, zerolog.Nop(), persist.NewMemoryBackend())
@@ -200,4 +207,55 @@ func TestRegisteredAsFactory(t *testing.T) {
 		return
 	}
 	t.Fatalf("play is not in the default registry; its init() should have registered %s", AppId)
+}
+
+// TestPlayApp_LoadFromPicker_OutlastsTheTransportDefault is the regression
+// guard on a defect the round-trip test above could not see, because it
+// resolves the dialog immediately: fs.dialog.read is answered when somebody
+// finishes choosing in a file picker, and the bus transport's own default is
+// far shorter than that. Under it the load failed with "request timeout" while
+// the picker was still on screen.
+//
+// The default is set deliberately tiny here and the dialog held well past it.
+// A picker path that waits the transport default fails; one that asks for
+// fsbroker.DialogTimeout does not.
+func TestPlayApp_LoadFromPicker_OutlastsTheTransportDefault(t *testing.T) {
+	inst, fsSvc, cleanup := setupPlayWithCapsTimeout(t, 40*time.Millisecond)
+	defer cleanup()
+
+	tmpFile := filepath.Join(t.TempDir(), "slow.sql")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("SELECT 'picked late'"), 0600))
+
+	done := make(chan struct{})
+	go func() {
+		inst.loadFromPicker()
+		close(done)
+	}()
+
+	var reqId string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if pending := fsSvc.Pending(); len(pending) == 1 {
+			reqId = pending[0].Id
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	require.NotEmpty(t, reqId)
+
+	// Stand in for a person reading the dialog: far longer than the transport
+	// default, far shorter than what the picker path asks for.
+	time.Sleep(300 * time.Millisecond)
+	_, err := fsSvc.Resolve(reqId, tmpFile)
+	require.NoError(t, err)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("loadFromPicker did not finish after a slow Resolve")
+	}
+
+	inst.pickMu.Lock()
+	assert.Empty(t, inst.pickErr, "a dialog answered slowly is not an error")
+	inst.pickMu.Unlock()
 }

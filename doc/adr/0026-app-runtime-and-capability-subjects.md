@@ -401,13 +401,18 @@ the subject, and the broker is the only party that knows it. Finite rather than
 unbounded, so a picker nobody answers releases the caller's goroutine instead
 of leaking it for the life of the window.
 
-Adopted by mdedit ([ADR-0178](./0178-mdedit-markdown-editor.md) M4) and by
-`sqlappletcreator`'s export, whose regression guard is the shape worth copying:
-the fake bus records the duration each subject was requested with, because the
-fakes answer instantly and nothing else in those tests can tell a five-second
-wait from a ten-minute one. **`capdemo` (`fs.dialog.read`, `fs.dialog.watch`)
-and play (`fs.dialog.read`) still carry the defect** — the fix is a one-line
-change each, left to whoever owns those flows.
+Adopted by every consumer in the repo: mdedit
+([ADR-0178](./0178-mdedit-markdown-editor.md) M4), `sqlappletcreator`'s export,
+`capdemo`'s read and watch pickers, and play's Load. All four had the defect
+and none of their tests could see it, for the same reason in two flavours —
+which is the part worth carrying forward. Where the test uses a FAKE bus
+(sqlappletcreator), the fake answers instantly, so the guard has to record the
+duration each subject was requested with; nothing else distinguishes a
+five-second wait from a ten-minute one. Where it drives a REAL broker (capdemo,
+play), the test resolved the dialog immediately, so the guard sets the
+transport default deliberately tiny and then holds the dialog well past it —
+standing in for a person reading the picker. Each guard was checked to fail
+against its unfixed call.
 
 ### 2026-07-30 (later) — `runtime.persist` is a legacy channel under the data-centricity invariant
 

@@ -809,7 +809,7 @@ func (inst *PlayApp) loadFromPicker() {
 	inst.setLoadBusy(true)
 	defer inst.setLoadBusy(false)
 
-	rawReply, rerr := inst.bus.Request(fsbroker.SubjectDialogRead, nil)
+	rawReply, rerr := inst.bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
 	if rerr != nil {
 		inst.setLoadErr("fs.dialog.read: " + rerr.Error())
 		return
@@ -823,7 +823,7 @@ func (inst *PlayApp) loadFromPicker() {
 		inst.setLoadErr("dialog denied: " + dr.Reason)
 		return
 	}
-	body, rerr := inst.bus.Request(dr.HandleSubjectPrefix+".read", nil)
+	body, rerr := inst.bus.RequestWithTimeout(dr.HandleSubjectPrefix+".read", nil, fsbroker.HandleOpTimeout)
 	if rerr != nil {
 		inst.setLoadErr("handle read: " + rerr.Error())
 		return
