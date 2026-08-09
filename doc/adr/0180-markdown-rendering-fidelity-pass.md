@@ -2,7 +2,13 @@
 type: adr
 status: proposed
 date: 2026-08-09
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
+
+> **Status: proposed — pre-human-review.** The twelve items below are
+> implemented and their Go tests are green, but the decision itself has not
+> been read by a second person; do not cite it as settled.
 
 # ADR-0180: markdown rendering fidelity pass
 
@@ -180,15 +186,29 @@ Twelve items in three milestones.
 
 ## Verification plan — Tier 1
 
-- **Lane.** Default `go test`: a parse test per lowering change (checkbox
-  runs, marker padding, embed pipe-strip, `DisplayText`, `FeatureAll`
-  arithmetic, threshold policy as a pure function); the corpus zero-drops
-  gate; the widened parity test; the `-race` concurrent-parse test.
-- **Live.** The review's probe document driven through the gallery's Load
-  section (headless compositor + egui-mcp): checkbox glyphs present, image
-  at native size, heading gaps two-tier, marker columns flush, link
-  punctuation attached — geometry read from the accessibility tree, not
-  pixels. Tour A/B run against a same-binary control for the capture shift.
+- **Lane — done, green.** Default `go test`: a parse test per lowering change
+  (checkbox emission, marker padding, embed pipe-strip, `DisplayText`,
+  `FeatureAll` arithmetic, image fit-axis, heading gap tiers, threshold policy
+  as a pure function); the corpus zero-drops gates; the widened parity test;
+  the `-race` concurrent-parse test. The regenerated Rust builds and is
+  rustfmt-clean; `go mod tidy --diff` reports no drift.
+
+  One shape worth recording, because it constrains every future test here: a
+  finished paragraph run is an opaque retained FFFI blob with no way to read
+  its text back, so "the checkbox glyph reaches the document" is asserted
+  against the inline builder's pending buffer, and the regression net for the
+  whole class is the zero-drops gate rather than a text comparison.
+- **Live — NOT run.** Driving the probe document through the gallery needs the
+  imzero2 host binary, which does not build in the working tree this landed
+  in: a concurrent, unfinished refactor of `widgets/tree` and its adopters
+  (`configview`, `schemaview`, `fieldview`, `mdedit`, the demo) breaks every
+  package that imports them. So the visual claims — checkbox glyphs present,
+  image at native size, heading gaps two-tier, marker columns flush, link
+  punctuation attached — rest on the lowering tests and on reading the Rust,
+  not on geometry read from a live accessibility tree. The tour A/B for the
+  capture shift is outstanding for the same reason. Both remain to be done
+  once the tree builds; nothing here is expected to be wrong, but this section
+  should not read as though it had been checked.
 - **What would fail.** A future parser feature whose node the lowering does
   not know now fails the corpus gate instead of deleting text silently. A
   regression in the table else-arm shows as the policy test's `Vscroll`
@@ -202,15 +222,52 @@ Twelve items in three milestones.
 
 Proposed 2026-08-09, from the design dialogue over the
 [rendering review](../adr-background-work/markdown-rendering-review.md) §6.
+M0–M2 are implemented the same day, ahead of acceptance: the batch is a
+correctness pass over an existing surface rather than a new subsystem, so the
+code is the cheapest way to read what it does. It stays **proposed** until a
+second reader signs off — `reviewed-by` is a human's mark and nothing else may
+fill it in. Until then this remains a living snapshot, editable in place.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way).
 
 ### Milestones
 
-- **M0 — lowering + docs: checkboxes, drifts, rhythm, markers, image clamp, embed pipe, FeatureAll, thread contract.**
-- **M1 — the wire round: table else-arm + threshold policy, uiSetItemSpacing + renderRuns.**
-- **M2 — the nets: Doc.Dropped + corpus gates, parity broadening, race test.**
+- **M0 — lowering + docs: checkboxes, drifts, rhythm, markers, image clamp, embed pipe, FeatureAll, thread contract.** ✓
+  All eight items as decided. Two things worth recording beyond the decision
+  text. The heading ladder turned out to sit BELOW body text at H6 (12.5 pt
+  against the IDS 13 pt step): it was tuned against egui's default 12 pt body,
+  and `ScaledPt` moves it without correcting it. Pinned by a test rather than
+  retuned — retuning is a typographic decision of its own and moves every
+  capture a second time. And the ordered-list marker is padded and rendered
+  monospace, which is a `LabelAtoms` where it was a `Label`; bullets stay a
+  plain `Label`, per the decision.
+- **M1 — the wire round: table else-arm + threshold policy, uiSetItemSpacing + renderRuns.** ✓
+  One `egui2gen generate` round, Rust rebuilt and rustfmt-clean. The
+  threshold policy is factored as a pure `tableFlows(rows, hasHeader)` so the
+  decision is testable without a live FFFI sink — the render path around it
+  still is not.
+- **M2 — the nets: Doc.Dropped + corpus gates, parity broadening, race test.** ✓
+  `Doc.Dropped()` counts every skipped node by AST kind; comments are
+  deliberately not counted, since an author who wrote `%%…%%` got what they
+  asked for. The zero-drops gate went in per corpus-owning package rather than
+  as one central test — play, capinspector, helphost, logviewer, and all ten
+  sqlapplet applet books — because `help.BookI` already exposes everything the
+  gate needs and adding a method to that interface was a surface change the
+  decision did not license.
+
+  The parity test compares merged per-category byte ranges over 32 cases, with
+  a per-case allowlist that must stay live: a category listed as differing
+  which has since come into agreement fails, so the list cannot rot. Two
+  constraints shaped it. `Highlight`'s spans index the canonical form it
+  re-emits, so a case is only comparable when that form is byte-identical to
+  its source — 22 of 32 cases agree exactly, and the ten that do not are
+  documented divergences (the `***x***` delimiter split, the space after `>`,
+  callout titles, wikilink aliases, HTML blocks, frontmatter values). Nine
+  categories cannot be compared at all, because every input carrying them is
+  rewritten by canonicalisation; they are named with reasons and asserted as
+  an exact set. The lex tier's four declared non-goals get their own test:
+  they must stay plain.
 
 ## References
 

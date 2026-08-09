@@ -601,10 +601,69 @@ preview and source, and a truncated heading's tooltip carries its full text.
 That last one also settles a question this pane raised — a `HoverText` wrapping
 a tree cell's label does not steal the row's own click.
 
+### 2026-08-09 — Correction: the PARSE can leave the render goroutine; the RENDER cannot
+
+The Context section above states that "the parse cannot leave the render
+goroutine" because `parseAndLower` builds the document tree "out of FFI
+opcodes", and the Design-space entry rejecting a `bgjob` worker rests on the
+same reading. The claim is wrong as written, and
+[ADR-0180](./0180-markdown-rendering-fidelity-pass.md) item 8 corrects it at
+the source.
+
+`markdown.Parse` never touches the wire. `c.Atoms()` / `.Keep()` write into a
+`sync.Pool`-backed Go buffer and intern the result through `unique.Make`;
+only `Send()` on the render path reaches the FFFI sink. The one piece of
+shared mutable state involved — codeview's package-level prepared-job memo —
+already takes a mutex, and says in its own comment why: the documented
+retain-once idiom is a package-level `var doc = markdown.Parse(...)`, which
+runs at init on whatever goroutine gets there. Two shipping consumers
+(`docsections`, `sqlapplet_store`) have been parsing off the render goroutine
+all along. The `markdown` package now states the contract, and a `-race` test
+pins it.
+
+What is render-goroutine-only is `Doc.Render` — it emits into the current Ui
+scope like any other widget call. That is what the original sentence meant to
+say.
+
+Nothing in mdedit changes. The reparse-per-keystroke policy was licensed by
+the measured cost curve, not by the impossibility of moving the work, and the
+measurements stand. What changes is that the deferred quiescence gate is no
+longer the only remedy available for a document large enough to show up as
+typing latency: a `bgjob` parse with the previous `Doc` rendered until the new
+one lands is now on the table, at the cost of a stale-preview window. It stays
+deferred, on the same trigger.
+
+### 2026-08-09 — the outline's collapse map moved into the widget
+
+[ADR-0176](./0176-native-tree-widget.md) took up the `Keys` column this app's
+port argued for, so the tree widget now files expansion under a caller-supplied
+key instead of a node index. The outline's own `outlineCollapsed` map,
+`outlineIsCollapsed` and `outlineSetCollapsed` are gone: `outlineModel` hands
+the widget a `keys` column of `slug#ord` and `tree.State` is the store.
+
+Three consequences worth naming, none of which change what the pane does:
+
+- `syncOutline` no longer pushes expansion, only the caret-derived selection
+  and the default. The default is set through `SetDefaultExpanded(true)`, which
+  is what keeps the pane's promise that a document arrives fully open.
+- `outlineReveal` lost its parent walk. It used to open the caret's ancestors
+  in the host map because the widget's own `ExpandAncestors` was overwritten a
+  frame later by `syncOutline`; with nothing rewriting expansion, asking for
+  the reveal is enough. `PendingReveal` is what its test asserts on now.
+- `outlineCollapseAll` stays a loop over the current nodes rather than becoming
+  `tree.State.CollapseAll`, because that also flips the default: a heading
+  written after the fold has never been closed by anyone and has to arrive
+  showing. A test pins it.
+
+The reparse still renumbers every node on every edit that changes the text —
+that has not changed, and it is why the key column exists at all.
+
 ## References
 
 - [ADR-0176](./0176-native-tree-widget.md) — the tree widget the outline
-  renders through, and the node-index identity contract its `State` documents.
+  renders through, and the `Keys` identity column its `State` files under.
+- [ADR-0180](./0180-markdown-rendering-fidelity-pass.md) — the rendering
+  fidelity pass that corrected the parse-thread claim above.
 - [ADR-0130](./0130-imzero2-textedit-highlight-seam.md) — the TextEdit
   highlight seam this app edits through, and the reconcile contract that makes
   a canonicalising span source unusable here.

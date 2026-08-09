@@ -83,11 +83,17 @@ const richMaxImagePixels = imagedecode.DefaultMaxPixels
 // nowhere. Frontmatter is dropped because a cell is not a note — a leading
 // `---` is content here, not metadata.
 //
-// Tables and math are absent for a different reason: the markdown widget's
-// renderer drops both even though the parser recognises them (see its package
-// doc). Enabling FeatureGFM still buys strikethrough, task lists and
-// footnotes; a GFM *table* in a declared cell renders as nothing. That is an
-// upstream gap, recorded in ADR-0123 §SD3 rather than worked around here.
+// FeatureGFM is on and buys what it says: tables, strikethrough and task
+// lists all render in a declared cell. (This comment used to say a GFM table
+// "renders as nothing" — true when ADR-0123 §SD3 was written, and stale since
+// helphost generation 2 gave the widget a native table path.) Footnotes are
+// the one GFM construct still missing, and they are missing everywhere: the
+// footnote extension is wired to no feature flag at all, so `[^1]` stays
+// literal prose rather than disappearing.
+//
+// Math is absent for the original reason: obsidian.FeatureMath is declared,
+// reserved and consulted by nothing, so setting it would change neither the
+// parse nor the render. It is not part of obsidian.FeatureAll for that reason.
 const richMarkdownFeatures = obsidian.FeatureGFM |
 	obsidian.FeatureCallout |
 	obsidian.FeatureHighlight |
