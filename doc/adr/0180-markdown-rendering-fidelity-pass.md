@@ -7,8 +7,9 @@ date: 2026-08-09
 ---
 
 > **Status: proposed — pre-human-review.** The twelve items below are
-> implemented and their Go tests are green, but the decision itself has not
-> been read by a second person; do not cite it as settled.
+> implemented, their Go tests are green and the live checks are done, but the
+> decision itself has not been read by a second person; do not cite it as
+> settled.
 
 # ADR-0180: markdown rendering fidelity pass
 
@@ -198,17 +199,47 @@ Twelve items in three milestones.
   its text back, so "the checkbox glyph reaches the document" is asserted
   against the inline builder's pending buffer, and the regression net for the
   whole class is the zero-drops gate rather than a text comparison.
-- **Live — NOT run.** Driving the probe document through the gallery needs the
-  imzero2 host binary, which does not build in the working tree this landed
-  in: a concurrent, unfinished refactor of `widgets/tree` and its adopters
-  (`configview`, `schemaview`, `fieldview`, `mdedit`, the demo) breaks every
-  package that imports them. So the visual claims — checkbox glyphs present,
-  image at native size, heading gaps two-tier, marker columns flush, link
-  punctuation attached — rest on the lowering tests and on reading the Rust,
-  not on geometry read from a live accessibility tree. The tour A/B for the
-  capture shift is outstanding for the same reason. Both remain to be done
-  once the tree builds; nothing here is expected to be wrong, but this section
-  should not read as though it had been checked.
+- **Live — done.** The probe document driven through the gallery's Load
+  section, under a private headless weston (`--idle-time=0`) over egui-mcp,
+  with geometry read from the accessibility tree. Measured at standard
+  density:
+
+  | Claim | Measurement |
+  | --- | --- |
+  | Heading rhythm is two-tier | gap above H1/H2 = **20 px**, above H3–H6 = **16 px**, against an **8 px** paragraph-to-paragraph baseline — i.e. the token step (12 / 8) on top of `item_spacing.y`. Every one of those gaps was 8 px before. |
+  | Marker columns flush | ordered items 8, 9, 10, 11, 12 all start at **x = 101.3125**. The review measured 84.3 vs 91.75 across the same boundary; the step is now 0. |
+  | Link punctuation attached | the three runs of one paragraph abut exactly — text ends at 161.875, link starts at 162.0, link ends at 232.8, trailing run starts at 232.0. The style gap is **zero**; the word gap is the author's own space. |
+  | Images at native size | inline image width read as the x-gap between its neighbouring runs: **127.5 px** for the CommonMark path and **127.3 px** for the embed path, against a native 128 and a configured cap of 200×140. Row height 80 = native. Before, `FitAspectMax` scaled 128×80 up by 1.5625 to fill the cap. |
+  | Tables flow, and stop flowing at the threshold | a 40-row table lays out **1385.6 px** inline (41 × 33.6) with prose directly beneath it; a 150-row table is bounded to **628 px** instead of 5040. Both arms of the policy, and proof the `vscroll(false)` else-arm is real. |
+  | Checkbox glyphs present | in one list, task items carry a leading Phosphor glyph and the plain bullet beside them carries none; checked and unchecked render as visibly different squares. |
+
+  Images carry no AccessKit node (the op allocates and paints rather than
+  going through `apply_widget`), so their size is derived from the bounds of
+  the text runs on either side rather than read directly — the only claim
+  here not taken from a node of its own.
+
+- **Tour A/B — done, and it needed the clean-worktree form.** Run first from
+  the working tree, the A/B reported 77 of 81 captures shifted, which is not a
+  finding but an artefact: that tree also carried two other sessions'
+  unfinished work. Re-run between two throwaway worktrees at this batch's tip
+  and its parent, with a same-binary control for the noise floor, 90 captures
+  each:
+
+  - **4 captures are nondeterministic run to run** (`fibscope-exhaust`,
+    `sccmap-bytes-tests`, `sccmap-treemap`, `splashscreen-about`) — the noise
+    floor, and the reason this is a classify-by-bbox exercise rather than a
+    `cmp`.
+  - **2 captures changed for real, both markdown-bearing**: `markdown`
+    (14.4 % of pixels — images at native size, heading rhythm, markers) and
+    `mdedit-split` (4.5 %, confined to the preview pane — the heading rhythm
+    reaching a second consumer).
+  - **18 captures differ only inside one 135×17 box**, identical in all of
+    them: the window title, shifted a uniform −8 px. Every differing pixel
+    lies inside that box. The cause is the gallery window being 16 px
+    narrower from the markdown demo onward, because its images no longer
+    claim 200 px of width — so the whole downstream effect traces to the
+    image clamp and touches no demo's own content.
+  - **64 captures are byte-identical.**
 - **What would fail.** A future parser feature whose node the lowering does
   not know now fails the corpus gate instead of deleting text silently. A
   regression in the table else-arm shows as the policy test's `Vscroll`
@@ -216,7 +247,12 @@ Twelve items in three milestones.
   arithmetic test.
 - **Gap.** Render-path emission is still exercised only live; that lane
   (op-capture or ADR-0154 carrier) remains the standing weakness, deferred
-  on its own trigger.
+  on its own trigger. What the live pass above bought is one dated
+  measurement, not a gate — nothing re-runs it.
+
+  A second gap the live pass surfaced: an A/B on a shared working tree
+  measures whatever else is in that tree. The clean-worktree pair is the only
+  form of this check worth reporting, and it should be the documented one.
 
 ## Status
 
