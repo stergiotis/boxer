@@ -1936,6 +1936,15 @@ func UiSetHeight(height float32) {
 	r.SendIntermediate()
 }
 
+func UiSetItemSpacing(sx float32, sy float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiSetItemSpacing))
+	r.WriteFloat32(sx)
+	r.WriteFloat32(sy)
+
+	r.SendIntermediate()
+}
+
 func UiSetMaxHeight(height float32) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdUiSetMaxHeight))

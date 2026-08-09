@@ -21,6 +21,38 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
+	// uiSetItemSpacing — override `spacing.item_spacing` for the CURRENT Ui.
+	//
+	// Scope is the Ui the op lands in: egui's Style is cloned into each
+	// child Ui when it is created, so children opened AFTER this op inherit
+	// the override and siblings of the enclosing Ui are untouched. Emit it
+	// inside the block whose gaps you want to change; there is no restore
+	// op, and none is needed — the enclosing Ui keeps its own Style.
+	//
+	// The x axis is the one with no other lever. A row of inline runs
+	// (markdown's links and images inside HorizontalWrapped) gets
+	// item_spacing.x inserted at every run boundary IN ADDITION to whatever
+	// space characters the text already carries, so links float in a
+	// double-wide gap and punctuation after a link detaches ("a link .").
+	// Trimming the adjacent spaces cannot fix the second case — there is no
+	// space to trim there — so the gap has to go to zero and the text's own
+	// spaces have to carry the word gap.
+	//
+	// Generally useful beyond that: control rows and badge clusters that
+	// want to sit tighter than the global density without every widget
+	// growing a knob. Carries no widget id.
+	widgets = append(widgets, idl.NewProceduralNode("uiSetItemSpacing").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("sx", ctabb.F32).
+			PlainArg("sy", ctabb.F32).
+			Build()).
+		WithApplyCodeClientRust(rustClientCode(`
+					if {{EguiUiOptionalOuter}}.is_some() {
+						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						ui.spacing_mut().item_spacing = egui::vec2(sx, sy);
+					}
+`)).
+		Build())
 	widgets = append(widgets, idl.NewProceduralNode("endRow").
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {

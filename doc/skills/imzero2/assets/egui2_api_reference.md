@@ -185,6 +185,7 @@ status: draft
 | UiClipToMaxRect | Procedural | No | 0 | 0 | - | - |
 | UiDisable | Procedural | No | 0 | 0 | - | - |
 | UiSetHeight | Procedural | No | 1 | 0 | - | - |
+| UiSetItemSpacing | Procedural | No | 2 | 0 | - | - |
 | UiSetMaxHeight | Procedural | No | 1 | 0 | - | - |
 | UiSetMaxWidth | Procedural | No | 1 | 0 | - | - |
 | UiSetMinHeight | Procedural | No | 1 | 0 | - | - |
@@ -3222,6 +3223,20 @@ Block
 | Name | Kind | Type |
 |------|------|------|
 | height | plain | f32 |
+
+---
+
+### UiSetItemSpacing
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| sx | plain | f32 |
+| sy | plain | f32 |
 
 ---
 

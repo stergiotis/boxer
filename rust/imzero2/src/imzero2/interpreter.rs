@@ -11526,8 +11526,16 @@ let mut w = // generating location: egui2_definition_templating.go:67 github.com
                         if w.striped {
                             builder = builder.striped(true);
                         }
+                        // Both arms, not just the true one. egui_extras defaults vscroll ON,
+                        // so a one-sided apply made Vscroll(false) a silent no-op and a long
+                        // table always became a nested scroll region — capturing the wheel
+                        // inside a document pane that is itself scrolling. TableConfig::new
+                        // also defaults vscroll true, so the else arm fires only for an
+                        // explicit false and no existing caller moves.
                         if w.vscroll {
                             builder = builder.vscroll(true);
+                        } else {
+                            builder = builder.vscroll(false);
                         }
                         if let Some(row) = w.scroll_to_row {
                             builder = builder.scroll_to_row(row, None);
@@ -12243,6 +12251,25 @@ self.apply_widget(w,u,f,Some(i));
 
                 if u.is_some() {
                     u.as_mut().unwrap().set_height(height);
+                }
+            }
+            FuncProcId::UiSetItemSpacing => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::UiSetItemSpacing");
+                // arguments
+                #[allow(unused_mut)]
+                let mut sx = self.io.read_plain_f32()?;
+                #[allow(unused_mut)]
+                let mut sy = self.io.read_plain_f32()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    let ui = u.as_mut().unwrap();
+                    ui.spacing_mut().item_spacing = egui::vec2(sx, sy);
                 }
             }
             FuncProcId::UiSetMaxHeight => {

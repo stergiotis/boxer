@@ -12,10 +12,21 @@ package definition
 //     matches the version Go last sent for this widget id, Go ships
 //     `pixels=[]uint32{}` (empty, NOT nil — see FFFI2 nil-sentinel asymmetry)
 //     to mean "draw the cached texture, don't re-upload".
-//   - Rust caches `(TextureHandle, w, h, content_version)` keyed by widget id.
-//     A non-empty pixel buffer with the same `(w, h, contentVersion)` triggers
-//     re-upload (defensive — Go shouldn't send pixels when version matches);
-//     an empty buffer with no cached entry is treated as "no draw".
+//   - Rust caches `(TextureHandle, w, h, content_version)` keyed by widget id
+//     and decides on the CACHE KEY ALONE: it re-uploads when there is no
+//     entry, when `contentVersion` moved, or when `(w, h)` changed. Matching
+//     key ⇒ the cached texture is drawn and the buffer is ignored, whether or
+//     not Go shipped pixels. An empty buffer with no cached entry is "no
+//     draw" and reports starvation so the sender re-ships.
+//
+// The cost of shipping pixels Go did not have to ship is therefore WIRE
+// BANDWIDTH — one memcpy each way — and NOT a GPU re-upload. A caller
+// pinning `contentVersion` and re-sending every frame (the markdown widget
+// does exactly this, deliberately, so one Doc can render under several id
+// scopes) pays that memcpy per frame: negligible for icons, the wrong cost
+// model for full-page screenshots. This comment used to claim the opposite —
+// that a non-empty buffer always forces a re-upload — which taught two
+// downstream comments a cost model the interpreter never had.
 //
 // Hover readout (per SD11 in ADR-0058): packed as `(row << 32) | col` in
 // image-pixel space (NOT screen pixels — caller doesn't have to invert the

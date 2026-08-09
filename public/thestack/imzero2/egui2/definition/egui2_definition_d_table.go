@@ -189,8 +189,16 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	if {{Instance}}.striped {
 		builder = builder.striped(true);
 	}
+	// Both arms, not just the true one. egui_extras defaults vscroll ON,
+	// so a one-sided apply made Vscroll(false) a silent no-op and a long
+	// table always became a nested scroll region — capturing the wheel
+	// inside a document pane that is itself scrolling. TableConfig::new
+	// also defaults vscroll true, so the else arm fires only for an
+	// explicit false and no existing caller moves.
 	if {{Instance}}.vscroll {
 		builder = builder.vscroll(true);
+	} else {
+		builder = builder.vscroll(false);
 	}
 	if let Some(row) = {{Instance}}.scroll_to_row {
 		builder = builder.scroll_to_row(row, None);
