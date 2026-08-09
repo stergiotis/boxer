@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -16,6 +17,27 @@ func padDefault() (v float32) {
 	return
 }
 
+// headingGap is the vertical air set above a heading of the given level.
+// Two tiers: the outer-padding step for the levels that open a major
+// section (H1/H2), the default step for H3–H6.
+//
+// Two token tiers rather than a gradient proportional to the heading's
+// font size. A gradient reads better in the abstract but reintroduces a
+// tuned constant per level, and the tokens already carry the density —
+// so a Tight document tightens its section breaks along with everything
+// else, for free. Without any of this every block pair in a document was
+// separated by exactly one item_spacing (8 px at standard density) and
+// the hierarchy rode on font size alone (L1 in the rendering review).
+func headingGap(level uint8) (v float32) {
+	d := styletokens.DensityFromEnv()
+	if level <= 2 {
+		v = styletokens.PaddingOuter(d)
+		return
+	}
+	v = styletokens.PaddingDefault(d)
+	return
+}
+
 // render emits a single segment into the current egui Ui scope.
 //
 // rc threads the monotonic per-Render-invocation id sequence counter,
@@ -24,8 +46,23 @@ func padDefault() (v float32) {
 // drag) keyed by id stays stable across frames as long as the lowering
 // rules produce the same segment sequence.
 func (inst *segment) render(rc *renderCtx) {
+	atDocStart := !rc.emittedAny
+	rc.emittedAny = true
 	switch inst.kind {
 	case segKindHeading:
+		// Air above the heading — but not above the first thing in the
+		// document, where a leading gap reads as a misaligned pane
+		// rather than as a section break.
+		//
+		// Emitted before the scroll dispatch below, not after: that op
+		// targets the current cursor, and a gap placed after it would
+		// push the heading below the position we just asked egui to
+		// scroll to. [c.AddSpace] takes no widget id, so this does not
+		// disturb the id-derivation order (EXPLANATION.md) and needs no
+		// consumer scope-key bump.
+		if !atDocStart {
+			c.AddSpace(headingGap(inst.headingLevel))
+		}
 		// Scroll-to-section dispatch: scrollToSlug is consumed when it
 		// matches the slug of the heading about to render. The op
 		// targets the current cursor position (top of the to-be-
@@ -133,6 +170,45 @@ const tableCellPadding float32 = 12.0
 // pixels.
 const tableRowHeightFactor float32 = 1.6
 
+// tableFlowMaxRows is the body-row count above which a table keeps its
+// own vertical scroll instead of flowing with the document.
+//
+// A document's tables should flow: the reader scrolls the pane, and a
+// table that opens its own scroll region inside that pane captures the
+// wheel and cuts the document in two. That is the right default and the
+// threshold exists only to bound the case it cannot afford — a generated
+// table of thousands of rows would lay every row out on every frame,
+// because a flowing table has no viewport to cull against.
+//
+// A heuristic, and a deliberately blunt one. It is not a knob: a knob
+// would push the judgement onto every caller, and none of them knows
+// more about this than the renderer does. What could replace it is a
+// measurement seam — the render path cannot ask egui for the remaining
+// viewport height today (the Fetcher opcodes that could may only run
+// from StateManager.Sync at frame end).
+const tableFlowMaxRows = 100
+
+// tableScrollRows bounds the internal scroll of a table that exceeds
+// [tableFlowMaxRows]: its viewport is this many rows tall, so a
+// pathological table costs a bounded region rather than the whole frame.
+const tableScrollRows = 24
+
+// tableFlows reports whether a table of the given body-row count renders
+// as part of the document flow, and — when it does not — the scroll
+// height its own viewport is bounded to.
+//
+// Split out as a pure function because the render path itself is
+// untestable (it needs a live FFFI sink), and the policy is the part
+// worth pinning.
+func tableFlows(rows int, hasHeader bool) (flows bool, maxScrollHeight float32) {
+	if rows <= tableFlowMaxRows {
+		flows = true
+		return
+	}
+	maxScrollHeight = tableScrollRows * tableRowHeight(hasHeader)
+	return
+}
+
 // tableRowHeight derives the per-row height from the IDS type scale at
 // the active density. The op applies one height to the header row and
 // every body row alike, and the interpreter draws header cells with
@@ -194,6 +270,12 @@ func tableColumnWidth(runes uint32, colCap float32) (w float32) {
 // a nested table is impossible in GFM, so adjacency holds by
 // construction.
 //
+// A table of ordinary length FLOWS with the document (see [tableFlows]):
+// it takes its full height inline and the enclosing pane scrolls it,
+// rather than opening a scroll region of its own that swallows the wheel
+// halfway down a page. Only past the row threshold does it keep an
+// internal scroll, bounded so the cost stays bounded.
+//
 // Rows are a fixed height (see [tableRowHeight]): cell text does not
 // wrap and anything taller than one line is clipped. Cells are plain
 // strings — a hyperlink inside a cell renders as its label text, not as
@@ -239,9 +321,15 @@ func renderTable(s *segment, rc *renderCtx) {
 
 	seq := rc.idSeq
 	rc.idSeq++
-	c.Table(rc.ids.PrepareSeq(seq), tableRowHeight(len(s.tableHeader) > 0), uint64(rows)).
-		Striped(true).
-		Send()
+	hasHeader := len(s.tableHeader) > 0
+	tbl := c.Table(rc.ids.PrepareSeq(seq), tableRowHeight(hasHeader), uint64(rows)).
+		Striped(true)
+	if flows, maxScroll := tableFlows(rows, hasHeader); flows {
+		tbl = tbl.Vscroll(false)
+	} else {
+		tbl = tbl.MaxScrollHeight(maxScroll)
+	}
+	tbl.Send()
 }
 
 // renderCodeActionButtons emits a horizontal row of small IDS buttons above
@@ -328,6 +416,20 @@ func renderCallout(s *segment, rc *renderCtx) {
 // only a single Atoms run becomes one wrapping LabelAtoms (so egui's
 // text shaper can do glyph-level wrapping). A mixed sequence becomes a
 // HorizontalWrapped flow so links and images can sit inline with text.
+//
+// The mixed path zeroes the row's horizontal item spacing. Each run
+// boundary otherwise inserts item_spacing.x IN ADDITION to whatever
+// space characters the text run already carries, so a link floats in a
+// double-wide gap and punctuation written flush against it detaches
+// ("…even a link ." — L3 in the rendering review). With the style gap at
+// zero the text's own spaces carry the word gap, which is what the
+// author wrote and what the single-run path already does. The vertical
+// component keeps a real gap: it is what separates the rows a wrapped
+// paragraph breaks into.
+//
+// [c.UiSetItemSpacing] applies to the Ui it lands in and to children
+// opened after it, never to siblings — so this affects one paragraph's
+// row and nothing around it. It carries no widget id.
 func renderRuns(runs []paragraphRun, rc *renderCtx) {
 	if len(runs) == 0 {
 		return
@@ -337,6 +439,7 @@ func renderRuns(runs []paragraphRun, rc *renderCtx) {
 		return
 	}
 	for range c.HorizontalWrapped().KeepIter() {
+		c.UiSetItemSpacing(0, styletokens.GapItems(styletokens.DensityFromEnv()))
 		for i := range runs {
 			r := &runs[i]
 			switch r.kind {
@@ -378,40 +481,66 @@ func renderLinkRun(r *paragraphRun, rc *renderCtx) {
 	}
 }
 
-// renderImageRun emits one image-pixel-data widget. Pixels are re-sent
-// every frame and contentVersion is pinned at 1: per the wire contract
-// in egui2_definition_d_image.go, a non-empty pixel buffer triggers a
-// Rust-side re-upload regardless of version, and per the bindings
-// doc-comment at [c.ImageVersionTracker] skipping the tracker is the
-// recommended pattern for static assets ("the per-widget-id one-shot
-// upload cost is negligible"). Avoiding the tracker also keeps the
-// package-level retain-once / render-many Doc usable under multiple
-// id scopes — keyed-by-seq trackers silently drop pixels on the
-// second scope.
+// renderImageRun emits one image-pixel-data widget.
+//
+// The fit box is min(cap, native) per axis, not the cap: FitAspectMaxE
+// computes s = min(fw/nw, fh/nh) with no s ≤ 1 clamp, so handing it the
+// raw cap upscaled every image smaller than the box — the demo's 128×80
+// assets rendered stretched to the 200×140 cap (L4 in the rendering
+// review). Passing the native size where it is smaller pins s at 1. A
+// zero cap axis means "no cap", which is why it resolves to native here
+// rather than to egui's fill-available (that reads ~0 inside a vertical
+// ScrollArea, which is where every markdown document lives, and
+// collapsed the image to invisible).
+//
+// Pixels are re-sent every frame and contentVersion is pinned at 1. The
+// Rust ImageCache keys on (id, version, w, h) and skips the GPU upload
+// when they match, so this costs wire bandwidth — one memcpy each way
+// per frame — and NOT a per-frame texture upload. Fine for icons and
+// diagrams; the wrong cost model for a book of full-page screenshots,
+// which is when the tracker becomes worth its complexity. Skipping it
+// today follows the bindings doc-comment at [c.ImageVersionTracker]
+// ("the per-widget-id one-shot upload cost is negligible") and keeps the
+// package-level retain-once / render-many Doc usable under multiple id
+// scopes — keyed-by-seq trackers silently drop pixels on the second
+// scope.
 func renderImageRun(r *paragraphRun, rc *renderCtx) {
 	seq := rc.idSeq
 	rc.idSeq++
 	c.Image(
 		rc.ids.PrepareSeq(seq),
 		r.imgWidthPx, r.imgHeightPx,
-		1, // contentVersion: any value works (non-empty pixels re-upload).
+		1, // contentVersion: pinned; pixels ride every frame.
 		uint8(c.FitAspectMaxE),
-		rc.imageMaxW, rc.imageMaxH,
+		imageFitAxis(rc.imageMaxW, r.imgWidthPx),
+		imageFitAxis(rc.imageMaxH, r.imgHeightPx),
 		uint8(c.FilterLinearE),
 		c.TintNoneRgba,
 		r.imgPixels,
 	).Send()
 }
 
+// imageFitAxis resolves one axis of the fit box: the smaller of the
+// configured cap and the image's own size, with a zero cap meaning
+// "uncapped" and therefore native.
+func imageFitAxis(capPx uint32, native uint32) (box uint32) {
+	if capPx == 0 || capPx > native {
+		box = native
+		return
+	}
+	box = capPx
+	return
+}
+
 // renderList emits a Vertical of list items. Each item is a
-// Horizontal{ glyph-Label , Vertical{ children } } so multi-line item
-// content stays aligned to the glyph's right edge.
+// Horizontal{ marker , Vertical{ children } } so multi-line item
+// content stays aligned to the marker's right edge.
 func renderList(s *segment, rc *renderCtx) {
 	for range c.Vertical().KeepIter() {
 		for i := range s.children {
 			item := &s.children[i]
 			for range c.Horizontal().KeepIter() {
-				c.Label(itemMarker(s, uint32(i))).Send()
+				renderItemMarker(s, uint32(i))
 				for range c.Vertical().KeepIter() {
 					item.render(rc)
 				}
@@ -420,13 +549,48 @@ func renderList(s *segment, rc *renderCtx) {
 	}
 }
 
+// renderItemMarker draws the bullet or the number for list item i
+// (0-based).
+//
+// A bullet is a plain label. A number is a MONOSPACE label, padded on the
+// left to the list's widest marker: proportional digits are not
+// equal-width, so `9.` and `10.` put their item bodies at different x
+// (measured at 7.4 pt apart — L2 in the rendering review) and a numbered
+// list crossing ten items develops a visible step. Monospace plus
+// padding lines the periods up exactly at every digit width.
+//
+// The trade is deliberate: the numerals sit in a different face from the
+// prose beside them. Exact alignment reads better than matched faces in
+// a column of items, and the marker is chrome rather than content.
+//
+// The numbered markers are retained holders built once at lowering time,
+// not Atoms rebuilt per frame — monospace needs the RichText scope, and
+// interning a fresh blob per item per frame would put an allocation back
+// into the steady state the package is built to keep empty. A missing
+// holder falls back to a plain label rather than panicking: the segment
+// tree is the renderer's own, but a nil holder is not worth a crash in a
+// reading surface.
+func renderItemMarker(s *segment, i uint32) {
+	if !s.listOrdered || int(i) >= len(s.listMarkers) {
+		c.Label(itemMarker(s, i)).Send()
+		return
+	}
+	c.LabelAtoms(s.listMarkers[i]).Send()
+}
+
 // itemMarker returns the bullet glyph or a numbered marker for list
-// item index i (0-based).
+// item index i (0-based). Ordered markers are left-padded with spaces to
+// s.listMarkerDigits, the digit count of the list's LAST number, settled
+// once at lowering time.
 func itemMarker(s *segment, i uint32) (m string) {
 	if !s.listOrdered {
 		m = "• "
 		return
 	}
-	m = strconv.FormatUint(uint64(s.listStart+i), 10) + ". "
+	n := strconv.FormatUint(uint64(s.listStart+i), 10)
+	if pad := int(s.listMarkerDigits) - len(n); pad > 0 {
+		m = strings.Repeat(" ", pad)
+	}
+	m += n + ". "
 	return
 }

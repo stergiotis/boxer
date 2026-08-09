@@ -18,21 +18,63 @@ import (
 // frame-time render path remains single-threaded.
 //
 // imageMaxW / imageMaxH cap the bounding box for FitAspectMaxE on
-// inline images sourced from [resolver.ResolverI.LoadImage]. Pixels
-// are decoded once at parse time, stashed on a runKindImage paragraph
-// run, and re-sent every frame; the bindings doc-comment at
-// [c.ImageVersionTracker] explicitly recommends skipping the tracker
-// for static assets ("the per-widget-id one-shot upload cost is
-// negligible") because per-widget-id tracking would silently break
-// the package-level `var doc = markdown.Parse(...)` retain-once /
+// inline images sourced from [resolver.ResolverI.LoadImage] — see
+// [WithImageMaxSize] for the exact meaning, including what a zero axis
+// does. Pixels are decoded once at parse time, stashed on a
+// runKindImage paragraph run, and re-sent every frame; the bindings
+// doc-comment at [c.ImageVersionTracker] explicitly recommends skipping
+// the tracker for static assets ("the per-widget-id one-shot upload
+// cost is negligible") because per-widget-id tracking would silently
+// break the package-level `var doc = markdown.Parse(...)` retain-once /
 // render-many idiom when the same Doc is rendered under multiple id
 // scopes.
 type Doc struct {
 	segments    []segment
 	frontmatter *containers.BinarySearchGrowingKV[string, interface{}]
 	headings    []HeadingInfo
+	dropped     map[string]int
 	imageMaxW   uint32
 	imageMaxH   uint32
+}
+
+// KindCount is one AST node kind the lowering could not represent, and
+// how many times it occurred in the document. Kind is goldmark's node
+// kind name ("RawHTML", "HTMLBlock", "FootnoteLink", …).
+type KindCount struct {
+	Kind  string
+	Count int
+}
+
+// Dropped reports, per AST node kind, how many nodes [Parse] skipped —
+// text the reader will never see. It is empty for a document the
+// lowering represents in full, which is the case for every book in the
+// repo's corpus and the property those tests assert.
+//
+// This exists because the lowering's failure mode for a construct it does
+// not know is *invisible*: the default branch drops the node and the
+// prose it covered, so a document reads short with nothing to say it
+// did. That is how a tag feature once deleted the text it covered. A
+// count is not a fix — the construct still does not render — but it
+// turns "we hope nothing is lost" into something a test can gate on, and
+// tells an author which construct to rewrite.
+//
+// Comments (`%%…%%`) are NOT counted: an author asking for text to be
+// invisible got what they asked for.
+//
+// The result is sorted by Kind so callers can compare it directly. It is
+// freshly allocated per call and safe to keep.
+func (inst *Doc) Dropped() (kinds []KindCount) {
+	if len(inst.dropped) == 0 {
+		return
+	}
+	kinds = make([]KindCount, 0, len(inst.dropped))
+	for kind, count := range inst.dropped {
+		kinds = append(kinds, KindCount{Kind: kind, Count: count})
+	}
+	slices.SortFunc(kinds, func(a, b KindCount) int {
+		return strings.Compare(a.Kind, b.Kind)
+	})
+	return
 }
 
 // HeadingInfo describes one top-level heading discovered during [Parse].
@@ -364,6 +406,14 @@ type renderCtx struct {
 	imageMaxW uint32
 	imageMaxH uint32
 
+	// emittedAny goes true once the first segment of this Render call has
+	// been reached, and exists only so a heading knows whether it opens
+	// the document. A leading heading takes no gap above it; every later
+	// one does. It tracks what actually rendered, so under
+	// [WithSectionFilter] the first ADMITTED segment is the one treated
+	// as the start.
+	emittedAny bool
+
 	// Scroll-to-section state. scrollToSlug is the caller-provided
 	// target ([WithScrollToSection]); empty disables the dispatch.
 	// headings mirrors [Doc.headings] for slug→ordinal lookup at
@@ -433,17 +483,28 @@ func defaultConfig() (cfg config) {
 }
 
 // WithFeatures overrides the default obsidian feature set. The default
-// covers everything the renderer can lower: frontmatter, GFM (tables /
-// strikethrough / footnotes / task lists), wikilinks, embeds, callouts,
-// ==highlight== and %%comment%% stripping, `#tag` spans, and `{#anchor}`
-// heading anchors ([obsidian.FeatureHeadingAnchor], which feeds
-// [HeadingInfo.Slug]). Math remains deferred — the parser recognises it
-// but the renderer drops it.
+// covers everything the renderer can lower: frontmatter, GFM (tables,
+// strikethrough, task lists), wikilinks, embeds, callouts, ==highlight==
+// and %%comment%% stripping, `#tag` spans, and `{#anchor}` heading
+// anchors ([obsidian.FeatureHeadingAnchor], which feeds
+// [HeadingInfo.Slug]).
+//
+// Two things the default set does NOT include, contrary to what this
+// comment used to claim:
+//
+//   - GFM footnotes. goldmark's footnote extension is wired to no
+//     feature flag at all, so `[^1]` and `[^1]: text` stay literal prose
+//     on every path. Nothing is lost, but nothing is rendered as a
+//     footnote either.
+//   - Math. [obsidian.FeatureMath] is declared and reserved but wired to
+//     nothing, and is deliberately not part of [obsidian.FeatureAll];
+//     setting it changes neither parse nor render.
 //
 // Enabling a feature the lowering does not handle is worse than leaving it
 // off: an unrecognised inline node reaches the default branch of emitInline
-// and is silently DROPPED, so the text disappears from the document rather
-// than rendering unstyled. Every flag in the default set has a case.
+// and is DROPPED, so the text disappears from the document rather than
+// rendering unstyled. Every flag in the default set has a case, and
+// [Doc.Dropped] reports whatever still got skipped.
 func WithFeatures(features obsidian.FeatureE) (opt Option) {
 	opt = func(cfg *config) {
 		cfg.features = features
@@ -472,10 +533,23 @@ func WithResolver(r resolver.ResolverI) (opt Option) {
 }
 
 // WithImageMaxSize caps the bounding box used when rendering inline
-// images with FitAspectMaxE — images are scaled aspect-preserving to
-// fit inside (maxW × maxH). Zero in either dimension is treated as
-// "no cap on that axis" (FitAspectMaxE then degenerates to a one-axis
-// fit). Defaults are (800, 600).
+// images: an image larger than (maxW × maxH) is scaled down
+// aspect-preserving to fit inside it. Zero on an axis means "no cap on
+// that axis". Defaults are (800, 600).
+//
+// The cap only ever shrinks. An image smaller than the box renders at
+// its native size, never blown up to fill it — the renderer passes
+// min(cap, native) per axis rather than the cap itself. This is a
+// deliberate change of an exported option's semantics (ADR-0180 item 5):
+//
+//   - A zero axis used to mean "fill available", which inside a vertical
+//     ScrollArea — where every markdown document lives — measures ~0 and
+//     collapsed the image to nothing. Nobody wants that in a reader.
+//   - The cap used to be a target rather than a ceiling, so a 128×80
+//     asset under the default box rendered upscaled and soft.
+//
+// The cap is per-Doc, not per-image; Obsidian's `![[img.png|300]]` size
+// suffix is parsed off and ignored (honouring it needs a per-run cap).
 func WithImageMaxSize(maxW uint32, maxH uint32) (opt Option) {
 	opt = func(cfg *config) {
 		cfg.imageMaxW = maxW
@@ -494,11 +568,12 @@ func Parse(md []byte, opts ...Option) (doc *Doc) {
 		opt(&cfg)
 	}
 
-	segments, frontmatter, headings := parseAndLower(md, &cfg)
+	segments, frontmatter, headings, dropped := parseAndLower(md, &cfg)
 	doc = &Doc{
 		segments:    segments,
 		frontmatter: frontmatter,
 		headings:    headings,
+		dropped:     dropped,
 		imageMaxW:   cfg.imageMaxW,
 		imageMaxH:   cfg.imageMaxH,
 	}
@@ -556,13 +631,26 @@ type paragraphRun struct {
 // of each field depends on kind:
 //
 //   - segKindParagraph / segKindHeading: runs is the inline flow.
+//     headingLevel is 1..6 on a heading
+//     (0 on a paragraph) and drives the
+//     gap the renderer sets above it —
+//     the font size is already baked into
+//     the runs.
 //   - segKindCodeBlock:                  code holds the retained job;
 //     codeText holds the verbatim source
 //     and codeLang the fence language,
 //     both surfaced by [Doc.RenderActions].
 //   - segKindList:                       children is a slice of segKindListItem
 //     segments; listOrdered + listStart
-//     drive the bullet glyph.
+//     drive the bullet glyph. For an
+//     ordered list, listMarkerDigits is
+//     the width every marker is padded
+//     to so item bodies line up across a
+//     digit boundary, and listMarkers
+//     holds one pre-built monospace
+//     Atoms blob per item (empty for a
+//     bullet list, which needs no
+//     holder).
 //   - segKindListItem:                   children is the item's nested blocks.
 //   - segKindBlockquote:                 children is the quoted blocks.
 //   - segKindHorizontalRule:             no payload.
@@ -587,8 +675,11 @@ type segment struct {
 	codeText           string
 	codeLang           string
 	children           []segment
+	headingLevel       uint8
 	listOrdered        bool
 	listStart          uint32
+	listMarkerDigits   uint8
+	listMarkers        []typed.RetainedFffiHolderTyped[c.AtomsS]
 	calloutType        string
 	calloutTitle       string
 	calloutFoldable    bool

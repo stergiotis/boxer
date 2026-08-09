@@ -189,25 +189,30 @@ should iterate `Frontmatter().IteratePairs()` directly.
   be baked into a content-addressed retained blob. So `Doc` is a Go-side
   tree of segments, not one big `RetainedFffiHolderTyped`. The sub-blobs
   (atoms, code-view jobs) are still retained.
-- **`egui::Atoms` wraps at atom boundaries, not inside them.** The
-  Atoms primitive that backs `LabelAtoms` is the egui compose layer:
-  each pushed text fragment is one atom, atoms wrap *between*
-  themselves, and only the atom's own text shaper word-wraps *inside*
-  it. CommonMark soft line breaks within a paragraph generate
-  successive `ast.Text` nodes — one Text() opcode per node would emit
-  one atom per node, each wrapping independently with a forced
-  atom-boundary break in between. The result is a visible jitter:
-  one fragment wraps to many narrow lines while a short trailing
-  fragment sits on a fresh line by itself. The visitor mitigates this
-  by coalescing consecutive same-style text fragments inside the
-  paragraph builder so each contiguous run becomes a single atom; egui
-  then word-wraps the merged string. The mitigation is full for
-  unstyled paragraphs and partial for paragraphs with inline styling
-  (each style boundary still produces a fresh atom). For paragraphs
-  with style boundaries, `labelAtoms`' Rust construction now flattens
-  the atoms into a single `egui::text::LayoutJob` (one section per
-  styled span) and renders via `egui::Label::new`, so the shaper
-  word-wraps across style transitions as one continuous run.
+- **Text wrapping is glyph-level, and the coalescing that made it so
+  is still load-bearing.** `egui::Atoms` — the compose layer behind
+  `LabelAtoms` — treats each pushed fragment as one atom and wraps
+  *between* atoms, so one `Text()` opcode per `ast.Text` node would
+  wrap every soft-line-break fragment independently: one fragment
+  spilling to several narrow lines while a short trailing fragment
+  sits alone on a fresh one. The visitor coalesces consecutive
+  same-style fragments in the paragraph builder so each contiguous
+  run is a single atom.
+
+  What the coalescing buys has since narrowed, and the earlier version
+  of this note overstated the remaining problem. `labelAtoms`' Rust
+  construction flattens the atoms into one `egui::text::LayoutJob`
+  (one section per styled span) and renders via `egui::Label::new`, so
+  the shaper word-wraps ACROSS style transitions as one continuous
+  run — a paragraph mixing bold and plain wraps mid-word-run like
+  ordinary prose, not at the style boundary. Coalescing still earns
+  its keep by keeping the section count (and the opcode count) down,
+  but it is no longer what stands between the reader and a jittery
+  ladder.
+
+  What does still wrap at run boundaries is the `HorizontalWrapped`
+  path — links and inline images are separate widgets, not atoms, so a
+  paragraph containing them breaks between runs.
 - **Lists are hand-rolled.** egui has no list primitive. Bullet/numbered
   lists are `Horizontal{glyph, Vertical{children}}` per item. This
   reproduces Obsidian's visual layout closely enough for a viewer; an
@@ -239,14 +244,30 @@ should iterate `Frontmatter().IteratePairs()` directly.
   a small fixed number of times "skipping the tracker entirely is
   usually clearer — the per-widget-id one-shot upload cost is
   negligible." Markdown image pixels are decoded once at parse time
-  and shipped on every frame; the wire contract in
-  `egui2_definition_d_image.go` says a non-empty buffer always
-  triggers re-upload, so `contentVersion=1` is pinned and never
-  needs busting. The alternative (a per-`Doc` tracker keyed by
-  segment seq) silently breaks the package-level retain-once /
-  render-many idiom under multi-scope rendering, since the second
-  scope's widget ids are distinct from the first scope's and the
-  tracker can't tell them apart.
+  and shipped on every frame, with `contentVersion` pinned at 1.
+  What that costs is **wire bandwidth, not GPU uploads**: the Rust
+  `ImageCache` decides on the cache key `(id, contentVersion, w, h)`
+  alone, so a matching key draws the cached texture and ignores the
+  buffer entirely. One memcpy each way per frame per image —
+  negligible for icons and small diagrams, and the wrong cost model
+  for a book of full-page screenshots, which is the trigger for
+  taking the tracker on. (The wire-contract comment in
+  `egui2_definition_d_image.go` used to say a non-empty buffer always
+  forces a re-upload; it does not, and this paragraph used to repeat
+  that claim.) The tracker's own cost is what keeps it off today: a
+  per-`Doc` tracker keyed by segment seq silently breaks the
+  package-level retain-once / render-many idiom under multi-scope
+  rendering, since the second scope's widget ids are distinct from
+  the first scope's and the tracker can't tell them apart.
+- **Images never upscale.** `FitAspectMaxE` computes
+  `s = min(fw/nw, fh/nh)` with no `s ≤ 1` clamp, so passing the
+  configured cap as the fit box blew every smaller image up to fill
+  it. `renderImageRun` passes `min(cap, native)` per axis instead,
+  which pins `s` at 1 for anything already inside the box, and reads
+  a zero cap axis as "uncapped ⇒ native" rather than as egui's
+  fill-available (which measures ~0 inside a vertical `ScrollArea` —
+  where every markdown document lives — and collapsed the image to
+  invisible).
 - **Image dimensions are capped at `imageMaxPixelCount`
   (64 Mpx ≈ 256 MiB RGBA) in `emitImage`.** Defense in depth even
   though the resolver owns the allocation; rejects pathological

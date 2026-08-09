@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/containers"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/callout"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/comment"
@@ -15,6 +16,7 @@ import (
 	tagext "github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/tag"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/wikilink"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
+	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/yuin/goldmark/ast"
@@ -24,12 +26,28 @@ import (
 )
 
 // lowerCtx bundles the per-parse state threaded through every
-// lowerXxx call: the source bytes (for ast.Text segments) and the
-// resolver (for wikilinks and embeds). Allocated once at the top of
+// lowerXxx call: the source bytes (for ast.Text segments), the
+// resolver (for wikilinks and embeds), and the tally of AST nodes the
+// lowering could not represent. Allocated once at the top of
 // parseAndLower and passed by pointer.
 type lowerCtx struct {
 	src      []byte
 	resolver resolver.ResolverI
+	dropped  map[string]int
+}
+
+// countDropped records that one AST node of n's kind reached a skip
+// path. Every silent-drop site in the lowering calls it, which is what
+// turns "the reader never sees this text" from an invisible failure into
+// something [Doc.Dropped] can report and a corpus test can gate on.
+//
+// The map is allocated lazily: the overwhelmingly common case is a
+// document that drops nothing, and that case should not pay for a map.
+func (inst *lowerCtx) countDropped(n ast.Node) {
+	if inst.dropped == nil {
+		inst.dropped = make(map[string]int, 4)
+	}
+	inst.dropped[n.Kind().String()]++
 }
 
 // parseAndLower runs goldmark with the configured Obsidian extensions,
@@ -39,8 +57,9 @@ type lowerCtx struct {
 // key-sorted KV so callers iterate in stable order across frames.
 // Headings are collected as a side table (plain text + slug + level)
 // for help/TOC consumers; callers that don't need it ignore the
-// third return value.
-func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *containers.BinarySearchGrowingKV[string, interface{}], headings []HeadingInfo) {
+// third return value. The fourth is the per-kind tally of AST nodes the
+// lowering could not represent — see [Doc.Dropped].
+func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *containers.BinarySearchGrowingKV[string, interface{}], headings []HeadingInfo, dropped map[string]int) {
 	gm := obsidian.New(obsidian.Options{
 		Features: cfg.features,
 		Resolver: cfg.resolver,
@@ -83,6 +102,7 @@ func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *co
 			segments = append(segments, seg)
 		}
 	}
+	dropped = ctx.dropped
 	return
 }
 
@@ -142,17 +162,21 @@ func fieldCarriedText(n ast.Node, src []byte) (text string, ok bool) {
 }
 
 // lowerBlock converts one block AST node into a segment. Unsupported
-// block kinds (raw HTML blocks, GFM footnote definitions, math and
-// other phase-deferred constructs) are silently dropped — a visible
+// block kinds (raw HTML blocks, math and other phase-deferred
+// constructs) are dropped from the rendered flow — a visible
 // "unsupported block" marker would be the honest rendering, but it is
 // a behaviour change for every doc that already relies on HTML blocks
-// and footnote definitions disappearing, so it is left for its own
-// change.
+// disappearing, so it is left for its own change.
+//
+// The drop is no longer silent, though: every skip is tallied by kind on
+// the ctx and surfaced through [Doc.Dropped], so a document that loses
+// text can be made to fail a test instead of just reading short.
 func lowerBlock(ctx *lowerCtx, n ast.Node) (seg segment, ok bool) {
 	switch v := n.(type) {
 	case *ast.Heading:
 		seg = lowerParagraphLike(ctx, v, uint8(v.Level))
 		seg.kind = segKindHeading
+		seg.headingLevel = uint8(v.Level)
 		ok = true
 	case *ast.Paragraph:
 		seg = lowerParagraphLike(ctx, v, 0)
@@ -185,6 +209,12 @@ func lowerBlock(ctx *lowerCtx, n ast.Node) (seg segment, ok bool) {
 		ok = true
 	case *east.Table:
 		seg, ok = lowerTable(ctx, v)
+	}
+	if !ok {
+		// Both arms land here: a block kind with no case at all, and a
+		// degenerate table that lowered to nothing. Either way the
+		// document rendered less than it holds.
+		ctx.countDropped(n)
 	}
 	return
 }
@@ -328,6 +358,11 @@ func lowerCodeBlock(lines *text.Segments, src []byte, lang string) (seg segment)
 
 // lowerList walks an ast.List into a list segment with one
 // segKindListItem child per item.
+//
+// For an ordered list it also settles the marker column width here, once,
+// rather than per item per frame: the widest marker is the last item's,
+// and every marker is padded to it so `9.` and `10.` put their bodies at
+// the same x (the L2 misalignment in the rendering review).
 func lowerList(ctx *lowerCtx, list *ast.List) (seg segment) {
 	seg.kind = segKindList
 	seg.listOrdered = list.IsOrdered()
@@ -343,6 +378,45 @@ func lowerList(ctx *lowerCtx, list *ast.List) (seg segment) {
 			continue
 		}
 		seg.children = append(seg.children, lowerListItem(ctx, li))
+	}
+	if seg.listOrdered {
+		seg.listMarkerDigits = markerDigits(seg.listStart, len(seg.children))
+		seg.listMarkers = buildListMarkers(&seg)
+	}
+	return
+}
+
+// buildListMarkers pre-builds one monospace Atoms holder per ordered item.
+// Built here rather than per frame for the reason every other retained
+// holder in this package is: the render path walks a tree and splices
+// bytes, and an Atoms builder + intern per item per frame would put an
+// allocation back into the steady state. The holders live on the segment,
+// per the retained-holder lifetime invariant in EXPLANATION.md.
+func buildListMarkers(seg *segment) (markers []typed.RetainedFffiHolderTyped[c.AtomsS]) {
+	markers = make([]typed.RetainedFffiHolderTyped[c.AtomsS], len(seg.children))
+	for i := range seg.children {
+		a := c.Atoms()
+		for rt := range a.StyledText(itemMarker(seg, uint32(i))) {
+			rt.Monospace()
+		}
+		markers[i] = a.Keep()
+	}
+	return
+}
+
+// markerDigits returns the digit count of the widest marker a list of n
+// items numbered from start will print — i.e. the digits of its last
+// number, since the sequence only grows. n == 0 yields 1 so a degenerate
+// empty list still has a sane column.
+func markerDigits(start uint32, n int) (digits uint8) {
+	last := start
+	if n > 1 {
+		last = start + uint32(n) - 1
+	}
+	digits = 1
+	for last >= 10 {
+		last /= 10
+		digits++
 	}
 	return
 }
@@ -497,12 +571,40 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 			label += " > " + heading
 		}
 		b.emitLink(label, url)
+	case *east.TaskCheckBox:
+		// GFM task list (`- [x] done`). goldmark's task-list parser eats
+		// the whole `[x] ` marker — brackets and the space after — into
+		// this node, so without a case here the state disappears and the
+		// item reads as an ordinary bullet. That was C1 in the rendering
+		// review: a silent drop contradicting this package's own contract
+		// comment on [WithFeatures].
+		//
+		// A glyph, not a real Checkbox widget: nothing maps render
+		// geometry back to source bytes (ADR-0178 rejected WYSIWYG), so a
+		// click would have nowhere to write. The affordance-glyph rule
+		// puts this on icons.Ph* rather than on a fallback-chain rune.
+		//
+		// deferred: Obsidian also dims and strikes the text of a checked
+		// item. That needs the checkbox to inject style into its SIBLING
+		// nodes, which this walk has no seam for. Trigger: the reading
+		// surface starts carrying long task lists where done/not-done has
+		// to be legible at a glance.
+		glyph := icons.PhSquare
+		if v.IsChecked {
+			glyph = icons.PhCheckSquare
+		}
+		b.emitText(glyph+" ", parentStyle)
 	case *comment.Node:
-		// Obsidian %%comment%% — explicitly drop. Default branch would
-		// also drop it, but enumerating it here documents intent.
+		// Obsidian %%comment%% — explicitly drop, and deliberately NOT
+		// counted as a drop: the author asked for it to be invisible, so
+		// it is not content loss and must not trip the zero-drops corpus
+		// gate. The default branch would also drop it; enumerating it
+		// here is what separates the two meanings.
 	default:
 		// RawHTML, RawInline, HTMLBlock, math (deferred), and unknown
-		// extension nodes are silently skipped.
+		// extension nodes are skipped — but counted, so [Doc.Dropped]
+		// can say what the document lost.
+		ctx.countDropped(n)
 	}
 }
 
@@ -749,10 +851,23 @@ func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
 	}
 }
 
-// headingFontSize returns the font size for an H1..H6. Sizes are tuned
-// against egui's default 12pt body font; H1/H2 dominate, H6 stays close
-// to body to mirror Obsidian's reading view.
+// headingFontSize returns the font size for an H1..H6 at the active
+// density. The tuned table is a ladder over the body size — H1/H2
+// dominate, H6 stays close to body to mirror Obsidian's reading view —
+// and [styletokens.ScaledPt] then moves the whole ladder the same ±1 pt
+// the type scale moves body text and table rows by. Without that, a
+// Tight or Roomy density shifted everything on the page EXCEPT the
+// headings, and the hierarchy read differently at each density (L6 in
+// the rendering review).
 func headingFontSize(level uint8) (sz float32) {
+	sz = styletokens.ScaledPt(headingFontSizeBase(level), styletokens.DensityFromEnv())
+	return
+}
+
+// headingFontSizeBase is the tuned ladder before the density
+// adjustment — split out so the scaling can be asserted independently of
+// the numbers it scales.
+func headingFontSizeBase(level uint8) (sz float32) {
 	switch level {
 	case 1:
 		sz = 26

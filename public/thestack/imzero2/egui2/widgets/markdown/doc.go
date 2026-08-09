@@ -45,7 +45,44 @@
 // GFM's per-column alignment (`:---:`) is parsed but not applied. See
 // EXPLANATION.md for why.
 //
-// Math is still deferred.
+// Math is still deferred: [obsidian.FeatureMath] is declared and
+// reserved but wired to nothing, and is deliberately not part of
+// [obsidian.FeatureAll]. GFM footnotes are absent for a different
+// reason — goldmark's footnote extension is bound to no feature flag at
+// all, so `[^1]` stays literal prose.
+//
+// # Concurrency
+//
+// [Parse] is safe to call from ANY goroutine, including concurrently
+// with a frame in flight on the render goroutine. [Doc.Render] and its
+// variants are not: they emit into the current Ui scope and belong to
+// the render goroutine like every other widget call.
+//
+// The asymmetry is not an accident of the current implementation, and
+// it is worth stating because "it is built out of FFI opcodes" reads
+// like it should be false (ADR-0178 said as much, and is corrected).
+// Parse never touches the wire. What it builds are `.Keep()` retained
+// holders, and the whole path is Go-side:
+//
+//   - The builders come from a [sync.Pool] and write into their own
+//     buffer; nothing is sent. Only Render's `Send()` reaches the FFFI
+//     sink.
+//   - `BuildRetained` interns the finished bytes through [unique.Make],
+//     which is itself safe for concurrent use, and hands back an
+//     immutable view of the interned string.
+//   - The one piece of shared mutable state on the path — codeview's
+//     package-level prepared-job memo — takes a mutex precisely because
+//     the documented retain-once idiom is a package-level
+//     `var doc = markdown.Parse(...)`, which runs at init on whatever
+//     goroutine gets there.
+//
+// Two shipping consumers already depend on this (`docsections` parses
+// from a snapshot call, `sqlapplet_store` from a bus handler); the
+// contract is now stated rather than relied on by accident. The
+// per-package `-race` test pins it.
+//
+// A [Doc] is immutable after Parse, so sharing one across goroutines is
+// fine as long as only the render goroutine renders it.
 //
 // # See also
 //

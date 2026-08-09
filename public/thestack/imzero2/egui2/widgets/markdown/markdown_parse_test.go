@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/yuin/goldmark/ast"
+	east "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 )
@@ -331,6 +332,331 @@ func TestParse_OrderedList_ExplicitStart(t *testing.T) {
 	}
 	if seg.listStart != 5 {
 		t.Errorf("listStart: got %d want 5", seg.listStart)
+	}
+}
+
+// ---------------- Doc.Dropped ---------------------------------------------
+
+func TestDropped_EmptyForAFullyRepresentedDocument(t *testing.T) {
+	src := strings.Join([]string{
+		"---", "title: t", "---", "",
+		"# Heading", "",
+		"Prose with **bold**, *italic*, `code`, ~~strike~~, ==mark==, #tag,",
+		"a [link](https://example.com), an <https://autolink.example>,",
+		"a [[Wikilink]] and an ![[embed.png]].", "",
+		"- bullet", "- [x] task", "",
+		"1. one", "2. two", "",
+		"> quote", "",
+		"> [!note] callout", "> body", "",
+		"| a | b |", "|---|---|", "| 1 | 2 |", "",
+		"```go", "package main", "```", "",
+		"---", "",
+		"trailing prose.",
+	}, "\n")
+	doc := Parse([]byte(src))
+	if dropped := doc.Dropped(); len(dropped) != 0 {
+		t.Errorf("a document of supported constructs dropped: %+v", dropped)
+	}
+}
+
+func TestDropped_CountsHTMLBlocksAndInlineRawHTML(t *testing.T) {
+	// C4 in the rendering review: an HTML block takes its prose with it,
+	// and inline raw HTML loses its tags. Both are recorded decisions —
+	// what was not acceptable is that they were invisible.
+	doc := Parse([]byte("<div>\nswallowed prose\n</div>\n\nplain <b>bold</b> tail\n"))
+	dropped := doc.Dropped()
+	if len(dropped) == 0 {
+		t.Fatal("HTML dropped nothing; the counters are not wired")
+	}
+	total := 0
+	for _, kc := range dropped {
+		if kc.Count <= 0 {
+			t.Errorf("kind %q has a non-positive count %d", kc.Kind, kc.Count)
+		}
+		total += kc.Count
+	}
+	if total < 2 {
+		t.Errorf("expected the block and the inline tags to be counted, got %+v", dropped)
+	}
+}
+
+func TestDropped_ObsidianCommentsAreNotDrops(t *testing.T) {
+	// An author who wrote %%…%% asked for it to be invisible. Counting it
+	// would make every book carrying one fail the corpus gate for doing
+	// exactly what it was told.
+	doc := Parse([]byte("visible %%hidden%% visible\n"))
+	if dropped := doc.Dropped(); len(dropped) != 0 {
+		t.Errorf("a comment counted as content loss: %+v", dropped)
+	}
+}
+
+func TestDropped_IsSortedAndSelfConsistent(t *testing.T) {
+	doc := Parse([]byte("<div>a</div>\n\n<span>b</span> and <i>c</i>\n"))
+	dropped := doc.Dropped()
+	for i := 1; i < len(dropped); i++ {
+		if dropped[i-1].Kind >= dropped[i].Kind {
+			t.Errorf("Dropped() is not sorted by kind: %+v", dropped)
+			break
+		}
+	}
+	// Freshly allocated per call: mutating one result must not affect the
+	// next, since callers are told they may keep it.
+	if len(dropped) > 0 {
+		dropped[0].Count = -1
+		if again := doc.Dropped(); again[0].Count == -1 {
+			t.Error("Dropped() handed out a shared slice")
+		}
+	}
+}
+
+func TestDropped_EmptyDocumentDropsNothing(t *testing.T) {
+	if dropped := Parse(nil).Dropped(); len(dropped) != 0 {
+		t.Errorf("empty input dropped: %+v", dropped)
+	}
+}
+
+// ---------------- Task lists (GFM) ----------------------------------------
+
+// emittedInlineText lowers one inline node with a fresh builder and
+// returns the text it wrote.
+//
+// It reads the builder's PENDING buffer rather than the finished runs on
+// purpose: a finished run is an opaque retained FFFI blob with no way to
+// read the text back, so this is the only seam in the package that can
+// see what the lowering actually emitted. It therefore only works for a
+// single node whose text lands in one style bucket — which is exactly
+// what a checkbox glyph is.
+func emittedInlineText(n ast.Node, src []byte) (s string) {
+	ctx := &lowerCtx{src: src, resolver: resolver.NoopResolver{}}
+	b := newInlineBuilder(0, ctx.resolver)
+	emitInline(ctx, n, &b, styleNone)
+	s = b.pendingText.String()
+	return
+}
+
+func TestEmitInline_TaskCheckBox_EmitsItsGlyph(t *testing.T) {
+	// C1 in the rendering review: goldmark's task-list parser eats the
+	// whole `[x] ` marker into this node, so with no case in emitInline
+	// the state vanished and the item read as an ordinary bullet.
+	cases := []struct {
+		checked bool
+		want    string
+	}{
+		{true, icons.PhCheckSquare + " "},
+		{false, icons.PhSquare + " "},
+	}
+	for _, tc := range cases {
+		got := emittedInlineText(east.NewTaskCheckBox(tc.checked), nil)
+		if got != tc.want {
+			t.Errorf("TaskCheckBox(checked=%v): emitted %q want %q", tc.checked, got, tc.want)
+		}
+	}
+}
+
+func TestEmitInline_TaskCheckBox_GlyphIsAnIconNotAFallbackRune(t *testing.T) {
+	// The affordance-glyph rule: a control's mark comes from icons.Ph*,
+	// never from a font-fallback chain that can land on tofu. Both are
+	// single runes in the Phosphor private-use range.
+	for _, glyph := range []string{icons.PhSquare, icons.PhCheckSquare} {
+		r := []rune(glyph)
+		if len(r) != 1 {
+			t.Fatalf("glyph %q: got %d runes want 1", glyph, len(r))
+		}
+		if r[0] < 0xe000 || r[0] > 0xf8ff {
+			t.Errorf("glyph %q: rune %U is outside the private-use area", glyph, r[0])
+		}
+	}
+}
+
+// TestParse_TaskList_ReachesACaseNotTheDefaultBranch is the regression net
+// for the whole class: the render path cannot be read back, but a node the
+// lowering does not enumerate lands in emitInline's default branch and is
+// counted there. Zero drops over a task-list document is therefore the
+// assertion that the case exists and stays.
+func TestParse_TaskList_ReachesACaseNotTheDefaultBranch(t *testing.T) {
+	src := "- [x] done\n- [ ] todo, with **bold** and a [link](https://example.com)\n" +
+		"  - [ ] nested\n- a plain bullet\n"
+	doc := Parse([]byte(src))
+	if dropped := doc.Dropped(); len(dropped) != 0 {
+		t.Errorf("task list dropped nodes: %+v", dropped)
+	}
+}
+
+func TestParse_TaskList_ShapeIsAnOrdinaryList(t *testing.T) {
+	// The checkbox is a glyph inside the item's inline flow, not a
+	// segment or a widget of its own — so a task list lowers to exactly
+	// the same tree an ordinary bullet list does, and the item body is
+	// one coalesced atoms run (glyph + text share a style bucket).
+	doc := Parse([]byte("- [x] done\n- [ ] todo\n"))
+	if len(doc.segments) != 1 || doc.segments[0].kind != segKindList {
+		t.Fatalf("expected one list segment, got %v", kindsOf(doc.segments))
+	}
+	list := doc.segments[0]
+	if list.listOrdered {
+		t.Error("task list flagged as ordered")
+	}
+	if len(list.children) != 2 {
+		t.Fatalf("items: got %d want 2", len(list.children))
+	}
+	for i, item := range list.children {
+		if item.kind != segKindListItem {
+			t.Errorf("children[%d].kind: got %d want segKindListItem", i, item.kind)
+			continue
+		}
+		if len(item.children) != 1 || item.children[0].kind != segKindParagraph {
+			t.Errorf("children[%d]: want one paragraph body, got %v", i, kindsOf(item.children))
+			continue
+		}
+		if got := kindsOfRuns(item.children[0].runs); !reflect.DeepEqual(got, []runKindE{runKindAtoms}) {
+			t.Errorf("children[%d] runs: got %v want one coalesced atoms run", i, got)
+		}
+	}
+}
+
+// TestParse_TaskList_MarkerOnlyCountsAtItemStart pins the boundary at the
+// level a reader cares about: prose that happens to mention `[x]` is not a
+// checkbox, so the brackets survive as text.
+func TestParse_TaskList_MarkerOnlyCountsAtItemStart(t *testing.T) {
+	cfg := defaultConfig()
+	gm := obsidian.New(obsidian.Options{Features: cfg.features, Resolver: cfg.resolver})
+	pc := obsidian.NewParserContext()
+	src := []byte("- [x] a real one\n- mentions [x] in passing\n")
+	root := gm.Parser().Parse(text.NewReader(src), parser.WithContext(pc))
+
+	boxes := 0
+	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if _, ok := n.(*east.TaskCheckBox); ok {
+			boxes++
+		}
+		return ast.WalkContinue, nil
+	})
+	if boxes != 1 {
+		t.Errorf("checkboxes: got %d want 1 (only the leading marker counts)", boxes)
+	}
+	// And the passing mention keeps its brackets in the rendered flow.
+	doc := Parse(src)
+	if dropped := doc.Dropped(); len(dropped) != 0 {
+		t.Errorf("dropped nodes: %+v", dropped)
+	}
+}
+
+// ---------------- Ordered-list marker alignment ---------------------------
+
+func TestMarkerDigits_WidestIsTheLastNumber(t *testing.T) {
+	cases := []struct {
+		start uint32
+		n     int
+		want  uint8
+	}{
+		{1, 0, 1},   // degenerate empty list still has a column
+		{1, 1, 1},   // "1."
+		{1, 9, 1},   // "1." … "9."
+		{1, 10, 2},  // "1." … "10."
+		{1, 100, 3}, // "1." … "100."
+		{9, 2, 2},   // starts at 9, so the second item is "10."
+		{95, 10, 3}, // 95 … 104
+		{100, 1, 3}, // a single three-digit item
+	}
+	for _, tc := range cases {
+		if got := markerDigits(tc.start, tc.n); got != tc.want {
+			t.Errorf("markerDigits(start=%d, n=%d): got %d want %d", tc.start, tc.n, got, tc.want)
+		}
+	}
+}
+
+func TestItemMarker_PadsToTheWidestMarker(t *testing.T) {
+	// L2 in the rendering review: markers were left-aligned labels, so
+	// the body of item 10 started 7.4 px right of the body of item 9.
+	// Padding to a common width (rendered monospace) puts every period in
+	// the same column.
+	s := &segment{kind: segKindList, listOrdered: true, listStart: 1, listMarkerDigits: 2}
+	if got, want := itemMarker(s, 0), " 1. "; got != want {
+		t.Errorf("first of ten: got %q want %q", got, want)
+	}
+	if got, want := itemMarker(s, 9), "10. "; got != want {
+		t.Errorf("tenth of ten: got %q want %q", got, want)
+	}
+	// Every marker in one list is the same width, whatever the digits.
+	for i := uint32(0); i < 10; i++ {
+		if got := itemMarker(s, i); len(got) != 4 {
+			t.Errorf("item %d: marker %q is %d bytes, want a uniform 4", i, got, len(got))
+		}
+	}
+}
+
+func TestItemMarker_SingleDigitListIsUnpadded(t *testing.T) {
+	// A list that never crosses a digit boundary must not gain leading
+	// space it does not need.
+	s := &segment{kind: segKindList, listOrdered: true, listStart: 1, listMarkerDigits: 1}
+	if got, want := itemMarker(s, 0), "1. "; got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+}
+
+func TestItemMarker_BulletsAreUnchanged(t *testing.T) {
+	s := &segment{kind: segKindList}
+	if got, want := itemMarker(s, 3), "• "; got != want {
+		t.Errorf("bullet: got %q want %q", got, want)
+	}
+}
+
+func TestParse_OrderedList_MarkerWidthSettledAtLoweringTime(t *testing.T) {
+	var src strings.Builder
+	for range 12 {
+		src.WriteString("1. item\n")
+	}
+	doc := Parse([]byte(src.String()))
+	if len(doc.segments) != 1 || doc.segments[0].kind != segKindList {
+		t.Fatalf("expected one list segment, got %v", kindsOf(doc.segments))
+	}
+	seg := doc.segments[0]
+	if len(seg.children) != 12 {
+		t.Fatalf("items: got %d want 12", len(seg.children))
+	}
+	if seg.listMarkerDigits != 2 {
+		t.Errorf("listMarkerDigits: got %d want 2 (the list reaches item 12)", seg.listMarkerDigits)
+	}
+}
+
+func TestParse_UnorderedList_HasNoMarkerWidth(t *testing.T) {
+	doc := Parse([]byte("- one\n- two\n"))
+	seg := doc.segments[0]
+	if got := seg.listMarkerDigits; got != 0 {
+		t.Errorf("bullet list carries a marker width %d; it should stay unset", got)
+	}
+	if len(seg.listMarkers) != 0 {
+		t.Errorf("bullet list built %d marker holders; bullets render as a plain label",
+			len(seg.listMarkers))
+	}
+}
+
+func TestParse_OrderedList_MarkersArePrebuilt(t *testing.T) {
+	// The retained-holder invariant: a monospace marker needs the RichText
+	// scope, and building one per item per frame would put an intern back
+	// into the steady state the package keeps allocation-free. One holder
+	// per item, built during Parse and owned by the segment.
+	//
+	// One holder per item is all this can check: the holder's bytes are not
+	// readable back, so the marker TEXT is asserted through [itemMarker]
+	// instead, and what it renders is a live-lane question.
+	doc := Parse([]byte("1. one\n2. two\n3. three\n"))
+	seg := doc.segments[0]
+	if len(seg.listMarkers) != len(seg.children) {
+		t.Fatalf("marker holders: got %d want one per item (%d)",
+			len(seg.listMarkers), len(seg.children))
+	}
+	// A list long enough to cross a digit boundary keeps the 1:1 mapping,
+	// which is what renderItemMarker indexes by item ordinal.
+	var long strings.Builder
+	for range 15 {
+		long.WriteString("1. item\n")
+	}
+	seg = Parse([]byte(long.String())).segments[0]
+	if len(seg.listMarkers) != 15 || len(seg.children) != 15 {
+		t.Errorf("15-item list: %d holders for %d items", len(seg.listMarkers), len(seg.children))
 	}
 }
 
@@ -695,6 +1021,55 @@ func TestTableColumnCap_TightensAsColumnsMultiply(t *testing.T) {
 	}
 }
 
+// L5 in the rendering review: the table op's vscroll apply was one-sided
+// (`if w.vscroll { … }` with no else) and egui_extras defaults it on, so
+// a long table opened a nested scroll region inside the document pane and
+// captured the wheel. With the else arm real, the policy below decides.
+func TestTableFlows_ThresholdPolicy(t *testing.T) {
+	cases := []struct {
+		name      string
+		rows      int
+		wantFlows bool
+	}{
+		{"empty", 0, true},
+		{"ordinary doc table", 5, true},
+		{"at the threshold", tableFlowMaxRows, true},
+		{"one past it", tableFlowMaxRows + 1, false},
+		{"pathological", 100_000, false},
+	}
+	for _, tc := range cases {
+		flows, maxScroll := tableFlows(tc.rows, true)
+		if flows != tc.wantFlows {
+			t.Errorf("%s (%d rows): flows=%v want %v", tc.name, tc.rows, flows, tc.wantFlows)
+		}
+		if flows && maxScroll != 0 {
+			t.Errorf("%s: a flowing table must not carry a scroll bound, got %v", tc.name, maxScroll)
+		}
+		if !flows && maxScroll <= 0 {
+			t.Errorf("%s: a scrolling table needs a positive bound, got %v", tc.name, maxScroll)
+		}
+	}
+}
+
+func TestTableFlows_ScrollBoundIsRowsTimesRowHeight(t *testing.T) {
+	// The bound is a row count, so it moves with the density the row
+	// height moves with — a Tight document does not get a viewport sized
+	// for Roomy rows.
+	for _, hasHeader := range []bool{true, false} {
+		_, got := tableFlows(tableFlowMaxRows+1, hasHeader)
+		want := tableScrollRows * tableRowHeight(hasHeader)
+		if got != want {
+			t.Errorf("hasHeader=%v: bound %v want %v", hasHeader, got, want)
+		}
+	}
+	// A headered table's rows are taller, so its bounded viewport is too.
+	_, withHeader := tableFlows(tableFlowMaxRows+1, true)
+	_, without := tableFlows(tableFlowMaxRows+1, false)
+	if withHeader <= without {
+		t.Errorf("headered bound %v should exceed headerless %v", withHeader, without)
+	}
+}
+
 func TestTableRowHeight_TracksTypeScale(t *testing.T) {
 	// A table with a header sizes off the larger heading step, because
 	// the interpreter draws header cells with ui.heading() and one row
@@ -974,6 +1349,42 @@ func TestParse_ObsidianImageEmbed_WithLoader_ProducesImageRun(t *testing.T) {
 	}
 }
 
+func TestParse_ObsidianImageEmbed_SizeSuffixStillResolvesAsAnImage(t *testing.T) {
+	// C5 in the rendering review: the embed parser split only on '#', so
+	// `![[img.png|300]]` kept the pipe in Target, the resolver's `.png`
+	// suffix match failed, and a perfectly ordinary image embed rendered
+	// as a 📄 note link. The suffix is Obsidian's display size; it is
+	// parsed off and (deliberately) ignored.
+	cases := []struct {
+		name string
+		src  string
+		ref  string
+	}{
+		{"width only", "see ![[diagram.png|300]] now\n", "diagram.png"},
+		{"width and height", "see ![[diagram.png|300x200]] now\n", "diagram.png"},
+		{"heading and suffix", "see ![[diagram.png#Part|300]] now\n", "diagram.png#Part"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &stubResolver{}
+			r.imagePayload, r.imageW, r.imageH = stubLoaderPixels()
+			doc := Parse([]byte(tc.src), WithResolver(r))
+			found := false
+			for _, run := range doc.segments[0].runs {
+				if run.kind == runKindImage {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("expected runKindImage; got runs=%v", kindsOfRuns(doc.segments[0].runs))
+			}
+			if len(r.imageRefs) != 1 || r.imageRefs[0] != tc.ref {
+				t.Errorf("LoadImage refs: got %v want [%s]", r.imageRefs, tc.ref)
+			}
+		})
+	}
+}
+
 func TestParse_ObsidianNoteEmbed_StaysAsHyperlink(t *testing.T) {
 	// Note transclusion (`![[Note]]`) is not an image even when the loader
 	// is present; LoadImage must not be called and the rendering must stay
@@ -1019,6 +1430,53 @@ func TestParse_DefaultImageMaxSize(t *testing.T) {
 	if doc.imageMaxW != imageMaxDefaultW || doc.imageMaxH != imageMaxDefaultH {
 		t.Errorf("default imageMax: got (%d,%d) want (%d,%d)",
 			doc.imageMaxW, doc.imageMaxH, imageMaxDefaultW, imageMaxDefaultH)
+	}
+}
+
+// TestImageFitAxis_CapOnlyEverShrinks covers the L4 fix: FitAspectMaxE
+// computes s = min(fw/nw, fh/nh) with no s ≤ 1 clamp, so handing it the
+// raw cap upscaled every image smaller than the box. The widget-side
+// answer is to pass min(cap, native) — the same clamp, without a wire
+// change — and to read a zero axis as "uncapped" rather than as egui's
+// fill-available (which measures ~0 inside the vertical ScrollArea every
+// markdown document lives in, and collapsed the image to invisible).
+func TestImageFitAxis_CapOnlyEverShrinks(t *testing.T) {
+	cases := []struct {
+		name   string
+		cap    uint32
+		native uint32
+		want   uint32
+	}{
+		{"small image under a large cap renders native", 800, 128, 128},
+		{"large image is bounded by the cap", 200, 1920, 200},
+		{"exact fit is a no-op", 200, 200, 200},
+		{"zero cap means native, never fill-available", 0, 128, 128},
+		{"zero cap on a large image is still native", 0, 4096, 4096},
+	}
+	for _, tc := range cases {
+		if got := imageFitAxis(tc.cap, tc.native); got != tc.want {
+			t.Errorf("%s: imageFitAxis(cap=%d, native=%d) = %d want %d",
+				tc.name, tc.cap, tc.native, got, tc.want)
+		}
+	}
+}
+
+func TestImageFitAxis_NeverExceedsEitherBound(t *testing.T) {
+	// The property behind the table: the box is never larger than the
+	// image, and never larger than a non-zero cap.
+	for _, capPx := range []uint32{0, 1, 64, 200, 800, 4096} {
+		for _, native := range []uint32{1, 63, 128, 200, 1920, 8192} {
+			got := imageFitAxis(capPx, native)
+			if got > native {
+				t.Errorf("cap=%d native=%d: box %d upscales", capPx, native, got)
+			}
+			if capPx != 0 && got > capPx {
+				t.Errorf("cap=%d native=%d: box %d exceeds the cap", capPx, native, got)
+			}
+			if got == 0 {
+				t.Errorf("cap=%d native=%d: box collapsed to zero", capPx, native)
+			}
+		}
 	}
 }
 
@@ -1104,9 +1562,12 @@ func kindsOfRuns(runs []paragraphRun) []runKindE {
 }
 
 func TestParse_HeadingFontSize_TableCovers1Through6AndFallback(t *testing.T) {
+	// The tuned ladder, then the density adjustment on top — headings
+	// move with the type scale the way table rows already do.
+	d := styletokens.DensityFromEnv()
 	cases := []struct {
 		level uint8
-		want  float32
+		base  float32
 	}{
 		{1, 26},
 		{2, 22},
@@ -1118,8 +1579,86 @@ func TestParse_HeadingFontSize_TableCovers1Through6AndFallback(t *testing.T) {
 		{0, 14}, // out-of-range falls back to 14
 	}
 	for _, tc := range cases {
-		if got := headingFontSize(tc.level); got != tc.want {
-			t.Errorf("headingFontSize(%d): got %v want %v", tc.level, got, tc.want)
+		want := styletokens.ScaledPt(tc.base, d)
+		if got := headingFontSize(tc.level); got != want {
+			t.Errorf("headingFontSize(%d): got %v want %v", tc.level, got, want)
+		}
+	}
+}
+
+func TestHeadingFontSize_MovesWithDensity(t *testing.T) {
+	// The ladder is one call to ScaledPt away from the raw table, so a
+	// density that shifts body text shifts headings by the same step.
+	// Asserted against ScaledPt rather than against numbers so retuning
+	// the ladder does not have to retune this test.
+	for _, level := range []uint8{1, 3, 6} {
+		tight := styletokens.ScaledPt(headingFontSizeBase(level), styletokens.DensityTight)
+		roomy := styletokens.ScaledPt(headingFontSizeBase(level), styletokens.DensityRoomy)
+		if tight >= roomy {
+			t.Errorf("level %d: tight %v should sit below roomy %v", level, tight, roomy)
+		}
+	}
+}
+
+func TestHeadingFontSize_LadderDescendsAndStraddlesBody(t *testing.T) {
+	// The ladder descends monotonically — that is what makes the level
+	// legible without reading the text.
+	for level := uint8(1); level < 6; level++ {
+		if headingFontSize(level) <= headingFontSize(level+1) {
+			t.Errorf("H%d (%v) should be larger than H%d (%v)",
+				level, headingFontSize(level), level+1, headingFontSize(level+1))
+		}
+	}
+	// H1..H5 sit above body text; H6 sits just BELOW it. That is not an
+	// accident of this change — the ladder was tuned against egui's
+	// default 12 pt body while the IDS body step is 13 pt, so the
+	// smallest heading came out under it. Pinned rather than corrected:
+	// retuning the ladder moves every markdown-bearing capture again and
+	// is a typographic decision of its own, not part of the density fix.
+	d := styletokens.DensityFromEnv()
+	body := styletokens.ScaledPt(styletokens.BodyPt, d)
+	for level := uint8(1); level <= 5; level++ {
+		if got := headingFontSize(level); got <= body {
+			t.Errorf("headingFontSize(%d) = %v, want > body %v", level, got, body)
+		}
+	}
+	if got := headingFontSize(6); got >= body {
+		t.Errorf("headingFontSize(6) = %v: it now sits at or above body %v — "+
+			"the ladder was retuned, so update this expectation deliberately", got, body)
+	}
+}
+
+func TestHeadingGap_TwoTiers(t *testing.T) {
+	d := styletokens.DensityFromEnv()
+	outer := styletokens.PaddingOuter(d)
+	def := styletokens.PaddingDefault(d)
+	if outer <= def {
+		t.Fatalf("token premise broken: PaddingOuter %v should exceed PaddingDefault %v", outer, def)
+	}
+	for _, level := range []uint8{1, 2} {
+		if got := headingGap(level); got != outer {
+			t.Errorf("headingGap(%d): got %v want the outer step %v", level, got, outer)
+		}
+	}
+	for _, level := range []uint8{3, 4, 5, 6} {
+		if got := headingGap(level); got != def {
+			t.Errorf("headingGap(%d): got %v want the default step %v", level, got, def)
+		}
+	}
+}
+
+func TestParse_Heading_CarriesItsLevelOnTheSegment(t *testing.T) {
+	// The font size is baked into the runs at lowering time, so the level
+	// has to be stored separately for the renderer to pick a gap tier.
+	src := "# one\n\n## two\n\n###### six\n\npara\n"
+	doc := Parse([]byte(src))
+	want := []uint8{1, 2, 6, 0}
+	if len(doc.segments) != len(want) {
+		t.Fatalf("segments: got %d want %d", len(doc.segments), len(want))
+	}
+	for i, w := range want {
+		if got := doc.segments[i].headingLevel; got != w {
+			t.Errorf("segments[%d].headingLevel: got %d want %d", i, got, w)
 		}
 	}
 }

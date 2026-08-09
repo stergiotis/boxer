@@ -111,7 +111,7 @@ func init() {
 		Stage:       [2]float32{1024, 760},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "Obsidian-flavored markdown renderer: headings, inline, lists, tables, blockquote, code, rule, frontmatter, highlight, wikilinks, embeds (Obsidian + CommonMark images), callouts, comments — plus an interactive Load section.",
+		Description: "Obsidian-flavored markdown renderer: headings, inline, lists, task lists, tables, blockquote, code, rule, frontmatter, highlight, wikilinks, embeds (Obsidian + CommonMark images), callouts, comments — plus an interactive Load section.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = &markdownDemoState{}
 			return
@@ -164,6 +164,30 @@ Mixed start:
 
 5. starts at five
 6. continues at six`))
+
+	// mdTasks exercises the GFM task-list path. The checkbox is a glyph,
+	// not a control: nothing maps rendered geometry back to source bytes,
+	// so a click would have nowhere to write. The last group shows that
+	// the state survives nesting and inline styling, and that a bracket
+	// pair anywhere but at the start of an item is ordinary text.
+	mdTasks = markdown.Parse([]byte(`Task list:
+
+- [x] a completed item
+- [ ] an open item
+- [x] done, with **bold** and ` + "`code`" + ` in the text
+- [ ] open, with a [link](https://example.com)
+
+Nested, and mixed with plain bullets:
+
+- [ ] parent task
+  - [x] finished subtask
+  - [ ] unfinished subtask
+- a plain bullet in the same list
+- [ ] back to a task
+
+Only a leading marker counts — this item mentions [x] mid-sentence:
+
+- an item that says [x] in passing`))
 
 	mdBlockquote = markdown.Parse([]byte(`Standalone paragraph above the quote.
 
@@ -391,6 +415,12 @@ func demoMarkdownLists(ids *c.WidgetIdStack) {
 	}
 }
 
+func demoMarkdownTasks(ids *c.WidgetIdStack) {
+	for range c.IdScope(ids.PrepareStr("md-tasks")) {
+		mdTasks.Render(ids)
+	}
+}
+
 func demoMarkdownBlockquote(ids *c.WidgetIdStack) {
 	for range c.IdScope(ids.PrepareStr("md-blockquote")) {
 		mdBlockquote.Render(ids)
@@ -549,6 +579,9 @@ func demoMarkdown(ids *c.WidgetIdStack, st *markdownDemoState) {
 	}
 	for range c.CollapsingHeader(ids.PrepareStr("md-lists-h"), c.WidgetText().Text("lists (bullet / numbered / nested)").Keep()).KeepIter() {
 		demoMarkdownLists(ids)
+	}
+	for range c.CollapsingHeader(ids.PrepareStr("md-tasks-h"), c.WidgetText().Text("task lists (- [x] / - [ ] — glyph, not a control)").Keep()).KeepIter() {
+		demoMarkdownTasks(ids)
 	}
 	for range c.CollapsingHeader(ids.PrepareStr("md-blockquote-h"), c.WidgetText().Text("blockquote (Frame.PresetGroup)").Keep()).KeepIter() {
 		demoMarkdownBlockquote(ids)
