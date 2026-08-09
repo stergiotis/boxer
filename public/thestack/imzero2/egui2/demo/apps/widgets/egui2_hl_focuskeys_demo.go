@@ -5,8 +5,10 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
@@ -17,10 +19,12 @@ func init() {
 		Title:    icons.PhKeyboard + " focus",
 		Stage:    [2]float32{900, 500},
 		Kind:     registry.DemoKindDX,
-		Description: "ADR-0177 M0: a Frame can be made focusable, and focus can be moved from code. " +
-			"Click either panel to focus it, Tab between them, or use the buttons — each panel reports " +
-			"its own HasFocus / GainedFocus / LostFocus. Focus is the gate the keyboard capture in M1 " +
-			"hangs on, so this is the half that has to work first.",
+		Description: "ADR-0177 M0+M1: a Frame can be made focusable, focus can be moved from code, and " +
+			"a focused Frame can capture the keys it declares. Click either panel to focus it, Tab " +
+			"between them, or use the buttons. Only panel B declares a capture mask: with it focused " +
+			"the arrow keys are consumed and logged, and the surrounding gallery does not scroll on " +
+			"them. Focus panel A instead and the same keys scroll the gallery as usual — the " +
+			"difference is the mask, not the focus.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = &focusDemoState{}
 			return
@@ -33,9 +37,16 @@ func init() {
 }
 
 // =============================================================================
-// focus — ADR-0177 M0.
+// focus — ADR-0177 M0 and M1.
 //
 // What this exists to show, and to prove:
+//
+//   - `.CaptureKeys(mask)` on a focused Frame consumes exactly the keys the
+//     mask names (SD1–SD3), and they arrive in Go via GetCapturedKeys. Only
+//     panel B declares a mask, so the two panels differ in one thing and the
+//     effect of that one thing is watchable: arrows pressed over B are logged
+//     and the gallery stays put; the same arrows over A scroll the gallery.
+//     That contrast is the fencing observable, not a claim about it.
 //
 //   - `.Focusable()` on a Frame registers a post-body interact rect (SD8), so
 //     the Frame becomes something egui can focus: click it, or Tab to it.
@@ -94,12 +105,12 @@ func (inst *focusDemoState) log(s string) {
 
 func demoFocus(ids *c.WidgetIdStack, st *focusDemoState) {
 	stdSection("two focusable panels",
-		"click one, or Tab between them; each reports its own focus flags")
+		"click one, or Tab between them; only B captures the arrow keys")
 
 	for range c.Horizontal().KeepIter() {
-		st.panel(ids, "A", focusA)
+		st.panel(ids, "A", focusA, false)
 		c.AddSpace(gapSections())
-		st.panel(ids, "B", focusB)
+		st.panel(ids, "B", focusB, true)
 	}
 
 	c.AddSpace(padInner())
@@ -151,7 +162,8 @@ func demoFocus(ids *c.WidgetIdStack, st *focusDemoState) {
 	st.wantSurren = focusNone
 
 	c.AddSpace(padInner())
-	stdSection("focus transitions", "Gained and Lost are one-frame edges, so they are logged rather than polled")
+	stdSection("focus transitions and captured keys",
+		"focus panel B and press the arrow keys — captured, consumed, and logged here")
 	if len(st.events) == 0 {
 		for rt := range c.RichTextLabel("(nothing yet — click a panel)") {
 			rt.Weak().Italics()
@@ -162,6 +174,25 @@ func demoFocus(ids *c.WidgetIdStack, st *focusDemoState) {
 			rt.Monospace().Small()
 		}
 	}
+}
+
+// describeKey renders one captured event the way a keymap would write it, so
+// the modifier byte is legible rather than a number. Modifiers ride the event
+// instead of being part of the match (SD5): Shift+Down arrives as Down with
+// Shift set, which is what lets a tree bind "extend selection" without needing
+// a second mask entry.
+func describeKey(k c.CapturedKey) string {
+	s := ""
+	if k.Ctrl() {
+		s += "Ctrl+"
+	}
+	if k.Alt() {
+		s += "Alt+"
+	}
+	if k.Shift() {
+		s += "Shift+"
+	}
+	return s + k.Code.String()
 }
 
 // handle is the id a panel's Frame put on the wire last frame, or 0 before it
@@ -175,7 +206,7 @@ func (inst *focusDemoState) focused() int {
 	return inst.lastFocused
 }
 
-func (inst *focusDemoState) panel(ids *c.WidgetIdStack, name string, which int) {
+func (inst *focusDemoState) panel(ids *c.WidgetIdStack, name string, which int, captures bool) {
 	// Build the Frame FIRST and take the id it will send. c.Frame stamps its id
 	// at construction via DeriveStacked(), so this is the only value that
 	// matches what r7 is keyed by; the decoration is chained on afterwards.
@@ -214,15 +245,33 @@ func (inst *focusDemoState) panel(ids *c.WidgetIdStack, name string, which int) 
 		inst.log("panel " + name + ": lost focus")
 		inst.lastFocused = focusNone
 	}
+	// Every key this panel captures is one it CONSUMES: while a panel has
+	// focus, ↑/↓ move nothing in the surrounding gallery scroll area, because
+	// the event never reaches it (SD2). Click away and scrolling returns.
+	for _, k := range c.CurrentApplicationState.StateManager.GetCapturedKeys(widgethandle.Make(id)) {
+		inst.log("panel " + name + ": " + describeKey(k))
+	}
+
 	f = f.Fill(color.Hex(styletokens.NeutralBgFaint.AsHex())).
 		Stroke(strokeW, stroke).
 		InnerMargin(styletokens.PaddingOuter(styletokens.DensityFromEnv())).
-		Focusable().
 		HoverCursorPointer()
+	if captures {
+		// CaptureKeys implies Focusable — capture is gated on has_focus, so a
+		// mask on a widget egui cannot focus would never fire.
+		f = f.CaptureKeys(uint64(keycodes.Navigation))
+	} else {
+		f = f.Focusable()
+	}
 	for range f.KeepIter() {
 		c.UiSetMinWidth(260)
 		for rt := range c.RichTextLabel("panel " + name) {
 			rt.Strong()
+		}
+		if captures {
+			c.Label("captures " + icons.PhArrowsOutCardinal + " nav keys").Send()
+		} else {
+			c.Label("no capture mask").Send()
 		}
 		c.Label(fmt.Sprintf("hasFocus=%v", flags.HasFocus())).Send()
 		c.Label(fmt.Sprintf("gained=%v lost=%v",

@@ -122,6 +122,22 @@ events land in a per-id register that Go reads back by widget handle.
   This mirrors ADR-0140's `.CaptureScroll()` zeroing `smooth_scroll_delta`. A
   widget that captures nothing pays nothing and changes no behaviour.
 
+  Implementation showed this is only half the fence, and the missing half is
+  not optional. Consuming stops *other widgets* from acting on the event, but
+  it does not stop **egui's own focus navigation**: `Focus::begin_pass` latches
+  a focus direction from the raw input, before any widget runs, for unmodified
+  arrows / Tab / Escape. Removing the event from the queue in apply code
+  happens strictly later, so the widget captured one keypress and then lost
+  focus at `end_pass` — capturing exactly once and thereafter looking dead.
+  Consuming alone is therefore not a fence against the framework, only against
+  peers.
+  The fix is egui's per-widget `EventFilter`, set via `set_focus_lock_filter`,
+  and it needs no new declaration from the caller: the filter is derived from
+  the SD3 mask, since "my mask names ↑/↓" and "↑/↓ act on me rather than moving
+  focus" are the same statement. One consequence to know: the filter only
+  applies from the second frame of focus, so a keypress in the very frame focus
+  arrives can still navigate. egui's own `TextEdit` has that edge too.
+
 - **SD3 — The widget declares a key mask, rather than capturing everything.**
   This is the parametric form of the existing per-binding ownership stance, not
   a departure from it: the widget states what it eats, so `F1` and Ctrl+Enter
@@ -214,8 +230,13 @@ events land in a per-id register that Go reads back by widget handle.
   that takes focus on click cannot give it back on Escape except by requesting
   focus on some other id it may not have. Demo `focus`; a headless trace
   asserts click-to-focus, `RequestFocus` and `SurrenderFocus`.
-- **M1 — R26 capture register + fetcher + `GetCapturedKeys`.** The capture
-  path end to end, with a gallery demo that echoes captured keys.
+- **M1 — R26 capture register + fetcher + `GetCapturedKeys`.** ✓ The capture
+  path end to end, with a gallery demo that echoes captured keys. `.CaptureKeys(mask)`
+  implies `.Focusable()`, since capture is gated on focus and a mask without a
+  focus registration could only ever be a silent no-op. The `focus` demo gives
+  panel B a mask and panel A none, so the fencing is a visible contrast rather
+  than a claim; a headless trace asserts ArrowDown, ArrowUp and Shift+ArrowDown
+  arrive in Go with the modifier reported alongside.
 - **M2 — Fencing verification.** A demo placing a capturing widget inside a
   `ScrollArea` and asserting ↑/↓ do not scroll the parent — the observable
   SD2 exists for.

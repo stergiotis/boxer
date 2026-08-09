@@ -208,6 +208,16 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 			// widget could not have one without the other.
 			BeginMethod("focusable").
 			CodeClientRust(rustClientCode("focusable = true;\n")).EndMethod().
+			// captureKeys — ADR-0177 SD3. One bit per keycodes.Code; the
+			// widget states what it eats, so F1 and Ctrl+Enter keep reaching
+			// their runtime-level owners while this Frame has focus.
+			//
+			// Implies focusable: capture is gated on has_focus (SD1), so a
+			// mask without a focus registration could never fire, and making
+			// the caller remember both would only produce silent no-ops. A
+			// zero mask captures nothing and costs nothing.
+			BeginMethod("captureKeys").Arg("mask", ctabb.U64).
+			CodeClientRust(rustClientCode("capture_keys_mask = mask;\nfocusable = true;\n")).EndMethod().
 			// hoverCursorPointer changes the OS cursor to a pointing
 			// hand whenever the pointer is over this Frame — the
 			// universal "this is clickable" cue. Only meaningful when
@@ -241,7 +251,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 		WithSettingBlockIterator(true).
 		WithSettingImmediate(true).
 		WithSettingRetained(true).
-		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\n")).
+		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\n")).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -290,7 +300,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 							}
 							if fr.lost_focus() {
 								resp2 |= ResponseFlags::LOST_FOCUS;
-							}
+							}`+keyCaptureHelperRust("{{Id}}.value()", "fr")+`
 						}
 						self.r7_push({{Id}}.value(), resp2);
 					} else {

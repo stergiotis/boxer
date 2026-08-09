@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/containers/ragged"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
 )
 
@@ -132,6 +133,30 @@ func (v CanvasCursorValue) Ctrl() bool    { return v.Mods&2 != 0 }
 func (v CanvasCursorValue) Alt() bool     { return v.Mods&4 != 0 }
 func (v CanvasCursorValue) Command() bool { return v.Mods&8 != 0 }
 
+// CapturedKey is one R26 key-capture row (ADR-0177 SD6): a key a widget
+// declared in its `.CaptureKeys()` mask, pressed while that widget had focus,
+// and CONSUMED from egui's queue so nothing else acts on it.
+//
+// An event, not a state. A widget can see several in one frame (key repeat, or
+// a fast typist), which is why GetCapturedKeys returns a slice rather than the
+// single value the other per-id registers hold. The slice is empty on any frame
+// with no presses — there is no "still held" reading here, and a widget that
+// wants held-key behaviour should count repeats rather than look for one.
+type CapturedKey struct {
+	Code keycodes.Code
+	// Mods is the modifier state at the moment of the press (bit0 shift,
+	// bit1 ctrl, bit2 alt, bit3 command). The mask matches on the key ALONE
+	// (SD5), so Shift+Down arrives as Down with Shift set rather than being
+	// missed — read this to tell the two apart.
+	Mods uint8
+}
+
+// CapturedKey modifier accessors.
+func (v CapturedKey) Shift() bool   { return v.Mods&1 != 0 }
+func (v CapturedKey) Ctrl() bool    { return v.Mods&2 != 0 }
+func (v CapturedKey) Alt() bool     { return v.Mods&4 != 0 }
+func (v CapturedKey) Command() bool { return v.Mods&8 != 0 }
+
 // ModifiersValue is the cached payload of the R17 modifiers drain.
 // Modifier-key state from egui's InputState for the previous frame.
 // Command is the platform-native primary modifier (Cmd on macOS, Ctrl
@@ -236,6 +261,11 @@ type StateManager struct {
 	// M1), keyed by canvas widget id. Rebuilt each Sync; read via
 	// GetCanvasCursor.
 	r24CanvasPointers map[uint64]CanvasCursorValue
+	// r26KeyCaptures holds LAST frame's captured key events (ADR-0177 SD6),
+	// grouped by capturing widget id. Rebuilt each Sync; read via
+	// GetCapturedKeys. Backing arrays are reused across frames, so a caller
+	// that needs to keep a slice past the next Sync must copy it.
+	r26KeyCaptures map[uint64][]CapturedKey
 	// r22StarvedTextures holds LAST frame's starved-texture report: ids the
 	// host interpreted with no pixels and no usable cache entry (a send-once
 	// upload lost to a discarded hidden-tab buffer, or an idle-LRU eviction).
@@ -281,6 +311,7 @@ func NewStateManager() *StateManager {
 		r21UiRects:           make(map[uint64]UiRectValue, 8),
 		r23CanvasWheel:       make(map[uint64]CanvasWheelValue, 8),
 		r24CanvasPointers:    make(map[uint64]CanvasCursorValue, 8),
+		r26KeyCaptures:       make(map[uint64][]CapturedKey, 4),
 		r22StarvedTextures:   make(map[uint64]struct{}, 8),
 	}
 }
@@ -438,6 +469,22 @@ func (inst *StateManager) GetCanvasWheel(h widgethandle.WidgetHandle) CanvasWhee
 func (inst *StateManager) GetCanvasCursor(h widgethandle.WidgetHandle) (v CanvasCursorValue, ok bool) {
 	v, ok = inst.r24CanvasPointers[h.Resolve()]
 	return
+}
+
+// GetCapturedKeys returns the keys the widget behind the handle captured last
+// frame (ADR-0177 SD6) — those it named in `.CaptureKeys()` and that were
+// pressed while it had focus. Empty on any frame with no presses, which is
+// most of them.
+//
+// These events were CONSUMED: an enclosing ScrollArea did not scroll on them
+// and no sibling saw them. That is the point (SD2), and also the obligation —
+// a widget that declares a mask and then ignores the result has swallowed the
+// key rather than merely skipped it.
+//
+// The returned slice aliases the manager's buffer and is invalidated by the
+// next Sync; copy it if it must outlive the frame.
+func (inst *StateManager) GetCapturedKeys(h widgethandle.WidgetHandle) []CapturedKey {
+	return inst.r26KeyCaptures[h.Resolve()]
 }
 
 // GetPointer returns last frame's R20 latest-pointer-position from egui's
@@ -918,6 +965,33 @@ func (inst *StateManager) Sync() {
 				PosY:    posYs[i],
 				Mods:    mods,
 			}
+			i++
+		}
+	}
+	{
+		// One row per captured EVENT, so a widget appears as many times as it
+		// captured. Re-grouped by id here rather than in Rust because the wire
+		// shape is three flat arrays and the grouping is what callers want.
+		//
+		// Slices are truncated and refilled instead of reallocated: a tree
+		// under held ArrowDown captures every frame, and a fresh slice per
+		// widget per frame is garbage for no benefit. The map keeps its
+		// entries for the same reason — a widget that captured once will
+		// likely capture again.
+		ids, codes, modsSeq := fetcher.FetchR26KeyCaptures()
+		for k, v := range inst.r26KeyCaptures {
+			inst.r26KeyCaptures[k] = v[:0]
+		}
+		i := 0
+		for mods := range modsSeq {
+			if i >= len(ids) || i >= len(codes) {
+				break
+			}
+			id := ids[i]
+			inst.r26KeyCaptures[id] = append(inst.r26KeyCaptures[id], CapturedKey{
+				Code: keycodes.Code(codes[i]),
+				Mods: mods,
+			})
 			i++
 		}
 	}

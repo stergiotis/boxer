@@ -75,9 +75,46 @@ func KeyCodesRustFile() string {
 // The mask matches on the KEY ALONE and reports the modifiers alongside (SD5),
 // which sidesteps `consume_key`'s `matches_logically` extra-modifier ordering
 // hazard rather than re-encountering it per adopter.
-func keyCaptureHelperRust(idExpr string) string {
+// maskBitExpr builds the Rust test for "the mask names any of these codes",
+// with the bit numbers taken from the Go constants rather than written out. The
+// numbers are a wire contract (SD4); spelling them by hand here would be a
+// second place for them to drift from.
+func maskBitExpr(codes ...keycodes.Code) string {
+	parts := make([]string, 0, len(codes))
+	for _, c := range codes {
+		parts = append(parts, "(1u64 << "+strconv.Itoa(int(c))+")")
+	}
+	return "(capture_keys_mask & (" + strings.Join(parts, " | ") + ")) != 0"
+}
+
+func keyCaptureHelperRust(idExpr string, respExpr string) string {
 	return `
-if capture_keys_mask != 0 && resp.has_focus() {
+if capture_keys_mask != 0 && ` + respExpr + `.has_focus() {
+    // Consuming the event is NOT enough on its own, and this is the part that
+    // is easy to get wrong: egui latches its focus-navigation direction in
+    // Focus::begin_pass, from the RAW input, before any widget runs. By the
+    // time this apply code removes an arrow key from the queue, egui has
+    // already decided to move focus at end_pass, so the widget would capture
+    // one keypress and immediately lose focus — capturing exactly once and
+    // then appearing dead.
+    //
+    // The filter is egui's own mechanism for this, and it takes the same
+    // declaration SD3 already makes: a mask naming the vertical arrows means
+    // "they act on me", which is precisely what vertical_arrows encodes. So the
+    // filter is DERIVED from the mask rather than being a second thing to keep
+    // in sync — a widget that captures ↑/↓ keeps focus on them, and one that
+    // does not still Tabs and arrows away normally.
+    //
+    // set_focus_lock_filter requires focus to have been held since last frame,
+    // so the filter takes effect on the second frame of focus. The first
+    // keypress in the same frame focus arrives can still navigate; egui's own
+    // TextEdit has the same edge and it has not been worth more machinery.
+    ui.memory_mut(|m| m.set_focus_lock_filter(` + respExpr + `.id, egui::EventFilter {
+        tab: ` + maskBitExpr(keycodes.Tab) + `,
+        horizontal_arrows: ` + maskBitExpr(keycodes.ArrowLeft, keycodes.ArrowRight) + `,
+        vertical_arrows: ` + maskBitExpr(keycodes.ArrowUp, keycodes.ArrowDown) + `,
+        escape: ` + maskBitExpr(keycodes.Escape) + `,
+    }));
     let mods_now = ui.input(|inp| inp.modifiers);
     let mods_byte = (mods_now.shift as u8)
         | ((mods_now.ctrl as u8) << 1)
@@ -89,7 +126,7 @@ if capture_keys_mask != 0 && resp.has_focus() {
     ui.input(|inp| {
         for ev in &inp.events {
             if let egui::Event::Key { key, pressed: true, .. } = ev {
-                let code = imzero_key_code(*key);
+                let code = crate::imzero2::keycodes::imzero_key_code(*key);
                 if code != 0 && (capture_keys_mask & (1u64 << code)) != 0 {
                     hits.push((*key, code));
                 }
@@ -106,6 +143,33 @@ if capture_keys_mask != 0 && resp.has_focus() {
     }
 }
 `
+}
+
+// definitionsKeysFetchers drains R26 (SD6). Separate from definitionsFetcher()
+// so ADR-0177's pieces sit together; the generator concatenates several such
+// per-feature fetcher sets already.
+func definitionsKeysFetchers() (nodes []ir.NodeI) {
+	// Drains every key captured last frame, as parallel arrays: one row per
+	// EVENT, not per widget, so a widget appears as many times as it captured.
+	// Go re-groups by id in StateManager.Sync.
+	//
+	// Drain (`.drain(..)`) rather than copy: the register is per-frame and the
+	// clear in prepare_next_frame is a safety net, not the normal path.
+	nodes = append(nodes, idl.NewFetcherNode("fetchR26KeyCaptures").
+		WithApplyCodeClientRust(rustClientCode(`
+let len = self.r26_key_capture_ids.len();
+debug_assert_eq!(len, self.r26_key_capture_codes.len());
+debug_assert_eq!(len, self.r26_key_capture_mods.len());
+self.io.write_plain_u64h(len, self.r26_key_capture_ids.drain(..))?;
+self.io.write_plain_u8h(len, self.r26_key_capture_codes.drain(..))?;
+self.io.write_plain_u8h(len, self.r26_key_capture_mods.drain(..))?;
+{{SendMessage}}
+`)).
+		AddReturnValue("ids", ctabb.U64h).
+		AddReturnValue("codes", ctabb.U8h).
+		AddReturnValue("mods", ctabb.U8h).
+		Build())
+	return
 }
 
 func definitionsKeys() (nodes []*ir.ProceduralNode) {

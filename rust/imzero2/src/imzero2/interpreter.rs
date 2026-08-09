@@ -2337,6 +2337,20 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     r24_canvas_pointer_pos_y: Vec<f32>,
     r24_canvas_pointer_mods: Vec<u8>,
 
+    // ADR-0177 SD6 key captures, per id: one row per captured key EVENT, so a
+    // widget that sees two presses in a frame contributes two rows — unlike
+    // r24, where each canvas contributes exactly one. Parallel arrays keyed by
+    // the capturing widget's id, drained by FetchR26KeyCaptures and cleared in
+    // prepare_next_frame.
+    //
+    // Drained rather than retained, and that is the decision: a key press is an
+    // event, not a state. Retaining it the way r15 retains cameras would replay
+    // last frame's press every frame until the next one arrived, which for a
+    // tree cursor means one ArrowDown scrolling forever.
+    r26_key_capture_ids: Vec<u64>,
+    r26_key_capture_codes: Vec<u8>,
+    r26_key_capture_mods: Vec<u8>,
+
     // Ui::available_size snapshot — set by the captureAvailableSize
     // procedural op when called inside a Ui scope, read by Go via
     // fetchR18AvailableSize. One-frame lag (capture this frame, read
@@ -2609,6 +2623,9 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r24_canvas_pointer_pos_x: Vec::with_capacity(16),
             r24_canvas_pointer_pos_y: Vec::with_capacity(16),
             r24_canvas_pointer_mods: Vec::with_capacity(16),
+            r26_key_capture_ids: Vec::with_capacity(8),
+            r26_key_capture_codes: Vec::with_capacity(8),
+            r26_key_capture_mods: Vec::with_capacity(8),
             r18_avail_w: f32::NAN,
             r18_avail_h: f32::NAN,
             r21_ui_rect_seqs: Vec::with_capacity(8),
@@ -2723,6 +2740,24 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             self.r25_et_colwidth_ids.clear();
             self.r25_et_colwidth_counts.clear();
             self.r25_et_colwidth_values.clear();
+        }
+
+        {
+            // Logged when non-empty, unlike r24/r25: reaching here with rows
+            // means keys were CONSUMED from egui's queue and then dropped
+            // without being read. That is strictly worse than an unfetched
+            // snapshot register — the event is gone, so nothing downstream can
+            // act on it either, and the symptom is a widget that ignores the
+            // keyboard while the parent ScrollArea has also stopped scrolling.
+            if !self.r26_key_capture_ids.is_empty() {
+                tracing::debug!(
+                    len = self.r26_key_capture_ids.len(),
+                    "r26 key captures not empty (consumed but not fetched), clearing"
+                );
+            }
+            self.r26_key_capture_ids.clear();
+            self.r26_key_capture_codes.clear();
+            self.r26_key_capture_mods.clear();
         }
 
         // Hyperlink zones — cleared so a removed link doesn't carry into
@@ -6353,6 +6388,23 @@ self.apply_widget(w,u,f,Some(i));
                 self.io.write_plain_f32h(vlen, self.r25_et_colwidth_values.drain(..))?;
                 self.io.flush()?;
             }
+            FuncProcId::FetchR26KeyCaptures => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchR26KeyCaptures");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                let len = self.r26_key_capture_ids.len();
+                debug_assert_eq!(len, self.r26_key_capture_codes.len());
+                debug_assert_eq!(len, self.r26_key_capture_mods.len());
+                self.io.write_plain_u64h(len, self.r26_key_capture_ids.drain(..))?;
+                self.io.write_plain_u8h(len, self.r26_key_capture_codes.drain(..))?;
+                self.io.write_plain_u8h(len, self.r26_key_capture_mods.drain(..))?;
+                self.io.flush()?;
+            }
             FuncProcId::FetchR7 => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::FetchR7");
@@ -6512,6 +6564,7 @@ self.apply_widget(w,u,f,Some(i));
                 let mut sense_drag = false;
                 let mut hover_cursor_pointer = false;
                 let mut focusable = false;
+                let mut capture_keys_mask: u64 = 0;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(FrameBuilderMethodId::from_repr)?;
@@ -6685,6 +6738,14 @@ self.apply_widget(w,u,f,Some(i));
                             puffin::profile_scope!("match FrameBuilderMethodId::Focusable");
                             focusable = true;
                         }
+                        FrameBuilderMethodId::CaptureKeys => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match FrameBuilderMethodId::CaptureKeys");
+                            #[allow(unused_mut)]
+                            let mut mask = self.io.read_plain_u64()?;
+                            capture_keys_mask = mask;
+                            focusable = true;
+                        }
                         FrameBuilderMethodId::HoverCursorPointer => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!(
@@ -6807,6 +6868,73 @@ self.apply_widget(w,u,f,Some(i));
                         }
                         if fr.lost_focus() {
                             resp2 |= ResponseFlags::LOST_FOCUS;
+                        }
+                        if capture_keys_mask != 0 && fr.has_focus() {
+                            // Consuming the event is NOT enough on its own, and this is the part that
+                            // is easy to get wrong: egui latches its focus-navigation direction in
+                            // Focus::begin_pass, from the RAW input, before any widget runs. By the
+                            // time this apply code removes an arrow key from the queue, egui has
+                            // already decided to move focus at end_pass, so the widget would capture
+                            // one keypress and immediately lose focus — capturing exactly once and
+                            // then appearing dead.
+                            //
+                            // The filter is egui's own mechanism for this, and it takes the same
+                            // declaration SD3 already makes: a mask naming the vertical arrows means
+                            // "they act on me", which is precisely what vertical_arrows encodes. So the
+                            // filter is DERIVED from the mask rather than being a second thing to keep
+                            // in sync — a widget that captures ↑/↓ keeps focus on them, and one that
+                            // does not still Tabs and arrows away normally.
+                            //
+                            // set_focus_lock_filter requires focus to have been held since last frame,
+                            // so the filter takes effect on the second frame of focus. The first
+                            // keypress in the same frame focus arrives can still navigate; egui's own
+                            // TextEdit has the same edge and it has not been worth more machinery.
+                            ui.memory_mut(|m| {
+                                m.set_focus_lock_filter(
+                                    fr.id,
+                                    egui::EventFilter {
+                                        tab: (capture_keys_mask & (1u64 << 12)) != 0,
+                                        horizontal_arrows: (capture_keys_mask
+                                            & ((1u64 << 3) | (1u64 << 4)))
+                                            != 0,
+                                        vertical_arrows: (capture_keys_mask
+                                            & ((1u64 << 1) | (1u64 << 2)))
+                                            != 0,
+                                        escape: (capture_keys_mask & (1u64 << 11)) != 0,
+                                    },
+                                )
+                            });
+                            let mods_now = ui.input(|inp| inp.modifiers);
+                            let mods_byte = (mods_now.shift as u8)
+                                | ((mods_now.ctrl as u8) << 1)
+                                | ((mods_now.alt as u8) << 2)
+                                | ((mods_now.command as u8) << 3);
+                            // Collect first, mutate after: consuming inside the read closure would
+                            // borrow the input state twice.
+                            let mut hits: Vec<(egui::Key, u8)> = Vec::new();
+                            ui.input(|inp| {
+                                for ev in &inp.events {
+                                    if let egui::Event::Key {
+                                        key, pressed: true, ..
+                                    } = ev
+                                    {
+                                        let code = crate::imzero2::keycodes::imzero_key_code(*key);
+                                        if code != 0 && (capture_keys_mask & (1u64 << code)) != 0 {
+                                            hits.push((*key, code));
+                                        }
+                                    }
+                                }
+                            });
+                            for (key, code) in hits {
+                                // Remove it from the queue so nothing downstream also acts on it.
+                                ui.input_mut(|inp| {
+                                    inp.events.retain(|ev| {
+                                        !matches!(ev,
+                egui::Event::Key { key: k, pressed: true, .. } if *k == key)
+                                    });
+                                });
+                                self.r26_key_capture_push(i.value(), code, mods_byte);
+                            }
                         }
                     }
                     self.r7_push(i.value(), resp2);
@@ -13157,6 +13285,13 @@ egui::Window::new(label).id(i);
         self.r23_canvas_wheel_zoom.push(zoom);
         self.r23_canvas_wheel_hover_x.push(hx);
         self.r23_canvas_wheel_hover_y.push(hy);
+    }
+    /// One captured key event for a widget (ADR-0177 SD6). Called from the
+    /// capturing widget's own apply code, so `i` is that widget's id.
+    pub fn r26_key_capture_push(&mut self, i: u64, code: u8, mods: u8) {
+        self.r26_key_capture_ids.push(i);
+        self.r26_key_capture_codes.push(code);
+        self.r26_key_capture_mods.push(mods);
     }
     pub fn r24_canvas_pointer_push(
         &mut self,

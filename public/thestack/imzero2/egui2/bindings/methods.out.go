@@ -1456,6 +1456,14 @@ func (inst FrameFluid) Focusable() FrameFluid {
 	return inst
 }
 
+func (inst FrameFluid) CaptureKeys(mask uint64) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdCaptureKeys))
+	r.WriteUint64(mask)
+
+	return inst
+}
+
 func (inst FrameFluid) HoverCursorPointer() FrameFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(FrameMethodIdHoverCursorPointer))
