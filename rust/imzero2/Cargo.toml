@@ -162,7 +162,7 @@ h3o = { version = "0.10", features = ["geo"] }
 # Concave-polygon fill for the painter (paintPolygonFilled.Concave()):
 # ear-clip triangulation → egui::Shape::Mesh, since epaint itself fills
 # only convex outlines.
-earcutr = "0.4"
+earcutr = "0.5"
 egui-snarl = "0.11.0"
 
 # IDS token layer (ADR-0029). Per-app-startup egui::Style overlay; no widgets.
