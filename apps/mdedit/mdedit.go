@@ -43,6 +43,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
 const (
@@ -125,7 +126,7 @@ const (
 	tipCopy  = "Copy the whole document to the clipboard. This is the only way text leaves the app — there is no file I/O in this cut."
 	tipDirty = "Whether the buffer differs from the last checkpoint: a completed copy to the clipboard, or the document restored when the window opened. With no file to be out of step with, that is the only thing the marker can honestly mean."
 
-	tipOutline = "Show the heading outline beside the preview; clicking a heading scrolls the preview to it. The column needs a window wide enough to spare it, and hides itself below that rather than starving the two panes doing the work."
+	tipOutline = "Show the heading outline beside the preview. Headings nest by level and a section folds away; clicking one scrolls the preview to it and takes the caret with it. The column needs a window wide enough to spare it, and hides itself below that rather than starving the two panes doing the work."
 
 	tipStats = "Words, characters and a reading estimate over the PROSE only — fenced code bodies, markers, URLs, table rules and frontmatter are excluded, since none of them are read at prose speed. The estimate divides by 200 words a minute, a round convention rather than a measurement of anyone."
 
@@ -192,6 +193,26 @@ type App struct {
 	// showOutline is the reader's toggle. The column also needs the window to
 	// be wide enough — see App.outlineVisible.
 	showOutline bool
+
+	// The outline pane's state (see mdedit_outline.go). outline is the
+	// hierarchy, rebuilt whenever outlineDoc stops matching the current parse;
+	// outlineState is the tree widget's own expansion/selection, rewritten from
+	// the two fields below on every frame because it keys on node indices and a
+	// rebuild renumbers them.
+	outline      outlineModel
+	outlineDoc   *markdown.Doc
+	outlineState tree.State
+	// outlineCollapsed is the closed sections, keyed by the stable slug#ord
+	// rather than by node index. Absent means open, so the zero value is a
+	// fully expanded outline.
+	outlineCollapsed map[string]bool
+	// outlineRevealed is the section the outline last scrolled itself to, so a
+	// caret that has stayed put does not re-issue the scroll every frame.
+	outlineRevealed string
+	// outlinePaneW/H are what the outline's pane probe last reported, held
+	// across frames for the same reason paneW/paneH are.
+	outlinePaneW float32
+	outlinePaneH float32
 
 	// paneW/paneH are what the editor's pane probe reported last, held across
 	// frames so a frame in which the probe does not come back (the pane was

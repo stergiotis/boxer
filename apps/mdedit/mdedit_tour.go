@@ -19,7 +19,11 @@ const (
 	gallerySrcW = float32(400)
 	// galleryOutlineW pins the outline column. The live app derives it from
 	// the window instead; here the stage width is fixed, so it is too.
-	galleryOutlineW = float32(150)
+	//
+	// Wider than the flat list needed. The outline renders through the tree
+	// widget now, so the column pays for a disclosure control, a per-level
+	// indent and the trailing count before the heading text starts.
+	galleryOutlineW = float32(190)
 	// galleryPaneH bounds both columns. The interactive gallery host is a
 	// scroll area of unbounded height, in which an unbounded child does not
 	// know where to stop. It has to leave room for the demo chrome the driver
@@ -36,6 +40,11 @@ const (
 // the lowering paths a reader will actually look at in a screenshot: headings
 // (which are also what the caret-follows-preview sync keys on), inline
 // styling, a list, a fenced block, and a callout.
+//
+// The heading levels go three deep on one branch and two on another, so the
+// outline column has a hierarchy to draw rather than a flat run — a forest of
+// same-level headings would show the tree widget's indent and disclosure
+// controls doing nothing.
 const sampleDoc = `# Release notes
 
 Some **bold** prose with *emphasis*, a ` + "`code span`" + `, and a
@@ -46,6 +55,11 @@ Some **bold** prose with *emphasis*, a ` + "`code span`" + `, and a
 - the preview reparses as you type
 - the caret drives the preview's scroll
 - copy leaves through the clipboard broker
+
+### Why the caret leads
+
+Following the caret keeps both panes on the same section without a scroll sync
+that fights the reader for the scrollbar.
 
 ## Notes
 
@@ -85,9 +99,16 @@ func mdTourInit(ids *c.WidgetIdStack) (state any) {
 	inst.ids = ids
 	inst.src = sampleDoc
 	inst.saved = sampleDoc
-	// The scene shows the outline column: it is half of what M2 added, and the
-	// gallery stage is wide enough to earn it.
+	// The scene shows the outline column — the heading tree, its indents and
+	// its disclosure controls — and the gallery stage is wide enough to earn
+	// it. Left fully expanded, which is the state a reader first meets.
 	inst.showOutline = true
+	// Pin the caret at the top of the document. Left alone, the TextEdit
+	// reports whatever cursor it starts with — the end of the buffer — and the
+	// caret-follows-preview sync then does its job and scrolls both panes past
+	// the title. Focus is not requested: the scene wants the caret placed, not
+	// the editor made the focused widget.
+	inst.requestCaret(0, 0, false)
 	// …and an open find bar with a query that hits twice, so the capture
 	// carries M3's two tones — the current match and the rest — and would show
 	// a regression in the colour-section split as a background bleeding across
@@ -116,6 +137,12 @@ func mdTourRender(ids *c.WidgetIdStack, state any) {
 // an unconstrained one behaves in both.
 func (inst *App) renderGallery() {
 	inst.refreshDerived()
+	// The same call renderBody makes, and for the scene the same reason: the
+	// outline highlights whichever section the caret is in, so without it the
+	// column draws with nothing selected and the capture is missing the row
+	// chrome. Deterministic here — the caret starts at offset 0, which is the
+	// first heading.
+	inst.trackCaretSection()
 	inst.renderBar()
 	// The size constraints sit on the columns, OUTSIDE the scroll areas. Set
 	// inside, they size the scrolled CONTENT instead of the viewport — the

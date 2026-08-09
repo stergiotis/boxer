@@ -537,8 +537,74 @@ Accepted 2026-08-08, with M0–M4 shipped. Changes now arrive as dated
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-08-09 — The outline renders through the native tree widget
+
+M2's outline was a flat list of `SelectableLabel`s indented by `AddSpace`. It
+now renders through `widgets/tree` ([ADR-0176](./0176-native-tree-widget.md)),
+making mdedit that widget's fourth adopter after `schemaview`, `configview` and
+`fieldview`, and following the same four-step shape they do: build the columnar
+hierarchy, sync host state into the widget's, render, apply the result back.
+
+Three things the flat list could not do, and one it did that this gives up.
+Headings nest by level, so the outline shows the structure the document already
+has rather than a run of indents. A section folds away, with the count of what
+it hides on the closed row. And only the rows on screen build widgets, where
+before every heading in the document did on every frame.
+
+What it gives up is horizontal scrolling. A tree row is a table cell of declared
+width, so a long heading truncates where it used to be reachable by dragging the
+column sideways; the full text is carried as the row's tooltip instead. The same
+change retires the reason the pane needed `Hscroll(true)` at all — the heading
+labels no longer push their own width back out into the window's minimum,
+because the column's width is declared rather than derived from content.
+
+Four decisions worth recording, because each has a failure mode that is quiet:
+
+- **Collapse state is keyed by `slug#ord`, not by node index.** `tree.State`
+  keys on the node's index in the columnar input — the only identity such an
+  input has — and this app rebuilds its hierarchy from a fresh parse on every
+  edit that changes the text. Typing a new heading above a collapsed section
+  renumbers everything below it, so an index-keyed collapse would transfer to
+  whichever heading slid into the vacated slot. The host therefore owns a
+  `map[string]bool` and rewrites the widget's State from it every frame. This is
+  the hazard `schemaview.syncNav` exists for; it is not specific to mdedit, but
+  mdedit hits it on every keystroke rather than on every filter change.
+- **The zero value is fully expanded.** Absent from the map means open, so a
+  reader who never collapses anything sees exactly what M2 showed.
+- **Selection is derived from the caret, never remembered by the tree.** The
+  highlighted row is whichever section the caret is in, recomputed each frame,
+  so the outline cannot come to disagree with the editor about where the writer
+  is. A click therefore highlights by moving the caret, not by selecting.
+- **Revealing the caret's section opens its ancestors in the HOST's map.**
+  `tree.State.Reveal` opens them in the widget's own State, which the sync
+  above overwrites one frame later; opening them where they will last is what
+  makes the reveal survive. It fires only when the caret's section CHANGES —
+  the same guard the preview's scroll target has — which has the consequence
+  that collapsing the section the caret is already in leaves it collapsed. A
+  click also marks its own destination as revealed, or the caret arriving there
+  next frame reads as a change and scrolls the outline to centre a row the
+  reader had already put their pointer on.
+
+The hidden-heading count is a column of its own rather than a chip after the
+label. A truncating label in a horizontal row takes the whole width it is
+offered, so anything emitted after it is pushed out of the cell — which for an
+outline, where long headings are common, would drop the count exactly on the
+rows with most to hide.
+
+Verified by unit tests over the pure half (nesting under skipped levels, a
+document with no level 1, key stability across an insert, the reveal and click
+paths) and by driving the gallery scene live over egui-mcp: collapse-all leaves
+one row carrying its count, expand-all restores, clicking a row scrolls both
+preview and source, and a truncated heading's tooltip carries its full text.
+That last one also settles a question this pane raised — a `HoverText` wrapping
+a tree cell's label does not steal the row's own click.
+
 ## References
 
+- [ADR-0176](./0176-native-tree-widget.md) — the tree widget the outline
+  renders through, and the node-index identity contract its `State` documents.
 - [ADR-0130](./0130-imzero2-textedit-highlight-seam.md) — the TextEdit
   highlight seam this app edits through, and the reconcile contract that makes
   a canonicalising span source unusable here.
