@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-07
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-09
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0176: A native Go tree widget over etable
 
@@ -611,8 +609,10 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 
 ## Status
 
-Proposed — awaiting review. M0–M5 are built; what the review is for is the
-decision, not the delivery.
+Accepted 2026-08-09, with M0–M5 built and verified before the flip rather than
+after it. What follows is what shipped under each milestone; the ADR is now
+Tier 2, so a later refinement lands as a dated `## Updates` entry rather than an
+edit in place.
 
 - **M0** — `row_ui` as a deferred block map, with SD6's seen-set guard;
   `logviewer` off its per-cell tint workaround.
