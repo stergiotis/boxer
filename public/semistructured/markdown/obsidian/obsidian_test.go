@@ -72,6 +72,57 @@ func allFeatures() Options {
 }
 
 // =============================================================================
+// Feature flags
+// =============================================================================
+
+// FeatureAll means every WIRED feature. FeatureMath is declared, reserved
+// and consulted by nothing — a flag inside "all" that does nothing reads
+// as a capability the stack has, and the next consumer writes `$x$`
+// expecting it to render (C3 in the rendering review).
+func TestFeatureAll_ExcludesTheUnwiredMathBit(t *testing.T) {
+	require.Zero(t, FeatureAll&FeatureMath, "FeatureAll must not carry the unwired math bit")
+	require.Equal(t, FeatureE(((1<<10)-1)&^FeatureMath), FeatureAll)
+}
+
+// Every OTHER declared bit is in FeatureAll — the exclusion list is one
+// entry long and stays that way unless someone adds a reason.
+func TestFeatureAll_CoversEveryWiredFlag(t *testing.T) {
+	wired := []struct {
+		name string
+		bit  FeatureE
+	}{
+		{"Wikilink", FeatureWikilink},
+		{"Embed", FeatureEmbed},
+		{"Callout", FeatureCallout},
+		{"Highlight", FeatureHighlight},
+		{"Comment", FeatureComment},
+		{"Tag", FeatureTag},
+		{"GFM", FeatureGFM},
+		{"Frontmatter", FeatureFrontmatter},
+		{"HeadingAnchor", FeatureHeadingAnchor},
+	}
+	var union FeatureE
+	for _, f := range wired {
+		require.NotZerof(t, FeatureAll&f.bit, "Feature%s missing from FeatureAll", f.name)
+		union |= f.bit
+	}
+	require.Equal(t, union, FeatureAll, "FeatureAll holds a bit no wired flag names")
+}
+
+// The bit is dead code, so setting it changes nothing: same extender
+// list, same output. This is what makes removing it from FeatureAll a
+// pure constant change rather than a behaviour change.
+func TestFeatureMath_ChangesNothingWhenSet(t *testing.T) {
+	src := "Prose with $x^2$ and $$\\sum_i x_i$$ in it.\n"
+	without := render(t, allFeatures(), src)
+	opts := allFeatures()
+	opts.Features |= FeatureMath
+	with := render(t, opts, src)
+	require.Equal(t, without, with)
+	require.Len(t, collectExtensions(opts), len(collectExtensions(allFeatures())))
+}
+
+// =============================================================================
 // Wikilinks
 // =============================================================================
 
@@ -115,6 +166,20 @@ func TestWikilink_InParagraph(t *testing.T) {
 	require.Contains(t, out, " after")
 }
 
+// A same-page link has no page part, and the "page > heading" join then
+// produced a stray leading "> " with nothing on its left (C6 in the
+// rendering review). Obsidian shows the heading alone.
+func TestWikilink_SamePageHeading_HasNoStrayJoin(t *testing.T) {
+	out := render(t, allFeatures(), "jump to [[#Section A]]")
+	require.NotContains(t, out, "&gt; Section A")
+	require.Contains(t, out, ">Section A</a>")
+}
+
+func TestWikilink_SamePageHeading_AliasStillWins(t *testing.T) {
+	out := render(t, allFeatures(), "jump to [[#Section A|down there]]")
+	require.Contains(t, out, ">down there</a>")
+}
+
 // =============================================================================
 // Embeds
 // =============================================================================
@@ -142,6 +207,24 @@ func TestEmbed_ImageExtensions(t *testing.T) {
 		out := render(t, allFeatures(), "![[file"+ext+"]]")
 		require.Contains(t, out, "<img", "expected <img> for extension %s", ext)
 	}
+}
+
+// Obsidian's `|size` suffix used to stay in Target, so the `.png` suffix
+// match failed and a plain image embed rendered as a note transclusion
+// (C5 in the rendering review). The suffix is parsed off and ignored —
+// honouring it needs a per-embed size, which neither renderer carries.
+func TestEmbed_SizeSuffix_StillAnImage(t *testing.T) {
+	for _, suffix := range []string{"|300", "|300x200", "|100%"} {
+		out := render(t, allFeatures(), "![[photo.png"+suffix+"]]")
+		require.Containsf(t, out, `<img src="/photo.png"`, "suffix %q", suffix)
+		require.NotContainsf(t, out, suffix, "suffix %q leaked into the output", suffix)
+	}
+}
+
+func TestEmbed_SizeSuffix_AfterAHeading(t *testing.T) {
+	out := render(t, allFeatures(), "![[SomeNote#Section|300]]")
+	require.Contains(t, out, `data-src="/SomeNote#section"`)
+	require.NotContains(t, out, "300")
 }
 
 // =============================================================================

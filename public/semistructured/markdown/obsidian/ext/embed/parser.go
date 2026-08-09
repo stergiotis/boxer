@@ -47,6 +47,20 @@ func (inst *embedParser) Parse(parent ast.Node, block text.Reader, pc parser.Con
 func parseEmbedInner(inner []byte) (node *Node) {
 	n := &Node{}
 
+	// Split on | for the display/size suffix FIRST: `![[img.png|300]]`,
+	// `![[img.png|300x200]]`, `![[Note#Section|alias]]`. Obsidian reads
+	// that suffix as a width (or width×height) for image embeds and as an
+	// alias for note embeds. It is parsed off here and dropped: leaving it
+	// on Target is what made `![[img.png|300]]` stop being an image at all
+	// — the resolver matches the `.png` suffix, and `png|300` does not.
+	//
+	// deferred: honouring the size means a per-RUN image cap, and the
+	// markdown widget's cap is per-Doc ([markdown.WithImageMaxSize]).
+	// Trigger: a vault whose authors actually size their embeds.
+	if idx := bytes.IndexByte(inner, '|'); idx >= 0 {
+		inner = inner[:idx]
+	}
+
 	// Split on # for heading: ![[note#heading]]
 	if idx := bytes.IndexByte(inner, '#'); idx >= 0 {
 		n.Heading = bytes.TrimSpace(inner[idx+1:])

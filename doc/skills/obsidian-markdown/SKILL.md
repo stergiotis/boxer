@@ -73,21 +73,27 @@ md := goldmark.New(goldmark.WithExtensions(ext, myOtherExt))
 | `FeatureHighlight` | `1 << 3` | `==highlighted text==` → `<mark>` |
 | `FeatureComment` | `1 << 4` | `%%hidden%%` → stripped from output |
 | `FeatureTag` | `1 << 5` | `#tag`, `#nested/tag` |
-| `FeatureMath` | `1 << 6` | Reserved (not yet implemented) |
+| `FeatureMath` | `1 << 6` | Reserved and **wired to nothing** — setting it changes neither parse nor output. Not part of `FeatureAll`. |
 | `FeatureGFM` | `1 << 7` | Tables, strikethrough, task lists (goldmark built-in) |
 | `FeatureFrontmatter` | `1 << 8` | YAML `---` frontmatter parsing |
 | `FeatureHeadingAnchor` | `1 << 9` | `## Heading {#explicit-anchor}` → `<h2 id="explicit-anchor">` |
-| `FeatureAll` | `(1<<10)-1` | All features enabled |
+| `FeatureAll` | `((1<<10)-1) &^ FeatureMath` | Every **wired** feature. `FeatureMath` is excluded on purpose: a flag inside "all" that does nothing reads as a capability the stack has. |
+
+Note that `FeatureGFM` does **not** buy footnotes. goldmark's footnote
+extension is wired to no flag here at all, so `[^1]` and `[^1]: text` stay
+literal prose on every path.
 
 ### Wikilinks
 
-**Syntax:** `[[page]]`, `[[page|display text]]`, `[[page#heading]]`, `[[page#heading|alias]]`
+**Syntax:** `[[page]]`, `[[page|display text]]`, `[[page#heading]]`, `[[page#heading|alias]]`, `[[#heading]]` (same page)
 
 **HTML output:**
 ```html
 <a href="/page" class="wikilink">page</a>
 <a href="/page" class="wikilink">display text</a>
 <a href="/page#heading" class="wikilink">page &gt; heading</a>
+<a href="/#heading" class="wikilink">heading</a>   <!-- [[#heading]]: no page, so no "page > " join -->
+
 <a href="/missing" class="wikilink wikilink-broken">missing</a>
 ```
 
@@ -95,7 +101,13 @@ The `wikilink-broken` class is added when `ResolverI.ResolveWikilink` returns `e
 
 ### Embeds
 
-**Syntax:** `![[image.png]]`, `![[note]]`, `![[note#section]]`
+**Syntax:** `![[image.png]]`, `![[note]]`, `![[note#section]]`, `![[image.png|300]]`
+
+A `|suffix` (Obsidian's display size for images, alias for notes) is parsed off
+the target and **ignored** — it is not carried on the node and does not reach
+either renderer. It has to be split off before resolution: left on the target,
+`image.png|300` fails the extension match and an image embed renders as a note
+placeholder.
 
 **HTML output (image):**
 ```html
@@ -307,7 +319,7 @@ Extensions are registered with specific goldmark parser priorities to ensure cor
 
 ## Known Limitations
 
-1. **Math (`$...$` / `$$...$$`)** — `FeatureMath` is reserved but not yet implemented. Requires a math rendering strategy decision (KaTeX, MathJax, or raw LaTeX passthrough).
+1. **Math (`$...$` / `$$...$$`)** — `FeatureMath` is reserved and consulted by nothing; it is excluded from `FeatureAll` for that reason. Implementing it needs a math rendering strategy decision (KaTeX, MathJax, or raw LaTeX passthrough).
 2. **Multi-line comments** — `%%...%%` only works within a single line. Block-level comments spanning multiple lines are not supported.
 3. **Highlight nesting** — Inline parsers within `==...==` highlight spans do not recurse (goldmark limitation for custom inline delimiters).
 4. **Embed transclusion** — Note embeds render as placeholder `<div>` elements. Actual content transclusion requires vault access, which is the consumer's responsibility.

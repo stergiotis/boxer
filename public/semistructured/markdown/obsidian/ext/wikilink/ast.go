@@ -36,13 +36,22 @@ func (inst *Node) Dump(source []byte, level int) {
 	})
 }
 
-// DisplayText returns the text to display: alias if present, otherwise page (with heading suffix).
+// DisplayText returns the text to display: alias if present, otherwise page
+// (with heading suffix).
+//
+// A same-page link (`[[#Section]]`) has an empty Page, and the "page >
+// heading" join then rendered as a stray leading "> " with nothing on its
+// left. Obsidian shows such a link as the heading alone, which is what the
+// empty-page branch below produces.
 func (inst *Node) DisplayText() string {
 	if len(inst.Alias) > 0 {
 		return string(inst.Alias)
 	}
 	s := string(inst.Page)
 	if len(inst.Heading) > 0 {
+		if s == "" {
+			return string(inst.Heading)
+		}
 		s += " > " + string(inst.Heading)
 	}
 	return s

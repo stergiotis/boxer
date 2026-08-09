@@ -8,12 +8,18 @@ import (
 type FeatureE uint16
 
 const (
-	FeatureWikilink    FeatureE = 1 << 0
-	FeatureEmbed       FeatureE = 1 << 1
-	FeatureCallout     FeatureE = 1 << 2
-	FeatureHighlight   FeatureE = 1 << 3
-	FeatureComment     FeatureE = 1 << 4
-	FeatureTag         FeatureE = 1 << 5
+	FeatureWikilink  FeatureE = 1 << 0
+	FeatureEmbed     FeatureE = 1 << 1
+	FeatureCallout   FeatureE = 1 << 2
+	FeatureHighlight FeatureE = 1 << 3
+	FeatureComment   FeatureE = 1 << 4
+	FeatureTag       FeatureE = 1 << 5
+	// FeatureMath is RESERVED and wired to nothing: no extender consults
+	// it, so setting it changes neither the parse nor the render. The bit
+	// is kept declared so the flag space stays stable if math ever lands,
+	// but it is deliberately excluded from [FeatureAll] — a flag that is
+	// part of "all" and does nothing reads as a capability the stack has,
+	// and the next consumer writes `$x$` expecting it to render.
 	FeatureMath        FeatureE = 1 << 6
 	FeatureGFM         FeatureE = 1 << 7
 	FeatureFrontmatter FeatureE = 1 << 8
@@ -33,7 +39,13 @@ const (
 	// leaves prose that happens to contain braces alone.
 	FeatureHeadingAnchor FeatureE = 1 << 9
 
-	FeatureAll FeatureE = (1 << 10) - 1
+	// FeatureAll is every WIRED feature — the whole declared space MINUS
+	// the reserved-and-unwired bits. Only [FeatureMath] is subtracted
+	// today. Written as the full mask minus the exclusions rather than as
+	// an OR of the wired flags so a newly declared bit is opted IN by
+	// default and has to be excluded on purpose, which is the direction
+	// that fails loudly.
+	FeatureAll FeatureE = ((1 << 10) - 1) &^ FeatureMath
 )
 
 // TagRenderE controls how tags are rendered in HTML.
