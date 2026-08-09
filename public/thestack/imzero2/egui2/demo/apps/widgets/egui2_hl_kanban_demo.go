@@ -14,7 +14,7 @@ func init() {
 		Name: "kanban", Category: "Layout & widgets", Title: icons.IconTable + " kanban board",
 		Stage:       [2]float32{1040, 560},
 		Kind:        registry.DemoKindMixed,
-		Description: "A board of columns and the cards in them. Move a card by dragging it (a ghost follows the pointer, an insertion line shows where it lands) or with its ◀ ▶ / ▲ ▼ controls; click a card to select it (accent-stroked). Cards carry an optional accent bullet, a packed row of small legend-backed tally dots along the bottom (up to 3 kinds, each repeated by its count with no gap between kinds), and a one-level parent link (a \"sub-item of …\" trailer; parents show a sub-item count chip) — sub-items are scheduled independently of their parent. The legend above the board names each dot kind and shows its detail on hover.",
+		Description: "A board of columns and the cards in them. Move a card by dragging it (a ghost follows the pointer, an insertion line shows where it lands) or with its left/right and up/down move controls; click a card to select it (accent-stroked). Cards carry an optional accent bullet, a packed row of small legend-backed tally dots along the bottom (up to 3 kinds, each repeated by its count with no gap between kinds), and a one-level parent link (a \"sub-item of …\" trailer; parents show a sub-item count chip) — sub-items are scheduled independently of their parent. The legend above the board names each dot kind and shows its detail on hover.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = newKanbanState()
 			return

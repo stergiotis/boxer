@@ -24,11 +24,12 @@
 // (a panel Frame around a width-pinned Vertical) with a header — title + a count
 // badge — over a stack of card Frames. A card Frame senses clicks for selection
 // (accent-stroked when selected); a compact control row sits beneath it as a
-// footer: ◀ ▶ move to the adjacent column, ▲ ▼ reorder within the column. Edge
-// controls are omitted rather than disabled (no ◀ in the first column, no ▶ in
-// the last). The controls are a footer, not in-card, because a click-sensed
-// Frame wins the pointer over buttons drawn inside it — placed inside, the card
-// would select but the buttons would never fire.
+// footer: the left/right carets move to the adjacent column, up/down reorder
+// within it. Edge controls are omitted rather than disabled (no left control in
+// the first column, no right one in the last). The controls are a footer, not
+// in-card, because a click-sensed Frame wins the pointer over buttons drawn
+// inside it — placed inside, the card would select but the buttons would never
+// fire.
 //
 // # Sub-items and grouping
 //
