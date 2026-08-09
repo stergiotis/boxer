@@ -174,6 +174,11 @@ sync (degenerates correctly).
 
 ## 6. Recommendations, ranked, with premise cost
 
+> **Outcome.** The forks below were settled in a design dialogue on
+> 2026-08-09; the decisions and milestones are recorded in
+> [ADR-0180](../adr/0180-markdown-rendering-fidelity-pass.md). Items 13–16
+> remain deferred with the triggers as written.
+
 Small, premise-clean (no new dependency, no retained layout, no new op):
 
 1. **Add the `TaskCheckBox` case** to `emitInline` — a Phosphor glyph atom
