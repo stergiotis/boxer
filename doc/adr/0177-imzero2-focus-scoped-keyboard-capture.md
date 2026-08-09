@@ -239,8 +239,13 @@ events land in a per-id register that Go reads back by widget handle.
   asserts click-to-focus, `RequestFocus` and `SurrenderFocus`.
 - **M1 — R26 capture register + fetcher + `GetCapturedKeys`.** ✓ The capture
   path end to end, with a gallery demo that echoes captured keys. `.CaptureKeys(mask)`
-  implies `.Focusable()`, since capture is gated on focus and a mask without a
-  focus registration could only ever be a silent no-op. The `focus` demo gives
+  registers the focus rect itself, since capture is gated on focus and a mask
+  without a focus registration could only ever be a silent no-op. It does NOT
+  imply `.Focusable()` — that was the M1 spelling and M3 corrected it: a
+  focusable rect senses CLICKS and, registered after the body, sits above
+  everything inside, so on a container it swallows the clicks its children were
+  meant to get. Capture asks only for `Sense::FOCUSABLE`; a container takes
+  focus by calling `requestFocus` when one of its children is hit. The `focus` demo gives
   panel B a mask and panel A none, so the fencing is a visible contrast rather
   than a claim; a headless trace asserts ArrowDown, ArrowUp and Shift+ArrowDown
   arrive in Go with the modifier reported alongside.
@@ -254,8 +259,26 @@ events land in a per-id register that Go reads back by widget handle.
   only in the mask. Measured — capturing panel keeps focus across three
   arrows with `scrollY=0` and three captures; the unmasked one loses focus to
   a single arrow with none.
-- **M3 — Tree adoption.** ADR-0176's widget moves its cursor from captured
-  keys, with `ScrollToRow` following it.
+- **M3 — Tree adoption.** ✓ ADR-0176's widget moves its cursor from captured
+  keys, with `ScrollToRow` following it. Smaller than planned: ADR-0176's Keys
+  refactor had already filed cursor and reveal under the identity column and
+  the renderer already scrolled to a pending reveal, so M3 is the input half
+  only — a wrapping Frame carrying the mask, and a pass turning captured keys
+  into cursor moves. ↑/↓ by row, Home/End, PageUp/PageDown by the MEASURED
+  visible row count, ←/→ as collapse/expand-then-descend, Enter/Space to
+  activate. Keys are applied before the reveal is consumed so a keypress
+  scrolls on the same frame rather than one behind, which costs a provisional
+  flatten on frames that had key input.
+
+  Two things this adoption settled. Capture must not imply focusable (see M1):
+  the first build wrapped the table in a `.Focusable()` Frame and would have
+  killed row selection. And the tree calls `requestFocus` on a row click, so
+  the arrow keys work straight after a click with no separate Tab — without it
+  a container that cannot be clicked into can only be reached by tabbing.
+
+  Verified against ADR-0176's M4 scene, which passes unchanged — row clicks,
+  disclosure clicks and reveal all still reach the widget — plus an ArrowDown
+  that moves the selection to the next row.
 
 ## Surfaces — Tier 1
 

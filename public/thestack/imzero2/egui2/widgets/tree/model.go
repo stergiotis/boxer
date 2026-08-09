@@ -194,6 +194,16 @@ type State struct {
 	// Pointer selection does move it: a plain or ctrl click puts it on the row
 	// clicked, and a shift click leaves it on the anchor it extended from.
 	cursor nodeRef
+	// keyFrameID is the id of the capture Frame the renderer wrapped the table
+	// in last frame, and the key r26 captures are read back under. Kept here
+	// rather than recomputed because captures are one frame late: the id has
+	// to survive from the frame that registered it to the frame that reads it.
+	// Zero until the tree has rendered once, which is what gates the key pass.
+	keyFrameID uint64
+	// lastVisibleRows is how many rows the etable drew last frame — what
+	// PageUp and PageDown move by, so a page matches what the reader sees
+	// rather than a guess.
+	lastVisibleRows int
 	// reveal is a pending [State.Reveal], which the renderer consumes.
 	reveal nodeRef
 	// keys is the identity column of the last-bound Tree, borrowed. Empty

@@ -212,12 +212,18 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 			// widget states what it eats, so F1 and Ctrl+Enter keep reaching
 			// their runtime-level owners while this Frame has focus.
 			//
-			// Implies focusable: capture is gated on has_focus (SD1), so a
-			// mask without a focus registration could never fire, and making
-			// the caller remember both would only produce silent no-ops. A
-			// zero mask captures nothing and costs nothing.
+			// Registers the focus rect on its own, so a mask alone is enough —
+			// capture is gated on has_focus (SD1) and a mask without a focus
+			// registration could never fire. It does NOT imply .focusable(),
+			// which is the stronger claim: that rect senses CLICKS, and being
+			// registered after the body it sits above everything inside. On a
+			// Frame wrapping interactive content — a tree's rows, a toolbar —
+			// that overlay swallows every click the content was meant to get.
+			// So capture asks only for Sense::FOCUSABLE and leaves click-to-
+			// focus to .focusable(); a container whose children are clickable
+			// takes focus by calling requestFocus when one of them is hit.
 			BeginMethod("captureKeys").Arg("mask", ctabb.U64).
-			CodeClientRust(rustClientCode("capture_keys_mask = mask;\nfocusable = true;\n")).EndMethod().
+			CodeClientRust(rustClientCode("capture_keys_mask = mask;\n")).EndMethod().
 			// hoverCursorPointer changes the OS cursor to a pointing
 			// hand whenever the pointer is over this Frame — the
 			// universal "this is clickable" cue. Only meaningful when
@@ -283,11 +289,21 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 						// The id expression MUST match focusIdExpr() in
 						// egui2_definition_d_keys.go — requestFocus asks for
 						// exactly this id, and a mismatch is silent (SD7).
-						if focusable {
+						if focusable || capture_keys_mask != 0 {
+							// click() only when the caller asked to be
+							// focusable: that sense makes this overlay eat
+							// clicks meant for the body. A capture-only Frame
+							// still needs egui to KNOW the id, so it registers
+							// with FOCUSABLE alone and stays out of the way.
+							let focus_sense = if focusable {
+								egui::Sense::click()
+							} else {
+								egui::Sense::FOCUSABLE
+							};
 							let fr = ui.interact(
 								r2.response.rect,
 								egui::Id::new({{Id}}.value()).with("imzero-focus"),
-								egui::Sense::click(),
+								focus_sense,
 							);
 							if fr.clicked() {
 								fr.request_focus();

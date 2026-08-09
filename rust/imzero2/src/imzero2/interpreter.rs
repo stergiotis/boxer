@@ -6744,7 +6744,6 @@ self.apply_widget(w,u,f,Some(i));
                             #[allow(unused_mut)]
                             let mut mask = self.io.read_plain_u64()?;
                             capture_keys_mask = mask;
-                            focusable = true;
                         }
                         FrameBuilderMethodId::HoverCursorPointer => {
                             #[cfg(feature = "puffin")]
@@ -6851,11 +6850,21 @@ self.apply_widget(w,u,f,Some(i));
                     // The id expression MUST match focusIdExpr() in
                     // egui2_definition_d_keys.go — requestFocus asks for
                     // exactly this id, and a mismatch is silent (SD7).
-                    if focusable {
+                    if focusable || capture_keys_mask != 0 {
+                        // click() only when the caller asked to be
+                        // focusable: that sense makes this overlay eat
+                        // clicks meant for the body. A capture-only Frame
+                        // still needs egui to KNOW the id, so it registers
+                        // with FOCUSABLE alone and stays out of the way.
+                        let focus_sense = if focusable {
+                            egui::Sense::click()
+                        } else {
+                            egui::Sense::FOCUSABLE
+                        };
                         let fr = ui.interact(
                             r2.response.rect,
                             egui::Id::new(i.value()).with("imzero-focus"),
-                            egui::Sense::click(),
+                            focus_sense,
                         );
                         if fr.clicked() {
                             fr.request_focus();

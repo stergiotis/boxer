@@ -282,6 +282,23 @@ func Render(in Input) (res Result) {
 	// reveal below is resolved through exactly that binding.
 	st.Bind(in.Tree)
 
+	// Keys are applied before the reveal, and this is the whole ordering: a
+	// key sets a cursor and asks for a reveal, the reveal opens the ancestors,
+	// and the flatten below then emits the row the scroll lands on. Running it
+	// after the flatten would put the scroll one frame behind every keypress.
+	//
+	// It needs a row sequence to resolve "the next visible row" against, so it
+	// gets a provisional flatten — the one keys were pressed against, since
+	// captures are one frame late anyway. Expansion changes make it stale,
+	// which is why the real flatten below is unconditional rather than reused.
+	keyActivated := int32(-1)
+	if st.keyFrameID != 0 {
+		if pre, perr := Flatten(in.Tree, st, st.rows[:0]); perr == nil {
+			st.rows = pre
+			keyActivated = applyKeys(st, pre, st.keyFrameID, st.lastVisibleRows)
+		}
+	}
+
 	// The reveal is consumed before the flatten because its two halves
 	// straddle it: opening the ancestors changes which rows exist, and
 	// scrolling to the row needs the index the flatten then assigns.
@@ -321,63 +338,79 @@ func Render(in Input) (res Result) {
 	mode := clickMode()
 
 	for range c.IdScope(in.Ids.PrepareStr(scopeKey)) {
-		in.pushColumns()
-		et := c.EndETable(in.Ids.PrepareStr("t"), uint64(len(rows)), rowH,
-			in.numStickyHeaders(), 0)
-		if in.MaxHeight > 0 {
-			et = et.MaxHeight(in.MaxHeight)
-		}
-		if reveal >= 0 {
-			if ri := RowOf(rows, reveal); ri >= 0 {
-				et = et.ScrollToRow(uint64(ri), scrollAlignCenter)
+		// The capture Frame. CaptureKeys and NOT Focusable: see keys.go — a
+		// focusable rect senses clicks and, registered after the body, would
+		// sit above every row and eat the clicks selection is made of.
+		kf := c.Frame(in.Ids.PrepareStr("keys")).CaptureKeys(uint64(treeKeyMask))
+		st.keyFrameID = kf.Id()
+		for range kf.KeepIter() {
+			in.pushColumns()
+			et := c.EndETable(in.Ids.PrepareStr("t"), uint64(len(rows)), rowH,
+				in.numStickyHeaders(), 0)
+			if in.MaxHeight > 0 {
+				et = et.MaxHeight(in.MaxHeight)
 			}
-		}
-		in.renderHeaders(et, density)
-
-		// Emit only the rows egui_table will draw. Without this gate every row
-		// of the whole outline builds deferred blocks and widget ids each
-		// frame, most of which are culled on arrival — the allocation
-		// pathology this widget chose an etable to avoid. VisibleRange reports
-		// the PREVIOUS frame's window, so it needs clamping here in a way a
-		// fixed-length table does not: a collapse can shorten the outline
-		// between the two frames.
-		rowBegin, rowEnd := 0, len(rows)
-		if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-			rowBegin = min(int(rb), len(rows))
-			rowEnd = min(int(re), rowEnd)
-		}
-		for i := rowBegin; i < rowEnd; i++ {
-			r := rows[i]
-			flags := in.rowChrome(et, i, r, rowH, st.IsSelected(r.Node))
-			if flags.HasPrimaryClicked() {
-				clickedNode, clickedRow = r.Node, i
-			}
-			if flags.HasDoubleClicked() {
-				activated = r.Node
-			}
-
-			et.BeginCells(uint64(i), 0)
-			if in.outlineCell(r, indent, density) {
-				toggled = r.Node
-			}
-			et.EndCells()
-
-			for ci := range in.Columns {
-				if in.Columns[ci].Cell == nil {
-					continue
+			if reveal >= 0 {
+				if ri := RowOf(rows, reveal); ri >= 0 {
+					et = et.ScrollToRow(uint64(ri), scrollAlignCenter)
 				}
-				et.BeginCells(uint64(i), uint32(ci+1))
-				in.paddedCell(r, ci+1, density, in.Columns[ci].Cell)
-				et.EndCells()
 			}
+			in.renderHeaders(et, density)
+
+			// Emit only the rows egui_table will draw. Without this gate every row
+			// of the whole outline builds deferred blocks and widget ids each
+			// frame, most of which are culled on arrival — the allocation
+			// pathology this widget chose an etable to avoid. VisibleRange reports
+			// the PREVIOUS frame's window, so it needs clamping here in a way a
+			// fixed-length table does not: a collapse can shorten the outline
+			// between the two frames.
+			rowBegin, rowEnd := 0, len(rows)
+			if rb, re, _, _, _, ok := et.VisibleRange(); ok {
+				rowBegin = min(int(rb), len(rows))
+				rowEnd = min(int(re), rowEnd)
+			}
+			// What PageUp / PageDown mean, kept for the next frame's key pass.
+			st.lastVisibleRows = rowEnd - rowBegin
+			for i := rowBegin; i < rowEnd; i++ {
+				r := rows[i]
+				flags := in.rowChrome(et, i, r, rowH, st.IsSelected(r.Node))
+				if flags.HasPrimaryClicked() {
+					clickedNode, clickedRow = r.Node, i
+				}
+				if flags.HasDoubleClicked() {
+					activated = r.Node
+				}
+
+				et.BeginCells(uint64(i), 0)
+				if in.outlineCell(r, indent, density) {
+					toggled = r.Node
+				}
+				et.EndCells()
+
+				for ci := range in.Columns {
+					if in.Columns[ci].Cell == nil {
+						continue
+					}
+					et.BeginCells(uint64(i), uint32(ci+1))
+					in.paddedCell(r, ci+1, density, in.Columns[ci].Cell)
+					et.EndCells()
+				}
+			}
+			et.Send()
 		}
-		et.Send()
 	}
 
 	// Applied only now that the pass is over and nothing else reads the rows.
 	if clickedNode >= 0 {
 		applySelection(st, rows, clickedRow, mode)
 		res.Clicked = clickedNode
+		// Clicking a row focuses the tree, so the arrow keys work straight
+		// after without a separate Tab. The capture Frame does not sense
+		// clicks (it must not — see keys.go), so focus is asked for here
+		// rather than arriving on its own.
+		if st.keyFrameID != 0 {
+			c.RequestFocus(st.keyFrameID)
+		}
 	}
 	if toggled < 0 && activated >= 0 {
 		// Double-clicking an interior row opens or closes it, the way every
@@ -390,6 +423,9 @@ func Render(in Input) (res Result) {
 	if toggled >= 0 {
 		st.ToggleExpanded(toggled)
 		res.Toggled = toggled
+	}
+	if activated < 0 {
+		activated = keyActivated
 	}
 	res.Activated = activated
 	return
