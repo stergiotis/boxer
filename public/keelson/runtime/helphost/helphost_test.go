@@ -220,3 +220,33 @@ func TestHelpHost_RegisteredInDefaultRegistry(t *testing.T) {
 		t.Errorf("Open returned %T, want *HelpHost", got)
 	}
 }
+
+// TestOwnHelpCorpusDropsNothing is the ADR-0180 M2 zero-drops gate over
+// HelpHost's own "Help about Help" corpus.
+//
+// The markdown lowering drops a construct it has no case for SILENTLY: the
+// node and the prose it covered vanish from the rendered page with nothing to
+// say so. [markdown.Doc.Dropped] counts every skip by kind, so asserting zero
+// over a shipped corpus turns that failure mode into a property — and catches
+// a future parser feature whose node the lowering does not know before it
+// deletes anyone's text.
+func TestOwnHelpCorpusDropsNothing(t *testing.T) {
+	b, err := help.NewBook(ManifestId, help.MustSub(helpFS, "help"))
+	if err != nil {
+		t.Fatalf("NewBook: %v", err)
+	}
+	docs := b.Docs()
+	if len(docs) == 0 {
+		t.Fatal("help corpus must not be empty")
+	}
+	for _, info := range docs {
+		doc, _, parsed := b.Doc(info.Path)
+		if !parsed {
+			t.Errorf("doc %q must parse", info.Path)
+			continue
+		}
+		if dropped := doc.Dropped(); len(dropped) != 0 {
+			t.Errorf("doc %q loses content in the lowering: %+v", info.Path, dropped)
+		}
+	}
+}

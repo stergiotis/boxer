@@ -10,6 +10,7 @@ import (
 
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/errorview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fieldview"
@@ -340,4 +341,21 @@ func TestSelectionSurvivesSinkTrim(t *testing.T) {
 	assert.Equal(t, originalKey, rowKey(app.selected))
 	assert.True(t, app.hasSelected)
 	assert.Equal(t, "high cpu", app.selected.Message)
+}
+
+// TestHelpCorpusDropsNothing is the ADR-0180 M2 zero-drops gate over the log
+// viewer's help corpus. A construct the markdown lowering has no case for is
+// dropped silently, taking the prose it covered with it; asserting zero drops
+// over a shipped corpus is what makes that visible.
+func TestHelpCorpusDropsNothing(t *testing.T) {
+	b, err := help.NewBook(manifest.Id, help.MustSub(helpFS, "help"))
+	require.NoError(t, err)
+	docs := b.Docs()
+	require.NotEmpty(t, docs, "help corpus must not be empty")
+	for _, info := range docs {
+		doc, _, parsed := b.Doc(info.Path)
+		require.Truef(t, parsed, "doc %q must parse", info.Path)
+		require.Emptyf(t, doc.Dropped(), "doc %q loses content in the lowering: %+v",
+			info.Path, doc.Dropped())
+	}
 }
