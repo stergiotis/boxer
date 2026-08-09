@@ -1,15 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-09
 ---
-
-> **Status: proposed — pre-human-review.** The twelve items below are
-> implemented, their Go tests are green and the live checks are done, but the
-> decision itself has not been read by a second person; do not cite it as
-> settled.
 
 # ADR-0180: markdown rendering fidelity pass
 
@@ -256,13 +251,16 @@ Twelve items in three milestones.
 
 ## Status
 
-Proposed 2026-08-09, from the design dialogue over the
-[rendering review](../adr-background-work/markdown-rendering-review.md) §6.
-M0–M2 are implemented the same day, ahead of acceptance: the batch is a
-correctness pass over an existing surface rather than a new subsystem, so the
-code is the cheapest way to read what it does. It stays **proposed** until a
-second reader signs off — `reviewed-by` is a human's mark and nothing else may
-fill it in. Until then this remains a living snapshot, editable in place.
+Accepted 2026-08-09, from the design dialogue over the
+[rendering review](../adr-background-work/markdown-rendering-review.md) §6,
+with M0–M2 shipped and both verification lanes closed the same day. Changes
+now arrive as dated `## Update` sections rather than in-place edits.
+
+The code landed ahead of acceptance, which is worth recording rather than
+smoothing over: the batch is a correctness pass over an existing surface
+rather than a new subsystem, so the diff was the cheapest way to read what the
+decision actually meant, and the live measurements below could not be taken
+until it existed.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way).
