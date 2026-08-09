@@ -1,6 +1,7 @@
 package markdownhighlight
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -341,33 +342,328 @@ func TestHighlightLex_TagRulesMatchTheParser(t *testing.T) {
 	}
 }
 
-// TestHighlightLex_TagAgreesWithHighlight pins the two tiers to the same
-// verdict on the same input. They read markdown independently — that is the
-// cost ADR-0178 records — so a rule added to one and not the other is exactly
-// how the source pane and the preview come to disagree about a document.
-func TestHighlightLex_TagAgreesWithHighlight(t *testing.T) {
-	for _, src := range []string{
-		"a #real tag here\n",
-		"C#sharp is not a tag\n",
-		"open question #4 is not a tag\n",
-		"#a/b/c nested\n",
-	} {
-		lexHasTag := false
-		for _, s := range HighlightLex([]byte(src)) {
-			if s.Category == CategoryTagText {
-				lexHasTag = true
+// ---------------------------------------------------------------------------
+// Cross-tier parity
+//
+// The two tiers are independent readings of the same syntax — the cost
+// ADR-0178 records — so a rule added to one and not the other is exactly how
+// the source pane and the preview come to disagree about a document. The only
+// agreement test used to be "#tag exists", a document-level boolean: the tiers
+// could already disagree about WHERE a construct sits without failing
+// anything (rendering review §3.3). This compares them per category, by byte
+// range.
+//
+// Comparing byte ranges at all needs one thing to hold: [Highlight]'s spans
+// index the CANONICAL form it re-emits, not the input, so a case is only
+// comparable when that form is byte-identical to its source. Every case below
+// is chosen for that property and the test asserts it rather than skipping —
+// a case that stops round-tripping stops being a test, and should say so.
+// ---------------------------------------------------------------------------
+
+// mergeAdjacent joins neighbouring spans of the same category.
+//
+// The tiers legitimately differ in GRANULARITY: the canonical tier emits one
+// span per goldmark inline node, so a run of prose arrives as several Plain
+// spans where the lexer emits one. That is not a disagreement about what a
+// byte IS, which is what parity is about, so it is normalised away before
+// comparing.
+func mergeAdjacent(spans []Span) (out []Span) {
+	out = make([]Span, 0, len(spans))
+	for _, s := range spans {
+		if n := len(out); n > 0 && out[n-1].Category == s.Category && out[n-1].Stop == s.Start {
+			out[n-1].Stop = s.Stop
+			continue
+		}
+		out = append(out, Span{Start: s.Start, Stop: s.Stop, Category: s.Category})
+	}
+	return
+}
+
+// rangesByCategory keys the merged spans by category, each as a printable
+// range list, so a mismatch reports what moved rather than that something did.
+func rangesByCategory(spans []Span) (m map[CategoryE]string) {
+	parts := map[CategoryE][]string{}
+	for _, s := range mergeAdjacent(spans) {
+		parts[s.Category] = append(parts[s.Category], fmt.Sprintf("%d..%d", s.Start, s.Stop))
+	}
+	m = make(map[CategoryE]string, len(parts))
+	for cat, r := range parts {
+		m[cat] = strings.Join(r, ",")
+	}
+	return
+}
+
+// parityCase is one input the tiers must agree on, plus the categories where
+// they are known to differ and why. The allowlist is per case AND per
+// category, never blanket: a divergence nobody wrote down is a bug.
+type parityCase struct {
+	name   string
+	src    string
+	differ []CategoryE
+	why    string
+}
+
+var parityCorpus = []parityCase{
+	{name: "plain prose", src: "just some words\nand a second line\n"},
+	{name: "heading", src: "# Title\n\nbody\n"},
+	{name: "tag not heading", src: "#tag is not a heading\n"},
+	{name: "tags", src: "#project and #a/b/c and #kebab-tag here\n"},
+	{name: "tag-shaped prose", src: "C#sharp, foo#bar, open question #4, issue #1158\n"},
+	{name: "half-typed tag", src: "a #\n"},
+	{name: "strike and highlight", src: "~~gone~~ and ==marked==\n"},
+	{name: "code span", src: "a `code` span\n"},
+	{name: "fenced block", src: "```go\nfunc main() {}\n```\n"},
+	{name: "fence hides markup", src: "```\n# not a heading\n**not strong**\n```\n"},
+	{name: "link", src: "a [label](https://example.com) link\n"},
+	{name: "autolink", src: "see <https://example.com> now\n"},
+	{name: "bare angle is not a link", src: "a < b and c > d\n"},
+	{name: "wikilink", src: "see [[Some Note]] there\n"},
+	{name: "embed", src: "![[picture.png]]\n"},
+	{name: "pipe in prose", src: "the a | b case\n"},
+	{name: "snake case is not emphasis", src: "call some_function_name(x) now\n"},
+	// Half-typed input is the lex tier's reason to exist: goldmark parses it
+	// into whatever structure it can, the lexer leaves it plain, and the two
+	// still have to land on the same categories.
+	{name: "half-typed strong", src: "some **bold and then nothing\n"},
+	{name: "half-typed code", src: "a `code and no close\n"},
+	{name: "half-typed link", src: "a [label](http\n"},
+	{name: "half-typed wikilink", src: "see [[Some No\n"},
+
+	{
+		name:   "nested emphasis",
+		src:    "some *em* and **strong** and ***both***\n",
+		differ: []CategoryE{CategoryPlain, CategoryStrongDelim, CategoryStrongText, CategoryEmphasisDelim},
+		why: "`***x***` is one `*` plus one `**` and the tiers split the three " +
+			"bytes the other way round: goldmark nests emphasis outside strong, " +
+			"the lexer claims the longest delimiter first. Same text, same two " +
+			"styles, delimiter bytes attributed differently.",
+	},
+	{
+		name:   "multibyte around emphasis",
+		src:    "héllo wörld — em dash, ünicode ***bold***\n",
+		differ: []CategoryE{CategoryPlain, CategoryStrongDelim, CategoryStrongText, CategoryEmphasisDelim},
+		why:    "the `***` split above, at multibyte offsets — nothing new.",
+	},
+	{
+		name:   "emoji around emphasis",
+		src:    "🎉 party ***time*** 🎉\n",
+		differ: []CategoryE{CategoryPlain, CategoryStrongDelim, CategoryStrongText, CategoryEmphasisDelim},
+		why:    "the `***` split above, at 4-byte offsets — nothing new.",
+	},
+	{
+		name:   "blockquote",
+		src:    "> quoted\n> more\n",
+		differ: []CategoryE{CategoryWhitespace, CategoryBlockquoteMarker},
+		why: "the space after `>` is part of the marker for the canonical tier " +
+			"and whitespace for the lexer. A boundary convention, not a reading.",
+	},
+	{
+		name:   "callout",
+		src:    "> [!note] Title\n> body\n",
+		differ: []CategoryE{CategoryPlain, CategoryWhitespace, CategoryBlockquoteMarker, CategoryCalloutMarker, CategoryCalloutType},
+		why: "two things: the `>` boundary above, and the callout TITLE — the " +
+			"canonical tier tints it as CalloutType, the lexer leaves it prose. " +
+			"The title is author text, so the lexer's reading is the one that " +
+			"should win; changing it moves colours in a shipped pane.",
+	},
+	{
+		name:   "foldable callout",
+		src:    "> [!warning]- Folded\n> body\n",
+		differ: []CategoryE{CategoryPlain, CategoryWhitespace, CategoryBlockquoteMarker, CategoryCalloutMarker, CategoryCalloutType},
+		why:    "as `callout` above; the fold marker changes nothing here.",
+	},
+	{
+		name:   "half-typed callout",
+		src:    "> [!no\n",
+		differ: []CategoryE{CategoryWhitespace, CategoryBlockquoteMarker},
+		why:    "the `>` boundary convention again.",
+	},
+	{
+		name:   "heading with anchor",
+		src:    "## Creating a table {#creating-a-table}\n",
+		differ: []CategoryE{CategoryWhitespace, CategoryHeadingText},
+		why: "the space before `{#…}` goes to the heading text for the lexer " +
+			"and to whitespace for the canonical tier, which strips the anchor " +
+			"out of the heading and knows where it starts.",
+	},
+	{
+		name:   "wikilink with alias",
+		src:    "see [[Some Note|shown]] there\n",
+		differ: []CategoryE{CategoryLinkLabel, CategoryWikilinkPunct, CategoryWikilinkTarget},
+		why: "the canonical tier claims `Some Note|shown` as one target; the " +
+			"lexer splits target / `|` / label. The lexer is finer here, and it " +
+			"is the tier the editor uses — the coarse one is the gap.",
+	},
+	{
+		name:   "html block",
+		src:    "<div class=\"x\">\ntext\n</div>\n",
+		differ: []CategoryE{CategoryPlain, CategoryWhitespace, CategoryRawHtml},
+		why: "the canonical tier paints the whole block RawHtml, tags and prose " +
+			"alike; the lexer claims only the tags and leaves the inner text " +
+			"plain. Consistent with the renderer, which drops the block " +
+			"entirely — see markdown.Doc.Dropped.",
+	},
+	{
+		name:   "frontmatter value",
+		src:    "---\nhome: https://example.com\n---\n",
+		differ: []CategoryE{CategoryFrontmatterDelim, CategoryFrontmatterValue},
+		why:    "the space after `:` goes to the delimiter for one tier, to the value for the other.",
+	},
+}
+
+// TestTiersAgreePerCategory is the widened parity net.
+func TestTiersAgreePerCategory(t *testing.T) {
+	for _, tc := range parityCorpus {
+		t.Run(tc.name, func(t *testing.T) {
+			canon, canonSpans := Highlight([]byte(tc.src))
+			if canon != tc.src {
+				t.Fatalf("case is no longer comparable: the canonical form differs from the source\n"+
+					" src   = %q\n canon = %q\nEither pick an input that round-trips or drop the case",
+					tc.src, canon)
 			}
-		}
-		canonHasTag := false
-		_, spans := Highlight([]byte(src))
-		for _, s := range spans {
-			if s.Category == CategoryTagText {
-				canonHasTag = true
+			lexSpans := HighlightLex([]byte(tc.src))
+			checkInvariants(t, tc.src, lexSpans)
+
+			lex, canonical := rangesByCategory(lexSpans), rangesByCategory(canonSpans)
+			allowed := map[CategoryE]bool{}
+			for _, c := range tc.differ {
+				allowed[c] = true
 			}
+			cats := map[CategoryE]bool{}
+			for c := range lex {
+				cats[c] = true
+			}
+			for c := range canonical {
+				cats[c] = true
+			}
+			for c := range cats {
+				same := lex[c] == canonical[c]
+				if allowed[c] {
+					// A stale allowlist entry is as bad as a missing one: it
+					// silences a category that has since come into agreement,
+					// and nobody would notice it drifting apart again.
+					if same {
+						t.Errorf("category %d now agrees (%s) — drop it from the allowlist", c, lex[c])
+					}
+					continue
+				}
+				if !same {
+					t.Errorf("category %d disagrees\n  lex   = [%s]\n  canon = [%s]\n"+
+						"Either fix the tier that is wrong, or add the category to this case's "+
+						"`differ` list WITH a reason", c, lex[c], canonical[c])
+				}
+			}
+		})
+	}
+}
+
+// TestParityCorpusExercisesTheVocabulary keeps the corpus honest about its
+// reach. The review's finding was that 23 of the categories had no
+// category-level assertion at all; this names the ones still outside the net,
+// so growing it is a matter of reading a list rather than guessing.
+//
+// The uncovered set is not empty and cannot be: every construct listed below
+// is one whose canonical form is NOT byte-identical to its source (list
+// markers are normalised to `-`, `~~~` fences to ` ``` `, table alignment
+// rows are re-padded, comment bodies are elided to `…`, task marks lose their
+// trailing space), so the two tiers index different byte strings and no range
+// comparison exists to make. Those are pinned by the per-tier tests instead.
+//
+// Asserted as an exact set rather than a count: a category that leaves the
+// list is progress worth recording, and one that joins it is a construct that
+// silently stopped being compared.
+func TestParityCorpusExercisesTheVocabulary(t *testing.T) {
+	// The categories no parity case can reach, and why.
+	wantUncovered := map[CategoryE]string{
+		CategoryListMarker:      "list markers normalise to `-` / `N.`",
+		CategoryThematicBreak:   "a leading `---` is read as frontmatter by the canonical tier",
+		CategoryCommentDelim:    "comment bodies are elided to `…`",
+		CategoryCommentText:     "comment bodies are elided to `…`",
+		CategoryTablePipe:       "tables are re-padded to a canonical grid",
+		CategoryTableAlign:      "alignment rows are re-padded (`:--:` becomes `:---:`)",
+		CategoryTableHeaderText: "tables are re-padded to a canonical grid",
+		CategoryTableCellText:   "tables are re-padded to a canonical grid",
+		CategoryTaskMark:        "`- [x] done` loses the space after the mark",
+	}
+
+	seen := map[CategoryE]bool{}
+	for _, tc := range parityCorpus {
+		for _, s := range HighlightLex([]byte(tc.src)) {
+			seen[s.Category] = true
 		}
-		if lexHasTag != canonHasTag {
-			t.Errorf("%q: lex tier says tag=%v, canonical tier says tag=%v", src, lexHasTag, canonHasTag)
+		_, canonSpans := Highlight([]byte(tc.src))
+		for _, s := range canonSpans {
+			seen[s.Category] = true
 		}
+	}
+	for c := range CategoryCount {
+		cat := CategoryE(c)
+		why, expectedUncovered := wantUncovered[cat]
+		switch {
+		case seen[cat] && expectedUncovered:
+			t.Errorf("category %d is now compared across tiers — drop it from "+
+				"wantUncovered (it was listed as %q)", c, why)
+		case !seen[cat] && !expectedUncovered:
+			t.Errorf("category %d is claimed by neither tier over the parity corpus: "+
+				"add a case that exercises it, or list it in wantUncovered with a reason", c)
+		}
+	}
+}
+
+// TestHighlightLex_DeclaredNonGoalsStayPlain pins what the lex tier says it
+// does NOT do. Each of these is a construct it cannot recognise without block
+// context or a second pass, and its documented answer is to leave the text
+// plain rather than guess — a lex tier that guesses colours a buffer wrongly
+// while someone is typing into it, which is worse than leaving it uncoloured.
+//
+// These inputs are not in the parity corpus because the canonical tier
+// REWRITES them (setext becomes ATX, reference links are inlined), so their
+// spans index a different byte string and no range comparison is possible.
+// This is the honest form of the comparison for them: the lexer claims
+// nothing structural.
+func TestHighlightLex_DeclaredNonGoalsStayPlain(t *testing.T) {
+	cases := []struct {
+		name      string
+		src       string
+		mustNotBe []CategoryE
+	}{
+		{
+			name:      "setext heading",
+			src:       "Title\n=====\n\nbody\n",
+			mustNotBe: []CategoryE{CategoryHeadingMarker, CategoryHeadingText},
+		},
+		{
+			name:      "indented code block",
+			src:       "prose\n\n    indented code\n\nmore\n",
+			mustNotBe: []CategoryE{CategoryCodeBlockBody, CategoryFenceDelim},
+		},
+		{
+			name:      "reference link and its definition",
+			src:       "see [label][ref] here\n\n[ref]: https://example.com\n",
+			mustNotBe: []CategoryE{CategoryLinkUrl},
+		},
+		{
+			name:      "emphasis across a line break",
+			src:       "start **bold\nstill bold** end\n",
+			mustNotBe: []CategoryE{CategoryStrongDelim, CategoryStrongText},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spans := HighlightLex([]byte(tc.src))
+			checkInvariants(t, tc.src, spans)
+			banned := map[CategoryE]bool{}
+			for _, c := range tc.mustNotBe {
+				banned[c] = true
+			}
+			for _, s := range spans {
+				if banned[s.Category] {
+					t.Errorf("the lexer claimed %q as category %d; this construct is a "+
+						"declared non-goal and must stay plain",
+						tc.src[s.Start:s.Stop], s.Category)
+				}
+			}
+		})
 	}
 }
 
