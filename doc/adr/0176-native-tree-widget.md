@@ -633,13 +633,95 @@ edit in place.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-08-09 — Adoption feedback from a fourth caller, and a proposed `Keys` column
+
+`apps/mdedit`'s heading outline was ported off its flat `SelectableLabel` list
+onto this widget ([ADR-0178](./0178-mdedit-markdown-editor.md), dated Update of
+the same day), making four adopters rather than M3's three. Nothing here blocks
+anything — all four callers work — and nothing below is decided. It is what one
+more port surfaced, written down while it is fresh, with a proposed shape for
+the one item that looks structural rather than cosmetic.
+
+**Every adopter has now written the same projection, and the widget could own
+it.** `State` keys on the node's index in the columnar input, which is the only
+identity such an input has; SD2 says so and tells a host that renumbers to
+remap against its own stable key. All four have done exactly that, each
+inventing the key column separately:
+
+| adopter | projection | key |
+|---|---|---|
+| `schemaview` | `syncNav` | `"plain:" + itemType` / `+ ":" + column` |
+| `configview` | `syncTree` | category name, or variable name |
+| `fieldview` | `syncState` | a **synthesised** positional path, `"0/2/1"` |
+| `mdedit` | `syncOutline` | `slug#ord` |
+
+`fieldview` is the informative case: its own comment records that it had to
+invent that path because names are not usable — an array's children are named
+by position and an object's keys are not guaranteed unique. Four independent
+inventions of the same missing column is evidence about the input model rather
+than about the callers.
+
+What makes it worth more than the ~12 lines it costs each time is the failure
+mode. Omit the projection and nothing panics and nothing logs: a section the
+reader collapsed reappears somewhere else after an edit renumbers the nodes. It
+reads as a flaky widget rather than as a host bug. The exposure scales with how
+often the host rebuilds — `schemaview` renumbers per filter keystroke, `mdedit`
+per keystroke that adds a heading.
+
+**Proposed:** an optional `Tree.Keys []string`, parallel to `Labels` and
+`Parents`. When present, `State` files expansion, selection and cursor under
+the key and remaps them on each `Flatten`; when absent, behaviour is exactly as
+today, so this is additive and no existing caller changes. It does not remove
+the need for a host to *have* a stable key — `fieldview` would still synthesise
+its path — only the need for each host to write the projection and to have
+remembered that it must.
+
+**`State.Reveal` and host-owned expansion quietly cancel.** `Reveal` does two
+things: open the target's ancestors, and scroll its row into view. The first is
+written into the widget's `State` — which a host that owns expansion overwrites
+on the very next frame from its own map, as all four do. Each half is correct
+in isolation and neither doc mentions the other, so the naive composition works
+for one frame and then stops. `mdedit` opens the ancestors in its own map
+before the sync; `ExpandAncestors` is exported, so this is expressible, but it
+is currently something each caller has to derive. Worth at minimum a sentence
+in both doc comments, and it is a second thing the `Keys` proposal would
+simplify: a keyed `State` could survive a rebuild and would not need rewriting
+each frame at all.
+
+Four smaller observations, none of which need a decision:
+
+- **`Column.Cell func(node int32)` could carry the `Row`.** A cell that varies
+  on expansion — `mdedit` draws a hidden-heading count only on closed rows —
+  has to reach back into the `State` it passed in, during the widget's own
+  render pass. The renderer already holds the `Row`, with `Expanded`, `Depth`,
+  `HasChildren` and `IsLastChild`, at that exact call site. Passing it costs
+  nothing and is strictly more informative; SD9's deferred indent guides would
+  want the same fields.
+- **Truncation versus trailing content is an undocumented trap in the primary
+  extension point.** A truncating label takes the whole width it is offered, so
+  anything emitted after it in the same row is pushed out of the cell.
+  `schemaview` hit this and accepted the loss on long names; `mdedit` moved its
+  count into a column of its own instead. `Column.Cell`'s doc says a label must
+  be `Selectable(false)`, which is the other footgun in the same place, and
+  could say this too.
+- **A pending reveal cannot be observed.** `revealP1` and `takeReveal` are
+  unexported and `Reveal` returns nothing, so a caller wanting to assert that a
+  reveal was issued has to thread a return value through its own code to do it.
+  A `State.PendingReveal() int32` would close that.
+- **`MaxHeight`'s guidance is rarely the answer in practice.** It says to leave
+  it 0 in a bounded host. `schemaview`, `configview` and `mdedit` all pass a
+  pane-probed height; `fieldview` re-exports the knob to its own caller rather
+  than choosing. No caller relies on the 0 branch, so the doc would serve a
+  reader better by leading with the probe.
+
+None of this changes what M3 concluded about the widget being the right shape:
+host-owned state is what made `mdedit`'s slug remap possible at all, and is the
+thing `egui_ltreeview` could not do. The seam between that host ownership and
+index-based identity is simply one step short of finished. If `Keys` is taken
+up it should land as a further dated entry here recording what shipped; if the
+shape grows past an optional column it wants its own ADR instead.
 
 ## References
 
@@ -648,4 +730,5 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
 - [ADR-0154](./0154-headless-carrier-tree-and-driver.md) — the headless driver the verification plan leans on.
 - [ADR-0160](./0160-imzero2-icicle-flamegraph-widget.md) — the columnar hierarchy input SD1 follows, and the model/layout/view split SD3 mirrors.
 - [ADR-0166](./0166-play-treemap-panel.md) — the second reader of `play_hierarchy.go`'s column contract.
+- [ADR-0178](./0178-mdedit-markdown-editor.md) — the fourth adopter, and the source of the 2026-08-09 update above.
 - [ADR-0012](./0012-imzero2-collapsible-retained-bodies.md) — why block bodies emit every frame, and what culling is available instead.
