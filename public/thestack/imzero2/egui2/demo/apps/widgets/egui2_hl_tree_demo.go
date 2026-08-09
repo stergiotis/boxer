@@ -224,6 +224,11 @@ func buildTaxonTree(root taxon) (t tree.Tree, leaves []int) {
 		node = int32(len(t.Labels))
 		t.Labels = append(t.Labels, tx.Name)
 		t.Parents = append(t.Parents, parent)
+		// A taxon name is unique in this fixture, so it doubles as the key.
+		// This demo never rebuilds and would work without one — the column is
+		// here because a host that DOES rebuild needs it, and a demo that
+		// leaves it out reads as though it were optional in general.
+		t.Keys = append(t.Keys, tx.Name)
 		leaves = append(leaves, 0)
 		if len(tx.Children) == 0 {
 			leaves[node] = 1
@@ -275,7 +280,7 @@ func treeControlsSection(ids *c.WidgetIdStack, st *treeDemoState) {
 	for range c.Horizontal().KeepIter() {
 		if c.Button(ids.PrepareStr("tv-expand"), c.Atoms().Text("expand all").Keep()).
 			SendResp().HasPrimaryClicked() {
-			st.st.ExpandAll(taxonTree)
+			st.st.ExpandAll()
 			st.lastAction = "expand all"
 		}
 		c.AddSpace(gapInline())
@@ -351,7 +356,8 @@ func treeOutlineSection(ids *c.WidgetIdStack, st *treeDemoState) {
 // treeSpeciesCell draws the host column: how many species sit under this node.
 // Blank on a species itself, where the answer is "it is one" and repeating it
 // down every leaf row would be noise.
-func treeSpeciesCell(node int32) {
+func treeSpeciesCell(r tree.Row) {
+	node := r.Node
 	if taxonLeaves[node] <= 1 {
 		return
 	}

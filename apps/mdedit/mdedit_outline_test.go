@@ -111,10 +111,8 @@ func TestOutlineKeysDisambiguateDuplicateSlugs(t *testing.T) {
 	m.build([]markdown.HeadingInfo{
 		heading(1, "notes"), heading(1, "notes"), heading(1, "other"),
 	})
-	assert.Equal(t, "notes#0", m.nodes[0].key)
-	assert.Equal(t, "notes#1", m.nodes[1].key,
+	assert.Equal(t, []string{"notes#0", "notes#1", "other#0"}, m.keys,
 		"two sections with the same title must not share collapse state")
-	assert.Equal(t, "other#0", m.nodes[2].key)
 }
 
 // TestOutlineBuildReusesItsSlices is the allocation property the retained
@@ -132,20 +130,19 @@ func TestOutlineBuildReusesItsSlices(t *testing.T) {
 // State across a rebuild
 // ---------------------------------------------------------------------------
 
-// TestOutlineCollapseSurvivesAHeadingInsert is the reason the collapse map is
-// keyed by slug and not by node index. The tree widget's State keys on the
-// index, which is the only identity a columnar input has — and this app
-// renumbers every node whenever the buffer changes. Inserting a section above
-// a collapsed one would otherwise hand the collapse to whichever heading slid
-// into the vacated slot.
+// TestOutlineCollapseSurvivesAHeadingInsert is the reason the hierarchy
+// carries a key column. A node INDEX is the only identity a columnar input has
+// on its own, and this app renumbers every node whenever the buffer changes;
+// inserting a section above a collapsed one would otherwise hand the collapse
+// to whichever heading slid into the vacated slot.
 func TestOutlineCollapseSurvivesAHeadingInsert(t *testing.T) {
 	inst := &App{}
 	inst.outline.build([]markdown.HeadingInfo{
 		heading(1, "intro"), heading(1, "body"), heading(2, "detail"),
 	})
-	// The reader folds "body" away.
-	inst.outlineSetCollapsed(inst.outline.nodes[1].key, true)
 	inst.syncOutline()
+	// The reader folds "body" away.
+	inst.outlineState.SetExpanded(1, false)
 	require.False(t, inst.outlineState.IsExpanded(1), "body is closed")
 
 	// A new section is typed in above it, so every index below shifts by one.
@@ -169,7 +166,6 @@ func TestOutlineDefaultsToExpanded(t *testing.T) {
 	for i := range inst.outline.nodes {
 		assert.True(t, inst.outlineState.IsExpanded(int32(i)), "node %d starts open", i)
 	}
-	assert.Nil(t, inst.outlineCollapsed, "an all-open outline carries no map at all")
 }
 
 func TestOutlineCollapseAllSkipsLeaves(t *testing.T) {
@@ -177,17 +173,33 @@ func TestOutlineCollapseAllSkipsLeaves(t *testing.T) {
 	inst.outline.build([]markdown.HeadingInfo{
 		heading(1, "a"), heading(2, "b"), heading(1, "c"),
 	})
-	inst.outlineCollapseAll()
-	assert.True(t, inst.outlineIsCollapsed("a#0"), "a has a child to hide")
-	assert.False(t, inst.outlineIsCollapsed("b#0"), "b is a leaf")
-	assert.False(t, inst.outlineIsCollapsed("c#0"), "c is a leaf")
-	assert.Len(t, inst.outlineCollapsed, 1, "leaves leave no entries to walk")
-
-	// Expand-all is the plain inverse and clears the map rather than filling
-	// it with falses.
-	clear(inst.outlineCollapsed)
 	inst.syncOutline()
+	inst.outlineCollapseAll()
+	assert.False(t, inst.outlineState.IsExpanded(0), "a has a child to hide")
+	assert.True(t, inst.outlineState.IsExpanded(1), "b is a leaf and is left alone")
+	assert.True(t, inst.outlineState.IsExpanded(2), "c is a leaf and is left alone")
+
+	// Expand-all is the plain inverse.
+	inst.outlineState.ExpandAll()
 	assert.True(t, inst.outlineState.IsExpanded(0))
+}
+
+// TestOutlineCollapseAllLeavesLaterHeadingsOpen is why collapse-all is a loop
+// over the nodes rather than tree.State.CollapseAll, which would also flip the
+// default: a section written after the fold has never been closed by anyone
+// and has to arrive showing.
+func TestOutlineCollapseAllLeavesLaterHeadingsOpen(t *testing.T) {
+	inst := &App{}
+	inst.outline.build([]markdown.HeadingInfo{heading(1, "a"), heading(2, "b")})
+	inst.syncOutline()
+	inst.outlineCollapseAll()
+
+	inst.outline.build([]markdown.HeadingInfo{
+		heading(1, "a"), heading(2, "b"), heading(1, "c"), heading(2, "d"),
+	})
+	inst.syncOutline()
+	assert.False(t, inst.outlineState.IsExpanded(0), "a stays folded")
+	assert.True(t, inst.outlineState.IsExpanded(2), "c was written afterwards and is open")
 }
 
 // TestOutlineSelectionFollowsTheCaret pins that the highlight is derived from
@@ -212,61 +224,47 @@ func TestOutlineSelectionFollowsTheCaret(t *testing.T) {
 // Reveal and click
 // ---------------------------------------------------------------------------
 
-// TestOutlineRevealOpensAncestorsInTheHostMap covers the half of the reveal
-// the widget cannot do for itself. tree.State.Reveal opens the ancestors in
-// the widget's own State — which syncOutline overwrites from the host map on
-// the very next frame — so the host has to open them where they will last.
-func TestOutlineRevealOpensAncestorsInTheHostMap(t *testing.T) {
+// TestOutlineRevealAsksForTheCaretsSection covers the app's half of the
+// reveal: naming the node. Opening its ancestors is the widget's half, and
+// used to be the app's — before expansion was filed under the key column,
+// syncOutline rewrote every node's open state from a host map on the next
+// frame and undid the widget's version before it was drawn.
+func TestOutlineRevealAsksForTheCaretsSection(t *testing.T) {
 	inst := &App{}
 	inst.outline.build([]markdown.HeadingInfo{
 		heading(1, "a"), heading(2, "b"), heading(3, "c"),
 	})
+	inst.syncOutline()
 	inst.outlineCollapseAll()
-	require.True(t, inst.outlineIsCollapsed("a#0"))
-	require.True(t, inst.outlineIsCollapsed("b#0"))
 
 	// The caret lands in the innermost section, two closed levels down.
 	inst.caretSlug = "c"
 	require.True(t, inst.outlineReveal())
-	assert.False(t, inst.outlineIsCollapsed("a#0"), "an ancestor is opened")
-	assert.False(t, inst.outlineIsCollapsed("b#0"), "and so is the one between")
-
-	// c itself is not touched: revealing a section says nothing about whether
-	// its own children should be showing.
-	inst.outline.build([]markdown.HeadingInfo{
-		heading(1, "a"), heading(2, "b"), heading(3, "c"), heading(4, "d"),
-	})
-	inst.outlineSetCollapsed("c#0", true)
-	inst.caretSlug = "c"
-	inst.outlineRevealed = ""
-	inst.outlineReveal()
-	assert.True(t, inst.outlineIsCollapsed("c#0"), "the revealed section keeps its own state")
+	assert.Equal(t, int32(2), inst.outlineState.PendingReveal(),
+		"the request names c; the widget opens a and b on its way to it")
 }
 
 // TestOutlineRevealOnlyOnAChange is what keeps the outline from scrolling
 // itself under the reader every frame — the same guard the preview's own
-// scroll target has.
+// scroll target has. It is also what lets a deliberate collapse stand: no
+// request is issued, so nothing reopens the section the caret is already in.
 func TestOutlineRevealOnlyOnAChange(t *testing.T) {
 	inst := &App{}
 	inst.outline.build([]markdown.HeadingInfo{heading(1, "a"), heading(2, "b")})
-	inst.outlineSetCollapsed("a#0", true)
+	inst.syncOutline()
 
 	inst.caretSlug = "b"
-	inst.outlineReveal()
-	require.False(t, inst.outlineIsCollapsed("a#0"))
+	require.True(t, inst.outlineReveal())
+	require.Equal(t, int32(1), inst.outlineState.PendingReveal())
 
-	// The reader deliberately folds the section they are working in. Nothing
-	// has moved since, so the next frame leaves it folded.
-	inst.outlineSetCollapsed("a#0", true)
-	inst.outlineReveal()
-	assert.True(t, inst.outlineIsCollapsed("a#0"), "a deliberate collapse is not fought")
+	// Nothing has moved since, so the next frame asks for nothing.
+	assert.False(t, inst.outlineReveal(), "a caret that has stayed put re-issues nothing")
 
 	// Moving away and back does reveal it again.
 	inst.caretSlug = "a"
-	inst.outlineReveal()
+	assert.True(t, inst.outlineReveal())
 	inst.caretSlug = "b"
-	inst.outlineReveal()
-	assert.False(t, inst.outlineIsCollapsed("a#0"))
+	assert.True(t, inst.outlineReveal())
 }
 
 // TestOutlineClickNavigatesWithoutMovingTheCaretBaseline is the M2
@@ -314,22 +312,25 @@ func TestOutlineClickSuppressesItsOwnReveal(t *testing.T) {
 	assert.True(t, inst.outlineReveal())
 }
 
-// TestOutlineToggleIsRecordedByKey covers the write-back that makes a
-// disclosure click outlive the next reparse.
-func TestOutlineToggleIsRecordedByKey(t *testing.T) {
+// TestOutlineToggleOutlivesAReparse: a disclosure click is applied by the
+// widget to the State that owns it, so the app has no write-back to do — and
+// the fold is still there after the buffer is reparsed under it.
+func TestOutlineToggleOutlivesAReparse(t *testing.T) {
 	inst := &App{}
 	inst.outline.build([]markdown.HeadingInfo{heading(1, "a"), heading(2, "b")})
 	inst.syncOutline()
 
-	// The widget has already applied the toggle to its own State by the time
-	// the result comes back; this is the host catching up.
-	inst.outlineState.SetExpanded(0, false)
+	// What the widget itself does on a disclosure click.
+	inst.outlineState.ToggleExpanded(0)
 	inst.applyOutline(tree.Result{Clicked: -1, Activated: -1, Toggled: 0})
-	assert.True(t, inst.outlineIsCollapsed("a#0"))
+	require.False(t, inst.outlineState.IsExpanded(0))
 
-	inst.outlineState.SetExpanded(0, true)
-	inst.applyOutline(tree.Result{Clicked: -1, Activated: -1, Toggled: 0})
-	assert.False(t, inst.outlineIsCollapsed("a#0"))
+	inst.outline.build([]markdown.HeadingInfo{
+		heading(1, "intro"), heading(1, "a"), heading(2, "b"),
+	})
+	inst.syncOutline()
+	assert.True(t, inst.outlineState.IsExpanded(0), "intro is new and open")
+	assert.False(t, inst.outlineState.IsExpanded(1), "a is still folded, at its new index")
 }
 
 // TestOutlineApplyIgnoresStaleNodeIndices: a result describes the PREVIOUS

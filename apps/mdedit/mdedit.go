@@ -196,16 +196,14 @@ type App struct {
 
 	// The outline pane's state (see mdedit_outline.go). outline is the
 	// hierarchy, rebuilt whenever outlineDoc stops matching the current parse;
-	// outlineState is the tree widget's own expansion/selection, rewritten from
-	// the two fields below on every frame because it keys on node indices and a
-	// rebuild renumbers them.
+	// outlineState is the tree widget's own expansion and selection, and the
+	// authority for which sections are closed. It survives a reparse because
+	// the hierarchy carries a key column (slug#ord) for the widget to file
+	// under — a node index would name a different heading one keystroke later.
+	// Only the selection is projected, from the caret.
 	outline      outlineModel
 	outlineDoc   *markdown.Doc
 	outlineState tree.State
-	// outlineCollapsed is the closed sections, keyed by the stable slug#ord
-	// rather than by node index. Absent means open, so the zero value is a
-	// fully expanded outline.
-	outlineCollapsed map[string]bool
 	// outlineRevealed is the section the outline last scrolled itself to, so a
 	// caret that has stayed put does not re-issue the scroll every frame.
 	outlineRevealed string

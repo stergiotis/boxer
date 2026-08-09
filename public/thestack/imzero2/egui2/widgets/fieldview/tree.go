@@ -21,12 +21,6 @@ import (
 
 // fieldNode is the per-node metadata carried beside the columnar tree.
 type fieldNode struct {
-	// path identifies the node across frames as a slash-joined index chain
-	// ("0/2/1"). Names are not usable as a key — an Array's children are all
-	// named by position and an Object's keys are not guaranteed unique — and
-	// node indices are not either, since a collapse renumbers everything
-	// below it.
-	path string
 	// kind is the short label shown after the name, and value the formatted
 	// leaf value. Both are computed during the build, where the Renderer's
 	// ShowKind and BytesMax settings are in scope.
@@ -41,38 +35,21 @@ type fieldNode struct {
 // It is separate from the Renderer because the Renderer is a value whose
 // fluent setters return copies — configuration that is safe to share, where
 // view state is not. One State belongs to one place a field list is shown.
+//
+// Expansion is the tree widget's own, filed under the key column below. There
+// is no second map here mirroring it: the widget's [tree.State] is the store,
+// and this type only feeds it the identity to file under.
 type State struct {
-	// open holds only the containers whose state differs from the Renderer's
-	// DefaultOpen, so the zero value needs no construction and switching
-	// DefaultOpen still moves everything the reader has not touched.
-	open map[string]bool
-
 	st      tree.State
 	labels  []string
 	parents []int32
 	nodes   []fieldNode
-}
-
-// isOpen reports whether the container at path is expanded, given the
-// Renderer's default.
-func (s *State) isOpen(path string, deflt bool) bool {
-	if v, ok := s.open[path]; ok {
-		return v
-	}
-	return deflt
-}
-
-// setOpen records a container's state, dropping the entry when it agrees with
-// the default so the map stays bounded by what the reader actually changed.
-func (s *State) setOpen(path string, open, deflt bool) {
-	if open == deflt {
-		delete(s.open, path)
-		return
-	}
-	if s.open == nil {
-		s.open = make(map[string]bool, 8)
-	}
-	s.open[path] = open
+	// keys identify the nodes across rebuilds, as slash-joined index chains
+	// ("0/2/1"), one per node. Names are not usable — an Array's children are
+	// all named by position and an Object's keys are not guaranteed unique —
+	// and plain node indices are not either, since a container closing
+	// renumbers everything below it.
+	keys []string
 }
 
 // build flattens the field forest into the State's scratch, in slice order,
@@ -82,6 +59,7 @@ func (inst Renderer) build(s *State, fields []Field) {
 	labels := s.labels[:0]
 	parents := s.parents[:0]
 	nodes := s.nodes[:0]
+	keys := s.keys[:0]
 
 	var walk func(parent int32, path string, fs []Field)
 	walk = func(parent int32, path string, fs []Field) {
@@ -91,7 +69,8 @@ func (inst Renderer) build(s *State, fields []Field) {
 			n := int32(len(labels))
 			labels = append(labels, f.Name)
 			parents = append(parents, parent)
-			node := fieldNode{path: p}
+			keys = append(keys, p)
+			var node fieldNode
 			if inst.showKind {
 				node.kind = kindName(f.Kind)
 			}
@@ -111,25 +90,11 @@ func (inst Renderer) build(s *State, fields []Field) {
 	}
 	walk(-1, "", fields)
 
-	s.labels, s.parents, s.nodes = labels, parents, nodes
+	s.labels, s.parents, s.nodes, s.keys = labels, parents, nodes, keys
 }
 
-// syncState projects the caller's own expansion onto the widget's, which keys
-// on node indices — indices a collapse or a changed field list renumbers,
-// where the index path does not.
-func (inst Renderer) syncState(s *State) {
-	for i := range s.nodes {
-		s.st.SetExpanded(int32(i), s.isOpen(s.nodes[i].path, inst.defaultOpen))
-	}
-}
-
-// applyResult writes a frame's toggle back onto the caller's state. There is
-// nothing to do for a click: the viewer has no selection of its own, and the
-// widget's is overwritten by the next syncState before it is ever drawn.
-func (inst Renderer) applyResult(s *State, res tree.Result) {
-	n := res.Toggled
-	if n < 0 || int(n) >= len(s.nodes) {
-		return
-	}
-	s.setOpen(s.nodes[n].path, s.st.IsExpanded(n), inst.defaultOpen)
+// tree is the columnar input, borrowed: valid until the next build. The key
+// column is what makes the widget's expansion survive one.
+func (s *State) tree() tree.Tree {
+	return tree.Tree{Labels: s.labels, Parents: s.parents, Keys: s.keys}
 }

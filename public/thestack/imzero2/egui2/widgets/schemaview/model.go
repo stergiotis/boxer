@@ -42,20 +42,26 @@ type Model struct {
 	// an R10 databinding, so it stays a plain widget-owned bool.
 	legendOpen bool
 
-	// collapsed holds the sections the reader has closed, keyed by
-	// [navNode.key]. Absent means open, which is what the CollapsingHeader
-	// navigator's DefaultOpen(true) meant before the port.
-	collapsed map[string]bool
-	// navState is the tree widget's view state. It is rewritten from collapsed
-	// and sel before every render ([Model.syncNav]) rather than being an
-	// authority of its own, because it keys on node indices and the filter
-	// renumbers those on every keystroke.
+	// navState is the tree widget's view state, and the authority for which
+	// sections are open. It survives the rebuild every filter keystroke
+	// triggers because the hierarchy carries [navNode.key] as its key column,
+	// so the widget files expansion under the section rather than under an
+	// index the next keystroke reassigns. Its selection is projected from sel,
+	// which is the richer thing the detail pane reads ([Model.syncNav]).
 	navState tree.State
-	// navLabels / navParents / navNodes are [Model.buildNav]'s scratch: the
-	// hierarchy is rebuilt every frame — the filter can change on any of them —
-	// so the slices are retained and refilled rather than reallocated.
+	// navLabels / navParents / navKeys / navNodes are [Model.buildNav]'s
+	// scratch: the hierarchy is rebuilt every frame — the filter can change on
+	// any of them — so the slices are retained and refilled rather than
+	// reallocated.
+	//
+	// navKeys is the identity column the widget files expansion under:
+	// "plain:<item-type>" for a plain grouping, "sec:<name>" or
+	// "co:<group>:<name>" for a tagged section, and the parent's key plus
+	// ":<column>" for a column beneath one. Stable across a filter keystroke,
+	// which node indices are not — that is the whole reason it exists.
 	navLabels  []string
 	navParents []int32
+	navKeys    []string
 	navNodes   []navNode
 }
 

@@ -40,8 +40,10 @@ package tree
 // node index instead. Responses come back one frame late, and between those
 // two frames an expand or a collapse renumbers every row below it — a row-keyed
 // id would then hand a click to whichever node inherited that row. A node-keyed
-// id survives, because a node index is stable exactly as long as the host's
-// Tree ordering is, which is the identity assumption State already documents.
+// id survives, because a node index holds still across those two frames as
+// long as the host does not rebuild between them — a weaker assumption than
+// the one State makes about identity across rebuilds, and the reason widget
+// ids need no Tree.Keys where State does.
 
 import (
 	"errors"
@@ -150,7 +152,7 @@ type Column struct {
 	Width float32
 	// Resizable lets the user drag this column's right edge.
 	Resizable bool
-	// Cell draws the column's content for one node, inside a padded cell Ui.
+	// Cell draws the column's content for one row, inside a padded cell Ui.
 	// On [Input.Outline] it replaces the plain label and runs after the indent
 	// and the disclosure control, so a host can put a badge, a count or a
 	// secondary tint on the label without giving up the outline chrome.
@@ -158,12 +160,26 @@ type Column struct {
 	// A nil Cell on a host column emits nothing for that column; a nil Cell on
 	// the outline draws the node's [Tree.Labels] entry.
 	//
+	// It takes the whole [Row] rather than the node, because a cell that
+	// varies on expansion — a count of what a closed section hides, an indent
+	// guide, a different glyph on a leaf — otherwise has to reach back into
+	// the [State] it passed in, during the widget's own render pass, to ask
+	// something the renderer is already holding.
+	//
+	// # Two things about this that bite
+	//
 	// Interactive widgets are allowed and win the pointer over the row's own
 	// click sense — that is the arbitration in this file's header comment, and
 	// it means a per-row control works, at the price of that control's rect no
 	// longer selecting the row. Plain labels must be emitted Selectable(false)
 	// or they swallow the row click; the default label does.
-	Cell func(node int32)
+	//
+	// And a TRUNCATING label takes the whole width it is offered, so anything
+	// emitted after it in the same cell is pushed out of view. A count, a
+	// chip or a glyph that has to survive a long label belongs in a column of
+	// its own, whose width is reserved before the label is laid out — not
+	// after the label in this one.
+	Cell func(r Row)
 }
 
 // Input is the per-frame render request.
@@ -180,7 +196,9 @@ type Input struct {
 	// subtrees missing.
 	Tree Tree
 	// State is the host-owned expansion, selection and cursor. Required: a
-	// tree with nowhere to record what is open cannot be drawn.
+	// tree with nowhere to record what is open cannot be drawn. Render binds
+	// it to Tree before reading anything out of it, so it survives a rebuild
+	// exactly as far as [Tree.Keys] lets it.
 	State *State
 
 	// Outline configures the first column — the one carrying the indent, the
@@ -191,10 +209,15 @@ type Input struct {
 
 	// RowHeight is the fixed height of every row; 0 takes defaultRowHeight.
 	RowHeight float32
-	// MaxHeight caps the vertical extent the table claims. Leave it 0 in a
-	// bounded host. Set it in a tall or unbounded one: endETable otherwise
-	// falls back to an auto-fit heuristic capped by ETABLE_AUTOFIT_CAP_PX,
-	// which a long tree overruns.
+	// MaxHeight caps the vertical extent the table claims. Feed it the pane's
+	// measured height, from c.CapturePaneSize, with a constant to fall back on
+	// for the first frame — the probe answers one frame late and not at all on
+	// the first. That is what every in-repo adopter does.
+	//
+	// Left at 0 the table falls back to endETable's auto-fit heuristic, capped
+	// by ETABLE_AUTOFIT_CAP_PX, which a tree of any length overruns. That is
+	// only the right answer in a host that already bounds the tree tightly and
+	// knows it stays short.
 	MaxHeight float32
 	// Indent is the horizontal step per depth level; 0 takes defaultIndent.
 	Indent float32
@@ -253,6 +276,11 @@ func Render(in Input) (res Result) {
 		return
 	}
 	st := in.State
+
+	// Bound before anything is read out of the State, because until it is, a
+	// node index means whatever the PREVIOUS frame's Tree called it — and the
+	// reveal below is resolved through exactly that binding.
+	st.Bind(in.Tree)
 
 	// The reveal is consumed before the flatten because its two halves
 	// straddle it: opening the ancestors changes which rows exist, and
@@ -339,7 +367,7 @@ func Render(in Input) (res Result) {
 					continue
 				}
 				et.BeginCells(uint64(i), uint32(ci+1))
-				in.paddedCell(r.Node, ci+1, density, in.Columns[ci].Cell)
+				in.paddedCell(r, ci+1, density, in.Columns[ci].Cell)
 				et.EndCells()
 			}
 		}
@@ -507,14 +535,14 @@ func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, r Row, rowH float32, 
 // outlineCell draws the indent, the disclosure control and the label, and
 // reports whether the disclosure was clicked.
 func (in Input) outlineCell(r Row, indent float32, density styletokens.DensityE) (toggled bool) {
-	in.paddedCell(r.Node, 0, density, func(node int32) {
+	in.paddedCell(r, 0, density, func(row Row) {
 		for range c.Horizontal().KeepIter() {
 			if d := float32(r.Depth) * indent; d > 0 {
 				c.AddSpace(d)
 			}
 			toggled = in.disclose(r)
 			if in.Outline.Cell != nil {
-				in.Outline.Cell(node)
+				in.Outline.Cell(row)
 				return
 			}
 			// Selectable(false) is load-bearing, not tidiness: egui makes
@@ -523,7 +551,7 @@ func (in Input) outlineCell(r Row, indent float32, density styletokens.DensityE)
 			// eat every click on the label's own rect. Truncate keeps a long
 			// label on one line — the row height is fixed, so a wrapped label
 			// is a clipped one.
-			c.Label(in.Tree.Labels[node]).Selectable(false).Truncate().Send()
+			c.Label(in.Tree.Labels[row.Node]).Selectable(false).Truncate().Send()
 		}
 	})
 	return
@@ -561,13 +589,13 @@ func (in Input) disclose(r Row) (clicked bool) {
 // paddedCell insets a cell's content so it does not sit flush against the
 // column gridlines. The row block behind it owns the fill, the outline and the
 // click sense, so the inset is all a cell Frame has left to do.
-func (in Input) paddedCell(node int32, col int, density styletokens.DensityE, body func(node int32)) {
+func (in Input) paddedCell(r Row, col int, density styletokens.DensityE, body func(r Row)) {
 	ncols := uint64(1 + len(in.Columns))
-	for range c.Frame(in.Ids.PrepareSeq(seqCellBase + uint64(node)*ncols + uint64(col))).
+	for range c.Frame(in.Ids.PrepareSeq(seqCellBase + uint64(r.Node)*ncols + uint64(col))).
 		OuterMargin(0).
 		InnerMargin(styletokens.PaddingInner(density)).
 		KeepIter() {
-		body(node)
+		body(r)
 	}
 }
 

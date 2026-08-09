@@ -45,13 +45,6 @@ func fixture() *common.TableDesc {
 	}
 }
 
-func keysOf(m *Model) (out []string) {
-	for i := range m.navNodes {
-		out = append(out, m.navNodes[i].key)
-	}
-	return
-}
-
 func TestBuildNavShape(t *testing.T) {
 	m := NewModel(fixture())
 	m.buildNav()
@@ -76,7 +69,7 @@ func TestBuildNavShape(t *testing.T) {
 		"plain:entity-id", "plain:entity-id:shard", "plain:entity-id:tenant",
 		"sec:readings", "sec:readings:celsius",
 		"co:prov:audit",
-	}, keysOf(m), "keys distinguish a co-grouped section from a standalone one")
+	}, m.navKeys, "keys distinguish a co-grouped section from a standalone one")
 
 	assert.Equal(t, "—", m.navNodes[1].typ, "a column carries its terse type")
 	assert.Equal(t, "", m.navNodes[0].typ, "a section header does not")
@@ -108,7 +101,7 @@ func TestBuildNavFilterDropsWholeSections(t *testing.T) {
 	assert.Equal(t, []int32{-1, 0}, m.navParents)
 }
 
-func TestSyncNavProjectsTheModelsOwnState(t *testing.T) {
+func TestSyncNavSetsTheDefaultAndProjectsTheSelection(t *testing.T) {
 	m := NewModel(fixture())
 	m.buildNav()
 	m.syncNav()
@@ -121,19 +114,24 @@ func TestSyncNavProjectsTheModelsOwnState(t *testing.T) {
 	assert.True(t, m.navState.IsSelected(1))
 	assert.Equal(t, 1, m.navState.SelectionLen())
 
-	m.setCollapsed("sec:readings", true)
+	// A closure is recorded against the section's key, and syncNav no longer
+	// rewrites expansion, so it stands.
+	m.navState.SetExpanded(3, false)
 	m.syncNav()
 	assert.True(t, m.navState.IsExpanded(0))
 	assert.False(t, m.navState.IsExpanded(3), "a closed section stays closed")
 }
 
-func TestSyncNavSurvivesAFilterRenumberingTheNodes(t *testing.T) {
+// TestNavStateSurvivesAFilterRenumberingTheNodes is the property the key column
+// exists for, and the one the Model kept its own collapse map for before it.
+func TestNavStateSurvivesAFilterRenumberingTheNodes(t *testing.T) {
 	m := NewModel(fixture())
 	m.buildNav()
+	m.syncNav()
 
 	// Close the tagged section and select its column, then narrow the filter
 	// so the plain item-type disappears and every node index shifts.
-	m.setCollapsed("sec:readings", true)
+	m.navState.SetExpanded(3, false)
 	m.sel = selection{kind: selSectionColumn, section: 0, col: 0}
 
 	m.filter = "readings"
@@ -146,20 +144,10 @@ func TestSyncNavSurvivesAFilterRenumberingTheNodes(t *testing.T) {
 	assert.True(t, m.navState.IsSelected(1), "and so did the selection")
 }
 
-func TestApplyNavWritesBackToTheModel(t *testing.T) {
+func TestApplyNavTurnsAClickIntoASelectionOrAToggle(t *testing.T) {
 	m := NewModel(fixture())
 	m.buildNav()
 	m.syncNav()
-
-	// A toggle: the widget has already flipped its own State, so applyNav
-	// reads it back rather than recomputing it.
-	m.navState.ToggleExpanded(3)
-	m.applyNav(tree.Result{Clicked: -1, Activated: -1, Toggled: 3})
-	assert.True(t, m.collapsed["sec:readings"])
-
-	m.navState.ToggleExpanded(3)
-	m.applyNav(tree.Result{Clicked: -1, Activated: -1, Toggled: 3})
-	assert.NotContains(t, m.collapsed, "sec:readings", "reopening drops the entry rather than storing false")
 
 	// A click on a column selects it.
 	m.applyNav(tree.Result{Clicked: 4, Activated: -1, Toggled: -1})
@@ -169,13 +157,12 @@ func TestApplyNavWritesBackToTheModel(t *testing.T) {
 	// and closes the header instead, since it has no detail to show.
 	m.applyNav(tree.Result{Clicked: 0, Activated: -1, Toggled: -1})
 	assert.Equal(t, selection{kind: selSectionColumn, section: 0, col: 0}, m.sel)
-	assert.True(t, m.collapsed["plain:entity-id"])
+	assert.False(t, m.navState.IsExpanded(0))
 
-	// The same click while the widget also toggled that row is the second
-	// half of a double-click. Only the widget's toggle counts, or the two
-	// would cancel and a double-click would do nothing at all.
-	m.syncNav()
+	// The same click while the widget also toggled that row is the second half
+	// of a double-click. Only the widget's toggle counts, or the two would
+	// cancel and a double-click would do nothing at all.
 	m.navState.ToggleExpanded(0)
 	m.applyNav(tree.Result{Clicked: 0, Activated: -1, Toggled: 0})
-	assert.NotContains(t, m.collapsed, "plain:entity-id")
+	assert.True(t, m.navState.IsExpanded(0), "the widget's own toggle is the only one that counts")
 }

@@ -205,7 +205,8 @@ func renderSections(ids *c.WidgetIdStack, m *Model, availW, availH float32) {
 // selectable label senses click-and-drag and is registered after the row's own
 // sense region, so it would sit over it and swallow every click on its rect
 // (ADR-0176 SD7).
-func (m *Model) navCell(node int32) {
+func (m *Model) navCell(r tree.Row) {
+	node := r.Node
 	// The category glyph is its own run, in the monospace face — see
 	// glyphPlainItemType for why the face is load-bearing rather than stylistic.
 	if g := m.navNodes[node].glyph; g != "" {

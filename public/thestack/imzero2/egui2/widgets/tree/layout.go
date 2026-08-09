@@ -47,6 +47,9 @@ type Row struct {
 // A nil st is treated as fully collapsed, which makes "show me just the roots"
 // a call with no state to construct.
 //
+// It binds st to t ([State.Bind]) before reading anything, so a host may
+// rebuild its columns and flatten in the same breath.
+//
 // The error is [Tree.Validate]'s: on a structurally broken tree Flatten
 // returns dst unextended rather than a partial outline, because the failure
 // modes it rejects — a dangling parent index, a parent cycle — are the ones
@@ -55,6 +58,9 @@ type Row struct {
 func Flatten(t Tree, st *State, dst []Row) ([]Row, error) {
 	if err := t.Validate(); err != nil {
 		return dst, err
+	}
+	if st != nil {
+		st.Bind(t)
 	}
 	n := t.Len()
 	if n == 0 {

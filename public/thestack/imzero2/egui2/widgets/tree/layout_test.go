@@ -83,7 +83,7 @@ func TestFlattenNilStateIsFullyCollapsed(t *testing.T) {
 func TestFlattenExpandedOrderAndDepth(t *testing.T) {
 	tr := taxonomy()
 	st := &State{}
-	st.ExpandAll(tr)
+	st.ExpandAll()
 
 	got := labels(tr, mustFlatten(t, tr, st))
 	want := "" +
@@ -146,7 +146,7 @@ func TestFlattenExpandedLeafIsHarmless(t *testing.T) {
 func TestFlattenRowFlags(t *testing.T) {
 	tr := taxonomy()
 	st := &State{}
-	st.ExpandAll(tr)
+	st.ExpandAll()
 	rows := mustFlatten(t, tr, st)
 
 	byNode := make(map[int32]Row, len(rows))
@@ -223,7 +223,7 @@ func TestFlattenDeepChainDoesNotRecurse(t *testing.T) {
 		tr.Parents[i] = int32(i - 1) // node 0 gets -1
 	}
 	st := &State{}
-	st.ExpandAll(tr)
+	st.ExpandAll()
 
 	rows := mustFlatten(t, tr, st)
 	if len(rows) != n {
@@ -237,7 +237,7 @@ func TestFlattenDeepChainDoesNotRecurse(t *testing.T) {
 func TestFlattenReusesDestination(t *testing.T) {
 	tr := taxonomy()
 	st := &State{}
-	st.ExpandAll(tr)
+	st.ExpandAll()
 
 	dst := make([]Row, 0, 64)
 	first, err := Flatten(tr, st, dst[:0])
@@ -425,7 +425,7 @@ func TestSelection(t *testing.T) {
 func TestCollapseAllAndToggle(t *testing.T) {
 	tr := taxonomy()
 	st := &State{}
-	st.ExpandAll(tr)
+	st.ExpandAll()
 	st.CollapseAll()
 	if got := labels(tr, mustFlatten(t, tr, st)); got != "Animalia\nArthropoda\n" {
 		t.Errorf("after CollapseAll:\n%s", got)

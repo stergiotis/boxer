@@ -41,6 +41,7 @@ type varNode struct {
 func (inst *App) buildTree(buckets []bucket) {
 	labels := inst.navLabels[:0]
 	parents := inst.navParents[:0]
+	keys := inst.navKeys[:0]
 	nodes := inst.navNodes[:0]
 
 	for _, b := range buckets {
@@ -53,40 +54,58 @@ func (inst *App) buildTree(buckets []bucket) {
 		head := int32(len(labels))
 		labels = append(labels, categoryLabel(b.cat, setCount, len(b.specs)))
 		parents = append(parents, -1)
+		keys = append(keys, string(b.cat))
 		nodes = append(nodes, varNode{key: string(b.cat)})
 
 		for _, s := range b.specs {
 			labels = append(labels, s.Name)
 			parents = append(parents, head)
+			keys = append(keys, s.Name)
 			nodes = append(nodes, varNode{key: s.Name, spec: s, isVar: true})
 		}
 	}
 
-	inst.navLabels, inst.navParents, inst.navNodes = labels, parents, nodes
+	inst.navLabels, inst.navParents, inst.navKeys, inst.navNodes = labels, parents, keys, nodes
 }
 
 // navTree is the columnar view of the last [App.buildTree], borrowed: valid
-// until the next build.
+// until the next build. The key column is what carries a category's open state
+// across one.
 func (inst *App) navTree() tree.Tree {
-	return tree.Tree{Labels: inst.navLabels, Parents: inst.navParents}
+	return tree.Tree{Labels: inst.navLabels, Parents: inst.navParents, Keys: inst.navKeys}
 }
 
-// syncTree projects the App's own state onto the tree widget's. The App stays
-// the authority because its keys — a category name, a variable name — survive
-// the rebuild that every filter keystroke triggers, where a node index does
-// not.
+// syncTree sets up the widget's state for the frame: the expansion default,
+// the tour's pre-opened category, and the selection projected from the App's
+// own [App.selected].
 //
-// Categories start closed, which is what the CollapsingHeader navigator did:
-// the registry is long and an operator arrives looking for one variable.
+// Expansion is not projected. The hierarchy carries a key column — a category
+// name, a variable name — so the widget files a section's open state under
+// that and it survives the rebuild every filter keystroke triggers, which is
+// what the App used to keep a parallel map for. Categories start CLOSED, which
+// is what the CollapsingHeader navigator did: the registry is long and an
+// operator arrives looking for one variable.
+//
 // [App.expandedCat] pre-opens one, which is how the demo capture pins a scene
-// without depending on persisted egui memory.
+// without depending on persisted egui memory. It is re-asserted every frame
+// rather than seeded once, as it was before the port — so while the tour has
+// it set, that one category cannot be closed.
+//
+// The selection stays a projection: it is the App's own field, it is what a
+// category row's click deliberately does NOT change, and rewriting it here is
+// what keeps a grouping row from drawing as selected on the way past.
 func (inst *App) syncTree() {
+	// Bound to THIS frame's hierarchy before anything is written, or the
+	// selection below is filed under whatever key the previous build gave that
+	// index — and on the first frame, under no key at all.
+	inst.navState.Bind(inst.navTree())
+	inst.navState.SetDefaultExpanded(false)
 	sel := int32(-1)
 	for i := range inst.navNodes {
 		n, node := int32(i), &inst.navNodes[i]
-		open := inst.expanded[node.key] ||
-			(!node.isVar && inst.expandedCat != "" && node.key == string(inst.expandedCat))
-		inst.navState.SetExpanded(n, open)
+		if !node.isVar && inst.expandedCat != "" && node.key == string(inst.expandedCat) {
+			inst.navState.SetExpanded(n, true)
+		}
 		if node.isVar && node.key == inst.selected {
 			sel = n
 		}
@@ -99,10 +118,9 @@ func (inst *App) syncTree() {
 }
 
 // applyTree writes a frame's tree interaction back onto the App's own state.
+// Expansion needs nothing: the widget has already applied it to the state that
+// owns it.
 func (inst *App) applyTree(res tree.Result) {
-	if n := res.Toggled; n >= 0 && int(n) < len(inst.navNodes) {
-		inst.setExpanded(inst.navNodes[n].key, inst.navState.IsExpanded(n))
-	}
 	n := res.Clicked
 	if n < 0 || int(n) >= len(inst.navNodes) {
 		return
@@ -117,19 +135,6 @@ func (inst *App) applyTree(res tree.Result) {
 	// toggled this row on the same frame, so a double-click nets two toggles
 	// rather than three.
 	if res.Toggled < 0 {
-		inst.setExpanded(inst.navNodes[n].key, !inst.navState.IsExpanded(n))
+		inst.navState.ToggleExpanded(n)
 	}
-}
-
-// setExpanded records a section's open state. Closed is the default, so a
-// closed section is an absent entry rather than a false one.
-func (inst *App) setExpanded(key string, open bool) {
-	if !open {
-		delete(inst.expanded, key)
-		return
-	}
-	if inst.expanded == nil {
-		inst.expanded = make(map[string]bool, 8)
-	}
-	inst.expanded[key] = true
 }

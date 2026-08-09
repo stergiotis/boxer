@@ -111,20 +111,23 @@ type App struct {
 	// widget memory.
 	expandedCat env.CategoryE
 
-	// expanded holds the categories the operator has opened, keyed by
-	// category name, and selected is the variable name of the
-	// highlighted row. Both are string-keyed rather than indexed
-	// because the filter rebuilds the hierarchy on every keystroke —
-	// see [App.syncTree].
-	expanded map[string]bool
+	// selected is the variable name of the highlighted row. Name-keyed
+	// rather than indexed because the filter rebuilds the hierarchy on
+	// every keystroke — see [App.syncTree].
 	selected string
-	// navState is the tree widget's view state, rewritten from the two
-	// fields above before every render rather than being an authority
-	// of its own. navLabels / navParents / navNodes are
-	// [App.buildTree]'s retained scratch.
+	// navState is the tree widget's view state, and the authority for
+	// which categories are open: navKeys gives the widget a stable
+	// identity per node, so a section's open state outlives the rebuild
+	// that every filter keystroke triggers. Only its selection is
+	// projected, from the field above.
+	//
+	// navLabels / navParents / navKeys / navNodes are [App.buildTree]'s
+	// retained scratch; navKeys holds a category name for a section row
+	// and a variable name for a var row.
 	navState   tree.State
 	navLabels  []string
 	navParents []int32
+	navKeys    []string
 	navNodes   []varNode
 }
 
@@ -256,7 +259,8 @@ func categoryLabel(cat env.CategoryE, setCount, total int) string {
 // would sit over it and swallow clicks on its own rect (ADR-0176 SD7). The
 // type chip is a real button and legitimately takes the pointer over its
 // rect — that is the price of its tooltip, and it is 30px of a row.
-func (inst *App) renderNameCell(node int32) {
+func (inst *App) renderNameCell(r tree.Row) {
+	node := r.Node
 	n := &inst.navNodes[node]
 	if !n.isVar {
 		c.Label(inst.navLabels[node]).Selectable(false).Truncate().Send()
@@ -299,7 +303,8 @@ func (inst *App) renderNameCell(node int32) {
 // this variable. Colour cues: muted for <unset>, primary for set. The tooltip
 // carries the default and the declared origin, which the dense row leaves out
 // for layout calm.
-func (inst *App) renderValueCell(node int32) {
+func (inst *App) renderValueCell(r tree.Row) {
+	node := r.Node
 	n := &inst.navNodes[node]
 	if !n.isVar {
 		return
@@ -335,7 +340,8 @@ func (inst *App) renderValueCell(node int32) {
 // wrapped line under the name. A tree row is one line high, so it truncates
 // and carries the full text as a tooltip — the trade the port makes for
 // descriptions that line up down the pane.
-func (inst *App) renderDescCell(node int32) {
+func (inst *App) renderDescCell(r tree.Row) {
+	node := r.Node
 	n := &inst.navNodes[node]
 	if !n.isVar || n.spec.Description == "" {
 		return

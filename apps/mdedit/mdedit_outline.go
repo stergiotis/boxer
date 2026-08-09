@@ -100,16 +100,6 @@ var (
 // widget has no way to know: what this row is filed under across rebuilds,
 // where in the buffer it points, and how much it hides when closed.
 type outlineNode struct {
-	// key identifies the node across rebuilds. The widget keys its State on
-	// node INDICES — the only identity a columnar input has — but the outline
-	// is rebuilt from a fresh parse on every edit that changes the text, so an
-	// index means a different heading one keystroke to the next. Inserting a
-	// section would otherwise hand its collapse state to whichever heading
-	// slid into its slot.
-	//
-	// The slug is the stable part, and the ordinal disambiguates two sections
-	// that happen to share a title.
-	key string
 	// slug is the anchor the preview scrolls to and the caret's section is
 	// reported as. Not unique on its own — see key.
 	slug string
@@ -129,6 +119,16 @@ type outlineModel struct {
 	labels  []string
 	parents []int32
 	nodes   []outlineNode
+	// keys identify the nodes across rebuilds, and are what the tree widget
+	// files a collapse under. The outline is rebuilt from a fresh parse on
+	// every edit that changes the text, so a node INDEX — the only identity a
+	// columnar input has on its own — means a different heading one keystroke
+	// to the next, and inserting a section would hand its collapse state to
+	// whichever heading slid into its slot.
+	//
+	// The slug is the stable part; the ordinal disambiguates two sections that
+	// happen to share a title.
+	keys []string
 	// seen counts slugs during a build, so the ordinal in a key is stable for
 	// a given document. Retained and cleared rather than allocated per build.
 	seen map[string]int
@@ -151,6 +151,7 @@ func (m *outlineModel) build(headings []markdown.HeadingInfo) {
 	labels := m.labels[:0]
 	parents := m.parents[:0]
 	nodes := m.nodes[:0]
+	keys := m.keys[:0]
 	if m.seen == nil {
 		m.seen = make(map[string]int, 32)
 	}
@@ -185,8 +186,8 @@ func (m *outlineModel) build(headings []markdown.HeadingInfo) {
 		node := int32(len(labels))
 		labels = append(labels, label)
 		parents = append(parents, parent)
+		keys = append(keys, h.Slug+"#"+itoa(ord))
 		nodes = append(nodes, outlineNode{
-			key:  h.Slug + "#" + itoa(ord),
 			slug: h.Slug,
 			off:  h.ByteOffset,
 		})
@@ -203,15 +204,16 @@ func (m *outlineModel) build(headings []markdown.HeadingInfo) {
 		}
 	}
 
-	m.labels, m.parents, m.nodes = labels, parents, nodes
+	m.labels, m.parents, m.nodes, m.keys = labels, parents, nodes, keys
 }
 
 // len is the node count.
 func (m *outlineModel) len() int { return len(m.nodes) }
 
-// tree is the columnar input, borrowed. Valid until the next build.
+// tree is the columnar input, borrowed. Valid until the next build. The key
+// column is what carries a collapse across one.
 func (m *outlineModel) tree() tree.Tree {
-	return tree.Tree{Labels: m.labels, Parents: m.parents}
+	return tree.Tree{Labels: m.labels, Parents: m.parents, Keys: m.keys}
 }
 
 // nodeBySlug finds the first node with this slug, or -1. First rather than
@@ -280,54 +282,46 @@ func (inst *App) outlineColWidth() (px float32) {
 // Host-owned state
 // ---------------------------------------------------------------------------
 
-// outlineIsCollapsed reports whether a section is closed. Absent from the map
-// means open, so the zero value is a fully expanded outline — which is what
-// the flat list showed, and means the tree adds collapsing without taking the
-// old view away from anyone who never uses it.
-func (inst *App) outlineIsCollapsed(key string) (yes bool) {
-	return inst.outlineCollapsed[key]
-}
-
-// outlineSetCollapsed records a section's open state. Reopening deletes rather
-// than storing false, so a document whose sections are all open carries no map
-// at all.
-func (inst *App) outlineSetCollapsed(key string, collapsed bool) {
-	if !collapsed {
-		delete(inst.outlineCollapsed, key)
-		return
-	}
-	if inst.outlineCollapsed == nil {
-		inst.outlineCollapsed = make(map[string]bool, 16)
-	}
-	inst.outlineCollapsed[key] = true
-}
-
 // outlineCollapseAll closes every section that has one. Leaves are skipped —
-// collapsing one does nothing and would only leave entries in the map to walk.
+// collapsing one does nothing and would only leave records in the State to
+// carry around.
+//
+// Deliberately a loop over what is there rather than [tree.State.CollapseAll],
+// which would also flip the DEFAULT closed: a heading written after this would
+// then arrive folded, and the outline's promise is that new content shows.
 func (inst *App) outlineCollapseAll() {
 	for i := range inst.outline.nodes {
-		if n := &inst.outline.nodes[i]; n.descendants > 0 {
-			inst.outlineSetCollapsed(n.key, true)
+		if inst.outline.nodes[i].descendants > 0 {
+			inst.outlineState.SetExpanded(int32(i), false)
 		}
 	}
 }
 
-// syncOutline pushes the host's state into the widget's, which is what makes
-// both survive the next rebuild. The widget's State keys on node indices and
-// this app renumbers them on every edit, so it is written afresh each frame
-// rather than being an authority of its own.
+// syncOutline sets up the widget's state for the frame: the expansion default,
+// and the selection derived from the caret.
 //
-// Selection is derived too: the selected row is whichever node the caret is
-// in, never something the tree remembers. A click moves the caret, and the
-// selection follows from that — one source of truth for "where am I", rather
-// than a highlight that can disagree with the editor.
+// Expansion is not pushed. The hierarchy carries a key column, so the widget
+// files a collapse under slug#ord and it survives the reparse every edit
+// triggers — which is what this app used to keep a parallel map for. Sections
+// default to OPEN, so the zero value is the fully expanded outline the flat
+// list M2 shipped showed, and collapsing is added without taking the old view
+// away from anyone who never uses it.
+//
+// Selection is derived rather than remembered: the selected row is whichever
+// node the caret is in, never something the tree holds on to. A click moves
+// the caret and the selection follows from that — one source of truth for
+// "where am I", rather than a highlight that can disagree with the editor.
 func (inst *App) syncOutline() {
+	// Bound to THIS frame's hierarchy before anything is written, or the
+	// selection below is filed under whatever key the previous parse gave that
+	// index — and on the first frame, under no key at all.
+	inst.outlineState.Bind(inst.outline.tree())
+	inst.outlineState.SetDefaultExpanded(true)
 	sel := int32(-1)
 	for i := range inst.outline.nodes {
-		n := &inst.outline.nodes[i]
-		inst.outlineState.SetExpanded(int32(i), !inst.outlineIsCollapsed(n.key))
-		if sel < 0 && n.slug == inst.caretSlug {
+		if inst.outline.nodes[i].slug == inst.caretSlug {
 			sel = int32(i)
+			break
 		}
 	}
 	if sel < 0 {
@@ -347,14 +341,15 @@ func (inst *App) syncOutline() {
 // already in leaves it collapsed, which is the right answer: it was a
 // deliberate gesture, and nothing has happened since to override it.
 //
-// The ancestors are opened in the HOST's map, not through State.Reveal's own
-// ExpandAncestors. The widget's version is correct and would be undone one
-// frame later by syncOutline, which rewrites every node's expansion from the
-// map; opening them here is what makes the reveal survive.
+// Opening the ancestors is left to the widget, which does it as the first half
+// of the reveal. That used to be impossible here: syncOutline rewrote every
+// node's expansion from a host map on the next frame, so the widget's own
+// ExpandAncestors was undone before it was ever drawn and the ancestors had to
+// be opened in the map instead. With expansion filed under the key column
+// there is no map to lose it to.
 //
-// Reports whether it asked for one. The request itself lands in the widget's
-// State, which has no reader outside the package, so the return value is what
-// a test can hold on to.
+// Reports whether it asked for one, which is also readable afterwards from
+// [tree.State.PendingReveal].
 func (inst *App) outlineReveal() (asked bool) {
 	slug := inst.caretSlug
 	if slug == "" || slug == inst.outlineRevealed {
@@ -365,20 +360,14 @@ func (inst *App) outlineReveal() (asked bool) {
 	if node < 0 {
 		return false
 	}
-	for p := inst.outline.parents[node]; p >= 0; p = inst.outline.parents[p] {
-		inst.outlineSetCollapsed(inst.outline.nodes[p].key, false)
-	}
 	inst.outlineState.Reveal(node)
 	return true
 }
 
-// applyOutline writes a frame's tree interaction back onto the app. The widget
-// has already applied it to its own State; this is what makes it outlive the
-// next rebuild, and what turns a click into a navigation.
+// applyOutline turns a frame's tree interaction into an app change: a click
+// becomes a navigation. Expansion needs nothing — the widget has already
+// applied it to the state that owns it.
 func (inst *App) applyOutline(res tree.Result) {
-	if n := res.Toggled; n >= 0 && int(n) < inst.outline.len() {
-		inst.outlineSetCollapsed(inst.outline.nodes[n].key, !inst.outlineState.IsExpanded(n))
-	}
 	n := res.Clicked
 	if n < 0 || int(n) >= inst.outline.len() {
 		return
@@ -463,7 +452,8 @@ func (inst *App) renderOutline() {
 	inst.applyOutline(res)
 }
 
-// buildOutline rebuilds the hierarchy when the parse behind it has moved.
+// buildOutline rebuilds the hierarchy when the parse behind it has moved, and
+// points the widget's State at the result either way.
 //
 // The gate is the Doc POINTER: syncDoc installs a fresh one whenever the buffer
 // changes and leaves it alone otherwise, so pointer identity is exactly "the
@@ -471,16 +461,21 @@ func (inst *App) renderOutline() {
 // themselves would be the same answer for more work, and rebuilding every frame
 // would put a walk and a map of every heading in the frame budget of a document
 // nobody is editing.
+//
+// The bind is outside the gate and comes first, because everything downstream
+// writes to the State by node index — the collapse-all button, the reveal, the
+// selection — and an index means nothing until the State knows which parse it
+// belongs to. tree.Render binds too, but it runs last.
 func (inst *App) buildOutline() {
-	if inst.outlineDoc == inst.doc {
-		return
+	if inst.outlineDoc != inst.doc {
+		inst.outlineDoc = inst.doc
+		var headings []markdown.HeadingInfo
+		if inst.doc != nil {
+			headings = inst.doc.Headings()
+		}
+		inst.outline.build(headings)
 	}
-	inst.outlineDoc = inst.doc
-	var headings []markdown.HeadingInfo
-	if inst.doc != nil {
-		headings = inst.doc.Headings()
-	}
-	inst.outline.build(headings)
+	inst.outlineState.Bind(inst.outline.tree())
 }
 
 // renderOutlineControls draws the expand/collapse-all pair.
@@ -502,7 +497,7 @@ func (inst *App) renderOutlineControls() {
 		}
 		switch {
 		case expand:
-			clear(inst.outlineCollapsed)
+			inst.outlineState.ExpandAll()
 		case collapse:
 			inst.outlineCollapseAll()
 		}
@@ -517,8 +512,8 @@ func (inst *App) renderOutlineControls() {
 // selectable label senses click-and-drag and is registered after the row's own
 // sense region, so it would sit over it and swallow every click on its rect
 // (ADR-0176 SD7).
-func (inst *App) outlineHeadingCell(node int32) {
-	label := inst.outline.labels[node]
+func (inst *App) outlineHeadingCell(r tree.Row) {
+	label := inst.outline.labels[r.Node]
 	for range c.HoverText(label).KeepIter() {
 		c.Label(label).Selectable(false).Truncate().Send()
 	}
@@ -528,9 +523,9 @@ func (inst *App) outlineHeadingCell(node int32) {
 // nothing at all otherwise — an open section's contents are on screen to be
 // counted, and a number beside every row would be noise in a column this
 // narrow.
-func (inst *App) outlineCountCell(node int32) {
-	n := &inst.outline.nodes[node]
-	if n.descendants == 0 || inst.outlineState.IsExpanded(node) {
+func (inst *App) outlineCountCell(r tree.Row) {
+	n := &inst.outline.nodes[r.Node]
+	if n.descendants == 0 || r.Expanded {
 		return
 	}
 	c.LabelAtoms(c.Atoms().

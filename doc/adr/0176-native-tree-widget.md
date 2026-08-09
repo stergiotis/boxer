@@ -723,6 +723,111 @@ index-based identity is simply one step short of finished. If `Keys` is taken
 up it should land as a further dated entry here recording what shipped; if the
 shape grows past an optional column it wants its own ADR instead.
 
+### 2026-08-09 — `Keys` shipped, with a default the proposal did not have
+
+The `Tree.Keys` column proposed in the entry above is in, along with the four
+smaller items beside it. All four adopters now file expansion under their own
+key and none keeps a parallel map. What follows is what shipped and what the
+building of it found — including one place the shape grew past what that entry
+proposed.
+
+**The proposal was one value short of usable.** `State`'s expansion map meant
+"absent is collapsed", and filing under a key does not change that: a key the
+State has never seen and a key the reader closed are the same absent entry.
+Three of the four adopters are default-OPEN — `schemaview` stored `collapsed`,
+`mdedit` stored `outlineCollapsed`, `fieldview` has a `DefaultOpen` that is
+switchable at runtime — so under `Keys` alone each would have kept its
+inversion and only `configview` would have dropped anything. The column would
+have paid for one caller in four.
+
+Expansion is therefore three-valued now: open, closed, or no record, with
+`State.SetDefaultExpanded` deciding the last. `SetExpanded` drops a record that
+agrees with the default, so the store stays bounded by what the reader changed
+and a later change of default still moves everything untouched — which is what
+`fieldview.DefaultOpen` already promised its callers and now gets from the
+widget instead of from its own map. `ExpandAll` and `CollapseAll` set the
+default and clear the records rather than enumerating nodes, so "expand all"
+covers rows that arrive afterwards; `ExpandAll` lost its `Tree` parameter with
+that.
+
+That is one field and one three-valued map past "an optional column", which the
+entry above said would want its own ADR. It is recorded here instead, on the
+reading that it is the same decision finished rather than a new one — but it is
+a judgement call, and an ADR is the honest alternative if this seam moves again.
+
+**What each adopter dropped, and what stayed.**
+
+| adopter | dropped | kept, and why |
+|---|---|---|
+| `schemaview` | `collapsed`, `setCollapsed`, the expansion loop in `syncNav`, the toggle write-back in `applyNav` | a selection projection: `selection` names a plain column, a section, or a column within one — richer than a node, and set from outside the navigator |
+| `configview` | `expanded`, `setExpanded`, the same two | the same, for `selected`; rewriting it each frame is also what keeps a category row from drawing as selected on the way past its own toggle |
+| `fieldview` | `open`, `isOpen`, `setOpen`, `syncState`, `applyResult` | nothing — it has no selection, so its projection is gone outright |
+| `mdedit` | `outlineCollapsed` and its two helpers, the expansion loop in `syncOutline`, the toggle write-back, and the ancestor walk in `outlineReveal` | the caret-derived selection, which is a projection of the editor rather than of identity |
+
+So the boilerplate the entry above counted did not all have one cause. The
+expansion half was about identity and is gone. The selection half is about a
+host whose selection is a richer thing than a node, and it stays — three of the
+four still write `SelectOnly` each frame, and that is not a gap.
+
+**`State.Reveal`'s quiet cancellation dissolves.** The entry above records that
+`Reveal`'s ancestor-opening is undone by a host that rewrites expansion each
+frame. With expansion filed under the key there is nothing to rewrite, so the
+naive composition is now the correct one: `mdedit`'s `outlineReveal` deleted its
+own parent walk and just asks. Both doc comments say so, which was the minimum
+that entry asked for.
+
+**A binding is now something a host has to remember, which is the new sharp
+edge.** `State` learns its key column from the `Tree` that `Flatten` — and
+therefore `Render` — is called with. A host that rebuilds and then writes to
+the State by index before the next render is writing under the key the previous
+build gave that index. All three navigators do exactly that, to project their
+selection, so all three call `State.Bind` immediately after building;
+`mdedit`'s is in `buildOutline` itself, because its collapse-all button and its
+reveal both run before the sync.
+
+The first-frame case of this is worse and is handled in the widget: a fresh
+State seeded before any render has its entries filed by index, and the binding
+would then hide them permanently. `Bind` adopts index-filed entries on its
+first binding, which is the one frame it can happen on. The between-frames case
+cannot be papered over the same way — an index means something either way —
+and is left to the doc.
+
+**The four smaller items shipped as proposed.** `Column.Cell` takes the `Row`
+rather than the node (`mdedit`'s hidden-heading count now reads `r.Expanded`
+instead of reaching back into the `State` mid-render); its doc gained the
+truncation-versus-trailing-content trap that cost `schemaview` its long names;
+`State.PendingReveal` makes a pending reveal observable, and `mdedit`'s reveal
+test now asserts on it rather than on a map; and `MaxHeight`'s doc leads with
+the pane probe, which is what all four do.
+
+**Not done: duplicate keys are documented, not detected.** Two nodes sharing a
+key read as one node to everything in `State`. Catching it means building a map
+of every key on every frame, which is a permanent per-frame cost for a host bug
+that shows up the first time the two rows are opened. `Tree.Keys` says so.
+
+**Surfaces.** Two exported Go signatures changed — `Column.Cell func(node
+int32)` to `func(r Row)`, and `ExpandAll(Tree)` to `ExpandAll()`. Both are
+compile-time breaks with no downstream module compiling against the package;
+every in-repo caller moved in the same change. `Tree.Keys`,
+`State.SetDefaultExpanded`, `State.Bind` and `State.PendingReveal` are
+additive, and a host that supplies no `Keys` behaves exactly as before.
+
+**Verification.** `go test` covers the widget's own keyed rebuild — expansion,
+selection, cursor and reveal following their keys across a filter that
+renumbers every node — the default's three-valued behaviour, and the first-bind
+adoption. Two adopters assert the same property through their real builders:
+`schemaview`'s filter keystroke and `mdedit`'s heading insert. The headless
+scene passes unchanged, and the demo's tree now carries a `Keys` column so the
+scene drives the keyed render path rather than only the unkeyed one; its
+capture still shows a selection outline closed on all four sides.
+
+What no test here reaches is a KEYED adopter through a real render — the scene
+drives the demo, whose tree never rebuilds, so nothing exercises "collapse a
+section, type in the filter, watch it stay collapsed" end to end. That wants a
+second scene with an `Nth` anchor to tell the two filter boxes apart, and it is
+not built. The unit tests cover each half of it and the render path is
+identical either way, which is why this is recorded rather than blocking.
+
 ## References
 
 - [ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md) — the keyboard capture primitive SD8 defers to; SD2's cursor is its hook in this widget.

@@ -44,12 +44,6 @@ const (
 // navNode is the per-node metadata the navigator keeps alongside the columnar
 // [tree.Tree]. One entry per node, indexed the same way.
 type navNode struct {
-	// key identifies the node across frames. The tree widget keys its state on
-	// node indices, which is the only identity a columnar input has — but this
-	// navigator rebuilds its hierarchy on every filter keystroke, so an index
-	// means a different node one frame to the next. The key is what the
-	// Model's own collapse state is filed under; see [Model.syncNav].
-	key string
 	// glyph is the section row's category mark (◆ / ◇ / ❖), or "" on a column
 	// row. It rides beside the label rather than inside it because it has to
 	// be drawn in a DIFFERENT FACE — see [glyphPlainItemType].
@@ -80,19 +74,21 @@ type navNode struct {
 func (m *Model) buildNav() {
 	labels := m.navLabels[:0]
 	parents := m.navParents[:0]
+	keys := m.navKeys[:0]
 	nodes := m.navNodes[:0]
 
 	add := func(parent int32, key, glyph, label, typ string, sel selection) (node int32) {
 		node = int32(len(labels))
 		labels = append(labels, label)
 		parents = append(parents, parent)
-		nodes = append(nodes, navNode{key: key, glyph: glyph, typ: typ, sel: sel})
+		keys = append(keys, key)
+		nodes = append(nodes, navNode{glyph: glyph, typ: typ, sel: sel})
 		return
 	}
 
 	t := m.Table
 	if t == nil {
-		m.navLabels, m.navParents, m.navNodes = labels, parents, nodes
+		m.navLabels, m.navParents, m.navKeys, m.navNodes = labels, parents, keys, nodes
 		return
 	}
 
@@ -148,36 +144,43 @@ func (m *Model) buildNav() {
 		}
 	}
 
-	m.navLabels, m.navParents, m.navNodes = labels, parents, nodes
+	m.navLabels, m.navParents, m.navKeys, m.navNodes = labels, parents, keys, nodes
 }
 
 // navTree is the columnar view of the last [Model.buildNav], borrowed: valid
-// until the next build.
+// until the next build. The key column is what carries a collapse across one.
 func (m *Model) navTree() tree.Tree {
-	return tree.Tree{Labels: m.navLabels, Parents: m.navParents}
+	return tree.Tree{Labels: m.navLabels, Parents: m.navParents, Keys: m.navKeys}
 }
 
-// syncNav projects the Model's own state onto the tree widget's, which is what
-// makes the Model the single authority and the widget's [tree.State] a
-// per-frame scratch.
+// syncNav sets up the widget's state for the frame: the expansion default, and
+// the selection projected from the Model's own [selection].
 //
-// It has to be a projection rather than a hand-over because the two key on
-// different things. The widget keys on node indices; the Model keys expansion
-// on [navNode.key] and selection on a [selection], both of which survive the
-// rebuild that every filter keystroke triggers. Handing the widget's state
-// authority instead would mean a section collapsed before typing "id" reopens
-// as whichever section inherited its index after.
+// Expansion is not projected. The hierarchy carries a key column, so the
+// widget files a collapse under [navNode.key] and it survives the rebuild
+// every filter keystroke triggers — which is what the Model used to keep a
+// parallel map for. What it does need saying is the polarity: sections start
+// OPEN, as the CollapsingHeader navigator's DefaultOpen(true) did, so only
+// what the reader closed is stored.
 //
-// It also settles what a click on a row with no [selection] does: nothing.
-// Render applies its own selection after the row loop, so the widget's stray
-// selection is overwritten here before it is ever drawn.
+// The selection stays a projection because [selection] is the richer thing —
+// it names a plain column, a section, or a column within one, which is what
+// the detail pane reads, and the host sets it from elsewhere (a fixture swap
+// resets it). Overwriting the widget's selection here also settles what a
+// click on a row with no selection does: nothing is drawn from it, because
+// Render applies its own selection after the row loop and this runs before the
+// next one.
 func (m *Model) syncNav() {
+	// Bound to THIS frame's hierarchy before anything is written, or the
+	// selection below is filed under whatever key the previous build gave that
+	// index — and on the first frame, under no key at all.
+	m.navState.Bind(m.navTree())
+	m.navState.SetDefaultExpanded(true)
 	sel := int32(-1)
 	for i := range m.navNodes {
-		n := int32(i)
-		m.navState.SetExpanded(n, !m.collapsed[m.navNodes[i].key])
 		if m.navNodes[i].sel.kind != selNone && m.navNodes[i].sel == m.sel {
-			sel = n
+			sel = int32(i)
+			break
 		}
 	}
 	if sel < 0 {
@@ -187,13 +190,9 @@ func (m *Model) syncNav() {
 	m.navState.SelectOnly(sel)
 }
 
-// applyNav writes a frame's tree interaction back onto the Model's own state.
-// The widget has already applied both to its [tree.State]; this is what makes
-// them outlive the next rebuild.
+// applyNav turns a frame's tree interaction into a Model change. Expansion
+// needs nothing: the widget has already applied it to the state that owns it.
 func (m *Model) applyNav(res tree.Result) {
-	if n := res.Toggled; n >= 0 && int(n) < len(m.navNodes) {
-		m.setCollapsed(m.navNodes[n].key, !m.navState.IsExpanded(n))
-	}
 	n := res.Clicked
 	if n < 0 || int(n) >= len(m.navNodes) {
 		return
@@ -208,21 +207,6 @@ func (m *Model) applyNav(res tree.Result) {
 	// the widget already toggled this row on the same frame, so a double-click
 	// nets two toggles rather than three.
 	if res.Toggled < 0 {
-		m.setCollapsed(m.navNodes[n].key, m.navState.IsExpanded(n))
+		m.navState.ToggleExpanded(n)
 	}
-}
-
-// setCollapsed records a section's closed state. Open is the default, so an
-// open section is an absent entry rather than a false one — which keeps the
-// map bounded by what the reader actually closed, and means a section that
-// disappears under a filter and comes back is still open.
-func (m *Model) setCollapsed(key string, closed bool) {
-	if !closed {
-		delete(m.collapsed, key)
-		return
-	}
-	if m.collapsed == nil {
-		m.collapsed = make(map[string]bool, 8)
-	}
-	m.collapsed[key] = true
 }

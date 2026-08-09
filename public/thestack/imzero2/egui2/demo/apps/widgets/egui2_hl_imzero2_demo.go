@@ -63,7 +63,7 @@ func init() {
 				dropDownSelected: -1,
 				treeSelection:    "(none)",
 			}
-			st.treeState.ExpandAll(imzero2DemoTree)
+			st.treeState.ExpandAll()
 			state = st
 			return
 		},

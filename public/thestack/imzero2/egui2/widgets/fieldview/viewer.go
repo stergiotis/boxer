@@ -153,25 +153,27 @@ func (inst Renderer) Render(state *State, fields []Field) {
 		state = &State{}
 	}
 	inst.build(state, fields)
-	inst.syncState(state)
-	res := tree.Render(tree.Input{
+	// DefaultOpen is a default and not a seed, so it is pushed every frame
+	// rather than at construction: changing it still moves every container the
+	// reader has not touched, which is what it promises.
+	state.st.SetDefaultExpanded(inst.defaultOpen)
+	tree.Render(tree.Input{
 		Ids:      inst.ids,
 		ScopeKey: inst.idPrefix,
-		Tree:     tree.Tree{Labels: state.labels, Parents: state.parents},
+		Tree:     state.tree(),
 		State:    &state.st,
 		Indent:   inst.indent,
 		Outline: tree.Column{
 			Width:     inst.nameWidth,
 			Resizable: true,
-			Cell:      func(node int32) { inst.nameCell(state, node) },
+			Cell:      func(r tree.Row) { inst.nameCell(state, r.Node) },
 		},
 		Columns: []tree.Column{{
 			Width: inst.valueWidth,
-			Cell:  func(node int32) { inst.valueCell(state, node) },
+			Cell:  func(r tree.Row) { inst.valueCell(state, r.Node) },
 		}},
 		MaxHeight: inst.maxHeight,
 	})
-	inst.applyResult(state, res)
 }
 
 // nameCell draws the field's name and, when ShowKind is on, its typed-slot
