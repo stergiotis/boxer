@@ -122,8 +122,15 @@ events land in a per-id register that Go reads back by widget handle.
   This mirrors ADR-0140's `.CaptureScroll()` zeroing `smooth_scroll_delta`. A
   widget that captures nothing pays nothing and changes no behaviour.
 
-  Implementation showed this is only half the fence, and the missing half is
-  not optional. Consuming stops *other widgets* from acting on the event, but
+  The ScrollArea collision named above does not exist, and M2 found it by
+  trying to measure it: egui 0.35's `scroll_area.rs` contains no key handling
+  at all, so a plain `ScrollArea` never scrolls on ↑/↓/PageUp/PageDown and
+  never could have competed for them. `scroll_to_me` is public API that egui
+  core does not call on focus change either. The sentence above described a
+  plausible collision rather than an observed one.
+
+  Implementation showed the rest is only half the fence, and the missing half
+  is not optional. Consuming stops *other widgets* from acting on the event, but
   it does not stop **egui's own focus navigation**: `Focus::begin_pass` latches
   a focus direction from the raw input, before any widget runs, for unmodified
   arrows / Tab / Escape. Removing the event from the queue in apply code
@@ -237,9 +244,16 @@ events land in a per-id register that Go reads back by widget handle.
   panel B a mask and panel A none, so the fencing is a visible contrast rather
   than a claim; a headless trace asserts ArrowDown, ArrowUp and Shift+ArrowDown
   arrive in Go with the modifier reported alongside.
-- **M2 — Fencing verification.** A demo placing a capturing widget inside a
-  `ScrollArea` and asserting ↑/↓ do not scroll the parent — the observable
-  SD2 exists for.
+- **M2 — Fencing verification.** ✓ A demo placing a capturing widget inside a
+  `ScrollArea`, measuring what the arrows actually do to it. The milestone as
+  written asked to assert ↑/↓ do not scroll the parent; a ScrollArea does not
+  scroll on arrows in the first place (see SD2), so asserting only that would
+  have passed without the feature and proved nothing. The demo therefore
+  reports focus retention and scroll offset SEPARATELY, and carries a
+  non-capturing panel as the control: same keys, same ScrollArea, differing
+  only in the mask. Measured — capturing panel keeps focus across three
+  arrows with `scrollY=0` and three captures; the unmasked one loses focus to
+  a single arrow with none.
 - **M3 — Tree adoption.** ADR-0176's widget moves its cursor from captured
   keys, with `ScrollToRow` following it.
 
