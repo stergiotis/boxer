@@ -197,6 +197,17 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 			CodeClientRust(rustClientCode("sense_click = true;\n")).EndMethod().
 			BeginMethod("senseDrag").
 			CodeClientRust(rustClientCode("sense_drag = true;\n")).EndMethod().
+			// focusable — ADR-0177 SD8. Registers a post-body interact rect
+			// under a salted focus id, so egui knows this Frame as something
+			// that can hold keyboard focus: clicking it focuses it, Tab reaches
+			// it, and HasFocus() reads back true.
+			//
+			// A separate registration from senseClick's, deliberately. That one
+			// is the Frame's own click response and a caller may not want it;
+			// focus is a different opt-in, and sharing one id would mean a
+			// widget could not have one without the other.
+			BeginMethod("focusable").
+			CodeClientRust(rustClientCode("focusable = true;\n")).EndMethod().
 			// hoverCursorPointer changes the OS cursor to a pointing
 			// hand whenever the pointer is over this Frame — the
 			// universal "this is clickable" cue. Only meaningful when
@@ -230,7 +241,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 		WithSettingBlockIterator(true).
 		WithSettingImmediate(true).
 		WithSettingRetained(true).
-		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\n")).
+		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\n")).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -251,6 +262,35 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 							resp2.populate(&response);
 						} else {
 							resp2.populate(&r2.response);
+						}
+						// ADR-0177 SD8: the focus registration is its own
+						// interact, after the body, so it sits ABOVE the content
+						// in hit-test order and a click anywhere in the Frame
+						// reaches it. request_focus on click rather than relying
+						// on egui to focus clickables, so the behaviour does not
+						// depend on what the sense flags happen to say.
+						//
+						// The id expression MUST match focusIdExpr() in
+						// egui2_definition_d_keys.go — requestFocus asks for
+						// exactly this id, and a mismatch is silent (SD7).
+						if focusable {
+							let fr = ui.interact(
+								r2.response.rect,
+								egui::Id::new({{Id}}.value()).with("imzero-focus"),
+								egui::Sense::click(),
+							);
+							if fr.clicked() {
+								fr.request_focus();
+							}
+							if fr.has_focus() {
+								resp2 |= ResponseFlags::HAS_FOCUS;
+							}
+							if fr.gained_focus() {
+								resp2 |= ResponseFlags::GAINED_FOCUS;
+							}
+							if fr.lost_focus() {
+								resp2 |= ResponseFlags::LOST_FOCUS;
+							}
 						}
 						self.r7_push({{Id}}.value(), resp2);
 					} else {

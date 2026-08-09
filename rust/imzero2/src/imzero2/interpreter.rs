@@ -6511,6 +6511,7 @@ self.apply_widget(w,u,f,Some(i));
                 let mut sense_click = false;
                 let mut sense_drag = false;
                 let mut hover_cursor_pointer = false;
+                let mut focusable = false;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(FrameBuilderMethodId::from_repr)?;
@@ -6679,6 +6680,11 @@ self.apply_widget(w,u,f,Some(i));
                             puffin::profile_scope!("match FrameBuilderMethodId::SenseDrag");
                             sense_drag = true;
                         }
+                        FrameBuilderMethodId::Focusable => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match FrameBuilderMethodId::Focusable");
+                            focusable = true;
+                        }
                         FrameBuilderMethodId::HoverCursorPointer => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!(
@@ -6773,6 +6779,35 @@ self.apply_widget(w,u,f,Some(i));
                         resp2.populate(&response);
                     } else {
                         resp2.populate(&r2.response);
+                    }
+                    // ADR-0177 SD8: the focus registration is its own
+                    // interact, after the body, so it sits ABOVE the content
+                    // in hit-test order and a click anywhere in the Frame
+                    // reaches it. request_focus on click rather than relying
+                    // on egui to focus clickables, so the behaviour does not
+                    // depend on what the sense flags happen to say.
+                    //
+                    // The id expression MUST match focusIdExpr() in
+                    // egui2_definition_d_keys.go — requestFocus asks for
+                    // exactly this id, and a mismatch is silent (SD7).
+                    if focusable {
+                        let fr = ui.interact(
+                            r2.response.rect,
+                            egui::Id::new(i.value()).with("imzero-focus"),
+                            egui::Sense::click(),
+                        );
+                        if fr.clicked() {
+                            fr.request_focus();
+                        }
+                        if fr.has_focus() {
+                            resp2 |= ResponseFlags::HAS_FOCUS;
+                        }
+                        if fr.gained_focus() {
+                            resp2 |= ResponseFlags::GAINED_FOCUS;
+                        }
+                        if fr.lost_focus() {
+                            resp2 |= ResponseFlags::LOST_FOCUS;
+                        }
                     }
                     self.r7_push(i.value(), resp2);
                 } else {
@@ -10101,6 +10136,20 @@ self.apply_widget(w,u,f,Some(i));
                     self.r10_push(i.value(), true);
                 }
             }
+            FuncProcId::RequestFocus => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::RequestFocus");
+                // arguments
+                #[allow(unused_mut)]
+                let mut id = self.io.read_plain_u64()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                c.memory_mut(|m| m.request_focus(egui::Id::new(id).with("imzero-focus")));
+            }
             FuncProcId::RequestRepaint => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::RequestRepaint");
@@ -11424,6 +11473,20 @@ let mut w = // generating location: egui2_definition_templating.go:67 github.com
                     self.end_consume_message()?;
                 }
                 // apply
+            }
+            FuncProcId::SurrenderFocus => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::SurrenderFocus");
+                // arguments
+                #[allow(unused_mut)]
+                let mut id = self.io.read_plain_u64()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                c.memory_mut(|m| m.surrender_focus(egui::Id::new(id).with("imzero-focus")));
             }
             FuncProcId::Table => {
                 #[cfg(feature = "puffin")]

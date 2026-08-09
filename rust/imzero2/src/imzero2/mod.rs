@@ -27,6 +27,8 @@ pub mod inputmap;
 #[cfg(feature = "headless")]
 pub mod inputproto;
 pub mod interpreter;
+/// ADR-0177 key vocabulary — generated from the Go table, see keycodes.rs.
+pub mod keycodes;
 #[cfg(feature = "headless")]
 pub mod meshlane;
 #[cfg(feature = "headless")]

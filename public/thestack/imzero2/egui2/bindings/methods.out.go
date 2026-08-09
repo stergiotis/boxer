@@ -1449,6 +1449,13 @@ func (inst FrameFluid) SenseDrag() FrameFluid {
 	return inst
 }
 
+func (inst FrameFluid) Focusable() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdFocusable))
+
+	return inst
+}
+
 func (inst FrameFluid) HoverCursorPointer() FrameFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(FrameMethodIdHoverCursorPointer))

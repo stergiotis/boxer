@@ -1468,6 +1468,14 @@ func RadioButton(i WidgetIdCreatorI, atoms typed.RetainedFffiHolderTyped[AtomsS]
 	return
 }
 
+func RequestFocus(id uint64) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdRequestFocus))
+	r.WriteUint64(id)
+
+	r.SendIntermediate()
+}
+
 func RequestRepaint() {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdRequestRepaint))
@@ -1794,6 +1802,14 @@ func StyledSections() (inst StyledSectionsFluid) {
 	}
 
 	return
+}
+
+func SurrenderFocus(id uint64) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdSurrenderFocus))
+	r.WriteUint64(id)
+
+	r.SendIntermediate()
 }
 
 func Table(i WidgetIdCreatorI, rowHeight float32, numRows uint64) (inst TableFluid) {

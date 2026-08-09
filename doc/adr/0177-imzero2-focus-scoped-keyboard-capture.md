@@ -162,6 +162,27 @@ events land in a per-id register that Go reads back by widget handle.
   registered silently does nothing. It therefore works only against a widget
   registered through SD8's interact rect.
 
+  Implementation found a second silent-failure path in the same family, and it
+  cost more to find than the one above. The op must reach memory through the
+  interpreter's `egui::Context`, **not** the outer `Ui`: focus lives in
+  `Memory`, which hangs off the Context, so a `Ui` is not needed — and reaching
+  it as `ui.ctx()` means writing the body under `if u.is_some()`, which turns
+  every dispatch where the interpreter holds no `Ui` into a no-op with nothing
+  logged. `interpret_inner`'s Context parameter is never optional, so that form
+  cannot be skipped. Both spellings compile, vet clean, and differ only in
+  whether focus ever moves.
+
+  A consequence for adopters: **the `GAINED_FOCUS` / `LOST_FOCUS` edges are not
+  reliable when focus moves programmatically.** `requestFocus` is applied at
+  the end of a pass, after the widget has already run, and egui snapshots
+  `id_previous_frame` from the focus state at the end of that same pass — so by
+  the time the widget next runs it "always had" focus and `gained_focus()` is
+  false. Clicking does produce the edge, because that request happens during
+  the widget's own interaction. A consumer that keys off the edge flags
+  therefore works when a user clicks and silently misses every code-driven
+  focus change. Derive transitions from the `HAS_FOCUS` level instead; the
+  `focus` demo does.
+
 - **SD8 — Focusability is opt-in via an overlay interact rect.** A widget that
   wants focus registers `ui.interact(rect, {{Id}}, Sense::click())` after its
   body, the same post-body overlay pattern `HoverText` and the `Frame`
@@ -186,9 +207,13 @@ events land in a per-id register that Go reads back by widget handle.
 
 ### Milestones
 
-- **M0 — Key vocabulary + `requestFocus` + focusable interact rect.** SD4's
+- **M0 — Key vocabulary + `requestFocus` + focusable interact rect.** ✓ SD4's
   generated table, SD7's op, SD8's `.Focusable()` method. No register yet;
   verifiable on its own by focusing a widget and reading `HasFocus()` back.
+  Shipped with `surrenderFocus` alongside `requestFocus` — without it a widget
+  that takes focus on click cannot give it back on Escape except by requesting
+  focus on some other id it may not have. Demo `focus`; a headless trace
+  asserts click-to-focus, `RequestFocus` and `SurrenderFocus`.
 - **M1 — R26 capture register + fetcher + `GetCapturedKeys`.** The capture
   path end to end, with a gallery demo that echoes captured keys.
 - **M2 — Fencing verification.** A demo placing a capturing widget inside a

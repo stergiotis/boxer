@@ -15,6 +15,7 @@ func Definitions() []ir.NodeI {
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsText(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsColor(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.ProceduralNode, ir.NodeI](definitionsWidgetProc(), nil),
+		slices2.CopySliceInterfaceCastable[*ir.ProceduralNode, ir.NodeI](definitionsKeys(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsEvaluated(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsRegistered(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsTableRegistered(), nil),
