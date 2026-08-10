@@ -695,3 +695,68 @@ template:
   whatever a server is already carrying — unlike its predecessor, which left
   16 to be dropped by hand. Detection is still absent; see README ledger
   row 7.
+
+## 2026-08-10 — recovering a side probe of per-column codecs, run 2026-08-06 and never written down — two of its six columns turn out to be too sparse to read
+
+- **Provenance, and why to distrust this entry.** This is not a run of the
+  trial protocol. On 2026-08-06 23:04–23:06 a `codecprobe` database was built
+  by hand through `clickhouse-client`, storing single columns of
+  `jsonbench_j_10m.json` under 19 different CODEC choices to compare
+  compressed size. No run directory, no script, no environment record. It is
+  reconstructed here from `system.query_log` and `system.tables` because the
+  database is being dropped and the numbers exist nowhere else. **It is not
+  reproducible**: the source dataset `jsonbench_j_10m` has already been
+  deleted, so nothing here can be re-checked.
+- **Protocol, as recovered.** Per variant, one
+  `CREATE TABLE codecprobe.<name> (v <type> CODEC(<codec>)) ENGINE=MergeTree
+  ORDER BY tuple()` followed by
+  `INSERT INTO codecprobe.<name> SELECT <column> FROM jsonbench_j_10m.json`.
+  All 19 tables hold the same 9 999 994 rows. Columns probed:
+  `tv:int64:value:val:i64:0:0:0:0::`, `tv:float64:value:…f64…`,
+  `tv:bool:value:…b…`, `tv:string:value:…s…`, `id:blake3hash:y:g:0:0:`, and
+  that hash truncated with `substring(…, 1, 16)`.
+- **Two columns carry almost no data, and their rows mean nothing.** At the
+  10M tier `f64` and `bool` occupy 0.036 and 0.037 bytes/row uncompressed —
+  those sections are all but empty in this dataset. That is why FPC(12),
+  Gorilla and plain ZSTD(3) come out **byte-identical at 56 898** on the
+  float column: the specialised stage is not being exercised, ZSTD is
+  absorbing a near-constant column. Read no codec preference from those two
+  rows. The remaining four columns hold 5.9–115.6 bytes/row and are worth
+  something.
+
+  | column | B/row | codec | bytes | vs baseline |
+  |---|---:|---|---:|---:|
+  | `int64` | 5.94 | *(none)* | 59 433 386 | 1.000 |
+  | | | T64, LZ4 | 40 055 704 | 0.674 |
+  | | | T64, ZSTD(3) | 30 933 310 | 0.520 |
+  | | | ZSTD(3) | 30 514 717 | 0.513 |
+  | | | Delta, ZSTD(3) | 26 219 413 | 0.441 |
+  | | | **DoubleDelta, ZSTD(3)** | **25 146 863** | **0.423** |
+  | `blake3hash` | 40.01 | NONE | 400 071 808 | 1.000 |
+  | | | LZ4 | 321 657 448 | 0.804 |
+  | | | ZSTD(3) | 320 119 605 | 0.800 |
+  | hash\[1..16] | 24.01 | NONE | 240 071 923 | 0.600 |
+  | | | ZSTD(3) | 160 116 386 | 0.400 |
+  | `string` | 115.61 | ZSTD(3) | 1 156 144 340 | 1.000 |
+  | | | ZSTD(12) | 1 110 379 092 | 0.960 |
+  | `float64` | 0.04 | — | *too sparse to read* | — |
+  | `bool` | 0.04 | — | *too sparse to read* | — |
+
+- **What the four readable columns support.** On integers the ordering is
+  DoubleDelta < Delta < plain ZSTD(3) < T64 — and T64, the codec whose name
+  suggests it is *the* integer specialist, is the worst of the compressed
+  variants here, losing to plain ZSTD(3) at both LZ4 and ZSTD(3) backing.
+  On a blake3 hash no codec does much (0.80 at best), which is what
+  incompressible-by-construction should look like; halving the identifier
+  first saves more (0.60) than any codec applied to the full one, and the two
+  compose (0.40). On strings, ZSTD(12) returns **4 %** over ZSTD(3).
+- **One live decision this touches.** ADR-0168 §SD4 assigns ZSTD(12) to
+  `factsschema`'s `textArray` on the argument that prose has redundancy worth
+  the heavier setting. The 4 % here is the only measurement of that split the
+  trial holds, and it is against JSONBench's strings, not prose — so it
+  neither confirms nor refutes the ADR's reasoning. Recorded so the next
+  person weighing that codec knows a number exists and knows what it is not.
+- **Solution size:** this entry; no code touched.
+- **Results:** none — the probe database was dropped after this entry was
+  written. The tables above are the whole surviving record.
+- **Run dir:** none. See the provenance caveat.
