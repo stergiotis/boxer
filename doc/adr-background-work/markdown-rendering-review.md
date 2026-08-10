@@ -58,7 +58,7 @@ every one of these was findable only by reading Rust or driving a live window.
 | C4 | **HTML blocks delete their prose.** `<div>…text…</div>` vanishes wholesale — segments drop from 3 to 2 and the inner text is gone **[probe][live]**. Inline raw HTML degrades better: tags are dropped, inner text survives unstyled **[live]**. The silent drop is a recorded decision (`lowerBlock` comment: an honest marker "is left for its own change"). | live + probe | `visitor.go` `lowerBlock`, `emitInline` default |
 | C5 | **`![[image.png|300]]` (Obsidian size syntax) breaks image detection.** The embed parser splits only on `#`, so the pipe stays in `Target`, the `.png` suffix match fails, and the embed renders as a 📄 note link instead of an image. Common in real vaults. | code | `ext/embed/parser.go:47-58`, `resolver/resolver.go:89-97` |
 | C6 | **`[[#heading]]` (same-page link) renders a stray leading "> ".** `DisplayText` has no empty-page branch (`s = Page + " > " + Heading`). URL becomes `/#fragment`. | code | `ext/wikilink/ast.go:40-49` |
-| C7 | **An image inside a link renders as a text link, never as an image** (`[![alt](img)](url)` → link labelled "alt") **[probe]**. Consistent with cells/labels flattening, but undocumented. | probe | `visitor.go` `emitInline` `*ast.Link` case |
+| C7 | **An image inside a link renders as a text link, never as an image** (`[![alt](#img)](#url)` → link labelled "alt") **[probe]**. Consistent with cells/labels flattening, but undocumented. | probe | `visitor.go` `emitInline` `*ast.Link` case |
 | C8 | **Multi-line `%%` comments are not comments.** Only single-line pairs strip; a block `%%`…`%%` emits its content verbatim — surprising for anyone using Obsidian block comments to hide notes. Known limitation in the skill doc; restated here because the failure mode is *leaking* text rather than losing it. | code + pinned (single-line only) | `ext/comment/parser.go` |
 | C9 | Malformed frontmatter YAML leaks the raw YAML block plus a literal `<!-- <yaml error> -->` marker into the rendered flow (goldmark-meta behaviour on its error path). Untested anywhere. | code | goldmark-meta `meta.go:155-157,243-248` |
 
@@ -101,7 +101,7 @@ class that produced the tag-deletion incident.
    The system's failure mode for *any* future parser feature is invisible
    content loss, which is the worst available default for a reading surface.
 2. **Hyperlink runs discard inherited style.** `emitLink` takes no
-   `parentStyle`; `**a [link](u) b**` renders the link unstyled between bold
+   `parentStyle`; `**a [link](#u) b**` renders the link unstyled between bold
    halves **[live]**. A primitive constraint (Hyperlink takes a plain label),
    but nothing records it.
 3. **Three independent readings of markdown syntax exist** — goldmark (the
