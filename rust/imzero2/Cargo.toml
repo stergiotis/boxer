@@ -100,7 +100,7 @@ eframe = { version = ">=0.35.0", optional = true, default-features = false, feat
 # Headless host (ADR-0024 SD2): drives egui_wgpu::Renderer directly against
 # an offscreen texture; wgpu with default features so the native backends
 # (vulkan/gles) are present even when eframe is compiled out.
-wgpu = { version = "29.0.1", optional = true }
+wgpu = { version = "30.0.0", optional = true }
 egui-wgpu = { version = "0.35.0", optional = true }
 pollster = { version = "0.4", optional = true }
 # ADR-0024 SD4/SD6/SD7: WebSocket carrier + protobuf wire. The proto
@@ -114,7 +114,7 @@ futures-util = { version = "0.3", optional = true, default-features = false, fea
 log = "0.4.27"
 binary_rw = "4.1.0"
 thiserror = "2.0.17"
-strum = { version = "0.27", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 bitflags = "2.9.4"
 roaring = "0.11.2"
 tracing = "0.1.43"
@@ -132,7 +132,7 @@ mimalloc = "0.1.48"
 dhat = { version = "0.3.3", optional = true }
 puffin_egui = "0.30.0"
 memmap2 = "0.9.9"
-rand = "0.9.2"
+rand = "0.10.2"
 blake3 = "1.8.2"
 egui_extras = { version = "0.35.0", features = ["default", "datepicker", "serde"] }
 jiff = { version = "0.2", default-features = false, features = ["std"] }
@@ -140,7 +140,7 @@ egui_table = "0.9.0"
 egui_dock = "0.20"
 egui_graphs = { version = "0.31", features = ["events"] }
 petgraph = { version = "0.8", default-features = false, features = ["stable_graph"] }
-png = "0.17"
+png = "0.18"
 walkers = "0.56"
 # Tile downloads for a custom .TileUrl source that needs TLS configuration
 # walkers cannot express (imzero2::walkers_tiles). Both crates are already in
@@ -162,7 +162,7 @@ h3o = { version = "0.10", features = ["geo"] }
 # Concave-polygon fill for the painter (paintPolygonFilled.Concave()):
 # ear-clip triangulation → egui::Shape::Mesh, since epaint itself fills
 # only convex outlines.
-earcutr = "0.4"
+earcutr = "0.5"
 egui-snarl = "0.11.0"
 
 # IDS token layer (ADR-0029). Per-app-startup egui::Style overlay; no widgets.

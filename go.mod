@@ -15,7 +15,7 @@ require (
 	github.com/bufbuild/protocompile v0.14.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cockroachdb/pebble v1.1.5
-	github.com/dgraph-io/badger/v4 v4.9.4
+	github.com/dgraph-io/badger/v4 v4.9.5
 	github.com/dim13/colormap v1.1.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/ebitengine/purego v0.10.2
@@ -35,7 +35,7 @@ require (
 	github.com/hishamk/statetrooper v0.1.4
 	github.com/klauspost/compress v1.19.1
 	github.com/matoous/go-nanoid/v2 v2.1.0
-	github.com/mattn/go-isatty v0.0.23
+	github.com/mattn/go-isatty v0.0.24
 	github.com/nao1215/markdown v0.13.0
 	github.com/nats-io/nats.go v1.52.0
 	github.com/nozzle/umap-go v0.0.0-20260301204052-79bd84384eff
@@ -52,7 +52,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasttemplate v1.2.2
 	github.com/yassinebenaid/godump v0.11.1
-	github.com/yuin/goldmark v1.8.4
+	github.com/yuin/goldmark v1.8.5
 	github.com/yuin/goldmark-meta v1.1.0
 	github.com/zeebo/xxh3 v1.1.0
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
