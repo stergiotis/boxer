@@ -183,10 +183,16 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		}
 		comps = append(comps, sc)
 	}
-	// Components must own disjoint sections: membership ids are assigned
-	// per kind (each numbering from 1), so two kinds writing the same
-	// section would alias each other's memberships — the presence-gated
-	// decode and the baked Scan filters would silently cross-read them.
+	// Components must bind disjoint sections within one generated store —
+	// a precondition of this generator, not a component-model rule: leeway
+	// components may share sections and slots (ADR-0146 D5). This store
+	// drives marshallgen's NoOpWrapper target, which numbers membership
+	// ids per plan (each kind from 1), so two kinds' distinct memberships
+	// can carry the same wire id — under a shared section the
+	// presence-gated decode and the baked Scan filters would silently
+	// cross-read. ADR-0105 D2 records the lift: a caller-supplied
+	// membership-id override, with this gate relaxed to id-level
+	// disjointness.
 	sectionOwner := map[string]string{}
 	for _, sc := range comps {
 		for _, g := range sc.groups {

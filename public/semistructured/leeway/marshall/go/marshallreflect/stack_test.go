@@ -156,9 +156,10 @@ func TestRowComposer_SingleRow_PlainPlusSections(t *testing.T) {
 // A's sections, AddSections with DTO-B's row adds B's sections, then CommitRow
 // closes. Order of section emit follows call order.
 //
-// The two DTOs must target DISJOINT sections. ADR-0070 D3 claimed they could
-// share one; no generated DML supports that, and ADR-0146 D6 retracted it —
-// see TestRowComposer_RejectsSectionOverlap.
+// The two DTOs here happen to target disjoint sections; they would not have
+// to. Sharing a section is supported — contributions merge into one buffered
+// frame per section (ADR-0146 D6, which retracted ADR-0070 D3's two-visit
+// shape) — see TestRowComposer_SharedSectionSharesOneFrame.
 func TestRowComposer_Stacked_TwoDTOsOneRow(t *testing.T) {
 	dml := &recordingDML{}
 	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
@@ -333,9 +334,9 @@ func TestRowComposer_SectionsWrittenAtCommit(t *testing.T) {
 	require.Contains(t, strings.Join(dml.log, "\n"), "GetSectionSymbol")
 }
 
-// TestRowComposer_AllowsDisjointSections confirms the rule bites only on
-// overlap: stacking DTOs that touch different sections is the ADR-0070 D1 case
-// and still works.
+// TestRowComposer_AllowsDisjointSections covers the plain stacking case:
+// DTOs that touch different sections (the ADR-0070 D1 case) each get their
+// own frame.
 func TestRowComposer_AllowsDisjointSections(t *testing.T) {
 	dml := &recordingDML{}
 	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
