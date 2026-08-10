@@ -150,6 +150,20 @@ exports its own; the read-back family and `identsql` publish theirs
 (see Surfaces). The panel diffs declared against probed and marks each
 function present or missing.
 
+The diff runs both ways: a probed name that no roster claims is listed as an
+**extra** — a hand-installed helper, or a spelling left by a rename this build
+no longer performs. It is the half of ADR-0171 §SD2's drift question a client
+can answer on its own.
+
+Which makes roster completeness load-bearing, and is why a family this build
+installs joins an existing roster rather than standing beside its own
+generator: undeclared, it reads as *on this endpoint but not in any roster
+this build carries* — a sentence about the server, for what would be a gap in
+the build. [ADR-0182](./0182-leeway-aspects-v2-codec-and-vocabulary.md) §SD4's
+generated `LW_ASPECT_*` family is the worked case. It joined `chpack`, so it
+is declared by `Functions()` like the rest of the pack, and the pack revision
+that already answers the skew question moved with it.
+
 The pack revision comes out of the same probe, so pack *skew* — the server has
 the family but at a revision this build did not write — is distinguishable
 from absence. That is the drift ADR-0171 §SD2 is about, surfaced where someone
