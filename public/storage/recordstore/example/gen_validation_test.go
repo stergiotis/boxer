@@ -3,10 +3,13 @@ package example
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/storage/recordstore/gen"
 	"github.com/stretchr/testify/require"
@@ -511,4 +514,138 @@ type RefDoc struct {
 	sec.TaggedValueColumn("value", ctabb.S)
 	err = generateInto(t, manip, a)
 	require.ErrorContains(t, err, "dynamic-membership tuple")
+}
+
+// --- Membership-id wrapper gates (ADR-0100 SD6 as corrected 2026-08-10;
+// ADR-0105 D2). ---
+
+// generateIntoWrapper is generateInto with a caller-selected membership-id
+// wrapper on gen.Input.
+func generateIntoWrapper(t *testing.T, manip *common.TableManipulator, wrapper marshallgen.WrapperEmitterI, componentPaths ...string) error {
+	t.Helper()
+	td, berr := manip.BuildTableDesc()
+	require.NoError(t, berr)
+	return gen.Input{
+		PackageName:    "tmp",
+		StoreName:      "Valcheck",
+		TableName:      "valcheck",
+		Table:          td,
+		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
+		ComponentPaths: componentPaths,
+		OutDir:         t.TempDir(),
+		ImportPath:     "example.invalid/tmp",
+		Wrapper:        wrapper,
+	}.Generate()
+}
+
+// sharedSectionDTOs writes the two-kinds-one-section pair the
+// disjoint-sections gate exists for — the same shape
+// TestGenerateRejectsSharedSection refuses under the default wrapper.
+func sharedSectionDTOs(t *testing.T) (a, b string) {
+	t.Helper()
+	dir := t.TempDir()
+	a = writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,shared\"`"+`
+}
+`)
+	b = writeDTO(t, dir, "kind_b.go", `package tmp
+
+type KindB struct {
+	_  struct{} `+"`kind:\"kindB\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	B  string   `+"`lw:\"fieldB,shared\"`"+`
+}
+`)
+	return
+}
+
+// TestGenerateSharedSectionAllowedUnderUniqueIds: the disjoint-sections
+// gate is a property of per-plan declaration-order ids, not of the
+// component model — a wrapper whose ids are globally unique relaxes it to
+// id-level disjointness, so two kinds may bind one section (the
+// recordstore/sharedsection package is the compiled, round-tripped proof).
+func TestGenerateSharedSectionAllowedUnderUniqueIds(t *testing.T) {
+	a, b := sharedSectionDTOs(t)
+	err := generateIntoWrapper(t, validationManipulator(t, "shared"),
+		marshallgen.FixedIdsWrapper{Ids: map[string]uint64{"fieldA": 11, "fieldB": 22}}, a, b)
+	require.NoError(t, err)
+}
+
+// TestGenerateFixedIdsMissingMembership: a fixed-ids wrapper must cover
+// every ref-channel membership — a miss fails generation rather than
+// emitting a wrong or zero id.
+func TestGenerateFixedIdsMissingMembership(t *testing.T) {
+	a, b := sharedSectionDTOs(t)
+	err := generateIntoWrapper(t, validationManipulator(t, "shared"),
+		marshallgen.FixedIdsWrapper{Ids: map[string]uint64{"fieldA": 11}}, a, b)
+	require.ErrorContains(t, err, "no assigned id")
+}
+
+// TestGenerateFixedIdsRepeatedIdRejected: GloballyUniqueIds is a caller
+// claim; the generator verifies it over the memberships the store uses —
+// a map repeating an id would cross-read a shared section exactly the way
+// the declaration-order gate prevents.
+func TestGenerateFixedIdsRepeatedIdRejected(t *testing.T) {
+	a, b := sharedSectionDTOs(t)
+	err := generateIntoWrapper(t, validationManipulator(t, "shared"),
+		marshallgen.FixedIdsWrapper{Ids: map[string]uint64{"fieldA": 11, "fieldB": 11}}, a, b)
+	require.ErrorContains(t, err, "share id 11")
+}
+
+// TestGenerateRejectsSharedMembershipAcrossKinds: two kinds naming one
+// membership would redeclare its kind<Name> symbol in the generated
+// package — a generation-time domain error now, instead of the Go
+// redeclaration break it used to surface as. (Deliberate cross-kind slot
+// sharing needs the reflect path — ADR-0146 D5/D6.)
+func TestGenerateRejectsSharedMembershipAcrossKinds(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"dup,solo\"`"+`
+}
+`)
+	b := writeDTO(t, dir, "kind_b.go", `package tmp
+
+type KindB struct {
+	_  struct{} `+"`kind:\"kindB\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	B  string   `+"`lw:\"dup,other\"`"+`
+}
+`)
+	err := generateInto(t, validationManipulator(t, "solo", "other"), a, b)
+	require.ErrorContains(t, err, "both use membership")
+}
+
+// noIdSourceWrapper implements WrapperEmitterI but not
+// MembershipIdSourceI — the store generator must refuse it, because the
+// Scan filter literals and the cross-check map need generation-time ids.
+type noIdSourceWrapper struct{}
+
+func (noIdSourceWrapper) Imports(*mappingplan.Plan) []string                   { return nil }
+func (noIdSourceWrapper) KindVars(*strings.Builder, *mappingplan.Plan)         {}
+func (noIdSourceWrapper) Init(*strings.Builder, *mappingplan.Plan)             {}
+func (noIdSourceWrapper) BeforeCore(*strings.Builder, *mappingplan.Plan) error { return nil }
+func (noIdSourceWrapper) AfterCore(*strings.Builder, *mappingplan.Plan) error  { return nil }
+
+// TestGenerateRequiresIdSourceWrapper: a wrapper that cannot state its
+// membership ids at generation time cannot back a store.
+func TestGenerateRequiresIdSourceWrapper(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,solo\"`"+`
+}
+`)
+	err := generateIntoWrapper(t, validationManipulator(t, "solo"), noIdSourceWrapper{}, a)
+	require.ErrorContains(t, err, "MembershipIdSourceI")
 }

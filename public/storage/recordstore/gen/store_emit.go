@@ -55,6 +55,11 @@ type emitter struct {
 	// second wall for when that ADR-0100 deferral lifts.
 	stampLane       bool
 	stampLaneAsData bool
+	// registryIds is set when the configured wrapper's ids are globally
+	// unique (a caller-assigned registry snapshot) rather than per-plan
+	// declaration order — it selects the emitted <Store>MembershipIds doc
+	// text.
+	registryIds bool
 }
 
 // plainRole classifies one plain (backbone) column. The three roles drive
@@ -110,6 +115,10 @@ type storeComponent struct {
 	Kind   string // Go type, e.g. "Identity"
 	plan   *mappingplan.Plan
 	groups []goplan.SectionGroup
+	// ids is the membership → id assignment the configured wrapper states
+	// for this plan — the one source the codec consts, the baked Scan
+	// filter literals and the <Store>MembershipIds map all resolve from.
+	ids map[string]uint64
 	// filter is the baked ADR-0066 Filter artefact (presence prefilter AND
 	// exact validator) identifying rows that carry a conforming component —
 	// the WHERE body of the Scan verb.
@@ -174,33 +183,72 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	}
 	stateView := model.stateView
 
+	idSrc, hasIdSrc := inst.wrapper().(marshallgen.MembershipIdSourceI)
+	if !hasIdSrc && len(plans) > 0 {
+		// Generate gates this earlier with the same message; kept here so
+		// emitStore is safe against a future direct caller.
+		err = eh.Errorf("Wrapper %T does not provide generation-time membership ids (marshallgen.MembershipIdSourceI) — the store bakes ids into its Scan filter SQL and the <Store>MembershipIds map", inst.wrapper())
+		return
+	}
 	comps := make([]storeComponent, 0, len(plans))
 	for _, plan := range plans {
 		var sc storeComponent
-		sc, err = classifyComponent(plan, info)
+		sc, err = classifyComponent(plan, info, idSrc)
 		if err != nil {
 			return
 		}
 		comps = append(comps, sc)
 	}
-	// Components must bind disjoint sections within one generated store —
-	// a precondition of this generator, not a component-model rule: leeway
-	// components may share sections and slots (ADR-0146 D5). This store
-	// drives marshallgen's NoOpWrapper target, which numbers membership
-	// ids per plan (each kind from 1), so two kinds' distinct memberships
-	// can carry the same wire id — under a shared section the
-	// presence-gated decode and the baked Scan filters would silently
-	// cross-read. ADR-0105 D2 records the lift: a caller-supplied
-	// membership-id override, with this gate relaxed to id-level
-	// disjointness.
-	sectionOwner := map[string]string{}
+	// Membership-id coherence gates. The kind<Name> symbols are declared
+	// once per generated package, so two kinds naming one membership would
+	// redeclare them — refuse with the domain error instead of the Go
+	// compile break. (Deliberate cross-kind slot sharing needs the reflect
+	// path — ADR-0146 D5/D6.)
+	membOwner := map[string]string{}
 	for _, sc := range comps {
-		for _, g := range sc.groups {
-			if owner, taken := sectionOwner[g.Section]; taken && owner != sc.Kind {
-				err = eh.Errorf("components %s and %s both bind section %q — components must own disjoint sections (ADR-0100 SD6)", owner, sc.Kind, g.Section)
+		for _, name := range sortedIdNames(sc.ids) {
+			if owner, taken := membOwner[name]; taken && owner != sc.Kind {
+				err = eh.Errorf("components %s and %s both use membership %q — its kind symbol is declared once per generated package, so two kinds cannot share a membership in one store", owner, sc.Kind, name)
 				return
 			}
-			sectionOwner[g.Section] = sc.Kind
+			membOwner[name] = sc.Kind
+		}
+	}
+	if !idSrc.GloballyUniqueIds() {
+		// Under package-local ids (each kind numbering from 1), two kinds'
+		// distinct memberships can carry the same wire id, and the
+		// membership match is scoped to a section's reader — so components
+		// must bind disjoint sections or the presence-gated decode and the
+		// baked Scan filters would silently cross-read. A precondition of
+		// this id regime, not a component-model rule (ADR-0100 SD6 as
+		// corrected 2026-08-10; leeway itself permits sharing, ADR-0146
+		// D5); a globally-unique id source lifts it (ADR-0105 D2).
+		sectionOwner := map[string]string{}
+		for _, sc := range comps {
+			for _, g := range sc.groups {
+				if owner, taken := sectionOwner[g.Section]; taken && owner != sc.Kind {
+					err = eh.Errorf("components %s and %s both bind section %q — components must own disjoint sections (ADR-0100 SD6)", owner, sc.Kind, g.Section)
+					return
+				}
+				sectionOwner[g.Section] = sc.Kind
+			}
+		}
+	} else {
+		// Id-level disjointness: the wrapper claims two names never share
+		// an id — verify it over the memberships this store actually uses,
+		// so a caller-supplied map that repeats an id cannot silently
+		// cross-read a shared section (ADR-0105 D2).
+		type idClaim struct{ kind, name string }
+		idOwner := map[uint64]idClaim{}
+		for _, sc := range comps {
+			for _, name := range sortedIdNames(sc.ids) {
+				id := sc.ids[name]
+				if prev, taken := idOwner[id]; taken && prev.name != name {
+					err = eh.Errorf("memberships %q (component %s) and %q (component %s) share id %d — a globally-unique id source must assign distinct ids (id-level disjointness, ADR-0105 D2)", prev.name, prev.kind, name, sc.Kind, id)
+					return
+				}
+				idOwner[id] = idClaim{kind: sc.Kind, name: name}
+			}
 		}
 	}
 	// A pass-through column surfaces as a promoted entity field (via the
@@ -247,7 +295,8 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	}
 
 	em := emitter{Input: inst, keyGoType: model.key.goType, model: model, hasComps: len(comps) > 0,
-		stampLane: stampLane, stampLaneAsData: stampLaneAsData}
+		stampLane: stampLane, stampLaneAsData: stampLaneAsData,
+		registryIds: hasIdSrc && idSrc.GloballyUniqueIds()}
 	var sb strings.Builder
 	em.emitStoreHeader(&sb, key, order, lifecycle, stateView)
 	em.emitMembershipIds(&sb, comps)
@@ -504,9 +553,10 @@ func (inst emitter) emitBeginFrame(p func(string, ...any), recv, lifecycleExpr, 
 // per non-role plain column, in canonical order. Nothing is emitted for a
 // role-only schema (the pre-pass-through shape).
 // emitMembershipIds emits the membership-id assignment this store was
-// generated under: per component, the 1..N declaration-order ids
-// marshallgen's NoOpWrapper bakes into that component's codec and this
-// generator bakes into its Scan filter literals.
+// generated under: per component, the ids the configured wrapper bakes
+// into that component's codec and this generator bakes into its Scan
+// filter literals — declaration-order 1..N under the default NoOpWrapper,
+// the caller-assigned registry snapshot under a FixedIdsWrapper.
 //
 // It is emitted as readable data because nothing on the wire records it. The
 // ids are values in the membership columns, indistinguishable from any other
@@ -525,7 +575,11 @@ func (inst emitter) emitMembershipIds(sb *strings.Builder, comps []storeComponen
 	p("// carried in the membership columns. Verbatim-channel memberships embed")
 	p("// their literal name instead and are absent here.")
 	p("//")
-	p("// The ids are declaration-order (1..N per component) and are baked into")
+	if inst.registryIds {
+		p("// The ids are caller-assigned (a registry-stable snapshot) and are baked")
+	} else {
+		p("// The ids are declaration-order (1..N per component) and are baked into")
+	}
 	p("// both the component codecs and this store's Scan filters. Nothing on the")
 	p("// wire records which assignment wrote a row, so rows written under a")
 	p("// different one decode as ABSENT rather than failing — VerifySchema")
@@ -533,7 +587,7 @@ func (inst emitter) emitMembershipIds(sb *strings.Builder, comps []storeComponen
 	p("// regenerated store at existing rows.")
 	p("var %sMembershipIds = map[string]map[string]uint64{", inst.StoreName)
 	for _, c := range comps {
-		ids := marshallgen.MembershipIds(c.plan)
+		ids := c.ids
 		names := make([]string, 0, len(ids))
 		for n := range ids {
 			names = append(names, n)
@@ -571,7 +625,7 @@ func (inst emitter) emitEnvelopeStruct(sb *strings.Builder) {
 // coverage — exactly marshallgen's ReadRow gate, so the store generator
 // and the codec emission cannot disagree — and bakes the component's
 // ADR-0066 Filter artefact for the Scan verb.
-func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetrieval) (sc storeComponent, err error) {
+func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetrieval, idSrc marshallgen.MembershipIdSourceI) (sc storeComponent, err error) {
 	sc.Kind = plan.KindType
 	sc.plan = plan
 	sc.groups = goplan.ComputeGroups(plan)
@@ -579,7 +633,12 @@ func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetriev
 		err = eh.Errorf("component %s: %s — <Kind>ReadRow is not emitted for this shape (ADR-0100 Deferred)", sc.Kind, reason)
 		return
 	}
-	g := readback.NewGenerator(info, readback.NewLookupResolver(mapIdLookup(marshallgen.MembershipIds(plan))))
+	sc.ids, err = idSrc.PlanMembershipIds(plan)
+	if err != nil {
+		err = eh.Errorf("component %s: resolve membership ids: %w", sc.Kind, err)
+		return
+	}
+	g := readback.NewGenerator(info, readback.NewLookupResolver(mapIdLookup(sc.ids)))
 	artefacts, err := g.Generate(plan)
 	if err != nil {
 		err = eh.Errorf("component %s: generate read-back artefacts: %w", sc.Kind, err)
@@ -589,8 +648,19 @@ func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetriev
 	return
 }
 
-// mapIdLookup adapts marshallgen's package-local membership-id assignment
-// to the readback resolver's IdLookup.
+// sortedIdNames returns the id map's membership names sorted, for
+// deterministic gate iteration and error selection.
+func sortedIdNames(ids map[string]uint64) []string {
+	names := make([]string, 0, len(ids))
+	for n := range ids {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// mapIdLookup adapts the wrapper-stated membership-id assignment to the
+// readback resolver's IdLookup.
 type mapIdLookup map[string]uint64
 
 func (inst mapIdLookup) LookupMembership(name string) (id uint64, err error) {

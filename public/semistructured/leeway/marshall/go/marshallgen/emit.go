@@ -74,6 +74,16 @@ func EmitPlan(plan *mappingplan.Plan, wrapper WrapperEmitterI, opts EmitOpts) (o
 	if wrapper == nil {
 		wrapper = NoOpWrapper{}
 	}
+	if src, ok := wrapper.(MembershipIdSourceI); ok {
+		// A source that cannot resolve every membership must fail the
+		// generation, not emit a wrong id (FixedIdsWrapper's missing-name
+		// case; NoOpWrapper never fails).
+		_, err = src.PlanMembershipIds(plan)
+		if err != nil {
+			err = eb.Build().Errorf("wrapper membership ids: %w", err)
+			return
+		}
+	}
 	// The body is emitted before the imports so the import set can be gated
 	// on what the emitted code actually uses (the eb import varies by field
 	// shapes; predicating it on plan properties drifted once already).

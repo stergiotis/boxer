@@ -1,6 +1,7 @@
 package factswrapper
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,6 +15,52 @@ func importsHave(imports []string, substr string) bool {
 		}
 	}
 	return false
+}
+
+func importsHaveExact(imports []string, line string) bool {
+	return slices.Contains(imports, line)
+}
+
+// TestVocabParameterization pins the third-party-vocabulary seam: custom
+// VocabImportPath / VocabQualifier flow into the import spec and the Init
+// lookups, and the zero value keeps the boxer keelson/vdd default —
+// byte-identical to the pre-parameterization output.
+func TestVocabParameterization(t *testing.T) {
+	plan := &mappingplan.Plan{Fields: []mappingplan.TaggedField{
+		{GoFieldName: "X", LWMembership: "grantee", LWSection: "symbol"},
+	}}
+
+	// Zero value: plain vdd import spec, vdd-qualified lookups.
+	def := FactsWrapper{}
+	if !importsHaveExact(def.Imports(plan), `"github.com/stergiotis/boxer/public/keelson/vdd"`) {
+		t.Fatalf("zero-value wrapper must import keelson/vdd unqualified, got %v", def.Imports(plan))
+	}
+	var sb strings.Builder
+	def.Init(&sb, plan)
+	if !strings.Contains(sb.String(), "kindGrantee = vdd.MembGrantee.GetId().Value()") {
+		t.Fatalf("zero-value Init must resolve through vdd, got:\n%s", sb.String())
+	}
+
+	// Custom vocabulary, qualifier differing from the path base: the
+	// qualified import spec and qualified lookups; no vdd import.
+	cust := FactsWrapper{VocabImportPath: "example.invalid/team/conceptvocab", VocabQualifier: "cv"}
+	if !importsHaveExact(cust.Imports(plan), `cv "example.invalid/team/conceptvocab"`) {
+		t.Fatalf("custom wrapper must import the vocabulary qualified, got %v", cust.Imports(plan))
+	}
+	if importsHave(cust.Imports(plan), "keelson/vdd") {
+		t.Fatal("custom vocabulary must replace the default vdd import")
+	}
+	sb.Reset()
+	cust.Init(&sb, plan)
+	if !strings.Contains(sb.String(), "kindGrantee = cv.MembGrantee.GetId().Value()") {
+		t.Fatalf("custom Init must resolve through the qualifier, got:\n%s", sb.String())
+	}
+
+	// Qualifier equal to the path base renders the plain spec.
+	base := FactsWrapper{VocabImportPath: "example.invalid/team/vocab", VocabQualifier: "vocab"}
+	if !importsHaveExact(base.Imports(plan), `"example.invalid/team/vocab"`) {
+		t.Fatalf("base-matching qualifier must render the plain spec, got %v", base.Imports(plan))
+	}
 }
 
 // TestImports_DeclaresOwnNeeds pins the post-2026-06-14 contract: the wrapper

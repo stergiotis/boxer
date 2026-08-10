@@ -83,6 +83,18 @@ type Input struct {
 	// store: BuildEntities on Raw() would drive entity frames past the
 	// store's bookkeeping (ADR-0100 Update 2026-07-04).
 	FullCodecs bool
+	// Wrapper selects the marshallgen membership-id storage for the
+	// emitted per-component codecs — and thereby the ids baked into the
+	// store's Scan filter literals and the <Store>MembershipIds map,
+	// which all resolve from this one source so they cannot disagree. It
+	// must implement marshallgen.MembershipIdSourceI. nil defaults to
+	// marshallgen.NoOpWrapper{} (package-local declaration-order ids,
+	// byte-identical to the pre-seam output), under which components must
+	// bind disjoint sections. A wrapper reporting globally-unique ids
+	// (marshallgen.FixedIdsWrapper over a registry snapshot) relaxes that
+	// gate to id-level disjointness, so components may share sections
+	// (ADR-0100 SD6 as corrected 2026-08-10; ADR-0105 D2).
+	Wrapper marshallgen.WrapperEmitterI
 
 	// DDL overrides the table-level clauses (ADR-0102 seam). nil derives
 	// the defaults: CREATE TABLE IF NOT EXISTS, ENGINE MergeTree(),
@@ -171,7 +183,15 @@ func (inst Input) Generate() (err error) {
 	}
 
 	// 4. Per-component marshallgen codecs (Columns, BuildEntities,
-	// AddSections, FillFromArrow).
+	// AddSections, FillFromArrow), emitted under the configured
+	// membership-id wrapper. The store bakes membership ids into its Scan
+	// filter SQL and cross-check map, so the wrapper must state them at
+	// generation time.
+	wrapper := inst.wrapper()
+	if _, ok := wrapper.(marshallgen.MembershipIdSourceI); !ok && len(inst.ComponentPaths) > 0 {
+		err = eh.Errorf("Wrapper %T does not provide generation-time membership ids (marshallgen.MembershipIdSourceI) — the store bakes ids into its Scan filter SQL and the <Store>MembershipIds map", wrapper)
+		return
+	}
 	plans := make([]*mappingplan.Plan, 0, len(inst.ComponentPaths))
 	for _, in := range inst.ComponentPaths {
 		out := strings.TrimSuffix(filepath.Base(in), ".go") + ".out.go"
@@ -186,7 +206,7 @@ func (inst Input) Generate() (err error) {
 			mode = marshallgen.EmitModeCodec
 		}
 		var rendered []byte
-		rendered, err = marshallgen.EmitPlan(plan, marshallgen.NoOpWrapper{}, marshallgen.EmitOpts{Mode: mode})
+		rendered, err = marshallgen.EmitPlan(plan, wrapper, marshallgen.EmitOpts{Mode: mode})
 		if err != nil {
 			err = eh.Errorf("emit component codec %s: %w", in, err)
 			return
@@ -300,6 +320,15 @@ func (inst Input) qualifiedTableName() string {
 		return inst.TableName
 	}
 	return inst.Database + "." + inst.TableName
+}
+
+// wrapper resolves the configured membership-id wrapper, defaulting to
+// the package-local declaration-order NoOpWrapper.
+func (inst Input) wrapper() marshallgen.WrapperEmitterI {
+	if inst.Wrapper == nil {
+		return marshallgen.NoOpWrapper{}
+	}
+	return inst.Wrapper
 }
 
 // scaffoldPkg is the package the DML/RA scaffolding declares: the

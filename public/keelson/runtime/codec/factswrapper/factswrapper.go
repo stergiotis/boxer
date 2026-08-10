@@ -29,15 +29,56 @@ import (
 
 // FactsWrapper wires the marshallgen core into the boxer.facts
 // dml_cbor / ra / cborarrow / buscodec stack. Zero-value usable.
-type FactsWrapper struct{}
+type FactsWrapper struct {
+	// VocabImportPath / VocabQualifier select the vocabulary package the
+	// emitted Init resolves membership ids from: the generated file
+	// imports VocabImportPath and emits
+	// <VocabQualifier>.Memb<Name>.GetId().Value() per membership, so the
+	// vocabulary must export vdd-style Memb<Name> accessors. Zero values
+	// keep the boxer default (keelson/vdd, qualifier "vdd") and the
+	// emitted bytes unchanged; a third-party vocabulary sets both.
+	VocabImportPath string
+	VocabQualifier  string
+}
 
 var _ marshallgen.WrapperEmitterI = FactsWrapper{}
+
+const (
+	defaultVocabImportPath = "github.com/stergiotis/boxer/public/keelson/vdd"
+	defaultVocabQualifier  = "vdd"
+)
+
+func (inst FactsWrapper) vocabImportPath() string {
+	if inst.VocabImportPath == "" {
+		return defaultVocabImportPath
+	}
+	return inst.VocabImportPath
+}
+
+func (inst FactsWrapper) vocabQualifier() string {
+	if inst.VocabQualifier == "" {
+		return defaultVocabQualifier
+	}
+	return inst.VocabQualifier
+}
+
+// vocabImportLine renders the vocabulary import spec: plain when the
+// qualifier equals the path's last segment (the default vdd case, keeping
+// the emitted bytes identical to the pre-parameterization output), the
+// qualified `qual "path"` form otherwise.
+func (inst FactsWrapper) vocabImportLine() string {
+	path, qual := inst.vocabImportPath(), inst.vocabQualifier()
+	if path[strings.LastIndexByte(path, '/')+1:] == qual {
+		return `"` + path + `"`
+	}
+	return qual + ` "` + path + `"`
+}
 
 // Generate parses inputPath, applies the boxer.facts back-compat
 // Unit-flag inference for unchanged DTOs, then emits via marshallgen
 // with this wrapper supplying the schema-coupled blocks. Returns the
 // rendered bytes; if outputPath is non-empty, also writes to disk.
-func (FactsWrapper) Generate(inputPath, outputPath string) (out []byte, err error) {
+func (inst FactsWrapper) Generate(inputPath, outputPath string) (out []byte, err error) {
 	var plan *mappingplan.Plan
 	plan, err = marshallgen.ParsePlan(inputPath)
 	if err != nil {
@@ -47,7 +88,7 @@ func (FactsWrapper) Generate(inputPath, outputPath string) (out []byte, err erro
 	if err = checkRefMembershipsAreIdentifiers(plan); err != nil {
 		return
 	}
-	out, err = marshallgen.EmitPlan(plan, FactsWrapper{}, marshallgen.EmitOpts{})
+	out, err = marshallgen.EmitPlan(plan, inst, marshallgen.EmitOpts{})
 	if err != nil {
 		return
 	}
@@ -95,7 +136,7 @@ func isNonScalarSectionName(s string) bool {
 // io.Writer), strings (ActiveFields prefix scan), sync (sync.Pool +
 // sync.OnceValue), arrow/arrow + ipc + memory (Allocator + IPC
 // reader), and the per-package codec / facts imports.
-func (FactsWrapper) Imports(plan *mappingplan.Plan) []string {
+func (inst FactsWrapper) Imports(plan *mappingplan.Plan) []string {
 	imports := []string{
 		`"bytes"`,
 		`"io"`,
@@ -119,18 +160,19 @@ func (FactsWrapper) Imports(plan *mappingplan.Plan) []string {
 		`"github.com/stergiotis/boxer/public/observability/eh"`,
 		`"github.com/stergiotis/boxer/public/observability/eh/eb"`,
 	}
-	// vdd is used only by Init's `vdd.MembXxx.GetId()` lookups, one per
-	// kindXxx var. A kind with no ref-channel membership (a plain-only or
-	// verbatim/parametrized-only DTO) emits no lookups, so include vdd only
-	// when there is at least one.
+	// The vocabulary package is used only by Init's `<qual>.MembXxx.GetId()`
+	// lookups, one per kindXxx var. A kind with no ref-channel membership
+	// (a plain-only or verbatim/parametrized-only DTO) emits no lookups, so
+	// include it only when there is at least one.
 	if len(uniqueMemberships(plan)) > 0 {
-		imports = append(imports, `"github.com/stergiotis/boxer/public/keelson/vdd"`)
+		imports = append(imports, inst.vocabImportLine())
 	}
 	return imports
 }
 
 // KindVars emits `var kindXxx uint64` for each unique non-verbatim
-// membership. Resolved in Init from vdd.MembXxx.GetId().Value().
+// membership. Resolved in Init from the vocabulary package's
+// MembXxx.GetId().Value() accessors (keelson/vdd by default).
 // Verbatim memberships are skipped — they embed the literal []byte
 // name at the call site, no uint64 lookup needed.
 func (FactsWrapper) KindVars(sb *strings.Builder, plan *mappingplan.Plan) {
@@ -150,10 +192,10 @@ func (FactsWrapper) KindVars(sb *strings.Builder, plan *mappingplan.Plan) {
 // kind's CodecI with buscodec so any buscodec.Encode[<Kind>] /
 // Decode[<Kind>] call routes through this codec instead of the CBOR
 // fallback.
-func (FactsWrapper) Init(sb *strings.Builder, plan *mappingplan.Plan) {
+func (inst FactsWrapper) Init(sb *strings.Builder, plan *mappingplan.Plan) {
 	sb.WriteString("func init() {\n")
 	for _, f := range uniqueMemberships(plan) {
-		fmt.Fprintf(sb, "\t%s = vdd.Memb%s.GetId().Value()\n", f.KindVar(), upperFirst(f.LWMembership))
+		fmt.Fprintf(sb, "\t%s = %s.Memb%s.GetId().Value()\n", f.KindVar(), inst.vocabQualifier(), upperFirst(f.LWMembership))
 	}
 	fmt.Fprintf(sb, "\tbuscodec.Register[%s](%s)\n", plan.KindType, lowerFirst(plan.KindType)+"BusCodec")
 	sb.WriteString("}\n\n")
