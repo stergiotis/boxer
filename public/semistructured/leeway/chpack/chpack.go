@@ -31,9 +31,10 @@ import (
 // Version is the pack revision reported by LW_PACK_VERSION(). Bump on any
 // roster change; never repurpose a shipped name (ADR-0162 §SD5).
 //
+// 4 — the LW_ASPECT_* family joined (ADR-0182 SD4/M4).
 // 3 — every name moved into the `LW_` namespace (2026-08-07 Update).
 // 2 — the roster went camelCase → UPPER_SNAKE (2026-08-06 Update).
-const Version = 3
+const Version = 4
 
 // VersionFunctionName is the zero-argument marker function that makes
 // client/server pack skew a query (ADR-0162 §SD5).
@@ -147,13 +148,14 @@ func Functions() (fns []Function) {
 			Body:   "arrayElement(vals, arrayElement(arrayCumSum(card), i) - arrayElement(card, i) + k)",
 			Doc:    "k-th value of instance i (both 1-based); valid while k does not exceed the instance's cardinality",
 		},
-		{
-			Name:   VersionFunctionName,
-			Params: []string{},
-			Body:   fmt.Sprintf("%d", Version),
-			Doc:    "pack revision marker; SELECT it to detect client/server pack skew",
-		},
 	}
+	fns = append(fns, aspectFunctions()...)
+	fns = append(fns, Function{
+		Name:   VersionFunctionName,
+		Params: []string{},
+		Body:   fmt.Sprintf("%d", Version),
+		Doc:    "pack revision marker; SELECT it to detect client/server pack skew",
+	})
 	return
 }
 

@@ -32,8 +32,19 @@ func TestStatementsGolden(t *testing.T) {
 		"CREATE OR REPLACE FUNCTION LW_RAGGED_EXISTS AS (f, vals, card) -> arrayReduceInRanges('max', LW_RAGGED_RANGES(card), arrayMap(f, vals))",
 		"CREATE OR REPLACE FUNCTION LW_RAGGED_COUNT AS (f, vals, card) -> arrayReduceInRanges('sum', LW_RAGGED_RANGES(card), arrayMap(f, vals))",
 		"CREATE OR REPLACE FUNCTION LW_RAGGED_ELEM AS (vals, card, i, k) -> arrayElement(vals, arrayElement(arrayCumSum(card), i) - arrayElement(card, i) + k)",
-		"CREATE OR REPLACE FUNCTION LW_PACK_VERSION AS () -> 3",
 	}
+	expected = append(expected,
+		"CREATE OR REPLACE FUNCTION LW_ASPECT_SEG_ENC AS (name) -> if(length(splitByChar(':', name)) = 11, arrayElement(splitByChar(':', name), 6), if(length(splitByChar(':', name)) = 7, arrayElement(splitByChar(':', name), 4), ''))",
+		"CREATE OR REPLACE FUNCTION LW_ASPECT_SEG_USE AS (name) -> if(length(splitByChar(':', name)) = 11, arrayElement(splitByChar(':', name), 7), if(length(splitByChar(':', name)) = 7, '', ''))",
+		"CREATE OR REPLACE FUNCTION LW_ASPECT_SEG_SEM AS (name) -> if(length(splitByChar(':', name)) = 11, arrayElement(splitByChar(':', name), 8), if(length(splitByChar(':', name)) = 7, arrayElement(splitByChar(':', name), 5), ''))",
+		"CREATE OR REPLACE FUNCTION LW_ASPECT_DECODE AS (seg) -> if(seg = '' OR seg = '0', CAST([], 'Array(UInt8)'), arrayMap(c -> toUInt8(position('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', c) - 2 + 0 * throwIf(position('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', c) < 2 OR c = 'z', 'LW_ASPECT_DECODE: char outside the v0 aspect range')), splitByString('', seg)))",
+	)
+	// The six transform-bearing statements carry the full enum tables; the
+	// expectations are assembled here from the same enums with independent
+	// string assembly, so the shape is pinned while the tables stay owned by
+	// the vocabulary packages (their canonical tests pin those).
+	expected = append(expected, expectedAspectTransformStatements()...)
+	expected = append(expected, "CREATE OR REPLACE FUNCTION LW_PACK_VERSION AS () -> 4")
 	require.Equal(t, expected, chpack.Statements())
 }
 
@@ -101,6 +112,7 @@ func TestRosterInvariants(t *testing.T) {
 		// algebra the function belongs to.
 		validPrefix := strings.HasPrefix(f.Name, "LW_CO_") ||
 			strings.HasPrefix(f.Name, "LW_RAGGED_") ||
+			strings.HasPrefix(f.Name, "LW_ASPECT_") ||
 			f.Name == chpack.VersionFunctionName
 		require.Truef(t, validPrefix, "name %s outside the owned prefixes", f.Name)
 

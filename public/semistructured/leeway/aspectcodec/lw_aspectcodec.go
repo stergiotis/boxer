@@ -17,7 +17,12 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+// Alphabet is the v2 digit alphabet, ASCII-sorted so alphabet order equals
+// byte order; position 0 is the reserved '0', position 61 the escape.
+// Exported for consumers that mirror the codec outside Go (SQL UDFs).
+const Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+const alphabet = Alphabet
 const escapeByte = 'z'
 const indicesPerLevel = 60
 

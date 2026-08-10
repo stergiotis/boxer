@@ -202,7 +202,7 @@ Accepted 2026-08-10.
 - **M1 — vocabulary pass, family registry, validator generalization.** ✓
 - **M2 — regeneration sweep and corpus re-measurement.** ✓
 - **M3 — external-adopter lockstep migration.** ✓
-- **M4 — `LW_ASPECT_*` UDFs, installed and probed.**
+- **M4 — `LW_ASPECT_*` UDFs, installed and probed.** ✓
 - **M5 — old-era physical-table re-derivation, docs and skills touch-ups.**
 
 ## References
