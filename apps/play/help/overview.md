@@ -92,7 +92,7 @@ query is substituted server-side:
 ```sql
 SET param_event = 'DDOS';
 SELECT * FROM anchor.facts
-WHERE has(`tv:symbol:value:val:s:m:0:24:0::data`, {event:String})
+WHERE has(`tv:symbol:value:val:s:m:0:12:0::data`, {event:String})
 ```
 
 A placeholder *without* a `SET` line is a live **signal** instead: panels

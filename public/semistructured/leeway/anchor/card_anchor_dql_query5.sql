@@ -20,7 +20,7 @@ SELECT
     concat('COMPOSITE-H3-', toString(h3_index), '-20260311') AS `id:naturalKey:y:g:0:0:`,
 
     -- symbol section: all distinct event types seen in this cell today
-    distinct_symbols AS `tv:symbol:value:val:s:m:0:24:0::data`,
+    distinct_symbols AS `tv:symbol:value:val:s:m:0:12:0::data`,
 
     -- u64Array section: the incident count, packed as a one-element array
     [event_count] AS `tv:u64Array:value:val:u64h:g:0:0:0::data`,

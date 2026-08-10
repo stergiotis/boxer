@@ -162,7 +162,7 @@ func TestStoreWritesFactRows_LiveCH(t *testing.T) {
 	// store's durable id on the MembRuntimeApp mixed membership, which is
 	// what the symbol value column holds.
 	rows, err := queryScalar(ctx, cli,
-		"SELECT count() FROM "+db+".facts WHERE has(`tv:symbol:value:val:s:m:0:24:0::data`, 'runtime.appletstore')")
+		"SELECT count() FROM "+db+".facts WHERE has(`tv:symbol:value:val:s:m:0:12:0::data`, 'runtime.appletstore')")
 	require.NoError(t, err)
 	assert.Equal(t, "2", rows,
 		"expected one state row for the document and one for the index")

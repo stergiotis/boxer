@@ -24,10 +24,10 @@ DB="${DB:-jsonbench_d_1m}"
 TABLE="${TABLE:-facts}"
 CH=(clickhouse-client --allow_suspicious_low_cardinality_types=1)
 
-SV='tv:symbol:value:val:s:m:0:24:0::data'
+SV='tv:symbol:value:val:s:m:0:12:0::data'
 SP='tv:symbol:mrhp:mrhp:y:g:0:0:0::data'
 SC='tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data'
-TV='tv:stringArray:value:val:sh:g:0:x2:0::data'
+TV='tv:stringArray:value:val:sh:g:0:gw:0::data'
 TP='tv:stringArray:mrhp:mrhp:y:g:0:0:0::data'
 TC='tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data'
 TL='tv:stringArray:len:len:u64:28o:0:0:0::data'

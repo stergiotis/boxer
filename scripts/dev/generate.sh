@@ -72,8 +72,11 @@ boxer keelsoncodec \
     public/keelson/runtime/codec/launchrequest/launchrequest.go \
     public/keelson/runtime/codec/launchreply/launchreply.go
 
-# runtime/factsschema codegen (ADR-0026). Emits DDL / DML (plain, rowbinary,
-# cbor, sparserb) / read-access wrappers for the runtime facts schema.
+# runtime/factsschema codegen (ADR-0026). Emits DDL / DML (Arrow and sparse
+# CBOR) / read-access wrappers for the runtime facts schema. Driven from here
+# rather than a //go:generate directive, so a change to the leeway aspect
+# vocabularies that regenerates the gen-test-driven artifacts does NOT reach
+# these four — run this script, not `go generate ./...` alone.
 boxer runtimecodegen all
 
 # Phosphor icon catalogue (ADR-0044 §SD3). SHA-verifies the vendored

@@ -134,6 +134,15 @@ func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
 // connection. engineClause supplies the MergeTree partition / order / TTL
 // settings (empty selects defaultEngineClause). The SQL is composed by
 // ComposeSetupSQL, so this path and the `keelsonddl` CLI cannot drift.
+//
+// Idempotent means CREATE TABLE IF NOT EXISTS, which is not the same as
+// migrating: an existing table is left exactly as it is, including its column
+// names. Physical column names encode the column's aspect bitmask, so a change
+// to the leeway aspect vocabularies renames columns in the generated DDL while
+// the deployed table keeps the old ones — after which inserts naming the new
+// columns fail against it. There is no automatic reconciliation. Recovering
+// means ALTER TABLE ... RENAME COLUMN per renamed column, or dropping and
+// re-creating the table if the trail is expendable.
 func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err error) {
 	var ddl string
 	ddl, err = ComposeSetupSQL(inst.cfg, engineClause)
@@ -633,7 +642,7 @@ func composeLatestStateSql(table string, appId app.AppIdT, key string) (sql stri
 	const (
 		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
 		symLMR     = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symValue   = "`tv:symbol:value:val:s:m:0:24:0::data`"
+		symValue   = "`tv:symbol:value:val:s:m:0:12:0::data`"
 		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
 		blobValue  = "`tv:blobArray:value:val:yh:g:0:0:0::data`"
 		blobLR     = "`tv:blobArray:lr:lr:u64:2q:0:0:0::data`"

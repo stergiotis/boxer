@@ -12,7 +12,7 @@ status: draft
 # Leeway column names
 
 A leeway table stores each attribute under a long, technical *physical* column
-name like `tv:symbol:value:val:s:m:0:24:0::data`. This page explains why those
+name like `tv:symbol:value:val:s:m:0:12:0::data`. This page explains why those
 names are shaped that way, and how the playground lets you query them with short
 **handles** (`` `symbol:value` ``) instead — including what a handle is, what it
 is not, and how one becomes a physical name before a query runs.

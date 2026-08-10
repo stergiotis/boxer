@@ -23,7 +23,7 @@ import (
 // columns, and that coupling is the thing this test exists to pin.
 const (
 	colId       = "`id:id:u64:2k:0:0:`"
-	colSymValue = "`tv:symbol:value:val:s:m:0:24:0::data`"
+	colSymValue = "`tv:symbol:value:val:s:m:0:12:0::data`"
 	colSymLr    = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
 	colTxtLmr   = "`tv:textArray:lmr:lmr:u64:2q:0:0:0::data`"
 	colTxtMrhp  = "`tv:textArray:mrhp:mrhp:y:g:0:0:0::data`"

@@ -20,9 +20,18 @@
 //
 // Regenerate by running:
 //
-//	go run ./cmd/runtimecodegen all
+//	./boxer.sh runtimecodegen all
 //
-// or the individual subcommands.
+// or the individual subcommands. Note that these four are reached only by that
+// command — scripts/dev/generate.sh invokes it explicitly, and there is no
+// //go:generate directive that a bare `go generate ./...` would sweep. A change
+// to the leeway aspect vocabularies renames physical columns, so it has to run
+// here too, not only over the gen-test-driven artifacts.
+//
+// The physical column names these artifacts emit are also spelled out by hand
+// in read-back SQL elsewhere in the tree; those constants are pinned against
+// this output by factsschema/ddl's TestHandwrittenColumnsMatchGeneratedSchema,
+// which turns red when a regeneration renames a column out from under them.
 package codegen
 
 import (

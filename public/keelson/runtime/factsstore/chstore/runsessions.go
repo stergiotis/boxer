@@ -185,10 +185,10 @@ type columnExprsRun struct {
 
 func buildRunColumnExprs() (e columnExprsRun) {
 	const (
-		symValue   = "`tv:symbol:value:val:s:m:0:24:0::data`"
+		symValue   = "`tv:symbol:value:val:s:m:0:12:0::data`"
 		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
 		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		strValue   = "`tv:stringArray:value:val:sh:g:0:x2:0::data`"
+		strValue   = "`tv:stringArray:value:val:sh:g:0:gw:0::data`"
 		strLR      = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
 		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
 		u64Value   = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"
@@ -226,12 +226,12 @@ type columnExprsLifecycle struct {
 
 func buildLifecycleColumnExprs() (e columnExprsLifecycle) {
 	const (
-		symValue  = "`tv:symbol:value:val:s:m:0:24:0::data`"
+		symValue  = "`tv:symbol:value:val:s:m:0:12:0::data`"
 		symLR     = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
 		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
 		symLMR    = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
 		symMRHP   = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
-		strValue  = "`tv:stringArray:value:val:sh:g:0:x2:0::data`"
+		strValue  = "`tv:stringArray:value:val:sh:g:0:gw:0::data`"
 		strLR     = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
 		strLRCard = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
 		u64Value  = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"

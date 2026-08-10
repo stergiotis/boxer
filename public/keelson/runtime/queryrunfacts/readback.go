@@ -63,11 +63,11 @@ const HistoryLimitCap = 500
 // Wire names of the section columns the pivots touch (the symbol and
 // string constants complement ColId/ColTs/ColSymbolLr in extract.go).
 const (
-	colSymbolValue  = "`tv:symbol:value:val:s:m:0:24:0::data`"
+	colSymbolValue  = "`tv:symbol:value:val:s:m:0:12:0::data`"
 	colSymbolLrCard = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
 	colSymbolLmr    = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
 	colSymbolMrhp   = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
-	colStringValue  = "`tv:stringArray:value:val:sh:g:0:x2:0::data`"
+	colStringValue  = "`tv:stringArray:value:val:sh:g:0:gw:0::data`"
 	colStringLr     = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
 	colStringLrCard = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
 	colU64Value     = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"

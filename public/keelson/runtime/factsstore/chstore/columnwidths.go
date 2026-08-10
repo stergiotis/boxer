@@ -129,7 +129,7 @@ func composeListColumnWidthsSql(table string, appId app.AppIdT) (sql string) {
 	const (
 		symLR     = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
 		symLMR    = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symValue  = "`tv:symbol:value:val:s:m:0:24:0::data`"
+		symValue  = "`tv:symbol:value:val:s:m:0:12:0::data`"
 		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
 		boolLR    = "`tv:bool:lr:lr:u64:2q:0:0:0::data`"
 		idCol     = "`id:id:u64:2k:0:0:`"

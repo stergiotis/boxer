@@ -32,7 +32,7 @@ Narrow to a single scenario to vary which tagged sections are populated.
 
 ```sql
 SELECT * FROM anchor.facts
-WHERE hasAny(`tv:symbol:value:val:s:m:0:24:0::data`,
+WHERE hasAny(`tv:symbol:value:val:s:m:0:12:0::data`,
              ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
 ```
 
@@ -52,7 +52,7 @@ WITH
   ),
   by_kind AS (
     SELECT
-      `tv:symbol:value:val:s:m:0:24:0::data`[1] AS event_type,
+      `tv:symbol:value:val:s:m:0:12:0::data`[1] AS event_type,
       count()                                   AS n
     FROM recent
     GROUP BY event_type
@@ -115,7 +115,7 @@ reads; timestamps must be `DateTime64`.
 SELECT
   `tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`[1] AS _tl_time,
   `tv:timeRange:endExcl:val:z64:2k:0:0:0::data`[1]   AS _tl_time_end,
-  `tv:symbol:value:val:s:m:0:24:0::data`[1]          AS _tl_lane
+  `tv:symbol:value:val:s:m:0:12:0::data`[1]          AS _tl_lane
 FROM anchor.facts
 WHERE length(`tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`) > 0
 ORDER BY _tl_time
@@ -159,7 +159,7 @@ and Table shows a plain grid.
 SELECT
   `id:id:u64:2k:0:0:`                       AS id,
   `id:naturalKey:y:g:0:0:`                  AS natural_key,
-  `tv:symbol:value:val:s:m:0:24:0::data`[1] AS event_type
+  `tv:symbol:value:val:s:m:0:12:0::data`[1] AS event_type
 FROM anchor.facts
 ORDER BY id
 ```
@@ -226,7 +226,7 @@ placeholder is substituted by ClickHouse.
 ```sql
 SET param_event = 'DDOS';
 SELECT * FROM anchor.facts
-WHERE has(`tv:symbol:value:val:s:m:0:24:0::data`, {event:String})
+WHERE has(`tv:symbol:value:val:s:m:0:12:0::data`, {event:String})
 ```
 
 ## Signals (unbound parameter)
