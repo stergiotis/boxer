@@ -216,6 +216,13 @@ the vocabulary panel's **client** population
 ([ADR-0174](./0174-play-sql-vocabulary-panel.md)); nothing new is installed
 server-side, so ADR-0171 §SD2's reconciler scope is untouched.
 
+The two halves register differently. SD2's constructors expand into an
+expression and an alias, so they run wherever the statement does; the
+`LW_GET` family expands into pack-form calls (SD3), so it registers with the
+declared expansion dependencies of ADR-0174 §SD6 and is marked against that
+panel's existing probe. Client-side expansion makes a name portable only when
+what it expands *into* is.
+
 ### SD8 — Deferrals, each with its trigger
 
 - **Statement wrapping** (`INSERT`/`CREATE … AS SELECT` in-pipeline):
@@ -287,6 +294,11 @@ server-side, so ADR-0171 §SD2's reconciler scope is untouched.
   endpoint. The failure is loud (unknown function), but the asymmetry is
   real and must be documented (it is the same asymmetry handles already
   have).
+- `LW_GET` carries a second, different asymmetry: expansion succeeds and the
+  *expanded* statement fails, because SD3's v0 renderer emits pack-form
+  calls. Still loud, but one step further from the text that was typed, and
+  it makes an authoring name endpoint-dependent where the constructors are
+  not. It ends when the inline renderer ships (SD8).
 - `lwsql` widens from read-direction to both directions — more package
   scope, justified by the shared machinery.
 - `TableOptions` index intent can drift from what a deployment actually

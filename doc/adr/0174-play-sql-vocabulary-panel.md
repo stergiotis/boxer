@@ -123,6 +123,9 @@ genuinely is both — installable as UDFs (`identsql.UdfDdlStatements`) and
 expanded client-side by `identsql.ExpandPass`. Listing it once and picking a
 side would make one of the two answers wrong.
 
+Where a name runs and what its expansion needs are two questions, and the
+second cuts across the first for at least one family — §SD6.
+
 ### SD2 — The server section is a probe, and the endpoint is part of the question
 
 `system.functions` through a `nodeLane` over `clientExecutor` — the same
@@ -182,6 +185,41 @@ The regex battery of [ADR-0164](./0164-documentation-regex-search.md) —
 `renderSnippetsFilterRow`. A user filtering the vocabulary and filtering the
 snippet library should not be typing in two different query languages.
 
+### SD6 — A client macro may still need the server, and the row says which
+
+Being expanded client-side is not the same as being endpoint-independent. The
+client section's promise — rewritten before it ships, so it works anywhere —
+is a property of the *expansion output*, not of where the expansion happens.
+For every macro listed when this ADR was written the two coincide: `LW_ID_*`
+expands into builtin arithmetic, `descriptiveStatistics` into builtin
+aggregates, `docsearch` and `keelson` into table references whose transport
+the downstream pass owns. None of them needs anything *installed*.
+
+[ADR-0181](./0181-leeway-dql-authoring-surface.md) §SD3's `LW_GET` family is
+the first that does. Its v0 renderer emits pack-form calls
+(`LW_VALUE_BY_TAG_EQUAL` and family) because the inline builtins-only renderer
+is deliberately not shipped (ADR-0162 §SD8-1) — so the name never reaches the
+server, and the expansion still fails on an endpoint without the pack. Listed
+unqualified under the client heading it would be the one row this panel
+actively misleads about, in the section whose whole point is that its members
+cannot fail that way.
+
+A roster entry may therefore declare the server functions its expansion emits.
+The panel resolves them against the probe the server section already ran and
+marks the row by the weakest of them: unmarked before the probe answers,
+present when every dependency is installed, otherwise naming the first missing
+one. No new query and no new state — §SD3's declared-vs-probed diff holds both
+halves already; this reads it for a second population.
+
+The dependency is on **installation, not on data**. A macro expanding into a
+table reference depends on that table being reachable, which is a different
+question, has a different answer per retarget ([ADR-0134](./0134-adhoc-datasets.md)),
+and is not what this marks. Confining it to function names keeps the mark to
+what the probe can decide.
+
+Today's three rosters declare no dependencies, so no exported roster shape
+moves until ADR-0181's names arrive.
+
 ### Milestones
 
 - **M0 — Declared rosters exported.** The read-back family and `identsql`
@@ -192,6 +230,9 @@ snippet library should not be typing in two different query languages.
 - **M2 — The panel.** Three sections, filter, Insert, present/missing marks.
 - **M3 — Skew and docs routing.** `LW_PACK_VERSION` comparison and the
   row → Docs pane link.
+- **M4 — Expansion dependencies.** §SD6's mark. Nothing to point at until
+  ADR-0181's `LW_GET` family lands, so it is sequenced behind it rather than
+  behind the rest of this ADR.
 
 ## Surfaces — Tier 1
 
@@ -231,6 +272,9 @@ than carrying macro spellings of its own.
   collides. Also: `sqlapplet`'s tab-policy test, which fails when play
   registers a tab the applet surface classifies as neither chrome nor a
   result panel — this one is chrome (an applet has no editor to insert into).
+- **Goes red if (§SD6).** A roster entry declares a dependency on a name no
+  server roster carries. An unresolvable dependency can never mark anything,
+  so a typo there is silent in the panel and has to be caught here.
 - **Not covered by an automated lane.** That the panel *renders* correctly.
   It was driven live instead, against ClickHouse 26.7 on a headless
   compositor (`egui-mcp`), which confirmed: the probe reporting 408
@@ -261,6 +305,26 @@ than carrying macro spellings of its own.
   should not be". It is still proposed, and the panel's question — "what
   should be here and is not" — is answerable now from the declared rosters.
 
+Considered for §SD6 and rejected:
+
+- **Say it in the doc line only.** One sentence on `LW_GET`'s entry, the way
+  `keelsonsql`'s entry already carries its table-position rule in prose. It is
+  the cheapest honest thing and it is what the panel should say *anyway*, but
+  on its own it leaves the section blurb promising endpoint-independence while
+  a row underneath it says otherwise, and leaves the mark column — the thing a
+  user scans — silent on the one case in that section where it has something
+  to report. C2 is the criterion this ADR exists for.
+- **List the `LW_GET` family in the server section instead.** Then the diff
+  applies unchanged. But the name never reaches the server, so `MISSING` would
+  be permanently and uninformatively true, and §SD1's rule would be inverted:
+  the row would sit under a heading that mispredicts how it fails.
+- **A fourth section for client-with-server-support.** Sections answer where a
+  name runs, and that has not changed. Splitting the population would separate
+  rows that are identical in every other respect — provisioned the same way,
+  failing the same way when the pass is absent — and would put `LW_GET` away
+  from `LW_PLAIN`, which is exactly the comparison an author of a leeway→leeway
+  statement is making.
+
 ## Consequences
 
 ### Positive
@@ -279,6 +343,10 @@ than carrying macro spellings of its own.
 - One more `system.functions` query per session per endpoint. It is memoised
   by the lane and lazy with the tab, so a session that never opens the tab
   never pays it.
+- §SD6 costs the three-population story some of its crispness: "client" no
+  longer means "works anywhere" without qualification, and a reader now has to
+  look at the mark as well as the heading. The alternative was a heading that
+  is simply wrong for one family.
 
 ### Neutral
 
