@@ -3,8 +3,9 @@
 // (public/boxerstaging/spinnaker/schema/spinnaker_schema.go):
 // plain-value identity columns + per-canonical-type tagged-value sections
 // in a single "data" streaming group, with foreignKey for cross-fact
-// references. Fact "kind" is a membership (see memberships.go), so the
-// same row can carry several kind memberships without schema duplication.
+// references. Fact "kind" is a membership (the vocabulary lives in
+// [github.com/stergiotis/boxer/public/keelson/runtime/vocab]), so the same
+// row can carry several kind memberships without schema duplication.
 //
 // No live ClickHouse interaction lives in this package — only the schema
 // definition. Hosts that need an actual table execute the CREATE TABLE

@@ -1,13 +1,15 @@
 // Package factsstore is the durable view of runtime facts per ADR-0026 §SD6.
 // Capability grants from the broker, audit records from the bus, and state
-// writes from the persist service all flow through FactsStoreI; M2.5 ships
-// an in-memory implementation that proves the data shape end-to-end. A
-// boxer.facts-backed implementation (writing CH+leeway rows via the
-// factsschema package) lands in a later sub-phase once a live ClickHouse
-// driver is wired.
+// writes from the persist service all flow through FactsStoreI. Two backends
+// implement it: InMemoryFactsStore here, and the boxer.facts-backed Store in
+// [github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore],
+// which writes CH+leeway rows through the factsschema package.
+// chstore.NewWithFallback picks between them at runtime, degrading to the
+// in-memory store when ClickHouse is unreachable.
 //
 // Row types are typed per-kind so the broker / persist / audit code stays
-// readable; the leeway translation lives behind the FactsStoreI boundary.
+// readable; the leeway translation lives behind the FactsStoreI boundary, and
+// this package deliberately imports no leeway at all.
 package factsstore
 
 import (
