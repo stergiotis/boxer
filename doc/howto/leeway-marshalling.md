@@ -720,4 +720,10 @@ type DroneMission struct {
 - [`marshallgen` EXPLANATION](../../public/semistructured/leeway/marshall/go/marshallgen/EXPLANATION.md) — how the generator works, the channel table, the read-side asymmetry, and the emit trade-offs.
 - [The `goplan` toolkit](../../public/semistructured/leeway/marshall/go/goplan/) and [the `mappingplan` model](../../public/semistructured/leeway/mappingplan/) — the shared tag grammar, `PlanBuilder` validation, section grouping, and the membership channels.
 - Worked DTOs: [`anchor/codecdemo/`](../../public/semistructured/leeway/anchor/codecdemo/) — `textdoc` (multi-sub-column), `labeledtextdoc` (tuple), `lineagedoc` (multi-membership + ref tuple), `sensorreading` (carriers), and [`codecdemo/nested/`](../../public/semistructured/leeway/anchor/codecdemo/nested/) for the nested forms.
+- Multi-DTO composition — several component DTOs contributing to one entity,
+  shared sections included — is outside this how-to's single-DTO scope: see
+  `RowComposer` and [ADR-0146](../adr/0146-leeway-marshall-component-read-contract.md)
+  (overlap is expected; contributions share one buffered frame per section),
+  with [`anchor/ecsdemo/`](../../public/semistructured/leeway/anchor/ecsdemo/)
+  as the worked example.
 - Decisions: [ADR-0113](../adr/0113-leeway-marshall-nested-primary-consolidation.md) (nested primary, the frozen flat escalation, the D1 cull), [ADR-0074](../adr/0074-leeway-marshall-package-layout.md) (package layout), [ADR-0101](../adr/0101-leeway-marshall-mixed-shape-sections.md) (mixed shapes), [ADR-0103](../adr/0103-leeway-marshall-dynamic-membership-tuples.md) / [ADR-0109](../adr/0109-leeway-marshall-multi-membership-ref-tuples.md) (tuples), [ADR-0100](../adr/0100-recordstore-generated-leeway-clickhouse-store.md) (`ReadRow` / store).

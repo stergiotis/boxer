@@ -174,6 +174,12 @@ open, codegen-free read path (`marshallreflect.Unmarshal`).
 - An entity "has" component `C` iff its id is present in `C`'s store (stage 1:
   the map key is present, equivalently the `*C` field on the gathered `Entity` is
   non-nil).
+- Components need not partition the storage: several components may read one
+  section, and even the same `(section, membership)` slot — overlap is expected
+  under fusion and enrichment, and a reader ignores attributes no bound kind
+  claims ([ADR-0146](../../../../../doc/adr/0146-leeway-marshall-component-read-contract.md)
+  D5). What correct decode requires is membership → id agreement between
+  writer and reader — stage 2's shared `droneLookup`.
 - The approximate check is a *necessary condition* for the exact check, at both
   granularities: `Presence[C]` ⊆ `Validate[C]` and `ArchetypePresence` ⊆
   `ArchetypeValidate`. If the approximate check fails, the exact check is
