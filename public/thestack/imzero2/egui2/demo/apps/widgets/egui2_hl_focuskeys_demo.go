@@ -271,7 +271,7 @@ func (inst *focusDemoState) panel(ids *c.WidgetIdStack, name string, which int, 
 		if captures {
 			c.Label("captures " + icons.PhArrowsOutCardinal + " nav keys").Send()
 		} else {
-			c.Label("no capture mask").Send()
+			c.Label("no capture mask").Send() // designlint:ignore=L1 (counterpart to the "captures … nav keys" branch above; same lowercase readout style)
 		}
 		c.Label(fmt.Sprintf("hasFocus=%v", flags.HasFocus())).Send()
 		c.Label(fmt.Sprintf("gained=%v lost=%v",

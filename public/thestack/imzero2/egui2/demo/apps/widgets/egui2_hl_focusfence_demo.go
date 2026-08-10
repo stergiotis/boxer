@@ -183,7 +183,7 @@ func demoFocusFence(ids *c.WidgetIdStack, st *fenceDemoState) {
 		// Positive = content moved up, i.e. scrolled down.
 		c.Label(fmt.Sprintf("scrollY=%.0f", st.baselineY-rel)).Send()
 	} else {
-		c.Label("scrollY=?").Send()
+		c.Label("scrollY=?").Send() // designlint:ignore=L1 (no-baseline-yet state of the scrollY=%.0f readout above, same key=value diagnostic style)
 	}
 	c.Label(fmt.Sprintf("openKeys=%d capturingKeys=%d",
 		st.keyCounts[fenceOpen], st.keyCounts[fenceCapture])).Send()
