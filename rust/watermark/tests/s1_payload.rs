@@ -2,7 +2,7 @@
 //! detects any single-bit corruption of the 80-bit info word.
 
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use watermark::payload::INFO_BITS;
 use watermark::Payload;
 
@@ -28,7 +28,7 @@ fn single_bit_corruption_always_detected() {
         let p = Payload(b);
         let mut bits = p.to_info_bits();
         // Flip exactly one bit anywhere in the 80-bit info word.
-        let i = rng.gen_range(0..INFO_BITS);
+        let i = rng.random_range(0..INFO_BITS);
         bits[i] = !bits[i];
         assert!(
             Payload::from_info_bits(&bits).is_err(),

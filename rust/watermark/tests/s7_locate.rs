@@ -2,7 +2,7 @@
 //! enumeration over 200 random integer offsets (including single-tile offsets).
 
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 
 use watermark::decode::decode_at_origins;
 use watermark::locate::locate;
@@ -52,8 +52,8 @@ fn run(seed: u64, natural: bool) {
     let mut singles = 0;
 
     for _ in 0..200 {
-        let ox = rng.gen_range(0..spec.tile_w);
-        let oy = rng.gen_range(0..spec.tile_h);
+        let ox = rng.random_range(0..spec.tile_w);
+        let oy = rng.random_range(0..spec.tile_h);
         let crop = full.crop(ox, oy, cw, ch);
 
         let loc = locate(&crop, &spec);

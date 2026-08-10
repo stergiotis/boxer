@@ -6,7 +6,7 @@
 //!   recovery up to a documented σ.
 
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 
 use watermark::decode::{decode_at_origins, recover_words};
 use watermark::fec::{encode_info, BITS_PER_WORD, N_WORDS};
@@ -18,8 +18,8 @@ fn add_gaussian(frame: &mut LumaFrame, sigma: f32, rng: &mut StdRng) {
         return;
     }
     for v in frame.y.iter_mut() {
-        let u1: f32 = rng.gen::<f32>().max(1e-7);
-        let u2: f32 = rng.gen::<f32>();
+        let u1: f32 = rng.random::<f32>().max(1e-7);
+        let u2: f32 = rng.random::<f32>();
         let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f32::consts::PI * u2).cos();
         *v = (*v + sigma * z).clamp(0.0, 255.0);
     }
@@ -49,7 +49,7 @@ fn brightness_offsets_decode_clean() {
     let mut rng = StdRng::seed_from_u64(1);
     for off in [-60.0, -30.0, 30.0, 60.0, 90.0] {
         for _ in 0..200 {
-            let payload = Payload(rng.gen());
+            let payload = Payload(rng.random());
             let mut wm = encode_frame(&base, &payload, &spec);
             add_brightness(&mut wm, off);
             let got = decode_at_origins(&wm, &[(0, 0)], &spec)
@@ -67,7 +67,7 @@ fn gamma_shifts_decode_clean() {
     let mut rng = StdRng::seed_from_u64(2);
     for gamma in [0.5f32, 0.7, 1.4, 2.0] {
         for _ in 0..200 {
-            let payload = Payload(rng.gen());
+            let payload = Payload(rng.random());
             let mut wm = encode_frame(&base, &payload, &spec);
             apply_gamma(&mut wm, gamma);
             let got = decode_at_origins(&wm, &[(0, 0)], &spec)
@@ -92,7 +92,7 @@ fn noise_sigma_sweep_single_tile() {
         let mut total_bits = 0u64;
         let mut ok = 0u32;
         for _ in 0..trials {
-            let payload = Payload(rng.gen());
+            let payload = Payload(rng.random());
             let truth = encode_info(&payload.to_info_bits());
             let mut wm = encode_frame(&base, &payload, &spec);
             add_gaussian(&mut wm, sigma, &mut rng);

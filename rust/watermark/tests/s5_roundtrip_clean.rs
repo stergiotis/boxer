@@ -3,7 +3,7 @@
 //! golden test: if it fails, nothing downstream works.
 
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 
 use watermark::decode::{decode_aligned, decode_at_origins};
 use watermark::render::encode_frame;
@@ -13,7 +13,7 @@ fn roundtrip_over_base(base: &LumaFrame, seed: u64, n: usize) {
     let spec = TileSpec::default();
     let mut rng = StdRng::seed_from_u64(seed);
     for _ in 0..n {
-        let payload = Payload(rng.gen());
+        let payload = Payload(rng.random());
         let wm = encode_frame(base, &payload, &spec);
         let got = decode_aligned(&wm, &spec).expect("clean decode must be CRC-clean");
         assert_eq!(got, payload, "bit-exact round-trip failed");
@@ -42,7 +42,7 @@ fn single_tile_decode_clean() {
     let base = LumaFrame::synthetic_natural(spec.tile_w, spec.tile_h, 9);
     let mut rng = StdRng::seed_from_u64(123);
     for _ in 0..1000 {
-        let payload = Payload(rng.gen());
+        let payload = Payload(rng.random());
         let wm = encode_frame(&base, &payload, &spec);
         let got = decode_at_origins(&wm, &[(0, 0)], &spec).expect("single tile must decode");
         assert_eq!(got, payload);

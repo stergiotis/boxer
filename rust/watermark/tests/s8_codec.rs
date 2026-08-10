@@ -5,7 +5,7 @@
 //! Skipped (not failed) when `ffmpeg` is absent.
 
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 
 use watermark::codec::{ffmpeg_available, roundtrip, Codec};
 use watermark::decode::{decode_at_origins, recover_words};
@@ -24,7 +24,7 @@ fn measure(codec: Codec, crf: u32, n: u32, seed: u64) -> (f64, u32) {
     let mut ok = 0u32;
 
     for _ in 0..n {
-        let payload = Payload(rng.gen());
+        let payload = Payload(rng.random());
         let truth = encode_info(&payload.to_info_bits());
         let wm = encode_frame(&base, &payload, &spec);
         let dec = roundtrip(&wm, codec, crf).expect("ffmpeg round-trip");

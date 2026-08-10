@@ -6,7 +6,7 @@
 //! - Full 80-bit info word survives encode → (corrupt) → decode.
 
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 
 use watermark::fec::{
     decode_payload, decode_word, encode_info, encode_word, BITS_PER_WORD, N_WORDS,
@@ -43,19 +43,19 @@ fn corrects_all_weight_1_and_2_errors() {
 fn corrects_random_weight_3_errors() {
     let mut rng = StdRng::seed_from_u64(0xC0DE_F00D);
     for _ in 0..200_000 {
-        let x = rng.gen_range(0..4096u16);
+        let x = rng.random_range(0..4096u16);
         let cw = encode_word(x);
         // Pick 3 distinct bit positions.
         let mut bits = [0u32; 3];
-        bits[0] = rng.gen_range(0..BITS_PER_WORD as u32);
+        bits[0] = rng.random_range(0..BITS_PER_WORD as u32);
         loop {
-            bits[1] = rng.gen_range(0..BITS_PER_WORD as u32);
+            bits[1] = rng.random_range(0..BITS_PER_WORD as u32);
             if bits[1] != bits[0] {
                 break;
             }
         }
         loop {
-            bits[2] = rng.gen_range(0..BITS_PER_WORD as u32);
+            bits[2] = rng.random_range(0..BITS_PER_WORD as u32);
             if bits[2] != bits[0] && bits[2] != bits[1] {
                 break;
             }
@@ -75,7 +75,7 @@ fn info_word_roundtrip_clean() {
     for _ in 0..1000 {
         let mut bits = [false; INFO_BITS];
         for b in bits.iter_mut() {
-            *b = rng.gen();
+            *b = rng.random();
         }
         let cws = encode_info(&bits);
         let (back, stats) = watermark::fec::decode_words(&cws);
@@ -91,14 +91,14 @@ fn info_word_survives_3_errors_per_word() {
     // whole 80-bit word survives up to 3 errors in *every* one of the 7 words.
     let mut rng = StdRng::seed_from_u64(22);
     for _ in 0..2000 {
-        let payload = Payload(rng.gen());
+        let payload = Payload(rng.random());
         let info = payload.to_info_bits();
         let mut cws = encode_info(&info);
         for cw in cws.iter_mut() {
             // Inject exactly 3 distinct errors into this word.
             let mut mask = 0u32;
             while mask.count_ones() < 3 {
-                mask |= 1u32 << rng.gen_range(0..BITS_PER_WORD as u32);
+                mask |= 1u32 << rng.random_range(0..BITS_PER_WORD as u32);
             }
             *cw = apply(*cw, mask);
         }
@@ -115,13 +115,13 @@ fn four_errors_never_silently_wrong() {
     let mut crc_caught = 0u32;
     let mut lucky = 0u32;
     for _ in 0..20_000 {
-        let payload = Payload(rng.gen());
+        let payload = Payload(rng.random());
         let info = payload.to_info_bits();
         let mut cws = encode_info(&info);
-        let victim = rng.gen_range(0..N_WORDS);
+        let victim = rng.random_range(0..N_WORDS);
         let mut mask = 0u32;
         while mask.count_ones() < 4 {
-            mask |= 1u32 << rng.gen_range(0..BITS_PER_WORD as u32);
+            mask |= 1u32 << rng.random_range(0..BITS_PER_WORD as u32);
         }
         cws[victim] = apply(cws[victim], mask);
         match decode_payload(&cws) {

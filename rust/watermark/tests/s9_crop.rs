@@ -9,7 +9,7 @@
 //! Skipped (not failed) when ffmpeg is absent.
 
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 
 use watermark::codec::{ffmpeg_available, roundtrip, Codec};
 use watermark::decode::decode_frame;
@@ -35,14 +35,14 @@ fn sweep_codec(codec: Codec, crf: u32, frames: u32, crops_per_frame: u32, seed: 
     };
 
     for f in 0..frames {
-        let payload = Payload(rng.gen());
+        let payload = Payload(rng.random());
         let base = LumaFrame::synthetic_natural(fw, fh, seed.wrapping_add(f as u64));
         let wm = encode_frame(&base, &payload, &spec);
         let dec_full = roundtrip(&wm, codec, crf).expect("ffmpeg round-trip");
 
         for _ in 0..crops_per_frame {
-            let ox = rng.gen_range(0..=spec.tile_w);
-            let oy = rng.gen_range(0..=spec.tile_h);
+            let ox = rng.random_range(0..=spec.tile_w);
+            let oy = rng.random_range(0..=spec.tile_h);
             let crop = dec_full.crop(ox, oy, spec.window_w(), spec.window_h());
 
             // Track whether this offset exposes a single tile (the worst case).
