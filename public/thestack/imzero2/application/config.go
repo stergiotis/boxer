@@ -7,6 +7,8 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/config"
+	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
 type ImZeroClientConfig struct {
@@ -184,11 +186,19 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 		&cli.Float64Flag{Name: nameTransf("fallbackFontScale"), Value: 1.0, Category: "font tweaks"},
 		&cli.Float64Flag{Name: nameTransf("fallbackFontYOffsetFactor"), Value: 0.0, Category: "font tweaks"},
 		&cli.Float64Flag{Name: nameTransf("fallbackFontYOffset"), Value: 0.0, Category: "font tweaks"},
-		&cli.StringFlag{
-			Name:     nameTransf("clientBinary"),
-			Value:    inst.ClientBinary,
-			Required: false,
-		},
+		// Derived from the env spec rather than declared here, so the flag
+		// carries IMZERO2_CLIENT_BINARY and the two cannot drift (ADR-0009).
+		// FromContext still reads it with ctx.String: urfave/cli resolves the
+		// env var into the flag set before the action runs, and a PathFlag's
+		// value is a string.
+		//
+		// The flag's default is now the spec's (empty) rather than whatever
+		// inst.ClientBinary held when ToCliFlags ran. No caller relied on the
+		// old behaviour: both ToCliFlags sites build a Config that leaves
+		// ClientBinary zero. apps/svgserver sets it, but constructs its Config
+		// directly and keeps its own flag — that one names the headless_svg
+		// client, a different binary, so it must not share this variable.
+		imzero2env.ClientBinary.AsCliFlag(env.WithCliFlagName(nameTransf("clientBinary"))),
 		&cli.StringFlag{
 			Name:     nameTransf("imZeroCmdOutFile"),
 			Value:    inst.ImZeroCmdOutFile,

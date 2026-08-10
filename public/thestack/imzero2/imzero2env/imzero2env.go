@@ -62,6 +62,26 @@ var (
 		Category:    env.CategoryDev,
 	})
 
+	// ClientBinary is the imzero2 GUI client the Go host launches and
+	// speaks the command protocol to.
+	//
+	// Empty is not an error and not a headless mode: the host falls back to
+	// reading and writing that protocol on stdin/stdout, so a caller who
+	// merely forgot the path sees a process that starts, logs normally, and
+	// never opens a window. That failure is quiet enough to cost an
+	// afternoon, which is the argument for setting the path once in the
+	// environment rather than retyping it per invocation.
+	//
+	// Declared as a path so a value like ~/repo/boxer/... expands.
+	// ImZeroClientConfig derives its --clientBinary flag from this spec, so
+	// the flag and the variable cannot drift apart.
+	ClientBinary = env.NewPath(env.Spec{
+		Name:        "IMZERO2_CLIENT_BINARY",
+		Description: "path to the imzero2 GUI client the host launches; empty speaks the command protocol on stdin/stdout instead of opening a window",
+		Category:    env.CategoryDev,
+		CliFlagName: "clientBinary",
+	})
+
 	// DebugMode selects an imzero2 launch profile: "memcheck",
 	// "massif", "flamegraph", or "heaptrack". Empty means the default
 	// launch path.
