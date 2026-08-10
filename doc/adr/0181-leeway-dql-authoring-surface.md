@@ -130,14 +130,24 @@ Client-only authoring calls, expanded by a new standard-set pass
 `<expr> AS "<physical name>"`. Never installed server-side; a call reaching
 a raw endpoint fails loudly as an unknown function.
 
-- **Arguments** after the wrapped expression are string literals:
-  logical name, canonical type (parsed with the `canonicaltypes` parser),
-  then vocabulary-prefixed tokens — `item:` (**mandatory** on `LW_PLAIN`;
-  prefixes carry semantics, calls read complete), `enc:`, `sem:`, `use:`
-  (tagged only). Prefixes are required because aspect names collide across
-  the three closed vocabularies (`json*`/`cbor*` exist twice).
+- **Call shape.** Every argument after the wrapped expression is a string
+  literal. The tagged constructors name their **section explicitly, in
+  second position** — `LW_TV(expr, 'section', 'name', 'type', tokens…)`,
+  `LW_TV_MEMB(expr, 'section', 'channel')` — while `LW_PLAIN` takes no
+  section at all, because a plain column has none; its mandatory `item:`
+  token is what files it instead. Inferring the section from the
+  statement's target would make the same text mean different things in
+  different hosts, and folding it into the name as `'section:name'` would
+  spell a mint exactly like ADR-0116's handle for an existing column,
+  collapsing the duality this family exists to keep legible.
+- **Aspect tokens** carry a vocabulary prefix — `item:` (**mandatory** on
+  `LW_PLAIN`; prefixes carry semantics, calls read complete), `enc:`,
+  `sem:`, `use:` (tagged only) — after the logical name and the canonical
+  type (parsed with the `canonicaltypes` parser). Prefixes are required
+  because aspect names collide across the three closed vocabularies
+  (`json*`/`cbor*` exist twice).
 - **Membership and support columns are constructed by channel**
-  (`LW_TV_MEMB(expr, section, 'low-card-ref')`), never by properties —
+  (`LW_TV_MEMB(expr, 'section', 'low-card-ref')`), never by properties —
   role, type and hints come from `ResolveMembership`, ClickHouse-filtered.
 - **Position rule:** legal only as a whole projection item; anywhere else
   errors with the call's `SourceRange`.
