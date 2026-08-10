@@ -151,6 +151,31 @@ Twelve items in three milestones.
 | every tour capture containing markdown | rhythm, marker, image-size changes shift pixels once | captures refreshed; A/B against a same-binary control per the established noise-floor recipe |
 | ADR-0178 | dated Update on the parse-thread claim | none |
 
+## Alternatives
+
+- **Stage the twelve items as separate, smaller ADRs/PRs** instead of one
+  batch — the review doc's own size tiers (small / medium / larger, §6)
+  would support it. Rejected: the design dialogue settled all twelve the
+  same day the review landed, and the wire round (IDL regen + Rust rebuild)
+  is a fixed cost either of its two M1 items pays alone — splitting them
+  across future ADRs pays that cost twice for changes that are already
+  zero-existing-caller and low-risk on their own.
+- **Ship only the small tier (review §6 items 1–7) now, defer the medium
+  tier (8–12) to a later pass.** A real fork the review's own tiering
+  invites. Rejected: item 8 there — `Doc.Dropped()` and the corpus
+  zero-drops gate, Decision item 11 — is the direct fix for the review's
+  structural finding #1, the silent-drop failure mode behind the historical
+  tag-deletion incident. Deferring it behind the cosmetic items (rhythm,
+  markers) would ship polish ahead of the regression net for the worse bug
+  class.
+- **Fold the four larger items (review §6 items 13–16) into this batch
+  too.** Rejected per the review's own framing: each needs its own dialogue
+  independent of this one — render-path smoke coverage has no harness yet,
+  styled table cells want a new op, the image cost model is speculative
+  until screenshot-heavy books exist, and slug dedup wants corpus lint
+  landed first so it doesn't silently move existing anchors. Recorded with
+  named triggers (Consequences — Neutral) rather than folded in.
+
 ## Consequences
 
 ### Positive
