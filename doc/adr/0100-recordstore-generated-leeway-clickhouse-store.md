@@ -338,8 +338,9 @@ Adopt **O4**. Specific decisions:
   `<Kind>ReadRow(i, attrs, membs, …) (row, present, err)` — the
   FillFromArrow decode middles (accumulators, membership-match loops)
   shared, with presence-tolerant tails (a row carrying none of the kind's
-  memberships is `present=false`, never an error; a duplicated **scalar**
-  field errors, while duplicated container memberships concatenate). Two
+  memberships is `present=false`, never an error; a surplus attribute on a
+  claimed slot errors on every shape — ADR-0146 D4 made arity uniform on
+  read, retiring the earlier scalar-errors/container-concatenates split). Two
   write/read asymmetries are inherited from marshallgen and worth knowing:
   an **empty container** field writes no membership (len-gated) and reads
   back as if absent — "present with empty list" is unrepresentable — and
@@ -349,10 +350,22 @@ Adopt **O4**. Specific decisions:
   per component; kinds whose shapes ReadRow does not cover are skipped at
   emission and rejected by the store generator through the same exported
   gate (`marshallgen.ReadRowSupported`), so the two cannot disagree.
-  Components must own **disjoint sections** — membership ids are assigned
-  per kind, so two kinds writing one section would alias each other's
-  memberships and silently cross-decode; the generator enforces the
-  invariant at generation time.
+  Components must bind **disjoint sections** within one generated store —
+  a precondition of this generator, not a rule of the component model.
+  The store drives marshallgen's schema-agnostic `NoOpWrapper` target,
+  which numbers membership ids per plan (each kind counting 1..N), so two
+  kinds' distinct memberships can carry the same wire id (the example's
+  `DeviceMembershipIds`: four memberships, all id 1); the membership
+  match is scoped to a section's reader, so under colliding ids a shared
+  section would silently cross-read — disjoint sections keep the
+  collision unobservable, and the generator enforces the precondition at
+  generation time. Leeway components as such may bind any mixture of
+  sections and may deliberately share `(section, membership)` slots
+  (ADR-0146 D5/D6 — overlap is expected; `anchor/ecsdemo` overlaps every
+  slot across kinds via one shared membership lookup). Lifting the
+  restriction needs a store-global membership→id assignment — the
+  ADR-0105 D2 membership-id override, with this gate relaxed to id-level
+  disjointness (Deferred).
 
   *Emitted layout and control visibility.* The DML and RA scaffolding (~280
   identifiers: the `InEntity` builder, section classes,
@@ -639,6 +652,13 @@ The QOC options above carry the rankings; notes below record nuance.
   channels. Carrier (mixed / parametrized) channels and exploded fields
   remain uncovered — `marshallgen.ReadRowSupported` is the single gate —
   pending a consumer (the keelson facts kinds would be the trigger).
+- **Membership-id override / id-level disjointness** (SD6). The
+  disjoint-sections precondition exists because the store's `NoOpWrapper`
+  target numbers membership ids per plan. ADR-0105 D2 records the lift: an
+  optional name → id map on `gen.Input` (positional assignment stays the
+  default), with the gate relaxed to id-level disjointness when the
+  override is present — needed by schemas whose kinds share sections by
+  construction (the keelson facts table).
 - **Flat-safe layout** (SD6). `Flat` today exports the whole builder,
   control set included — the wide, unguarded surface. A Flat variant that
   keeps the types nameable but the control set walled (in-package unexported
@@ -692,8 +712,9 @@ The QOC options above carry the rankings; notes below record nuance.
 
 ## Status
 
-Accepted — 2026-07-04 (reviewed by @spx); reconciled in place 2026-07-10
-(see Updates). The decision in force: `public/storage/recordstore` is the
+Accepted — 2026-07-04 (reviewed by @spx); reconciled in place 2026-07-10;
+SD6 corrected in place 2026-08-10 (see Updates). The decision in force:
+`public/storage/recordstore` is the
 generated, append-only store composing leeway, the read-through cache and
 ClickHouse — SD1–SD9 as written, with all four slices delivered and the two
 consumer adapters (pushout `StorageI` passing `repo/storagetest`, the CQRS
@@ -705,8 +726,9 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 From acceptance on, this document normally changes only via dated `## Update`
 sections; the 2026-07-10 reconciliation is a maintainer-authorized
 consolidation exception (the SD text now states current truth and the dated
-updates are compacted to the changelog below). See
-`doc/DOCUMENTATION_STANDARD.md` for the edit-policy tiers.
+updates are compacted to the changelog below), and the 2026-08-10 SD6
+correction is a second authorized in-place fix, recorded in its dated entry.
+See `doc/DOCUMENTATION_STANDARD.md` for the edit-policy tiers.
 
 ## Updates
 
@@ -759,6 +781,44 @@ Changelog (all landed; see git history for the commits):
   exported (wide) control set. Interface-narrowing was rejected as
   cast-defeatable. A dml-generator capability drove this. (SD4/SD6)
 
+### 2026-08-10 — SD6 corrected in place: disjoint sections is a generator precondition, not a component-model law
+
+SD6 stated: "Components must own **disjoint sections** — membership ids are
+assigned per kind, so two kinds writing one section would alias each other's
+memberships and silently cross-decode; the generator enforces the invariant
+at generation time." Presented as a rule of components, that is wrong — this
+ADR's own Context says the opposite ("components are flat DTOs sharing
+sections"), and ADR-0146 D5/D6 (accepted 2026-07-27, after this ADR's
+reconciliation) settle the model against it: overlap is expected — components
+may bind any mixture of sections and may deliberately share
+`(section, membership)` slots; the write path composes several DTOs'
+contributions into one buffered section frame; `anchor/ecsdemo` overlaps
+every slot across kinds and round-trips. The aliasing hazard the sentence
+describes is real but mis-attributed: it is an id-collision consequence of
+the schema-agnostic `NoOpWrapper` target this generator drives (membership
+ids numbered 1..N per plan — the example's `DeviceMembershipIds` carries
+four memberships, all id 1), not a property of section sharing. ADR-0105
+already scopes the gate correctly ("correct under positional ids, but
+`boxer.facts` kinds share sections by construction") and records the lift
+as its D2 membership-id override.
+
+The maintainer authorized correcting the body in place rather than leaving
+the mis-scoped sentence standing (the 2026-07-10 exception pattern); this
+entry records what changed:
+
+- SD6's disjointness paragraph rescoped: the gate is a generator
+  precondition caused by per-plan membership ids; the component model
+  permits overlap (ADR-0146 D5/D6); the ADR-0105 D2 membership-id override
+  is the recorded lift path.
+- SD6's arity tail corrected: a surplus attribute on a claimed slot errors
+  on every shape (ADR-0146 D4); the scalar-errors/container-concatenates
+  split it described was retired with D4.
+- Deferred gained the membership-id override / id-level disjointness entry.
+- References gained ADR-0146.
+
+Unaffected: the gate itself, its error message, every generated artefact,
+and the other SDs — a records correction, not a behavior change.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)
@@ -772,6 +832,10 @@ Changelog (all landed; see git history for the commits):
   — the tiering this store consumes without disturbing.
 - [ADR-0075: leeway typed component views](0075-leeway-typed-component-views.md)
   — components, archetypes and the flat-DTO limit.
+- [ADR-0146: leeway marshall — the component read contract](0146-leeway-marshall-component-read-contract.md)
+  — the component-model overlap rules (D5/D6) SD6's store-local
+  disjointness precondition is scoped against, and the uniform read arity
+  (D4) the `ReadRow` tails follow.
 - [ADR-0079: pushout production storage, codec, exchange](0079-pushout-production-storage-codec-exchange.md)
   — `repo.StorageI` and the conformance suite gating slice S3.
 - [ADR-0089: row-DML serialization vs ClickHouse-native ingestion](0089-rowdml-serialization-clickhouse-native-ingestion.md)
