@@ -21,19 +21,19 @@ computing queries 1-6 do not, and the pass declines them untouched.
 ### input (query 7, executable form)
 
 ```sql
-SELECT "id:id:u64:2k:0:0:", "id:naturalKey:y:g:0:0:", "tv:symbol:value:val:s:m:0:24:0::data", "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "tv:geoPoint:h3:val:u64:g:0:0:0::geo" FROM "anchor"."facts" WHERE "has"("tv:symbol:value:val:s:m:0:24:0::data", 'DELIVERED') OR "has"("tv:symbol:value:val:s:m:0:24:0::data", 'SEISMIC_ANOMALY')
+SELECT "id:id:u64:2k:0:0:", "id:naturalKey:y:g:0:0:", "tv:symbol:value:val:s:m:0:12:0::data", "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "tv:geoPoint:h3:val:u64:g:0:0:0::geo" FROM "anchor"."facts" WHERE "has"("tv:symbol:value:val:s:m:0:12:0::data", 'DELIVERED') OR "has"("tv:symbol:value:val:s:m:0:12:0::data", 'SEISMIC_ANOMALY')
 ```
 
 ### plain naming (no namer) — `cond_N` beside the schema
 
 ```sql
-SELECT "id:id:u64:2k:0:0:", "id:naturalKey:y:g:0:0:", "tv:symbol:value:val:s:m:0:24:0::data", "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "tv:geoPoint:h3:val:u64:g:0:0:0::geo", ("has"("tv:symbol:value:val:s:m:0:24:0::data", 'DELIVERED')) AS cond_1, ("has"("tv:symbol:value:val:s:m:0:24:0::data", 'SEISMIC_ANOMALY')) AS cond_2 FROM "anchor"."facts" WHERE cond_1 OR cond_2
+SELECT "id:id:u64:2k:0:0:", "id:naturalKey:y:g:0:0:", "tv:symbol:value:val:s:m:0:12:0::data", "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "tv:geoPoint:h3:val:u64:g:0:0:0::geo", ("has"("tv:symbol:value:val:s:m:0:12:0::data", 'DELIVERED')) AS cond_1, ("has"("tv:symbol:value:val:s:m:0:12:0::data", 'SEISMIC_ANOMALY')) AS cond_2 FROM "anchor"."facts" WHERE cond_1 OR cond_2
 ```
 
 ### leeway naming (resolver as ConditionNamerI) — a `conditions` section
 
 ```sql
-SELECT "id:id:u64:2k:0:0:", "id:naturalKey:y:g:0:0:", "tv:symbol:value:val:s:m:0:24:0::data", "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "tv:geoPoint:h3:val:u64:g:0:0:0::geo", ("has"("tv:symbol:value:val:s:m:0:24:0::data", 'DELIVERED')) AS "tv:conditions:c1:val:b:0:0:0:0::", ("has"("tv:symbol:value:val:s:m:0:24:0::data", 'SEISMIC_ANOMALY')) AS "tv:conditions:c2:val:b:0:0:0:0::" FROM "anchor"."facts" WHERE "tv:conditions:c1:val:b:0:0:0:0::" OR "tv:conditions:c2:val:b:0:0:0:0::"
+SELECT "id:id:u64:2k:0:0:", "id:naturalKey:y:g:0:0:", "tv:symbol:value:val:s:m:0:12:0::data", "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "tv:geoPoint:h3:val:u64:g:0:0:0::geo", ("has"("tv:symbol:value:val:s:m:0:12:0::data", 'DELIVERED')) AS "tv:conditions:c1:val:b:0:0:0:0::", ("has"("tv:symbol:value:val:s:m:0:12:0::data", 'SEISMIC_ANOMALY')) AS "tv:conditions:c2:val:b:0:0:0:0::" FROM "anchor"."facts" WHERE "tv:conditions:c1:val:b:0:0:0:0::" OR "tv:conditions:c2:val:b:0:0:0:0::"
 ```
 
 The synthesized condition columns are physical leeway names, so a result
@@ -55,7 +55,7 @@ plain/backbone columns label the same way.
 | `tv:foreignKey:value:val:u64:g:1d0DV72:0:0::foreignKey` | `foreignKey:value` |
 | `tv:foreignKey:lr:lr:u64:2q:1d0DV72:0:0::foreignKey` | `foreignKey:lr` |
 | `tv:foreignKey:lrcard:lrcard:u64:4gw:1d0DV72:0:0::foreignKey` | `foreignKey:lrcard` |
-| `tv:symbol:value:val:s:m:0:24:0::data` | `symbol:value` |
+| `tv:symbol:value:val:s:m:0:12:0::data` | `symbol:value` |
 | `tv:symbol:hr:hr:u64:2k:0:0:0::data` | `symbol:hr` |
 | `tv:symbol:lr:lr:u64:2q:0:0:0::data` | `symbol:lr` |
 | `tv:symbol:lv:lv:y:m:0:0:0::data` | `symbol:lv` |
@@ -65,7 +65,7 @@ plain/backbone columns label the same way.
 | `tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data` | `symbol:lrcard` |
 | `tv:symbol:lvcard:lvcard:u64:4gw:0:0:0::data` | `symbol:lvcard` |
 | `tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data` | `symbol:lmrcard` |
-| `tv:symbolArray:value:val:sh:g:0:24:0::data` | `symbolArray:value` |
+| `tv:symbolArray:value:val:sh:g:0:12:0::data` | `symbolArray:value` |
 | `tv:symbolArray:hr:hr:u64:2k:0:0:0::data` | `symbolArray:hr` |
 | `tv:symbolArray:lr:lr:u64:2q:0:0:0::data` | `symbolArray:lr` |
 | `tv:symbolArray:lv:lv:y:m:0:0:0::data` | `symbolArray:lv` |

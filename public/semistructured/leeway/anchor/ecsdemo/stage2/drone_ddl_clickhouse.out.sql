@@ -1,6 +1,6 @@
 CREATE OR REPLACE TABLE drone.facts (
 	"id:id:u64:2k:0:0:" UInt64 CODEC(Delta,ZSTD(3)),
-	"tv:symbol:value:val:s:m:0:24:0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:symbol:value:val:s:m:0:12:0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
 	"tv:symbol:hr:hr:u64:2k:0:0:0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
 	"tv:symbol:lr:lr:u64:2q:0:0:0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
 	"tv:symbol:lv:lv:y:m:0:0:0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
@@ -21,7 +21,7 @@ CREATE OR REPLACE TABLE drone.facts (
 	"tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:u64Array:lvcard:lvcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:u64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
-	"tv:symbolArray:value:val:sh:g:0:24:0::data" Array(String) CODEC(ZSTD(3)),
+	"tv:symbolArray:value:val:sh:g:0:12:0::data" Array(String) CODEC(ZSTD(3)),
 	"tv:symbolArray:hr:hr:u64:2k:0:0:0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
 	"tv:symbolArray:lr:lr:u64:2q:0:0:0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
 	"tv:symbolArray:lv:lv:y:m:0:0:0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),

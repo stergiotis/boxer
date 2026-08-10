@@ -19,7 +19,7 @@ U0VOUy1aUk0tMQ==
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -158,7 +158,7 @@ U0VOUy1aUk0tMg==
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -297,7 +297,7 @@ U0VOUy1aUk0tMw==
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 SNOW_SHIFT
 							EndScalarValue()
@@ -467,7 +467,7 @@ U0VOUy1aUk0tNA==
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -606,7 +606,7 @@ U0VOUy1aUk0tNQ==
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -745,7 +745,7 @@ U0VOUy1aUk0tNg==
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 SNOW_SHIFT
 							EndScalarValue()
@@ -915,7 +915,7 @@ U0VOUy1aUk0tNw==
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 SEISMIC_ANOMALY
 							EndScalarValue()
@@ -1108,7 +1108,7 @@ U0VOUy1aUk0tOA==
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -1247,7 +1247,7 @@ U0VOUy1aUk0tOQ==
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 SNOW_SHIFT
 							EndScalarValue()
@@ -1417,7 +1417,7 @@ U0VOUy1aUk0tMTA=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -1556,7 +1556,7 @@ U0VOUy1aUk0tMTE=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -1695,7 +1695,7 @@ U0VOUy1aUk0tMTI=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 SNOW_SHIFT
 							EndScalarValue()
@@ -1865,7 +1865,7 @@ U0VOUy1aUk0tMTM=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -2004,7 +2004,7 @@ U0VOUy1aUk0tMTQ=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 SEISMIC_ANOMALY
 							EndScalarValue()
@@ -2197,7 +2197,7 @@ U0VOUy1aUk0tMTU=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 SNOW_SHIFT
 							EndScalarValue()
@@ -2367,7 +2367,7 @@ U0VOUy1aUk0tMTY=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -2506,7 +2506,7 @@ U0VOUy1aUk0tMTc=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -2645,7 +2645,7 @@ U0VOUy1aUk0tMTg=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 SNOW_SHIFT
 							EndScalarValue()
@@ -2815,7 +2815,7 @@ U0VOUy1aUk0tMTk=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()
@@ -2954,7 +2954,7 @@ U0VOUy1aUk0tMjA=
 				EndSection()
 				BeginSection(name="symbol",valueNames=["value"],valueCanonicalTypes=["s"],useAspects="0",nAttrs=1)
 					BeginTaggedValue()
-						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:24:0::data",name="value",canonicalType="s",valueSemantics="24")
+						BeginColumn(colAddr.FullColumnName="tv:symbol:value:val:s:m:0:12:0::data",name="value",canonicalType="s",valueSemantics="12")
 							BeginScalarValue()
 HEARTBEAT
 							EndScalarValue()

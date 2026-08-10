@@ -24,7 +24,7 @@ import (
 func CreateSchemaDroneTable() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:id:u64:2k:0:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
-		/* 001 */ arrow.Field{Name: "tv:symbol:value:val:s:m:0:24:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 001 */ arrow.Field{Name: "tv:symbol:value:val:s:m:0:12:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
 		/* 002 */ arrow.Field{Name: "tv:symbol:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 003 */ arrow.Field{Name: "tv:symbol:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 004 */ arrow.Field{Name: "tv:symbol:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
@@ -45,7 +45,7 @@ func CreateSchemaDroneTable() (schema *arrow.Schema) {
 		/* 019 */ arrow.Field{Name: "tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 020 */ arrow.Field{Name: "tv:u64Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 021 */ arrow.Field{Name: "tv:u64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 022 */ arrow.Field{Name: "tv:symbolArray:value:val:sh:g:0:24:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 022 */ arrow.Field{Name: "tv:symbolArray:value:val:sh:g:0:12:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
 		/* 023 */ arrow.Field{Name: "tv:symbolArray:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 024 */ arrow.Field{Name: "tv:symbolArray:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 025 */ arrow.Field{Name: "tv:symbolArray:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},

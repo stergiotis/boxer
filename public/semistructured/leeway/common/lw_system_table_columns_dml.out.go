@@ -25,7 +25,7 @@ func CreateSchemaSystemTableColumns() (schema *arrow.Schema) {
 		/* 000 */ arrow.Field{Name: "id:tableHash:u64:2k:0:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
 		/* 001 */ arrow.Field{Name: "id:columnIndex:u64:2k:0:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
 		/* 002 */ arrow.Field{Name: "ro:tableName:s:k:0:0:", Nullable: false, Type: &arrow.StringType{}},
-		/* 003 */ arrow.Field{Name: "tv:symbol:value:val:s:m:0:24:0::meta", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 003 */ arrow.Field{Name: "tv:symbol:value:val:s:m:0:12:0::meta", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
 		/* 004 */ arrow.Field{Name: "tv:symbol:hr:hr:u64:2k:0:0:0::meta", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 005 */ arrow.Field{Name: "tv:symbol:lr:lr:u64:2q:0:0:0::meta", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 006 */ arrow.Field{Name: "tv:symbol:lmr:lmr:u64:2q:0:0:0::meta", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
