@@ -1,19 +1,19 @@
 ---
 type: explanation
 audience: contributor
-status: draft
-reviewed-by:
-reviewed-date:
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-10
 ---
 
-> **Status: draft — pre-human-review.** Working material as of 2026-08-10. A
-> review of the three leeway aspect vocabularies for orthogonality,
-> completeness and consistency. The lens is deliberately *not* expressivity:
-> each observation is graded by what it costs to check and over what
-> neighbourhood, to keep the vocabulary out of the ontology tarpit. Findings
-> are facts about the code as reviewed; §5 records what was subsequently
-> changed, including the same-day outright removal of
-> `AspectScaleOfMeasurementCategorial` (M6).
+> Review record, 2026-08-10: the three leeway aspect vocabularies examined
+> for orthogonality, completeness and consistency. The lens is deliberately
+> *not* expressivity — each observation is graded by what it costs to check
+> and over what neighbourhood, to keep the vocabulary out of the ontology
+> tarpit. Findings describe the code as reviewed; §5 records what was
+> changed the same day, and
+> [ADR-0182](../adr/0182-leeway-aspects-v2-codec-and-vocabulary.md) owns the
+> successor decisions.
 
 # The leeway aspect vocabularies — a review
 
@@ -170,12 +170,16 @@ The review's stop-rule, stated so it can be enforced rather than felt:
    predicate in `TableValidator` — never a relation the system reasons over.
    Disjointness-as-axiom is the door to the far side of the discontinuity;
    it stays shut.
-2. **Admission over retirement.** Removal is structurally impossible (wire
-   format), so the ratchet control must sit at admission: a new aspect names
-   its checker and the consumer that fails without it *before* it takes a
-   slot. With 2 slots left in `valueaspects` this is arithmetic, not hygiene.
-3. **Retirement is deprecation-in-place.** Doc marker plus lint against new
-   writes; never renumber, never re-use a slot.
+2. **Admission over retirement.** The ratchet control sits at admission: a
+   new aspect names its checker and the consumer that fails without it
+   *before* it takes a slot.
+3. **Retirement is a wire break, taken deliberately.** Removing an aspect
+   renumbers the enum and re-interprets every embedded segment; it is
+   affordable only as a planned window with every artifact regenerated and
+   adopters in lockstep (first Categorial, then ADR-0182) — never casually,
+   never by slot re-use. (As reviewed, this item read "removal is
+   structurally impossible; deprecate in place" — the Categorial removal
+   revised it the same day.)
 4. **Population follows consumers.** The census (18/144) is the number to
    move — by adding readers or stopping writes, not by adding vocabulary.
 
@@ -203,9 +207,8 @@ pre-DQL, with the external adopter migrated in the same change and every
 generated artifact regenerated. Physical tables created under the old
 numbering decode differently under the new one and must be re-created from
 regenerated DDL; none carrying the shifted segments were known outside
-regenerable artifacts. Still **not** proposed: renaming Go identifiers
-(external adopter); restructuring exclusive families into typed enums (a
-redesign of the wire format the bit-set *is*); building the reverse parser
-(it belongs to ADR-0181's implementation, and its naming decisions —
-including whether DQL spells `machine-generated` against the misnamed Go
-identifier — should be made there while strings are still cheap to choose).
+regenerable artifacts. The successor work — the v2 segment codec, the
+timeless vocabulary pass including the `MachineGenerated` rename, and the
+admission rule — is decided in
+[ADR-0182](../adr/0182-leeway-aspects-v2-codec-and-vocabulary.md); the
+reverse parser stays with ADR-0181's implementation.
