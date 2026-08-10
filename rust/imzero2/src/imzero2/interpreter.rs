@@ -14925,7 +14925,8 @@ mod tests {
         assert_eq!(info.color_type, png::ColorType::Rgba);
         assert_eq!(info.bit_depth, png::BitDepth::Eight);
 
-        let mut decoded = vec![0u8; reader.output_buffer_size()];
+        let mut decoded =
+            vec![0u8; reader.output_buffer_size().expect("buffer size computable for 2x2 image")];
         let frame = reader.next_frame(&mut decoded).expect("decode frame");
         let decoded = &decoded[..frame.buffer_size()];
         assert_eq!(decoded, &rgba[..], "decoded pixels must match input");

@@ -100,7 +100,16 @@ eframe = { version = ">=0.35.0", optional = true, default-features = false, feat
 # Headless host (ADR-0024 SD2): drives egui_wgpu::Renderer directly against
 # an offscreen texture; wgpu with default features so the native backends
 # (vulkan/gles) are present even when eframe is compiled out.
-wgpu = { version = "30.0.0", optional = true }
+#
+# Pinned to the 29.x line to match egui-wgpu 0.35.0's own `wgpu = "29.0"`
+# requirement — Cargo cannot unify a direct `wgpu` dependency with
+# egui-wgpu's transitive one across a major-version gap, so a bare bump to
+# 30.x (dependabot proposed this once already) links two distinct copies of
+# the wgpu types into headless.rs and every `egui_wgpu::Renderer` call site
+# fails to typecheck. Move this only alongside an egui-wgpu bump that itself
+# picks up wgpu 30 (which rides on an egui major bump — see Cargo.toml's
+# `egui`/`eframe` deps).
+wgpu = { version = "29.0.1", optional = true }
 egui-wgpu = { version = "0.35.0", optional = true }
 pollster = { version = "0.4", optional = true }
 # ADR-0024 SD4/SD6/SD7: WebSocket carrier + protobuf wire. The proto
