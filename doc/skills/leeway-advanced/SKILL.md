@@ -1,6 +1,6 @@
 ---
 name: leeway-advanced
-description: "Use for advanced Leeway columnar modelling — multi-membership encoding, co-sections, membership roles, and mapping JSON to an equivalent Leeway representation."
+description: "Use for advanced Leeway columnar modelling — multi-membership encoding, co-sections, membership roles, and mapping JSON to an equivalent Leeway representation. For the component/ECS layer (component DTOs over sections, overlap rules, archetypes) see the leeway-components skill."
 type: reference
 audience: agent reading this skill
 status: draft
