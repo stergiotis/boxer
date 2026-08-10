@@ -276,7 +276,6 @@ type TableManipulator struct {
 	table                     *TableDesc
 	plainValueItemNameToIndex []map[string]int
 	upsertedCount             int
-	receivedInvalidAspects    bool
 }
 
 var _ TableManipulatorFluidI = (*TableManipulator)(nil)

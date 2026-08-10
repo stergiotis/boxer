@@ -102,7 +102,8 @@ func ContainsAspect(encoded AspectSet, target AspectE) (has bool) {
 func IterateAspects(encoded AspectSet) iter.Seq2[int, AspectE] {
 	num, valid := decode(encoded)
 	if !valid {
-		return nil
+		// ranging over a nil iter.Seq2 panics; invalid input iterates nothing
+		return func(yield func(int, AspectE) bool) {}
 	}
 	return func(yield func(int, AspectE) bool) {
 		j := 0

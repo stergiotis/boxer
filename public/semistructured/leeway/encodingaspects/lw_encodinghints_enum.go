@@ -20,6 +20,10 @@ const (
 	AspectHeavyBiasSmallInteger         AspectE = 14
 	AspectSparse                        AspectE = 15
 
+	// The Json*/Cbor* encoding aspects permit the ddl module to use a native
+	// JSON/CBOR database type for the column. Deliberately distinct from the
+	// equally named valueaspects family, which states that the value is a
+	// JSON/CBOR string serialization.
 	AspectJsonScalar AspectE = 16
 	AspectJsonArray  AspectE = 17
 	AspectJsonObject AspectE = 18

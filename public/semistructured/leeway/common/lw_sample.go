@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"math/rand/v2"
+	"slices"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -18,6 +19,12 @@ func generateExampleAspects(rnd *rand.Rand, nAspectsMax int) (r useaspects2.Aspe
 	asps := make([]useaspects2.AspectE, 0, nAspectsMax)
 	for i := 0; i < nAspectsMax; i++ {
 		asps = append(asps, useaspects2.AspectE(rnd.IntN(int(useaspects2.MaxAspectExcl))))
+	}
+	// the validator rejects the contradictory uniformity pair
+	if slices.Contains(asps, useaspects2.AspectSectionMembershipsAllPrimary) {
+		asps = slices.DeleteFunc(asps, func(a useaspects2.AspectE) bool {
+			return a == useaspects2.AspectSectionMembershipsAllSecondary
+		})
 	}
 	var err error
 	r, err = useaspects2.EncodeAspects(asps...)
@@ -117,8 +124,10 @@ func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCa
 	sectionCount := rnd.IntN(4) + 1
 	for i := 0; i < sectionCount; i++ {
 		columnCount := rnd.IntN(8)
+		// use-aspects are section-level; sampling them per column would union
+		// contradictory pairs across columns of the same section
+		asp := generateExampleAspects(rnd, 4)
 		for j := 0; j < columnCount; j++ {
-			asp := generateExampleAspects(rnd, 4)
 			mem := generateExampleMembershipSpec(rnd)
 			hints := GenerateSampleEncodingAspectEx(rnd.IntN(2)+1, rnd, acceptEncodingAspect)
 			valueSemantics := GenerateSampleValueSemantics(rnd.IntN(2)+1, rnd)

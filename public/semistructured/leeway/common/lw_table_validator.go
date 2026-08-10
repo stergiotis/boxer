@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	useaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 )
 
 func NewTableValidator() *TableValidator {
@@ -113,6 +114,16 @@ func (inst *TableValidator) validateTable(table *TableDesc) {
 	addErr(checkCoSliceLen("plain values", "encodingHints", n, len(table.PlainValuesEncodingHints)))
 	addErr(checkCoSliceLen("plain values", "itemTypes", n, len(table.PlainValuesItemTypes)))
 	addErr(checkCoSliceLen("plain values", "valueSemantics", n, len(table.PlainValuesValueSemantics)))
+	for _, t := range table.PlainValuesEncodingHints {
+		if !t.IsValid() {
+			addErr(eh.Errorf("plain value column encoding hints are not valid"))
+		}
+	}
+	for _, t := range table.PlainValuesValueSemantics {
+		if !t.IsValid() {
+			addErr(eh.Errorf("plain value column value semantics are not valid"))
+		}
+	}
 	inst.errors = errs
 }
 
@@ -132,6 +143,9 @@ func (inst *TableValidator) validateSection(section TaggedValuesSection) {
 	addErr(inst.validateSectionName(section.Name))
 	if !section.UseAspects.IsValid() {
 		addErr(eb.Build().Stringer("section", section.Name).Errorf("section aspects are not valid"))
+	} else if section.UseAspects.Contains(useaspects2.AspectSectionMembershipsAllPrimary) &&
+		section.UseAspects.Contains(useaspects2.AspectSectionMembershipsAllSecondary) {
+		addErr(eb.Build().Stringer("section", section.Name).Errorf("section use aspects declare both memberships-all-primary and memberships-all-secondary"))
 	}
 	addErr(inst.validateNamesTypes(section.ValueColumnNames, section.ValueColumnTypes))
 	n := len(section.ValueColumnNames)
@@ -140,6 +154,11 @@ func (inst *TableValidator) validateSection(section TaggedValuesSection) {
 	for _, t := range section.ValueEncodingHints {
 		if !t.IsValid() {
 			addErr(eb.Build().Stringer("section", section.Name).Errorf("section value column encoding hints are not valid"))
+		}
+	}
+	for _, t := range section.ValueSemantics {
+		if !t.IsValid() {
+			addErr(eb.Build().Stringer("section", section.Name).Errorf("section value column value semantics are not valid"))
 		}
 	}
 	err := section.StreamingGroup.Validate()

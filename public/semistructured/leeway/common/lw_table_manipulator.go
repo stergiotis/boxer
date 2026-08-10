@@ -32,7 +32,6 @@ func NewTableManipulator() (inst *TableManipulator, err error) {
 		marshaller:                marshaller,
 		buffer:                    bytes.NewBuffer(make([]byte, 0, 4096*4)),
 		validator:                 NewTableValidator(),
-		receivedInvalidAspects:    false,
 		upsertedCount:             0,
 		plainValueItemNameToIndex: plu,
 		sectionNameToIndex:        make(map[string]int, estSections),
@@ -49,7 +48,6 @@ func (inst *TableManipulator) Reset() {
 	}
 	maps.Clear(inst.sectionNameToIndex)
 	inst.upsertedCount = 0
-	inst.receivedInvalidAspects = false
 }
 func (inst *TableManipulator) BuildTableDesc() (tbl TableDesc, err error) {
 	b := inst.buffer
