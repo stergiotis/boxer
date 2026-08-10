@@ -92,6 +92,7 @@ import (
 	_ "github.com/stergiotis/boxer/apps/fibscope"
 	_ "github.com/stergiotis/boxer/apps/imzrt"
 	_ "github.com/stergiotis/boxer/apps/imztop"
+	_ "github.com/stergiotis/boxer/apps/mdedit"
 	_ "github.com/stergiotis/boxer/apps/play"
 	_ "github.com/stergiotis/boxer/apps/splashscreen"
 	_ "github.com/stergiotis/boxer/apps/sqlappletcreator"
@@ -244,7 +245,10 @@ func directCapabilities(ctx context.Context, opts Options) (capsByPkg map[string
 //
 // The two conditions are documented at the package level: the record must be
 // DIRECT, and the classified function must be called by the originating
-// package's own code.
+// package's own code. A third, independent check happens here too: even a
+// function the app calls directly can be a [knownNoiseSinks] entry, where the
+// classifier's attribution to that function — not the app's reach into it —
+// is what is wrong.
 func ownCapabilities(cil *cpb.CapabilityInfoList) (out map[string]map[string]struct{}) {
 	out = make(map[string]map[string]struct{}, 16)
 	for _, ci := range cil.GetCapabilityInfo() {
@@ -268,17 +272,53 @@ func ownCapabilities(cil *cpb.CapabilityInfoList) (out map[string]map[string]str
 			// package's code — a deeper stdlib frame. Not the app's operation.
 			continue
 		}
+		sink := path[len(path)-1].GetName()
+		if _, ok := knownNoiseSinks[sink]; ok {
+			continue
+		}
 		capName := normaliseCapability(ci.GetCapabilityName())
 		if capName == "" {
 			continue
 		}
-		capName = refineCapability(capName, path[len(path)-1].GetName())
+		capName = refineCapability(capName, sink)
 		if out[pkg] == nil {
 			out[pkg] = make(map[string]struct{})
 		}
 		out[pkg][capName] = struct{}{}
 	}
 	return
+}
+
+// knownNoiseSinks are sink functions whose capability capslock's own database
+// (interesting.cm) assigns at package granularity — a `package X CAPABILITY`
+// rule — rather than because the function's own body does anything of the
+// kind. callerOfSink asks whether the app reached the sink itself; this asks
+// whether the classifier's attribution to the sink is even trustworthy, so it
+// is checked against the sink name directly and drops the finding outright
+// rather than refining it the way [processSelfFuncs]/[envFuncs] do.
+//
+//   - "(os/signal.signalError).Error" is `return string(s)`: the string
+//     method of the cancellation-cause NotifyContext hands to
+//     context.WithCancelCause when a listened-for signal arrives. `package
+//     os/signal MODIFY_SYSTEM_STATE/SIGNALS` brands every function in the
+//     package, this trivial one included. Because signalError satisfies
+//     plain `error`, and capslock's call graph does not track which concrete
+//     type reaches which `error.Error()` call site, EVERY such call anywhere
+//     in the analysed program links to it — the interface-dispatch
+//     counterpart of the context.AfterFunc closure collapse the package doc
+//     above describes for NETWORK. That is why it landed on eight unrelated
+//     apps in one capslock/Go bump rather than at one call site: each merely
+//     formats an error somewhere in its own code.
+//   - "net/http.containsDotDot$1" is the loop body of a `for range` over
+//     strings.FieldsFuncSeq that rejects ".." path segments in a URL path —
+//     no network I/O. `package net/http CAPABILITY_NETWORK` brands the
+//     package; capslock's own database already carves out one sibling helper
+//     this way (func net/http.isSlashRune CAPABILITY_SAFE) but not this one.
+//
+// See TestOwnCapabilities_DropsKnownNoiseSink.
+var knownNoiseSinks = map[string]struct{}{
+	"(os/signal.signalError).Error": {},
+	"net/http.containsDotDot$1":     {},
 }
 
 // The §SD10 vocabulary for capabilities capslock reports too coarsely to

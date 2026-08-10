@@ -246,6 +246,39 @@ func TestOwnCapabilities_DropsGuessedClosureEdge(t *testing.T) {
 	assert.Empty(t, out, "the app called context, not the network")
 }
 
+// os/signal and net/http are each classified at package granularity in
+// capslock's own database (interesting.cm): every function in the package
+// inherits the package's capability whether or not its own body can incur
+// it. Unlike the two cases above, the app calls the sink directly here —
+// callerOfSink cannot tell these apart from a real finding, only the sink's
+// own identity can. See knownNoiseSinks for why each call shape reproduces so
+// widely (an error formatted, a ".." path segment rejected).
+func TestOwnCapabilities_DropsKnownNoiseSink(t *testing.T) {
+	out := ownCapabilities(cil(
+		recNamed("MODIFY_SYSTEM_STATE", cpb.CapabilityType_CAPABILITY_TYPE_DIRECT,
+			[]string{"p", "os/signal"}, []string{"p.explain", "(os/signal.signalError).Error"}),
+	))
+	assert.Empty(t, out, "the app formatted an error, not a signal")
+
+	out = ownCapabilities(cil(
+		recNamed("NETWORK", cpb.CapabilityType_CAPABILITY_TYPE_DIRECT,
+			[]string{"p", "net/http"}, []string{"p.sectionTexts", "net/http.containsDotDot$1"}),
+	))
+	assert.Empty(t, out, `the app rejected a ".." path segment, not the network`)
+}
+
+// The drop is keyed on the sink's own identity, not its package: a different
+// os/signal function — a real one, like Notify — must still be reported.
+// Pins that knownNoiseSinks cannot regress into a package-wide bypass.
+func TestOwnCapabilities_KnownNoiseSinkIsExactMatch(t *testing.T) {
+	out := ownCapabilities(cil(
+		recNamed("MODIFY_SYSTEM_STATE", cpb.CapabilityType_CAPABILITY_TYPE_DIRECT,
+			[]string{"p", "os/signal"}, []string{"p.watch", "os/signal.Notify"}),
+	))
+	_, ok := out["p"]["CAPABILITY_MODIFY_SYSTEM_STATE"]
+	assert.True(t, ok, "a real os/signal call must still be reported")
+}
+
 // The app's own function is itself classified: a one-element path is its own
 // caller and must be kept.
 func TestOwnCapabilities_KeepsSelfClassifiedFunction(t *testing.T) {
