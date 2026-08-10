@@ -301,7 +301,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// buffer, so the bridge below knows to stay out of the way.
 	seededSQL := initSQL != ""
 	if initSQL == "" {
-		initSQL = "SELECT * FROM spinnaker.facts"
+		initSQL = "SELECT * FROM boxer.facts"
 	}
 	cfg := ClientConfig{
 		URL:      clickhouseenv.URL.Get(),

@@ -35,7 +35,7 @@ and the server rejects them. When that happens the **Diagnostics** tab's
 error that skipped it, and the **Passes** tab marks them in the sequence. Each
 block below is one statement for that reason.
 
-In a real boxer deployment the equivalent table is `spinnaker.facts`; the
+In a real boxer deployment the equivalent table is `boxer.facts`; the
 queries transfer by swapping the table name.
 
 ## Loading the demo table

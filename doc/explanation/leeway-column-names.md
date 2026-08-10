@@ -45,7 +45,8 @@ tv : symbol : value : val : s : … (aspect and config components) … : data
 - **role** distinguishes a value column (`val`) from the membership machinery
   that rides alongside it (refs, cardinalities, lengths — named after their
   role, e.g. `tv:symbol:lr:lr:…`);
-- the rest encodes the canonical type and the aspect/config bitmasks.
+- the rest encodes the canonical type, the aspect digit-lists (ADR-0182)
+  and the config segments.
 
 A **plain/backbone** column begins with an item-type prefix instead —
 `id:id:u64:47::0:`, `id:naturalKey:y:4::0:` — for the entity id, natural key,

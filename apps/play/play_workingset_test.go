@@ -223,7 +223,7 @@ func TestMount_PlainOpenStillReadsTheLegacyKey(t *testing.T) {
 func TestMount_PlainOpenWithNothingStoredUsesTheDefault(t *testing.T) {
 	inst, err := mountLauncherReason(t, nil, mapStorage{}, app.LaunchReasonPlain)
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT * FROM spinnaker.facts", inst.inner.sql)
+	assert.Equal(t, "SELECT * FROM boxer.facts", inst.inner.sql)
 }
 
 func TestMount_RestoredEmptyBandsAreNotResurrected(t *testing.T) {

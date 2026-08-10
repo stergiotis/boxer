@@ -13,7 +13,7 @@ func samplePlayLaunch() launchcfg.PlayLaunch {
 	return launchcfg.PlayLaunch{
 		FactId:   3,
 		At:       time.Unix(0, 1_700_000_000_000_000_000).UTC(),
-		Sql:      "SELECT count() FROM spinnaker.facts",
+		Sql:      "SELECT count() FROM boxer.facts",
 		AutoRun:  true,
 		Live:     true,
 		BandsSql: "SELECT 'a' AS band, now() - 3600 AS b, now() AS e",

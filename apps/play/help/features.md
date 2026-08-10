@@ -593,7 +593,7 @@ the automation variables `BOXER_PLAY_AUTORUN` (run the initial SQL on launch),
 ## The demo data
 
 The table you query depends on your deployment — a boxer deployment typically exposes
-`spinnaker.facts`. For local exploration there is a self-contained demo table,
+`boxer.facts`. For local exploration there is a self-contained demo table,
 `anchor.facts`, populated by an integration test (it skips silently without a local
 ClickHouse):
 
@@ -605,4 +605,4 @@ go test -tags="$(cat ./tags)" -run TestLeewayClickHouse \
 That loads ~60 entities across three scenarios (drone deliveries, cyber incidents,
 alpine sensor readings). The **Example queries** and **Snippets** pages target it.
 Leeway physical column names differ per schema, so a query written for `anchor.facts`
-transfers to `spinnaker.facts` by swapping the table name and adjusting column names.
+transfers to `boxer.facts` by swapping the table name and adjusting column names.

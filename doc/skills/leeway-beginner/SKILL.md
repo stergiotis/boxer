@@ -94,21 +94,22 @@ A Section is composed of multiple physical columns working in unison (Co-Arrays)
 | **Membership Card** | `lmvcard`| Support: Maps M memberships to 1 value. |
 | **Value Card** | `valcard`| Support: Maps N scalars to 1 logical value. |
 
-### 4.2 Naming Scheme & Base62 Encoding
-Format: `[Prefix]:[Section]:[LogCol]:[Role]:[Type]:[Hints]:[Semantics]:[Config]:[Group]:`
+### 4.2 Naming Scheme & Aspect Segments
+Format: `[Prefix]:[Section]:[LogCol]:[Role]:[Type]:[Hints]:[Use]:[Semantics]:[Config]:[CoGroup]:[Group]`
 
-To keep names concise and URL-safe, **Aspects** (Encoding Hints, Value Semantics, Use Aspects) are serialized as bitmasks and encoded using **Base62**.
+To keep names concise and URL-safe, **Aspects** (Encoding Hints, Use Aspects, Value Semantics) are serialized as **digit-lists** over the Base62 alphabet (ADR-0182): one character per aspect, ascending, at `alphabet[index+1]`. The empty set is the empty segment (a legacy `0` also decodes as empty), and `z` escapes indices beyond 59.
 
-**Example:** `"tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::"`
+**Example:** `"tv:symbol:value:val:s:124::I:0::data"`
 
 *   **tv:** Prefix (Tagged Value).
-*   **bool:** Section Name.
-*   **lmvcard:** Logical Name & Role (Membership Cardinality).
-*   **u64:** Canonical Type (UInt64).
-*   **4gw:** **Encoding Hints** (Base62 encoded bitmask). Decoding `4gw` reveals specific compression settings (e.g., Delta Encoding + ZSTD).
-*   **0:** **Value Semantics** (Base62 encoded bitmask).
-*   **0:** **Config** (TableRowConfig).
-*   **0:** **Streaming Group**.
+*   **symbol:** Section Name.
+*   **value / val:** Logical Name & Role (a value column).
+*   **s:** Canonical Type (String).
+*   **124:** **Encoding Hints** — one char per aspect: `1` intra-record low cardinality, `2` inter-record low cardinality, `4` light general compression.
+*   **(empty):** **Use Aspects** — none on this section.
+*   **I:** **Value Semantics** — canonicalized-value.
+*   **0:** **Config** (TableRowConfig), then an empty co-section group.
+*   **data:** **Streaming Group**.
 
 *> [Figure 3: Co-Array Alignment – Illustrating how Tag indices align physically with Value indices]*
 
@@ -185,7 +186,7 @@ The SDK follows a **Definition $\to$ Synthesis $\to$ Runtime** pattern.
 
 **Physical Table (ClickHouse Arrays):**
 
-| Section | Column Name (Base62 decoded for readability) | Value | Notes |
+| Section | Column Name (aspect segments elided for readability) | Value | Notes |
 | :--- | :--- | :--- | :--- |
 | **Backbone** | `id:blake3...` | `["hash-1"]` | Entity ID |
 | **String** | `tv:string:val...` | `["server-a"]` | Value |
@@ -228,7 +229,7 @@ D) `0`
 
 **Q5. Where does a tool look to find the schema definition (Types, Hints, Semantics) for a physical column?**
 A) It queries the `system.leeway_registry` table.
-B) It parses the column name itself, decoding the Base62 segments.
+B) It parses the column name itself, decoding its segments.
 C) It looks for a companion `.proto` file.
 D) It cannot determine the schema; this is an internal column.
 

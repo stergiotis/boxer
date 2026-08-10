@@ -105,6 +105,6 @@ toggle, and what happens when a placeholder is left unfilled.
 ## Where the data comes from
 
 The table you query depends on your deployment — a boxer deployment typically
-exposes `spinnaker.facts`. For local exploration there is a self-contained demo
+exposes `boxer.facts`. For local exploration there is a self-contained demo
 table, `anchor.facts`. The **Example queries** page covers how to load it and a
 verified query set that walks each tab above.
