@@ -32,7 +32,7 @@ Narrow to a single scenario to vary which tagged sections are populated.
 
 ```sql
 SELECT * FROM anchor.facts
-WHERE hasAny(`tv:symbol:value:val:s:m:0:12:0::data`,
+WHERE hasAny(`tv:symbol:value:val:s:124::I:0::data`,
              ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
 ```
 
@@ -52,7 +52,7 @@ WITH
   ),
   by_kind AS (
     SELECT
-      `tv:symbol:value:val:s:m:0:12:0::data`[1] AS event_type,
+      `tv:symbol:value:val:s:124::I:0::data`[1] AS event_type,
       count()                                   AS n
     FROM recent
     GROUP BY event_type
@@ -103,7 +103,7 @@ SELECT week, days_in_week FROM by_week ORDER BY week
 The ids 10005, 10010, 10015, 10020, 500003 carry the sparse `geoArea` section.
 
 ```sql
-SELECT * FROM anchor.facts WHERE `id:id:u64:2k:0:0:` = 10005
+SELECT * FROM anchor.facts WHERE `id:id:u64:47::0:` = 10005
 ```
 
 ## Timeline contract
@@ -115,7 +115,7 @@ reads; timestamps must be `DateTime64`.
 SELECT
   `tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`[1] AS _tl_time,
   `tv:timeRange:endExcl:val:z64:2k:0:0:0::data`[1]   AS _tl_time_end,
-  `tv:symbol:value:val:s:m:0:12:0::data`[1]          AS _tl_lane
+  `tv:symbol:value:val:s:124::I:0::data`[1]          AS _tl_lane
 FROM anchor.facts
 WHERE length(`tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`) > 0
 ORDER BY _tl_time
@@ -157,9 +157,9 @@ and Table shows a plain grid.
 
 ```sql
 SELECT
-  `id:id:u64:2k:0:0:`                       AS id,
-  `id:naturalKey:y:g:0:0:`                  AS natural_key,
-  `tv:symbol:value:val:s:m:0:12:0::data`[1] AS event_type
+  `id:id:u64:47::0:`                       AS id,
+  `id:naturalKey:y:4::0:`                  AS natural_key,
+  `tv:symbol:value:val:s:124::I:0::data`[1] AS event_type
 FROM anchor.facts
 ORDER BY id
 ```
@@ -226,7 +226,7 @@ placeholder is substituted by ClickHouse.
 ```sql
 SET param_event = 'DDOS';
 SELECT * FROM anchor.facts
-WHERE has(`tv:symbol:value:val:s:m:0:12:0::data`, {event:String})
+WHERE has(`tv:symbol:value:val:s:124::I:0::data`, {event:String})
 ```
 
 ## Signals (unbound parameter)

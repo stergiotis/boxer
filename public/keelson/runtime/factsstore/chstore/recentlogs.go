@@ -83,19 +83,19 @@ type recentLogsColumnExprs struct {
 
 func buildColumnExprs() (e recentLogsColumnExprs) {
 	const (
-		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLMR     = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symMRHP    = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
-		symValue   = "`tv:symbol:value:val:s:m:0:12:0::data`"
-		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		strLR      = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
-		strValue   = "`tv:stringArray:value:val:sh:g:0:gw:0::data`"
-		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		textLR     = "`tv:textArray:lr:lr:u64:2q:0:0:0::data`"
-		textValue  = "`tv:textArray:value:val:sh:w:0:8g:0::data`"
-		textLRCard = "`tv:textArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		idCol      = "`id:id:u64:2k:0:0:`"
-		tsCol      = "`ts:ts:z64:2k:0:0:`"
+		symLR      = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLMR     = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		symMRHP    = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
+		symValue   = "`tv:symbol:value:val:s:124::I:0::data`"
+		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
+		strLR      = "`tv:stringArray:lr:lr:u64:1247:::0::data`"
+		strValue   = "`tv:stringArray:value:val:sh:4::8:0::data`"
+		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4E:::0::data`"
+		textLR     = "`tv:textArray:lr:lr:u64:1247:::0::data`"
+		textValue  = "`tv:textArray:value:val:sh:5::7:0::data`"
+		textLRCard = "`tv:textArray:lrcard:lrcard:u64:4E:::0::data`"
+		idCol      = "`id:id:u64:47::0:`"
+		tsCol      = "`ts:ts:z64:47::0:`"
 	)
 	e.id = idCol
 	// `ts` is z64 — emitted by the leeway DDL pipeline as
@@ -146,9 +146,9 @@ func pickLcrString(valueArr, lrArr, lrCardArr string, membershipId uint64) (expr
 func composeRecentLogsSql(table string, filter LogFilter, limit uint32) (sql string) {
 	e := buildColumnExprs()
 	const (
-		symLR  = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLMR = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		tsCol  = "`ts:ts:z64:2k:0:0:`"
+		symLR  = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLMR = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		tsCol  = "`ts:ts:z64:47::0:`"
 	)
 	whereParts := []string{
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindLog.GetId().Value()),

@@ -7,8 +7,10 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	useaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
 func NewTableValidator() *TableValidator {
@@ -117,11 +119,15 @@ func (inst *TableValidator) validateTable(table *TableDesc) {
 	for _, t := range table.PlainValuesEncodingHints {
 		if !t.IsValid() {
 			addErr(eh.Errorf("plain value column encoding hints are not valid"))
+		} else if e := encodingaspects2.CheckFamilyExclusivity(t); e != nil {
+			addErr(eh.Errorf("plain value column encoding hints violate family exclusivity: %w", e))
 		}
 	}
 	for _, t := range table.PlainValuesValueSemantics {
 		if !t.IsValid() {
 			addErr(eh.Errorf("plain value column value semantics are not valid"))
+		} else if e := valueaspects.CheckFamilyExclusivity(t); e != nil {
+			addErr(eh.Errorf("plain value column value semantics violate family exclusivity: %w", e))
 		}
 	}
 	inst.errors = errs
@@ -143,9 +149,8 @@ func (inst *TableValidator) validateSection(section TaggedValuesSection) {
 	addErr(inst.validateSectionName(section.Name))
 	if !section.UseAspects.IsValid() {
 		addErr(eb.Build().Stringer("section", section.Name).Errorf("section aspects are not valid"))
-	} else if section.UseAspects.Contains(useaspects2.AspectSectionMembershipsAllPrimary) &&
-		section.UseAspects.Contains(useaspects2.AspectSectionMembershipsAllSecondary) {
-		addErr(eb.Build().Stringer("section", section.Name).Errorf("section use aspects declare both memberships-all-primary and memberships-all-secondary"))
+	} else if e := useaspects2.CheckFamilyExclusivity(section.UseAspects); e != nil {
+		addErr(eb.Build().Stringer("section", section.Name).Errorf("section use aspects violate family exclusivity: %w", e))
 	}
 	addErr(inst.validateNamesTypes(section.ValueColumnNames, section.ValueColumnTypes))
 	n := len(section.ValueColumnNames)
@@ -154,11 +159,15 @@ func (inst *TableValidator) validateSection(section TaggedValuesSection) {
 	for _, t := range section.ValueEncodingHints {
 		if !t.IsValid() {
 			addErr(eb.Build().Stringer("section", section.Name).Errorf("section value column encoding hints are not valid"))
+		} else if e := encodingaspects2.CheckFamilyExclusivity(t); e != nil {
+			addErr(eb.Build().Stringer("section", section.Name).Errorf("section value column encoding hints violate family exclusivity: %w", e))
 		}
 	}
 	for _, t := range section.ValueSemantics {
 		if !t.IsValid() {
 			addErr(eb.Build().Stringer("section", section.Name).Errorf("section value column value semantics are not valid"))
+		} else if e := valueaspects.CheckFamilyExclusivity(t); e != nil {
+			addErr(eb.Build().Stringer("section", section.Name).Errorf("section value column value semantics violate family exclusivity: %w", e))
 		}
 	}
 	err := section.StreamingGroup.Validate()

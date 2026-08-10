@@ -77,10 +77,10 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 
 	// The lifted stamp: the run_id must be queryable via the
 	// MembRuntimeRun mixed membership's high-card parameter.
-	lmrCol := "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-	mrhpCol := "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
+	lmrCol := "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+	mrhpCol := "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
 	sql := fmt.Sprintf(
-		"SELECT count() FROM %s.facts WHERE `id:naturalKey:y:g:0:0:` = '%s' AND has(%s, %d) AND has(%s, '%s')",
+		"SELECT count() FROM %s.facts WHERE `id:naturalKey:y:4::0:` = '%s' AND has(%s, %d) AND has(%s, '%s')",
 		scratchDb, probe1, lmrCol, vocab.MembRuntimeRun.GetId().Value(), mrhpCol, runId)
 	require.Equal(t, "1", queryScalar(t, cli, sql), "the stamp's run_id must be lifted into the mixed membership")
 
@@ -136,7 +136,7 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 	pullRowCount(t, svc.PullURL())
 	time.Sleep(3 * time.Second) // a few refreshes over the overlap window
 	require.Equal(t, "1", queryScalar(t, cli,
-		fmt.Sprintf("SELECT count() FROM %s.facts WHERE `id:naturalKey:y:g:0:0:` = '%s'", scratchDb, probe1)),
+		fmt.Sprintf("SELECT count() FROM %s.facts WHERE `id:naturalKey:y:4::0:` = '%s'", scratchDb, probe1)),
 		"anti-join must suppress re-served rows")
 
 	// --- endpoint-down catch-up ---
@@ -162,7 +162,7 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 	// from the catch-up).
 	time.Sleep(3 * time.Second)
 	require.Equal(t, "1", queryScalar(t, cli,
-		fmt.Sprintf("SELECT count() FROM %s.facts WHERE `id:naturalKey:y:g:0:0:` = '%s'", scratchDb, probe2)))
+		fmt.Sprintf("SELECT count() FROM %s.facts WHERE `id:naturalKey:y:4::0:` = '%s'", scratchDb, probe2)))
 }
 
 // TestLiveReconcileRefusesDriftedDestination pins the schema-drift
@@ -225,7 +225,7 @@ const factWaitBudget = 60 * time.Second
 // scratch facts table.
 func waitForFactCount(t *testing.T, cli *chclient.Client, naturalKey string, n int) {
 	t.Helper()
-	sql := fmt.Sprintf("SELECT count() FROM %s.facts WHERE `id:naturalKey:y:g:0:0:` = '%s'", scratchDb, naturalKey)
+	sql := fmt.Sprintf("SELECT count() FROM %s.facts WHERE `id:naturalKey:y:4::0:` = '%s'", scratchDb, naturalKey)
 	require.Eventually(t, func() bool {
 		return queryScalar(t, cli, sql) == fmt.Sprint(n)
 	}, factWaitBudget, 500*time.Millisecond, "fact for %s did not reach count %d", naturalKey, n)

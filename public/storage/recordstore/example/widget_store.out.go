@@ -42,9 +42,9 @@ const WidgetTableName = "widget"
 // derived from the IR at generation time — exported so consumers can
 // address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	WidgetColKey       = `"id:id:u64:2k:0:0:"`
-	WidgetColOrder     = `"ts:ts:z64:2k:0:0:"`
-	WidgetColLifecycle = `"lc:lifecycle:u8:g:0:0:"`
+	WidgetColKey       = `"id:id:u64:47::0:"`
+	WidgetColOrder     = `"ts:ts:z64:47::0:"`
+	WidgetColLifecycle = `"lc:lifecycle:u8:4::0:"`
 )
 
 // Arrow output shape the read-access classes expect.

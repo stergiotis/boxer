@@ -22,9 +22,9 @@ DB="${DB:-jsonbench_c_1m}"
 TABLE="${TABLE:-facts}"
 CH=(clickhouse-client --allow_suspicious_low_cardinality_types=1)
 
-SYM_VAL='tv:symbol:value:val:s:m:0:12:0::data'
-SYM_PARAM='tv:symbol:mrhp:mrhp:y:g:0:0:0::data'
-STR_PARAM='tv:stringArray:mrhp:mrhp:y:g:0:0:0::data'
+SYM_VAL='tv:symbol:value:val:s:124::I:0::data'
+SYM_PARAM='tv:symbol:mrhp:mrhp:y:4:::0::data'
+STR_PARAM='tv:stringArray:mrhp:mrhp:y:4:::0::data'
 
 "${CH[@]}" -q "DROP DATABASE IF EXISTS $DB"
 "${CH[@]}" -q "CREATE DATABASE $DB"

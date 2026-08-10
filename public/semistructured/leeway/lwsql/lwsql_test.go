@@ -96,7 +96,7 @@ func TestResolver_ColonHandles(t *testing.T) {
 	require.Equal(t, passes.ResolveNotAHandle, kind("value"))
 	// a physical name typed verbatim (many colons) is not a handle — it must
 	// pass through untouched, not warn as an unknown section
-	require.Equal(t, passes.ResolveNotAHandle, kind("tv:symbol:value:val:s:m:0:12:0::data"))
+	require.Equal(t, passes.ResolveNotAHandle, kind("tv:symbol:value:val:s:124::I:0::data"))
 
 	// known section, unknown column → candidates
 	res := r.Resolve("", testTable, "symbol:nope")

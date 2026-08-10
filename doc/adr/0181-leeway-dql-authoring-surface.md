@@ -31,7 +31,7 @@ read-back family and generated artefacts, and
 [ADR-0171](./0171-leeway-sql-read-surface.md) names them as one read surface.
 (c) is a missing *direction*, not a missing function: physical column names
 are the schema, a human cannot compose one
-(`tv:symbol:lr:lr:u64:2q:0:0:0::data`), and nothing exposes the naming seam
+(`tv:symbol:lr:lr:u64:1247:::0::data`), and nothing exposes the naming seam
 to SQL authoring. The driving acceptance criterion: a SQL practitioner must
 do routine leeway work **without Go in the loop and without typing a
 physical name** — in either direction.

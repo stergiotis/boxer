@@ -328,10 +328,10 @@ Within the chosen family, three drivers were weighed:
 CREATE MATERIALIZED VIEW boxer.mv_queryruns
 REFRESH EVERY 5 SECOND APPEND TO boxer.facts
 AS SELECT * FROM url('http://127.0.0.1:8127/pull', 'ArrowStream', '<facts columns>')
-WHERE `id:id:u64:2k:0:0:` NOT IN (
-  SELECT `id:id:u64:2k:0:0:` FROM boxer.facts
-  WHERE `ts:ts:z64:2k:0:0:` > now64(9) - INTERVAL 1 DAY
-    AND has(`tv:symbol:lr:lr:u64:2q:0:0:0::data`, <KindQueryRun id>)
+WHERE `id:id:u64:47::0:` NOT IN (
+  SELECT `id:id:u64:47::0:` FROM boxer.facts
+  WHERE `ts:ts:z64:47::0:` > now64(9) - INTERVAL 1 DAY
+    AND has(`tv:symbol:lr:lr:u64:1247:::0::data`, <KindQueryRun id>)
 )
 SETTINGS log_comment='queryrunsd-refresh',
          allow_suspicious_low_cardinality_types=1, http_max_tries=1;

@@ -22,7 +22,7 @@ func leewayRec(t *testing.T, ids []uint64) arrow.RecordBatch {
 	t.Helper()
 	mem := memory.NewGoAllocator()
 	schema := arrow.NewSchema([]arrow.Field{
-		{Name: "id:id:u64:2k:0:0:", Type: arrow.PrimitiveTypes.Uint64},
+		{Name: "id:id:u64:47::0:", Type: arrow.PrimitiveTypes.Uint64},
 		{Name: "n", Type: arrow.PrimitiveTypes.Int64},
 	}, nil)
 	ib := array.NewUint64Builder(mem)

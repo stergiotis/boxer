@@ -78,8 +78,8 @@ func TestUrlStructureMatchesBuilderSchema(t *testing.T) {
 	structure, err := UrlStructure()
 	require.NoError(t, err)
 	require.NotContains(t, structure, "CODEC", "codecs must not leak into the structure clause")
-	require.Contains(t, structure, "`id:id:u64:2k:0:0:` UInt64")
-	require.Contains(t, structure, "`ts:ts:z64:2k:0:0:` DateTime64(9,'UTC')")
+	require.Contains(t, structure, "`id:id:u64:47::0:` UInt64")
+	require.Contains(t, structure, "`ts:ts:z64:47::0:` DateTime64(9,'UTC')")
 
 	// The structure clause must cover exactly the fields the generated
 	// builder emits — this is the wire contract between the /pull
@@ -157,13 +157,13 @@ func TestBuildEntitiesEncodesRows(t *testing.T) {
 	rec := records[0]
 	require.EqualValues(t, 2, rec.NumRows())
 
-	idIdx := rec.Schema().FieldIndices("id:id:u64:2k:0:0:")
+	idIdx := rec.Schema().FieldIndices("id:id:u64:47::0:")
 	require.Len(t, idIdx, 1)
 	ids := rec.Column(idIdx[0]).(*array.Uint64)
 	require.Equal(t, DeterministicId("play-map-1234-7", 1752700000123456, "QueryFinish"), ids.Value(0))
 	require.Equal(t, DeterministicId("adhoc-1", 1752700001000000, "ExceptionWhileProcessing"), ids.Value(1))
 
-	nkIdx := rec.Schema().FieldIndices("id:naturalKey:y:g:0:0:")
+	nkIdx := rec.Schema().FieldIndices("id:naturalKey:y:4::0:")
 	require.Len(t, nkIdx, 1)
 	require.Equal(t, []byte("play-map-1234-7"), binaryValue(t, rec.Column(nkIdx[0]), 0))
 	require.Equal(t, []byte("adhoc-1"), binaryValue(t, rec.Column(nkIdx[0]), 1))

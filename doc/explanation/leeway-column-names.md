@@ -12,7 +12,7 @@ status: draft
 # Leeway column names
 
 A leeway table stores each attribute under a long, technical *physical* column
-name like `tv:symbol:value:val:s:m:0:12:0::data`. This page explains why those
+name like `tv:symbol:value:val:s:124::I:0::data`. This page explains why those
 names are shaped that way, and how the playground lets you query them with short
 **handles** (`` `symbol:value` ``) instead — including what a handle is, what it
 is not, and how one becomes a physical name before a query runs.
@@ -48,7 +48,7 @@ tv : symbol : value : val : s : … (aspect and config components) … : data
 - the rest encodes the canonical type and the aspect/config bitmasks.
 
 A **plain/backbone** column begins with an item-type prefix instead —
-`id:id:u64:2k:0:0:`, `id:naturalKey:y:g:0:0:` — for the entity id, natural key,
+`id:id:u64:47::0:`, `id:naturalKey:y:4::0:` — for the entity id, natural key,
 timestamp, lifecycle, transaction, and opaque columns.
 
 One consequence to keep in mind: a section groups values by *kind*, and a

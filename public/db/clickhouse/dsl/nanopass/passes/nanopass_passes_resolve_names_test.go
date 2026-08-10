@@ -8,10 +8,10 @@ import (
 // Physical names quoted as nanopass.QuoteIdentifier emits them (double-quoted
 // canonical form, valid ClickHouse identifier quoting).
 const (
-	qSymbol = `"tv:symbol:value:val:s:m:0:12:0::data"`
+	qSymbol = `"tv:symbol:value:val:s:124::I:0::data"`
 	qLat    = `"tv:geoPoint:pointLat:val:f32:g:0:0:0::geo"`
 	qLng    = `"tv:geoPoint:pointLng:val:f32:g:0:0:0::geo"`
-	qId     = `"id:id:u64:2k:0:0:"`
+	qId     = `"id:id:u64:47::0:"`
 )
 
 // fakeResolver returns canned verdicts keyed by lower-cased handle per table.
@@ -36,10 +36,10 @@ func (f *fakeResolver) Resolve(dbName string, tableName string, handle string) R
 func newFakeResolver() *fakeResolver {
 	return &fakeResolver{byTable: map[string]map[string]ResolveResult{
 		"facts": {
-			"symbol:value":      {Kind: ResolveOK, Physical: []string{"tv:symbol:value:val:s:m:0:12:0::data"}},
+			"symbol:value":      {Kind: ResolveOK, Physical: []string{"tv:symbol:value:val:s:124::I:0::data"}},
 			"geopoint:pointlat": {Kind: ResolveOK, Physical: []string{"tv:geoPoint:pointLat:val:f32:g:0:0:0::geo"}},
 			"geopoint:*":        {Kind: ResolveOK, Physical: []string{"tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo"}},
-			"id:id":             {Kind: ResolveOK, Physical: []string{"id:id:u64:2k:0:0:"}},
+			"id:id":             {Kind: ResolveOK, Physical: []string{"id:id:u64:47::0:"}},
 			"geopoint:lat":      {Kind: ResolveUnknownColumn, Section: "geoPoint", Column: "lat", Candidates: []string{"pointLat", "pointLng", "h3"}},
 			"nope:x":            {Kind: ResolveUnknownSection, Section: "nope"},
 		},

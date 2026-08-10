@@ -156,11 +156,11 @@ var DefaultEventKinds = []string{"app-lifecycle", "runtime-run", "started", "sto
 // The name is an encoded column descriptor, not something a human chose, and it
 // moves if the schema is regenerated. Hard-coding it is acceptable for a study
 // and would not be for a product path.
-const factsTimestampColumn = "`ts:ts:z64:2k:0:0:`"
+const factsTimestampColumn = "`ts:ts:z64:47::0:`"
 
 // factsSymbolColumn holds each row's symbol values, which is where the fact kind
 // lives.
-const factsSymbolColumn = "`tv:symbol:value:val:s:m:0:12:0::data`"
+const factsSymbolColumn = "`tv:symbol:value:val:s:124::I:0::data`"
 
 // Series is the extracted study data: a regular time grid, one value slice per
 // channel, the binned event count, and the bins an event fell into.

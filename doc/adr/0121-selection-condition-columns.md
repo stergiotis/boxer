@@ -443,7 +443,7 @@ these columns.
   example's grouped single condition returns rows identical to the original.
 - The leeway round-trip of SD5 is checked against the real convention:
   `DiscoverTableFromColumnNames` over a mixed column set
-  (`id:id:u64:2k:0:0:`, `tv:symbol:value:val:s:m:0:24:0::data`, and two
+  (`id:id:u64:47::0:`, `tv:symbol:value:val:s:m:0:24:0::data`, and two
   synthesized conditions) reconstructs the `conditions` section with value
   columns `[c1 c2]` beside the `symbol` section and the `id` plain column.
 - Table-driven pass tests: the ADR's worked example; grouping vs. recursion
@@ -459,7 +459,7 @@ these columns.
   off by default, on → rewritten, off again → verbatim, a refusal shipping the
   original, and a client with no schema install staying inert.
 - **Live drive** (headless weston, `EGUI_INSPECTION`, real ClickHouse 26.6 with
-  the 241-column `anchor.facts`). `` SELECT `id:id:u64:2k:0:0:` FROM anchor.facts
+  the 241-column `anchor.facts`). `` SELECT `id:id:u64:47::0:` FROM anchor.facts
   WHERE `id:id…` = 1 OR `id:id…` = 2 ``: the **Why** toggle renders in the top
   bar unchecked, "as sent" shows the query verbatim; checking it rewrites the
   wire SQL to the two `tv:conditions:c*` condition columns while the editor buffer

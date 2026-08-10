@@ -173,11 +173,11 @@ test generates and runs):
 
 ```sql
 LW_LIST_BY_TAG_EQUAL(
-    `tv:u64Array:value:val:u64h:g:0:0:0::data`,
-    `tv:u64Array:len:len:u64:28o:0:0:0::data`,
-    `tv:u64Array:lr:lr:u64:2q:0:0:0::data`,
+    `tv:u64Array:value:val:u64h:4:::0::data`,
+    `tv:u64Array:len:len:u64:4D:::0::data`,
+    `tv:u64Array:lr:lr:u64:1247:::0::data`,
     2,
-    LW_RAGGED_PARENT_IDS(`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`))
+    LW_RAGGED_PARENT_IDS(`tv:u64Array:lrcard:lrcard:u64:4E:::0::data`))
 ```
 
 **Generated artefacts** (`lw_readback_generator.go`, `Generator.Generate`):

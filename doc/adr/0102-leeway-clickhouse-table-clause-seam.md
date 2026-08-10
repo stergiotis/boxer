@@ -22,7 +22,7 @@ engine-plus-clauses string verbatim.
 Two costs followed:
 
 - **The physical-name footgun.** Plain columns are leeway-encoded like
-  every other column (`"id:id:u64:2k:0:0:"`), so a hand-written
+  every other column (`"id:id:u64:47::0:"`), so a hand-written
   `ORDER BY (id, ts)` names columns that do not exist — a failure mode
   actually hit while building ADR-0100 S1, discovered only at CREATE
   time.

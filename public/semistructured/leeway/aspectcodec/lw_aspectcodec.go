@@ -256,3 +256,60 @@ func Validate(seg string) (err error) {
 func IsEmpty(seg string) (empty bool) {
 	return seg == "" || seg == legacyEmptySegment
 }
+
+// Family groups related aspects for documentation and validation
+// (ADR-0182 SD3). An exclusive family admits at most one member per set.
+type Family[E IndexI] struct {
+	Name      string
+	Members   []E
+	Exclusive bool
+}
+
+// FirstExclusivityViolation returns the name of the first exclusive family
+// with more than one member present (per contains), or "" when none is
+// violated.
+func FirstExclusivityViolation[E IndexI](families []Family[E], contains func(E) bool) (name string) {
+	for _, f := range families {
+		if !f.Exclusive {
+			continue
+		}
+		n := 0
+		for _, m := range f.Members {
+			if contains(m) {
+				n++
+			}
+		}
+		if n > 1 {
+			name = f.Name
+			return
+		}
+	}
+	return
+}
+
+// KeepFirstPerExclusiveFamily drops all but the first-encountered member of
+// each exclusive family, preserving input order; aspects outside any
+// exclusive family pass through.
+func KeepFirstPerExclusiveFamily[E IndexI](families []Family[E], aspects []E) (out []E) {
+	famOf := make(map[E]int, 16)
+	for fi, f := range families {
+		if !f.Exclusive {
+			continue
+		}
+		for _, m := range f.Members {
+			famOf[m] = fi
+		}
+	}
+	seen := make(map[int]bool, 8)
+	out = make([]E, 0, len(aspects))
+	for _, a := range aspects {
+		if fi, in := famOf[a]; in {
+			if seen[fi] {
+				continue
+			}
+			seen[fi] = true
+		}
+		out = append(out, a)
+	}
+	return
+}

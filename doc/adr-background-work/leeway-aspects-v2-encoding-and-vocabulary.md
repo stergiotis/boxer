@@ -40,6 +40,10 @@ Total aspect-segment cost, all three kinds:
 | group-pairs (5-bit chunks) | ~3228 | 4.00 | 6 |
 | offset+mask | ~3104 | 3.85 | 11 |
 
+Post-migration re-measurement (2026-08-10, same method, 812 columns):
+**2094 chars, 2.58 chars/column, worst segment 4** — matching the
+prediction within a percent.
+
 Two facts dominate. **Empty sets are 34% of all aspect bytes** (1389 of
 4091 chars are lone `"0"` markers — 730 use + 656 sem + 3 enc). And the
 mask encoding prices a set by its **highest index**, not its content: one

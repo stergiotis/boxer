@@ -14,7 +14,7 @@ events (drone deliveries, cyber incidents, alpine sensor readings). They walk
 each tab of the playground.
 
 Leeway stores each attribute under a long *physical* column name that encodes
-its whole shape — `tv:symbol:value:val:s:m:0:12:0::data`. You do not type those.
+its whole shape — `tv:symbol:value:val:s:124::I:0::data`. You do not type those.
 The playground resolves a short, backtick-quoted **handle** to the physical name
 before the query ships:
 

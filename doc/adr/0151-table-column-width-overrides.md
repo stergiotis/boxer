@@ -380,7 +380,7 @@ on the next load. Bounding the durable trail is a retention question over
 the facts table, alongside every other fact kind's.
 
 Two facts for whoever picks up M3. The f64 value column is
-`` `tv:f64Array:value:val:f64h:gM:0:0:0::data` `` — the encoding segment is
+`` `tv:f64Array:value:val:f64h:4A:::0::data` `` — the encoding segment is
 `gM`, not the `g` the other array sections use, so a name extrapolated from
 the u64 block compiles and matches nothing. And "latest" means insertion
 order in `InMemoryFactsStore` and `(ts, id)` in `chstore`, as it already

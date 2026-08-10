@@ -128,7 +128,7 @@ func TestIterateAspectsInvalidInput(t *testing.T) {
 	for range IterateAspects(AspectSet("!")) {
 		t.Fatal("undecodable AspectSet must iterate nothing")
 	}
-	for range IterateAspects(encode(uint64(1) << 63)) {
-		t.Fatal("set with an unknown high bit must iterate nothing")
+	for range IterateAspects(AspectSet("zzzz1")) {
+		t.Fatal("set with only unknown high indices must iterate nothing")
 	}
 }

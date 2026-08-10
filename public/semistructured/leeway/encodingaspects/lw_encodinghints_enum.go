@@ -1,43 +1,59 @@
+// Package encodingaspects is the closed vocabulary of encoding hints
+// (ADR-0182). Every aspect maps to a real storage-encoding capability of a
+// target technology (codec chains, native types); intensity scales (light …
+// ultra-heavy) are advisory effort levels the technology mapping interprets.
+// Numbering is the wire format (segments in physical column names):
+// append-only between migration windows, family-grouped as of v2.
 package encodingaspects
 
 import "slices"
 
 const (
-	AspectNone                          AspectE = 0
-	AspectIntraRecordLowCardinality     AspectE = 1
-	AspectInterRecordLowCardinality     AspectE = 2
-	AspectUltraLightGeneralCompression  AspectE = 3
-	AspectLightGeneralCompression       AspectE = 4
-	AspectHeavyGeneralCompression       AspectE = 5
-	AspectUltraHeavyGeneralCompression  AspectE = 6
-	AspectDeltaEncoding                 AspectE = 7
-	AspectDoubleDeltaEncoding           AspectE = 8
-	AspectUltraLightSlowlyChangingFloat AspectE = 9
-	AspectLightSlowlyChangingFloat      AspectE = 10
-	AspectHeavySlowlyChangingFloat      AspectE = 11
-	AspectUltraHeavySlowlyChangingFloat AspectE = 12
-	AspectLightBiasSmallInteger         AspectE = 13
-	AspectHeavyBiasSmallInteger         AspectE = 14
-	AspectSparse                        AspectE = 15
+	AspectIntraRecordLowCardinality AspectE = 0
+	AspectInterRecordLowCardinality AspectE = 1
+
+	// General-purpose compression effort (exclusive).
+
+	AspectUltraLightGeneralCompression AspectE = 2
+	AspectLightGeneralCompression      AspectE = 3
+	AspectHeavyGeneralCompression      AspectE = 4
+	AspectUltraHeavyGeneralCompression AspectE = 5
+
+	AspectDeltaEncoding       AspectE = 6
+	AspectDoubleDeltaEncoding AspectE = 7
+
+	// Slowly-changing-float compression effort (exclusive).
+
+	AspectUltraLightSlowlyChangingFloat AspectE = 8
+	AspectLightSlowlyChangingFloat      AspectE = 9
+	AspectHeavySlowlyChangingFloat      AspectE = 10
+	AspectUltraHeavySlowlyChangingFloat AspectE = 11
+
+	// Small-integer bias compression effort (exclusive).
+
+	AspectLightBiasSmallInteger AspectE = 12
+	AspectHeavyBiasSmallInteger AspectE = 13
+
+	AspectSparse AspectE = 14
 
 	// The Json*/Cbor* encoding aspects permit the ddl module to use a native
 	// JSON/CBOR database type for the column. Deliberately distinct from the
 	// equally named valueaspects family, which states that the value is a
 	// JSON/CBOR string serialization.
-	AspectJsonScalar AspectE = 16
-	AspectJsonArray  AspectE = 17
-	AspectJsonObject AspectE = 18
-	AspectJson       AspectE = 19
-	AspectCborScalar AspectE = 20
-	AspectCborArray  AspectE = 21
-	AspectCborMap    AspectE = 22
-	AspectCbor       AspectE = 23
+
+	AspectJsonScalar AspectE = 15
+	AspectJsonArray  AspectE = 16
+	AspectJsonObject AspectE = 17
+	AspectJson       AspectE = 18
+	AspectCborScalar AspectE = 19
+	AspectCborArray  AspectE = 20
+	AspectCborMap    AspectE = 21
+	AspectCbor       AspectE = 22
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
 
 var AllAspects = []AspectE{
-	AspectNone,
 	AspectIntraRecordLowCardinality,
 	AspectInterRecordLowCardinality,
 	AspectUltraLightGeneralCompression,
@@ -73,8 +89,6 @@ func (inst AspectE) Value() uint8 {
 }
 func (inst AspectE) String() string {
 	switch inst {
-	case AspectNone:
-		return "none"
 	case AspectIntraRecordLowCardinality:
 		return "intra-record-low-cardinality"
 	case AspectInterRecordLowCardinality:

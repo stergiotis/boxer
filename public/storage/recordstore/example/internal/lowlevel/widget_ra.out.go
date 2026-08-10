@@ -1469,19 +1469,19 @@ func (inst *ReadAccessWidgetTableTaggedGeoPoint) GetSectionName() naming.Stylabl
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessWidgetTableTaggedGeoPoint)(nil)
 
 func (inst *ReadAccessWidgetTableTaggedSymbol) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessWidgetTableTaggedU64Array) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessWidgetTableTaggedSymbolArray) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessWidgetTableTaggedGeoPoint) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessWidgetTableTaggedSymbol) GetSectionStreamingGroup() naming.Key {

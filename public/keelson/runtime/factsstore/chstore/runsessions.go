@@ -98,9 +98,9 @@ func (inst *Store) LastHeartbeatForRun(ctx context.Context, runId string) (ts ti
 
 func composeLastHeartbeatSql(table, runId string) (sql string) {
 	const (
-		symLR  = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLMR = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		tsCol  = "`ts:ts:z64:2k:0:0:`"
+		symLR  = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLMR = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		tsCol  = "`ts:ts:z64:47::0:`"
 	)
 	whereParts := []string{
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindRuntimeHeartbeat.GetId().Value()),
@@ -185,20 +185,20 @@ type columnExprsRun struct {
 
 func buildRunColumnExprs() (e columnExprsRun) {
 	const (
-		symValue   = "`tv:symbol:value:val:s:m:0:12:0::data`"
-		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		strValue   = "`tv:stringArray:value:val:sh:g:0:gw:0::data`"
-		strLR      = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
-		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		u64Value   = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"
-		u64LR      = "`tv:u64Array:lr:lr:u64:2q:0:0:0::data`"
-		u64LRCard  = "`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		boolValue  = "`tv:bool:value:val:b:g:0:0:0::data`"
-		boolLR     = "`tv:bool:lr:lr:u64:2q:0:0:0::data`"
-		boolLRCard = "`tv:bool:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		idCol      = "`id:id:u64:2k:0:0:`"
-		tsCol      = "`ts:ts:z64:2k:0:0:`"
+		symValue   = "`tv:symbol:value:val:s:124::I:0::data`"
+		symLR      = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
+		strValue   = "`tv:stringArray:value:val:sh:4::8:0::data`"
+		strLR      = "`tv:stringArray:lr:lr:u64:1247:::0::data`"
+		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4E:::0::data`"
+		u64Value   = "`tv:u64Array:value:val:u64h:4:::0::data`"
+		u64LR      = "`tv:u64Array:lr:lr:u64:1247:::0::data`"
+		u64LRCard  = "`tv:u64Array:lrcard:lrcard:u64:4E:::0::data`"
+		boolValue  = "`tv:bool:value:val:b:4:::0::data`"
+		boolLR     = "`tv:bool:lr:lr:u64:1247:::0::data`"
+		boolLRCard = "`tv:bool:lrcard:lrcard:u64:4E:::0::data`"
+		idCol      = "`id:id:u64:47::0:`"
+		tsCol      = "`ts:ts:z64:47::0:`"
 	)
 	e.id = idCol
 	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", tsCol)
@@ -226,19 +226,19 @@ type columnExprsLifecycle struct {
 
 func buildLifecycleColumnExprs() (e columnExprsLifecycle) {
 	const (
-		symValue  = "`tv:symbol:value:val:s:m:0:12:0::data`"
-		symLR     = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		symLMR    = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symMRHP   = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
-		strValue  = "`tv:stringArray:value:val:sh:g:0:gw:0::data`"
-		strLR     = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
-		strLRCard = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		u64Value  = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"
-		u64LR     = "`tv:u64Array:lr:lr:u64:2q:0:0:0::data`"
-		u64LRCard = "`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		idCol     = "`id:id:u64:2k:0:0:`"
-		tsCol     = "`ts:ts:z64:2k:0:0:`"
+		symValue  = "`tv:symbol:value:val:s:124::I:0::data`"
+		symLR     = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
+		symLMR    = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		symMRHP   = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
+		strValue  = "`tv:stringArray:value:val:sh:4::8:0::data`"
+		strLR     = "`tv:stringArray:lr:lr:u64:1247:::0::data`"
+		strLRCard = "`tv:stringArray:lrcard:lrcard:u64:4E:::0::data`"
+		u64Value  = "`tv:u64Array:value:val:u64h:4:::0::data`"
+		u64LR     = "`tv:u64Array:lr:lr:u64:1247:::0::data`"
+		u64LRCard = "`tv:u64Array:lrcard:lrcard:u64:4E:::0::data`"
+		idCol     = "`id:id:u64:47::0:`"
+		tsCol     = "`ts:ts:z64:47::0:`"
 	)
 	e.id = idCol
 	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", tsCol)
@@ -270,8 +270,8 @@ func pickLcrNumeric(valueArr, lrArr, lrCardArr string, membershipId uint64, zero
 // requested run_id.
 func runIdPredicate(runId string) (expr string) {
 	const (
-		symLMR  = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symMRHP = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
+		symLMR  = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		symMRHP = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
 	)
 	expr = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s) = %s",
 		vocab.MembRuntimeRun.GetId().Value(), symMRHP, symLMR, quoteSqlString(runId))
@@ -282,8 +282,8 @@ func runIdPredicate(runId string) (expr string) {
 // the optional LifecycleFilter.AppId narrowing.
 func appIdPredicate(appId app.AppIdT) (expr string) {
 	const (
-		symLMR  = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symMRHP = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
+		symLMR  = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		symMRHP = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
 	)
 	expr = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s) = %s",
 		vocab.MembRuntimeApp.GetId().Value(), symMRHP, symLMR, quoteSqlString(string(appId)))
@@ -293,8 +293,8 @@ func appIdPredicate(appId app.AppIdT) (expr string) {
 func composeLookupRunStartSql(table, runId string) (sql string) {
 	e := buildRunColumnExprs()
 	const (
-		symLR  = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLMR = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
+		symLR  = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLMR = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
 	)
 	whereParts := []string{
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindRuntimeRun.GetId().Value()),
@@ -328,9 +328,9 @@ FORMAT TabSeparated`,
 func composeLifecyclesByRunSql(table string, filter LifecycleFilter, limit uint32) (sql string) {
 	e := buildLifecycleColumnExprs()
 	const (
-		symLR  = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLMR = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		tsCol  = "`ts:ts:z64:2k:0:0:`"
+		symLR  = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLMR = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		tsCol  = "`ts:ts:z64:47::0:`"
 	)
 	whereParts := []string{
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindAppLifecycle.GetId().Value()),

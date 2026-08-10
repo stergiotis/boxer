@@ -34,11 +34,7 @@ func sampleTableDesc() (tbl common.TableDesc, err error) {
 		err = eh.Errorf("unable to encode hints: %w", err)
 		return
 	}
-	hintsFloat64, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
+	hintsFloat64 = encodingaspects2.EmptyAspectSet
 	hintsId, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectDeltaEncoding, encodingaspects2.AspectLightGeneralCompression)
 	if err != nil {
 		err = eh.Errorf("unable to encode hints: %w", err)

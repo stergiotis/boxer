@@ -1880,31 +1880,31 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) GetSectionName() naming.Stylabl
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessPushoutTableTaggedRetTime)(nil)
 
 func (inst *ReadAccessPushoutTableTaggedEnvBlob) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessPushoutTableTaggedLogHash) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessPushoutTableTaggedSnapGraggle) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessPushoutTableTaggedSnapApplied) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessPushoutTableTaggedRetHash) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessPushoutTableTaggedRetIndex) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessPushoutTableTaggedRetTime) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessPushoutTableTaggedEnvBlob) GetSectionStreamingGroup() naming.Key {

@@ -199,9 +199,9 @@ Then one window, ordered, each step gated on green:
 Accepted 2026-08-10.
 
 - **M0 — segment codec v2 in the three aspect packages.** ✓
-- **M1 — vocabulary pass, family registry, validator generalization.**
-- **M2 — regeneration sweep and corpus re-measurement.**
-- **M3 — external-adopter lockstep migration.**
+- **M1 — vocabulary pass, family registry, validator generalization.** ✓
+- **M2 — regeneration sweep and corpus re-measurement.** ✓
+- **M3 — external-adopter lockstep migration.** ✓
 - **M4 — `LW_ASPECT_*` UDFs, installed and probed.**
 - **M5 — old-era physical-table re-derivation, docs and skills touch-ups.**
 

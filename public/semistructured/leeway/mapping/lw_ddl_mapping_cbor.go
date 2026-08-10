@@ -30,61 +30,17 @@ func NewCborMapping() (tbl common.TableDesc, err error) {
 		err = eh.Errorf("unable to encode hints: %w", err)
 		return
 	}
-	hintsFloat64, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsFloat32, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsFloat16, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsInt64, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsInt32, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsInt16, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsInt8, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsUint64, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsUint32, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsUint16, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsUint8, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
+	hintsFloat64 = encodingaspects2.EmptyAspectSet
+	hintsFloat32 = encodingaspects2.EmptyAspectSet
+	hintsFloat16 = encodingaspects2.EmptyAspectSet
+	hintsInt64 = encodingaspects2.EmptyAspectSet
+	hintsInt32 = encodingaspects2.EmptyAspectSet
+	hintsInt16 = encodingaspects2.EmptyAspectSet
+	hintsInt8 = encodingaspects2.EmptyAspectSet
+	hintsUint64 = encodingaspects2.EmptyAspectSet
+	hintsUint32 = encodingaspects2.EmptyAspectSet
+	hintsUint16 = encodingaspects2.EmptyAspectSet
+	hintsUint8 = encodingaspects2.EmptyAspectSet
 	hintsId, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectDeltaEncoding, encodingaspects2.AspectLightGeneralCompression)
 	if err != nil {
 		err = eh.Errorf("unable to encode hints: %w", err)

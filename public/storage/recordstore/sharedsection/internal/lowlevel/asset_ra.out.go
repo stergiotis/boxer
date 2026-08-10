@@ -447,7 +447,7 @@ func (inst *ReadAccessAssetTableTaggedSymbol) GetSectionName() naming.StylableNa
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessAssetTableTaggedSymbol)(nil)
 
 func (inst *ReadAccessAssetTableTaggedSymbol) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessAssetTableTaggedSymbol) GetSectionStreamingGroup() naming.Key {

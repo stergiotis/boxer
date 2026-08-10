@@ -94,7 +94,7 @@ func (inst *Store) Ping(ctx context.Context) (err error) {
 // forced. Retention — TTL / partitioning to bound a forever-growing
 // heartbeat table — is intentionally left to the operator's own engine
 // clause rather than imposed here, since it deletes data.
-const defaultEngineClause = "MergeTree() ORDER BY `ts:ts:z64:2k:0:0:`"
+const defaultEngineClause = "MergeTree() ORDER BY `ts:ts:z64:47::0:`"
 
 // ComposeSetupSQL returns the exact DDL script SetupTable applies for cfg:
 // the CREATE DATABASE + CREATE TABLE statements (separated by ';'), composed
@@ -105,7 +105,7 @@ const defaultEngineClause = "MergeTree() ORDER BY `ts:ts:z64:2k:0:0:`"
 // executes, with no risk of drift.
 //
 // The columns are referenced by their leeway-encoded physical names (e.g.
-// "id:id:u64:2k:0:0:") since the table has no logical aliases.
+// "id:id:u64:47::0:") since the table has no logical aliases.
 func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
 	if cfg.Database == "" || cfg.Table == "" {
 		err = eh.Errorf("chstore: compose setup sql: cfg requires Database + Table")
@@ -640,15 +640,15 @@ func (inst *Store) DeleteState(appId app.AppIdT, key string) (err error) {
 // the positional order of symbol attributes.
 func composeLatestStateSql(table string, appId app.AppIdT, key string) (sql string) {
 	const (
-		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLMR     = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symValue   = "`tv:symbol:value:val:s:m:0:12:0::data`"
-		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		blobValue  = "`tv:blobArray:value:val:yh:g:0:0:0::data`"
-		blobLR     = "`tv:blobArray:lr:lr:u64:2q:0:0:0::data`"
-		blobLRCard = "`tv:blobArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		boolLR     = "`tv:bool:lr:lr:u64:2q:0:0:0::data`"
-		tsCol      = "`ts:ts:z64:2k:0:0:`"
+		symLR      = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLMR     = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		symValue   = "`tv:symbol:value:val:s:124::I:0::data`"
+		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
+		blobValue  = "`tv:blobArray:value:val:yh:4:::0::data`"
+		blobLR     = "`tv:blobArray:lr:lr:u64:1247:::0::data`"
+		blobLRCard = "`tv:blobArray:lrcard:lrcard:u64:4E:::0::data`"
+		boolLR     = "`tv:bool:lr:lr:u64:1247:::0::data`"
+		tsCol      = "`ts:ts:z64:47::0:`"
 	)
 	// Value: the blob attribute tagged MembPersistKey, located the same way
 	// pickLcrString locates a scalar — find the membership in lr, map through

@@ -16,14 +16,14 @@ WITH
     arrayDistinct(groupArrayArray(symbols)) AS distinct_symbols,
     toUInt64(count()) AS event_count
 SELECT
-    cityHash64(h3_index, event_date) AS `id:id:u64:2k:0:0:`,
-    concat('COMPOSITE-H3-', toString(h3_index), '-20260311') AS `id:naturalKey:y:g:0:0:`,
+    cityHash64(h3_index, event_date) AS `id:id:u64:47::0:`,
+    concat('COMPOSITE-H3-', toString(h3_index), '-20260311') AS `id:naturalKey:y:4::0:`,
 
     -- symbol section: all distinct event types seen in this cell today
-    distinct_symbols AS `tv:symbol:value:val:s:m:0:12:0::data`,
+    distinct_symbols AS `tv:symbol:value:val:s:124::I:0::data`,
 
     -- u64Array section: the incident count, packed as a one-element array
-    [event_count] AS `tv:u64Array:value:val:u64h:g:0:0:0::data`,
+    [event_count] AS `tv:u64Array:value:val:u64h:4:::0::data`,
 
     -- text section: a generated summary line
     [concat('Regional summary: ', toString(event_count), ' events. Includes: ',

@@ -640,11 +640,11 @@ func (inst *ReadAccessProvenanceTableTaggedSymbolArray) GetSectionName() naming.
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessProvenanceTableTaggedSymbolArray)(nil)
 
 func (inst *ReadAccessProvenanceTableTaggedSymbol) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessProvenanceTableTaggedSymbolArray) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessProvenanceTableTaggedSymbol) GetSectionStreamingGroup() naming.Key {

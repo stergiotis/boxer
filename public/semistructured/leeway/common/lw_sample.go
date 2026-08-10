@@ -3,7 +3,6 @@ package common
 import (
 	"fmt"
 	"math/rand/v2"
-	"slices"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -20,12 +19,8 @@ func generateExampleAspects(rnd *rand.Rand, nAspectsMax int) (r useaspects2.Aspe
 	for i := 0; i < nAspectsMax; i++ {
 		asps = append(asps, useaspects2.AspectE(rnd.IntN(int(useaspects2.MaxAspectExcl))))
 	}
-	// the validator rejects the contradictory uniformity pair
-	if slices.Contains(asps, useaspects2.AspectSectionMembershipsAllPrimary) {
-		asps = slices.DeleteFunc(asps, func(a useaspects2.AspectE) bool {
-			return a == useaspects2.AspectSectionMembershipsAllSecondary
-		})
-	}
+	// the validator rejects exclusive-family violations
+	asps = useaspects2.SanitizeFamilyExclusivity(asps)
 	var err error
 	r, err = useaspects2.EncodeAspects(asps...)
 	if err != nil {
@@ -94,6 +89,7 @@ func GenerateSampleEncodingAspectEx(nMembers int, r *rand.Rand, accept func(aspe
 		}
 		members = append(members, m)
 	}
+	members = encodingaspects2.SanitizeFamilyExclusivity(members)
 	return encodingaspects2.EncodeAspectsMustValidate(members...)
 }
 func GenerateSampleValueSemantics(nMembers int, rnd *rand.Rand) (valueSemantics valueaspects.AspectSet) {
@@ -105,6 +101,7 @@ func GenerateSampleValueSemantics(nMembers int, rnd *rand.Rand) (valueSemantics 
 	for i := 0; i < nMembers; i++ {
 		members = append(members, valueaspects.AllAspects[rnd.IntN(len(valueaspects.AllAspects))])
 	}
+	members = valueaspects.SanitizeFamilyExclusivity(members)
 	return valueaspects.EncodeAspectsMustValidate(members...)
 }
 func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCanonicalType func(ct canonicaltypes.PrimitiveAstNodeI) (ok bool, msg string), acceptEncodingAspect func(aspect encodingaspects2.AspectE) (ok bool, msg string)) (err error) {

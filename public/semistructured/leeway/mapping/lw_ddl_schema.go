@@ -96,7 +96,7 @@ func addUint64(manip *common.TableManipulator) {
 		"")
 }
 func addBool(manip *common.TableManipulator) {
-	hints := encodingaspects2.EncodeAspectsMustValidate(encodingaspects2.AspectNone)
+	hints := encodingaspects2.EmptyAspectSet
 	manip.MergeTaggedValueColumn("bool",
 		"value",
 		canonicaltypes2.StringAstNode{BaseType: canonicaltypes2.BaseTypeStringBool},

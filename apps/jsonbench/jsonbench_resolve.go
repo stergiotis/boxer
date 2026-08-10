@@ -20,7 +20,7 @@ import (
 
 // resolveCommand expands leeway column handles to physical column names, so a
 // query against a leeway table can be *written* as `symbol:value` instead of
-// `tv:symbol:value:val:s:m:0:12:0::data`.
+// `tv:symbol:value:val:s:124::I:0::data`.
 //
 // This is ADR-0116's ResolveColumnNames pass with a live-endpoint resolver
 // bound to it. play applies the same pass at StagePreExecute; running it on

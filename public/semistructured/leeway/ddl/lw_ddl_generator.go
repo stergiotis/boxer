@@ -61,9 +61,7 @@ func (inst *GeneratorDriver) GenerateColumnsCode(iter common.IntermediateColumnI
 				return
 			}
 			for _, hint := range hints.IterateAspects() {
-				if hint != encodingaspects.AspectNone {
-					hintLU[hint] = append(hintLU[hint], p.String())
-				}
+				hintLU[hint] = append(hintLU[hint], p.String())
 			}
 		}
 		{ // check canonical type

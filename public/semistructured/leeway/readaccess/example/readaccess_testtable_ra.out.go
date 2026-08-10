@@ -921,11 +921,11 @@ func (inst *ReadAccessTestTableTaggedText) GetSectionName() naming.StylableName 
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedText)(nil)
 
 func (inst *ReadAccessTestTableTaggedGeo) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessTestTableTaggedText) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessTestTableTaggedGeo) GetSectionStreamingGroup() naming.Key {

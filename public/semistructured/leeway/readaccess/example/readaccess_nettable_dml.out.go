@@ -23,17 +23,17 @@ import (
 
 func CreateSchemaNetTable() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
-		/* 000 */ arrow.Field{Name: "id:id:u64:2k:0:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
-		/* 001 */ arrow.Field{Name: "ts:ts:z32:2k:0:0:", Nullable: false, Type: &arrow.TimestampType{Unit: arrow.Millisecond}},
-		/* 002 */ arrow.Field{Name: "tv:net:ipv4:val:v:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
-		/* 003 */ arrow.Field{Name: "tv:net:ipv6:val:w:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 16})},
-		/* 004 */ arrow.Field{Name: "tv:net:ipv4_cidr:val:vc:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 5})},
-		/* 005 */ arrow.Field{Name: "tv:net:ipv6_cidr:val:wc:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 17})},
-		/* 006 */ arrow.Field{Name: "tv:net:lr:lr:u64:2q:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 007 */ arrow.Field{Name: "tv:net:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 008 */ arrow.Field{Name: "tv:net:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 009 */ arrow.Field{Name: "tv:net:lrcard:lrcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 010 */ arrow.Field{Name: "tv:net:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 000 */ arrow.Field{Name: "id:id:u64:47::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
+		/* 001 */ arrow.Field{Name: "ts:ts:z32:47::0:", Nullable: false, Type: &arrow.TimestampType{Unit: arrow.Millisecond}},
+		/* 002 */ arrow.Field{Name: "tv:net:ipv4:val:v::::0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 003 */ arrow.Field{Name: "tv:net:ipv6:val:w::::0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 16})},
+		/* 004 */ arrow.Field{Name: "tv:net:ipv4_cidr:val:vc::::0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 5})},
+		/* 005 */ arrow.Field{Name: "tv:net:ipv6_cidr:val:wc::::0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 17})},
+		/* 006 */ arrow.Field{Name: "tv:net:lr:lr:u64:1247:::0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 007 */ arrow.Field{Name: "tv:net:lmv:lmv:y:124:::0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 008 */ arrow.Field{Name: "tv:net:mvhp:mvhp:y:4:::0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 009 */ arrow.Field{Name: "tv:net:lrcard:lrcard:u64:4E:::0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 010 */ arrow.Field{Name: "tv:net:lmvcard:lmvcard:u64:4E:::0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }

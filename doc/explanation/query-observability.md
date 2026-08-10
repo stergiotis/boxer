@@ -152,7 +152,7 @@ capture is flowing needs no pivot:
 ```sql
 SELECT count()
 FROM boxer.facts
-WHERE has(`tv:symbol:lr:lr:u64:2q:0:0:0::data`,
+WHERE has(`tv:symbol:lr:lr:u64:1247:::0::data`,
           6917529027641081896)  -- KindQueryRun (vocab.MembKindQueryRun)
 ```
 

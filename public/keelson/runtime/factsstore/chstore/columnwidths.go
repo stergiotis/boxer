@@ -22,9 +22,9 @@ import (
 // encoding segment is `gM`, not the `g` every other array section uses,
 // and a hand-derived name would have compiled and then found nothing.
 const (
-	f64Value  = "`tv:f64Array:value:val:f64h:gM:0:0:0::data`"
-	f64LR     = "`tv:f64Array:lr:lr:u64:2q:0:0:0::data`"
-	f64LRCard = "`tv:f64Array:lrcard:lrcard:u64:4gw:0:0:0::data`"
+	f64Value  = "`tv:f64Array:value:val:f64h:4A:::0::data`"
+	f64LR     = "`tv:f64Array:lr:lr:u64:1247:::0::data`"
+	f64LRCard = "`tv:f64Array:lrcard:lrcard:u64:4E:::0::data`"
 )
 
 // WriteColumnWidth lands one boxer.facts row tagged KindColumnWidth
@@ -127,13 +127,13 @@ func (inst *Store) ListColumnWidths(appId app.AppIdT) (rows []factsstore.ColumnW
 // explicitly cleared — the exact defect the workingsets read had to fix.
 func composeListColumnWidthsSql(table string, appId app.AppIdT) (sql string) {
 	const (
-		symLR     = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLMR    = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symValue  = "`tv:symbol:value:val:s:m:0:12:0::data`"
-		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		boolLR    = "`tv:bool:lr:lr:u64:2q:0:0:0::data`"
-		idCol     = "`id:id:u64:2k:0:0:`"
-		tsCol     = "`ts:ts:z64:2k:0:0:`"
+		symLR     = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLMR    = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		symValue  = "`tv:symbol:value:val:s:124::I:0::data`"
+		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
+		boolLR    = "`tv:bool:lr:lr:u64:1247:::0::data`"
+		idCol     = "`id:id:u64:47::0:`"
+		tsCol     = "`ts:ts:z64:47::0:`"
 	)
 	tier := pickLcrString(symValue, symLR, symLRCard, vocab.MembColWidthTier.GetId().Value())
 	scope := pickLcrString(symValue, symLR, symLRCard, vocab.MembColWidthScope.GetId().Value())

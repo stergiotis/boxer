@@ -16,7 +16,7 @@ ClickHouse table (the "single unified event bus" pattern demonstrated by
 events share `anchor.facts`). Each tagged-value section is a struct-of-arrays:
 a `value` column plus membership columns (`lr`/`hr`/`lv`/…) and support
 columns (`*card`, `len`), all named by the human-readable naming convention —
-e.g. `` `tv:symbol:lr:lr:u64:2q:0:0:0::data` `` encodes scope, section, role,
+e.g. `` `tv:symbol:lr:lr:u64:1247:::0::data` `` encodes scope, section, role,
 canonical type, encoding hints, aspects, table-row-config, and groups.
 
 Three generation surfaces already derive from a schema: DDL (`CREATE TABLE`,
@@ -200,7 +200,7 @@ Presence (a) uses the identity match; the exact validator (c) uses all matches
 Worked on `anchor`'s `symbol` section: `value` =
 `` `tv:symbol:value:val:s:m:0:24:0::data` `` (`Array(LowCardinality(String))`),
 verbatim id = `` `tv:symbol:lv:lv:y:m:0:0:0::data` ``, ref id =
-`` `tv:symbol:lr:lr:u64:2q:0:0:0::data` ``; plain `` `id:id:u64:2k:0:0:` ``.
+`` `tv:symbol:lr:lr:u64:1247:::0::data` ``; plain `` `id:id:u64:47::0:` ``.
 DTO fields: `attackType` (verbatim), `severity` (`LowCardRef`, id resolved to
 `8456` at generation time).
 
@@ -217,7 +217,7 @@ value behind a present membership.
 ```sql
 CREATE FUNCTION leeway_has_MyDTO AS (lv_symbol, lr_symbol) ->
     has(lv_symbol, 'attackType') AND has(lr_symbol, 8456);
--- WHERE leeway_has_MyDTO(`tv:symbol:lv:lv:y:m:0:0:0::data`, `tv:symbol:lr:lr:u64:2q:0:0:0::data`)
+-- WHERE leeway_has_MyDTO(`tv:symbol:lv:lv:y:m:0:0:0::data`, `tv:symbol:lr:lr:u64:1247:::0::data`)
 ```
 
 **(b) Named-tuple projection (decision 3).** Locate each field by `indexOf` and
@@ -228,9 +228,9 @@ slot name:
 
 ```sql
 CAST(tuple(
-    `id:id:u64:2k:0:0:`,
+    `id:id:u64:47::0:`,
     `tv:symbol:value:val:s:m:0:24:0::data`[indexOf(`tv:symbol:lv:lv:y:m:0:0:0::data`, 'attackType')],
-    `tv:symbol:value:val:s:m:0:24:0::data`[indexOf(`tv:symbol:lr:lr:u64:2q:0:0:0::data`, 8456)]
+    `tv:symbol:value:val:s:m:0:24:0::data`[indexOf(`tv:symbol:lr:lr:u64:1247:::0::data`, 8456)]
   ) AS x,
   'Tuple(id UInt64, attackType String, severity String)') AS myDTO
 ```

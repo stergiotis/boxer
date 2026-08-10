@@ -33,7 +33,7 @@ distinct things a SQL-fluent consumer wants to do with it:
 The acceptance criterion driving all three: a senior SQL practitioner must be
 able to do routine leeway work **without Go in the loop and without ever
 typing a physical column name**. Today (c) is impossible without Go — a
-physical name like `tv:symbol:lr:lr:u64:2q:0:0:0::data` cannot feasibly be
+physical name like `tv:symbol:lr:lr:u64:1247:::0::data` cannot feasibly be
 composed by a human — and (a)/(b) exist but are split across three packages
 with different discoverability and installation stories
 ([ADR-0171](../adr/0171-leeway-sql-read-surface.md) is about exactly that gap

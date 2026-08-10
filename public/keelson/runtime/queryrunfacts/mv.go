@@ -76,7 +76,7 @@ func DdlColumnNames() (names []string, err error) {
 
 // UrlStructure derives the url() structure clause from the generated
 // boxer.facts DDL — every leeway wire column with its ClickHouse type,
-// names backtick-quoted: "`id:id:u64:2k:0:0:` UInt64, …". Deriving
+// names backtick-quoted: "`id:id:u64:47::0:` UInt64, …". Deriving
 // (rather than duplicating) the list keeps the pipeline DDL moving with
 // the schema.
 func UrlStructure() (structure string, err error) {

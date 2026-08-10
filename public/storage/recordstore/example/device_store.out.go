@@ -42,9 +42,9 @@ const DeviceTableName = "device"
 // derived from the IR at generation time — exported so consumers can
 // address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	DeviceColKey       = `"id:id:u64:2k:0:0:"`
-	DeviceColOrder     = `"ts:ts:z64:2k:0:0:"`
-	DeviceColLifecycle = `"lc:lifecycle:u8:g:0:0:"`
+	DeviceColKey       = `"id:id:u64:47::0:"`
+	DeviceColOrder     = `"ts:ts:z64:47::0:"`
+	DeviceColLifecycle = `"lc:lifecycle:u8:4::0:"`
 )
 
 // Arrow output shape the read-access classes expect.
@@ -863,10 +863,10 @@ func (inst *deviceFetcher) FetchItemSinglePartition(ctx context.Context, partiti
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	deviceScanIdentityFilter = "has(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 2) <= 1"
-	deviceScanBatteryFilter  = "has(\"tv:u64Array:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:u64Array:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
-	deviceScanTaggedFilter   = "has(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 1) <= 1"
-	deviceScanLocatedFilter  = "has(\"tv:geoPoint:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:geoPoint:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
+	deviceScanIdentityFilter = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 2) <= 1"
+	deviceScanBatteryFilter  = "has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1) = 1"
+	deviceScanTaggedFilter   = "has(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 1) <= 1"
+	deviceScanLocatedFilter  = "has(\"tv:geoPoint:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:geoPoint:lr:lr:u64:1247:::0::data\", 1) = 1"
 )
 
 // ScanIdentity iterates the entities whose rows carry a conforming Identity

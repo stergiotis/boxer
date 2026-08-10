@@ -43,7 +43,7 @@ import (
 // two cannot drift.
 //
 // Do not be tempted to write something readable like `ORDER BY (id)` here.
-// There is no column called `id` — leeway spells it `id:id:u64:2k:0:0:` — and
+// There is no column called `id` — leeway spells it `id:id:u64:47::0:` — and
 // the clause is passed through to ClickHouse verbatim, so the mistake surfaces
 // only when a table is actually created, not when the DDL is composed.
 const defaultEngine = ""

@@ -49,7 +49,7 @@ drop_caches() {
 # RESOLVE, when set to a `jsonbench` binary, first expands leeway column
 # handles (`symbol:value`) to physical names via ADR-0116's ResolveColumnNames
 # pass. That is what lets the facts query files be written against section and
-# column names instead of `tv:symbol:value:val:s:m:0:12:0::data`. Arms whose
+# column names instead of `tv:symbol:value:val:s:124::I:0::data`. Arms whose
 # queries carry no handles are unaffected, so it is safe to leave set.
 statements() {
   if [[ -n "${RESOLVE:-}" ]]; then

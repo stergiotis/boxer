@@ -1,83 +1,108 @@
+// Package useaspects is the closed vocabulary of section-usage aspects
+// (ADR-0182). Admission criterion: an aspect family is admissible when its
+// meaning is anchored in mathematics, a long-lived open standard, a practice
+// predating the current tooling generation, or a format the engine itself
+// commits to; its domain is closed under that anchor, or it is a genuinely
+// independent boolean. Open-domain technique-, tier- or brand-shaped
+// information belongs in canonical types, TableOptions or the catalog — not
+// here. Numbering is the wire format (segments in physical column names):
+// append-only between migration windows, family-grouped as of v2.
 package useaspects
 
 import "slices"
 
 const (
-	AspectIndefinite         AspectE = 0
-	AspectCompliance         AspectE = 1
-	AspectRisk               AspectE = 2
-	AspectPrivacy            AspectE = 3
-	AspectProvenanceEntity   AspectE = 4 // see https://www.w3.org/TR/prov-overview/
-	AspectProvenanceActivity AspectE = 5 // see https://www.w3.org/TR/prov-overview/
-	AspectProvenanceAgent    AspectE = 6 // see https://www.w3.org/TR/prov-overview/
-	AspectProvenanceRelation AspectE = 7 // see https://www.w3.org/TR/prov-overview/
-	AspectLineage            AspectE = 8
-	AspectCatalog            AspectE = 9
-	AspectSecurity           AspectE = 10
-	AspectAuthorization      AspectE = 11
-	AspectAccess             AspectE = 12
-	AspectAudit              AspectE = 13
-	AspectQuality            AspectE = 14
-	AspectPolicy             AspectE = 15
-	AspectOwnership          AspectE = 16
-	AspectMetrics            AspectE = 17
-	AspectLog                AspectE = 18
-	AspectCollaboration      AspectE = 19
-	AspectInterop            AspectE = 20
-	AspectEvolution          AspectE = 21
-	AspectClassification     AspectE = 22
-	AspectTaxonomy           AspectE = 23
-	AspectUnit               AspectE = 24 // e.g. SI unit
-	AspectProfile            AspectE = 25 // i.e. performance profiling data
-	AspectSpatial            AspectE = 26
-	AspectOrgUnit            AspectE = 27
-	AspectOrgRole            AspectE = 28
-	AspectOrgProcess         AspectE = 29
-	AspectOrgFinance         AspectE = 30
-	AspectBusinessAsset      AspectE = 31
-	AspectBusinessPartner    AspectE = 32
-	AspectBusinessActivity   AspectE = 33
-	AspectBusinessChannel    AspectE = 34
-	AspectWorkflow           AspectE = 35
-	AspectLinking            AspectE = 36 // i.e. references, hyperlinks, graph edges, hyper edges ...
-	AspectTesting            AspectE = 37
-	AspectDevice             AspectE = 38
-	AspectDocumentation      AspectE = 39
-	AspectObservability      AspectE = 40
+	// Governance data kinds. Authorization = grants and policy (who may);
+	// Access = access records (who did); Audit = examinations of controls
+	// (what was checked).
 
-	AspectCodeSourceOfTruth                       AspectE = 41
-	AspectDataSourceOfTruth                       AspectE = 42
-	AspectExternalSourceOfTruth                   AspectE = 43
-	AspectMiniDimension                           AspectE = 44
-	AspectSlowlyChangingDimensionRetainOriginal   AspectE = 45 // i.e. type 0, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-0/
-	AspectSlowlyChangingDimensionOverwrite        AspectE = 46 // i.e. type 1, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-1/
-	AspectSlowlyChangingDimensionAddNewRecord     AspectE = 47 // i.e. type 2, add new row, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-2/
-	AspectSlowlyChangingDimensionAddNewAttribute  AspectE = 48 // i.e. type 3, add new attribute, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-3/
-	AspectSlowlyChangingDimensionAddMiniDimension AspectE = 49 // i.e. type 4, add mini dimension, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-4-mini-dimension/
-	AspectSlowlyChangingDimensionType5            AspectE = 50 // i.e. type 5, add mini and type 1 outrigger, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-5/
-	AspectSlowlyChangingDimensionType6            AspectE = 51 // i.e. type 6, add type 1 attributes to type 2 dimension, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-6/
-	AspectSlowlyChangingDimensionType7            AspectE = 52 // i.e. type 7, dual type 1 and type 2 dimension, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-7/
-	AspectQualityStaging                          AspectE = 53 // i.e. Bronze in medaillon architecture
-	AspectQualityCore                             AspectE = 54 // i.e. Silver in medaillon architecture
-	AspectQualitySemantical                       AspectE = 55 // i.e. Gold in medaillon architecture
+	AspectCompliance    AspectE = 0
+	AspectRisk          AspectE = 1
+	AspectPrivacy       AspectE = 2
+	AspectSecurity      AspectE = 3
+	AspectAuthorization AspectE = 4
+	AspectAccess        AspectE = 5
+	AspectAudit         AspectE = 6
+	AspectQuality       AspectE = 7
+	AspectPolicy        AspectE = 8
+	AspectOwnership     AspectE = 9
 
-	AspectSectionMembershipsAllPrimary   AspectE = 56 // every membership in this tagged-value section defines an attribute's identity
-	AspectSectionMembershipsAllSecondary AspectE = 57 // every membership in this tagged-value section annotates an existing attribute
+	// W3C PROV kinds (record-level provenance). Lineage, by contrast, is
+	// artifact/column-level derivation topology between datasets.
+
+	AspectProvenanceEntity   AspectE = 10 // see https://www.w3.org/TR/prov-overview/
+	AspectProvenanceActivity AspectE = 11 // see https://www.w3.org/TR/prov-overview/
+	AspectProvenanceAgent    AspectE = 12 // see https://www.w3.org/TR/prov-overview/
+	AspectProvenanceRelation AspectE = 13 // see https://www.w3.org/TR/prov-overview/
+	AspectLineage            AspectE = 14
+
+	// Classification = the section carries class labels assigned to things;
+	// Taxonomy = the section carries the classification system itself.
+
+	AspectClassification AspectE = 15
+	AspectTaxonomy       AspectE = 16
+
+	AspectCatalog       AspectE = 17
+	AspectUnit          AspectE = 18 // e.g. SI unit
+	AspectSpatial       AspectE = 19
+	AspectWorkflow      AspectE = 20
+	AspectLinking       AspectE = 21 // i.e. references, hyperlinks, graph edges, hyper edges ...
+	AspectTesting       AspectE = 22
+	AspectDevice        AspectE = 23
+	AspectDocumentation AspectE = 24
+	AspectCollaboration AspectE = 25
+	AspectInterop       AspectE = 26
+	AspectEvolution     AspectE = 27
+
+	AspectMetrics AspectE = 28
+	AspectLog     AspectE = 29
+	AspectProfile AspectE = 30 // i.e. performance profiling data
+
+	// Source-of-truth authority (exclusive).
+
+	AspectCodeSourceOfTruth     AspectE = 31
+	AspectDataSourceOfTruth     AspectE = 32
+	AspectExternalSourceOfTruth AspectE = 33
+
+	// Refinement stages (exclusive): Staging = raw as received; Core =
+	// cleansed and conformed; Semantical = semantically modeled for
+	// consumption.
+
+	AspectQualityStaging    AspectE = 34
+	AspectQualityCore       AspectE = 35
+	AspectQualitySemantical AspectE = 36
+
+	// Attribute history treatment (exclusive): what happens to a prior value
+	// when a new one arrives. Values that never change carry the value-level
+	// Immutable aspect instead.
+
+	AspectHistoryRetained    AspectE = 37 // changes append; prior values stay readable
+	AspectHistoryOverwritten AspectE = 38 // only the current value is kept
+	AspectHistoryDual        AspectE = 39 // a current view is maintained alongside retained history
+
+	// Traffic Light Protocol dissemination marking (exclusive), per FIRST
+	// TLP 2.0 (https://www.first.org/tlp/, authoritative August 2022; 2.0
+	// renamed 1.0's WHITE to CLEAR). States who may receive the data.
+
+	AspectTlpClear       AspectE = 40 // no limit on disclosure
+	AspectTlpGreen       AspectE = 41 // limited disclosure, community
+	AspectTlpAmber       AspectE = 42 // limited disclosure, organization and its clients on a need-to-know basis
+	AspectTlpAmberStrict AspectE = 43 // limited disclosure, organization only
+	AspectTlpRed         AspectE = 44 // named recipients only, no further disclosure
+
+	// Section-uniformity hints for the membership-role classifier
+	// (exclusive; ADR-0007/0073).
+
+	AspectSectionMembershipsAllPrimary   AspectE = 45 // every membership in this tagged-value section defines an attribute's identity
+	AspectSectionMembershipsAllSecondary AspectE = 46 // every membership in this tagged-value section annotates an existing attribute
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
 
 var AllAspects = []AspectE{
-	AspectIndefinite,
 	AspectCompliance,
 	AspectRisk,
 	AspectPrivacy,
-	AspectProvenanceEntity,
-	AspectProvenanceActivity,
-	AspectProvenanceAgent,
-	AspectProvenanceRelation,
-	AspectLineage,
-	AspectCatalog,
 	AspectSecurity,
 	AspectAuthorization,
 	AspectAccess,
@@ -85,45 +110,41 @@ var AllAspects = []AspectE{
 	AspectQuality,
 	AspectPolicy,
 	AspectOwnership,
-	AspectMetrics,
-	AspectLog,
-	AspectCollaboration,
-	AspectInterop,
-	AspectEvolution,
+	AspectProvenanceEntity,
+	AspectProvenanceActivity,
+	AspectProvenanceAgent,
+	AspectProvenanceRelation,
+	AspectLineage,
 	AspectClassification,
 	AspectTaxonomy,
+	AspectCatalog,
 	AspectUnit,
-	AspectProfile,
 	AspectSpatial,
-	AspectOrgUnit,
-	AspectOrgRole,
-	AspectOrgProcess,
-	AspectOrgFinance,
-	AspectBusinessAsset,
-	AspectBusinessPartner,
-	AspectBusinessActivity,
-	AspectBusinessChannel,
 	AspectWorkflow,
 	AspectLinking,
 	AspectTesting,
 	AspectDevice,
 	AspectDocumentation,
-	AspectObservability,
+	AspectCollaboration,
+	AspectInterop,
+	AspectEvolution,
+	AspectMetrics,
+	AspectLog,
+	AspectProfile,
 	AspectCodeSourceOfTruth,
 	AspectDataSourceOfTruth,
 	AspectExternalSourceOfTruth,
-	AspectMiniDimension,
-	AspectSlowlyChangingDimensionRetainOriginal,
-	AspectSlowlyChangingDimensionOverwrite,
-	AspectSlowlyChangingDimensionAddNewRecord,
-	AspectSlowlyChangingDimensionAddNewAttribute,
-	AspectSlowlyChangingDimensionAddMiniDimension,
-	AspectSlowlyChangingDimensionType5,
-	AspectSlowlyChangingDimensionType6,
-	AspectSlowlyChangingDimensionType7,
 	AspectQualityStaging,
 	AspectQualityCore,
 	AspectQualitySemantical,
+	AspectHistoryRetained,
+	AspectHistoryOverwritten,
+	AspectHistoryDual,
+	AspectTlpClear,
+	AspectTlpGreen,
+	AspectTlpAmber,
+	AspectTlpAmberStrict,
+	AspectTlpRed,
 	AspectSectionMembershipsAllPrimary,
 	AspectSectionMembershipsAllSecondary,
 }
@@ -135,26 +156,12 @@ func (inst AspectE) IsValid() bool {
 }
 func (inst AspectE) String() string {
 	switch inst {
-	case AspectIndefinite:
-		return "indefinite"
 	case AspectCompliance:
 		return "compliance"
 	case AspectRisk:
 		return "risk"
 	case AspectPrivacy:
 		return "privacy"
-	case AspectProvenanceEntity:
-		return "provenance-entity"
-	case AspectProvenanceActivity:
-		return "provenance-activity"
-	case AspectProvenanceAgent:
-		return "provenance-agent"
-	case AspectProvenanceRelation:
-		return "provenance-relation"
-	case AspectLineage:
-		return "lineage"
-	case AspectCatalog:
-		return "catalog"
 	case AspectSecurity:
 		return "security"
 	case AspectAuthorization:
@@ -169,84 +176,76 @@ func (inst AspectE) String() string {
 		return "policy"
 	case AspectOwnership:
 		return "ownership"
-	case AspectMetrics:
-		return "metrics"
-	case AspectLog:
-		return "log"
+	case AspectProvenanceEntity:
+		return "provenance-entity"
+	case AspectProvenanceActivity:
+		return "provenance-activity"
+	case AspectProvenanceAgent:
+		return "provenance-agent"
+	case AspectProvenanceRelation:
+		return "provenance-relation"
+	case AspectLineage:
+		return "lineage"
+	case AspectClassification:
+		return "classification"
+	case AspectTaxonomy:
+		return "taxonomy"
+	case AspectCatalog:
+		return "catalog"
+	case AspectUnit:
+		return "unit"
+	case AspectSpatial:
+		return "spatial"
+	case AspectWorkflow:
+		return "workflow"
+	case AspectLinking:
+		return "linking"
+	case AspectTesting:
+		return "testing"
+	case AspectDevice:
+		return "device"
+	case AspectDocumentation:
+		return "documentation"
 	case AspectCollaboration:
 		return "collaboration"
 	case AspectInterop:
 		return "interop"
 	case AspectEvolution:
-		return "change-evolution"
-	case AspectClassification:
-		return "classification"
-	case AspectTaxonomy:
-		return "taxonomy"
-	case AspectUnit:
-		return "unit"
+		return "evolution"
+	case AspectMetrics:
+		return "metrics"
+	case AspectLog:
+		return "log"
 	case AspectProfile:
 		return "profile"
-	case AspectSpatial:
-		return "spatial"
-	case AspectOrgUnit:
-		return "organization-unit"
-	case AspectOrgRole:
-		return "organization-role"
-	case AspectOrgProcess:
-		return "organization-process"
-	case AspectOrgFinance:
-		return "organization-finance"
-	case AspectBusinessAsset:
-		return "business-asset"
-	case AspectBusinessPartner:
-		return "business-partner"
-	case AspectBusinessActivity:
-		return "business-activity"
-	case AspectBusinessChannel:
-		return "business-channel"
-	case AspectLinking:
-		return "linking"
-	case AspectTesting:
-		return "testing"
-	case AspectWorkflow:
-		return "workflow"
-	case AspectDevice:
-		return "device"
-	case AspectDocumentation:
-		return "documentation"
-	case AspectObservability:
-		return "observability"
 	case AspectCodeSourceOfTruth:
 		return "code-source-of-truth"
 	case AspectDataSourceOfTruth:
 		return "data-source-of-truth"
 	case AspectExternalSourceOfTruth:
 		return "external-source-of-truth"
-	case AspectMiniDimension:
-		return "mini-dimension"
-	case AspectSlowlyChangingDimensionRetainOriginal:
-		return "slowly-changing-dimension-retain-original"
-	case AspectSlowlyChangingDimensionOverwrite:
-		return "slowly-changing-dimension-overwrite"
-	case AspectSlowlyChangingDimensionAddNewRecord:
-		return "slowly-changing-dimension-add-new-record"
-	case AspectSlowlyChangingDimensionAddNewAttribute:
-		return "slowly-changing-dimension-add-new-attribute"
-	case AspectSlowlyChangingDimensionAddMiniDimension:
-		return "slowly-changing-dimension-add-mini-dimension"
-	case AspectSlowlyChangingDimensionType5:
-		return "slowly-changing-dimension-type5"
-	case AspectSlowlyChangingDimensionType6:
-		return "slowly-changing-dimension-type6"
-	case AspectSlowlyChangingDimensionType7:
-		return "slowly-changing-dimension-type7"
 	case AspectQualityStaging:
 		return "quality-staging"
 	case AspectQualityCore:
 		return "quality-core"
 	case AspectQualitySemantical:
 		return "quality-semantical"
+	case AspectHistoryRetained:
+		return "history-retained"
+	case AspectHistoryOverwritten:
+		return "history-overwritten"
+	case AspectHistoryDual:
+		return "history-dual"
+	case AspectTlpClear:
+		return "tlp-clear"
+	case AspectTlpGreen:
+		return "tlp-green"
+	case AspectTlpAmber:
+		return "tlp-amber"
+	case AspectTlpAmberStrict:
+		return "tlp-amber-strict"
+	case AspectTlpRed:
+		return "tlp-red"
 	case AspectSectionMembershipsAllPrimary:
 		return "section-memberships-all-primary"
 	case AspectSectionMembershipsAllSecondary:

@@ -3,146 +3,118 @@ package useaspects
 
 import (
 	"iter"
-	"math/bits"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/base62"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/aspectcodec"
 )
 
-const EmptyAspectSet = AspectSet("0")
+// AspectSet is encoded with the v2 segment codec (ADR-0182 SD1): the
+// ascending digit-list of the set's aspect indices. The empty set is ""; the
+// legacy v1 marker "0" is accepted as empty on decode, never produced.
 
-func countEncodedAspect(num uint64) (n int) {
-	n = bits.OnesCount64(num)
-	return
-}
-func maxEncodedAspect(num uint64) (maxEncoded AspectE) {
-	maxEncoded = AspectE(64 - bits.LeadingZeros64(num) - 1)
-	return
-}
-func decode(encoded AspectSet) (num uint64, valid bool) {
-	num, valid = base62.Decode(base62.Base62Num(encoded))
-	valid = valid && (num == 0 || maxEncodedAspect(num).IsValid())
-	return
-}
-func encode(num uint64) (encoded AspectSet) {
-	return AspectSet(base62.Encode(num))
-}
+const EmptyAspectSet = AspectSet("")
 
-var ErrInvalidEncoding = eh.Errorf("encoding is wrong")
-var ErrEmptySet = eh.Errorf("encoding contains empty set")
+var ErrInvalidEncoding = aspectcodec.ErrInvalidEncoding
+var ErrEmptySet = aspectcodec.ErrEmptySet
 
 func EncodeAspects(aspects ...AspectE) (encoded AspectSet, err error) {
-	var num uint64
 	for i, a := range aspects {
 		if !a.IsValid() {
 			err = eb.Build().Uint8("aspect", uint8(a)).Int("index", i).Errorf("found invalid aspect in supplied arguments")
 			return
 		}
-		num |= uint64(1) << a
 	}
-	encoded = encode(num)
+	encoded = AspectSet(aspectcodec.Encode(aspects))
 	return
 }
 func EncodeAspectsIgnoreInvalid(aspects ...AspectE) (encoded AspectSet) {
-	var num uint64
+	valid := make([]AspectE, 0, len(aspects))
 	for _, a := range aspects {
 		if a.IsValid() {
-			num |= uint64(1) << a
+			valid = append(valid, a)
 		}
 	}
-	encoded = encode(num)
+	encoded = AspectSet(aspectcodec.Encode(valid))
 	return
 }
 func EncodeAspectsMustValidate(aspects ...AspectE) (encoded AspectSet) {
-	var num uint64
 	for i, a := range aspects {
 		if !a.IsValid() {
 			log.Panic().Uint8("aspect", uint8(a)).Int("index", i).Msg("found invalid aspect in supplied arguments")
 		}
-		num |= uint64(1) << a
 	}
-	encoded = encode(num)
+	encoded = AspectSet(aspectcodec.Encode(aspects))
 	return
 }
+
+// DecodeAspects splits a structurally valid segment into aspects known to
+// this vocabulary and a count of unknown (too-new) indices; unknown elements
+// never poison the known part.
+func DecodeAspects(encoded AspectSet) (known []AspectE, unknownCount int, err error) {
+	return aspectcodec.Decode(string(encoded), MaxAspectExcl)
+}
 func MaxEncodedAspect(encoded AspectSet) (aspect AspectE, err error) {
-	num, valid := decode(encoded)
-	if !valid {
-		err = ErrInvalidEncoding
+	var max int
+	max, err = aspectcodec.MaxIndex(string(encoded))
+	if err != nil {
 		return
 	}
-	if num == 0 {
-		err = ErrEmptySet
+	if max > 255 {
+		err = eb.Build().Int("index", max).Errorf("maximum encoded index exceeds the aspect range: %w", ErrInvalidEncoding)
 		return
 	}
-	aspect = maxEncodedAspect(num)
+	aspect = AspectE(max)
 	return
 }
 func CountEncodedAspects(encoded AspectSet) (n int, err error) {
-	num, valid := decode(encoded)
-	if !valid {
-		err = ErrInvalidEncoding
-		return
-	}
-	n = countEncodedAspect(num)
-	return
+	return aspectcodec.Count(string(encoded))
 }
 func ContainsAspect(encoded AspectSet, target AspectE) (has bool) {
 	if !target.IsValid() {
 		return
 	}
-	num, valid := decode(encoded)
-	if !valid {
-		return
-	}
-	has = num&(uint64(1)<<target) != 0
+	has = aspectcodec.Contains(string(encoded), target)
 	return
 }
 func IterateAspects(encoded AspectSet) iter.Seq2[int, AspectE] {
-	num, valid := decode(encoded)
-	if !valid {
+	known, _, err := aspectcodec.Decode(string(encoded), MaxAspectExcl)
+	if err != nil {
 		// ranging over a nil iter.Seq2 panics; invalid input iterates nothing
 		return func(yield func(int, AspectE) bool) {}
 	}
 	return func(yield func(int, AspectE) bool) {
-		j := 0
-		for i := uint8(0); i < uint8(MaxAspectExcl); i++ {
-			if num&(uint64(1)<<i) != 0 {
-				if !yield(j, AspectE(i)) {
-					return
-				}
-				j++
+		for j, a := range known {
+			if !yield(j, a) {
+				return
 			}
 		}
 	}
 }
 func UnionAspects(asp1 AspectSet, asp2 AspectSet) (res AspectSet, err error) {
-	num1, valid1 := decode(asp1)
-	if !valid1 {
-		err = ErrInvalidEncoding
-		return
-	}
-	num2, valid2 := decode(asp2)
-	if !valid2 {
-		err = ErrInvalidEncoding
-		return
-	}
-	res = encode(num1 | num2)
+	var s string
+	s, err = aspectcodec.Union(string(asp1), string(asp2))
+	res = AspectSet(s)
 	return
 }
+
+// UnionAspectsIgnoreInvalid merges both sets; a structurally invalid side is
+// dropped rather than failing the union.
 func UnionAspectsIgnoreInvalid(asp1 AspectSet, asp2 AspectSet) (res AspectSet) {
-	num1, valid1 := decode(asp1)
-	num2, valid2 := decode(asp2)
-	if valid1 && valid2 {
-		res = encode(num1 | num2)
-	} else if valid1 {
-		res = asp1
-	} else if valid2 {
-		res = asp2
-	} else {
-		res = EmptyAspectSet
+	var err error
+	res, err = UnionAspects(asp1, asp2)
+	if err == nil {
+		return
 	}
+	if asp1.IsValid() {
+		res = asp1
+		return
+	}
+	if asp2.IsValid() {
+		res = asp2
+		return
+	}
+	res = EmptyAspectSet
 	return
 }
 func (inst AspectSet) String() string {
@@ -150,14 +122,10 @@ func (inst AspectSet) String() string {
 }
 
 func (inst AspectSet) IsValid() bool {
-	if inst == "" {
-		return false
-	}
-	_, valid := decode(inst)
-	return valid
+	return aspectcodec.Validate(string(inst)) == nil
 }
 func (inst AspectSet) IsEmptySet() bool {
-	return inst == EmptyAspectSet
+	return aspectcodec.IsEmpty(string(inst))
 }
 func (inst AspectSet) UnionAspectsIgnoreInvalid(asp2 AspectSet) (res AspectSet) {
 	return UnionAspectsIgnoreInvalid(inst, asp2)
@@ -176,4 +144,7 @@ func (inst AspectSet) MaxEncodedAspect() (aspect AspectE, err error) {
 }
 func (inst AspectSet) Contains(target AspectE) (has bool) {
 	return ContainsAspect(inst, target)
+}
+func (inst AspectSet) DecodeAspects() (known []AspectE, unknownCount int, err error) {
+	return DecodeAspects(inst)
 }

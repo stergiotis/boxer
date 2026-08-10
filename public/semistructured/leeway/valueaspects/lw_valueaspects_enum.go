@@ -1,3 +1,12 @@
+// Package valueaspects is the closed vocabulary of value-semantics aspects
+// (ADR-0182). Admission criterion: an aspect family is admissible when its
+// meaning is anchored in mathematics, a long-lived open standard, a practice
+// predating the current tooling generation, or a format the engine itself
+// commits to; its domain is closed under that anchor, or it is a genuinely
+// independent boolean. Open-domain technique-, tier- or brand-shaped
+// information belongs in canonical types, TableOptions or the catalog — not
+// here. Numbering is the wire format (segments in physical column names):
+// append-only between migration windows, family-grouped as of v2.
 package valueaspects
 
 import (
@@ -5,98 +14,162 @@ import (
 )
 
 const (
-	AspectNone                             AspectE = 0
-	AspectScaleOfMeasurementNominal        AspectE = 1
-	AspectScaleOfMeasurementOrdinal        AspectE = 2
-	AspectScaleOfMeasurementMetricInterval AspectE = 3
-	AspectScaleOfMeasurementMetricRatio    AspectE = 4
-	AspectVectorValue                      AspectE = 5
-	AspectCanonicalizedValue               AspectE = 6
-	AspectApplicationLevelEncryption       AspectE = 7
-	AspectApplicationLevelCompression      AspectE = 8
-	AspectHumanReadable                    AspectE = 9
-	AspectMachineReadable                  AspectE = 10
-	AspectUltraShortLifespan               AspectE = 11
-	AspectShortLifespan                    AspectE = 12
-	AspectMediumLifespan                   AspectE = 13
-	AspectLongLifespan                     AspectE = 14
-	AspectUltraLongLifespan                AspectE = 15
+	// Epistemic origin (exclusive): how the stored value came to exist.
+	// Proximate origin wins — the aspect describes the step that produced
+	// the stored value, decidable per column, no chain-chasing. It licenses
+	// no inference: derivation edges live in provenance facts, never here.
+
+	AspectMeasured AspectE = 0 // an observation of the world, captured by an instrument or observing process
+	AspectAsserted AspectE = 1 // declared by an agent as a claim or input (user entry, configuration, label)
+	AspectDerived  AspectE = 2 // computed from other values
+
+	// Generating agent kind; orthogonal to the epistemic origin (a user-typed
+	// name is human-generated + asserted, a sensor reading machine-generated
+	// + measured).
+
+	AspectHumanGenerated   AspectE = 3
+	AspectMachineGenerated AspectE = 4
+	AspectSynthetic        AspectE = 5 // fixture/simulated data, not an observation of the world
+
+	AspectHumanReadable   AspectE = 6
+	AspectMachineReadable AspectE = 7
+
+	// Mandatory/Optional declare requiredness at the semantic level
+	// (exclusive). This is not the structural presence distinction: e.g. a
+	// plain non-scalar value is always structurally present but may be empty.
+
+	AspectMandatory AspectE = 8
+	AspectOptional  AspectE = 9
+
+	AspectImmutable       AspectE = 10 // never updated after first write; also where SCD type 0 maps (see useaspects history family)
+	AspectSentinelMissing AspectE = 11 // absence encoded in-band by sentinel values (-999, epoch zero, ...)
+
+	// Stevens' scales of measurement (exclusive).
+
+	AspectScaleOfMeasurementNominal        AspectE = 12
+	AspectScaleOfMeasurementOrdinal        AspectE = 13
+	AspectScaleOfMeasurementMetricInterval AspectE = 14
+	AspectScaleOfMeasurementMetricRatio    AspectE = 15
+
+	AspectVectorValue        AspectE = 16
+	AspectCanonicalizedValue AspectE = 17
+
+	// Bitemporal roles per SQL:2011 (exclusive): system-maintained
+	// transaction time vs application-defined valid time.
+
+	AspectTransactionTime AspectE = 18
+	AspectValidTime       AspectE = 19
+
+	// Lifespan buckets (exclusive). Bucket boundaries are deployment-defined
+	// and advisory; no validator can check them.
+
+	AspectUltraShortLifespan AspectE = 20
+	AspectShortLifespan      AspectE = 21
+	AspectMediumLifespan     AspectE = 22
+	AspectLongLifespan       AspectE = 23
+	AspectUltraLongLifespan  AspectE = 24
+
+	// Identifier kinds. IdDurableSuperNaturalKey follows dimensional
+	// modeling's durable supernatural key; IdReference marks a value that
+	// references another entity's key (foreign reference) — the others
+	// classify keys the entity owns.
+
+	AspectIdNaturalKey             AspectE = 25
+	AspectIdSurrogateKey           AspectE = 26
+	AspectIdDurableSuperNaturalKey AspectE = 27
+	AspectIdContentAddressableKey  AspectE = 28
+	AspectIdReference              AspectE = 29
+
+	// De-identification state (Anonymized/Pseudonymized exclusive):
+	// pseudonymized data is reversibly de-identified and remains personal
+	// data; anonymized data is not. Secret marks credentials, keys and
+	// tokens — consumers must mask by default.
+
+	AspectAnonymized    AspectE = 30
+	AspectPseudonymized AspectE = 31
+	AspectSecret        AspectE = 32
+
+	AspectApplicationLevelEncryption  AspectE = 33
+	AspectApplicationLevelCompression AspectE = 34
+
+	AspectUrl AspectE = 35 // follow the WHATWG recommendation to forget URI and use URL (see https://url.spec.whatwg.org/#goals)
+
 	// The Json*/Cbor* value aspects state that the value is (or may be dealt
 	// with as) a string/bytes serialization in the given format. Deliberately
 	// distinct from the equally named encodingaspects family, which permits
 	// the ddl module to use a native database type.
-	AspectJsonScalar                 AspectE = 16
-	AspectJsonArray                  AspectE = 17
-	AspectJsonObject                 AspectE = 18
-	AspectJson                       AspectE = 19
-	AspectCborScalar                 AspectE = 20
-	AspectCborArray                  AspectE = 21
-	AspectCborMap                    AspectE = 22
-	AspectCbor                       AspectE = 23
-	AspectUrl                        AspectE = 24 // follow the WHATWG recommendation to forget URI and use URL (see https://url.spec.whatwg.org/#goals)
-	AspectFeature                    AspectE = 25
-	AspectFeatureOneHot              AspectE = 26
-	AspectFeatureScalingStandardN01  AspectE = 27
-	AspectFeatureScalingMinMax01     AspectE = 28
-	AspectFeatureScalingRobust01     AspectE = 29
-	AspectFeatureBinarized           AspectE = 30
-	AspectFeatureOrdinal             AspectE = 31
-	AspectFeatureLabel               AspectE = 32
-	AspectMachineLearningEmbedding   AspectE = 33
-	AspectIdNaturalKey               AspectE = 34
-	AspectIdSurrogateKey             AspectE = 35
-	AspectIdDurableSuperNaturalKey   AspectE = 36
-	AspectIdContentAddressableKey    AspectE = 37
-	AspectTextUnicodeNormalizedNfd   AspectE = 38 // Normalization Form Canonical Decomposition
-	AspectTextUnicodeNormalizedNfc   AspectE = 39 // Normalization Form Canonical Composition
-	AspectTextUnicodeNormalizedNfkd  AspectE = 40 // Normalization Form Compatibility Decomposition
-	AspectTextUnicodeNormalizedNfkc  AspectE = 41 // Normalization Form Compatibility Composition
-	AspectTextUnicodeCaseFolded      AspectE = 42 // Unicode case folding (not a normalization form)
-	AspectTextUnicodeCaseInsensitive AspectE = 43
-	AspectTextUnicodeLocaleSensitive AspectE = 44
-	AspectTextUnicodeMayBeBidi       AspectE = 45
-	AspectHumanGenerated             AspectE = 46
-	AspectMachineGenerate            AspectE = 47
-	AspectBinaryCodedDecimal         AspectE = 48 // BCD see https://en.wikipedia.org/wiki/Binary-coded_decimal, note that there are many incompatible encodings
-	AspectReflectedBinaryCode        AspectE = 49 // see https://en.wikipedia.org/wiki/Gray_code
-	AspectTrinaryLogic               AspectE = 50 // see https://en.wikipedia.org/wiki/Three-valued_logic
-	AspectGraphVertex                AspectE = 51
-	AspectGraphEdge                  AspectE = 52
-	AspectHyperGraphEdge             AspectE = 53
-	AspectAnonymized                 AspectE = 54
-	// Mandatory/Optional declare requiredness at the semantic level. This is
-	// not the structural presence distinction: e.g. a plain non-scalar value
-	// is always structurally present but may be empty.
-	AspectMandatory AspectE = 55
-	AspectOptional  AspectE = 56
-	// The EmulatedMembership* aspects mark values that emulate membership
-	// semantics without leeway's native membership machinery, supporting
-	// transitions from other EAV systems.
-	AspectEmulatedMembershipVerbatim      AspectE = 57
-	AspectEmulatedMembershipRef           AspectE = 58
-	AspectEmulatedMembershipParams        AspectE = 59
-	AspectEmulatedMembershipRefWithParams AspectE = 60
+
+	AspectJsonScalar AspectE = 36
+	AspectJsonArray  AspectE = 37
+	AspectJsonObject AspectE = 38
+	AspectJson       AspectE = 39
+	AspectCborScalar AspectE = 40
+	AspectCborArray  AspectE = 41
+	AspectCborMap    AspectE = 42
+	AspectCbor       AspectE = 43
+
+	AspectTextUnicodeNormalizedNfd   AspectE = 44 // Normalization Form Canonical Decomposition
+	AspectTextUnicodeNormalizedNfc   AspectE = 45 // Normalization Form Canonical Composition
+	AspectTextUnicodeNormalizedNfkd  AspectE = 46 // Normalization Form Compatibility Decomposition
+	AspectTextUnicodeNormalizedNfkc  AspectE = 47 // Normalization Form Compatibility Composition
+	AspectTextUnicodeCaseFolded      AspectE = 48 // Unicode case folding (not a normalization form)
+	AspectTextUnicodeCaseInsensitive AspectE = 49
+	AspectTextUnicodeLocaleSensitive AspectE = 50
+	AspectTextUnicodeMayBeBidi       AspectE = 51
+
+	AspectGraphVertex    AspectE = 52
+	AspectGraphEdge      AspectE = 53
+	AspectHyperGraphEdge AspectE = 54
+
+	// The EmulatedMembership* aspects (exclusive) mark values that emulate
+	// membership semantics without leeway's native membership machinery,
+	// supporting transitions from other EAV systems.
+
+	AspectEmulatedMembershipVerbatim      AspectE = 55
+	AspectEmulatedMembershipRef           AspectE = 56
+	AspectEmulatedMembershipParams        AspectE = 57
+	AspectEmulatedMembershipRefWithParams AspectE = 58
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
 
 var AllAspects = []AspectE{
-	AspectNone,
+	AspectMeasured,
+	AspectAsserted,
+	AspectDerived,
+	AspectHumanGenerated,
+	AspectMachineGenerated,
+	AspectSynthetic,
+	AspectHumanReadable,
+	AspectMachineReadable,
+	AspectMandatory,
+	AspectOptional,
+	AspectImmutable,
+	AspectSentinelMissing,
 	AspectScaleOfMeasurementNominal,
 	AspectScaleOfMeasurementOrdinal,
 	AspectScaleOfMeasurementMetricInterval,
 	AspectScaleOfMeasurementMetricRatio,
 	AspectVectorValue,
 	AspectCanonicalizedValue,
-	AspectApplicationLevelEncryption,
-	AspectApplicationLevelCompression,
-	AspectHumanReadable,
-	AspectMachineReadable,
+	AspectTransactionTime,
+	AspectValidTime,
 	AspectUltraShortLifespan,
 	AspectShortLifespan,
 	AspectMediumLifespan,
 	AspectLongLifespan,
 	AspectUltraLongLifespan,
+	AspectIdNaturalKey,
+	AspectIdSurrogateKey,
+	AspectIdDurableSuperNaturalKey,
+	AspectIdContentAddressableKey,
+	AspectIdReference,
+	AspectAnonymized,
+	AspectPseudonymized,
+	AspectSecret,
+	AspectApplicationLevelEncryption,
+	AspectApplicationLevelCompression,
+	AspectUrl,
 	AspectJsonScalar,
 	AspectJsonArray,
 	AspectJsonObject,
@@ -105,20 +178,6 @@ var AllAspects = []AspectE{
 	AspectCborArray,
 	AspectCborMap,
 	AspectCbor,
-	AspectUrl,
-	AspectFeature,
-	AspectFeatureOneHot,
-	AspectFeatureScalingStandardN01,
-	AspectFeatureScalingMinMax01,
-	AspectFeatureScalingRobust01,
-	AspectFeatureBinarized,
-	AspectFeatureOrdinal,
-	AspectFeatureLabel,
-	AspectMachineLearningEmbedding,
-	AspectIdNaturalKey,
-	AspectIdSurrogateKey,
-	AspectIdDurableSuperNaturalKey,
-	AspectIdContentAddressableKey,
 	AspectTextUnicodeNormalizedNfd,
 	AspectTextUnicodeNormalizedNfc,
 	AspectTextUnicodeNormalizedNfkd,
@@ -127,17 +186,9 @@ var AllAspects = []AspectE{
 	AspectTextUnicodeCaseInsensitive,
 	AspectTextUnicodeLocaleSensitive,
 	AspectTextUnicodeMayBeBidi,
-	AspectHumanGenerated,
-	AspectMachineGenerate,
-	AspectBinaryCodedDecimal,
-	AspectReflectedBinaryCode,
-	AspectTrinaryLogic,
 	AspectGraphVertex,
 	AspectGraphEdge,
 	AspectHyperGraphEdge,
-	AspectAnonymized,
-	AspectMandatory,
-	AspectOptional,
 	AspectEmulatedMembershipVerbatim,
 	AspectEmulatedMembershipRef,
 	AspectEmulatedMembershipParams,
@@ -151,8 +202,30 @@ func (inst AspectE) IsValid() bool {
 }
 func (inst AspectE) String() string {
 	switch inst {
-	case AspectNone:
-		return "none"
+	case AspectMeasured:
+		return "measured"
+	case AspectAsserted:
+		return "asserted"
+	case AspectDerived:
+		return "derived"
+	case AspectHumanGenerated:
+		return "human-generated"
+	case AspectMachineGenerated:
+		return "machine-generated"
+	case AspectSynthetic:
+		return "synthetic"
+	case AspectHumanReadable:
+		return "human-readable"
+	case AspectMachineReadable:
+		return "machine-readable"
+	case AspectMandatory:
+		return "mandatory"
+	case AspectOptional:
+		return "optional"
+	case AspectImmutable:
+		return "immutable"
+	case AspectSentinelMissing:
+		return "sentinel-missing"
 	case AspectScaleOfMeasurementNominal:
 		return "scale-of-measurement-nominal"
 	case AspectScaleOfMeasurementOrdinal:
@@ -165,14 +238,10 @@ func (inst AspectE) String() string {
 		return "vector-value"
 	case AspectCanonicalizedValue:
 		return "canonicalized-value"
-	case AspectApplicationLevelEncryption:
-		return "application-level-encryption"
-	case AspectApplicationLevelCompression:
-		return "application-level-compression"
-	case AspectHumanReadable:
-		return "human-readable"
-	case AspectMachineReadable:
-		return "machine-readable"
+	case AspectTransactionTime:
+		return "transaction-time"
+	case AspectValidTime:
+		return "valid-time"
 	case AspectUltraShortLifespan:
 		return "ultra-short-lifespan"
 	case AspectShortLifespan:
@@ -183,6 +252,28 @@ func (inst AspectE) String() string {
 		return "long-lifespan"
 	case AspectUltraLongLifespan:
 		return "ultra-long-lifespan"
+	case AspectIdNaturalKey:
+		return "id-natural-key"
+	case AspectIdSurrogateKey:
+		return "id-surrogate-key"
+	case AspectIdDurableSuperNaturalKey:
+		return "id-durable-super-natural-key"
+	case AspectIdContentAddressableKey:
+		return "id-content-addressable-key"
+	case AspectIdReference:
+		return "id-reference"
+	case AspectAnonymized:
+		return "anonymized"
+	case AspectPseudonymized:
+		return "pseudonymized"
+	case AspectSecret:
+		return "secret"
+	case AspectApplicationLevelEncryption:
+		return "application-level-encryption"
+	case AspectApplicationLevelCompression:
+		return "application-level-compression"
+	case AspectUrl:
+		return "url"
 	case AspectJsonScalar:
 		return "json-scalar"
 	case AspectJsonArray:
@@ -199,34 +290,6 @@ func (inst AspectE) String() string {
 		return "cbor-map"
 	case AspectCbor:
 		return "cbor"
-	case AspectUrl:
-		return "url"
-	case AspectFeature:
-		return "feature"
-	case AspectFeatureOneHot:
-		return "feature-one-hot"
-	case AspectFeatureScalingStandardN01:
-		return "feature-scaling-standard-n01"
-	case AspectFeatureScalingMinMax01:
-		return "feature-scaling-min-max01"
-	case AspectFeatureScalingRobust01:
-		return "feature-scaling-robust01"
-	case AspectFeatureBinarized:
-		return "feature-binarized"
-	case AspectFeatureOrdinal:
-		return "feature-ordinal"
-	case AspectFeatureLabel:
-		return "feature-label"
-	case AspectMachineLearningEmbedding:
-		return "machine-learning-embedding"
-	case AspectIdNaturalKey:
-		return "id-natural-key"
-	case AspectIdSurrogateKey:
-		return "id-surrogate-key"
-	case AspectIdDurableSuperNaturalKey:
-		return "id-durable-super-natural-key"
-	case AspectIdContentAddressableKey:
-		return "id-content-addressable-key"
 	case AspectTextUnicodeNormalizedNfd:
 		return "text-unicode-normalized-nfd"
 	case AspectTextUnicodeNormalizedNfc:
@@ -243,28 +306,12 @@ func (inst AspectE) String() string {
 		return "text-unicode-locale-sensitive"
 	case AspectTextUnicodeMayBeBidi:
 		return "text-unicode-maybe-bidi"
-	case AspectHumanGenerated:
-		return "human-generated"
-	case AspectMachineGenerate:
-		return "machine-generated"
-	case AspectBinaryCodedDecimal:
-		return "binary-coded-decimal"
-	case AspectReflectedBinaryCode:
-		return "reflected-binary-code"
-	case AspectTrinaryLogic:
-		return "trinary-logic"
 	case AspectGraphVertex:
 		return "graph-vertex"
 	case AspectGraphEdge:
 		return "graph-edge"
 	case AspectHyperGraphEdge:
 		return "hyper-graph-edge"
-	case AspectAnonymized:
-		return "anonymized"
-	case AspectMandatory:
-		return "mandatory"
-	case AspectOptional:
-		return "optional"
 	case AspectEmulatedMembershipVerbatim:
 		return "emulated-membership-verbatim"
 	case AspectEmulatedMembershipRef:

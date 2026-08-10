@@ -1413,23 +1413,23 @@ func (inst *ReadAccessDroneTableTaggedTimeRange) GetSectionName() naming.Stylabl
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessDroneTableTaggedTimeRange)(nil)
 
 func (inst *ReadAccessDroneTableTaggedSymbol) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessDroneTableTaggedU64Array) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessDroneTableTaggedSymbolArray) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessDroneTableTaggedGeoPoint) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessDroneTableTaggedTimeRange) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessDroneTableTaggedSymbol) GetSectionStreamingGroup() naming.Key {

@@ -42,8 +42,8 @@ const ProvenanceTableName = "provenance"
 // derived from the IR at generation time — exported so consumers can
 // address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	ProvenanceColKey   = `"id:id:u64:g:0:0:"`
-	ProvenanceColOrder = `"ts:ts:z64:2k:0:0:"`
+	ProvenanceColKey   = `"id:id:u64:4::0:"`
+	ProvenanceColOrder = `"ts:ts:z64:47::0:"`
 )
 
 // Arrow output shape the read-access classes expect.
@@ -692,7 +692,7 @@ func (inst *provenanceFetcher) FetchItemSinglePartition(ctx context.Context, par
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	provenanceScanProvenanceFilter = "has(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 2) <= 1"
+	provenanceScanProvenanceFilter = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 2) <= 1"
 )
 
 // ScanProvenance iterates the entities whose rows carry a conforming Provenance

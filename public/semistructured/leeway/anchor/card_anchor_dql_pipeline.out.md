@@ -85,7 +85,7 @@ SELECT "id:id" AS "id", "id:naturalKey" AS "incident_ticket", "attack_type", "ta
 ### after ResolveColumnNames
 
 ```sql
-SELECT "id:id:u64:2k:0:0:" AS "id", "id:naturalKey:y:g:0:0:" AS "incident_ticket", "attack_type", "target_ports" FROM "anchor"."facts" ARRAY JOIN "tv:symbol:value:val:s:m:0:12:0::data" AS "attack_type", "LW_RAGGED_NEST"("tv:symbol:lr:lr:u64:2q:0:0:0::data", "tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
+SELECT "id:id:u64:47::0:" AS "id", "id:naturalKey:y:4::0:" AS "incident_ticket", "attack_type", "target_ports" FROM "anchor"."facts" ARRAY JOIN "tv:symbol:value:val:s:124::I:0::data" AS "attack_type", "LW_RAGGED_NEST"("tv:symbol:lr:lr:u64:1247:::0::data", "tv:symbol:lrcard:lrcard:u64:4E:::0::data") AS "target_ports" WHERE "has"("array"('DDOS', 'SQL_INJECTION', 'PORT_SCAN'), "attack_type")
 ```
 
 ## card_anchor_dql_query2.sql
@@ -169,7 +169,7 @@ SELECT "h3_hex", "groupUniqArray"("entity_type") AS "simultaneous_events", "coun
 ### after ResolveColumnNames
 
 ```sql
-SELECT "h3_hex", "groupUniqArray"("entity_type") AS "simultaneous_events", "count"() AS "total_incidents" FROM ( SELECT "id:id:u64:2k:0:0:" AS "id", "arrayElement"("tv:symbol:value:val:s:m:0:12:0::data", 1) AS "entity_type", "arrayConcat"("tv:geoPoint:h3:val:u64:g:0:0:0::geo", "tv:geoArea:h3:val:u64m:g:0:0:0::geo") AS "all_h3_indices" FROM "anchor"."facts" WHERE "arrayElement"("tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", 1) >= "toDateTime64"('2026-03-11 00:00:00', 9, 'UTC') ) ARRAY JOIN "all_h3_indices" AS "h3_hex" GROUP BY "h3_hex" HAVING "has"("simultaneous_events", 'IN_TRANSIT') AND ( "has"("simultaneous_events", 'SEISMIC_ANOMALY') OR "has"("simultaneous_events", 'DDOS') ) ORDER BY "total_incidents" DESC
+SELECT "h3_hex", "groupUniqArray"("entity_type") AS "simultaneous_events", "count"() AS "total_incidents" FROM ( SELECT "id:id:u64:47::0:" AS "id", "arrayElement"("tv:symbol:value:val:s:124::I:0::data", 1) AS "entity_type", "arrayConcat"("tv:geoPoint:h3:val:u64:4:::0::geo", "tv:geoArea:h3:val:u64m:4:::0::geo") AS "all_h3_indices" FROM "anchor"."facts" WHERE "arrayElement"("tv:timeRange:beginIncl:val:z64:47:::0::data", 1) >= "toDateTime64"('2026-03-11 00:00:00', 9, 'UTC') ) ARRAY JOIN "all_h3_indices" AS "h3_hex" GROUP BY "h3_hex" HAVING "has"("simultaneous_events", 'IN_TRANSIT') AND ( "has"("simultaneous_events", 'SEISMIC_ANOMALY') OR "has"("simultaneous_events", 'DDOS') ) ORDER BY "total_incidents" DESC
 ```
 
 ## card_anchor_dql_query3.sql
@@ -228,7 +228,7 @@ SELECT "id:id" AS "id", "arrayElement"("symbol:value", 1) AS "event_type", "arra
 ### after ResolveColumnNames
 
 ```sql
-SELECT "id:id:u64:2k:0:0:" AS "id", "arrayElement"("tv:symbol:value:val:s:m:0:12:0::data", 1) AS "event_type", "arrayStringConcat"("tv:text:text:val:s:0:0:0:0::", ' | ') AS "text_payload", "arrayFilter"("w" -> "w" IN "array"('quietly', 'union'), "tv:text:wordBag:val:sh:0:0:0:0::") AS "matched_tokens" FROM "anchor"."facts" WHERE "hasAny"("tv:text:wordBag:val:sh:0:0:0:0::", "array"('quietly', 'union')) LIMIT 10
+SELECT "id:id:u64:47::0:" AS "id", "arrayElement"("tv:symbol:value:val:s:124::I:0::data", 1) AS "event_type", "arrayStringConcat"("tv:text:text:val:s::::0::", ' | ') AS "text_payload", "arrayFilter"("w" -> "w" IN "array"('quietly', 'union'), "tv:text:wordBag:val:sh::::0::") AS "matched_tokens" FROM "anchor"."facts" WHERE "hasAny"("tv:text:wordBag:val:sh::::0::", "array"('quietly', 'union')) LIMIT 10
 ```
 
 ## card_anchor_dql_query4.sql
@@ -316,7 +316,7 @@ SELECT "id:id", "id:naturalKey", "symbol:value", "symbol:lrcard", "timeRange:beg
 ### after ResolveColumnNames
 
 ```sql
-SELECT "id:id:u64:2k:0:0:", "id:naturalKey:y:g:0:0:", "tv:symbol:value:val:s:m:0:12:0::data", "tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data", "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "tv:timeRange:endExcl:val:z64:2k:0:0:0::data", "arrayMap"("x" -> "CAST"(0.0, 'Float32'), "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo") AS "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", "arrayMap"("x" -> "CAST"(0.0, 'Float32'), "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo") AS "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo", "tv:geoPoint:h3:val:u64:g:0:0:0::geo", "CAST"("array"(), 'Array(UInt64)') AS "tv:geoPoint:hr:hr:u64:2k:0:0:0::geo", "CAST"("array"(), 'Array(UInt64)') AS "tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo" FROM "anchor"."facts" WHERE "has"("tv:symbol:value:val:s:m:0:12:0::data", 'DELIVERED') OR "has"("tv:symbol:value:val:s:m:0:12:0::data", 'IN_TRANSIT')
+SELECT "id:id:u64:47::0:", "id:naturalKey:y:4::0:", "tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lrcard:lrcard:u64:4E:::0::data", "tv:timeRange:beginIncl:val:z64:47:::0::data", "tv:timeRange:endExcl:val:z64:47:::0::data", "arrayMap"("x" -> "CAST"(0.0, 'Float32'), "tv:geoPoint:pointLat:val:f32:4:::0::geo") AS "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", "arrayMap"("x" -> "CAST"(0.0, 'Float32'), "tv:geoPoint:pointLng:val:f32:4:::0::geo") AS "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo", "tv:geoPoint:h3:val:u64:4:::0::geo", "CAST"("array"(), 'Array(UInt64)') AS "tv:geoPoint:hr:hr:u64:2k:0:0:0::geo", "CAST"("array"(), 'Array(UInt64)') AS "tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo" FROM "anchor"."facts" WHERE "has"("tv:symbol:value:val:s:124::I:0::data", 'DELIVERED') OR "has"("tv:symbol:value:val:s:124::I:0::data", 'IN_TRANSIT')
 ```
 
 ## card_anchor_dql_query5.sql
@@ -342,14 +342,14 @@ WITH
     arrayDistinct(groupArrayArray(symbols)) AS distinct_symbols,
     toUInt64(count()) AS event_count
 SELECT
-    cityHash64(h3_index, event_date) AS `id:id:u64:2k:0:0:`,
-    concat('COMPOSITE-H3-', toString(h3_index), '-20260311') AS `id:naturalKey:y:g:0:0:`,
+    cityHash64(h3_index, event_date) AS `id:id:u64:47::0:`,
+    concat('COMPOSITE-H3-', toString(h3_index), '-20260311') AS `id:naturalKey:y:4::0:`,
 
     -- symbol section: all distinct event types seen in this cell today
-    distinct_symbols AS `tv:symbol:value:val:s:m:0:12:0::data`,
+    distinct_symbols AS `tv:symbol:value:val:s:124::I:0::data`,
 
     -- u64Array section: the incident count, packed as a one-element array
-    [event_count] AS `tv:u64Array:value:val:u64h:g:0:0:0::data`,
+    [event_count] AS `tv:u64Array:value:val:u64h:4:::0::data`,
 
     -- text section: a generated summary line
     [concat('Regional summary: ', toString(event_count), ' events. Includes: ',
@@ -384,12 +384,12 @@ WITH
     arrayDistinct(groupArrayArray(symbols)) AS distinct_symbols,
     toUInt64(count()) AS event_count
 SELECT
-    cityHash64(h3_index, event_date) AS `id:id:u64:2k:0:0:`,
-    concat('COMPOSITE-H3-', toString(h3_index), '-20260311') AS `id:naturalKey:y:g:0:0:`,
+    cityHash64(h3_index, event_date) AS `id:id:u64:47::0:`,
+    concat('COMPOSITE-H3-', toString(h3_index), '-20260311') AS `id:naturalKey:y:4::0:`,
 
-         distinct_symbols AS `tv:symbol:value:val:s:m:0:12:0::data`,
+         distinct_symbols AS `tv:symbol:value:val:s:124::I:0::data`,
 
-         [event_count] AS `tv:u64Array:value:val:u64h:g:0:0:0::data`,
+         [event_count] AS `tv:u64Array:value:val:u64h:4:::0::data`,
 
          [concat('Regional summary: ', toString(event_count), ' events. Includes: ',
             arrayStringConcat(distinct_symbols, ', '))] AS `tv:text:text:val:s:0:0:0:0::`,
@@ -416,19 +416,19 @@ GROUP BY h3_index, event_date
 ### after CanonicalizeFull
 
 ```sql
-WITH "arrayDistinct"("groupArrayArray"("symbols")) AS "distinct_symbols", "toUInt64"("count"()) AS "event_count" SELECT "cityHash64"("h3_index", "event_date") AS "id:id:u64:2k:0:0:", "concat"('COMPOSITE-H3-', "toString"("h3_index"), '-20260311') AS "id:naturalKey:y:g:0:0:", "distinct_symbols" AS "tv:symbol:value:val:s:m:0:12:0::data", "array"("event_count") AS "tv:u64Array:value:val:u64h:g:0:0:0::data", "array"("concat"('Regional summary: ', "toString"("event_count"), ' events. Includes: ', "arrayStringConcat"("distinct_symbols", ', '))) AS "tv:text:text:val:s:0:0:0:0::", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo", "array"("h3_index") AS "tv:geoPoint:h3:val:u64:g:0:0:0::geo", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")), 9, 'UTC')) AS "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")) + 86400, 9, 'UTC')) AS "tv:timeRange:endExcl:val:z64:2k:0:0:0::data" FROM ( SELECT "arrayElement"("geoPoint:h3", 1) AS "h3_index", "toDate"("arrayElement"("timeRange:beginIncl", 1)) AS "event_date", "symbol:value" AS "symbols" FROM "facts" WHERE "length"("geoPoint:h3") > 0 ) WHERE "event_date" = '2026-03-11' GROUP BY "h3_index", "event_date"
+WITH "arrayDistinct"("groupArrayArray"("symbols")) AS "distinct_symbols", "toUInt64"("count"()) AS "event_count" SELECT "cityHash64"("h3_index", "event_date") AS "id:id:u64:47::0:", "concat"('COMPOSITE-H3-', "toString"("h3_index"), '-20260311') AS "id:naturalKey:y:4::0:", "distinct_symbols" AS "tv:symbol:value:val:s:124::I:0::data", "array"("event_count") AS "tv:u64Array:value:val:u64h:4:::0::data", "array"("concat"('Regional summary: ', "toString"("event_count"), ' events. Includes: ', "arrayStringConcat"("distinct_symbols", ', '))) AS "tv:text:text:val:s:0:0:0:0::", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo", "array"("h3_index") AS "tv:geoPoint:h3:val:u64:g:0:0:0::geo", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")), 9, 'UTC')) AS "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")) + 86400, 9, 'UTC')) AS "tv:timeRange:endExcl:val:z64:2k:0:0:0::data" FROM ( SELECT "arrayElement"("geoPoint:h3", 1) AS "h3_index", "toDate"("arrayElement"("timeRange:beginIncl", 1)) AS "event_date", "symbol:value" AS "symbols" FROM "facts" WHERE "length"("geoPoint:h3") > 0 ) WHERE "event_date" = '2026-03-11' GROUP BY "h3_index", "event_date"
 ```
 
 ### after QualifyTables
 
 ```sql
-WITH "arrayDistinct"("groupArrayArray"("symbols")) AS "distinct_symbols", "toUInt64"("count"()) AS "event_count" SELECT "cityHash64"("h3_index", "event_date") AS "id:id:u64:2k:0:0:", "concat"('COMPOSITE-H3-', "toString"("h3_index"), '-20260311') AS "id:naturalKey:y:g:0:0:", "distinct_symbols" AS "tv:symbol:value:val:s:m:0:12:0::data", "array"("event_count") AS "tv:u64Array:value:val:u64h:g:0:0:0::data", "array"("concat"('Regional summary: ', "toString"("event_count"), ' events. Includes: ', "arrayStringConcat"("distinct_symbols", ', '))) AS "tv:text:text:val:s:0:0:0:0::", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo", "array"("h3_index") AS "tv:geoPoint:h3:val:u64:g:0:0:0::geo", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")), 9, 'UTC')) AS "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")) + 86400, 9, 'UTC')) AS "tv:timeRange:endExcl:val:z64:2k:0:0:0::data" FROM ( SELECT "arrayElement"("geoPoint:h3", 1) AS "h3_index", "toDate"("arrayElement"("timeRange:beginIncl", 1)) AS "event_date", "symbol:value" AS "symbols" FROM "anchor"."facts" WHERE "length"("geoPoint:h3") > 0 ) WHERE "event_date" = '2026-03-11' GROUP BY "h3_index", "event_date"
+WITH "arrayDistinct"("groupArrayArray"("symbols")) AS "distinct_symbols", "toUInt64"("count"()) AS "event_count" SELECT "cityHash64"("h3_index", "event_date") AS "id:id:u64:47::0:", "concat"('COMPOSITE-H3-', "toString"("h3_index"), '-20260311') AS "id:naturalKey:y:4::0:", "distinct_symbols" AS "tv:symbol:value:val:s:124::I:0::data", "array"("event_count") AS "tv:u64Array:value:val:u64h:4:::0::data", "array"("concat"('Regional summary: ', "toString"("event_count"), ' events. Includes: ', "arrayStringConcat"("distinct_symbols", ', '))) AS "tv:text:text:val:s:0:0:0:0::", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo", "array"("h3_index") AS "tv:geoPoint:h3:val:u64:g:0:0:0::geo", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")), 9, 'UTC')) AS "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")) + 86400, 9, 'UTC')) AS "tv:timeRange:endExcl:val:z64:2k:0:0:0::data" FROM ( SELECT "arrayElement"("geoPoint:h3", 1) AS "h3_index", "toDate"("arrayElement"("timeRange:beginIncl", 1)) AS "event_date", "symbol:value" AS "symbols" FROM "anchor"."facts" WHERE "length"("geoPoint:h3") > 0 ) WHERE "event_date" = '2026-03-11' GROUP BY "h3_index", "event_date"
 ```
 
 ### after ResolveColumnNames
 
 ```sql
-WITH "arrayDistinct"("groupArrayArray"("symbols")) AS "distinct_symbols", "toUInt64"("count"()) AS "event_count" SELECT "cityHash64"("h3_index", "event_date") AS "id:id:u64:2k:0:0:", "concat"('COMPOSITE-H3-', "toString"("h3_index"), '-20260311') AS "id:naturalKey:y:g:0:0:", "distinct_symbols" AS "tv:symbol:value:val:s:m:0:12:0::data", "array"("event_count") AS "tv:u64Array:value:val:u64h:g:0:0:0::data", "array"("concat"('Regional summary: ', "toString"("event_count"), ' events. Includes: ', "arrayStringConcat"("distinct_symbols", ', '))) AS "tv:text:text:val:s:0:0:0:0::", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo", "array"("h3_index") AS "tv:geoPoint:h3:val:u64:g:0:0:0::geo", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")), 9, 'UTC')) AS "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")) + 86400, 9, 'UTC')) AS "tv:timeRange:endExcl:val:z64:2k:0:0:0::data" FROM ( SELECT "arrayElement"("tv:geoPoint:h3:val:u64:g:0:0:0::geo", 1) AS "h3_index", "toDate"("arrayElement"("tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", 1)) AS "event_date", "tv:symbol:value:val:s:m:0:12:0::data" AS "symbols" FROM "anchor"."facts" WHERE "length"("tv:geoPoint:h3:val:u64:g:0:0:0::geo") > 0 ) WHERE "event_date" = '2026-03-11' GROUP BY "h3_index", "event_date"
+WITH "arrayDistinct"("groupArrayArray"("symbols")) AS "distinct_symbols", "toUInt64"("count"()) AS "event_count" SELECT "cityHash64"("h3_index", "event_date") AS "id:id:u64:47::0:", "concat"('COMPOSITE-H3-', "toString"("h3_index"), '-20260311') AS "id:naturalKey:y:4::0:", "distinct_symbols" AS "tv:symbol:value:val:s:124::I:0::data", "array"("event_count") AS "tv:u64Array:value:val:u64h:4:::0::data", "array"("concat"('Regional summary: ', "toString"("event_count"), ' events. Includes: ', "arrayStringConcat"("distinct_symbols", ', '))) AS "tv:text:text:val:s:0:0:0:0::", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", "array"("CAST"(0.0, 'Float32')) AS "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo", "array"("h3_index") AS "tv:geoPoint:h3:val:u64:g:0:0:0::geo", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")), 9, 'UTC')) AS "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")) + 86400, 9, 'UTC')) AS "tv:timeRange:endExcl:val:z64:2k:0:0:0::data" FROM ( SELECT "arrayElement"("tv:geoPoint:h3:val:u64:4:::0::geo", 1) AS "h3_index", "toDate"("arrayElement"("tv:timeRange:beginIncl:val:z64:47:::0::data", 1)) AS "event_date", "tv:symbol:value:val:s:124::I:0::data" AS "symbols" FROM "anchor"."facts" WHERE "length"("tv:geoPoint:h3:val:u64:4:::0::geo") > 0 ) WHERE "event_date" = '2026-03-11' GROUP BY "h3_index", "event_date"
 ```
 
 ## card_anchor_dql_query6.sql
@@ -567,7 +567,7 @@ SELECT "id", "naturalKey", "section", "error_type", "base_attribute_count", "exp
 ### after ResolveColumnNames
 
 ```sql
-SELECT "id", "naturalKey", "section", "error_type", "base_attribute_count", "expected_flattened_length", "actual_flattened_length" FROM ( SELECT "id:id:u64:2k:0:0:" AS "id", "id:naturalKey:y:g:0:0:" AS "naturalKey", 'GeoPoint' AS "section", "multiIf"( "length"("tv:geoPoint:pointLat:val:f32:g:0:0:0::geo") != "length"("tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo"), 'Base/Card Length Mismatch', "length"("tv:geoPoint:pointLat:val:f32:g:0:0:0::geo") != "length"("tv:geoPoint:lrcard:lrcard:u64:4gw:0:0:0::geo"), 'Base/Card Length Mismatch', "length"("tv:geoPoint:hr:hr:u64:2k:0:0:0::geo") != "toUInt64"("arraySum"("tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo")), 'High-Card (hr) Integrity Failure', "length"("tv:geoPoint:lr:lr:u64:2q:0:0:0::geo") != "toUInt64"("arraySum"("tv:geoPoint:lrcard:lrcard:u64:4gw:0:0:0::geo")), 'Low-Card (lr) Integrity Failure', "length"("tv:geoPoint:lmr:lmr:u64:2q:0:0:0::geo") != "toUInt64"("arraySum"("tv:geoPoint:lmrcard:lmrcard:u64:4gw:0:0:0::geo")), 'Mixed-Card (lmr) Integrity Failure', "length"("tv:geoPoint:mrhp:mrhp:y:g:0:0:0::geo") != "toUInt64"("arraySum"("tv:geoPoint:lmrcard:lmrcard:u64:4gw:0:0:0::geo")), 'Mixed-Card Payload (mrhp) Integrity Failure', 'Valid' ) AS "error_type", "length"("tv:geoPoint:pointLat:val:f32:g:0:0:0::geo") AS "base_attribute_count", "toUInt64"("arraySum"("tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo")) AS "expected_flattened_length", "length"("tv:geoPoint:hr:hr:u64:2k:0:0:0::geo") AS "actual_flattened_length" FROM "anchor"."facts" UNION ALL SELECT "id:id:u64:2k:0:0:" AS "id", "id:naturalKey:y:g:0:0:" AS "naturalKey", 'Text' AS "section", "multiIf"( "length"("tv:text:text:val:s:0:0:0:0::") != "length"("tv:text:len:len:u64:28o:0:0:0::"), 'Base/Len Length Mismatch', "length"("tv:text:wordLength:val:u32h:0:0:0:0::") != "toUInt64"("arraySum"("tv:text:len:len:u64:28o:0:0:0::")), 'Co-Container (wordLength) Integrity Failure', "length"("tv:text:wordBag:val:sh:0:0:0:0::") != "toUInt64"("arraySum"("tv:text:len:len:u64:28o:0:0:0::")), 'Co-Container (wordBag) Integrity Failure', 'Valid' ) AS "error_type", "length"("tv:text:text:val:s:0:0:0:0::") AS "base_attribute_count", "toUInt64"("arraySum"("tv:text:len:len:u64:28o:0:0:0::")) AS "expected_flattened_length", "length"("tv:text:wordBag:val:sh:0:0:0:0::") AS "actual_flattened_length" FROM "anchor"."facts" ) WHERE "error_type" != 'Valid'
+SELECT "id", "naturalKey", "section", "error_type", "base_attribute_count", "expected_flattened_length", "actual_flattened_length" FROM ( SELECT "id:id:u64:47::0:" AS "id", "id:naturalKey:y:4::0:" AS "naturalKey", 'GeoPoint' AS "section", "multiIf"( "length"("tv:geoPoint:pointLat:val:f32:4:::0::geo") != "length"("tv:geoPoint:hrcard:hrcard:u64:4E:::0::geo"), 'Base/Card Length Mismatch', "length"("tv:geoPoint:pointLat:val:f32:4:::0::geo") != "length"("tv:geoPoint:lrcard:lrcard:u64:4E:::0::geo"), 'Base/Card Length Mismatch', "length"("tv:geoPoint:hr:hr:u64:47:::0::geo") != "toUInt64"("arraySum"("tv:geoPoint:hrcard:hrcard:u64:4E:::0::geo")), 'High-Card (hr) Integrity Failure', "length"("tv:geoPoint:lr:lr:u64:1247:::0::geo") != "toUInt64"("arraySum"("tv:geoPoint:lrcard:lrcard:u64:4E:::0::geo")), 'Low-Card (lr) Integrity Failure', "length"("tv:geoPoint:lmr:lmr:u64:1247:::0::geo") != "toUInt64"("arraySum"("tv:geoPoint:lmrcard:lmrcard:u64:4E:::0::geo")), 'Mixed-Card (lmr) Integrity Failure', "length"("tv:geoPoint:mrhp:mrhp:y:4:::0::geo") != "toUInt64"("arraySum"("tv:geoPoint:lmrcard:lmrcard:u64:4E:::0::geo")), 'Mixed-Card Payload (mrhp) Integrity Failure', 'Valid' ) AS "error_type", "length"("tv:geoPoint:pointLat:val:f32:4:::0::geo") AS "base_attribute_count", "toUInt64"("arraySum"("tv:geoPoint:hrcard:hrcard:u64:4E:::0::geo")) AS "expected_flattened_length", "length"("tv:geoPoint:hr:hr:u64:47:::0::geo") AS "actual_flattened_length" FROM "anchor"."facts" UNION ALL SELECT "id:id:u64:47::0:" AS "id", "id:naturalKey:y:4::0:" AS "naturalKey", 'Text' AS "section", "multiIf"( "length"("tv:text:text:val:s::::0::") != "length"("tv:text:len:len:u64:4D:::0::"), 'Base/Len Length Mismatch', "length"("tv:text:wordLength:val:u32h::::0::") != "toUInt64"("arraySum"("tv:text:len:len:u64:4D:::0::")), 'Co-Container (wordLength) Integrity Failure', "length"("tv:text:wordBag:val:sh::::0::") != "toUInt64"("arraySum"("tv:text:len:len:u64:4D:::0::")), 'Co-Container (wordBag) Integrity Failure', 'Valid' ) AS "error_type", "length"("tv:text:text:val:s::::0::") AS "base_attribute_count", "toUInt64"("arraySum"("tv:text:len:len:u64:4D:::0::")) AS "expected_flattened_length", "length"("tv:text:wordBag:val:sh::::0::") AS "actual_flattened_length" FROM "anchor"."facts" ) WHERE "error_type" != 'Valid'
 ```
 
 ## card_anchor_dql_query7.sql
@@ -626,6 +626,6 @@ SELECT "id:id", "id:naturalKey", "symbol:value", "timeRange:beginIncl", "geoPoin
 ### after ResolveColumnNames
 
 ```sql
-SELECT "id:id:u64:2k:0:0:", "id:naturalKey:y:g:0:0:", "tv:symbol:value:val:s:m:0:12:0::data", "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", "tv:geoPoint:h3:val:u64:g:0:0:0::geo" FROM "anchor"."facts" WHERE "has"("tv:symbol:value:val:s:m:0:12:0::data", 'DELIVERED') OR "has"("tv:symbol:value:val:s:m:0:12:0::data", 'SEISMIC_ANOMALY')
+SELECT "id:id:u64:47::0:", "id:naturalKey:y:4::0:", "tv:symbol:value:val:s:124::I:0::data", "tv:timeRange:beginIncl:val:z64:47:::0::data", "tv:geoPoint:h3:val:u64:4:::0::geo" FROM "anchor"."facts" WHERE "has"("tv:symbol:value:val:s:124::I:0::data", 'DELIVERED') OR "has"("tv:symbol:value:val:s:124::I:0::data", 'SEISMIC_ANOMALY')
 ```
 

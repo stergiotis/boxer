@@ -30,7 +30,7 @@ demo table:
 
 ```
 tv:symbol:value:val:s:m:0:24:0::data
-id:id:u64:2k:0:0:
+id:id:u64:47::0:
 ```
 
 A user querying a leeway table in the play playground (ADR-0097) must type

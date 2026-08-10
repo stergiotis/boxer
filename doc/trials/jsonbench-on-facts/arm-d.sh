@@ -24,17 +24,17 @@ DB="${DB:-jsonbench_d_1m}"
 TABLE="${TABLE:-facts}"
 CH=(clickhouse-client --allow_suspicious_low_cardinality_types=1)
 
-SV='tv:symbol:value:val:s:m:0:12:0::data'
-SP='tv:symbol:mrhp:mrhp:y:g:0:0:0::data'
-SC='tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data'
-TV='tv:stringArray:value:val:sh:g:0:gw:0::data'
-TP='tv:stringArray:mrhp:mrhp:y:g:0:0:0::data'
-TC='tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data'
-TL='tv:stringArray:len:len:u64:28o:0:0:0::data'
-IV='tv:i64Array:value:val:i64h:g:0:0:0::data'
-IP='tv:i64Array:mrhp:mrhp:y:g:0:0:0::data'
-IC='tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data'
-IL='tv:i64Array:len:len:u64:28o:0:0:0::data'
+SV='tv:symbol:value:val:s:124::I:0::data'
+SP='tv:symbol:mrhp:mrhp:y:4:::0::data'
+SC='tv:symbol:lmrcard:lmrcard:u64:4E:::0::data'
+TV='tv:stringArray:value:val:sh:4::8:0::data'
+TP='tv:stringArray:mrhp:mrhp:y:4:::0::data'
+TC='tv:stringArray:lmrcard:lmrcard:u64:4E:::0::data'
+TL='tv:stringArray:len:len:u64:4D:::0::data'
+IV='tv:i64Array:value:val:i64h:4:::0::data'
+IP='tv:i64Array:mrhp:mrhp:y:4:::0::data'
+IC='tv:i64Array:lmrcard:lmrcard:u64:4E:::0::data'
+IL='tv:i64Array:len:len:u64:4D:::0::data'
 
 # Per-attribute path vectors (membership half) and value vectors (value half).
 symPaths="arrayMap((c,s)->if(c=0,'',\`$SP\`[toUInt32(s-c+1)]),\`$SC\`,arrayCumSum(\`$SC\`))"

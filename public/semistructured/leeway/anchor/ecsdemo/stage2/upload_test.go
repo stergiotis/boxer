@@ -64,7 +64,7 @@ func TestUploadToClickHouseServer(t *testing.T) {
 	require.NoError(t, ch.InsertArrow(ctx, "drone.facts", recs))
 
 	// the id plain column lands under its generated physical name.
-	body, err := ch.Query(ctx, `SELECT count(), min("id:id:u64:2k:0:0:"), max("id:id:u64:2k:0:0:") FROM drone.facts FORMAT TabSeparated`)
+	body, err := ch.Query(ctx, `SELECT count(), min("id:id:u64:47::0:"), max("id:id:u64:47::0:") FROM drone.facts FORMAT TabSeparated`)
 	require.NoError(t, err)
 	defer body.Close()
 	out, err := io.ReadAll(body)

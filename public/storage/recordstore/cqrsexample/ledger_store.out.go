@@ -43,8 +43,8 @@ const LedgerTableName = "ledger"
 // derived from the IR at generation time — exported so consumers can
 // address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	LedgerColKey   = `"id:id:s:g:0:0:"`
-	LedgerColOrder = `"ts:ts:z64:2k:0:0:"`
+	LedgerColKey   = `"id:id:s:4::0:"`
+	LedgerColOrder = `"ts:ts:z64:47::0:"`
 )
 
 // Arrow output shape the read-access classes expect.
@@ -874,11 +874,11 @@ func (inst *ledgerFetcher) FetchItemSinglePartition(ctx context.Context, partiti
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	ledgerScanOpenedFilter       = "has(\"tv:acctOwner:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:acctOwner:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
-	ledgerScanDepositedFilter    = "has(\"tv:acctDeposit:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:acctDeposit:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
-	ledgerScanWithdrawnFilter    = "has(\"tv:acctWithdraw:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:acctWithdraw:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
-	ledgerScanClosedFilter       = "has(\"tv:acctClosed:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:acctClosed:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
-	ledgerScanAccountStateFilter = "has(\"tv:snapOwner:lr:lr:u64:2q:0:0:0::data\", 1) AND has(\"tv:snapBalance:lr:lr:u64:2q:0:0:0::data\", 2) AND has(\"tv:snapClosed:lr:lr:u64:2q:0:0:0::data\", 3) AND has(\"tv:snapAsOf:lr:lr:u64:2q:0:0:0::data\", 4) AND countEqual(\"tv:snapOwner:lr:lr:u64:2q:0:0:0::data\", 1) = 1 AND countEqual(\"tv:snapBalance:lr:lr:u64:2q:0:0:0::data\", 2) = 1 AND countEqual(\"tv:snapClosed:lr:lr:u64:2q:0:0:0::data\", 3) = 1 AND countEqual(\"tv:snapAsOf:lr:lr:u64:2q:0:0:0::data\", 4) = 1"
+	ledgerScanOpenedFilter       = "has(\"tv:acctOwner:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:acctOwner:lr:lr:u64:1247:::0::data\", 1) = 1"
+	ledgerScanDepositedFilter    = "has(\"tv:acctDeposit:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:acctDeposit:lr:lr:u64:1247:::0::data\", 1) = 1"
+	ledgerScanWithdrawnFilter    = "has(\"tv:acctWithdraw:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:acctWithdraw:lr:lr:u64:1247:::0::data\", 1) = 1"
+	ledgerScanClosedFilter       = "has(\"tv:acctClosed:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:acctClosed:lr:lr:u64:1247:::0::data\", 1) = 1"
+	ledgerScanAccountStateFilter = "has(\"tv:snapOwner:lr:lr:u64:1247:::0::data\", 1) AND has(\"tv:snapBalance:lr:lr:u64:1247:::0::data\", 2) AND has(\"tv:snapClosed:lr:lr:u64:1247:::0::data\", 3) AND has(\"tv:snapAsOf:lr:lr:u64:1247:::0::data\", 4) AND countEqual(\"tv:snapOwner:lr:lr:u64:1247:::0::data\", 1) = 1 AND countEqual(\"tv:snapBalance:lr:lr:u64:1247:::0::data\", 2) = 1 AND countEqual(\"tv:snapClosed:lr:lr:u64:1247:::0::data\", 3) = 1 AND countEqual(\"tv:snapAsOf:lr:lr:u64:1247:::0::data\", 4) = 1"
 )
 
 // ScanOpened iterates the entities whose rows carry a conforming Opened

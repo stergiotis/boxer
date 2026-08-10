@@ -311,7 +311,7 @@ Adopt **O4**. Specific decisions:
 
   Three facts S1 established bind this decode path: physical **plain** column
   names are leeway-encoded like every other column (e.g.
-  `"id:id:u64:2k:0:0:"`, exported per store as `<Store>ColKey` etc.) — every
+  `"id:id:u64:47::0:"`, exported per store as `<Store>ColKey` etc.) — every
   SQL fragment quotes names derived from the IR at generation time, never
   bare role names; fetched Arrow must be pinned to the shape the read-access
   classes expect (`SETTINGS output_format_arrow_string_as_string=1,

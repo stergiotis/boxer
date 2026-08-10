@@ -23,11 +23,11 @@ import (
 
 func CreateSchemaAssetTable() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
-		/* 000 */ arrow.Field{Name: "id:id:u64:0:0:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
-		/* 001 */ arrow.Field{Name: "ts:ts:z64:0:0:0:", Nullable: false, Type: &arrow.TimestampType{Unit: arrow.Nanosecond}},
-		/* 002 */ arrow.Field{Name: "tv:symbol:value:val:s:0:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 003 */ arrow.Field{Name: "tv:symbol:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 004 */ arrow.Field{Name: "tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 000 */ arrow.Field{Name: "id:id:u64:::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
+		/* 001 */ arrow.Field{Name: "ts:ts:z64:::0:", Nullable: false, Type: &arrow.TimestampType{Unit: arrow.Nanosecond}},
+		/* 002 */ arrow.Field{Name: "tv:symbol:value:val:s::::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 003 */ arrow.Field{Name: "tv:symbol:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 004 */ arrow.Field{Name: "tv:symbol:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }

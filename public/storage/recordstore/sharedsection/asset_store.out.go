@@ -42,8 +42,8 @@ const AssetTableName = "asset"
 // derived from the IR at generation time — exported so consumers can
 // address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	AssetColKey   = `"id:id:u64:0:0:0:"`
-	AssetColOrder = `"ts:ts:z64:0:0:0:"`
+	AssetColKey   = `"id:id:u64:::0:"`
+	AssetColOrder = `"ts:ts:z64:::0:"`
 )
 
 // Arrow output shape the read-access classes expect.
@@ -737,8 +737,8 @@ func (inst *assetFetcher) FetchItemSinglePartition(ctx context.Context, partitio
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	assetScanLabelFilter = "has(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 7001) AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 7001) = 1"
-	assetScanStateFilter = "has(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 7002) AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 7002) = 1"
+	assetScanLabelFilter = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 7001) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 7001) = 1"
+	assetScanStateFilter = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 7002) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 7002) = 1"
 )
 
 // ScanLabel iterates the entities whose rows carry a conforming Label

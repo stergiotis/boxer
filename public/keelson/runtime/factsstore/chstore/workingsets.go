@@ -175,15 +175,15 @@ func (inst *Store) DeleteWorkingset(appId app.AppIdT, name string) (err error) {
 // projected column.
 func composeLatestWorkingsetSql(table string, appId app.AppIdT, name string) (sql string) {
 	const (
-		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLMR     = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symValue   = "`tv:symbol:value:val:s:m:0:12:0::data`"
-		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		blobValue  = "`tv:blobArray:value:val:yh:g:0:0:0::data`"
-		blobLR     = "`tv:blobArray:lr:lr:u64:2q:0:0:0::data`"
-		blobLRCard = "`tv:blobArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		boolLR     = "`tv:bool:lr:lr:u64:2q:0:0:0::data`"
-		tsCol      = "`ts:ts:z64:2k:0:0:`"
+		symLR      = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLMR     = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		symValue   = "`tv:symbol:value:val:s:124::I:0::data`"
+		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
+		blobValue  = "`tv:blobArray:value:val:yh:4:::0::data`"
+		blobLR     = "`tv:blobArray:lr:lr:u64:1247:::0::data`"
+		blobLRCard = "`tv:blobArray:lrcard:lrcard:u64:4E:::0::data`"
+		boolLR     = "`tv:bool:lr:lr:u64:1247:::0::data`"
+		tsCol      = "`ts:ts:z64:47::0:`"
 	)
 	blobIdxInLr := fmt.Sprintf("indexOf(%s, %d)", blobLR, vocab.MembLaunchConfig.GetId().Value())
 	configPick := fmt.Sprintf("hex(if(%s > 0, arrayElement(%s, indexOf(arrayCumSum(%s), %s)), ''))",
@@ -233,23 +233,23 @@ type columnExprsWorkingset struct {
 
 func buildWorkingsetColumnExprs() (e columnExprsWorkingset) {
 	const (
-		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLMR     = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
-		symMRHP    = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
-		symValue   = "`tv:symbol:value:val:s:m:0:12:0::data`"
-		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		strLR      = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
-		strValue   = "`tv:stringArray:value:val:sh:g:0:gw:0::data`"
-		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		u64LR      = "`tv:u64Array:lr:lr:u64:2q:0:0:0::data`"
-		u64Value   = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"
-		u64LRCard  = "`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		blobLR     = "`tv:blobArray:lr:lr:u64:2q:0:0:0::data`"
-		blobValue  = "`tv:blobArray:value:val:yh:g:0:0:0::data`"
-		blobLRCard = "`tv:blobArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
-		boolLR     = "`tv:bool:lr:lr:u64:2q:0:0:0::data`"
-		idCol      = "`id:id:u64:2k:0:0:`"
-		tsCol      = "`ts:ts:z64:2k:0:0:`"
+		symLR      = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLMR     = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		symMRHP    = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
+		symValue   = "`tv:symbol:value:val:s:124::I:0::data`"
+		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
+		strLR      = "`tv:stringArray:lr:lr:u64:1247:::0::data`"
+		strValue   = "`tv:stringArray:value:val:sh:4::8:0::data`"
+		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4E:::0::data`"
+		u64LR      = "`tv:u64Array:lr:lr:u64:1247:::0::data`"
+		u64Value   = "`tv:u64Array:value:val:u64h:4:::0::data`"
+		u64LRCard  = "`tv:u64Array:lrcard:lrcard:u64:4E:::0::data`"
+		blobLR     = "`tv:blobArray:lr:lr:u64:1247:::0::data`"
+		blobValue  = "`tv:blobArray:value:val:yh:4:::0::data`"
+		blobLRCard = "`tv:blobArray:lrcard:lrcard:u64:4E:::0::data`"
+		boolLR     = "`tv:bool:lr:lr:u64:1247:::0::data`"
+		idCol      = "`id:id:u64:47::0:`"
+		tsCol      = "`ts:ts:z64:47::0:`"
 	)
 	e.appId = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s)",
 		vocab.MembRuntimeApp.GetId().Value(), symMRHP, symLMR)
@@ -285,8 +285,8 @@ func buildWorkingsetColumnExprs() (e columnExprsWorkingset) {
 func composeListWorkingsetsSql(table string) (sql string) {
 	e := buildWorkingsetColumnExprs()
 	const (
-		symLR  = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
-		symLMR = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
+		symLR  = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLMR = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
 	)
 	whereParts := []string{
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindWorkingset.GetId().Value()),

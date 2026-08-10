@@ -166,7 +166,7 @@ func TestNameConditions_SectionNameFolds(t *testing.T) {
 		got, ok, err := r.NameConditions("", testTable, 1)
 		require.NoError(t, err)
 		require.True(t, ok)
-		require.Equal(t, "tv:my-audit:c1:val:b:0:0:0:0::", got[0], "spelling %q", spelling)
+		require.Equal(t, "tv:my-audit:c1:val:b::::0::", got[0], "spelling %q", spelling)
 	}
 }
 
@@ -177,8 +177,8 @@ func TestNameConditions_DefaultSection(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, []string{
-		"tv:conditions:c1:val:b:0:0:0:0::",
-		"tv:conditions:c2:val:b:0:0:0:0::",
+		"tv:conditions:c1:val:b::::0::",
+		"tv:conditions:c2:val:b::::0::",
 	}, got)
 }
 
@@ -189,7 +189,7 @@ func TestNameConditions_CustomSection(t *testing.T) {
 	got, ok, err := r.NameConditions("", testTable, 1)
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.Equal(t, "tv:audit:c1:val:b:0:0:0:0::", got[0])
+	require.Equal(t, "tv:audit:c1:val:b::::0::", got[0])
 }
 
 func TestNewResolverWithConditionSection_Rejects(t *testing.T) {
@@ -206,7 +206,7 @@ func TestNameConditions_UnderscoreSeparator(t *testing.T) {
 	got, ok, err := r.NameConditions("", testTable, 1)
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.Equal(t, "tv_conditions_c1_val_b_0_0_0_0__", got[0])
+	require.Equal(t, "tv_conditions_c1_val_b____0__", got[0])
 
 	// It reads back as part of the same table.
 	conv, err := ddl.NewHumanReadableNamingConvention("_")

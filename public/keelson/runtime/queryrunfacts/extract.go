@@ -37,9 +37,9 @@ const (
 // references (the chstore composeLatestStateSql convention; the DDL
 // parse test in mv_test.go asserts they exist in ddl.ColumnsSQL).
 const (
-	ColId       = "`id:id:u64:2k:0:0:`"
-	ColTs       = "`ts:ts:z64:2k:0:0:`"
-	ColSymbolLr = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
+	ColId       = "`id:id:u64:47::0:`"
+	ColTs       = "`ts:ts:z64:47::0:`"
+	ColSymbolLr = "`tv:symbol:lr:lr:u64:1247:::0::data`"
 )
 
 // WatermarkOverlap is the lookback subtracted from the destination

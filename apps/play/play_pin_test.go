@@ -47,7 +47,7 @@ func TestArrowColumnType(t *testing.T) {
 func TestComposePinTableDDL(t *testing.T) {
 	schema := arrow.NewSchema([]arrow.Field{
 		{Name: "count()", Type: arrow.PrimitiveTypes.Uint64},
-		{Name: "id:id:u64:2k:0:0:", Type: arrow.PrimitiveTypes.Uint64},
+		{Name: "id:id:u64:47::0:", Type: arrow.PrimitiveTypes.Uint64},
 		{Name: "note", Type: arrow.BinaryTypes.String, Nullable: true},
 		{Name: "tags", Type: arrow.ListOf(arrow.BinaryTypes.String), Nullable: true},
 	}, nil)
@@ -55,7 +55,7 @@ func TestComposePinTableDDL(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, ddl, "CREATE TABLE IF NOT EXISTS boxer.pin_00ff")
 	require.Contains(t, ddl, "`count()` UInt64")
-	require.Contains(t, ddl, "`id:id:u64:2k:0:0:` UInt64")
+	require.Contains(t, ddl, "`id:id:u64:47::0:` UInt64")
 	require.Contains(t, ddl, "`note` Nullable(String)")
 	require.Contains(t, ddl, "`tags` Array(String)", "arrays must not be wrapped Nullable")
 	require.Contains(t, ddl, "ENGINE MergeTree() ORDER BY tuple()")

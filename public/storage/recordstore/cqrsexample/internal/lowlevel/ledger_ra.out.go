@@ -1983,35 +1983,35 @@ func (inst *ReadAccessLedgerTableTaggedSnapAsOf) GetSectionName() naming.Stylabl
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessLedgerTableTaggedSnapAsOf)(nil)
 
 func (inst *ReadAccessLedgerTableTaggedAcctOwner) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessLedgerTableTaggedAcctDeposit) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessLedgerTableTaggedAcctWithdraw) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessLedgerTableTaggedAcctClosed) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessLedgerTableTaggedSnapOwner) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessLedgerTableTaggedSnapBalance) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessLedgerTableTaggedSnapClosed) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessLedgerTableTaggedSnapAsOf) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessLedgerTableTaggedAcctOwner) GetSectionStreamingGroup() naming.Key {

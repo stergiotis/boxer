@@ -653,7 +653,7 @@ func (inst *ReadAccessNetTableTaggedNet) GetSectionName() naming.StylableName {
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessNetTableTaggedNet)(nil)
 
 func (inst *ReadAccessNetTableTaggedNet) GetSectionUseAspects() useaspects.AspectSet {
-	return "0"
+	return ""
 }
 
 func (inst *ReadAccessNetTableTaggedNet) GetSectionStreamingGroup() naming.Key {
