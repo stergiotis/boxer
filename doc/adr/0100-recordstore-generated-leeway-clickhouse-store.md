@@ -362,10 +362,16 @@ Adopt **O4**. Specific decisions:
   generation time. Leeway components as such may bind any mixture of
   sections and may deliberately share `(section, membership)` slots
   (ADR-0146 D5/D6 — overlap is expected; `anchor/ecsdemo` overlaps every
-  slot across kinds via one shared membership lookup). Lifting the
-  restriction needs a store-global membership→id assignment — the
-  ADR-0105 D2 membership-id override, with this gate relaxed to id-level
-  disjointness (Deferred).
+  slot across kinds via one shared membership lookup). Package-local ids
+  also carry a cross-writer hazard the partition cannot see: on a fat
+  table with several writers (`boxer.facts` today — the runtime writes
+  vdd-resolved ids, a generated store writes 1..N), a store pointed at
+  rows written under a different assignment matches nothing and decodes
+  every component as absent, without an error. Lifting the restriction —
+  and retiring that failure class — needs a store-global membership→id
+  assignment: registry-resolved ids (the facts-target `WrapperEmitterI`
+  regime, `codec/factswrapper`) or the ADR-0105 D2 caller-supplied
+  override, with this gate relaxed to id-level disjointness (Deferred).
 
   *Emitted layout and control visibility.* The DML and RA scaffolding (~280
   identifiers: the `InEntity` builder, section classes,
@@ -808,8 +814,14 @@ entry records what changed:
 
 - SD6's disjointness paragraph rescoped: the gate is a generator
   precondition caused by per-plan membership ids; the component model
-  permits overlap (ADR-0146 D5/D6); the ADR-0105 D2 membership-id override
-  is the recorded lift path.
+  permits overlap (ADR-0146 D5/D6); a store-global membership→id
+  assignment (registry-resolved ids, or the ADR-0105 D2 override) is the
+  recorded lift path.
+- SD6 also records the cross-writer id-drift hazard package-local ids
+  carry on multi-writer fat tables — a store reading rows written under a
+  different assignment decodes every component as absent, without an
+  error — the stronger reason registry-resolved ids, not partitioning,
+  retire the class.
 - SD6's arity tail corrected: a surplus attribute on a claimed slot errors
   on every shape (ADR-0146 D4); the scalar-errors/container-concatenates
   split it described was retired with D4.
