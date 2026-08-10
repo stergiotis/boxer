@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 )
 
 // CapId is the short identifier the carousel's status bar uses when
@@ -35,6 +37,31 @@ type BackendImpl struct {
 	Display string
 }
 
+// CapSchema is the durable table a capability's backend writes into:
+// the ClickHouse coordinates plus a loader for the authored leeway
+// schema, which the inspector renders with the schemaview widget
+// (ADR-0075). Nil on caps whose backend owns no table — persist's
+// MemBackend is in-process, and the bus / fs / task caps land their
+// audit trail in the facts table rather than carrying one of their own.
+type CapSchema struct {
+	// Database / Table are the CH coordinates the backend writes to.
+	// Rendered as the section header; nothing here connects to them.
+	Database string
+	Table    string
+	// Load returns the authored TableDesc. Expected to be lazy and
+	// memoised (see loadFactsTableDesc): building one runs the leeway
+	// describe pipeline, which is what the generated ddl/dml packages
+	// exist to keep off the runtime's startup path, and the result is
+	// read-only, so every open inspector window can share it.
+	Load func() (tbl *common.TableDesc, err error)
+}
+
+// Qualified renders the CH coordinates the conventional way.
+func (inst CapSchema) Qualified() (s string) {
+	s = inst.Database + "." + inst.Table
+	return
+}
+
 // CapSpec describes one capability for the inspector body. The schematic
 // is live-generated from the registry by reading every Manifest's Caps
 // and filtering with Matches; the prose fields are static and live
@@ -62,6 +89,10 @@ type CapSpec struct {
 	// for an app declaring a related Manifest field (e.g. PersistedKeys
 	// → runtime.persist.{ownAlias}.>). Empty when no host injection.
 	HostInjected func(m app.Manifest) string
+	// Schema is the table this cap's backend persists into, rendered as
+	// a collapsed storage-schema section under the prose. Nil when the
+	// cap owns no table.
+	Schema *CapSchema
 	// Backends is the set of available implementations of this cap.
 	// One per shipping concrete impl. At runtime, the carousel calls
 	// SetActiveBackend(capId, backendId) so the inspector knows which
@@ -108,6 +139,16 @@ var Registry = map[CapId]CapSpec{
 		Backends: []BackendImpl{
 			{Id: "inmem", Display: "InMem"},
 			{Id: "chstore", Display: "chstore"},
+		},
+		// The physical home of every row the chstore backend writes —
+		// the ADR-0026 §SD6 leeway table. The in-memory backend keeps
+		// the same rows in process memory and never materialises this
+		// shape, so the section describes what durability looks like,
+		// not what the current backend is doing.
+		Schema: &CapSchema{
+			Database: factsschema.DatabaseName,
+			Table:    factsschema.TableName,
+			Load:     loadFactsTableDesc,
 		},
 	},
 	CapBus: {

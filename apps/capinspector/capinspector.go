@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
@@ -107,6 +108,20 @@ type App struct {
 	// density resolves IDS spacing tokens at the active preset
 	// (ADR-0032 §SD2); cached once at newApp.
 	density styletokens.DensityE
+
+	// schemaModel is the schemaview inspector's state for the storage
+	// schema of the selected cap (CapSpec.Schema, rendered by
+	// capschema.go). Per-window because the widget mutates selection,
+	// filter and outline expansion in it; the TableDesc behind it is
+	// process-wide and read-only. schemaCap records which cap the model
+	// is bound to so the picker rebinds exactly once per switch, and
+	// schemaErr carries a failed build so the section can say so instead
+	// of rendering an empty pane. schemaScope is the per-window half of
+	// the widget's scope key, derived lazily — see schemaScopePrefix.
+	schemaModel *schemaview.Model
+	schemaCap   CapId
+	schemaErr   error
+	schemaScope string
 }
 
 var _ app.AppI = (*App)(nil)
@@ -216,6 +231,7 @@ func (inst *App) renderDetail(spec CapSpec) {
 		c.Separator().Horizontal().Send()
 		c.AddSpace(styletokens.GapItems(inst.density))
 		inst.renderCapDoc(spec)
+		inst.renderCapSchema(spec)
 	}
 }
 

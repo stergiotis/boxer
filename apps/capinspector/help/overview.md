@@ -32,6 +32,17 @@ For the selected capability:
   drawn with the IDS palette so callers stand out.
 - **Prose** — a short description of what the capability promises
   and what guarantees the active backend honours.
+- **Storage schema** — for a capability whose backend persists into a
+  table, a collapsed section at the foot of the page: the leeway
+  schema of that table as a section navigator beside a decoded
+  property pane (canonical type, encoding hints, value semantics,
+  membership spec). `boxer.facts` is the only such table today; the
+  `?` in the navigator header opens the glyph legend.
+
+The schema shown is the one the code declares, not a live
+`DESCRIBE TABLE` — no database is contacted to render it, so it reads
+the same when the facts backend has fallen back to the in-memory
+store.
 
 The view is read-only — switching the active backend happens at
 process startup via the runtime configuration, not from here.

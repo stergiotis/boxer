@@ -30,6 +30,14 @@ The in-memory backend exposes `Runs()`, `Lifecycles()`, `Heartbeats()`,
 and friends — full snapshots for tests; production paths use the CH
 helpers above.
 
+The **Storage schema** section below renders that table's leeway
+schema: the plain identity columns, the tagged-value sections under the
+`data` streaming group, and each column's canonical type, encoding
+hints and membership spec. It is the authored mapping, so it describes
+what durability looks like rather than what the current backend is
+doing — the in-memory store keeps the same rows in process memory and
+never materialises the table.
+
 **Where to look in the code:**
 
 - `runtime/factsstore/factsstore.go` — `FactsStoreI` interface + in-mem impl
