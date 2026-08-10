@@ -6,12 +6,13 @@ reviewed-by:
 reviewed-date:
 ---
 
-> **Status: draft — working material, 2026-08-10.** A review of the three leeway
-> aspect vocabularies for orthogonality, completeness and consistency. The lens
-> is deliberately *not* expressivity: each observation is graded by what it
-> costs to check and over what neighbourhood, to keep the vocabulary out of the
-> ontology tarpit. Findings are facts about the code as reviewed; §5 records
-> what was subsequently changed, including the same-day outright removal of
+> **Status: draft — pre-human-review.** Working material as of 2026-08-10. A
+> review of the three leeway aspect vocabularies for orthogonality,
+> completeness and consistency. The lens is deliberately *not* expressivity:
+> each observation is graded by what it costs to check and over what
+> neighbourhood, to keep the vocabulary out of the ontology tarpit. Findings
+> are facts about the code as reviewed; §5 records what was subsequently
+> changed, including the same-day outright removal of
 > `AspectScaleOfMeasurementCategorial` (M6).
 
 # The leeway aspect vocabularies — a review
