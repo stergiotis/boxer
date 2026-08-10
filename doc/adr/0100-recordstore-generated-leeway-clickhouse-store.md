@@ -371,7 +371,9 @@ Adopt **O4**. Specific decisions:
   and retiring that failure class — needs a store-global membership→id
   assignment: registry-resolved ids (the facts-target `WrapperEmitterI`
   regime, `codec/factswrapper`) or the ADR-0105 D2 caller-supplied
-  override, with this gate relaxed to id-level disjointness (Deferred).
+  override — landed 2026-08-10 as `gen.Input.Wrapper` +
+  `marshallgen.FixedIdsWrapper`, with this gate relaxed to id-level
+  disjointness (`recordstore/sharedsection` is the worked example).
 
   *Emitted layout and control visibility.* The DML and RA scaffolding (~280
   identifiers: the `InEntity` builder, section classes,
@@ -658,13 +660,6 @@ The QOC options above carry the rankings; notes below record nuance.
   channels. Carrier (mixed / parametrized) channels and exploded fields
   remain uncovered — `marshallgen.ReadRowSupported` is the single gate —
   pending a consumer (the keelson facts kinds would be the trigger).
-- **Membership-id override / id-level disjointness** (SD6). The
-  disjoint-sections precondition exists because the store's `NoOpWrapper`
-  target numbers membership ids per plan. ADR-0105 D2 records the lift: an
-  optional name → id map on `gen.Input` (positional assignment stays the
-  default), with the gate relaxed to id-level disjointness when the
-  override is present — needed by schemas whose kinds share sections by
-  construction (the keelson facts table).
 - **Flat-safe layout** (SD6). `Flat` today exports the whole builder,
   control set included — the wide, unguarded surface. A Flat variant that
   keeps the types nameable but the control set walled (in-package unexported
@@ -830,6 +825,41 @@ entry records what changed:
 
 Unaffected: the gate itself, its error message, every generated artefact,
 and the other SDs — a records correction, not a behavior change.
+
+### 2026-08-10 — the membership-id override landed: `gen.Input.Wrapper` (ADR-0105 D2)
+
+Same-day follow-up to the correction above: the lift it recorded as
+deferred is now built, so the Deferred bullet added this morning is
+removed again and SD6's closing sentence states the seam.
+
+- `gen.Input.Wrapper` selects the marshallgen membership-id storage (a
+  `marshallgen.WrapperEmitterI`, required to implement the new
+  `marshallgen.MembershipIdSourceI`); nil keeps `NoOpWrapper`, and every
+  existing store regenerates byte-identically (verified: zero drift over
+  example, cqrsexample, pushoutstore, dimension/provenance). The
+  per-component codec emission, the baked Scan filter literals and the
+  emitted `<Store>MembershipIds` map all resolve from this one source, so
+  the failure a partial seam would produce — filters searching for ids the
+  codec never wrote — cannot be generated.
+- `marshallgen.FixedIdsWrapper` is the caller-supplied form: `kindXxx`
+  consts carrying a registry-stable name → id snapshot.
+  `keelson/codec/factswrapper` gained vocabulary-package parameterization
+  (default output byte-identical), so a third-party vocabulary can drive
+  the facts-style codec emission and, at generation time, feed the
+  snapshot.
+- The SD6 gate now fires only under an id source that is not globally
+  unique; a unique source relaxes it to id-level disjointness —
+  injectivity over the memberships the store uses, verified rather than
+  trusted. A cross-kind duplicate membership *name* is a generation error
+  under either regime (previously a bare Go redeclaration break).
+- `recordstore/sharedsection` is the worked example, with the round-trip
+  this change exists for: one entity carrying two components' memberships
+  in one shared section, each component decoding only its own attributes,
+  and the Scan filters matching on the assigned ids. The write-path
+  boundary is unchanged — the typed Add verbs still compose one section
+  frame per entity (ADR-0146 D6), so the shared-frame row composes via
+  `Raw()`'s section surface; `RowComposer` remains the reflect-path
+  answer.
 
 ## References
 

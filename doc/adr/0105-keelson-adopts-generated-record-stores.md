@@ -370,6 +370,22 @@ entry records what changed:
   persist state facts-bound with membership tombstones and hand-written
   live reads).
 
+### 2026-08-10 — the two D2 generator features landed
+
+The recordstore generator now takes the membership-id override and
+relaxes the disjoint-sections gate under it (ADR-0100's dated entry of
+the same day carries the mechanics): `gen.Input.Wrapper` selects a
+`marshallgen.WrapperEmitterI` that must state its ids at generation time
+(`MembershipIdSourceI`), and `marshallgen.FixedIdsWrapper` carries the
+caller-resolved name → id snapshot — the wrapper form subsumes the bare
+map this ADR sketched. Under a source claiming globally-unique ids the
+gate checks id-level disjointness instead of section ownership.
+`factswrapper`'s vocabulary package and qualifier are parameterized for
+vocabularies outside boxer's vdd. `recordstore/sharedsection` is the
+round-tripped worked example. D3b's generator precondition is thereby
+met; the facts-bound store itself — the storegen package resolving vdd
+ids into the snapshot — remains to be built.
+
 ## References
 
 - [ADR-0100: recordstore — generated leeway ClickHouse store](0100-recordstore-generated-leeway-clickhouse-store.md) — the producer-side decision and its deferrals.

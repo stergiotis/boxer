@@ -55,7 +55,7 @@ component read contract), [ADR-0075](../../adr/0075-leeway-typed-component-views
 | One row carrying two attributes on a claimed slot? | Read error on every path — arity is uniform (ADR-0146 D4) — unless the slot is tuple-owned. |
 | What isolates kinds sharing a section? | The membership tags (ref ids / verbatim names): decode matches `(section reader, membership value)`, never "kind". |
 | What actually breaks sharing? | Membership → id **disagreement** — e.g. per-plan positional numbering without a shared lookup. |
-| Inside one generated recordstore? | Components must bind disjoint sections — a generator precondition (ADR-0100 SD6), not a model rule; lift recorded as ADR-0105 D2. |
+| Inside one generated recordstore? | Under the default per-plan ids, components must bind disjoint sections — a generator precondition (ADR-0100 SD6), not a model rule. A registry-stable `gen.Input.Wrapper` (ADR-0105 D2) lifts it to id-level disjointness. |
 
 ## Overlap is expected; tagging is the isolation
 
@@ -96,8 +96,9 @@ Corollaries of the per-plan regime:
   but the *values* still collide across kinds (`kindDeviceStatus = 1`,
   `kindDeviceCharge = 1`, …).
 - Two kinds reusing one membership **name** in one package would emit
-  duplicate consts — a build break. `anchor/ecsdemo` avoids it by generating
-  a codec only for the fat kind and reading the component kinds reflectively
+  duplicate consts — a build break (the recordstore generator refuses it at
+  generation time instead). `anchor/ecsdemo` avoids it by generating a codec
+  only for the fat kind and reading the component kinds reflectively
   through one shared `marshallreflect.MapLookup` (`droneLookup`) — the
   shared-lookup pattern that makes full slot overlap work.
 - Id drift is a **diagnosis, not a check**: a wrong lookup id observes
@@ -157,20 +158,29 @@ Corollaries of the per-plan regime:
 
 ## The recordstore exception (store-local, not model)
 
-`recordstore/gen` requires the components of **one generated store** to bind
-disjoint sections and rejects violations at generation time. This is a
-precondition of that generator — it drives the per-plan `NoOpWrapper` ids
-into decode switches and baked `Scan` filter SQL, where a shared section
-under colliding ids would silently cross-read — not a rule of the component
-model (ADR-0100 SD6, as corrected 2026-08-10). Notes:
+Under its default id regime, `recordstore/gen` requires the components of
+**one generated store** to bind disjoint sections and rejects violations at
+generation time. This is a precondition of that regime — per-plan
+`NoOpWrapper` ids baked into decode switches and `Scan` filter SQL, where a
+shared section under colliding ids would silently cross-read — not a rule
+of the component model (ADR-0100 SD6, as corrected 2026-08-10). Notes:
 
 - The gate is cross-kind per section; one kind may hold several memberships
   in one section.
-- Two kinds reusing a membership name in *different* sections pass the gate
-  but break the build (duplicate `kind<Name>` consts).
-- The lift is recorded, not built: ADR-0105 D2 — a caller-supplied
-  membership-id override on `gen.Input`, with the gate relaxed to id-level
-  disjointness under the override.
+- Two kinds naming one membership is a generation error under any id regime
+  (the `kind<Name>` symbol is declared once per generated package);
+  cross-kind slot sharing inside one store needs the reflect path.
+- The lift landed 2026-08-10 (ADR-0105 D2): `gen.Input.Wrapper` selects the
+  id source — `marshallgen.FixedIdsWrapper` carries a registry-stable
+  name → id snapshot — and the gate relaxes to id-level disjointness
+  (verified injectivity). One source feeds the codec consts, the baked
+  `Scan` filters and the exported `<Store>MembershipIds` map, so they
+  cannot disagree.
+  [`recordstore/sharedsection`](../../../public/storage/recordstore/sharedsection/)
+  is the worked example: two kinds in one section, round-tripped. The
+  write-path boundary stands — the typed Add verbs still open one frame
+  per section per entity (D6), so a shared-frame row composes via `Raw()`'s
+  section surface or the reflect `RowComposer`.
 
 ## Pointers
 
