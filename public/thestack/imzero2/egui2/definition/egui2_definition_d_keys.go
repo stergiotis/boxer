@@ -133,6 +133,7 @@ if capture_keys_mask != 0 && ` + respExpr + `.has_focus() {
             }
         }
     });
+    let captured_any = !hits.is_empty();
     for (key, code) in hits {
         // Remove it from the queue so nothing downstream also acts on it.
         ui.input_mut(|inp| {
@@ -140,6 +141,27 @@ if capture_keys_mask != 0 && ` + respExpr + `.has_focus() {
                 egui::Event::Key { key: k, pressed: true, .. } if *k == key));
         });
         self.r26_key_capture_push(` + idExpr + `, code, mods_byte);
+    }
+    if captured_any {
+        // A capture is only half a keypress. R26 is read back at the END of
+        // this frame, so the Go side cannot act on it until it builds the
+        // NEXT one — and the keypress that would have asked for that frame
+        // has just been consumed here. Under a reactive cadence (ADR-0062)
+        // an idle window builds no frame of its own, so the capture sits
+        // unfetched and prepare_next_frame drops it one frame later, logging
+        // the "consumed but not fetched" warning: the widget ate the key and
+        // nothing acted on it.
+        //
+        // Requested on the CURRENT viewport, which is the one whose widget
+        // captured the key — a hosted window is its own viewport and does not
+        // repaint because the root did.
+        //
+        // Necessary but not sufficient on its own: this delivers the key that
+        // was pressed, while a consumer holding the keyboard still wants a
+        // repaint cadence of its own so the NEXT press finds a live window
+        // (measured in shadow-boxer's lightbox: three arrows moved one cell
+        // with this alone, three with a 50 ms poll beside it).
+        ui.ctx().request_repaint();
     }
 }
 `
