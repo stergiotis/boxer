@@ -55,6 +55,7 @@ component read contract), [ADR-0075](../../adr/0075-leeway-typed-component-views
 | One row carrying two attributes on a claimed slot? | Read error on every path — arity is uniform (ADR-0146 D4) — unless the slot is tuple-owned. |
 | What isolates kinds sharing a section? | The membership tags (ref ids / verbatim names): decode matches `(section reader, membership value)`, never "kind". |
 | What actually breaks sharing? | Membership → id **disagreement** — e.g. per-plan positional numbering without a shared lookup. |
+| What does "per-plan" mean? | Per `mappingplan.Plan` — one plan per kind-tagged **root** DTO. Tuple/nested element structs fold into the parent's plan, and a plan need not come from a struct at all (the `mappingplanview` playground builds one field-by-field). `NoOpWrapper` numbers a plan's **unique ref-channel memberships** 1..N in declaration order — distinct memberships, not fields; a membership reused across fields keeps one id, and verbatim channels carry none. |
 | Inside one generated recordstore? | Under the default per-plan ids, components must bind disjoint sections — a generator precondition (ADR-0100 SD6), not a model rule. A registry-stable `gen.Input.Wrapper` (ADR-0105 D2) lifts it to id-level disjointness. |
 
 ## Overlap is expected; tagging is the isolation
