@@ -54,9 +54,22 @@ func KeyCodesRustFile() string {
 	b.WriteString("/// Map an egui key to its imzero2 wire code. 0 is \"outside the vocabulary\";\n")
 	b.WriteString("/// the capture mask cannot name it, so it is never captured.\n")
 	b.WriteString("pub fn imzero_key_code(k: egui::Key) -> u8 {\n    match k {\n")
-	for _, e := range keycodes.Table {
-		b.WriteString("        egui::Key::" + e.EguiKey + " => " +
-			strconv.Itoa(int(e.Code)) + ", // " + e.Name + "\n")
+	// Trailing comments are padded to the widest arm because that is what
+	// rustfmt does to this block, and the committed file is rustfmt's output —
+	// it is Rust in a Rust crate, so `cargo fmt` reaches it like any other.
+	// Emitting them one-space would make every `cargo fmt` re-align the file and
+	// leave it permanently drifted from the table it is generated from, with the
+	// test failing until someone pasted the unaligned form back and formatted it
+	// again. Matching the formatter is what makes the two idempotent.
+	arms := make([]string, len(keycodes.Table))
+	width := 0
+	for i, e := range keycodes.Table {
+		arms[i] = "egui::Key::" + e.EguiKey + " => " + strconv.Itoa(int(e.Code)) + ","
+		width = max(width, len(arms[i]))
+	}
+	for i, e := range keycodes.Table {
+		b.WriteString("        " + arms[i] +
+			strings.Repeat(" ", width-len(arms[i])) + " // " + e.Name + "\n")
 	}
 	// Unknown is the reserved zero. A key outside the vocabulary is never
 	// captured (the mask cannot name it), so this arm is unreachable in
