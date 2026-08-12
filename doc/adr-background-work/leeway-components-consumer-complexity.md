@@ -35,7 +35,7 @@ status: draft
 ## 1. The question, and why it came up
 
 The component layer — flat DTOs claiming `(section, membership)` slots,
-composed into entities, detected and decoded off shared wire rows — was
+detected and decoded off shared wire rows — was
 reviewed in 2026-08 as it approaches its first consumers. The review's
 verdict: the model is strong and the hard problems (overlap under fusion,
 presence without global vocabulary, one contract across three read paths)
