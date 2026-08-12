@@ -24,6 +24,11 @@ status: draft
 > named files and running the named tests; claims about what an ADR decided
 > are readings of the ADR text; line counts come from `wc -l`. Items that
 > could not be verified today are marked **unpinned**.
+>
+> Updated 2026-08-12: the R4 and R7 pins landed as tests. The results —
+> `Projection` alone takes the first match (confirmed), and value-count
+> narrowing silently zero-fills (a new finding) — are folded into §4 and
+> §5, and the components skill's arity sentence was corrected.
 
 # What stands between the leeway component model and its consumers?
 
@@ -127,8 +132,9 @@ symptoms while the source keeps generating new ones.
    under the narrower one — in the type terms below, every row that
    satisfied the narrow contract satisfies the wide one. Under B2 there
    is no flag-day, so wide readers and narrow writers coexist
-   indefinitely; narrowing is the breaking direction, and D4 makes it
-   loud — correctly. The data-oriented-design rule of thumb **"where
+   indefinitely; narrowing is the breaking direction — D4 makes
+   attribute-count narrowing loud, but the value-count rung was found to
+   zero-fill silently (R7's pinned finding). The data-oriented-design rule of thumb **"where
    there is one, there are many"** (Mike Acton's CppCon 2014 principles,
    with the companion advice to look on the time axis) is this
    consequence's cultural form: today's arity is a snapshot on the time
@@ -336,13 +342,15 @@ Three structural findings, independent of any single document:
   the reader also finds the decision that obsoleted it. Accepted-ADR edit
   policy (dated updates only) makes this pattern recurrent: the *current*
   semantics need an executable home, with ADR prose as history.
-- **Unpinned claims.** The components skill states that surplus-attribute
-  arity errors uniformly on every path *including* the SQL `Projection`
-  artefact; the pre-D4 measurement had `Projection` alone taking the first
-  match via `indexOf`. Whether M2c's contract-derived artefacts changed
-  that is **unpinned** — no test found today asserts Projection's surplus
-  behaviour in isolation. Re-verify and pin before the unification states
-  it anywhere.
+- **Unpinned claims — resolved 2026-08-12.** The components skill stated
+  that surplus-attribute arity errors uniformly on every path *including*
+  the SQL `Projection` artefact. Pinning it (the readback
+  projection-surplus test, executed against clickhouse-local) falsified
+  the wording: the CH lane enforces in the **Validator/Filter** — the
+  surplus row is excluded from any `Scan` — while `Projection` alone
+  still takes the first match. The skill's sentence was corrected the
+  same day. The episode is S4's thesis in one move: the claim stood in
+  prose for weeks; the test decided it in minutes.
 
 ## 5. Sharp-edge inventory (symptoms, keyed to their driver)
 
@@ -380,10 +388,10 @@ plain labels (**contained**, **framing**). Remedy classes are defined in
 | R1 | Present ≠ conforming: a partial row decodes `present=true` with missing fields zero-valued; only `Detect`'s `Exact` / the Scan filter check conformance | surprise (skin cost, §3.2) | ADR-0100 SD6 tail; skill | X + D (one statement, one example; delete duplicates) |
 | R2 | Empty container is unrepresentable: writes no membership, reads back absent | surprise (essential, §3.2) | skill; ADR-0100 | S (wire fact) + X (round-trip asymmetry example) |
 | R3 | All-optional kinds get presence-by-disjunction (presence = "necessary for carrying", not conformance) | surprise | ADR-0066 dated update | D (fold into the same statement as R1) |
-| R4 | Arity behaviour history: pre-D4 split (measured) vs post-D4 uniform (decided) — and Projection-alone **unpinned** (§4) | asymmetry risk (S4) | ADR-0146 Context (stale snapshot) vs M2b/M2c tests | X (pin Projection); D (mark the Context table historical via dated update) |
+| R4 | Arity behaviour history: pre-D4 split (measured) vs post-D4 uniform (decided). Projection-alone **pinned 2026-08-12**: it takes the first match; the Validator/Filter is the CH enforcement point (readback projection-surplus test; the skill's sentence corrected) | asymmetry (pinned) | the readback test; ADR-0146 Context (still a stale snapshot) | D (mark the Context table historical via dated update) — the X item landed |
 | R5 | A fat DTO spanning several components can only answer "is all of this here" — component DTOs must claim only their own slots for `Detect` to work | surprise | ADR-0146 update; `ecsdemo` | D + X (already half-covered by ecsdemo; consolidate). Benchmark note: B2's domain-owned narrow DTOs make the fat DTO an anti-pattern the mesh discourages structurally |
 | R6 | `string` fields are `CopyNone` — they alias the Arrow buffer; a DTO outliving released readers is a lifetime footgun that type-checks fine | **silent** (use-after-release) | scattered; where stated durably is **to be confirmed** during unification | X (a test demonstrating retain-record discipline) + D |
-| R7 | Arity widening over live data (fact 2's third consequence): the contract layer is widening-safe by construction (`Slot.Admits` with a superset admits-set accepts every old count) and required → optional is the same-shape safe rung — but every shape-crossing rung (scalar → container; scalar/`Option` → tuple) is **unpinned**: encodings differ (card lanes; one array-valued attribute vs N attributes) and no test writes narrow rows and reads them under a widened plan. Interaction: widening a kind's last *required* slot flips kind presence to disjunction (R3) — a kind-level semantic shift from a field-level edit | latent | this review; `mappingplan` (`Slot.Admits`) | X (an **arity-evolution corpus**: write narrow, read wide, one case per rung); D (state the monotone-evolution invariant once, in the contract's home); S (narrowing = breaking by design, loud via D4) |
+| R7 | Arity widening over live data (fact 2's third consequence), **pinned 2026-08-12** (`arity_evolution_test.go`): required → optional and unit → container both read narrow-written rows with their values, wide readers and narrow writers coexist in one table, and widening is admits-superset at the contract layer. The pin also surfaced a **new silent defect**: the reverse value-count direction — a container-written multi-element value under a unit definition — neither errors nor truncates; it decodes present with the field **zero-filled** (attribute-count narrowing stays loud, D4). The R3 disjunction interaction is pinned for the Option-widened kind in the readback suite | **silent** (narrowing rung, pinned as found) | `arity_evolution_test.go`; the readback projection-surplus test | API (unit read refuses a multi-element value — D4's spirit at the value level; small fix, own decision); D (state the monotone-evolution invariant once); the tuple rung of the corpus remains open |
 
 ### 5.4 Front-end and policy asymmetries (S2/S3 fringe)
 
@@ -454,8 +462,9 @@ that only works in the closed world must say so in its first sentence.
   how-to's stamp drift (§4) is exactly the class it would catch.
 - **X — executable documentation (S4, and the current-state home §4
   demands).** A failure-mode suite: one small test or worked example per
-  edge above (I1, I2-diagnosis, R1, R2, R4-pin, R6, R7's arity-evolution
-  rungs, W1-matrix if API-3 does not land), in the pattern of
+  edge above (I1, I2-diagnosis, R1, R2, R6, W1-matrix if API-3 does not
+  land; the R4 pin and R7's option/container rungs landed 2026-08-12 —
+  the tuple rung and the mesh centerpiece remain), in the pattern of
   `sharedsection` and the parity corpus. Benchmark addition: the suite's centerpiece should be the
   **missing main-scenario example** (§4) — registry-resolved ids over a
   shared table, one domain formulating a component late over rows written

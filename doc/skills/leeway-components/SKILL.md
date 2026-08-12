@@ -141,10 +141,14 @@ Corollaries of the per-plan regime:
   conformance is a separate question (the Validator artefact / `Detect`
   returning `Exact`).
 - **Arity is uniform on read** (ADR-0146 D4): a surplus attribute on a
-  claimed primary slot errors on every path — reflect, generated, and the
-  ClickHouse Presence/Validator/Projection artefacts, which derive from the
-  same `ReadContract`. (Before D4, scalars errored while containers silently
-  concatenated; that split is gone.)
+  claimed primary slot errors on both Go paths — reflect and generated —
+  and the ClickHouse lane refuses it in the **Validator** (so the Filter a
+  generated `Scan` embeds excludes the row); all derive from the same
+  `ReadContract`. The `Projection` artefact alone does **not** validate:
+  asked without its Filter it takes the first match (pinned by the
+  readback projection-surplus test), so a projection is only as
+  trustworthy as the Filter beside it. (Before D4, scalars errored while
+  containers silently concatenated; that split is gone.)
 - `Detect[T](readers, i)` returns `Absent | Approximate | Exact` without
   decoding values; `ReadComponent[T]` is `Detect` + projection;
   `ArchetypePresence` folds per-kind verdicts — an **archetype** is the set
