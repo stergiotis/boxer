@@ -29,6 +29,16 @@ status: draft
 > `Projection` alone takes the first match (confirmed), and value-count
 > narrowing silently zero-fills (a new finding) — are folded into §4 and
 > §5, and the components skill's arity sentence was corrected.
+>
+> Later the same day, a seam survey grounded §6's costings: API-1 is
+> ~150 LOC against exactly two production `MapLookup` sites (with a
+> naming-style hazard at the snapshot seam); API-3 as drafted missed
+> that the facts encoders bypass plans entirely and that the typed
+> lift's hidden scope is the entity-bag shape; and
+> `marshallreflect/doc.go`'s registry claim turned out aspirational.
+> The decisions — including a recut API-3 — now live in
+> [ADR-0183](../adr/0183-leeway-component-consumer-simplification.md);
+> this page remains the analysis record.
 
 # What stands between the leeway component model and its consumers?
 
