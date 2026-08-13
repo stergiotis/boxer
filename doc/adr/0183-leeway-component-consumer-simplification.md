@@ -53,6 +53,19 @@ of the page's assumptions:
   every later registration while the wire keeps the old ids. The
   sibling tag-value registry already takes its value explicitly at the
   call site; the natural-key registry is the outlier.
+- Cross-vocabulary disjointness in a shared table rides entirely on
+  distinct **effective** tag values, and nothing checks them. The three
+  cohabiting vocabularies sit at effective 1 (vdd — odd, despite
+  runtime/vocab's comment stating an effective-even convention), 2
+  (runtime), and 16 (capmap, a named base constant); the jsonbench app
+  vocabulary independently picked 2, colliding with runtime — latent
+  only because it shares no table. `VcsManagedContract` meanwhile
+  checks parity of the *declared* value, which is 0 in all four
+  packages. Three readings of "convention A" coexist; none is
+  enforced. Beyond minting, the pipeline treats ids as opaque uint64s
+  (no non-test use of `Split`/`SameTag`/`RemoveTag` anywhere in it);
+  the only other tag-structure consumer is `identity/identsql`,
+  ADR-0106 SD2's SQL half.
 
 ADR-0105 D3b's storegen resolver (registry ids baked into generated
 artifacts) is confirmed unbuilt; it gates the one worked example the
@@ -95,6 +108,15 @@ today's effective assignment: dump each registry via `IterateAll()`,
 splice each current value into its registration; wire bytes are
 untouched.
 
+The rule extends one level up: a vocabulary package's **effective tag
+value** — the partition that keeps cohabiting vocabularies disjoint in
+a shared table — is declared as one named constant per package
+(capmap's `TagValueBase` is the existing form), never assembled from
+an offset in one place and a relative zero in another. An explicit
+ordinal also inherits a per-registry ceiling — the body budget below
+the registry's tag (`GetMaxPossibleIdIncl`; 62 bits under vdd's
+two-bit tag) — which `AddTag`'s guard already makes loud.
+
 ### D1 — Registry-stable ids are the default; positional ids are marked closed-world (S1)
 
 - A vdd-side snapshot helper (working name `MembershipIdSnapshot()`)
@@ -122,10 +144,14 @@ untouched.
   vocabulary package defines which names appear — the helper's doc says
   so); no link set can change a value.
 - Each VCS-managed registry gains a committed **assignment golden** — a
-  test pinning every `(name, id)` pair. D0's init-time refusal catches
-  duplicates and reordering; the golden catches the remaining silent
-  case, editing an existing ordinal. Together they make the append-only
-  discipline mechanical rather than aspirational.
+  test pinning every `(name, id)` pair, where the pinned id is the
+  **composed tagged id**. D0's init-time refusal catches duplicates and
+  reordering; the golden catches the remaining silent case, editing an
+  existing ordinal; and one further test unions all goldens and asserts
+  global disjointness — pinned ids carry their tags, so a tag-value
+  collision between two vocabularies (the jsonbench/runtime duplicate
+  in the Context) surfaces there as an id collision. Together they make
+  the append-only discipline mechanical rather than aspirational.
 
 ### D2 — The storegen slice unblocks the mesh example (S1, ADR-0105 D3b)
 
@@ -149,7 +175,9 @@ and the gen test is the repo's proven lane.
   reader's resolved assignment vs the vocabulary of record, and
   `InspectLookup`'s "resolved but never carried" heuristic become SQL
   views over claim joins; the outer join (asserted vs used) is the
-  interesting one.
+  interesting one. Views that partition by tag (per-vocabulary lanes,
+  D8's runtime lane) use `identity/identsql` — ADR-0106 SD2's SQL
+  half, already consumed by the play vocabulary panel.
 - **Name governance (I4):** the vdd registry package remains the coinage
   chokepoint — names enter by PR to the vocabulary package, and the
   registry refuses duplicate coinage within a link set. The claims view
