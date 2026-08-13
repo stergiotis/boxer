@@ -337,6 +337,56 @@ func (inst *HumanReadableNamingConvention) ExtractCanonicalType(column common.Ph
 	return
 }
 
+// ExtractColumnRole returns the column's role. A plain column has no role
+// component and reports ColumnRoleUnspecific with no error.
+func (inst *HumanReadableNamingConvention) ExtractColumnRole(column common.PhysicalColumnDesc) (role common.ColumnRoleE, err error) {
+	var p positionData
+	p, err = getParseStructure(len(column.NameComponents))
+	if err != nil {
+		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to extract column role: %w", err)
+		return
+	}
+	if p.roleIndex < 0 {
+		role = common.ColumnRoleUnspecific
+		return
+	}
+	role, err = common.ParseColumnRole(column.NameComponents[p.roleIndex])
+	if err != nil {
+		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to parse column role: %w %w", err, ErrParseError)
+		return
+	}
+	return
+}
+
+// ExtractCoSectionGroup returns the column's co-section grouping key. A plain
+// column has no co-section-group component and reports the empty key.
+func (inst *HumanReadableNamingConvention) ExtractCoSectionGroup(column common.PhysicalColumnDesc) (key naming.Key, err error) {
+	var p positionData
+	p, err = getParseStructure(len(column.NameComponents))
+	if err != nil {
+		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to extract co-section group: %w", err)
+		return
+	}
+	if p.coSectionGroupIndex < 0 {
+		return
+	}
+	key = naming.Key(column.NameComponents[p.coSectionGroupIndex])
+	return
+}
+
+// ExtractStreamingGroup returns the column's streaming-group key (present in
+// both the plain and the tagged layout).
+func (inst *HumanReadableNamingConvention) ExtractStreamingGroup(column common.PhysicalColumnDesc) (key naming.Key, err error) {
+	var p positionData
+	p, err = getParseStructure(len(column.NameComponents))
+	if err != nil {
+		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to extract streaming group: %w", err)
+		return
+	}
+	key = naming.Key(column.NameComponents[p.streamingGroupIndex])
+	return
+}
+
 // CanonicalizeSchemaName re-styles the section-name and column-name
 // components of a physical column name to LowerSpinalCase — the same
 // transformation MakeStylableName applies when the IR is loaded from
