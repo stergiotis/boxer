@@ -219,6 +219,15 @@ func checkFamilies(enc encodingaspects.AspectSet, sem valueaspects.AspectSet, us
 // table row config, and the grouping keys. Zero value plus DefaultTableSegments
 // covers a fresh table; adopt a live table's pair via Resolver.TableSegments
 // so minted names re-parse into it, the way NameConditions does.
+//
+// The grouping keys are per-section, not table-wide: set them only when
+// every column minted through this Composer belongs to that co-section /
+// streaming group. Minting into a table whose sections carry differing
+// groups needs one Composer per group — a name with the wrong group segment
+// discovers as a different section. StreamingGroup applies to tagged lanes
+// and opaque plain columns; the other plain item types carry no streaming
+// segment (the discover direction rejects one), so PlainColumn ignores it
+// for them.
 type TableSegments struct {
 	Separator      string
 	TableRowConfig common.TableRowConfigE
@@ -327,9 +336,16 @@ func (inst *Composer) PlainColumn(columnName string, canonicalType string, token
 	if err != nil {
 		return
 	}
+	// Only opaque plain columns carry a streaming group; the discover
+	// direction rejects the segment on every other plain item type, so
+	// stamping it would mint a name the pass's own shape check refuses.
+	streamingGroup := inst.seg.StreamingGroup
+	if spec.Item != common.PlainItemTypeOpaque {
+		streamingGroup = ""
+	}
 	cc := common.IntermediateColumnContext{
 		Scope:          spec.Item.GetIntermediateColumnScope(),
-		StreamingGroup: inst.seg.StreamingGroup,
+		StreamingGroup: streamingGroup,
 		UseAspects:     useaspects.EmptyAspectSet,
 		PlainItemType:  spec.Item,
 	}
