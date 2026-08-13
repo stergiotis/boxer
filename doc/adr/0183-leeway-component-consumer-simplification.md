@@ -44,6 +44,15 @@ of the page's assumptions:
   entity bag: unbounded multi-contribution would force
   `option.Option[Kind]` to a slice, dragging the cache, `Archetype()`,
   decode, and ADR-0100 SD5.
+- The registry's own minting is registration-ordinal: a natural key's id
+  is `tag.ComposeId(offset + Len())` at package-init time
+  (`stopa/registry/lw_registry_nk.go`) — the positional regime S1
+  indicts, one altitude up — and nothing pins it: `VcsManagedContract`
+  validates only name shape and tag parity, and the vdd package carries
+  no tests, so a mid-file insertion or a file rename silently renumbers
+  every later registration while the wire keeps the old ids. The
+  sibling tag-value registry already takes its value explicitly at the
+  call site; the natural-key registry is the outlier.
 
 ADR-0105 D3b's storegen resolver (registry ids baked into generated
 artifacts) is confirmed unbuilt; it gates the one worked example the
@@ -54,6 +63,37 @@ landscape lacks — the mesh scenario itself.
 We adopt the following, attacking the four accidental drivers at their
 sites rather than documenting their symptoms. Working names are marked;
 final naming lands with the code.
+
+### D0 — Vocabulary ids are declared in source, never derived from initialization order (S1 at the mint)
+
+Implicit ordinal minting in the natural-key registry is replaced by
+explicit declaration: every registration in a VCS-managed registry
+states its untagged ordinal beside its name — protobuf-field-number
+style, and the parameter shape the sibling tag-value registry already
+has —
+
+```go
+MembDroneStatus = Reg.MustBegin("droneStatus", 17).End()
+```
+
+with the registry composing the tag as before. Duplicate ordinals or
+names are refused at init (loud in any test that links the package),
+and `VcsManagedContract` refuses the implicit form outright, so
+order-derived ids survive only in non-VCS-managed (test/ephemeral)
+registries. The `(name, ordinal)` pair becomes statically analyzable —
+greppable and reviewable in a diff exactly like a `const` block — and
+initialization order stops mattering: file renames, var reordering,
+and partial link sets can no longer change any value.
+Link-set-dependence thereby shrinks to **extent** — a partial link set
+yields fewer names, never different ids — and D2 already fails closed
+on missing names.
+
+Scope: all four VCS-managed registries — `keelson/vdd` (~140
+registrations across 14 files), `keelson/runtime/vocab`,
+`gov/capmapvocab`, and the jsonbench app vocabulary. Migration freezes
+today's effective assignment: dump each registry via `IterateAll()`,
+splice each current value into its registration; wire bytes are
+untouched.
 
 ### D1 — Registry-stable ids are the default; positional ids are marked closed-world (S1)
 
@@ -77,9 +117,15 @@ final naming lands with the code.
   leaf packages for a one-method interface).
 - `marshallreflect/doc.go`'s registry claim is corrected to describe
   what this ADR builds, not asserted as existing.
-- A snapshot is link-set-dependent (the registry populates by
-  package-init side effects); the helper's doc states that the linked
-  vocabulary package defines the snapshot's extent.
+- Under D0 a snapshot is link-set-dependent in extent only (the
+  registry still populates by package-init side effects, so the linked
+  vocabulary package defines which names appear — the helper's doc says
+  so); no link set can change a value.
+- Each VCS-managed registry gains a committed **assignment golden** — a
+  test pinning every `(name, id)` pair. D0's init-time refusal catches
+  duplicates and reordering; the golden catches the remaining silent
+  case, editing an existing ordinal. Together they make the append-only
+  discipline mechanical rather than aspirational.
 
 ### D2 — The storegen slice unblocks the mesh example (S1, ADR-0105 D3b)
 
@@ -117,6 +163,13 @@ and the gen test is the repo's proven lane.
 - The earlier DDL/table-comment assignment fingerprint is **killed**: it
   records vocabulary outside the data spine (fails B1) and its
   monotone-union comment is a write-time coordination point (fails B2).
+- Division of labor across D0/D1/D3: the goldens are the **preventive**
+  control, in VCS, before anything ships; the claims are the
+  **detective** control, in data, catching what ships anyway (stale
+  binaries, skipped tests, forks). Neither mints. The code is the sole
+  id authority — the store never allocates — and reconciliation
+  surfaces line items whose remedy is operational (rebuild, redeploy,
+  retire an assignment), never transactional.
 
 ### D4 — Write-path absorption: one buffering mechanism under all three spellings (S2)
 
@@ -213,13 +266,19 @@ and the gen test is the repo's proven lane.
   when built and gates nothing.
 - Deferred, with their kill-reasons above: storegen CLI (D2), domain
   namespacing (D3), generated-side roles (D6).
+- Runtime-coined memberships — names unknown at build time — are
+  outside this regime by construction: minting is compile-time, in
+  VCS. The even-tag convention leaves the odd tag space free, so a
+  future data-side minting regime could coexist without collision; it
+  is undesigned and would be its own ADR.
 
 ### Milestones
 
 - **M0 — value-arity refusal on every read path.** D5's fix; the pinned
   assertions move.
-- **M1 — registry-backed lookup seam.** D1: snapshot helper +
-  constructor + closed-world marking + `doc.go` correction.
+- **M1 — id-source hardening.** D0: explicit declaration, the freeze
+  migration, assignment goldens; D1: snapshot helper + constructor +
+  closed-world marking + `doc.go` correction.
 - **M2 — storegen slice.** D2: `FactsWrapper` id-source methods;
   `runtime/factsschema/storegen` + gen test.
 - **M3 — failure-mode corpus.** D7's X-class, centerpiece included.
@@ -236,6 +295,7 @@ M5 and M6 are independent of each other and may swap.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
+| `stopa/registry` natural-key API | explicit-ordinal registration; `VcsManagedContract` refuses implicit minting (D0) | four vocabulary packages rewrite registrations; assignment goldens |
 | `marshallreflect` exported API | constructor + minimal resolver interface added (D1); unit-read refusal (D5) | `doc.go` correction; arity tests |
 | vdd vocabulary package | snapshot helper added (D1); claim kind + publication (D3) | naming round-trip pin; reconciliation views |
 | `marshallgen` wrapper contract | `FactsWrapper` gains id-source methods (D2) | `runtime/factsschema/storegen` + gen test |
@@ -251,6 +311,16 @@ M5 and M6 are independent of each other and may swap.
 
 - **DDL/table-comment assignment fingerprint.** Killed: vocabulary
   outside the data spine (B1), write-time coordination point (B2).
+- **`iota` in a single const block (for D0).** Rejected: it fixes the
+  cross-file fragility but keeps positional derivation — a mid-block
+  insertion still silently renumbers everything below; explicit
+  ordinals are equally legible and strictly more robust.
+- **Content-derived ids (name hash).** Rejected: order-independent but
+  opaque to humans, needs collision management, and renumbers the
+  entire existing wire history.
+- **A vocabulary manifest + codegen.** Deferred: the same properties as
+  D0 with more machinery; revisit only if vocabulary scale outgrows
+  hand-maintained Go source.
 - **Split API-3 — buffer-and-facts only, defer the typed-store lift.**
   Rejected in dialogue: leaves the consumer surface a trichotomy
   indefinitely; the one-per-kind scoping (D4) removes the hidden scope
@@ -301,31 +371,40 @@ M5 and M6 are independent of each other and may swap.
 
 ## Migration — Tier 1
 
-- **Breaks.** Double-Add of one kind: silent `raw = true` fallback
+- **Breaks.** Implicit registration on a VCS-managed registry: refused
+  at init (D0). Double-Add of one kind: silent `raw = true` fallback
   becomes an error. Mixing `Raw()` with typed Adds in one entity frame:
   refused. Multi-element values under unit-shaped slots: read error on
   all paths (previously silent zero-fill). `DefaultClassifier`:
   deprecated alias.
-- **Path.** Callers composing kinds via `Raw()` move to typed Adds once
-  M6 lands (the reason Raw was needed disappears); pure-raw entities are
-  untouched. No known writer produces multi-element-under-unit rows;
-  any that surfaces reads the D5 error and fixes its plan arity.
+- **Path.** The four vocabulary packages freeze today's assignment
+  (dump via `IterateAll()`, splice each value into its registration);
+  `Memb*` references and resolved values are unchanged, so no consumer
+  code moves. Callers composing kinds via `Raw()` move to typed Adds
+  once M6 lands (the reason Raw was needed disappears); pure-raw
+  entities are untouched. No known writer produces
+  multi-element-under-unit rows; any that surfaces reads the D5 error
+  and fixes its plan arity.
 - **Regeneration.** `recordstore` stores and DML artifacts regenerate
   (48 `*.out.go`); factsschema regen lane runs for the claim kind; no
-  FFI boundary is involved.
+  FFI boundary is involved. D0 regenerates nothing — resolved values
+  are identical, so checked-in codecs stay byte-stable.
 - **Old shape.** Raw-fallback and zero-fill behaviours are removed
   outright; positional ids are kept indefinitely as the marked
   closed-world regime.
 
 ## Verification plan — Tier 1
 
-- **Lane.** Default `go test`: naming round-trip pin over the full
+- **Lane.** Default `go test`: the per-registry assignment goldens and
+  init-time duplicate refusal (D0), naming round-trip pin over the full
   registry (D1), `arity_evolution_test.go` with moved assertions (D5),
   `sharedsection` round-trip and the parity corpus (D4), the storegen
   gen test (D2), the failure-mode corpus (D7). CH-backed behaviour:
   the clickhouse-local readback suite (D5's validator rung) and the
   `//go:build integration` lane for D3's reconciliation views.
-- **What would fail.** A snapshot whose keys miss the DTO spelling fails
+- **What would fail.** An edited ordinal fails the assignment golden; a
+  duplicate fails init in every test linking the package; a snapshot
+  whose keys miss the DTO spelling fails
   the round-trip pin; a regression to silent zero-fill fails the moved
   arity assertions; buffered flush diverging between front-ends fails
   the parity corpus; a store generated without a registry-stable source
