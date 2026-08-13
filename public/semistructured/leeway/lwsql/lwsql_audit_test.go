@@ -72,6 +72,23 @@ func TestAuditQueries_NonRepeatingMembershipIsAnInstanceLane(t *testing.T) {
 	require.Contains(t, queries[0].SQL, `length("`+lr+`")`)
 }
 
+// TestAuditQueries_UnderscoreSeparator: a dumped ('_'-separated) table's
+// names classify through the same sniff the resolver uses.
+func TestAuditQueries_UnderscoreSeparator(t *testing.T) {
+	seg := DefaultTableSegments()
+	seg.Separator = "_"
+	c, err := NewComposer(seg)
+	require.NoError(t, err)
+	v, err := c.TaggedValueColumn("sym", "v", "s", nil)
+	require.NoError(t, err)
+	m, err := c.MembershipColumn("sym", "low-card-ref")
+	require.NoError(t, err)
+	queries, err := AuditQueries("t", []string{v, m})
+	require.NoError(t, err)
+	require.Len(t, queries, 1)
+	require.Contains(t, queries[0].SQL, `length("`+m+`")`)
+}
+
 // runAuditLocal executes DDL+INSERT+audit statements through
 // clickhouse-local, returning one output line per audit query.
 func runAuditLocal(t *testing.T, script string) []string {

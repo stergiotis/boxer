@@ -218,6 +218,61 @@ func TestSupportColumn_Rejections(t *testing.T) {
 	require.ErrorContains(t, err, "unknown support role")
 }
 
+// TestComposer_AllChannelsRoundTrip: every non-mixed channel mints a
+// membership lane and its card lane, and the pair re-discovers together with
+// a value column — the parametrized channels included.
+func TestComposer_AllChannelsRoundTrip(t *testing.T) {
+	channels := map[string]string{
+		"low-card-ref":               "lrcard",
+		"low-card-verbatim":          "lvcard",
+		"low-card-ref-parametrized":  "lpcard",
+		"high-card-ref":              "hrcard",
+		"high-card-verbatim":         "hvcard",
+		"high-card-ref-parametrized": "hpcard",
+	}
+	conv, err := ddl.NewHumanReadableNamingConvention(":")
+	require.NoError(t, err)
+	for channel, cardRole := range channels {
+		t.Run(channel, func(t *testing.T) {
+			c, err := NewComposer(DefaultTableSegments())
+			require.NoError(t, err)
+			v, err := c.TaggedValueColumn("s", "v", "s", nil)
+			require.NoError(t, err)
+			m, err := c.MembershipColumn("s", channel)
+			require.NoError(t, err)
+			card, err := c.SupportColumn("s", cardRole)
+			require.NoError(t, err)
+			_, _, err = conv.DiscoverTableFromColumnNames([]string{v, m, card})
+			require.NoError(t, err, "channel %s does not round-trip", channel)
+		})
+	}
+
+	// Mixed value lanes are not per-column authorable (ADR-0181 §SD8), but
+	// their shared card lanes are.
+	c, err := NewComposer(DefaultTableSegments())
+	require.NoError(t, err)
+	for _, role := range []string{"lmrcard", "lmvcard"} {
+		_, err = c.SupportColumn("s", role)
+		require.NoError(t, err, role)
+	}
+}
+
+// TestComposer_SectionNameFolding: differently-spelled section and column
+// names fold to one canonical spelling in the minted physical name.
+func TestComposer_SectionNameFolding(t *testing.T) {
+	c, err := NewComposer(DefaultTableSegments())
+	require.NoError(t, err)
+	v, err := c.TaggedValueColumn("geoPoint", "pointLat", "f64", nil)
+	require.NoError(t, err)
+	require.Contains(t, v, "tv:geo-point:point-lat:")
+	m, err := c.MembershipColumn("geo_point", "low-card-ref")
+	require.NoError(t, err)
+	conv, err := ddl.NewHumanReadableNamingConvention(":")
+	require.NoError(t, err)
+	_, _, err = conv.DiscoverTableFromColumnNames([]string{v, m})
+	require.NoError(t, err, "spellings must fold to one section")
+}
+
 func TestResolver_TableSegments(t *testing.T) {
 	names := buildKnownNames(t)
 	r := newTestResolver(names)
