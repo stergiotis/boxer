@@ -29,13 +29,21 @@ more expensive than it looks. Pipe syntax is pure sugar — the server lowers
 each stage into a nested subquery and the resulting AST is identical to the
 hand-written nested form — so boxer needs no new IR, no new scope model, and
 no new AST node kinds. What it needs is one lexer token, a suffix rule in
-grammar1, and one lowering pass; after that every existing pass, the
-CST→AST converter, and play's panels work on pipe queries unchanged. Going
-the other way (nested → pipe) is a partial function, not a total one, and is
-best built as a second unparser over the existing AST rather than as a token
-rewriter. Visualisation is well-positioned because play's Flow panel already
-computes the clause-level dataflow that a pipe chain is a linear notation
-for.
+grammar1, and one lowering — after which every existing pass, the CST→AST
+converter, and play's panels work on pipe queries unchanged. Going the other
+way (nested → pipe) is a partial function, not a total one, and its dangers
+all come from *writing the result back*; rendered as a read-only view it
+stops being a third goal and becomes part of the third. Visualisation is
+well-positioned because play's Flow panel already computes the clause-level
+dataflow that a pipe chain is a linear notation for.
+
+Two conclusions were reached after the first draft and are worked out in §7:
+boxer should prefer **not to own the lowering semantics** on any path where
+being wrong yields wrong results — `clickhouse-local` can be used as the
+vendor's own lowering oracle, and the repo already has the worker pool for it
+(ADR-0028). And the **smallest useful change is much smaller than the first
+milestone**: the lexer token alone, with no parser rule, fixes two of the
+three current-behaviour defects in §2.
 
 ## 1. What the feature is
 
@@ -269,14 +277,17 @@ Properties: idempotent (a lowered query has no `|>` left), `Reads`/`Writes`
 = `Body`, `Produces` a no-pipes form tag. Verifiable by `AssertProperties`
 against the upstream corpus.
 
-One design consequence is worth stating plainly because it is what makes the
-whole feature usable before 26.8 is deployed anywhere: **if boxer lowers by
-default and only sends raw pipe SQL when explicitly opted in, pipe queries
-run against today's servers.** The parse-and-lower path needs no server
-support at all. A version gate is then needed only for the opt-in
-pass-through — and nothing in `public/db/clickhouse` or `apps/play` currently
-reads `version()`, so that gate does not exist yet and would have to be
-built.
+Lowering in Go has an attractive property — **pipe queries would run against
+pre-26.8 servers**, since the parse-and-lower path needs no server support at
+all — and one sharp danger that property tends to obscure: a hand-written
+lowering is a **semantic reimplementation of a vendor feature**. If boxer's
+lowering disagrees with the server's on any detail (`AGGREGATE`'s
+grouping-columns-first output order, `WHERE`-after-`AGGREGATE` becoming
+`HAVING`, where a mid-chain `SETTINGS` binds), and boxer sends the lowered
+text, the user gets **wrong results with no error**. That is a worse failure
+mode than anything else in this note. §7 costs the alternatives; the
+conclusion there is that boxer should prefer *not* to own the lowering
+semantics on the execution path.
 
 ## 5. Goal (b) — rewriting ordinary queries into pipe form
 
@@ -336,6 +347,10 @@ the light cut and record the deferral rather than gate on the hardest part.
 A pure round-trip property gives the raiser trustworthiness without a server:
 `raise` then `lower` must equal `canonicalize` of the original.
 
+Nothing upstream can be borrowed here, and the reason is structural — see
+§7. It is also §7's argument that the comment-loss and stored-artifact
+dangers disappear entirely if the raised form is only ever *displayed*.
+
 ## 6. Goal (c) — visualisation
 
 The observation that makes this cheap: play's Flow panel (ADR-0153,
@@ -377,7 +392,86 @@ One thing to keep separate: play's reactive query graph (ADR-0097) is
 node-level, and pipe stages are intra-node. Merging them would muddle the
 graph's shape-reject semantics. Stages should stay a within-node concern.
 
-## 7. Verification
+## 7. Buy or build — what can come from ClickHouse
+
+Measured 2026-08-13 against the locally installed `clickhouse-local`
+**26.7.3.19**, i.e. one release short of the feature:
+
+```
+$ clickhouse-local --query "SELECT number FROM numbers(3) |> WHERE number > 0"
+Code: 62. DB::Exception: Syntax error: failed at position 31 (|) … (SYNTAX_ERROR)
+
+$ clickhouse-local --query "EXPLAIN SYNTAX oneline=1 SELECT * FROM
+    (SELECT number AS n FROM numbers(10) WHERE number % 3 = 0) ORDER BY n DESC LIMIT 2"
+SELECT * FROM (SELECT number AS n FROM numbers(10) WHERE equals(modulo(number, 3), 0))
+  ORDER BY n DESC LIMIT 2
+```
+
+So the version boundary is exactly 26.8, and `EXPLAIN SYNTAX` already works
+as an unparse oracle **locally, with no server**. That matters because the
+repo already owns the plumbing to use it: ADR-0028's pre-spawned
+`clickhouse-local` worker pool
+([`queryengine/chlocal`](../../public/keelson/runtime/queryengine/chlocal/),
+`chlocalpool`, `chlocalbroker`), built precisely for low-latency local SQL.
+
+Taking the three goals in turn:
+
+**Lowering (pipe → nested) — largely buyable.** Point a 26.8
+`clickhouse-local` worker at `EXPLAIN SYNTAX oneline = 1 <pipe query>` and the
+vendor's own lowering comes back. This removes the §4.3 danger outright:
+boxer never owns the semantics, so it cannot disagree with them. The costs
+are a worker round trip (tens of ms, versus ~µs for an in-process pass), a
+26.8 binary as a new floor for that path, and the fact that `EXPLAIN SYNTAX`
+also canonicalises function calls (`number % 3` came back as
+`equals(modulo(number, 3), 0)`) — which happens to align with what
+`CanonicalizeFull` wants anyway. A sound arrangement is two tiers, mirroring
+the split `highlight` already uses: a fast in-process lowering for editing
+and analysis, where being wrong costs a wrong *picture*; the chlocal oracle
+before anything executes or is stored, where being wrong costs wrong
+*results*. If the deployed server is 26.8, the cheapest correct option is
+simply to **send the user's original text and let the server lower it**.
+
+**Raising (nested → pipe) — not buyable, and structurally cannot be.**
+Upstream states the pipe form produces an AST identical to the nested
+spelling, so the pipe structure is **destroyed at parse time**. Everything
+that unparses — `formatQuery`, `clickhouse-format`, `EXPLAIN SYNTAX` — walks
+that AST and can therefore only emit the nested form. (Inference from the PR
+plus formatter behaviour, not measured: no 26.8 binary was available.) No
+upstream conversion feature exists or appears planned. Two consequences:
+if boxer wants nested → pipe it must build it, and — the sharper one —
+**any path that normalises SQL through the server silently un-pipes it.**
+Query-cache keys, `QueryRun`-as-facts pins, applet bodies stored after a
+formatting round trip: each is a place where a user's pipe query could come
+back as nested. Worth auditing before, not after.
+
+**Visualisation — nothing to buy, and nothing needed.** ClickHouse ships no
+query-shape visualiser boxer could consume.
+
+### Value against danger
+
+| Goal | Value | Danger | Buyable? |
+| --- | --- | --- | --- |
+| (a) parse | High, but **defensive** — stops mishandling input that arrives anyway | Lowering is a semantic reimplementation (§4.3); grammar1 is load-bearing for the whole repo, so every consumer pays for DFA growth (ADR-0084); reserving `AGGREGATE` would break existing bare aliases | Lowering: mostly. Parsing: no — per-keystroke analysis cannot shell out |
+| (b) raise | Lowest per unit of risk — pipe form is only easier to read for genuinely multi-stage queries | Cosmetic change with semantic risk; comment loss; the temptation to bulk-rewrite stored artifacts (applet books, ADR examples) for zero functional gain | No — and no prospect of it |
+| (c) visualise | Highest per unit of risk, and the only **differentiated** one | Essentially none: read-only. Per-stage cardinality costs *N* queries, so cap it behind an explicit action | No — and none needed |
+
+Two observations follow, and they are the practical ones:
+
+- **The smallest useful slice is much smaller than M0.** Adding the lexer
+  token *alone*, with no parser rule, fixes two of the three §2 symptoms:
+  `HighlightLex` regains contiguity, so the `|>` glyphs stop vanishing from
+  CodeView, and the parse failure becomes an honest parser error instead of a
+  lexer error that mangles the token stream. Roughly ten lines across three
+  files. Classification stays `KindUnknown` until the grammar lands.
+- **Goal (b) is better framed as a lens than as a rewriter.** Every danger in
+  its row above comes from *writing the pipe form back* — into the user's
+  buffer, into a stored applet, into a commit. Rendered as a read-only view
+  next to the original, comment loss stops mattering, no artifact changes,
+  and a mistake is a wrong picture rather than a wrong query. play already
+  has the vocabulary for this (`play_flow_lens.go`, the EXPLAIN lens seam).
+  Framed that way (b) stops being a third goal and becomes part of (c).
+
+## 8. Verification
 
 - **Upstream's own test file is a ready-made conformance corpus.**
   `04613_pipe_operators.sql` holds roughly 110 statements, including negative
@@ -392,7 +486,7 @@ graph's shape-reject semantics. Stages should stay a within-node concern.
 - **Raiser round trip** — `raise ∘ lower == canonicalize`, pure, no server.
 - **`AssertProperties`** for both new passes against the corpus.
 
-## 8. Risks and open questions
+## 9. Risks and open questions
 
 - **26.8 is not released and the repo has no server-version detection.**
   Measured: no `version()` read anywhere under `public/db/clickhouse` or
@@ -410,7 +504,7 @@ graph's shape-reject semantics. Stages should stay a within-node concern.
   ([`apps/sqlapplet/`](../../apps/sqlapplet/)) should be allowed to author
   pipe SQL. Both are downstream of the parser landing and can wait.
 
-## 9. A possible cut
+## 10. A possible cut
 
 Ordered so that each milestone is independently useful and none gates on the
 hardest part of the next.
