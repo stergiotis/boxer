@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-13
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0181: leeway DQL authoring surface — contracts, constructors, extraction sugar
 
@@ -367,7 +364,14 @@ what it expands *into* is.
 
 ## Status
 
-Proposed — awaiting review by p@stergiotis.
+Accepted 2026-08-13.
+
+- **M0 — SD1: the three contracts and transform patterns as normative docs; skills pointers.**
+- **M1 — SD6: `lwsql` spec→name seam and token parsing; `leeway ddl compose`.**
+- **M2 — SD2+SD7: `LwConstructExpand`; standard-set registration; client vocabulary entries.**
+- **M3 — SD5: `LwShapeCheck` and the audit-query generator.**
+- **M4 — SD4: skip-index emission policy over `TableOptions`.**
+- **M5 — SD3: shared extraction builder and `LwExtractExpand` — blocked until ADR-0171 §SD2's version handshake lands.**
 
 The options considered for each naming and scoping choice, and their
 kill-reasons, are recorded in
