@@ -89,10 +89,21 @@ func lexHighlight(sql string) (spans []Span) {
 		}
 
 		text := tok.GetText()
+		// Characters the lexer cannot recognise produce no token at all: it
+		// reports an error (nobody is listening — highlighting never fails)
+		// and skips them, so the cursor has to catch up to the next token's
+		// start. Claim the skipped bytes as a span of their own, or they
+		// would be absent from the output and break the coverage contract —
+		// a CodeViewJob draws only the bytes some section covers, so an
+		// unclaimed byte silently loses its glyph.
+		skipped := byteOff
 		for runeOff < tok.GetStart() && byteOff < len(sql) {
 			_, sz := decodeRune(sql[byteOff:])
 			byteOff += sz
 			runeOff++
+		}
+		if byteOff > skipped {
+			spans = append(spans, unrecognisedSpan(sql, skipped, byteOff))
 		}
 		start := byteOff
 		stop := byteOff + len(text)
@@ -109,7 +120,30 @@ func lexHighlight(sql string) (spans []Span) {
 		})
 	}
 
+	// Unrecognised characters at the very end have no following token to
+	// trigger the catch-up above.
+	if byteOff < len(sql) {
+		spans = append(spans, unrecognisedSpan(sql, byteOff, len(sql)))
+	}
+
 	return
+}
+
+// unrecognisedSpan covers bytes the lexer refused, categorised as CatPlain.
+// CatPlain is the documented fallback and is what classifyTokenType already
+// returns for recognised-but-unclassified tokens, so no consumer needs to
+// learn a new category — notably [github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview]
+// indexes its palette by category into a fixed-size array, where an unknown
+// value would panic at render rather than fail a build. If a consumer ever
+// wants to mark these visually, that is a new category plus a palette entry,
+// not a change here.
+func unrecognisedSpan(sql string, start, stop int) Span {
+	return Span{
+		Start:    start,
+		Stop:     stop,
+		Text:     sql[start:stop],
+		Category: CatPlain,
+	}
 }
 
 // decodeRune is a minimal UTF-8 size decoder (we only need the byte width).
@@ -210,9 +244,18 @@ func classifyTokenType(tokenType int, channel int) CategoryE {
 // --- Phase 2: Semantic refinement ---
 
 // buildTokenToSpanMap pairs parser tokens with lexer spans. Both sequences
-// come from the same lexer over the same input, so they line up 1:1 in
-// order — a single parallel sweep suffices (the spans carry byte offsets,
-// the tokens rune offsets, so offsets cannot be compared directly).
+// come from the same lexer over the same input, so a single parallel sweep
+// suffices (the spans carry byte offsets, the tokens rune offsets, so
+// offsets cannot be compared directly).
+//
+// The two line up 1:1 whenever this runs, but not by construction:
+// [lexHighlight] also emits a span per run of unrecognised bytes. Those
+// appear only when the lexer errored, which makes
+// [github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass.Parse] fail,
+// so [Highlight] has already taken its lexical-only fallback and never
+// reaches here. The text check keeps that reasoning from being load-bearing:
+// an unpaired span is skipped rather than shifting every subsequent token
+// onto the wrong span.
 func buildTokenToSpanMap(pr *nanopass.ParseResult, spans []Span) (tokenToSpan map[int]int) {
 	tokenToSpan = make(map[int]int, len(spans))
 	spanIdx := 0
@@ -220,6 +263,9 @@ func buildTokenToSpanMap(pr *nanopass.ParseResult, spans []Span) (tokenToSpan ma
 		tok := pr.TokenStream.Get(j)
 		if tok.GetTokenType() == antlr.TokenEOF {
 			break
+		}
+		for spanIdx < len(spans) && spans[spanIdx].Text != tok.GetText() {
+			spanIdx++
 		}
 		if spanIdx >= len(spans) {
 			break

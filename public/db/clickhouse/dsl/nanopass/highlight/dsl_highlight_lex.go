@@ -8,9 +8,14 @@ package highlight
 //
 // It never parses, so the cost stays per-keystroke affordable (measured
 // ~26 µs for a 180 B statement, ~280 µs for 2.5 KB; roughly linear). This is
-// the span source for the ADR-0130 editor path. Spans cover the input
-// contiguously in source order, whitespace and comments included; semantic
-// categories (table/column/alias/CTE names) are out of reach here and remain
+// the span source for the ADR-0130 editor path.
+//
+// Spans cover the input contiguously in source order for **arbitrary** input,
+// whitespace and comments included. Characters the lexer cannot recognise —
+// `|>`, `#`, `@`, `~`, `^`, `&` and friends — yield no token, and are covered
+// by a CatPlain span rather than being dropped; a consumer that does not
+// gap-fill would otherwise lose their glyphs silently. Semantic categories
+// (table/column/alias/CTE names) are out of reach here and remain
 // [Highlight]'s job.
 func HighlightLex(sql string) (spans []Span) {
 	spans = lexHighlight(sql)
