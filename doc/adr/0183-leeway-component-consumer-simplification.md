@@ -65,7 +65,14 @@ of the page's assumptions:
   enforced. Beyond minting, the pipeline treats ids as opaque uint64s
   (no non-test use of `Split`/`SameTag`/`RemoveTag` anywhere in it);
   the only other tag-structure consumer is `identity/identsql`,
-  ADR-0106 SD2's SQL half.
+  ADR-0106 SD2's SQL half. The allocation is also inverted: vdd's ~140
+  names sit on effective tag value 1 — the single two-bit prefix, whose
+  62-bit body is the scheme's widest — while the actual wide-body
+  constituency (the `identity/identgen` runtime generators:
+  badger-sequenced, leased, in-memory) competes for the same scarce
+  short prefixes; the tag-planning layer that would size them
+  (`identity/fibonacci`, ADR-0106 SD4) exists and is unused by every
+  vocabulary package.
 
 ADR-0105 D3b's storegen resolver (registry ids baked into generated
 artifacts) is confirmed unbuilt; it gates the one worked example the
@@ -103,19 +110,51 @@ on missing names.
 
 Scope: all four VCS-managed registries — `keelson/vdd` (~140
 registrations across 14 files), `keelson/runtime/vocab`,
-`gov/capmapvocab`, and the jsonbench app vocabulary. Migration freezes
-today's effective assignment: dump each registry via `IterateAll()`,
-splice each current value into its registration; wire bytes are
-untouched.
+`gov/capmapvocab`, and the jsonbench app vocabulary. Migration keeps
+today's ordinals (dump each registry via `IterateAll()`, splice each
+current ordinal into its registration); an explicit ordinal also
+inherits a per-registry ceiling — the body budget below the registry's
+tag — which `AddTag`'s guard already makes loud.
 
-The rule extends one level up: a vocabulary package's **effective tag
-value** — the partition that keeps cohabiting vocabularies disjoint in
-a shared table — is declared as one named constant per package
-(capmap's `TagValueBase` is the existing form), never assembled from
-an offset in one place and a relative zero in another. An explicit
-ordinal also inherits a per-registry ceiling — the body budget below
-the registry's tag (`GetMaxPossibleIdIncl`; 62 bits under vdd's
-two-bit tag) — which `AddTag`'s guard already makes loud.
+The rule extends one level up, and gains an authority: **tag values
+are claimed, not constructed**. A claiming API beside the tag
+machinery (working name `identifier.MustClaimTagValue(name, value)`)
+is the only source of the unforgeable token the stopa registry
+constructors accept — no claim, no registry, so the fence is the type
+system, not convention. The value stays in the consumer, one literal
+at the claim site (never assembled from an offset in one place and a
+relative zero in another); the provider checks **uniqueness**
+(duplicate value or name refused at init) and **fit** — the claimed
+value's width class must suit the family's declared cardinality, via
+the tag-planning layer built for exactly this
+(`identity/fibonacci`, ADR-0106 SD4: `SelectFittingTagValueRange`,
+`WidthClass`). The per-package `TagValueRegistry` instances dissolve
+into the claim authority, and "convention A"'s parity check retires
+with them. Claim-time uniqueness is per link set, like every
+init-populated registry; the goldens make it total — the D1 union
+test reads the committed golden files, so no link set can hide a
+collision.
+
+**Vocabulary tags move to the width-32 class.** Today's allocation is
+inverted (see Context): the smallest families hold the widest bodies.
+All four vocabulary packages re-key to claimed values from the class
+of tag values whose fibonacci code spends exactly 32 bits
+(`WidthClass(32)` in the plan layer) — a uniform 32/32 tag/body split
+for every vocabulary. That buys: 32 body bits (~4·10⁹ ids) per
+vocabulary; a large pool of claimable tag values in the class (the
+plan layer's `TagValueCount` states it exactly); one constant split
+width for `identsql` views and `SameTag` mask compares; and symmetry
+with D8, whose reserved runtime tag is this same class's maximum.
+Exact legible values are pinned at M1 with the goldens. The move
+frees the short prefixes for high-cardinality families (`identgen`)
+and kills the jsonbench/runtime duplicate en passant. This re-keys every composed
+membership id — a **breaking data change**, taken deliberately in the
+pre-first-consumer window (the ADR-0182 precedent: run the breaking
+pass while the window is open). The code side is nearly free: the
+facts codecs and `factswrapper` resolve ids at package init, so a
+rebuild carries them, and no generation-baked ids exist yet (D2 lands
+after). Existing facts data is regenerated or migrated with the
+re-key; once claims are live, D3 flags any straggler binary.
 
 ### D1 — Registry-stable ids are the default; positional ids are marked closed-world (S1)
 
@@ -296,8 +335,8 @@ and the gen test is the repo's proven lane.
   namespacing (D3), generated-side roles (D6).
 - Runtime- and roundtrip-minted ids get a **reserved tag, decided
   here**: one designated large-value tag (working name
-  `RuntimeMintTagValue`), a named constant in `identity/identifier`,
-  pinned by a test beside the assignment goldens. Purpose: ids assigned
+  `RuntimeMintTagValue`), claimed through D0's authority like every
+  other tag value and pinned by a test beside the assignment goldens. Purpose: ids assigned
   outside VCS — memberships coined at runtime (names unknown at build
   time, e.g. ingested foreign vocabularies) and roundtrip/passthrough
   cases where data-carried names need local ids that survive
@@ -311,8 +350,9 @@ and the gen test is the repo's proven lane.
   carries meaning, not safety — and "convention A"'s even/odd parity
   rule is recorded as a pre-0106 legacy heuristic superseded by this
   named fence. Proposed value: the largest tag value whose fibonacci
-  code still leaves 32 body bits — a legible 32/32 tag/body split,
-  ~4·10⁹ runtime ids — computed and pinned at M1. The allocator itself
+  code still leaves 32 body bits — the maximum of the same width-32
+  class D0 assigns to vocabularies, a legible 32/32 split, ~4·10⁹
+  runtime ids — computed and pinned at M1. The allocator itself
   (who assigns bodies; how independent writers stay collision-free)
   remains deferred to its own ADR.
 
@@ -320,8 +360,9 @@ and the gen test is the repo's proven lane.
 
 - **M0 — value-arity refusal on every read path.** D5's fix; the pinned
   assertions move.
-- **M1 — id-source hardening.** D0: explicit declaration, the freeze
-  migration, assignment goldens; D1: snapshot helper + constructor +
+- **M1 — id-source hardening.** D0: claim authority, explicit ordinals
+  (kept at today's values), the vocabulary-tag re-key — one flag-day —
+  and the assignment goldens; D1: snapshot helper + constructor +
   closed-world marking + `doc.go` correction.
 - **M2 — storegen slice.** D2: `FactsWrapper` id-source methods;
   `runtime/factsschema/storegen` + gen test.
@@ -341,6 +382,7 @@ M5 and M6 are independent of each other and may swap.
 | --- | --- | --- |
 | `stopa/registry` natural-key API | explicit-ordinal registration; `VcsManagedContract` refuses implicit minting (D0) | four vocabulary packages rewrite registrations; assignment goldens |
 | `identity/identifier` tag space | named runtime-mint tag reserved; `VcsManagedContract` refuses it (D8) | reservation pin test; D3 views partition by tag |
+| tag-value claim authority | claiming API added; token required by stopa registries; parity check and per-package `TagValueRegistry` instances retired (D0) | four vocabulary packages re-key to narrow-body claims; facts data regenerated/migrated |
 | `marshallreflect` exported API | constructor + minimal resolver interface added (D1); unit-read refusal (D5) | `doc.go` correction; arity tests |
 | vdd vocabulary package | snapshot helper added (D1); claim kind + publication (D3) | naming round-trip pin; reconciliation views |
 | `marshallgen` wrapper contract | `FactsWrapper` gains id-source methods (D2) | `runtime/factsschema/storegen` + gen test |
@@ -371,6 +413,14 @@ M5 and M6 are independent of each other and may swap.
   prefix-free codes parity carries no structural meaning, and a
   meaning-bearing reservation must be named, not inferred from a
   numeric property.
+- **Goldens without a claiming authority.** Rejected: goldens detect a
+  collision after the fact; waterproof means a vocabulary registry
+  cannot exist without a checked claim — prevention at the type level.
+- **Keeping vocabularies on their small tag values.** Rejected: it
+  spends the scheme's shortest prefixes (widest bodies) on its
+  smallest families while `identgen`'s high-cardinality generators
+  need them, and the jsonbench/runtime duplicate shows the hand-picked
+  regime does not even stay disjoint.
 - **Split API-3 — buffer-and-facts only, defer the typed-store lift.**
   Rejected in dialogue: leaves the consumer surface a trichotomy
   indefinitely; the one-per-kind scoping (D4) removes the hidden scope
@@ -411,6 +461,9 @@ M5 and M6 are independent of each other and may swap.
 - Rows that previously decoded (multi-element under unit) now error —
   the point of D5, but any undiscovered writer of that shape breaks
   loudly at read.
+- Every composed membership id changes once (the vocabulary-tag
+  re-key) — a deliberate break taken while the window is open; facts
+  data regenerates or migrates with it.
 - API-2 decided now means implementation may surface refinements; they
   land as dated updates rather than a fresh design round.
 
@@ -422,31 +475,40 @@ M5 and M6 are independent of each other and may swap.
 ## Migration — Tier 1
 
 - **Breaks.** Implicit registration on a VCS-managed registry: refused
-  at init (D0). Double-Add of one kind: silent `raw = true` fallback
+  at init (D0). The vocabulary-tag re-key changes every composed
+  membership id: facts data written under the old tags predates the
+  new assignment (D0). Double-Add of one kind: silent `raw = true` fallback
   becomes an error. Mixing `Raw()` with typed Adds in one entity frame:
   refused. Multi-element values under unit-shaped slots: read error on
   all paths (previously silent zero-fill). `DefaultClassifier`:
   deprecated alias.
-- **Path.** The four vocabulary packages freeze today's assignment
-  (dump via `IterateAll()`, splice each value into its registration);
-  `Memb*` references and resolved values are unchanged, so no consumer
-  code moves. Callers composing kinds via `Raw()` move to typed Adds
+- **Path.** The four vocabulary packages keep today's ordinals (dump
+  via `IterateAll()`, splice each into its registration) and claim
+  narrow-body tag values; ordinal explication, the re-key, and the
+  goldens ship as one flag-day in M1. `Memb*` references are unchanged
+  and every codec resolves at init, so a rebuild carries the code
+  side; facts tables are regenerated (introspection-derived facts
+  recompute) or migrated in the same window. Callers composing kinds via `Raw()` move to typed Adds
   once M6 lands (the reason Raw was needed disappears); pure-raw
   entities are untouched. No known writer produces
   multi-element-under-unit rows; any that surfaces reads the D5 error
   and fixes its plan arity.
 - **Regeneration.** `recordstore` stores and DML artifacts regenerate
   (48 `*.out.go`); factsschema regen lane runs for the claim kind; no
-  FFI boundary is involved. D0 regenerates nothing — resolved values
-  are identical, so checked-in codecs stay byte-stable.
+  FFI boundary is involved. The tag re-key changes resolved values but
+  no checked-in artifact: codecs and `factswrapper` resolve at init, so
+  the `*.out.go` files stay byte-stable and a rebuild suffices.
 - **Old shape.** Raw-fallback and zero-fill behaviours are removed
-  outright; positional ids are kept indefinitely as the marked
-  closed-world regime.
+  outright; the offset+relative tag-value split and convention A's
+  parity rule are retired outright; positional ids are kept
+  indefinitely as the marked closed-world regime.
 
 ## Verification plan — Tier 1
 
-- **Lane.** Default `go test`: the per-registry assignment goldens and
-  init-time duplicate refusal (D0), naming round-trip pin over the full
+- **Lane.** Default `go test`: the per-registry assignment goldens,
+  init-time duplicate refusal, and claim-authority refusal tests
+  (duplicate value or name; band misfit) (D0), naming round-trip pin
+  over the full
   registry (D1), `arity_evolution_test.go` with moved assertions (D5),
   `sharedsection` round-trip and the parity corpus (D4), the storegen
   gen test (D2), the failure-mode corpus (D7). CH-backed behaviour:
@@ -455,7 +517,8 @@ M5 and M6 are independent of each other and may swap.
 - **What would fail.** An edited ordinal fails the assignment golden; a
   duplicate fails init in every test linking the package; a VCS-managed
   registration landing on the reserved runtime tag fails contract
-  validation, and moving the reserved value fails its pin; a snapshot
+  validation, and moving the reserved value fails its pin; a registry
+  constructed without a claimed tag value fails to compile; a snapshot
   whose keys miss the DTO spelling fails
   the round-trip pin; a regression to silent zero-fill fails the moved
   arity assertions; buffered flush diverging between front-ends fails
