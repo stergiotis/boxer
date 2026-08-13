@@ -295,6 +295,7 @@ func (inst Input) tableOptions() (opts clickhouse.TableOptions) {
 		opts.Tail = o.Tail
 	}
 	opts.Indexes = o.Indexes
+	opts.SkipIndexes = o.SkipIndexes
 	return
 }
 
