@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 // The constructor names (LW_ + UPPER_SNAKE per the repo-wide namespace rule).
@@ -105,6 +106,19 @@ type expandState struct {
 	// minted tracks (enclosing select, physical name) → minting call.
 	// Scoped per select: UNION members legitimately mint the same names.
 	minted map[mintKey]string
+	// sectionUse tracks (enclosing select, folded section) → the use-aspects
+	// segment the section's mints imply. Use aspects are section-level, so
+	// every minted lane of a section must carry the same segment — and
+	// membership/support mints carry none (their call shape has no tokens,
+	// ADR-0181 §SD8), so a use:-bearing section cannot be fully minted
+	// per-column today. Catching the disagreement here keeps the read-back
+	// side from silently missing a divergent lane.
+	sectionUse map[mintKey]sectionUseInfo
+}
+
+type sectionUseInfo struct {
+	segment string
+	call    string
 }
 
 type mintKey struct {
@@ -133,12 +147,11 @@ func (inst *expandState) walk(node antlr.Tree) (err error) {
 			name := nanopass.NormalizeCallName(ident.GetText())
 			if _, isConstructor := arities[name]; isConstructor {
 				err = inst.expandCall(name, ident.GetText(), funcExpr)
-				if err != nil {
-					return
-				}
-				// Fall through into the children: a constructor nested in
-				// an argument is a position-rule violation and must error,
-				// not silently ride along inside the kept expression span.
+				// The subtree is consumed either way: expandCall verified
+				// the expression argument is constructor-free, so nothing
+				// below can match, and descending into a replaced node
+				// would stack a second rewrite onto the same tokens.
+				return
 			}
 		}
 	}
@@ -151,6 +164,43 @@ func (inst *expandState) walk(node antlr.Tree) (err error) {
 	return
 }
 
+// findNestedConstructor returns the spelled name of the first constructor
+// call anywhere under node — subqueries included, where a call would sit at
+// a formally legal projection position but inside a span this pass is about
+// to replace (overlapping rewrites are unresolvable token conflicts).
+func findNestedConstructor(node antlr.Tree) string {
+	ctx, ok := node.(antlr.ParserRuleContext)
+	if !ok {
+		return ""
+	}
+	if funcExpr, isFn := ctx.(*grammar1.ColumnExprFunctionContext); isFn {
+		if ident := funcExpr.Identifier(); ident != nil {
+			if _, isConstructor := arities[nanopass.NormalizeCallName(ident.GetText())]; isConstructor {
+				return ident.GetText()
+			}
+		}
+	}
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		if found := findNestedConstructor(ctx.GetChild(i)); found != "" {
+			return found
+		}
+	}
+	return ""
+}
+
+// inProjection reports whether a ColumnsExprColumnContext item belongs to a
+// select's projection clause. The item/list contexts recur in GROUP BY,
+// array and tuple literals, IN lists and more — the projection anchor is the
+// clause, not the item shape (adversarial review).
+func inProjection(item antlr.ParserRuleContext) bool {
+	list, ok := item.GetParent().(*grammar1.ColumnExprListContext)
+	if !ok {
+		return false
+	}
+	_, ok = list.GetParent().(*grammar1.ProjectionClauseContext)
+	return ok
+}
+
 // errCall builds the error context every rejection carries: the call as
 // spelled and its source range.
 func (inst *expandState) errCall(spelled string, funcExpr *grammar1.ColumnExprFunctionContext) *eb.ErrorBuilder {
@@ -159,10 +209,15 @@ func (inst *expandState) errCall(spelled string, funcExpr *grammar1.ColumnExprFu
 }
 
 func (inst *expandState) expandCall(name string, spelled string, funcExpr *grammar1.ColumnExprFunctionContext) (err error) {
-	// Position rule (ADR-0181 §SD2): legal only as a whole projection item.
-	switch funcExpr.GetParent().(type) {
+	// Position rule (ADR-0181 §SD2): legal only as a whole projection item —
+	// of the projection clause, not any of the other places the item/list
+	// contexts recur (GROUP BY, array literals, IN lists, …).
+	switch parent := funcExpr.GetParent().(type) {
 	case *grammar1.ColumnsExprColumnContext:
-		// legal
+		if !inProjection(parent) {
+			err = inst.errCall(spelled, funcExpr).Errorf("constructor calls are legal only as a whole projection item")
+			return
+		}
 	case *grammar1.ColumnExprAliasContext:
 		err = inst.errCall(spelled, funcExpr).Errorf("a constructor mints its own alias; drop the AS")
 		return
@@ -175,6 +230,12 @@ func (inst *expandState) expandCall(name string, spelled string, funcExpr *gramm
 	if err != nil {
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
+	}
+	if len(args) > 0 {
+		if nested := findNestedConstructor(args[0]); nested != "" {
+			err = inst.errCall(spelled, funcExpr).Str("nested", nested).Errorf("a constructor call inside another constructor's expression argument is not supported; mint it in its own (sub)select first")
+			return
+		}
 	}
 	want := arities[name]
 	if len(args) < want.min || (want.max > 0 && len(args) > want.max) {
@@ -200,20 +261,42 @@ func (inst *expandState) expandCall(name string, spelled string, funcExpr *gramm
 			return
 		}
 	}
-	var minted string
+	var minted, section, useSegment string
+	hasSection := false
 	switch name {
 	case nanopass.NormalizeCallName(NamePlain):
 		minted, err = inst.composer.PlainColumn(spec[0], spec[1], spec[2:])
 	case nanopass.NormalizeCallName(NameTagged):
-		minted, err = inst.composer.TaggedValueColumn(spec[0], spec[1], spec[2], spec[3:])
+		var tokens lwsql.TaggedSpecTokens
+		tokens, err = lwsql.ParseTaggedSpecTokens(spec[3:])
+		if err == nil {
+			minted, err = inst.composer.TaggedValueColumn(spec[0], spec[1], spec[2], spec[3:])
+			section, useSegment, hasSection = spec[0], tokens.UseAspects.String(), true
+		}
 	case nanopass.NormalizeCallName(NameMembership):
 		minted, err = inst.composer.MembershipColumn(spec[0], spec[1])
+		section, useSegment, hasSection = spec[0], "", true
 	case nanopass.NormalizeCallName(NameSupport):
 		minted, err = inst.composer.SupportColumn(spec[0], spec[1])
+		section, useSegment, hasSection = spec[0], "", true
 	}
 	if err != nil {
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
+	}
+	if hasSection {
+		key := mintKey{sel: enclosingSelect(funcExpr), name: string(naming.ConvertNameStyle(section, naming.DefaultNamingStyle))}
+		if prior, seenSection := inst.sectionUse[key]; seenSection {
+			if prior.segment != useSegment {
+				err = inst.errCall(spelled, funcExpr).Str("section", section).Str("priorCall", prior.call).Errorf("constructor calls disagree on the section's use aspects — use aspects are section-level, and membership/support mints carry none (ADR-0181 §SD8)")
+				return
+			}
+		} else {
+			if inst.sectionUse == nil {
+				inst.sectionUse = make(map[mintKey]sectionUseInfo, 4)
+			}
+			inst.sectionUse[key] = sectionUseInfo{segment: useSegment, call: strings.TrimSpace(nanopass.NodeText(inst.pr, funcExpr))}
+		}
 	}
 	// Two calls in one select minting one physical name would emit duplicate
 	// aliases. Spellings fold (myCol ≡ my-col), so the collision is easy to

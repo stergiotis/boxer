@@ -79,9 +79,37 @@ func TestExpand_PositionRules(t *testing.T) {
 	err = expandErr(t, "SELECT LW_PLAIN(x, 'a', 'u64', 'item:oq') AS y FROM t")
 	require.ErrorContains(t, err, "mints its own alias")
 
-	// A constructor nested in another constructor's expression argument.
+	// A constructor nested in another constructor's expression argument —
+	// directly or through a scalar subquery, where it would sit at a
+	// formally legal projection position inside a span this pass replaces.
 	err = expandErr(t, "SELECT LW_PLAIN(LW_TV(v, 's', 'c', 'u64'), 'a', 'u64', 'item:oq') FROM t")
+	require.ErrorContains(t, err, "inside another constructor")
+	err = expandErr(t, "SELECT LW_PLAIN((SELECT LW_TV(v, 's', 'c', 'u64') FROM u), 'a', 'u64', 'item:oq') FROM t")
+	require.ErrorContains(t, err, "inside another constructor")
+
+	// The item/list contexts recur outside the projection clause; every
+	// such position is a rejection, not a rewrite (adversarial review).
+	err = expandErr(t, "SELECT a FROM t GROUP BY LW_PLAIN(x, 'a', 'u64', 'item:oq')")
 	require.ErrorContains(t, err, "whole projection item")
+	err = expandErr(t, "SELECT a FROM t WHERE x IN (LW_PLAIN(y, 'a', 'u64', 'item:oq'), 1)")
+	require.ErrorContains(t, err, "whole projection item")
+	err = expandErr(t, "SELECT [LW_PLAIN(x, 'a', 'u64', 'item:oq')] FROM t")
+	require.ErrorContains(t, err, "whole projection item")
+}
+
+// TestExpand_SectionUseAgreement: use aspects are section-level, so mints of
+// one section must agree on the use segment — and membership/support mints
+// carry none, so a use-bearing section cannot be fully minted per column.
+func TestExpand_SectionUseAgreement(t *testing.T) {
+	err := expandErr(t, "SELECT LW_TV(v, 'sec', 'a', 's', 'use:tlp-amber'), LW_TV(w, 'sec', 'b', 's') FROM t")
+	require.ErrorContains(t, err, "disagree on the section's use aspects")
+
+	err = expandErr(t, "SELECT LW_TV(v, 'sec', 'a', 's', 'use:tlp-amber'), LW_TV_MEMB(m, 'sec', 'low-card-ref') FROM t")
+	require.ErrorContains(t, err, "disagree on the section's use aspects")
+
+	out, err := ExpandPass.Run("SELECT LW_TV(v, 'sec', 'a', 's', 'use:tlp-amber'), LW_TV(w, 'sec', 'b', 's', 'use:tlp-amber') FROM t")
+	require.NoError(t, err, "agreeing use tokens are fine")
+	require.Contains(t, out, `AS "tv:sec:a:`)
 }
 
 func TestExpand_SubqueryProjectionItemIsLegal(t *testing.T) {
