@@ -3,7 +3,6 @@ package clickhouse
 import (
 	"strconv"
 
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 )
@@ -97,8 +96,8 @@ func DeriveSkipIndexes(ir *common.IntermediateTableRepresentation, policy SkipIn
 			}
 		}
 	}
-	if len(specs) == 0 && (policy.MembershipBloom || policy.ValueStringBloom || policy.MembershipSet > 0) {
-		err = eb.Build().Errorf("skip-index policy selected lanes but the schema has none (no tagged sections)")
-	}
+	// Zero specs is legal: index derivation is an optimisation, and a schema
+	// with no matching lanes simply gets none. Interactive surfaces that
+	// want a loud no-match (the CLI flag) check the count themselves.
 	return
 }

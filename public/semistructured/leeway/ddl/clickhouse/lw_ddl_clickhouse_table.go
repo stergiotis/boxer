@@ -122,6 +122,7 @@ func ComposeCreateTable(tableName string, ir *common.IntermediateTableRepresenta
 		}
 		indexes = append(append([]IndexSpec{}, indexes...), derived...)
 	}
+	indexNames := make(map[string]bool, len(indexes))
 	for _, idx := range indexes {
 		if idx.Type == "" {
 			err = eb.Build().Str("table", tableName).Errorf("index spec has no type expression")
@@ -137,6 +138,14 @@ func ComposeCreateTable(tableName string, ir *common.IntermediateTableRepresenta
 		if name == "" {
 			name = deriveIndexName(idx.Ref)
 		}
+		// ClickHouse rejects duplicate index names at CREATE time; an
+		// explicit spec colliding with a derived one must fail here, at
+		// generation time.
+		if indexNames[name] {
+			err = eb.Build().Str("table", tableName).Str("index", name).Errorf("duplicate index name — give the explicit IndexSpec a distinct Name")
+			return
+		}
+		indexNames[name] = true
 		b.WriteString(",\n\tINDEX ")
 		b.WriteString(name)
 		b.WriteString(" ")

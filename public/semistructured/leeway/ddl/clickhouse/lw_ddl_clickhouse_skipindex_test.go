@@ -49,7 +49,10 @@ func TestDeriveSkipIndexes_Policy(t *testing.T) {
 	require.Equal(t, "bloom_filter", specs[0].Type)
 }
 
-func TestDeriveSkipIndexes_NoTaggedSectionsIsLoud(t *testing.T) {
+// TestDeriveSkipIndexes_ZeroMatchesIsEmpty: derivation is an optimisation —
+// a schema with no matching lanes yields no specs and no error; interactive
+// surfaces that want a loud no-match check the count (the CLI flag does).
+func TestDeriveSkipIndexes_ZeroMatchesIsEmpty(t *testing.T) {
 	manip, err := common.NewTableManipulator()
 	require.NoError(t, err)
 	manip.SetTableName("plainonly")
@@ -59,8 +62,26 @@ func TestDeriveSkipIndexes_NoTaggedSectionsIsLoud(t *testing.T) {
 	ir := common.NewIntermediateTableRepresentation()
 	require.NoError(t, ir.LoadFromTable(&td, clickhouse.NewTechnologySpecificCodeGenerator()))
 
-	_, err = clickhouse.DeriveSkipIndexes(ir, clickhouse.DefaultSkipIndexPolicy())
-	require.ErrorContains(t, err, "no tagged sections")
+	specs, err := clickhouse.DeriveSkipIndexes(ir, clickhouse.DefaultSkipIndexPolicy())
+	require.NoError(t, err)
+	require.Empty(t, specs)
+}
+
+// TestComposeCreateTable_DuplicateIndexNameIsGenerationError: an explicit
+// spec colliding with a derived one must fail at generation time, not as
+// ClickHouse's ILLEGAL_INDEX at deploy.
+func TestComposeCreateTable_DuplicateIndexNameIsGenerationError(t *testing.T) {
+	ir, conv := composeFixture(t)
+	policy := clickhouse.DefaultSkipIndexPolicy()
+	_, err := clickhouse.ComposeCreateTable("tdup", ir, common.TableRowConfigMultiAttributesPerRow, conv, clickhouse.TableOptions{
+		Engine: "MergeTree()",
+		Indexes: []clickhouse.IndexSpec{{
+			Ref:  clickhouse.ColumnRef{Section: "symbol", Role: common.ColumnRoleLowCardRef},
+			Type: "minmax",
+		}},
+		SkipIndexes: &policy,
+	})
+	require.ErrorContains(t, err, "duplicate index name")
 }
 
 func TestComposeCreateTable_SkipIndexPolicy(t *testing.T) {
