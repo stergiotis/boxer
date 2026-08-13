@@ -447,6 +447,54 @@ back as nested. Worth auditing before, not after.
 **Visualisation — nothing to buy, and nothing needed.** ClickHouse ships no
 query-shape visualiser boxer could consume.
 
+### The oracle replaces lowering on the wire, not lowering for analysis
+
+An obvious next step from the above is to drop the Go lowering entirely: parse
+pipes, send the user's text to a 26.8 server, done. That works for *execution*
+and fails for *analysis*, and the split is worth stating because it is what
+makes the §4.3 danger tractable.
+
+With grammar1 accepting `|>` but no lowering, `nanopass.Parse` succeeds and
+the CST carries `pipeOp` nodes that are **siblings of the head
+`selectStmt`, not descendants of it**. Everything downstream then divides by
+how it walks the tree — measured against HEAD, 2026-08-13:
+
+| Walk style | Behaviour on pipe stages | Examples |
+| --- | --- | --- |
+| Generic `FindAll` / `WalkCST` over the whole tree | **Works unchanged** | `analysis.ExtractTables`, `ClassifyQuerySecurity`, play's `collectParamSlots`, and the `CanonicalizeFull` sub-passes, which match `columnExpr` shapes wherever they sit |
+| Anchored on scopes from `BuildScopes` | **Silently skips them** — `buildQueryScopes` switches on `*grammar1.SelectStmtContext` children of `QueryContext`, and a `pipeOp` is neither | `ResolveColumnNames`, `QualifyTables`, `ExpandColumns`, `DynamizeColumns`, `SelectionConditions`; `analysis` passthrough; play's dispatch policy, split, subquery, ts-recognise, flow model, flow lineage, diagnostics |
+| Anchored on "the outermost `selectStmt`" | **Wrong anchor** | `ManipulateSetting.AddSetting` — `findOutermostSelectStmt` + `findLastSelectStmtClause` + `InsertAfter` lands the clause after the *head* query's last clause, i.e. **before the first `|>`**, where upstream documents it as binding to the innermost subquery rather than the query |
+| grammar2 / `ast.Query` | **Hard fail** — grammar2 has no pipe rules, by design | `ParseCanonical`, `ConvertCSTToAST`, and anything built on the AST |
+
+Only the last row fails loudly. `CanonicalizeFull` carries no
+`Validating(Grammar2, …)` wrapper, so nothing in the pre-execute path forces
+the silent rows to become visible.
+
+The middle row is the same defect the repo has already hit once: a construct
+that is query-level rather than a descendant of a `selectStmt` is invisible to
+any pass anchored at `scope.Node` — previously `ctes`, which resolved a column
+handle at its use site but not one bound by a query-level `WITH`.
+
+So the conclusion is narrower than "buy the lowering":
+
+- **On the wire — skip the Go lowering.** Send the user's text to a 26.8
+  server (or lower via the chlocal oracle when the target is older). Boxer
+  never owns the semantics, so it cannot silently disagree with them.
+- **For analysis — a Go lowering is still needed**, because the alternative is
+  teaching every scope-anchored pass and every `selectStmt`-anchored pass
+  about pipe stages, which duplicates the same semantics across a dozen sites
+  instead of one. A worker round trip is also the wrong shape here: this runs
+  per keystroke in the editor, against `HighlightLex`'s ~26 µs budget.
+
+That split is what makes the §4.3 danger go away rather than move: an
+analysis-only lowering whose output is never sent anywhere can produce a wrong
+*picture*, never a wrong *result*.
+
+A cheaper partial cut worth costing: since the whole middle row goes through
+`BuildScopes`, synthesising one `SelectScope` per pipe stage there fixes that
+entire fleet in one place. It does not fix the `ManipulateSetting` anchor or
+the grammar2 path.
+
 ### Value against danger
 
 | Goal | Value | Danger | Buyable? |
