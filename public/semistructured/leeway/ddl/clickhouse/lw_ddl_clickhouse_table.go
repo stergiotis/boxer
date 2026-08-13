@@ -69,6 +69,10 @@ type TableOptions struct {
 	PartitionBy string // raw ClickHouse expression, e.g. "toYYYYMM(ts…)"
 	TTL         string // raw ClickHouse expression
 	Indexes     []IndexSpec
+	// SkipIndexes, when non-nil, derives data-skipping indexes from the IR
+	// per the verified shape matrix (ADR-0181 §SD4) and emits them after the
+	// explicit Indexes.
+	SkipIndexes *SkipIndexPolicy
 	Settings    []string // joined with ", " after SETTINGS
 	Tail        string
 }
@@ -108,7 +112,17 @@ func ComposeCreateTable(tableName string, ir *common.IntermediateTableRepresenta
 		return
 	}
 
-	for _, idx := range opts.Indexes {
+	indexes := opts.Indexes
+	if opts.SkipIndexes != nil {
+		var derived []IndexSpec
+		derived, err = DeriveSkipIndexes(ir, *opts.SkipIndexes)
+		if err != nil {
+			err = eh.Errorf("compose create table %s: skip-index policy: %w", tableName, err)
+			return
+		}
+		indexes = append(append([]IndexSpec{}, indexes...), derived...)
+	}
+	for _, idx := range indexes {
 		if idx.Type == "" {
 			err = eb.Build().Str("table", tableName).Errorf("index spec has no type expression")
 			return
