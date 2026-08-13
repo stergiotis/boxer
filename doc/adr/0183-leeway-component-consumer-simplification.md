@@ -117,10 +117,10 @@ inherits a per-registry ceiling — the body budget below the registry's
 tag — which `AddTag`'s guard already makes loud.
 
 The rule extends one level up, and gains an authority: **tag values
-are claimed, not constructed**. A claiming API beside the tag
-machinery (working name `identifier.MustClaimTagValue(name, value)`)
-is the only source of the unforgeable token the stopa registry
-constructors accept — no claim, no registry, so the fence is the type
+are claimed, not constructed**. A dedicated package,
+**`identity/tagmint`**, is the only source of the unforgeable token
+the registry constructors accept (`tagmint.MustClaim(name, value)`) —
+no claim, no registry, so the fence is the type
 system, not convention. The value stays in the consumer, one literal
 at the claim site (never assembled from an offset in one place and a
 relative zero in another); the provider checks **uniqueness**
@@ -129,7 +129,7 @@ value's width class must suit the family's declared cardinality, via
 the tag-planning layer built for exactly this
 (`identity/fibonacci`, ADR-0106 SD4: `SelectFittingTagValueRange`,
 `WidthClass`). The per-package `TagValueRegistry` instances dissolve
-into the claim authority, and "convention A"'s parity check retires
+into `tagmint`, and "convention A"'s parity check retires
 with them. Claim-time uniqueness is per link set, like every
 init-populated registry; the goldens make it total — the D1 union
 test reads the committed golden files, so no link set can hide a
@@ -155,6 +155,20 @@ facts codecs and `factswrapper` resolve ids at package init, so a
 rebuild carries them, and no generation-baked ids exist yet (D2 lands
 after). Existing facts data is regenerated or migrated with the
 re-key; once claims are live, D3 flags any straggler binary.
+
+Naming rides the same decision: the `leeway/stopa` umbrella
+(registries, contracts, natural-key encoding) is renamed
+**`leeway/namemint`** — the name mint, where a name is struck into
+its timeless id. "stopa" carried no documented meaning; the new pair
+makes the two-level minting story readable from the import graph — a
+vocabulary package claims its tag from `tagmint`, then registers
+names into a `namemint` registry that composes the ids. ("namemint"
+over "symbolmint": the repo's term for the atom is *name* — natural
+keys, `naming.StylableName`, I4 name governance — and one atom should
+carry one term. "idmint" was rejected for colliding with
+`identity/identgen`'s runtime-generation role.) Both package docs
+state what their names mean. The rename is mechanical (20 non-test
+importers) and ships in M1's flag-day.
 
 ### D1 — Registry-stable ids are the default; positional ids are marked closed-world (S1)
 
@@ -380,9 +394,9 @@ M5 and M6 are independent of each other and may swap.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `stopa/registry` natural-key API | explicit-ordinal registration; `VcsManagedContract` refuses implicit minting (D0) | four vocabulary packages rewrite registrations; assignment goldens |
+| `stopa/registry` natural-key API (renamed `namemint/registry`) | explicit-ordinal registration; `VcsManagedContract` refuses implicit minting (D0) | four vocabulary packages rewrite registrations; ~20 importers update the path; assignment goldens |
 | `identity/identifier` tag space | named runtime-mint tag reserved; `VcsManagedContract` refuses it (D8) | reservation pin test; D3 views partition by tag |
-| tag-value claim authority | claiming API added; token required by stopa registries; parity check and per-package `TagValueRegistry` instances retired (D0) | four vocabulary packages re-key to narrow-body claims; facts data regenerated/migrated |
+| `identity/tagmint` (new) | claiming API; token required by the `namemint` registries; parity check and per-package `TagValueRegistry` instances retired (D0) | four vocabulary packages re-key to width-32 claims; facts data regenerated/migrated |
 | `marshallreflect` exported API | constructor + minimal resolver interface added (D1); unit-read refusal (D5) | `doc.go` correction; arity tests |
 | vdd vocabulary package | snapshot helper added (D1); claim kind + publication (D3) | naming round-trip pin; reconciliation views |
 | `marshallgen` wrapper contract | `FactsWrapper` gains id-source methods (D2) | `runtime/factsschema/storegen` + gen test |
@@ -477,7 +491,8 @@ M5 and M6 are independent of each other and may swap.
 - **Breaks.** Implicit registration on a VCS-managed registry: refused
   at init (D0). The vocabulary-tag re-key changes every composed
   membership id: facts data written under the old tags predates the
-  new assignment (D0). Double-Add of one kind: silent `raw = true` fallback
+  new assignment (D0). The `leeway/stopa` import path becomes
+  `leeway/namemint` (D0). Double-Add of one kind: silent `raw = true` fallback
   becomes an error. Mixing `Raw()` with typed Adds in one entity frame:
   refused. Multi-element values under unit-shaped slots: read error on
   all paths (previously silent zero-fill). `DefaultClassifier`:
