@@ -105,3 +105,63 @@ func TestComposeDdl_SkipIndexes(t *testing.T) {
 	require.Contains(t, sql, "INDEX idx_section_symbol_role_lr")
 	require.Contains(t, sql, "TYPE bloom_filter(0.01) GRANULARITY 4")
 }
+
+func TestComposeDdl_DuplicateSpecsRejected(t *testing.T) {
+	_, err := composeDdl(composeDdlInput{
+		Table:       "t",
+		Engine:      "MergeTree()",
+		Tagged:      []string{"sec reading u64", "sec reading f64"},
+		Memberships: []string{"sec low-card-ref"},
+	})
+	require.ErrorContains(t, err, "duplicate tagged column spec")
+
+	_, err = composeDdl(composeDdlInput{
+		Table:  "t",
+		Engine: "MergeTree()",
+		Plain:  []string{"id u64 item:id", "id u32 item:id"},
+	})
+	require.ErrorContains(t, err, "duplicate plain column spec")
+}
+
+func TestComposeDdl_SectionCoherence(t *testing.T) {
+	// Value lanes without a membership channel: the shape LwShapeCheck
+	// rejects must not be emitted as durable DDL.
+	_, err := composeDdl(composeDdlInput{
+		Table:  "t",
+		Engine: "MergeTree()",
+		Tagged: []string{"symbol value s"},
+	})
+	require.ErrorContains(t, err, "no membership channel")
+
+	// A typo'd section in a group flag must not mint a phantom section.
+	_, err = composeDdl(composeDdlInput{
+		Table:       "t",
+		Engine:      "MergeTree()",
+		Tagged:      []string{"symbol value s"},
+		Memberships: []string{"symbol low-card-ref"},
+		CoGroups:    []string{"sybmol g"},
+	})
+	require.ErrorContains(t, err, "unknown section")
+
+	// A values-only co-section leaning on a membership-carrying partner is
+	// legal (that sharing is what co-groups exist for).
+	sql, err := composeDdl(composeDdlInput{
+		Table:       "t",
+		Engine:      "MergeTree()",
+		Tagged:      []string{"a v s"},
+		Memberships: []string{"b low-card-ref"},
+		CoGroups:    []string{"a g", "b g"},
+	})
+	require.NoError(t, err)
+	require.Contains(t, sql, `"tv:b:lr:`)
+}
+
+func TestComposeDdl_SkipIndexesZeroMatchIsLoud(t *testing.T) {
+	_, err := composeDdl(composeDdlInput{
+		Table:       "t",
+		Engine:      "MergeTree()",
+		Plain:       []string{"id u64 item:id"},
+		SkipIndexes: true,
+	})
+	require.ErrorContains(t, err, "matched no lanes")
+}

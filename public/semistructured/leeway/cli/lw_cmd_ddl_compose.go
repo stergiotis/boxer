@@ -70,6 +70,16 @@ func composeDdl(in composeDdlInput) (sql string, err error) {
 	}
 	parser := canonicaltypes.NewParser()
 
+	// The manipulator upserts on a name collision (last type wins) with no
+	// signal the CLI could surface, and it creates sections on first
+	// mention — so duplicate specs and typo'd section names must be caught
+	// here, before anything merges.
+	plainSeen := make(map[string]string, len(in.Plain))
+	tvSeen := make(map[string]string, len(in.Tagged))
+	tvSections := make(map[string]string, 4)    // folded → display
+	membSections := make(map[string]bool, 4)    // folded
+	coGroupOf := make(map[string]naming.Key, 4) // folded section → co-group key
+
 	for _, spec := range in.Plain {
 		fields := strings.Fields(spec)
 		if len(fields) < 3 {
@@ -87,6 +97,12 @@ func composeDdl(in composeDdlInput) (sql string, err error) {
 		if err != nil {
 			return
 		}
+		dupKey := tokens.Item.String() + "\x00" + string(name)
+		if prior, dup := plainSeen[dupKey]; dup {
+			err = eb.Build().Str("plain", spec).Str("prior", prior).Errorf("duplicate plain column spec — the second would silently overwrite the first")
+			return
+		}
+		plainSeen[dupKey] = spec
 		var ct canonicaltypes.PrimitiveAstNodeI
 		ct, err = parser.ParsePrimitiveTypeAst(fields[1])
 		if err != nil {
@@ -117,6 +133,13 @@ func composeDdl(in composeDdlInput) (sql string, err error) {
 		if err != nil {
 			return
 		}
+		dupKey := string(section) + "\x00" + string(column)
+		if prior, dup := tvSeen[dupKey]; dup {
+			err = eb.Build().Str("tv", spec).Str("prior", prior).Errorf("duplicate tagged column spec — the second would silently overwrite the first")
+			return
+		}
+		tvSeen[dupKey] = spec
+		tvSections[string(section)] = fields[0]
 		var ct canonicaltypes.PrimitiveAstNodeI
 		ct, err = parser.ParsePrimitiveTypeAst(fields[2])
 		if err != nil {
@@ -143,6 +166,7 @@ func composeDdl(in composeDdlInput) (sql string, err error) {
 			err = eb.Build().Str("memb", spec).Errorf("invalid membership spec: %w", err)
 			return
 		}
+		membSections[string(section)] = true
 		manip.MergeTaggedValueSection(section, useaspects.EmptyAspectSet, m, "", "")
 	}
 
@@ -158,6 +182,12 @@ func composeDdl(in composeDdlInput) (sql string, err error) {
 			if err != nil {
 				return
 			}
+			// A group flag never introduces a section — a typo would mint a
+			// phantom one and silently leave the real section ungrouped.
+			if _, known := tvSections[string(section)]; !known && !membSections[string(section)] {
+				err = eb.Build().Str(kind, spec).Str("section", fields[0]).Errorf("unknown section in %s spec — declare it via --tv or --memb first (typo?)", kind)
+				return
+			}
 			var key naming.Key
 			key, err = naming.MakeKey(fields[1])
 			if err != nil {
@@ -165,6 +195,7 @@ func composeDdl(in composeDdlInput) (sql string, err error) {
 				return
 			}
 			if co {
+				coGroupOf[string(section)] = key
 				manip.MergeTaggedValueSection(section, useaspects.EmptyAspectSet, common.MembershipSpecNone, key, "")
 			} else {
 				manip.MergeTaggedValueSection(section, useaspects.EmptyAspectSet, common.MembershipSpecNone, "", key)
@@ -179,6 +210,29 @@ func composeDdl(in composeDdlInput) (sql string, err error) {
 	err = applyGroup(in.StreamGroups, "stream-group", false)
 	if err != nil {
 		return
+	}
+
+	// A section with value lanes needs a membership channel — its own, or a
+	// membership-carrying partner in its co-section group (the sharing
+	// co-groups exist for). The generator would silently emit the
+	// membership-less shape LwShapeCheck rejects.
+	for folded, display := range tvSections {
+		if membSections[folded] {
+			continue
+		}
+		leaning := false
+		if g := coGroupOf[folded]; g != "" {
+			for other, og := range coGroupOf {
+				if og == g && membSections[other] {
+					leaning = true
+					break
+				}
+			}
+		}
+		if !leaning {
+			err = eb.Build().Str("section", display).Errorf("section has value lanes but no membership channel — add --memb '<section> <channel>' (or a membership-carrying co-group partner)")
+			return
+		}
 	}
 
 	table, err := manip.BuildTableDesc()
@@ -218,17 +272,26 @@ func composeDdl(in composeDdlInput) (sql string, err error) {
 	if in.IfNotExists {
 		mode = clickhouse.CreateModeIfNotExists
 	}
-	var skip *clickhouse.SkipIndexPolicy
+	// Derive here rather than through TableOptions.SkipIndexes: an
+	// interactive flag that matches nothing should say so, not silently
+	// emit an index-less table.
+	var derived []clickhouse.IndexSpec
 	if in.SkipIndexes {
-		policy := clickhouse.DefaultSkipIndexPolicy()
-		skip = &policy
+		derived, err = clickhouse.DeriveSkipIndexes(ir, clickhouse.DefaultSkipIndexPolicy())
+		if err != nil {
+			return
+		}
+		if len(derived) == 0 {
+			err = eh.Errorf("--skip-indexes matched no lanes: the schema carries no membership lanes (the bloom_filter targets)")
+			return
+		}
 	}
 	sql, err = clickhouse.ComposeCreateTable(in.Table, ir, in.TableRowConfig, conv, clickhouse.TableOptions{
 		Mode:        mode,
 		Engine:      in.Engine,
 		OrderBy:     orderBy,
 		PartitionBy: in.PartitionBy,
-		SkipIndexes: skip,
+		Indexes:     derived,
 		Settings:    in.Settings,
 	})
 	return
