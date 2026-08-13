@@ -16,6 +16,8 @@ Leeway is a **schema-on-write** data representation protocol designed to bridge 
 
 It decouples **Topology** (hierarchy/nesting) from **Content** (values). Instead of storing domain-specific objects, Leeway shreds data into type-specific **Sections**, managing structure via **Memberships** and **Cardinality Vectors**. This enables "Zero-Copy" schema evolution, vectorized processing of sparse data, and seamless transition between row-oriented transport (Streaming) and column-oriented storage (OLAP).
 
+**Querying from SQL:** the consumer-facing contracts for filtering, extracting, and transforming leeway data in SQL — including the `LW_PLAIN`/`LW_TV` constructor vocabulary that mints physical column names (ADR-0181) — are stated in `$(boxer-path)/doc/explanation/leeway-dql-contracts.md`; the executable ClickHouse idioms live in `$(boxer-path)/doc/howto/leeway-clickhouse-array-idioms.md`.
+
 ---
 
 ## 2. Core Architecture

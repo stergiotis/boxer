@@ -12,6 +12,8 @@ status: draft
 # Leeway - A columnar approach to semi structured data representation
 Leeway is a way to represent semi structured data amenable to efficient columnar storage and processing technologies (e.g. DuckDB, ClickHouse, Arrow, data oriented programming). The approach aims to be fully code driven (i.e. having excellent tooling support).
 
+When the task is querying leeway data **from SQL** — guard predicates in `WHERE`, extracting attributes into opaque columns, or `SELECT` lists that produce leeway shape (`LW_PLAIN`/`LW_TV` constructors, ADR-0181) — the normative contracts are in `$(boxer-path)/doc/explanation/leeway-dql-contracts.md` and the executable idioms in `$(boxer-path)/doc/howto/leeway-clickhouse-array-idioms.md`.
+
 ## Key terms
 The key terms used to describe the idea are:
 * **Section** a group of columns that have to be interpreted as whole.
