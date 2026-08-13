@@ -266,11 +266,27 @@ and the gen test is the repo's proven lane.
   when built and gates nothing.
 - Deferred, with their kill-reasons above: storegen CLI (D2), domain
   namespacing (D3), generated-side roles (D6).
-- Runtime-coined memberships — names unknown at build time — are
-  outside this regime by construction: minting is compile-time, in
-  VCS. The even-tag convention leaves the odd tag space free, so a
-  future data-side minting regime could coexist without collision; it
-  is undesigned and would be its own ADR.
+- Runtime- and roundtrip-minted ids get a **reserved tag, decided
+  here**: one designated large-value tag (working name
+  `RuntimeMintTagValue`), a named constant in `identity/identifier`,
+  pinned by a test beside the assignment goldens. Purpose: ids assigned
+  outside VCS — memberships coined at runtime (names unknown at build
+  time, e.g. ingested foreign vocabularies) and roundtrip/passthrough
+  cases where data-carried names need local ids that survive
+  write→read→write without a VCS registration. The fence is the name,
+  not parity: `VcsManagedContract` refuses the reserved value (against
+  the *effective*, offset-adjusted tag), no generated artifact bakes
+  ids under it, and D3 claims publish such ids like any others while
+  the reconciliation views partition by tag, so the runtime lane
+  audits separately from the VCS vocabulary. Prefix-freedom (ADR-0106)
+  already makes distinct tags collision-free, so the reservation
+  carries meaning, not safety — and "convention A"'s even/odd parity
+  rule is recorded as a pre-0106 legacy heuristic superseded by this
+  named fence. Proposed value: the largest tag value whose fibonacci
+  code still leaves 32 body bits — a legible 32/32 tag/body split,
+  ~4·10⁹ runtime ids — computed and pinned at M1. The allocator itself
+  (who assigns bodies; how independent writers stay collision-free)
+  remains deferred to its own ADR.
 
 ### Milestones
 
@@ -296,6 +312,7 @@ M5 and M6 are independent of each other and may swap.
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | `stopa/registry` natural-key API | explicit-ordinal registration; `VcsManagedContract` refuses implicit minting (D0) | four vocabulary packages rewrite registrations; assignment goldens |
+| `identity/identifier` tag space | named runtime-mint tag reserved; `VcsManagedContract` refuses it (D8) | reservation pin test; D3 views partition by tag |
 | `marshallreflect` exported API | constructor + minimal resolver interface added (D1); unit-read refusal (D5) | `doc.go` correction; arity tests |
 | vdd vocabulary package | snapshot helper added (D1); claim kind + publication (D3) | naming round-trip pin; reconciliation views |
 | `marshallgen` wrapper contract | `FactsWrapper` gains id-source methods (D2) | `runtime/factsschema/storegen` + gen test |
@@ -321,6 +338,11 @@ M5 and M6 are independent of each other and may swap.
 - **A vocabulary manifest + codegen.** Deferred: the same properties as
   D0 with more machinery; revisit only if vocabulary scale outgrows
   hand-maintained Go source.
+- **Parity-partitioned tag space (odd tags for non-VCS minting).**
+  Rejected: "convention A" predates ADR-0106's fibonacci tags — under
+  prefix-free codes parity carries no structural meaning, and a
+  meaning-bearing reservation must be named, not inferred from a
+  numeric property.
 - **Split API-3 — buffer-and-facts only, defer the typed-store lift.**
   Rejected in dialogue: leaves the consumer surface a trichotomy
   indefinitely; the one-per-kind scoping (D4) removes the hidden scope
@@ -403,7 +425,9 @@ M5 and M6 are independent of each other and may swap.
   the clickhouse-local readback suite (D5's validator rung) and the
   `//go:build integration` lane for D3's reconciliation views.
 - **What would fail.** An edited ordinal fails the assignment golden; a
-  duplicate fails init in every test linking the package; a snapshot
+  duplicate fails init in every test linking the package; a VCS-managed
+  registration landing on the reserved runtime tag fails contract
+  validation, and moving the reserved value fails its pin; a snapshot
   whose keys miss the DTO spelling fails
   the round-trip pin; a regression to silent zero-fill fails the moved
   arity assertions; buffered flush diverging between front-ends fails
