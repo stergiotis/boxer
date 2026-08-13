@@ -37,13 +37,17 @@ stops being a third goal and becomes part of the third. Visualisation is
 well-positioned because play's Flow panel already computes the clause-level
 dataflow that a pipe chain is a linear notation for.
 
-Two conclusions were reached after the first draft and are worked out in §7:
-boxer should prefer **not to own the lowering semantics** on any path where
-being wrong yields wrong results — `clickhouse-local` can be used as the
-vendor's own lowering oracle, and the repo already has the worker pool for it
-(ADR-0028). And the **smallest useful change is much smaller than the first
-milestone**: the lexer token alone, with no parser rule, fixes two of the
-three current-behaviour defects in §2.
+Three conclusions were reached after the first draft. Boxer should prefer
+**not to own the lowering semantics** wherever being wrong yields wrong
+results — `clickhouse-local` is the vendor's own lowering oracle and the repo
+already has the worker pool for it (ADR-0028) — but that only replaces
+lowering **on the wire**; the analysis side still needs its own, and is safe
+to own precisely because a mistake there is a wrong picture rather than a
+wrong result (§7). One of the three defects in §2 turns out **not to be about
+pipes at all**: `HighlightLex` drops every unrecognised character, `|>`
+included, and that is worth fixing on its own terms. And on the question of
+whether the operator earns its keep: **not yet** — the reasoning, and the
+triggers that would change the answer, are in §10.
 
 ## 1. What the feature is
 
@@ -147,6 +151,26 @@ Three consequences, each of which is a distinct piece of work:
    ([`widgets/codeview/sql.go:70`](../../public/thestack/imzero2/egui2/widgets/codeview/sql.go)),
    so in any read-only SQL CodeView — doc panes, previews, applet bodies —
    the `|>` glyphs are simply absent from the render, with no error.
+
+   **This one is not about pipes.** Measured the same day, every character the
+   lexer does not recognise drops out identically:
+
+   | input | dropped |
+   | --- | --- |
+   | `SELECT a \|> b FROM t` | `\|>` |
+   | `SELECT a # comment` | `#` |
+   | `SELECT a @ b FROM t` | `@` |
+   | `SELECT a ~ b FROM t` | `~` |
+   | `SELECT a ^ b FROM t` | `^` |
+   | `SELECT a & b FROM t` | `&` |
+
+   So `HighlightLex` violates its own documented contiguity contract for any
+   unrecognised input, and `|>` is only the newest instance. The fix belongs
+   in `HighlightLex` — emit a span for unrecognised bytes so the invariant
+   holds at the source, with a test asserting spans start at 0, abut, and end
+   at `len(sql)` — not in a pipe-shaped special case. It is worth doing
+   whether or not pipe operators are ever supported, and it needs no grammar
+   change.
 
 A related current-state fact: **the FROM-first form fails independently of
 pipes.** `FROM orders SELECT customer, amount` lexes cleanly and still fails
@@ -552,7 +576,59 @@ Two observations follow, and they are the practical ones:
   ([`apps/sqlapplet/`](../../apps/sqlapplet/)) should be allowed to author
   pipe SQL. Both are downstream of the parser landing and can wait.
 
-## 10. A possible cut
+## 10. Is it worth supporting at all?
+
+Asked directly, 2026-08-13, on the grounds that the operator brings many edge
+cases and difficult tests. The reading this note ends on: **not yet, and the
+cost is not one lump.**
+
+Against, and these are the strong arguments:
+
+- Pipe syntax adds **no expressive power**. Every pipe query has a nested
+  spelling, and the server proves it by producing the same AST.
+- The cost lands on **grammar1, which is load-bearing for the whole repo** —
+  every SQL consumer pays for its growth in adaptive-prediction state
+  (ADR-0084), not just the ones that want pipes.
+- The edge cases are real and mostly live in the FROM-first half (§4.2), not
+  in `|>` itself.
+- Correctness of the lowering is only checkable against a 26.8 server, and
+  the locally installed binary is 26.7.3 (§7).
+- 26.8 is unreleased and nothing in the tree has asked for the syntax. This
+  would be building ahead of demand, for sugar.
+
+One argument in mitigation, since it cuts against the "difficult tests"
+premise specifically: the tests largely **already exist**. Upstream's
+`04613_pipe_operators.sql` is ~110 statements including negative cases with
+expected errors, so the work is importing and adapting a corpus rather than
+designing one. The edge-case concern stands; the test-authoring concern is
+smaller than it looks.
+
+The cost splits three ways, with very different ratios:
+
+1. **The `HighlightLex` contiguity fix (§2).** Do it now — but note it is
+   *not* pipe support. It is a live defect that silently deletes `#`, `@`,
+   `~`, `^`, `&` and any other unrecognised character from CodeView renders.
+   No grammar change, no edge cases, one invariant test.
+2. **Grammar + lowering (M0–M2).** Where every edge case and every difficult
+   test actually sits. Defer.
+3. **Raiser and visualisation (M3–M4).** Entirely downstream of 2, however
+   attractive per-stage cardinality is. Defer with it.
+
+Deferring is only useful if the trigger to revisit is named, so:
+
+- a boxer endpoint actually runs 26.8 or later — worth noticing deliberately,
+  since nothing currently reads `version()` (§8);
+- the first real pipe query arrives, most plausibly from `text2sql2` once
+  models train on 26.8, rather than from a person;
+- someone wants the per-stage cardinality view (§6) enough to pay for the
+  parser that makes it possible.
+
+Until one fires, this note is the record and **no ADR is needed** — ADRs are
+for decisions taken, and "we looked, the sugar is not worth the grammar yet"
+is adequately captured here. The earlier suggestion in this note's first
+draft that ADR-0184 should be written is withdrawn.
+
+## 11. A possible cut
 
 Ordered so that each milestone is independently useful and none gates on the
 hardest part of the next.
@@ -572,7 +648,7 @@ hardest part of the next.
 M0+M1 is the load-bearing pair: it is what makes pipe SQL a first-class input
 to the whole stack, and it is the part with the strongest verification story.
 
-This touches a public surface (the accepted SQL dialect), carries a
-migration (grammar regeneration across three packages), and needs a stated
-verification approach — so it warrants an ADR rather than landing as a
-sequence of commits. The next free number at the time of writing is 0184.
+Should a trigger from §10 fire, this ordering touches a public surface (the
+accepted SQL dialect) and carries a migration (grammar regeneration across
+three packages), so it would warrant an ADR at that point. It does not
+warrant one now — see §10.
