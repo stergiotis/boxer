@@ -236,8 +236,9 @@ raw endpoint fails loudly as an unknown function.
 
 The worked example from the naming ground truth: one plain `u64` column
 with delta encoding, light compression, and the `nominal` value aspect is
-the single physical column `id:mycol:u64:2k:2:0:` — one column, no
-companions, and a valid leeway table by itself.
+the single physical column `id:mycol:u64:47:D:0:` (v2 aspect segments,
+ADR-0182) — one column, no companions, and a valid leeway table by
+itself.
 
 ### Validation is two-staged
 
