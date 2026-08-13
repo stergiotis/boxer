@@ -366,11 +366,11 @@ what it expands *into* is.
 
 Accepted 2026-08-13.
 
-- **M0 — SD1: the three contracts and transform patterns as normative docs; skills pointers.**
-- **M1 — SD6: `lwsql` spec→name seam and token parsing; `leeway ddl compose`.**
-- **M2 — SD2+SD7: `LwConstructExpand`; standard-set registration; client vocabulary entries.**
-- **M3 — SD5: `LwShapeCheck` and the audit-query generator.**
-- **M4 — SD4: skip-index emission policy over `TableOptions`.**
+- **M0 — SD1: the three contracts and transform patterns as normative docs; skills pointers.** ✓
+- **M1 — SD6: `lwsql` spec→name seam and token parsing; `leeway ddl compose`.** ✓
+- **M2 — SD2+SD7: `LwConstructExpand`; standard-set registration; client vocabulary entries.** ✓
+- **M3 — SD5: `LwShapeCheck` and the audit-query generator.** ✓
+- **M4 — SD4: skip-index emission policy over `TableOptions`.** ✓
 - **M5 — SD3: shared extraction builder and `LwExtractExpand` — blocked until ADR-0171 §SD2's version handshake lands.**
 
 The options considered for each naming and scoping choice, and their
@@ -380,6 +380,43 @@ and are not repeated here.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## Update 2026-08-13 — M0–M4 implemented; homes and two verification deviations
+
+The choices this ADR left to implementation, as landed:
+
+- **Homes.** The spec→name seam is `lwsql.Composer` plus the token parsers
+  (`ParsePlainSpecTokens` / `ParseTaggedSpecTokens` /
+  `ParseMembershipSpec`); `LwConstructExpand` and `LwShapeCheck` live in the
+  new `constructsql` package beside `lwsql`; the SD5 audit-query generator is
+  `lwsql.AuditQueries`. Machine-chosen membership/support lane properties are
+  derived by running the production section-loading path
+  (`ResolveMembership` included) over a synthetic section — never restated —
+  and a generator-equality test pins every minted name against the DDL
+  generator's output.
+- **SD4 scope.** The raw `INDEX` plumbing (`TableOptions.Indexes`) predated
+  this milestone; what landed is the policy layer — `SkipIndexPolicy`,
+  `DeriveSkipIndexes`, `TableOptions.SkipIndexes`, and
+  `leeway ddl compose --skip-indexes` — with defaults documented as starting
+  points (bloom_filter(0.01), GRANULARITY 4).
+- **Verification deviation, SD4.** Granule pruning is asserted via
+  `clickhouse-local` `EXPLAIN indexes = 1` in the unit lane (skip-if-absent)
+  — the same method ADR-0066's matrix was verified with — rather than the
+  integration lane; hermetic, and the skip-stage chain is asserted
+  first-denominator vs last-numerator as planned.
+- **Verification deviation, SD5.** The audit queries' clickhouse-local
+  fixtures are composer-minted synthetic tables (clean fixture green, one
+  corruption per invariant class red); the marshallreflect round-trip
+  fixtures stay in the read-back package and are not re-wired here.
+- **Analytical contract.** `LwShapeCheck` returns its input unchanged on
+  success instead of splicing the discard marker: the marker mechanism
+  serves handler flows, and for a plain pass the observable contract —
+  body rides through, violations are hard errors — is identical.
+- **SD7 split, applied.** The four constructor names are registered in the
+  vocabulary panel's client population; the `LW_GET` family registers when
+  SD3 lands, together with ADR-0174 §SD6's dependency marking (that panel's
+  M4, sequenced behind SD3). SD3 remains blocked: the read-back family
+  carries no version marker today (ADR-0171 §SD2 open).
 
 ## References
 
