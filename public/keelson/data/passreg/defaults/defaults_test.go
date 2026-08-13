@@ -23,10 +23,11 @@ func TestRegisterStandard(t *testing.T) {
 	require.NoError(t, RegisterStandard(r))
 
 	es := r.Entries(passreg.StagePreExecute)
-	require.Len(t, es, 3)
+	require.Len(t, es, 4)
 	require.Equal(t, "ExpandDescriptiveStatistics", es[0].Pass.Name, "ADR-0161 expansion orders first (75)")
 	require.Equal(t, "DocsearchExpand", es[1].Pass.Name, "ADR-0164 expansion between the two (80)")
 	require.Equal(t, "ExpandLwIdMacros", es[2].Pass.Name)
+	require.Equal(t, "LwConstructExpand", es[3].Pass.Name, "ADR-0181 constructor expansion orders after identsql (130)")
 	for _, e := range es {
 		require.NotEmpty(t, e.Description)
 		require.NotEmpty(t, e.Provenance)
@@ -35,7 +36,7 @@ func TestRegisterStandard(t *testing.T) {
 	// Registering twice into the same registry must fail loudly (duplicate
 	// key), not silently double the entries.
 	require.Error(t, RegisterStandard(r))
-	require.Len(t, r.Entries(passreg.StagePreExecute), 3)
+	require.Len(t, r.Entries(passreg.StagePreExecute), 4)
 }
 
 // TestStandardSetExpandsDescriptiveStatistics proves the ADR-0161 wiring end
@@ -86,9 +87,9 @@ func TestStandardSetRegistersResolveColumnNamesFactory(t *testing.T) {
 	r := passreg.NewRegistry()
 	require.NoError(t, RegisterStandard(r))
 
-	// Concrete entries are the three expansions (descriptiveStatistics,
-	// docsearch, LW_ID_*); the resolver is a factory.
-	require.Len(t, r.Entries(passreg.StagePreExecute), 3)
+	// Concrete entries are the four expansions (descriptiveStatistics,
+	// docsearch, LW_ID_*, LW_ constructors); the resolver is a factory.
+	require.Len(t, r.Entries(passreg.StagePreExecute), 4)
 	fs := r.Factories(passreg.StagePreExecute)
 	require.Len(t, fs, 1)
 	f := fs[0]
@@ -114,6 +115,22 @@ func TestStandardSetRegistersResolveColumnNamesFactory(t *testing.T) {
 	require.False(t, ok, "a non-resolver binding must be declined")
 	_, ok = f.Build(nil)
 	require.False(t, ok, "a nil binding must be declined")
+}
+
+// TestStandardSetExpandsLeewayConstructors proves the ADR-0181 §SD7 wiring
+// end to end: a constructor call leaves the pre-execute stage as an aliased
+// expression minting the physical name, and an inert query is untouched.
+func TestStandardSetExpandsLeewayConstructors(t *testing.T) {
+	r := passreg.NewRegistry()
+	require.NoError(t, RegisterStandard(r))
+
+	out := r.ApplyBestEffort(passreg.StagePreExecute, "SELECT LW_PLAIN(sum(x), 'total-revenue', 'u64', 'item:oq') FROM t", zerolog.Nop())
+	require.NotContains(t, out, "LW_PLAIN", "constructor call must be expanded")
+	require.Contains(t, out, `sum(x) AS "oq:total-revenue:u64:::0:"`)
+	require.Contains(t, out, "FROM t", "surrounding query must survive")
+
+	const inert = "SELECT a FROM t WHERE b = 1"
+	require.Equal(t, inert, r.ApplyBestEffort(passreg.StagePreExecute, inert, zerolog.Nop()))
 }
 
 // TestStandardSetOmitsExposeSelectionConditions pins ADR-0121 §SD7: ExposeSelectionConditions changes a

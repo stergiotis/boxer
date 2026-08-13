@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 )
 
 // RegisterStandard registers the standard set into r:
@@ -24,6 +25,12 @@ import (
 //     §SD5) at StagePreExecute. chlocal executors have no LW_ID_* UDFs
 //     installed, so an unexpanded macro only works against a server
 //     that carries them; expanding before execution serves both.
+//   - constructsql.ExpandPass (LwConstructExpand, ADR-0181 §SD2/§SD7):
+//     LW_PLAIN/LW_TV* constructor calls → `<expr> AS "<physical name>"`.
+//     Client-only by design; a cheap marker pre-scan keeps it near-free
+//     on queries without authoring calls. Ordered after identsql (100)
+//     so an LW_ID_* macro inside a constructor's expression argument is
+//     already expanded when the span is kept.
 //   - ResolveColumnNames (friendly leeway column handles → physical
 //     names, ADR-0116) at StagePreExecute, as a late-bound Factory
 //     (ADR-0108 §SD7): it needs a per-consumer schema resolver, so it is
@@ -67,6 +74,17 @@ func RegisterStandard(r *passreg.Registry) (err error) {
 			Order:       100,
 			Description: "expand LW_ID_* identity-macro calls into bit arithmetic",
 			Provenance:  "github.com/stergiotis/boxer/public/identity/identsql",
+		},
+		{
+			// Ordered after identsql (100) and before handle resolution
+			// (200). A minted alias is a physical leeway name, which the
+			// handle pass never touches (a handle is exactly one colon), so
+			// the 130 slot is for determinism, not correctness.
+			Pass:        constructsql.ExpandPass,
+			Stage:       passreg.StagePreExecute,
+			Order:       130,
+			Description: "expand LW_PLAIN/LW_TV* constructor calls into aliased expressions minting physical leeway column names",
+			Provenance:  "github.com/stergiotis/boxer/public/semistructured/leeway/constructsql",
 		},
 	} {
 		err = r.Register(e)

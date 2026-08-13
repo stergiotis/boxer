@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 )
 
@@ -178,6 +179,16 @@ func vocabDeclared() (out []vocabEntry) {
 			Where: vocabClient, Family: "introspection (ADR-0094)", Declared: true, Available: true,
 		},
 	)
+	// The leeway constructor family (ADR-0181 §SD2/§SD7): client-only by
+	// design — expansion mints identifier-position aliases no server-side
+	// function can reach.
+	for _, f := range constructsql.Functions() {
+		out = append(out, vocabEntry{
+			Name: f.Name, Params: f.Params, Doc: f.Doc,
+			Where: vocabClient, Family: "leeway authoring (ADR-0181)",
+			Declared: true, Available: true,
+		})
+	}
 
 	for _, f := range tsFuncs {
 		params := make([]string, 0, len(f.Args))

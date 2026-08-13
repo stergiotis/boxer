@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 )
 
 func vocabByWhere(entries []vocabEntry, where vocabWhereE) (out []vocabEntry) {
@@ -47,6 +48,9 @@ func TestVocabDeclaredCoversEveryPopulation(t *testing.T) {
 	assert.Contains(t, client, "descriptiveStatistics")
 	assert.Contains(t, client, "docsearch")
 	assert.Contains(t, client, "keelson")
+	for _, f := range constructsql.Functions() {
+		assert.Containsf(t, client, f.Name, "%s missing from the client section (ADR-0181 roster)", f.Name)
+	}
 
 	assert.Contains(t, vocabNames(vocabByWhere(all, vocabPlay)), "tsProfile")
 }

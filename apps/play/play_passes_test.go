@@ -28,7 +28,7 @@ func TestRegisterPassesOrdering(t *testing.T) {
 			got = append(got, r.Name)
 		}
 	}
-	want := []string{"CanonicalizeFull", "ExpandDescriptiveStatistics", "DocsearchExpand", "ExpandLwIdMacros", "ResolveColumnNames"}
+	want := []string{"CanonicalizeFull", "ExpandDescriptiveStatistics", "DocsearchExpand", "ExpandLwIdMacros", "LwConstructExpand", "ResolveColumnNames"}
 	if len(got) != len(want) {
 		t.Fatalf("pre-execute catalog = %v, want %v", got, want)
 	}
