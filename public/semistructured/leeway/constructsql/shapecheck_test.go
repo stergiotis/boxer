@@ -91,6 +91,13 @@ func TestShapeCheck_CoSectionGroupWholeness(t *testing.T) {
 	shapeOK(t, `SELECT "`+aVal+`", "`+aMemb+`", "`+bMemb+`" FROM t`)
 }
 
+// TestShapeCheck_DuplicateOutputNames: a result carrying one physical name
+// twice is not a leeway table, whichever way the duplicate arises.
+func TestShapeCheck_DuplicateOutputNames(t *testing.T) {
+	shapeErr(t, `SELECT "id:mycol:u64:::0:", "id:mycol:u64:::0:" FROM t`, "duplicate output column name")
+	shapeErr(t, `SELECT a AS "id:mycol:u64:::0:", "id:mycol:u64:::0:" FROM t`, "duplicate output column name")
+}
+
 func TestShapeCheck_UnionMembersCheckedIndependently(t *testing.T) {
 	v, memb, _ := mintFixture(t)
 	good := `SELECT "` + v + `", "` + memb + `" FROM t`

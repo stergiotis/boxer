@@ -102,6 +102,25 @@ type expandState struct {
 	rw       nanopass.RewriterI
 	seg      lwsql.TableSegments
 	composer *lwsql.Composer // built on first use
+	// minted tracks (enclosing select, physical name) → minting call.
+	// Scoped per select: UNION members legitimately mint the same names.
+	minted map[mintKey]string
+}
+
+type mintKey struct {
+	sel  antlr.ParserRuleContext
+	name string
+}
+
+// enclosingSelect ascends to the projection's select statement, the scope a
+// duplicate mint is judged in.
+func enclosingSelect(node antlr.ParserRuleContext) antlr.ParserRuleContext {
+	for p := node.GetParent(); p != nil; p = p.GetParent() {
+		if sel, ok := p.(*grammar1.SelectStmtContext); ok {
+			return sel
+		}
+	}
+	return nil
 }
 
 func (inst *expandState) walk(node antlr.Tree) (err error) {
@@ -196,6 +215,18 @@ func (inst *expandState) expandCall(name string, spelled string, funcExpr *gramm
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
 	}
+	// Two calls in one select minting one physical name would emit duplicate
+	// aliases. Spellings fold (myCol ≡ my-col), so the collision is easy to
+	// author and hard to see; catch it here rather than at the server.
+	key := mintKey{sel: enclosingSelect(funcExpr), name: minted}
+	if prior, dup := inst.minted[key]; dup {
+		err = inst.errCall(spelled, funcExpr).Str("name", minted).Str("priorCall", prior).Errorf("two constructor calls mint the same physical column name (spellings fold)")
+		return
+	}
+	if inst.minted == nil {
+		inst.minted = make(map[mintKey]string, 4)
+	}
+	inst.minted[key] = strings.TrimSpace(nanopass.NodeText(inst.pr, funcExpr))
 
 	exprText := strings.TrimSpace(nanopass.NodeText(inst.pr, args[0]))
 	nanopass.ReplaceNode(inst.rw, funcExpr, exprText+" AS "+nanopass.QuoteIdentifier(minted))

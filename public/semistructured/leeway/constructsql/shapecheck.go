@@ -168,6 +168,13 @@ func CheckOutputColumns(names []string) (err error) {
 	if len(names) == 0 {
 		return eb.Build().Errorf("empty output column set")
 	}
+	seen := make(map[string]bool, len(names))
+	for _, n := range names {
+		if seen[n] {
+			return eb.Build().Str("column", n).Errorf("duplicate output column name — a result carrying it twice is not a leeway table")
+		}
+		seen[n] = true
+	}
 	separator := ":"
 	if !strings.ContainsRune(strings.Join(names, ""), ':') {
 		separator = "_"

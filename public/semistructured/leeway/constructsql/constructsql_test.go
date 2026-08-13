@@ -1,6 +1,7 @@
 package constructsql
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -109,6 +110,54 @@ func TestExpand_SpecArgRejections(t *testing.T) {
 
 	err = expandErr(t, "SELECT LW_PLAIN(x, 'a', 'nosuchtype', 'item:oq') FROM t")
 	require.ErrorContains(t, err, "canonical type")
+}
+
+// TestExpand_DuplicateMintRejected: two calls in one select minting the same
+// physical name — including via spelling folding (myCol ≡ my-col) — are a
+// loud error, while UNION members minting the same names are legal (their
+// column sets must agree).
+func TestExpand_DuplicateMintRejected(t *testing.T) {
+	err := expandErr(t, "SELECT LW_PLAIN(a, 'myCol', 'u64', 'item:oq'), LW_PLAIN(b, 'my-col', 'u64', 'item:oq') FROM t")
+	require.ErrorContains(t, err, "mint the same physical column name")
+
+	one := "SELECT LW_PLAIN(a, 'x', 'u64', 'item:oq') FROM t"
+	out, err := ExpandPass.Run(one + " UNION ALL " + one)
+	require.NoError(t, err, "UNION members minting the same name are legal")
+	require.Equal(t, 2, strings.Count(out, `AS "oq:x:u64:::0:"`))
+}
+
+// TestExpand_SpellingsAndPlacements: call-name matching is case- and
+// quoting-insensitive, and the position rule admits every whole-projection-
+// item placement — CTE bodies, DISTINCT, LIMIT.
+func TestExpand_SpellingsAndPlacements(t *testing.T) {
+	for _, in := range []string{
+		`SELECT "LW_PLAIN"(x, 'a', 'u64', 'item:oq') FROM t`,
+		"SELECT `LW_PLAIN`(x, 'a', 'u64', 'item:oq') FROM t",
+		"SELECT Lw_Plain(x, 'a', 'u64', 'item:oq') FROM t",
+		"WITH c AS (SELECT LW_PLAIN(x, 'a', 'u64', 'item:oq') FROM t) SELECT * FROM c",
+		"SELECT DISTINCT LW_PLAIN(x, 'a', 'u64', 'item:oq') FROM t LIMIT 5",
+	} {
+		out, err := ExpandPass.Run(in)
+		require.NoError(t, err, in)
+		require.Contains(t, out, `AS "oq:a:u64:::0:"`, in)
+		require.NotContains(t, strings.ToLower(out), "lw_plain", in)
+	}
+}
+
+// TestExpand_CommentInsideExpression: hidden-channel trivia inside the kept
+// expression span survives, and the expanded statement re-parses — a
+// trailing line comment must not swallow the emitted alias.
+func TestExpand_CommentInsideExpression(t *testing.T) {
+	out, err := ExpandPass.Run("SELECT LW_PLAIN(sum(x) -- keep\n + 1, 'a', 'u64', 'item:oq') FROM t")
+	require.NoError(t, err)
+	require.Contains(t, out, "-- keep")
+	_, err = nanopass.Parse(out)
+	require.NoError(t, err)
+
+	out, err = ExpandPass.Run("SELECT LW_PLAIN(sum(x) -- tail\n, 'a', 'u64', 'item:oq') FROM t")
+	require.NoError(t, err)
+	_, err = nanopass.Parse(out)
+	require.NoError(t, err, "a trailing line comment must not comment out the alias")
 }
 
 // authoringCorpus is the ADR-0181 verification corpus: valid constructor
