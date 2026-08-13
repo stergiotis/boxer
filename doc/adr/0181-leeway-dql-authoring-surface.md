@@ -90,8 +90,13 @@ SQL text; the passes run where SQL is authored, not where it executes.
 
 ## Decision
 
-Each sub-decision independently descope-able. Suggested order: SD1; SD2+SD6
-together; SD5; SD3; SD4 anytime (independent).
+Each sub-decision independently descope-able (SD2 alone presupposes SD6 —
+the pass consumes the seam it exports; SD7's bookkeeping lands with
+whichever of SD2/SD3 ships first). Suggested order: SD1; SD2+SD6 together;
+SD5; SD3; SD4 anytime (independent). One dependency carried from the
+background analysis: ADR-0171 §SD2's version handshake should land before
+SD3 makes the authoring surface a second caller of the installed read-back
+family.
 
 ### SD1 — The three contracts become normative documentation
 
@@ -107,7 +112,8 @@ The F/X/T contracts are written down once, as consumer-facing rules:
   names follow demand.
 - **X (extract):** the three-way absent semantics (type default / `NULL`
   variant / empty-array sentinel for non-scalars), the aliasing rule
-  (`indexOf` returns the *first* match; the m2v form is the exact one), and
+  (`indexOf` returns the *first* match; the m2v position→attribute form is
+  the exact one), and
   the structural fast-path licence.
 - **T (transform):** the closure rule — a `SELECT` whose output names parse
   under the naming convention and satisfy vertical subsetting (all plain
@@ -120,7 +126,7 @@ The same documentation work records the canonical transform patterns
 ADR-0171 §SD5) and the lambda-free relational rendering the
 second-substrate trial flagged as undocumented.
 
-Home: the leeway explanation/howto docs; the three leeway skills gain
+Home: the leeway explanation/howto docs; the leeway skills gain
 pointers (same move as ADR-0171 §SD1).
 
 ### SD2 — Constructor family: `LW_PLAIN`, `LW_TV`, `LW_TV_MEMB`, `LW_TV_SUPPORT`
@@ -257,6 +263,7 @@ what it expands *into* is.
 | Client SQL function names (named registry, `LW_` + UPPER_SNAKE) | +`LW_PLAIN`, `LW_TV`, `LW_TV_MEMB`, `LW_TV_SUPPORT`, `LW_GET`, `LW_GET_NULL`, `LW_GET_LIST` — client-only | vocabulary panel client rosters; SD1 docs; skills pointers |
 | `lwsql` (exported Go API under `public/`) | gains spec→name composition + token parsing | its importers; the two passes; the CLI |
 | `passreg` standard set (named registry) | +`LwConstructExpand`, +`LwExtractExpand` | every pipeline host, incl. play |
+| `LwShapeCheck` + SD5 audit-query generator (opt-in pass; generator home decided at implementation) | new, outside the standard set | hosts and schemas that opt in |
 | read-back generator emission (generated-code input) | refactored onto the shared expression builder; emitted SQL unchanged | recordstore `.out.go` goldens; round-trip tests |
 | `ddl/clickhouse` `TableOptions` (exported Go API) | index emission options | `ComposeCreateTable` callers; DDL goldens for opted-in schemas |
 | `leeway` CLI | +`ddl compose` | CLI help/docs |
@@ -352,6 +359,8 @@ what it expands *into* is.
     first-denominator vs last-numerator, per the ADR-0162 test's note).
   - `LwShapeCheck` negative fixtures: incomplete section, repeating channel
     without `…card`, dangling co-group half.
+  - SD5 audit queries: zero violations on the round-trip fixtures; a
+    deliberately corrupted co-length fixture goes red (`clickhouse-local`).
 - **Gap.** SD1 is documentation and has no lane. The inline renderer is
   untested because it is unshipped (SD8). Statement wrapping is untestable
   until the grammar port.
@@ -372,6 +381,8 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 - [Background analysis](../adr-background-work/leeway-dql-featureset.md) —
   taxonomy, inventory, name-grammar facts, QOC detail, kill-reasons.
+- [leeway-query-algebra](../explanation/leeway-query-algebra.md) — the
+  (S,N) guard model SD1 makes normative.
 - [ADR-0171](./0171-leeway-sql-read-surface.md) — the read surface this
   extends with a construct/transform direction.
 - [ADR-0162](./0162-leeway-co-ragged-function-pack.md) — the pack; §SD3
