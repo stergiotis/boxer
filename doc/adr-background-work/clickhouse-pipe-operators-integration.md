@@ -43,11 +43,11 @@ results — `clickhouse-local` is the vendor's own lowering oracle and the repo
 already has the worker pool for it (ADR-0028) — but that only replaces
 lowering **on the wire**; the analysis side still needs its own, and is safe
 to own precisely because a mistake there is a wrong picture rather than a
-wrong result (§7). One of the three defects in §2 turns out **not to be about
-pipes at all**: `HighlightLex` drops every unrecognised character, `|>`
-included, and that is worth fixing on its own terms. And on the question of
-whether the operator earns its keep: **not yet** — the reasoning, and the
-triggers that would change the answer, are in §10.
+wrong result (§7). One of the three defects in §2 turned out **not to be about
+pipes at all** — `HighlightLex` dropped every unrecognised character, `|>`
+included — and has since been fixed on its own terms (§2, `00b4012d`). And on
+the question of whether the operator earns its keep: **not yet** — the
+reasoning, and the triggers that would change the answer, are in §10.
 
 ## 1. What the feature is
 
@@ -164,13 +164,18 @@ Three consequences, each of which is a distinct piece of work:
    | `SELECT a ^ b FROM t` | `^` |
    | `SELECT a & b FROM t` | `&` |
 
-   So `HighlightLex` violates its own documented contiguity contract for any
-   unrecognised input, and `|>` is only the newest instance. The fix belongs
-   in `HighlightLex` — emit a span for unrecognised bytes so the invariant
-   holds at the source, with a test asserting spans start at 0, abut, and end
-   at `len(sql)` — not in a pipe-shaped special case. It is worth doing
-   whether or not pipe operators are ever supported, and it needs no grammar
-   change.
+   So `HighlightLex` violated its own documented contiguity contract for any
+   unrecognised input, and `|>` was only the newest instance.
+
+   **Fixed 2026-08-13 in `00b4012d`**, independently of anything else in this
+   note: `lexHighlight` now claims skipped bytes as a `CatPlain` span (plus a
+   tail case for garbage with no following token), and the coverage test —
+   which had asserted the invariant only on a well-formed query, which cannot
+   violate it — was extended to a table of unrecognised inputs. One knock-on
+   worth knowing: `buildTokenToSpanMap` pairs token *i* with span *i*
+   positionally, so it now pairs by text rather than relying on the
+   undocumented fact that gap spans can only exist when the parse has already
+   failed.
 
 A related current-state fact: **the FROM-first form fails independently of
 pipes.** `FROM orders SELECT customer, amount` lexes cleanly and still fails
@@ -605,10 +610,11 @@ smaller than it looks.
 
 The cost splits three ways, with very different ratios:
 
-1. **The `HighlightLex` contiguity fix (§2).** Do it now — but note it is
-   *not* pipe support. It is a live defect that silently deletes `#`, `@`,
-   `~`, `^`, `&` and any other unrecognised character from CodeView renders.
-   No grammar change, no edge cases, one invariant test.
+1. **The `HighlightLex` contiguity fix (§2).** Was worth doing on its own
+   terms, and is **done** (`00b4012d`) — but note it was *not* pipe support.
+   It was a live defect that silently deleted `#`, `@`, `~`, `^`, `&` and any
+   other unrecognised character from CodeView renders. No grammar change, no
+   edge cases, one invariant test. Nothing below it has been started.
 2. **Grammar + lowering (M0–M2).** Where every edge case and every difficult
    test actually sits. Defer.
 3. **Raiser and visualisation (M3–M4).** Entirely downstream of 2, however
