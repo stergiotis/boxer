@@ -1,8 +1,10 @@
 package lwsql
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -20,7 +22,8 @@ import (
 // Emitted SQL is ClickHouse-shaped (arrayAll lambdas) and uses built-ins
 // only; each query returns one row with a `violations` count, zero on a
 // conforming table. Plain (backbone) lanes carry no descriptors and are not
-// audited.
+// audited. Output is deterministic: lanes and queries are emitted in sorted
+// order, never map order.
 
 // AuditQuery is one invariant check over a leeway table.
 type AuditQuery struct {
@@ -40,15 +43,9 @@ type auditLanes struct {
 	positive []string
 }
 
-// paramPartner maps a mixed membership's parameter lane to the identity lane
-// whose `<role>card` descriptor covers both.
-var paramPartner = map[common.ColumnRoleE]common.ColumnRoleE{
-	common.ColumnRoleMixedVerbatimHighCardParameters: common.ColumnRoleMixedLowCardVerbatim,
-	common.ColumnRoleMixedRefHighCardParameters:      common.ColumnRoleMixedLowCardRef,
-}
-
 // AuditQueries derives the audit set from a table's physical column names.
-// tableName is emitted verbatim into FROM.
+// tableName is emitted verbatim into FROM (qualify and quote at the call
+// site when needed); column names are quoted with identifier escaping.
 func AuditQueries(tableName string, columnNames []string) (queries []AuditQuery, err error) {
 	if len(columnNames) == 0 {
 		err = eb.Build().Errorf("empty column set")
@@ -101,6 +98,19 @@ func AuditQueries(tableName string, columnNames []string) (queries []AuditQuery,
 			}
 			sections[key] = sec
 			order = append(order, key)
+		} else {
+			// Section-level segments must agree across the section's lanes;
+			// a first-seen latch would make the verdict depend on column
+			// order (adversarial review).
+			var coGroup naming.Key
+			coGroup, err = conv.ExtractCoSectionGroup(phy)
+			if err != nil {
+				return
+			}
+			if coGroup != sec.coGroup {
+				err = eb.Build().Str("section", sec.display).Str("column", columnNames[i]).Str("got", coGroup.String()).Str("want", sec.coGroup.String()).Errorf("lanes of one section disagree on the co-section group")
+				return
+			}
 		}
 		var role common.ColumnRoleE
 		role, err = conv.ExtractColumnRole(phy)
@@ -109,8 +119,9 @@ func AuditQueries(tableName string, columnNames []string) (queries []AuditQuery,
 			return
 		}
 		name := columnNames[i]
-		switch {
-		case role == common.ColumnRoleValue:
+		kind, base := ClassifyLaneRole(role)
+		switch kind {
+		case LaneKindValue:
 			var ct canonicaltypes.PrimitiveAstNodeI
 			ct, err = conv.ExtractCanonicalType(phy)
 			if err != nil {
@@ -130,20 +141,24 @@ func AuditQueries(tableName string, columnNames []string) (queries []AuditQuery,
 			default:
 				sec.scalarVals = append(sec.scalarVals, name)
 			}
-		case role == common.ColumnRoleLength:
+		case LaneKindLength:
 			sec.lenLane = name
-		case role == common.ColumnRoleCardinality:
+		case LaneKindSetCardinality:
 			sec.cardLane = name
-		case role == common.ColumnRoleCusumLength, role == common.ColumnRoleCusumCardinality:
+		case LaneKindCusum:
 			// materialized cumulative companions; not audited
-		case strings.HasSuffix(string(role), "card"):
-			sec.membCards[common.ColumnRoleE(strings.TrimSuffix(string(role), "card"))] = name
-		default:
+		case LaneKindMembership:
 			sec.membLanes[role] = name
+		case LaneKindMembershipCardinality:
+			sec.membCards[base] = name
+		default:
+			err = eb.Build().Str("column", name).Stringer("role", role).Errorf("unclassified column role — extend the lane classifier before auditing it")
+			return
 		}
 	}
 
 	coGroups := make(map[naming.Key][]*auditLanes, 4)
+	coGroupOrder := make([]naming.Key, 0, 4)
 	queries = make([]AuditQuery, 0, len(order)*3)
 	for _, key := range order {
 		sec := sections[key]
@@ -164,9 +179,10 @@ func AuditQueries(tableName string, columnNames []string) (queries []AuditQuery,
 				lanes.raggedSums = append(lanes.raggedSums, [2]string{sec.cardLane, v})
 			}
 		}
-		for role, lane := range sec.membLanes {
+		for _, role := range sortedRoles(sec.membLanes) {
+			lane := sec.membLanes[role]
 			base := role
-			if partner, isParam := paramPartner[role]; isParam {
+			if partner, isParam := MembershipParamPartner(role); isParam {
 				base = partner
 			}
 			if cardLane, repeating := sec.membCards[base]; repeating {
@@ -177,7 +193,8 @@ func AuditQueries(tableName string, columnNames []string) (queries []AuditQuery,
 				lanes.iLanes = append(lanes.iLanes, lane)
 			}
 		}
-		for _, cardLane := range sec.membCards {
+		for _, base := range sortedRoles(sec.membCards) {
+			cardLane := sec.membCards[base]
 			lanes.iLanes = append(lanes.iLanes, cardLane)
 			lanes.positive = append(lanes.positive, cardLane)
 		}
@@ -205,11 +222,15 @@ func AuditQueries(tableName string, columnNames []string) (queries []AuditQuery,
 			queries = append(queries, violationQuery(sec.display+": positivity", tableName, terms))
 		}
 		if lanes.coGroup != "" && len(lanes.iLanes) > 0 {
+			if _, seen := coGroups[lanes.coGroup]; !seen {
+				coGroupOrder = append(coGroupOrder, lanes.coGroup)
+			}
 			coGroups[lanes.coGroup] = append(coGroups[lanes.coGroup], &lanes)
 		}
 	}
 
-	for key, members := range coGroups {
+	for _, key := range coGroupOrder {
+		members := coGroups[key]
 		if len(members) < 2 {
 			continue // the static shape check flags dangling halves
 		}
@@ -223,10 +244,23 @@ func AuditQueries(tableName string, columnNames []string) (queries []AuditQuery,
 	return
 }
 
-// quoteAudit double-quotes a physical column name; validated name components
-// cannot contain a double quote.
+// sortedRoles returns the map's keys in lexical order, so emitted SQL is
+// reproducible run to run.
+func sortedRoles(m map[common.ColumnRoleE]string) []common.ColumnRoleE {
+	roles := make([]common.ColumnRoleE, 0, len(m))
+	for r := range m {
+		roles = append(roles, r)
+	}
+	slices.Sort(roles)
+	return roles
+}
+
+// quoteAudit renders a physical column name as a quoted, escape-safe SQL
+// identifier. Parsing validates component count, prefix, and canonical type
+// — not the name components' bytes — so foreign names must not be trusted
+// to splice verbatim.
 func quoteAudit(name string) string {
-	return `"` + name + `"`
+	return nanopass.QuoteIdentifier(name)
 }
 
 func violationQuery(name string, tableName string, terms []string) AuditQuery {

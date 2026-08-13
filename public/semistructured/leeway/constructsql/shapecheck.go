@@ -9,15 +9,18 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 )
 
 // LwShapeCheck (ADR-0181 §SD5) — the static half of the transform contract's
 // validation. It checks that a SELECT's output column set forms a coherent
 // leeway table: every output name parses under the naming convention, the
-// discovered table passes the validator, and section completeness holds per
-// channel. All of it is decidable from names alone; the invariants that need
-// data (co-length equality, cardinality positivity) are the audit-query
+// discovered table passes the validator, section-level segments agree across
+// each section's lanes, and section completeness holds per channel. All of
+// it is decidable from names alone; the invariants that need data
+// (co-length equality, cardinality positivity) are the audit-query
 // generator's half (lwsql.AuditQueries).
 //
 // The pass is analytical: on success the body rides through unchanged; any
@@ -63,9 +66,10 @@ func shapeCheckImpl(sql string) (result string, err error) {
 
 // outputNames derives the statement's output column names from the top-level
 // projection. An aliased item contributes its alias; a bare identifier rides
-// through under its own name; anything else — an expression without a minted
-// name — breaks the closure rule and is rejected, as is `*`, which cannot be
-// checked without a schema.
+// through under its own name (a table qualifier does not reach the result
+// column name and is dropped); anything else — an expression without a
+// minted name — breaks the closure rule and is rejected, as is `*`, which
+// cannot be checked without a schema.
 func outputNames(pr *nanopass.ParseResult, scope *nanopass.SelectScope) (names []string, err error) {
 	projection := scope.Node.ProjectionClause()
 	if projection == nil {
@@ -114,11 +118,29 @@ func itemOutputName(pr *nanopass.ParseResult, item *grammar1.ColumnsExprColumnCo
 			}
 			return
 		case *grammar1.ColumnExprIdentifierContext:
-			name = nanopass.DecodeIdentifier(strings.TrimSpace(nanopass.NodeText(pr, child)))
+			name, err = bareIdentifierName(pr, child)
 			return
 		}
 	}
 	err = eb.Build().Str("item", strings.TrimSpace(item.GetText())).Errorf("expression without a minted name breaks the closure rule (ADR-0181): wrap it in a constructor or alias it to a physical name")
+	return
+}
+
+// bareIdentifierName is the result-column name of an unaliased identifier
+// item: the nested identifier without any table qualifier, which ClickHouse
+// drops when naming the column.
+func bareIdentifierName(pr *nanopass.ParseResult, identExpr *grammar1.ColumnExprIdentifierContext) (name string, err error) {
+	colIdCtx, ok := identExpr.ColumnIdentifier().(*grammar1.ColumnIdentifierContext)
+	if !ok {
+		err = eb.Build().Str("item", strings.TrimSpace(nanopass.NodeText(pr, identExpr))).Errorf("unexpected identifier shape")
+		return
+	}
+	nestedCtx, ok := colIdCtx.NestedIdentifier().(*grammar1.NestedIdentifierContext)
+	if !ok {
+		err = eb.Build().Str("item", strings.TrimSpace(nanopass.NodeText(pr, identExpr))).Errorf("unexpected identifier shape")
+		return
+	}
+	name = nanopass.DecodeIdentifier(nestedCtx.GetText())
 	return
 }
 
@@ -134,21 +156,6 @@ func aliasName(ctx *grammar1.ColumnExprAliasContext) string {
 	return ""
 }
 
-// membershipLaneRoles are the membership identity/payload lane roles; their
-// cardinality companions are the `<role>card` spellings.
-var membershipLaneRoles = map[common.ColumnRoleE]bool{
-	common.ColumnRoleHighCardRef:                     true,
-	common.ColumnRoleHighCardRefParametrized:         true,
-	common.ColumnRoleHighCardVerbatim:                true,
-	common.ColumnRoleLowCardRef:                      true,
-	common.ColumnRoleLowCardRefParametrized:          true,
-	common.ColumnRoleLowCardVerbatim:                 true,
-	common.ColumnRoleMixedLowCardRef:                 true,
-	common.ColumnRoleMixedLowCardVerbatim:            true,
-	common.ColumnRoleMixedVerbatimHighCardParameters: true,
-	common.ColumnRoleMixedRefHighCardParameters:      true,
-}
-
 type sectionShape struct {
 	display    string
 	valueCount int
@@ -159,11 +166,13 @@ type sectionShape struct {
 	membLanes  map[common.ColumnRoleE]bool
 	membCards  map[common.ColumnRoleE]bool // keyed by the base lane role
 	coGroup    naming.Key
+	streaming  naming.Key
+	useAspects string // the section's use-aspects segment, verbatim
 }
 
 // CheckOutputColumns is the name-level shape check over one output column
 // set: parse, discover, validate, and enforce per-channel section
-// completeness plus co-section-group wholeness.
+// completeness, section-segment agreement, and co-section-group wholeness.
 func CheckOutputColumns(names []string) (err error) {
 	if len(names) == 0 {
 		return eb.Build().Errorf("empty output column set")
@@ -211,19 +220,50 @@ func CheckOutputColumns(names []string) (err error) {
 		if secName == "" {
 			continue // plain columns ride freely
 		}
+		var coGroup, streaming naming.Key
+		var use string
+		{
+			coGroup, err = conv.ExtractCoSectionGroup(phy)
+			if err != nil {
+				return
+			}
+			streaming, err = conv.ExtractStreamingGroup(phy)
+			if err != nil {
+				return
+			}
+			var useSet useaspects.AspectSet
+			useSet, err = conv.ExtractUseAspects(phy)
+			if err != nil {
+				return
+			}
+			use = useSet.String()
+		}
 		key := string(secName)
 		sec := sections[key]
 		if sec == nil {
 			sec = &sectionShape{
-				display:   key,
-				membLanes: make(map[common.ColumnRoleE]bool, 2),
-				membCards: make(map[common.ColumnRoleE]bool, 2),
+				display:    key,
+				membLanes:  make(map[common.ColumnRoleE]bool, 2),
+				membCards:  make(map[common.ColumnRoleE]bool, 2),
+				coGroup:    coGroup,
+				streaming:  streaming,
+				useAspects: use,
 			}
 			sections[key] = sec
 			order = append(order, key)
-			sec.coGroup, err = conv.ExtractCoSectionGroup(phy)
-			if err != nil {
-				return
+		} else {
+			// Section-level segments must agree across the section's lanes;
+			// a first-seen latch would make the verdict depend on the
+			// projection order, and a disagreement is a shape no generator
+			// produces (the read-back side re-derives names WITH the
+			// section's segments and would miss a divergent lane).
+			switch {
+			case coGroup != sec.coGroup:
+				return eb.Build().Str("section", sec.display).Str("column", names[i]).Str("got", coGroup.String()).Str("want", sec.coGroup.String()).Errorf("lanes of one section disagree on the co-section group")
+			case streaming != sec.streaming:
+				return eb.Build().Str("section", sec.display).Str("column", names[i]).Str("got", streaming.String()).Str("want", sec.streaming.String()).Errorf("lanes of one section disagree on the streaming group")
+			case use != sec.useAspects:
+				return eb.Build().Str("section", sec.display).Str("column", names[i]).Str("got", use).Str("want", sec.useAspects).Errorf("lanes of one section disagree on the use aspects — every lane of a section carries the same use segment")
 			}
 		}
 		var role common.ColumnRoleE
@@ -232,8 +272,9 @@ func CheckOutputColumns(names []string) (err error) {
 			err = eb.Build().Str("column", names[i]).Errorf("unable to classify: %w", err)
 			return
 		}
-		switch {
-		case role == common.ColumnRoleValue:
+		kind, base := lwsql.ClassifyLaneRole(role)
+		switch kind {
+		case lwsql.LaneKindValue:
 			sec.valueCount++
 			var ct canonicaltypes.PrimitiveAstNodeI
 			ct, err = conv.ExtractCanonicalType(phy)
@@ -253,24 +294,48 @@ func CheckOutputColumns(names []string) (err error) {
 			case canonicaltypes.ScalarModifierSet:
 				sec.setVals = append(sec.setVals, names[i])
 			}
-		case role == common.ColumnRoleLength:
+		case lwsql.LaneKindLength:
 			sec.hasLen = true
-		case role == common.ColumnRoleCardinality:
+		case lwsql.LaneKindSetCardinality:
 			sec.hasCard = true
-		case role == common.ColumnRoleCusumLength, role == common.ColumnRoleCusumCardinality:
+		case lwsql.LaneKindCusum:
 			// materialized cumulative companions; nothing to enforce statically
-		case membershipLaneRoles[role]:
+		case lwsql.LaneKindMembership:
 			sec.membLanes[role] = true
-		case strings.HasSuffix(string(role), "card"):
-			base := common.ColumnRoleE(strings.TrimSuffix(string(role), "card"))
+		case lwsql.LaneKindMembershipCardinality:
 			sec.membCards[base] = true
+		default:
+			return eb.Build().Str("column", names[i]).Stringer("role", role).Errorf("unclassified column role — extend the lane classifier before shape-checking it")
 		}
 	}
 
-	coGroups := make(map[naming.Key][]string, 4)
+	coGroups := make(map[naming.Key][]*sectionShape, 4)
+	coGroupOrder := make([]naming.Key, 0, 4)
 	for _, key := range order {
 		sec := sections[key]
-		if sec.valueCount > 0 && len(sec.membLanes) == 0 {
+		if sec.coGroup != "" {
+			if _, seenGroup := coGroups[sec.coGroup]; !seenGroup {
+				coGroupOrder = append(coGroupOrder, sec.coGroup)
+			}
+			coGroups[sec.coGroup] = append(coGroups[sec.coGroup], sec)
+		}
+	}
+	membershipReachable := func(sec *sectionShape) bool {
+		if len(sec.membLanes) > 0 {
+			return true
+		}
+		// A values-only co-section may lean on a membership-carrying
+		// partner — that sharing is what co-section groups exist for.
+		for _, partner := range coGroups[sec.coGroup] {
+			if sec.coGroup != "" && len(partner.membLanes) > 0 {
+				return true
+			}
+		}
+		return false
+	}
+	for _, key := range order {
+		sec := sections[key]
+		if sec.valueCount > 0 && !membershipReachable(sec) {
 			return eb.Build().Str("section", sec.display).Errorf("section has value lanes but no membership lane — an instance exists because it is tagged")
 		}
 		if len(sec.arrayVals) > 0 && !sec.hasLen {
@@ -290,13 +355,11 @@ func CheckOutputColumns(names []string) (err error) {
 				return eb.Build().Str("section", sec.display).Str("role", string(base)).Errorf("dangling membership cardinality lane: its membership lane is not in the set")
 			}
 		}
-		if sec.coGroup != "" {
-			coGroups[sec.coGroup] = append(coGroups[sec.coGroup], sec.display)
-		}
 	}
-	for key, members := range coGroups {
+	for _, key := range coGroupOrder {
+		members := coGroups[key]
 		if len(members) < 2 {
-			return eb.Build().Str("coSectionGroup", key.String()).Strs("sections", members).Errorf("dangling co-section-group half: the group must move whole under vertical subsetting")
+			return eb.Build().Str("coSectionGroup", key.String()).Str("section", members[0].display).Errorf("dangling co-section-group half: the group must move whole under vertical subsetting")
 		}
 	}
 	return

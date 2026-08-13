@@ -374,6 +374,28 @@ func (inst *HumanReadableNamingConvention) ExtractCoSectionGroup(column common.P
 	return
 }
 
+// ExtractUseAspects returns a tagged column's use-aspects segment. A plain
+// column has no use-aspects component and reports the empty set.
+func (inst *HumanReadableNamingConvention) ExtractUseAspects(column common.PhysicalColumnDesc) (aspects useaspects2.AspectSet, err error) {
+	var p positionData
+	p, err = getParseStructure(len(column.NameComponents))
+	if err != nil {
+		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to extract use aspects: %w", err)
+		return
+	}
+	if p.useAspectsIndex < 0 {
+		aspects = useaspects2.EmptyAspectSet
+		return
+	}
+	aspects = useaspects2.AspectSet(column.NameComponents[p.useAspectsIndex])
+	if !aspects.IsValid() {
+		aspects = useaspects2.EmptyAspectSet
+		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to parse use aspects: %w", ErrParseError)
+		return
+	}
+	return
+}
+
 // ExtractStreamingGroup returns the column's streaming-group key (present in
 // both the plain and the tagged layout).
 func (inst *HumanReadableNamingConvention) ExtractStreamingGroup(column common.PhysicalColumnDesc) (key naming.Key, err error) {

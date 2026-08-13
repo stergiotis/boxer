@@ -73,6 +73,53 @@ func TestShapeCheck_Rejections(t *testing.T) {
 	shapeErr(t, `SELECT "`+va+`", "`+memb+`" FROM t`, "without their `len` support")
 }
 
+// TestShapeCheck_QualifiedItemsAccepted: a table qualifier does not reach
+// the result column name; a qualified bare identifier must not false-reject.
+func TestShapeCheck_QualifiedItemsAccepted(t *testing.T) {
+	v, memb, _ := mintFixture(t)
+	shapeOK(t, `SELECT s."`+v+`", s."`+memb+`" FROM src AS s JOIN o USING (id)`)
+}
+
+// TestShapeCheck_SectionSegmentAgreement: lanes of one section must agree on
+// the section-level segments; the verdict must not depend on projection
+// order (adversarial review — the first-seen latch did).
+func TestShapeCheck_SectionSegmentAgreement(t *testing.T) {
+	plain, err := lwsql.NewComposer(lwsql.DefaultTableSegments())
+	require.NoError(t, err)
+	seg := lwsql.DefaultTableSegments()
+	seg.CoSectionGroup = "g"
+	grouped, err := lwsql.NewComposer(seg)
+	require.NoError(t, err)
+
+	vGrouped, err := grouped.TaggedValueColumn("sym", "v", "s", nil)
+	require.NoError(t, err)
+	membPlain, err := plain.MembershipColumn("sym", "low-card-ref")
+	require.NoError(t, err)
+
+	// Both orders reject, deterministically.
+	shapeErr(t, `SELECT "`+vGrouped+`", "`+membPlain+`" FROM t`, "disagree on the co-section group")
+	shapeErr(t, `SELECT "`+membPlain+`", "`+vGrouped+`" FROM t`, "disagree on the co-section group")
+
+	// Use-aspect disagreement is the same class.
+	vUse, err := plain.TaggedValueColumn("sym", "v", "s", []string{"use:tlp-amber"})
+	require.NoError(t, err)
+	shapeErr(t, `SELECT "`+vUse+`", "`+membPlain+`" FROM t`, "disagree on the use aspects")
+}
+
+// TestShapeCheck_ValueOnlyCoSectionLeansOnPartner: a values-only co-section
+// beside a membership-carrying partner is the sharing co-groups exist for.
+func TestShapeCheck_ValueOnlyCoSectionLeansOnPartner(t *testing.T) {
+	seg := lwsql.DefaultTableSegments()
+	seg.CoSectionGroup = "g"
+	c, err := lwsql.NewComposer(seg)
+	require.NoError(t, err)
+	aVal, err := c.TaggedValueColumn("a", "v", "s", nil)
+	require.NoError(t, err)
+	bMemb, err := c.MembershipColumn("b", "low-card-ref")
+	require.NoError(t, err)
+	shapeOK(t, `SELECT "`+aVal+`", "`+bMemb+`" FROM t`)
+}
+
 func TestShapeCheck_CoSectionGroupWholeness(t *testing.T) {
 	seg := lwsql.DefaultTableSegments()
 	seg.CoSectionGroup = "g"
