@@ -50,6 +50,7 @@ func NewCliCommandDdl() *cli.Command {
 	return &cli.Command{
 		Name: "ddl",
 		Subcommands: []*cli.Command{
+			newCliCommandDdlCompose(),
 			{
 				Name: "table",
 				Subcommands: []*cli.Command{
