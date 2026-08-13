@@ -133,6 +133,21 @@ func TestStandardSetExpandsLeewayConstructors(t *testing.T) {
 	require.Equal(t, inert, r.ApplyBestEffort(passreg.StagePreExecute, inert, zerolog.Nop()))
 }
 
+// TestStandardSetOrdersIdentityBeforeConstructors pins the 100 → 130
+// ordering claim: an LW_ID_* macro inside a constructor's expression
+// argument is expanded first, so the kept span carries bit arithmetic, and
+// the constructor then mints the alias around it.
+func TestStandardSetOrdersIdentityBeforeConstructors(t *testing.T) {
+	r := passreg.NewRegistry()
+	require.NoError(t, RegisterStandard(r))
+
+	out := r.ApplyBestEffort(passreg.StagePreExecute, "SELECT LW_PLAIN(LW_ID_TAG_VALUE(id), 'tag', 'u32', 'item:oq') FROM t", zerolog.Nop())
+	require.NotContains(t, out, "LW_ID_TAG_VALUE", "inner identity macro must expand")
+	require.NotContains(t, out, "LW_PLAIN", "outer constructor must expand")
+	require.Contains(t, out, `AS "oq:tag:u32:::0:"`)
+	require.Contains(t, out, "bitAnd(", "the kept span carries the identity expansion")
+}
+
 // TestStandardSetOmitsExposeSelectionConditions pins ADR-0121 §SD7: ExposeSelectionConditions changes a
 // query's result schema, so it is opt-in per host (play applies it from
 // buildResidual behind a toggle) and must never join the standard set — a bound
