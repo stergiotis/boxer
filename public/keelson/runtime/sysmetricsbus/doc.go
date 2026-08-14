@@ -12,10 +12,12 @@
 //   - SD1 per-domain subjects. P2 publishes the whole BundleSnapshot on a
 //     single subject (BundleSubject). The sysmetrics.{host}.{domain}
 //     fan-out — granular subscription, per-domain grants — comes later.
-//   - SD3 leeway-facts codec. P2 ships CBORCodec (fxamacker/cbor, already a
-//     dependency — no new dep). The chosen wire is "metrics are leeway
-//     facts, reuse the boxer.facts codec"; CBORCodec is the interim that
-//     the Codec interface lets us swap without touching Producer/Consumer.
+//   - SD3 leeway-facts codec — deferred in P2, then abandoned. P2 shipped
+//     CBORCodec (fxamacker/cbor, already a dependency — no new dep) as the
+//     interim, and the swap to the boxer.facts codec never happened.
+//     ADR-0184 settles that it will not: persistence re-models from
+//     sysmsnap structs against this wire. CBORCodec is the wire, not a
+//     placeholder.
 //
 // The package is transport-agnostic on purpose: it imports app (for BusI),
 // not inprocbus. The dataflow is strictly one way — there is no

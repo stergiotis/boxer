@@ -10,22 +10,32 @@ import (
 
 // Codec encodes a BundleSnapshot to bus bytes and back. The Producer and
 // Consumer hold a Codec so the wire format is swappable without touching
-// them: P2 ships CBORCodec; ADR-0090 SD3's leeway-facts codec is the
-// planned replacement.
+// them.
+//
+// The swap ADR-0090 §SD3 planned — to the leeway-facts codec — is no
+// longer planned. CBORCodec is the wire (ADR-0184, and see its doc for
+// what that cost). The seam stays because it is what lets the wire change
+// at all, not because a particular change is pending.
 type Codec interface {
 	Encode(snap *sysmsnap.BundleSnapshot) (payload []byte, err error)
 	Decode(payload []byte) (snap *sysmsnap.BundleSnapshot, err error)
 }
 
-// CBORCodec is the P2 interim codec (ADR-0090 SD3). It uses fxamacker/cbor
-// — already a project dependency, so it adds none. The chosen production
-// wire is the boxer.facts SoA codec; CBORCodec gets the bisection working
-// first and the Codec seam keeps the swap local.
+// CBORCodec is the plane's wire format. It uses fxamacker/cbor — already a
+// project dependency, so it adds none.
+//
+// It shipped in P2 as an interim, to get the producer/consumer bisection
+// working before the facts codec ADR-0090 §SD3 chose. The swap never
+// happened and is no longer intended: ADR-0184 builds persistence against
+// this wire instead, re-modelling from sysmsnap structs rather than teeing
+// bytes. The interim is therefore the decision, and the cost §SD3's
+// Alternatives predicted for "a bespoke metric codec" — a second
+// serialization plus a mapping step — is paid rather than avoided.
 type CBORCodec struct{}
 
 var _ Codec = CBORCodec{}
 
-// NewCBORCodec returns the interim CBOR codec.
+// NewCBORCodec returns the CBOR codec.
 func NewCBORCodec() (c CBORCodec) { return }
 
 // wireBundle carries a BundleSnapshot over the wire. It embeds the snapshot

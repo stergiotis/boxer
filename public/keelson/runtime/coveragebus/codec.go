@@ -7,10 +7,15 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// Codec is the wire seam of the coverage plane. The interim CBOR codec is
-// the sysmetricsbus position (ADR-0090 §SD3 precedent): the facts bus codec
-// is the planned replacement, and this interface is the swap point
-// (ADR-0089 keeps the bus wire distinct from the ingest wire either way).
+// Codec is the wire seam of the coverage plane, and CBORCodec is what it
+// carries.
+//
+// This followed sysmetricsbus, which shipped CBOR as an interim on the way
+// to ADR-0090 §SD3's facts bus codec. That swap was since abandoned there
+// (ADR-0184), so the precedent no longer carries a pending replacement —
+// only the seam. What the coverage plane's wire should be is ADR-0169's to
+// settle; nothing here is waiting on a decision made elsewhere. ADR-0089
+// keeps the bus wire distinct from the ingest wire either way.
 type Codec interface {
 	Encode(upd *covsnap.Update) (payload []byte, err error)
 	Decode(payload []byte) (upd *covsnap.Update, err error)
