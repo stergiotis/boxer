@@ -462,9 +462,39 @@ Proposed — awaiting review by the code owner.
   Deliberately dropped: per-interface IP address lists (a list per element does
   not flatten into this shape, and addresses are nearer the §SD8 sensitive
   class than a metric) and the raw mount options string.
-- **M5 — the fan-out domains: proc and sockets.**
-  Entity-per-item versus column-major arrays is decided here, against a working
-  store rather than in the abstract.
+- **M5 — the fan-out domains: proc and sockets.** ✓
+  Decided against the working store: **column-major**, as for the M4 per-item
+  domains. An entity per `(host, pid, tick)` would make "this process over
+  time" a key lookup instead of an array walk, but it multiplies the row rate
+  by the process count — the collector caps at 256 processes, so at 1 Hz that
+  is ~22M rows/day/host against ~86k. `boxer.facts` is shared with runtime
+  facts and Consequences already records volume as the cost of that sharing; a
+  256× multiplier on the busiest domain is not worth one query shape array
+  functions can express anyway. Three kinds, taking the store to twelve.
+
+  **A correction to §SD4's sensitivity plan, for the durable form.** §SD8 of
+  ADR-0090 puts a `sensitive` membership beside each sensitive attribute's own,
+  so the tag travels with the data. Two things make separation better here, and
+  the command line, user name and uid/gid are their own kind
+  (`SysProcCmd`, `--tee-proc-cmd`, off by default):
+
+  - A component DTO binds **one membership per field**, so §SD8's second tag is
+    unreachable from the generated write path at all.
+  - §SD8's accepted exposure was scoped to *"the single-tenant, localhost-bound
+    bus"*, where a command line lives as long as its subscriber. A row in
+    `boxer.facts` outlives the process, is readable by anything with database
+    access, and is backed up with everything else. The masking switch §SD8
+    defers does not exist, so a tag today annotates without enforcing — while a
+    kind a deployment never writes needs no enforcement.
+
+  The rest of the process table is stored either way, so ADR-0126's topology
+  marks and the load view are unaffected by the default.
+
+  **Sockets are written once per observation.** That collector samples on its
+  own slower cadence and consecutive bundles repeat one snapshot; a row per
+  bundle would store one observation many times and put a rising Order on rows
+  that never changed. The row is dated by the collection stamp rather than the
+  bundle's.
 - **M6 — topology, closing ADR-0126 §SD6.**
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
