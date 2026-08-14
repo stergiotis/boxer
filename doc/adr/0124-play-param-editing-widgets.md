@@ -688,6 +688,46 @@ no slots at all, because grammar1's `QueryStmt` is single-statement — the same
 scope §SD8's other deferrals live in, and the trigger for revisiting is the
 same first real friction.
 
+### 2026-08-14 — a declared-options knob, and a way back to the defaults
+
+Two additions, both from the same finding: a published query's knobs are its
+whole interface, and the ladder §SD2 built had one rung — any parameter that was
+not half of a DateTime range got a text field.
+
+**`-- play: enum <slot> <value>[=<label>][,…]`** renders a knob as a dropdown.
+A parameter whose values are a known short set is a different control from one
+that takes any text: `size_by` takes `bytes` or `count`, and until now a reader
+had to know that and spell one of them, with a typo answering as an empty
+result rather than as an error. Nothing in `{name:Type}` says what the values
+are — `UInt8` is not "1 through 4" — so §SD1's detection cannot reach this, and
+the marker is the declaration §SD6 already established the vocabulary for (and
+that §O4 sketched as `-- play: range <lo> <hi>`). The widget sits after both
+range widgets and before the scalar tail: a range is a statement about two slots
+at once, so letting the pair fold first keeps a stray hint on one half from
+splitting a picker. The hints reach the widget the way the evaluator does — the
+orchestrator holds what a widget needs from outside its own slots and hands it
+over — and a hint naming a placeholder the buffer does not carry gets §SD7's
+advisory line, because its symptom is otherwise indistinguishable from having
+written no hint at all.
+
+**Values from the data are not built.** `All catalogs`, populated by a query
+over the corpus, is the variant a browsing UI actually wants; it needs a second
+execution, a shape contract for its result and a rule for when it re-runs, which
+is a bigger feature wearing the same syntax. A document that wants it writes a
+text field and says so in its prose.
+
+**Reset** puts every knob back to the value the buffer was *loaded* with. The
+semantics are the whole of it: the defaults are captured when a buffer is
+installed and never recomputed, because a widget's drift rewrites the very
+prelude they would be recomputed from — "restore the defaults" would come to
+mean "restore what you last did". Only prelude-bound names have one; a live
+name's value comes from a panel (the 2026-07-22 amendment), and taking it back
+to a value the buffer never stated would be the pane overruling the panel that
+owns it. The control is absent rather than disabled when nothing has moved, so
+its appearing is itself the signal that something has, and it asks for a run,
+since leaving the old result up would make the button look like it had not
+worked.
+
 ## References
 
 - [ADR-0016](./0016-imzero2-time-range-picker.md) — the range picker and its

@@ -177,6 +177,18 @@ func TestParseDocShapes(t *testing.T) {
 	require.NotNil(t, def)
 	assert.Equal(t, []TabSel{{ID: "table", Node: "recent"}, {ID: "detail"}}, def.Tabs)
 
+	// A zone suffix places the pane; it composes with a node binding, and the
+	// zone comes last because the binding syntax predates it.
+	def, errs = parseOne(t, "placed.md", docMD("title: Placed\ntabs: [treemap, \"detail@side\", \"table:rows@bottom\"]",
+		"```sql\nWITH rows AS (SELECT 1) SELECT * FROM rows\n```"))
+	require.Empty(t, errs)
+	require.NotNil(t, def)
+	assert.Equal(t, []TabSel{
+		{ID: "treemap"},
+		{ID: "detail", Zone: "side"},
+		{ID: "table", Node: "rows", Zone: "bottom"},
+	}, def.Tabs)
+
 	// A datasets list declares the ad-hoc aliases the buffer references
 	// (ADR-0134 §SD4); absent is nil.
 	def, errs = parseOne(t, "ds.md", docMD("title: DS\ndatasets: [items, series_a]",
@@ -222,6 +234,9 @@ func TestParseDocErrors(t *testing.T) {
 		{"tabs_unknown_panel", "a.md", "title: A\ntabs: [editor]", sqlFence, "not a result panel"},
 		{"tabs_empty_node", "a.md", "title: A\ntabs: [\"table:\"]", sqlFence, "empty node binding"},
 		{"tabs_duplicate", "a.md", "title: A\ntabs: [table, table]", sqlFence, "twice"},
+		{"tabs_unknown_zone", "a.md", "title: A\ntabs: [\"table@basement\"]", sqlFence, "body, side and bottom"},
+		{"tabs_chrome_zone", "a.md", "title: A\ntabs: [\"table@editor\"]", sqlFence, "body, side and bottom"},
+		{"tabs_empty_zone", "a.md", "title: A\ntabs: [\"table@\"]", sqlFence, "body, side and bottom"},
 		{"tabs_bad_shape", "a.md", "title: A\ntabs: yes-please", sqlFence, "must be \"auto\" or a list"},
 		{"datasets_not_list", "a.md", "title: A\ndatasets: nope", sqlFence, "must be a list"},
 		{"datasets_bad_alias", "a.md", "title: A\ndatasets: [bad-alias]", sqlFence, "not a bare identifier"},

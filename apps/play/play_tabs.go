@@ -36,6 +36,16 @@ const (
 	// TabZonePreview when Preview was its only occupant.
 	TabZoneTools
 	TabZoneSide // split right of the body leaf (Detail)
+	// TabZoneBottom is the leaf split BELOW the body: a pane read alongside
+	// the body rather than instead of it, spanning the full width because the
+	// split is taken before the side zone narrows the body.
+	//
+	// Nothing registers here by default, so play's own layout is unchanged; it
+	// exists for a document that says where its panes go (ADR-0132's `tabs:`
+	// zone suffix). The three-pane shape it buys — a picture, its detail
+	// beside it, the rows underneath — is what a corpus browser is, and it was
+	// not expressible while every result panel landed in one leaf of tabs.
+	TabZoneBottom
 )
 
 // TabFrame is the per-frame view a tab body renders from: the active result
@@ -157,6 +167,31 @@ func (inst *TabRegistry) Replace(id string, spec TabSpec) (err error) {
 		}
 		inst.specs[i] = spec
 		return
+	}
+	err = eh.Errorf("tab %q: not registered", id)
+	return
+}
+
+// SetZone moves a registered tab to another layout zone, leaving the rest of
+// its spec alone.
+//
+// It exists so an embedder can place a pane without rebuilding the spec that
+// declares it: a document says where its panes go, and everything else about
+// them — the panel, the dock identity, the shape contract — belongs to
+// whoever registered the tab. Replace would make the caller restate all of it,
+// and a caller restating a spec it did not author is a caller that will
+// eventually restate it wrongly.
+//
+// Like the other mutators, valid only before the first Render.
+func (inst *TabRegistry) SetZone(id string, z TabZoneE) (err error) {
+	if err = inst.mutable("SetZone"); err != nil {
+		return
+	}
+	for i := range inst.specs {
+		if inst.specs[i].ID == id {
+			inst.specs[i].Zone = z
+			return
+		}
 	}
 	err = eh.Errorf("tab %q: not registered", id)
 	return

@@ -210,6 +210,22 @@ func attenuateTabs(inner *play.PlayApp, def *AppletDef, logger zerolog.Logger) (
 			}
 		}
 		for _, sel := range def.Tabs {
+			// Placement before binding, and both before the landing tab: a
+			// zone a document names is part of what it declares, so a failure
+			// to apply it is an error like a failed binding rather than a
+			// warning like a stray tab. The author asked for a layout the
+			// instance cannot give.
+			if sel.Zone != "" {
+				zone, known := tabZones[sel.Zone]
+				if !known {
+					err = eh.Errorf("sqlapplet %s: tab %q names unknown zone %q", def.Slug, sel.ID, sel.Zone)
+					return
+				}
+				if zErr := inner.Tabs().SetZone(sel.ID, zone); zErr != nil {
+					err = eh.Errorf("sqlapplet %s: %w", def.Slug, zErr)
+					return
+				}
+			}
 			if sel.Node == "" {
 				continue
 			}

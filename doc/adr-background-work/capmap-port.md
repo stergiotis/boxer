@@ -467,3 +467,25 @@ and a write path — describe an app that *embeds* an applet for its list and
 draws its own review surface, which is `adhocdemo`'s shape with a real screen in
 place of its Regenerate button. Trying to express it as a SQL document would
 mean putting a mutation behind a lens whose whole contract is that it reads.
+
+### 12.9 What has since been built
+
+**2026-08-14 — G1, G2, G7 and G8 are done**, in play and sqlapplet, and the
+competence book uses all four.
+
+| Gap | What landed |
+| --- | --- |
+| G1 | A `tabs:` entry is `<panel>[:<node>][@<zone>]`; `body`, `side` and `bottom` may be named (ADR-0132 Update 2026-08-14) |
+| G2 | `TabZoneBottom`, split before the side zone so it spans the full width, plus `TabRegistry.SetZone` (ADR-0097 Update 2026-08-14) |
+| G7 | `-- play: enum <slot> <value>[=<label>][,…]` and a dropdown widget ahead of the scalar tail (ADR-0124 Update 2026-08-14) |
+| G8 | Reset, restoring the values the buffer was *loaded* with — captured at install, never recomputed from a prelude the knobs rewrite |
+
+Two of the four turned out smaller than this survey implied, and one turned out
+to have a boundary worth naming. G1 and G2 are one change: play already built a
+split layout out of zones, and the missing half was a document's ability to name
+one. G7's *declared* options are a day's work; the values-from-the-data variant
+the screenshots actually show — `All catalogs`, populated by a query — is a
+different feature with the same syntax, and is not built.
+
+What that leaves for the reading screen is G9 (a predicate input) and G12
+(treemap depth, and the toolbar's quantile readout).

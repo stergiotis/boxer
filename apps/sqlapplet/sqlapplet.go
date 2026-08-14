@@ -50,10 +50,19 @@ const (
 
 // TabSel is one entry of an explicit frontmatter `tabs:` list: a result-panel
 // slug, optionally bound to a split node by CTE name (`table:recent`,
-// ADR-0132 §SD4 riding ADR-0097 slice 6c).
+// ADR-0132 §SD4 riding ADR-0097 slice 6c), and optionally placed in a layout
+// zone (`table@bottom`, ADR-0132 Update 2026-08-14).
+//
+// The full form is `<panel>[:<node>][@<zone>]`. The zone comes last because
+// the node binding was there first and a suffix cannot be added in front of
+// one without re-reading every existing document.
 type TabSel struct {
 	ID   string
 	Node string
+	// Zone is the pane's placement, empty for the panel's own default. See
+	// [tabZones] for the three an author may name and why the other two are
+	// not among them.
+	Zone string
 }
 
 // AppletDef is one parsed applet document, ready to mint.
@@ -134,6 +143,21 @@ var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 // ClickHouse identifier, since it is interpolated as keelson('<alias>')
 // and rewritten to a handle client-side (ADR-0134 §SD4).
 var datasetAliasPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// tabZones are the layout zones a `tabs:` entry may place a pane in, mapped to
+// play's own (ADR-0132 Update 2026-08-14, riding ADR-0097 slice 6a).
+//
+// Three of play's five, and the two missing ones are missing on purpose.
+// `editor` holds the buffer an applet does not have, and `tools` is the leaf
+// beside it — both are chrome zones, and a result pane placed in one would sit
+// in a column whose reason for existing was attenuated away. An author who
+// wants a pane elsewhere is asking for a *layout*, and body/side/bottom are the
+// three positions a layout has once the editor is gone.
+var tabZones = map[string]play.TabZoneE{
+	"body":   play.TabZoneBody,
+	"side":   play.TabZoneSide,
+	"bottom": play.TabZoneBottom,
+}
 
 // resultTabIDs are play's result-panel registry slugs an explicit `tabs:`
 // list may name (the chrome tabs are never listable — attenuation removes
@@ -434,7 +458,16 @@ func parseTabs(bookID string, path string, v any) (tabs []TabSel, err error) {
 			return
 		}
 		sel := TabSel{ID: entry}
-		if id, node, hasNode := strings.Cut(entry, ":"); hasNode {
+		if head, zone, hasZone := strings.Cut(entry, "@"); hasZone {
+			sel.ID = head
+			sel.Zone = zone
+			if _, known := tabZones[sel.Zone]; !known {
+				err = eh.Errorf("sqlapplet: %s/%s: `tabs` entry %q names zone %q; the zones a document may place a pane in are body, side and bottom",
+					bookID, path, entry, sel.Zone)
+				return
+			}
+		}
+		if id, node, hasNode := strings.Cut(sel.ID, ":"); hasNode {
 			sel.ID = id
 			sel.Node = node
 			if sel.Node == "" {

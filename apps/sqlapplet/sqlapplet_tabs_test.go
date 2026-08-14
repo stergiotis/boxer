@@ -106,6 +106,73 @@ func TestAttenuateTabsExplicitListCanAskForADefaultOffPanel(t *testing.T) {
 	assert.NotContains(t, ids, "network")
 }
 
+// zonesOf reports where attenuation placed each surviving pane.
+func zonesOf(t *testing.T, def *AppletDef) (zones map[string]play.TabZoneE) {
+	t.Helper()
+	inner := play.NewLivePlayApp(nil, "", appletMaxHistory)
+	require.NoError(t, attenuateTabs(inner, def, zerolog.Nop()))
+	zones = make(map[string]play.TabZoneE, len(inner.Tabs().Specs()))
+	for _, spec := range inner.Tabs().Specs() {
+		zones[spec.ID] = spec.Zone
+	}
+	return
+}
+
+// A document places its panes (ADR-0132 Update 2026-08-14). Without this every
+// result panel landed in one leaf as tabs, so the three-pane shape a browser is
+// — a picture, its detail beside it, the rows underneath — could not be
+// declared at all.
+func TestAttenuateTabsAppliesDeclaredZones(t *testing.T) {
+	zones := zonesOf(t, &AppletDef{Slug: "browser", Tabs: []TabSel{
+		{ID: "treemap"},
+		{ID: "detail", Zone: "side"},
+		{ID: "table", Zone: "bottom"},
+	}})
+
+	assert.Equal(t, play.TabZoneBody, zones["treemap"], "an unqualified entry keeps the panel's own zone")
+	assert.Equal(t, play.TabZoneSide, zones["detail"])
+	assert.Equal(t, play.TabZoneBottom, zones["table"])
+}
+
+// A zone moves a pane OUT of its default as well as into one: Detail is
+// registered in the side zone, so placing it in the body is the interesting
+// direction — it proves the document overrides play rather than only agreeing
+// with it.
+func TestAttenuateTabsZoneOverridesThePanelsDefault(t *testing.T) {
+	zones := zonesOf(t, &AppletDef{Slug: "stacked", Tabs: []TabSel{
+		{ID: "detail", Zone: "body"},
+		{ID: "table", Zone: "bottom"},
+	}})
+	assert.Equal(t, play.TabZoneBody, zones["detail"])
+}
+
+// A zone the parser would have rejected still fails the mount rather than being
+// dropped: the author asked for a layout the instance cannot provide, which is
+// the same class of failure as a binding that does not resolve.
+func TestAttenuateTabsRefusesAnUnknownZone(t *testing.T) {
+	inner := play.NewLivePlayApp(nil, "", appletMaxHistory)
+	err := attenuateTabs(inner, &AppletDef{Slug: "bad", Tabs: []TabSel{{ID: "table", Zone: "basement"}}}, zerolog.Nop())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "basement")
+}
+
+// The zones a document may name are play's, and the two it may not name are
+// the chrome ones. A zone added to play without a decision here would be
+// unreachable, which is fine; one added HERE without a play zone behind it
+// would not compile, which is the direction that matters.
+func TestTabZonesAreDistinctAndExcludeChrome(t *testing.T) {
+	seen := make(map[play.TabZoneE]string, len(tabZones))
+	for name, zone := range tabZones {
+		if prev, dup := seen[zone]; dup {
+			t.Fatalf("zones %q and %q both name the same play zone", prev, name)
+		}
+		seen[zone] = name
+		assert.NotEqual(t, play.TabZoneEditor, zone, "%q names the editor zone, which an applet removes", name)
+		assert.NotEqual(t, play.TabZoneTools, zone, "%q names the tools zone, which sits beside the removed editor", name)
+	}
+	assert.Len(t, tabZones, 3)
+}
+
 // landingTab reports which tab attenuation raised, via the launch composer —
 // the only reader play exports for "the tab play itself raised".
 func landingTab(t *testing.T, def *AppletDef) (id string) {

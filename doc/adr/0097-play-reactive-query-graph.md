@@ -481,6 +481,29 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-08-14 — slice 6a gains a fifth zone, below the body
+
+The tab registry's zones (D3/D4) were the four the editing layout needs: the
+body leaf, the editor above it, the tools leaf beside the editor, and a side
+leaf right of the body. They describe play, and until now play was the only
+consumer — an embedder could remove tabs but not place them.
+
+**`TabZoneBottom` is a leaf split below the body**, and `TabRegistry.SetZone`
+moves a registered tab into it without restating the tab's own spec. Nothing
+registers there by default, so play's layout is unchanged; the zone exists for a
+document that says where its panes go
+([ADR-0132](./0132-sqlapplet-sql-defined-applets.md) Update 2026-08-14), and the
+shape it buys — a picture, its detail beside it, the rows underneath — is one
+the four zones could not express at all.
+
+Two details are load-bearing. The split is taken **before** the side split, so
+it spans the body's full width and the side split narrows only what remains
+above it; the reverse order files the bottom pane beside the side pane instead
+of under both. And the progress strip's gate moves from "the body zone" to "a
+full-width zone": the reason the side zone is withheld from it is that Detail is
+~250 pt wide and the strip's numbers clip, which is a fact about width rather
+than about which leaf a pane sits in.
+
 ### 2026-08-05 — the status bar says what a run read; play's numbers get one vocabulary
 
 The Map's landed-run readout (next entry) made an omission in the main status

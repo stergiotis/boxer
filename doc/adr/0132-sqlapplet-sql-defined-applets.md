@@ -619,6 +619,44 @@ would let a document say two contradictory things about the same list, and
 because every book in the corpus already listed its subject first — the order
 was carrying the intent all along.
 
+## Update (2026-08-14) — a `tabs:` entry may say where its pane goes
+
+§SD1's `tabs:` said *which* panels an applet keeps and the 2026-08-05 Update
+added *which one opens*. Neither said **where** a pane sits, so every result
+panel landed in one leaf as tabs and the reader saw one at a time. play has had
+a split layout all along — the body leaf, the editor above it, tools beside the
+editor, a side leaf right of the body, with `detail` registered into the side
+one — but which zone a pane belongs to was play's per-tab default and a document
+could not override it.
+
+An entry is now `<panel>[:<node>][@<zone>]`, and the zone comes last because the
+node binding was there first and a suffix cannot be added in front of one
+without re-reading every existing document. Three zones may be named — `body`,
+`side` and `bottom` — and the missing two are missing on purpose: `editor` holds
+the buffer an applet does not have and `tools` is the leaf beside it, so a
+result pane placed in either would sit in a column whose reason for existing was
+attenuated away.
+
+`bottom` is new in play (ADR-0097's zones gained it in the same change) and
+nothing registers there by default, so play's own layout is what it was. It is
+taken **before** the side split, which is what makes it span the full width: the
+side split then narrows only what is left above it. Reversing the two would put
+the bottom pane under the body column alone, beside the side pane rather than
+under it.
+
+The application is `TabRegistry.SetZone`, not `Replace`: a document says where
+its panes go, and everything else about a pane — its panel, its dock identity,
+its shape contract — belongs to whoever registered it. A caller restating a spec
+it did not author is a caller that will eventually restate it wrongly.
+
+A zone that does not resolve **fails the mount**, where an unremovable tab only
+warns. The asymmetry is the ADR's existing one: a stray tab is cosmetic, and a
+layout the instance cannot provide is the author being ignored.
+
+Two of the competence book's documents use it, which is what it was built for:
+the browser puts its rows top-left, the focused note's detail beside them and
+the family graph underneath, and the map puts its table under the picture.
+
 ## References
 
 Internal:

@@ -121,6 +121,35 @@ func TestTabRegistryMutationAndFreeze(t *testing.T) {
 	require.Error(t, reg.Add(TabSpec{ID: "late", DockID: 64, Render: noop}))
 	require.Error(t, reg.Replace("table", TabSpec{ID: "late", DockID: 64, Render: noop}))
 	require.Error(t, reg.Remove("table"))
+	require.Error(t, reg.SetZone("table", TabZoneBottom))
+}
+
+// SetZone moves a pane and leaves the rest of its spec — the panel, the dock
+// identity, the shape contract — to whoever registered it. An embedder that had
+// to Replace instead would be restating a spec it did not author.
+func TestTabRegistrySetZone(t *testing.T) {
+	app := tabsTestApp()
+	reg := app.Tabs()
+	before := *specByID(t, app, "table")
+	require.Equal(t, TabZoneBody, before.Zone)
+
+	require.NoError(t, reg.SetZone("table", TabZoneBottom))
+	after := *specByID(t, app, "table")
+	assert.Equal(t, TabZoneBottom, after.Zone)
+	assert.Equal(t, before.DockID, after.DockID, "identity is not a placement")
+	assert.Equal(t, before.Title, after.Title)
+	assert.Equal(t, before.ShapeContract, after.ShapeContract)
+
+	// The bottom zone is empty until something is put there, which is what
+	// keeps play's own layout unchanged by its existence.
+	assert.Len(t, reg.byZone(TabZoneBottom), 1)
+	require.Error(t, reg.SetZone("nosuchtab", TabZoneBottom))
+}
+
+// Nothing registers in the bottom zone by default: it exists for a document
+// that places its panes, and play's own three-leaf layout must be what it was.
+func TestBottomZoneIsEmptyByDefault(t *testing.T) {
+	assert.Empty(t, tabsTestApp().Tabs().byZone(TabZoneBottom))
 }
 
 // Specs is the embedder-facing enumeration: a copy, in registration order.

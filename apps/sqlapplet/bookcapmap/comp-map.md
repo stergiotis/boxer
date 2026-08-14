@@ -5,7 +5,7 @@ status: draft
 title: Competence map
 icon: "🗺"
 endpoint: introspection
-tabs: [treemap, table]
+tabs: [treemap, "table@bottom"]
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
@@ -29,7 +29,11 @@ breadcrumb walks back out. The panel's own `show` control (`drill` ▸ one
 frontier at a time, `full` ▸ every level at once) decides how much of the tree
 is drawn before you click.
 
-**The knobs.** `size_by` picks the area: `bytes` is the competence's own prose,
+The Table tab sits underneath the picture rather than behind it, so a cell you
+cannot place is one glance from being named instead of one click.
+
+**The knobs.** Both are lists, so the values are the offer rather than something
+to spell. `size_by` picks the area: `bytes` is the competence's own prose,
 `count` gives every competence the same area so the picture becomes shape rather
 than volume. `color_by` picks the colour: `branch` is the level-2 ancestor —
 which part of the toolbelt this belongs to, and the reading that makes the map
@@ -38,6 +42,8 @@ worth colouring at all — with `domain`, `catalog` and `level` as alternatives.
 ```sql
 SET param_size_by = 'bytes';
 SET param_color_by = 'branch';
+-- play: enum size_by bytes=prose bytes,count=one each
+-- play: enum color_by branch,domain,catalog,level
 
 WITH RECURSIVE
   parents AS (

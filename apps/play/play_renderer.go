@@ -676,10 +676,18 @@ type PlayApp struct {
 	// drift baseline (write only when the draft moved away from it) and the
 	// reseed guard (follow the store only when the store moved away from
 	// it), so a co-writing panel and the pane do not chase each other.
-	paramSlots             []paramSlot
-	paramDrafts            map[string]*string
-	paramSyncedValues      map[string]string
-	paramLiveSeeded        map[string]string
+	paramSlots        []paramSlot
+	paramDrafts       map[string]*string
+	paramSyncedValues map[string]string
+	paramLiveSeeded   map[string]string
+	// paramDefaults is what Reset restores: the prelude values the buffer was
+	// LOADED with, captured when a buffer is installed and not touched again.
+	// It cannot be re-read from the prelude on demand, because a widget's drift
+	// rewrites that prelude — the default would then be whatever the reader
+	// last did, and the gesture would restore nothing (ADR-0124 Update
+	// 2026-08-14). A name with no entry has no default: a live name is
+	// panel-driven, and Reset leaves it to its panel.
+	paramDefaults          map[string]string
 	paramWidgets           []paramWidgetI
 	paramEvaluator         *evaluator.Evaluator
 	paramHidePrelude       bool
@@ -773,6 +781,9 @@ func (inst *PlayApp) RestorePersistedSql() {
 		return
 	}
 	inst.sql = string(value)
+	// The restored buffer is the one this session starts from, so its prelude
+	// is what Reset restores to — not the compiled-in default it replaced.
+	inst.captureParamDefaults(inst.sql)
 }
 
 // RestorePersistedTimelineBandsSql loads the bands-SQL editor buffer
@@ -951,15 +962,24 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		// Range widget first so the Grafana-style picker (when the
 		// host has wired an evaluator via SetCapabilities) folds the
 		// from/to pair; otherwise its Matches returns ok=false and
-		// the simpler dateTimePairWidget claims the slots. Scalar
-		// text widget is the tail catch-all — one TextEdit per
+		// the simpler dateTimePairWidget claims the slots. The enum
+		// widget comes after both: a declared option list is a
+		// per-slot statement, and a range is a statement about two
+		// slots at once, so letting the pair fold first keeps a
+		// stray enum hint on one half from splitting a picker.
+		// Scalar text widget is the tail catch-all — one TextEdit per
 		// remaining slot.
 		paramWidgets: []paramWidgetI{
 			newDateTimeRangeWidget(),
 			newDateTimePairWidget(),
+			newEnumWidget(),
 			newScalarTextWidget(),
 		},
 	}
+	// The buffer this instance opens with is the one Reset restores to. For an
+	// applet that is the document's declared prelude, which is the case the
+	// gesture exists for.
+	inst.captureParamDefaults(initialSQL)
 	inst.timeline = NewTimelineDriver(timelineIds, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
 	inst.mapDriver = NewMapDriver(mk(), client)
 	inst.worldDriver = NewWorldDriver(mk())
@@ -1344,6 +1364,18 @@ func (inst *PlayApp) Render() error {
 			if len(editorIDs) > 0 && len(bodyIDs) > 0 {
 				bodyLeaf = dock.Split(rootLeaf, c.DockBelow, 0.45, bodyIDs...)
 			}
+			// Bottom before side, and the order is the layout: this split takes
+			// the whole body's width, and the side split then narrows only what
+			// is left above it. Reversing them would put the bottom pane under
+			// the body column alone, beside the side pane rather than under it.
+			//
+			// bodyLeaf keeps addressing the surviving top half: the interpreter
+			// remaps a split's parent handle to the old node and gives the new
+			// node its own, which is the same property the tools zone relies on
+			// when it splits rootLeaf after the body already did.
+			if bottom := zoneTabOrder(inst.tabs.byZone(TabZoneBottom), focused); len(bottom) > 0 {
+				_ = dock.Split(bodyLeaf, c.DockBelow, 0.60, bottom...)
+			}
 			if side := zoneTabOrder(inst.tabs.byZone(TabZoneSide), focused); len(side) > 0 {
 				_ = dock.Split(bodyLeaf, c.DockRight, 0.70, side...)
 			}
@@ -1412,12 +1444,13 @@ func (inst *PlayApp) renderTabBody(spec *TabSpec, title string, f *TabFrame) {
 	// new result is on the way. The empty-state spinner cannot cover this:
 	// it is reached only when there is no result at all.
 	//
-	// Body-zone result panes only. Chrome tabs (Graph, and every tool
+	// Full-width result panes only. Chrome tabs (Graph, and every tool
 	// pane in its own leaf) do not render the frame at all, and the side
 	// zone is narrow by design — Detail is ~250 pt wide, where bar +
 	// numbers clip, and the body pane beside it is already carrying the
-	// same strip.
-	if spec.Panel != nil && spec.Zone == TabZoneBody && f.Loading && f.Rec != nil {
+	// same strip. The bottom zone is full width, so it keeps the strip:
+	// the reason to withhold one is the pane's width, not its leaf.
+	if spec.Panel != nil && (spec.Zone == TabZoneBody || spec.Zone == TabZoneBottom) && f.Loading && f.Rec != nil {
 		inst.renderPaneProgressStrip(inst.tabOnActiveLane(spec.ID))
 	}
 	spec.Render(f)
@@ -2242,6 +2275,10 @@ func (inst *PlayApp) consumePendingSnippet() (insert string) {
 	if replace := inst.pendingSnippetReplace; replace != "" {
 		inst.pendingSnippetReplace = ""
 		inst.sql = replace
+		// A whole-buffer swap is a new buffer, so its prelude is the new
+		// default Reset restores to. An insert is not: it edits the buffer the
+		// reader already has.
+		inst.captureParamDefaults(replace)
 		insert = ""
 	}
 	return

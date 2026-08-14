@@ -42,7 +42,8 @@ or one that lives in a tree this corpus does not read. Sorting by it puts the
 systematic gaps at the top and the one-offs at the bottom.
 
 **The knobs.** `show` picks the resolution (`unresolved` by default, `all` for
-everything). `kind` narrows to `parent`, `similar` or `wikilink`. `section`
+everything) and `kind` narrows to one relation kind; both are lists, so the four
+resolutions above are the offer rather than four words to spell. `section`
 narrows body links to the heading they were found under — `Standards` is where a
 catalog keeps its bibliography, and it is where most `external` links live.
 
@@ -50,6 +51,8 @@ catalog keeps its bibliography, and it is where most `external` links live.
 SET param_show = 'unresolved';
 SET param_kind = '';
 SET param_section = '';
+-- play: enum show unresolved,dirref,external,direct,all
+-- play: enum kind =All kinds,parent,similar,wikilink
 
 WITH
   rels AS (

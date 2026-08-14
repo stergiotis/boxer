@@ -109,13 +109,28 @@ func (inst *PlayApp) renderParamSlots() {
 		return
 	}
 
-	for rt := range c.RichTextLabel("PARAMETERS") {
-		rt.Small().Weak()
+	for range c.Horizontal().KeepIter() {
+		for rt := range c.RichTextLabel("PARAMETERS") {
+			rt.Small().Weak()
+		}
+		inst.renderParamResetControl()
 	}
 
 	// Phase 1b: idle live drafts follow the store before any widget reads
 	// them, so a panel's publication is what the pane draws this frame.
 	inst.syncLiveParamDrafts()
+
+	// The buffer's declared option lists, handed to whichever widgets read them
+	// before dispatch — the orchestrator holds what a widget needs from outside
+	// its own slots, the way it does the range evaluator (ADR-0124 Update
+	// 2026-08-14). Re-scanned per frame for the same reason the ungroup hint is:
+	// a marker is part of the buffer, and the buffer is being edited.
+	enums := scanEnumHints(inst.sql)
+	for _, w := range inst.paramWidgets {
+		if aware, ok := w.(enumHintAwareI); ok {
+			aware.SetEnumHints(enums)
+		}
+	}
 
 	consumed := make([]bool, len(slots))
 	// grouped tracks the slots a group widget folded, which is what §SD7's
@@ -213,7 +228,7 @@ func (inst *PlayApp) renderParamSlots() {
 		}
 	}
 
-	inst.renderNearMissNote(slots, grouped, ungroup, mixed)
+	inst.renderNearMissNote(slots, grouped, ungroup, mixed, orphanEnumHints(enums, slots))
 
 	// Divider between the parameter block and the SQL editor below it.
 	c.Separator().Horizontal().Send()
@@ -496,9 +511,11 @@ func mixedTierNote(pairs []mixedTierPair) string {
 //
 // One line, so the cases are ordered by how much they explain: the ungroup
 // opt-out accounts for every missing fold at once; a half-pinned pair is next,
-// being a specific decline with a one-click fix; then the type mismatch and
-// the generic vocabulary note, both inside nearMissNote.
-func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungroup bool, mixed []mixedTierPair) {
+// being a specific decline with a one-click fix; then an enum hint naming a
+// placeholder the buffer does not have, which is a typo with a visible symptom
+// and no other explanation; then the type mismatch and the generic vocabulary
+// note, both inside nearMissNote.
+func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungroup bool, mixed []mixedTierPair, orphanEnums []string) {
 	unfolded := make([]paramSlot, 0, len(slots))
 	for i, s := range slots {
 		if !grouped[i] {
@@ -508,6 +525,9 @@ func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungro
 	note := ""
 	if !ungroup {
 		note = mixedTierNote(mixed)
+	}
+	if note == "" {
+		note = orphanEnumNote(orphanEnums)
 	}
 	if note == "" {
 		note = nearMissNote(unfolded, ungroup)

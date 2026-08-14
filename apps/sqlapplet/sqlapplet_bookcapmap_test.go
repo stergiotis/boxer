@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
@@ -49,9 +50,29 @@ func TestCapmapBookCorpus(t *testing.T) {
 	}
 
 	assert.Equal(t, []TabSel{{ID: "table"}}, bySlug["comp-overview"].Tabs)
-	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "detail"}, {ID: "network"}}, bySlug["comp-browser"].Tabs)
-	assert.Equal(t, []TabSel{{ID: "treemap"}, {ID: "table"}}, bySlug["comp-map"].Tabs)
+	// The browser places all three of its panes: rows top-left, the note
+	// beside them, the family graph underneath (ADR-0132 Update 2026-08-14).
+	assert.Equal(t, []TabSel{
+		{ID: "table"},
+		{ID: "detail", Zone: "side"},
+		{ID: "network", Zone: "bottom"},
+	}, bySlug["comp-browser"].Tabs)
+	assert.Equal(t, []TabSel{{ID: "treemap"}, {ID: "table", Zone: "bottom"}}, bySlug["comp-map"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "detail"}}, bySlug["comp-lint"].Tabs)
+
+	// The knobs whose values are a known set are lists, not text fields. The
+	// ones that are not — a catalog, a tag, a substring — stay text, which is
+	// the honest answer for a value that comes from the data.
+	for slug, want := range map[string][]string{
+		"comp-browser": {"level"},
+		"comp-map":     {"size_by", "color_by"},
+		"comp-lint":    {"show", "kind"},
+	} {
+		declared := play.DeclaredEnumSlots(bySlug[slug].SQL)
+		for _, name := range want {
+			assert.Containsf(t, declared, name, "%s: %q should offer its values as a list", slug, name)
+		}
+	}
 
 	// The browser is the one click-driven lens: `selection_key` stays UNBOUND,
 	// which is what makes it a signal a table row or graph vertex publishes

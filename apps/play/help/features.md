@@ -197,8 +197,21 @@ The widget chosen for a slot depends on its shape:
 - **Date/time pair** — the same pair falls back to two independent calendar
   pickers when the evaluator isn't available. The control says so when it is
   standing in.
+- **Dropdown** — a slot whose values are a known set, declared by a comment
+  line: `-- play: enum size_by bytes,count`. Each option is `value` or
+  `value=Label`, and an empty value is allowed for the "no filter" entry —
+  `-- play: enum catalog =All catalogs,boxer`. The buffer keeps whatever value
+  is picked, so a dropdown is a spelling aid, not a constraint: a value the
+  list does not carry still shows, marked *not in the list*. A hint naming a
+  placeholder the query does not have is reported in the line beneath the
+  widgets, since its only other symptom is a text field.
 - **Text field** — every other slot gets a single text input (hint
   `value for {<name> : <Type>}`) where you type the literal value or expression.
+
+A **Reset** appears beside the PARAMETERS caption as soon as a knob is off the
+value the buffer was loaded with, and puts them all back. Only parameters the
+buffer `SET`s have a default to return to — a live value belongs to whichever
+panel publishes it.
 
 Bounds pair by **stem**: strip a `from`/`to`, `min`/`max`, `start`/`end`,
 `lo`/`hi` or `since`/`until` suffix, and two placeholders left with the same stem

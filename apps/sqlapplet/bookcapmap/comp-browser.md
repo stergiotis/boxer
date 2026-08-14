@@ -5,7 +5,7 @@ status: draft
 title: Competence browser
 icon: "🔍"
 endpoint: introspection
-tabs: [table, detail, network]
+tabs: [table, "detail@side", "network@bottom"]
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
@@ -27,9 +27,16 @@ so the Detail tab renders it as prose rather than as a wall of escaped text. It
 is the source verbatim — the corpus keeps prose as prose rather than shredding
 it into an AST — so what you read here is what is in the file.
 
+**Three panes at once.** The list fills the top-left, the focused note's detail
+sits beside it, and the family graph runs along the bottom — the placement the
+`tabs:` entries declare with their `@side` and `@bottom` suffixes. Drag any
+divider; the layout the document declares is a preset, not a constraint.
+
 **The knobs.** `filter` narrows the table by substring over slug, name and
 synopsis. `level` keeps one tier (1 macro ▸ 4 building block) or all of them at
-`0`. `catalog` keeps one catalog, empty keeps all. `tag` keeps the competences
+`0`, and picks from a list rather than taking a number. `catalog` keeps one
+catalog, empty keeps all — a text field, because the catalogs are whatever the
+vault holds and a declared list could only ever be out of date. `tag` keeps the competences
 carrying one triage tag — the `tags:` frontmatter a reviewer writes — and is
 exact rather than a substring, because a tag is a name and `owner` should not
 also match `needs-owner`.
@@ -42,6 +49,7 @@ SET param_filter = '';
 SET param_level = 0;
 SET param_catalog = '';
 SET param_tag = '';
+-- play: enum level 0=All levels,1=Macro,2=Meso,3=Micro,4=Block
 
 WITH
   bodies AS (
