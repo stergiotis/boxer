@@ -89,8 +89,15 @@ func New(client *chclient.Client, alloc memory.Allocator) (inst *Executor, err e
 	return
 }
 
-// Exec runs sql for its side effect and returns once the server has
-// acknowledged it. See the package comment on single statements.
+// Exec runs sql for its side effect. See the package comment on single
+// statements.
+//
+// It returns once the server has *accepted* the statement, which is not quite
+// the same as having completed it: a failure raised after ClickHouse has
+// answered 200 rides in a response body that
+// [github.com/stergiotis/boxer/public/keelson/data/chclient.Client.Exec]
+// discards, so it reads here as success. That doc carries the detail and the
+// reason nothing catches it yet.
 func (inst *Executor) Exec(ctx context.Context, sql string) (err error) {
 	err = inst.client.Exec(ctx, sql)
 	if err != nil {

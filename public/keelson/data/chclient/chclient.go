@@ -137,6 +137,29 @@ func (inst *Client) Ping(ctx context.Context) (err error) {
 
 // Exec POSTs sql to the base URL and discards the response body. Used for
 // DDL and any SQL that does not return rows.
+//
+// # A failure after the status line is discarded with the body
+//
+// The shared postSQL helper checks the HTTP status, so anything ClickHouse
+// rejects before it starts answering — a syntax error, an unknown identifier,
+// a permission refusal — comes back as an error carrying the server's own
+// diagnostic. That is the common case and it is covered.
+//
+// What is not covered: ClickHouse can answer 200 and fail part way through
+// producing the response, in which case the exception text lands in the body
+// this function throws away, and Exec returns nil. The same failure class is
+// documented for
+// [github.com/stergiotis/boxer/public/keelson/data/storeexec.Executor.QueryArrow],
+// where it surfaces instead as an Arrow decode error mid-iteration.
+//
+// Whether it is reachable for the statements Exec is actually given — DDL and
+// other row-less SQL — has not been established, which is why nothing here
+// tries to catch it: a check for a failure nobody has reproduced would be a
+// permanent cost against a hypothetical. If it needs closing, the pieces
+// exist. [github.com/stergiotis/boxer/public/db/clickhouse/chhttp] knows both
+// the `X-ClickHouse-Exception-Code` header and the `Code: N. DB::Exception: …`
+// body shape, and `wait_end_of_query=1` makes the case impossible at the cost
+// of buffering the whole reply server-side.
 func (inst *Client) Exec(ctx context.Context, sql string) (err error) {
 	var body io.ReadCloser
 	body, err = inst.postSQL(ctx, sql, nil)
