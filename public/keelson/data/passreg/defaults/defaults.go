@@ -121,6 +121,36 @@ func RegisterStandard(r *passreg.Registry) (err error) {
 			return passes.ResolveColumnNames(resolver, "", nil), true
 		},
 	})
+	if err != nil {
+		return
+	}
+
+	// LW_GET/_NULL/_LIST extraction sugar (ADR-0181 §SD3) is a Factory for
+	// the same reason handle resolution is: it needs a per-consumer schema
+	// to turn a section name into lanes. Ordered at 120 — after identsql
+	// (100), so an LW_ID_* macro in a surrounding expression is already
+	// expanded, and before the constructors (130), which is arbitrary in the
+	// sense that neither emits the other's calls, but fixed for determinism.
+	//
+	// Unlike the constructors, what this expands INTO is server-dependent:
+	// the pack-form renderer calls the read-back helper family. That is the
+	// dependency ADR-0174 §SD6 marks.
+	extractProbe := constructsql.ExtractExpandPass(nil, "")
+	err = r.RegisterFactory(passreg.Factory{
+		Name:        extractProbe.Name,
+		Stage:       passreg.StagePreExecute,
+		Order:       120,
+		Description: "expand LW_GET/LW_GET_NULL/LW_GET_LIST into leeway locate-and-extract expressions",
+		Provenance:  "github.com/stergiotis/boxer/public/semistructured/leeway/constructsql",
+		Properties:  extractProbe.Properties,
+		Build: func(binding any) (nanopass.Pass, bool) {
+			lanes, ok := binding.(constructsql.LaneSourceI)
+			if !ok {
+				return nanopass.Pass{}, false
+			}
+			return constructsql.ExtractExpandPass(lanes, ""), true
+		},
+	})
 	return
 }
 

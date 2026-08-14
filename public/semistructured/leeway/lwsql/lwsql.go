@@ -27,6 +27,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -62,11 +63,17 @@ type sectionIndex struct {
 	display   string            // section name as authored, e.g. "geoPoint"
 	byColumn  map[string]string // folded column name → physical
 	valueCols []columnRef       // value columns only, in order
+	// roles maps each support column's role to its physical name. Keyed by
+	// role rather than by name because that is the question an extraction
+	// asks — "which column carries this section's low-card-ref identities" —
+	// and the answer is a role, not a spelling (ADR-0181 §SD3).
+	roles map[common.ColumnRoleE]string
 }
 
 type columnRef struct {
-	display  string // column name as authored, e.g. "pointLat"
-	physical string
+	display        string // column name as authored, e.g. "pointLat"
+	physical       string
+	scalarModifier canonicaltypes.ScalarModifierE
 }
 
 // NewResolver builds a Resolver over a schema provider (expected to be caching;
@@ -185,12 +192,14 @@ func (inst *Resolver) build(dbName string, tableName string) *tableIndex {
 		fs := fold(ci.section)
 		si := idx.sections[fs]
 		if si == nil {
-			si = &sectionIndex{display: ci.section, byColumn: make(map[string]string, 4)}
+			si = &sectionIndex{display: ci.section, byColumn: make(map[string]string, 4), roles: make(map[common.ColumnRoleE]string, 4)}
 			idx.sections[fs] = si
 		}
 		si.byColumn[fold(ci.column)] = ci.physical
 		if ci.isValue {
-			si.valueCols = append(si.valueCols, columnRef{display: ci.column, physical: ci.physical})
+			si.valueCols = append(si.valueCols, columnRef{display: ci.column, physical: ci.physical, scalarModifier: ci.scalarModifier})
+		} else {
+			si.roles[ci.role] = ci.physical
 		}
 	}
 	if len(idx.sections) == 0 {
@@ -217,6 +226,10 @@ type columnInfo struct {
 	section  string
 	column   string
 	isValue  bool
+	role     common.ColumnRoleE
+	// scalarModifier is meaningful for value columns only: none for a
+	// scalar, homogenous-array or set for the two flattened shapes.
+	scalarModifier canonicaltypes.ScalarModifierE
 }
 
 // tableMeta carries the table-wide properties recovered alongside the per-column
@@ -266,10 +279,32 @@ func classifyColumns(names []string) (infos []columnInfo, meta tableMeta, ok boo
 		if secErr != nil {
 			continue
 		}
-		ci := columnInfo{physical: names[i], column: string(col)}
+		// A role this build cannot parse — a table written by a newer or
+		// forked leeway generation — must NOT drop the column. Handle
+		// resolution reads the same index, and skipping here would turn a
+		// `section:column` that resolved before into an unknown-column
+		// error, or empty the index entirely and stop every handle on the
+		// table from resolving. Unspecific keeps the column listed and
+		// simply contributes no role entry.
+		role, roleErr := conv.ExtractColumnRole(phy)
+		if roleErr != nil {
+			role = common.ColumnRoleUnspecific
+		}
+		ci := columnInfo{physical: names[i], column: string(col), role: role}
 		if sec != "" {
 			ci.section = string(sec)
 			_, ci.isValue = valueCols[fold(string(sec))+"\x00"+fold(string(col))]
+			if ci.isValue {
+				// The value's scalar modifier decides which element-count
+				// lane it is partitioned by — and a section may hold value
+				// columns of DIFFERENT modifiers, so this cannot be a
+				// section-level property (see ExtractLanes).
+				if ct, ctErr := conv.ExtractCanonicalType(phy); ctErr == nil {
+					if mod, unsupported := canonicaltypes.GetScalarModifier(ct); !unsupported {
+						ci.scalarModifier = mod
+					}
+				}
+			}
 		} else {
 			// Plain/backbone column — its section is its item-type name.
 			pit, pErr := conv.ExtractPlainItemType(phy)

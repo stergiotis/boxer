@@ -8,6 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 )
 
 // stubResolver is a no-op ColumnResolverI. Build only type-asserts the binding;
@@ -88,11 +89,17 @@ func TestStandardSetRegistersResolveColumnNamesFactory(t *testing.T) {
 	require.NoError(t, RegisterStandard(r))
 
 	// Concrete entries are the four expansions (descriptiveStatistics,
-	// docsearch, LW_ID_*, LW_ constructors); the resolver is a factory.
+	// docsearch, LW_ID_*, LW_ constructors); the two schema-bound passes —
+	// handle resolution and LW_GET extraction — are factories.
 	require.Len(t, r.Entries(passreg.StagePreExecute), 4)
 	fs := r.Factories(passreg.StagePreExecute)
-	require.Len(t, fs, 1)
-	f := fs[0]
+	require.Len(t, fs, 2)
+	var f passreg.Factory
+	for _, cand := range fs {
+		if cand.Name == "ResolveColumnNames" {
+			f = cand
+		}
+	}
 	require.Equal(t, "ResolveColumnNames", f.Name)
 	require.Equal(t, 200, f.Order, "must order after identsql (100)")
 
@@ -166,4 +173,38 @@ func TestStandardSetOmitsExposeSelectionConditions(t *testing.T) {
 	const q = "SELECT a FROM tt WHERE c = 1"
 	out := r.ApplyBestEffortBound(passreg.StagePreExecute, q, stubResolver{}, zerolog.Nop())
 	require.Equal(t, q, out, "the standard set must not add condition columns")
+}
+
+// TestStandardSetRegistersExtractFactory proves the ADR-0181 §SD3/§SD7
+// wiring: LwExtractExpand is late-bound like handle resolution, because it
+// needs a schema to turn a section name into physical lanes, and it declines
+// a binding that cannot answer that question rather than silently not
+// expanding.
+func TestStandardSetRegistersExtractFactory(t *testing.T) {
+	r := passreg.NewRegistry()
+	require.NoError(t, RegisterStandard(r))
+
+	var f passreg.Factory
+	for _, cand := range r.Factories(passreg.StagePreExecute) {
+		if cand.Name == constructsql.ExtractPassName {
+			f = cand
+		}
+	}
+	require.Equal(t, constructsql.ExtractPassName, f.Name)
+	require.Equal(t, 120, f.Order, "must order after identsql (100), before the constructors (130)")
+
+	found := false
+	for _, row := range r.Catalog() {
+		if row.Name == constructsql.ExtractPassName {
+			found = true
+			require.True(t, row.LateBound, "the extraction row must be late-bound")
+			require.Equal(t, passreg.StagePreExecute, row.Stage)
+		}
+	}
+	require.True(t, found, "LwExtractExpand must appear in keelson('sql_passes')")
+
+	_, ok := f.Build("not a lane source")
+	require.False(t, ok, "a binding that cannot answer for a section must be declined")
+	_, ok = f.Build(nil)
+	require.False(t, ok, "a nil binding must be declined")
 }
