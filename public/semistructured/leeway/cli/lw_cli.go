@@ -90,6 +90,7 @@ func NewCliCommand() *cli.Command {
 				NewCliCommandCard(),
 				NewCliCommandId(),
 				NewCliCommandIr(),
+				NewCliCommandSqlSurface(),
 			},
 		),
 	}
