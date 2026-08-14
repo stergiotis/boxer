@@ -149,12 +149,12 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 The pipeline landed in eight commits (`6f593270` … `ec4dae61` on `main`):
 
 - **Phase 0–1** — `nutreader.rs` (independent NUT demuxer; the §SD4 licence posture) validated against `ffprobe` for H.264/VP9/AV1, whole-buffer and fed in 7-byte chunks; `codeclane.rs` `CodecLane`; `EncoderSink` muxes to NUT. `IMZERO2_HEADLESS_CODEC=h264|vp9|av1` selects the startup lane.
-- **Phase 2** — all codecs fold onto the one NUT drain; the Annex-B AUD splitter is retired. (Deviation: software lanes force `-pix_fmt yuv420p` — BGRA readback otherwise becomes `gbrap` and libvpx-vp9 refuses to open.)
-- **Phase 3** — `SessionHello.codec`; the viewer configures `VideoDecoder` from it (H.264 keeps SPS-derivation), reconfiguring on a codec change — so VP9/AV1 decode in the browser at startup.
-- **Phase 4** — `DecodeCapabilities` wire message; the browser probes `isConfigSupported` + `mediaCapabilities.decodingInfo`.
-- **Phase 5** — the two seams: a `setVideoPipeline` egui2 opcode (Go→Rust, drained by the headless loop → `WsCarrier::set_video_codec`, resize-shaped) and a `fetchVideoCapabilities` fetcher (Rust→Go); the SD5 host-encode probe is a real probe-encode; the Go `videopipeline` model holds the browser-decode ∩ host-encode set. (Deviation: SD5's probe moved from Phase 2 to Phase 5, where its consumer lives. The `codec_description` escape hatch (SD6) was not needed.)
-- **Phase 6** — the `videooutput` codec-picker widget (SD10).
-- **Phase 7** — verified per layer: host-encode probe (all three encode here), NUT demux (vs `ffprobe`), lane encodes (BGRA→NUT), codegen drift-free, Rust binaries + Go launcher build. **Not yet exercised live:** a browser-driven codec switch (click the picker → switch → decode resumes) needs a running app + a real browser, so it remains the manual acceptance step — the SD7 switch is verified by construction and compile, not yet by a live decode.
+- **Phase 2 — all codecs fold onto the one NUT drain.** ✓ the Annex-B AUD splitter is retired. (Deviation: software lanes force `-pix_fmt yuv420p` — BGRA readback otherwise becomes `gbrap` and libvpx-vp9 refuses to open.)
+- **Phase 3 — `SessionHello.codec`.** ✓ The viewer configures `VideoDecoder` from it (H.264 keeps SPS-derivation), reconfiguring on a codec change — so VP9/AV1 decode in the browser at startup.
+- **Phase 4 — `DecodeCapabilities` wire message.** ✓ The browser probes `isConfigSupported` + `mediaCapabilities.decodingInfo`.
+- **Phase 5 — the two seams.** ✓ A `setVideoPipeline` egui2 opcode (Go→Rust, drained by the headless loop → `WsCarrier::set_video_codec`, resize-shaped) and a `fetchVideoCapabilities` fetcher (Rust→Go); the SD5 host-encode probe is a real probe-encode; the Go `videopipeline` model holds the browser-decode ∩ host-encode set. (Deviation: SD5's probe moved from Phase 2 to Phase 5, where its consumer lives. The `codec_description` escape hatch (SD6) was not needed.)
+- **Phase 6 — the `videooutput` codec-picker widget (SD10).** ✓
+- **Phase 7 — verified per layer.** ✓ Host-encode probe (all three encode here), NUT demux (vs `ffprobe`), lane encodes (BGRA→NUT), codegen drift-free, Rust binaries + Go launcher build. **Not yet exercised live:** a browser-driven codec switch (click the picker → switch → decode resumes) needs a running app + a real browser, so it remains the manual acceptance step — the SD7 switch is verified by construction and compile, not yet by a live decode.
 
 `videooutput` is now wired into the live carousel chrome (`decorateRenderer`'s bottom status bar, `9ba0a623`), holding a persistent `videopipeline.Model` and self-hiding when no remote viewer is connected.
 

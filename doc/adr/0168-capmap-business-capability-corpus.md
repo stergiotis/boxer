@@ -130,8 +130,8 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   round-tripping (a goldmark AST is not losslessly re-renderable) and multiplies
   rows to answer questions nobody asks.
 
-- **SD6 — The unit is a *competence*, and the vocabulary has its own
-  tag-value base.**
+- **SD6 — The unit is a *competence*.**
+  And the vocabulary has its own tag-value base.
 
   **The word first.** boxer already spends "capability" on the runtime's
   security capabilities — ADR-0026's subjects, what `capslock` audits and a
@@ -192,8 +192,8 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   the repo's gate. Rejected: committing the corpus now, which would decide both
   questions by accident.
 
-- **SD8 — The read path is keelson providers over the vault, not over the
-  facts table.** Three tables — `competence`, `competencesection`,
+- **SD8 — The read path is keelson providers over the vault.**
+  Not over the facts table. Three tables — `competence`, `competencesection`,
   `competencerelation` —
   reading the corpus live on the `adr` providers' precedent (ADR-0122 §SD4):
   registered statically, `FreshnessLive`, and empty rather than erroring

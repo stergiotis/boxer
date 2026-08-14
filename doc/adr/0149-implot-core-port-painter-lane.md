@@ -203,21 +203,21 @@ follows the git-trailer discipline
 
 ### Milestones
 
-- **M0** — SD3 primitives in the painter IDL + regen.
-- **M1** — plot frame core: transforms, linear axes, tick locator/formatter,
+- **M0 — SD3 primitives in the painter IDL + regen.** ✓
+- **M1 — Plot frame core.** ✓ Transforms, linear axes, tick locator/formatter,
   grid, line series, pan / anchored zoom / box-select / double-click fit,
   hover readout.
-- **M2** — legend (toggle, hover-highlight) + item breadth: scatter/markers,
+- **M2 — Legend + item breadth.** ✓ Toggle, hover-highlight; scatter/markers,
   bars, shaded, stairs, stems, infinite lines.
-- **M3** — scales and time: log/symlog, time-axis locators and formatting
+- **M3 — Scales and time.** ✓ Log/symlog, time-axis locators and formatting
   (Go `time` replaces the C localtime machinery).
-- **M4** — heatmap + histograms (1D/2D) with SD5 routing; the `paintImage`
+- **M4 — Heatmap + histograms (1D/2D) with SD5 routing.** ✓ The `paintImage`
   opcode lands here with its first consumer; colormap integration with the
   existing `colormap`/`colorscale` widgets.
-- **M5** — tools: drag lines/points/rects, annotations, tags; native context
+- **M5 — Tools.** ✓ Drag lines/points/rects, annotations, tags; native context
   menus.
-- **M6** — subplots and linked axes.
-- **M7** — remainder: error bars, pie, digital, images; bridge-user migration
+- **M6 — Subplots and linked axes.** ✓
+- **M7 — Remainder.** ✓ Error bars, pie, digital, images; bridge-user migration
   begins.
 
 Each milestone ports its sections of `implot_demo.cpp` (3k lines — the de

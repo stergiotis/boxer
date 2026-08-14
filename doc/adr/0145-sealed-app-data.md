@@ -185,8 +185,8 @@ places that refuse, and the removal of the unreachable path.
   naming the reason, instead of a query that works until the day the
   endpoint moves.
 
-- **SD5 — Locality proven, not inferred (R3), which gives E6 its first
-  consumer.** Exactly one engine may serve a confined run without proof:
+- **SD5 — Locality proven, not inferred (R3).**
+  Which gives E6 its first consumer. Exactly one engine may serve a confined run without proof:
   this process's own introspection plane, and it is exempt by *identity*
   rather than by address — the endpoint string was minted by a server this
   process started, which is not the same act as recognising `127.0.0.1` in

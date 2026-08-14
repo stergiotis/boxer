@@ -46,8 +46,8 @@ plus the sweep computation in the library. Phased, descope-over-gate:
   headless-testable.
 - **Phase 1 (first cut)** — port the demo into the app: map, two-click selection,
   elevation profile. Retire the demo scene.
-- **Phase 2** — single-ray line-of-sight overlay (sight-line + obstruction marker).
-- **Phase 3** — the polar sweep: render the fan (overlaid profiles first;
+- **Phase 2 — Single-ray line-of-sight overlay.** Sight-line + obstruction marker.
+- **Phase 3 — The polar sweep.** Render the fan (overlaid profiles first;
   angle × distance heatmap later) and record the profiles (in-UI; CSV export via
   the `fs.dialog.save` broker later).
 - **Phase 4 (deferred)** — extract a headless elevation service (sole tile reader,

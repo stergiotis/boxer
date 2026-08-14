@@ -228,8 +228,8 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   field — the one part of keyboard support that lives in the tree's own model
   and would force a reshape if it arrived late.
 
-- **SD11 — A caller keys its own state, and projects it onto `State` each
-  frame.** Found at M3, in all three ports. `State` keys on node indices —
+- **SD11 — A caller keys its own state.**
+  And projects it onto `State` each frame. Found at M3, in all three ports. `State` keys on node indices —
   SD1's columnar input has no other identity — and its doc says a host that
   reorders should reset or remap. Every real caller reorders: schemaview and
   configview rebuild their hierarchy on each filter keystroke, and fieldview
@@ -256,8 +256,8 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   evidence for the shape of the key column, and the projection is a dozen
   lines.
 
-- **SD12 — A one-line row costs a wrapped second line; the trade is a column
-  plus a tooltip.** Found at M3. `fieldview` drew each leaf as name-and-kind
+- **SD12 — A one-line row costs a wrapped second line.**
+  The trade is a column plus a tooltip. Found at M3. `fieldview` drew each leaf as name-and-kind
   over a wrapping value, and `configview` drew each variable as signals over a
   wrapping description. Neither survives a fixed row height. Both took the same
   treatment: the second line becomes its own column, truncated, with the full
@@ -270,8 +270,8 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   because it is the one place the port is not behaviour-preserving, and because
   a future variable-height row would let both revert.
 
-- **SD13 — C4's "rows are addressable" was half true, and M4 paid the other
-  half.** The design scored O3 `++` on driveability because rows appear in the
+- **SD13 — C4's "rows are addressable" was half true.**
+  M4 paid the other half. The design scored O3 `++` on driveability because rows appear in the
   AccessKit tree. They do. But a driver has to *find* a row and then *act* on
   it, and the tree as built supports the first and not the second:
 
@@ -614,18 +614,18 @@ after it. What follows is what shipped under each milestone; the ADR is now
 Tier 2, so a later refinement lands as a dated `## Updates` entry rather than an
 edit in place.
 
-- **M0** — `row_ui` as a deferred block map, with SD6's seen-set guard;
+- **M0 — `row_ui` as a deferred block map,** with SD6's seen-set guard;
   `logviewer` off its per-cell tint workaround.
 - **M1/M2** — the columnar model, the host-owned `State`, the pure flatten, and
   the etable renderer.
-- **M3** — `schemaview`, `configview` and `fieldview` ported.
+- **M3 — `schemaview`, `configview` and `fieldview` ported.**
   `componentview` is not a tree and stays a `CollapsingHeader` accordion; the
   Context paragraph that counted it as a fourth adopter is corrected in place.
-- **M4** — the `tree` demo, the catch-all demo's node section, and
-  `scripts/dev/tree-widget-scene.sh`. Cost two additive rungs on ADR-0154's
+- **M4 — the `tree` demo and its scene script.** The catch-all demo's node
+  section, and `scripts/dev/tree-widget-scene.sh`. Cost two additive rungs on ADR-0154's
   anchor ladder (SD13), and its capture caught the outline defect the
   assertions could not.
-- **M5** — `egui_ltreeview` gone: the IDL nodes, the register, the enum, the
+- **M5 — `egui_ltreeview` gone.** The IDL nodes, the register, the enum, the
   crate. Verified on both lanes with the Go host and both Rust clients rebuilt
   together — the headless scene passes with no wire desync, and the desktop
   gallery renders the ported outlines with no id collisions.

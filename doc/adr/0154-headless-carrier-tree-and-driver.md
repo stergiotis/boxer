@@ -193,12 +193,12 @@ every deployment that never asks.
 
 ### Milestones
 
-- **M1** — proto additions, the tree mapping and its pinned tests, subscription
+- **M1 — Proto additions and the tree mapping.** ✓ Its pinned tests, subscription
   gating, capture on demand; verified by extending `ws_probe`.
-- **M2** — the Go client: generation, WebSocket, session and tree round-trip.
-- **M3** — the `drive` subcommand: trace format, anchor ladder, waits, and a
+- **M2 — The Go client.** ✓ Generation, WebSocket, session and tree round-trip.
+- **M3 — The `drive` subcommand.** ✓ Trace format, anchor ladder, waits, and a
   verify mode that asserts recorded effects.
-- **M4** — move the `play` screenshot tour onto the driver, dropping its
+- **M4 — Move the `play` screenshot tour onto the driver.** ✓ Dropping its
   compositor and its app-specific capture knobs.
 
 ## Alternatives
@@ -260,11 +260,11 @@ every deployment that never asks.
 
 Accepted 2026-07-31, with M1–M4 built and verified the same day.
 
-- **M1** — the tree channel, the AccessKit action verb and capture-on-demand
+- **M1 — the tree channel, the AccessKit action verb and capture-on-demand**
   ship in the headless host; `ws_probe` gained matching verbs.
 - **M2/M3** — `public/thestack/imzero2/carrierclient` speaks the wire, and
   `imzero2 drive` replays traces against it.
-- **M4** — `scripts/dev/play-screenshot-tour.sh` captures 29 scenes of `play`,
+- **M4 — `scripts/dev/play-screenshot-tour.sh`** captures 29 scenes of `play`,
   five of them states no launch knob can reach, with no compositor running.
 
 Verified across the two seams: the same widget resolves to the same node id

@@ -197,15 +197,15 @@ deferred.
 
 ### Milestones
 
-- **M1** — `RecorderPlugin`: JSONL semantic log with dual layers, raw annex,
+- **M1 — `RecorderPlugin`.** JSONL semantic log with dual layers, raw annex,
   start-of-recording tree snapshot, annotation marker; ring-buffer mode with
   export-on-panic.
-- **M2** — script emitter: coalescing, dual anchors, auto-waits; a recorded
+- **M2 — Script emitter.** Coalescing, dual anchors, auto-waits; a recorded
   demonstration replays via egui-mcp.
-- **M3** — `app imzero2 replay`: Go protocol client, anchor ladder,
+- **M3 — `app imzero2 replay`.** Go protocol client, anchor ladder,
   navigate / verify modes; CI wiring under weston.
-- **M4** — heal-on-green + the teach-in how-to (demonstrate → distill →
-  replay → verify, skill file conventions).
+- **M4 — Heal-on-green + the teach-in how-to.** Demonstrate → distill →
+  replay → verify, skill file conventions.
 
 ## Alternatives
 

@@ -174,14 +174,14 @@ id) keep the clickhouse-local path.
 
 ### Milestones
 
-- **M1** — lane in the carrier behind ADR-0088 negotiation, tied to carrier
+- **M1 — Lane in the carrier behind ADR-0088 negotiation.** Tied to carrier
   lifecycle (no serve outliving FFFI2 shutdown); probe retired into it.
-- **M2** — painter to product grade: gamma parity, DPR adoption, reconnect.
-- **M3** — appliance host feature: the `headless_wgpu`/`headless` split (SD6),
+- **M2 — Painter to product grade.** Gamma parity, DPR adoption, reconnect.
+- **M3 — Appliance host feature.** The `headless_wgpu`/`headless` split (SD6),
   then a musl-static target and a gokrazy QEMU boot probe. The appliance
   *image* is out of scope here — it relates the ADR-P-0001 deployment substrate
   and gets its own ADR once the probe confirms viability.
-- **M4** — runtime fallback policy (callback sentinel, bandwidth guard).
+- **M4 — Runtime fallback policy.** Callback sentinel, bandwidth guard.
 
 ## Alternatives
 

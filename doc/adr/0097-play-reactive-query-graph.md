@@ -222,8 +222,8 @@ computed once in `Accept` and consumed in `Render`, mirroring today's Timeline
   the hybrid. We keep demand-driven (first look at a tab pays its latency once,
   nothing unseen runs) and get the cache for free as early-cutoff memoization (SD4).
 
-- **SD3 — the graph is recovered from SQL by nanopass static analysis; the user
-  writes ordinary SQL.** Splitting is two levels, both leaning on existing
+- **SD3 — the graph is recovered from SQL by nanopass static analysis.**
+  The user writes ordinary SQL. Splitting is two levels, both leaning on existing
   machinery:
   1. **Statement split** — a quote/comment-aware split on top-level `;` (the one
      new primitive; it mirrors the existing quote-aware discard-marker scan).

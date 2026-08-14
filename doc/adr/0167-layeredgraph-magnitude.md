@@ -335,12 +335,14 @@ a verification pass M1 did not.
 
 Accepted 2026-08-05, with both milestones built and verified the same day.
 
-- **M1** — `Edge.Weight` and `EdgeLayout.Weight` carrying it through the engine
+- **M1 — Edge weight through the engine.** ✓ `Edge.Weight` and
+  `EdgeLayout.Weight` carrying it
   without reaching the DOT emission; `view.RenderOpts.EdgeWidth` and
   `view.WeightWidth`; the panel's `weight` column on `edges`, its
   normalisation, and the colour ramp; `profile-callgraph` emitting the weight
   it already computed.
-- **M2** — `Node.Weight`, `LayoutOpts.NodeFontSize` and `WeightFontSize`, the
+- **M2 — Node weight through layout and render.** ✓ `Node.Weight`,
+  `LayoutOpts.NodeFontSize` and `WeightFontSize`, the
   per-node font in the DOT emission, `NodeLayout.FontSize` and the renderer
   preferring it; the panel's `vertices.weight`, the node ramp with its paired
   ink, and node weights entering the layout cache key; `profile-callgraph`

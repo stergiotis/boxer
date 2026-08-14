@@ -233,8 +233,8 @@ with the per-channel argument list matching the
   rejected; the read-side iterator type is still uniquely determined
   per section.
 
-- **SD2 — Read-side dispatch picks the matching `GetMembValue<Channel>`
-  method.** The codegen emitter and the reflect dispatcher both
+- **SD2 — Read-side dispatch picks the matching accessor.**
+  `GetMembValue<Channel>`; the codegen emitter and the reflect dispatcher both
   consult the section's channel (computed from the Plan once per
   section) and call exactly one of `GetMembValueLowCardRef` /
   `GetMembValueLowCardVerbatim` / … / `GetMembValueMixedLowCardRef` /
@@ -287,8 +287,8 @@ with the per-channel argument list matching the
   two separate attributes. The read-side projection re-assembles the
   carrier from the Seq / Seq2 iterator.
 
-- **SD8 — Empty / zero `Params` is wire-emitted, not elided
-  (Cut 2 semantics).** Unlike empty `[]T` (splice semantics — zero
+- **SD8 — Empty / zero `Params` is wire-emitted, not elided.**
+  Cut 2 semantics. Unlike empty `[]T` (splice semantics — zero
   attributes), an empty `Params` blob on a present carrier emits the
   attribute with an empty params bytes argument. The carrier-field
   presence is the signal of "this attribute is here"; the params
@@ -300,8 +300,8 @@ with the per-channel argument list matching the
   (`LowCardVerbatim`). Documentation prefers the new explicit form for
   new code.
 
-- **SD10 — Cut 1 / Cut 2 staging is parse-time-enforced, not feature-
-  flagged.** The four deferred channels are recognised by the
+- **SD10 — Cut 1 / Cut 2 staging is parse-time-enforced.**
+  Not feature-flagged. The four deferred channels are recognised by the
   parser's flag table so users get a clear "not yet implemented"
   error pointing to this ADR, rather than an obscure mismatch
   downstream. Cut 2 lands as a follow-up that extends the parser

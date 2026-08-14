@@ -284,20 +284,20 @@ which is part of why the single document was chosen over per-table keys.
 
 ## Milestones
 
-- **M1** — `colwidth` resolver package: document codec, tiers, epoch,
+- **M1 — `colwidth` resolver package.** Document codec, tiers, epoch,
   capture detection, eviction; pure Go, table-driven tests.
-- **M2** — ~~`persist.FactsBackend` + carousel wiring flip +
-  `runtimestatus` surfacing.~~ **Done (2026-07-30), outside this ADR.** It
+- **M2 — `persist.FactsBackend` + carousel wiring flip.** ✓ Plus
+  `runtimestatus` surfacing. **Done (2026-07-30), outside this ADR.** It
   was independent of M1/M3 and also repaired the applet store's silent
   non-durability, so it landed on its own (§SD3).
-- **M3** — etable wire: width read-back register + `applyWidths` epoch +
+- **M3 — etable wire.** Width read-back register + `applyWidths` epoch +
   first-show autofit suppression; IDL change + regen + interpreter apply
   code in the marked region.
-- **M4** — play adoption on the attr-results table: resolve → `EtColumn`,
+- **M4 — play adoption on the attr-results table.** Resolve → `EtColumn`,
   capture → store; `Manifest.PersistedKeys` gains `colw`.
-- **M5** — `c.Table` / `c.NewTable` reset-based apply for override
+- **M5 — `c.Table` / `c.NewTable` reset-based apply** for override
   consumers.
-- **M6** — affordances: header context "clear override"; docs
+- **M6 — Affordances.** Header context "clear override"; docs
   (`doc/howto` note on width behavior).
 
 ## Update — 2026-07-30: `colw` becomes modelled facts, not a persist document

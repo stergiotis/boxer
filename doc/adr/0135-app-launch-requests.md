@@ -104,8 +104,8 @@ Adopt **O2**.
   mounted yet. Refusals (unknown app, kind mismatch, oversize, malformed
   envelope) are replies with named errors, never silent drops.
 
-- **SD2 — A launch config is a leeway-declared DTO with a generated
-  facts-codec.** An app that accepts launch arguments ships one config
+- **SD2 — A launch config is a leeway-declared DTO.**
+  With a generated facts-codec. An app that accepts launch arguments ships one config
   DTO in an app-owned package, declared in the codec grammar
   (`kind:"…"` tag, `lw:` columns) and generated via the `keelsoncodec`
   path (`factswrapper.FactsWrapper{}.Generate`), with the kind registered

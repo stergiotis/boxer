@@ -175,14 +175,14 @@ SD6.
 
 ### Milestones
 
-- **M0** — Cover lane script + measured overhead numbers (recorded here as an
-  Update); `--coverageTrapDir` probe fix. Gate: overhead acceptable.
-- **M1** — Decoder + fixtures + drift guard.
-- **M2** — Sampler: snapshot, bitmap diff, rollups; unit tests over synthetic
+- **M0 — Cover lane script + measured overhead numbers.** ✓ Recorded here as an
+  Update; `--coverageTrapDir` probe fix. Gate: overhead acceptable.
+- **M1 — Decoder + fixtures + drift guard.** ✓
+- **M2 — Sampler: snapshot, bitmap diff, rollups.** ✓ Unit tests over synthetic
   snapshots including the re-statement rule.
-- **M3** — `coveragebus` + carousel wiring + the three live providers,
-  verified via `keelson('coverage_pkgs')`.
-- **M4** — `bookcoverage` applets over the live tables, fixture-gated like
+- **M3 — `coveragebus` + carousel wiring + the three live providers.** ✓
+  Verified via `keelson('coverage_pkgs')`.
+- **M4 — `bookcoverage` applets over the live tables.** ✓ Fixture-gated like
   the capmap book.
 
 ## Surfaces — Tier 1
