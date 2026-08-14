@@ -442,7 +442,26 @@ Proposed — awaiting review by the code owner.
   it; a standalone sink spanning several hosts would need the subject in the
   handler, which is a `sysmetricsbus` change deferred until such a sink
   exists.
-- **M4 — the remaining scalar domains: psi, net, disk, battery, gpu.**
+- **M4 — the remaining scalar domains: psi, net, disk, battery, gpu.** ✓
+  Six kinds, not five: disk splits into `SysDiskMount` and `SysDiskIo` because
+  the mount table and the block-device list have independent lengths, and one
+  entity per aligned group keeps every array in a row the same length. The
+  vocabulary reached 106 memberships; the store reached nine kinds.
+
+  §SD3 called these domains scalar. Four of them are not — net, disk, battery
+  and gpu each carry a per-item table — so they are stored column-major, one
+  array element per item, which is the shape §SD3 of ADR-0090 describes for a
+  process table. That introduces an **alignment contract** the ADR did not
+  anticipate: index *i* of every array in a row describes the same item, and
+  nothing in leeway enforces it. The arrays sit in different sections, so
+  ADR-0181 §SD5's co-length audit applies within a section, not across them.
+  The writer fills every array in one pass over one slice; the tests assert
+  equi-length and check values by position. A violation would read back
+  plausibly, pairing one interface's name with another's counters.
+
+  Deliberately dropped: per-interface IP address lists (a list per element does
+  not flatten into this shape, and addresses are nearer the §SD8 sensitive
+  class than a metric) and the raw mount options string.
 - **M5 — the fan-out domains: proc and sockets.**
   Entity-per-item versus column-major arrays is decided here, against a working
   store rather than in the abstract.
