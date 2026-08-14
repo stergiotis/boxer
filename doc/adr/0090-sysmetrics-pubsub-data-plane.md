@@ -155,6 +155,49 @@ the bundle tick loop is unchanged. Marked processes are exempt from the
 proc collector's `MaxProcs` cap so an idle appliance daemon stays
 visible. The SD8 sensitivity posture covers the new fields unchanged.
 
+### 2026-08-14 — P5 is built; §SD3's codec swap is abandoned and §SD4's byte-tee is void
+
+[ADR-0184](./0184-sysmetrics-persistence-tee.md) *(proposed, awaiting
+review)* specifies the §SD9 P5 tee, and it is built: `runtime/sysmtee`
+subscribes to the plane and writes `boxer.facts` through a generated record
+store (`runtime/sysmfacts`), behind `sysmetricsd --tee`, default off.
+Correcting three things recorded here, because the tee's shape is not the
+one this ADR reserved.
+
+**§SD4's "a `chstore` subscriber could tee the same bytes into a table …
+without touching producer or consumer" is void in its first half.** It
+held only while the wire was expected to be §SD3's facts codec. P2 shipped
+`CBORCodec`, the swap never happened, and so the tee decodes CBOR into
+`sysmsnap` structs and re-models them. The second half survives intact and
+is the half that mattered: producer and consumers are untouched by the
+tee's presence. Also on §SD4 — "v1 persists nowhere" and "no CH instance
+enters the metric path" stay literally true with the flag unset, which is
+the reason ADR-0184 §SD8 made it a flag.
+
+**§SD3's "we reuse the existing facts bus codec, not a bespoke one" did not
+happen, and is no longer intended.** What ships is the shape *Alternatives*
+rejects by name — "a bespoke metric codec (CBOR-of-structs, protobuf, …)" —
+so the rejected option became the decision by way of an interim nobody
+revisited. Its kill-reason was "a second serialization plus a persistence
+mapping step"; both are now paid rather than avoided, and the mapping step
+is what ADR-0184 builds. The interim label is removed from the
+`sysmetricsbus` and `coveragebus` codec docs with this entry, the latter
+having inherited it by citing §SD3 as precedent.
+
+§SD3's *schema* sub-decision — the generic `boxer.facts` schema over a
+parallel one — still reaches the right answer, but not for the recorded
+reason. It preferred generic for "zero new codegen" when the alternative
+meant hand-driving the leeway generators; `recordstore/gen` has since
+reduced that to one `Input` literal in a gen-test. ADR-0184 §SD1 restates
+the conclusion on the reason that survives.
+
+**§SD9's P5 is not a `chstore` tee.** `chstore.Store.SetupTable` remains the
+sole author of the `boxer.facts` DDL: the generated store is emitted
+externally-provisioned, which omits `EnsureTable` entirely and keeps
+`VerifySchema` (ADR-0184 §SD2). Nothing before this had generated a store
+against a table another component owns, so no ADR had said which of the two
+provisions it.
+
 ## References
 
 - [ADR-0019](./0019-observability-sysmetrics-linux-collector.md) sysmetrics collector · [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) imztop · [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) remote access · [ADR-0082](./0082-imzero2-remote-session-auth-tls.md) auth/TLS
