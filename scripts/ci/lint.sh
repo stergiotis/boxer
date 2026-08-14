@@ -173,8 +173,14 @@ step_begin "packageprops"
 #   props verify — declarations agree with the freshly computed verdict.
 #                  Static mode only proves red, which is sound (ADR-0078), so
 #                  this fails on regressions and stays quiet about what it
-#                  cannot judge. It is ~8s; the empirical mode needs TinyGo
-#                  and is not run here.
+#                  cannot judge. It is ~10s.
+#
+# `--mode static` is load-bearing, not decoration: the empirical mode shells
+# out to `tinygo build` once per candidate package (minutes), and its verdict
+# depends on whether this runner carries a TinyGo whose Go ceiling clears the
+# repo's toolchain. The flag is not defended by this comment — `props verify`
+# has no mode default and refuses to run without one, so dropping it here fails
+# in a second rather than turning the lint step into a TinyGo sweep.
 if out=$("$here/../../boxer.sh" code analysis golang wasmsurvey props drift 2>&1) &&
    out2=$("$here/../../boxer.sh" code analysis golang wasmsurvey props verify --mode static 2>&1); then
     printf '%s\n%s\n' "$out" "$out2"

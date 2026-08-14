@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/packageprops"
+	cli "github.com/urfave/cli/v2"
 )
 
 // cmdPathPrefix is the part of the invocation that lives above this package:
@@ -82,5 +83,58 @@ func TestNamedVerbsExistInTheCommandTree(t *testing.T) {
 		if !verbs[verb] {
 			t.Errorf("`props %s` is named in package documentation but absent from the command tree", verb)
 		}
+	}
+}
+
+// modeFlagOf returns the `mode` flag of a command's flag set, or nil.
+func modeFlagOf(flags []cli.Flag) (f *cli.StringFlag) {
+	for _, raw := range flags {
+		if sf, ok := raw.(*cli.StringFlag); ok && sf.Name == "mode" {
+			return sf
+		}
+	}
+	return nil
+}
+
+// TestVerifyHasNoModeDefault is the structural half of the guard in
+// runPropsVerify. `props verify` is the command scripts/ci/lint.sh runs, and
+// its two modes differ by orders of magnitude: static reads the import graph,
+// empirical shells out to `tinygo build` per candidate package. A default of
+// `both` would mean an edit dropping `--mode static` from the lint step turns
+// it into a TinyGo sweep whose verdict also depends on the runner's TinyGo
+// version. Without a default the same edit fails before any work starts.
+func TestVerifyHasNoModeDefault(t *testing.T) {
+	root := NewCliCommand()
+	for _, sub := range root.Subcommands {
+		if sub.Name != "props" {
+			continue
+		}
+		for _, verb := range sub.Subcommands {
+			if verb.Name != "verify" {
+				continue
+			}
+			f := modeFlagOf(verb.Flags)
+			if f == nil {
+				t.Fatal("`props verify` has no --mode flag; the CI step passes one")
+			}
+			if f.Value != "" {
+				t.Errorf("--mode has default %q; it must have none, so dropping it in CI fails loudly instead of probing", f.Value)
+			}
+			return
+		}
+	}
+	t.Fatal("no `props verify` command found")
+}
+
+// The exploratory commands keep their default. Requiring an explicit mode
+// everywhere would be friction for no safety: they are run by hand, and
+// empirical confirmation is what the bare survey exists for.
+func TestBareSurveyKeepsItsModeDefault(t *testing.T) {
+	f := modeFlagOf(NewCliCommand().Flags)
+	if f == nil {
+		t.Fatal("the bare survey has no --mode flag")
+	}
+	if f.Value != "both" {
+		t.Errorf("bare survey --mode default is %q, want \"both\"", f.Value)
 	}
 }

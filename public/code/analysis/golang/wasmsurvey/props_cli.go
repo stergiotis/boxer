@@ -54,7 +54,7 @@ func newPropsCommand() *cli.Command {
 			{
 				Name:  "verify",
 				Usage: "Reconcile declared PackageProps against the freshly computed verdict; non-zero exit on a regression",
-				Flags: append(computeFlags(), &cli.BoolFlag{
+				Flags: append(verifyFlags(), &cli.BoolFlag{
 					Name:  "show-unjudged",
 					Usage: "also list packages the survey left unjudged (computed=unknown), which without TinyGo is most of them",
 				}),
@@ -195,7 +195,42 @@ func runPropsDrift(c *cli.Context) (err error) {
 		Errorf("props drift: the generated table disagrees with the tracked declarations; regenerate it with `props harvest --tracked --emit go --out public/packageprops/proptable/proptable.out.go` (--tracked is required: it is the scope this check compares against)")
 }
 
+// verifyFlags is [computeFlags] with `mode` stripped of its default. verify is
+// the one command in this group that CI runs, and the two modes differ by
+// orders of magnitude: static reads the import graph, empirical shells out to
+// `tinygo build` once per candidate package. Inheriting the group's `both`
+// default would mean a future edit to scripts/ci/lint.sh that drops
+// `--mode static` silently converts the lint step into a TinyGo sweep — and,
+// worse, into one whose verdict depends on whether the runner happens to carry
+// a TinyGo whose Go ceiling clears this repo's toolchain. Without a default the
+// same edit fails before any work starts.
+//
+// The bare survey and `props generate` keep the `both` default: they are
+// exploratory, run by hand, and empirical confirmation is what they are for.
+func verifyFlags() (flags []cli.Flag) {
+	for _, f := range computeFlags() {
+		sf, ok := f.(*cli.StringFlag)
+		if !ok || sf.Name != "mode" {
+			flags = append(flags, f)
+			continue
+		}
+		cp := *sf
+		cp.Value = ""
+		cp.Usage = "static | empirical | both — REQUIRED, no default; `static` needs no TinyGo"
+		flags = append(flags, &cp)
+	}
+	return
+}
+
 func runPropsVerify(c *cli.Context) (err error) {
+	// Refuse rather than guess. See [verifyFlags] for why this command has no
+	// mode default; the error names the gate's answer so a caller who hit this
+	// by dropping the flag can put back the right one rather than the fast one.
+	if !c.IsSet("mode") {
+		return eb.Build().Errorf("props verify: --mode is required and has no default. " +
+			"Use `--mode static` for a gate: it needs no TinyGo, runs in seconds, and proves only red — " +
+			"the sound signal ADR-0078 established. `--mode empirical|both` runs `tinygo build` per candidate package.")
+	}
 	var opts Options
 	if opts, err = wasmSurveyOptions(c); err != nil {
 		return err
