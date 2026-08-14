@@ -400,9 +400,9 @@ asks for, and accepting this ADR does not licence building them.
 - **M0 — SD1: the read surface as one page; skills pointers.** ✓
 - **M1 — SD2: `lwsqlsurface` — declared set, marker, `Install`, `Reconcile`.** ✓
 - **M2 — SD2: play's vocabulary probe on the surface marker.** ✓
-- **M3 — SD3: `MATERIALIZED` projection emission — dialogue first.**
+- **M3 — SD3: `MATERIALIZED` projection emission — deferred.**
 - **M4 — SD4: membership name→id readable from SQL.** ✓
-- **M5 — SD5: the exploded companion table — dialogue first.**
+- **M5 — SD5: the exploded companion table — deferred, pending the ADR-0025 convergence.**
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
@@ -577,3 +577,91 @@ shape ADR-0066 chose over a correlated lookup. It is asserted off the same
 binding the schema comes from, so a host that carries a registry gets names
 and one that does not keeps the id form — and the decimal spelling is checked
 first, so every query written before this Update expands unchanged.
+
+## Update 2026-08-14 — SD3 and SD5 deferred; SD5 may not be its own decision
+
+Both remaining sub-decisions are deferred, for different reasons. SD1, SD2
+and SD4 have shipped, so what is left of this ADR is these two.
+
+### SD3 — deferred on complexity
+
+Emitting `MATERIALIZED` projections from a leeway schema stays a good idea
+with the largest measured number attached to it (3.8–13.8× on the trial's
+queries, +18.8 % storage). It is deferred because the generator it needs is
+not small: it must stay in step with physical column naming across every
+shape the naming convention admits, which is the same coupling that made the
+hand-written version fragile — only now inside a generator, where a drift is
+silent rather than a compile error.
+
+**Trigger to revisit:** a consumer with a specific, named path worth
+materialising, rather than the general capability. One path hand-written
+against a stable schema costs little and would tell us what the generator
+actually has to emit.
+
+### SD5 — deferred because it may be the same table as ADR-0025's vault
+
+[ADR-0025](./0025-pushout-forget-architecture.md) selects a
+**vault-by-design** architecture for personal data under GDPR and the Swiss
+FADP, and its §SD5 realises that vault as *a Leeway facts table in
+ClickHouse* with the fact shape
+`(vaultRef, subjectID, actorID, fieldPath, valueBytes, nonce, recordedAt, retentionExpiry)`
+— **one row per attribute occurrence**.
+
+This ADR's §SD5 proposes a second representation of the same data, *one row
+per attribute*, `(doc, section, path, value…)`, generated from one leeway
+schema, in ClickHouse. The two are the same explosion of the same packed
+form, reached from opposite motivations: query shape here, erasure
+granularity there. ADR-0025 §SD6's kill-reason 3 states the second one
+plainly — "with per-occurrence nonces the erasure unit equals the vault
+row" — which is a structural argument for per-attribute rows that owes
+nothing to query performance.
+
+That makes building this sub-decision on its own premature. What each side
+would give the other, and where they pull apart:
+
+- **The measurements transfer; the ratios do not.** The
+  [second-substrate trial](../trials/leeway-second-substrate/README.md)
+  priced exactly this shape — 100M documents / 1.2 billion attributes
+  converted in 50.8 s, exploded footprint 0.6978× the packed form — and
+  ADR-0025 has no capacity numbers at all. But a vault is not a conversion
+  output: every value *change* mints a fresh row (ADR-0025 §SD6) and
+  superseded rows accumulate until the retention sweep runs, so the
+  footprint ratio measured on a one-shot conversion does not describe it.
+  The memory figures transfer as a warning rather than a budget — 69.8× the
+  packed form's peak on one value-predicate query, against a store that will
+  be queried by subject.
+- **Redundancy changes meaning.** Here it is a deliberate second copy whose
+  open question is how it is maintained, with batch reconversion leaving it
+  stale between runs. Where the rows hold personal data, a stale derived
+  copy can resurrect an erased attribute, so the freshness question becomes
+  ADR-0025 §SD11's mutation-finality contract applied to two tables instead
+  of one. "Affordable at 50.8 s per 100M" stops being the relevant measure;
+  bounded staleness starts being it.
+- **The columns want opposite things.** ADR-0025 §SD12 envelope-encrypts
+  `valueBytes` and `nonce` under a per-subject key, and §SD6 rules out
+  equality joins over committed fields on purpose. This ADR's §SD5 exists
+  because the path becomes a sort-key prefix and values become queryable.
+  One table cannot be both: encrypted values do not answer value predicates,
+  and per-subject keys defeat the locality the sort key buys.
+- **The direction of derivation is unsettled.** Here the exploded form is
+  derived from the packed one. In ADR-0025 the vault is authoritative —
+  patches carry only commitments, and the value exists nowhere else. If the
+  two converge, one of those has to give, and the trial measured the
+  conversion in only one direction.
+
+The shape that survives all four is not one table but a split: the vault is
+the exploded form for the sections that hold personal data, and the
+companion is the exploded form for the rest. **A leeway schema can already
+say which is which** — `useaspects` carries a section-level `privacy`
+aspect, and `valueaspects` carries `anonymized` / `pseudonymized` /
+`secret` / `application-level-encryption`. ADR-0025 §SD10 currently routes
+cell paths to the vault through a Go-side `FieldPolicyI`; a schema-declared
+routing would put that decision where the rest of the column's properties
+already live. Recorded as an observation, not a decision — it is ADR-0025's
+to make.
+
+**Trigger to revisit:** ADR-0025 reaching acceptance (it waits on counsel
+sign-off for OQ1 and OQ5), or a consumer needing the exploded form for
+sections that carry no personal data, where the convergence does not
+arise. Either way the shape should be settled once, in one place, rather
+than twice with a migration between them.

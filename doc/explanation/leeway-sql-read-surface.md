@@ -191,9 +191,16 @@ one.
 
 Stated here rather than discovered later:
 
-- **`MATERIALIZED` projections are not generated** from a leeway schema
-  (§SD3). The trial's largest single lever is still hand-written per path,
-  with physical names inlined and nothing checking they still match.
+- **`MATERIALIZED` projections are not generated** from a leeway schema —
+  §SD3, deferred on the cost of a generator that must track physical naming
+  across every shape. The trial's largest single lever (3.8–13.8×) is still
+  hand-written per path, with physical names inlined and nothing checking
+  they still match.
+- **The exploded companion table** (§SD5) is deferred too, and may not be
+  its own decision: it is the same one-row-per-attribute shape
+  [ADR-0025](../adr/0025-pushout-forget-architecture.md) realises as its
+  personal-data vault, and settling it twice would mean a migration between
+  them.
 - **Mixed and parametrized membership channels** are out of scope for the
   extraction sugar (ADR-0008 Cut 2); the read-back generator does not model
   them either.
