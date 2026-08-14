@@ -151,6 +151,31 @@ type Input struct {
 	DDL *clickhouse.TableOptions
 }
 
+// sharedRA is not an option either.
+//
+// The read-access classes are a function of the table, so a facts-bound
+// store's own copy would duplicate `factsschema/ra` — ~206 KB, which
+// ADR-0184 measured and recorded as the follow-up this closes. Binding the
+// existing package is strictly better here: it is the same generator over
+// the same TableDesc, and it is the package `codec/factswrapper` already
+// emits into every keelson wire codec, so a store and a codec decoding the
+// same row now share one definition of what its columns are.
+//
+// Not a parameter because there is no second answer. A facts-bound store
+// that emitted its own RA would be duplicating a package it links anyway.
+//
+// The DML is *not* shared. Its entity-frame control surface is walled by
+// the internal/lowlevel import barrier (ADR-0100 SD6), and `factsschema/dml`
+// exports that surface for the hand-written facts writers — so binding it
+// would drop the wall. That is a decision for ADR-0100, not a default here.
+var sharedRA = gen.Scaffold{
+	ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra",
+	Package:    "ra",
+	// factsschema/codegen generates under the bare table name, where this
+	// generator's default would be "facts_table".
+	Stylable: factsschema.TableName,
+}
+
 // externallyProvisioned is not an option.
 //
 // `boxer.facts` is provisioned by `factsstore/chstore`'s SetupTable, which is
@@ -199,6 +224,7 @@ func (inst Input) Generate() (err error) {
 		OutDir:         inst.OutDir,
 		ImportPath:     inst.ImportPath,
 		Wrapper:        marshallgen.FixedIdsWrapper{Ids: inst.Ids},
+		SharedRA:       &sharedRA,
 		DDL:            inst.DDL,
 		// Not a parameter — see the externallyProvisioned doc.
 		ExternallyProvisioned: externallyProvisioned,

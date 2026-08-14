@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
@@ -1852,20 +1853,20 @@ func (inst *SysmetricsStore) iterateEntities(ctx context.Context, sql string) it
 // membership-matched reads (fat rows carry optional components — the
 // kind-homogeneous helpers cannot decode them).
 func decodeSysmetricsRecord(rec arrow.RecordBatch) (ents []*SysmetricsEntity, err error) {
-	idR := lowlevel.NewReadAccessFactsTablePlainEntityIdAttributes()
-	tsR := lowlevel.NewReadAccessFactsTablePlainEntityTimestampAttributes()
-	lcR := lowlevel.NewReadAccessFactsTablePlainEntityLifecycleAttributes()
-	symbolR := lowlevel.NewReadAccessFactsTableTaggedSymbol()
-	u8ArrayR := lowlevel.NewReadAccessFactsTableTaggedU8Array()
-	u32ArrayR := lowlevel.NewReadAccessFactsTableTaggedU32Array()
-	f32ArrayR := lowlevel.NewReadAccessFactsTableTaggedF32Array()
-	i32ArrayR := lowlevel.NewReadAccessFactsTableTaggedI32Array()
-	u64ArrayR := lowlevel.NewReadAccessFactsTableTaggedU64Array()
-	boolR := lowlevel.NewReadAccessFactsTableTaggedBool()
-	symbolArrayR := lowlevel.NewReadAccessFactsTableTaggedSymbolArray()
-	i64ArrayR := lowlevel.NewReadAccessFactsTableTaggedI64Array()
-	stringArrayR := lowlevel.NewReadAccessFactsTableTaggedStringArray()
-	u16ArrayR := lowlevel.NewReadAccessFactsTableTaggedU16Array()
+	idR := ra.NewReadAccessFactsPlainEntityIdAttributes()
+	tsR := ra.NewReadAccessFactsPlainEntityTimestampAttributes()
+	lcR := ra.NewReadAccessFactsPlainEntityLifecycleAttributes()
+	symbolR := ra.NewReadAccessFactsTaggedSymbol()
+	u8ArrayR := ra.NewReadAccessFactsTaggedU8Array()
+	u32ArrayR := ra.NewReadAccessFactsTaggedU32Array()
+	f32ArrayR := ra.NewReadAccessFactsTaggedF32Array()
+	i32ArrayR := ra.NewReadAccessFactsTaggedI32Array()
+	u64ArrayR := ra.NewReadAccessFactsTaggedU64Array()
+	boolR := ra.NewReadAccessFactsTaggedBool()
+	symbolArrayR := ra.NewReadAccessFactsTaggedSymbolArray()
+	i64ArrayR := ra.NewReadAccessFactsTaggedI64Array()
+	stringArrayR := ra.NewReadAccessFactsTaggedStringArray()
+	u16ArrayR := ra.NewReadAccessFactsTaggedU16Array()
 	readers := []factsSectionReaderI{idR, tsR, lcR, symbolR, u8ArrayR, u32ArrayR, f32ArrayR, i32ArrayR, u64ArrayR, boolR, symbolArrayR, i64ArrayR, stringArrayR, u16ArrayR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)

@@ -162,16 +162,27 @@ func TestGenerate_EmitsAFactsBoundStore(t *testing.T) {
 	ddl := readFile(t, filepath.Join(out, "facts_ddl_clickhouse.out.sql"))
 	assert.Contains(t, ddl, "CREATE TABLE IF NOT EXISTS boxer.facts")
 
-	// The scaffolding lands under internal/lowlevel, and the component codec
-	// beside the store.
+	// The DML scaffolding lands under internal/lowlevel, and the component
+	// codec beside the store.
 	for _, f := range []string{
 		"probe_dto.out.go",
 		filepath.Join("internal", "lowlevel", "facts_dml.out.go"),
-		filepath.Join("internal", "lowlevel", "facts_ra.out.go"),
 	} {
 		_, err := os.Stat(filepath.Join(out, f))
 		require.NoError(t, err, "expected %s", f)
 	}
+
+	// Read access is NOT emitted — the store binds `factsschema/ra`, the same
+	// package `codec/factswrapper` puts in every wire codec. Asserting the
+	// absence rather than the reference is what has teeth: an emitted copy
+	// would compile, decode correctly, and silently cost ~206 KB per
+	// facts-bound store (ADR-0184, Consequences).
+	_, err := os.Stat(filepath.Join(out, "internal", "lowlevel", "facts_ra.out.go"))
+	assert.True(t, os.IsNotExist(err),
+		"a facts-bound store must not emit its own read-access copy")
+	assert.Contains(t, store, `"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"`)
+	assert.Contains(t, store, "ra.NewReadAccessFactsPlainEntityIdAttributes()",
+		"the class names must carry factsschema's stylable name, not this generator's _table default")
 
 	// The ids must be consts in the codec, not runtime lookups: a store bakes
 	// them into its Scan filter SQL, so they cannot come from an init().
