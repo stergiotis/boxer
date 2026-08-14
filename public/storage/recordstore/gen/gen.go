@@ -30,6 +30,40 @@ import (
 // (see the Input.TableName doc and the Generate gate).
 var tableNameRe = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
 
+// Scaffold names a generated scaffolding package the store references
+// instead of emitting its own copy.
+//
+// Stylable is the [naming.StylableName] that package was generated under,
+// which is what its class names encode — `facts` yields
+// `ReadAccessFacts*`, where this generator's own default (TableName +
+// "_table") would yield `ReadAccessFactsTable*`. It is stated rather than
+// derived because the two generators are independent: nothing here can
+// see the other lane's argument, and a wrong guess emits references that
+// do not compile.
+type Scaffold struct {
+	// ImportPath is the package's import path.
+	ImportPath string
+	// Package is the qualifier its identifiers carry at the reference
+	// site — the package's own name, not an alias.
+	Package string
+	// Stylable is the table name the package was generated under.
+	Stylable string
+}
+
+// valid reports the first thing missing, so a half-filled Scaffold fails
+// at generation rather than as an unresolved identifier in the output.
+func (inst *Scaffold) valid() (err error) {
+	switch {
+	case inst.ImportPath == "":
+		err = eh.Errorf("Scaffold.ImportPath is required")
+	case inst.Package == "":
+		err = eh.Errorf("Scaffold.Package is required")
+	case inst.Stylable == "":
+		err = eh.Errorf("Scaffold.Stylable is required — the class names encode it, so it cannot be derived here")
+	}
+	return
+}
+
 // Input parameterizes one store generation.
 type Input struct {
 	// PackageName is the Go package the emitted files declare.
@@ -75,6 +109,21 @@ type Input struct {
 	// package's public surface stays the store family (ADR-0100 Update
 	// 2026-07-04).
 	Flat bool
+	// SharedRA binds read-access scaffolding that already exists instead
+	// of emitting a copy. nil (the default) emits it as usual.
+	//
+	// The RA classes are a function of the table alone — TableDesc and
+	// RowConfig — so every store over one table generates the same ones.
+	// That is free when the store owns its table, and pure duplication
+	// when it does not: a store over `boxer.facts` re-emits ~206 KB the
+	// tree already carries in `factsschema/ra` (ADR-0184, Consequences).
+	//
+	// Only RA is shareable this way. The DML builder carries the
+	// entity-frame control surface a store owns (ADR-0100 SD6), and the
+	// wall around it *is* the internal/lowlevel import barrier — see
+	// [Input.privateControl]. RA has no control surface, so binding an
+	// existing package costs nothing but the reference.
+	SharedRA *Scaffold
 	// FullCodecs emits the complete exported marshallgen codec per kind
 	// (SoA <Kind>Columns, BuildEntities, FillFromArrow) as keelson and
 	// the anchor demos consume it. The default (false) emits the trimmed
@@ -130,6 +179,13 @@ func (inst Input) Generate() (err error) {
 		err = eh.Errorf("ImportPath is required for the internal/lowlevel layout (set Flat for the single-package layout)")
 		return
 	}
+	if inst.SharedRA != nil {
+		err = inst.SharedRA.valid()
+		if err != nil {
+			err = eh.Errorf("SharedRA: %w", err)
+			return
+		}
+	}
 	// The store emitter derives the DML/RA class names by capitalizing
 	// TableName's first letter; a multi-word name would disagree with the
 	// generators' own style conversion and emit non-compiling references.
@@ -182,16 +238,19 @@ func (inst Input) Generate() (err error) {
 		return
 	}
 
-	// 3. RA (the read-access classes decode drives).
-	raDriver := readaccess.NewGoCodeGeneratorDriver(conv, clickhouse.NewTechnologySpecificCodeGenerator(), true)
-	code, _, err = raDriver.GenerateGoClasses(inst.scaffoldPkg(), tableStylable, inst.Table, inst.RowConfig, gocodegen.NewMultiTablePerPackageGoClassNamer())
-	if err != nil {
-		err = eh.Errorf("generate ra: %w", err)
-		return
-	}
-	err = inst.write(inst.scaffoldFile(inst.TableName+"_ra.out.go"), code)
-	if err != nil {
-		return
+	// 3. RA (the read-access classes decode drives) — emitted unless the
+	// caller bound an existing package.
+	if inst.SharedRA == nil {
+		raDriver := readaccess.NewGoCodeGeneratorDriver(conv, clickhouse.NewTechnologySpecificCodeGenerator(), true)
+		code, _, err = raDriver.GenerateGoClasses(inst.scaffoldPkg(), tableStylable, inst.Table, inst.RowConfig, gocodegen.NewMultiTablePerPackageGoClassNamer())
+		if err != nil {
+			err = eh.Errorf("generate ra: %w", err)
+			return
+		}
+		err = inst.write(inst.scaffoldFile(inst.TableName+"_ra.out.go"), code)
+		if err != nil {
+			return
+		}
 	}
 
 	// 4. Per-component marshallgen codecs (Columns, BuildEntities,

@@ -673,21 +673,41 @@ func (inst mapIdLookup) LookupMembership(name string) (id uint64, err error) {
 
 // --- emission helpers. The emitted shapes mirror example/device_store.go. ---
 
-func (inst Input) dmlType() string         { return "InEntity" + upperFirst(inst.TableName) + "Table" }
-func (inst Input) raPrefix() string        { return "ReadAccess" + upperFirst(inst.TableName) + "Table" }
+func (inst Input) dmlType() string { return "InEntity" + upperFirst(inst.TableName) + "Table" }
+
+// raPrefix is the generated read-access class prefix. It encodes the
+// StylableName the RA package was generated under — this generator's own
+// (TableName + "_table"), or the bound package's when SharedRA states a
+// different one.
+func (inst Input) raPrefix() string {
+	if inst.SharedRA != nil {
+		return "ReadAccess" + upperFirst(inst.SharedRA.Stylable)
+	}
+	return "ReadAccess" + upperFirst(inst.TableName) + "Table"
+}
+
 func (inst Input) entityType() string      { return inst.StoreName + "Entity" }
 func (inst Input) storeType() string       { return inst.StoreName + "Store" }
 func (inst Input) builderType() string     { return inst.StoreName + "EntityBuilder" }
 func (inst Input) cacheType() string       { return inst.StoreName + "Cache" }
 func (inst Input) cacheConfigType() string { return inst.StoreName + "CacheConfig" }
 
-// lowQ qualifies DML/RA scaffolding references from the store file:
+// lowQ qualifies emitted-scaffolding references from the store file:
 // empty in the Flat layout, "lowlevel." otherwise.
 func (inst Input) lowQ() string {
 	if inst.Flat {
 		return ""
 	}
 	return "lowlevel."
+}
+
+// raQ qualifies read-access references, which part company with lowQ once
+// SharedRA binds a package of their own.
+func (inst Input) raQ() string {
+	if inst.SharedRA != nil {
+		return inst.SharedRA.Package + "."
+	}
+	return inst.lowQ()
 }
 
 // codecName renders a per-kind codec identifier the store calls
@@ -739,6 +759,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("\t%q", "github.com/stergiotis/boxer/public/storage/recordstore")
 	if !inst.Flat {
 		p("\t%q", inst.ImportPath+"/internal/lowlevel")
+	}
+	if inst.SharedRA != nil {
+		p("\t%q", inst.SharedRA.ImportPath)
 	}
 	p("\traruntime %q", "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime")
 	p(")")
@@ -1758,11 +1781,11 @@ func (inst emitter) emitDecode(sb *strings.Builder, comps []storeComponent, stat
 	plainVars := make([]string, 0, len(inst.model.groups))
 	for _, g := range inst.model.groups {
 		v := plainReaderVar(g.itemType)
-		p("\t%s := %sNew%sPlain%sAttributes()", v, inst.lowQ(), ra, plainReaderRoleToken(g.itemType))
+		p("\t%s := %sNew%sPlain%sAttributes()", v, inst.raQ(), ra, plainReaderRoleToken(g.itemType))
 		plainVars = append(plainVars, v)
 	}
 	for _, m := range order {
-		p("\t%s := %sNew%sTagged%s()", seen[m].varN, inst.lowQ(), ra, m)
+		p("\t%s := %sNew%sTagged%s()", seen[m].varN, inst.raQ(), ra, m)
 	}
 	readerVars := append([]string{}, plainVars...)
 	for _, m := range order {
