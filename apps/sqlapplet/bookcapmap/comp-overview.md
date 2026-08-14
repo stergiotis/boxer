@@ -23,6 +23,12 @@ working directory looking for `doc/competences`, so launching boxer from
 elsewhere changes what these applets are about. `BOXER_CAPMAP_VAULT` points at
 one kept somewhere else.
 
+**Tags are the triage channel.** A reviewer walking the corpus marks what they
+found — `needs-owner`, `merge-candidate` — in the note's `tags:` frontmatter,
+and the `tag · …` rows below count each one. They are a different signal from
+maturity and pain: a score says how good something is, a tag says what somebody
+decided to do about it. A corpus nobody has walked has none.
+
 **Assessment coverage is the row worth looking at.** Maturity and pain are
 human judgements with no oracle, and an unassessed competence carries the
 sentinel `255` rather than a zero — because a zero is a judgement ("none") and
@@ -60,6 +66,9 @@ WITH
     UNION ALL SELECT 21, 'assessment', 'assessed (pain)', toString(countIf(pain != 255)) FROM comps
     UNION ALL SELECT 22, 'assessment', 'with an owner', toString(countIf(owner != '')) FROM comps
     UNION ALL SELECT 23, 'assessment', 'with a lifecycle record', toString(countIf(length(lifecycle_phases) > 0)) FROM comps
+    UNION ALL SELECT 24, 'assessment', 'tagged', toString(countIf(length(tags) > 0)) FROM comps
+    UNION ALL SELECT 25, 'assessment', concat('tag · ', t), toString(count())
+      FROM comps ARRAY JOIN tags AS t GROUP BY t
     UNION ALL SELECT 30, 'links', concat(resolution, ' · ', kind), toString(count())
       FROM rels GROUP BY resolution, kind
     UNION ALL SELECT 40, 'domains', concat('domain · ', domain), toString(n) FROM doms
@@ -82,10 +91,10 @@ ORDER BY ord, metric
 
 | Table | One row per |
 |---|---|
-| `keelson('competence')` | competence: `slug`, `name`, `abbrev`, `synopsis`, `domain`, `catalog`, `owner`, `level`, `maturity`, `pain`, `section_count`, `vault_path`, `fact_id`, and the three `lifecycle_*` arrays |
+| `keelson('competence')` | competence: `slug`, `name`, `abbrev`, `synopsis`, `domain`, `catalog`, `owner`, `level`, `maturity`, `pain`, `tags`, `section_count`, `vault_path`, `fact_id`, and the three `lifecycle_*` arrays |
 | `keelson('competencesection')` | body section: `slug`, `ordinal`, `heading`, `bytes`, `` `text@text/markdown` `` |
 | `keelson('competencerelation')` | link: `source_slug`, `target`, `kind`, `resolution`, `section`, `ncd`, `source_fact_id`, `target_fact_id` |
 
-`fact_id` is the id `boxer capmap ingest` writes into `boxer.facts` for the same
+`fact_id` is the id `boxer capmap load` writes into `boxer.facts` for the same
 competence, so the live view here and the persisted history there join without
 either side knowing how the other derives it.

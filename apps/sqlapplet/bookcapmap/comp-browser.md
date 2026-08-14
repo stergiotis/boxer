@@ -29,7 +29,10 @@ it into an AST — so what you read here is what is in the file.
 
 **The knobs.** `filter` narrows the table by substring over slug, name and
 synopsis. `level` keeps one tier (1 macro ▸ 4 building block) or all of them at
-`0`. `catalog` keeps one catalog, empty keeps all.
+`0`. `catalog` keeps one catalog, empty keeps all. `tag` keeps the competences
+carrying one triage tag — the `tags:` frontmatter a reviewer writes — and is
+exact rather than a substring, because a tag is a name and `owner` should not
+also match `needs-owner`.
 
 `maturity` and `pain` render as `—` when nothing has been assessed, which is not
 the same as a zero: a zero is the judgement "none".
@@ -38,6 +41,7 @@ the same as a zero: a zero is the judgement "none".
 SET param_filter = '';
 SET param_level = 0;
 SET param_catalog = '';
+SET param_tag = '';
 
 WITH
   bodies AS (
@@ -60,6 +64,7 @@ WITH
            c.section_count AS sections,
            c.synopsis AS synopsis,
            c.owner AS owner,
+           c.tags AS tags,
            c.vault_path AS vault_path,
            b.body AS `body@text/markdown`
     FROM keelson('competence') AS c
@@ -70,6 +75,7 @@ WITH
              OR position(lower(c.synopsis), lower({filter:String})) > 0)
       AND ({level:UInt8} = 0 OR c.level = {level:UInt8})
       AND ({catalog:String} = '' OR c.catalog = {catalog:String})
+      AND ({tag:String} = '' OR has(c.tags, {tag:String}))
     ORDER BY level, slug
   ),
   focus AS (

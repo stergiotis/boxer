@@ -179,6 +179,13 @@ func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence
 	addSymbolIf(sym, competence.Domain, capmapvocab.MembCompDomain)
 	addSymbolIf(sym, competence.Catalog, capmapvocab.MembCompCatalog)
 	addSymbolIf(sym, competence.Owner, capmapvocab.MembCompOwner)
+	// Tags: one attribute each, all wearing the same membership. A tag set is
+	// a small vocabulary applied across the corpus, which is what the
+	// low-cardinality symbol section is for, and one attribute per tag is what
+	// makes "every competence tagged X" an indexOf rather than a string scan.
+	for _, tag := range competence.Tags {
+		addSymbolIf(sym, tag, capmapvocab.MembCompTag)
+	}
 	// Lifecycle: one attribute per recorded phase, the phase riding as the
 	// membership's high-card parameter so who stays attached to which phase.
 	for _, ev := range competence.Lifecycle {

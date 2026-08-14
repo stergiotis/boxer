@@ -65,6 +65,7 @@ func sampleCorpus() (corpus capmapcorpus.Corpus) {
 				VaultPath: "analytics/robustness.md", Name: "Robustness", Abbrev: "Rob",
 				Domain: "boxer-toolbelt", Catalog: "boxer", Owner: "Platform Lead", Level: 2,
 				Maturity: 3, Pain: 0,
+				Tags:     []string{"needs-owner", "workflow/triage"},
 				Sections: []capmapcorpus.Section{{Heading: "Standards", Text: "cites [[Jouppi-1990]]"}},
 				Lifecycle: []capmapcorpus.LifecycleEvent{
 					{Phase: capmapcorpus.PhaseDefined, By: "J. Smith", At: fixedNow},

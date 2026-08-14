@@ -24,7 +24,7 @@ import (
 //
 // # They read the vault, not boxer.facts
 //
-// `boxer capmap ingest` writes the same corpus into `boxer.facts`, and these
+// `boxer capmap load` writes the same corpus into `boxer.facts`, and these
 // tables deliberately do not read it back. Two reasons, both learned the hard
 // way elsewhere in this tree. An applet whose table only exists once some
 // other command has been run is the failure mode the pprof datasets hit — the
@@ -55,7 +55,7 @@ import (
 // is split from `adr` — it is the bulk of the corpus by bytes, and a query
 // about maturity should not pay for it.
 //
-// fact_id is the id `boxer capmap ingest` writes for this competence, so a
+// fact_id is the id `boxer capmap load` writes for this competence, so a
 // reader who wants the persisted trail can join this table to boxer.facts
 // without knowing how the id is derived.
 type competenceProvider struct{}
@@ -166,6 +166,7 @@ func competenceTable(rows []capmapcorpus.Competence) *introspect.Table {
 		Int32("pain", func(i int) int32 { return int32(rows[i].Pain) }).
 		Int32("section_count", func(i int) int32 { return int32(len(rows[i].Sections)) }).
 		String("vault_path", func(i int) string { return rows[i].VaultPath }).
+		StringList("tags", func(i int) []string { return rows[i].Tags }).
 		Uint64("fact_id", func(i int) uint64 { return capmapfacts.DeriveId(rows[i].NaturalKey) }).
 		StringList("lifecycle_phases", func(i int) []string {
 			out := make([]string, 0, len(rows[i].Lifecycle))

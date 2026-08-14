@@ -85,9 +85,17 @@ var NkRegistry = registry.MustNewNaturalKeyRegistry[*contract.VcsManagedContract
 
 // Membership constants for `boxer.facts` rows carrying competence-corpus data.
 //
-// Ordering matters and is append-only: membership ids follow declaration
-// order, and rows already written carry them. A new membership goes at the end
-// of its group, never in the middle.
+// Ordering matters and is append-only: a membership's id is its registration
+// ordinal ([registry.HumanReadableNaturalKeyRegistry.Begin] composes it from
+// the count so far), and rows already written carry the ids they were given.
+// **A new membership goes at the end of this block** — not at the end of the
+// group it belongs to, which is where an earlier version of this comment sent
+// it. Appending to a group renumbers every membership declared after that
+// group, which does not fail to compile, does not fail to write, and makes
+// every already-ingested row mean something else. That is why the tag
+// membership below sits after the relation ones rather than beside the other
+// competence attributes; grouping is a comment, ordinal is data.
+// TestMembershipIdsAreGoldenPinned holds the whole table.
 var (
 	// Kinds. The row's attribute value carries the kind label for
 	// readability; the membership id is what identifies which kind the row is.
@@ -150,6 +158,13 @@ var (
 
 	// Similarity score, on the f64 section, for similarity relations only.
 	MembRelNcd = NkRegistry.MustBegin("capmapRelationNcd").End()
+
+	// MembCompTag is a competence's triage tag, one attribute per tag on the
+	// symbol section — low-cardinality by nature, since tags are a small
+	// vocabulary applied across the corpus. It is a competence attribute
+	// declared after the relation ones because ids are ordinals and this
+	// membership was added later; see the block comment.
+	MembCompTag = NkRegistry.MustBegin("capmapCompetenceTag").End()
 )
 
 // AllMembs enumerates every registered capmap membership. Tests iterate it to
@@ -166,4 +181,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembRelTargetText, MembRelKind, MembRelResolution,
 	MembRelSection,
 	MembRelNcd,
+	MembCompTag,
 }

@@ -6,13 +6,20 @@
 // to the runtime's security capabilities here (§SD6). This command speaks
 // boxer's side of that boundary.
 //
-// Two verbs, deliberately split by whether they need a database:
+// Three verbs, one of which needs no database:
 //
 //   - `parse` reads the vault and reports what is in it — counts, the files
 //     that were not competences, and the links that did not resolve. No
 //     ClickHouse, so it works in a checkout with nothing running, and it is
 //     the corpus lint until the applet book lands.
-//   - `ingest` does the same read and then writes the rows.
+//   - `load` does the same read and then writes the rows.
+//   - `dump` is `load` backwards: it reads the rows and writes a vault.
+//
+// `load` and `dump` are named after the pair they are, which is also what the
+// prototype this was ported from called them. The vault stays authoritative
+// (ADR-0168 §SD3), so `dump` is not a second editing surface — it is how a
+// corpus that has been through the store comes back into the form a person
+// edits and git diffs, and it is what makes the store a safe place to keep one.
 //
 // The corpus model lives in
 // [github.com/stergiotis/boxer/public/gov/capmapcorpus] and the row encoding in
@@ -60,11 +67,24 @@ func vaultFlag() cli.Flag {
 	}
 }
 
+// storeFlags are the connection and placement flags the two database verbs
+// share, so `load` and `dump` cannot drift into naming the same table
+// differently.
+func storeFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{Name: "clickhouse-url", Value: chclient.Defaults().URL, Usage: "ClickHouse HTTP endpoint"},
+		&cli.StringFlag{Name: "user", Value: chclient.Defaults().User, Usage: "ClickHouse user"},
+		&cli.StringFlag{Name: "password", Usage: "ClickHouse password"},
+		&cli.StringFlag{Name: "database", Value: factsschema.DatabaseName, Usage: "target database"},
+		&cli.StringFlag{Name: "table", Value: factsschema.TableName, Usage: "target table"},
+	}
+}
+
 // NewCliCommand wires `boxer capmap` and its subcommands.
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "capmap",
-		Usage: "read a business-capability vault; report it, or ingest it into boxer.facts as competence and relation rows",
+		Usage: "read a business-capability vault; report it, load it into boxer.facts as competence and relation rows, or dump it back out",
 		Subcommands: []*cli.Command{
 			{
 				Name:   "parse",
@@ -73,19 +93,27 @@ func NewCliCommand() *cli.Command {
 				Action: actionParse,
 			},
 			{
-				Name:  "ingest",
-				Usage: "read the vault and write it into boxer.facts",
-				Flags: []cli.Flag{
-					vaultFlag(),
-					&cli.StringFlag{Name: "clickhouse-url", Value: chclient.Defaults().URL, Usage: "ClickHouse HTTP endpoint"},
-					&cli.StringFlag{Name: "user", Value: chclient.Defaults().User, Usage: "ClickHouse user"},
-					&cli.StringFlag{Name: "password", Usage: "ClickHouse password"},
-					&cli.StringFlag{Name: "database", Value: factsschema.DatabaseName, Usage: "target database"},
-					&cli.StringFlag{Name: "table", Value: factsschema.TableName, Usage: "target table"},
+				Name: "load",
+				// `ingest` was this verb's only name until `dump` arrived and
+				// made the pair worth naming as one. Kept as an alias rather
+				// than removed: it is in ADR-0168, in the applet book's prose
+				// and in whatever anybody scripted.
+				Aliases: []string{"ingest"},
+				Usage:   "read the vault and write it into boxer.facts",
+				Flags: append(append([]cli.Flag{vaultFlag()}, storeFlags()...),
 					&cli.BoolFlag{Name: "setup-table", Usage: "create the database and table first if they are absent"},
 					&cli.StringFlag{Name: "engine", Value: defaultEngine, Usage: "engine clause used by --setup-table; empty uses the store's own default"},
-				},
-				Action: actionIngest,
+				),
+				Action: actionLoad,
+			},
+			{
+				Name:  "dump",
+				Usage: "read the competences in boxer.facts and write them back out as a vault",
+				Flags: append([]cli.Flag{
+					&cli.StringFlag{Name: "out", Required: true, Usage: "directory to write the vault into"},
+					&cli.BoolFlag{Name: "force", Usage: "write into a directory that already holds files"},
+				}, storeFlags()...),
+				Action: actionDump,
 			},
 		},
 	}
@@ -177,7 +205,7 @@ func reportUnresolved(broken []capmapcorpus.Relation) {
 	}
 }
 
-func actionIngest(c *cli.Context) (err error) {
+func actionLoad(c *cli.Context) (err error) {
 	var (
 		corpus capmapcorpus.Corpus
 		dir    string
@@ -217,7 +245,63 @@ func actionIngest(c *cli.Context) (err error) {
 	if stats, err = capmapfacts.Ingest(ctx, corpus, sink, database+"."+table, time.Now().UTC()); err != nil {
 		return err
 	}
-	fmt.Printf("ingested %d rows into %s.%s from %s (%d competences, %d relations)\n",
+	fmt.Printf("loaded %d rows into %s.%s from %s (%d competences, %d relations)\n",
 		stats.Rows, database, table, dir, stats.Competences, stats.Relations)
+	return nil
+}
+
+func actionDump(c *cli.Context) (err error) {
+	out := c.String("out")
+	if err = checkOutputDir(out, c.Bool("force")); err != nil {
+		return err
+	}
+	client := chclient.New(chclient.Config{
+		URL:      c.String("clickhouse-url"),
+		User:     c.String("user"),
+		Password: c.String("password"),
+	}, nil)
+	database, table := c.String("database"), c.String("table")
+	qualified := database + "." + table
+
+	ctx := context.Background()
+	corpus, err := capmapfacts.ReadCorpus(ctx, client, qualified)
+	if err != nil {
+		return err
+	}
+	if len(corpus.Competences) == 0 {
+		// Writing an empty vault over a directory the operator named is the
+		// one outcome nobody wants from a typo'd --table.
+		return eh.Errorf("%s holds no competences; refusing to write an empty vault to %q", qualified, out)
+	}
+	stats, err := capmapcorpus.WriteVault(corpus, out)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("dumped %d competences and %d relations from %s into %s (%d directory-backed)\n",
+		len(corpus.Competences), len(corpus.Relations), qualified, out, stats.Directories)
+	return nil
+}
+
+// checkOutputDir refuses to write into a directory that already holds
+// something, unless the operator says so.
+//
+// A dump writes and never deletes, so pointing it at a populated vault would
+// leave files from both — the previous corpus's competences that this one no
+// longer has, silently mixed in with the new ones. Naming an empty directory is
+// the honest default; --force is for the operator who knows what is in theirs.
+func checkOutputDir(dir string, force bool) (err error) {
+	if dir == "" {
+		return eh.Errorf("no output directory")
+	}
+	entries, rErr := os.ReadDir(dir)
+	if rErr != nil {
+		if os.IsNotExist(rErr) {
+			return nil
+		}
+		return eh.Errorf("unable to inspect %q: %w", dir, rErr)
+	}
+	if len(entries) > 0 && !force {
+		return eh.Errorf("%q is not empty; a dump adds files and removes none, so its contents would mix with the corpus being written — empty it, name another, or pass --force", dir)
+	}
 	return nil
 }

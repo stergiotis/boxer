@@ -14,7 +14,8 @@ This directory is the business-capability corpus — what the toolbelt can do,
 how the parts relate, and (when anyone has judged it) how mature each part is.
 It is read by the `public/gov/capmapcorpus` package, served as the
 `competence` / `competencesection` / `competencerelation` keelson tables, and
-ingested into `boxer.facts` by `boxer capmap ingest`
+loaded into `boxer.facts` by `boxer capmap load` — and written back out of it by
+`boxer capmap dump`
 ([ADR-0168](../adr/0168-capmap-business-capability-corpus.md)).
 
 **Two words for one thing, on purpose.** The literature — and this vault —

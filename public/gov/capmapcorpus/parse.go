@@ -47,6 +47,7 @@ type frontmatter struct {
 	Maturity    *uint8          `yaml:"maturity"`
 	Pain        *uint8          `yaml:"pain"`
 	Owner       string          `yaml:"owner"`
+	Tags        tagList         `yaml:"tags"`
 	Similar     []similarEntry  `yaml:"similar"`
 	Lifecycle   lifecycleFields `yaml:",inline"`
 }
@@ -236,6 +237,7 @@ func parseFile(path string, slug string, vaultDir string) (comp Competence, rels
 		Level:      fm.Level,
 		Maturity:   scoreOrNotAssessed(fm.Maturity),
 		Pain:       scoreOrNotAssessed(fm.Pain),
+		Tags:       normalizeTags(fm.Tags),
 		Sections:   parseSections(body),
 		Lifecycle:  lifecycleEvents(fm.Lifecycle),
 	}

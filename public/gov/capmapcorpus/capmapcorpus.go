@@ -105,6 +105,16 @@ type Competence struct {
 	Maturity uint8
 	Pain     uint8
 
+	// Tags are the vault's `tags:` frontmatter entries, normalised without the
+	// leading `#` and deduplicated, in the order they were written.
+	//
+	// They are the triage channel: a reviewer walking the corpus marks what
+	// they found — `needs-owner`, `merge-candidate` — and the mark belongs to
+	// the note rather than to whatever tool applied it. Frontmatter rather
+	// than inline `#tags` in the body because a tag has to be writable
+	// without touching prose, and because the body round-trips verbatim
+	// (see [Section]); an inline tag would be carried twice.
+	Tags []string
 	// Sections are the body's h1-delimited chunks in document order. Headings
 	// are not constrained to a fixed set — an unrecognised one is kept rather
 	// than dropped, so the vault round-trips.
@@ -290,5 +300,24 @@ func (inst ResolutionE) String() (s string) {
 		return "unresolved"
 	default:
 		return "unknown"
+	}
+}
+
+// ParseResolution is the inverse of [ResolutionE.String], for reading a corpus
+// back out of a store that holds the name rather than the number.
+//
+// An unrecognised name reads as [ResolutionUnresolved] rather than failing:
+// resolution is a judgement about a link, and a value this build does not know
+// is one more link it cannot vouch for — which is what unresolved says.
+func ParseResolution(s string) (r ResolutionE) {
+	switch s {
+	case "direct":
+		return ResolutionDirect
+	case "dirref":
+		return ResolutionDirRef
+	case "external":
+		return ResolutionExternal
+	default:
+		return ResolutionUnresolved
 	}
 }

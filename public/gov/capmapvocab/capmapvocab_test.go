@@ -82,12 +82,54 @@ func TestTagValueBaseIsTheAllocatedOne(t *testing.T) {
 		"offset 0 of the base is what the memberships hang from")
 }
 
-// Ordering is append-only because ids follow declaration order and written
-// rows carry them. Pinning the first and last entries makes an insertion in
-// the middle — the change that would silently renumber everything after it —
-// fail here rather than in a corpus somebody already ingested.
-func TestMembershipOrderIsAppendOnly(t *testing.T) {
-	require.GreaterOrEqual(t, len(capmapvocab.AllMembs), 2)
-	assert.Equal(t, "capmap-kind-competence", string(capmapvocab.AllMembs[0].GetNaturalKey()))
-	assert.Equal(t, "capmap-relation-ncd", string(capmapvocab.AllMembs[len(capmapvocab.AllMembs)-1].GetNaturalKey()))
+// The whole name-to-id table, written down.
+//
+// A membership id is its registration ordinal, so declaring a new membership
+// anywhere but at the end renumbers every one after it. That change compiles,
+// vets, writes and reads — it just makes rows already in `boxer.facts` mean
+// something else, because the id is all a row carries. Pinning only the ends
+// (which this test used to do) catches a prepend and an append but not the
+// insertion in the middle, which is the one an author actually makes when they
+// put a new field "with the others".
+//
+// Updating this table is therefore a deliberate act: appending a line is
+// ordinary, and changing a line that is already here means every store holding
+// the corpus must be re-ingested.
+func TestMembershipIdsAreGoldenPinned(t *testing.T) {
+	golden := []struct {
+		name string
+		id   uint64
+	}{
+		{"capmap-kind-competence", 2738188573441261568},
+		{"capmap-kind-relation", 2738188573441261569},
+		{"capmap-competence-slug", 2738188573441261570},
+		{"capmap-competence-name", 2738188573441261571},
+		{"capmap-competence-abbrev", 2738188573441261572},
+		{"capmap-competence-synopsis", 2738188573441261573},
+		{"capmap-competence-domain", 2738188573441261574},
+		{"capmap-competence-catalog", 2738188573441261575},
+		{"capmap-competence-owner", 2738188573441261576},
+		{"capmap-competence-level", 2738188573441261577},
+		{"capmap-competence-vault-path", 2738188573441261578},
+		{"capmap-competence-maturity", 2738188573441261579},
+		{"capmap-competence-pain", 2738188573441261580},
+		{"capmap-competence-section", 2738188573441261581},
+		{"capmap-competence-lifecycle-by", 2738188573441261582},
+		{"capmap-competence-lifecycle-at", 2738188573441261583},
+		{"capmap-relation-source", 2738188573441261584},
+		{"capmap-relation-target", 2738188573441261585},
+		{"capmap-relation-target-text", 2738188573441261586},
+		{"capmap-relation-kind", 2738188573441261587},
+		{"capmap-relation-resolution", 2738188573441261588},
+		{"capmap-relation-section", 2738188573441261589},
+		{"capmap-relation-ncd", 2738188573441261590},
+		{"capmap-competence-tag", 2738188573441261591},
+	}
+	require.Len(t, capmapvocab.AllMembs, len(golden),
+		"a membership was added or removed — append its line to the golden table, and re-ingest if any line changed")
+	for i, want := range golden {
+		got := capmapvocab.AllMembs[i]
+		assert.Equalf(t, want.name, string(got.GetNaturalKey()), "position %d", i)
+		assert.Equalf(t, want.id, got.GetId().Value(), "id of %q", want.name)
+	}
 }
