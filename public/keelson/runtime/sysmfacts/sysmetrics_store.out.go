@@ -89,6 +89,96 @@ var SysmetricsMembershipIds = map[string]map[string]uint64{
 		"sysmMemArcSizeBytes":   3098476543630901273,
 		"sysmMemArcMinBytes":    3098476543630901274,
 	},
+	"SysPsi": {
+		"sysmKindPsi":              3098476543630901276,
+		"sysmPsiHost":              3098476543630901277,
+		"sysmPsiCpuSomeAvg10":      3098476543630901278,
+		"sysmPsiCpuSomeAvg60":      3098476543630901279,
+		"sysmPsiCpuSomeAvg300":     3098476543630901280,
+		"sysmPsiCpuSomeTotalUs":    3098476543630901281,
+		"sysmPsiCpuFullAvg10":      3098476543630901282,
+		"sysmPsiCpuFullAvg60":      3098476543630901283,
+		"sysmPsiCpuFullAvg300":     3098476543630901284,
+		"sysmPsiCpuFullTotalUs":    3098476543630901285,
+		"sysmPsiMemorySomeAvg10":   3098476543630901286,
+		"sysmPsiMemorySomeAvg60":   3098476543630901287,
+		"sysmPsiMemorySomeAvg300":  3098476543630901288,
+		"sysmPsiMemorySomeTotalUs": 3098476543630901289,
+		"sysmPsiMemoryFullAvg10":   3098476543630901290,
+		"sysmPsiMemoryFullAvg60":   3098476543630901291,
+		"sysmPsiMemoryFullAvg300":  3098476543630901292,
+		"sysmPsiMemoryFullTotalUs": 3098476543630901293,
+		"sysmPsiIoSomeAvg10":       3098476543630901294,
+		"sysmPsiIoSomeAvg60":       3098476543630901295,
+		"sysmPsiIoSomeAvg300":      3098476543630901296,
+		"sysmPsiIoSomeTotalUs":     3098476543630901297,
+		"sysmPsiIoFullAvg10":       3098476543630901298,
+		"sysmPsiIoFullAvg60":       3098476543630901299,
+		"sysmPsiIoFullAvg300":      3098476543630901300,
+		"sysmPsiIoFullTotalUs":     3098476543630901301,
+		"sysmPsiAvailable":         3098476543630901302,
+	},
+	"SysNet": {
+		"sysmKindNet":          3098476543630901303,
+		"sysmNetHost":          3098476543630901304,
+		"sysmNetName":          3098476543630901305,
+		"sysmNetIndex":         3098476543630901306,
+		"sysmNetHardwareAddr":  3098476543630901307,
+		"sysmNetUp":            3098476543630901308,
+		"sysmNetRunning":       3098476543630901309,
+		"sysmNetRxBytes":       3098476543630901310,
+		"sysmNetTxBytes":       3098476543630901311,
+		"sysmNetRxBytesPerSec": 3098476543630901312,
+		"sysmNetTxBytesPerSec": 3098476543630901313,
+	},
+	"SysDiskMount": {
+		"sysmKindDiskMount":       3098476543630901314,
+		"sysmDiskMountHost":       3098476543630901315,
+		"sysmDiskMountDevice":     3098476543630901316,
+		"sysmDiskMountPoint":      3098476543630901317,
+		"sysmDiskMountFsType":     3098476543630901318,
+		"sysmDiskMountBlockName":  3098476543630901319,
+		"sysmDiskMountReal":       3098476543630901320,
+		"sysmDiskMountTotalBytes": 3098476543630901321,
+		"sysmDiskMountFreeBytes":  3098476543630901322,
+		"sysmDiskMountUsedBytes":  3098476543630901323,
+		"sysmDiskMountUsedPct":    3098476543630901324,
+	},
+	"SysDiskIo": {
+		"sysmKindDiskIo":             3098476543630901325,
+		"sysmDiskIoHost":             3098476543630901326,
+		"sysmDiskIoName":             3098476543630901327,
+		"sysmDiskIoReadBytesPerSec":  3098476543630901328,
+		"sysmDiskIoWriteBytesPerSec": 3098476543630901329,
+		"sysmDiskIoBusyPct":          3098476543630901330,
+	},
+	"SysBattery": {
+		"sysmKindBattery":           3098476543630901331,
+		"sysmBatteryHost":           3098476543630901332,
+		"sysmBatteryName":           3098476543630901333,
+		"sysmBatteryType":           3098476543630901334,
+		"sysmBatteryPercent":        3098476543630901335,
+		"sysmBatteryState":          3098476543630901336,
+		"sysmBatteryPowerWatts":     3098476543630901337,
+		"sysmBatterySecondsToFull":  3098476543630901338,
+		"sysmBatterySecondsToEmpty": 3098476543630901339,
+		"sysmAcAdapterName":         3098476543630901340,
+		"sysmAcAdapterOnline":       3098476543630901341,
+	},
+	"SysGpu": {
+		"sysmKindGpu":             3098476543630901342,
+		"sysmGpuHost":             3098476543630901343,
+		"sysmGpuVendor":           3098476543630901344,
+		"sysmGpuIndex":            3098476543630901345,
+		"sysmGpuName":             3098476543630901346,
+		"sysmGpuPciId":            3098476543630901347,
+		"sysmGpuBusyPct":          3098476543630901348,
+		"sysmGpuMemoryUsedBytes":  3098476543630901349,
+		"sysmGpuMemoryTotalBytes": 3098476543630901350,
+		"sysmGpuPowerWatts":       3098476543630901351,
+		"sysmGpuTempC":            3098476543630901352,
+		"sysmGpuFreqMhz":          3098476543630901353,
+	},
 }
 
 // SysmetricsEnvelope carries the pass-through backbone columns — every plain
@@ -110,9 +200,15 @@ type SysmetricsEntity struct {
 	// SysmetricsEnvelope is embedded: its pass-through columns read as
 	// promoted entity fields.
 	SysmetricsEnvelope
-	SysCpu     option.Option[SysCpu]
-	SysCpuInfo option.Option[SysCpuInfo]
-	SysMem     option.Option[SysMem]
+	SysCpu       option.Option[SysCpu]
+	SysCpuInfo   option.Option[SysCpuInfo]
+	SysMem       option.Option[SysMem]
+	SysPsi       option.Option[SysPsi]
+	SysNet       option.Option[SysNet]
+	SysDiskMount option.Option[SysDiskMount]
+	SysDiskIo    option.Option[SysDiskIo]
+	SysBattery   option.Option[SysBattery]
+	SysGpu       option.Option[SysGpu]
 }
 
 // Archetype reports which components the entity carries, in schema order.
@@ -125,6 +221,24 @@ func (inst *SysmetricsEntity) Archetype() (a []string) {
 	}
 	if inst.SysMem.Has {
 		a = append(a, "sysMem")
+	}
+	if inst.SysPsi.Has {
+		a = append(a, "sysPsi")
+	}
+	if inst.SysNet.Has {
+		a = append(a, "sysNet")
+	}
+	if inst.SysDiskMount.Has {
+		a = append(a, "sysDiskMount")
+	}
+	if inst.SysDiskIo.Has {
+		a = append(a, "sysDiskIo")
+	}
+	if inst.SysBattery.Has {
+		a = append(a, "sysBattery")
+	}
+	if inst.SysGpu.Has {
+		a = append(a, "sysGpu")
 	}
 	return
 }
@@ -344,6 +458,96 @@ func (inst *SysmetricsEntityBuilder) AddSysMem(row SysMem) *SysmetricsEntityBuil
 	return inst
 }
 
+// AddSysPsi contributes the SysPsi component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *SysmetricsEntityBuilder) AddSysPsi(row SysPsi) *SysmetricsEntityBuilder {
+	err := sysPsiAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.SysPsi.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.SysPsi = option.Some(row)
+	}
+	return inst
+}
+
+// AddSysNet contributes the SysNet component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *SysmetricsEntityBuilder) AddSysNet(row SysNet) *SysmetricsEntityBuilder {
+	err := sysNetAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.SysNet.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.SysNet = option.Some(row)
+	}
+	return inst
+}
+
+// AddSysDiskMount contributes the SysDiskMount component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *SysmetricsEntityBuilder) AddSysDiskMount(row SysDiskMount) *SysmetricsEntityBuilder {
+	err := sysDiskMountAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.SysDiskMount.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.SysDiskMount = option.Some(row)
+	}
+	return inst
+}
+
+// AddSysDiskIo contributes the SysDiskIo component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *SysmetricsEntityBuilder) AddSysDiskIo(row SysDiskIo) *SysmetricsEntityBuilder {
+	err := sysDiskIoAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.SysDiskIo.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.SysDiskIo = option.Some(row)
+	}
+	return inst
+}
+
+// AddSysBattery contributes the SysBattery component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *SysmetricsEntityBuilder) AddSysBattery(row SysBattery) *SysmetricsEntityBuilder {
+	err := sysBatteryAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.SysBattery.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.SysBattery = option.Some(row)
+	}
+	return inst
+}
+
+// AddSysGpu contributes the SysGpu component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *SysmetricsEntityBuilder) AddSysGpu(row SysGpu) *SysmetricsEntityBuilder {
+	err := sysGpuAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.SysGpu.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.SysGpu = option.Some(row)
+	}
+	return inst
+}
+
 // Raw exposes the underlying DML entity for direct attribute
 // manipulation within the same entity frame. The type lives in
 // internal/lowlevel: callers outside the generated package hold the
@@ -453,6 +657,150 @@ func (inst *SysmetricsStore) IngestSysMem(ts time.Time, rows []SysMem) (err erro
 		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysMem(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysMem row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestSysPsi buffers one whole entity per row carrying only the
+// SysPsi component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *SysmetricsStore) IngestSysPsi(ts time.Time, rows []SysPsi) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest sysPsi row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysPsi(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest sysPsi row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestSysNet buffers one whole entity per row carrying only the
+// SysNet component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *SysmetricsStore) IngestSysNet(ts time.Time, rows []SysNet) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest sysNet row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysNet(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest sysNet row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestSysDiskMount buffers one whole entity per row carrying only the
+// SysDiskMount component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *SysmetricsStore) IngestSysDiskMount(ts time.Time, rows []SysDiskMount) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest sysDiskMount row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysDiskMount(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest sysDiskMount row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestSysDiskIo buffers one whole entity per row carrying only the
+// SysDiskIo component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *SysmetricsStore) IngestSysDiskIo(ts time.Time, rows []SysDiskIo) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest sysDiskIo row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysDiskIo(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest sysDiskIo row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestSysBattery buffers one whole entity per row carrying only the
+// SysBattery component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *SysmetricsStore) IngestSysBattery(ts time.Time, rows []SysBattery) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest sysBattery row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysBattery(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest sysBattery row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestSysGpu buffers one whole entity per row carrying only the
+// SysGpu component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *SysmetricsStore) IngestSysGpu(ts time.Time, rows []SysGpu) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest sysGpu row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysGpu(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest sysGpu row %d: %w", i, err)
 			return
 		}
 	}
@@ -790,9 +1138,15 @@ func (inst *factsFetcher) FetchItemSinglePartition(ctx context.Context, partitio
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	factsScanSysCpuFilter     = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901248, 3098476543630901251]) AND has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901254) AND hasAll(\"tv:f32Array:lr:lr:u64:1247:::0::data\", [3098476543630901257, 3098476543630901258, 3098476543630901259]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901248) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901251) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901254) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901255) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901256) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901257) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901258) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901259) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901260) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901261) <= 1"
-	factsScanSysCpuInfoFilter = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901249, 3098476543630901252, 3098476543630901262]) AND has(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901263) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901249) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901252) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901262) = 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901263) = 1"
-	factsScanSysMemFilter     = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901250, 3098476543630901253]) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [3098476543630901264, 3098476543630901265, 3098476543630901266, 3098476543630901267, 3098476543630901268, 3098476543630901269, 3098476543630901270, 3098476543630901271, 3098476543630901272, 3098476543630901273, 3098476543630901274]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901250) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901253) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901264) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901265) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901266) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901267) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901268) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901269) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901270) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901271) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901272) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901273) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901274) = 1"
+	factsScanSysCpuFilter       = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901248, 3098476543630901251]) AND has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901254) AND hasAll(\"tv:f32Array:lr:lr:u64:1247:::0::data\", [3098476543630901257, 3098476543630901258, 3098476543630901259]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901248) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901251) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901254) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901255) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901256) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901257) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901258) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901259) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901260) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901261) <= 1"
+	factsScanSysCpuInfoFilter   = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901249, 3098476543630901252, 3098476543630901262]) AND has(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901263) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901249) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901252) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901262) = 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901263) = 1"
+	factsScanSysMemFilter       = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901250, 3098476543630901253]) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [3098476543630901264, 3098476543630901265, 3098476543630901266, 3098476543630901267, 3098476543630901268, 3098476543630901269, 3098476543630901270, 3098476543630901271, 3098476543630901272, 3098476543630901273, 3098476543630901274]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901250) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901253) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901264) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901265) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901266) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901267) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901268) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901269) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901270) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901271) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901272) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901273) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901274) = 1"
+	factsScanSysPsiFilter       = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901276, 3098476543630901277]) AND has(\"tv:bool:lr:lr:u64:1247:::0::data\", 3098476543630901302) AND hasAll(\"tv:f32Array:lr:lr:u64:1247:::0::data\", [3098476543630901278, 3098476543630901279, 3098476543630901280, 3098476543630901282, 3098476543630901283, 3098476543630901284, 3098476543630901286, 3098476543630901287, 3098476543630901288, 3098476543630901290, 3098476543630901291, 3098476543630901292, 3098476543630901294, 3098476543630901295, 3098476543630901296, 3098476543630901298, 3098476543630901299, 3098476543630901300]) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [3098476543630901281, 3098476543630901285, 3098476543630901289, 3098476543630901293, 3098476543630901297, 3098476543630901301]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901276) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901277) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 3098476543630901302) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901278) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901279) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901280) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901281) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901282) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901283) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901284) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901285) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901286) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901287) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901288) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901289) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901290) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901291) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901292) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901293) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901294) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901295) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901296) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901297) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901298) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901299) = 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901300) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901301) = 1"
+	factsScanSysNetFilter       = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901303, 3098476543630901304]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901303) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901304) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901305) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901306) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901307) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901308) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901309) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901310) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901311) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901312) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901313) <= 1"
+	factsScanSysDiskMountFilter = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901314, 3098476543630901315]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901314) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901315) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901316) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901317) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901318) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901319) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901320) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901321) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901322) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901323) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901324) <= 1"
+	factsScanSysDiskIoFilter    = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901325, 3098476543630901326]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901325) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901326) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901327) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901328) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901329) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901330) <= 1"
+	factsScanSysBatteryFilter   = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901331, 3098476543630901332]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901331) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901332) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901333) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901334) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901335) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901336) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901337) <= 1 AND countEqual(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 3098476543630901338) <= 1 AND countEqual(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 3098476543630901339) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901340) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901341) <= 1"
+	factsScanSysGpuFilter       = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901342, 3098476543630901343]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901342) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901343) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901344) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901345) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901346) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901347) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901348) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901349) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901350) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901351) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901352) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901353) <= 1"
 )
 
 // ScanSysCpu iterates the entities whose rows carry a conforming SysCpu
@@ -869,6 +1223,180 @@ func (inst *SysmetricsStore) ScanSysCpuInfo(ctx context.Context, opts recordstor
 // rows.
 func (inst *SysmetricsStore) ScanSysMem(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
 	where := factsScanSysMemFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + SysmetricsTableName +
+		" WHERE " + where +
+		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanSysPsi iterates the entities whose rows carry a conforming SysPsi
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *SysmetricsStore) ScanSysPsi(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	where := factsScanSysPsiFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + SysmetricsTableName +
+		" WHERE " + where +
+		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanSysNet iterates the entities whose rows carry a conforming SysNet
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *SysmetricsStore) ScanSysNet(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	where := factsScanSysNetFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + SysmetricsTableName +
+		" WHERE " + where +
+		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanSysDiskMount iterates the entities whose rows carry a conforming SysDiskMount
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *SysmetricsStore) ScanSysDiskMount(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	where := factsScanSysDiskMountFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + SysmetricsTableName +
+		" WHERE " + where +
+		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanSysDiskIo iterates the entities whose rows carry a conforming SysDiskIo
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *SysmetricsStore) ScanSysDiskIo(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	where := factsScanSysDiskIoFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + SysmetricsTableName +
+		" WHERE " + where +
+		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanSysBattery iterates the entities whose rows carry a conforming SysBattery
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *SysmetricsStore) ScanSysBattery(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	where := factsScanSysBatteryFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + SysmetricsTableName +
+		" WHERE " + where +
+		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanSysGpu iterates the entities whose rows carry a conforming SysGpu
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *SysmetricsStore) ScanSysGpu(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	where := factsScanSysGpuFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -986,7 +1514,10 @@ func decodeSysmetricsRecord(rec arrow.RecordBatch) (ents []*SysmetricsEntity, er
 	f32ArrayR := lowlevel.NewReadAccessFactsTableTaggedF32Array()
 	i32ArrayR := lowlevel.NewReadAccessFactsTableTaggedI32Array()
 	u64ArrayR := lowlevel.NewReadAccessFactsTableTaggedU64Array()
-	readers := []factsSectionReaderI{idR, tsR, lcR, symbolR, u8ArrayR, u32ArrayR, f32ArrayR, i32ArrayR, u64ArrayR}
+	boolR := lowlevel.NewReadAccessFactsTableTaggedBool()
+	symbolArrayR := lowlevel.NewReadAccessFactsTableTaggedSymbolArray()
+	i64ArrayR := lowlevel.NewReadAccessFactsTableTaggedI64Array()
+	readers := []factsSectionReaderI{idR, tsR, lcR, symbolR, u8ArrayR, u32ArrayR, f32ArrayR, i32ArrayR, u64ArrayR, boolR, symbolArrayR, i64ArrayR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1048,6 +1579,78 @@ func decodeSysmetricsRecord(rec arrow.RecordBatch) (ents []*SysmetricsEntity, er
 				row.Id = ent.ID
 				row.Ts = ent.Ts
 				ent.SysMem = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := sysPsiReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), boolR.GetAttributes(), boolR.GetMemberships(), f32ArrayR.GetAttributes(), f32ArrayR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read sysPsi component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				row.Ts = ent.Ts
+				ent.SysPsi = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := sysNetReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships(), i32ArrayR.GetAttributes(), i32ArrayR.GetMemberships(), u8ArrayR.GetAttributes(), u8ArrayR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read sysNet component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				row.Ts = ent.Ts
+				ent.SysNet = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := sysDiskMountReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships(), u8ArrayR.GetAttributes(), u8ArrayR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships(), f32ArrayR.GetAttributes(), f32ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read sysDiskMount component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				row.Ts = ent.Ts
+				ent.SysDiskMount = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := sysDiskIoReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships(), u8ArrayR.GetAttributes(), u8ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read sysDiskIo component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				row.Ts = ent.Ts
+				ent.SysDiskIo = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := sysBatteryReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships(), u8ArrayR.GetAttributes(), u8ArrayR.GetMemberships(), f32ArrayR.GetAttributes(), f32ArrayR.GetMemberships(), i64ArrayR.GetAttributes(), i64ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read sysBattery component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				row.Ts = ent.Ts
+				ent.SysBattery = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := sysGpuReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships(), i32ArrayR.GetAttributes(), i32ArrayR.GetMemberships(), u8ArrayR.GetAttributes(), u8ArrayR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships(), f32ArrayR.GetAttributes(), f32ArrayR.GetMemberships(), u32ArrayR.GetAttributes(), u32ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read sysGpu component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				row.Ts = ent.Ts
+				ent.SysGpu = option.Some(row)
 			}
 		}
 		ents = append(ents, ent)
