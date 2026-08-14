@@ -158,6 +158,134 @@ var (
 	// they are already tagged, rather than there being a span of stored rows
 	// the switch cannot see.
 	MembSensitive = NkRegistry.MustBegin("sysmSensitive").End()
+
+	// --- ADR-0184 M4: the remaining scalar and per-item domains. ---
+	//
+	// Appended, never interleaved with the block above: a membership id is its
+	// registration ordinal, so inserting among the cpu and mem names would
+	// renumber them and silently change what already-stored rows mean.
+
+	// PSI. Every figure is the kernel's own — the avg windows are already
+	// percentages and the totals are cumulative microseconds, so neither is
+	// recomputed here. `full` is all-zero for cpu on most kernels; it is stored
+	// as read rather than dropped, because "the kernel reported zero" and "we
+	// decided not to store it" are different facts.
+	MembKindPsi = NkRegistry.MustBegin("sysmKindPsi").End()
+	MembPsiHost = NkRegistry.MustBegin("sysmPsiHost").End()
+
+	MembPsiCpuSomeAvg10   = NkRegistry.MustBegin("sysmPsiCpuSomeAvg10").End()
+	MembPsiCpuSomeAvg60   = NkRegistry.MustBegin("sysmPsiCpuSomeAvg60").End()
+	MembPsiCpuSomeAvg300  = NkRegistry.MustBegin("sysmPsiCpuSomeAvg300").End()
+	MembPsiCpuSomeTotalUs = NkRegistry.MustBegin("sysmPsiCpuSomeTotalUs").End()
+	MembPsiCpuFullAvg10   = NkRegistry.MustBegin("sysmPsiCpuFullAvg10").End()
+	MembPsiCpuFullAvg60   = NkRegistry.MustBegin("sysmPsiCpuFullAvg60").End()
+	MembPsiCpuFullAvg300  = NkRegistry.MustBegin("sysmPsiCpuFullAvg300").End()
+	MembPsiCpuFullTotalUs = NkRegistry.MustBegin("sysmPsiCpuFullTotalUs").End()
+
+	MembPsiMemorySomeAvg10   = NkRegistry.MustBegin("sysmPsiMemorySomeAvg10").End()
+	MembPsiMemorySomeAvg60   = NkRegistry.MustBegin("sysmPsiMemorySomeAvg60").End()
+	MembPsiMemorySomeAvg300  = NkRegistry.MustBegin("sysmPsiMemorySomeAvg300").End()
+	MembPsiMemorySomeTotalUs = NkRegistry.MustBegin("sysmPsiMemorySomeTotalUs").End()
+	MembPsiMemoryFullAvg10   = NkRegistry.MustBegin("sysmPsiMemoryFullAvg10").End()
+	MembPsiMemoryFullAvg60   = NkRegistry.MustBegin("sysmPsiMemoryFullAvg60").End()
+	MembPsiMemoryFullAvg300  = NkRegistry.MustBegin("sysmPsiMemoryFullAvg300").End()
+	MembPsiMemoryFullTotalUs = NkRegistry.MustBegin("sysmPsiMemoryFullTotalUs").End()
+
+	MembPsiIoSomeAvg10   = NkRegistry.MustBegin("sysmPsiIoSomeAvg10").End()
+	MembPsiIoSomeAvg60   = NkRegistry.MustBegin("sysmPsiIoSomeAvg60").End()
+	MembPsiIoSomeAvg300  = NkRegistry.MustBegin("sysmPsiIoSomeAvg300").End()
+	MembPsiIoSomeTotalUs = NkRegistry.MustBegin("sysmPsiIoSomeTotalUs").End()
+	MembPsiIoFullAvg10   = NkRegistry.MustBegin("sysmPsiIoFullAvg10").End()
+	MembPsiIoFullAvg60   = NkRegistry.MustBegin("sysmPsiIoFullAvg60").End()
+	MembPsiIoFullAvg300  = NkRegistry.MustBegin("sysmPsiIoFullAvg300").End()
+	MembPsiIoFullTotalUs = NkRegistry.MustBegin("sysmPsiIoFullTotalUs").End()
+
+	// Available distinguishes "kernel built without CONFIG_PSI" from "no
+	// pressure". Without it every unsupported host would read as a perfectly
+	// unstalled one.
+	MembPsiAvailable = NkRegistry.MustBegin("sysmPsiAvailable").End()
+
+	// Network, one array element per interface. See the DTO for the alignment
+	// contract the parallel arrays carry.
+	MembKindNet = NkRegistry.MustBegin("sysmKindNet").End()
+	MembNetHost = NkRegistry.MustBegin("sysmNetHost").End()
+
+	MembNetName         = NkRegistry.MustBegin("sysmNetName").End()
+	MembNetIndex        = NkRegistry.MustBegin("sysmNetIndex").End()
+	MembNetHardwareAddr = NkRegistry.MustBegin("sysmNetHardwareAddr").End()
+	MembNetUp           = NkRegistry.MustBegin("sysmNetUp").End()
+	MembNetRunning      = NkRegistry.MustBegin("sysmNetRunning").End()
+	MembNetRxBytes      = NkRegistry.MustBegin("sysmNetRxBytes").End()
+	MembNetTxBytes      = NkRegistry.MustBegin("sysmNetTxBytes").End()
+	// The per-second rates are the collector's own derivation and are stored
+	// alongside the raw counters rather than left to the reader: they
+	// compensate for counter wrap on 32-bit virtual NICs, which a consumer
+	// differencing the cumulative fields cannot detect after the fact.
+	MembNetRxBytesPerSec = NkRegistry.MustBegin("sysmNetRxBytesPerSec").End()
+	MembNetTxBytesPerSec = NkRegistry.MustBegin("sysmNetTxBytesPerSec").End()
+
+	// Filesystem capacity, one array element per mount entry.
+	MembKindDiskMount = NkRegistry.MustBegin("sysmKindDiskMount").End()
+	MembDiskMountHost = NkRegistry.MustBegin("sysmDiskMountHost").End()
+
+	MembDiskMountDevice     = NkRegistry.MustBegin("sysmDiskMountDevice").End()
+	MembDiskMountPoint      = NkRegistry.MustBegin("sysmDiskMountPoint").End()
+	MembDiskMountFsType     = NkRegistry.MustBegin("sysmDiskMountFsType").End()
+	MembDiskMountBlockName  = NkRegistry.MustBegin("sysmDiskMountBlockName").End()
+	MembDiskMountReal       = NkRegistry.MustBegin("sysmDiskMountReal").End()
+	MembDiskMountTotalBytes = NkRegistry.MustBegin("sysmDiskMountTotalBytes").End()
+	MembDiskMountFreeBytes  = NkRegistry.MustBegin("sysmDiskMountFreeBytes").End()
+	MembDiskMountUsedBytes  = NkRegistry.MustBegin("sysmDiskMountUsedBytes").End()
+	MembDiskMountUsedPct    = NkRegistry.MustBegin("sysmDiskMountUsedPct").End()
+
+	// Block-device I/O, one array element per device. A separate kind from the
+	// mount table because the two lists have independent lengths — one entity
+	// per aligned group keeps every array in a row the same length.
+	MembKindDiskIo = NkRegistry.MustBegin("sysmKindDiskIo").End()
+	MembDiskIoHost = NkRegistry.MustBegin("sysmDiskIoHost").End()
+
+	MembDiskIoName             = NkRegistry.MustBegin("sysmDiskIoName").End()
+	MembDiskIoReadBytesPerSec  = NkRegistry.MustBegin("sysmDiskIoReadBytesPerSec").End()
+	MembDiskIoWriteBytesPerSec = NkRegistry.MustBegin("sysmDiskIoWriteBytesPerSec").End()
+	MembDiskIoBusyPct          = NkRegistry.MustBegin("sysmDiskIoBusyPct").End()
+
+	// Power supplies. Batteries and mains adapters are two independently
+	// lengthed groups within one kind; each group's own arrays are aligned.
+	MembKindBattery = NkRegistry.MustBegin("sysmKindBattery").End()
+	MembBatteryHost = NkRegistry.MustBegin("sysmBatteryHost").End()
+
+	MembBatteryName    = NkRegistry.MustBegin("sysmBatteryName").End()
+	MembBatteryType    = NkRegistry.MustBegin("sysmBatteryType").End()
+	MembBatteryPercent = NkRegistry.MustBegin("sysmBatteryPercent").End()
+	// State is the normalized kernel charge state, stored as its numeric code
+	// rather than its label so the stored value cannot drift with a rename.
+	MembBatteryState      = NkRegistry.MustBegin("sysmBatteryState").End()
+	MembBatteryPowerWatts = NkRegistry.MustBegin("sysmBatteryPowerWatts").End()
+	// The two remaining-time fields carry the collector's -1 sentinel for
+	// "unknown or not in that state", which is why they are signed.
+	MembBatterySecondsToFull  = NkRegistry.MustBegin("sysmBatterySecondsToFull").End()
+	MembBatterySecondsToEmpty = NkRegistry.MustBegin("sysmBatterySecondsToEmpty").End()
+
+	MembAcAdapterName   = NkRegistry.MustBegin("sysmAcAdapterName").End()
+	MembAcAdapterOnline = NkRegistry.MustBegin("sysmAcAdapterOnline").End()
+
+	// GPUs, one array element per device across all vendors.
+	MembKindGpu = NkRegistry.MustBegin("sysmKindGpu").End()
+	MembGpuHost = NkRegistry.MustBegin("sysmGpuHost").End()
+
+	MembGpuVendor  = NkRegistry.MustBegin("sysmGpuVendor").End()
+	MembGpuIndex   = NkRegistry.MustBegin("sysmGpuIndex").End()
+	MembGpuName    = NkRegistry.MustBegin("sysmGpuName").End()
+	MembGpuPciId   = NkRegistry.MustBegin("sysmGpuPciId").End()
+	MembGpuBusyPct = NkRegistry.MustBegin("sysmGpuBusyPct").End()
+	// Memory, power, temperature and clock are 0 where the vendor exposes no
+	// accounting for them; the collector does not distinguish that from a
+	// genuine zero, so neither can a reader.
+	MembGpuMemoryUsedBytes  = NkRegistry.MustBegin("sysmGpuMemoryUsedBytes").End()
+	MembGpuMemoryTotalBytes = NkRegistry.MustBegin("sysmGpuMemoryTotalBytes").End()
+	MembGpuPowerWatts       = NkRegistry.MustBegin("sysmGpuPowerWatts").End()
+	MembGpuTempC            = NkRegistry.MustBegin("sysmGpuTempC").End()
+	MembGpuFreqMhz          = NkRegistry.MustBegin("sysmGpuFreqMhz").End()
 )
 
 // AllMembs enumerates every registered sysmetrics membership. Tests iterate it
@@ -176,4 +304,35 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembMemUsedBytes, MembMemSwapUsedBytes,
 	MembMemArcSizeBytes, MembMemArcMinBytes,
 	MembSensitive,
+
+	MembKindPsi, MembPsiHost,
+	MembPsiCpuSomeAvg10, MembPsiCpuSomeAvg60, MembPsiCpuSomeAvg300, MembPsiCpuSomeTotalUs,
+	MembPsiCpuFullAvg10, MembPsiCpuFullAvg60, MembPsiCpuFullAvg300, MembPsiCpuFullTotalUs,
+	MembPsiMemorySomeAvg10, MembPsiMemorySomeAvg60, MembPsiMemorySomeAvg300, MembPsiMemorySomeTotalUs,
+	MembPsiMemoryFullAvg10, MembPsiMemoryFullAvg60, MembPsiMemoryFullAvg300, MembPsiMemoryFullTotalUs,
+	MembPsiIoSomeAvg10, MembPsiIoSomeAvg60, MembPsiIoSomeAvg300, MembPsiIoSomeTotalUs,
+	MembPsiIoFullAvg10, MembPsiIoFullAvg60, MembPsiIoFullAvg300, MembPsiIoFullTotalUs,
+	MembPsiAvailable,
+
+	MembKindNet, MembNetHost,
+	MembNetName, MembNetIndex, MembNetHardwareAddr, MembNetUp, MembNetRunning,
+	MembNetRxBytes, MembNetTxBytes, MembNetRxBytesPerSec, MembNetTxBytesPerSec,
+
+	MembKindDiskMount, MembDiskMountHost,
+	MembDiskMountDevice, MembDiskMountPoint, MembDiskMountFsType, MembDiskMountBlockName,
+	MembDiskMountReal, MembDiskMountTotalBytes, MembDiskMountFreeBytes,
+	MembDiskMountUsedBytes, MembDiskMountUsedPct,
+
+	MembKindDiskIo, MembDiskIoHost,
+	MembDiskIoName, MembDiskIoReadBytesPerSec, MembDiskIoWriteBytesPerSec, MembDiskIoBusyPct,
+
+	MembKindBattery, MembBatteryHost,
+	MembBatteryName, MembBatteryType, MembBatteryPercent, MembBatteryState,
+	MembBatteryPowerWatts, MembBatterySecondsToFull, MembBatterySecondsToEmpty,
+	MembAcAdapterName, MembAcAdapterOnline,
+
+	MembKindGpu, MembGpuHost,
+	MembGpuVendor, MembGpuIndex, MembGpuName, MembGpuPciId, MembGpuBusyPct,
+	MembGpuMemoryUsedBytes, MembGpuMemoryTotalBytes, MembGpuPowerWatts,
+	MembGpuTempC, MembGpuFreqMhz,
 }
