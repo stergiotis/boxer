@@ -24,7 +24,7 @@ const doneGlyph = "✓"
 // of code to cite. Evidence cannot speak for those; the author can.
 type Subtask struct {
 	Num     int    // owning ADR number
-	Marker  string // canonical marker, e.g. "SD3", "M12", "Phase 2"
+	Marker  string // canonical marker, e.g. "SD3", "M12", "Phase2" (space dropped)
 	Kind    string // "SD" | "M" | "Phase" | "Step" | "Cut" | "Milestone"
 	Ordinal int    // leading integer of the marker (3 in SD3, 0 in M0a)
 	Title   string // declaration title, with the done glyph stripped
@@ -134,6 +134,75 @@ func extractSubtasks(num int, body string, lineOffset int) (subs []Subtask) {
 		}
 	}
 	return subs
+}
+
+// NearMiss is a list bullet that names a sub-item marker and is evidently
+// meant as a declaration, but does not match [the list shape] and so
+// contributes no row to the `subtask` table.
+//
+// The failure it describes is silent: the marker still renders, the ADR still
+// reads as a milestone list, and only a query notices the absence. Ten ADRs
+// carried the first shape below for months — 45 declared sub-items, 36 of them
+// already done, none of them visible.
+type NearMiss struct {
+	Line   int    // 1-based line in the file
+	Marker string // the marker as written, e.g. "M0" or "Phase 2"
+	Reason string // what to change, in the author's terms
+}
+
+var (
+	// nearMissClosedEarly: `- **M0** — title`, the bold closing before the
+	// em-dash instead of after the title. The canonical form puts marker,
+	// dash and title inside one pair of asterisks.
+	nearMissClosedEarly = regexp.MustCompile(`^[ \t]*[-*][ \t]+\*\*(` + markerPat + `)\*\*` + dashPat)
+	// nearMissUnterminated: `- **M0 — title` with no closing `**` on the same
+	// line, which is what a title wrapped onto a continuation line looks
+	// like. Parsing is line-oriented, so such a declaration matches nothing.
+	nearMissUnterminated = regexp.MustCompile(`^[ \t]*[-*][ \t]+\*\*(` + markerPat + `)` + dashPat)
+)
+
+// FindNearMisses reports the near-miss declarations in body (whose first line
+// is lineOffset+1 in the file), in line order.
+//
+// It shares [markerPat] and [dashPat] with the parser deliberately. A detector
+// with its own copy of the accepted form drifts from the thing it is checking,
+// which is the class of bug it exists to catch.
+func FindNearMisses(body string, lineOffset int) (out []NearMiss) {
+	lineNo := lineOffset
+	var fence string
+	for line := range strings.SplitSeq(body, "\n") {
+		lineNo++
+		if m := fenceRe.FindStringSubmatch(line); m != nil {
+			run := m[1]
+			switch {
+			case fence == "":
+				fence = run
+			case run[0] == fence[0] && len(run) >= len(fence) && strings.TrimSpace(m[2]) == "":
+				fence = ""
+			}
+			continue
+		}
+		if fence != "" {
+			continue
+		}
+		if subListRe.MatchString(line) || subHeadingRe.MatchString(line) {
+			continue // parses; nothing to say
+		}
+		if m := nearMissClosedEarly.FindStringSubmatch(line); m != nil {
+			out = append(out, NearMiss{
+				Line: lineNo, Marker: m[1],
+				Reason: "the bold closes before the em-dash; move it after the title, as in `- **" + m[1] + " — Title.**`",
+			})
+			continue
+		}
+		if m := nearMissUnterminated.FindStringSubmatch(line); m != nil {
+			out = append(out, NearMiss{
+				Line: lineNo, Marker: m[1],
+				Reason: "the title has no closing `**` on this line; parsing is line-oriented, so a title wrapped onto the next line declares nothing",
+			})
+		}
+	}
+	return
 }
 
 func newSubtask(num int, kind, ord, title string, done bool, shape string, line int) Subtask {
