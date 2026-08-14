@@ -272,9 +272,11 @@ review outcome.
 ## Status
 
 Accepted (2026-07-05); reconciled in place 2026-07-11, before
-implementation start (see Updates). Implementation not started: D3a
-(persist backend on a dedicated store table) is unblocked; D3b (facts-bound
-grants/audit store) waits on the two D2 generator features.
+implementation start (see Updates). D1 (`data/storeexec`) and D2
+(`runtime/factsschema/storegen`) are built. D3a is built and wired — the
+persist backend runs on the generated `boxer.persiststate` store, and the
+2026-07-31 deviation is discharged. D3b's generator precondition is met;
+the facts-bound grants/audit store itself is not built.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
@@ -385,6 +387,56 @@ vocabularies outside boxer's vdd. `recordstore/sharedsection` is the
 round-tripped worked example. D3b's generator precondition is thereby
 met; the facts-bound store itself — the storegen package resolving vdd
 ids into the snapshot — remains to be built.
+
+### 2026-08-14 — D1 and D2 built; D3a built and wired; the 2026-07-31 deviation is discharged
+
+D1 (`keelson/data/storeexec`) and D2 (`keelson/runtime/factsschema/storegen`)
+landed for ADR-0184's tee. They are this ADR's D1 and D2 and satisfy what it
+specified — so D3a's real precondition, a `recordstore.ExecutorI` that a
+keelson service can bind, was met by the first of them.
+
+**D3a is built.** `persist.StoreBackend` runs on a generated store over
+`boxer.persiststate` (`runtime/persist/persiststore`): entity key
+`"<appId>/<key>"`, the z64 timestamp as Order, a u8 lifecycle column. `Get`
+is the cache's `GetFetch` plus a tombstone check, `Set` is `Begin`+`Commit`,
+`Delete` is the tombstone — as specified. Every mutating call flushes before
+returning and discards its rows on a failed flush, so a failed operation
+stays "never happened"; that is `pushoutstore`'s posture, adopted for the
+same reason. D4's confinement is the mutex-guarded wrapper rather than an
+owner goroutine. The backend's test suite mirrors `FactsBackend`'s case for
+case, over `clickhouse-local`, because the migration only holds if the
+replacement answers the same contract.
+
+**The 2026-07-31 deviation is discharged.** That entry declined to revert
+`persist.FactsBackend` because "D3a cannot be built in its place today — D1
+does not exist", and named the exit as exactly one migration. The carousel
+now selects `StoreBackend`; `FactsBackend` has no production callers, and
+the `FactsStoreI` state verbs have no callers outside it. The status-bar
+label moves from `persist:facts` to `persist:store`.
+
+Three corrections the decision did not anticipate:
+
+- **The table is `boxer.persiststate`, not `runtime.persiststate`.** D3a
+  predates the runtime→boxer database rename. Same database as the facts
+  table it left: D3a moves the substrate, not the deployment.
+- **`FactsBackend` is kept, not deleted.** D5 schedules no rewrite, and it
+  is the only backend a test can aim at a scratch database — a generated
+  store bakes its database at generation time, so
+  `sqlapplet_store_durability_integration_test` has no equivalent isolation
+  and stays on it. That leaves one test exercising a path production no
+  longer takes, which is the smaller cost against pointing it at the live
+  table.
+- **What the move costs is the §SD6 join.** State rows leave the table
+  carrying that app's grant, audit and launch facts, so "an app's state
+  beside its other facts" is now a two-table query. ADR-0026 §SD6 argued for
+  the single table on that property; D3a takes the trade knowingly, and the
+  app id is carried on the new table so the join stays expressible.
+
+Not taken here: removing `WriteState`/`DeleteState`/`LatestState` from
+`FactsStoreI`. D3a says they stay "until its callers migrate" and the
+callers have, so the removal is now available — but it touches `chstore`,
+the in-memory store and that one integration test, and D5's opportunistic
+posture argues against scheduling the sweep for its own sake.
 
 ## References
 
