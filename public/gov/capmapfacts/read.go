@@ -25,8 +25,12 @@ import (
 // and it should not spell physical column names. A dump has neither escape —
 // its whole job is to say what the *store* holds, so that a corpus can survive
 // the vault being lost, and so an edit made anywhere else can be brought back
-// into diffable form. The coupling is therefore paid here and nowhere else, in
-// one file, under the column guard (see columns.go).
+// into diffable form.
+//
+// What it does NOT do any more is spell the physical column names out. The
+// query is written in column handles and resolved against the generated schema
+// (see handles.go), so a regeneration that re-aspects a column cannot leave a
+// stale literal behind here.
 //
 // # What comes back, and what does not
 //
@@ -131,7 +135,7 @@ type relationRow struct {
 
 func readCompetences(ctx context.Context, q QuerierI, table string) (comps []capmapcorpus.Competence, err error) {
 	sql := competenceSQL(table)
-	rows, err := queryJSON[competenceRow](ctx, q, sql)
+	rows, err := queryJSON[competenceRow](ctx, q, table, sql)
 	if err != nil {
 		return nil, eh.Errorf("unable to read competences from %s: %w", table, err)
 	}
@@ -247,7 +251,7 @@ func parseFactsTime(s string) (t time.Time) {
 }
 
 func readRelations(ctx context.Context, q QuerierI, table string, slugById map[uint64]string) (rels []capmapcorpus.Relation, err error) {
-	rows, err := queryJSON[relationRow](ctx, q, relationSQL(table))
+	rows, err := queryJSON[relationRow](ctx, q, table, relationSQL(table))
 	if err != nil {
 		return nil, eh.Errorf("unable to read relations from %s: %w", table, err)
 	}
@@ -277,9 +281,19 @@ func readRelations(ctx context.Context, q QuerierI, table string, slugById map[u
 	return rels, nil
 }
 
-// queryJSON runs sql and decodes its JSONEachRow body.
-func queryJSON[T any](ctx context.Context, q QuerierI, sql string) (rows []T, err error) {
-	body, err := q.Query(ctx, sql+"\nFORMAT JSONEachRow")
+// queryJSON resolves the query's column handles, runs it, and decodes its
+// JSONEachRow body.
+//
+// Resolution happens here rather than in the builders because it is the one
+// place both queries pass through, and it happens before the FORMAT clause is
+// appended because the pass parses what it is given and FORMAT is not part of
+// the statement grammar it reads.
+func queryJSON[T any](ctx context.Context, q QuerierI, table string, sql string) (rows []T, err error) {
+	resolved, err := resolveHandles(sql, table)
+	if err != nil {
+		return nil, err
+	}
+	body, err := q.Query(ctx, resolved+"\nFORMAT JSONEachRow")
 	if err != nil {
 		return nil, err
 	}
@@ -367,7 +381,7 @@ func pickParameters(paramCol, membCol string, memb uint64) (expr string) {
 // under the same ids, so without it a dump would emit each competence once per
 // ingest.
 func newestPerId() (clause string) {
-	return fmt.Sprintf("ORDER BY %s DESC LIMIT 1 BY %s", colTs, colId)
+	return fmt.Sprintf("ORDER BY %s DESC LIMIT 1 BY %s", hTs, hId)
 }
 
 func competenceSQL(table string) (sql string) {
@@ -393,26 +407,26 @@ func competenceSQL(table string) (sql string) {
 FROM %s
 WHERE has(%s, %d)
 %s`,
-		pickScalar(colSymValue, colSymLr, colSymLrCard, membId(capmapvocab.MembCompSlug), "''"),
-		pickArrayValue(colStrValue, colStrLen, colStrLr, colStrLrCard, membId(capmapvocab.MembCompName), "''"),
-		pickArrayValue(colStrValue, colStrLen, colStrLr, colStrLrCard, membId(capmapvocab.MembCompAbbrev), "''"),
-		pickArrayValue(colStrValue, colStrLen, colStrLr, colStrLrCard, membId(capmapvocab.MembCompSynopsis), "''"),
-		pickScalar(colSymValue, colSymLr, colSymLrCard, membId(capmapvocab.MembCompDomain), "''"),
-		pickScalar(colSymValue, colSymLr, colSymLrCard, membId(capmapvocab.MembCompCatalog), "''"),
-		pickScalar(colSymValue, colSymLr, colSymLrCard, membId(capmapvocab.MembCompOwner), "''"),
-		pickArrayValue(colStrValue, colStrLen, colStrLr, colStrLrCard, membId(capmapvocab.MembCompVaultPath), "''"),
-		pickArrayValue(colU8Value, colU8Len, colU8Lr, colU8LrCard, membId(capmapvocab.MembCompLevel), "0"),
-		pickArrayValue(colU8Value, colU8Len, colU8Lr, colU8LrCard, membId(capmapvocab.MembCompMaturity), "0"),
-		pickArrayValue(colU8Value, colU8Len, colU8Lr, colU8LrCard, membId(capmapvocab.MembCompPain), "0"),
-		pickScalars(colSymValue, colSymLr, colSymLrCard, membId(capmapvocab.MembCompTag)),
-		pickParameters(colTxtMrhp, colTxtLmr, membId(capmapvocab.MembCompSection)),
-		pickArrayValues(colTxtValue, colTxtLen, colTxtLmr, colTxtLmrCard, membId(capmapvocab.MembCompSection)),
-		pickParameters(colSymMrhp, colSymLmr, membId(capmapvocab.MembCompLifecycleBy)),
-		pickScalars(colSymValue, colSymLmr, colSymLmrCard, membId(capmapvocab.MembCompLifecycleBy)),
-		pickParameters(colTimeMrhp, colTimeLmr, membId(capmapvocab.MembCompLifecycleAt)),
-		pickArrayValues(colTimeValue, colTimeLen, colTimeLmr, colTimeLmrCard, membId(capmapvocab.MembCompLifecycleAt)),
+		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompSlug), "''"),
+		pickArrayValue(hStrValue, hStrLen, hStrLr, hStrLrCard, membId(capmapvocab.MembCompName), "''"),
+		pickArrayValue(hStrValue, hStrLen, hStrLr, hStrLrCard, membId(capmapvocab.MembCompAbbrev), "''"),
+		pickArrayValue(hStrValue, hStrLen, hStrLr, hStrLrCard, membId(capmapvocab.MembCompSynopsis), "''"),
+		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompDomain), "''"),
+		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompCatalog), "''"),
+		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompOwner), "''"),
+		pickArrayValue(hStrValue, hStrLen, hStrLr, hStrLrCard, membId(capmapvocab.MembCompVaultPath), "''"),
+		pickArrayValue(hU8Value, hU8Len, hU8Lr, hU8LrCard, membId(capmapvocab.MembCompLevel), "0"),
+		pickArrayValue(hU8Value, hU8Len, hU8Lr, hU8LrCard, membId(capmapvocab.MembCompMaturity), "0"),
+		pickArrayValue(hU8Value, hU8Len, hU8Lr, hU8LrCard, membId(capmapvocab.MembCompPain), "0"),
+		pickScalars(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompTag)),
+		pickParameters(hTxtMrhp, hTxtLmr, membId(capmapvocab.MembCompSection)),
+		pickArrayValues(hTxtValue, hTxtLen, hTxtLmr, hTxtLmrCard, membId(capmapvocab.MembCompSection)),
+		pickParameters(hSymMrhp, hSymLmr, membId(capmapvocab.MembCompLifecycleBy)),
+		pickScalars(hSymValue, hSymLmr, hSymLmrCard, membId(capmapvocab.MembCompLifecycleBy)),
+		pickParameters(hTimeMrhp, hTimeLmr, membId(capmapvocab.MembCompLifecycleAt)),
+		pickArrayValues(hTimeValue, hTimeLen, hTimeLmr, hTimeLmrCard, membId(capmapvocab.MembCompLifecycleAt)),
 		table,
-		colSymLr, membId(capmapvocab.MembKindCompetence),
+		hSymLr, membId(capmapvocab.MembKindCompetence),
 		newestPerId())
 }
 
@@ -428,14 +442,14 @@ func relationSQL(table string) (sql string) {
 FROM %s
 WHERE has(%s, %d)
 %s`,
-		pickScalar(colFkValue, colFkLr, colFkLrCard, membId(capmapvocab.MembRelSource), "0"),
-		pickScalar(colFkValue, colFkLr, colFkLrCard, membId(capmapvocab.MembRelTarget), "0"),
-		pickScalar(colSymValue, colSymLr, colSymLrCard, membId(capmapvocab.MembRelTargetText), "''"),
-		pickScalar(colSymValue, colSymLr, colSymLrCard, membId(capmapvocab.MembRelKind), "''"),
-		pickScalar(colSymValue, colSymLr, colSymLrCard, membId(capmapvocab.MembRelResolution), "''"),
-		pickScalar(colSymValue, colSymLr, colSymLrCard, membId(capmapvocab.MembRelSection), "''"),
-		pickArrayValue(colF64Value, colF64Len, colF64Lr, colF64LrCard, membId(capmapvocab.MembRelNcd), "0"),
+		pickScalar(hFkValue, hFkLr, hFkLrCard, membId(capmapvocab.MembRelSource), "0"),
+		pickScalar(hFkValue, hFkLr, hFkLrCard, membId(capmapvocab.MembRelTarget), "0"),
+		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembRelTargetText), "''"),
+		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembRelKind), "''"),
+		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembRelResolution), "''"),
+		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembRelSection), "''"),
+		pickArrayValue(hF64Value, hF64Len, hF64Lr, hF64LrCard, membId(capmapvocab.MembRelNcd), "0"),
 		table,
-		colSymLr, membId(capmapvocab.MembKindRelation),
+		hSymLr, membId(capmapvocab.MembKindRelation),
 		newestPerId())
 }

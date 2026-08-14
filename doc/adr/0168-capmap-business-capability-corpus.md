@@ -257,12 +257,33 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   the vault is still authoritative, and `dump` is how a stored corpus returns to
   the form that is reviewed, not a second editing surface.
 
-  **This pays SD8's coupling on purpose, once.** The provider tables avoid
-  hand-written physical column names by reading the vault; a dump has no such
-  option, since its whole job is to say what the *store* holds. The names
-  therefore live in one file (`capmapfacts/columns.go`), and
-  `public/gov/capmapfacts` was already a scan root of the guard that fails when
-  a schema regeneration invalidates one.
+  **The read is written in column handles, not physical names.** The first cut
+  spelled 28 physical column names out in one file and leaned on the guard that
+  fails when a regeneration invalidates one. That was the wrong half of the
+  bargain — the repository provides a read surface precisely so a query does not
+  carry names that can go stale
+  ([leeway-sql-read-surface](../explanation/leeway-sql-read-surface.md);
+  ADR-0116 handles), and the jsonbench-on-facts trial measured what not finding
+  it costs. The query now names `section:column` and a client-side pass
+  resolves it against the schema the DML artifact generates, so the names come
+  from the same source the writer writes through and a test asserts every
+  handle resolves with no server in reach.
+
+  **What is still hand-written, and why.** The locate-an-attribute-by-membership
+  expressions are the surface's `LW_GET` family (ADR-0181 §SD3), and this does
+  not use them yet: they expand into the read-back UDFs, which are not installed
+  on the servers this was developed against, and the installer that would put
+  them there is not committed. Adopting them also gives `boxer capmap dump` a
+  provisioned-server precondition it does not have today, which wants deciding
+  once — together, when the surface lands — rather than half now. The two forms
+  are equivalent for what the encoder writes; the surface's is shorter and
+  tested elsewhere.
+
+  One more thing `LW_GET` would not cover as it stands: the read-back family
+  locates **the** attribute carrying a membership, and this encoding writes
+  several under one membership on purpose — a tag each, a section each, a
+  lifecycle entry each. Those reads stay a filter over the membership lane
+  whatever happens to the scalar ones.
 
   Two things the read-back had to get right, neither of which a unit test can
   reach. A section's memberships are stored flattened across attributes with a
