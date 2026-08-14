@@ -176,6 +176,14 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   against both other vocabularies, and is verified to fail when the base is
   moved onto one of theirs.
 
+  **A membership's id is its registration ordinal**, which SD10 made concrete:
+  the registry composes the id from the count registered so far, so a new
+  membership declared anywhere but at the *end of the block* renumbers every one
+  after it — silently, since nothing about the change fails to compile or to
+  write. The package comment used to say "at the end of its group", which is
+  precisely the mistake. The whole name-to-id table is now written down in a
+  test, so an insertion fails there rather than in somebody's ingested corpus.
+
 - **SD7 — The corpus lives in-tree but git-ignored.** `doc/competences/`,
   symmetric with `doc/adr/`, holding the boxer catalog only, with a committed
   `README.md` and everything else ignored. Two catalogs are excluded: one
@@ -214,6 +222,64 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   tables. Rejected: porting the HTMX server, which would add a second UI stack
   and duplicate implementations boxer already has.
 
+  **What an applet cannot be.** Measured against the prototype's two working
+  screens, the reading one is an applet and the triage one is not: a Culler
+  needs a cursor over an ordered result, a card layout, a way for a gesture to
+  reach host code, and a write path — none of which a SQL document has, and the
+  last of which is §Deferrals' open decision. The reading screen needs only
+  things every book would use: a tab's placement declared in `tabs:`,
+  enumerated params, a reset, and a predicate input. The
+  [background survey §12](../adr-background-work/capmap-port.md) has the gap
+  list and what each is worth. Nothing here changes: SD9 says the *views* are
+  applets, and a triage surface is not a view.
+
+- **SD10 — Triage state is a tag in the note's frontmatter.** A `tags:` list,
+  normalised without the leading `#`, carried on the competence and encoded as
+  one symbol attribute per tag under `capmapCompetenceTag`.
+
+  Scores answer "how good is this"; a tag answers "what did somebody decide to
+  do about it" — `needs-owner`, `merge-candidate` — and the two are wanted at
+  once, so a tag is not a sixth maturity value. Frontmatter rather than an
+  inline `#tag` in the body, which is where the prototype's culler wrote them:
+  the body round-trips verbatim (SD5), so a body tag would be carried twice and
+  a write would have to edit prose. Measured before choosing: the reference
+  vault has **zero** notes with frontmatter tags and one with an inline one, so
+  there is no installed base to keep faith with.
+
+  The character rules are Obsidian's, restated for a whole-string check rather
+  than the inline scanner's prefix scan — `needs!owner` is a malformed tag here
+  and the tag `needs` there — and the two are pinned to each other by a test.
+
+- **SD11 — The store is a round trip, not a write-only sink.** `boxer capmap
+  load` writes the corpus into `boxer.facts` and `boxer capmap dump` reads it
+  back and renders a vault, so a corpus can survive the vault being lost and an
+  edit made anywhere can be brought back into diffable form. SD3 is unchanged:
+  the vault is still authoritative, and `dump` is how a stored corpus returns to
+  the form that is reviewed, not a second editing surface.
+
+  **This pays SD8's coupling on purpose, once.** The provider tables avoid
+  hand-written physical column names by reading the vault; a dump has no such
+  option, since its whole job is to say what the *store* holds. The names
+  therefore live in one file (`capmapfacts/columns.go`), and
+  `public/gov/capmapfacts` was already a scan root of the guard that fails when
+  a schema regeneration invalidates one.
+
+  Two things the read-back had to get right, neither of which a unit test can
+  reach. A section's memberships are stored flattened across attributes with a
+  per-attribute cardinality beside them, so a membership's position in that
+  array is the attribute's index only while every earlier attribute contributed
+  exactly one — true of what the encoder writes today, and it would stop being
+  true the day a mixed-membership attribute is written first. The decode goes
+  through the cardinality column instead. And ids are derived, so a re-load
+  restates entities rather than minting new ones and the table holds one row per
+  competence per load; the newest wins.
+
+  Not carried back: whether a frontmatter link was written `[[slug]]` or
+  `[[slug/capability]]`. The encoding stores the resolved target, not the
+  spelling. Both name the same competence and the frontmatter kinds are exempt
+  from the dirref rule, so a re-read of a dumped vault yields the same corpus —
+  the difference is textual, against an original that used the qualified form.
+
 ### Milestones
 
 - **M1 — `factsschema` aspects (SD4).** Regenerate the four artifacts.
@@ -222,7 +288,8 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   out not to belong here: both sit in packages this port replaces rather than
   carries, so neither is ported and neither needs fixing.
 - **M3 — the `capmap` vocabulary (SD6).**
-- **M4 — ingest.** `boxer capmap ingest --vault`, plus a `parse` verb that
+- **M4 — ingest.** `boxer capmap ingest --vault` (M9 renames the verb `load`
+  and keeps `ingest` as an alias), plus a `parse` verb that
   reports the corpus and needs no database. **Not** through `FactsStoreI` as
   first planned: that interface is a closed per-kind surface — twenty methods,
   `WriteGrant` through `WriteColumnWidth` — with no generic write, so using it
@@ -248,6 +315,15 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   so nothing else caught it, and the first read reported 80 competences and a
   relation the corpus never declared. `ParseDir` now skips it and reports it
   as a skipped file.
+- **M8 — tags (SD10).** `Competence.Tags`, the `tags:` frontmatter reader, the
+  `capmapCompetenceTag` membership, a `tags` provider column, and the tag knob
+  and coverage rows in the applet book. It also turned up what SD6 now records
+  about ordinals, since adding a membership is what made the hazard concrete.
+- **M9 — load and dump (SD11).** `capmapcorpus.WriteVault` renders a corpus
+  back to markdown, `capmapfacts.ReadCorpus` reads one out of the table, and
+  `boxer capmap dump` joins them; `ingest` becomes `load` and keeps its old name
+  as an alias. Writing the renderer is also what supplied the parse-render test
+  §Verification plan had claimed for two milestones and did not have.
 
 ## Surfaces — Tier 1
 
@@ -259,7 +335,10 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
 | Environment-variable registry ([ADR-0009](./0009-environment-variable-registry.md)) | Added — the corpus location | `doc/env-vars.md`; the package must be reachable from the `public/app` link graph or the spec stays invisible |
 | keelson table-name namespace ([ADR-0094](./0094-keelson-introspection-tables.md)) | Added — `competence`, `competencesection`, `competencerelation` | `RegisterStatic` and the name roster it is pinned by; the applet book's queries |
 | Applet id namespace ([ADR-0132](./0132-sqlapplet-sql-defined-applets.md)) | Added — a fifth book, `capmap`, minting `cap-overview`, `cap-browser`, `cap-map`, `cap-lint` | The cross-book slug-collision test, which counts every minted applet |
-| Exported Go API under `public/` | Added — `capmapcorpus`, `capmapvocab`, `capmapfacts` under `public/gov/`, and the `boxer capmap` command | Nothing yet; no downstream module compiles against them |
+| `boxer.facts` row vocabulary (again, M8) | Added — `capmapCompetenceTag`, appended last because ids are ordinals (§SD6) | The golden name-to-id test; the encoder; the `tags` provider column |
+| keelson `competence` table columns | Added — `tags` | The applet book's `tag` knob and its coverage rows |
+| `boxer capmap` verb names | Renamed — `ingest` is `load`, which keeps `ingest` as an alias; `dump` is new | The command's own help; the prose in `doc/competences/README.md`, the providers and the book |
+| Exported Go API under `public/` | Added — `capmapcorpus`, `capmapvocab`, `capmapfacts` under `public/gov/`, and the `boxer capmap` command. M8/M9 add `NormalizeTag`, `ParseResolution`, `RenderCompetence`, `WriteVault`, `SortCorpus` and `capmapfacts.ReadCorpus` | Nothing yet; no downstream module compiles against them |
 
 ## Alternatives
 
@@ -300,7 +379,14 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   into the integration lane.
 - Of the prototype's four webapps, two are replaced (browser, lint) and two are
   deferred with the triage workflow (culler, cull-configer). The treemap gap
-  closed when ADR-0166 landed, and `cap-map` reads its nodes contract.
+  closed when ADR-0166 landed, and `cap-map` reads its nodes contract. The
+  replacement is not feature-parity: the browser's enumerated filters, its
+  reset, its free `WHERE` bar and its pane placement are play and sqlapplet
+  features that do not exist yet, and the lenses are knobs and tabs until they
+  do (background survey §12).
+- The store holds a corpus that can be recovered from it (§SD11), which is what
+  makes `boxer.facts` a place to keep one rather than only a place to query
+  one. It also means two copies exist and can disagree; SD3 says which wins.
 
 ### Neutral
 
@@ -361,6 +447,17 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   and the decoder drift, the provider returns wrong or empty columns, and the
   parity test goes red. Vault round-tripping is pinned by a parse-render test,
   which is what would catch SD5 being violated by a future AST decomposition.
+
+  **That last sentence was not true when it was written.** There was no
+  renderer, so there was no such test, and this plan asserted a guard the tree
+  did not have from M2 until M9 built one. It now says what it always claimed:
+  a fixture vault is parsed, written back with `WriteVault`, parsed again, and
+  the two corpora compared — competences, relations, tags, lifecycle and prose.
+  The comparison is over the model rather than the bytes, because YAML emission
+  style is not what the corpus means. The lesson is the general one about
+  verification plans written before the code: a claim in this section is a
+  promise, and the only thing that keeps it is a test somebody can name.
+
   The default lane must stay green with no corpus and no ClickHouse present.
   For SD4's blast radius specifically,
   `TestHandwrittenColumnsMatchGeneratedSchema` (added by M1, in
@@ -389,6 +486,13 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   green for the wrong reason. The fixture carries the shapes the buffers reason
   about — a directory-backed competence, a multi-parent level-4 leaf, an
   interior node with prose of its own, and one relation of each resolution.
+  M9 added the read-back's half, in the same lane and for the same reason —
+  the decode is SQL over physical columns, so none of it can be exercised
+  without a server. Three tests: what was written comes back as what was
+  written; a second load of a changed corpus reads back as the newer one and
+  not as two; and a fixture vault loaded and dumped parses equal to itself,
+  which is the only test that exercises the two verbs against each other rather
+  than each against a fixture.
 - **Gap.** The serverless read path — facts-shaped Arrow through `file()` — has
   been reasoned about but not run; proving it is a step inside M4 rather than a
   standing lane. Nothing verifies that the corpus content is *correct*, only
@@ -416,6 +520,24 @@ Each carries a trigger rather than a date.
 - **The triage/culling workflow.** A UI that mutates repo files is a distinct
   security posture and needs its own decision. Trigger: the read path proving
   the corpus is worth curating at that rate.
+
+  **2026-08-14 — the trigger is closer and the shape is known.** SD10 gives
+  triage somewhere to land, so what is missing is the write, and it is a
+  narrower question than "a UI that mutates repo files": measured, `fsbroker`
+  writes a whole file to the one path a picker granted, and the "pick folder"
+  grant it already has (`fs.dialog.bundle`) carries no path-relative operation.
+  So a surface that tags one of a thousand notes per keystroke cannot go
+  through the dialog path at all — the choice is a new broker operation scoped
+  to a granted directory, or keeping the mutation in a CLI verb and leaving the
+  UI read-only. The
+  [background survey §12](../adr-background-work/capmap-port.md) has the rest
+  of what such a surface needs from play, none of which is blocked on this.
+
+  **Settled the same day: the CLI is the mutation surface.** §SD11's `load` and
+  `dump` move the corpus between the vault and the store, editing stays in the
+  vault, and no in-app write path is built — so this deferral stops being an
+  open question about a UI and becomes a scope line. `fsbroker` gains nothing,
+  and the reading surfaces stay reading surfaces.
 - **A treemap panel for play.** ~~Not deferred by this ADR~~ — settled. A play
   Treemap panel was decided separately in ADR-0166, in flight at the time of
   writing, and landed; SD9's book gained the hierarchy lens as this said it
@@ -427,6 +549,16 @@ Each carries a trigger rather than a date.
 ## Status
 
 Proposed — awaiting review.
+
+Reconciled against the tree on 2026-08-14, which is what a proposed ADR's
+in-place edits are for: M8 and M9 were added, SD10 and SD11 record decisions
+taken while building them, SD6 gained the ordinal rule that adding a membership
+exposed, and §Verification plan's claim about a parse-render test was corrected
+— it named a guard the tree did not have. What has *not* changed is the shape:
+the nine original decisions all still describe what is there. The two things a
+reviewer should weigh before this is accepted are SD11, which pays SD8's
+coupling on purpose for the dump path, and the §Deferrals note on triage, which
+is the only open decision left.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

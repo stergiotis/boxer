@@ -320,3 +320,150 @@ Each is deferred with a trigger rather than left implicit.
   path order does not matter — which is the motivation that kill note said
   would be needed. As of 2026-08-05 this is no longer open here: a play Treemap
   panel is being decided in ADR-0166, written concurrently with this survey.
+
+## 12. Composing the two screens from applets — what play and sqlapplet lack
+
+> **2026-08-14.** Measurements and reads in this section are against the tree at
+> that date, later than the rest of the page. The question is narrower than
+> §9's ledger: taking the prototype's two working screens — its Capability
+> Browser and its Culler — as the target, what would a host app need from
+> `play` and `sqlapplet` to assemble each one out of embedded applets?
+
+### 12.1 What already works
+
+**Read.** An app can host an applet and draw its own chrome around it:
+`sqlapplet.NewEmbedded(def, EmbedConfig{…})` returns a configured
+`*play.PlayApp`, and `apps/adhocdemo` — the only embedder in the tree — draws a
+top panel of its own and then calls `inner.Render()`. Identity, capability
+grants, dataset binding, AutoRun/Live gating and tab attenuation all happen
+inside `NewEmbedded`, so an embedder gets the same applet the launcher does.
+
+Also present, and worth naming so the gap list is not read as a longer one than
+it is: the treemap's drill, breadcrumb and legend (ADR-0166); markdown-typed
+cells (ADR-0123); focus-scoped keyboard capture (ADR-0177); `PlayApp.SetSignal`
+for pushing a value into an applet; `RequestRun` and Live re-run.
+
+### 12.2 Placing panes: an applet cannot say where a tab goes
+
+**Read.** play already builds a split layout rather than one leaf of tabs. Tabs
+carry a zone — `TabZoneBody`, `TabZoneEditor`, `TabZoneTools`, `TabZoneSide` —
+and the renderer splits body-below-editor, side-right-of-body,
+tools-right-of-editor. `detail` is registered in `TabZoneSide`, which is why an
+applet naming `tabs: [table, detail]` already shows both at once.
+
+**The gap.** An applet's `tabs:` is a flat keep-list, so a document cannot say
+*where*: it takes play's per-tab default zone. The Browser screen is
+treemap-top-left, detail-right, table-bottom — three placements, and the third
+does not exist, since the only above/below split is the editor's and an applet
+removes the editor. `TabRegistry.Replace` already accepts a `TabSpec` carrying a
+`Zone`, so the mechanism is there and the declaration is not.
+
+- **G1** — a zone in `tabs:` (`treemap@body`, `detail@side`, …).
+- **G2** — one more zone, below the body, for the layout the Browser uses.
+
+### 12.3 Several applets in one window
+
+**Read.** `PlayApp.Render()` claims `PanelCentralInside` and opens a `DockArea`
+under a fixed id. Two instances in one frame would each claim the central panel,
+so the composition "one applet per pane" is not expressible today; `adhocdemo`
+hosts exactly one.
+
+- **G3** — a render mode that draws into the caller's current UI scope instead
+  of claiming the central panel.
+- **G4** — dock-tab identity across instances. play's dock tab ids are package
+  constants (`dockTabTable = 3`), so two instances in one window would present
+  the same numeric tab ids to egui_dock. Instance-id salting is per-`PlayApp`,
+  but vendored crates have bypassed salting before, so this is a risk to
+  measure rather than a fact.
+
+Note that G1–G2 and G3–G4 are alternatives, not a sequence: with zones, the
+Browser is **one** applet whose panels are its panes, and nothing needs to host
+two. G3 is what a screen made of genuinely independent applets would need.
+
+### 12.4 State between panes, and between host and applet
+
+**Read.** `SetSignal(name, value)` publishes through the same path panels emit
+on, so a host can push. Nothing exported reads back: `SignalEnvI.Get` is
+internal to the package, and `MainSnapshot()` returns the result batch, not the
+selection. `PlayApp`'s whole exported surface is 28 methods (**measured**,
+`grep -c 'func (inst \*PlayApp) [A-Z]'`) and none of them answers "what is
+selected".
+
+- **G5** — a host-side signal read. Without it an embedder cannot know which row
+  a Table selected, so it cannot drive a second pane from it, and a button
+  inside an applet cannot reach host code at all.
+- **G6** — a host-side write for *prelude-bound* params. `SetSignal` reaches
+  unbound `{name:Type}` slots only; a knob for a `SET param_catalog` value has
+  to be left unbound instead, which also flips the applet to Live.
+
+### 12.5 The knobs
+
+**Read.** play registers three param widgets — `scalarTextWidget`,
+`dateTimePairWidget`, `dateTimeRangeWidget` — and one marker comment,
+`-- play: ungroup`. So every capmap knob (`catalog`, `level`, `tag`, `size_by`,
+`color_by`, `show`) renders as a free-text field, where both screenshots show a
+populated dropdown.
+
+- **G7** — an enumerated param widget. ADR-0124 §O4 already contemplated a
+  `-- play: range <lo> <hi>` marker, so the marker vocabulary is the established
+  route; the values-from-the-data variant the screens use (`All domains`,
+  populated by a query) is the harder half.
+- **G8** — a reset gesture: both screens have a Reset that returns every knob to
+  the document's declared default.
+- **G9** — a predicate surface. Both screens carry a free `WHERE` bar, validated
+  and canonicalised before it runs. Applets remove the `editor` chrome tab, so
+  there is nowhere to type one. boxer has the validating half already — it is
+  the same nanopass seam play's editor uses — so the gap is a small read-only
+  input an applet can declare, not the machinery behind it.
+
+### 12.6 Panels the screens need and play does not have
+
+- **G10** — a record cursor: an ordered result, a current position, prev/next/
+  skip, and a filmstrip of neighbours. Detail *consumes* a selection signal but
+  cannot advance one, and nothing else in play holds a position in a result.
+- **G11** — a card layout: the Culler's centre pane is a header, two segmented
+  meters and three prose columns. Detail renders a row's columns; the meters
+  exist as a widget, the composition does not.
+- **G12** — treemap depth (the panel's `show` is `drill`/`full`, the Browser's
+  is 1–4) and the toolbar's quantile colour scale (the panel has a legend, not
+  the min/P25/median/P75/P90/P99/max readout).
+
+### 12.7 Actions, and the write path
+
+**Read.** `fsbroker.Service.handleWrite` writes the request payload to the one
+path its handle was granted, and only for `HandleModeWrite`. `fs.dialog.bundle`
+("pick folder", ADR-0026 §SD3) mints a handle with no path-relative operation,
+so a granted folder buys nothing today. The same model is why mdedit "is not
+told which file — the Powerbox hands it a handle, never a path", which is also
+what makes the Browser's *Open in Obsidian* link unbuildable as drawn.
+
+- **G13** — an action seam: a way for a panel gesture to reach host code. Today
+  a panel can emit a signal and no host can read it (G5), so this is G5's
+  consequence rather than a separate mechanism.
+- **G14** — a vault-scoped write. Tagging one of 1,722 competences per keystroke
+  cannot go through a per-file save dialog. This is the decision ADR-0168
+  deferred, and it is the only gap on this page that is a *policy* question
+  rather than a missing feature.
+
+**2026-08-14 — G13 and G14 are out of scope, decided.** The mutation surface is
+the CLI: `boxer capmap load` and `dump` move the corpus between the vault and
+the store, and editing stays where SD3 puts it. So no in-app write path is
+built, no broker operation is added, and the *Open in Obsidian* link is dropped
+rather than approximated — the Powerbox hands an app a handle and never a path,
+so there is nothing to hand an editor. Everything above G13 stands.
+
+### 12.8 What this implies for the shape
+
+Splitting the list by screen makes the sequencing obvious, and the two halves
+are unequal.
+
+**The Browser is an applet.** G1, G2, G7, G8, G9, G12 — placement, enumerated
+knobs, a reset, a predicate bar, treemap depth. None of them needs multi-applet
+hosting, none is a new subsystem, and each is useful to every other book in the
+tree. The lens documents themselves barely change.
+
+**The Culler is not.** G5, G10, G11, G13, G14 — a cursor, a card, an action seam
+and a write path — describe an app that *embeds* an applet for its list and
+draws its own review surface, which is `adhocdemo`'s shape with a real screen in
+place of its Regenerate button. Trying to express it as a SQL document would
+mean putting a mutation behind a lens whose whole contract is that it reads.
