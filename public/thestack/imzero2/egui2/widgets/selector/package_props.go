@@ -3,9 +3,11 @@ package selector
 import "github.com/stergiotis/boxer/public/packageprops"
 
 // PackageProps records this package's curated properties (ADR-0080).
-// Seeded by `wasmsurvey props generate`; curate by hand, then `wasmsurvey props verify`.
+// Seeded by `boxer code analysis golang wasmsurvey props generate`; curate by
+// hand. The same group's `props verify` reconciles it.
 // Mirrors badge: pure Go composition over the egui2 bindings, same import
-// surface — `wasmsurvey props verify` is the authority if that ever diverges.
+// surface — `boxer code analysis golang wasmsurvey props verify` is the
+// authority if that ever diverges.
 var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMCompiles,
 	WASMJS:           packageprops.WASMCompiles,
