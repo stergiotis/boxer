@@ -190,6 +190,39 @@ func TestTee_StopFlushesWhatIsBuffered(t *testing.T) {
 	assert.EqualValues(t, 3, after, "Stop must drain and flush")
 }
 
+// TestTee_WritesEveryWiredDomain covers the M4 widening: a bundle with every
+// collector wired must produce one row per kind, and the disk snapshot must
+// produce two. Counting them is what catches a domain silently omitted from
+// the ingest switch — which would look exactly like an unwired collector.
+func TestTee_WritesEveryWiredDomain(t *testing.T) {
+	tee, exec, publish := startTee(t, sysmtee.Options{FlushInterval: 20 * time.Millisecond})
+
+	publish(&sysmsnap.BundleSnapshot{
+		SampledAtUnixMs: time.Now().UnixMilli(),
+		CPU:             &sysmsnap.CPUSnapshot{TotalPercent: 10, LogicalCores: 2},
+		Mem:             &sysmsnap.MemSnapshot{TotalBytes: 1 << 30},
+		PSI:             &sysmsnap.PSISnapshot{Available: true},
+		Net:             &sysmsnap.NetSnapshot{Interfaces: []sysmsnap.NetInterface{{Name: "eth0"}}},
+		Disk: &sysmsnap.DiskSnapshot{
+			Mounts:       []sysmsnap.DiskMount{{Device: "/dev/sda1", MountPoint: "/"}},
+			BlockDevices: []sysmsnap.BlockDevice{{Name: "sda1"}},
+		},
+		Battery: &sysmsnap.BatterySnapshot{Batteries: []sysmsnap.BatteryStatus{{Name: "BAT0"}}},
+		GPU:     &sysmsnap.GPUSnapshot{Devices: []sysmsnap.GPUDevice{{Vendor: "amd"}}},
+	})
+
+	// cpu + cpuInfo + mem + psi + net + diskMount + diskIo + battery + gpu.
+	const wantRows = 9
+	require.Eventually(t, func() bool {
+		return tee.Stats().Flushed >= wantRows
+	}, 5*time.Second, 10*time.Millisecond, "stats: %+v", tee.Stats())
+	require.NoError(t, tee.Stop())
+
+	_, _, rows := exec.snapshot()
+	assert.EqualValues(t, wantRows, rows)
+	assert.Zero(t, tee.Stats().FlushErrors)
+}
+
 func TestTee_StopIsIdempotent(t *testing.T) {
 	tee, _, _ := startTee(t, sysmtee.Options{FlushInterval: time.Hour})
 	require.NoError(t, tee.Stop())

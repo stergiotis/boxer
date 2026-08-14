@@ -221,48 +221,93 @@ func (inst *Tee) run() {
 	}
 }
 
-// ingest converts one bundle into rows. A domain whose collector was not wired
-// is absent from the bundle and contributes nothing — absence stays absence
-// rather than becoming a row of zeros.
+// ingest converts one bundle into rows.
+//
+// A domain whose collector was not wired is absent from the bundle and
+// contributes nothing — absence stays absence rather than becoming a row of
+// zeros, which would be indistinguishable from a genuinely idle machine.
+//
+// One domain failing does not stop the others: a bundle is a union of
+// independent collectors, and dropping the whole tick because one of them
+// produced an unencodable row would lose data the rest of the plane got right.
 func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 	ts := sampleTime(snap)
 	host := inst.opts.Host
+	store := inst.opts.Store
 
 	if snap.CPU != nil {
+		// Static CPU facts once per host, not per tick.
 		if _, seen := inst.seenHosts[host]; !seen {
-			row, err := cpuInfoRow(host, snap.CPU, ts)
-			if err == nil {
-				err = inst.opts.Store.IngestSysCpuInfo(ts, []sysmfacts.SysCpuInfo{row})
-			}
-			if err != nil {
-				inst.opts.Log.Warn().Err(err).Msg("sysmtee: cpu descriptor")
-			} else {
+			if ingestKind(inst, "cpuInfo", ts,
+				func() (sysmfacts.SysCpuInfo, error) { return cpuInfoRow(host, snap.CPU, ts) },
+				store.IngestSysCpuInfo) {
 				inst.seenHosts[host] = struct{}{}
-				inst.rows.Add(1)
 			}
 		}
-		row, err := cpuRow(host, snap.CPU, ts)
-		if err == nil {
-			err = inst.opts.Store.IngestSysCpu(ts, []sysmfacts.SysCpu{row})
-		}
-		if err != nil {
-			inst.opts.Log.Warn().Err(err).Msg("sysmtee: cpu sample")
-		} else {
-			inst.rows.Add(1)
-		}
+		ingestKind(inst, "cpu", ts,
+			func() (sysmfacts.SysCpu, error) { return cpuRow(host, snap.CPU, ts) },
+			store.IngestSysCpu)
 	}
-
 	if snap.Mem != nil {
-		row, err := memRow(host, snap.Mem, ts)
-		if err == nil {
-			err = inst.opts.Store.IngestSysMem(ts, []sysmfacts.SysMem{row})
-		}
-		if err != nil {
-			inst.opts.Log.Warn().Err(err).Msg("sysmtee: mem sample")
-		} else {
-			inst.rows.Add(1)
-		}
+		ingestKind(inst, "mem", ts,
+			func() (sysmfacts.SysMem, error) { return memRow(host, snap.Mem, ts) },
+			store.IngestSysMem)
 	}
+	if snap.PSI != nil {
+		ingestKind(inst, "psi", ts,
+			func() (sysmfacts.SysPsi, error) { return psiRow(host, snap.PSI, ts) },
+			store.IngestSysPsi)
+	}
+	if snap.Net != nil {
+		ingestKind(inst, "net", ts,
+			func() (sysmfacts.SysNet, error) { return netRow(host, snap.Net, ts) },
+			store.IngestSysNet)
+	}
+	if snap.Disk != nil {
+		// Two kinds from one snapshot: the mount table and the device list have
+		// independent lengths, so they cannot share an entity's arrays.
+		ingestKind(inst, "diskMount", ts,
+			func() (sysmfacts.SysDiskMount, error) { return diskMountRow(host, snap.Disk, ts) },
+			store.IngestSysDiskMount)
+		ingestKind(inst, "diskIo", ts,
+			func() (sysmfacts.SysDiskIo, error) { return diskIoRow(host, snap.Disk, ts) },
+			store.IngestSysDiskIo)
+	}
+	if snap.Battery != nil {
+		ingestKind(inst, "battery", ts,
+			func() (sysmfacts.SysBattery, error) { return batteryRow(host, snap.Battery, ts) },
+			store.IngestSysBattery)
+	}
+	if snap.GPU != nil {
+		ingestKind(inst, "gpu", ts,
+			func() (sysmfacts.SysGpu, error) { return gpuRow(host, snap.GPU, ts) },
+			store.IngestSysGpu)
+	}
+}
+
+// ingestKind builds one row and hands it to the store, reporting whether it
+// landed. Generic because the nine kinds differ only in their row type and
+// their Ingest verb, and spelling each out invited the copy-paste error of
+// pairing one domain's builder with another's verb.
+func ingestKind[T any](
+	inst *Tee,
+	domain string,
+	ts time.Time,
+	build func() (T, error),
+	ingest func(time.Time, []T) error,
+) (ok bool) {
+	row, err := build()
+	if err == nil {
+		err = ingest(ts, []T{row})
+	}
+	if err != nil {
+		inst.opts.Log.Warn().Err(err).Str("domain", domain).
+			Msg("sysmtee: ingest failed, sample dropped")
+		return
+	}
+	inst.rows.Add(1)
+	ok = true
+	return
 }
 
 // flush makes buffered rows durable. A failure leaves the batch pending in the
