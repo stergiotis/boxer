@@ -210,6 +210,9 @@ Stated here rather than discovered later:
 
 ## Reading list
 
+- [reading-and-authoring how-to](../howto/leeway-sql-reading-and-authoring.md)
+  — the task order: install, read an attribute, name a membership, filter,
+  mint new columns.
 - [three DQL contracts](./leeway-dql-contracts.md) — when a guard is sound,
   what absence means, and when a `SELECT` still produces a leeway table.
 - [leeway-column-names](./leeway-column-names.md) — the anatomy of a
