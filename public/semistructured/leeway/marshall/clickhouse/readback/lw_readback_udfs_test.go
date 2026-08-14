@@ -56,7 +56,6 @@ func TestHelperUDFs_SQLShape(t *testing.T) {
 	for _, fn := range []string{
 		"LW_RAGGED_NEST",
 		"LW_RAGGED_PARENT_IDS",
-		"LW_PACK_VERSION",
 		"LW_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL",
 		"LW_LU_VAL_IDX_TO_MEMB_IDX_END_EXCL",
 		"LW_LU_VAL_BY_MEMB_IDX",

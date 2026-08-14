@@ -60,6 +60,35 @@ func TestRosterMatchesSQL(t *testing.T) {
 	}
 }
 
+// TestFamilyStatementsMatchRoster pins the lexical split FamilyStatements
+// does — strip `--` comments, cut on `;` — against the declared roster.
+//
+// The split assumes no body contains a `;` inside a string literal. That is
+// true of the file today and this is what keeps it true: a body that broke
+// the assumption would produce a statement count or an order that no longer
+// matches the roster, failing here rather than installing half a function.
+func TestFamilyStatementsMatchRoster(t *testing.T) {
+	stmts := readback.FamilyStatements()
+	roster := readback.HelperFunctions()
+	require.Len(t, stmts, len(roster), "one statement per declared function")
+
+	for i, want := range roster {
+		m := createRe.FindStringSubmatch(stmts[i])
+		require.NotNilf(t, m, "statement %d is not a CREATE OR REPLACE FUNCTION: %s", i, stmts[i])
+		require.Equal(t, want.Name, m[1], "statement %d", i)
+		require.NotContains(t, stmts[i], ";", "statements are cut at the separator")
+		require.NotContains(t, stmts[i], "--", "comments are stripped")
+	}
+
+	// The pack is HelperUDFsSQL's business, not this family's: the surface
+	// installer provisions the pack itself and must not receive it twice.
+	for _, f := range chpack.Functions() {
+		for _, stmt := range stmts {
+			require.NotContainsf(t, stmt, "FUNCTION "+f.Name+" ", "%s leaked into the family statements", f.Name)
+		}
+	}
+}
+
 // TestRosterNamespace pins the family to the one leeway namespace (ADR-0162
 // §SD2 as amended 2026-08-07). The panel's server probe asks a server for
 // `LW\_%`; a family member outside that prefix would be invisible to it and

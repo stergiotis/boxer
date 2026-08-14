@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwextract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
@@ -267,6 +268,31 @@ type fieldLocators struct {
 	subtypeCol string // length (homogenous array) / cardinality (set) support col; "" for scalar
 }
 
+// lanes renders the locators as lwextract's view of them.
+//
+// Card is always populated: locate errors when the schema lacks the
+// cardinality column, so this generator never takes lwextract's
+// one-membership-per-attribute fast path. That is deliberate — a Plan
+// reaching a schema without the column is a conformance failure worth
+// reporting, not a shape to silently optimise.
+func (inst fieldLocators) lanes() lwextract.Lanes {
+	return lwextract.Lanes{
+		Value:  inst.vinfo.col,
+		Ident:  inst.idCol,
+		Card:   inst.cardCol,
+		Length: inst.subtypeCol,
+	}
+}
+
+// shape maps the value column's IR subtype onto lwextract's. locate has
+// already rejected every other subtype.
+func (inst fieldLocators) shape() lwextract.ShapeE {
+	if inst.vinfo.subType == common.IntermediateColumnsSubTypeScalar {
+		return lwextract.ShapeScalar
+	}
+	return lwextract.ShapeList
+}
+
 // locate resolves a tagged field to its physical columns, erroring on the first
 // one the schema lacks — and on the field shapes the generator cannot express
 // at all. Shared by field (Generate) and validate (ValidatePlanAgainstIR) so
@@ -355,15 +381,6 @@ func (g *Generator) field(f *mappingplan.TaggedField, contract mappingplan.ReadC
 		return
 	}
 	lit := resolved.Identity().Literal
-	m2v := "LW_RAGGED_PARENT_IDS(" + loc.cardCol + ")"
-
-	var valExpr string
-	switch vinfo.subType {
-	case common.IntermediateColumnsSubTypeScalar:
-		valExpr = "LW_VALUE_BY_TAG_EQUAL(" + vinfo.col + ", " + idCol + ", " + lit + ", " + m2v + ")"
-	case common.IntermediateColumnsSubTypeHomogenousArray, common.IntermediateColumnsSubTypeSet:
-		valExpr = "LW_LIST_BY_TAG_EQUAL(" + vinfo.col + ", " + loc.subtypeCol + ", " + idCol + ", " + lit + ", " + m2v + ")"
-	}
 
 	// A `,unit` field is a container column carrying exactly ONE element per
 	// attribute, authored and read back as the scalar element type (the
@@ -375,15 +392,31 @@ func (g *Generator) field(f *mappingplan.TaggedField, contract mappingplan.ReadC
 	// so it is a no-op there.
 	unit := f.Flags.Unit && vinfo.subType != common.IntermediateColumnsSubTypeScalar
 	if unit {
-		valExpr += "[1]"
 		res.canonicalType = canonicaltypes.DemoteToScalarPrim(vinfo.canonicalType)
+	}
+
+	// The expression itself is lwextract's (ADR-0181 §SD3): one builder, so
+	// this generator and the LW_GET family cannot drift on what "locate the
+	// attribute tagged X" means. Card is always populated here — locate
+	// requires the column — so the general helper form is what renders, and
+	// the golden tests pin that it is byte-identical to what this emitted
+	// when the strings lived inline.
+	lanes := loc.lanes()
+	valExpr, err := lwextract.Value(lwextract.Request{
+		Lanes:      lanes,
+		Shape:      loc.shape(),
+		Membership: lit,
+		Unit:       unit,
+	})
+	if err != nil {
+		return
 	}
 	// Whether the slot this field projects is a scalar — true for a scalar
 	// value column and for the indexed `,unit` shape above. Drives the Option
 	// treatment below: only a scalar slot can carry Nullable(T).
 	projectsScalar := vinfo.subType == common.IntermediateColumnsSubTypeScalar || unit
 
-	countExpr := "countEqual(" + idCol + ", " + lit + ")"
+	countExpr := lwextract.CountEqual(lanes, lit)
 
 	switch {
 	case f.IsConst:
@@ -432,7 +465,7 @@ func (g *Generator) field(f *mappingplan.TaggedField, contract mappingplan.ReadC
 		// A `,unit` Option projects a scalar slot, so it gets the Nullable
 		// treatment even though its value column is an array.
 		if projectsScalar {
-			res.valExpr = "if(has(" + idCol + ", " + lit + "), " + valExpr + ", NULL)"
+			res.valExpr = lwextract.NullWhenAbsent(valExpr, lanes, lit)
 			res.nullableSlot = true
 		} else {
 			res.valExpr = valExpr
