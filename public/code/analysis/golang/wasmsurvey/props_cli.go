@@ -9,8 +9,10 @@ import (
 	"text/tabwriter"
 
 	"github.com/stergiotis/boxer/public/code/analysis/golang/godep/godepcollect"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/packageprops"
+	"github.com/stergiotis/boxer/public/packageprops/proptable"
 	cli "github.com/urfave/cli/v2"
 )
 
@@ -37,13 +39,25 @@ func newPropsCommand() *cli.Command {
 					&cli.StringFlag{Name: "emit", Usage: "output format: table | go", Value: "table"},
 					&cli.StringFlag{Name: "out", Usage: "output path for --emit go (\"-\" or empty = stdout)"},
 					&cli.StringFlag{Name: "package", Usage: "package clause for --emit go", Value: "proptable"},
+					&cli.BoolFlag{Name: "tracked", Usage: "read only git-tracked declarations — required to regenerate the committed table, since `props drift` gates it on that same scope"},
 				},
 				Action: runPropsHarvest,
 			},
 			{
-				Name:   "verify",
-				Usage:  "Reconcile declared PackageProps against the freshly computed verdict; non-zero exit on a regression",
-				Flags:  computeFlags(),
+				Name:  "drift",
+				Usage: "Reconcile the generated props table against the git-tracked declarations; non-zero exit on any difference",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "dir", Usage: "module dir; empty resolves nearest go.mod above wd"},
+				},
+				Action: runPropsDrift,
+			},
+			{
+				Name:  "verify",
+				Usage: "Reconcile declared PackageProps against the freshly computed verdict; non-zero exit on a regression",
+				Flags: append(computeFlags(), &cli.BoolFlag{
+					Name:  "show-unjudged",
+					Usage: "also list packages the survey left unjudged (computed=unknown), which without TinyGo is most of them",
+				}),
 				Action: runPropsVerify,
 			},
 		},
@@ -81,8 +95,18 @@ func runPropsHarvest(c *cli.Context) (err error) {
 	if modPath, err = readModulePath(dir); err != nil {
 		return err
 	}
+	// --tracked and `props drift` must agree on scope, or a regen lands a
+	// table the gate immediately rejects. Regenerating the committed table is
+	// therefore always the --tracked form; the working-tree default stays for
+	// the human `--emit table` overview, where seeing your own in-flight
+	// package is the point.
 	var rows []HarvestRow
-	if rows, err = HarvestProps(dir, modPath); err != nil {
+	if c.Bool("tracked") {
+		rows, err = HarvestTracked(c.Context, dir, modPath)
+	} else {
+		rows, err = HarvestProps(dir, modPath)
+	}
+	if err != nil {
 		return err
 	}
 	prefixes := patternsToPrefixes(modPath, c.StringSlice("patterns"))
@@ -131,6 +155,46 @@ func runPropsHarvest(c *cli.Context) (err error) {
 	}
 }
 
+// runPropsDrift gates the generated table against the tracked declarations.
+//
+// It needs neither the survey nor TinyGo — it parses declarations and compares
+// them to the compiled-in table — so it is cheap enough to run on every lint
+// pass, which is the property that makes it a gate rather than a chore.
+func runPropsDrift(c *cli.Context) (err error) {
+	root := c.String("dir")
+	if root == "" {
+		wd, e := os.Getwd()
+		if e != nil {
+			return eh.Errorf("props drift: working dir: %w", e)
+		}
+		if r, ok := godepcollect.ModuleRoot(wd); ok {
+			root = r
+		} else {
+			root = wd
+		}
+	}
+	modPath, err := readModulePath(root)
+	if err != nil {
+		return err
+	}
+	declared, err := HarvestTracked(c.Context, root, modPath)
+	if err != nil {
+		return err
+	}
+	drifts := DriftAgainstTable(proptable.Table, declared)
+	if len(drifts) == 0 {
+		fmt.Fprintf(os.Stdout, "props drift: table matches %d tracked declaration(s)\n", len(declared))
+		return nil
+	}
+	for _, d := range drifts {
+		fmt.Fprintf(os.Stdout, "%-8s %s\n", d.Kind, strings.TrimPrefix(d.ImportPath, modPath+"/"))
+	}
+	fmt.Fprintf(os.Stdout, "props drift: %d difference(s) against %d tracked declaration(s)\n",
+		len(drifts), len(declared))
+	return eb.Build().Int("drifts", len(drifts)).
+		Errorf("props drift: the generated table disagrees with the tracked declarations; regenerate it with `props harvest --tracked --emit go --out public/packageprops/proptable/proptable.out.go` (--tracked is required: it is the scope this check compares against)")
+}
+
 func runPropsVerify(c *cli.Context) (err error) {
 	var opts Options
 	if opts, err = wasmSurveyOptions(c); err != nil {
@@ -144,17 +208,36 @@ func runPropsVerify(c *cli.Context) (err error) {
 		fmt.Fprintln(os.Stdout, "props verify: all declarations match the computed verdict")
 		return nil
 	}
-	regressions := 0
+	// A computed verdict of "unknown" is the oracle declining, not a
+	// disagreement: static mode proves red soundly and says nothing about the
+	// rest (ADR-0078), so without TinyGo it leaves most packages unjudged.
+	// Listing those beside real findings buries them — the first run of this
+	// command against the tree reported 882 mismatches, of which 870 were
+	// abstentions and 12 were the regressions that mattered. They are counted
+	// here and listed only on request, because a gate whose output is mostly
+	// noise is a gate that gets tuned out.
+	showUnjudged := c.Bool("show-unjudged")
+	regressions, drifts, unjudged := 0, 0, 0
 	for _, m := range mismatches {
 		tag := "drift"
-		if m.IsRegression {
+		switch {
+		case m.Computed == packageprops.WASMUnknown:
+			unjudged++
+			if !showUnjudged {
+				continue
+			}
+			tag = "unjudged"
+		case m.IsRegression:
 			tag = "REGRESSION"
 			regressions++
+		default:
+			drifts++
 		}
 		fmt.Fprintf(os.Stdout, "%-11s %s [%s] declared=%s computed=%s\n",
 			tag, m.ImportPath, m.Target, m.Declared, m.Computed)
 	}
-	fmt.Fprintf(os.Stdout, "props verify: %d mismatch(es), %d regression(s)\n", len(mismatches), regressions)
+	fmt.Fprintf(os.Stdout, "props verify: %d regression(s), %d drift(s), %d unjudged\n",
+		regressions, drifts, unjudged)
 	if regressions > 0 {
 		return eb.Build().Errorf("props verify failed: %d declared-amenable package(s) are now blocked", regressions)
 	}

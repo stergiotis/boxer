@@ -278,6 +278,19 @@ type HarvestRow struct {
 	Kind             packageprops.Kind
 }
 
+// Props is the row's declaration as the vocabulary type, so a harvested row
+// and a table entry compare as one value rather than field by field — a
+// comparison that would otherwise silently ignore any field added to Props
+// later (ADR-0080 SD4 expects the struct to grow).
+func (inst HarvestRow) Props() (p packageprops.Props) {
+	return packageprops.Props{
+		WASMWASI:         inst.WASMWASI,
+		WASMJS:           inst.WASMJS,
+		WASMFreestanding: inst.WASMFreestanding,
+		Kind:             inst.Kind,
+	}
+}
+
 // HarvestProps walks root for package_props.go files and parses their
 // PackageProps declarations into rows, sorted by import path. It does not run
 // the survey — it is the cheap, toolchain-free overview of what is declared.
