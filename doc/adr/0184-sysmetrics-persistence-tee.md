@@ -334,16 +334,31 @@ runs as a standalone sink against a remote scraper without change.
 - Metric volume lands on the same table as runtime facts, so `boxer.facts`
   growth becomes dominated by whatever cadence the tee runs at. This is the
   concrete form of the O2 trade-off.
-- **Each facts-bound store re-emits the whole table's scaffolding.** Measured
-  at M1: a store over `boxer.facts` generates ~305 KB of DML and ~211 KB of RA
+- **A facts-bound store re-emits the table's DML scaffolding.** Measured at
+  M1: a store over `boxer.facts` generated ~305 KB of DML and ~211 KB of RA
   into its own `internal/lowlevel`, against the ~299 KB and ~206 KB the tree
   already carries in `factsschema/dml` and `factsschema/ra`. The generic
   schema's 21 sections are what make it large, so this cost is specific to
   binding *this* table and would be a fraction of it for a dedicated one —
   a point in O2's favour the QOC above did not weigh, found only by building
-  it. `recordstore/gen` has no seam for reusing existing scaffolding
-  (`Flat` moves it, nothing shares it); adding one is out of scope here and
-  recorded as the obvious follow-up if a second facts-bound store lands.
+  it.
+
+  **The RA half is now shared** via `gen.Input.SharedRA`, a generic
+  (import path, package, stylable) triple `storegen` fills in with
+  `factsschema/ra` — the package `codec/factswrapper` already emits into
+  every keelson wire codec, so a store and a codec decoding the same row
+  share one definition of its columns. `sysmetrics_store.out.go` lost 5,569
+  lines. The seam is off by default and the six non-facts stores regenerate
+  byte-identical.
+
+  **The DML half stays duplicated, deliberately.** Its entity-frame control
+  surface is walled by the `internal/lowlevel` import barrier
+  ([ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md) §SD6),
+  and `factsschema/dml` exports that surface for the hand-written facts
+  writers — so binding it would put every facts-bound store into the `Flat`
+  shape ADR-0100 deferred as "wide, unguarded". That is a decision for
+  ADR-0100 to revisit, not a default to change here. RA has no control
+  surface, which is why only that half moved.
 - SD4 depends on a proposed ADR for one seam; if ADR-0183 is rejected the
   snapshot helper is built here and the assignment golden stands alone.
 
