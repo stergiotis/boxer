@@ -101,6 +101,21 @@ SELECT category, count() AS n
 FROM keelson('env') GROUP BY category ORDER BY n DESC
 ```
 
+List the membership registry — the vocabulary behind the `uint64` tags a
+leeway ref channel carries, so one join turns an id from a result column back
+into its name (ADR-0171 §SD4):
+
+```sql
+SELECT name, id, virtual, parents
+FROM keelson('memberships')
+ORDER BY name
+```
+
+The `name` column holds the folded spelling (`naturalKey` publishes as
+`natural-key`), so join predicates must use that form — `LW_GET` accepts
+either. A `virtual` row groups related memberships and never appears on a
+lane, so matching data against one returns nothing by design.
+
 ## Caveats
 
 - The endpoint lives inside the running shell, so the shell must be up and its

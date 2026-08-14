@@ -10,12 +10,18 @@ title: Snippets
 # Snippets
 
 A small library of ready-to-run queries against `anchor.facts`, the
-self-contained demo table. Click **Insert** above any block to splice it into
-the editor at the cursor; place the caret where you want it first (an empty
-editor takes the snippet whole). Do not add a `FORMAT` clause — the app appends
-one. The verified, explained versions live on the **Example queries** page. The
-**ADS-B geo-raster** section below targets `planes_mercator` from the demo loader
-(`apps/play/demo/adsb/demo.sh`), not `anchor.facts`.
+self-contained demo table (seeded by
+`public/semistructured/leeway/anchor/seed_facts.sh`). Click **Insert** above any
+block to splice it into the editor at the cursor; place the caret where you want
+it first (an empty editor takes the snippet whole). Do not add a `FORMAT` clause
+— the app appends one. The verified, explained versions live on the **Example
+queries** page. The **ADS-B geo-raster** section below targets `planes_mercator`
+from the demo loader (`apps/play/demo/adsb/demo.sh`), not `anchor.facts`.
+
+Leeway columns are named by their friendly handles (`` `section:column` ``,
+resolved to physical names before the query ships), and tagged attributes are
+read with the `LW_*` vocabulary — **The leeway surface** below covers the
+one-time install the server-side part of it needs.
 
 ## Whole entities
 
@@ -32,8 +38,7 @@ Narrow to a single scenario to vary which tagged sections are populated.
 
 ```sql
 SELECT * FROM anchor.facts
-WHERE hasAny(`tv:symbol:value:val:s:124::I:0::data`,
-             ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
+WHERE hasAny(`symbol:value`, ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
 ```
 
 ## Query graph (CTEs become nodes)
@@ -45,15 +50,20 @@ single query for execution (identical to running it inline); the **Graph** tab
 shows the nodes and their edges, and its *observe in panels* button points the
 result tabs at an intermediate node instead of the sink.
 
+The handle read sits in `recent`, where `anchor.facts` is in scope: the
+resolver rewrites handles per `SELECT`, against the tables that `SELECT` reads,
+and a CTE has no catalog schema to ask — downstream nodes see only the aliases
+the upstream node exported.
+
 ```sql
 WITH
   recent AS (
-    SELECT * FROM anchor.facts LIMIT 50
+    SELECT `symbol:value`[1] AS event_type
+    FROM anchor.facts
+    LIMIT 50
   ),
   by_kind AS (
-    SELECT
-      `tv:symbol:value:val:s:124::I:0::data`[1] AS event_type,
-      count()                                   AS n
+    SELECT event_type, count() AS n
     FROM recent
     GROUP BY event_type
   )
@@ -103,21 +113,183 @@ SELECT week, days_in_week FROM by_week ORDER BY week
 The ids 10005, 10010, 10015, 10020, 500003 carry the sparse `geoArea` section.
 
 ```sql
-SELECT * FROM anchor.facts WHERE `id:id:u64:47::0:` = 10005
+SELECT * FROM anchor.facts WHERE `id:id` = 10005
 ```
+
+## The leeway surface (one-time install)
+
+The `LW_*` names the next sections use are leeway's query vocabulary
+(ADR-0171). Part of it is client-side — expanded by play before the statement
+ships — and part is SQL user-defined functions the endpoint must carry. Ask
+which revision a server has:
+
+```sql
+SELECT LW_SURFACE_VERSION()
+```
+
+An *unknown function* error means the server is not provisioned — it reads
+like a typo and is not one. Install the whole surface (function pack,
+read-back helpers, identity family, plus the version marker) with the CLI, or
+pipe the same DDL through `clickhouse-client`:
+
+```sh
+boxer leeway sqlsurface install --url http://localhost:8123/
+# or, offline:
+boxer leeway sqlsurface print | clickhouse-client -n
+```
+
+The **Vocabulary** tab shows the same answer per function, marked against the
+configured endpoint — including the client-expanded names whose *expansion*
+needs the server-side families.
+
+## Read a tagged attribute by its tag (`LW_GET`)
+
+A tagged section stores attributes in parallel arrays; `LW_GET` locates one
+**by its membership tag** and extracts the value, without a physical name in
+sight. In this fixture every `symbol` attribute carries a tag on the
+low-cardinality ref channel — the cyber events tag with the targeted port
+(22, 443, 53), the drone events with the drone model (5), the sensor events
+with the hardware version (12) — so one tag picks its rows out of all three
+domains:
+
+```sql
+SELECT
+  `id:naturalKey`                                  AS entity,
+  `symbol:value`                                   AS all_events,
+  LW_GET_NULL('symbol', '22', 'chan:low-card-ref') AS event_on_port_22
+FROM anchor.facts
+WHERE LW_GET('symbol', '22', 'chan:low-card-ref') != ''
+```
+
+`LW_GET` returns the type default when the tag is absent (`''` here, which the
+`WHERE` uses); `LW_GET_NULL` returns `NULL` instead, telling absent from
+present-with-the-default. A section whose values are arrays or sets reads with
+`LW_GET_LIST`. The `chan:` token is needed here because the fixture's sections
+carry several membership channels; a single-channel section needs only the two
+arguments. On a ref channel a bound registry also lets the tag be a *name* —
+see the next section.
+
+A section with several value columns takes a `col:` token to say which one.
+`geoPoint` carries three (`pointLat`, `pointLng`, `h3`), and its tag is the
+attacker's autonomous-system number on the high-cardinality ref channel:
+
+```sql
+SELECT
+  `id:naturalKey`                                                  AS incident,
+  LW_GET('geoPoint', '3360', 'chan:high-card-ref', 'col:pointLat') AS origin_lat,
+  LW_GET('geoPoint', '3360', 'chan:high-card-ref', 'col:pointLng') AS origin_lng
+FROM anchor.facts
+WHERE LW_GET_NULL('geoPoint', '3360', 'chan:high-card-ref', 'col:h3') IS NOT NULL
+```
+
+Omit a token a call needs and the error lists the candidates rather than
+guessing. Attributes that carry no tag at all (this fixture's `timeRange`,
+`text`, `u64Array`) are read positionally through their handles —
+`` `timeRange:beginIncl`[1] `` — as the **Timeline contract** section below
+does.
+
+## Membership ids and names (`keelson('memberships')`)
+
+A ref channel carries a `uint64` per tag. This fixture uses plain domain
+numbers (ports, model ids), but boxer's own facts stores tag with the
+process's membership registry, and those ids are not meant to be read or
+typed. `keelson('memberships')` publishes that registry as a table — point the
+**Endpoint** menu at *Keelson introspection* (or any `/query` node) and Run:
+
+```sql
+SELECT name, id, virtual, parents
+FROM keelson('memberships')
+ORDER BY name
+```
+
+Turn an id from a result column back into its name with the same table:
+
+```sql
+SELECT name, virtual FROM keelson('memberships') WHERE id = {id:UInt64}
+```
+
+Two things to know. The table publishes the **folded** spelling — a membership
+declared as `naturalKey` lists as `natural-key` — so a join predicate must use
+that form, though `LW_GET` accepts either. And a `virtual` row is a grouping
+node that never appears on a lane: matching against one returns nothing, which
+is a wrong question rather than missing data. In the write direction, `LW_GET`
+on a ref channel takes the *name* and compiles it to the id before the
+statement ships (play binds its registry for exactly this), so the SQL still
+carries a constant.
+
+## Ragged lanes (`LW_RAGGED_*`, `LW_CO_*`)
+
+The flat streams behind a section regroup without hand-written array
+arithmetic. Each `symbol` attribute here carries one or more ref tags; nesting
+the flat `lr` stream by the per-attribute `lrcard` counts lines the tags up
+with their attribute for a parallel `ARRAY JOIN`:
+
+```sql
+SELECT
+  `id:naturalKey` AS incident,
+  event,
+  tags
+FROM anchor.facts
+ARRAY JOIN
+  `symbol:value` AS event,
+  LW_RAGGED_NEST(`symbol:lr`, `symbol:lrcard`) AS tags
+WHERE hasAny(`symbol:value`, ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
+```
+
+The pack knows nothing about leeway — the lanes are ordinary arrays, so it
+works on literals too, which is the quickest way to see what each function
+does (this block needs only the installed pack, no table):
+
+```sql
+SELECT
+  LW_RAGGED_NEST([10, 20, 30, 40, 50, 60], [2, 3, 1])                AS nested,
+  LW_RAGGED_REDUCE('sum', [10, 20, 30, 40, 50, 60], [2, 3, 1])       AS sums,
+  LW_RAGGED_EXISTS(v -> v > 45, [10, 20, 30, 40, 50, 60], [2, 3, 1]) AS any_gt_45,
+  LW_CO_LOOKUP(['de', 'fr', 'it'], [83.2, 68.1, 59.0], 'fr')         AS co_lookup
+```
+
+`nested` regroups the stream into `[[10,20],[30,40,50],[60]]`, `sums`
+aggregates per run without materializing the nesting, `any_gt_45` is the fused
+per-run existence test, and `co_lookup` reads one lane at the position where a
+sibling lane matches. Prefer the fused forms over nest-then-operate — nesting
+copies the stream (ADR-0162 §SD4).
+
+## Mint a leeway column (`LW_PLAIN`)
+
+The write direction: a computed column with an ordinary alias stops being
+leeway-shaped, but a constructor mints the physical name for it, so the result
+classifies back into the schema — Detail renders the card again. `LW_PLAIN`
+wraps the expression, names it, types it, and declares the item kind
+(`item:oq`, an opaque plain value); it expands client-side into
+`<expr> AS "<physical name>"`, so any endpoint runs the result:
+
+```sql
+SELECT
+  `id:id`,
+  `id:naturalKey`,
+  LW_PLAIN(length(`symbol:value`), 'attack-count', 'u64', 'item:oq')
+FROM anchor.facts
+```
+
+A constructor call is a projection item and nothing else — not aliased (the
+minted name *is* the alias), not nested, not in a `WHERE`. The tagged-section
+constructors (`LW_TV`, `LW_TV_MEMB`, `LW_TV_SUPPORT`) follow the same shape;
+the *reading and authoring* how-to in the repository covers them.
 
 ## Timeline contract
 
 Map the `timeRange` section onto the canonical slot columns the Timeline tab
-reads; timestamps must be `DateTime64`.
+reads; timestamps must be `DateTime64`. The attributes carry no membership
+tag, so this is positional reading — handles plus `[1]` — rather than a
+`LW_GET`.
 
 ```sql
 SELECT
-  `tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`[1] AS _tl_time,
-  `tv:timeRange:endExcl:val:z64:2k:0:0:0::data`[1]   AS _tl_time_end,
-  `tv:symbol:value:val:s:124::I:0::data`[1]          AS _tl_lane
+  `timeRange:beginIncl`[1] AS _tl_time,
+  `timeRange:endExcl`[1]   AS _tl_time_end,
+  `symbol:value`[1]        AS _tl_lane
 FROM anchor.facts
-WHERE length(`tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`) > 0
+WHERE length(`timeRange:beginIncl`) > 0
 ORDER BY _tl_time
 ```
 
@@ -153,13 +325,15 @@ SELECT
 ## Ad-hoc columns
 
 Aliased columns are not leeway-shaped, so Detail falls back to prefix grouping
-and Table shows a plain grid.
+and Table shows a plain grid. (An *unaliased* handle keeps its physical name
+and stays leeway; the alias is what changes the shape — mint a real leeway
+column instead with `LW_PLAIN`, above.)
 
 ```sql
 SELECT
-  `id:id:u64:47::0:`                       AS id,
-  `id:naturalKey:y:4::0:`                  AS natural_key,
-  `tv:symbol:value:val:s:124::I:0::data`[1] AS event_type
+  `id:id`            AS id,
+  `id:naturalKey`    AS natural_key,
+  `symbol:value`[1]  AS event_type
 FROM anchor.facts
 ORDER BY id
 ```
@@ -226,7 +400,7 @@ placeholder is substituted by ClickHouse.
 ```sql
 SET param_event = 'DDOS';
 SELECT * FROM anchor.facts
-WHERE has(`tv:symbol:value:val:s:124::I:0::data`, {event:String})
+WHERE has(`symbol:value`, {event:String})
 ```
 
 ## Signals (unbound parameter)

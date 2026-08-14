@@ -571,17 +571,22 @@ The functions a buffer can name, filtered the same way as Snippets, each with an
 where a name is actually evaluated — which is what decides how it fails:
 
 - **Server** — SQL user-defined functions, which exist only where somebody
-  installed them. The `LW_*` family is leeway's query vocabulary: `LW_CO_*` over
-  positionally aligned lanes, `LW_RAGGED_*` over flat streams with a lengths lane,
-  `LW_VALUE_BY_TAG_EQUAL` / `LW_LIST_BY_TAG_EQUAL` to read a tagged attribute, and
-  `LW_ID_*` over Fibonacci-tagged identifiers. Each row is marked `✓` or `MISSING`
-  against what the endpoint carries — a missing one needs provisioning, not a
-  different query. Functions the endpoint has that this build does not know about
-  are listed as `extra`.
+  installed them (`boxer leeway sqlsurface install`, one version marker
+  `LW_SURFACE_VERSION` for all of it). The `LW_*` family is leeway's query
+  vocabulary: `LW_CO_*` over positionally aligned lanes, `LW_RAGGED_*` over flat
+  streams with a lengths lane, `LW_LU_*` / `LW_VALUE_BY_TAG_EQUAL` /
+  `LW_LIST_BY_TAG_EQUAL` to read a tagged attribute, `LW_ASPECT_*` to decode a
+  physical column name's aspects, and `LW_ID_*` over Fibonacci-tagged
+  identifiers. Each row is marked `✓` or `MISSING` against what the endpoint
+  carries — a missing one needs provisioning, not a different query. Functions
+  the endpoint has that this build does not know about are listed as `extra`.
 - **Client** — macros play rewrites into ordinary SQL before the statement leaves,
   so they work against any endpoint, including one carrying no UDFs at all:
-  `descriptiveStatistics(...)`, `docsearch('...')`, `keelson('...')`, and `LW_ID_*`
-  (which is both — installable *and* expanded here).
+  `descriptiveStatistics(...)`, `docsearch('...')`, `keelson('...')`, the leeway
+  extraction and constructor families (`LW_GET*`, `LW_PLAIN` / `LW_TV*` —
+  though what `LW_GET*` expands *into* calls the server-side read-back
+  helpers, and the panel marks that dependency), and `LW_ID_*` (which is both —
+  installable *and* expanded here).
 - **play** — the `ts*` family, computed locally over the rows a sub-query returns.
   The server never sees the name.
 
