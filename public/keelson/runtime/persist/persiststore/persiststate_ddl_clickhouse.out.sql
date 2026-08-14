@@ -1,0 +1,39 @@
+CREATE DATABASE IF NOT EXISTS boxer;
+
+CREATE TABLE IF NOT EXISTS boxer.persiststate (
+	"id:id:s:4::0:" String CODEC(ZSTD(3)),
+	"ts:ts:z64:47::0:" DateTime64(9,'UTC') CODEC(Delta,ZSTD(3)),
+	"lc:lifecycle:u8:4::0:" UInt8 CODEC(ZSTD(3)),
+	"tv:stateBlob:value:val:y:4:::0::data" Array(String) CODEC(ZSTD(3)),
+	"tv:stateBlob:hr:hr:u64:47:::0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
+	"tv:stateBlob:lr:lr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:stateBlob:lv:lv:y:124:::0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:stateBlob:lmr:lmr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:stateBlob:mrhp:mrhp:y:4:::0::data" Array(String) CODEC(ZSTD(3)),
+	"tv:stateBlob:hrcard:hrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateBlob:lrcard:lrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateBlob:lvcard:lvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateBlob:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateAppId:value:val:s:24:::0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:stateAppId:hr:hr:u64:47:::0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
+	"tv:stateAppId:lr:lr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:stateAppId:lv:lv:y:124:::0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:stateAppId:lmr:lmr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:stateAppId:mrhp:mrhp:y:4:::0::data" Array(String) CODEC(ZSTD(3)),
+	"tv:stateAppId:hrcard:hrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateAppId:lrcard:lrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateAppId:lvcard:lvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateAppId:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateKey:value:val:s:4:::0::data" Array(String) CODEC(ZSTD(3)),
+	"tv:stateKey:hr:hr:u64:47:::0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
+	"tv:stateKey:lr:lr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:stateKey:lv:lv:y:124:::0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:stateKey:lmr:lmr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:stateKey:mrhp:mrhp:y:4:::0::data" Array(String) CODEC(ZSTD(3)),
+	"tv:stateKey:hrcard:hrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateKey:lrcard:lrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateKey:lvcard:lvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateKey:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
+) ENGINE = MergeTree()
+ORDER BY ("id:id:s:4::0:", "ts:ts:z64:47::0:")
+SETTINGS allow_suspicious_low_cardinality_types=1
