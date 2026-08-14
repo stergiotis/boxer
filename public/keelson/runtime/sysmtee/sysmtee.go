@@ -139,6 +139,10 @@ type Tee struct {
 	// lastSocketsStamp dedupes the sockets table, which arrives repeated on the
 	// slower cadence its collector samples at. Owned by the writer goroutine.
 	lastSocketsStamp int64
+	// seenTopology is the containment tree's first-sight gate. It is static, so
+	// a second write would be a duplicate rather than an observation. Owned by
+	// the writer goroutine.
+	seenTopology bool
 }
 
 // Start subscribes and begins writing. The returned Tee runs until Stop.
@@ -253,6 +257,18 @@ func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 	host := inst.opts.Host
 	store := inst.opts.Store
 
+	// The topology is static — the collector reads it once from sysfs and
+	// stamps the same value onto every snapshot — so it is written on first
+	// sight like the CPU descriptor. Its own seen-set: it rides the bundle
+	// independently of whether the cpu collector was wired, and gating it on
+	// the descriptor's would drop it whenever cpu was absent.
+	if snap.Topology != nil && !inst.seenTopology {
+		if ingestKind(inst, "topology", ts,
+			func() (sysmfacts.SysTopology, error) { return topologyRow(host, snap.Topology, ts) },
+			store.IngestSysTopology) {
+			inst.seenTopology = true
+		}
+	}
 	if snap.CPU != nil {
 		// Static CPU facts once per host, not per tick.
 		if _, seen := inst.seenHosts[host]; !seen {

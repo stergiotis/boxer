@@ -209,10 +209,20 @@ func TestTee_WritesEveryWiredDomain(t *testing.T) {
 		},
 		Battery: &sysmsnap.BatterySnapshot{Batteries: []sysmsnap.BatteryStatus{{Name: "BAT0"}}},
 		GPU:     &sysmsnap.GPUSnapshot{Devices: []sysmsnap.GPUDevice{{Vendor: "amd"}}},
+		Procs:   []sysmsnap.ProcInfo{{PID: 1, Name: "systemd"}},
+		Sockets: &sysmsnap.SocketsSnapshot{
+			CollectedAtUnixMs: time.Now().UnixMilli(),
+			Sockets:           []sysmsnap.SocketInfo{{Proto: sysmsnap.SocketProtoTCP, Port: 8123}},
+		},
+		Topology: &sysmsnap.Topology{
+			LogicalCount: 1,
+			Root:         &sysmsnap.TopoObject{Kind: sysmsnap.TopoKindMachine, OSIndex: -1},
+		},
 	})
 
-	// cpu + cpuInfo + mem + psi + net + diskMount + diskIo + battery + gpu.
-	const wantRows = 9
+	// topology + cpu + cpuInfo + mem + psi + net + diskMount + diskIo +
+	// battery + gpu + proc + sockets. Not procCmd: it is opt-in.
+	const wantRows = 12
 	require.Eventually(t, func() bool {
 		return tee.Stats().Flushed >= wantRows
 	}, 5*time.Second, 10*time.Millisecond, "stats: %+v", tee.Stats())
@@ -287,6 +297,50 @@ func TestTee_SocketsAreWrittenOncePerObservation(t *testing.T) {
 
 	_, _, rows := exec.snapshot()
 	assert.EqualValues(t, 2, rows, "four bundles, two observations, two rows")
+}
+
+// The topology is static — the collector reads it once and stamps the same
+// value onto every snapshot — so a row per tick would be pure duplication.
+func TestTee_TopologyIsWrittenOncePerHost(t *testing.T) {
+	tee, exec, publish := startTee(t, sysmtee.Options{FlushInterval: 20 * time.Millisecond})
+
+	topo := &sysmsnap.Topology{
+		LogicalCount: 1,
+		Root:         &sysmsnap.TopoObject{Kind: sysmsnap.TopoKindMachine, OSIndex: -1},
+	}
+	for range 4 {
+		publish(&sysmsnap.BundleSnapshot{SampledAtUnixMs: time.Now().UnixMilli(), Topology: topo})
+	}
+	require.Eventually(t, func() bool {
+		_, _, rows := exec.snapshot()
+		return rows >= 1
+	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, tee.Stop())
+
+	_, _, rows := exec.snapshot()
+	assert.EqualValues(t, 1, rows, "four bundles carrying one static tree is one row")
+}
+
+// The topology rides the bundle whether or not the cpu collector is wired, so
+// its first-sight gate has to be its own rather than the CPU descriptor's.
+func TestTee_TopologyIsIndependentOfTheCpuDescriptor(t *testing.T) {
+	tee, exec, publish := startTee(t, sysmtee.Options{FlushInterval: 20 * time.Millisecond})
+
+	publish(&sysmsnap.BundleSnapshot{
+		SampledAtUnixMs: time.Now().UnixMilli(),
+		Topology: &sysmsnap.Topology{
+			LogicalCount: 1,
+			Root:         &sysmsnap.TopoObject{Kind: sysmsnap.TopoKindMachine, OSIndex: -1},
+		},
+	})
+	require.Eventually(t, func() bool {
+		_, _, rows := exec.snapshot()
+		return rows >= 1
+	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, tee.Stop())
+
+	_, _, rows := exec.snapshot()
+	assert.EqualValues(t, 1, rows, "a cpu-less bundle still stores its topology")
 }
 
 func TestTee_StopIsIdempotent(t *testing.T) {
