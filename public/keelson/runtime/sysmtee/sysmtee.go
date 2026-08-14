@@ -80,7 +80,22 @@ type Options struct {
 	// does not build an unbounded batch between ticks. Zero takes
 	// DefaultFlushRows.
 	FlushRows int
-	Log       zerolog.Logger
+	// PersistProcCmd opts into storing process command lines, user names and
+	// uid/gid — the ADR-0090 §SD8 sensitive class, which
+	// [sysmfacts.SysProcCmd] keeps in its own kind.
+	//
+	// Off by default, and deliberately not merely a masking flag: §SD8's
+	// accepted exposure was scoped to a single-tenant, localhost-bound bus,
+	// where a command line lives as long as its subscriber. A row in
+	// `boxer.facts` outlives the process, is readable by anything with database
+	// access, and is backed up with everything else. The masking switch §SD8
+	// defers does not exist, so not writing is the only control that currently
+	// enforces anything.
+	//
+	// The rest of the process table — pids, names, cpu, memory, the ADR-0126
+	// topology marks — is stored either way.
+	PersistProcCmd bool
+	Log            zerolog.Logger
 }
 
 // Defaults for [Options]. The flush interval is the dominant one: it is the
@@ -121,6 +136,9 @@ type Tee struct {
 	// seenHosts is the descriptor split: a host's static CPU facts are written
 	// on first sight rather than every tick. Owned by the writer goroutine.
 	seenHosts map[string]struct{}
+	// lastSocketsStamp dedupes the sockets table, which arrives repeated on the
+	// slower cadence its collector samples at. Owned by the writer goroutine.
+	lastSocketsStamp int64
 }
 
 // Start subscribes and begins writing. The returned Tee runs until Stop.
@@ -282,6 +300,30 @@ func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 		ingestKind(inst, "gpu", ts,
 			func() (sysmfacts.SysGpu, error) { return gpuRow(host, snap.GPU, ts) },
 			store.IngestSysGpu)
+	}
+	if len(snap.Procs) > 0 {
+		ingestKind(inst, "proc", ts,
+			func() (sysmfacts.SysProc, error) { return procRow(host, snap.Procs, ts) },
+			store.IngestSysProc)
+		// Command lines, user names and ids only when a deployment asked for
+		// them (ADR-0090 §SD8; see SysProcCmd for why this is a kind and not a
+		// tag).
+		if inst.opts.PersistProcCmd {
+			ingestKind(inst, "procCmd", ts,
+				func() (sysmfacts.SysProcCmd, error) { return procCmdRow(host, snap.Procs, ts) },
+				store.IngestSysProcCmd)
+		}
+	}
+	// The sockets collector runs on its own slower cadence, so consecutive
+	// bundles carry the same snapshot. Writing one row per bundle would store
+	// the same observation many times over and put a rising Order on rows that
+	// never changed; the stamp is what tells one observation from a re-send.
+	if snap.Sockets != nil && snap.Sockets.CollectedAtUnixMs != inst.lastSocketsStamp {
+		if ingestKind(inst, "sockets", ts,
+			func() (sysmfacts.SysSocket, error) { return socketRow(host, snap.Sockets) },
+			store.IngestSysSocket) {
+			inst.lastSocketsStamp = snap.Sockets.CollectedAtUnixMs
+		}
 	}
 }
 

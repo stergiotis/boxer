@@ -60,6 +60,10 @@ func NewCliCommand() *cli.Command {
 				Value: sysmtee.DefaultFlushInterval,
 				Usage: "how long a sampled row may wait before becoming durable; also the window lost if the process dies",
 			},
+			&cli.BoolFlag{
+				Name:  "tee-proc-cmd",
+				Usage: "also persist process command lines, user names and uid/gid (ADR-0090 SD8 sensitive class). Off by default: a stored command line outlives the process, is readable by anything with database access, and is backed up — a wider exposure than the localhost bus SD8's accepted gap was scoped to",
+			},
 		},
 		Action: run,
 	}
@@ -74,7 +78,7 @@ func NewCliCommand() *cli.Command {
 // rather than a warning — rows written against a schema the store does not
 // agree with decode as absent, which is indistinguishable from having written
 // nothing.
-func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time.Duration) (stop func() error, err error) {
+func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time.Duration, persistProcCmd bool) (stop func() error, err error) {
 	cfg := chclient.ConfigFromEnv()
 	client := chclient.New(cfg, nil)
 	err = client.Ping(ctx)
@@ -95,11 +99,12 @@ func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time
 		return
 	}
 	tee, err := sysmtee.Start(sysmtee.Options{
-		Bus:           bus,
-		Store:         store,
-		Host:          host,
-		FlushInterval: flushInterval,
-		Log:           log.Logger,
+		Bus:            bus,
+		Store:          store,
+		Host:           host,
+		FlushInterval:  flushInterval,
+		PersistProcCmd: persistProcCmd,
+		Log:            log.Logger,
 	})
 	if err != nil {
 		store.Close()
@@ -107,6 +112,7 @@ func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time
 		return
 	}
 	log.Info().Str("table", sysmfacts.SysmetricsTableName).Stringer("flushInterval", flushInterval).
+		Bool("procCmd", persistProcCmd).
 		Msg("sysmetricsd: persistence tee running")
 	stop = func() (serr error) {
 		serr = tee.Stop()
@@ -152,7 +158,7 @@ func run(c *cli.Context) (err error) {
 	// service running with persistence silently off.
 	var stopTee func() error
 	if c.Bool("tee") {
-		stopTee, err = startTee(ctx, client, host, c.Duration("tee-flush-interval"))
+		stopTee, err = startTee(ctx, client, host, c.Duration("tee-flush-interval"), c.Bool("tee-proc-cmd"))
 		if err != nil {
 			_ = stopScraper()
 			_ = client.Close()

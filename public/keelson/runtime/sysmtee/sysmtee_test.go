@@ -223,6 +223,72 @@ func TestTee_WritesEveryWiredDomain(t *testing.T) {
 	assert.Zero(t, tee.Stats().FlushErrors)
 }
 
+// Command lines must not reach the table unless a deployment asked for them.
+// This is the assertion behind ADR-0090 §SD8's exposure boundary for the
+// durable form — the default writes the process table without them.
+func TestTee_ProcCmdIsOffByDefault(t *testing.T) {
+	bundle := func() *sysmsnap.BundleSnapshot {
+		return &sysmsnap.BundleSnapshot{
+			SampledAtUnixMs: time.Now().UnixMilli(),
+			Procs:           []sysmsnap.ProcInfo{{PID: 1, Name: "systemd", Cmd: "/sbin/init"}},
+		}
+	}
+
+	tee, exec, publish := startTee(t, sysmtee.Options{FlushInterval: 20 * time.Millisecond})
+	publish(bundle())
+	require.Eventually(t, func() bool {
+		_, _, rows := exec.snapshot()
+		return rows > 0
+	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, tee.Stop())
+	_, _, rows := exec.snapshot()
+	assert.EqualValues(t, 1, rows, "the process table alone, without the command-line kind")
+
+	optedIn, execIn, publishIn := startTee(t, sysmtee.Options{
+		FlushInterval:  20 * time.Millisecond,
+		PersistProcCmd: true,
+	})
+	publishIn(bundle())
+	require.Eventually(t, func() bool {
+		_, _, r := execIn.snapshot()
+		return r >= 2
+	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, optedIn.Stop())
+	_, _, rowsIn := execIn.snapshot()
+	assert.EqualValues(t, 2, rowsIn, "opting in adds the command-line kind beside it")
+}
+
+// The sockets collector re-sends one snapshot on every tick. Writing a row per
+// bundle would store the same observation repeatedly and put a rising Order on
+// rows that never changed.
+func TestTee_SocketsAreWrittenOncePerObservation(t *testing.T) {
+	tee, exec, publish := startTee(t, sysmtee.Options{FlushInterval: 20 * time.Millisecond})
+
+	sockets := &sysmsnap.SocketsSnapshot{
+		CollectedAtUnixMs: time.Now().UnixMilli(),
+		Sockets:           []sysmsnap.SocketInfo{{Proto: sysmsnap.SocketProtoTCP, Port: 8123}},
+	}
+	// Three bundles carrying the same snapshot, as the plane actually behaves.
+	for range 3 {
+		publish(&sysmsnap.BundleSnapshot{SampledAtUnixMs: time.Now().UnixMilli(), Sockets: sockets})
+	}
+	require.Eventually(t, func() bool { return tee.Stats().Rows >= 1 }, 5*time.Second, 10*time.Millisecond)
+
+	// A new collection pass must produce a second row.
+	publish(&sysmsnap.BundleSnapshot{
+		SampledAtUnixMs: time.Now().UnixMilli(),
+		Sockets: &sysmsnap.SocketsSnapshot{
+			CollectedAtUnixMs: sockets.CollectedAtUnixMs + 5000,
+			Sockets:           []sysmsnap.SocketInfo{{Proto: sysmsnap.SocketProtoTCP, Port: 9000}},
+		},
+	})
+	require.Eventually(t, func() bool { return tee.Stats().Rows >= 2 }, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, tee.Stop())
+
+	_, _, rows := exec.snapshot()
+	assert.EqualValues(t, 2, rows, "four bundles, two observations, two rows")
+}
+
 func TestTee_StopIsIdempotent(t *testing.T) {
 	tee, _, _ := startTee(t, sysmtee.Options{FlushInterval: time.Hour})
 	require.NoError(t, tee.Stop())
