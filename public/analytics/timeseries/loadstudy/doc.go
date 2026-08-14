@@ -34,8 +34,11 @@
 // numeric payload at all — it is an event log". That was wrong about the
 // schema even when written: the table has the full `u8`…`i64Array` set,
 // `u32Set`/`u64Set`, and `f32Array`/`f64Array` under an encoding hint chosen
-// for slowly-changing series. It was true only of the table's *contents*, and
-// the tee is what changes that.
+// for slowly-changing series. It was not quite right about the contents
+// either — [github.com/stergiotis/boxer/public/gov/capmapfacts] has been
+// writing an f64 there, a normalized compression distance, since before any
+// of this. What was true, and only this, is that nothing wrote *load
+// metrics*; the tee is what changes that.
 //
 // Events come from `boxer.facts`: application lifecycle, run starts and stops.
 // Heartbeats are excluded, because they fire on a timer rather than on anything

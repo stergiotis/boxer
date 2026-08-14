@@ -37,7 +37,10 @@ about the schema, and has been since before it was written:
 `u8`…`i64Array` sections, `u32Set`/`u64Set`, and `f32Array`/`f64Array` under
 `AspectLightSlowlyChangingFloat` — an encoding hint chosen for slowly-changing
 floating-point series. The substrate was provisioned for metric-shaped payloads
-before anything wrote one; what is absent is a writer, not a column.
+before anything wrote metrics into it; what is absent is a *metrics* writer,
+not a column — and not a writer of numbers at all, since `gov/capmapfacts` has
+been putting an `f64` on that table (a normalized compression distance) since
+well before this ADR.
 
 ### What has changed since P5 was deferred
 
