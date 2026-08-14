@@ -324,6 +324,16 @@ runs as a standalone sink against a remote scraper without change.
 - Metric volume lands on the same table as runtime facts, so `boxer.facts`
   growth becomes dominated by whatever cadence the tee runs at. This is the
   concrete form of the O2 trade-off.
+- **Each facts-bound store re-emits the whole table's scaffolding.** Measured
+  at M1: a store over `boxer.facts` generates ~305 KB of DML and ~211 KB of RA
+  into its own `internal/lowlevel`, against the ~299 KB and ~206 KB the tree
+  already carries in `factsschema/dml` and `factsschema/ra`. The generic
+  schema's 21 sections are what make it large, so this cost is specific to
+  binding *this* table and would be a fraction of it for a dedicated one —
+  a point in O2's favour the QOC above did not weigh, found only by building
+  it. `recordstore/gen` has no seam for reusing existing scaffolding
+  (`Flat` moves it, nothing shares it); adding one is out of scope here and
+  recorded as the obvious follow-up if a second facts-bound store lands.
 - SD4 depends on a proposed ADR for one seam; if ADR-0183 is rejected the
   snapshot helper is built here and the assignment golden stands alone.
 
@@ -388,7 +398,17 @@ Proposed — awaiting review by the code owner.
   format the buffered `chexec` sibling reads, because the file format's trailing
   footer would force the whole response into memory before the first batch and
   defeat the iterator shape `ExecutorI` was written for.
-- **M1 — `storegen`: the facts `TableDesc` plus an id snapshot into `recordstore/gen` (ADR-0105 D2, ADR-0183 D2).**
+- **M1 — `storegen`: the facts `TableDesc` plus an id snapshot into `recordstore/gen` (ADR-0105 D2, ADR-0183 D2).** ✓
+  Landed as
+  [`public/keelson/runtime/factsschema/storegen`](../../public/keelson/runtime/factsschema/storegen).
+  Parameterized by registry rather than bound to vdd, per SD4. Two findings
+  came out of it: the scaffolding duplication recorded under Consequences, and
+  a `recordstore/gen` property worth lifting — the emitted component codec
+  keeps the DTO's own package clause while the store takes `PackageName`, so a
+  mismatch emits two packages into one directory and is discovered only when
+  someone compiles the output. `storegen` gates it; `gen` is where the check
+  belongs, and moving it there is a candidate change to a shared surface this
+  ADR does not own.
 - **M2 — vocabulary at base 32, assignment golden, and the cpu/mem DTOs.**
 - **M3 — `ExternallyProvisioned`, the generated store, the tee, and `sysmetricsd` wiring.**
   Corrects `loadstudy`'s package documentation in the same milestone.
