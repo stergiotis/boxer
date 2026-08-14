@@ -205,3 +205,25 @@ func TestAttenuateTabsOpensTheFirstListedTab(t *testing.T) {
 func TestAttenuateTabsAutoRaisesNothing(t *testing.T) {
 	assert.Empty(t, landingTab(t, &AppletDef{Slug: "auto"}))
 }
+
+// The screenshot knob: inert unless set, and unreadable input leaves the
+// archetype default rather than a zero-sized window.
+func TestParseSurfaceHints(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		w, h uint16
+	}{
+		{"", 0, 0},
+		{"1800x1080", 1800, 1080},
+		{" 1800 X 1080 ", 1800, 1080},
+		{"nonsense", 0, 0},
+		{"1800", 0, 0},
+		{"0x1080", 0, 0},
+		{"1800x-1", 0, 0},
+		{"70000x1080", 0, 0},
+	} {
+		h := parseSurfaceHints(tc.raw)
+		assert.Equalf(t, tc.w, h.PreferredWidth, "width for %q", tc.raw)
+		assert.Equalf(t, tc.h, h.PreferredHeight, "height for %q", tc.raw)
+	}
+}

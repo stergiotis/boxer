@@ -4,10 +4,13 @@ import (
 	"embed"
 	"io/fs"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
@@ -270,6 +273,47 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 	return
 }
 
+// WindowSize opens an applet at a chosen size, for scripted screenshots.
+//
+// It mirrors play's `BOXER_PLAY_WINDOW_SIZE` and exists for the same reason:
+// the host's archetype fallback is a 900×640 application window, and an applet
+// whose document places panes in three zones (ADR-0132 Update 2026-08-14)
+// opens with all three of them cramped — which a capture would then record as
+// the shape of the applet rather than the shape of the default window. Inert
+// when unset, so an ordinary launch is unaffected.
+var WindowSize = env.NewString(env.Spec{
+	Name:        "BOXER_SQLAPPLET_WINDOW_SIZE",
+	Description: "open an applet window at \"WxH\" logical points (scripted screenshots); empty or unparseable keeps the host's archetype default",
+	Category:    env.CategoryE("boxer-sqlapplet"),
+})
+
+// appletSurfaceHints reads [WindowSize] into a manifest's window hints.
+//
+// The registry caches an environment value on first read, which is right for a
+// manifest built once at registration and is why the parsing lives in
+// [parseSurfaceHints] — a pure function is the half worth testing.
+func appletSurfaceHints() (h app.SurfaceHints) {
+	return parseSurfaceHints(WindowSize.Get())
+}
+
+// parseSurfaceHints reads a "WxH" spelling. Unset, unparseable or out of range
+// returns the zero value, which the host reads as "pick the archetype default"
+// — a window of zero size is never what an unreadable knob should produce.
+func parseSurfaceHints(raw string) (h app.SurfaceHints) {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(raw)), "x")
+	if len(parts) != 2 {
+		return
+	}
+	w, wErr := strconv.Atoi(strings.TrimSpace(parts[0]))
+	ht, hErr := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if wErr != nil || hErr != nil || w <= 0 || ht <= 0 || w > 65535 || ht > 65535 {
+		return
+	}
+	h.PreferredWidth = uint16(w)
+	h.PreferredHeight = uint16(ht)
+	return
+}
+
 // manifestFor builds the minted manifest. Help is the whole contributing
 // book's FS, so the applet's prose page is reachable through the Help
 // center; narrowing Help to the single document is a recorded nicety for
@@ -289,7 +333,10 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 		Keywords: def.Keywords,
 		Kind:     app.KindApplet,
 		Surface:  app.SurfaceWindowed,
-		Help:     bookFsys,
+		// No hints unless the screenshot knob is set: the host's archetype
+		// default is the right window for an applet opened by a person.
+		SurfaceHints: appletSurfaceHints(),
+		Help:         bookFsys,
 		Caps: []app.SubjectFilter{
 			{
 				Pattern:   clipboardbroker.SubjectWrite,
