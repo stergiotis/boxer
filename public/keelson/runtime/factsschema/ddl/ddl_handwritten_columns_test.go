@@ -165,7 +165,10 @@ func scanRootedFiles(t *testing.T, root string, checked *int, onStale func(rel, 
 		}
 		// Generated files are re-emitted from the schema and so cannot drift
 		// from it; scanning them would only re-assert the generator against
-		// itself.
+		// itself. That holds within a regeneration lane. It does not hold
+		// across two, which is what TestStoreDDLMatchesGeneratedSchema covers
+		// — the names there are not hardcoded, so this scan is the wrong shape
+		// for them either way.
 		base := filepath.Base(path)
 		if strings.Contains(base, ".out.") {
 			return
