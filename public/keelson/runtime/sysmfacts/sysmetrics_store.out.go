@@ -179,6 +179,43 @@ var SysmetricsMembershipIds = map[string]map[string]uint64{
 		"sysmGpuTempC":            3098476543630901352,
 		"sysmGpuFreqMhz":          3098476543630901353,
 	},
+	"SysProc": {
+		"sysmKindProc":         3098476543630901354,
+		"sysmProcHost":         3098476543630901355,
+		"sysmProcPid":          3098476543630901356,
+		"sysmProcPpid":         3098476543630901357,
+		"sysmProcName":         3098476543630901358,
+		"sysmProcState":        3098476543630901359,
+		"sysmProcCpuPct":       3098476543630901360,
+		"sysmProcRssBytes":     3098476543630901361,
+		"sysmProcVmSizeBytes":  3098476543630901362,
+		"sysmProcNumThreads":   3098476543630901363,
+		"sysmProcNice":         3098476543630901364,
+		"sysmProcPriority":     3098476543630901365,
+		"sysmProcKernelThread": 3098476543630901366,
+		"sysmProcStartedAtMs":  3098476543630901367,
+		"sysmProcComponent":    3098476543630901368,
+		"sysmProcCgroupUnit":   3098476543630901369,
+	},
+	"SysProcCmd": {
+		"sysmKindProcCmd": 3098476543630901370,
+		"sysmProcCmdHost": 3098476543630901371,
+		"sysmProcCmdPid":  3098476543630901372,
+		"sysmProcCmdLine": 3098476543630901373,
+		"sysmProcCmdUser": 3098476543630901374,
+		"sysmProcCmdUid":  3098476543630901375,
+		"sysmProcCmdGid":  3098476543630901376,
+	},
+	"SysSocket": {
+		"sysmKindSocket":  3098476543630901377,
+		"sysmSocketHost":  3098476543630901378,
+		"sysmSocketProto": 3098476543630901379,
+		"sysmSocketAddr":  3098476543630901380,
+		"sysmSocketPort":  3098476543630901381,
+		"sysmSocketInode": 3098476543630901382,
+		"sysmSocketUid":   3098476543630901383,
+		"sysmSocketPid":   3098476543630901384,
+	},
 }
 
 // SysmetricsEnvelope carries the pass-through backbone columns — every plain
@@ -209,6 +246,9 @@ type SysmetricsEntity struct {
 	SysDiskIo    option.Option[SysDiskIo]
 	SysBattery   option.Option[SysBattery]
 	SysGpu       option.Option[SysGpu]
+	SysProc      option.Option[SysProc]
+	SysProcCmd   option.Option[SysProcCmd]
+	SysSocket    option.Option[SysSocket]
 }
 
 // Archetype reports which components the entity carries, in schema order.
@@ -239,6 +279,15 @@ func (inst *SysmetricsEntity) Archetype() (a []string) {
 	}
 	if inst.SysGpu.Has {
 		a = append(a, "sysGpu")
+	}
+	if inst.SysProc.Has {
+		a = append(a, "sysProc")
+	}
+	if inst.SysProcCmd.Has {
+		a = append(a, "sysProcCmd")
+	}
+	if inst.SysSocket.Has {
+		a = append(a, "sysSocket")
 	}
 	return
 }
@@ -548,6 +597,51 @@ func (inst *SysmetricsEntityBuilder) AddSysGpu(row SysGpu) *SysmetricsEntityBuil
 	return inst
 }
 
+// AddSysProc contributes the SysProc component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *SysmetricsEntityBuilder) AddSysProc(row SysProc) *SysmetricsEntityBuilder {
+	err := sysProcAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.SysProc.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.SysProc = option.Some(row)
+	}
+	return inst
+}
+
+// AddSysProcCmd contributes the SysProcCmd component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *SysmetricsEntityBuilder) AddSysProcCmd(row SysProcCmd) *SysmetricsEntityBuilder {
+	err := sysProcCmdAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.SysProcCmd.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.SysProcCmd = option.Some(row)
+	}
+	return inst
+}
+
+// AddSysSocket contributes the SysSocket component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *SysmetricsEntityBuilder) AddSysSocket(row SysSocket) *SysmetricsEntityBuilder {
+	err := sysSocketAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.SysSocket.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.SysSocket = option.Some(row)
+	}
+	return inst
+}
+
 // Raw exposes the underlying DML entity for direct attribute
 // manipulation within the same entity frame. The type lives in
 // internal/lowlevel: callers outside the generated package hold the
@@ -801,6 +895,78 @@ func (inst *SysmetricsStore) IngestSysGpu(ts time.Time, rows []SysGpu) (err erro
 		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysGpu(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysGpu row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestSysProc buffers one whole entity per row carrying only the
+// SysProc component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *SysmetricsStore) IngestSysProc(ts time.Time, rows []SysProc) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest sysProc row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysProc(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest sysProc row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestSysProcCmd buffers one whole entity per row carrying only the
+// SysProcCmd component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *SysmetricsStore) IngestSysProcCmd(ts time.Time, rows []SysProcCmd) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest sysProcCmd row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysProcCmd(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest sysProcCmd row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestSysSocket buffers one whole entity per row carrying only the
+// SysSocket component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *SysmetricsStore) IngestSysSocket(ts time.Time, rows []SysSocket) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest sysSocket row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysSocket(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest sysSocket row %d: %w", i, err)
 			return
 		}
 	}
@@ -1147,6 +1313,9 @@ const (
 	factsScanSysDiskIoFilter    = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901325, 3098476543630901326]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901325) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901326) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901327) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901328) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901329) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901330) <= 1"
 	factsScanSysBatteryFilter   = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901331, 3098476543630901332]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901331) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901332) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901333) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901334) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901335) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901336) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901337) <= 1 AND countEqual(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 3098476543630901338) <= 1 AND countEqual(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 3098476543630901339) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901340) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901341) <= 1"
 	factsScanSysGpuFilter       = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901342, 3098476543630901343]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901342) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901343) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901344) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901345) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901346) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901347) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901348) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901349) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901350) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901351) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901352) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901353) <= 1"
+	factsScanSysProcFilter      = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901354, 3098476543630901355]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901354) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901355) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901356) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901357) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901358) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901359) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901360) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901361) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901362) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901363) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901364) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901365) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901366) <= 1 AND countEqual(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 3098476543630901367) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901368) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901369) <= 1"
+	factsScanSysProcCmdFilter   = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901370, 3098476543630901371]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901370) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901371) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901372) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 3098476543630901373) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901374) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901375) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901376) <= 1"
+	factsScanSysSocketFilter    = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901377, 3098476543630901378]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901377) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901378) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901379) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901380) <= 1 AND countEqual(\"tv:u16Array:lr:lr:u64:1247:::0::data\", 3098476543630901381) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901382) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901383) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901384) <= 1"
 )
 
 // ScanSysCpu iterates the entities whose rows carry a conforming SysCpu
@@ -1410,6 +1579,93 @@ func (inst *SysmetricsStore) ScanSysGpu(ctx context.Context, opts recordstore.Sc
 	return inst.iterateEntities(ctx, sql)
 }
 
+// ScanSysProc iterates the entities whose rows carry a conforming SysProc
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *SysmetricsStore) ScanSysProc(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	where := factsScanSysProcFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + SysmetricsTableName +
+		" WHERE " + where +
+		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanSysProcCmd iterates the entities whose rows carry a conforming SysProcCmd
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *SysmetricsStore) ScanSysProcCmd(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	where := factsScanSysProcCmdFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + SysmetricsTableName +
+		" WHERE " + where +
+		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanSysSocket iterates the entities whose rows carry a conforming SysSocket
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *SysmetricsStore) ScanSysSocket(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	where := factsScanSysSocketFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + SysmetricsTableName +
+		" WHERE " + where +
+		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
 // Latest returns the newest row for key, tombstone-blind (the raw
 // row-level primitive — a deleted key still returns its tombstone
 // row; GetLive is the interpreted state-view read). Reads see only
@@ -1517,7 +1773,9 @@ func decodeSysmetricsRecord(rec arrow.RecordBatch) (ents []*SysmetricsEntity, er
 	boolR := lowlevel.NewReadAccessFactsTableTaggedBool()
 	symbolArrayR := lowlevel.NewReadAccessFactsTableTaggedSymbolArray()
 	i64ArrayR := lowlevel.NewReadAccessFactsTableTaggedI64Array()
-	readers := []factsSectionReaderI{idR, tsR, lcR, symbolR, u8ArrayR, u32ArrayR, f32ArrayR, i32ArrayR, u64ArrayR, boolR, symbolArrayR, i64ArrayR}
+	stringArrayR := lowlevel.NewReadAccessFactsTableTaggedStringArray()
+	u16ArrayR := lowlevel.NewReadAccessFactsTableTaggedU16Array()
+	readers := []factsSectionReaderI{idR, tsR, lcR, symbolR, u8ArrayR, u32ArrayR, f32ArrayR, i32ArrayR, u64ArrayR, boolR, symbolArrayR, i64ArrayR, stringArrayR, u16ArrayR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1651,6 +1909,42 @@ func decodeSysmetricsRecord(rec arrow.RecordBatch) (ents []*SysmetricsEntity, er
 				row.Id = ent.ID
 				row.Ts = ent.Ts
 				ent.SysGpu = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := sysProcReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), u32ArrayR.GetAttributes(), u32ArrayR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships(), f32ArrayR.GetAttributes(), f32ArrayR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships(), i32ArrayR.GetAttributes(), i32ArrayR.GetMemberships(), u8ArrayR.GetAttributes(), u8ArrayR.GetMemberships(), i64ArrayR.GetAttributes(), i64ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read sysProc component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				row.Ts = ent.Ts
+				ent.SysProc = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := sysProcCmdReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), u32ArrayR.GetAttributes(), u32ArrayR.GetMemberships(), stringArrayR.GetAttributes(), stringArrayR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read sysProcCmd component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				row.Ts = ent.Ts
+				ent.SysProcCmd = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := sysSocketReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships(), u16ArrayR.GetAttributes(), u16ArrayR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships(), u32ArrayR.GetAttributes(), u32ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read sysSocket component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				row.Ts = ent.Ts
+				ent.SysSocket = option.Some(row)
 			}
 		}
 		ents = append(ents, ent)

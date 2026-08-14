@@ -24,6 +24,9 @@ var componentPaths = []string{
 	"./sysdiskio_dto.go",
 	"./sysbattery_dto.go",
 	"./sysgpu_dto.go",
+	"./sysproc_dto.go",
+	"./sysproccmd_dto.go",
+	"./syssocket_dto.go",
 }
 
 func generate(t *testing.T, ids map[string]uint64) (outDir string, err error) {
