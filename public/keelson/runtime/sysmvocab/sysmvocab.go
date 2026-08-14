@@ -365,6 +365,53 @@ var (
 	// absent: the row is published anyway (ADR-0126 §SD3), so a zero here means
 	// "not attributed", not "owned by pid 0".
 	MembSocketPid = NkRegistry.MustBegin("sysmSocketPid").End()
+
+	// --- ADR-0184 M6: the CPU containment tree. ---
+	//
+	// The tree is stored as an adjacency list: a pre-order walk numbers the
+	// nodes and each carries its parent's number. Parallel arrays cannot hold a
+	// recursive shape directly, and the alternatives are worse — a serialized
+	// blob would put the structure beyond SQL entirely, which is the opposite
+	// of what modelling it as facts is for. NodeIdx plus ParentIdx reconstruct
+	// the tree exactly, and a recursive CTE walks it.
+	MembKindTopology = NkRegistry.MustBegin("sysmKindTopology").End()
+	MembTopologyHost = NkRegistry.MustBegin("sysmTopologyHost").End()
+
+	// NodeIdx is stored rather than left implicit in array position: the moment
+	// a query filters the arrays — "just the PUs" — position is lost and the
+	// parent references would dangle.
+	MembTopoNodeIdx = NkRegistry.MustBegin("sysmTopoNodeIdx").End()
+	// ParentIdx is -1 for the root, which is the only node without one.
+	MembTopoParentIdx = NkRegistry.MustBegin("sysmTopoParentIdx").End()
+	// Kind is the hwloc-style name (Machine/Package/NUMANode/Cache/Core/PU),
+	// stored as the name rather than its enum ordinal so a row stays readable
+	// and cannot drift if the enum is reordered.
+	MembTopoKind = NkRegistry.MustBegin("sysmTopoKind").End()
+	// OSIndex is the kernel's own id for the object and is -1 for Machine and
+	// Cache, which have no single id.
+	MembTopoOsIndex = NkRegistry.MustBegin("sysmTopoOsIndex").End()
+
+	// Cache attributes, meaningful only on Cache nodes.
+	MembTopoCacheLevel     = NkRegistry.MustBegin("sysmTopoCacheLevel").End()
+	MembTopoCacheType      = NkRegistry.MustBegin("sysmTopoCacheType").End()
+	MembTopoCacheSizeBytes = NkRegistry.MustBegin("sysmTopoCacheSizeBytes").End()
+
+	// Node-local RAM, meaningful only on NUMANode nodes.
+	MembTopoMemBytes = NkRegistry.MustBegin("sysmTopoMemBytes").End()
+
+	// The cpufreq policy, meaningful only on PU nodes. Present is carried
+	// separately because a PU whose cpufreq read failed and a PU with a policy
+	// reporting zeroes are otherwise the same row.
+	MembTopoFreqPresent  = NkRegistry.MustBegin("sysmTopoFreqPresent").End()
+	MembTopoFreqMinMhz   = NkRegistry.MustBegin("sysmTopoFreqMinMhz").End()
+	MembTopoFreqMaxMhz   = NkRegistry.MustBegin("sysmTopoFreqMaxMhz").End()
+	MembTopoFreqGovernor = NkRegistry.MustBegin("sysmTopoFreqGovernor").End()
+	MembTopoFreqDriver   = NkRegistry.MustBegin("sysmTopoFreqDriver").End()
+
+	// LogicalCount is the collector's own count of online PU leaves. It is
+	// stored rather than derived from the node arrays because it is what the
+	// collector observed, and a mismatch between the two is itself a finding.
+	MembTopoLogicalCount = NkRegistry.MustBegin("sysmTopoLogicalCount").End()
 )
 
 // AllMembs enumerates every registered sysmetrics membership. Tests iterate it
@@ -427,4 +474,12 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindSocket, MembSocketHost,
 	MembSocketProto, MembSocketAddr, MembSocketPort, MembSocketInode,
 	MembSocketUid, MembSocketPid,
+
+	MembKindTopology, MembTopologyHost,
+	MembTopoNodeIdx, MembTopoParentIdx, MembTopoKind, MembTopoOsIndex,
+	MembTopoCacheLevel, MembTopoCacheType, MembTopoCacheSizeBytes,
+	MembTopoMemBytes,
+	MembTopoFreqPresent, MembTopoFreqMinMhz, MembTopoFreqMaxMhz,
+	MembTopoFreqGovernor, MembTopoFreqDriver,
+	MembTopoLogicalCount,
 }

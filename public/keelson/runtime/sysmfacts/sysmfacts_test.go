@@ -27,6 +27,7 @@ var componentPaths = []string{
 	"./sysproc_dto.go",
 	"./sysproccmd_dto.go",
 	"./syssocket_dto.go",
+	"./systopology_dto.go",
 }
 
 func generate(t *testing.T, ids map[string]uint64) (outDir string, err error) {

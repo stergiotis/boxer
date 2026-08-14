@@ -216,6 +216,24 @@ var SysmetricsMembershipIds = map[string]map[string]uint64{
 		"sysmSocketUid":   3098476543630901383,
 		"sysmSocketPid":   3098476543630901384,
 	},
+	"SysTopology": {
+		"sysmKindTopology":       3098476543630901385,
+		"sysmTopologyHost":       3098476543630901386,
+		"sysmTopoNodeIdx":        3098476543630901387,
+		"sysmTopoParentIdx":      3098476543630901388,
+		"sysmTopoKind":           3098476543630901389,
+		"sysmTopoOsIndex":        3098476543630901390,
+		"sysmTopoCacheLevel":     3098476543630901391,
+		"sysmTopoCacheType":      3098476543630901392,
+		"sysmTopoCacheSizeBytes": 3098476543630901393,
+		"sysmTopoMemBytes":       3098476543630901394,
+		"sysmTopoFreqPresent":    3098476543630901395,
+		"sysmTopoFreqMinMhz":     3098476543630901396,
+		"sysmTopoFreqMaxMhz":     3098476543630901397,
+		"sysmTopoFreqGovernor":   3098476543630901398,
+		"sysmTopoFreqDriver":     3098476543630901399,
+		"sysmTopoLogicalCount":   3098476543630901400,
+	},
 }
 
 // SysmetricsEnvelope carries the pass-through backbone columns — every plain
@@ -249,6 +267,7 @@ type SysmetricsEntity struct {
 	SysProc      option.Option[SysProc]
 	SysProcCmd   option.Option[SysProcCmd]
 	SysSocket    option.Option[SysSocket]
+	SysTopology  option.Option[SysTopology]
 }
 
 // Archetype reports which components the entity carries, in schema order.
@@ -288,6 +307,9 @@ func (inst *SysmetricsEntity) Archetype() (a []string) {
 	}
 	if inst.SysSocket.Has {
 		a = append(a, "sysSocket")
+	}
+	if inst.SysTopology.Has {
+		a = append(a, "sysTopology")
 	}
 	return
 }
@@ -642,6 +664,21 @@ func (inst *SysmetricsEntityBuilder) AddSysSocket(row SysSocket) *SysmetricsEnti
 	return inst
 }
 
+// AddSysTopology contributes the SysTopology component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *SysmetricsEntityBuilder) AddSysTopology(row SysTopology) *SysmetricsEntityBuilder {
+	err := sysTopologyAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.SysTopology.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.SysTopology = option.Some(row)
+	}
+	return inst
+}
+
 // Raw exposes the underlying DML entity for direct attribute
 // manipulation within the same entity frame. The type lives in
 // internal/lowlevel: callers outside the generated package hold the
@@ -967,6 +1004,30 @@ func (inst *SysmetricsStore) IngestSysSocket(ts time.Time, rows []SysSocket) (er
 		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysSocket(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysSocket row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestSysTopology buffers one whole entity per row carrying only the
+// SysTopology component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *SysmetricsStore) IngestSysTopology(ts time.Time, rows []SysTopology) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest sysTopology row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysTopology(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest sysTopology row %d: %w", i, err)
 			return
 		}
 	}
@@ -1316,6 +1377,7 @@ const (
 	factsScanSysProcFilter      = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901354, 3098476543630901355]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901354) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901355) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901356) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901357) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901358) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901359) <= 1 AND countEqual(\"tv:f32Array:lr:lr:u64:1247:::0::data\", 3098476543630901360) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901361) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901362) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901363) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901364) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901365) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901366) <= 1 AND countEqual(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 3098476543630901367) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901368) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901369) <= 1"
 	factsScanSysProcCmdFilter   = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901370, 3098476543630901371]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901370) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901371) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901372) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 3098476543630901373) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901374) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901375) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901376) <= 1"
 	factsScanSysSocketFilter    = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901377, 3098476543630901378]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901377) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901378) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901379) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901380) <= 1 AND countEqual(\"tv:u16Array:lr:lr:u64:1247:::0::data\", 3098476543630901381) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901382) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901383) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901384) <= 1"
+	factsScanSysTopologyFilter  = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [3098476543630901385, 3098476543630901386]) AND has(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901400) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901385) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 3098476543630901386) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901387) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901388) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901389) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901390) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901391) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901392) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901393) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 3098476543630901394) <= 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 3098476543630901395) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901396) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 3098476543630901397) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901398) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 3098476543630901399) <= 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 3098476543630901400) = 1"
 )
 
 // ScanSysCpu iterates the entities whose rows carry a conforming SysCpu
@@ -1666,6 +1728,35 @@ func (inst *SysmetricsStore) ScanSysSocket(ctx context.Context, opts recordstore
 	return inst.iterateEntities(ctx, sql)
 }
 
+// ScanSysTopology iterates the entities whose rows carry a conforming SysTopology
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *SysmetricsStore) ScanSysTopology(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	where := factsScanSysTopologyFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + SysmetricsTableName +
+		" WHERE " + where +
+		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
 // Latest returns the newest row for key, tombstone-blind (the raw
 // row-level primitive — a deleted key still returns its tombstone
 // row; GetLive is the interpreted state-view read). Reads see only
@@ -1945,6 +2036,18 @@ func decodeSysmetricsRecord(rec arrow.RecordBatch) (ents []*SysmetricsEntity, er
 				row.Id = ent.ID
 				row.Ts = ent.Ts
 				ent.SysSocket = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := sysTopologyReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), u32ArrayR.GetAttributes(), u32ArrayR.GetMemberships(), i32ArrayR.GetAttributes(), i32ArrayR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships(), u8ArrayR.GetAttributes(), u8ArrayR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read sysTopology component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				row.Ts = ent.Ts
+				ent.SysTopology = option.Some(row)
 			}
 		}
 		ents = append(ents, ent)
