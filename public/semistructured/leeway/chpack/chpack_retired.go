@@ -1,8 +1,9 @@
 package chpack
 
 // RetiredNames lists every leeway SQL-UDF name this repository has shipped
-// and since withdrawn — earlier spellings of the pack, and the read-back
-// family's pre-`LW_` names. Install drops them.
+// and since withdrawn — earlier spellings of the pack, the read-back
+// family's pre-`LW_` names, and the pack's own version marker.
+// lwsqlsurface.Install drops them.
 //
 // The list exists because `CREATE OR REPLACE FUNCTION` cannot remove a
 // function that has been renamed: provisioning a new roster leaves the old
@@ -18,15 +19,13 @@ package chpack
 // forever, since we cannot know. Duplicates across generations are harmless;
 // every drop is IF EXISTS.
 //
-// Deliberately a list rather than the general reconcile. Now that the whole
-// vocabulary sits under one namespace, the reconcile a server actually wants
-// is "drop every `LW\_%` function the build does not declare" — but the full
-// declared set spans chpack, the read-back family and identsql, and no
-// package here holds all three. That reconciler is ADR-0171 §SD2, still
-// proposed; this list is the part that needs no new decision, and it removes
-// the manual drop step for every rename to date.
-//
-// deferred: replace with the ADR-0171 §SD2 reconciler once it is accepted.
+// Deliberately a list, and it stays one now that the general reconcile
+// exists. lwsqlsurface.Reconcile answers "what `LW\_%` does this server
+// carry that no build declares", but reports rather than drops by default:
+// an undeclared name may belong to a fork or a downstream consumer. This
+// list is the complement — names this repository itself shipped and
+// withdrew, which it may therefore delete without asking, and which
+// lwsqlsurface.Install drops automatically after each install verifies.
 func RetiredNames() (names []string) {
 	names = []string{
 		// v1 roster, camelCase (retired 2026-08-06).
@@ -47,6 +46,17 @@ func RetiredNames() (names []string) {
 		// Withdrawn outright, not renamed: both became the pack's
 		// LW_RAGGED_NEST / LW_RAGGED_PARENT_IDS (ADR-0162 Update 2026-08-02).
 		"LEEWAY_UNFLATTEN", "LEEWAY_LU_MEMB_IDX_TO_VAL_IDX",
+
+		// The pack's own marker, superseded by LW_SURFACE_VERSION
+		// (ADR-0171 §SD2, retired 2026-08-14). Two markers that can
+		// disagree are the ambiguity the surface marker removes.
+		//
+		// A client diagnosing a server that has NOT been reconciled yet
+		// still reads this name's create_query — see
+		// lwsqlsurface.PreSurfaceVersionFunctionName. That is not a
+		// contradiction: the fallback reads a server we have not installed
+		// on, and installing is what drops it.
+		"LW_PACK_VERSION",
 	}
 	return
 }

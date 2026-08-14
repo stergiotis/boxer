@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/identity/identsql"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
 func vocabByWhere(entries []vocabEntry, where vocabWhereE) (out []vocabEntry) {
@@ -137,42 +137,57 @@ func TestVocabExtras(t *testing.T) {
 	assert.Empty(t, vocabExtras(map[string]string{}, declared), "an empty answer claims nothing")
 }
 
-// TestParsePackVersion covers reading the pack revision out of the marker's
-// own definition — the reason the probe never CALLS LW_PACK_VERSION(), which
+// TestParseMarkerVersion covers reading a revision out of the marker's own
+// definition — the reason the probe never CALLS LW_SURFACE_VERSION(), which
 // would fail with unknown-function on exactly the servers whose version
 // matters most.
-func TestParsePackVersion(t *testing.T) {
+func TestParseMarkerVersion(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		in   string
 		want int
 	}{
-		{"current shape", "CREATE FUNCTION LW_PACK_VERSION AS () -> 3", 3},
-		{"older revision", "CREATE FUNCTION LW_PACK_VERSION AS () -> 1", 1},
-		{"trailing space", "CREATE FUNCTION LW_PACK_VERSION AS () ->  7  ", 7},
+		{"current shape", "CREATE FUNCTION LW_SURFACE_VERSION AS () -> 1", 1},
+		{"retired marker", "CREATE FUNCTION LW_PACK_VERSION AS () -> 3", 3},
+		{"trailing space", "CREATE FUNCTION LW_SURFACE_VERSION AS () ->  7  ", 7},
 		{"absent", "", -1},
-		{"no arrow", "CREATE FUNCTION LW_PACK_VERSION AS ()", -1},
-		{"hand-edited body", "CREATE FUNCTION LW_PACK_VERSION AS () -> 'three'", -1},
+		{"no arrow", "CREATE FUNCTION LW_SURFACE_VERSION AS ()", -1},
+		{"hand-edited body", "CREATE FUNCTION LW_SURFACE_VERSION AS () -> 'three'", -1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, parsePackVersion(tc.in))
+			assert.Equal(t, tc.want, parseMarkerVersion(tc.in))
 		})
 	}
 }
 
-// TestVocabPackSkew pins that an unknown revision says nothing rather than
-// guessing, and that a match and a mismatch are different sentences.
-func TestVocabPackSkew(t *testing.T) {
-	_, ok := vocabPackSkew(-1)
+// TestVocabSurfaceSkew pins that an unknown revision says nothing rather
+// than guessing, that a match and a mismatch are different sentences, and
+// that a pre-surface endpoint gets its own sentence instead of being
+// reported as unknown — it is a server that works, provisioned by a build
+// from before the three families shared one marker (ADR-0171 §SD2).
+func TestVocabSurfaceSkew(t *testing.T) {
+	_, ok := vocabSurfaceSkew(-1, -1)
 	assert.False(t, ok, "unknown revision must not produce a line")
 
-	line, ok := vocabPackSkew(chpack.Version)
+	line, ok := vocabSurfaceSkew(lwsqlsurface.Version, -1)
 	require.True(t, ok)
 	assert.Contains(t, line, "matches this build")
 
-	line, ok = vocabPackSkew(chpack.Version - 1)
+	line, ok = vocabSurfaceSkew(lwsqlsurface.Version-1, -1)
 	require.True(t, ok)
 	assert.Contains(t, line, "older definitions")
+
+	line, ok = vocabSurfaceSkew(-1, 4)
+	require.True(t, ok)
+	assert.Contains(t, line, "pre-surface endpoint")
+	assert.Contains(t, line, "pack v4")
+
+	// A server carrying both markers is mid-migration or hand-patched; the
+	// surface marker is the one that answers the question, so it wins.
+	line, ok = vocabSurfaceSkew(lwsqlsurface.Version, 4)
+	require.True(t, ok)
+	assert.Contains(t, line, "matches this build")
+	assert.NotContains(t, line, "pre-surface")
 }
 
 // TestVocabRowMark pins the four server states apart, and that the two
@@ -204,4 +219,65 @@ func TestVocabRowMark(t *testing.T) {
 	reserved := vocabEntry{Name: "tsMotifs", Where: vocabPlay, Declared: true, Available: false}
 	mark, _ = vocabRowMark(reserved, vocabPlay, true)
 	assert.Equal(t, "reserved ·", mark)
+}
+
+// TestVocabExtractionDependencies pins ADR-0174 §SD6's marking on the entry
+// it was designed for (ADR-0181 §SD7): the extraction family is expanded
+// client-side, so a per-name "installed?" verdict says nothing useful about
+// it — what decides whether a call works is whether the endpoint carries
+// what the expansion emits.
+func TestVocabExtractionDependencies(t *testing.T) {
+	all := vocabDeclared()
+	client := vocabByWhere(all, vocabClient)
+	for _, f := range constructsql.ExtractFunctions() {
+		assert.Containsf(t, vocabNames(client), f.Name, "%s missing from the client section", f.Name)
+	}
+
+	var entry vocabEntry
+	for _, e := range all {
+		if e.Name == constructsql.NameGet {
+			entry = e
+		}
+	}
+	require.NotEmpty(t, entry.Dependencies, "the extraction family must declare what its expansion emits")
+
+	// Every declared dependency must be a name some roster actually
+	// declares. A dependency on a name that does not exist would mark the
+	// family missing on every endpoint, forever.
+	declared := lwsqlsurface.DeclaredNames()
+	for _, dep := range entry.Dependencies {
+		assert.Containsf(t, declared, dep, "%s is declared as a dependency but no roster declares it", dep)
+	}
+
+	// An endpoint carrying the whole surface leaves nothing marked.
+	installed := make(map[string]string, len(declared))
+	for name := range declared {
+		installed[name] = "CREATE FUNCTION " + name
+	}
+	full := vocabDeclared()
+	vocabMarkInstalled(full, installed)
+	for _, e := range full {
+		if e.Name == constructsql.NameGet {
+			assert.Empty(t, e.MissingDeps, "nothing is missing on a fully provisioned endpoint")
+		}
+	}
+
+	// Strip one dependency and it is named — on the client row, which no
+	// "installed?" column would ever have flagged.
+	delete(installed, "LW_VALUE_BY_TAG_EQUAL")
+	partial := vocabDeclared()
+	vocabMarkInstalled(partial, installed)
+	for _, e := range partial {
+		if e.Name == constructsql.NameGet {
+			assert.Equal(t, []string{"LW_VALUE_BY_TAG_EQUAL"}, e.MissingDeps)
+		}
+	}
+
+	// An unanswered probe claims nothing, the same rule the rest of the
+	// panel follows.
+	unanswered := vocabDeclared()
+	vocabMarkInstalled(unanswered, nil)
+	for _, e := range unanswered {
+		assert.Empty(t, e.MissingDeps, "%s: an unanswered probe must not claim a missing dependency", e.Name)
+	}
 }

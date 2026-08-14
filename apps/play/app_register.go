@@ -308,11 +308,11 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		User:     clickhouseenv.User.Get(),
 		Password: clickhouseenv.Password.Get(),
 	}
-	// Reconcile the co/ragged function pack (ADR-0162) against the env
+	// Reconcile leeway's SQL read surface (ADR-0171 §SD2) against the env
 	// endpoint, once per process and off the open path — before the
-	// introspection retarget below, because the pack belongs to the real
+	// introspection retarget below, because the surface belongs to the real
 	// server, not the in-process /query endpoint.
-	installChPack(cfg.URL, cfg.User, cfg.Password, ctx.Log())
+	installSQLSurface(cfg.URL, cfg.User, cfg.Password, ctx.Log())
 	// The env target, remembered before the retarget below can overwrite it:
 	// it is what the switcher's "External (reset)" restores, and it has to
 	// keep meaning "the external server" even for a window that opened on

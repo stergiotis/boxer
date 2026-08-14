@@ -16,12 +16,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
-
-// The installer's Conn is deliberately client-free; this is the one place
-// that asserts the intended client satisfies it.
-var _ chpack.Conn = (*chclient.Client)(nil)
 
 func liveClient(t *testing.T) (client *chclient.Client, ctx context.Context) {
 	t.Helper()
@@ -47,18 +43,17 @@ func query(t *testing.T, ctx context.Context, client *chclient.Client, sql strin
 }
 
 // TestIntegrationChpack is the ADR-0162 verification-plan lane: install on a
-// live server, verify the marker, pin the correctness matrix, re-run the
-// plan-identity and guard-pruning probes as regressions, and differential-
-// test against a Go oracle on randomized positive co/ragged data.
+// live server, pin the correctness matrix, re-run the plan-identity and
+// guard-pruning probes as regressions, and differential-test against a Go
+// oracle on randomized positive co/ragged data.
+//
+// Installing goes through the surface (ADR-0171 §SD2) because the pack no
+// longer installs on its own; the marker it stamps is verified in
+// lwsqlsurface's own lane, not here.
 func TestIntegrationChpack(t *testing.T) {
 	client, ctx := liveClient(t)
 
-	require.NoError(t, chpack.Install(ctx, client))
-
-	t.Run("version marker", func(t *testing.T) {
-		require.Equal(t, fmt.Sprintf("%d", chpack.Version),
-			query(t, ctx, client, "SELECT LW_PACK_VERSION()"))
-	})
+	require.NoError(t, lwsqlsurface.Install(ctx, client))
 
 	t.Run("correctness matrix", func(t *testing.T) {
 		// Expectations follow ClickHouse TSV literal formatting. Cases with

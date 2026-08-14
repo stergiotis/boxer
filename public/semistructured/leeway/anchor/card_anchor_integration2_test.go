@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,9 +36,9 @@ func TestLeewayClickHouse(t *testing.T) {
 	err := setupClickHouseDdl(ctx, ch)
 	require.NoError(t, err)
 
-	// Query 1 uses the co/ragged function pack (ADR-0162); reconcile it the
-	// way any connecting host would.
-	err = chpack.Install(ctx, ch)
+	// Query 1 uses the co/ragged function pack (ADR-0162); reconcile the
+	// whole read surface the way any connecting host would (ADR-0171 §SD2).
+	err = lwsqlsurface.Install(ctx, ch)
 	require.NoError(t, err)
 
 	records, err := GenerateAlpineEvents(nil, 20)

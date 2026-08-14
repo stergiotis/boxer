@@ -8,9 +8,8 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
 // play_vocab_model.go assembles what a buffer in this build may call, from
@@ -90,6 +89,17 @@ type vocabEntry struct {
 	// Installed is meaningful for server entries only, and only once the
 	// probe has answered — see vocabMarkInstalled, which is the only writer.
 	Installed bool
+	// Dependencies are server-side functions this entry's CLIENT-side
+	// expansion emits (ADR-0174 §SD6). A client macro is portable only when
+	// what it expands into is: LW_GET is expanded here and works on any
+	// endpoint as a name, but the expression it becomes calls the read-back
+	// family, so an endpoint without that family fails on the expansion.
+	Dependencies []string
+	// MissingDeps are the Dependencies the probe did not find. Written by
+	// vocabMarkInstalled, and only when the probe has answered — an
+	// unanswered probe leaves it empty, which reads as "not known" and not
+	// as "all present".
+	MissingDeps []string
 }
 
 // vocabMarkInstalled stamps the server entries with what the endpoint
@@ -106,6 +116,16 @@ func vocabMarkInstalled(entries []vocabEntry, installed map[string]string) {
 		return
 	}
 	for i := range entries {
+		// Expansion dependencies are marked for every population, not just
+		// the server one: they are the reason a CLIENT entry can fail on an
+		// endpoint, which is precisely the case a per-name "installed?"
+		// column cannot express (ADR-0174 §SD6).
+		entries[i].MissingDeps = nil
+		for _, dep := range entries[i].Dependencies {
+			if _, ok := installed[dep]; !ok {
+				entries[i].MissingDeps = append(entries[i].MissingDeps, dep)
+			}
+		}
 		if entries[i].Where != vocabServer {
 			continue
 		}
@@ -119,6 +139,24 @@ func (inst vocabEntry) call() string {
 	return inst.Name + "(" + strings.Join(inst.Params, ", ") + ")"
 }
 
+// vocabFamilyLabel names the declaring family for the panel's Family
+// column, with the ADR a reader follows to find out what the family is for.
+func vocabFamilyLabel(fam lwsqlsurface.FamilyE) (label string) {
+	switch fam {
+	case lwsqlsurface.FamilyPack:
+		label = "co/ragged pack (ADR-0162)"
+	case lwsqlsurface.FamilyReadback:
+		label = "leeway read-back (ADR-0066)"
+	case lwsqlsurface.FamilyIdentity:
+		label = "identity (ADR-0106) — also expanded client-side"
+	case lwsqlsurface.FamilySurface:
+		label = "surface marker (ADR-0171)"
+	default:
+		label = "leeway SQL surface"
+	}
+	return
+}
+
 // vocabDeclared returns everything this build knows how to offer, in
 // presentation order: server rosters first (the population a user most often
 // finds absent), then the client macros, then play's own.
@@ -130,24 +168,16 @@ func (inst vocabEntry) call() string {
 func vocabDeclared() (out []vocabEntry) {
 	out = make([]vocabEntry, 0, 48)
 
-	for _, f := range chpack.Functions() {
+	// The server population IS the declared set (ADR-0171 §SD2), taken from
+	// the one place that holds all three families plus the marker. Looping
+	// the three rosters separately here is what let the marker be declared
+	// in one list and probed against another; a name the surface installs
+	// and this panel does not know would show up as an "extra" on a
+	// correctly provisioned server.
+	for _, f := range lwsqlsurface.DeclaredFunctions() {
 		out = append(out, vocabEntry{
 			Name: f.Name, Params: f.Params, Doc: f.Doc,
-			Where: vocabServer, Family: "co/ragged pack (ADR-0162)",
-			Declared: true, Available: true,
-		})
-	}
-	for _, f := range readback.HelperFunctions() {
-		out = append(out, vocabEntry{
-			Name: f.Name, Params: f.Params, Doc: f.Doc,
-			Where: vocabServer, Family: "leeway read-back (ADR-0066)",
-			Declared: true, Available: true,
-		})
-	}
-	for _, f := range identsql.Functions() {
-		out = append(out, vocabEntry{
-			Name: f.Name, Params: f.Params, Doc: f.Doc,
-			Where: vocabServer, Family: "identity (ADR-0106) — also expanded client-side",
+			Where: vocabServer, Family: vocabFamilyLabel(f.Family),
 			Declared: true, Available: true,
 		})
 	}
@@ -189,6 +219,18 @@ func vocabDeclared() (out []vocabEntry) {
 			Declared: true, Available: true,
 		})
 	}
+	// The extraction family is client-expanded like the constructors, but
+	// unlike them it expands INTO server-side calls — so it declares those
+	// as dependencies and is marked against the same probe (ADR-0181 §SD7,
+	// ADR-0174 §SD6). This is the entry the dependency column exists for.
+	for _, f := range constructsql.ExtractFunctions() {
+		out = append(out, vocabEntry{
+			Name: f.Name, Params: f.Params, Doc: f.Doc,
+			Where: vocabClient, Family: "leeway extraction (ADR-0181)",
+			Declared: true, Available: true,
+			Dependencies: constructsql.ExtractExpansionDependencies(),
+		})
+	}
 
 	for _, f := range tsFuncs {
 		params := make([]string, 0, len(f.Args))
@@ -220,8 +262,27 @@ func vocabExtras(installed map[string]string, declared []vocabEntry) (out []voca
 			known[e.Name] = struct{}{}
 		}
 	}
+	// A name this repository shipped and withdrew is not an unknown extra:
+	// it has a known fix, and the next install drops it. Reporting it as
+	// "not in any roster this build carries" sends a reader to investigate
+	// a name we are about to delete ourselves — and on a pre-surface
+	// endpoint it would contradict the panel's own skew line, which names
+	// the retired marker as the reason the endpoint is pre-surface
+	// (ADR-0171 §SD2 splits the two for the same reason).
+	retired := make(map[string]struct{}, 64)
+	for _, name := range lwsqlsurface.RetiredNames() {
+		retired[name] = struct{}{}
+	}
 	for name := range installed {
 		if _, ok := known[name]; ok {
+			continue
+		}
+		if _, wasOurs := retired[name]; wasOurs {
+			out = append(out, vocabEntry{
+				Name: name, Where: vocabServer, Family: "withdrawn by this build",
+				Declared: false, Available: true,
+				Doc: "a spelling this repository shipped and has since withdrawn — reinstalling the surface drops it",
+			})
 			continue
 		}
 		out = append(out, vocabEntry{
@@ -244,17 +305,37 @@ func sortVocabByName(entries []vocabEntry) {
 	}
 }
 
-// vocabPackSkew describes the pack revision the endpoint carries against the
-// one this build writes. ok=false when there is nothing to say — the probe
-// has not answered, or the marker is absent (which the per-function "missing"
-// marks already report, more precisely).
-func vocabPackSkew(probed int) (line string, ok bool) {
-	if probed < 0 {
-		return "", false
+// vocabSurfaceSkew describes the surface revision the endpoint carries
+// against the one this build writes (ADR-0171 §SD2). ok=false when there is
+// nothing to say — the probe has not answered, or neither marker is present
+// (which the per-function "missing" marks already report, more precisely).
+//
+// The pre-surface case is its own sentence rather than a missing marker.
+// A server carrying the retired LW_PACK_VERSION is not broken and not
+// empty: it was provisioned by a build from before the three families
+// shared one marker, and every function it carries still works. What it
+// cannot tell us is whether the other two families are there — which is
+// the whole reason the surface marker exists, so saying "unknown" would
+// throw away the one thing this reading does establish.
+func vocabSurfaceSkew(surface int, preSurface int) (line string, ok bool) {
+	if surface < 0 {
+		if preSurface < 0 {
+			return "", false
+		}
+		return "pre-surface endpoint: pack v" + strconv.Itoa(preSurface) +
+			", no surface marker — reinstall to reconcile all three families", true
 	}
-	if probed == chpack.Version {
-		return "pack v" + strconv.Itoa(probed) + " — matches this build", true
+	if surface == lwsqlsurface.Version {
+		return "surface v" + strconv.Itoa(surface) + " — matches this build", true
 	}
-	return "pack v" + strconv.Itoa(probed) + " on this endpoint, v" + strconv.Itoa(chpack.Version) +
+	if surface > lwsqlsurface.Version {
+		// Ahead, not behind: the endpoint was provisioned by a NEWER build,
+		// so the definitions are newer than this client's, not older. The
+		// marker number went 4 → 1 when the surface replaced the pack's, so
+		// this is not a hypothetical direction.
+		return "surface v" + strconv.Itoa(surface) + " on this endpoint, v" + strconv.Itoa(lwsqlsurface.Version) +
+			" in this build — the endpoint was provisioned by a newer build", true
+	}
+	return "surface v" + strconv.Itoa(surface) + " on this endpoint, v" + strconv.Itoa(lwsqlsurface.Version) +
 		" in this build — the names below may resolve to older definitions", true
 }

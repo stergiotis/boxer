@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
 // play_vocab_probe.go asks the endpoint which SQL user-defined functions it
@@ -23,11 +23,13 @@ import (
 
 // vocabProbeQuery lists the server's user-defined functions.
 //
-// `create_query` rides along so the pack's revision can be read WITHOUT
-// calling LW_PACK_VERSION(): calling it would fail with unknown-function on
+// `create_query` rides along so a revision can be read WITHOUT calling
+// LW_SURFACE_VERSION(): calling it would fail with unknown-function on
 // exactly the servers whose version we most want to report, and a failed
 // query poisons the lane for the whole listing. The definition text is
 // already there, and parsing an integer out of it cannot fail that way.
+// The same reading recovers the retired LW_PACK_VERSION on a server no
+// current build has reconciled yet (ADR-0171 §SD2).
 //
 // `origin` and `create_query` are marked Obsolete in system.functions' own
 // documentation but are still populated as of 26.7 (the same dependency
@@ -53,16 +55,25 @@ type vocabProbe struct {
 	// unanswered probe would send someone to reprovision a healthy server.
 	installed map[string]string // name -> create_query
 
-	// packVersion is the revision read out of LW_PACK_VERSION's definition,
-	// or -1 when the function is absent or its body is not an integer.
-	packVersion int
+	// surfaceVersion is the revision read out of LW_SURFACE_VERSION's
+	// definition, or -1 when the function is absent or its body is not an
+	// integer.
+	surfaceVersion int
+
+	// preSurfaceVersion is the same reading of the pack's retired marker,
+	// which is the only revision a server provisioned before the surface
+	// marker existed can report (ADR-0171 §SD2). It tells "never reconciled
+	// by a current build" from "no leeway functions at all", and both from
+	// a current install — three states one field cannot hold.
+	preSurfaceVersion int
 }
 
 func newVocabProbe(client *Client) (inst *vocabProbe) {
 	return &vocabProbe{
 		lane: newNodeLane(clientExecutor{client: client, opts: newExecOptions("vocabulary")},
 			memory.NewGoAllocator(), vocabProbeTimeout),
-		packVersion: -1,
+		surfaceVersion:    -1,
+		preSurfaceVersion: -1,
 	}
 }
 
@@ -94,7 +105,8 @@ func (inst *vocabProbe) demand() (installed map[string]string, ready bool) {
 		}
 		inst.installed[name] = def
 	}
-	inst.packVersion = parsePackVersion(inst.installed[chpack.VersionFunctionName])
+	inst.surfaceVersion = parseMarkerVersion(inst.installed[lwsqlsurface.VersionFunctionName])
+	inst.preSurfaceVersion = parseMarkerVersion(inst.installed[lwsqlsurface.PreSurfaceVersionFunctionName])
 	return inst.installed, true
 }
 
@@ -104,15 +116,15 @@ func (inst *vocabProbe) close() {
 	}
 }
 
-// parsePackVersion recovers the pack revision from LW_PACK_VERSION's own
-// definition, which the pack emits as a bare integer body:
+// parseMarkerVersion recovers a revision from a marker function's own
+// definition, which is emitted as a bare integer body:
 //
-//	CREATE FUNCTION LW_PACK_VERSION AS () -> 3
+//	CREATE FUNCTION LW_SURFACE_VERSION AS () -> 1
 //
 // Returns -1 for an absent function or any body it cannot read as an
 // integer — a server carrying a hand-edited marker reports unknown rather
 // than a number that would misdescribe it.
-func parsePackVersion(createQuery string) int {
+func parseMarkerVersion(createQuery string) int {
 	_, body, found := strings.Cut(createQuery, "->")
 	if !found {
 		return -1

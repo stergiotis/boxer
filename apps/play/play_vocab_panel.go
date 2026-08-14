@@ -19,7 +19,7 @@ import (
 // library types in the same language, and an Insert lands the same way.
 //
 // The panel reports; it never provisions. Installing is a process-level
-// reconcile at startup (installChPack), and a per-user "install it" button
+// reconcile at startup (installSQLSurface), and a per-user "install it" button
 // would be a decision about who may change server state that ADR-0174 does
 // not make.
 
@@ -153,7 +153,7 @@ func (inst *PlayApp) renderVocabStatus(installed map[string]string, ready bool) 
 		}
 	default:
 		line := strconv.Itoa(len(installed)) + " user-defined function(s) on " + inst.client.URL()
-		if skew, ok := vocabPackSkew(inst.vocab.packVersion); ok {
+		if skew, ok := vocabSurfaceSkew(inst.vocab.surfaceVersion, inst.vocab.preSurfaceVersion); ok {
 			line += " · " + skew
 		}
 		for rt := range c.RichTextLabel(line) {
@@ -212,6 +212,15 @@ func (inst *PlayApp) renderVocabRow(e vocabEntry, where vocabWhereE, ready bool)
 	if e.Doc != "" {
 		for rt := range c.RichTextLabel(e.Doc) {
 			rt.Small().Weak()
+		}
+	}
+	// The dependency line only appears when something is actually missing.
+	// Listing what an expansion needs on every endpoint that has it would
+	// be noise on every row; naming it on the endpoint where the call will
+	// fail is the whole point (ADR-0174 §SD6).
+	if ready && len(e.MissingDeps) > 0 {
+		for rt := range c.RichTextLabel("expands into " + strings.Join(e.MissingDeps, ", ") + " — MISSING on this endpoint") {
+			rt.Small()
 		}
 	}
 }

@@ -15,7 +15,13 @@
 // lambda-first parameters, 1-based indexing, compositions only: a builtin
 // that already is the operation is used directly, not wrapped. Shipped names
 // are append-only in semantics (§SD5): a published function's meaning never
-// changes; changed behavior gets a new name and a Version bump.
+// changes; changed behavior gets a new name and a surface-version bump.
+//
+// This package declares and renders the pack; it does not install it. One
+// marker covers all three leeway families, so provisioning and the version
+// handshake both live in lwsqlsurface (ADR-0171 §SD2) — a pack-only install
+// could not verify anything, and a pack-only marker is the ambiguity that
+// marker was introduced to remove.
 //
 // One namespace is what makes the family enumerable on a server —
 // `WHERE name LIKE 'LW\\_%'` reaches every leeway function regardless of which
@@ -27,18 +33,6 @@ import (
 	"fmt"
 	"strings"
 )
-
-// Version is the pack revision reported by LW_PACK_VERSION(). Bump on any
-// roster change; never repurpose a shipped name (ADR-0162 §SD5).
-//
-// 4 — the LW_ASPECT_* family joined (ADR-0182 SD4/M4).
-// 3 — every name moved into the `LW_` namespace (2026-08-07 Update).
-// 2 — the roster went camelCase → UPPER_SNAKE (2026-08-06 Update).
-const Version = 4
-
-// VersionFunctionName is the zero-argument marker function that makes
-// client/server pack skew a query (ADR-0162 §SD5).
-const VersionFunctionName = "LW_PACK_VERSION"
 
 // Function is one pack entry. Body is a ClickHouse expression over Params —
 // and over earlier pack functions only: the roster is dependency-ordered,
@@ -150,12 +144,6 @@ func Functions() (fns []Function) {
 		},
 	}
 	fns = append(fns, aspectFunctions()...)
-	fns = append(fns, Function{
-		Name:   VersionFunctionName,
-		Params: []string{},
-		Body:   fmt.Sprintf("%d", Version),
-		Doc:    "pack revision marker; SELECT it to detect client/server pack skew",
-	})
 	return
 }
 
