@@ -151,6 +151,23 @@ type Input struct {
 	DDL *clickhouse.TableOptions
 }
 
+// externallyProvisioned is not an option.
+//
+// `boxer.facts` is provisioned by `factsstore/chstore`'s SetupTable, which is
+// its sole DDL author, so every store generated here is externally
+// provisioned by construction: the emitted store carries no EnsureTable, no
+// embedded DDLCreate and no DDLTail. A store that cannot run DDL cannot be
+// wired up to run it by a later caller who did not read ADR-0184 §SD2, which
+// is the point of deciding it here rather than at each call site.
+//
+// The transport agrees independently: the ClickHouse HTTP interface rejects
+// the multi-statement script EnsureTable emits, so a facts-bound store bound
+// to `keelson/data/storeexec` could not provision itself even if allowed to.
+//
+// The DDL *file* is still written — it is the physical schema the store
+// decodes positionally, and whoever does provision the table needs it.
+const externallyProvisioned = true
+
 // Generate emits the store package against the `boxer.facts` schema.
 func (inst Input) Generate() (err error) {
 	if len(inst.Ids) == 0 {
@@ -183,6 +200,8 @@ func (inst Input) Generate() (err error) {
 		ImportPath:     inst.ImportPath,
 		Wrapper:        marshallgen.FixedIdsWrapper{Ids: inst.Ids},
 		DDL:            inst.DDL,
+		// Not a parameter — see the externallyProvisioned doc.
+		ExternallyProvisioned: externallyProvisioned,
 	}.Generate()
 	if err != nil {
 		err = eh.Errorf("storegen: generate %s store: %w", inst.StoreName, err)

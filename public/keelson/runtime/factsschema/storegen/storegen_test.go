@@ -188,6 +188,37 @@ func TestGenerate_EmitsAFactsBoundStore(t *testing.T) {
 	assert.Contains(t, store, "package probe\n")
 }
 
+// TestGenerate_EmitsNoDdlExecutionSurface is the ADR-0184 §SD2 guarantee.
+//
+// `chstore.SetupTable` is the sole DDL author for boxer.facts, so a store
+// generated here must carry no way to run DDL at all — not a discouraged
+// method, an absent one. VerifySchema remains and matters more, since nothing
+// in the store guarantees the live table's shape.
+func TestGenerate_EmitsNoDdlExecutionSurface(t *testing.T) {
+	out := t.TempDir()
+	require.NoError(t, storegen.Input{
+		PackageName:    "probe",
+		StoreName:      "Probe",
+		ComponentPaths: []string{"./testdata/probe_dto.go"},
+		OutDir:         out,
+		ImportPath:     "example.com/probe",
+		Ids:            map[string]uint64{"storegenProbeHost": 7001, "storegenProbeCount": 7002, "storegenProbeRatio": 7003},
+	}.Generate())
+
+	store := readFile(t, filepath.Join(out, "probe_store.out.go"))
+	assert.NotContains(t, store, "func (inst *ProbeStore) EnsureTable",
+		"a facts-bound store must not be able to provision boxer.facts")
+	assert.NotContains(t, store, "DDLTail",
+		"DDLTail exists only as EnsureTable's raw suffix; leaving it would be config that does nothing")
+	assert.Contains(t, store, "func (inst *ProbeStore) VerifySchema",
+		"VerifySchema is how an externally provisioned store checks the table it was given")
+
+	// The DDL file is still written: it is the physical schema the store
+	// decodes positionally, and whoever does provision the table needs it.
+	assert.Contains(t, readFile(t, filepath.Join(out, "facts_ddl_clickhouse.out.sql")),
+		"CREATE TABLE IF NOT EXISTS boxer.facts")
+}
+
 func TestGenerate_RefusesComponentFromAnotherPackage(t *testing.T) {
 	// The failure this prevents is a `go build` error naming neither the DTO
 	// nor the setting that caused it, raised whenever someone first compiles
