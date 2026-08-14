@@ -495,7 +495,22 @@ Proposed — awaiting review by the code owner.
   bundle would store one observation many times and put a rising Order on rows
   that never changed. The row is dated by the collection stamp rather than the
   bundle's.
-- **M6 — topology, closing ADR-0126 §SD6.**
+- **M6 — topology, closing ADR-0126 §SD6.** ✓
+  The containment tree is stored as an **adjacency list**: a pre-order walk
+  numbers the nodes and each carries its parent's number. It is the one shape
+  in this vocabulary that parallel arrays cannot hold, and it is recursive, so
+  no fixed nesting expresses it either. A serialized blob would put the
+  structure beyond SQL entirely — the opposite of what modelling metrics as
+  facts is for. The node number is stored rather than left implicit in array
+  position, because a query that filters the arrays loses position and the
+  parent references would dangle.
+
+  Written on first sight of a host, like the CPU descriptor: the topology is
+  static, so a row per tick would be duplication rather than observation.
+
+  ADR-0126 §SD6 said *"the ADR-0090 P5 tee covers topology domains the day it
+  is built"*. That day is this one; its `sockets` domain landed in M5.
+  Vocabulary 153 memberships, store thirteen kinds.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
