@@ -483,6 +483,12 @@ memberships by registry id, and a client-side pass holds no registry. So
 name and need nothing. This is ADR-0171 §SD4 seen from the authoring side,
 and it is the one place where "no physical names, no Go" is not yet true.
 
+*Closed 2026-08-14 by ADR-0171 §SD4's Update: the pass takes an optional
+membership registry off the same binding the schema comes from, so a ref
+channel names its membership where a host carries one. The id form still
+works and needs no binding, so this paragraph describes what an unbound host
+still sees.*
+
 **The fast path is implemented, proven, and currently unreachable.** The
 absence of a `<role>card` column licenses the bare-`indexOf` form, and a
 `clickhouse-local` test proves the fast and general forms agree on the same

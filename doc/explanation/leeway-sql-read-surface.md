@@ -149,6 +149,37 @@ and lists what it has:
 SELECT LW_GET('geoPoint', 'here', 'col:lat') FROM events
 ```
 
+## Naming a membership instead of its id
+
+Memberships come in two spellings. A *verbatim* channel carries the name
+itself, so nothing extra is needed. A *ref* channel carries a uint64 from a
+registered vocabulary — the numbers that used to ride SQL text as literals
+like `6917529027641081861`.
+
+Both directions are reachable ([ADR-0171](../adr/0171-leeway-sql-read-surface.md)
+§SD4). Reading, when a result column came back as a number:
+
+```sql
+SELECT name FROM keelson('memberships') WHERE id = 6917529027641081861
+```
+
+and writing, where `LW_GET` takes the name and resolves it before the
+statement ships, so the SQL still carries a constant:
+
+```sql
+SELECT LW_GET('metric', 'cpuLoad') FROM events
+```
+
+Two things to know. The table publishes the **folded** spelling — a
+membership declared as `naturalKey` lists as `natural-key`, because that is
+what the registry keeps — so a join predicate must use that form, though
+`LW_GET` accepts either. And a `virtual` row is a grouping node that never
+appears on a lane: matching against one returns nothing, which is a wrong
+question rather than missing data.
+
+Naming only works where the host bound a registry. Without one, `LW_GET`
+still takes the id and says so.
+
 For filtering, prefer the cheap necessary condition — `has()` over a
 membership lane prunes granules through a skip index, which `indexOf` and
 `countEqual` never do. The
@@ -160,10 +191,6 @@ one.
 
 Stated here rather than discovered later:
 
-- **A ref channel needs the membership id, not its name.** There is no
-  server-side name→id lookup yet ([ADR-0171](../adr/0171-leeway-sql-read-surface.md)
-  §SD4), so `LW_GET` on a ref channel takes the id — `leeway id` prints
-  them. Verbatim channels take the name.
 - **`MATERIALIZED` projections are not generated** from a leeway schema
   (§SD3). The trial's largest single lever is still hand-written per path,
   with physical names inlined and nothing checking they still match.

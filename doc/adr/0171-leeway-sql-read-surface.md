@@ -401,7 +401,7 @@ asks for, and accepting this ADR does not licence building them.
 - **M1 — SD2: `lwsqlsurface` — declared set, marker, `Install`, `Reconcile`.** ✓
 - **M2 — SD2: play's vocabulary probe on the surface marker.** ✓
 - **M3 — SD3: `MATERIALIZED` projection emission — dialogue first.**
-- **M4 — SD4: membership name→id readable from SQL — dialogue first.**
+- **M4 — SD4: membership name→id readable from SQL.** ✓
 - **M5 — SD5: the exploded companion table — dialogue first.**
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
@@ -527,3 +527,53 @@ reported in their separate buckets, `install` clearing only the retired one,
 exactly while drift stood. The `//go:build integration` lane — this ADR's
 own test and ADR-0162's correctness matrix, plan-identity, guard-pruning and
 differential-oracle suites — passed against the same server.
+
+## Update 2026-08-14 — SD4 takes the shape of a table, and LW_GET learns names
+
+§SD4 left the shape open — "a small table, a dictionary, or a UDF". It is a
+table: `keelson('memberships')`, beside the introspection tables that already
+describe this process. Plus one client-side half: `LwExtractExpand` takes an
+optional membership registry, so `LW_GET` names a membership on a ref channel
+instead of carrying its id.
+
+**Scope widened to both directions**, deliberately. The sub-decision's
+sentence asks for name→id, but the trial's complaint was that a
+Ref-membership table cannot be *read* without the registry — the id→name
+direction, which is where a person lands first, on every SELECT that returns
+a membership column. A table answers both with the same join; a name→id
+function would have answered half.
+
+**Why not the generated-UDF shape**, which was the tempting one: ADR-0182's
+`LW_ASPECT_*` family is an exact precedent for rendering a closed Go
+vocabulary as `transform()` bodies that cannot drift. It was rejected on
+layering. This vocabulary is *application*-specific — `readback` takes an
+`IdLookup` interface, keelson's facts target wraps its registry, anchor uses
+a small map — while the pack and the read-back family are generic leeway
+infrastructure. Installing one application's vocabulary into the shared
+surface would make its declared set application-dependent, and that breaks
+the invariant §SD2's marker rests on: *the marker at revision N means all
+three families are installed at revision N*. A dictionary was rejected for a
+second reason on top of provisioning cost — ADR-0066 resolves ids at
+generation time precisely so emitted SQL never calls `dictGet`.
+
+**What the table publishes.** `name`, the wire `id`, `virtual` (a grouping
+node that never appears on a lane — without the column its absence from data
+reads as missing data rather than a wrong question), `root`, `tag_value`,
+`origin`, `module`, and `parents`. Restrictions — which section, which
+channel, what cardinality — are one-to-many per membership and want their own
+table; no consumer asks yet.
+
+**A sharp edge worth stating.** The registry folds every natural key to
+LowerSpinalCase on registration, so a Go declaration of `naturalKey` is
+published as `natural-key`, and a join predicate must use that. The Go-side
+lookup is forgiving where the table cannot be — it retries through the
+registry's naming style — so `LW_GET` accepts either spelling. The two are
+pinned to each other by test: every non-virtual row resolves, and to the same
+id it publishes.
+
+**The client half is a binding, not a join.** `LW_GET('metric', 'cpuLoad')`
+resolves at expansion time and still emits a constant, which is the plan
+shape ADR-0066 chose over a correlated lookup. It is asserted off the same
+binding the schema comes from, so a host that carries a registry gets names
+and one that does not keeps the id form — and the decimal spelling is checked
+first, so every query written before this Update expands unchanged.
