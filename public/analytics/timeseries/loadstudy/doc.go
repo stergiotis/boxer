@@ -19,9 +19,23 @@
 //
 // They do *not* come from
 // [github.com/stergiotis/boxer/public/observability/sysmetrics], which would be
-// the natural source. That scraper publishes to NATS and persists nothing, so
-// its data does not exist to analyse. Nor do they come from `boxer.facts`, which
-// carries no numeric payload at all — it is an event log.
+// the natural source. That scraper published to NATS and persisted nothing, so
+// its data did not exist to analyse — the gap this package's fallback was
+// chosen around, and the demand ADR-0184 cites for closing it.
+//
+// That gap is now closeable: `sysmetricsd --tee` writes the plane into
+// `boxer.facts` through
+// [github.com/stergiotis/boxer/public/keelson/runtime/sysmtee]. Migrating these
+// channels onto it is a separate decision and has not been made — the study's
+// published results were computed against `system.asynchronous_metric_log`, and
+// swapping the source silently would make old and new runs incomparable.
+//
+// An earlier version of this comment added that `boxer.facts` "carries no
+// numeric payload at all — it is an event log". That was wrong about the
+// schema even when written: the table has the full `u8`…`i64Array` set,
+// `u32Set`/`u64Set`, and `f32Array`/`f64Array` under an encoding hint chosen
+// for slowly-changing series. It was true only of the table's *contents*, and
+// the tee is what changes that.
 //
 // Events come from `boxer.facts`: application lifecycle, run starts and stops.
 // Heartbeats are excluded, because they fire on a timer rather than on anything
