@@ -148,7 +148,13 @@ func RegisterStandard(r *passreg.Registry) (err error) {
 			if !ok {
 				return nanopass.Pass{}, false
 			}
-			return constructsql.ExtractExpandPass(lanes, ""), true
+			// The membership registry is optional and asserted off the SAME
+			// binding (ADR-0171 §SD4): a host that carries one lets a ref
+			// channel take a name, one that does not keeps the id form.
+			// Absent, this degrades rather than declining — the schema is
+			// what the pass cannot work without.
+			ids, _ := binding.(constructsql.MembershipIdsI)
+			return constructsql.ExtractExpandPassWithIds(lanes, ids, ""), true
 		},
 	})
 	return

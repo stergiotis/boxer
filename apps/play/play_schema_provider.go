@@ -8,6 +8,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
 
@@ -52,13 +53,17 @@ func (inst *chSchemaProvider) GetColumns(dbName string, tableName string) (colum
 //
 //   - *lwsql.Resolver         → passes.ColumnResolverI  (ADR-0116, handles)
 //     and passes.ConditionNamerI  (ADR-0121, leeway condition columns)
+//     and constructsql.LaneSourceI (ADR-0181 §SD3, LW_GET's lanes)
 //   - passes.SchemaProviderI  → the raw column list, which ExposeSelectionConditions's
 //     collision check needs even for a non-leeway table (ADR-0121 §SD4)
+//   - providers.MembershipLookup → constructsql.MembershipIdsI (ADR-0171 §SD4),
+//     so LW_GET names a membership on a ref channel instead of carrying its id
 //
-// The two contribute disjoint methods, so the embedding is unambiguous.
+// The three contribute disjoint methods, so the embedding is unambiguous.
 type clientPassBinding struct {
 	*lwsql.Resolver
 	passes.SchemaProviderI
+	providers.MembershipLookup
 }
 
 // installLeewayNameResolution builds this client's leeway column-handle

@@ -40,6 +40,7 @@ func RegisterStatic(r *introspect.Registry) (err error) {
 		adrProvider{}, subtaskProvider{}, coderefProvider{}, adrcontentProvider{}, componentsProvider{},
 		competenceProvider{}, competencesectionProvider{}, competencerelationProvider{},
 		helpsectionsProvider{}, adrsectionsProvider{}, panelShapesProvider{},
+		membershipsProvider{},
 	} {
 		if err = r.Register(p); err != nil {
 			return

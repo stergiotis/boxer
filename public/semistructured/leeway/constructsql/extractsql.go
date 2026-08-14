@@ -74,6 +74,18 @@ type LaneSourceI interface {
 	Sections(dbName string, tableName string) (names []string)
 }
 
+// MembershipIdsI resolves a membership name to the uint64 a ref lane
+// carries (ADR-0171 §SD4). One method, spelled exactly as
+// marshallreflect.LookupI and readback.IdLookup spell it, so any registry
+// that satisfies those satisfies this.
+//
+// Optional. Without it a ref channel still takes an id, which is what it
+// took before §SD4 — the pass degrades to the older, wordier form rather
+// than refusing to run.
+type MembershipIdsI interface {
+	LookupMembership(name string) (id uint64, err error)
+}
+
 // ExtractExpandPass is LwExtractExpand bound to a schema. Idempotent by
 // construction: expansion leaves no LW_GET call behind, and an
 // unresolvable one is an error, never a partial rewrite.
@@ -81,8 +93,18 @@ type LaneSourceI interface {
 // defaultDatabase resolves unqualified table references, the same way the
 // selection-conditions pass takes one.
 func ExtractExpandPass(lanes LaneSourceI, defaultDatabase string) nanopass.Pass {
+	return ExtractExpandPassWithIds(lanes, nil, defaultDatabase)
+}
+
+// ExtractExpandPassWithIds is ExtractExpandPass with a membership-id lookup,
+// so a ref channel takes a NAME instead of a registry id (ADR-0171 §SD4).
+//
+// Resolution happens at expansion time, client-side, which keeps the emitted
+// SQL carrying constants — the property ADR-0066 chose deliberately over a
+// query-time dictGet, and the reason this is a binding rather than a join.
+func ExtractExpandPassWithIds(lanes LaneSourceI, ids MembershipIdsI, defaultDatabase string) nanopass.Pass {
 	return nanopass.LiftBodyPass(ExtractPassName, func(sql string) (string, error) {
-		return expandExtract(sql, lanes, defaultDatabase)
+		return expandExtract(sql, lanes, ids, defaultDatabase)
 	}, nanopass.PassProperties{
 		Idempotent: true,
 		Reads:      nanopass.RegionBody,
@@ -90,7 +112,7 @@ func ExtractExpandPass(lanes LaneSourceI, defaultDatabase string) nanopass.Pass 
 	})
 }
 
-func expandExtract(sql string, lanes LaneSourceI, defaultDatabase string) (result string, err error) {
+func expandExtract(sql string, lanes LaneSourceI, ids MembershipIdsI, defaultDatabase string) (result string, err error) {
 	result = sql
 	if lanes == nil || !HasExtractMarker(sql) {
 		return
@@ -105,7 +127,7 @@ func expandExtract(sql string, lanes LaneSourceI, defaultDatabase string) (resul
 		err = eb.Build().Errorf("%s: %w", ExtractPassName, err)
 		return
 	}
-	st := &extractState{pr: pr, rw: nanopass.NewRewriter(pr), lanes: lanes, byNode: indexScopes(roots)}
+	st := &extractState{pr: pr, rw: nanopass.NewRewriter(pr), lanes: lanes, ids: ids, byNode: indexScopes(roots)}
 	err = st.walk(pr.Tree)
 	if err != nil {
 		err = eb.Build().Errorf("%s: %w", ExtractPassName, err)
@@ -132,6 +154,7 @@ type extractState struct {
 	pr     *nanopass.ParseResult
 	rw     nanopass.RewriterI
 	lanes  LaneSourceI
+	ids    MembershipIdsI // optional; nil means a ref channel takes an id
 	byNode map[*grammar1.SelectStmtContext]*nanopass.SelectScope
 }
 
@@ -215,7 +238,7 @@ func (inst *extractState) expandCall(name string, spelled string, funcExpr *gram
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
 	}
-	lit, err := membershipLiteral(membership, ch)
+	lit, err := membershipLiteral(membership, ch, inst.ids)
 	if err != nil {
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
@@ -383,19 +406,31 @@ func (inst *extractState) errCall(spelled string, funcExpr *grammar1.ColumnExprF
 // membershipLiteral renders the membership as the channel spells it.
 //
 // A verbatim channel carries the name itself, so any string works. A ref
-// channel carries a registry id, and this pass holds no registry — there is
-// no server-side name→id lookup (ADR-0171 §SD4 is exactly that gap), so a
-// caller passes the id and gets told so if they do not. `leeway id` prints
-// them.
-func membershipLiteral(membership string, ch lwsql.Channel) (lit string, err error) {
+// channel carries a registry id: a decimal literal is taken as that id, and
+// anything else is resolved through the bound registry (ADR-0171 §SD4).
+//
+// The decimal check comes first and is deliberate. It keeps every query
+// written before §SD4 working unchanged, and it means the id form needs no
+// binding — which matters because the binding is a property of the host, not
+// of the query.
+func membershipLiteral(membership string, ch lwsql.Channel, ids MembershipIdsI) (lit string, err error) {
 	if ch.Verbatim {
 		lit = marshalling.EscapeString(membership)
 		return
 	}
-	id, convErr := strconv.ParseUint(membership, 10, 64)
-	if convErr != nil {
+	if id, convErr := strconv.ParseUint(membership, 10, 64); convErr == nil {
+		lit = strconv.FormatUint(id, 10)
+		return
+	}
+	if ids == nil {
 		err = eb.Build().Str("membership", membership).Str("channel", ch.Name).
-			Errorf("a ref channel identifies memberships by registry id, and no server-side name lookup exists yet (ADR-0171 §SD4); pass the id — `leeway id` prints it")
+			Errorf("a ref channel identifies memberships by registry id, and this host bound no membership registry; pass the id — `leeway id` prints it, and keelson('memberships') lists them")
+		return
+	}
+	id, lookupErr := ids.LookupMembership(membership)
+	if lookupErr != nil {
+		err = eb.Build().Str("membership", membership).Str("channel", ch.Name).
+			Errorf("no such membership in this build's registry; keelson('memberships') lists them: %w", lookupErr)
 		return
 	}
 	lit = strconv.FormatUint(id, 10)

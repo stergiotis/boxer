@@ -1,6 +1,7 @@
 package constructsql_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -556,4 +558,76 @@ func TestMixedShapeSectionPairsEachColumnWithItsOwnCounts(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, ":mix:len:")
 	require.NotContains(t, out, ":mix:card:")
+}
+
+// fakeIds is a membership registry for the test: one name, one id, and an
+// error for anything else — the same total behaviour a real registry has.
+type fakeIds map[string]uint64
+
+func (inst fakeIds) LookupMembership(name string) (id uint64, err error) {
+	id, ok := inst[name]
+	if !ok {
+		err = eh.Errorf("no such membership")
+	}
+	return
+}
+
+// TestRefChannelTakesANameWhenBound is ADR-0171 §SD4 seen from the authoring
+// side: with a registry bound, a ref channel names its membership instead of
+// carrying the uint64, which was the last place ADR-0181's "no Go, no
+// physical names" criterion still failed.
+//
+// Resolution happens at expansion time, so the emitted SQL still carries a
+// constant — the property ADR-0066 chose over a query-time lookup.
+func TestRefChannelTakesANameWhenBound(t *testing.T) {
+	r := extractResolver(t)
+	const id = 6917529027641081861
+	pass := constructsql.ExtractExpandPassWithIds(r, fakeIds{"cpuLoad": id}, "")
+
+	out, err := pass.Run("SELECT LW_GET('metric', 'cpuLoad') FROM events")
+	require.NoError(t, err)
+	require.Contains(t, out, strconv.FormatUint(id, 10), "the name resolves to the wire id")
+	require.NotContains(t, out, "'cpuLoad'", "a ref channel carries the id, not the name")
+
+	// An unknown name is an error naming where to look, not a predicate that
+	// matches nothing.
+	_, err = pass.Run("SELECT LW_GET('metric', 'noSuchThing') FROM events")
+	require.ErrorContains(t, err, "keelson('memberships')")
+}
+
+// TestRefChannelKeepsTakingAnId pins that §SD4 is additive: every query
+// written before it still expands, with or without a binding, because the
+// decimal form is checked before the registry is consulted.
+func TestRefChannelKeepsTakingAnId(t *testing.T) {
+	r := extractResolver(t)
+	const sql = "SELECT LW_GET('metric', '6917529027641081861') FROM events"
+
+	bound, err := constructsql.ExtractExpandPassWithIds(r, fakeIds{}, "").Run(sql)
+	require.NoError(t, err)
+	unbound, err := constructsql.ExtractExpandPass(r, "").Run(sql)
+	require.NoError(t, err, "the id form needs no registry")
+	require.Equal(t, bound, unbound)
+}
+
+// TestRefChannelWithoutABindingSaysSo keeps the unbound host's error
+// actionable: it names both ways to find the id rather than reporting a
+// parse failure.
+func TestRefChannelWithoutABindingSaysSo(t *testing.T) {
+	_, err := expandExtract(t, "SELECT LW_GET('metric', 'cpuLoad') FROM events")
+	require.ErrorContains(t, err, "bound no membership registry")
+	require.ErrorContains(t, err, "leeway id")
+	require.ErrorContains(t, err, "keelson('memberships')")
+}
+
+// TestVerbatimChannelIgnoresTheRegistry pins that a verbatim channel is
+// unaffected: its membership IS the name, so a registry must not be
+// consulted and a name that happens to look like a number must not be
+// silently turned into one.
+func TestVerbatimChannelIgnoresTheRegistry(t *testing.T) {
+	r := extractResolver(t)
+	pass := constructsql.ExtractExpandPassWithIds(r, fakeIds{"ticker": 42}, "")
+	out, err := pass.Run("SELECT LW_GET('symbol', 'ticker') FROM events")
+	require.NoError(t, err)
+	require.Contains(t, out, "'ticker'", "a verbatim channel carries the name")
+	require.NotContains(t, out, "42")
 }
