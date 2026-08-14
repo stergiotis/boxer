@@ -11,7 +11,7 @@ import (
 // it), packageprops.All() reflects exactly the packages compiled into the
 // running binary — the reflect-like "what's in me" view a GUI can enumerate.
 // For the whole-repo view regardless of what a binary links, use the static
-// Table emitted by `wasmsurvey props harvest --emit go` instead.
+// Table emitted by `props harvest --tracked --emit go` instead.
 
 // Entry is one package's declared Props keyed by its import path. It is both the
 // registry's record type and the element type of the harvested Table.

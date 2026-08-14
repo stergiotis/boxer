@@ -2,7 +2,7 @@ package packageprops
 
 // WASMState is a package's TinyGo/WebAssembly compile state for one target —
 // the verdict computed by the wasmsurvey (ADR-0078) and reconciled against the
-// declaration by `wasmsurvey props verify`. The zero value is WASMUnknown, so
+// declaration by `props verify`. The zero value is WASMUnknown, so
 // an unset field asserts nothing.
 type WASMState uint8
 
@@ -29,7 +29,7 @@ func (s WASMState) String() (str string) {
 // Kind classifies a package by its primary role — what the package *is* — when
 // it is not ordinary library/production code (ADR-0080 §SD4, 2026-07-02 Update).
 // Unlike the WASM* verdicts there is no survey that computes it, so it is
-// human-curated and `wasmsurvey props verify` does not reconcile it. The zero
+// human-curated and `props verify` does not reconcile it. The zero
 // value is KindUnspecified, so an unset field asserts nothing — the common case
 // being ordinary library code that carries no special role.
 type Kind uint8

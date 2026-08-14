@@ -84,7 +84,15 @@ var PackageProps = packageprops.Props{
 }
 ```
 
-`wasmsurvey` gains a `props` command group:
+`wasmsurvey` gains a `props` command group, four levels down the CLI:
+
+```sh
+boxer code analysis golang wasmsurvey props {generate,harvest,drift,verify}
+```
+
+The verbs are named bare below; the path is spelled here because the bare form
+is not runnable, and generated files that printed it that way were read as
+evidence the tool had been removed.
 
 - **`props generate`** — seeds a `package_props.go` in each package from the
   survey's computed verdict. Idempotent-create: it writes only where the file is

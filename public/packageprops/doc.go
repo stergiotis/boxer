@@ -17,26 +17,37 @@
 // typed (goto-definition and find-references work — find-references on
 // packageprops.WASMCompiles lists every package in that state), readable at
 // runtime as pkg.PackageProps, and statically harvestable into an overview
-// table by `wasmsurvey props harvest`.
+// table by `props harvest`.
 //
 // Props grows over time (ADR-0080 SD4). Besides the WASM* verdicts it carries a
 // Kind classifying the package's primary role — KindDemo, KindExample, or
 // KindIntegrationTest — for the packages that are not ordinary library code;
 // the zero KindUnspecified asserts nothing. Kind is purely human-curated (no
-// survey computes it), so `wasmsurvey props verify` does not reconcile it,
+// survey computes it), so `props verify` does not reconcile it,
 // though `props generate` seeds the obvious demo/example cases from directory
 // name.
 //
-// The lifecycle is hybrid (ADR-0080 SD3): `wasmsurvey props generate` seeds the
+// The tooling is the `props` group of the wasmsurvey command, four levels down
+// the CLI:
+//
+//	boxer code analysis golang wasmsurvey props {generate,harvest,drift,verify}
+//
+// The path is spelled once here because the short form is not runnable; the
+// verbs are named on their own below.
+//
+// The lifecycle is hybrid (ADR-0080 SD3): `props generate` seeds the
 // declarations from the computed verdict (idempotent-create, never clobbering a
-// curated file), humans then curate them as intent, and `wasmsurvey props
-// verify` reconciles declaration against the freshly computed reality and gates
+// curated file), humans then curate them as intent, and `props verify`
+// reconciles declaration against the freshly computed reality and gates
 // regressions in CI.
 //
 // Two discovery surfaces (registry.go): generated files Register their Props
 // from init, so packageprops.All() enumerates the packages compiled into the
-// running binary; `wasmsurvey props harvest --emit go` emits a static Table of
+// running binary; `props harvest --tracked --emit go` emits a static Table of
 // the whole repo for embedding into a binary that does not link everything.
+// `props drift` gates that Table against the tracked declarations, so the two
+// surfaces cannot silently disagree — they did, by 63 packages, until it was
+// added.
 //
 // This package depends only on the standard library (sync, sort) and on no
 // boxer or external package (ADR-0080 SD2): every package imports it, so a
