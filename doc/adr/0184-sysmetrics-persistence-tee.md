@@ -409,7 +409,16 @@ Proposed — awaiting review by the code owner.
   someone compiles the output. `storegen` gates it; `gen` is where the check
   belongs, and moving it there is a candidate change to a shared surface this
   ADR does not own.
-- **M2 — vocabulary at base 32, assignment golden, and the cpu/mem DTOs.**
+- **M2 — vocabulary at base 32, assignment golden, and the cpu/mem DTOs.** ✓
+  Landed as
+  [`sysmvocab`](../../public/keelson/runtime/sysmvocab) and
+  [`sysmfacts`](../../public/keelson/runtime/sysmfacts).
+  One correction to §SD3 as written: the host token is **one membership per
+  kind** (`sysmCpuHost`, `sysmMemHost`, …), not one shared `sysmHost`. A
+  generated store declares each membership's kind symbol once per package and
+  refuses two kinds naming the same membership — cross-kind sharing needs the
+  reflect path, which a store does not use. The cost is linear in domains. The
+  domain token was dropped: the kind already identifies it.
 - **M3 — `ExternallyProvisioned`, the generated store, the tee, and `sysmetricsd` wiring.**
   Corrects `loadstudy`'s package documentation in the same milestone.
 - **M4 — the remaining scalar domains: psi, net, disk, battery, gpu.**
