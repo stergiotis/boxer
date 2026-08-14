@@ -10,6 +10,16 @@
 // Row types are typed per-kind so the broker / persist / audit code stays
 // readable; the leeway translation lives behind the FactsStoreI boundary, and
 // this package deliberately imports no leeway at all.
+//
+// # This is the hand-rolled lane
+//
+// Every kind here costs a hand-written verb, its hand-encoded leeway DML, and
+// hand-composed read-back SQL. A *new* fact kind should not land that way:
+// ADR-0105 §D5 puts it on a generated record store behind this facade
+// instead. The name of this package is the main reason someone misses that,
+// so: start at doc/explanation/facts-bound-record-stores.md, which covers
+// which lane to pick, the two DTO shapes the generated lane still refuses,
+// and why the state and keyed-lookup verbs cannot move yet.
 package factsstore
 
 import (

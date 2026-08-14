@@ -6,6 +6,11 @@
 // emitted per-component codec keeps its DTO's own package clause, so a
 // component declared elsewhere would land here as a second package.
 //
+// It is also the tree's only facts-bound store, so it doubles as the worked
+// example for adding another — one per domain, each in its own package. What
+// generalizes and what is specific to system metrics is separated in
+// doc/explanation/facts-bound-record-stores.md.
+//
 // # Shape
 //
 // One kind per collector domain, one entity per (host, domain, tick), append

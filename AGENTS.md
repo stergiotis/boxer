@@ -28,6 +28,7 @@ the linked document wins.
 | Run a trial — a reproducible measurement protocol repeated across builds | [doc/trials/](./doc/trials/) |
 | Configure behaviour via env vars | [doc/env-vars.md](./doc/env-vars.md) |
 | Run a task end to end | [doc/howto/](./doc/howto/) |
+| Persist a new kind of fact to `boxer.facts` | [doc/explanation/facts-bound-record-stores.md](./doc/explanation/facts-bound-record-stores.md) |
 | Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |
 | Report a vulnerability | [SECURITY.md](./SECURITY.md) |
 
