@@ -640,6 +640,42 @@ aggregation's.
 
 **M5 `hstrees` is next**, unchanged.
 
+### 2026-08-14 — the 2026-07-31 entry was wrong about `boxer.facts`
+
+That entry explains the load channels' provenance partly by ruling out
+"`boxer.facts` itself, which carries no numeric payload at all". Correcting it
+here rather than editing that entry, per the edit policy.
+
+It was wrong about the schema when written:
+[`factsschema`](../../public/keelson/runtime/factsschema/factsschema.go) builds
+the full `u8`…`i64Array` set, `u32Set`/`u64Set`, and `f32Array`/`f64Array`
+under `AspectLightSlowlyChangingFloat` — an encoding hint chosen for
+slowly-changing series, which is as close to "provisioned for metrics" as a
+schema gets. It was wrong about the table's contents too, if less obviously:
+`gov/capmapfacts` writes an `f64` there, a normalized compression distance.
+
+What was true is narrower — nothing wrote *load metrics* to that table, so no
+recorded series existed to analyse and `system.asynchronous_metric_log` was
+the only source available. That has since stopped being true as well.
+[ADR-0184](./0184-sysmetrics-persistence-tee.md) built the ADR-0090 P5 tee:
+`sysmetricsd --tee` writes the metric plane into `boxer.facts`.
+
+**Nothing above changes.** The substrate's capability was never what made
+ClickHouse's own metrics the wrong instrument — their *coverage* was. They
+describe the ClickHouse server rather than the box (no GPU, battery, PSI,
+process table or container view) and cover one host where the plane carries
+many. No figure, and no conclusion drawn from one, rests on where the numbers
+were stored.
+
+What the tee changes is availability, and only for half of this ADR. `damp` is
+streaming: left discords run on the live bus and need no history at all, so
+anomaly detection does not depend on the tee. `matrixprofile` and `adscore` are
+batch and need a table, which is what the tee supplies (ADR-0184 §SD7).
+Migrating `loadstudy`'s channels onto it is a separate decision and has not
+been taken: the figures in the 2026-07-31 entry were computed against
+`system.asynchronous_metric_log`, and switching the source silently would make
+old and new runs incomparable.
+
 ## References
 
 - Survey and literature landscape:
