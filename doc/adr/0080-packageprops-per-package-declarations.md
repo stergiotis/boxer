@@ -92,11 +92,25 @@ var PackageProps = packageprops.Props{
 - **`props harvest`** — go/ast-scans the tree for `PackageProps` declarations
   (no survey, no TinyGo) and emits the overview as a `--emit table` text grid or
   `--emit go` source file (`var Table = packageprops.Table{…}`) for embedding the
-  whole-repo snapshot into a binary that does not link every package.
+  whole-repo snapshot into a binary that does not link every package. `--tracked`
+  restricts the scan to git-tracked declarations, which is the form that
+  regenerates the committed table.
+- **`props drift`** — reconciles the committed `--emit go` table against the
+  git-tracked declarations and exits non-zero on any difference in either
+  direction. Needs neither the survey nor TinyGo. This is what keeps the
+  generated artifact honest between regenerations; without it a regen is
+  correct only on the day it lands.
 - **`props verify`** — reconciles each *declared* `PackageProps` against the
   freshly *computed* verdict and reports mismatches; exits non-zero on a
   regression (a package declared `WASMCompiles` that is now `WASMBlocked`). The
-  sound static-red signal (ADR-0078) lets this gate CI without TinyGo.
+  sound static-red signal (ADR-0078) lets this gate CI without TinyGo. Because
+  static mode can only prove red, it leaves most packages *unjudged* rather
+  than agreeing with them; unjudged is counted, not listed, so the findings
+  that matter are not buried under the abstentions.
+
+Both reconcilers run in `scripts/ci/lint.sh`. They are deliberately outside the
+`gov gate` composite (ADR-0179), which publishes to consuming repositories:
+these gate *this* repo's table and declarations.
 
 ### Subsidiary design decisions
 
@@ -133,8 +147,10 @@ var PackageProps = packageprops.Props{
 
 - ~362 new `package_props.go` files and a universal import edge to
   `packageprops`. The payoff: the per-package state becomes committed, diffable,
-  reviewable, and navigable — find-references *is* the overview, and `verify` is
-  the regression gate.
+  reviewable, and navigable — find-references *is* the overview, `verify` gates
+  declaration against reality, and `drift` gates the generated table against the
+  declarations. Two artifacts means two gates; a declaration set with only one
+  of them is the state this ADR spent two months in.
 - The footprint argues for a **staged rollout** (SD: start with a subtree or the
   amenable set, not one mega-commit) so review stays tractable and the shared
   worktree stays calm.
@@ -158,8 +174,12 @@ var PackageProps = packageprops.Props{
    `generate` ever rewrites (idempotent-create only, per SD3).
 3. ~~**Rollout staging**~~ — **done for `public/` 2026-06-12** (see Updates);
    `apps/` remain unsurveyed.
-4. **Leeway-facts bridge** — wiring `props harvest` into boxer.facts /
-   `godepview` (ADR-0078 #3/#4) once the declarations exist.
+4. ~~**Leeway-facts bridge**~~ — **done**: `props harvest --emit go` feeds
+   `proptable`, which keelson surfaces as the `go_package_props` introspection
+   table (ADR-0094). That it is *queryable* is what made its staleness matter
+   enough to gate.
+5. ~~**Keeping the generated table honest**~~ — **done 2026-08-14**: `props
+   drift`, run in `lint.sh` (see Updates).
 
 ## Updates
 
@@ -235,3 +255,51 @@ verdicts are) with a human-curated `ReviewState` verdict (unreconciled, like
 `Kind`); the heavy findings content stays in a sidecar, keeping `Props` a clean
 vocabulary (§SD5). This entry is a signpost — the full field-group description
 lands here when ADR-0131 is accepted and the field is implemented.
+
+### 2026-08-14 — the 2026-07-02 deferral was wrong; drift is gated instead
+
+That entry deferred the `proptable` regen because a full `harvest --emit go`
+folds in untracked in-flight declarations from concurrent work, and said "a
+later regen on a settled tree picks it up". Both halves have since proved
+wrong, and the second is the instructive one.
+
+**"A settled tree" is not a state this repository reaches.** The working tree
+is shared by concurrent sessions by design (AGENTS.md says so), so the
+precondition is unmet nearly always — an unbounded deferral wearing a short
+one's clothes. It held for two months and the table drifted 63 packages behind
+while the entry read as a scheduling note.
+
+**The defect was never that the table was behind.** It was that nothing
+detected it. A regen is correct on the day it lands and decays from the next
+commit, so "regenerate later" could not have been the fix at any date. The fix
+is `props drift`, now in `lint.sh`.
+
+**Scoping the comparison dissolves the blocker rather than waiting it out.**
+Drift compares against *git-tracked* declarations, which is the honest
+comparison independent of any of this: the table is a committed artifact, so
+it should agree with committed declarations, and a package that exists only in
+someone's working tree is not in the repository yet. Untracked work is
+therefore invisible to both the check and `harvest --tracked`, and the
+contamination the deferral was waiting out cannot occur. Tracked *paths* with
+working-tree content, not content at HEAD — otherwise a regen could never be
+committed alongside the declaration it encodes.
+
+**Wiring `props verify` at the same time found four wrong declarations**, none
+of which anything had reported because §Decision's claim that it "gates CI" had
+never been implemented. `chlocalbroker`, `componentview` and (transitively)
+`timerangepicker/evaluator` were declared amenable in the 2026-06-12 rollout,
+which was true then, and each later grew an import edge reaching `arrow-go`.
+`sysmvocab` was different and worse: declared amenable on 2026-08-14, hours
+before this entry, reasoning "pure registry declarations … no syscalls, no
+I/O". That reasoning was correct about the package's own code and produced the
+wrong verdict anyway, because the property is over the transitive closure and
+its registry reaches `arrow-go` through `leeway/common`. No reader computes a
+closure by inspection; that is the whole reason a survey exists. All four are
+now declared blocked, each naming its blame edge.
+
+One tooling change was needed to make `verify` usable as a gate rather than
+merely runnable. Its first run reported 882 mismatches, of which 870 were
+`computed=unknown` — static mode declining to judge, since it proves only red
+— and 12 were the real regressions. Abstentions are now counted rather than
+listed (`--show-unjudged` restores them). A gate whose output is 98% noise is a
+gate that gets tuned out, which is a fair account of why this one sat unwired.
