@@ -70,11 +70,11 @@ var TagValueRegistry = registry.MustNewTagValueRegistry(
 var MembersTagValue = TagValueRegistry.MustBegin("sysmMembers", 0).End()
 
 // NkRegistry is the natural-key registry for sysmetrics memberships. Every
-// Memb* constant below lives in it. Sized for the domains ADR-0184 phases in
-// after cpu and mem — psi, net, disk, battery, gpu, then the fan-out and
-// topology domains — so the common case does not re-hash.
+// Memb* constant below lives in it. The size is a capacity hint only — ids
+// follow registration order and do not move when it changes — set with room
+// for the topology domain ADR-0184 M6 still adds.
 var NkRegistry = registry.MustNewNaturalKeyRegistry(
-	MembersTagValue.GetTagValue(), 128, NamingStyle, identifier.UntaggedId(0), Contract,
+	MembersTagValue.GetTagValue(), 192, NamingStyle, identifier.UntaggedId(0), Contract,
 )
 
 // Membership constants for `boxer.facts` rows carrying system-metric samples.
@@ -286,6 +286,85 @@ var (
 	MembGpuPowerWatts       = NkRegistry.MustBegin("sysmGpuPowerWatts").End()
 	MembGpuTempC            = NkRegistry.MustBegin("sysmGpuTempC").End()
 	MembGpuFreqMhz          = NkRegistry.MustBegin("sysmGpuFreqMhz").End()
+
+	// --- ADR-0184 M5: the per-tick tables. ---
+
+	// The process table, column-major like the M4 per-item domains. Nothing
+	// here identifies a human or reveals what a process was invoked with — see
+	// the sysmProcCmd* block for why that is a separate kind.
+	MembKindProc = NkRegistry.MustBegin("sysmKindProc").End()
+	MembProcHost = NkRegistry.MustBegin("sysmProcHost").End()
+
+	MembProcPid = NkRegistry.MustBegin("sysmProcPid").End()
+	// PPID plus PID is what makes the table a forest rather than a list; a
+	// process is only interpretable relative to its parent.
+	MembProcPpid = NkRegistry.MustBegin("sysmProcPpid").End()
+	// Name is /proc/[pid]/comm — the kernel's own 15-character truncation, not
+	// the command line.
+	MembProcName = NkRegistry.MustBegin("sysmProcName").End()
+	// State is the single-letter Linux state (R/S/D/Z/T/I/…), stored as the
+	// letter because that is what every kernel document and every operator
+	// calls it.
+	MembProcState = NkRegistry.MustBegin("sysmProcState").End()
+	// CPUPercent is per-CPU: a process pegging one core reads 100, one pegging
+	// N cores reads N*100. It is not clamped, and a reader that clamps it loses
+	// exactly the processes worth looking at.
+	MembProcCpuPct       = NkRegistry.MustBegin("sysmProcCpuPct").End()
+	MembProcRssBytes     = NkRegistry.MustBegin("sysmProcRssBytes").End()
+	MembProcVmSizeBytes  = NkRegistry.MustBegin("sysmProcVmSizeBytes").End()
+	MembProcNumThreads   = NkRegistry.MustBegin("sysmProcNumThreads").End()
+	MembProcNice         = NkRegistry.MustBegin("sysmProcNice").End()
+	MembProcPriority     = NkRegistry.MustBegin("sysmProcPriority").End()
+	MembProcKernelThread = NkRegistry.MustBegin("sysmProcKernelThread").End()
+	// StartedAt is what makes a pid unambiguous over time: pids are reused, so
+	// (pid, startedAt) is the identity a history query needs.
+	MembProcStartedAtMs = NkRegistry.MustBegin("sysmProcStartedAtMs").End()
+	// The two ADR-0126 topology marks: the cooperative BOXER_COMPONENT value
+	// and the kernel-maintained systemd unit that corroborates it.
+	MembProcComponent  = NkRegistry.MustBegin("sysmProcComponent").End()
+	MembProcCgroupUnit = NkRegistry.MustBegin("sysmProcCgroupUnit").End()
+
+	// Process identity and invocation — the ADR-0090 §SD8 sensitive class, in
+	// its own kind so that a deployment which does not opt in stores none of
+	// it rather than storing it tagged.
+	//
+	// §SD8 designed a `sensitive` membership carried alongside the attribute's
+	// own, on the reasoning that the tag travels with the data. Two things make
+	// separation the better shape for the stored form: a component DTO binds
+	// one membership per field, so the second tag is unreachable from the
+	// generated write path at all; and the masking switch §SD8 defers does not
+	// exist, so a tag today is an annotation nothing enforces. A kind a
+	// deployment never writes needs no enforcement.
+	MembKindProcCmd = NkRegistry.MustBegin("sysmKindProcCmd").End()
+	MembProcCmdHost = NkRegistry.MustBegin("sysmProcCmdHost").End()
+	// Pid repeats here because this kind's arrays are aligned among themselves,
+	// not with the sysmProc* kind's — the two are separate entities and a
+	// reader joins them on pid.
+	MembProcCmdPid  = NkRegistry.MustBegin("sysmProcCmdPid").End()
+	MembProcCmdLine = NkRegistry.MustBegin("sysmProcCmdLine").End()
+	MembProcCmdUser = NkRegistry.MustBegin("sysmProcCmdUser").End()
+	MembProcCmdUid  = NkRegistry.MustBegin("sysmProcCmdUid").End()
+	MembProcCmdGid  = NkRegistry.MustBegin("sysmProcCmdGid").End()
+
+	// Listening sockets (ADR-0126 observed topology). The collector samples on
+	// its own slower cadence and consecutive bundles repeat one snapshot, so
+	// the tee writes a row only when the collection stamp advances.
+	MembKindSocket = NkRegistry.MustBegin("sysmKindSocket").End()
+	MembSocketHost = NkRegistry.MustBegin("sysmSocketHost").End()
+
+	MembSocketProto = NkRegistry.MustBegin("sysmSocketProto").End()
+	// Addr is an IP literal for inet sockets and a filesystem or @abstract path
+	// for unix ones; Port is 0 for unix.
+	MembSocketAddr = NkRegistry.MustBegin("sysmSocketAddr").End()
+	MembSocketPort = NkRegistry.MustBegin("sysmSocketPort").End()
+	// Inode is the join key the fd walk attributes pids by, kept so an
+	// unattributed row can still be correlated later.
+	MembSocketInode = NkRegistry.MustBegin("sysmSocketInode").End()
+	MembSocketUid   = NkRegistry.MustBegin("sysmSocketUid").End()
+	// Pid is 0 where the owning process's fd table was unreadable. Partial over
+	// absent: the row is published anyway (ADR-0126 §SD3), so a zero here means
+	// "not attributed", not "owned by pid 0".
+	MembSocketPid = NkRegistry.MustBegin("sysmSocketPid").End()
 )
 
 // AllMembs enumerates every registered sysmetrics membership. Tests iterate it
@@ -335,4 +414,17 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembGpuVendor, MembGpuIndex, MembGpuName, MembGpuPciId, MembGpuBusyPct,
 	MembGpuMemoryUsedBytes, MembGpuMemoryTotalBytes, MembGpuPowerWatts,
 	MembGpuTempC, MembGpuFreqMhz,
+
+	MembKindProc, MembProcHost,
+	MembProcPid, MembProcPpid, MembProcName, MembProcState, MembProcCpuPct,
+	MembProcRssBytes, MembProcVmSizeBytes, MembProcNumThreads, MembProcNice,
+	MembProcPriority, MembProcKernelThread, MembProcStartedAtMs,
+	MembProcComponent, MembProcCgroupUnit,
+
+	MembKindProcCmd, MembProcCmdHost,
+	MembProcCmdPid, MembProcCmdLine, MembProcCmdUser, MembProcCmdUid, MembProcCmdGid,
+
+	MembKindSocket, MembSocketHost,
+	MembSocketProto, MembSocketAddr, MembSocketPort, MembSocketInode,
+	MembSocketUid, MembSocketPid,
 }
