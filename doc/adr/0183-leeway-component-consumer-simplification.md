@@ -75,8 +75,10 @@ of the page's assumptions:
   vocabulary package.
 
 ADR-0105 D3b's storegen resolver (registry ids baked into generated
-artifacts) is confirmed unbuilt; it gates the one worked example the
-landscape lacks — the mesh scenario itself.
+artifacts) was unbuilt when this ADR was written, and gated the one
+worked example the landscape lacks — the mesh scenario itself. It has
+since been built for ADR-0184 (see D2), which both removes that gate and
+supplies a second vocabulary to test the design against.
 
 ## Decision
 
@@ -150,11 +152,15 @@ frees the short prefixes for high-cardinality families (`identgen`)
 and kills the jsonbench/runtime duplicate en passant. This re-keys every composed
 membership id — a **breaking data change**, taken deliberately in the
 pre-first-consumer window (the ADR-0182 precedent: run the breaking
-pass while the window is open). The code side is nearly free: the
+pass while the window is open). The code side is *nearly* free: the
 facts codecs and `factswrapper` resolve ids at package init, so a
-rebuild carries them, and no generation-baked ids exist yet (D2 lands
-after). Existing facts data is regenerated or migrated with the
-re-key; once claims are live, D3 flags any straggler binary.
+rebuild carries them. Generation-baked ids are no longer hypothetical,
+though — D2 landed first, so `sysmfacts` already bakes `sysmvocab`'s ids
+into its emitted Scan filters and cross-check map. Those regenerate from
+a gen test, so the cost is a regeneration step in the flag-day rather
+than a hand edit, but the re-key now has to name it. Existing facts data
+is regenerated or migrated with the re-key; once claims are live, D3
+flags any straggler binary.
 
 Naming rides the same decision: the `leeway/stopa` umbrella
 (registries, contracts, natural-key encoding) is renamed
@@ -172,21 +178,32 @@ importers) and ships in M1's flag-day.
 
 ### D1 — Registry-stable ids are the default; positional ids are marked closed-world (S1)
 
-- A vdd-side snapshot helper (working name `MembershipIdSnapshot()`)
-  materializes the linked registry as `map[string]uint64`, keyed by the
-  **marshalling-side (lowerCamel) spelling**. Name-style conversion
-  happens only at this seam; the helper errors on post-conversion
-  collision, and a test over the full registry pins round-trip
-  conversion (the converter is non-idempotent at digit boundaries).
+- The snapshot helper is **built**, and not where this section first put
+  it. [`storegen.MembershipIds`](../../public/keelson/runtime/factsschema/storegen/storegen.go)
+  takes any natural-key registry through a one-method local interface
+  (`IterateAll()`) and materializes it as `map[string]uint64`, keyed by
+  the **marshalling-side (lowerCamel) spelling**. Name-style conversion
+  happens only at that seam; it refuses a post-conversion collision and a
+  zero id (tag value zero is reserved invalid, ADR-0106 §SD8), and a test
+  over the full vdd vocabulary pins round-trip conversion — the converter
+  is non-idempotent at digit boundaries, which is what the pin is for.
+
+  Consumer-side and registry-parameterized rather than vdd-side, and that
+  is the correction rather than an implementation detail: a helper living
+  in vdd would have had to be copied for the second vocabulary.
+  ADR-0184's `sysmvocab` registry consumes it unchanged, which is the
+  property the vdd-side shape could not have had.
 - marshallreflect gains a snapshot-backed constructor for `MapLookup`
   (working name `NewRegistryLookup`), typed on a minimal local interface
   or the materialized map — not on the registry type. Hand-built
   `MapLookup` literals stay legal and become the *documented*
   closed-world escape hatch, as does `NoOpWrapper`'s declaration-order
-  regime on the generated side.
-- One snapshot value feeds both existing seams: `FixedIdsWrapper` on the
-  generated path and the new constructor on the reflect path. The private
-  `mapIdLookup` bridge in `recordstore/gen` is deleted;
+  regime on the generated side. **Not built** — the storegen slice needed
+  only the generated path.
+- One snapshot value feeds both seams. The generated path is done:
+  `storegen` hands the map to `FixedIdsWrapper`. The reflect path waits
+  on the constructor above, and with it the deletion of the private
+  `mapIdLookup` bridge in `recordstore/gen`.
   `marshallreflect.LookupI` and `readback.IdLookup` stay deliberate
   structural twins (collapsing them forces an import direction between
   leaf packages for a one-method interface).
@@ -208,14 +225,27 @@ importers) and ships in M1's flag-day.
 
 ### D2 — The storegen slice unblocks the mesh example (S1, ADR-0105 D3b)
 
-`FactsWrapper` gains the generation-time id-source methods
-(`PlanMembershipIds`, `GloballyUniqueIds`), resolving `vdd.Memb*` ids —
-used as an **id source only**: `runtime/factsschema/storegen` feeds
-`recordstore/gen` through `FixedIdsWrapper`, so the checked-in codec
-artifacts' bytes are untouched. Generation runs in the gen-test lane
-(the `sharedsection` pattern); a CLI command is deferred until a second
-consumer exists — no recordstore generator command exists at all today,
-and the gen test is the repo's proven lane.
+**Built** (ADR-0105 D2, ADR-0184 M1), through a smaller seam than this
+section first specified. `FactsWrapper` gains nothing:
+[`runtime/factsschema/storegen`](../../public/keelson/runtime/factsschema/storegen/storegen.go)
+resolves ids itself via `MembershipIds` (D1) and hands them to
+`recordstore/gen` as a `marshallgen.FixedIdsWrapper`. The checked-in
+codec artifacts' bytes are untouched either way.
+
+Putting `PlanMembershipIds`/`GloballyUniqueIds` on `FactsWrapper` would
+have been the wrong shape twice over, which building the alternative made
+clear. `FactsWrapper` is the facts *codec's* wrapper and resolves
+`vdd.Memb*`, so a store generated through it would have been bound to vdd
+— where a store binds whichever vocabulary its components are written
+against, and `boxer.facts` carries several kept apart by tag value
+(ADR-0184 §SD4 mints at base 32). It would also have put id resolution on
+a type whose job is emitting codec source. Nothing needs the methods: the
+generator already accepts an id source, and a snapshot is a plain map.
+
+Generation runs in the gen-test lane (the `sharedsection` pattern); a CLI
+command is deferred until a second consumer exists — no recordstore
+generator command exists at all today, and the gen test is the repo's
+proven lane.
 
 ### D3 — The vocabulary is published as facts; reconciliation is a query (S1, B1)
 
@@ -328,7 +358,7 @@ and the gen test is the repo's proven lane.
   retain-discipline, the tuple rung — with the **centerpiece** the
   missing main-scenario example: registry-resolved ids over a shared
   table, one domain formulating a component late over rows another
-  domain wrote earlier (gated on D2).
+  domain wrote earlier — no longer gated, since D2 is built.
 - Hygiene the review caught: the marshalling how-to is re-reviewed and
   restamped; `EXPLANATION.md` gets a pass; ADR-0146's Context collision
   table is marked a historical (pre-D4) measurement via dated update; a
@@ -375,11 +405,15 @@ and the gen test is the repo's proven lane.
 - **M0 — value-arity refusal on every read path.** D5's fix; the pinned
   assertions move.
 - **M1 — id-source hardening.** D0: claim authority, explicit ordinals
-  (kept at today's values), the vocabulary-tag re-key — one flag-day —
-  and the assignment goldens; D1: snapshot helper + constructor +
-  closed-world marking + `doc.go` correction.
-- **M2 — storegen slice.** D2: `FactsWrapper` id-source methods;
-  `runtime/factsschema/storegen` + gen test.
+  (kept at today's values), the vocabulary-tag re-key — one flag-day,
+  now including a regeneration pass for the stores D2 already baked —
+  and the assignment goldens; D1: the reflect-path constructor +
+  closed-world marking + `doc.go` correction. The snapshot helper the
+  rest of D1 rests on landed early, with M2.
+- **M2 — storegen slice.** ✓ D2: `runtime/factsschema/storegen` +
+  `MembershipIds` + gen test, built ahead of M1 because ADR-0184 needed
+  it. `FactsWrapper` was left alone — see D2 for why that turned out to
+  be the point rather than a shortcut.
 - **M3 — failure-mode corpus.** D7's X-class, centerpiece included.
 - **M4 — doc unification.** D6 reframing + D7's U1, hygiene items, and
   the doclint rule.
@@ -398,8 +432,8 @@ M5 and M6 are independent of each other and may swap.
 | `identity/identifier` tag space | named runtime-mint tag reserved; `VcsManagedContract` refuses it (D8) | reservation pin test; D3 views partition by tag |
 | `identity/tagmint` (new) | claiming API; token required by the `namemint` registries; parity check and per-package `TagValueRegistry` instances retired (D0) | four vocabulary packages re-key to width-32 claims; facts data regenerated/migrated |
 | `marshallreflect` exported API | constructor + minimal resolver interface added (D1); unit-read refusal (D5) | `doc.go` correction; arity tests |
-| vdd vocabulary package | snapshot helper added (D1); claim kind + publication (D3) | naming round-trip pin; reconciliation views |
-| `marshallgen` wrapper contract | `FactsWrapper` gains id-source methods (D2) | `runtime/factsschema/storegen` + gen test |
+| vdd vocabulary package | claim kind + publication (D3) | reconciliation views |
+| `runtime/factsschema/storegen` (new) ✓ | registry → id-snapshot helper and the facts-bound store generator (D1, D2); no existing surface changed — `FactsWrapper` and the `marshallgen` wrapper contract are untouched | gen tests in the consuming package; naming round-trip pin |
 | `recordstore/gen` emitted builder | Add verbs buffer; double-Add and Raw-mixing refuse loudly (D4) | 6 stores / 48 `*.out.go` regenerate; `sharedsection` tests |
 | `dml/runtime` | deferred-section buffer added; second-visit error gains section name (D4) | facts encoders (`chstore`, `queryrunfacts`, `capmapfacts`); DML regeneration |
 | generated codec read path + CH readback validator | unit-read refusal (D5) | readback suite |
@@ -522,9 +556,9 @@ M5 and M6 are independent of each other and may swap.
 
 - **Lane.** Default `go test`: the per-registry assignment goldens,
   init-time duplicate refusal, and claim-authority refusal tests
-  (duplicate value or name; band misfit) (D0), naming round-trip pin
-  over the full
-  registry (D1), `arity_evolution_test.go` with moved assertions (D5),
+  (duplicate value or name; band misfit) (D0), the naming round-trip pin
+  over the full registry and the converging-name and zero-id refusals
+  (D1, in `storegen`), `arity_evolution_test.go` with moved assertions (D5),
   `sharedsection` round-trip and the parity corpus (D4), the storegen
   gen test (D2), the failure-mode corpus (D7). CH-backed behaviour:
   the clickhouse-local readback suite (D5's validator rung) and the
