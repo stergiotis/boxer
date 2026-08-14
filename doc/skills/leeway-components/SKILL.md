@@ -212,3 +212,8 @@ of the component model (ADR-0100 SD6, as corrected 2026-08-10). Notes:
   [`recordstore`](../../../public/storage/recordstore/) (the gated consumer).
 - How-to: [leeway-marshalling](../../howto/leeway-marshalling.md) — the
   single-DTO tag grammar this layer builds on.
+- Reading a component back **from SQL** rather than through the Go read
+  path: [the SQL read surface](../../explanation/leeway-sql-read-surface.md).
+  The per-kind Presence / Projection / Validator artefacts ADR-0066
+  generates are this contract's SQL rendering — the same arity rule, so a
+  slot that is optional here is optional there.

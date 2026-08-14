@@ -17,6 +17,13 @@ status: draft
 A `Driver` walks Arrow records and calls `SinkI` interface methods in strict nesting order.
 Implementors produce output (text, JSON, HTML, data frames, etc.) by responding to these calls.
 
+This is the **Go** read path, for a consumer that has the records in
+process. The other one is SQL, where the server does the locating and
+extracting — see
+[the SQL read surface](../../explanation/leeway-sql-read-surface.md). The
+membership-role classification below is the same model both use; only where
+it runs differs.
+
 ## Call Protocol
 
 ```

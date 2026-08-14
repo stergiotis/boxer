@@ -40,6 +40,14 @@ All schemata are nominal and not structural when compared.
 All names are so called "stylable names" that can be written in camel case (lower/upper), snake case (lower/upper), spinal case (lower/upper).
 The names are checked to not collide under all combinations of styles.
 
+Physical column names are generated from the model below, and reading them
+back from SQL is a solved problem — see
+[the SQL read surface](../../explanation/leeway-sql-read-surface.md) before
+open-coding the lane and membership arithmetic this skill describes. The
+multi-membership flattening in particular is where a hand-written extraction
+goes quietly wrong: an attribute may carry several memberships, so a position
+in the membership array does not index the value array.
+
 ## Example: Mapping JSON to a equivalent Leeway representation
 Consider as a first illustrative example the mapping of json to a leeway table definition (using the leeway go sdk):
 ```go

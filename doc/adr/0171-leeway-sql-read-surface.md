@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-06
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-14
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0171: leeway's SQL read surface — named, versioned, and generated
 
@@ -141,7 +139,7 @@ The layering is not a new claim — it is already true and already recorded in
 ADR-0162's 2026-08-02 Update. What is missing is a reader arriving from the
 consumer side finding it.
 
-### SD2 — The read-back family gets a version handshake and a retirement path
+### SD2 — The surface gets one version handshake, one declared set, and a retirement path
 
 The family adopts `chpack`'s existing mechanism: a version constant, a marker
 function, and an installer that verifies the marker after installing. Because
@@ -161,11 +159,53 @@ append-only list of names this repository has withdrawn
 (`chpack.RetiredNames`), which is what kept the rename from leaving 23 stale
 functions behind the way its predecessor left 16.
 
-What remains for §SD2 is the part the list cannot do: catching a leeway-owned
-function that *no build ever declared* — a hand-installed extra, or a
-spelling from a fork. That needs the full declared set, which spans `chpack`,
-the read-back family and `identsql`; no package holds all three today, and
-deciding where it should live is this sub-decision's remaining work.
+What the list cannot do is catch a leeway-owned function that *no build ever
+declared* — a hand-installed extra, or a spelling from a fork. That needs the
+full declared set, which spans `chpack`, the read-back family and `identsql`.
+The four choices that turns into are settled as follows.
+
+**Home — a new package, `public/semistructured/leeway/lwsqlsurface`.** It
+imports all three rosters and is the single entry point §SD1 names. The two
+cheaper homes do not work: `readback` already imports `chpack`, so a registry
+inside `chpack` would close an import cycle, escapable only by init-time
+self-registration or by moving the read-back roster away from the SQL
+`TestRosterMatchesSQL` pins it to; and a registry inside `readback` would put
+the whole surface under `marshall/clickhouse/`, where `identsql` — an identity
+concern, not a marshalling one — does not belong. Each family keeps declaring
+its own roster beside its own SQL; `lwsqlsurface` declares only the union.
+
+**One marker for the surface, `LW_SURFACE_VERSION`.** Not one per family. The
+invariant it carries is the reason: *the marker present at revision N means
+all three families are installed at revision N.* A per-family scheme answers
+three questions a caller then has to combine, and the trial's failure was not
+knowing which combination it was looking at.
+
+Three consequences follow, none of them optional once the invariant holds:
+
+- `LW_PACK_VERSION` is **retired** onto the append-only list. Two markers that
+  can disagree reintroduce the ambiguity this removes.
+- `chpack.Install` **folds into** the surface installer. A pack-only install
+  can verify nothing once the marker is the surface's; and were it to stamp
+  the marker anyway, the marker would stop meaning what the invariant says.
+- A client probing a server provisioned by a **pre-surface build** finds no
+  surface marker. It falls back to reading `LW_PACK_VERSION`'s `create_query`
+  — the existing technique, for the existing reason: calling either function
+  fails with unknown-function on exactly the servers whose revision matters.
+
+**Install provisions all three families**, in dependency order — pack,
+read-back helpers, identity UDFs — then stamps and verifies the marker, then
+drops retired names. This ends the asymmetry ADR-0066's 2026-08-07 Update
+records, where provisioning and reconciling lived in different places and a
+host could install one family without the other. It is a behaviour change for
+callers that install the pack alone today.
+
+**Undeclared names are reported, not dropped, unless the caller asks.**
+`Reconcile` returns the `LW\_%` functions the server carries that the declared
+set does not contain; dropping them is an explicit mode. Retired-name drops
+stay automatic, because those are spellings this repository itself withdrew.
+The asymmetry is deliberate: the repository may delete its own past, but a
+name it never declared may be a fork's or a downstream consumer's, and
+`play` reconciles endpoints automatically at startup.
 
 ### SD3 — Materialized projections are emitted from the schema, not hand-written
 
@@ -243,7 +283,10 @@ deployment option with a measured price, not a gap in the surface.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `readback.HelperUDFsSQL()` (exported Go API under `public/`) | gains a version constant, a marker function, and a reconciling installer | the read-back generator's golden tests; any server already carrying the family |
+| `lwsqlsurface` (new exported Go package under `public/`) | the declared set, `Version`, `Install`, `Reconcile` | the three rosters it unions; the roster-pinning tests |
+| `chpack.Install` (exported Go API under `public/`) | removed — superseded by `lwsqlsurface.Install` | `play`, `jsonbench`, and any out-of-tree caller |
+| `LW_PACK_VERSION` (SQL function name, named registry) | retired in favour of `LW_SURFACE_VERSION` | `chpack.RetiredNames`; play's vocabulary probe, which keeps reading it as the pre-surface fallback |
+| `readback.HelperUDFsSQL()` (exported Go API under `public/`) | keeps its signature; its family joins the surface's declared set and installer | the read-back generator's golden tests; any server already carrying the family |
 | leeway DDL generator (generated-code input) | gains `MATERIALIZED` projection emission | `go generate ./...` output for schemas that opt in |
 | keelson subjects and vocab (named registry) | SD4 exposes membership name→id to SQL readers | whatever carries the lookup; no change to how ids are minted |
 | leeway DDL generator (generated-code input) | SD5 only: gains exploded-companion DDL and its conversion statement | `go generate ./...` output for schemas that opt in; whatever maintains the copy |
@@ -286,8 +329,14 @@ deployment option with a measured price, not a gap in the surface.
   any single finding justifies on its own. The ordering exists so the tail can
   be dropped.
 - SD2's reconciling installer must know the full roster of leeway-owned
-  functions on a server, which is a new thing to keep correct; getting it wrong
-  drops a function someone else depends on.
+  functions, which is a new thing to keep correct — a fourth declaration of
+  names that are already declared three times. Getting it wrong under the
+  opt-in drop mode deletes a function someone else depends on; getting it
+  wrong under the default mode reports drift that is not there.
+- One marker for three families means any family's revision bump invalidates
+  the surface version, so a server is "stale" for a change that did not touch
+  the part it uses. That is the price of the invariant, and it is paid on
+  every bump, not only on the ones that matter to a given caller.
 - SD3 adds a schema-to-DDL path that must stay in step with physical column
   naming — the same coupling that made the hand-written version fragile, now in
   a generator.
@@ -300,26 +349,38 @@ deployment option with a measured price, not a gap in the surface.
 
 ## Migration — Tier 1
 
-- **Breaks.** Nothing at rest. SD2's reconciling installer will drop
-  leeway-owned functions on a server that the build no longer declares — which
-  is its purpose, and is a behaviour change for any server carrying
-  hand-installed extras under an `LW_` name.
-- **Path.** Install the versioned family; the installer reports what it removed.
-  Servers on the current family are reconciled on next install with no manual
-  drop step — the manual step is what this removes.
+- **Breaks.** Nothing at rest. Two things break at build time: `chpack.Install`
+  is removed, and callers move to `lwsqlsurface.Install`; `LW_PACK_VERSION`
+  stops being installed, so anything reading it as *the* marker reads
+  `LW_SURFACE_VERSION` instead. A server carrying hand-installed extras under
+  an `LW_` name is reported, and only dropped if the caller asks — see SD2.
+- **Path.** Call `lwsqlsurface.Install`; it provisions all three families,
+  verifies the marker, and drops the retired names — `LW_PACK_VERSION` among
+  them — after the verify succeeds. A server on an older build is reconciled on
+  next install with no manual drop step; the manual step is what this removes.
+  A client that must diagnose a server *before* reconciling it falls back to
+  `LW_PACK_VERSION`'s `create_query`.
 - **Regeneration.** SD3 changes generator output for schemas that opt in;
   `go generate ./...` must re-run. No FFI boundary is involved.
-- **Old shape.** `HelperUDFsSQL()` keeps its signature and meaning; the version
-  marker is additive.
+- **Old shape.** `HelperUDFsSQL()` keeps its signature and meaning. What it
+  emits is now also reachable through the surface installer, which is the
+  supported path; the string form stays for callers that provision by hand.
 
 ## Verification plan — Tier 1
 
 - **Lane.** The `//go:build integration` lane, which already has a live
-  ClickHouse and is where `chpack`'s install-and-verify test runs.
-- **What would fail.** A test that installs the read-back family against a
-  server pre-loaded with a retired function name and asserts the function is
-  gone afterwards; and a golden over the generated `MATERIALIZED` definitions,
-  so a physical-column-naming change that silently invalidates them goes red.
+  ClickHouse and is where `chpack`'s install-and-verify test runs. The parts
+  that fit in one session — install, marker verify, `system.functions`
+  drift detection — also run hermetically against `clickhouse-local` in the
+  unit lane, skipped when the binary is absent, as the read-back UDF tests do.
+- **What would fail.** A test that installs the surface against a server
+  pre-loaded with a retired function name and asserts the function is gone
+  afterwards; a test that plants an undeclared `LW_` function and asserts
+  `Reconcile` reports it and leaves it alone until asked; a test that asserts
+  the declared set equals the union of the three rosters, so a family growing
+  a function without the surface noticing goes red; and a golden over the
+  generated `MATERIALIZED` definitions, so a physical-column-naming change
+  that silently invalidates them goes red.
 - **Gap.** Nothing verifies SD1 — a documentation pointer has no lane. The
   honest check is a re-run of the jsonbench trial by an operator who has not
   read this ADR, which is exactly what
@@ -327,13 +388,21 @@ deployment option with a measured price, not a gap in the surface.
 
 ## Status
 
-Proposed — awaiting review by p@stergiotis.
+Accepted 2026-08-14.
 
 This ADR was written to close the jsonbench-on-facts trial's findings ledger,
-not from an implementation. SD3 and SD4 in particular describe an intent, not a
-shape: both would need the design dialogue
+not from an implementation. SD1 and SD2 are settled to a shape and carry
+milestones below. SD3, SD4 and SD5 record an intent, not a shape: each still
+needs the design dialogue
 [CODINGSTANDARDS § Design Before Code](../../CODINGSTANDARDS.md#design-before-code)
-asks for before anything is built.
+asks for, and accepting this ADR does not licence building them.
+
+- **M0 — SD1: the read surface as one page; skills pointers.** ✓
+- **M1 — SD2: `lwsqlsurface` — declared set, marker, `Install`, `Reconcile`.** ✓
+- **M2 — SD2: play's vocabulary probe on the surface marker.** ✓
+- **M3 — SD3: `MATERIALIZED` projection emission — dialogue first.**
+- **M4 — SD4: membership name→id readable from SQL — dialogue first.**
+- **M5 — SD5: the exploded companion table — dialogue first.**
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
@@ -349,3 +418,112 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - [ADR-0116](./0116-play-leeway-column-handle-resolution.md) — column handles.
 - [ADR-0168](./0168-capmap-business-capability-corpus.md) — the competence vault
   the findings' slugs come from.
+
+## Update 2026-08-14 — M1 and M2 implemented; what the shape turned into
+
+The four choices §SD2 left open, as landed, and the two things that only
+became visible while building it.
+
+- **Homes.** `public/semistructured/leeway/lwsqlsurface` holds `Version`,
+  `LW_SURFACE_VERSION`, `DeclaredFunctions`, `Statements`, `Install` and
+  `Reconcile`. The installer machinery moved there whole from `chpack` —
+  feature probe, collision check, retired-name drop — because a pack-only
+  installer could no longer verify anything. `chpack` is now declaration and
+  rendering only. `RetiredNames` stayed in `chpack`, where it already covered
+  more than the pack.
+- **`readback.FamilyStatements`.** The installer executes one statement per
+  round trip, and `HelperUDFsSQL()` emits the pack ahead of the family, so
+  the family needed a way to hand over its own statements alone. The split is
+  lexical and pinned against the roster by test, rather than parsed by a SQL
+  parser on an install path.
+- **The panel's server population is now the declared set** rather than three
+  separately-looped rosters. That was not tidying: the marker is declared by
+  this package and probed against that list, so a hand-maintained copy would
+  have reported `LW_SURFACE_VERSION` as an undeclared extra on every
+  correctly provisioned server.
+- **The pre-surface fallback is a sentence, not a missing marker.** A server
+  carrying the retired `LW_PACK_VERSION` and no surface marker is neither
+  broken nor empty — it works, and was provisioned before the families shared
+  a marker. The panel says that, because "unknown" would throw away the one
+  thing the reading does establish.
+
+**Verification deviation.** The install-and-reconcile lane is hermetic:
+`clickhouse-local --path` persists created functions across invocations, so
+`Install`, the marker verify, the retired-name drop and both `Reconcile`
+modes run for real without a server. The integration lane keeps what
+`clickhouse-local` cannot stand in for — a server with its own builtins and
+other users' functions — and runs `Reconcile` in report mode only, because
+that lane may target a shared server and dropping there would delete work
+that is not ours.
+
+**Not done here.** M0 (SD1's page and the skills pointers) is still open, and
+SD3–SD5 remain intents awaiting their own dialogue.
+
+## Update 2026-08-14 — M0: the page is a router, and it is linked both ways
+
+`doc/explanation/leeway-sql-read-surface.md` is deliberately **not** a fifth
+explanation of the mechanics. Four pages already cover them — physical names
+and handles, the array idioms, the three DQL contracts, the query algebra —
+and a page that restated any of them would be the thing that goes stale. It
+names the five layers, says where each name runs and how each fails, covers
+provisioning and the version check, walks one attribute end to end, and lists
+the gaps. Everything else is a link.
+
+**Linked from both directions**, because a router nothing points at
+reproduces the failure it exists to fix: the four leeway skills, the two
+explanation pages' reading lists, the array-idioms how-to (whose opening now
+says to read the surface first, and names the truncating idiom), and
+AGENTS.md's leeway subsystem note.
+
+Two deviations from §SD1 as written. It says *three* leeway skills; there are
+four now, and all four carry a pointer — placed where each skill's reader
+first meets the problem rather than in a footer, which is the placement the
+trial's evidence argues for. And each pointer carries one sentence of *why*,
+not just a link: a bare cross-reference is as unfindable as the vocabulary
+was.
+
+**One gap the page surfaced rather than closed.** No CLI installs the
+surface. `lwsqlsurface.Install` is Go, play reconciles on startup, and
+`jsonbench` has a subcommand — so an operator with neither is left piping SQL
+that carries no version marker, which is exactly the state §SD2 exists to
+make visible. A `leeway`-family install command is the obvious next step; it
+is recorded on the page as a known gap rather than fixed under a
+documentation milestone.
+
+## Update 2026-08-14 — `leeway sqlsurface`, and a split in the drift report
+
+M0's page named "no CLI installs the surface" as a known gap. It is closed:
+`leeway sqlsurface` has `install`, `status`, `print` and `drop-undeclared`,
+mapping one-to-one onto the package API — including its asymmetry, which the
+command shapes rather than describes. `install` drops this repository's
+withdrawn spellings without being asked; `drop-undeclared` is a separate
+command, explicitly named, and additionally requires `--confirm`, so removing
+a name that might be someone else's takes three deliberate acts.
+
+`print` is the half that closes the *original* complaint. Provisioning by
+hand was already possible — pipe `readback.HelperUDFsSQL()` — but that script
+carries no version marker, so it produced a server that works and cannot say
+what it carries, which is the failure §SD2 exists to prevent. `print` emits
+the marker with the rest.
+
+**`Report` gained `Retired`,** separated from `Undeclared`. Both are
+leftovers, but they need different actions: a withdrawn spelling has a known
+fix — the next install drops it — while an undeclared name is somebody's.
+Conflated, a status tool either nags about the fixable case or offers to
+delete the unknown one, and on a pre-surface server the retired
+`LW_PACK_VERSION` reported as "undeclared", which is true and useless.
+`ReconcileDrop` now removes only genuinely undeclared names, and
+`Report.PreSurface()` names the server that carries the old marker and no new
+one. Only the namespaced generations can appear in `Retired` — the listing
+asks for `LW\_%` — while `Install` drops the pre-namespace spellings anyway,
+by unconditional DROP rather than by diffing a listing.
+
+**Verified against a live server**, which is new for this ADR: ClickHouse
+26.7 on a scratch instance, driven through the CLI — `status` on an empty
+server reporting 39 missing, `install` provisioning and verifying, `status`
+reporting in sync, a planted fork helper and a planted retired marker
+reported in their separate buckets, `install` clearing only the retired one,
+`--confirm` clearing the other, and `--fail-on-drift` exiting non-zero
+exactly while drift stood. The `//go:build integration` lane — this ADR's
+own test and ADR-0162's correctness matrix, plan-identity, guard-pruning and
+differential-oracle suites — passed against the same server.

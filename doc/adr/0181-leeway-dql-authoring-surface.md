@@ -371,7 +371,7 @@ Accepted 2026-08-13.
 - **M2 — SD2+SD7: `LwConstructExpand`; standard-set registration; client vocabulary entries.** ✓
 - **M3 — SD5: `LwShapeCheck` and the audit-query generator.** ✓
 - **M4 — SD4: skip-index emission policy over `TableOptions`.** ✓
-- **M5 — SD3: shared extraction builder and `LwExtractExpand` — blocked until ADR-0171 §SD2's version handshake lands.**
+- **M5 — SD3: shared extraction builder and `LwExtractExpand`.** ✓
 
 The options considered for each naming and scoping choice, and their
 kill-reasons, are recorded in
@@ -445,3 +445,60 @@ The choices this ADR left to implementation, as landed:
 - [leeway-second-substrate trial](../trials/leeway-second-substrate/README.md)
   — the representation/expressibility evidence behind the acceptance
   criterion.
+
+## Update 2026-08-14 — M5 implemented; two surface additions and one dormant path
+
+ADR-0171 §SD2's handshake landed, unblocking §SD3. What that turned into:
+
+- **Homes.** The shared expression builder is the new package `lwextract`
+  (`Value`, `Present`, `CountEqual`, `NullWhenAbsent`) — a leaf that resolves
+  nothing, taking already-escaped lane names and an already-rendered
+  membership literal, which is what lets both consumers import it. The
+  read-back generator now calls it and its goldens pin the output
+  byte-identical. The schema side is `lwsql.ExtractLanesFor`, deciding
+  value/identity/cardinality/length lanes from the physical column NAMES
+  alone. The pass is `constructsql.ExtractExpandPass`.
+- **Registration is a Factory, not an Entry.** §SD7 anticipated a
+  standard-set entry with a marker pre-scan; the pass is schema-bound, so it
+  is late-bound at Order 120 exactly as `ResolveColumnNames` is. A consumer
+  with no schema binding — the unbound `/query` path — simply does not get
+  the sugar, rather than getting a pass that cannot answer.
+
+**Two additions to the family's signature**, both forced by real schemas:
+
+- `'col:<name>'` — a section with several value columns (`geoPoint` has
+  `lat` and `lon`) has no obvious "the" value. Rather than guess, the pass
+  asks and lists the candidates.
+- `'chan:<channel>'` — a section carrying more than one membership channel
+  is likewise ambiguous.
+
+Both follow §SD2's vocabulary-prefixed token convention, and both are
+optional: the single-value-column, single-channel section — the common case
+— needs neither.
+
+**A limitation worth stating plainly.** A *ref* channel identifies
+memberships by registry id, and a client-side pass holds no registry. So
+`LW_GET('metric', 'cpuLoad')` on a ref channel is an error naming the gap;
+`LW_GET('metric', '6917529027641081861')` works. Verbatim channels take the
+name and need nothing. This is ADR-0171 §SD4 seen from the authoring side,
+and it is the one place where "no physical names, no Go" is not yet true.
+
+**The fast path is implemented, proven, and currently unreachable.** The
+absence of a `<role>card` column licenses the bare-`indexOf` form, and a
+`clickhouse-local` test proves the fast and general forms agree on the same
+fixture (a deliberately broken fast form makes it fail, which was checked).
+But `TableRowConfigMultiAttributesPerRow` is the only row config the
+generator emits today, and it always emits the cardinality column — so no
+schema this repository produces takes the path. ADR-0066's fast-path item is
+closed in the builder, dormant in practice, and will light up when a
+single-attribute-per-row config exists.
+
+**Verification deviation.** The planned check was a `clickhouse-local`
+round-trip asserting the `LW_GET` expansion equals the read-back artefact.
+What landed instead pins the two halves separately, which is stricter about
+the part that can actually drift: the *expression* is one function in one
+package, pinned by its own tests and by the generator's goldens, so it
+cannot differ; the *lanes* are resolved by two independent roads — an IR
+loaded off a `TableDesc` versus parsed physical names — and a test compares
+them per section and sub-column. A round-trip would have exercised both at
+once and told us less about which one was wrong.

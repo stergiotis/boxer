@@ -130,3 +130,5 @@ data-level predicate, out of scope for name resolution.
   were rejected.
 - The `leeway-beginner` and `leeway-advanced` skills — the backbone/payload
   model and the physical encoding this page summarises.
+- [the SQL read surface](./leeway-sql-read-surface.md) — handles are one
+  layer of it; that page names the rest and says which endpoint carries what.

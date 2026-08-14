@@ -321,6 +321,9 @@ automatically; the consumer names the table it reads.
 
 ## Reading list
 
+- [the SQL read surface](./leeway-sql-read-surface.md) — what exists, where
+  each name runs, and how to check an endpoint carries it. Start there if you
+  arrived here without knowing which function to reach for.
 - [array-idioms how-to](../howto/leeway-clickhouse-array-idioms.md) — the
   executable kernel behind F and X.
 - [query algebra](./leeway-query-algebra.md) — axes, planes, the (S,N)

@@ -113,6 +113,16 @@ To keep names concise and URL-safe, **Aspects** (Encoding Hints, Use Aspects, Va
 *   **0:** **Config** (TableRowConfig), then an empty co-section group.
 *   **data:** **Streaming Group**.
 
+### 4.3 You do not type these names in SQL
+
+A name like the one above is the schema, not something a person composes.
+Reading a leeway table from SQL has a supported surface — handles that
+resolve `section:column`, an `LW_GET` family that locates an attribute by
+membership, and installed functions underneath both. Start at
+[the SQL read surface](../../explanation/leeway-sql-read-surface.md); a
+measured trial found that hand-writing the array arithmetic instead cost up
+to 3× and, in one case, silently returned truncated answers.
+
 *> [Figure 3: Co-Array Alignment – Illustrating how Tag indices align physically with Value indices]*
 
 ---

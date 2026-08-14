@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-07
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-14
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0174: a vocabulary panel for play — what this buffer can call, and where it runs
 
@@ -161,13 +159,23 @@ generator: undeclared, it reads as *on this endpoint but not in any roster
 this build carries* — a sentence about the server, for what would be a gap in
 the build. [ADR-0182](./0182-leeway-aspects-v2-codec-and-vocabulary.md) §SD4's
 generated `LW_ASPECT_*` family is the worked case. It joined `chpack`, so it
-is declared by `Functions()` like the rest of the pack, and the pack revision
-that already answers the skew question moved with it.
+is declared by `Functions()` like the rest of the pack.
 
-The pack revision comes out of the same probe, so pack *skew* — the server has
-the family but at a revision this build did not write — is distinguishable
+The server population is taken from
+[ADR-0171](./0171-leeway-sql-read-surface.md) §SD2's declared set — the union
+of the three rosters plus the surface marker — rather than by looping the
+three rosters here. Same names, but by construction rather than by
+maintenance: what the panel diffs against is exactly what the installer
+installs, so the marker itself cannot read as an undeclared extra on a
+correctly provisioned server.
+
+The surface revision comes out of the same probe, so *skew* — the server has
+the families but at a revision this build did not write — is distinguishable
 from absence. That is the drift ADR-0171 §SD2 is about, surfaced where someone
-is already looking at a wrong answer.
+is already looking at a wrong answer. A server carrying the retired
+`LW_PACK_VERSION` and no surface marker gets its own sentence: it was
+provisioned before the three families shared a marker, which is neither
+absence nor skew.
 
 It is read out of `LW_PACK_VERSION`'s stored definition rather than by calling
 it. Calling would fail with unknown-function on exactly the servers whose
@@ -236,17 +244,25 @@ moves until ADR-0181's names arrive.
 
 ### Milestones
 
-- **M0 — Declared rosters exported.** The read-back family and `identsql`
+- **M0 — Declared rosters exported.** ✓ The read-back family and `identsql`
   publish their names and signatures; a test pins each roster against the SQL
   its package actually emits, so a roster cannot drift from its DDL.
-- **M1 — The probe.** `system.functions` lane, endpoint-scoped, with the
+- **M1 — The probe.** ✓ `system.functions` lane, endpoint-scoped, with the
   unanswered-reads-as-unknown rule.
-- **M2 — The panel.** Three sections, filter, Insert, present/missing marks.
-- **M3 — Skew and docs routing.** `LW_PACK_VERSION` comparison and the
-  row → Docs pane link.
-- **M4 — Expansion dependencies.** §SD6's mark. Nothing to point at until
-  ADR-0181's `LW_GET` family lands, so it is sequenced behind it rather than
-  behind the rest of this ADR.
+- **M2 — The panel.** ✓ Three sections, filter, Insert, present/missing marks.
+- **M3 — Skew and docs routing.** `LW_SURFACE_VERSION` comparison and the
+  row → Docs pane link. **Half done:** the skew line landed (and now reads
+  the surface marker, with the pre-surface fallback); the row → Docs pane
+  link did not, and is the one piece of this ADR still unbuilt.
+- **M4 — Expansion dependencies.** ✓ §SD6's mark — landed with ADR-0181's
+  `LW_GET` family, which is what it was sequenced behind. A roster entry may
+  declare the server functions its client-side expansion emits; the probe
+  answers for those names too, and a client row whose dependencies are absent
+  says so. Marked for every population, not just the server one: the case the
+  mark exists for is precisely a client entry that cannot work here, which no
+  per-name "installed?" column can express. The line renders only when
+  something is missing — naming an expansion's needs on every endpoint that
+  has them would be noise on every row.
 
 ## Surfaces — Tier 1
 
@@ -369,16 +385,21 @@ Considered for §SD6 and rejected:
 
 ## Status
 
-Proposed. M0–M2 are the useful cut: rosters, probe, panel. M3 (version skew
+Accepted 2026-08-14. M0–M2 are the useful cut: rosters, probe, panel. M3 (version skew
 and Docs routing) is separable and can be dropped without making the rest
 incoherent — the panel is still worth having when it can only say present or
 missing.
 
 Implemented and driven 2026-08-07 ahead of review, per the verification items
-above; the decisions remain open to revision until the ADR is accepted.
+above.
 
-M3 landed with M0–M2 rather than after: reading the revision out of
-`LW_PACK_VERSION`'s stored definition instead of calling it turned out to be
+M3's skew half landed with M0–M2 rather than after: reading the revision out
+of the marker's stored definition instead of calling it turned out to be
 simpler than the conditional second probe the milestone assumed, so it cost
-nothing to include. Routing a row into the Docs pane is the part of M3 still
+nothing to include. It now reads `LW_SURFACE_VERSION`, falling back to the
+retired `LW_PACK_VERSION` for a server no current build has reconciled
+(ADR-0171 §SD2). Routing a row into the Docs pane is the part of M3 still
 open — the Docs tab already answers for any of these names typed by hand.
+
+M4 landed 2026-08-14 with ADR-0181 §SD3's `LW_GET` family, which is what it
+was sequenced behind.

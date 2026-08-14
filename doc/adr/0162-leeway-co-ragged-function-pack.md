@@ -444,3 +444,35 @@ after this change: `LW_PACK_VERSION` reports 3, the renamed roster resolves,
 and the pre-rename spellings are gone from the server — `CO_GATHER` does not
 appear among its 408 user-defined functions, where the previous rename would
 have left it. The drop step is what removed it.
+
+## Update 2026-08-14 — the pack's marker and installer move to the surface
+
+[ADR-0171](./0171-leeway-sql-read-surface.md) §SD2 landed, and it takes two
+things this ADR decided.
+
+**`LW_PACK_VERSION` is retired**, replaced by one `LW_SURFACE_VERSION` for
+all three leeway families. §SD5's mechanism is unchanged — a version
+constant, a marker function, an installer that verifies it afterwards — but
+it now covers the pack, the read-back family and `identsql` together, under
+the invariant that the marker at revision N means all three are installed at
+revision N. Two markers that can disagree are the ambiguity the marker was
+introduced to remove, so keeping the pack's own alongside the surface's was
+not an option. The name goes on `RetiredNames`, and an install drops it.
+
+**`chpack.Install` is removed**, and provisioning is
+`lwsqlsurface.Install`. A pack-only install can no longer verify anything,
+and a pack-only install that stamped the surface marker would make the
+marker lie. `chpack` keeps `Functions`, `Statement`, `Statements` and
+`RetiredNames`: it declares and renders the pack, and no longer installs it.
+
+Unchanged: the roster, every body, the append-only-semantics rule, and the
+`RetiredNames` list — which had already outgrown the pack, carrying the
+read-back family's pre-`LW_` spellings, and which stays here rather than
+moving to the surface package. One append-only list is the point; a second
+one would be a second place to forget.
+
+The general reconcile the 2026-08-07 Update left open now exists as
+`lwsqlsurface.Reconcile`. It reports undeclared `LW\_%` functions by
+default and drops them only when a caller asks — an undeclared name may
+belong to a fork or a downstream consumer, and hosts reconcile
+automatically at startup.

@@ -572,3 +572,66 @@ alongside the pack's. A host that provisions via `HelperUDFsSQL()` without
 also calling `chpack.Install` gets the new family installed and the old one
 left behind; that asymmetry is a consequence of provisioning and reconciling
 living in different places, and it is what §SD2 is for.
+
+## Update 2026-08-14 — the family gets its version handshake
+
+The gap the 2026-08-07 Update left open — "this family still has no version
+marker of its own … so a server carrying the old spellings is not detected by
+querying it" — is closed, though not the way that sentence expected.
+
+[ADR-0171](./0171-leeway-sql-read-surface.md) §SD2 gave the marker to the
+*surface* rather than to this family: one `LW_SURFACE_VERSION` covering the
+pack, this family and `identsql`, under the invariant that the marker at
+revision N means all three are installed at revision N. A per-family marker
+would have answered three questions a caller then has to combine, and not
+knowing which combination one was looking at is what the jsonbench trial
+actually suffered from.
+
+What this means here:
+
+- `lwsqlsurface.Install` provisions this family, so the asymmetry the
+  2026-08-07 Update described — a host provisioning via `HelperUDFsSQL()`
+  without also reconciling, getting the new family installed and the old one
+  left behind — no longer has a supported path that produces it.
+- `HelperUDFsSQL()` keeps its signature, its pack-first ordering and its
+  meaning, and stays the documented way to provision by hand.
+  `FamilyStatements()` is new beside it: this family's statements alone, for
+  the installer, which provisions the pack itself and must not receive it
+  twice.
+- `lwsqlsurface.Reconcile` answers, for the first time, "what does this
+  server carry that no build declares" — reporting by default, dropping only
+  when asked.
+
+The generator, the artefacts and the helper bodies are untouched.
+
+## Update 2026-08-14 — the emission moves to a shared builder; the fast path exists
+
+The per-channel locate-and-extract emission is no longer written here. It is
+`public/semistructured/leeway/lwextract`, which this generator calls and
+which [ADR-0181](./0181-leeway-dql-authoring-surface.md) §SD3's `LW_GET`
+family calls too — one builder, so the generated artefacts and the authoring
+sugar cannot come to mean different things. The generator's own goldens pin
+the emitted SQL byte-identical across the move; nothing about the artefacts,
+the Plan↔IR join or the resolver changed.
+
+**Open question 1's fast-path half is answered, structurally.** The absence
+of a section's `<role>card` column proves one membership per attribute,
+which makes `LW_RAGGED_PARENT_IDS` the identity permutation and licenses the
+bare form:
+
+	valcol[indexOf(tagcol, tagval)]
+
+`lwextract` renders it whenever the cardinality lane is absent, and a
+`clickhouse-local` test proves the two forms agree element-for-element on the
+same fixture — including the miss case and an empty attribute.
+
+Two honest caveats. This generator never takes the path: `locate` requires
+the cardinality column and errors without it, which is the right answer for a
+Plan that does not conform to its schema, so the fast form is reachable only
+from the schema-driven side. And no schema this repository generates omits
+the column today — `TableRowConfigMultiAttributesPerRow` is the only row
+config, and it always emits it. The licence is decided and implemented; a
+single-attribute-per-row config is what would exercise it.
+
+The rest of open question 1 — the mixed/parametrized parameter recursion —
+is untouched and still open.

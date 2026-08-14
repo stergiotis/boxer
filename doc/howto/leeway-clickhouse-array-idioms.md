@@ -20,7 +20,16 @@ lengths (roles `card` / `len`, optionally with materialized cumulative
 offsets `cusumcard` / `cusumlen`).
 
 This page collects a small kernel of array functions that is sufficient for
-querying both layouts by hand, and the idioms built from it. Caveats up front:
+querying both layouts by hand, and the idioms built from it.
+
+**Read [the SQL read surface](../explanation/leeway-sql-read-surface.md)
+first if you have not.** Most of what this page teaches by hand is already
+installed as functions, and one hand-written idiom that looks right here —
+gathering a ragged value by its start offset — silently truncates when an
+attribute carries more than one membership. This page is for when you need
+the kernel underneath, or are extending it.
+
+Caveats up front:
 
 - Every example and edge-case claim on this page was executed verbatim against
   ClickHouse 26.7; older servers may lack a few functions (`arrayFold`,
@@ -284,7 +293,7 @@ client-side expansion of the same bodies is an equivalent substitute there.
 
 The vocabulary ships as the co/ragged function pack
 ([ADR-0162](../adr/0162-leeway-co-ragged-function-pack.md)); play installs
-it at connect, and `SELECT LW_PACK_VERSION()` reports the revision. Its
+it at connect, and `SELECT LW_SURFACE_VERSION()` reports the revision. Its
 value proposition is one comparison. Hand-woven, the intent, the offset
 bookkeeping, and the pruning guards travel separately — and the guards are
 the part call sites forget, at the every-granule-scanned cost measured

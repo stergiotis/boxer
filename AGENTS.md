@@ -144,7 +144,11 @@ need:
 - **leeway** — the data-mapping engine, a six-stage pipeline:
   describe → IR → map → DDL → marshal → query. Get oriented from the leeway ADRs
   (e.g. ADR-0066) before changing a stage; a change in one stage usually has a
-  downstream pass that must move with it.
+  downstream pass that must move with it. **Reading a leeway table from SQL is
+  a solved problem** — start at
+  [doc/explanation/leeway-sql-read-surface.md](./doc/explanation/leeway-sql-read-surface.md)
+  rather than hand-writing array arithmetic, which a measured trial found
+  costs up to 3× and can silently truncate.
 - **egui2 / imzero2** — the UI layer. The IDL is the source of truth: edit it
   under `definition/` and regenerate with `app egui2gen generate`. Do **not**
   hand-edit generated dispatch code (`interpreter.rs` is hybrid — only the marked
