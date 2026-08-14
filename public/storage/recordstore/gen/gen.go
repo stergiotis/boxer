@@ -95,6 +95,18 @@ type Input struct {
 	// gate to id-level disjointness, so components may share sections
 	// (ADR-0100 SD6 as corrected 2026-08-10; ADR-0105 D2).
 	Wrapper marshallgen.WrapperEmitterI
+	// ExternallyProvisioned states that something other than this store
+	// creates the table — a migration tool, a DBA, a view or a table the
+	// store may only read and append to. The emitted store then carries no
+	// way to run DDL: no EnsureTable method, no embedded DDLCreate string,
+	// and no DDLTail config field (which exists only as EnsureTable's raw
+	// suffix, so leaving it would be config that silently does nothing).
+	// The <table>_ddl_clickhouse.out.sql file is still written — it is the
+	// physical schema the store decodes positionally, and whoever does
+	// provision the table needs it. VerifySchema is still emitted and
+	// matters more here: nothing in the store guarantees the live table's
+	// shape, so run it at startup.
+	ExternallyProvisioned bool
 
 	// DDL overrides the table-level clauses (ADR-0102 seam). nil derives
 	// the defaults: CREATE TABLE IF NOT EXISTS, ENGINE MergeTree(),

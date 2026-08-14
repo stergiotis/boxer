@@ -861,6 +861,36 @@ removed again and SD6's closing sentence states the seam.
   `Raw()`'s section surface; `RowComposer` remains the reflect-path
   answer.
 
+### 2026-08-14 — DDL emission is optional: `gen.Input.ExternallyProvisioned`
+
+SD6's *DDL and schema* paragraph describes a store that provisions its own
+table. That is now the default rather than the only shape: a table may be
+created by a migration tool, a DBA, or be a view the store may read and
+append to but not create, and for those an `EnsureTable` on the store is a
+verb nobody should be able to call.
+
+- `gen.Input.ExternallyProvisioned` omits the whole DDL-execution surface
+  from the emitted store: the `EnsureTable` method, the `//go:embed`
+  `<table>DDLCreate` string (and the `embed` import), and the
+  `<Store>StoreConfig.DDLTail` field. `DDLTail` goes with them rather than
+  staying inert — it is documented as EnsureTable's raw suffix and has no
+  other reader, so keeping it would be configuration that silently does
+  nothing.
+- `<table>_ddl_clickhouse.out.sql` is still composed and written. It states
+  the physical schema the positional decode expects, which is exactly what
+  whoever does provision the table needs; the ADR-0102 clause seam still
+  shapes it. Under `Database` it still leads with `CREATE DATABASE IF NOT
+  EXISTS`.
+- `VerifySchema` is still emitted, and carries more weight here: nothing in
+  the store constrains the live table's shape, so the `DESCRIBE` comparison
+  at startup is the only drift check left. Its doc comment states which
+  regime it is guarding.
+- Default (unset) is the existing behaviour, verified: example,
+  cqrsexample, pushoutstore, dimension/provenance and sharedsection all
+  regenerate byte-identically. A generator test pins both regimes and
+  asserts the switch's blast radius is the four DDL regions and nothing
+  else.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)
