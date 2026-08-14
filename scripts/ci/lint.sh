@@ -159,6 +159,32 @@ else
     step_end fail
 fi
 
+step_begin "packageprops"
+# Two ADR-0080 gates, one step. Both are boxer-specific (they are about this
+# repo's own generated table and declarations), so they stay out of the
+# `gov gate` composite, which publishes to consuming repositories.
+#
+#   props drift  — the committed proptable.out.go agrees with the git-tracked
+#                  package_props.go declarations. Needs no survey and no
+#                  TinyGo: it parses declarations and compares. A missing row
+#                  makes every query over keelson's go_package_props table
+#                  return a short answer with no error and no null, which is
+#                  the failure mode a reader cannot see.
+#   props verify — declarations agree with the freshly computed verdict.
+#                  Static mode only proves red, which is sound (ADR-0078), so
+#                  this fails on regressions and stays quiet about what it
+#                  cannot judge. It is ~8s; the empirical mode needs TinyGo
+#                  and is not run here.
+if out=$("$here/../../boxer.sh" code analysis golang wasmsurvey props drift 2>&1) &&
+   out2=$("$here/../../boxer.sh" code analysis golang wasmsurvey props verify --mode static 2>&1); then
+    printf '%s\n%s\n' "$out" "$out2"
+    step_end pass
+else
+    printf '%s\n%s\n' "$out" "${out2:-}"
+    rc=1
+    step_end fail
+fi
+
 step_begin "h3_wasm_parity"
 # Rebuilds rust/h3bridge to wasm and byte-compares against the committed
 # public/science/geo/h3/internal/h3o_wasm/h3.wasm. Gracefully skipped when
