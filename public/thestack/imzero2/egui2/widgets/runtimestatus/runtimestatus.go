@@ -57,9 +57,10 @@ type Snapshot struct {
 	// FsBrokerActive reports whether fsbroker.NewService succeeded
 	// (Phase B); false leaves fs.* unbound.
 	FsBrokerActive bool
-	// PersistBackend names the persist.NewService backend: "facts"
-	// when app state is written as boxer.facts rows (durable as far as
-	// the facts store is), "mem" when it lives in process memory only.
+	// PersistBackend names the persist.NewService backend: "store"
+	// when app state is written to boxer.persiststate through the
+	// generated record store (ADR-0105 D3a, durable in ClickHouse),
+	// "mem" when it lives in process memory only.
 	// Empty means the service didn't start (Phase C wiring skipped).
 	//
 	// It is reported separately from FactsBackend because the two answer

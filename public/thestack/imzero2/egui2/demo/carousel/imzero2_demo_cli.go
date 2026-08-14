@@ -27,6 +27,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
@@ -147,7 +149,8 @@ func NewCommand() *cli.Command {
 					Str("component", topo.Self()).
 					Msg("runinfo: process boot")
 			}
-			facts, isChStore := chstore.NewWithFallback(chstore.Defaults(), log.Logger, 2*time.Second)
+			factsCfg := chstore.Defaults()
+			facts, isChStore := chstore.NewWithFallback(factsCfg, log.Logger, 2*time.Second)
 			var heartbeatInst *heartbeat.Inst
 			if runInst != nil {
 				_, wErr := facts.WriteRuntimeStart(factsstore.RuntimeStartRow{
@@ -227,15 +230,20 @@ func NewCommand() *cli.Command {
 			// for any app declaring PersistedKeys in its manifest, so
 			// apps don't have to repeat that boilerplate.
 			//
-			// Backend follows the facts store: when chstore reached
-			// ClickHouse, persist writes land as boxer.facts KindState
-			// rows beside the grant + lifecycle events, and app state
-			// outlives the process. When it fell back to the in-memory
-			// facts store there is nothing to gain from routing through
-			// it — both are process-scoped, and the append-only trail
-			// would only grow — so the memory backend stays. The choice
-			// is surfaced in the status bar rather than inferred.
-			persistBackend, persistBackendLabel := selectPersistBackend(facts, isChStore, log.Logger)
+			// Backend follows the chstore verdict: when it reached
+			// ClickHouse, persist writes land on boxer.persiststate and
+			// app state outlives the process. When it fell back to the
+			// in-memory facts store there is nothing to gain from a
+			// durable path that cannot reach a server either, so the
+			// memory backend stays. The choice is surfaced in the status
+			// bar rather than inferred.
+			//
+			// The open does DDL over HTTP, so it is bounded: a server that
+			// answered the 2s ping and then stalls must not hang boot.
+			persistCtx, persistCancel := gocontext.WithTimeout(gocontext.Background(), 15*time.Second)
+			persistBackend, persistBackendLabel, persistBackendClose := selectPersistBackend(persistCtx, factsCfg, isChStore, log.Logger)
+			persistCancel()
+			defer persistBackendClose()
 			persistSvc, pErr := persist.NewService(bus, log.Logger, persistBackend)
 			if pErr != nil {
 				log.Warn().Err(pErr).Msg("persist: service start failed; runtime.persist.* will be unbound")
@@ -607,24 +615,37 @@ func buildStatusSnapshot(runInst *runinfo.Inst, isChStore bool, bus *inprocbus.I
 }
 
 // selectPersistBackend picks the StorageBackendI the persist service runs
-// on and the label the status bar shows for it. The facts-backed backend is
-// chosen only when chstore reached ClickHouse — that is the whole of what
-// makes it worth having over the memory backend, since over the in-memory
-// facts store it would be process-scoped too.
+// on, the label the status bar shows for it, and a teardown for backends
+// that hold resources.
+//
+// The durable backend is the generated record store on `boxer.persiststate`
+// (ADR-0105 D3a), not the facts store. It is chosen only when chstore
+// reached ClickHouse: that verdict is the cheapest available evidence that
+// the same server will answer this store's own DDL and inserts, and over an
+// in-memory facts store there was never anything to gain — both are
+// process-scoped.
 //
 // A construction failure degrades to the memory backend rather than leaving
 // runtime.persist unbound: losing durability is a smaller regression than
 // losing the subject family, and the label says which one ran.
-func selectPersistBackend(facts factsstore.FactsStoreI, isChStore bool, logger zerolog.Logger) (backend persist.StorageBackendI, label string) {
+func selectPersistBackend(ctx gocontext.Context, cfg chstore.Config, isChStore bool, logger zerolog.Logger) (backend persist.StorageBackendI, label string, closeFn func()) {
+	closeFn = func() {}
 	if isChStore {
-		fb, err := persist.NewFactsBackend(facts)
+		exec, err := storeexec.New(chclient.New(chclient.Config{
+			URL: cfg.URL, User: cfg.User, Password: cfg.Password,
+		}, nil), nil)
 		if err == nil {
-			backend = fb
-			label = "facts"
-			return
+			var sb *persist.StoreBackend
+			sb, err = persist.OpenStoreBackend(ctx, exec, nil)
+			if err == nil {
+				backend = sb
+				label = "store"
+				closeFn = sb.Close
+				return
+			}
 		}
 		logger.Warn().Err(err).
-			Msg("persist: facts backend construction failed; falling back to in-memory (app state will not survive restart)")
+			Msg("persist: store backend construction failed; falling back to in-memory (app state will not survive restart)")
 	}
 	backend = persist.NewMemoryBackend()
 	label = "mem"

@@ -1,10 +1,14 @@
 // Package persist implements the ADR-0026 §SD3 runtime.persist.{alias}.{key}.{op}
 // subject family. The Service subscribes to runtime.persist.>, parses each
 // request, and dispatches to a pluggable StorageBackendI for the actual
-// read/write/delete. Two backends ship: MemoryBackend, whose contents last
-// exactly as long as the process, and FactsBackend, which lands every write
-// as a boxer.facts KindState row so app state is durable and queryable
-// beside the grant + audit + lifecycle rows of §SD6.
+// read/write/delete. Three backends ship:
+//
+//   - MemoryBackend, whose contents last exactly as long as the process.
+//   - StoreBackend, the durable one the runtime wires (ADR-0105 D3a): a
+//     generated record store over the `boxer.persiststate` table, whose
+//     state view answers the latest-wins read directly.
+//   - FactsBackend, its superseded predecessor, which lands every write as
+//     a boxer.facts KindState row. Kept for tests; no production callers.
 package persist
 
 import (

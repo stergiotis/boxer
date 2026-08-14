@@ -16,6 +16,20 @@ import (
 // process exit wherever the store does, and it is queryable on the same
 // table, joining an app's other facts on the app-id column.
 //
+// # Superseded
+//
+// [StoreBackend] is the durable backend the runtime wires (ADR-0105 D3a):
+// it keeps the same three verbs and the same semantics, on a generated
+// record store over `boxer.persiststate` rather than on the facts table.
+// The reason for the move is the read path — resolving "latest non-
+// tombstoned row" here means the hand-written leeway-encoded SQL behind
+// LatestState, which is the code class ADR-0105 exists to delete.
+//
+// This backend is kept, not deleted: ADR-0105 D5 schedules no rewrite, and
+// it remains the only backend a test can point at a scratch database,
+// since a generated store bakes its database at generation time. It has no
+// production callers.
+//
 // The adapter is deliberately thin — no cache, no batching, no key
 // validation beyond what the service already applies. It holds only the
 // store, so a caller may share one FactsStoreI between this and the host's
@@ -25,11 +39,7 @@ import (
 // Durability is the store's, not this adapter's. Over chstore.Store the
 // rows reach ClickHouse; over factsstore.InMemoryFactsStore they last
 // exactly as long as the process — the same best-effort stance the audit
-// trail takes when ClickHouse is down, and the reason the carousel chooses
-// the backend by the chstore.NewWithFallback verdict and labels the choice
-// in the runtime status bar. A reader that sees "persist:facts" is being
-// told which code path ran, and the neighbouring "facts:" segment says
-// whether that path reaches ClickHouse.
+// trail takes when ClickHouse is down.
 type FactsBackend struct {
 	facts factsstore.FactsStoreI
 }
