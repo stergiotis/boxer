@@ -48,10 +48,15 @@ parsing, and its error text names the wrong mode. There is no decode, no
 bus, no facts, no viewing. The acquisition pattern to mirror is
 sysmetrics (pure-types package, collector-free bus package with a codec seam,
 wiring package, carousel hook, pure consumers); live introspect tables take
-constructor-injected in-process state; the freshest facts-ingestion recipe is
-capmap's ([ADR-0168](0168-capmap-business-capability-corpus.md)); run
-identity exists (`runinfo` + `WriteRuntimeStart`). No bus→facts tee exists —
-ADR-0090 reserved one as P5 and it is unbuilt.
+constructor-injected in-process state; run identity exists (`runinfo` +
+`WriteRuntimeStart`).
+
+A bus→facts tee now exists. When this ADR was drafted ADR-0090's P5 was still
+reserved and unbuilt, and capmap's hand-written encoder
+([ADR-0168](0168-capmap-business-capability-corpus.md)) was the freshest
+facts-ingestion recipe; §SD6 was written against both facts. ADR-0184 has
+since built P5 as `runtime/sysmtee` over a generated store, which is the
+recipe to mirror instead — see §SD6.
 
 ## Design space (QOC)
 
@@ -150,10 +155,26 @@ in-process and deliberately has no stored form yet.
 ### SD6 — Facts modelling contract; persistence deferred
 
 The stored form is recorded now so the wire anticipates it, and **built in a
-separate session** (user-directed deferral): a subscriber tee — the first
-realization of ADR-0090 P5 — consuming `coverage.>` and writing
-`boxer.facts` capmap-style (own vocabulary at the next free TagValue base,
-encoder over `dml.InEntityFacts`, `RecordSinkI` sink, batched inserts).
+separate session** (user-directed deferral): a subscriber tee consuming
+`coverage.>` and writing `boxer.facts` under its own vocabulary at the next
+free TagValue base.
+
+**How it writes is no longer this ADR's to specify.** The prescription here
+was capmap-style — a hand-written encoder over `dml.InEntityFacts` into a
+`RecordSinkI` sink — which is the code class [ADR-0105](./0105-keelson-adopts-generated-record-stores.md)
+exists to delete, and its D5 says the next kind lands as a generated store.
+[ADR-0184](./0184-sysmetrics-persistence-tee.md) §SD1 settled the shape
+against a working consumer and supersedes it: a facts-bound store generated
+through `runtime/factsschema/storegen`, bound externally-provisioned so
+`chstore` stays the sole author of the `boxer.facts` DDL (§SD2). The
+machinery did not exist when this section was written and does now.
+
+Two things that shape carries in, neither of them optional. The store bakes
+its membership ids at generation time, so the vocabulary has to be minted
+before the store is generated, not alongside it. And ADR-0090's P5 seam is
+already realized — by sysmetrics, not by this — so the coverage tee is the
+second consumer of a built path rather than the first proof of an idea.
+
 Kinds: `coverage.func` (once per `MetaFileHash`: package, name, file, line
 span, `unitBase`, unit/stmt totals; ingested lazily on first sight of an
 unknown hash), `coverage.funcSample` (changed-only covered set, stored as a
@@ -224,8 +245,10 @@ except viewers that subscribe.
   godep joins over `keelson('coverage_*')` with no new render surface.
 - The monotone-set representation makes continuous storage cheap
   (changed-only, run-length-friendly) and reads trivial (`max()`, unions).
-- SD6, when built, realizes the reserved ADR-0090 P5 seam and closes the
-  "coverage uploaded nowhere" note via a later test-lane ingest.
+- SD6, when built, closes the "coverage uploaded nowhere" note via a later
+  test-lane ingest. It no longer has to prove the ADR-0090 P5 seam — ADR-0184
+  built that, so this rides a path with a live consumer instead of being its
+  first realization.
 
 ### Negative
 
@@ -263,7 +286,7 @@ the capmap-style fixture query gate.
 
 ## Deferrals
 
-- **SD6 build** — the bus→facts tee, vocabulary, encoder, and history
+- **SD6 build** — the bus→facts tee, vocabulary, generated store, and history
   applets: separate session (user-directed).
 - Test-lane `GOCOVERDIR` ingest verb into the same kinds.
 - Per-line codeview highlighting (live tables already carry the data).
