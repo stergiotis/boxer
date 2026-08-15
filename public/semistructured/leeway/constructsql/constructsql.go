@@ -79,19 +79,29 @@ func ExpandPassWithSegments(seg lwsql.TableSegments) nanopass.Pass {
 }
 
 func expand(sql string, seg lwsql.TableSegments) (result string, err error) {
+	return expandCore(PassName, sql, seg, nil, "")
+}
+
+// expandCore is the shared expansion body. schema is optional; with one
+// bound, an INSERT wrapper's resolved destination adopts the target's table
+// segments and every mint reconciles against the target's columns
+// (ADR-0181 §SD8 M2). passName labels errors with whichever registered pass
+// ran.
+func expandCore(passName string, sql string, seg lwsql.TableSegments, schema TargetSchemaI, defaultDatabase string) (result string, err error) {
 	if !HasAuthoringMarker(sql) {
 		result = sql
 		return
 	}
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", PassName, err)
+		err = eb.Build().Errorf("%s: %w", passName, err)
 		return
 	}
-	st := &expandState{pr: pr, rw: nanopass.NewRewriter(pr), seg: seg}
+	seg, tgt := bindTarget(pr, schema, defaultDatabase, seg)
+	st := &expandState{pr: pr, rw: nanopass.NewRewriter(pr), seg: seg, target: tgt}
 	err = st.walk(pr.Tree)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", PassName, err)
+		err = eb.Build().Errorf("%s: %w", passName, err)
 		return
 	}
 	result = nanopass.GetText(st.rw)
@@ -102,6 +112,7 @@ type expandState struct {
 	pr       *nanopass.ParseResult
 	rw       nanopass.RewriterI
 	seg      lwsql.TableSegments
+	target   *targetBinding  // non-nil under a resolved INSERT wrapper (§SD8 M2)
 	composer *lwsql.Composer // built on first use
 	// minted tracks (enclosing select, physical name) → minting call.
 	// Scoped per select: UNION members legitimately mint the same names.
@@ -283,6 +294,13 @@ func (inst *expandState) expandCall(name string, spelled string, funcExpr *gramm
 	if err != nil {
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
+	}
+	// Target adoption (§SD8 M2): a resolved INSERT destination swaps the
+	// composed name for the target's own column where the mint's identity
+	// resolves — segments, aspects and spelling included. A miss keeps the
+	// composition; the loud verdict is LwShapeCheckTarget's.
+	if inst.target != nil {
+		minted = inst.target.reconcile(name, spec, minted)
 	}
 	if hasSection {
 		key := mintKey{sel: enclosingSelect(funcExpr), name: string(naming.ConvertNameStyle(section, naming.DefaultNamingStyle))}
