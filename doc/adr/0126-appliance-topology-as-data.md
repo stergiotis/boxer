@@ -215,7 +215,8 @@ dependency closure) documents the intended use; detection rules that
   5) evaluates the joins this ADR makes expressible; nothing here writes facts.
 - **Persistence/history** — the ADR-0090 P5 tee covers topology domains the
   day it is built; nothing stored meanwhile, so "what was true at 03:12"
-  stays unanswerable here.
+  stays unanswerable here. *(Built 2026-08-15 as ADR-0184, opt-in — see the
+  Updates entry for what that does and does not change.)*
 - **The appliance desired-state manifest** (R1) — which components *should*
   exist on which box is today ansible's knowledge in git; v1's declared half
   is what the binaries themselves compile in (registry, manifests). The R1
@@ -354,8 +355,44 @@ entry). What landed, and where it deviates from the letter of the SDs:
   its own mark on live `/proc`) and listener attribution (a test-owned
   listener attributes to the test's pid).
 
+### 2026-08-15 — SD6's persistence deferral is closed by ADR-0184
+
+SD6 deferred history with "the ADR-0090 P5 tee covers topology domains the
+day it is built; nothing stored meanwhile". That tee is built:
+[ADR-0184](./0184-sysmetrics-persistence-tee.md) *(proposed, awaiting
+review — the same qualifier ADR-0090's 2026-08-14 entry carries)*
+subscribes to the metric plane and writes `boxer.facts` through a generated
+record store. Its M5 carries the `sockets` domain and its M6 the containment
+tree, which is the topology half SD6 was waiting on. The SD6 bullet's first
+clause is answered; its second needs one qualification.
+
+- **The tree is stored as an adjacency list** — a pre-order walk numbers the
+  nodes and each carries its parent's number. Parallel arrays cannot hold a
+  recursive structure and no fixed nesting expresses it, while a serialized
+  blob would put it beyond SQL entirely. The node number is stored rather
+  than left implicit in array position, so a query that filters the arrays
+  does not leave the parent references dangling.
+- **Written on first sight of a host, not per tick.** The topology is static;
+  a row per tick would be duplication rather than observation. The same
+  treatment the CPU descriptor gets.
+- **"Nothing stored meanwhile" still holds where the tee is off.** It is
+  opt-in (`sysmetricsd --tee`, default off, ADR-0184 §SD8), so a deployment
+  that has not enabled it stores nothing and "what was true at 03:12" stays
+  unanswerable there. The deferral is closed as a *capability*, not as a
+  property every appliance now has.
+- **Retention is unbounded by decision.** ADR-0184 §SD7 declines a TTL on the
+  raw kinds in v1, because a window shorter than an analysis window truncates
+  it silently. Topology rows are per-host rather than per-tick, so they are
+  not what makes that volume; the per-tick domains are.
+
+Nothing in this ADR's own surface changes: the marking contract, the
+collectors and the `keelson.*` tables are untouched, and the tee reads the
+plane they already publish.
+
 ## References
 
+- [ADR-0184](./0184-sysmetrics-persistence-tee.md) — the ADR-0090 P5 tee that
+  closes SD6's persistence deferral
 - [aiops-operability](../explanation/aiops-operability.md) — the gap map this
   ADR implements item 2 (topology half) of
 - [ADR-0090](./0090-sysmetrics-pubsub-data-plane.md) — the plane, the scraper
