@@ -13,17 +13,17 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindBattery           uint64 = 3098476543630901331
-	kindSysmBatteryHost           uint64 = 3098476543630901332
-	kindSysmBatteryName           uint64 = 3098476543630901333
-	kindSysmBatteryType           uint64 = 3098476543630901334
-	kindSysmBatteryPercent        uint64 = 3098476543630901335
-	kindSysmBatteryState          uint64 = 3098476543630901336
-	kindSysmBatteryPowerWatts     uint64 = 3098476543630901337
-	kindSysmBatterySecondsToFull  uint64 = 3098476543630901338
-	kindSysmBatterySecondsToEmpty uint64 = 3098476543630901339
-	kindSysmAcAdapterName         uint64 = 3098476543630901340
-	kindSysmAcAdapterOnline       uint64 = 3098476543630901341
+	kindSysmKindBattery           uint64 = 2305843022098595923
+	kindSysmBatteryHost           uint64 = 2305843022098595924
+	kindSysmBatteryName           uint64 = 2305843022098595925
+	kindSysmBatteryType           uint64 = 2305843022098595926
+	kindSysmBatteryPercent        uint64 = 2305843022098595927
+	kindSysmBatteryState          uint64 = 2305843022098595928
+	kindSysmBatteryPowerWatts     uint64 = 2305843022098595929
+	kindSysmBatterySecondsToFull  uint64 = 2305843022098595930
+	kindSysmBatterySecondsToEmpty uint64 = 2305843022098595931
+	kindSysmAcAdapterName         uint64 = 2305843022098595932
+	kindSysmAcAdapterOnline       uint64 = 2305843022098595933
 )
 
 // sysBatterySymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

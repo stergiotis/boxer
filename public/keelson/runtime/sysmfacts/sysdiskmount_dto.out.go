@@ -13,17 +13,17 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindDiskMount       uint64 = 3098476543630901314
-	kindSysmDiskMountHost       uint64 = 3098476543630901315
-	kindSysmDiskMountDevice     uint64 = 3098476543630901316
-	kindSysmDiskMountPoint      uint64 = 3098476543630901317
-	kindSysmDiskMountFsType     uint64 = 3098476543630901318
-	kindSysmDiskMountBlockName  uint64 = 3098476543630901319
-	kindSysmDiskMountReal       uint64 = 3098476543630901320
-	kindSysmDiskMountTotalBytes uint64 = 3098476543630901321
-	kindSysmDiskMountFreeBytes  uint64 = 3098476543630901322
-	kindSysmDiskMountUsedBytes  uint64 = 3098476543630901323
-	kindSysmDiskMountUsedPct    uint64 = 3098476543630901324
+	kindSysmKindDiskMount       uint64 = 2305843022098595906
+	kindSysmDiskMountHost       uint64 = 2305843022098595907
+	kindSysmDiskMountDevice     uint64 = 2305843022098595908
+	kindSysmDiskMountPoint      uint64 = 2305843022098595909
+	kindSysmDiskMountFsType     uint64 = 2305843022098595910
+	kindSysmDiskMountBlockName  uint64 = 2305843022098595911
+	kindSysmDiskMountReal       uint64 = 2305843022098595912
+	kindSysmDiskMountTotalBytes uint64 = 2305843022098595913
+	kindSysmDiskMountFreeBytes  uint64 = 2305843022098595914
+	kindSysmDiskMountUsedBytes  uint64 = 2305843022098595915
+	kindSysmDiskMountUsedPct    uint64 = 2305843022098595916
 )
 
 // sysDiskMountSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

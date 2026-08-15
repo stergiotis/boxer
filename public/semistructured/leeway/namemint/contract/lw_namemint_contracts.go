@@ -11,6 +11,7 @@ package contract
 
 import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
@@ -39,9 +40,31 @@ func NewVcsManagedContract() *VcsManagedContract {
 	return &VcsManagedContract{}
 }
 
+// ValidateTagValue requires a value from the vocabulary width class, and
+// refuses the tag reserved for ids minted outside version control.
+//
+// The width is the rule because it is the one that means something: every
+// vocabulary gets the same 32/32 split of the id, so `identsql` views and tag
+// mask compares speak of one width, and the scheme's short prefixes — its
+// widest bodies — stay available to the high-cardinality runtime generators
+// that actually need them (ADR-0183 D0).
+//
+// It replaces a parity check that predated the fibonacci scheme: "convention
+// A" required an even tag value, which under prefix-free codes carries no
+// structural meaning at all — distinct tags cannot collide whatever their
+// parity. It was also checked against the declared value while the wire saw
+// the value plus a registry offset, so the three vocabularies it governed read
+// it three different ways.
 func (inst *VcsManagedContract) ValidateTagValue(tv identifier.TagValue) error {
-	if tv.Value()%2 != 0 {
-		return eb.Build().Uint32("tv", tv.Value()).Errorf("convention A expects even tag values (tv %% 2 == 0) for vcs managed tag ids")
+	if tv == tagmint.RuntimeMintTagValue {
+		return eb.Build().Uint32("tv", tv.Value()).Errorf("tag value %d is reserved for ids minted outside version control", tv.Value())
+	}
+	tag := tv.GetTag()
+	if !tag.IsValid() {
+		return eb.Build().Uint32("tv", tv.Value()).Errorf("tag value does not encode to a valid tag")
+	}
+	if w := tag.GetTagWidth(); w != tagmint.VocabularyTagWidth {
+		return eb.Build().Uint32("tv", tv.Value()).Int("width", w).Int("want", tagmint.VocabularyTagWidth).Errorf("a vcs-managed vocabulary claims from the width-%d class; this value's code is %d bits wide", tagmint.VocabularyTagWidth, w)
 	}
 	return nil
 }

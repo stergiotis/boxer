@@ -13,7 +13,7 @@
 package vocab
 
 import (
-	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -27,23 +27,26 @@ var Contract = contract.NewVcsManagedContract()
 // uses LowerSpinalCase too — keep consistent for cross-table query ergonomics.
 const NamingStyle = naming.LowerSpinalCase
 
-// TagValueRegistry allocates TagValues for runtime membership categories.
-// Lives in its own scope so it does not collide with spinnaker's
-// VcsTagValueRegistry — different binaries, different namespaces. The offset
-// is 2, not 0: fibonacci-coded tags reserve tag value 0 as invalid
-// (ADR-0106 SD8), and the vcs-managed convention keeps effective ids even.
-var TagValueRegistry = registry.MustNewTagValueRegistry[*contract.VcsManagedContract](
-	identifier.TagValue(2), NamingStyle, 4, Contract,
-)
+// TagValueClaim is this vocabulary's tag value, claimed from the width-32
+// class every version-controlled vocabulary claims from (ADR-0183 D0). The
+// second of the class, one above vdd's.
+//
+// It used to be 2, picked by hand — and the jsonbench trial's vocabulary
+// independently picked 2 as well, which made every runtime id and every
+// jsonbench id identical. They shared no table, so nothing broke; the claim is
+// what makes that a refusal instead of a coincidence.
+var TagValueClaim = tagmint.MustClaim("keelsonRuntime", 2178310, MaxExpectedMemberships)
 
-// MembersTagValue is the TagValue rooted at offset 0 of TagValueRegistry; it
-// covers every runtime membership registered below.
-var MembersTagValue = TagValueRegistry.MustBegin("runtimeMembers", 0).End()
+// MaxExpectedMemberships is what this vocabulary tells the mint it will need.
+// The width-32 class holds about 4.3e9, so the number is headroom rather than
+// a quota; it is stated so a future claim from a narrower class is refused
+// rather than silently too small.
+const MaxExpectedMemberships = 1 << 20
 
 // NkRegistry is the natural-key registry for runtime memberships. All Memb*
 // constants below live in this registry.
 var NkRegistry = registry.MustNewNaturalKeyRegistry[*contract.VcsManagedContract](
-	MembersTagValue.GetTagValue(), 32, NamingStyle, Contract,
+	TagValueClaim, 32, NamingStyle, Contract,
 )
 
 // Membership constants — vocabulary for boxer.facts rows per ADR-0026 §SD6.

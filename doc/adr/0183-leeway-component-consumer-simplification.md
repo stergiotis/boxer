@@ -147,9 +147,18 @@ vocabulary; a large pool of claimable tag values in the class (the
 plan layer's `TagValueCount` states it exactly); one constant split
 width for `identsql` views and `SameTag` mask compares; and symmetry
 with D8, whose reserved runtime tag is this same class's maximum.
-Exact legible values are pinned at M1 with the goldens. The move
+
+**Landed at M1.** The class is [2178309, 3524577] — 1,346,269 values,
+4,294,967,295 ids under each. The five claims take the first five values
+in class order, which is as legible as the class allows: 2178309 keelson
+vdd, 2178310 keelson runtime, 2178311 capmap, 2178312 sysmetrics, 2178313
+jsonbench; the D8 reservation is 3524577, the class maximum. Five, not
+four: `sysmvocab` arrived from ADR-0184 between this ADR being written and
+implemented. The move
 frees the short prefixes for high-cardinality families (`identgen`)
-and kills the jsonbench/runtime duplicate en passant. This re-keys every composed
+and kills the jsonbench/runtime duplicate en passant — the union test
+reported it on every id of both vocabularies before the re-key, which is
+how the collision finally became visible rather than argued. This re-keys every composed
 membership id — a **breaking data change**, taken deliberately in the
 pre-first-consumer window (the ADR-0182 precedent: run the breaking
 pass while the window is open). The code side is *nearly* free: the

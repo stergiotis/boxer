@@ -13,16 +13,16 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindCpu           uint64 = 3098476543630901248
-	kindSysmCpuHost           uint64 = 3098476543630901251
-	kindSysmCpuTotalPct       uint64 = 3098476543630901254
-	kindSysmCpuPerCorePct     uint64 = 3098476543630901255
-	kindSysmCpuPerCoreFreqMhz uint64 = 3098476543630901256
-	kindSysmCpuLoadAvg1       uint64 = 3098476543630901257
-	kindSysmCpuLoadAvg5       uint64 = 3098476543630901258
-	kindSysmCpuLoadAvg15      uint64 = 3098476543630901259
-	kindSysmCpuUsageWatts     uint64 = 3098476543630901260
-	kindSysmCpuActiveCpus     uint64 = 3098476543630901261
+	kindSysmKindCpu           uint64 = 2305843022098595840
+	kindSysmCpuHost           uint64 = 2305843022098595843
+	kindSysmCpuTotalPct       uint64 = 2305843022098595846
+	kindSysmCpuPerCorePct     uint64 = 2305843022098595847
+	kindSysmCpuPerCoreFreqMhz uint64 = 2305843022098595848
+	kindSysmCpuLoadAvg1       uint64 = 2305843022098595849
+	kindSysmCpuLoadAvg5       uint64 = 2305843022098595850
+	kindSysmCpuLoadAvg15      uint64 = 2305843022098595851
+	kindSysmCpuUsageWatts     uint64 = 2305843022098595852
+	kindSysmCpuActiveCpus     uint64 = 2305843022098595853
 )
 
 // sysCpuSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

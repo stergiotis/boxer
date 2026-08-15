@@ -13,21 +13,17 @@
 //
 // # Tag value 32, and why the number is written down
 //
-// This package owns **tag value 32**, allocated by ADR-0184 §SD4 under the rule
-// [github.com/stergiotis/boxer/public/gov/capmapvocab] states: a new vocabulary
-// takes the next unused multiple of 16 and owns the even offsets up to the
-// following multiple. 32 here means 32, 34 … 46. Bases 1 (keelson vdd) and 2
-// (keelson runtime) are grandfathered; 16 is capmap's.
+// This package claims **tag value 2178312**, the fourth of the width-32 class
+// (ADR-0183 D0). ADR-0184 §SD4 allocated base 32 for it a day earlier, under
+// the base-allocation rule the re-key replaced: a width-32 tag holds about
+// 4.3e9 ids, so one claimed value is a vocabulary's whole allocation and there
+// is no growth path to reserve room beside.
 //
-// Allocation is by *base* rather than by number because a base reserves an
-// open-ended range: the tag-value registry mints `base + tv` for any even `tv`,
-// so taking merely the next free integer would put a new vocabulary inside an
-// existing one's growth path.
-//
-// TestTagValuesAreDisjointFromOtherVocabularies is what enforces it. A
-// collision would not be a compile error — it would be two unrelated facts
-// wearing the same membership id, and every query over either would be quietly
-// wrong.
+// The claim goes through [github.com/stergiotis/boxer/public/identity/tagmint],
+// which refuses a value another package already claimed, and the committed
+// assignment tables are compared across the repo (ADR-0183 D1). A collision
+// would not be a compile error — it would be two unrelated facts wearing the
+// same membership id, and every query over either would be quietly wrong.
 //
 // # Raw counters only
 //
@@ -38,15 +34,15 @@
 package sysmvocab
 
 import (
-	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 // Contract is this vocabulary's leeway contract — the vcs-managed convention,
-// matching the runtime's and capmap's. It requires the tag value handed to
-// Begin be even; the base is what places the result.
+// matching the runtime's and capmap's. It requires a tag value from the
+// vocabulary width class and each membership's ordinal declared in source.
 var Contract = contract.NewVcsManagedContract()
 
 // NamingStyle is the canonical form for sysmetrics membership names. It matches
@@ -54,27 +50,24 @@ var Contract = contract.NewVcsManagedContract()
 // runtime facts reads the same way on both sides.
 const NamingStyle = naming.LowerSpinalCase
 
-// TagValueBase is this vocabulary's reserved base — see the package comment for
-// why allocation is by base rather than by single value.
-const TagValueBase = 32
+// TagValueClaim is this vocabulary's tag value, claimed from the width-32
+// class every version-controlled vocabulary claims from (ADR-0183 D0). The
+// fourth of the class.
+//
+// It was base 32, allocated by ADR-0184 §SD4 a day before this regime landed,
+// under the hand-picked scheme the claim replaces. The re-key moves every
+// sysmetrics id; the tee had written none that outlive the change.
+var TagValueClaim = tagmint.MustClaim("sysmetrics", 2178312, MaxExpectedMemberships)
 
-// TagValueRegistry allocates tag values for sysmetrics membership categories.
-// It lives in its own scope so it cannot collide with the keelson, runtime or
-// capmap registries, which are different vocabularies in the same table.
-var TagValueRegistry = registry.MustNewTagValueRegistry(
-	identifier.TagValue(TagValueBase), NamingStyle, 4, Contract,
-)
-
-// MembersTagValue is the tag value rooted at offset 0 of [TagValueRegistry],
-// covering every membership registered below.
-var MembersTagValue = TagValueRegistry.MustBegin("sysmMembers", 0).End()
+// MaxExpectedMemberships is what this vocabulary tells the mint it will need.
+const MaxExpectedMemberships = 1 << 16
 
 // NkRegistry is the natural-key registry for sysmetrics memberships. Every
 // Memb* constant below lives in it. The size is a capacity hint only — an id
 // is what its registration declares — set with room for the topology domain
 // ADR-0184 M6 still adds.
 var NkRegistry = registry.MustNewNaturalKeyRegistry(
-	MembersTagValue.GetTagValue(), 192, NamingStyle, Contract,
+	TagValueClaim, 192, NamingStyle, Contract,
 )
 
 // Membership constants for `boxer.facts` rows carrying system-metric samples.

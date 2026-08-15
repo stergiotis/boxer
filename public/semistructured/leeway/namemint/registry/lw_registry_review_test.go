@@ -11,7 +11,7 @@ import (
 
 func newTestNkRegistry(t *testing.T) *HumanReadableNaturalKeyRegistry[*contract.EphemeralContract] {
 	t.Helper()
-	reg, err := NewNaturalKeyRegistry[*contract.EphemeralContract](identifier.TagValue(4), 8, naming.LowerSnakeCase, contract.NewEphemeralContract())
+	reg, err := NewNaturalKeyRegistry[*contract.EphemeralContract](testClaimReview, 8, naming.LowerSnakeCase, contract.NewEphemeralContract())
 	require.NoError(t, err)
 	return reg
 }

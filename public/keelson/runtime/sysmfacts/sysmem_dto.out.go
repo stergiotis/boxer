@@ -13,19 +13,19 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindMem           uint64 = 3098476543630901250
-	kindSysmMemHost           uint64 = 3098476543630901253
-	kindSysmMemTotalBytes     uint64 = 3098476543630901264
-	kindSysmMemFreeBytes      uint64 = 3098476543630901265
-	kindSysmMemAvailableBytes uint64 = 3098476543630901266
-	kindSysmMemBuffersBytes   uint64 = 3098476543630901267
-	kindSysmMemCachedBytes    uint64 = 3098476543630901268
-	kindSysmMemSwapTotalBytes uint64 = 3098476543630901269
-	kindSysmMemSwapFreeBytes  uint64 = 3098476543630901270
-	kindSysmMemUsedBytes      uint64 = 3098476543630901271
-	kindSysmMemSwapUsedBytes  uint64 = 3098476543630901272
-	kindSysmMemArcSizeBytes   uint64 = 3098476543630901273
-	kindSysmMemArcMinBytes    uint64 = 3098476543630901274
+	kindSysmKindMem           uint64 = 2305843022098595842
+	kindSysmMemHost           uint64 = 2305843022098595845
+	kindSysmMemTotalBytes     uint64 = 2305843022098595856
+	kindSysmMemFreeBytes      uint64 = 2305843022098595857
+	kindSysmMemAvailableBytes uint64 = 2305843022098595858
+	kindSysmMemBuffersBytes   uint64 = 2305843022098595859
+	kindSysmMemCachedBytes    uint64 = 2305843022098595860
+	kindSysmMemSwapTotalBytes uint64 = 2305843022098595861
+	kindSysmMemSwapFreeBytes  uint64 = 2305843022098595862
+	kindSysmMemUsedBytes      uint64 = 2305843022098595863
+	kindSysmMemSwapUsedBytes  uint64 = 2305843022098595864
+	kindSysmMemArcSizeBytes   uint64 = 2305843022098595865
+	kindSysmMemArcMinBytes    uint64 = 2305843022098595866
 )
 
 // sysMemSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

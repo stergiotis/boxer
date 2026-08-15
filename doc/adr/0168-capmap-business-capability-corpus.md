@@ -176,6 +176,16 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   against both other vocabularies, and is verified to fail when the base is
   moved onto one of theirs.
 
+  **Superseded by [ADR-0183](./0183-leeway-component-consumer-simplification.md)
+  D0 (2026-08-15).** The base rule and the register-by-ADR convention are gone:
+  every vocabulary now claims one tag value from the width-32 class through
+  `identity/tagmint`, which refuses a value already claimed, and capmap's is
+  2178311. A width-32 tag holds ~4.3·10⁹ ids, so a vocabulary's growth happens
+  inside its tag rather than in reserved room beside it. This ADR's own
+  observation — that nothing but a test stood behind the allocation — is why:
+  the fourth vocabulary was allocated under this rule and a fifth, in `apps/`,
+  had already duplicated the runtime's value without anyone noticing.
+
   **A membership's id is its registration ordinal**, which SD10 made concrete:
   the registry composes the id from the count registered so far, so a new
   membership declared anywhere but at the *end of the block* renumbers every one

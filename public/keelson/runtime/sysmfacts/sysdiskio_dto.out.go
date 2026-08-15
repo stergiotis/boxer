@@ -13,12 +13,12 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindDiskIo             uint64 = 3098476543630901325
-	kindSysmDiskIoHost             uint64 = 3098476543630901326
-	kindSysmDiskIoName             uint64 = 3098476543630901327
-	kindSysmDiskIoReadBytesPerSec  uint64 = 3098476543630901328
-	kindSysmDiskIoWriteBytesPerSec uint64 = 3098476543630901329
-	kindSysmDiskIoBusyPct          uint64 = 3098476543630901330
+	kindSysmKindDiskIo             uint64 = 2305843022098595917
+	kindSysmDiskIoHost             uint64 = 2305843022098595918
+	kindSysmDiskIoName             uint64 = 2305843022098595919
+	kindSysmDiskIoReadBytesPerSec  uint64 = 2305843022098595920
+	kindSysmDiskIoWriteBytesPerSec uint64 = 2305843022098595921
+	kindSysmDiskIoBusyPct          uint64 = 2305843022098595922
 )
 
 // sysDiskIoSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

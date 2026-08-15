@@ -13,33 +13,33 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindPsi              uint64 = 3098476543630901276
-	kindSysmPsiHost              uint64 = 3098476543630901277
-	kindSysmPsiAvailable         uint64 = 3098476543630901302
-	kindSysmPsiCpuSomeAvg10      uint64 = 3098476543630901278
-	kindSysmPsiCpuSomeAvg60      uint64 = 3098476543630901279
-	kindSysmPsiCpuSomeAvg300     uint64 = 3098476543630901280
-	kindSysmPsiCpuSomeTotalUs    uint64 = 3098476543630901281
-	kindSysmPsiCpuFullAvg10      uint64 = 3098476543630901282
-	kindSysmPsiCpuFullAvg60      uint64 = 3098476543630901283
-	kindSysmPsiCpuFullAvg300     uint64 = 3098476543630901284
-	kindSysmPsiCpuFullTotalUs    uint64 = 3098476543630901285
-	kindSysmPsiMemorySomeAvg10   uint64 = 3098476543630901286
-	kindSysmPsiMemorySomeAvg60   uint64 = 3098476543630901287
-	kindSysmPsiMemorySomeAvg300  uint64 = 3098476543630901288
-	kindSysmPsiMemorySomeTotalUs uint64 = 3098476543630901289
-	kindSysmPsiMemoryFullAvg10   uint64 = 3098476543630901290
-	kindSysmPsiMemoryFullAvg60   uint64 = 3098476543630901291
-	kindSysmPsiMemoryFullAvg300  uint64 = 3098476543630901292
-	kindSysmPsiMemoryFullTotalUs uint64 = 3098476543630901293
-	kindSysmPsiIoSomeAvg10       uint64 = 3098476543630901294
-	kindSysmPsiIoSomeAvg60       uint64 = 3098476543630901295
-	kindSysmPsiIoSomeAvg300      uint64 = 3098476543630901296
-	kindSysmPsiIoSomeTotalUs     uint64 = 3098476543630901297
-	kindSysmPsiIoFullAvg10       uint64 = 3098476543630901298
-	kindSysmPsiIoFullAvg60       uint64 = 3098476543630901299
-	kindSysmPsiIoFullAvg300      uint64 = 3098476543630901300
-	kindSysmPsiIoFullTotalUs     uint64 = 3098476543630901301
+	kindSysmKindPsi              uint64 = 2305843022098595868
+	kindSysmPsiHost              uint64 = 2305843022098595869
+	kindSysmPsiAvailable         uint64 = 2305843022098595894
+	kindSysmPsiCpuSomeAvg10      uint64 = 2305843022098595870
+	kindSysmPsiCpuSomeAvg60      uint64 = 2305843022098595871
+	kindSysmPsiCpuSomeAvg300     uint64 = 2305843022098595872
+	kindSysmPsiCpuSomeTotalUs    uint64 = 2305843022098595873
+	kindSysmPsiCpuFullAvg10      uint64 = 2305843022098595874
+	kindSysmPsiCpuFullAvg60      uint64 = 2305843022098595875
+	kindSysmPsiCpuFullAvg300     uint64 = 2305843022098595876
+	kindSysmPsiCpuFullTotalUs    uint64 = 2305843022098595877
+	kindSysmPsiMemorySomeAvg10   uint64 = 2305843022098595878
+	kindSysmPsiMemorySomeAvg60   uint64 = 2305843022098595879
+	kindSysmPsiMemorySomeAvg300  uint64 = 2305843022098595880
+	kindSysmPsiMemorySomeTotalUs uint64 = 2305843022098595881
+	kindSysmPsiMemoryFullAvg10   uint64 = 2305843022098595882
+	kindSysmPsiMemoryFullAvg60   uint64 = 2305843022098595883
+	kindSysmPsiMemoryFullAvg300  uint64 = 2305843022098595884
+	kindSysmPsiMemoryFullTotalUs uint64 = 2305843022098595885
+	kindSysmPsiIoSomeAvg10       uint64 = 2305843022098595886
+	kindSysmPsiIoSomeAvg60       uint64 = 2305843022098595887
+	kindSysmPsiIoSomeAvg300      uint64 = 2305843022098595888
+	kindSysmPsiIoSomeTotalUs     uint64 = 2305843022098595889
+	kindSysmPsiIoFullAvg10       uint64 = 2305843022098595890
+	kindSysmPsiIoFullAvg60       uint64 = 2305843022098595891
+	kindSysmPsiIoFullAvg300      uint64 = 2305843022098595892
+	kindSysmPsiIoFullTotalUs     uint64 = 2305843022098595893
 )
 
 // sysPsiSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

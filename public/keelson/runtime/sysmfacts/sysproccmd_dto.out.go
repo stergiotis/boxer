@@ -13,13 +13,13 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindProcCmd uint64 = 3098476543630901370
-	kindSysmProcCmdHost uint64 = 3098476543630901371
-	kindSysmProcCmdPid  uint64 = 3098476543630901372
-	kindSysmProcCmdLine uint64 = 3098476543630901373
-	kindSysmProcCmdUser uint64 = 3098476543630901374
-	kindSysmProcCmdUid  uint64 = 3098476543630901375
-	kindSysmProcCmdGid  uint64 = 3098476543630901376
+	kindSysmKindProcCmd uint64 = 2305843022098595962
+	kindSysmProcCmdHost uint64 = 2305843022098595963
+	kindSysmProcCmdPid  uint64 = 2305843022098595964
+	kindSysmProcCmdLine uint64 = 2305843022098595965
+	kindSysmProcCmdUser uint64 = 2305843022098595966
+	kindSysmProcCmdUid  uint64 = 2305843022098595967
+	kindSysmProcCmdGid  uint64 = 2305843022098595968
 )
 
 // sysProcCmdSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

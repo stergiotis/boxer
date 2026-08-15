@@ -2,16 +2,16 @@
 # The committed assignment table (ADR-0183 D1). A changed line here
 # re-points rows already stored under the old id; a new line does not.
 # Regenerate with BOXER_VOCAB_GOLDEN_REGEN=1 go test ./<the vocabulary package>/...
-0	bluesky-kind-event	6917529027641081856
-1	bluesky-json-path	6917529027641081857
-2	bluesky-json-params	6917529027641081858
-3	jsonbench-kind-timing	6917529027641081859
-4	jsonbench-kind-size	6917529027641081860
-5	jsonbench-run	6917529027641081861
-6	jsonbench-arm	6917529027641081862
-7	jsonbench-query	6917529027641081863
-8	jsonbench-try	6917529027641081864
-9	jsonbench-seconds	6917529027641081865
-10	jsonbench-memory-bytes	6917529027641081866
-11	jsonbench-metric	6917529027641081867
-12	jsonbench-metric-value	6917529027641081868
+0	bluesky-kind-event	11529215058953371648
+1	bluesky-json-path	11529215058953371649
+2	bluesky-json-params	11529215058953371650
+3	jsonbench-kind-timing	11529215058953371651
+4	jsonbench-kind-size	11529215058953371652
+5	jsonbench-run	11529215058953371653
+6	jsonbench-arm	11529215058953371654
+7	jsonbench-query	11529215058953371655
+8	jsonbench-try	11529215058953371656
+9	jsonbench-seconds	11529215058953371657
+10	jsonbench-memory-bytes	11529215058953371658
+11	jsonbench-metric	11529215058953371659
+12	jsonbench-metric-value	11529215058953371660

@@ -1,6 +1,7 @@
 package capmapvocab_test
 
 import (
+	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -73,61 +74,12 @@ func TestTagValuesAreDisjointFromOtherVocabularies(t *testing.T) {
 	}
 }
 
-// The base is the allocation, so it is pinned rather than left to drift: the
-// package comment, ADR-0168 §SD6 and this constant have to agree, and a change
-// here is a change to what rows already in the table mean.
-func TestTagValueBaseIsTheAllocatedOne(t *testing.T) {
-	assert.Equal(t, uint32(16), uint32(capmapvocab.TagValueBase))
-	assert.Equal(t, uint32(16), capmapvocab.MembersTagValue.GetTagValue().Value(),
-		"offset 0 of the base is what the memberships hang from")
-}
-
-// The whole name-to-id table, written down.
-//
-// A membership id is the ordinal its registration states, and the id is all a
-// row carries — so editing an ordinal already listed here makes rows already
-// in `boxer.facts` mean something else. The registry refuses a repeated
-// ordinal at init; this table is what catches an ordinal edited in place
-// (ADR-0183 D0/D1).
-//
-// Updating this table is therefore a deliberate act: appending a line is
-// ordinary, and changing a line that is already here means every store holding
-// the corpus must be re-ingested.
-func TestMembershipIdsAreGoldenPinned(t *testing.T) {
-	golden := []struct {
-		name string
-		id   uint64
-	}{
-		{"capmap-kind-competence", 2738188573441261568},
-		{"capmap-kind-relation", 2738188573441261569},
-		{"capmap-competence-slug", 2738188573441261570},
-		{"capmap-competence-name", 2738188573441261571},
-		{"capmap-competence-abbrev", 2738188573441261572},
-		{"capmap-competence-synopsis", 2738188573441261573},
-		{"capmap-competence-domain", 2738188573441261574},
-		{"capmap-competence-catalog", 2738188573441261575},
-		{"capmap-competence-owner", 2738188573441261576},
-		{"capmap-competence-level", 2738188573441261577},
-		{"capmap-competence-vault-path", 2738188573441261578},
-		{"capmap-competence-maturity", 2738188573441261579},
-		{"capmap-competence-pain", 2738188573441261580},
-		{"capmap-competence-section", 2738188573441261581},
-		{"capmap-competence-lifecycle-by", 2738188573441261582},
-		{"capmap-competence-lifecycle-at", 2738188573441261583},
-		{"capmap-relation-source", 2738188573441261584},
-		{"capmap-relation-target", 2738188573441261585},
-		{"capmap-relation-target-text", 2738188573441261586},
-		{"capmap-relation-kind", 2738188573441261587},
-		{"capmap-relation-resolution", 2738188573441261588},
-		{"capmap-relation-section", 2738188573441261589},
-		{"capmap-relation-ncd", 2738188573441261590},
-		{"capmap-competence-tag", 2738188573441261591},
-	}
-	require.Len(t, capmapvocab.AllMembs, len(golden),
-		"a membership was added or removed — append its line to the golden table, and re-ingest if any line changed")
-	for i, want := range golden {
-		got := capmapvocab.AllMembs[i]
-		assert.Equalf(t, want.name, string(got.GetNaturalKey()), "position %d", i)
-		assert.Equalf(t, want.id, got.GetId().Value(), "id of %q", want.name)
-	}
+// The claimed value is the allocation, so it is pinned rather than left to
+// drift: the package comment, ADR-0168 §SD6 and this claim have to agree, and
+// a change here is a change to what rows already in the table mean.
+func TestTagValueClaimIsTheAllocatedOne(t *testing.T) {
+	assert.EqualValues(t, 2178311, capmapvocab.TagValueClaim.Value().Value())
+	assert.Equal(t, "capmap", capmapvocab.TagValueClaim.Name())
+	assert.Equal(t, tagmint.VocabularyTagWidth, capmapvocab.TagValueClaim.Tag().GetTagWidth(),
+		"every vcs-managed vocabulary claims from one width class")
 }

@@ -143,18 +143,6 @@ type RegisteredNaturalKeyFinalDml struct {
 
 var _ RegisteredItemDmlUseI[RegisteredNaturalKeyFinalDml, RegisteredNaturalKeyFinal] = RegisteredNaturalKeyFinalDml{}
 
-type RegisteredTagValue struct {
-	tv         identifier.TagValue
-	origin     string
-	moduleInfo string
-	naturalKey naming.StylableName
-	flags      RegisteredValueFlagsE
-	register   func(r RegisteredTagValue) RegisteredTagValue
-}
-type RegisteredTagValueDml struct {
-	w RegisteredTagValue
-}
-
 type HumanReadableNaturalKeyRegistry[C contract.ContractI] struct {
 	tv     identifier.TagValue
 	tag    identifier.IdTag
@@ -171,12 +159,3 @@ type HumanReadableNaturalKeyRegistry[C contract.ContractI] struct {
 type RegisteredValueFlagsE uint8
 
 var _ fmt.Stringer = RegisteredValueFlagsE(0)
-
-type MembershipTagValueRegistry[C contract.ContractI] struct {
-	offset      identifier.TagValue
-	lookupTg    *containers.BinarySearchGrowingKV[identifier.IdTag, RegisteredTagValue]
-	lookupNk    *containers.BinarySearchGrowingKV[naming.StylableName, RegisteredTagValue]
-	namingStyle naming.NamingStyleE
-	contr       C
-	memEnc      *naturalkey.Encoder
-}

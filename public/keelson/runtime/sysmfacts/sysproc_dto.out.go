@@ -13,22 +13,22 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindProc         uint64 = 3098476543630901354
-	kindSysmProcHost         uint64 = 3098476543630901355
-	kindSysmProcPid          uint64 = 3098476543630901356
-	kindSysmProcPpid         uint64 = 3098476543630901357
-	kindSysmProcName         uint64 = 3098476543630901358
-	kindSysmProcState        uint64 = 3098476543630901359
-	kindSysmProcCpuPct       uint64 = 3098476543630901360
-	kindSysmProcRssBytes     uint64 = 3098476543630901361
-	kindSysmProcVmSizeBytes  uint64 = 3098476543630901362
-	kindSysmProcNumThreads   uint64 = 3098476543630901363
-	kindSysmProcNice         uint64 = 3098476543630901364
-	kindSysmProcPriority     uint64 = 3098476543630901365
-	kindSysmProcKernelThread uint64 = 3098476543630901366
-	kindSysmProcStartedAtMs  uint64 = 3098476543630901367
-	kindSysmProcComponent    uint64 = 3098476543630901368
-	kindSysmProcCgroupUnit   uint64 = 3098476543630901369
+	kindSysmKindProc         uint64 = 2305843022098595946
+	kindSysmProcHost         uint64 = 2305843022098595947
+	kindSysmProcPid          uint64 = 2305843022098595948
+	kindSysmProcPpid         uint64 = 2305843022098595949
+	kindSysmProcName         uint64 = 2305843022098595950
+	kindSysmProcState        uint64 = 2305843022098595951
+	kindSysmProcCpuPct       uint64 = 2305843022098595952
+	kindSysmProcRssBytes     uint64 = 2305843022098595953
+	kindSysmProcVmSizeBytes  uint64 = 2305843022098595954
+	kindSysmProcNumThreads   uint64 = 2305843022098595955
+	kindSysmProcNice         uint64 = 2305843022098595956
+	kindSysmProcPriority     uint64 = 2305843022098595957
+	kindSysmProcKernelThread uint64 = 2305843022098595958
+	kindSysmProcStartedAtMs  uint64 = 2305843022098595959
+	kindSysmProcComponent    uint64 = 2305843022098595960
+	kindSysmProcCgroupUnit   uint64 = 2305843022098595961
 )
 
 // sysProcSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

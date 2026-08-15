@@ -13,18 +13,18 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindGpu             uint64 = 3098476543630901342
-	kindSysmGpuHost             uint64 = 3098476543630901343
-	kindSysmGpuVendor           uint64 = 3098476543630901344
-	kindSysmGpuIndex            uint64 = 3098476543630901345
-	kindSysmGpuName             uint64 = 3098476543630901346
-	kindSysmGpuPciId            uint64 = 3098476543630901347
-	kindSysmGpuBusyPct          uint64 = 3098476543630901348
-	kindSysmGpuMemoryUsedBytes  uint64 = 3098476543630901349
-	kindSysmGpuMemoryTotalBytes uint64 = 3098476543630901350
-	kindSysmGpuPowerWatts       uint64 = 3098476543630901351
-	kindSysmGpuTempC            uint64 = 3098476543630901352
-	kindSysmGpuFreqMhz          uint64 = 3098476543630901353
+	kindSysmKindGpu             uint64 = 2305843022098595934
+	kindSysmGpuHost             uint64 = 2305843022098595935
+	kindSysmGpuVendor           uint64 = 2305843022098595936
+	kindSysmGpuIndex            uint64 = 2305843022098595937
+	kindSysmGpuName             uint64 = 2305843022098595938
+	kindSysmGpuPciId            uint64 = 2305843022098595939
+	kindSysmGpuBusyPct          uint64 = 2305843022098595940
+	kindSysmGpuMemoryUsedBytes  uint64 = 2305843022098595941
+	kindSysmGpuMemoryTotalBytes uint64 = 2305843022098595942
+	kindSysmGpuPowerWatts       uint64 = 2305843022098595943
+	kindSysmGpuTempC            uint64 = 2305843022098595944
+	kindSysmGpuFreqMhz          uint64 = 2305843022098595945
 )
 
 // sysGpuSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

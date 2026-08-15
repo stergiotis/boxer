@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -32,18 +32,21 @@ var Contract = contract.NewVcsManagedContract()
 
 const NamingStyle = naming.LowerSpinalCase
 
-// TagValueRegistry is scoped to this trial so its ids cannot collide with the
-// runtime's own vocab (public/keelson/runtime/vocab). Offset 2 for the same
-// reason the runtime uses it: fibonacci-coded tags reserve 0 as invalid
-// (ADR-0106 §SD8) and the vcs-managed convention keeps effective ids even.
-var TagValueRegistry = registry.MustNewTagValueRegistry[*contract.VcsManagedContract](
-	identifier.TagValue(2), NamingStyle, 4, Contract,
-)
+// TagValueClaim is this trial vocabulary's tag value, claimed from the
+// width-32 class (ADR-0183 D0).
+//
+// The old value was 2, chosen to keep the trial's ids away from the runtime's
+// — which is exactly the value the runtime vocabulary had also chosen, so
+// every id here equalled a runtime id. Nothing broke because the two share no
+// table; the claim now refuses the duplicate outright rather than leaving it
+// to luck.
+var TagValueClaim = tagmint.MustClaim("jsonbench", 2178313, MaxExpectedMemberships)
 
-var MembersTagValue = TagValueRegistry.MustBegin("jsonbenchMembers", 0).End()
+// MaxExpectedMemberships is what this vocabulary tells the mint it will need.
+const MaxExpectedMemberships = 1 << 10
 
 var NkRegistry = registry.MustNewNaturalKeyRegistry[*contract.VcsManagedContract](
-	MembersTagValue.GetTagValue(), 8, NamingStyle, Contract,
+	TagValueClaim, 8, NamingStyle, Contract,
 )
 
 var (

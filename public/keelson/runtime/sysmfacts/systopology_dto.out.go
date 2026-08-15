@@ -13,22 +13,22 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindTopology       uint64 = 3098476543630901385
-	kindSysmTopologyHost       uint64 = 3098476543630901386
-	kindSysmTopoNodeIdx        uint64 = 3098476543630901387
-	kindSysmTopoParentIdx      uint64 = 3098476543630901388
-	kindSysmTopoKind           uint64 = 3098476543630901389
-	kindSysmTopoOsIndex        uint64 = 3098476543630901390
-	kindSysmTopoCacheLevel     uint64 = 3098476543630901391
-	kindSysmTopoCacheType      uint64 = 3098476543630901392
-	kindSysmTopoCacheSizeBytes uint64 = 3098476543630901393
-	kindSysmTopoMemBytes       uint64 = 3098476543630901394
-	kindSysmTopoFreqPresent    uint64 = 3098476543630901395
-	kindSysmTopoFreqMinMhz     uint64 = 3098476543630901396
-	kindSysmTopoFreqMaxMhz     uint64 = 3098476543630901397
-	kindSysmTopoFreqGovernor   uint64 = 3098476543630901398
-	kindSysmTopoFreqDriver     uint64 = 3098476543630901399
-	kindSysmTopoLogicalCount   uint64 = 3098476543630901400
+	kindSysmKindTopology       uint64 = 2305843022098595977
+	kindSysmTopologyHost       uint64 = 2305843022098595978
+	kindSysmTopoNodeIdx        uint64 = 2305843022098595979
+	kindSysmTopoParentIdx      uint64 = 2305843022098595980
+	kindSysmTopoKind           uint64 = 2305843022098595981
+	kindSysmTopoOsIndex        uint64 = 2305843022098595982
+	kindSysmTopoCacheLevel     uint64 = 2305843022098595983
+	kindSysmTopoCacheType      uint64 = 2305843022098595984
+	kindSysmTopoCacheSizeBytes uint64 = 2305843022098595985
+	kindSysmTopoMemBytes       uint64 = 2305843022098595986
+	kindSysmTopoFreqPresent    uint64 = 2305843022098595987
+	kindSysmTopoFreqMinMhz     uint64 = 2305843022098595988
+	kindSysmTopoFreqMaxMhz     uint64 = 2305843022098595989
+	kindSysmTopoFreqGovernor   uint64 = 2305843022098595990
+	kindSysmTopoFreqDriver     uint64 = 2305843022098595991
+	kindSysmTopoLogicalCount   uint64 = 2305843022098595992
 )
 
 // sysTopologySymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

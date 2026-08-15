@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
@@ -17,7 +16,7 @@ import (
 
 func newVcsRegistry(t *testing.T) *HumanReadableNaturalKeyRegistry[*contract.VcsManagedContract] {
 	t.Helper()
-	reg, err := NewNaturalKeyRegistry[*contract.VcsManagedContract](identifier.TagValue(4), 8, naming.LowerSnakeCase, contract.NewVcsManagedContract())
+	reg, err := NewNaturalKeyRegistry[*contract.VcsManagedContract](testClaimVcs, 8, naming.LowerSnakeCase, contract.NewVcsManagedContract())
 	require.NoError(t, err)
 	return reg
 }
@@ -30,7 +29,7 @@ func TestDeclaredOrdinalIsTheIdsBody(t *testing.T) {
 	assert.EqualValues(t, 17, first.GetId().RemoveTag().Value(),
 		"the ordinal is the body; declaration order has nothing to do with it")
 	assert.EqualValues(t, 3, second.GetId().RemoveTag().Value())
-	assert.Equal(t, identifier.TagValue(4), first.GetId().GetTag().GetValue())
+	assert.Equal(t, testClaimVcs.Value(), first.GetId().GetTag().GetValue())
 }
 
 // Two names on one ordinal are two names on one id — the collision the
@@ -62,7 +61,7 @@ func TestBeginRefusesADisagreeingOrdinalForTheSameName(t *testing.T) {
 // an error naming the ceiling.
 func TestBeginRefusesAnOrdinalWiderThanTheTag(t *testing.T) {
 	reg := newVcsRegistry(t)
-	max := identifier.TagValue(4).GetTag().GetMaxPossibleIdIncl()
+	max := testClaimVcs.Tag().GetMaxPossibleIdIncl()
 
 	_, err := reg.Begin("fits", max)
 	require.NoError(t, err)
@@ -88,7 +87,7 @@ func TestVcsManagedContractRefusesRegistrationOrderIds(t *testing.T) {
 // An ephemeral registry keeps the convenience: nothing stored depends on its
 // ids, which is the entire difference.
 func TestEphemeralContractAllowsRegistrationOrderIds(t *testing.T) {
-	reg, err := NewNaturalKeyRegistry[*contract.EphemeralContract](identifier.TagValue(4), 8, naming.LowerSnakeCase, contract.NewEphemeralContract())
+	reg, err := NewNaturalKeyRegistry[*contract.EphemeralContract](testClaimEphemeral, 8, naming.LowerSnakeCase, contract.NewEphemeralContract())
 	require.NoError(t, err)
 
 	a := reg.MustBeginNext("alpha").End()

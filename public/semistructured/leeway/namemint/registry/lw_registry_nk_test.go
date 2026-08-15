@@ -12,7 +12,7 @@ import (
 )
 
 func TestNewNaturalKeyRegistry(t *testing.T) {
-	reg, err := NewNaturalKeyRegistry[*contract.EphemeralContract](identifier.TagValue(4), 8, naming.LowerSnakeCase, contract.NewEphemeralContract())
+	reg, err := NewNaturalKeyRegistry[*contract.EphemeralContract](testClaimShapes, 8, naming.LowerSnakeCase, contract.NewEphemeralContract())
 	require.NoError(t, err)
 	nkV1 := reg.MustBegin("nkV1", 0).SetVirtual().End()
 	nkV2 := reg.MustBegin("nkV2", 1).SetVirtual().End()

@@ -13,17 +13,17 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindNet          uint64 = 3098476543630901303
-	kindSysmNetHost          uint64 = 3098476543630901304
-	kindSysmNetName          uint64 = 3098476543630901305
-	kindSysmNetIndex         uint64 = 3098476543630901306
-	kindSysmNetHardwareAddr  uint64 = 3098476543630901307
-	kindSysmNetUp            uint64 = 3098476543630901308
-	kindSysmNetRunning       uint64 = 3098476543630901309
-	kindSysmNetRxBytes       uint64 = 3098476543630901310
-	kindSysmNetTxBytes       uint64 = 3098476543630901311
-	kindSysmNetRxBytesPerSec uint64 = 3098476543630901312
-	kindSysmNetTxBytesPerSec uint64 = 3098476543630901313
+	kindSysmKindNet          uint64 = 2305843022098595895
+	kindSysmNetHost          uint64 = 2305843022098595896
+	kindSysmNetName          uint64 = 2305843022098595897
+	kindSysmNetIndex         uint64 = 2305843022098595898
+	kindSysmNetHardwareAddr  uint64 = 2305843022098595899
+	kindSysmNetUp            uint64 = 2305843022098595900
+	kindSysmNetRunning       uint64 = 2305843022098595901
+	kindSysmNetRxBytes       uint64 = 2305843022098595902
+	kindSysmNetTxBytes       uint64 = 2305843022098595903
+	kindSysmNetRxBytesPerSec uint64 = 2305843022098595904
+	kindSysmNetTxBytesPerSec uint64 = 2305843022098595905
 )
 
 // sysNetSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

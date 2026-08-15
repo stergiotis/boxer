@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
@@ -35,16 +36,19 @@ func (f fakeSource) IterateAll() iter.Seq2[naming.StylableName, registry.Registe
 	}
 }
 
-// scratchRegistry builds a throwaway vocabulary at a tag-value base no
-// in-tree vocabulary uses, so its RegisteredNaturalKey values are real ones.
+// storegenProbeClaim is a tag value no in-tree vocabulary claims, so the
+// fixture's RegisteredNaturalKey values are real ones. It is a package-level
+// claim because a claim is global to the binary: claiming inside the helper
+// would fail the second time it is called.
+var storegenProbeClaim = tagmint.MustClaim("storegenProbe", 2178500, 1<<10)
+
+// scratchRegistry builds a throwaway vocabulary under storegenProbeClaim, so
+// its RegisteredNaturalKey values are real ones.
 func scratchRegistry(t *testing.T, names ...string) (*registry.HumanReadableNaturalKeyRegistry[*contract.VcsManagedContract], []registry.RegisteredNaturalKey) {
 	t.Helper()
 	c := contract.NewVcsManagedContract()
-	tv := registry.MustNewTagValueRegistry(
-		identifier.TagValue(64), naming.LowerSpinalCase, 4, c)
-	base := tv.MustBegin("storegenProbeMembers", 0).End()
 	nk := registry.MustNewNaturalKeyRegistry(
-		base.GetTagValue(), 8, naming.LowerSpinalCase, c)
+		storegenProbeClaim, 8, naming.LowerSpinalCase, c)
 	keys := make([]registry.RegisteredNaturalKey, 0, len(names))
 	for i, n := range names {
 		// A vcs-managed registry states its ordinals; here the index is the

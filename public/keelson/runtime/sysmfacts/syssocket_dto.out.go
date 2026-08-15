@@ -13,14 +13,14 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindSocket  uint64 = 3098476543630901377
-	kindSysmSocketHost  uint64 = 3098476543630901378
-	kindSysmSocketProto uint64 = 3098476543630901379
-	kindSysmSocketAddr  uint64 = 3098476543630901380
-	kindSysmSocketPort  uint64 = 3098476543630901381
-	kindSysmSocketInode uint64 = 3098476543630901382
-	kindSysmSocketUid   uint64 = 3098476543630901383
-	kindSysmSocketPid   uint64 = 3098476543630901384
+	kindSysmKindSocket  uint64 = 2305843022098595969
+	kindSysmSocketHost  uint64 = 2305843022098595970
+	kindSysmSocketProto uint64 = 2305843022098595971
+	kindSysmSocketAddr  uint64 = 2305843022098595972
+	kindSysmSocketPort  uint64 = 2305843022098595973
+	kindSysmSocketInode uint64 = 2305843022098595974
+	kindSysmSocketUid   uint64 = 2305843022098595975
+	kindSysmSocketPid   uint64 = 2305843022098595976
 )
 
 // sysSocketSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

@@ -6,6 +6,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
@@ -15,11 +16,28 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-// NewNaturalKeyRegistry creates a registry minting ids under tagValue.
+// NewNaturalKeyRegistry creates a registry minting ids under a claimed tag
+// value.
+//
+// The claim is the argument rather than the number because ids under one tag
+// value are one id space: two vocabularies on one value are one vocabulary
+// with two sets of names, and nothing local can notice. [tagmint] is where
+// that is checked, and its token cannot be built anywhere else — so a registry
+// cannot exist around the check (ADR-0183 D0).
 //
 // estSize is a capacity hint only — an id is what its registration declares,
 // so nothing here moves when the hint changes.
-func NewNaturalKeyRegistry[C contract.ContractI](tagValue identifier.TagValue, estSize int, namingStyle naming.NamingStyleE, contr C) (inst *HumanReadableNaturalKeyRegistry[C], err error) {
+func NewNaturalKeyRegistry[C contract.ContractI](claim tagmint.ClaimedTagValue, estSize int, namingStyle naming.NamingStyleE, contr C) (inst *HumanReadableNaturalKeyRegistry[C], err error) {
+	if !claim.IsValid() {
+		err = eb.Build().Errorf("a registry mints under a claimed tag value — claim one with tagmint.MustClaim(name, value, maxExpectedIds)")
+		return
+	}
+	tagValue := claim.Value()
+	err = contr.ValidateTagValue(tagValue)
+	if err != nil {
+		err = eb.Build().Str("claimant", claim.Name()).Uint32("tagValue", tagValue.Value()).Errorf("the contract refuses this tag value: %w", err)
+		return
+	}
 	inst = &HumanReadableNaturalKeyRegistry[C]{
 		tv:          tagValue,
 		tag:         tagValue.GetTag(),
@@ -35,9 +53,9 @@ func NewNaturalKeyRegistry[C contract.ContractI](tagValue identifier.TagValue, e
 
 // MustNewNaturalKeyRegistry is [NewNaturalKeyRegistry] for a package-level
 // declaration.
-func MustNewNaturalKeyRegistry[C contract.ContractI](tagValue identifier.TagValue, estSize int, namingStyle naming.NamingStyleE, contr C) (inst *HumanReadableNaturalKeyRegistry[C]) {
+func MustNewNaturalKeyRegistry[C contract.ContractI](claim tagmint.ClaimedTagValue, estSize int, namingStyle naming.NamingStyleE, contr C) (inst *HumanReadableNaturalKeyRegistry[C]) {
 	var err error
-	inst, err = NewNaturalKeyRegistry[C](tagValue,
+	inst, err = NewNaturalKeyRegistry[C](claim,
 		estSize,
 		namingStyle,
 		contr)

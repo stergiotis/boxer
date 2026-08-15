@@ -13,10 +13,10 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindCpuInfo     uint64 = 3098476543630901249
-	kindSysmCpuInfoHost     uint64 = 3098476543630901252
-	kindSysmCpuModelName    uint64 = 3098476543630901262
-	kindSysmCpuLogicalCores uint64 = 3098476543630901263
+	kindSysmKindCpuInfo     uint64 = 2305843022098595841
+	kindSysmCpuInfoHost     uint64 = 2305843022098595844
+	kindSysmCpuModelName    uint64 = 2305843022098595854
+	kindSysmCpuLogicalCores uint64 = 2305843022098595855
 )
 
 // sysCpuInfoSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

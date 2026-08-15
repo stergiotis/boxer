@@ -18,35 +18,29 @@
 // does the same job for runtime facts in the same table. Two vocabularies
 // share `boxer.facts`, so what keeps their rows apart is the tag value below.
 //
-// # Tag value 16, and why the number is written down
+// # The claimed tag value
 //
-// This package owns **tag value 16**, allocated by ADR-0168 §SD6.
+// This package claims **tag value 2178311**, the third of the width-32 class
+// (ADR-0183 D0). ADR-0168 §SD6 allocated 16 for it; the re-key moved every
+// vocabulary into one class, and the claim is now made through
+// [github.com/stergiotis/boxer/public/identity/tagmint] rather than written
+// down and hoped for.
 //
-// Nothing in the tree records which tag values are taken — ADR-0106 §SD8 notes
-// only that zero is reserved — so §SD6 makes the allocating ADR the register
-// and requires the allocation be named here, where the next author will be
-// standing when they need one.
+// The old regime allocated by *base* — a vocabulary took the next unused
+// multiple of 16 and owned the even offsets above it — because the tag-value
+// registry could mint `base + tv` as a vocabulary grew, and a bare "next free
+// integer" would land inside someone's growth path. A width-32 tag carries
+// about 4.3e9 ids under one value, so the growth path is inside the tag rather
+// than beside it, and one claimed value is the whole allocation.
 //
-// Allocation is by *base*, not by number, because a base reserves an
-// open-ended range: [registry.MembershipTagValueRegistry.Begin] mints
-// `base + tv` for any even `tv`, so a registry based at 2 can mint 4, 6, 8 and
-// upward whenever it grows. Taking merely "the next free integer" would put a
-// new vocabulary inside an existing one's growth path.
-//
-// The rule, therefore: **a new vocabulary takes the next unused multiple of
-// 16, and owns the even offsets up to the following multiple** — 16 here means
-// 16, 18 … 30, which is more headroom than either existing registry's declared
-// size. Two bases predate the rule and are grandfathered at their current
-// size: 1 (keelson vdd, `valueLabel`) and 2 (keelson runtime, `runtimeMembers`).
-// A vocabulary added after this one takes 32.
-//
-// TestTagValuesAreDisjointFromOtherVocabularies is what enforces it; a
-// collision would not be a compile error, it would be two different facts
-// wearing the same membership id.
+// The claim is checked rather than trusted: tagmint refuses a value another
+// package already claimed, and the committed assignment tables are compared
+// across the repo (ADR-0183 D1). A collision would not be a compile error —
+// it would be two different facts wearing the same membership id.
 package capmapvocab
 
 import (
-	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -62,25 +56,22 @@ var Contract = contract.NewVcsManagedContract()
 // facts reads the same way on both sides.
 const NamingStyle = naming.LowerSpinalCase
 
-// TagValueBase is this vocabulary's reserved base — see the package comment
-// for why allocation is by base rather than by single value.
-const TagValueBase = 16
+// TagValueClaim is this vocabulary's tag value, claimed from the width-32
+// class every version-controlled vocabulary claims from (ADR-0183 D0). The
+// third of the class.
+//
+// It was 16, a hand-picked base with room reserved below it for further capmap
+// categories. The width-32 body holds about 4.3e9 ids, so one claimed value is
+// room enough and the reservation is no longer needed.
+var TagValueClaim = tagmint.MustClaim("capmap", 2178311, MaxExpectedMemberships)
 
-// TagValueRegistry allocates tag values for capmap membership categories. It
-// lives in its own scope so it cannot collide with the keelson or runtime
-// registries, which are different vocabularies in the same table.
-var TagValueRegistry = registry.MustNewTagValueRegistry[*contract.VcsManagedContract](
-	identifier.TagValue(TagValueBase), NamingStyle, 4, Contract,
-)
-
-// MembersTagValue is the tag value rooted at offset 0 of [TagValueRegistry],
-// covering every membership registered below.
-var MembersTagValue = TagValueRegistry.MustBegin("capmapMembers", 0).End()
+// MaxExpectedMemberships is what this vocabulary tells the mint it will need.
+const MaxExpectedMemberships = 1 << 16
 
 // NkRegistry is the natural-key registry for capmap memberships. Every Memb*
 // constant below lives in it.
 var NkRegistry = registry.MustNewNaturalKeyRegistry[*contract.VcsManagedContract](
-	MembersTagValue.GetTagValue(), 32, NamingStyle, Contract,
+	TagValueClaim, 32, NamingStyle, Contract,
 )
 
 // Membership constants for `boxer.facts` rows carrying competence-corpus data.
