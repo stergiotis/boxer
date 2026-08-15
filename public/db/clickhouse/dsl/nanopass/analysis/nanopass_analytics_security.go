@@ -18,12 +18,13 @@ import (
 type QuerySecurityClassE uint8
 
 const (
-	// QuerySecurityMutating — the statement changes state (a non-`param_*`
-	// SET), or could not be shown to be anything weaker. Grammar1 parses
-	// only `SET* … SELECT` chains, so every genuinely mutating statement
-	// form (INSERT, DDL, SYSTEM, KILL, `INTO OUTFILE`, …) is a parse error
-	// upstream of this classifier and lands here via the caller contract on
-	// [ClassifyQuerySecurity].
+	// QuerySecurityMutating — the statement changes state (an INSERT
+	// wrapper, a non-`param_*` SET), or could not be shown to be anything
+	// weaker. Grammar1 parses `SET* … SELECT` chains and the INSERT wrapper
+	// (ADR-0181 §SD8) — the latter is witnessed directly; every other
+	// mutating statement form (DDL, SYSTEM, KILL, `INTO OUTFILE`, …) is a
+	// parse error upstream of this classifier and lands here via the caller
+	// contract on [ClassifyQuerySecurity].
 	QuerySecurityMutating QuerySecurityClassE = iota
 	// QuerySecurityReadEgress — retrieval-only, but it reaches beyond the
 	// endpoint it is sent to: an egress table function (`url`, `s3`,
@@ -61,6 +62,9 @@ const (
 	// SecurityWitnessEgressFunction — a scalar call on the egress denylist
 	// (`file`).
 	SecurityWitnessEgressFunction
+	// SecurityWitnessInsertWrapper — the statement is an
+	// `INSERT INTO … SELECT` (ADR-0181 §SD8); Name carries the target.
+	SecurityWitnessInsertWrapper
 )
 
 func (inst SecurityWitnessKindE) String() (s string) {
@@ -69,6 +73,8 @@ func (inst SecurityWitnessKindE) String() (s string) {
 		s = "settings change"
 	case SecurityWitnessEgressTableFunction:
 		s = "egress table function"
+	case SecurityWitnessInsertWrapper:
+		s = "insert wrapper"
 	default:
 		s = "egress function"
 	}
@@ -136,12 +142,15 @@ var egressScalarFunctions = map[string]struct{}{
 //
 // Caller contract (the ADR's conservative direction): call [nanopass.Parse]
 // first and treat a parse error as **cannot classify → the strongest class**
-// ([QuerySecurityMutating]). Grammar1's root is `SET* … SELECT`-chain only,
-// so INSERT/DDL/SYSTEM and every other genuinely mutating form arrives at
-// the caller as exactly that parse error.
+// ([QuerySecurityMutating]). Grammar1's root is `SET* … SELECT` chains plus
+// exactly one write shape — the INSERT wrapper (ADR-0181 §SD8) — so DDL,
+// SYSTEM and every other mutating form still arrives at the caller as that
+// parse error, while a parsed INSERT is witnessed below.
 //
 // On a parsed tree the classification is:
 //
+//   - the INSERT wrapper witnesses [QuerySecurityMutating] outright — the
+//     write is the statement's whole point;
 //   - a top-level SET whose settings are all `param_*` is the parameter
 //     prelude — no witness; any non-`param_*` setting in a SET witnesses
 //     [QuerySecurityMutating]. A query-tail `SETTINGS` clause is *not* a
@@ -161,6 +170,25 @@ func ClassifyQuerySecurity(pr *nanopass.ParseResult) (class QuerySecurityClassE,
 	if pr == nil || pr.Tree == nil {
 		err = eh.Errorf("ClassifyQuerySecurity: nil parse result")
 		return
+	}
+	// The INSERT wrapper (ADR-0181 §SD8) is the one mutating form grammar1
+	// parses, so it must be witnessed from the tree — before the port it
+	// arrived as a parse error and classified mutating via the caller
+	// contract; a fall-through here would have flipped it to "read".
+	if ins := pr.InsertStmt(); ins != nil {
+		name := ""
+		if tid, ok := ins.TableIdentifier().(*grammar1.TableIdentifierContext); ok {
+			name = nanopass.TableIdentifierName(tid)
+			if db := nanopass.DatabaseIdentifierName(tid.DatabaseIdentifier()); db != "" {
+				name = db + "." + name
+			}
+		}
+		witnesses = append(witnesses, SecurityWitness{
+			Class: QuerySecurityMutating,
+			Kind:  SecurityWitnessInsertWrapper,
+			Name:  name,
+			Src:   pr.SourceRangeOf(ins),
+		})
 	}
 	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		switch ctx.(type) {

@@ -93,6 +93,21 @@ func TestClassifyQuerySecurityZeroValue(t *testing.T) {
 // every statement form outside grammar1's `SET* … SELECT` root — including
 // all genuinely mutating forms — is a parse error, which the caller must
 // treat as "cannot classify → mutating".
+// TestClassifyQuerySecurityInsertWrapper pins the one mutating form grammar1
+// parses (ADR-0181 §SD8): it must be witnessed from the tree, not fall
+// through to "read" for lack of a parse error.
+func TestClassifyQuerySecurityInsertWrapper(t *testing.T) {
+	pr, err := nanopass.Parse("INSERT INTO db.t SELECT x FROM src")
+	assert.NoError(t, err)
+	class, witnesses, err := ClassifyQuerySecurity(pr)
+	assert.NoError(t, err)
+	assert.Equal(t, QuerySecurityMutating, class)
+	if assert.Len(t, witnesses, 1) {
+		assert.Equal(t, SecurityWitnessInsertWrapper, witnesses[0].Kind)
+		assert.Equal(t, "db.t", witnesses[0].Name)
+	}
+}
+
 func TestClassifyQuerySecurityParseContract(t *testing.T) {
 	for _, sql := range []string{
 		`INSERT INTO t VALUES (1)`,
