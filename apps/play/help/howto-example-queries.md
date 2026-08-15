@@ -40,18 +40,20 @@ queries transfer by swapping the table name.
 
 ## Loading the demo table
 
-`anchor.facts` is populated by an integration test that talks to a local
-ClickHouse on `localhost:8123` (it skips silently if none is reachable):
+`anchor.facts` is a demo fixture, recreated empty and re-seeded on every load
+(its engine is `Memory`, so a ClickHouse server restart also wipes it). The
+seeding script drives the integration-tagged loader against a local ClickHouse
+on `localhost:8123` (`CLICKHOUSE_ENDPOINT` overrides), fails loudly when no
+server is reachable, and verifies the row count afterwards:
 
 ```bash
-go test -tags="$(cat ./tags)" -run TestLeewayClickHouse \
-  ./public/semistructured/leeway/anchor/
+bash public/semistructured/leeway/anchor/seed_facts.sh
 ```
 
-That creates the `anchor` database, loads an array-unflatten UDF, and inserts
-~60 entities across the three scenarios. Re-running appends another batch; to
-reset, `TRUNCATE TABLE anchor.facts` from a ClickHouse client — not from the
-playground, since the appended `FORMAT ArrowStream` is invalid on DDL.
+That creates the `anchor` database, installs the leeway SQL surface (the
+`LW_*` functions some examples below call), and inserts ~60 entities across
+the three scenarios. For an endpoint the loader does not touch, the surface
+installs on its own: `boxer leeway sqlsurface install --url <endpoint>`.
 
 ## Inspecting whole entities — the Detail card
 
@@ -109,6 +111,30 @@ SELECT `geoPoint:*` FROM anchor.facts LIMIT 20
 SELECT `id:id`, `geoPoint:*` FROM anchor.facts ARRAY JOIN `geoPoint:*` LIMIT 20
 ```
 
+## Reading one attribute by its tag — `LW_GET`
+
+Handles read whole lanes; `LW_GET` reads one attribute, located by its
+membership tag rather than by position (ADR-0181). In this fixture every
+`symbol` attribute carries a tag on the low-cardinality ref channel — the
+cyber events tag with the targeted network port — and the `chan:` token names
+that channel, since anchor's sections carry several:
+
+```sql
+SELECT
+  `id:naturalKey`                                  AS entity,
+  LW_GET_NULL('symbol', '22', 'chan:low-card-ref') AS event_on_port_22
+FROM anchor.facts
+WHERE LW_GET('symbol', '22', 'chan:low-card-ref') != ''
+```
+
+`LW_GET` yields the type default where the tag is absent; `LW_GET_NULL`
+yields `NULL` instead, telling absent from present-with-the-default;
+`LW_GET_LIST` reads array- and set-valued sections. The call expands
+client-side into the server's read-back helpers, so the endpoint must carry
+the surface — the loader above installs it. The **Snippets** tab's leeway
+sections cover the rest: `col:` disambiguation, membership names via
+`keelson('memberships')`, the ragged/co pack, and the constructor family.
+
 ## Plotting time — the Timeline tab
 
 The Timeline tab reads canonical slot columns. Map the `timeRange` section onto
@@ -146,8 +172,10 @@ ORDER BY id
 
 The repo ships richer relational examples next to the fixture —
 `card_anchor_dql_query1.sql` (explode nested ports with `ARRAY JOIN`),
-`…query3.sql` (pre-tokenised full-text search over a co-container), and
-`…query6.sql` (a leeway integrity scanner).
+`…query3.sql` (pre-tokenised full-text search over a co-container),
+`…query4.sql` / `…query5.sql` (mint sanitized and composite leeway tables
+with the constructor family), and `…query6.sql` (a leeway integrity
+scanner).
 
 ## Parameters
 

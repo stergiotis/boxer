@@ -220,7 +220,9 @@ Rules the pass enforces, loudly and before anything ships:
   agree, and membership/support mints carry none — a `use:`-bearing section
   cannot be fully minted per-column today (ADR-0181 §SD8).
 - Types are canonical-type tokens (`u64`, `s`, `u64h`, …), names are stylable
-  names; an unknown token errors with the candidates.
+  names minted in the folded spelling (`symbolUpper` lands as
+  `symbol-upper`, the same fold the membership registry applies); an unknown
+  token errors with the candidates.
 
 `LwShapeCheck` (opt-in pass) verifies a statement's output *is* a leeway
 table — names parse plus the vertical-subset rule — which catches the quiet
