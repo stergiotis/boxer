@@ -820,3 +820,20 @@ func TestSelectorMarkerIsScanned(t *testing.T) {
 	require.True(t, constructsql.HasExtractMarker("SELECT LW_SEL_ATTRS('a','b')"))
 	require.False(t, constructsql.HasExtractMarker("SELECT 1"))
 }
+
+// TestExpandsUnderInsertWrapper — ADR-0181 §SD8 M1: the wrapper's SELECT
+// source is an ordinary scope, so extraction and construction expand inside
+// it unchanged, while the target stays untouched — it is a sink, never a
+// scope table, so no section could resolve against it and none is asked to.
+func TestExpandsUnderInsertWrapper(t *testing.T) {
+	r := extractResolver(t)
+	sql := "INSERT INTO tgt (c1, c2) SELECT LW_GET('symbol', 'ticker'), LW_PLAIN(1, 'n', 'u64', 'item:oq') FROM events"
+	out, err := constructsql.ExtractExpandPass(r, "").Run(sql)
+	require.NoError(t, err)
+	out, err = constructsql.ExpandPass.Run(out)
+	require.NoError(t, err)
+	require.NotContains(t, strings.ToUpper(out), "LW_GET")
+	require.NotContains(t, strings.ToUpper(out), "LW_PLAIN")
+	require.Contains(t, out, "INSERT INTO tgt (c1, c2) SELECT")
+	require.Contains(t, out, `"oq:`, "the plain mint lands as the projection alias")
+}

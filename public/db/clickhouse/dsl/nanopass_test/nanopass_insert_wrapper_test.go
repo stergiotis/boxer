@@ -2,10 +2,10 @@ package nanopass_test
 
 // The ADR-0181 §SD8 (Update 2026-08-15) parse corpus: the INSERT wrapper the
 // M0 port admits, the out-of-scope forms it must keep rejecting, and the
-// pipeline-entry refusal that holds the fort until M1 teaches the passes the
-// wrapper. The corpus is the pin against the upstream utils/antlr lineage:
-// a regeneration or a later grammar edit that widens or narrows the admitted
-// set fails here first, with the offending statement in the failure.
+// pipeline entry's view of the wrapper (M1). The corpus is the pin against
+// the upstream utils/antlr lineage: a regeneration or a later grammar edit
+// that widens or narrows the admitted set fails here first, with the
+// offending statement in the failure.
 
 import (
 	"testing"
@@ -125,18 +125,16 @@ func TestInsertWrapperGrammar2Mirror(t *testing.T) {
 	}
 }
 
-// TestInsertWrapperPipelineEntryRefuses pins the M0 safety guard: the
-// grammar admits the wrapper, but nanopass.Parse — the entry every pass
-// chain shares — refuses it explicitly until M1 lands scope building and
-// the refusal matrix. Without this guard a wrapped statement would fail as
-// a nil-scope panic somewhere in the middle of a chain.
-func TestInsertWrapperPipelineEntryRefuses(t *testing.T) {
-	_, err := nanopass.Parse("INSERT INTO t SELECT 1")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "ADR-0181 §SD8")
-
-	// The guard must not touch the SELECT path.
-	pr, err := nanopass.Parse("SELECT 1")
+// TestInsertWrapperParsesAtEntry pins M1's flip of the M0 guard: the
+// pipeline entry accepts the wrapper and exposes it via
+// ParseResult.InsertStmt — the accessor passes key their refusals on and
+// hosts key statement-kind-aware behaviour on.
+func TestInsertWrapperParsesAtEntry(t *testing.T) {
+	pr, err := nanopass.Parse("INSERT INTO t SELECT 1")
 	require.NoError(t, err)
-	require.NotNil(t, pr)
+	require.NotNil(t, pr.InsertStmt())
+
+	pr, err = nanopass.Parse("SELECT 1")
+	require.NoError(t, err)
+	require.Nil(t, pr.InsertStmt())
 }

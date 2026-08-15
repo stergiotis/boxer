@@ -216,6 +216,22 @@ func BuildScopes(pr *ParseResult, defaultDatabase string) (scopes []*SelectScope
 		err = eb.Build().Errorf("BuildScopes: empty parse tree")
 		return
 	}
+	// ADR-0181 §SD8 M1: under the INSERT wrapper the scopes are the SELECT
+	// source's. The target tableIdentifier sits directly under insertStmt —
+	// outside every tableExpr — so it can never register as a scope table:
+	// the sink property is structural, not filtered.
+	if ins, isInsert := queryStmt.GetChild(0).(*grammar1.InsertStmtContext); isInsert {
+		for i := 0; i < ins.GetChildCount(); i++ {
+			if u, isUnion := ins.GetChild(i).(*grammar1.SelectUnionStmtContext); isUnion {
+				scopes = buildUnionScopes(u, nil, nil, defaultDatabase)
+				break
+			}
+		}
+		if len(scopes) == 0 {
+			err = eb.Build().Errorf("BuildScopes: INSERT wrapper carries no selectUnionStmt")
+		}
+		return
+	}
 	query, ok := queryStmt.GetChild(0).(*grammar1.QueryContext)
 	if !ok {
 		err = eb.Build().Type("child", queryStmt.GetChild(0)).Errorf("BuildScopes: expected query as first child of queryStmt")

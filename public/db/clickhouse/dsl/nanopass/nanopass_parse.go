@@ -40,6 +40,21 @@ type ParseResult struct {
 	Source string
 }
 
+// InsertStmt returns the INSERT wrapper when this result parsed one
+// (ADR-0181 §SD8), nil for a plain SELECT or a grammar2 tree. The wrapper is
+// grammar1's unlabeled queryStmt alternative, so the check is one child
+// accessor away — passes use it to refuse schema-changing rewrites under a
+// wrapper, and hosts to pick statement-kind-aware behaviour (FORMAT
+// appending, write gating) without re-parsing.
+func (inst *ParseResult) InsertStmt() *grammar1.InsertStmtContext {
+	qs, ok := inst.Tree.(*grammar1.QueryStmtContext)
+	if !ok {
+		return nil
+	}
+	ins, _ := qs.InsertStmt().(*grammar1.InsertStmtContext)
+	return ins
+}
+
 // errorListener collects syntax errors (with positions) during lexing and
 // parsing.
 type errorListener struct {
@@ -110,16 +125,6 @@ func Parse(sql string) (pr *ParseResult, err error) {
 
 	if len(errListener.errors) > 0 {
 		err = errListener.buildError("syntax error")
-		return
-	}
-
-	// ADR-0181 §SD8 M0: the grammar parses the INSERT wrapper, but no pass
-	// understands it yet — scope building, canonicalize node rules and the
-	// refusal matrix are M1. Refusing at the entry keeps a wrapped statement
-	// failing with its real reason instead of a nil-scope panic three passes
-	// later.
-	if tree.InsertStmt() != nil {
-		err = eb.Build().Errorf("INSERT INTO … SELECT parses, but the pass pipeline does not carry it yet (ADR-0181 §SD8, M1 pending); expand the SELECT alone and compose the wrapper around it")
 		return
 	}
 

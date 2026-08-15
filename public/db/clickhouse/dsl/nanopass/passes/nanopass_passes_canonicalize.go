@@ -9,6 +9,7 @@ import "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 func CanonicalizeFull(maxIter int) nanopass.Pass {
 	p := nanopass.Sequence(
 		"CanonicalizeFull",
+		CanonicalizeInsertWrapper,
 		CanonicalizeWhitespaceSingleLine,
 		CanonicalizeEquals,
 		CanonicalizeSugar,

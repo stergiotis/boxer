@@ -117,6 +117,20 @@ func applyExposeConditions(sql string, cfg ExposeSelectionConditionsConfig, pref
 		return
 	}
 
+	// Gate 0 — an INSERT wrapper refuses loudly (ADR-0181 §SD8's refusal
+	// matrix), and it must sit before Gate 1: a plain
+	// `INSERT INTO t SELECT … FROM src WHERE …` reads exactly one table and
+	// would sail through the passthrough triage, and the condition columns
+	// it then appends would change the SELECT's output schema — which is
+	// exactly what the INSERT target has to match. The other gates decline
+	// silently because their shapes are common and benign; this one errors
+	// because the rewrite was explicitly requested, and a silent skip would
+	// hide why no condition columns arrived.
+	if pr.InsertStmt() != nil {
+		err = eb.Build().Errorf("ExposeSelectionConditions refuses an INSERT wrapper (ADR-0181 §SD8): condition columns would change the SELECT's output schema, which the INSERT target must match")
+		return
+	}
+
 	// Gate 1: an information-retrieval read of exactly one table (ADR-0117).
 	// Exactly one is what makes the condition-naming target unambiguous; more
 	// than one can only arise from a UNION ALL, which §SD3 excludes anyway.

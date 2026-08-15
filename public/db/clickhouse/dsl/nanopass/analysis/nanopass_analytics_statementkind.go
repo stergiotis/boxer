@@ -85,22 +85,28 @@ var mutatingLeadingTokens = map[int]struct{}{
 // about it (refuse, reroute, fan out to every replica) is the caller's
 // policy.
 //
-// The proof has two tiers, because Grammar1 parses the SELECT surface and
-// nothing else:
+// The proof has two tiers, because Grammar1 parses the SELECT surface plus
+// exactly one write shape:
 //
-//   - A successful Grammar1 parse IS the read proof. Its top-level rule is
-//     `setStmt* ctes? selectUnionStmt`, so anything it accepts is a SELECT,
-//     a WITH…SELECT, or one of those behind a leading SET prelude. That
-//     prelude configures the read rather than mutating data, so it stays
-//     read-only; a SET on its own does not parse and is classified below.
+//   - A successful Grammar1 parse proves a read — unless it parsed the
+//     INSERT wrapper (ADR-0181 §SD8), which writes by definition and
+//     classifies as mutating from the tree rather than the keyword. What
+//     remains of a successful parse is a SELECT, a WITH…SELECT, or one of
+//     those behind a leading SET prelude; that prelude configures the read
+//     rather than mutating data, so it stays read-only (a SET on its own
+//     does not parse and is classified below).
 //   - Everything else is classified by its leading keyword, taken from the
 //     lexer so comments and whitespace ahead of it are skipped correctly.
 //     Only the two tables above are recognised; anything else is unknown.
 //
 // Total: no input errors, and no input is rejected.
 func ClassifyStatementKind(sql string) (kind KindE) {
-	_, err := nanopass.Parse(sql)
+	pr, err := nanopass.Parse(sql)
 	if err == nil {
+		if pr.InsertStmt() != nil {
+			kind = KindMutating
+			return
+		}
 		kind = KindReadOnly
 		return
 	}
