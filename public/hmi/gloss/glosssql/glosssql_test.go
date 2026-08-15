@@ -97,6 +97,25 @@ func TestExpandRejections(t *testing.T) {
 	assert.ErrorContains(t, err, "unknown media type")
 }
 
+// Call is Expand's dual: what the Glosses tab drops at the caret expands to
+// the alias with the same token (ADR-0186 §SD6).
+func TestCallRoundTrips(t *testing.T) {
+	call := Call("reading", gloss.MediaTypeTemperature, map[string]string{"unit": "K"})
+	assert.Equal(t, `gloss(reading, 'gloss/temperature', 'unit', 'K')`, call)
+	assert.Equal(t, `SELECT reading AS "reading@gloss/temperature;unit=K" FROM t`, expand(t, "SELECT "+call+" FROM t"))
+
+	assert.Equal(t, `gloss(expr, 'gloss/raw')`, Call("expr", gloss.MediaTypeRaw, nil), "no parameters: the type alone; a placeholder expression goes in verbatim")
+
+	// Parameters in name order, values quoted as ClickHouse literals.
+	call = Call("x", "gloss/free", map[string]string{"name": "it's", "digits": "1"})
+	assert.Equal(t, `gloss(x, 'gloss/free', 'digits', '1', 'name', 'it\'s')`, call)
+	cat := gloss.NewCatalog()
+	cat.MustRegister(&freeGloss{})
+	out, err := Expand("SELECT "+call, cat)
+	require.NoError(t, err)
+	assert.Equal(t, `SELECT x AS "x@gloss/free;digits=1;name=it's"`, out, "the SQL escape is undone; RFC 2045 does not quote an apostrophe")
+}
+
 func TestHasMarker(t *testing.T) {
 	assert.True(t, HasMarker("select GLOSS(x, 'gloss/raw')"))
 	assert.True(t, HasMarker("select `x@gloss/raw`"), "a false positive costs one parse")

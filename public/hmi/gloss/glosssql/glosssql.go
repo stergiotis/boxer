@@ -19,6 +19,8 @@
 package glosssql
 
 import (
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -357,6 +359,30 @@ func scalarLiteralText(arg *grammar1.ColumnArgExprContext) (s string, err error)
 		return tl.StringVal, nil
 	}
 	return marshalling.MarshalScalarToSQL(tl)
+}
+
+// Call spells a gloss(…) call for a media type and its parameters — the
+// text a UI drops at the caret (the Glosses tab's Insert, ADR-0186 §SD6) and
+// Expand's dual: Expand("SELECT " + Call("x", mt, params)) yields
+// x AS "x@<mt>;k=v…" with the same token. expr goes in verbatim, so a
+// placeholder ("expr") reads as one; parameters follow in name order as
+// 'key', 'value' string literals, quoted per ClickHouse. It does not
+// consult the catalog — Expand does, when the call runs.
+func Call(expr string, mediaType string, params map[string]string) string {
+	var b strings.Builder
+	b.WriteString(FuncName)
+	b.WriteByte('(')
+	b.WriteString(expr)
+	b.WriteString(", ")
+	b.WriteString(marshalling.EscapeString(mediaType))
+	for _, k := range slices.Sorted(maps.Keys(params)) {
+		b.WriteString(", ")
+		b.WriteString(marshalling.EscapeString(k))
+		b.WriteString(", ")
+		b.WriteString(marshalling.EscapeString(params[k]))
+	}
+	b.WriteByte(')')
+	return b.String()
 }
 
 // Function is the macro's vocabulary-panel entry (ADR-0174 §SD3): the

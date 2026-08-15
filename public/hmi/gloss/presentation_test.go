@@ -159,3 +159,25 @@ func TestDefaultOrderPresentation(t *testing.T) {
 		MediaTypeBytes, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeRaw,
 	}, order[8:])
 }
+
+// AcceptedKinds is the catalog listing's "accepts:" line: probed once per
+// gloss, "any" for a gloss that refuses nothing.
+func TestAcceptedKinds(t *testing.T) {
+	kinds, all := AcceptedKinds(instFor(t, "t@gloss/temperature;unit=K"))
+	assert.Equal(t, []ValueKindE{ValueKindNumeric}, kinds)
+	assert.False(t, all)
+
+	kinds, all = AcceptedKinds(instFor(t, "n@text/markdown"))
+	assert.Equal(t, []ValueKindE{ValueKindText, ValueKindBytes}, kinds, "the content family: text and bytes, in enum order")
+	assert.False(t, all)
+
+	kinds, all = AcceptedKinds(instFor(t, "p@gloss/luhn"))
+	assert.Equal(t, []ValueKindE{ValueKindNumeric, ValueKindText}, kinds)
+	assert.False(t, all)
+
+	kinds, all = AcceptedKinds(instFor(t, "s@gloss/masked"))
+	assert.True(t, all, "masked accepts any kind")
+	assert.Len(t, kinds, len(AllValueKinds))
+	_, all = AcceptedKinds(instFor(t, "r@gloss/raw"))
+	assert.True(t, all)
+}

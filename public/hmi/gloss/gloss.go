@@ -56,6 +56,20 @@ func (inst ValueKindE) String() string {
 	}
 }
 
+// AcceptedKinds probes an instance with every value kind and returns those
+// it accepts, in enum order; all is true when it refuses none — a listing
+// then says "any" rather than spelling the enum out. It is the catalog's
+// answer to "what does this gloss render", asked once per listing, never per
+// cell.
+func AcceptedKinds(inst InstanceI) (kinds []ValueKindE, all bool) {
+	for _, k := range AllValueKinds {
+		if ok, _ := inst.Accepts(k); ok {
+			kinds = append(kinds, k)
+		}
+	}
+	return kinds, len(kinds) == len(AllValueKinds)
+}
+
 // KindOfArrow classifies an Arrow type. A dictionary reads as its value type
 // (ClickHouse LowCardinality(String) arrives that way); lists, structs, maps
 // and null are ValueKindOther — a gloss that wants a list's items is applied
