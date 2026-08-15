@@ -201,8 +201,12 @@ query over effects, not only over launches.
   taken as written) with a `declared` column in place of an origin enum,
   since the client records no origin per cap and a comparison against the
   registered manifest is checkable where a label would not be.
-- **M3 — Interleaving lane.** The property test in Verification, and a
+- **M3 — Interleaving lane.** ✓ The property test in Verification, and a
   dated Update on ADR-0026 pointing here for revocation and lifecycle.
+  Landed 2026-08-15 as `TestClosingEdge_InterleavingLeavesNoTrace`
+  (`rapid.Check` over open / close / republish of a factory app and a
+  singleton, checking after every step and against a fresh assembly at
+  the end); a mutation that skips the client close fails it.
 
 ### Deferred
 

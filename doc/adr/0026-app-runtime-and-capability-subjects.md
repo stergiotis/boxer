@@ -359,6 +359,21 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-08-15 — revocation "later" and the closing edge are decided in ADR-0188
+
+Two things this record left open are settled elsewhere and pointed to
+from here so a reader of §SD3/§SD7 finds them. The broker "issues, records,
+and (later) revokes" capabilities: revocation of runtime grants now happens
+by construction — a grant is an attribute of the per-window bus client
+(`AddCap`), and the host closes that client at the closing edge
+([ADR-0188](./0188-app-instance-effect-tracking.md) §SD1), so a granted cap
+never outlives its window; sticky grants recorded as facts (§SD6) are
+untouched. And `MountContextI.Cancel()`, which `windowhost` had wired to a
+`nil` channel, is a real per-window channel closed *before* `Unmount` (§SD2);
+the closing edge runs leave → unmount → unload and is documented on `AppI`.
+The `runtime.app.{id}.{event}` lifecycle subjects reserved in §SD3 remain
+unbuilt and are recorded there as a deferral with their trigger.
+
 ### 2026-08-08 (later) — no app declares `fs.handle.>`; the dynamic grant is the whole story
 
 §SD7's grant model has two halves, and only one of them was being used. `Resolve`
