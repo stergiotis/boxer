@@ -391,3 +391,24 @@ func TestCheckAcyclic(t *testing.T) {
 		{ID: "b", DependsOn: []NodeID{"a"}},
 	}))
 }
+
+// fuseNode has no executable form for an id the split does not hold, so it
+// returns "" rather than the prelude on its own.
+//
+// The prelude alone is not a statement. It used to be what came back here, and
+// it reached the server, where Pass.Run splits it with env.Extract, keelsonsql
+// parses an empty body, and the answer is `syntax error: 1:0: mismatched input
+// '<EOF>'` — SQL's way of saying nothing arrived, reported as though the user's
+// query were malformed. [nodeLane.demand] turns the "" into a named error.
+func TestFuseNodeUnknownIDHasNoExecutableForm(t *testing.T) {
+	res, err := splitGraph("SET param_x = '1';\nWITH a AS (SELECT 1) SELECT * FROM a")
+	require.NoError(t, err)
+	require.NotEmpty(t, res.Prelude, "the buffer has a prelude to (wrongly) fall back on")
+
+	require.Equal(t, "", fuseNode(res, NodeID("nosuch")))
+
+	// The nodes it does hold still fuse, prelude included.
+	exec := fuseNode(res, NodeID("a"))
+	require.Contains(t, exec, "SET param_x = '1'")
+	require.Contains(t, exec, "SELECT 1")
+}

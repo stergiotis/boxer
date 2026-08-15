@@ -143,6 +143,12 @@ type compiledNode struct {
 	// the SAME input SQL, so without it the second read serves the first's
 	// result.
 	Client clientTransformI
+
+	// NodeID names the node this was compiled for. Diagnostic only, and
+	// deliberately NOT part of key(): two nodes that fuse to the same SQL have
+	// the same result and should share the memo. It exists so a lane handed
+	// something it cannot run can say which node it was handed.
+	NodeID NodeID
 }
 
 // clientTransformI is a client-side computation over a node's result. The

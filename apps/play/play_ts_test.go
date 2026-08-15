@@ -87,6 +87,25 @@ SELECT 1`)
 	})
 }
 
+// A client call's input must be a LIFTED node, not merely a CTE in scope.
+//
+// soleCTEInput proves the weaker thing, and a body that opens its own `WITH`
+// satisfies it with a name the graph does not carry. Executing that used to
+// fuse to the SET prelude alone, which reached the server as an empty body and
+// came back as `syntax error: 1:0` — a parse error naming neither the node nor
+// the buffer. It is a split error now, in front of the Graph and Diagnostics
+// tabs where §SD4 puts a malformed call.
+func TestSplitClientInputMustBeALiftedNode(t *testing.T) {
+	_, err := splitGraph(`WITH
+  scored AS (WITH inner AS (SELECT toDateTime64(now(), 3) AS t, 1.0 AS v)
+             SELECT tsAnomalyScores(t, v, 64) FROM inner)
+SELECT 1`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a CTE of this query")
+	assert.Contains(t, err.Error(), "inner", "the error names the input it could not find")
+	assert.Contains(t, err.Error(), "lift it", "and says what to do")
+}
+
 // Recognition refuses everything a client body could carry but whose effect
 // the transform would swallow, and every refusal says where the clause goes.
 func TestSplitClientCallShapeErrors(t *testing.T) {

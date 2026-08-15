@@ -188,13 +188,39 @@ func TestSyncExprDirectives(t *testing.T) {
 			map[string]string{"cond": ""},
 			"SELECT 1", true,
 		},
-		// A new declaration goes UNDER the prelude: above it, it would end the
-		// prelude before it starts (§SD3).
+		// A new declaration goes UNDER the prelude — §SD3's placement. It is no
+		// longer what keeps the prelude alive (ADR-0006's 2026-08-15 Update made
+		// the harvest comment-tolerant), but written above it the declaration
+		// would sit INSIDE the prelude region and be re-emitted above the `SET`
+		// block on the next round-trip, which is the placement §SD3 rules out.
 		{
 			"a new declaration lands below the prelude",
 			"SET param_x = '1';\nSELECT 1",
 			map[string]string{"cond": "a = 1"},
 			"SET param_x = '1';\n-- play: expr cond = a = 1\nSELECT 1", true,
+		},
+		// The prelude ends at the LAST `SET`, so a header comment above one is
+		// part of it and the declaration still lands underneath. A first-non-SET
+		// scan put the declaration at line 0 here, above the header.
+		{
+			"a header comment above the prelude does not hoist the declaration",
+			"-- what this query is for\nSET param_x = '1';\nSELECT 1",
+			map[string]string{"cond": "a = 1"},
+			"-- what this query is for\nSET param_x = '1';\n-- play: expr cond = a = 1\nSELECT 1", true,
+		},
+		{
+			"a comment between SET lines is prelude too",
+			"SET param_x = '1';\n-- why\nSET param_y = '2';\nSELECT 1",
+			map[string]string{"cond": "a = 1"},
+			"SET param_x = '1';\n-- why\nSET param_y = '2';\n-- play: expr cond = a = 1\nSELECT 1", true,
+		},
+		// No `SET` anywhere is no prelude, so there is nothing to sit below and
+		// the declaration leads — even past a header comment.
+		{
+			"a header comment with no prelude does not hold the declaration down",
+			"-- what this query is for\nSELECT 1",
+			map[string]string{"cond": "a = 1"},
+			"-- play: expr cond = a = 1\n-- what this query is for\nSELECT 1", true,
 		},
 		{
 			"a new declaration with no prelude leads the buffer",

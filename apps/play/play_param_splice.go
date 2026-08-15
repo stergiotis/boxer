@@ -294,17 +294,33 @@ func syncExprDirectives(sql string, values map[string]string) (out string, chang
 }
 
 // exprDirectiveInsertPoint is the first line index a declaration may occupy:
-// past the leading `SET` prelude, since a comment above it ends the prelude
-// before it starts (§SD3).
+// past the `SET` prelude, so the declaration lands in the residual where §SD3
+// puts it.
+//
+// The prelude it steps over is the one `dsl/env` defines — a leading run of
+// blank, comment and `SET` lines, ending at the last line that carries a `SET`
+// (ADR-0006, 2026-08-15 Update). Anchoring on the last SET rather than
+// breaking at the first non-SET line is what keeps a declaration below a
+// header comment: written above one, it would sit inside the prelude region
+// and be re-emitted above the `SET` block on the next round-trip, which is the
+// one placement §SD3 rules out.
+//
+// A buffer with no `SET` at all has no prelude, so the declaration goes to the
+// top — line 0, above any header comment. That is the same answer the old
+// first-non-SET-line scan gave, and it is deliberate: with nothing to sit
+// below, the top is where the reader looks.
 func exprDirectiveInsertPoint(lines []string) int {
 	at := 0
 	for i, line := range lines {
-		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(line)), "SET ") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(strings.ToUpper(trimmed), "SET ") {
 			at = i + 1
 			continue
 		}
-		if strings.TrimSpace(line) == "" && i == at {
-			at = i + 1
+		// Blank and comment lines are prelude only if a SET follows; they do
+		// not move the insert point themselves, so a comment trailing the
+		// prelude stays below the declaration rather than above it.
+		if trimmed == "" || strings.HasPrefix(trimmed, "--") || strings.HasPrefix(trimmed, "//") {
 			continue
 		}
 		break

@@ -62,6 +62,7 @@ func clientNodeCaption(call *tsCall) (line string) {
 func tsCompiledNode(split splitResult, node splitNode, bound map[string]bool, sig SignalEnvI) (c compiledNode) {
 	return compiledNode{
 		SQL:    fuseNode(split, node.Client.Input),
+		NodeID: node.Client.Input,
 		Params: resolveSignalNamesWithDefaults(node.Reads, bound, sig),
 		Client: node.Client,
 	}
@@ -75,6 +76,7 @@ func compileNodeFor(split splitResult, node splitNode, bound map[string]bool, si
 	}
 	return compiledNode{
 		SQL:    fuseNode(split, node.ID),
+		NodeID: node.ID,
 		Params: resolveSignalNamesWithDefaults(node.Reads, bound, sig),
 	}
 }

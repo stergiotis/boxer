@@ -363,3 +363,29 @@ func TestNodeLaneClosedDropsDemandsAndForgets(t *testing.T) {
 	require.Equal(t, 0, g.callCount())
 	lane.close() // idempotent
 }
+
+// A node the split does not hold has no executable form, and the lane must not
+// send one. [fuseNode] returns "" for such an id; shipping what it used to
+// return — the SET prelude on its own — reached the server as an empty body and
+// came back as `syntax error: 1:0: mismatched input '<EOF>'`, a parse error
+// naming neither the node nor the buffer. The rejection is the chokepoint: it
+// covers the call sites that resolve the node first AND the one that compiles a
+// user-written `ts*` input.
+func TestNodeLaneRefusesEmptySQL(t *testing.T) {
+	g := &gatedExecutor{gate: make(chan struct{}), build: func(string) arrow.RecordBatch { return nil }}
+	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
+	defer lane.close()
+
+	view := lane.demand(compiledNode{SQL: "", NodeID: "flows"})
+	require.Error(t, view.err)
+	require.Contains(t, view.err.Error(), "flows", "the error names the node, not the SQL")
+	require.Contains(t, view.err.Error(), "not in this buffer")
+	require.False(t, view.loading)
+	require.Nil(t, view.rec)
+	require.Zero(t, g.callCount(), "nothing reaches the executor")
+
+	// Whitespace is the same nothing.
+	view = lane.demand(compiledNode{SQL: "  \n\t", NodeID: "nodes"})
+	require.Error(t, view.err)
+	require.Zero(t, g.callCount())
+}

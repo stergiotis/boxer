@@ -209,7 +209,39 @@ func splitGraph(sql string) (res splitResult, err error) {
 	if err != nil {
 		return
 	}
+	err = checkClientInputs(res)
+	if err != nil {
+		return
+	}
 	closeReads(res.Nodes, res.Sink)
+	return
+}
+
+// checkClientInputs enforces that a client call's input names a LIFTED node,
+// which is what makes it fusable.
+//
+// recognizeTsCall proves less than that: soleCTEInput's `ts.IsCTE` says the
+// name resolves to a CTE *in scope*, and a body that opens its own `WITH`
+// satisfies it with a name no node carries — an inner CTE is part of a body,
+// not a node of the graph. Left to execution, [fuseNode] has nothing to fuse
+// and returns "", which the lane reports as a node that is not in the buffer.
+// Legible, but late: the buffer is wrong before it runs, and §SD4 puts a
+// malformed call in front of the Graph and Diagnostics tabs rather than behind
+// a Run.
+func checkClientInputs(res splitResult) (err error) {
+	for i := range res.Nodes {
+		n := &res.Nodes[i]
+		if n.Client == nil {
+			continue
+		}
+		if _, ok := findSplitNode(res, n.Client.Input); ok {
+			continue
+		}
+		err = eh.Errorf("splitGraph: CTE %q: `%s` reads %q, which is not a CTE of this query — "+
+			"lift it into the query's own WITH clause so the graph can show what is computed where",
+			string(n.ID), n.Client.Spec.Name, string(n.Client.Input))
+		return
+	}
 	return
 }
 
@@ -379,12 +411,20 @@ func fuseToSink(sql string) (executable string, res splitResult, err error) {
 // the node or any inlined dep needs it (the modifier is clause-wide and is
 // valid with non-recursive members). The client's ExtractParams re-lifts the
 // prelude to URL params at execution.
+// A node that is not in res has no executable form, so this returns "" rather
+// than the prelude on its own. The prelude alone is not a statement: it reaches
+// the server, `Pass.Run` splits it with env.Extract, keelsonsql parses an empty
+// body and answers `syntax error: 1:0: mismatched input '<EOF>'` — a parse
+// error naming neither the node nor the buffer, so a missing CTE reads as
+// broken SQL. [nodeLane.demand] is the guard that turns "" into a legible
+// error; it is there rather than here because this function has no way to
+// refuse.
 func fuseNode(res splitResult, nodeID NodeID) (executable string) {
 	parts := make([]string, 0, len(res.Prelude)+1)
 	parts = append(parts, res.Prelude...)
 	node, ok := findSplitNode(res, nodeID)
 	if !ok {
-		return strings.Join(parts, ";\n")
+		return ""
 	}
 	if node.Kind == splitNodeStatement {
 		parts = append(parts, node.SQL)

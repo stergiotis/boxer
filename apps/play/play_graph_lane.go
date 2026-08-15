@@ -2,12 +2,14 @@ package play
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // play_graph_lane.go is ADR-0097 slice 3b: the suspending async execution lane
@@ -95,6 +97,24 @@ func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 
 	if inst.closed {
 		// Torn down: drop the demand (empty view — no result, not loading).
+		return
+	}
+
+	// Nothing to run. [fuseNode] returns "" for a node id the split does not
+	// hold, and shipping what it used to return — the SET prelude on its own —
+	// reached the server as an empty body and came back as `syntax error: 1:0:
+	// mismatched input '<EOF>'`: a parse error naming neither the node nor the
+	// buffer, so a missing CTE read as broken SQL.
+	//
+	// The guard is here, on the way to the wire, rather than at each call site.
+	// Seven of the eight callers already resolve the node with findSplitNode
+	// first; the eighth compiles a `ts*` call's input, which is a name the user
+	// wrote. One chokepoint covers those and whatever binds to a node next.
+	//
+	// The last-good result is deliberately NOT served alongside the error: the
+	// demand is for a different node, and its rows are not this one's.
+	if strings.TrimSpace(c.SQL) == "" {
+		view.err = eh.Errorf("no SQL to run for node %q: it is not in this buffer", string(c.NodeID))
 		return
 	}
 

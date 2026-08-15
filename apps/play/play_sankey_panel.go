@@ -973,6 +973,7 @@ func (inst *PlayApp) demandSankeyFlows() (rec arrow.RecordBatch, schema *arrow.S
 	}
 	v := d.flowsLane.demand(compiledNode{
 		SQL:    fuseNode(inst.currentSplit, sankeyFlowsNodeID),
+		NodeID: sankeyFlowsNodeID,
 		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
 	})
 	d.flowsLoading = v.loading
@@ -994,6 +995,7 @@ func (inst *PlayApp) demandSankeyNodes() (rec arrow.RecordBatch, schema *arrow.S
 	}
 	v := d.nodesLane.demand(compiledNode{
 		SQL:    fuseNode(inst.currentSplit, sankeyNodesNodeID),
+		NodeID: sankeyNodesNodeID,
 		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
 	})
 	d.nodesLoading = v.loading
