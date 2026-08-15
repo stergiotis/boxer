@@ -1,0 +1,28 @@
+# ordinal	name	id
+# The committed assignment table (ADR-0183 D1). A changed line here
+# re-points rows already stored under the old id; a new line does not.
+# Regenerate with BOXER_VOCAB_GOLDEN_REGEN=1 go test ./<the vocabulary package>/...
+0	capmap-kind-competence	2738188573441261568
+1	capmap-kind-relation	2738188573441261569
+2	capmap-competence-slug	2738188573441261570
+3	capmap-competence-name	2738188573441261571
+4	capmap-competence-abbrev	2738188573441261572
+5	capmap-competence-synopsis	2738188573441261573
+6	capmap-competence-domain	2738188573441261574
+7	capmap-competence-catalog	2738188573441261575
+8	capmap-competence-owner	2738188573441261576
+9	capmap-competence-level	2738188573441261577
+10	capmap-competence-vault-path	2738188573441261578
+11	capmap-competence-maturity	2738188573441261579
+12	capmap-competence-pain	2738188573441261580
+13	capmap-competence-section	2738188573441261581
+14	capmap-competence-lifecycle-by	2738188573441261582
+15	capmap-competence-lifecycle-at	2738188573441261583
+16	capmap-relation-source	2738188573441261584
+17	capmap-relation-target	2738188573441261585
+18	capmap-relation-target-text	2738188573441261586
+19	capmap-relation-kind	2738188573441261587
+20	capmap-relation-resolution	2738188573441261588
+21	capmap-relation-section	2738188573441261589
+22	capmap-relation-ncd	2738188573441261590
+23	capmap-competence-tag	2738188573441261591
