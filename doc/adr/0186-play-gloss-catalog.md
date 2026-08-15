@@ -383,8 +383,10 @@ cell reports its truncated width and only the header ever sets the column.
 The per-DB-row grid now emits its cells untruncated on the re-fit frame (the
 frame egui_table discards and re-runs), so a column fits the wider of its
 header and its cells: `4111 •••• •••• 1111 ✓` renders whole. The
-per-attribute grid keeps its own width path (ADR-0151 overrides) and its
-truncation; a face wider than its header there still clips, noted, not fixed.
+per-attribute grid gets the same one-frame re-fit on column-set change,
+inside ADR-0151's contract: only columns without a user override are
+auto-sized, cells go out untruncated (bounded) on that frame, and the
+read-back is adopted as the crate's width rather than captured as the user's.
 
 ## References
 

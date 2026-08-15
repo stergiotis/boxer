@@ -1,6 +1,7 @@
 package play
 
 import (
+	"slices"
 	"time"
 
 	"strconv"
@@ -526,11 +527,27 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 		resolved = inst.colWidthRes.Resolve(attrTableTag, cols, 0, resolved)
 	}
 
+	// One-frame re-fit on the frame the column set changes, as the per-DB-row
+	// grid does (tableColsChanged): the sampled seed is an estimate, and this
+	// is the frame the crate measures the real header and cells. Two things
+	// keep it inside ADR-0151's contract. A column whose resolved width is
+	// not the seed's carries a user override, which outranks any fit, so
+	// only seed-width columns are auto-sized; and captureAttrWidths adopts
+	// this frame's read-back as the crate's idea, not the user's, so nothing
+	// it settles on is frozen as an override. Cells go out untruncated on
+	// this frame (selectableCell), else the fit would see their truncated
+	// width and only ever fit the header.
+	refit := inst.attrColsChanged(schema, visCols)
+
 	// Leading "#" (source DB row) column + the data columns, same order as the
 	// per-DB-row grid.
 	c.EtColumn(float32(resolved[0])).Resizable(false).Send()
 	for i := range visCols {
-		c.EtColumn(float32(resolved[i+1])).Resizable(true).Send()
+		col := c.EtColumn(float32(resolved[i+1])).Resizable(true)
+		if refit && resolved[i+1] == float64(widths[i]) {
+			col = col.AutoSizeThisFrame(true)
+		}
+		col.Send()
 	}
 
 	et := c.EndETable(ids.PrepareStr(attrTableTag), uint64(len(rows)), attrRowHeight, 1, 1).Striped(true)
@@ -629,14 +646,20 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 				if gc := &glossCols[visCols[pos]]; gc.mediaType == gloss.MediaTypeURL && gc.glossedElem() && !inst.tableOpts.rawCells {
 					link = row.cells[pos]
 				}
-				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, row.cells[pos], false, selected, true, leftAlign, gloss.ToneNeutral, link, true) {
+				text := row.cells[pos]
+				if refit {
+					// Bounded like the per-DB-row grid: the fit must not size
+					// a column to a paragraph.
+					text = fitRunes(text, colMaxRunes)
+				}
+				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, text, false, selected, true, leftAlign, gloss.ToneNeutral, link, !refit) {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}
 		}
 	}
 	et.Send()
-	inst.captureAttrWidths(et, cols)
+	inst.captureAttrWidths(et, cols, refit)
 }
 
 // captureAttrWidths feeds the widths egui_table settled on back into the
@@ -645,8 +668,9 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 // The first report a table makes is its force-autofit frame, whose widths
 // are the crate's idea rather than the user's; passing firstShow on that
 // frame is what stops the estimator's first result being frozen as an
-// override nobody chose.
-func (inst *PlayApp) captureAttrWidths(et c.EndETableFluid, cols []colwidth.Column) {
+// override nobody chose. A re-fit frame (attrColsChanged) is the same kind
+// of frame and is adopted the same way.
+func (inst *PlayApp) captureAttrWidths(et c.EndETableFluid, cols []colwidth.Column, refit bool) {
 	if inst.colWidthRes == nil {
 		return
 	}
@@ -658,7 +682,7 @@ func (inst *PlayApp) captureAttrWidths(et c.EndETableFluid, cols []colwidth.Colu
 		}
 		firstShow := !inst.attrWidthsSeen
 		inst.attrWidthsSeen = true
-		inst.colWidthRes.Observe(attrTableTag, cols, widths, 0, firstShow, now)
+		inst.colWidthRes.Observe(attrTableTag, cols, widths, 0, firstShow || refit, now)
 	}
 	if _, err := inst.colWidthRes.Flush(now); err != nil {
 		log.Warn().Err(err).Msg("play: storing column widths failed; will retry")
@@ -769,6 +793,20 @@ func (inst *PlayApp) attrColumnKeys(schema *arrow.Schema, visCols []int) (cols [
 	for _, arrowCol := range visCols {
 		f := schema.Field(arrowCol)
 		cols = append(cols, colwidth.Column{Name: f.Name, Type: f.Type.String()})
+	}
+	return
+}
+
+// attrColsChanged reports whether the per-attribute grid's column set —
+// the schema and the visible columns — differs from the last frame's, the
+// trigger for its one-frame re-fit; the per-DB-row grid's tableColsChanged,
+// with its own memory, since the two grids show different column sets of the
+// same result and must each answer once per change.
+func (inst *PlayApp) attrColsChanged(schema *arrow.Schema, visCols []int) (changed bool) {
+	changed = schema != inst.attrFitSchema || !slices.Equal(visCols, inst.attrFitCols)
+	if changed {
+		inst.attrFitSchema = schema
+		inst.attrFitCols = append(inst.attrFitCols[:0], visCols...)
 	}
 	return
 }

@@ -621,6 +621,11 @@ type PlayApp struct {
 	// estimator's rather than the user's — capturing it would freeze a
 	// width nobody chose. The first report a table makes is that frame.
 	attrWidthsSeen bool
+	// attrFitSchema / attrFitCols are the per-attribute grid's memory of the
+	// column set it last re-fitted for (attrColsChanged), the sibling of
+	// tableFitSchema / tableFitCols.
+	attrFitSchema *arrow.Schema
+	attrFitCols   []int
 
 	// attrSink is the per-attribute Table view's exploder (play_table_attr.go),
 	// pooled across frames: the per-attribute grid is re-driven every frame it is
