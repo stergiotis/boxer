@@ -508,3 +508,77 @@ cannot differ; the *lanes* are resolved by two independent roads — an IR
 loaded off a `TableDesc` versus parsed physical names — and a test compares
 them per section and sub-column. A round-trip would have exercised both at
 once and told us less about which one was wrong.
+
+## Update 2026-08-15 — §SD8 statement wrapping: decided; INSERT-only, target-bound
+
+The statement-wrapping deferral is now a decided design (four-question
+dialogue). It stays in this ADR as this Update rather than becoming its own
+ADR — reviewer's choice, resolving the background analysis's "growing an
+insertStmt is a separate Tier-1 decision" note: the decision is this Update,
+and its Tier-1 surface is listed below.
+
+**Scope: `INSERT INTO <table> [(columns)] SELECT …` only.** CTAS stays
+deferred, and the kill-reason is structural rather than effort: a table
+minted by `CREATE … AS SELECT` cannot carry codecs, and §SD4 deliberately
+made skip indexes `TableOptions`-borne — an in-pipeline CTAS would make the
+codec-less, index-less table the path of least resistance, working against
+`leeway ddl compose`, which exists to create tables right. The sanctioned
+flow is create-with-compose, fill-with-INSERT-SELECT. `VALUES` sources add
+nothing to authoring (writes at rest ride the DML generators), and
+materialized views are ADR-0171 §SD3's separate deferral; both stay out.
+CTAS's trigger, should it return: demonstrated need for scratch tables from
+inside the pipeline, documented as codec-less.
+
+**Grammar mechanics.** grammar1 and grammar2 grow in lockstep — grammar2
+because `ValidateGrammar2` is every chain's terminal proof, so a wrapper the
+canonical grammar cannot parse would fail exactly the statements the port
+exists to admit. Productions come from the upstream `utils/antlr` lineage
+per the §SD8 direction; grammar0 is the untouched provenance baseline (it
+has no importer outside its own package). `BuildScopes` learns that an
+INSERT target is a **sink** — never a readable scope table, so no handle or
+extraction binds against it.
+
+**Target adoption is in scope, and it includes spelling.** The parsed
+target is what finally feeds `ExpandPassWithSegments` — the target-adoption
+variant that has waited for a host that knows the destination: constructors
+mint in the target's segment convention, and a shape check verifies the
+SELECT's output columns against the target's physical names (the
+vertical-subset rule applied to a concrete table). Adoption must reconcile
+**spelling**, not only segments: constructors mint folded names
+(`geoPoint` → `geo-point`; the 2026-08-15 anchor query 4/5 modernization
+shows it live) while an existing target may spell camelCase — the check
+resolves fold-equivalent names to the target's spelling and errors only on
+true misses.
+
+**Pass contract under a wrapper — a refusal matrix, not best effort.**
+Passes whose output changes the result schema refuse loudly under an INSERT
+wrapper, because the target's column match *is* the schema:
+`ExposeSelectionConditions` (adds condition columns) and the `ts*`
+client-CTE lane (its result never exists as SQL) are the known two; the
+port's pass audit enumerates the rest. Macro expanders and the
+resolve/extract/construct chain operate on the inner SELECT unchanged.
+
+**Host policy: expand everywhere, execute gated.** Expansion, diagnostics
+and preview work on a wrapped statement in every host. Executing one from
+play requires an explicit write opt-in, and FORMAT appending becomes
+statement-kind-aware (an INSERT takes none — the appended FORMAT is exactly
+why DDL from play fails today). Without the opt-in, Run refuses with a
+copy-out hint. sqlapplet inherits the same rule.
+
+Milestones:
+
+- **M0 — grammar port.** grammar1 + grammar2 productions and regeneration;
+  a parse-corpus pin against the upstream lineage forms.
+- **M1 — pipeline semantics.** Scope sink, canonicalize node rules for the
+  wrapper clause, the pass refusal matrix with tests.
+- **M2 — target adoption.** Segment + spelling adoption via
+  `ExpandPassWithSegments`; the target shape check; anchor gains `query8`
+  (INSERT of constructor-minted columns into a compose-created scratch
+  table, executed in the integration lane; the snippets sweep extends).
+- **M3 — host policy.** play's write opt-in (ADR-0009 registry entry) and
+  statement-aware FORMAT; docs — the reading-and-authoring how-to's
+  wrapper paragraph and the read-surface page's known-gaps line.
+
+Tier-1 surface added by this Update: the grammar1/grammar2 statement
+productions, the pass refusal matrix as a pipeline contract, and play's
+write opt-in.
