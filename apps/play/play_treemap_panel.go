@@ -40,10 +40,40 @@ import (
 // treemapForm is this pane's vocabulary in a shared reject message.
 var treemapForm = hierForm{noun: "treemap", elem: "cell"}
 
-// treemapIDSalt namespaces the panel's ui-rect probe — distinct from the other
+// treemapIDSalt namespaces the panel's pane probe — distinct from the other
 // panels' salts; the per-instance idSeed (nextVizSeed) keeps two live PlayApps
 // apart.
 const treemapIDSalt uint64 = 0x5a11c0de17f10007
+
+// treemapPaneFill is the picture's box — the shared pane rule
+// (play_pane_box.go). The floor is where the cells stop carrying their labels;
+// a leaf under it scrolls rather than drawing a mosaic.
+//
+// It sits below the Icicle's, though the two draw the same tree, because this
+// pane spends more of its leaf on chrome than any of its neighbours: a
+// colourscale legend above the picture and the widget's own breadcrumb bar
+// inside it (treemapWidgetChromePx). At the 300 it inherited from the fixed
+// aspect, floor plus chrome came to more than a default body leaf has, so the
+// pane scrolled a picture that had just been sized to fit it.
+var treemapPaneFill = paneFill{
+	slack: 12, minW: 360, maxW: 1600, minH: 260,
+	fallbackW: 760, fallbackH: 460,
+	chrome: treemapWidgetChromePx,
+}
+
+// treemapWidgetChromePx is the room the widget takes for itself around the
+// container it is handed: Render draws the breadcrumb bar, then the box of
+// exactly SetContainerSize. A caller filling the pane has to leave the bar its
+// height or the picture ends that far past the leaf — the widget documents this
+// as the caller's "chrome budget" (treemap.containerRect), and its neighbours
+// carry one too, imztop's deeper because it keeps the summary line this pane
+// turns off (ensureWidget).
+//
+// Measured off a tour capture at 43pt (a text row inside a bordered chip, plus
+// the spacing either side) and rounded up, because the two failures are not
+// symmetric: over-reserving leaves a few points of background nobody sees,
+// where under-reserving clips a row of cells and holds a scrollbar open.
+const treemapWidgetChromePx float32 = 48
 
 const (
 	// treemapDepthStops is the length of the depth ramp. Eight matches the
@@ -139,6 +169,13 @@ type treemapDriver struct {
 	idSeed uint64
 
 	tm *treemap.Treemap
+
+	// paneW / paneH are the last box the pane probe reported. Held across
+	// frames rather than read fresh: the probe answers nothing on the first
+	// frame and again on the frame a hidden tab comes back (a seq that did not
+	// capture is absent from the drain), and resizing the picture to a fallback
+	// on those frames would flash.
+	paneW, paneH float32
 
 	colorMode treemapColorModeE
 	nesting   treemapNestingE
@@ -269,21 +306,27 @@ func (inst *treemapDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, c
 	// picture cannot push them out of sight.
 	c.Label(inst.pointerLine()).Send()
 	inst.renderLegend()
+	// The hint goes above the picture too, and here it is what lets the picture
+	// be the LAST widget in the body: the probe below reports the room left for
+	// the next widget, so with the hint underneath, taking that room would push
+	// it past the fold and hold a scrollbar open — which narrows the pane, which
+	// resizes the picture.
+	for rt := range c.RichTextLabel("hover a cell for its share; click a container to drill in, the breadcrumb " +
+		"to drill back out, a leaf to pin it") {
+		rt.Small().Weak()
+	}
 	c.Separator().Horizontal().Send()
 
-	sm := c.CurrentApplicationState.StateManager
-	probeSeq := treemapIDSalt ^ inst.idSeed ^ 0x1
-	c.CaptureUiRect(probeSeq)
-	paneW := float32(760)
-	if r, ok := sm.GetUiRect(probeSeq); ok && r.MaxX > r.MinX {
-		paneW = r.MaxX - r.MinX
+	// Fill the pane. The height used to be a fixed 0.56 of the width — a
+	// squarer aspect than the Icicle's, since that form spends its height on
+	// depth rows where this one spends both dimensions on area. The pane's own
+	// height says it better: a letterbox is what drives the squarify aspect
+	// ratios toward the slivers the algorithm exists to avoid, and the leaf is
+	// what decides how much of one this pane is.
+	if availW, availH, ok := c.CapturePaneSize(treemapIDSalt ^ inst.idSeed ^ 0x1); ok {
+		inst.paneW, inst.paneH = availW, availH
 	}
-	w := min(max(paneW-12, 360), 1600)
-	// A squarer aspect than the Icicle's 0.31. That form spends its height on
-	// depth rows and scrolls past them; this one spends both dimensions on
-	// area, and a wide letterbox drives the squarify aspect ratios toward the
-	// slivers the algorithm exists to avoid.
-	h := min(max(w*0.56, 300), 620)
+	w, h := treemapPaneFill.box(inst.paneW, inst.paneH)
 
 	inst.ensureWidget()
 	inst.tm.SetContainerSize(w, h)
@@ -304,11 +347,6 @@ func (inst *treemapDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, c
 			emit.Emit(signalSelectionKey, inst.selected)
 		}
 	}
-
-	for rt := range c.RichTextLabel("hover a cell for its share; click a container to drill in, the breadcrumb " +
-		"to drill back out, a leaf to pin it") {
-		rt.Small().Weak()
-	}
 }
 
 // ensureWidget constructs the widget on first use. It is built here rather than
@@ -323,6 +361,11 @@ func (inst *treemapDriver) ensureWidget() {
 		treemap.WithLeafClickSensing(true),
 		treemap.WithCellLabel(inst.cellLabel),
 		treemap.WithSelfCellLabel(inst.selfCellLabel),
+		// This pane draws its own readout above the picture — pointerLine, which
+		// reads a cell in the result's OWN unit and against the whole. The
+		// widget's line under the container would say the same thing again in
+		// bytes, and would be a row of the pane's height to reserve for it.
+		treemap.WithStatusLine(false),
 	)
 }
 

@@ -289,6 +289,18 @@ nothing in the verification plan is outstanding. Two decisions record what the
 code does rather than what was first proposed: SD3's second half, and SD2's
 inheritance and legend — all three found by a capture rather than by design.
 
+Since 2026-08-15 the picture fills its leaf rather than following a fixed
+aspect — the rule shared with the Sankey, Icicle and Network panes
+(`apps/play/play_pane_box.go`), whose reasoning is in ADR-0159's 2026-08-15
+Update. Two parts of it are this pane's own. It budgets the leaf for the
+breadcrumb bar the widget draws *above* the container it is handed, since
+filling a pane means covering the widget's own chrome as well. And it turns the
+widget's summary line off — `treemap.WithStatusLine`, added for this and
+defaulting to the old behaviour — because `pointerLine` above the picture
+already reads a cell, in the result's unit where the widget's says bytes; that
+line has been below the fold since the panel was built, and filling the pane
+would otherwise have been what finally revealed it.
+
 ## References
 
 ### Method sources (clean room — papers and public documentation only)

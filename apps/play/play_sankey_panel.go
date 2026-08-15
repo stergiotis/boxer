@@ -84,10 +84,19 @@ const (
 	sankeyMaxLinks = 1500
 )
 
-// sankeyIDSalt namespaces the panel's ui-rect probe — distinct from the other
+// sankeyIDSalt namespaces the panel's pane probe — distinct from the other
 // panels' salts; the per-instance idSeed (nextVizSeed) keeps two live PlayApps
 // apart.
 const sankeyIDSalt uint64 = 0x5a11c0de17f10005
+
+// sankeyPaneFill is the diagram's box — the shared pane rule
+// (play_pane_box.go). Both implot axes are hidden here, so the box has no tick
+// labels to clip and the floor is a readability one: under it the bars stop
+// carrying their labels and the diagram is a texture.
+var sankeyPaneFill = paneFill{
+	slack: 12, minW: 360, maxW: 1600, minH: 240,
+	fallbackW: 760, fallbackH: 460,
+}
 
 // sankeyChoiceE is the mode control's value. The default is Auto because the
 // data answers the question on its own: supplying a `stage` for every node IS
@@ -449,6 +458,13 @@ type SankeyDriver struct {
 	flowsErr     error
 	nodesErr     error
 
+	// paneW / paneH are the last box the pane probe reported. Held across
+	// frames rather than read fresh: the probe answers nothing on the first
+	// frame and again on the frame a hidden tab comes back (a seq that did not
+	// capture is absent from the drain), and resizing the plot to a fallback on
+	// those frames would flash.
+	paneW, paneH float32
+
 	// renderer holds the ribbon-sampling scratch across frames — one per pane,
 	// per ADR-0159; the free functions allocate a throwaway per call.
 	renderer   sankeyview.Renderer
@@ -688,32 +704,32 @@ func (inst *SankeyDriver) render(flowsRec arrow.RecordBatch, fc sankeyFlowsClaim
 	// a pane too short for the diagram cannot push them out of sight.
 	c.Label(inst.pointerLine(inst.hover)).Send()
 
-	// Fill the pane width: a full-width separator, then a Seq-keyed UiRect probe
-	// reads its span next frame (the passes/Network idiom — a per-seq R21 slot,
-	// so it contends with nobody, unlike the single CaptureAvailableSize
-	// register that the frame's last capture wins). A pane HEIGHT is available
-	// too since captureUiAvailableRect landed — the same seq-keyed slot, no
-	// separator needed, if this ever wants one.
-	// Height follows a fixed aspect, clamped: a flow diagram reads across,
-	// so width is what it wants. The tab scrolls, so a leaf shorter than the
-	// aspect asks for costs a scroll rather than a clipped diagram — and since
-	// implot pins both axes to the unit box, the whole diagram is on screen at
-	// any size; zoom is for detail, not for reaching what was cut off.
-	sm := c.CurrentApplicationState.StateManager
-	c.Separator().Horizontal().Send()
-	probeSeq := sankeyIDSalt ^ inst.idSeed ^ 0x1
-	c.CaptureUiRect(probeSeq)
-	paneW := float32(760)
-	if r, ok := sm.GetUiRect(probeSeq); ok && r.MaxX > r.MinX {
-		paneW = r.MaxX - r.MinX
+	// The hint goes above the plot too, and here it is what lets the plot be the
+	// LAST widget in the body: the probe below reports the room left for the
+	// next widget, so with the hint underneath, taking that room would push it
+	// past the fold and hold a scrollbar open — which narrows the pane, which
+	// resizes the plot.
+	for rt := range c.RichTextLabel("hover a bar or a ribbon, click to pin it; drag pans and the wheel zooms — " +
+		"over the diagram the wheel is the plot's, elsewhere it scrolls the pane") {
+		rt.Small().Weak()
 	}
-	w := min(max(paneW-12, 360), 1600)
-	// The aspect is set so that a maximised window's DEFAULT body leaf fits the
-	// plot without scrolling — measured from a tour capture, where 0.42 put the
-	// diagram about a hundred pixels past the leaf and made every first look a
-	// scroll. A taller leaf gains nothing past the cap, which is the price of
-	// having no pane height to read; zoom is the answer there.
-	h := min(max(w*0.34, 240), 460)
+
+	// Fill the pane: a full-width separator, then a seq-keyed probe of the free
+	// rect that reads back next frame (a per-seq r21 slot, so it contends with
+	// nobody, unlike the single CaptureAvailableSize register that the frame's
+	// last capture wins). Emitted after the chrome and BEFORE the plot, since
+	// the rect is the room left for the NEXT widget.
+	//
+	// The height used to be a fixed 0.34 of the width, tuned so that a maximised
+	// window's DEFAULT body leaf fitted the diagram without scrolling — the best
+	// available answer while the pane's height was unreadable, and one that left
+	// any other leaf either scrolling or part empty. captureUiAvailableRect
+	// carries the height, so the leaf can simply say.
+	c.Separator().Horizontal().Send()
+	if availW, availH, ok := c.CapturePaneSize(sankeyIDSalt ^ inst.idSeed ^ 0x1); ok {
+		inst.paneW, inst.paneH = availW, availH
+	}
+	w, h := sankeyPaneFill.box(inst.paneW, inst.paneH)
 
 	hover, click, clicked := inst.renderer.Show(inst.ids, "flow##playsankey", w, h, inst.layout, sankeyview.Opts{
 		Fill:       inst.fill,
@@ -735,11 +751,6 @@ func (inst *SankeyDriver) render(flowsRec arrow.RecordBatch, fc sankeyFlowsClaim
 		if emit != nil {
 			emit.Emit(signalSelectionKey, inst.selectedNodeID())
 		}
-	}
-
-	for rt := range c.RichTextLabel("hover a bar or a ribbon, click to pin it; drag pans and the wheel zooms — " +
-		"over the diagram the wheel is the plot's, elsewhere it scrolls the pane") {
-		rt.Small().Weak()
 	}
 }
 

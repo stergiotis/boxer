@@ -40,10 +40,19 @@ import (
 // icicleForm is this pane's vocabulary in a shared reject message.
 var icicleForm = hierForm{noun: "flame view", elem: "frame"}
 
-// icicleIDSalt namespaces the panel's ui-rect probe — distinct from the other
+// icicleIDSalt namespaces the panel's pane probe — distinct from the other
 // panels' salts; the per-instance idSeed (nextVizSeed) keeps two live PlayApps
 // apart.
 const icicleIDSalt uint64 = 0x5a11c0de17f10006
+
+// iciclePaneFill is the plot's box — the shared pane rule (play_pane_box.go).
+// The floor is a readability one and sits well above implot.MinBoxHeight, which
+// is what the value axis needs before it clips its own tick labels;
+// TestIciclePlotFloorClearsTheClipFloor holds the two in that order.
+var iciclePaneFill = paneFill{
+	slack: 12, minW: 360, maxW: 1600, minH: 260,
+	fallbackW: 760, fallbackH: 460,
+}
 
 // iciclePruneE is the layout-time pruning control, mapped onto
 // icicle.Options.MinFraction. Pruning is resolution-independent and
@@ -125,6 +134,13 @@ type icicleLayoutKey struct {
 type IcicleDriver struct {
 	ids    *c.WidgetIdStack
 	idSeed uint64
+
+	// paneW / paneH are the last box the pane probe reported. Held across
+	// frames rather than read fresh: the probe answers nothing on the first
+	// frame and again on the frame a hidden tab comes back (a seq that did not
+	// capture is absent from the drain), and resizing the plot to a fallback on
+	// those frames would flash.
+	paneW, paneH float32
 
 	// renderer holds the frame and label batch buffers across frames — one per
 	// pane, per ADR-0160; the free functions allocate a throwaway per call.
@@ -271,29 +287,31 @@ func (inst *IcicleDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl
 	// ADR-0159's play Update left for the next consumer).
 	c.Label(inst.pointerLine(inst.hover)).Send()
 
-	sm := c.CurrentApplicationState.StateManager
-	c.Separator().Horizontal().Send()
-	probeSeq := icicleIDSalt ^ inst.idSeed ^ 0x1
-	c.CaptureUiRect(probeSeq)
-	paneW := float32(760)
-	if r, ok := sm.GetUiRect(probeSeq); ok && r.MaxX > r.MinX {
-		paneW = r.MaxX - r.MinX
+	// The hint goes above the plot too, and here it is what lets the plot be the
+	// LAST widget in the body: the probe below reports the room left for the
+	// next widget, so with the hint underneath, taking that room would push it
+	// past the fold and hold a scrollbar open — which narrows the pane, which
+	// resizes the plot.
+	for rt := range c.RichTextLabel("hover a frame, click to zoom the value axis to it and pin it; " +
+		"double-click fits the whole tree, drag scrolls the depth — over the plot the wheel is the plot's, " +
+		"elsewhere it scrolls the pane") {
+		rt.Small().Weak()
 	}
-	w := min(max(paneW-12, 360), 1600)
-	// Height follows a fixed aspect, clamped. The pane's own height used to be
-	// unreadable here — the one register carrying it, CaptureAvailableSize, is
-	// a single slot the frame's last capture wins, so a second writer corrupts
-	// both. captureUiAvailableRect retired that: it reports the free rect into
-	// the same seq-keyed r21 slot this probe already uses.
-	//
-	// The aspect is measured from a tour capture, and lands within a pixel of
-	// the Sankey's for the same reason: it is the same dock leaf minus the same
-	// control row, status line and hint. 0.42 was tried first and put the plot
-	// about a hundred pixels past the leaf — which for THIS form is worse than
-	// for the Sankey's, since the depth axis holds rows at RowPx and scrolls, so
-	// the overflow is a whole row of frames below the fold rather than a
-	// slightly cropped picture of everything.
-	h := min(max(w*0.31, 260), 560)
+
+	// Fill the pane. The height used to be a fixed 0.31 of the width, measured
+	// off a tour capture of one leaf, because the pane's own height was
+	// unreadable here: the one register carrying it, CaptureAvailableSize, is a
+	// single slot the frame's last capture wins, so a second writer corrupts
+	// both. captureUiAvailableRect retired that — it reports the free rect into
+	// the same seq-keyed r21 slot this probe already uses, so the leaf says how
+	// tall it is and a taller one buys what this form spends height on: more
+	// depth rows above the fold, since the axis holds them at RowPx and scrolls
+	// the rest.
+	c.Separator().Horizontal().Send()
+	if availW, availH, ok := c.CapturePaneSize(icicleIDSalt ^ inst.idSeed ^ 0x1); ok {
+		inst.paneW, inst.paneH = availW, availH
+	}
+	w, h := iciclePaneFill.box(inst.paneW, inst.paneH)
 
 	reset := inst.resetView
 	inst.resetView = false
@@ -325,11 +343,6 @@ func (inst *IcicleDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl
 		}
 	}
 
-	for rt := range c.RichTextLabel("hover a frame, click to zoom the value axis to it and pin it; " +
-		"double-click fits the whole tree, drag scrolls the depth — over the plot the wheel is the plot's, " +
-		"elsewhere it scrolls the pane") {
-		rt.Small().Weak()
-	}
 }
 
 // selectedLabel is the pinned frame's label, or "" when nothing is pinned.

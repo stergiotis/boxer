@@ -2,6 +2,7 @@ package play
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -65,12 +66,28 @@ const (
 	// typical dock leaf.
 	experimentsUnicodeWidth = 160
 
-	experimentsTopoMinW = 240
-	experimentsTopoMinH = 200
-	// experimentsTopoReservedPx leaves room for the control row above the
-	// treemap when sizing it against the pane's available height.
-	experimentsTopoReservedPx = 8
+	// experimentsTopoWidgetChromePx is the room the treemap widget takes for
+	// itself around the container it is handed: the breadcrumb bar above it,
+	// measured off a tour capture at 43pt and rounded up. The summary line it
+	// would otherwise draw underneath is off (topologyPointerLine), so it needs
+	// no budget here.
+	experimentsTopoWidgetChromePx float32 = 48
 )
+
+// experimentsTopoPaneFill is the treemap's box — the shared pane rule
+// (play_pane_box.go).
+//
+// The floor is well under the dock tabs' because the leaf is: this pane lives
+// in the tools split, and between its two control rows, its reading guide and
+// its colour key it has a few hundred points to give the picture. A floor sized
+// like the Treemap tab's would exceed what is left, so the box would sit at the
+// floor and overflow — which is what the pane did before it read the height at
+// all, and the point of reading it is to stop.
+var experimentsTopoPaneFill = paneFill{
+	slack: 12, minW: 240, maxW: 1600, minH: 120,
+	fallbackW: 520, fallbackH: 420,
+	chrome: experimentsTopoWidgetChromePx,
+}
 
 // experimentsTopoPaneProbeSalt namespaces the pane probe's r21 slot; threading
 // it through the instance's id stack makes it window-unique, so two playgrounds
@@ -96,6 +113,13 @@ type experimentsDriver struct {
 
 	source experimentsSourceE
 	sink   experimentsSinkE
+
+	// paneW / paneH are the last box the pane probe reported. Held across
+	// frames rather than read fresh: the probe answers nothing on the first
+	// frame and again on the frame a hidden tab comes back (a seq that did not
+	// capture is absent from the drain), and resizing the treemap to a fallback
+	// on those frames would flash.
+	paneW, paneH float32
 
 	// Built output, invalidated by key.
 	key      experimentsKey
@@ -284,7 +308,11 @@ func (inst *experimentsDriver) makeSink() (sink streamreadaccess.SinkI, finish f
 		topo := leewaywidgets.NewTopologySink()
 		inst.topoSink = topo
 		return topo, func() {
-			inst.topoView = leewaywidgets.NewTopologyTreemap(inst.ids, "play-exp-topo", topo)
+			// The widget's own summary line is off: this pane draws
+			// topologyPointerLine above the picture instead, in the unit these
+			// sizes are actually in.
+			inst.topoView = leewaywidgets.NewTopologyTreemap(inst.ids, "play-exp-topo", topo,
+				treemap.WithStatusLine(false))
 		}
 	case experimentsSinkJSON:
 		enc := jsontext.NewEncoder(buf, jsontext.Multiline(true), jsontext.WithIndent("  "))
@@ -443,19 +471,40 @@ func (inst *experimentsDriver) renderTopology() {
 	// body tab — so any body pane that captured (Projection, Timeline,
 	// Distribution) sized this treemap, no Detail pane needed.
 	inst.renderTopologyLegend()
-	availW, availH, _ := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsTopoPaneProbeSalt).Derive())
-	if availW > 0 && availH > 0 &&
+	// The readout goes ABOVE the picture, as the Treemap and Icicle tabs' do. It
+	// is drawn unconditionally, hover or no hover, and that is load-bearing
+	// here: a line that appeared only while pointing at a cell would change what
+	// the probe below measures, and the picture would resize under the pointer.
+	c.Label(inst.topologyPointerLine()).Send()
+	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsTopoPaneProbeSalt).Derive()); ok &&
+		availW > 0 && availH > 0 &&
 		!math.IsNaN(float64(availW)) && !math.IsNaN(float64(availH)) {
-		w, h := availW, availH-experimentsTopoReservedPx
-		if w < experimentsTopoMinW {
-			w = experimentsTopoMinW
-		}
-		if h < experimentsTopoMinH {
-			h = experimentsTopoMinH
-		}
-		inst.topoView.SetContainerSize(w, h)
+		inst.paneW, inst.paneH = availW, availH
 	}
+	// The box is the pane less what the WIDGET draws around it — the reserve
+	// used to be 8pt for a control row the probe already excludes, which left
+	// the breadcrumb bar and the summary line unbudgeted and the picture that
+	// far past the leaf.
+	inst.topoView.SetContainerSize(experimentsTopoPaneFill.box(inst.paneW, inst.paneH))
 	inst.topoView.Render()
+}
+
+// topologyPointerLine reads the box under the pointer, or names the gesture
+// when there is nothing under it.
+//
+// It replaces the widget's own summary line (WithStatusLine(false) at
+// construction), which ran its totals through formatBytes: right for the
+// filesystem trees that widget was written against, wrong here, where a cell's
+// size is an ATTRIBUTE COUNT. It read "total size: 7 B" for seven attributes —
+// and read it invisibly, since it sat below the fold until this pane started
+// budgeting its leaf for the widget's chrome.
+func (inst *experimentsDriver) topologyPointerLine() string {
+	if inst.topoView != nil {
+		if n := inst.topoView.HoveredNode(); n != nil {
+			return fmt.Sprintf("%s — %.0f attribute(s)", n.Name, n.TotalSize())
+		}
+	}
+	return "hover a box for its name and attribute count"
 }
 
 // renderTopologyLegend names the four attribute states. The colours are

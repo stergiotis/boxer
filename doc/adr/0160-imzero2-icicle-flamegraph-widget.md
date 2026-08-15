@@ -401,11 +401,14 @@ Two notes for the next consumer, both found by looking at a capture:
   reading and the one look every options bar in `play` now shares. `Frameless`
   itself is kept, documented, and left with no caller: it is still right inside
   a ComboBox popup, where the popup states the selection.
-- The aspect that fits the plot in a dock leaf lands within a pixel of
-  ADR-0159's, being the same leaf minus the same control row and status line.
-  For this form the overflow is worse than for the sankey's: the depth axis
-  holds rows at `RowPx` rather than scaling, so a plot past the leaf hides a
-  whole row of frames instead of shrinking the picture.
+- The plot is sized to the pane, not to an aspect. It began as ADR-0159's fixed
+  ratio — the same leaf minus the same control row and status line, so the two
+  landed within a pixel of each other — and moved to the leaf's own height once
+  `captureUiAvailableRect` made that readable (ADR-0159's 2026-08-15 Update).
+  The pane rule is worth more to this form than to the sankey's: the depth axis
+  holds rows at `RowPx` rather than scaling, so a plot past the leaf hid a whole
+  row of frames instead of shrinking the picture, and a taller leaf now buys
+  rows rather than margin.
 
 ## Surfaces — Tier 1
 

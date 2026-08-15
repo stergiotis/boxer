@@ -483,6 +483,27 @@ databases against ~4 engines — it read "138 flow(s) too thin to read · 133
 bar(s) reuse a hue", which is the honest description of data this form serves
 badly, and is the answer §SD6 and `PaletteRepeats` were written to give.
 
+### 2026-08-15 — the plot follows the pane's height too
+
+The note above says the plot is sized from the pane **width** only, because the
+one register carrying a pane height (`CaptureAvailableSize`) is a single
+process-wide slot a second writer corrupts. That is no longer the constraint:
+`captureUiAvailableRect` reports the free rect into the same per-seq r21 slot
+the width probe already used, so `CapturePaneSize` answers both dimensions and
+contends with nobody.
+
+The panel now fills its leaf, which retires the fixed 0.34 aspect that stood in
+for the height it could not read. That aspect was tuned so that one leaf — a
+maximised window's default body split — fitted the diagram; every other leaf
+either scrolled it or left the bottom of the pane empty, and the tour's own
+capture turned out to be the scrolling case.
+
+Bounds rather than aspects shape the box now: a leaf shorter than the diagram's
+readability floor still gets the floor and scrolls. The rule is shared with the
+Icicle, Treemap and Network panels — `apps/play/play_pane_box.go`, written
+because the four had drifted into four near-copies of the same sizing, each
+with its own measured-off-a-capture ratio.
+
 ### 2026-08-01 — pipelineview's overlay shipped without consuming this package
 
 §Consequences claims ADR-0119 §SD5's deferral "gains something concrete to
