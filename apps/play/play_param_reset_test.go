@@ -11,7 +11,7 @@ import (
 // resetTestApp builds an instance around a buffer, the way an applet's mint
 // does: the prelude it opens with is what Reset restores to.
 func resetTestApp(sql string) *PlayApp {
-	return NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), sql)
+	return NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), sql, nil)
 }
 
 // drafted seeds the slot bookkeeping a frame would have built, so the reset

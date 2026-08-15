@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -141,9 +142,12 @@ var (
 // pre-process SQL identically to the standalone CLI and the launcher instead of
 // re-implementing launcher internals. A nil client — the result-less test
 // shells that never run a query — skips the install.
-func NewLivePlayApp(client *Client, initialSQL string, maxHistory int) *PlayApp {
+//
+// rules is the ADR-0186 rule repository — the standing gloss rules and the
+// catalog — the embedder built at wiring time; nil takes DefaultRepository.
+func NewLivePlayApp(client *Client, initialSQL string, maxHistory int, rules *gloss.Repository) *PlayApp {
 	graph := newLiveQueryGraph(client, memory.NewGoAllocator(), maxHistory)
-	app := NewPlayApp(client, graph, initialSQL)
+	app := NewPlayApp(client, graph, initialSQL, rules)
 	if client != nil {
 		// installLeewayNameResolution points client.passes at a fresh registry
 		// (standard set + resolver) and returns the resolver so the Diagnostics
@@ -161,6 +165,11 @@ func NewLivePlayApp(client *Client, initialSQL string, maxHistory int) *PlayApp 
 // can't be captured cleanly at init time before the cli flag parser has run.
 type PlayLauncher struct {
 	inner *PlayApp
+	// Rules is the gloss rule repository every window this launcher opens is
+	// built over (ADR-0186); nil takes DefaultRepository. The factory
+	// registered in init leaves it nil, so a deployment that links play
+	// registers its rule sets on DefaultRepository.
+	Rules *gloss.Repository
 }
 
 var _ app.AppI = (*PlayLauncher)(nil)
@@ -352,7 +361,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// wires the resolver into the Diagnostics pane. The carousel-embedded play
 	// is its own host, so — like the standalone CLI — it relies on that shared
 	// install rather than repeating it here.
-	inner := NewLivePlayApp(client, initSQL, 100)
+	inner := NewLivePlayApp(client, initSQL, 100, inst.Rules)
 	// Restore the pre-retarget meaning of "External": NewPlayApp read it off
 	// the client, which by now may be pointed at the introspection plane.
 	inner.externalURL = externalURL

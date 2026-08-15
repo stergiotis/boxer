@@ -486,9 +486,12 @@ type PlayApp struct {
 	// selected row (a parsed markdown doc, a highlighted job, decoded pixels).
 	richCells *richCellCache
 
-	// glosses is the ADR-0186 catalog every `<label>@<media type>` declaration
-	// resolves against. Read through glossCatalog(), which defaults it.
-	glosses *gloss.Catalog
+	// rules is the ADR-0186 rule repository the host handed the constructor:
+	// the catalog every `<label>@<media type>` declaration resolves against
+	// and the standing rules (sets declared in code, then the affinities) a
+	// column is offered after the buffer's directives. Read through
+	// glossRules(), which defaults it for a bare test app.
+	rules *gloss.Repository
 	// glossRes caches the per-column gloss resolution of the schema last seen
 	// by the Table grids (play_gloss.go).
 	glossRes glossResolution
@@ -942,8 +945,15 @@ func playInstanceSalt() uint64 {
 	return (playInstanceSeq.Add(1) * 0x9e3779b97f4a7c15) ^ playSaltTag
 }
 
-func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
+// NewPlayApp builds the playground over a client, its query graph, the
+// buffer it opens with, and the gloss rule repository (ADR-0186) — the
+// standing rules and the catalog the host hands in; nil means play's own
+// DefaultRepository.
+func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *gloss.Repository) *PlayApp {
 	salt := playInstanceSalt()
+	if rules == nil {
+		rules = DefaultRepository()
+	}
 	mk := func() *c.WidgetIdStack {
 		s := c.NewWidgetIdStack()
 		s.SetBaseSalt(salt)
@@ -975,6 +985,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		autoEndpoint:     true,
 		density:          styletokens.DensityFromEnv(),
 		sql:              initialSQL,
+		rules:            rules,
 		sigEmit:          graphEmitter{graph: graph},
 		cards:            cards,
 		projector:        NewProjector(projectorIds, cards),
@@ -1766,13 +1777,24 @@ func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string,
 		if bound[s.Name] {
 			continue
 		}
-		if _, resolved := sigParams["param_"+s.Name]; resolved {
-			continue
-		}
 		if exprCategoryFor(s.Type).spliced() {
+			// An expression is never a URL parameter, filled or not: the
+			// splice is its only route into the query, and leaving it in
+			// sigParams would ALSO ship the predicate as a `param_*` string
+			// that nothing reads. Dropped before the resolved-signal test
+			// below, which would otherwise accept it and skip this.
+			delete(sigParams, "param_"+s.Name)
 			if v, declared := exprValues[s.Name]; declared && v != "" {
 				continue
 			}
+			if raw, held := inst.signalRawFor(s.Name); held && raw != "" {
+				continue
+			}
+			unfilled = append(unfilled, s.Name)
+			continue
+		}
+		if _, resolved := sigParams["param_"+s.Name]; resolved {
+			continue
 		}
 		unfilled = append(unfilled, s.Name)
 	}

@@ -151,7 +151,7 @@ func TestQueryStoreSnapshotsSignalsIntoHistory(t *testing.T) {
 // for names the store holds; a parse failure resolves nothing (the
 // raw-fallback path defers to the server).
 func TestResolveRunSignalsResolvesUnboundOnly(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.graph.setSignalRaw("x", "41")
 	app.graph.setSignalRaw("y", "shadowed") // y is SET-bound below — never consulted
 	app.frameSig = app.graph.signals()
@@ -173,7 +173,7 @@ func TestResolveRunSignalsResolvesUnboundOnly(t *testing.T) {
 // moved since the run flips the state to the *Stale twin, and moving back
 // clears it — symmetric with a buffer edit and its revert.
 func TestObserveQueryStateSignalStaleness(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.sql = "SELECT {x:UInt64}"
 	app.lastSentSql = "SELECT {x:UInt64}"
 	app.paramSlots = []paramSlot{{Name: "x", Type: "UInt64"}}
@@ -198,7 +198,7 @@ func TestObserveQueryStateSignalStaleness(t *testing.T) {
 
 // Restoring a history entry seeds the store with the run's signal values (D4).
 func TestRestoreHistoryEntrySeedsSignalStore(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- initial")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- initial", nil)
 	app.restoreHistoryEntry(HistoryEntry{
 		SQL:       "SELECT {x:UInt64}",
 		SigParams: map[string]string{"param_x": "7"},
@@ -215,7 +215,7 @@ func TestActiveSnapshotResolvesIntermediateSignals(t *testing.T) {
 	srv, got := captureServer(t)
 	defer srv.Close()
 	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
-	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "", nil)
 	app.currentSplit = splitResult{
 		Nodes: []splitNode{
 			{ID: "recent", Kind: splitNodeCTE, SQL: "SELECT n FROM t WHERE n = {x:UInt64}", Reads: []SignalID{"x"}},
@@ -317,7 +317,7 @@ func TestEmitDropNoticeSetsAndRetires(t *testing.T) {
 // an absent or out-of-range selection to row 0 and leaves an in-range one
 // untouched — no store-revision churn on the steady state.
 func TestSyncSelectionClamp(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	rec := int64Rec("n", 1, 2, 3)
 	defer rec.Release()
 
@@ -470,7 +470,7 @@ func TestCollectSlotTypesConflicts(t *testing.T) {
 // The chrome row model: held ∪ referenced, with pinned (D1), unfilled (D3),
 // provenance, and the reserved-type conflict check.
 func TestCollectSignalChromeRows(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	sql := "SET param_a = 1;\nSELECT {a:Int64}, {b:UInt32}, {c:String}, {vp_w:String}"
 	app.sql = sql
 	app.formattedFor = sql // the debounce has settled — the type table may parse
@@ -512,7 +512,7 @@ func TestCollectSignalChromeRows(t *testing.T) {
 // unfilledInputs / hasUnboundSlots read the debounced caches + frame
 // snapshot: bound names and held names are filled; the rest are not.
 func TestUnfilledInputsFromCaches(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.paramSlots = []paramSlot{{Name: "a"}, {Name: "b"}, {Name: "c"}}
 	app.paramSyncedValues = map[string]string{"a": "1"}
 	app.graph.setSignalRaw("b", "2")
@@ -540,7 +540,7 @@ func TestReservedStringSignalDefaultsEmptyOnRun(t *testing.T) {
 		require.False(t, signalDefaultsEmpty(name), "%s must still gate the Run", name)
 	}
 
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.frameSig = app.graph.signals()
 
 	// Nothing written: selection_country resolves to the empty default; the
@@ -562,7 +562,7 @@ func TestReservedStringSignalDefaultsEmptyOnRun(t *testing.T) {
 // signal as filled, so the World drill-down query is runnable before the first
 // click; a non-reserved unbound slot still blocks.
 func TestUnfilledInputsDefaultsReservedString(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.paramSlots = []paramSlot{{Name: "selection_country", Type: "String"}, {Name: "z", Type: "UInt64"}}
 	app.frameSig = app.graph.signals()
 	require.Equal(t, []string{"z"}, app.unfilledInputs(),
@@ -577,7 +577,7 @@ func TestUnfilledInputsDefaultsReservedString(t *testing.T) {
 // flickers, the app pins). With nothing written and lastSent carrying the
 // default, the witness must read "not diverged"; a later store write diverges.
 func TestReservedStringDefaultDoesNotDiverge(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.sql = "SELECT {selection_country:String}"
 	app.lastSentSql = "SELECT {selection_country:String}"
 	app.paramSlots = []paramSlot{{Name: "selection_country", Type: "String"}}
@@ -600,7 +600,7 @@ func TestReservedStringDefaultDoesNotDiverge(t *testing.T) {
 // unchanged, fully-filled, non-observing, settled buffer re-runs.
 func TestShouldAutoRunGates(t *testing.T) {
 	mk := func() *PlayApp {
-		app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+		app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 		app.sql = "SELECT {x:Int64} AS v"
 		app.lastSentSql = "SELECT {x:Int64} AS v"
 		app.paramSlots = []paramSlot{{Name: "x", Type: "Int64"}}
@@ -648,7 +648,7 @@ func TestExecuteRunBlockedOnUnfilledThenRuns(t *testing.T) {
 	srv, got := captureServer(t)
 	defer srv.Close()
 	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
-	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "", nil)
 	defer app.graph.close()
 	app.sql = "SELECT {x:Int64} AS v"
 	app.frameSig = app.graph.signals()
@@ -673,7 +673,7 @@ func TestExecuteRunScopesGatesToTheCaretStatement(t *testing.T) {
 	srv, got := captureServer(t)
 	defer srv.Close()
 	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
-	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "", nil)
 	defer app.graph.close()
 	app.sql = "SELECT {x:Int64} AS v;\nSELECT {z:String} AS w"
 	app.caretByte = len("SELECT {x")
@@ -702,7 +702,7 @@ func TestExecuteRunSubqueryScopesGatesToTheUnit(t *testing.T) {
 	srv, got := captureServer(t)
 	defer srv.Close()
 	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
-	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "", nil)
 	defer app.graph.close()
 	app.sql = "SELECT {z:String} AS w FROM (SELECT {x:Int64} AS v)"
 	app.caretByte = len("SELECT {z:String} AS w FROM (SELECT {x")
@@ -721,7 +721,7 @@ func TestExecuteRunSubqueryScopesGatesToTheUnit(t *testing.T) {
 // Staleness follows the shipped params: a signal outside the narrowed run
 // cannot stale its result, one inside still does.
 func TestNarrowedRunStalenessScopedToShippedSignals(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.sql = "SELECT {x:Int64} AS v;\nSELECT {z:String} AS w"
 	app.lastSentSql = app.sql
 	app.paramSlots = []paramSlot{{Name: "x", Type: "Int64"}, {Name: "z", Type: "String"}}
@@ -746,7 +746,7 @@ func TestAutoRunLoopOnSignalDivergence(t *testing.T) {
 	srv, got := captureServer(t)
 	defer srv.Close()
 	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
-	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "", nil)
 	defer app.graph.close()
 	app.sql = "SELECT {x:Int64} AS v"
 	app.paramSlots = []paramSlot{{Name: "x", Type: "Int64"}} // the debounced cache

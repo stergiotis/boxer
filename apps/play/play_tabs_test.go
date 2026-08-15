@@ -15,7 +15,7 @@ import (
 // blocks, and the registry-backed panel inventory.
 
 func tabsTestApp() *PlayApp {
-	return NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	return NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 }
 
 // The built-in set: ids, frozen dock ids, zones, scroll opt-outs, and the

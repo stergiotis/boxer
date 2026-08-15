@@ -38,7 +38,7 @@ Set it once, right after you build the `PlayApp` — the same place
 effect on the next frame; there is nothing to unregister:
 
 ```go
-inner := play.NewPlayApp(client, graph, initSQL)
+inner := play.NewLivePlayApp(client, initSQL, 100, rules) // rules: a *gloss.Repository, or nil for play's default
 inner.SetDetailContent(func(rec arrow.RecordBatch, schema *arrow.Schema, row int64) {
 	// Pattern A or B, below. Capture `inner` to reach RenderDefaultDetailContent.
 })

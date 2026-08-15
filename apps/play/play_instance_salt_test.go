@@ -13,9 +13,9 @@ import (
 // derive the same effective id for the same widget label, or they collide in
 // the global seenIds registry and share egui widget state across windows.
 func TestPlayAppInstancesDeriveDisjointIds(t *testing.T) {
-	a := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- a")
+	a := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- a", nil)
 	defer a.Close()
-	b := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- b")
+	b := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- b", nil)
 	defer b.Close()
 
 	assert.NotEqual(t,

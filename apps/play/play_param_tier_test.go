@@ -19,7 +19,7 @@ import (
 // would leave it, with a frame snapshot taken.
 func paneApp(t *testing.T, sql string) *PlayApp {
 	t.Helper()
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.sql = sql
 	app.formattedFor = sql
 	slots, vals, err := extractSlotsAndParams(sql)
@@ -120,7 +120,7 @@ func TestMixedTierBufferForksBothWays(t *testing.T) {
 // shows its value the first frame its widget appears — and that seed does not
 // then read as drift and write the empty draft back over it.
 func TestLiveDraftBornFromStore(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.graph.setSignalRawFrom("tl_min", "2026-01-01 00:00:00", signalWriterApp)
 	app.sql = "SELECT {tl_min:DateTime64(3, 'UTC')}"
 	reparse(t, app)

@@ -45,7 +45,7 @@ func (inst *PlayApp) renderGlossesTab(schema *arrow.Schema) {
 	for rt := range c.RichTextLabel("Rules") {
 		rt.Strong()
 	}
-	for rt := range c.RichTextLabel("In precedence order: an explicit alias first, then the buffer's directive lines top to bottom, then the affinities each gloss brings along.") {
+	for rt := range c.RichTextLabel("In precedence order: an explicit alias first, then the buffer's directive lines top to bottom, then the rule sets the host registered in code, then the affinities each gloss brings along.") {
 		rt.Small().Weak()
 	}
 	inst.renderGlossRules(schema)
@@ -226,9 +226,23 @@ func (inst *PlayApp) renderGlossRules(schema *arrow.Schema) {
 			rt.Small()
 		}
 	}
-	for _, r := range inst.glossCatalog().AffinityRules() {
+	// The repository's standing rules: each set under its name, in
+	// registration order — code the deployment checked in — then the
+	// affinities the glosses bring along.
+	set := ""
+	for _, r := range inst.glossRules().Rules() {
+		if r.Set != set {
+			set = r.Set
+			for rt := range c.RichTextLabel("rule set " + set) {
+				rt.Small().Strong()
+			}
+		}
 		for range c.Horizontal().KeepIter() {
-			for rt := range c.RichTextLabel(r.Source) {
+			label := r.Source
+			if r.Set != "" {
+				label = r.Name
+			}
+			for rt := range c.RichTextLabel(label) {
 				rt.Small().Weak()
 			}
 			for rt := range c.RichTextLabel(r.Token() + "  ←  " + r.Pattern) {

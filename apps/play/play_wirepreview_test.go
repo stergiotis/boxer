@@ -82,7 +82,7 @@ func TestUpdateWirePreviewComputesAndDebounces(t *testing.T) {
 // re-resolves without an edit.
 func TestUpdateWirePreviewScopesSignalsToTheCaretStatement(t *testing.T) {
 	cl := newTestClientWithStandardSet(t)
-	app := NewPlayApp(cl, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "")
+	app := NewPlayApp(cl, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "", nil)
 	defer app.graph.close()
 	app.previewAsSent = true
 	app.sql = "SELECT {x:Int64} AS v;\nSELECT {z:String} AS w"

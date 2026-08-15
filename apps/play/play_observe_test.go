@@ -16,7 +16,7 @@ func TestActiveSnapshotObservesIntermediateNode(t *testing.T) {
 	defer srv.Close()
 	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
 	graph := newLiveQueryGraph(client, memory.NewGoAllocator(), 10)
-	app := NewPlayApp(client, graph, "")
+	app := NewPlayApp(client, graph, "", nil)
 	app.currentSplit = splitResult{
 		Nodes: []splitNode{
 			{ID: "recent", Kind: splitNodeCTE, SQL: "SELECT n FROM t"},
@@ -67,7 +67,7 @@ func TestActiveSnapshotObservesIntermediateNode(t *testing.T) {
 func TestActiveSnapshotReportsIntermediateLaneLoading(t *testing.T) {
 	g := &gatedExecutor{gate: make(chan struct{}), build: func(string) arrow.RecordBatch { return int64Rec("n", 1) }}
 	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)
-	app := NewPlayApp(nil, graph, "")
+	app := NewPlayApp(nil, graph, "", nil)
 	app.intermediateLane = newNodeLane(g, memory.NewGoAllocator(), 0)
 	app.currentSplit = splitResult{
 		Nodes: []splitNode{

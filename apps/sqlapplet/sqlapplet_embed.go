@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -36,6 +37,11 @@ type EmbedConfig struct {
 	// embedder published, applied pre-mount so the buffer's keelson('<alias>')
 	// rewrites to the handle client-side (ADR-0134 §SD4).
 	Bindings map[string]string
+	// Rules is the gloss rule repository the instance is built over
+	// (ADR-0186): the embedder's standing rules and catalog. Nil takes
+	// play.DefaultRepository, so an applet host that registers no rule sets
+	// of its own shares the deployment's.
+	Rules *gloss.Repository
 }
 
 // NewEmbedded constructs an attenuated PlayApp for def, ready to render:
@@ -54,7 +60,7 @@ func NewEmbedded(def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err erro
 	client := play.NewClient(clientCfg, nil)
 	client.SetStampIdentity(cfg.RunId, cfg.StampAppId)
 
-	inner = play.NewLivePlayApp(client, def.SQL, appletMaxHistory)
+	inner = play.NewLivePlayApp(client, def.SQL, appletMaxHistory, cfg.Rules)
 	// AutoRun only for the read class (ADR-0132 §SD3/§SD5): a mutating or
 	// egress-reaching applet always waits for an explicit Run. Ad-hoc data
 	// flows into the engine and widens no egress, so a dataset applet stays

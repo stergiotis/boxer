@@ -27,7 +27,7 @@ SELECT 1
 // handed the instance a document. An ordinary playground has none — its buffer
 // stands behind no definition — and must not grow a dead button.
 func TestSetDefinitionMarkdownGatesTheDrawer(t *testing.T) {
-	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x")
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x", nil)
 	defer inst.Close()
 
 	assert.Nil(t, inst.definition, "a plain playground has no definition")
@@ -50,7 +50,7 @@ func TestSetDefinitionMarkdownGatesTheDrawer(t *testing.T) {
 // that carries no Source hands over nothing, and the affordance stays off
 // rather than opening onto a blank drawer.
 func TestSetDefinitionMarkdownEmptyIsOff(t *testing.T) {
-	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x")
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x", nil)
 	defer inst.Close()
 
 	inst.SetDefinitionMarkdown([]byte(definitionDocMD))
@@ -67,7 +67,7 @@ func TestSetDefinitionMarkdownEmptyIsOff(t *testing.T) {
 // definition, both, or neither, and the strip is absent rather than empty
 // when the author wrote no preamble.
 func TestPreambleIsIndependentOfTheDefinition(t *testing.T) {
-	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x")
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x", nil)
 	defer inst.Close()
 
 	assert.Nil(t, inst.preamble, "a plain playground has no preamble")
@@ -89,7 +89,7 @@ func TestPreambleIsIndependentOfTheDefinition(t *testing.T) {
 // two document-derived surfaces it is expected to come and go while the
 // instance is live, as the condition it reports appears and clears.
 func TestDatasetNoticeIsSetAndCleared(t *testing.T) {
-	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x")
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x", nil)
 	defer inst.Close()
 
 	assert.Nil(t, inst.datasetNotice, "an instance with no unmet precondition shows no strip")

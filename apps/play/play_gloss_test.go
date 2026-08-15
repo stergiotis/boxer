@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -393,4 +394,49 @@ func TestCardCellBlock(t *testing.T) {
 	plain := glossRec(t)
 	defer plain.Release()
 	assert.Nil(t, app.cardCellBlock(plain.Schema()), "temperature, luhn: inline faces only")
+}
+
+// Standing rules are code: a repository the constructor was handed ranks
+// its sets between the buffer's directives and the affinities, and every
+// binding says which set and rule it came from.
+func TestGlossRepositoryRules(t *testing.T) {
+	repo := gloss.NewRepository(nil)
+	repo.MustRegister(gloss.Rules("acme").
+		Rule("sensor temperatures").
+		When(gloss.Section("sensor"), gloss.Name("temperature")).
+		Show(gloss.MediaTypeTemperature, gloss.Unit("C")).
+		Rule("no links").
+		When(gloss.Sem(valueaspects.AspectUrl)).
+		Show(gloss.MediaTypeRaw))
+	app := &PlayApp{rules: repo}
+	rec := leewayGlossRec(t)
+	defer rec.Release()
+	schema := rec.Schema()
+
+	cols := app.glossColumns(schema)
+	require.Len(t, cols, 4)
+	assert.Equal(t, gloss.MediaTypeTemperature, cols[1].mediaType, "the set's rule outranks the masked affinity")
+	assert.Equal(t, "C", cols[1].params[gloss.ParamUnit])
+	assert.Equal(t, "set acme: sensor temperatures: section=sensor ∧ name=temperature", cols[1].source)
+	assert.Equal(t, `affinity: gloss/masked ← \bsem:secret\b`, glossShadowedLine(cols[1].shadowed))
+	assert.Equal(t, gloss.MediaTypeRaw, cols[2].mediaType, "…and gloss/raw from a set switches an affinity off")
+	assert.Equal(t, `affinity: gloss/url ← \bsem:url\b`, glossShadowedLine(cols[2].shadowed))
+	assert.True(t, cols[1].glossedElem(), "the items are numeric; the whole list is not")
+	assert.Contains(t, glossHover(&cols[1]), "gloss/temperature;unit=C (set acme: sensor temperatures: section=sensor ∧ name=temperature)")
+
+	// A buffer directive still outranks the set.
+	app.sql = "SELECT *\n-- play: gloss gloss/masked name:temperature\n"
+	cols = app.glossColumns(schema)
+	assert.Equal(t, gloss.MediaTypeMasked, cols[1].mediaType)
+	assert.Equal(t, "directive line 2: name:temperature", cols[1].source)
+	assert.Equal(t, `set acme: sensor temperatures: gloss/temperature;unit=C ← section=sensor ∧ name=temperature · affinity: gloss/masked ← \bsem:secret\b`,
+		glossShadowedLine(cols[1].shadowed))
+
+	// The constructor injects; nil takes the process default.
+	a := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "", repo)
+	assert.Same(t, repo, a.glossRules())
+	assert.Same(t, repo.Catalog(), a.glossCatalog())
+	b := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "", nil)
+	assert.Same(t, DefaultRepository(), b.glossRules())
+	assert.Same(t, DefaultRepository(), NewLivePlayApp(nil, "", 4, nil).glossRules())
 }

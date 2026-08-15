@@ -60,7 +60,7 @@ func setupPlayWithCapsTimeout(t *testing.T, busTimeout time.Duration) (inst *Pla
 	require.NoError(t, err)
 
 	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)
-	inst = NewPlayApp(nil, graph, "-- initial")
+	inst = NewPlayApp(nil, graph, "-- initial", nil)
 	inst.SetCapabilities(busC, storage, zerolog.Nop())
 
 	fsSvc = fs
@@ -121,7 +121,7 @@ func TestPlayApp_LoadFromPicker_RoundTrip(t *testing.T) {
 
 func TestPlayApp_LoadFromPicker_NilBus_NoOp(t *testing.T) {
 	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)
-	inst := NewPlayApp(nil, graph, "-- initial")
+	inst := NewPlayApp(nil, graph, "-- initial", nil)
 	// No SetCapabilities call → inst.bus stays nil.
 
 	inst.loadFromPicker() // must not panic
@@ -136,7 +136,7 @@ func TestPlayApp_RestorePersistedSql_ReadsALegacyValue(t *testing.T) {
 	defer cleanup()
 	require.NoError(t, inst.storage.Set(persistKeyLastSql, []byte("SELECT 1 AS persisted")))
 
-	inst2 := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- default")
+	inst2 := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- default", nil)
 	inst2.SetCapabilities(inst.bus, inst.storage, zerolog.Nop())
 	inst2.RestorePersistedSql()
 	assert.Equal(t, "SELECT 1 AS persisted", inst2.sql,
@@ -145,7 +145,7 @@ func TestPlayApp_RestorePersistedSql_ReadsALegacyValue(t *testing.T) {
 
 func TestPlayApp_RestorePersistedSql_NilStorage_NoOp(t *testing.T) {
 	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)
-	inst := NewPlayApp(nil, graph, "-- initial")
+	inst := NewPlayApp(nil, graph, "-- initial", nil)
 	// No SetCapabilities → inst.storage stays nil.
 	inst.RestorePersistedSql()
 	assert.Equal(t, "-- initial", inst.sql, "Restore is a no-op when storage is nil")

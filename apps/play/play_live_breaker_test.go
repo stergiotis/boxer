@@ -20,7 +20,7 @@ import (
 // fire. writer decides whether that move looks human or machine.
 func breakerApp(t *testing.T, writer string) *PlayApp {
 	t.Helper()
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.sql = "SELECT {tl_min:Int64} AS v"
 	app.lastSentSql = app.sql
 	app.autoRunStreakSql = app.sql
@@ -166,7 +166,7 @@ func TestBreakerTripsOnRatchetingSelfFeedingQuery(t *testing.T) {
 	srv, got := captureServer(t)
 	defer srv.Close()
 	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
-	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "", nil)
 	defer app.graph.close()
 	app.sql = "SELECT * FROM t WHERE ts > {tl_min:Int64}"
 	app.paramSlots = []paramSlot{{Name: "tl_min", Type: "Int64"}}
@@ -206,7 +206,7 @@ func TestBreakerTripsOnRatchetingSelfFeedingQuery(t *testing.T) {
 // id-less result leaves it pointing at the previous one. The chrome says so
 // rather than leaving a stale-looking value unexplained.
 func TestSelectionIDLagsCursorCue(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.graph.setSignalRawFrom(signalSelection, "3", "table")
 	app.graph.setSignalRawFrom(signalSelectionID, "77", "table")
 	app.frameSig = app.graph.signals()

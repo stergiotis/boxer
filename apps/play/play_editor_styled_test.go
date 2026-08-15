@@ -102,7 +102,7 @@ func TestEditorStyledSectionsGatedOnQuiescence(t *testing.T) {
 // spans — several unit tests build a PlayApp this way for unrelated work.
 func TestEditorStyledSectionsOnBareApp(t *testing.T) {
 	require.Empty(t, (&PlayApp{}).editorStyledSections())
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	require.Empty(t, app.editorStyledSections())
 }
 

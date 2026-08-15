@@ -649,7 +649,13 @@ Three routes bind a column to a gloss, in precedence order:
   shape, gets a gloss. Some glosses bring an affinity rule along —
   `gloss/masked` for `sem:secret`, `gloss/url` for `sem:url`, `application/json`
   for `sem:json*` — and `gloss/raw` in a rule switches an affinity off for the
-  columns it matches.
+  columns it matches;
+- **a rule set in code** — rules that should outlive a query are Go, checked
+  in with the deployment: `gloss.Rules("acme").Rule("kelvin readings").When(gloss.Section("sensor"),
+  gloss.NameMatches("^temp")).Show(gloss.MediaTypeTemperature, gloss.Unit("K"))`,
+  registered on the `gloss.Repository` the host hands play at construction.
+  They rank between the buffer's directives and the affinities, and the
+  Glosses tab lists them under their set's name.
 
 The tab shows the **catalog** (each gloss with its accepted value kinds,
 parameters, a sample rendering, its affinities, and two Insert buttons —

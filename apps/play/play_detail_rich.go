@@ -76,14 +76,21 @@ const richMarkdownFeatures = obsidian.FeatureGFM |
 	obsidian.FeatureHighlight |
 	obsidian.FeatureComment
 
-// glossCatalog is the catalog every declaration and rule resolves against.
-// Lazily the default set, so a bare &PlayApp{} in a unit test resolves like
-// the wired app does; a host that wants more registers before first use.
-func (inst *PlayApp) glossCatalog() *gloss.Catalog {
-	if inst.glosses == nil {
-		inst.glosses = gloss.Default()
+// glossRules is the rule repository the constructor was handed (ADR-0186):
+// standing rules and the catalog. Lazily an empty repository over the
+// default catalog, so a bare &PlayApp{} in a unit test resolves like a wired
+// app with no rule sets does.
+func (inst *PlayApp) glossRules() *gloss.Repository {
+	if inst.rules == nil {
+		inst.rules = gloss.NewRepository(nil)
 	}
-	return inst.glosses
+	return inst.rules
+}
+
+// glossCatalog is the catalog every declaration and rule resolves against —
+// the repository's.
+func (inst *PlayApp) glossCatalog() *gloss.Catalog {
+	return inst.glossRules().Catalog()
 }
 
 // mediaTypeOnly strips a compact token's parameters: the block-face binding

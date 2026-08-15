@@ -253,7 +253,8 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
   below); reveal-on-click for `gloss/masked`.
 - A paint variant of the inline face (arrays as sparklines).
 - Rule files / env, and an in-app rule editor over ADR-0185 — text rules
-  first, because SQL travels and UI state does not.
+  first, because SQL travels and UI state does not. (Retired by the
+  2026-08-15 Update below: standing rules are code.)
 - Unit conversion; `iban`, `isbn`, `percent`, colour swatches; ADR-0123
   §SD7's own list (base64, URL sources, webp/avif/svg).
 - Reading kanban's `dot_*@<tone>` tokens as glosses — it would move
@@ -426,6 +427,45 @@ scrolls inside its area, and images box at 400 × 240. Raw cells switches
 this seam off with the other. Tour scene `03_detail_glosses` binds
 `text/markdown` to the text column, so the card's block face is in the
 tour; reveal-on-click for `gloss/masked` stays deferred.
+
+### 2026-08-15 — standing rules are code: `gloss.Repository`, rule sets, injected
+
+SD8 had left rules that outlive a query to files, an env var, or an editor
+over ADR-0185. Decided instead: such rules are Go, under version control,
+declared beside the glosses they bind — a query's own overrides stay in its
+buffer as `-- play: gloss` lines, and nothing is read from files, the
+environment, or persisted UI state. `public/hmi/gloss` gains:
+
+- **`Repository`** — first-class: rule sets over one catalog, in
+  registration order, then the catalog's affinities (`Rules()`); built at
+  wiring time and **injected** — `NewPlayApp` / `NewLivePlayApp` take a
+  `*gloss.Repository`, `PlayLauncher.Rules` and sqlapplet's
+  `EmbedConfig.Rules` carry one, and `play.DefaultRepository()` is what a
+  nil argument and the self-registered launcher use, so a deployment that
+  links play registers its sets there before the first window mounts.
+- **`RuleSet`**, built with a chain that reads as the rule does —
+  `gloss.Rules("acme-sensors").Rule("kelvin readings").When(gloss.Section("sensor"),
+  gloss.NameMatches("^temp")).Show(gloss.MediaTypeTemperature, gloss.Unit("K"))`
+  — validated whole at `Repository.Register` (unknown type, bad parameter,
+  bad pattern, no condition, duplicate or missing name), so a set that does
+  not validate applies to nothing, loudly, at startup.
+- **Predicates** over a parsed **`Spec`** (the spec line taken apart by
+  prefix): `Name`, `NameMatches`, `Section`, `Role`, `Item`, `CT`, `Arrow`,
+  `Enc`/`Sem`/`Use` typed by the aspect enums — a misspelt aspect does not
+  compile — `All`, `Any`, `Not`, and `SpecMatches`, the directive's own
+  regex as the escape hatch. Each prints as it reads (`section=sensor ∧
+  name~^temp`), which is what the Glosses tab and the hover show; a
+  directive is now the predicate `SpecMatches(re)`, so one matcher serves
+  every source.
+
+Precedence per column: alias › buffer directives › repository sets ›
+affinities. The buffer stays above code so a query's `gloss/raw` can switch
+a standing rule off for itself; a set is a deployment default, not a
+mandate. The first checked-in set is sqlapplet's `sqlapplet-books`: byte
+counts (`(^|_)bytes$`), nanosecond and millisecond durations (`_ns$`,
+`_ms$`) — the suffixes the shipped books use — bound to every standalone
+applet window through `EmbedConfig.Rules`. The recipe is
+[doc/howto/play-gloss-rules.md](../howto/play-gloss-rules.md).
 
 ## References
 

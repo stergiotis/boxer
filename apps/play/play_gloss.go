@@ -3,6 +3,7 @@ package play
 import (
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
@@ -20,13 +21,34 @@ import (
 // `-- play: gloss` lines, re-scanned per frame like the enum hints — and read
 // by both Table grids per cell.
 //
-// Precedence per column (§SD3): the explicit `<label>@<media type>` alias;
-// else the first matching directive rule, in buffer order; else the first
-// matching affinity, in catalog order; else plain. An aliased column is never
-// offered to the rules.
+// Precedence per column (§SD3, and the 2026-08-15 Update on rules as code):
+// the explicit `<label>@<media type>` alias; else the first matching
+// directive rule, in buffer order; else the first matching rule of the
+// repository the host handed the constructor — its rule sets in
+// registration order, then the affinities in catalog order; else plain. An
+// aliased column is never offered to the rules.
 
 // glossSourceAlias names the explicit-alias source in hover text.
 const glossSourceAlias = "alias"
+
+var (
+	defaultRepositoryOnce sync.Once
+	defaultRepository     *gloss.Repository
+)
+
+// DefaultRepository is the process-wide gloss rule repository over the
+// default catalog: what the self-registered PlayLauncher hands its windows,
+// and what NewPlayApp / NewLivePlayApp use for a nil argument. A deployment
+// that links play registers its rule sets on it before the first window
+// mounts — an init of its own package does — or hands its own repository to
+// the constructor / PlayLauncher.Rules instead. Rule sets are code, checked
+// in beside the glosses they bind (ADR-0186, its 2026-08-15 Update).
+func DefaultRepository() *gloss.Repository {
+	defaultRepositoryOnce.Do(func() {
+		defaultRepository = gloss.NewRepository(nil)
+	})
+	return defaultRepository
+}
 
 // glossMarkerPrefix is the directive keyword, matched case-insensitively after
 // the `--` the way ADR-0124's `play: enum ` is: `-- play: gloss <token> <regex>`.
@@ -159,8 +181,9 @@ func (inst *PlayApp) glossColumns(schema *arrow.Schema) []glossColumn {
 		}
 		res.rules = append(res.rules, r)
 	}
-	// Directive rules first, affinities after: list order is precedence.
-	rules := append(res.rules, cat.AffinityRules()...)
+	// Directive rules first, the repository's standing rules (sets, then
+	// affinities) after: list order is precedence.
+	rules := append(res.rules, inst.glossRules().Rules()...)
 
 	names := make([]string, schema.NumFields())
 	for i := range names {

@@ -97,7 +97,7 @@ func NewCliCommand() *cli.Command {
 			// client's pre-execute SQL pipeline (standard passes + schema-aware
 			// leeway name resolver, ADR-0108/0116), feeding the resolver to the
 			// Diagnostics pane.
-			playApp := NewLivePlayApp(client, initSQL, 100)
+			playApp := NewLivePlayApp(client, initSQL, 100, DefaultRepository())
 
 			unm := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 			app, err := application.NewApplication(appCfg, unm)

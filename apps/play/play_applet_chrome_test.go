@@ -12,7 +12,7 @@ import (
 // rule: the params strip renders in the top panel exactly when an embedder
 // removed the Editor tab, so param widgets have one render site per frame.
 func TestEditorTabPresenceDrivesParamsStrip(t *testing.T) {
-	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x")
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x", nil)
 	defer inst.Close()
 
 	assert.True(t, inst.editorTabPresent(), "stock tab set carries the editor")

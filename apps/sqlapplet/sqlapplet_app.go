@@ -106,6 +106,7 @@ func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
 		Bus:        ctx.Bus(),
 		Log:        ctx.Log(),
 		Bindings:   bindings,
+		Rules:      bookRepository,
 	})
 	if err != nil {
 		return

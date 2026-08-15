@@ -11,7 +11,7 @@ import (
 func newDatasetTestApp(t *testing.T) (*PlayApp, *Client) {
 	t.Helper()
 	client := NewClient(ClientConfig{URL: "http://example.invalid"}, nil)
-	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 4), "")
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 4), "", nil)
 	return app, client
 }
 
@@ -39,7 +39,7 @@ func TestBindDatasetAndRewrite(t *testing.T) {
 }
 
 func TestBindDatasetNeedsClient(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "", nil)
 	require.Error(t, app.BindDataset("items", "adhoc_x"))
 }
 

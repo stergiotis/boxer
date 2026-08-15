@@ -20,7 +20,7 @@ import (
 // syncWorkingsetDirty only anchors.
 func newWorkingsetTestApp(t *testing.T, sql string) (inst *PlayApp) {
 	t.Helper()
-	inst = NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), sql)
+	inst = NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), sql, nil)
 	inst.syncWorkingsetDirty()
 	require.False(t, inst.WorkingsetDirty(), "the seeded state is not an edit")
 	return
@@ -71,7 +71,7 @@ func newRunnableWorkingsetApp(t *testing.T) (inst *PlayApp) {
 	srv, _ := captureServer(t)
 	t.Cleanup(srv.Close)
 	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
-	inst = NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 4), "SELECT 1")
+	inst = NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 4), "SELECT 1", nil)
 	t.Cleanup(inst.graph.close)
 	inst.frameSig = inst.graph.signals()
 	inst.syncWorkingsetDirty()

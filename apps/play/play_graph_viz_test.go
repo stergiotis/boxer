@@ -94,7 +94,7 @@ func TestSystemGraphModelConstantsSignalsUnfilled(t *testing.T) {
 }
 
 func TestSystemGraphModelSynthesizesMainWithoutSplit(t *testing.T) {
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	defer app.graph.close()
 	app.frameSig = app.graph.signals()
 	nodes, edges := modelIDs(t, app)

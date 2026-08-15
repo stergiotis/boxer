@@ -15,7 +15,7 @@ import (
 
 func attenuated(t *testing.T, def *AppletDef) (ids map[string]struct{}) {
 	t.Helper()
-	inner := play.NewLivePlayApp(nil, "", appletMaxHistory)
+	inner := play.NewLivePlayApp(nil, "", appletMaxHistory, nil)
 	require.NoError(t, attenuateTabs(inner, def, zerolog.Nop()))
 	ids = make(map[string]struct{}, len(inner.Tabs().Specs()))
 	for _, spec := range inner.Tabs().Specs() {
@@ -41,7 +41,7 @@ func TestTabPolicyCoversEveryRegisteredTab(t *testing.T) {
 		assert.False(t, dup, "tab %q is both chrome and a result panel", id)
 		classified[id] = struct{}{}
 	}
-	for _, spec := range play.NewLivePlayApp(nil, "", appletMaxHistory).Tabs().Specs() {
+	for _, spec := range play.NewLivePlayApp(nil, "", appletMaxHistory, nil).Tabs().Specs() {
 		_, known := classified[spec.ID]
 		assert.Truef(t, known, "play registers tab %q, which sqlapplet classifies as neither chrome nor a "+
 			"result panel — it would survive attenuation on every applet and no `tabs:` list could prune it", spec.ID)
@@ -109,7 +109,7 @@ func TestAttenuateTabsExplicitListCanAskForADefaultOffPanel(t *testing.T) {
 // zonesOf reports where attenuation placed each surviving pane.
 func zonesOf(t *testing.T, def *AppletDef) (zones map[string]play.TabZoneE) {
 	t.Helper()
-	inner := play.NewLivePlayApp(nil, "", appletMaxHistory)
+	inner := play.NewLivePlayApp(nil, "", appletMaxHistory, nil)
 	require.NoError(t, attenuateTabs(inner, def, zerolog.Nop()))
 	zones = make(map[string]play.TabZoneE, len(inner.Tabs().Specs()))
 	for _, spec := range inner.Tabs().Specs() {
@@ -150,7 +150,7 @@ func TestAttenuateTabsZoneOverridesThePanelsDefault(t *testing.T) {
 // dropped: the author asked for a layout the instance cannot provide, which is
 // the same class of failure as a binding that does not resolve.
 func TestAttenuateTabsRefusesAnUnknownZone(t *testing.T) {
-	inner := play.NewLivePlayApp(nil, "", appletMaxHistory)
+	inner := play.NewLivePlayApp(nil, "", appletMaxHistory, nil)
 	err := attenuateTabs(inner, &AppletDef{Slug: "bad", Tabs: []TabSel{{ID: "table", Zone: "basement"}}}, zerolog.Nop())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "basement")
@@ -177,7 +177,7 @@ func TestTabZonesAreDistinctAndExcludeChrome(t *testing.T) {
 // the only reader play exports for "the tab play itself raised".
 func landingTab(t *testing.T, def *AppletDef) (id string) {
 	t.Helper()
-	inner := play.NewLivePlayApp(nil, "", appletMaxHistory)
+	inner := play.NewLivePlayApp(nil, "", appletMaxHistory, nil)
 	require.NoError(t, attenuateTabs(inner, def, zerolog.Nop()))
 	return inner.ComposeLaunch().Tab
 }

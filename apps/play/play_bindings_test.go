@@ -212,7 +212,7 @@ func bindTestApp(t *testing.T) (*PlayApp, func() []int) {
 	srv, got := captureServer(t)
 	t.Cleanup(srv.Close)
 	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
-	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), bindTestSQL)
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), bindTestSQL, nil)
 	t.Cleanup(func() { app.graph.close(); app.closeBoundLanes() })
 	split, err := splitGraph(bindTestSQL)
 	require.NoError(t, err)

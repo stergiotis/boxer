@@ -21,7 +21,7 @@ import (
 // debounce already elapsed, so a single updatePreview call runs the pipeline.
 func debouncedApp(t *testing.T, sql string) *PlayApp {
 	t.Helper()
-	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)
 	app.sql = sql
 	app.lastSeenSql = sql
 	app.lastEditAt = time.Now().Add(-2 * previewDebounce)

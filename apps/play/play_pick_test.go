@@ -18,7 +18,7 @@ import (
 )
 
 func TestConsumePickedSqlAppliesOncePerStash(t *testing.T) {
-	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- initial")
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- initial", nil)
 
 	inst.consumePickedSql()
 	require.Equal(t, "-- initial", inst.sql, "no stash → no change")
@@ -41,7 +41,7 @@ func TestConsumePickedSqlAppliesOncePerStash(t *testing.T) {
 func TestPickedSqlHandoffIsRaceFree(t *testing.T) {
 	// Concurrent stashers (the load goroutine's shape) against a consuming
 	// render loop; -race validates the synchronization discipline.
-	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- initial")
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- initial", nil)
 	var wg sync.WaitGroup
 	for i := range 16 {
 		wg.Add(1)

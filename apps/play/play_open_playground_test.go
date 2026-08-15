@@ -55,7 +55,7 @@ func (f *fakeOpenBus) Request(subject string, payload []byte) (reply []byte, err
 
 func newOpenTestApp(t *testing.T, bus *fakeOpenBus) (inst *PlayApp) {
 	t.Helper()
-	inst = NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "SELECT 1")
+	inst = NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "SELECT 1", nil)
 	inst.SetCapabilities(bus, nil, zerolog.Nop())
 	return
 }
@@ -98,7 +98,7 @@ func TestRequestOpenPlayground_ComposesRequestAndSucceeds(t *testing.T) {
 func TestRequestOpenPlayground_ResolvesDatasetAliases(t *testing.T) {
 	bus := &fakeOpenBus{reply: launchreply.LaunchReply{WindowKey: 3}}
 	client := NewClient(ClientConfig{URL: "http://example.invalid"}, nil)
-	inst := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 4), "")
+	inst := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 4), "", nil)
 	inst.SetCapabilities(bus, nil, zerolog.Nop())
 	require.NoError(t, inst.BindDataset("items", "adhoc_deadbeef01234567"))
 

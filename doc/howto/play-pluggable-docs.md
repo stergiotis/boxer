@@ -49,7 +49,7 @@ post-construction wiring. It takes effect on the next frame; there is
 nothing to unregister:
 
 ```go
-inner := play.NewLivePlayApp(client, initSQL, 100)
+inner := play.NewLivePlayApp(client, initSQL, 100, rules) // rules: a *gloss.Repository, or nil for play's default
 inner.SetDocsSource(mySource) // or a reconfigured play.ClickHouseDocsSource
 ```
 
@@ -134,6 +134,8 @@ always return `ready=true`.
 - [The Docs pane's engine](../../apps/play/play_docs.go) — the debounce,
   cache and caret-to-candidate-name walk that sit above whatever source is
   installed.
+- [play-gloss-rules.md](./play-gloss-rules.md) — the standing gloss rules a
+  host hands play at construction
 - [play-pluggable-detail.md](./play-pluggable-detail.md) — the sibling seam
   (`SetDetailContent`) this one was modelled on.
 - [ADR-0147](../adr/0147-sqleditor-widget-and-completion.md) — the
