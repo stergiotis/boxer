@@ -192,9 +192,12 @@ those names are ambiguous.
 
 v1 therefore supports the scope whose `FROM` names exactly one table, and that
 table the bound one; everything else is refused with a message that says so.
-(M2 refined this: the check is on table *count*, not on the alias. A single
-aliased source resolves unqualified names unambiguously — it is the second
-source that creates the problem.) Qualifying the
+Two refinements landed while building it: the check is on table *count*, not
+on the alias (a single aliased source resolves unqualified names
+unambiguously — it is the second source that creates the problem, M2); and
+the database half is compared only when one is known, since every pass in the
+standard registry is wired with an empty default and a strict comparison
+would refuse `FROM facts` everywhere (M3). Qualifying the
 columns means the artefacts can no longer be opaque strings — the generator
 would emit them structured, or emit a qualifier hole — which is a change to
 ADR-0066's output shape and is **deferred with the trigger: the first query
@@ -396,8 +399,30 @@ Proposed — awaiting review by the code owner.
 
   The wiring — `passreg` registration and play's registry — is M3's, so the
   pass exists and is tested but nothing runs it yet.
-- **M3 — play wires the registry and the pass (SD7, SD8).**
-  The Vocabulary tab marks the family's server dependencies.
+- **M3 — play wires the registry and the pass (SD7, SD8).** ✓
+  `LwComponentExpand` is registered in the standard set as an **Entry, not a
+  Factory**, at order 110 — after the identity macros (100) and before the
+  extraction family (120). The passes around it are factories because each
+  needs a per-consumer schema binding; this one needs a registry a host
+  populates once, which is a different thing and does not belong on the
+  binding. `play.RegisterComponents` publishes `sysmfacts`, and both hosts
+  that wire play — the standalone binary and the carousel — call it beside
+  their pass registration. The Vocabulary tab lists the family, with the
+  read-back dependencies on `LW_COMPONENT` only.
+
+  **One correction to §SD6, forced by the wiring.** Every pass in the standard
+  registry is constructed with an empty default database, so a strict
+  database comparison would refuse `FROM facts` everywhere and make the
+  family unusable through `passreg`. The check now requires the table name to
+  match, and compares the database only when one is known — an explicit
+  qualifier that disagrees is still refused, and an unqualified reference is
+  left to the server's session database.
+
+  Verified end to end against the live server, which is what makes the three
+  packages' agreement more than an assertion:
+  `SELECT LW_COMPONENT('SysMem') AS m FROM boxer.facts` returns a named tuple
+  whose slots are the DTO's Go field names, with its conformance filter in the
+  WHERE the statement did not have.
 - **M4 — the cross-oracle test against `Scan<Kind>`,** and the sysmetrics
   expansion goldens.
 
