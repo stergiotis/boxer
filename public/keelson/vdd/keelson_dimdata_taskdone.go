@@ -16,6 +16,6 @@ import (
 // extension (sized integers spell themselves `[]uint8` and stay in
 // the slice-of-u8 lane; `[]byte` is reserved for blob).
 var (
-	MembTaskResult = KeelsonHrNkRegistry.MustBegin("taskResult").
+	MembTaskResult = KeelsonHrNkRegistry.MustBegin("taskResult", 125).
 		MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

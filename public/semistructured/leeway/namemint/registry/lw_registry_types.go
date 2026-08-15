@@ -156,14 +156,17 @@ type RegisteredTagValueDml struct {
 }
 
 type HumanReadableNaturalKeyRegistry[C contract.ContractI] struct {
-	tv             identifier.TagValue
-	tag            identifier.IdTag
-	untaggedOffset identifier.UntaggedId
-	lookup         *containers.BinarySearchGrowingKV[naming.StylableName, RegisteredNaturalKey]
-	roots          *containers.BinarySearchGrowingKV[naming.StylableName, RegisteredNaturalKey]
-	namingStyle    naming.NamingStyleE
-	contr          C
-	memEnc         *naturalkey.Encoder
+	tv     identifier.TagValue
+	tag    identifier.IdTag
+	lookup *containers.BinarySearchGrowingKV[naming.StylableName, RegisteredNaturalKey]
+	roots  *containers.BinarySearchGrowingKV[naming.StylableName, RegisteredNaturalKey]
+	// byOrdinal is the assignment read the other way. Two names on one
+	// ordinal are one id, so the second registration is refused — the check
+	// the registration-order regime had no way to make.
+	byOrdinal   *containers.BinarySearchGrowingKV[identifier.UntaggedId, naming.StylableName]
+	namingStyle naming.NamingStyleE
+	contr       C
+	memEnc      *naturalkey.Encoder
 }
 type RegisteredValueFlagsE uint8
 

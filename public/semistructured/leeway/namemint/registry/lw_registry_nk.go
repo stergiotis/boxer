@@ -15,28 +15,34 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-func NewNaturalKeyRegistry[C contract.ContractI](tagValue identifier.TagValue, estSize int, namingStyle naming.NamingStyleE, untaggedOffset identifier.UntaggedId, contr C) (inst *HumanReadableNaturalKeyRegistry[C], err error) {
+// NewNaturalKeyRegistry creates a registry minting ids under tagValue.
+//
+// estSize is a capacity hint only — an id is what its registration declares,
+// so nothing here moves when the hint changes.
+func NewNaturalKeyRegistry[C contract.ContractI](tagValue identifier.TagValue, estSize int, namingStyle naming.NamingStyleE, contr C) (inst *HumanReadableNaturalKeyRegistry[C], err error) {
 	inst = &HumanReadableNaturalKeyRegistry[C]{
-		tv:             tagValue,
-		tag:            tagValue.GetTag(),
-		untaggedOffset: untaggedOffset,
-		lookup:         containers.NewBinarySearchGrowingKVOrdered[naming.StylableName, RegisteredNaturalKey](estSize),
-		roots:          containers.NewBinarySearchGrowingKVOrdered[naming.StylableName, RegisteredNaturalKey](estSize),
-		namingStyle:    namingStyle,
-		contr:          contr,
-		memEnc:         naturalkey.NewEncoder(),
+		tv:          tagValue,
+		tag:         tagValue.GetTag(),
+		lookup:      containers.NewBinarySearchGrowingKVOrdered[naming.StylableName, RegisteredNaturalKey](estSize),
+		roots:       containers.NewBinarySearchGrowingKVOrdered[naming.StylableName, RegisteredNaturalKey](estSize),
+		byOrdinal:   containers.NewBinarySearchGrowingKVOrdered[identifier.UntaggedId, naming.StylableName](estSize),
+		namingStyle: namingStyle,
+		contr:       contr,
+		memEnc:      naturalkey.NewEncoder(),
 	}
 	return
 }
-func MustNewNaturalKeyRegistry[C contract.ContractI](tagValue identifier.TagValue, estSize int, namingStyle naming.NamingStyleE, untaggedOffset identifier.UntaggedId, contr C) (inst *HumanReadableNaturalKeyRegistry[C]) {
+
+// MustNewNaturalKeyRegistry is [NewNaturalKeyRegistry] for a package-level
+// declaration.
+func MustNewNaturalKeyRegistry[C contract.ContractI](tagValue identifier.TagValue, estSize int, namingStyle naming.NamingStyleE, contr C) (inst *HumanReadableNaturalKeyRegistry[C]) {
 	var err error
 	inst, err = NewNaturalKeyRegistry[C](tagValue,
 		estSize,
 		namingStyle,
-		untaggedOffset,
 		contr)
 	if err != nil {
-		log.Panic().Err(err).Msg("unable to create tag value registry")
+		log.Panic().Err(err).Msg("unable to create natural key registry")
 	}
 	return
 }
@@ -51,11 +57,24 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) IterateAllRoots() iter.Seq2[nami
 	return inst.roots.IteratePairs()
 }
 
-func (inst *HumanReadableNaturalKeyRegistry[C]) MustBegin(nk naming.StylableName) (r RegisteredNaturalKeyDml) {
+// MustBegin is [HumanReadableNaturalKeyRegistry.Begin] for a package-level
+// declaration, where a refusal is a build-time fact wearing a run-time coat.
+func (inst *HumanReadableNaturalKeyRegistry[C]) MustBegin(nk naming.StylableName, ordinal identifier.UntaggedId) (r RegisteredNaturalKeyDml) {
 	var err error
-	r, err = inst.Begin(nk)
+	r, err = inst.Begin(nk, ordinal)
 	if err != nil {
-		log.Panic().Err(err).Msg("unable to register natural key")
+		log.Panic().Err(err).Stringer("nk", nk).Uint64("ordinal", ordinal.Value()).Msg("unable to register natural key")
+	}
+	return
+}
+
+// MustBeginNext is [HumanReadableNaturalKeyRegistry.BeginNext] for a
+// package-level declaration.
+func (inst *HumanReadableNaturalKeyRegistry[C]) MustBeginNext(nk naming.StylableName) (r RegisteredNaturalKeyDml) {
+	var err error
+	r, err = inst.BeginNext(nk)
+	if err != nil {
+		log.Panic().Err(err).Stringer("nk", nk).Msg("unable to register natural key")
 	}
 	return
 }
@@ -77,13 +96,45 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) GetTagValue() identifier.TagValu
 	return inst.tv
 }
 
-func (inst *HumanReadableNaturalKeyRegistry[C]) Begin(nk naming.StylableName) (r RegisteredNaturalKeyDml, err error) {
+// BeginNext registers nk at the next free ordinal — the registration-order
+// regime, kept for registries whose contract allows it.
+//
+// A version-controlled vocabulary's contract does not: an id derived from how
+// many names came before it moves when a name is inserted, a var block is
+// reordered, or a file is renamed, and every such move silently re-points rows
+// already written (ADR-0183 D0). Ephemeral registries — tests, throwaway
+// fixtures — have no stored rows to re-point, which is the whole difference.
+func (inst *HumanReadableNaturalKeyRegistry[C]) BeginNext(nk naming.StylableName) (r RegisteredNaturalKeyDml, err error) {
+	err = inst.contr.ValidateImplicitOrdinal()
+	if err != nil {
+		err = eb.Build().Stringer("nk", nk).Errorf("unable to mint an ordinal from registration order: %w", err)
+		return
+	}
+	return inst.begin(nk, identifier.UntaggedId(inst.lookup.Len()), true)
+}
+
+// Begin registers nk at ordinal, the untagged id composed with the registry's
+// tag. The pair is the assignment: stated in source, reviewable in a diff, and
+// unmoved by anything that happens around it.
+//
+// Refusals are at init, where a linked test sees them: an ordinal another name
+// already holds, a name already registered from a different code location, or
+// an ordinal wider than the registry's tag leaves room for.
+func (inst *HumanReadableNaturalKeyRegistry[C]) Begin(nk naming.StylableName, ordinal identifier.UntaggedId) (r RegisteredNaturalKeyDml, err error) {
+	return inst.begin(nk, ordinal, false)
+}
+
+func (inst *HumanReadableNaturalKeyRegistry[C]) begin(nk naming.StylableName, ordinal identifier.UntaggedId, implicit bool) (r RegisteredNaturalKeyDml, err error) {
 	if nk.IsValid() {
 		nk = nk.Convert(inst.namingStyle)
 	}
 	err = inst.contr.ValidateNaturalKeyHumanReadable(inst.tv, nk)
 	if err != nil {
 		err = eb.Build().Stringer("nk", nk).Errorf("unable to register invalid human readable natural key: %w", err)
+		return
+	}
+	if maxId := inst.tag.GetMaxPossibleIdIncl(); ordinal > maxId {
+		err = eb.Build().Stringer("nk", nk).Uint64("ordinal", ordinal.Value()).Uint64("maxOrdinal", maxId.Value()).Uint32("tagValue", inst.tv.Value()).Errorf("ordinal does not fit below the registry's tag — the tag's width class holds ordinals up to %d", maxId.Value())
 		return
 	}
 	lu := inst.lookup
@@ -96,6 +147,10 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) Begin(nk naming.StylableName) (r
 			err = eb.Build().Str("origin1", w.origin).Str("origin2", origin).Stringer("nk", nk).Errorf("two different code locations register the same natural key value")
 			return
 		}
+		if !implicit && w.id.RemoveTag() != ordinal {
+			err = eb.Build().Stringer("nk", nk).Uint64("ordinal", ordinal.Value()).Uint64("registered", w.id.RemoveTag().Value()).Str("origin", origin).Errorf("the same registration states two different ordinals")
+			return
+		}
 		// Same-origin re-Begin: return the existing registration unchanged.
 		// Previously this fell through and minted a fresh id from the grown
 		// lu.Len(), making the natural-key -> id mapping unstable (review G-5).
@@ -104,8 +159,13 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) Begin(nk naming.StylableName) (r
 		}
 		return
 	}
+	if other, taken := inst.byOrdinal.Get(ordinal); taken {
+		err = eb.Build().Stringer("nk", nk).Stringer("heldBy", other).Uint64("ordinal", ordinal.Value()).Str("origin", origin).Errorf("ordinal %d is already held by %q — an ordinal names one membership for the lifetime of the data", ordinal.Value(), other)
+		return
+	}
+	inst.byOrdinal.UpsertSingle(ordinal, nk)
 	w = RegisteredNaturalKey{
-		id:                              inst.tag.ComposeId(inst.untaggedOffset + identifier.UntaggedId(lu.Len())),
+		id:                              inst.tag.ComposeId(ordinal),
 		origin:                          origin,
 		moduleInfo:                      vcs.ModuleInfo(),
 		naturalKey:                      nk,

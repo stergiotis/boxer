@@ -18,63 +18,63 @@ import (
 var (
 	// MembDialogApproved is true when the user accepted the file
 	// picker, false on cancel or broker-side error.
-	MembDialogApproved = KeelsonHrNkRegistry.MustBegin("dialogApproved").
+	MembDialogApproved = KeelsonHrNkRegistry.MustBegin("dialogApproved", 21).
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembDialogHandleSubject is the NATS subject prefix
 	// (fs.handle.{uuid}) the broker hands back on approval — the
 	// caller's caps already cover {prefix}.> by the time the reply
 	// lands.
-	MembDialogHandleSubject = KeelsonHrNkRegistry.MustBegin("dialogHandleSubject").
+	MembDialogHandleSubject = KeelsonHrNkRegistry.MustBegin("dialogHandleSubject", 22).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembWatchPollFallback forces the poller backend regardless of
 	// the underlying filesystem (mirrors WatchRequest.PollFallback).
-	MembWatchPollFallback = KeelsonHrNkRegistry.MustBegin("watchPollFallback").
+	MembWatchPollFallback = KeelsonHrNkRegistry.MustBegin("watchPollFallback", 23).
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembWatchPollIntervalMs is the poller tick interval (zero
 	// selects default 500ms; values below 100ms clamp).
-	MembWatchPollIntervalMs = KeelsonHrNkRegistry.MustBegin("watchPollIntervalMs").
+	MembWatchPollIntervalMs = KeelsonHrNkRegistry.MustBegin("watchPollIntervalMs", 24).
 				MustAddRestriction("i32Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembWatchRecursive enables subtree watching from the handle's
 	// root path.
-	MembWatchRecursive = KeelsonHrNkRegistry.MustBegin("watchRecursive").
+	MembWatchRecursive = KeelsonHrNkRegistry.MustBegin("watchRecursive", 25).
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembWatchStarted is true when the watch actually started; false
 	// on broker-side error (with `reason` populated) or when the
 	// handle already has an active watch.
-	MembWatchStarted = KeelsonHrNkRegistry.MustBegin("watchStarted").
+	MembWatchStarted = KeelsonHrNkRegistry.MustBegin("watchStarted", 26).
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembWatchEventSubject is the NATS subject events publish to
 	// (fs.handle.{uuid}.event).
-	MembWatchEventSubject = KeelsonHrNkRegistry.MustBegin("watchEventSubject").
+	MembWatchEventSubject = KeelsonHrNkRegistry.MustBegin("watchEventSubject", 27).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembWatchBackend names the watcher implementation selected at
 	// pickBackend ("inotify", "poller"). Symbol section because the
 	// enumeration is small + stable.
-	MembWatchBackend = KeelsonHrNkRegistry.MustBegin("watchBackend").
+	MembWatchBackend = KeelsonHrNkRegistry.MustBegin("watchBackend", 28).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembWatchEventKind is fsbroker.WatchEventKindE rendered as its
 	// canonical String() ("create" / "delete" / "modify" / "attrib"
 	// / "renameFrom" / "renameTo" / "overflow" / "closed" /
 	// "unspecified"). Symbol for the LowCardinality dictionary.
-	MembWatchEventKind = KeelsonHrNkRegistry.MustBegin("watchEventKind").
+	MembWatchEventKind = KeelsonHrNkRegistry.MustBegin("watchEventKind", 29).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembWatchEventName is the basename (single-level mode) or
 	// forward-slash relative path (recursive mode) of the affected
 	// entry. Empty when the event addresses the watched root.
-	MembWatchEventName = KeelsonHrNkRegistry.MustBegin("watchEventName").
+	MembWatchEventName = KeelsonHrNkRegistry.MustBegin("watchEventName", 30).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembWatchEventCookie pairs inotify RenameFrom/RenameTo events;
 	// zero on poller-backed watches.
-	MembWatchEventCookie = KeelsonHrNkRegistry.MustBegin("watchEventCookie").
+	MembWatchEventCookie = KeelsonHrNkRegistry.MustBegin("watchEventCookie", 31).
 				MustAddRestriction("u32Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

@@ -7,8 +7,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 // memberships (ADR-0171 §SD4) publishes the membership vocabulary this

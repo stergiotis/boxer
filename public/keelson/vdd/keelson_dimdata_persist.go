@@ -18,7 +18,7 @@ var (
 	// MembPersistFound is true when a Get located the requested key.
 	// Meaningless on Set / Delete replies (the producer leaves it
 	// false and consumers ignore it).
-	MembPersistFound = KeelsonHrNkRegistry.MustBegin("persistFound").
+	MembPersistFound = KeelsonHrNkRegistry.MustBegin("persistFound", 112).
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembPersistValue carries the opaque application-defined bytes
@@ -26,6 +26,6 @@ var (
 	// when the operation was not a Get. Uses the codec's scalar-blob
 	// grammar (the same path TaskDone.Result lit up in the previous
 	// migration).
-	MembPersistValue = KeelsonHrNkRegistry.MustBegin("persistValue").
+	MembPersistValue = KeelsonHrNkRegistry.MustBegin("persistValue", 113).
 				MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

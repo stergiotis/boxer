@@ -14,10 +14,10 @@ import (
 // taskEstimatedMs=0 → no estimate). Keeps the wire compact for the
 // common case where every field has a real value.
 var (
-	MembTaskKind = KeelsonHrNkRegistry.MustBegin("taskKind").
+	MembTaskKind = KeelsonHrNkRegistry.MustBegin("taskKind", 122).
 			MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembTaskCancellableB = KeelsonHrNkRegistry.MustBegin("taskCancellableB").
+	MembTaskCancellableB = KeelsonHrNkRegistry.MustBegin("taskCancellableB", 123).
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembTaskEstimatedMs = KeelsonHrNkRegistry.MustBegin("taskEstimatedMs").
+	MembTaskEstimatedMs = KeelsonHrNkRegistry.MustBegin("taskEstimatedMs", 124).
 				MustAddRestriction("i64Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

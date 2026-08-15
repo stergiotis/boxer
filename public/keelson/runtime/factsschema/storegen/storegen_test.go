@@ -10,9 +10,9 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,10 +44,13 @@ func scratchRegistry(t *testing.T, names ...string) (*registry.HumanReadableNatu
 		identifier.TagValue(64), naming.LowerSpinalCase, 4, c)
 	base := tv.MustBegin("storegenProbeMembers", 0).End()
 	nk := registry.MustNewNaturalKeyRegistry(
-		base.GetTagValue(), 8, naming.LowerSpinalCase, identifier.UntaggedId(0), c)
+		base.GetTagValue(), 8, naming.LowerSpinalCase, c)
 	keys := make([]registry.RegisteredNaturalKey, 0, len(names))
-	for _, n := range names {
-		keys = append(keys, nk.MustBegin(naming.StylableName(n)).End())
+	for i, n := range names {
+		// A vcs-managed registry states its ordinals; here the index is the
+		// declaration, which is also what makes this fixture's ids stable
+		// across edits to the names above it.
+		keys = append(keys, nk.MustBegin(naming.StylableName(n), identifier.UntaggedId(i)).End())
 	}
 	return nk, keys
 }

@@ -17,14 +17,14 @@ import (
 // option.Option[T] tagged-section path, keeping the wire compact for the
 // common case where every field carries a real value.
 var (
-	MembProgressCurrent = KeelsonHrNkRegistry.MustBegin("progressCurrent").
+	MembProgressCurrent = KeelsonHrNkRegistry.MustBegin("progressCurrent", 126).
 				MustAddRestriction("u64Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembProgressTotal = KeelsonHrNkRegistry.MustBegin("progressTotal").
+	MembProgressTotal = KeelsonHrNkRegistry.MustBegin("progressTotal", 127).
 				MustAddRestriction("u64Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembProgressUnit = KeelsonHrNkRegistry.MustBegin("progressUnit").
+	MembProgressUnit = KeelsonHrNkRegistry.MustBegin("progressUnit", 128).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembProgressThroughputPerSec = KeelsonHrNkRegistry.MustBegin("progressThroughputPerSec").
+	MembProgressThroughputPerSec = KeelsonHrNkRegistry.MustBegin("progressThroughputPerSec", 129).
 					MustAddRestriction("f64Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembProgressEtaMs = KeelsonHrNkRegistry.MustBegin("progressEtaMs").
+	MembProgressEtaMs = KeelsonHrNkRegistry.MustBegin("progressEtaMs", 130).
 				MustAddRestriction("i64Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

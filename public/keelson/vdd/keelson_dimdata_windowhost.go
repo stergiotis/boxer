@@ -12,26 +12,26 @@ import (
 // the same identifier the app-lifecycle rows carry), reason (the reply's
 // error text, empty on success).
 //
-// Registration-order note: membership ids are assigned sequentially at
-// init, and package files initialise in lexical file-name order. This
-// file deliberately sorts after every other keelson_dimdata_*.go file so
-// its entries append to the id space instead of renumbering existing
-// entries (which on-disk facts data depends on). Future launch-surface
-// entries (adopting apps' config columns) belong at the end of this
-// file; a new dimdata file must sort after this one.
+// Ordinal note: each registration below states its own ordinal, so this
+// file's position among the keelson_dimdata_*.go files no longer decides
+// anything. It once did — ids were assigned sequentially at init, and
+// package files initialise in lexical file-name order, so renaming a file
+// re-pointed ids that on-disk facts data carries (ADR-0183 D0). Future
+// launch-surface entries take the next unused ordinals; where they are
+// declared is free.
 var (
 	// MembLaunchConfigKind is the vocabulary kind name the launch
 	// config bytes claim (e.g. "playLaunch"). Symbol section: the set
 	// of launch-config kinds is small and closed by construction
 	// (ADR-0135 §SD2 — a kind absent from the vocabulary has no codec).
-	MembLaunchConfigKind = KeelsonHrNkRegistry.MustBegin("launchConfigKind").
+	MembLaunchConfigKind = KeelsonHrNkRegistry.MustBegin("launchConfigKind", 131).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembLaunchConfig is the launch config payload: the config DTO's
 	// own facts-CBOR bytes, opaque at this level. Empty means "open
 	// plainly". The host caps the size (64 KiB) at the boundary before
 	// any decode.
-	MembLaunchConfig = KeelsonHrNkRegistry.MustBegin("launchConfig").
+	MembLaunchConfig = KeelsonHrNkRegistry.MustBegin("launchConfig", 132).
 				MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )
 
@@ -41,25 +41,25 @@ var (
 // closed set), bool for the two flags.
 var (
 	// MembPlayLaunchSql is the initial editor buffer.
-	MembPlayLaunchSql = KeelsonHrNkRegistry.MustBegin("playLaunchSql").
+	MembPlayLaunchSql = KeelsonHrNkRegistry.MustBegin("playLaunchSql", 133).
 				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembPlayLaunchAutoRun triggers a Run of the seeded buffer on mount.
-	MembPlayLaunchAutoRun = KeelsonHrNkRegistry.MustBegin("playLaunchAutoRun").
+	MembPlayLaunchAutoRun = KeelsonHrNkRegistry.MustBegin("playLaunchAutoRun", 134).
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembPlayLaunchLive enables live re-run on the main lane.
-	MembPlayLaunchLive = KeelsonHrNkRegistry.MustBegin("playLaunchLive").
+	MembPlayLaunchLive = KeelsonHrNkRegistry.MustBegin("playLaunchLive", 135).
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembPlayLaunchBandsSql seeds the Timeline panel's bands editor.
 	// Empty means "leave the persisted/default bands untouched".
-	MembPlayLaunchBandsSql = KeelsonHrNkRegistry.MustBegin("playLaunchBandsSql").
+	MembPlayLaunchBandsSql = KeelsonHrNkRegistry.MustBegin("playLaunchBandsSql", 136).
 				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembPlayLaunchTab selects the initially focused body tab by id.
 	// Empty means the default tab.
-	MembPlayLaunchTab = KeelsonHrNkRegistry.MustBegin("playLaunchTab").
+	MembPlayLaunchTab = KeelsonHrNkRegistry.MustBegin("playLaunchTab", 137).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembPlayLaunchEndpoint names the query target the opened window binds
@@ -69,7 +69,7 @@ var (
 	// the target where ad-hoc `keelson('<handle>')` datasets resolve
 	// (ADR-0134). Symbol section: the set of endpoints is small and closed.
 	// Appended after MembPlayLaunchTab per the id-ordering note above.
-	MembPlayLaunchEndpoint = KeelsonHrNkRegistry.MustBegin("playLaunchEndpoint").
+	MembPlayLaunchEndpoint = KeelsonHrNkRegistry.MustBegin("playLaunchEndpoint", 138).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )
 
@@ -84,7 +84,7 @@ var (
 var (
 	// MembAppletCreateSql is the buffer the creator composes into an applet
 	// document (the SQL fence of the saved doc).
-	MembAppletCreateSql = KeelsonHrNkRegistry.MustBegin("appletCreateSql").
+	MembAppletCreateSql = KeelsonHrNkRegistry.MustBegin("appletCreateSql", 139).
 				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembAppletCreateEndpoint names the query target the buffer was authored
@@ -93,6 +93,6 @@ var (
 	// ClickHouse; "introspection" is the in-process keelson `/query` endpoint
 	// where ad-hoc `keelson('<handle>')` datasets resolve (ADR-0094 §SD6 /
 	// ADR-0134). Symbol section: the set of endpoints is small and closed.
-	MembAppletCreateEndpoint = KeelsonHrNkRegistry.MustBegin("appletCreateEndpoint").
+	MembAppletCreateEndpoint = KeelsonHrNkRegistry.MustBegin("appletCreateEndpoint", 140).
 					MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

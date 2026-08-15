@@ -11,8 +11,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmvocab"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 func TestAllMembsHaveNonZeroIds(t *testing.T) {
@@ -123,12 +123,11 @@ func TestStoregenSnapshotCoversEveryMembership(t *testing.T) {
 
 // The whole name-to-id table, written down.
 //
-// A membership id is its registration ordinal, so declaring a new membership
-// anywhere but at the end renumbers every one after it. That change compiles,
-// vets, writes and reads — it just makes rows already in `boxer.facts` mean
-// something else, because the id is all a row carries. Pinning only the ends
-// catches a prepend and an append but not the insertion in the middle, which is
-// the one an author actually makes when they put a new field "with the others".
+// A membership id is the ordinal its registration states, and the id is all a
+// row carries — so editing an ordinal already listed here makes rows already
+// in `boxer.facts` mean something else. The registry refuses a repeated
+// ordinal at init; this table is what catches an ordinal edited in place
+// (ADR-0183 D0/D1).
 //
 // Updating this table is therefore a deliberate act: appending a line is
 // ordinary, and changing a line that is already here means every store holding

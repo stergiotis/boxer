@@ -11,32 +11,32 @@ import (
 // are easy to spot and retire once the generator's first real
 // production fact kind lands.
 var (
-	MembM1Source = KeelsonHrNkRegistry.MustBegin("m1Source").
+	MembM1Source = KeelsonHrNkRegistry.MustBegin("m1Source", 98).
 			MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembM1Severity = KeelsonHrNkRegistry.MustBegin("m1Severity").
+	MembM1Severity = KeelsonHrNkRegistry.MustBegin("m1Severity", 99).
 			MustAddRestriction("u8Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembM1MajorVer = KeelsonHrNkRegistry.MustBegin("m1MajorVer").
+	MembM1MajorVer = KeelsonHrNkRegistry.MustBegin("m1MajorVer", 100).
 			MustAddRestriction("u16Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembM1Sequence = KeelsonHrNkRegistry.MustBegin("m1Sequence").
+	MembM1Sequence = KeelsonHrNkRegistry.MustBegin("m1Sequence", 101).
 			MustAddRestriction("u32Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembM1LatencyNanos = KeelsonHrNkRegistry.MustBegin("m1LatencyNanos").
+	MembM1LatencyNanos = KeelsonHrNkRegistry.MustBegin("m1LatencyNanos", 102).
 				MustAddRestriction("u64Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembM1CpuPct = KeelsonHrNkRegistry.MustBegin("m1CpuPct").
+	MembM1CpuPct = KeelsonHrNkRegistry.MustBegin("m1CpuPct", 103).
 			MustAddRestriction("f32Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembM1LoadAvg1 = KeelsonHrNkRegistry.MustBegin("m1LoadAvg1").
+	MembM1LoadAvg1 = KeelsonHrNkRegistry.MustBegin("m1LoadAvg1", 104).
 			MustAddRestriction("f64Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembM1Healthy = KeelsonHrNkRegistry.MustBegin("m1Healthy").
+	MembM1Healthy = KeelsonHrNkRegistry.MustBegin("m1Healthy", 105).
 			MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembM1PeerV4 = KeelsonHrNkRegistry.MustBegin("m1PeerV4").
+	MembM1PeerV4 = KeelsonHrNkRegistry.MustBegin("m1PeerV4", 106).
 			MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembM1PeerV6 = KeelsonHrNkRegistry.MustBegin("m1PeerV6").
+	MembM1PeerV6 = KeelsonHrNkRegistry.MustBegin("m1PeerV6", 107).
 			MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembM1LastSuccess = KeelsonHrNkRegistry.MustBegin("m1LastSuccess").
+	MembM1LastSuccess = KeelsonHrNkRegistry.MustBegin("m1LastSuccess", 108).
 				MustAddRestriction("timeArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
-	MembM1OperatorName = KeelsonHrNkRegistry.MustBegin("m1OperatorName").
+	MembM1OperatorName = KeelsonHrNkRegistry.MustBegin("m1OperatorName", 109).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
-	MembM1Tags = KeelsonHrNkRegistry.MustBegin("m1Tags").
+	MembM1Tags = KeelsonHrNkRegistry.MustBegin("m1Tags", 110).
 			MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembM1CapBits = KeelsonHrNkRegistry.MustBegin("m1CapBits").
+	MembM1CapBits = KeelsonHrNkRegistry.MustBegin("m1CapBits", 111).
 			MustAddRestriction("u32Array", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
 )

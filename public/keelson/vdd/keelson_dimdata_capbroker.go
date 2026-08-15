@@ -20,20 +20,20 @@ var (
 	// MembCapFilterPattern is the NATS-style subject pattern from
 	// app.SubjectFilter.Pattern (e.g. "task.*.cancel"). String section
 	// because patterns are open-cardinality.
-	MembCapFilterPattern = KeelsonHrNkRegistry.MustBegin("capFilterPattern").
+	MembCapFilterPattern = KeelsonHrNkRegistry.MustBegin("capFilterPattern", 8).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembCapDirection is app.CapDirectionE rendered as its canonical
 	// String() ("pub" / "sub" / "pub+sub" / "unspecified"). Symbol
 	// section so the wire stays self-describing and the on-disk
 	// column is a LowCardinality dictionary.
-	MembCapDirection = KeelsonHrNkRegistry.MustBegin("capDirection").
+	MembCapDirection = KeelsonHrNkRegistry.MustBegin("capDirection", 9).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembCapFilterSticky mirrors app.SubjectFilter.Sticky — whether
 	// the grant survives an explicit revoke until a future
 	// supersession arrives.
-	MembCapFilterSticky = KeelsonHrNkRegistry.MustBegin("capFilterSticky").
+	MembCapFilterSticky = KeelsonHrNkRegistry.MustBegin("capFilterSticky", 10).
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembGrantApproved is the policy decision in the reply. False
@@ -42,12 +42,12 @@ var (
 	// semantic is broker-decision-specific; a future RPC reply that
 	// happens to carry an approved/denied bool can introduce its own
 	// term then.
-	MembGrantApproved = KeelsonHrNkRegistry.MustBegin("grantApproved").
+	MembGrantApproved = KeelsonHrNkRegistry.MustBegin("grantApproved", 11).
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembGrantId is the broker-local identifier the reply hands back
 	// to the caller on approval (currently a uint64-as-string;
 	// upstream readers don't parse it). Empty string on denial.
-	MembGrantId = KeelsonHrNkRegistry.MustBegin("grantId").
+	MembGrantId = KeelsonHrNkRegistry.MustBegin("grantId", 12).
 			MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

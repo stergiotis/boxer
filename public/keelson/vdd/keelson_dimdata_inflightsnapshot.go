@@ -28,26 +28,26 @@ import (
 // membership can't carry two cardinality declarations, so the
 // inflight surface gets its own vocab.
 var (
-	MembInflightTaskId = KeelsonHrNkRegistry.MustBegin("inflightTaskId").
+	MembInflightTaskId = KeelsonHrNkRegistry.MustBegin("inflightTaskId", 32).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembInflightTaskKind = KeelsonHrNkRegistry.MustBegin("inflightTaskKind").
+	MembInflightTaskKind = KeelsonHrNkRegistry.MustBegin("inflightTaskKind", 33).
 				MustAddRestriction("symbolArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembInflightTitle = KeelsonHrNkRegistry.MustBegin("inflightTitle").
+	MembInflightTitle = KeelsonHrNkRegistry.MustBegin("inflightTitle", 34).
 				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembInflightAppId = KeelsonHrNkRegistry.MustBegin("inflightAppId").
+	MembInflightAppId = KeelsonHrNkRegistry.MustBegin("inflightAppId", 35).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembInflightState = KeelsonHrNkRegistry.MustBegin("inflightState").
+	MembInflightState = KeelsonHrNkRegistry.MustBegin("inflightState", 36).
 				MustAddRestriction("symbolArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembInflightCreatedAtMs = KeelsonHrNkRegistry.MustBegin("inflightCreatedAtMs").
+	MembInflightCreatedAtMs = KeelsonHrNkRegistry.MustBegin("inflightCreatedAtMs", 37).
 				MustAddRestriction("i64Array", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembInflightLastEmitMs = KeelsonHrNkRegistry.MustBegin("inflightLastEmitMs").
+	MembInflightLastEmitMs = KeelsonHrNkRegistry.MustBegin("inflightLastEmitMs", 38).
 				MustAddRestriction("i64Array", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembInflightCurrent = KeelsonHrNkRegistry.MustBegin("inflightCurrent").
+	MembInflightCurrent = KeelsonHrNkRegistry.MustBegin("inflightCurrent", 39).
 				MustAddRestriction("u64Array", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembInflightTotal = KeelsonHrNkRegistry.MustBegin("inflightTotal").
+	MembInflightTotal = KeelsonHrNkRegistry.MustBegin("inflightTotal", 40).
 				MustAddRestriction("u64Array", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembInflightUnit = KeelsonHrNkRegistry.MustBegin("inflightUnit").
+	MembInflightUnit = KeelsonHrNkRegistry.MustBegin("inflightUnit", 41).
 				MustAddRestriction("symbolArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
-	MembInflightEtaMs = KeelsonHrNkRegistry.MustBegin("inflightEtaMs").
+	MembInflightEtaMs = KeelsonHrNkRegistry.MustBegin("inflightEtaMs", 42).
 				MustAddRestriction("i64Array", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
 )

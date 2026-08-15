@@ -2,9 +2,9 @@ package main
 
 import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 // The trial's leeway vocabulary, deliberately tiny.
@@ -43,22 +43,22 @@ var TagValueRegistry = registry.MustNewTagValueRegistry[*contract.VcsManagedCont
 var MembersTagValue = TagValueRegistry.MustBegin("jsonbenchMembers", 0).End()
 
 var NkRegistry = registry.MustNewNaturalKeyRegistry[*contract.VcsManagedContract](
-	MembersTagValue.GetTagValue(), 8, NamingStyle, identifier.UntaggedId(0), Contract,
+	MembersTagValue.GetTagValue(), 8, NamingStyle, Contract,
 )
 
 var (
 	// MembKindBlueskyEvent tags the row as one Jetstream event.
-	MembKindBlueskyEvent = NkRegistry.MustBegin("blueskyKindEvent").End()
+	MembKindBlueskyEvent = NkRegistry.MustBegin("blueskyKindEvent", 0).End()
 
 	// MembJsonPath carries the low-cardinality half of a shredded value's
 	// address — the JSON path with array positions elided to "_", e.g.
 	// "/commit/record/langs/_". Rides as a MixedLowCardRef parameter.
-	MembJsonPath = NkRegistry.MustBegin("blueskyJsonPath").End()
+	MembJsonPath = NkRegistry.MustBegin("blueskyJsonPath", 1).End()
 
 	// MembJsonParams carries the high-cardinality half — the array indices
 	// that "_" stands in for, comma-joined in path order. Only attached when
 	// the path actually contains a "_".
-	MembJsonParams = NkRegistry.MustBegin("blueskyJsonParams").End()
+	MembJsonParams = NkRegistry.MustBegin("blueskyJsonParams", 2).End()
 )
 
 // The trial's own results, as facts. The protocol asks for this explicitly
@@ -69,17 +69,17 @@ var (
 // per (run, arm, query, try) for a timing, one per (run, arm, metric) for a
 // size. Both carry run and arm so a page can pivot on either.
 var (
-	MembKindBenchTiming = NkRegistry.MustBegin("jsonbenchKindTiming").End()
-	MembKindBenchSize   = NkRegistry.MustBegin("jsonbenchKindSize").End()
+	MembKindBenchTiming = NkRegistry.MustBegin("jsonbenchKindTiming", 3).End()
+	MembKindBenchSize   = NkRegistry.MustBegin("jsonbenchKindSize", 4).End()
 
-	MembBenchRun   = NkRegistry.MustBegin("jsonbenchRun").End()
-	MembBenchArm   = NkRegistry.MustBegin("jsonbenchArm").End()
-	MembBenchQuery = NkRegistry.MustBegin("jsonbenchQuery").End()
-	MembBenchTry   = NkRegistry.MustBegin("jsonbenchTry").End()
+	MembBenchRun   = NkRegistry.MustBegin("jsonbenchRun", 5).End()
+	MembBenchArm   = NkRegistry.MustBegin("jsonbenchArm", 6).End()
+	MembBenchQuery = NkRegistry.MustBegin("jsonbenchQuery", 7).End()
+	MembBenchTry   = NkRegistry.MustBegin("jsonbenchTry", 8).End()
 
-	MembBenchSeconds     = NkRegistry.MustBegin("jsonbenchSeconds").End()
-	MembBenchMemoryBytes = NkRegistry.MustBegin("jsonbenchMemoryBytes").End()
+	MembBenchSeconds     = NkRegistry.MustBegin("jsonbenchSeconds", 9).End()
+	MembBenchMemoryBytes = NkRegistry.MustBegin("jsonbenchMemoryBytes", 10).End()
 
-	MembBenchMetric      = NkRegistry.MustBegin("jsonbenchMetric").End()
-	MembBenchMetricValue = NkRegistry.MustBegin("jsonbenchMetricValue").End()
+	MembBenchMetric      = NkRegistry.MustBegin("jsonbenchMetric", 11).End()
+	MembBenchMetricValue = NkRegistry.MustBegin("jsonbenchMetricValue", 12).End()
 )

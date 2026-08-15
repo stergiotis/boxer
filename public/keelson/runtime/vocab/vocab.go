@@ -14,9 +14,9 @@ package vocab
 
 import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 // Contract is the runtime's leeway contract — vcs-managed convention (even
@@ -43,7 +43,7 @@ var MembersTagValue = TagValueRegistry.MustBegin("runtimeMembers", 0).End()
 // NkRegistry is the natural-key registry for runtime memberships. All Memb*
 // constants below live in this registry.
 var NkRegistry = registry.MustNewNaturalKeyRegistry[*contract.VcsManagedContract](
-	MembersTagValue.GetTagValue(), 32, NamingStyle, identifier.UntaggedId(0), Contract,
+	MembersTagValue.GetTagValue(), 32, NamingStyle, Contract,
 )
 
 // Membership constants — vocabulary for boxer.facts rows per ADR-0026 §SD6.
@@ -51,55 +51,55 @@ var (
 	// Kinds (low-card-ref): the attribute value carries the kind label
 	// string (e.g. "grant") for readability; the membership id identifies
 	// which kind the row belongs to.
-	MembKindGrant = NkRegistry.MustBegin("runtimeKindGrant").End()
-	MembKindAudit = NkRegistry.MustBegin("runtimeKindAudit").End()
-	MembKindState = NkRegistry.MustBegin("runtimeKindState").End()
-	MembKindEvent = NkRegistry.MustBegin("runtimeKindEvent").End()
-	MembKindLog   = NkRegistry.MustBegin("runtimeKindLog").End()
+	MembKindGrant = NkRegistry.MustBegin("runtimeKindGrant", 0).End()
+	MembKindAudit = NkRegistry.MustBegin("runtimeKindAudit", 1).End()
+	MembKindState = NkRegistry.MustBegin("runtimeKindState", 2).End()
+	MembKindEvent = NkRegistry.MustBegin("runtimeKindEvent", 3).End()
+	MembKindLog   = NkRegistry.MustBegin("runtimeKindLog", 4).End()
 
 	// App identity (mixed-low-card-ref + high-card-parameter): LowCardRef
 	// is MembRuntimeApp; the HighCardParameter carries the AppIdT bytes.
-	MembRuntimeApp = NkRegistry.MustBegin("runtimeApp").End()
+	MembRuntimeApp = NkRegistry.MustBegin("runtimeApp", 5).End()
 
 	// Grant fields
-	MembGrantSubjectPattern = NkRegistry.MustBegin("runtimeSubjectFilterPattern").End()
-	MembGrantDirection      = NkRegistry.MustBegin("runtimeSubjectFilterDirection").End()
-	MembGrantReason         = NkRegistry.MustBegin("runtimeSubjectFilterReason").End()
-	MembGrantSticky         = NkRegistry.MustBegin("runtimeSubjectFilterSticky").End()
-	MembGrantedVia          = NkRegistry.MustBegin("runtimeSubjectFilterGrantedVia").End()
+	MembGrantSubjectPattern = NkRegistry.MustBegin("runtimeSubjectFilterPattern", 6).End()
+	MembGrantDirection      = NkRegistry.MustBegin("runtimeSubjectFilterDirection", 7).End()
+	MembGrantReason         = NkRegistry.MustBegin("runtimeSubjectFilterReason", 8).End()
+	MembGrantSticky         = NkRegistry.MustBegin("runtimeSubjectFilterSticky", 9).End()
+	MembGrantedVia          = NkRegistry.MustBegin("runtimeSubjectFilterGrantedVia", 10).End()
 
 	// Audit fields
-	MembAuditRequestSubject = NkRegistry.MustBegin("runtimeAuditRequestSubject").End()
-	MembAuditResult         = NkRegistry.MustBegin("runtimeAuditResult").End()
-	MembAuditLatencyMs      = NkRegistry.MustBegin("runtimeAuditLatencyMs").End()
-	MembAuditRequestSizeB   = NkRegistry.MustBegin("runtimeAuditRequestSizeB").End()
-	MembAuditResponseSizeB  = NkRegistry.MustBegin("runtimeAuditResponseSizeB").End()
+	MembAuditRequestSubject = NkRegistry.MustBegin("runtimeAuditRequestSubject", 11).End()
+	MembAuditResult         = NkRegistry.MustBegin("runtimeAuditResult", 12).End()
+	MembAuditLatencyMs      = NkRegistry.MustBegin("runtimeAuditLatencyMs", 13).End()
+	MembAuditRequestSizeB   = NkRegistry.MustBegin("runtimeAuditRequestSizeB", 14).End()
+	MembAuditResponseSizeB  = NkRegistry.MustBegin("runtimeAuditResponseSizeB", 15).End()
 
 	// Persist fields. The PersistKey membership is used both in the symbol
 	// section (the key string) and in the blob section (the value bytes).
 	// PersistTombstone is set on the bool section when a row marks a
 	// previously-persisted key as deleted; LatestState short-circuits
 	// found=false when it encounters this membership.
-	MembPersistKey       = NkRegistry.MustBegin("runtimePersistKey").End()
-	MembPersistTombstone = NkRegistry.MustBegin("runtimePersistTombstone").End()
+	MembPersistKey       = NkRegistry.MustBegin("runtimePersistKey", 16).End()
+	MembPersistTombstone = NkRegistry.MustBegin("runtimePersistTombstone", 17).End()
 
 	// Event fields
-	MembEventTopic = NkRegistry.MustBegin("runtimeEventTopic").End()
+	MembEventTopic = NkRegistry.MustBegin("runtimeEventTopic", 18).End()
 
 	// Runtime-run identity (kind + per-run fields). MembKindRuntimeRun
 	// tags a row that records one process boot — the runtime-started
 	// event. MembRuntimeRun is the mixed-low-card-ref + high-card-param
 	// membership carrying the run_id bytes; app-lifecycle rows tag
 	// themselves with this so a JOIN-by-run_id is a single column scan.
-	MembKindRuntimeRun  = NkRegistry.MustBegin("runtimeKindRuntimeRun").End()
-	MembRuntimeRun      = NkRegistry.MustBegin("runtimeRun").End()
-	MembRunHostname     = NkRegistry.MustBegin("runtimeRunHostname").End()
-	MembRunPid          = NkRegistry.MustBegin("runtimeRunPid").End()
-	MembRunGoVersion    = NkRegistry.MustBegin("runtimeRunGoVersion").End()
-	MembRunVcsRevision  = NkRegistry.MustBegin("runtimeRunVcsRevision").End()
-	MembRunVcsModified  = NkRegistry.MustBegin("runtimeRunVcsModified").End()
-	MembRunVcsBuildInfo = NkRegistry.MustBegin("runtimeRunVcsBuildInfo").End()
-	MembRunModulePath   = NkRegistry.MustBegin("runtimeRunModulePath").End()
+	MembKindRuntimeRun  = NkRegistry.MustBegin("runtimeKindRuntimeRun", 19).End()
+	MembRuntimeRun      = NkRegistry.MustBegin("runtimeRun", 20).End()
+	MembRunHostname     = NkRegistry.MustBegin("runtimeRunHostname", 21).End()
+	MembRunPid          = NkRegistry.MustBegin("runtimeRunPid", 22).End()
+	MembRunGoVersion    = NkRegistry.MustBegin("runtimeRunGoVersion", 23).End()
+	MembRunVcsRevision  = NkRegistry.MustBegin("runtimeRunVcsRevision", 24).End()
+	MembRunVcsModified  = NkRegistry.MustBegin("runtimeRunVcsModified", 25).End()
+	MembRunVcsBuildInfo = NkRegistry.MustBegin("runtimeRunVcsBuildInfo", 26).End()
+	MembRunModulePath   = NkRegistry.MustBegin("runtimeRunModulePath", 27).End()
 
 	// Heartbeat (kind only — the row carries no extra payload). A
 	// heartbeat row tagged MembKindRuntimeHeartbeat + MembRuntimeRun
@@ -107,7 +107,7 @@ var (
 	// alive. Readers compare the latest heartbeat ts to a crash-detection
 	// threshold; a runtime-start with no later heartbeats and no stopped
 	// app-lifecycle rows indicates a crashed process.
-	MembKindRuntimeHeartbeat = NkRegistry.MustBegin("runtimeKindRuntimeHeartbeat").End()
+	MembKindRuntimeHeartbeat = NkRegistry.MustBegin("runtimeKindRuntimeHeartbeat", 28).End()
 
 	// App-lifecycle (kind + per-event fields). MembKindAppLifecycle tags
 	// the row; MembLifecyclePhase carries "started" / "stopped" on the
@@ -116,10 +116,10 @@ var (
 	// "shutdown"); MembLifecycleTileKey carries the dock-host tile key
 	// on the u64 section so two tiles for the same app are
 	// distinguishable in the audit trail.
-	MembKindAppLifecycle    = NkRegistry.MustBegin("runtimeKindAppLifecycle").End()
-	MembLifecyclePhase      = NkRegistry.MustBegin("runtimeLifecyclePhase").End()
-	MembLifecycleStopReason = NkRegistry.MustBegin("runtimeLifecycleStopReason").End()
-	MembLifecycleTileKey    = NkRegistry.MustBegin("runtimeLifecycleTileKey").End()
+	MembKindAppLifecycle    = NkRegistry.MustBegin("runtimeKindAppLifecycle", 29).End()
+	MembLifecyclePhase      = NkRegistry.MustBegin("runtimeLifecyclePhase", 30).End()
+	MembLifecycleStopReason = NkRegistry.MustBegin("runtimeLifecycleStopReason", 31).End()
+	MembLifecycleTileKey    = NkRegistry.MustBegin("runtimeLifecycleTileKey", 32).End()
 
 	// Log fields — applied on rows tagged MembKindLog by logbridge / chstore.
 	// MembLogLevel / MembLogCaller / MembLogService are low-cardinality
@@ -130,13 +130,13 @@ var (
 	// as MembershipSpecMixedLowCardRefHighCardParameters with the field
 	// NAME as the high-card parameter and the value placed in the typed
 	// section that matches the field's CBOR-decoded runtime type.
-	MembLogLevel   = NkRegistry.MustBegin("runtimeLogLevel").End()
-	MembLogMessage = NkRegistry.MustBegin("runtimeLogMessage").End()
-	MembLogCaller  = NkRegistry.MustBegin("runtimeLogCaller").End()
-	MembLogError   = NkRegistry.MustBegin("runtimeLogError").End()
-	MembLogStack   = NkRegistry.MustBegin("runtimeLogStack").End()
-	MembLogService = NkRegistry.MustBegin("runtimeLogService").End()
-	MembLogField   = NkRegistry.MustBegin("runtimeLogField").End()
+	MembLogLevel   = NkRegistry.MustBegin("runtimeLogLevel", 33).End()
+	MembLogMessage = NkRegistry.MustBegin("runtimeLogMessage", 34).End()
+	MembLogCaller  = NkRegistry.MustBegin("runtimeLogCaller", 35).End()
+	MembLogError   = NkRegistry.MustBegin("runtimeLogError", 36).End()
+	MembLogStack   = NkRegistry.MustBegin("runtimeLogStack", 37).End()
+	MembLogService = NkRegistry.MustBegin("runtimeLogService", 38).End()
+	MembLogField   = NkRegistry.MustBegin("runtimeLogField", 39).End()
 
 	// Query-run fields (ADR-0115 S1) — applied on rows tagged
 	// MembKindQueryRun by the queryrunsd capture pipeline
@@ -157,27 +157,27 @@ var (
 	// MembershipSpecMixedLowCardRefHighCardParameters with the event NAME
 	// as the high-card parameter and the count on the u64 section — the
 	// MembLogField pattern.
-	MembKindQueryRun            = NkRegistry.MustBegin("runtimeKindQueryRun").End()
-	MembQueryRunEventType       = NkRegistry.MustBegin("runtimeQueryRunEventType").End()
-	MembQueryRunQueryKind       = NkRegistry.MustBegin("runtimeQueryRunQueryKind").End()
-	MembQueryRunLane            = NkRegistry.MustBegin("runtimeQueryRunLane").End()
-	MembQueryRunDurationMs      = NkRegistry.MustBegin("runtimeQueryRunDurationMs").End()
-	MembQueryRunReadRows        = NkRegistry.MustBegin("runtimeQueryRunReadRows").End()
-	MembQueryRunReadBytes       = NkRegistry.MustBegin("runtimeQueryRunReadBytes").End()
-	MembQueryRunWrittenRows     = NkRegistry.MustBegin("runtimeQueryRunWrittenRows").End()
-	MembQueryRunWrittenBytes    = NkRegistry.MustBegin("runtimeQueryRunWrittenBytes").End()
-	MembQueryRunResultRows      = NkRegistry.MustBegin("runtimeQueryRunResultRows").End()
-	MembQueryRunResultBytes     = NkRegistry.MustBegin("runtimeQueryRunResultBytes").End()
-	MembQueryRunMemoryPeakBytes = NkRegistry.MustBegin("runtimeQueryRunMemoryPeakBytes").End()
-	MembQueryRunNormalizedHash  = NkRegistry.MustBegin("runtimeQueryRunNormalizedHash").End()
-	MembQueryRunExceptionCode   = NkRegistry.MustBegin("runtimeQueryRunExceptionCode").End()
-	MembQueryRunExceptionText   = NkRegistry.MustBegin("runtimeQueryRunExceptionText").End()
-	MembQueryRunQueryText       = NkRegistry.MustBegin("runtimeQueryRunQueryText").End()
-	MembQueryRunAuthoredFp      = NkRegistry.MustBegin("runtimeQueryRunAuthoredFp").End()
-	MembQueryRunSentFp          = NkRegistry.MustBegin("runtimeQueryRunSentFp").End()
-	MembQueryRunChainFp         = NkRegistry.MustBegin("runtimeQueryRunChainFp").End()
-	MembQueryRunEnvFp           = NkRegistry.MustBegin("runtimeQueryRunEnvFp").End()
-	MembQueryRunProfileEvent    = NkRegistry.MustBegin("runtimeQueryRunProfileEvent").End()
+	MembKindQueryRun            = NkRegistry.MustBegin("runtimeKindQueryRun", 40).End()
+	MembQueryRunEventType       = NkRegistry.MustBegin("runtimeQueryRunEventType", 41).End()
+	MembQueryRunQueryKind       = NkRegistry.MustBegin("runtimeQueryRunQueryKind", 42).End()
+	MembQueryRunLane            = NkRegistry.MustBegin("runtimeQueryRunLane", 43).End()
+	MembQueryRunDurationMs      = NkRegistry.MustBegin("runtimeQueryRunDurationMs", 44).End()
+	MembQueryRunReadRows        = NkRegistry.MustBegin("runtimeQueryRunReadRows", 45).End()
+	MembQueryRunReadBytes       = NkRegistry.MustBegin("runtimeQueryRunReadBytes", 46).End()
+	MembQueryRunWrittenRows     = NkRegistry.MustBegin("runtimeQueryRunWrittenRows", 47).End()
+	MembQueryRunWrittenBytes    = NkRegistry.MustBegin("runtimeQueryRunWrittenBytes", 48).End()
+	MembQueryRunResultRows      = NkRegistry.MustBegin("runtimeQueryRunResultRows", 49).End()
+	MembQueryRunResultBytes     = NkRegistry.MustBegin("runtimeQueryRunResultBytes", 50).End()
+	MembQueryRunMemoryPeakBytes = NkRegistry.MustBegin("runtimeQueryRunMemoryPeakBytes", 51).End()
+	MembQueryRunNormalizedHash  = NkRegistry.MustBegin("runtimeQueryRunNormalizedHash", 52).End()
+	MembQueryRunExceptionCode   = NkRegistry.MustBegin("runtimeQueryRunExceptionCode", 53).End()
+	MembQueryRunExceptionText   = NkRegistry.MustBegin("runtimeQueryRunExceptionText", 54).End()
+	MembQueryRunQueryText       = NkRegistry.MustBegin("runtimeQueryRunQueryText", 55).End()
+	MembQueryRunAuthoredFp      = NkRegistry.MustBegin("runtimeQueryRunAuthoredFp", 56).End()
+	MembQueryRunSentFp          = NkRegistry.MustBegin("runtimeQueryRunSentFp", 57).End()
+	MembQueryRunChainFp         = NkRegistry.MustBegin("runtimeQueryRunChainFp", 58).End()
+	MembQueryRunEnvFp           = NkRegistry.MustBegin("runtimeQueryRunEnvFp", 59).End()
+	MembQueryRunProfileEvent    = NkRegistry.MustBegin("runtimeQueryRunProfileEvent", 60).End()
 
 	// App-launch (kind + per-request fields), ADR-0135 §SD6 — one row per
 	// accepted `windowhost.open` request, written beside the app-lifecycle
@@ -190,10 +190,10 @@ var (
 	// MembLaunchConfigKind carries the config's vocabulary kind name on
 	// the symbol section; MembLaunchConfig the raw facts-CBOR config
 	// bytes on the blob section (bounded by the host's 64 KiB cap).
-	MembKindLaunch       = NkRegistry.MustBegin("runtimeKindLaunch").End()
-	MembLaunchCaller     = NkRegistry.MustBegin("runtimeLaunchCaller").End()
-	MembLaunchConfigKind = NkRegistry.MustBegin("runtimeLaunchConfigKind").End()
-	MembLaunchConfig     = NkRegistry.MustBegin("runtimeLaunchConfig").End()
+	MembKindLaunch       = NkRegistry.MustBegin("runtimeKindLaunch", 61).End()
+	MembLaunchCaller     = NkRegistry.MustBegin("runtimeLaunchCaller", 62).End()
+	MembLaunchConfigKind = NkRegistry.MustBegin("runtimeLaunchConfigKind", 63).End()
+	MembLaunchConfig     = NkRegistry.MustBegin("runtimeLaunchConfig", 64).End()
 
 	// App-workingset (kind + name), ADR-0148 §SD6 — one row per saved
 	// workingset: the launch config that would reproduce the closing
@@ -210,12 +210,12 @@ var (
 	// kind tag, and the caller-chosen set name on the symbol section (v1
 	// wires exactly one name, "default" — §SD3).
 	//
-	// Appended at the end of the block deliberately: membership ids are
-	// assigned in declaration order and persisted facts rows carry those
-	// ids, so new entries append instead of renumbering existing ones (the
-	// ADR-0135 ordering constraint).
-	MembKindWorkingset = NkRegistry.MustBegin("runtimeKindWorkingset").End()
-	MembWorkingsetName = NkRegistry.MustBegin("runtimeWorkingsetName").End()
+	// The ordinals continue the block above rather than reusing any: each
+	// registration states its own, and persisted facts rows carry it (the
+	// ADR-0135 ordering constraint, now enforced by the registry itself —
+	// ADR-0183 D0).
+	MembKindWorkingset = NkRegistry.MustBegin("runtimeKindWorkingset", 65).End()
+	MembWorkingsetName = NkRegistry.MustBegin("runtimeWorkingsetName", 66).End()
 
 	// Table column-width override (ADR-0151, Update 2026-07-30) — one row
 	// per override entry rather than one document per app, so the trail is
@@ -237,14 +237,14 @@ var (
 	// only meaningful against the font it was captured at; resolution
 	// rescales proportionally when the two disagree (§SD1).
 	//
-	// Appended at the end for the same reason the workingset terms were:
-	// membership ids follow declaration order and persisted rows carry them.
-	MembKindColumnWidth   = NkRegistry.MustBegin("runtimeKindColumnWidth").End()
-	MembColWidthTier      = NkRegistry.MustBegin("runtimeColWidthTier").End()
-	MembColWidthScope     = NkRegistry.MustBegin("runtimeColWidthScope").End()
-	MembColWidthColumnKey = NkRegistry.MustBegin("runtimeColWidthColumnKey").End()
-	MembColWidthPoints    = NkRegistry.MustBegin("runtimeColWidthPoints").End()
-	MembColWidthFontSize  = NkRegistry.MustBegin("runtimeColWidthFontSize").End()
+	// Fresh ordinals for the same reason the workingset terms took theirs:
+	// persisted rows carry the id a name was given.
+	MembKindColumnWidth   = NkRegistry.MustBegin("runtimeKindColumnWidth", 67).End()
+	MembColWidthTier      = NkRegistry.MustBegin("runtimeColWidthTier", 68).End()
+	MembColWidthScope     = NkRegistry.MustBegin("runtimeColWidthScope", 69).End()
+	MembColWidthColumnKey = NkRegistry.MustBegin("runtimeColWidthColumnKey", 70).End()
+	MembColWidthPoints    = NkRegistry.MustBegin("runtimeColWidthPoints", 71).End()
+	MembColWidthFontSize  = NkRegistry.MustBegin("runtimeColWidthFontSize", 72).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests

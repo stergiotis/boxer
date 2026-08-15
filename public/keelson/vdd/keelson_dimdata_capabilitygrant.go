@@ -12,14 +12,14 @@ import (
 // constants in place until the legacy writer is retired in a
 // follow-up commit.
 var (
-	MembCgSubject = KeelsonHrNkRegistry.MustBegin("cgSubject").
+	MembCgSubject = KeelsonHrNkRegistry.MustBegin("cgSubject", 3).
 			MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembCgCapability = KeelsonHrNkRegistry.MustBegin("cgCapability").
+	MembCgCapability = KeelsonHrNkRegistry.MustBegin("cgCapability", 4).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembCgValidity = KeelsonHrNkRegistry.MustBegin("cgValidity").
+	MembCgValidity = KeelsonHrNkRegistry.MustBegin("cgValidity", 5).
 			MustAddRestriction("u32Range", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembCgActive = KeelsonHrNkRegistry.MustBegin("cgActive").
+	MembCgActive = KeelsonHrNkRegistry.MustBegin("cgActive", 6).
 			MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
-	MembCgGranter = KeelsonHrNkRegistry.MustBegin("cgGranter").
+	MembCgGranter = KeelsonHrNkRegistry.MustBegin("cgGranter", 7).
 			MustAddRestriction("foreignKey", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
 )
