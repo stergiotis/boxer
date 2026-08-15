@@ -328,6 +328,33 @@ minted name *is* the alias), not nested, not in a `WHERE`. The tagged-section
 constructors (`LW_TV`, `LW_TV_MEMB`, `LW_TV_SUPPORT`) follow the same shape;
 the *reading and authoring* how-to in the repository covers them.
 
+## Write a slice back (`INSERT … SELECT`)
+
+The whole authoring loop: an `INSERT INTO … SELECT` flows through the same
+pipeline as a read, and because the destination is known, the constructor
+mints **adopt the target's own column names** — spelling and aspect hints
+included — instead of composing fresh ones. Check **Preview → As sent** to
+see it: the wire body carries the target's physical names and, unlike a
+read, no `FORMAT` clause.
+
+Executing a write from play is gated: Run refuses until
+`BOXER_PLAY_ALLOW_WRITES=1` is set (the refusal names the switch), and a
+completed write reports its row count on the status line instead of filling
+the result tabs. `anchor.silver` is created by the same integration seeding
+that fills `anchor.facts`.
+
+```sql
+INSERT INTO anchor.silver
+SELECT
+  `id:id`,
+  `id:naturalKey`,
+  LW_TV(arrayMap(x -> upper(x), `symbol:value`), 'symbol', 'value', 's'),
+  LW_TV_MEMB(`symbol:lr`, 'symbol', 'low-card-ref'),
+  LW_TV_SUPPORT(`symbol:lrcard`, 'symbol', 'lrcard')
+FROM anchor.facts
+WHERE hasAny(`symbol:value`, ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
+```
+
 ## Timeline contract
 
 Map the `timeRange` section onto the canonical slot columns the Timeline tab

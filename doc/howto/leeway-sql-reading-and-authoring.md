@@ -296,10 +296,34 @@ Rules the pass enforces, loudly and before anything ships:
 table — names parse plus the vertical-subset rule — which catches the quiet
 closure breaks, like `SELECT "…" AS x` renaming a physical column.
 
-Two authoring paths deliberately stay outside the pipeline: skip-index DDL is
-table-level `TableOptions`, composed by `boxer leeway ddl compose` (ADR-0181
-§SD4), and `INSERT … SELECT` / `CREATE TABLE … AS SELECT` wrappers are written
-by hand around an expanded `SELECT` (§SD8).
+## 9. Write it back (`INSERT … SELECT`)
+
+The `INSERT INTO <table> [(columns)] SELECT …` wrapper flows through the
+pipeline like any statement (ADR-0181 §SD8): handles, `LW_GET` and the
+constructors expand inside the SELECT source, the target is a scope sink no
+handle binds against, and — with the destination known — constructor mints
+**adopt the target's own physical names**, spelling and aspect hints
+included, instead of composing fresh ones. `LwShapeCheckTarget` is the
+opt-in proof that the SELECT's output matches the destination's columns
+(and, when a column list is written, position by position).
+
+```sql
+INSERT INTO anchor.silver
+SELECT `id:id`, `id:naturalKey`,
+       LW_TV(arrayMap(x -> upper(x), `symbol:value`), 'symbol', 'value', 's'),
+       LW_TV_MEMB(`symbol:lr`, 'symbol', 'low-card-ref'),
+       LW_TV_SUPPORT(`symbol:lrcard`, 'symbol', 'lrcard')
+FROM anchor.facts
+```
+
+Hosts expand everywhere but gate execution: play (and every play-engined
+host, sqlapplet included) refuses to Run a write until
+`BOXER_PLAY_ALLOW_WRITES=1` is set, and ships an INSERT without the
+`FORMAT` clause a read gets. Create the destination with
+`boxer leeway ddl compose` first — an in-pipeline CTAS is deliberately
+absent, because a table it minted could carry neither codecs nor the
+`TableOptions` skip indexes of §SD4; create-with-compose, fill-with-INSERT
+is the sanctioned flow, and `VALUES` sources stay outside the grammar.
 
 ## Reading list
 

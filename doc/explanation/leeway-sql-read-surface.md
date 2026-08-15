@@ -224,9 +224,12 @@ Stated here rather than discovered later:
   readable — `param:` names the high-cardinality half — but the read-back
   *generator* still does not model them, because its `Plan` front-end maps
   only the four simple channels.
-- **Statement wrapping** — `INSERT … SELECT` and `CREATE TABLE … AS SELECT`
-  do not flow through the pipeline (ADR-0181 §SD8); the wrapper is composed
-  by hand around an expanded `SELECT`.
+- **Statement wrapping** — `INSERT … SELECT` flows through the pipeline
+  (ADR-0181 §SD8, 2026-08-15): the source expands like any SELECT, mints
+  adopt the target's names, and hosts gate execution behind
+  `BOXER_PLAY_ALLOW_WRITES`. `CREATE TABLE … AS SELECT` stays out
+  deliberately — a CTAS-minted table can carry neither codecs nor skip
+  indexes, so the flow is create-with-`ddl compose`, fill-with-INSERT.
 
 ## Reading list
 
