@@ -78,11 +78,11 @@ What constrains the design:
 
 ## Decision
 
-`play` gains a **glossary**: a catalog of **glosses**, each a named way of
-showing a value. A gloss reaches a column by an explicit `` `label@<media
-type>` `` alias, by a `-- play: gloss` directive rule, or by the gloss's own
-affinity for aspects. ADR-0123's media types become the content family of the
-catalog. Glosses render in both Table grids and both Detail paths.
+`play` gains a catalog of **glosses**, each a named way of showing a value. A
+gloss reaches a column by an explicit `` `label@<media type>` `` alias, by a
+`-- play: gloss` directive rule, or by the gloss's own affinity for aspects.
+ADR-0123's media types become the content family of the catalog. Glosses
+render in both Table grids and both Detail paths.
 
 ### SD1 — A gloss has two faces and lives in two layers
 
@@ -156,7 +156,7 @@ a media type. Rules are ordered; the first match wins.
 **Precedence per column** — explicit alias › directive rules in buffer order ›
 affinities in catalog order › none. An aliased column is never offered to the
 rules. The header hover names the winner, its source and the spec line; the
-Glossary tab (SD6) lists shadowed matches.
+Glosses tab (SD6) lists shadowed matches.
 
 **Directive** — joins the ADR-0124 family. `<token>` is the first
 whitespace-delimited word in compact `;k=v` form; the regex is the rest of the
@@ -204,7 +204,7 @@ linking — is v0; more are one-file additions. Quantity glosses are spelled
 after `public/science/units` (`temperature`, `length`, `mass`, …); unit
 conversion (`;show=F`) is deferred, v0 formats the stored unit.
 
-### SD6 — The Glossary tab
+### SD6 — The Glosses tab
 
 A result-side sibling of the Vocabulary tab (ADR-0174): each gloss with its
 kinds, parameters, a sample rendering and affinities; the buffer's effective
@@ -257,7 +257,7 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
 | `leewaywidgets.Table2CardEmitter` (exported Go API under `public/`) | +1 setter for a per-column glosser | play's card driver wiring |
 | result-column convention (ADR-0123 §SD2/§SD3) | "known type" = catalog; `gloss/` family; parameters validated | 0123's status and §SD7; `features.md` §Table/§Detail; `snippets.md` |
 | `-- play:` directive family (ADR-0124) | +`gloss` | `features.md` cross-reference |
-| play tab roster | +Glossary | Panes menu; tab marks |
+| play tab roster | +Glosses | Panes menu; tab marks |
 
 ## Alternatives
 
@@ -337,7 +337,7 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
   label + hover, raw toggle; the seven `gloss/*` members of SD5.
 - **M2 — rules.** `lwsql.SpecLine`, rules engine, affinities, the directive,
   precedence and hover provenance.
-- **M3 — Detail.** Block faces bound in play; the card seam; the Glossary tab.
+- **M3 — Detail.** Block faces bound in play; the card seam; the Glosses tab.
 - **M4 — macro.** `glosssql`, passreg entry, Vocabulary listing, goldens.
 - **M5 — docs.** `features.md`, `snippets.md`, the ADR-0123 pointers.
 
@@ -357,6 +357,6 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - [ADR-0181](./0181-leeway-dql-authoring-surface.md) §SD2/§SD6 — spec tokens, constructor family, `Composer`.
 - [ADR-0182](./0182-leeway-aspects-v2-codec-and-vocabulary.md) — aspect vocabularies and their admission criterion.
 - [ADR-0108](./0108-keelson-sql-pass-registry.md) — passreg and the late-bound Factory.
-- [ADR-0174](./0174-play-sql-vocabulary-panel.md) — the Vocabulary tab the Glossary tab mirrors.
+- [ADR-0174](./0174-play-sql-vocabulary-panel.md) — the Vocabulary tab the Glosses tab mirrors.
 - [ADR-0031](./0031-imzero2-design-system-color.md) — the semantic palette behind `Tone`.
 - RFC 2045 §5.1 (parameter syntax), RFC 6838 §3.4 (`x-` discouraged); Go `mime.ParseMediaType` / `FormatMediaType`.
