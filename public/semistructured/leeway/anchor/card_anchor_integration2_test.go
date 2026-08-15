@@ -26,6 +26,20 @@ func getSqlContent(path string, t *testing.T) string {
 	return unsafeperf.UnsafeBytesToString(b)
 }
 
+// silverDdl creates the write-back demo target (ADR-0181 §SD8): the
+// five-column slice SilverPhysicalColumnNames declares, spelled exactly as
+// facts spells it. Types are the plain equivalents of facts' — an INSERT
+// converts, and a Memory-engine fixture earns no codecs. Shared by the
+// query 8 arm and the snippets sweep, so the two cannot drift about what
+// silver is.
+const silverDdl = `CREATE OR REPLACE TABLE anchor.silver (
+	"id:id:u64:47::0:" UInt64,
+	"id:naturalKey:y:4::0:" String,
+	"tv:symbol:value:val:s:124::I:0::data" Array(String),
+	"tv:symbol:lr:lr:u64:1247:::0::data" Array(UInt64),
+	"tv:symbol:lrcard:lrcard:u64:4E:::0::data" Array(UInt64)
+) ENGINE = Memory`
+
 func TestLeewayClickHouse(t *testing.T) {
 	ctx := context.Background()
 	ch := newAnchorChClient()
@@ -78,15 +92,8 @@ func TestLeewayClickHouse(t *testing.T) {
 
 	// Query 8 is the write-back demo (ADR-0181 §SD8 M2): create the silver
 	// target, execute the INSERT … SELECT whose mints adopted its names, and
-	// verify the slice landed. Types are the plain equivalents of facts' —
-	// an INSERT converts, and a Memory-engine fixture earns no codecs.
-	err = ch.Exec(ctx, `CREATE OR REPLACE TABLE anchor.silver (
-		"id:id:u64:47::0:" UInt64,
-		"id:naturalKey:y:4::0:" String,
-		"tv:symbol:value:val:s:124::I:0::data" Array(String),
-		"tv:symbol:lr:lr:u64:1247:::0::data" Array(UInt64),
-		"tv:symbol:lrcard:lrcard:u64:4E:::0::data" Array(UInt64)
-	) ENGINE = Memory`)
+	// verify the slice landed.
+	err = ch.Exec(ctx, silverDdl)
 	require.NoError(t, err)
 	err = ch.Exec(ctx, getSqlContent("card_anchor_dql_query8.out.sql", t))
 	require.NoError(t, err)

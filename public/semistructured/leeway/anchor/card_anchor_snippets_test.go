@@ -105,6 +105,9 @@ func TestSnippetsAgainstFixture(t *testing.T) {
 		}
 	}()
 	require.NoError(t, ch.InsertArrow(ctx, "anchor.facts", records))
+	// The write-back snippet targets anchor.silver (ADR-0181 §SD8 M3);
+	// create it so the sweep can execute the INSERT like play would.
+	require.NoError(t, ch.Exec(ctx, silverDdl))
 
 	resolver := NewDqlResolver()
 	var diags []passes.ColumnDiagnostic
@@ -113,7 +116,9 @@ func TestSnippetsAgainstFixture(t *testing.T) {
 		passes.CanonicalizeFull(100),
 		passes.ResolveColumnNames(resolver, "anchor", func(d passes.ColumnDiagnostic) { diags = append(diags, d) }),
 		constructsql.ExtractExpandPass(resolver, "anchor"),
-		constructsql.ExpandPass,
+		// The target-adopting variant, as play runs it since §SD8 M2: an
+		// INSERT snippet's mints resolve against silver's columns.
+		constructsql.ExpandPassWithTargetAdoption(resolver, "anchor"),
 	)
 
 	nSelected := 0
