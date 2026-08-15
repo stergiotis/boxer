@@ -177,11 +177,29 @@ func Begin(ids *c.WidgetIdStack, title string, w float32, h float32) *Plot {
 		st = &plotState{hidden: make(map[string]bool, 4)}
 		pool[scopeId] = st
 	}
+	st.beginFrame()
 	shown, _, _ := strings.Cut(title, "##")
 	p := &Plot{ids: ids, st: st, scopeId: scopeId, w: w, h: h, title: title, titleShown: shown,
 		dataXMin: math.Inf(1), dataXMax: math.Inf(-1), dataYMin: math.Inf(1), dataYMax: math.Inf(-1)}
 	p.applyInteractions()
 	return p
+}
+
+// beginFrame returns the Setup state a caller re-declares every frame to its
+// default, leaving the retained interaction state (ranges, gesture history,
+// legend visibility) alone.
+//
+// The axis scale belongs to the first group and was in the second, which is
+// only visible when a caller STOPS asking for a non-linear axis: nothing else
+// writes the slot, so the last SetupAxisScale stood forever. Unchecking play's
+// `log y` put the checkbox back and left the plot logarithmic (2026-08-15) —
+// and a temporal x, once seen, would have kept formatting later numeric
+// results as dates. Setup is a per-frame protocol in upstream and here; End
+// already consumes the viewport constraints on the same reasoning, and the
+// stickiness was an unintended deviation rather than one of the documented
+// ones.
+func (st *plotState) beginFrame() {
+	st.x.scale, st.y.scale = ScaleLinear, ScaleLinear
 }
 
 // Scoped opens a plot and yields it exactly once; End runs when the
@@ -482,7 +500,10 @@ func (p *Plot) SetupAxisLimits(axis AxisE, vmin float64, vmax float64, cond Cond
 }
 
 // SetupAxisScale selects the axis scale (linear, time, log10, symlog).
-// Like every Setup call it must precede the first item.
+// Like every Setup call it must precede the first item — and, like every
+// Setup call, it holds for THIS frame only: an axis whose scale is not
+// re-declared is linear again next frame. A caller toggling a log axis
+// therefore states the choice, not the change.
 func (p *Plot) SetupAxisScale(axis AxisE, scale ScaleE) *Plot {
 	if p.warnIfLocked("SetupAxisScale") {
 		return p
