@@ -157,6 +157,34 @@ func RegisterStandard(r *passreg.Registry) (err error) {
 			return constructsql.ExtractExpandPassWithIds(lanes, ids, ""), true
 		},
 	})
+	if err != nil {
+		return
+	}
+
+	// Target-adopting constructor expansion (ADR-0181 §SD8 M2) is a Factory
+	// for the same reason the two above are: adopting an INSERT target's
+	// naming needs a per-consumer schema. Ordered at 129 — one before the
+	// unbound LwConstructExpand entry (130), so on a bound host THIS pass
+	// consumes every constructor call and the entry's marker scan then finds
+	// nothing; on an unbound host the factory declines and the entry mints
+	// with fresh-table defaults exactly as before. Statements without an
+	// INSERT wrapper expand identically under either.
+	targetProbe := constructsql.ExpandPassWithTargetAdoption(nil, "")
+	err = r.RegisterFactory(passreg.Factory{
+		Name:        targetProbe.Name,
+		Stage:       passreg.StagePreExecute,
+		Order:       129,
+		Description: "constructor calls adopt a resolved INSERT target's naming — segments, aspects and spelling",
+		Provenance:  "github.com/stergiotis/boxer/public/semistructured/leeway/constructsql",
+		Properties:  targetProbe.Properties,
+		Build: func(binding any) (nanopass.Pass, bool) {
+			schema, ok := binding.(constructsql.TargetSchemaI)
+			if !ok {
+				return nanopass.Pass{}, false
+			}
+			return constructsql.ExpandPassWithTargetAdoption(schema, ""), true
+		},
+	})
 	return
 }
 

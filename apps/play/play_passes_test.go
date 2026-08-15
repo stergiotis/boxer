@@ -28,7 +28,7 @@ func TestRegisterPassesOrdering(t *testing.T) {
 			got = append(got, r.Name)
 		}
 	}
-	want := []string{"CanonicalizeFull", "ExpandDescriptiveStatistics", "DocsearchExpand", "ExpandLwIdMacros", "LwExtractExpand", "LwConstructExpand", "ResolveColumnNames"}
+	want := []string{"CanonicalizeFull", "ExpandDescriptiveStatistics", "DocsearchExpand", "ExpandLwIdMacros", "LwExtractExpand", "LwConstructExpandTarget", "LwConstructExpand", "ResolveColumnNames"}
 	if len(got) != len(want) {
 		t.Fatalf("pre-execute catalog = %v, want %v", got, want)
 	}
@@ -64,6 +64,7 @@ func TestRegisterPassesExposesSubPasses(t *testing.T) {
 		t.Fatal("CanonicalizeFull entry not resolvable")
 	}
 	want := []string{
+		"CanonicalizeInsertWrapper",
 		"CanonicalizeWhitespaceSingleLine",
 		"CanonicalizeEquals",
 		"CanonicalizeSugar",

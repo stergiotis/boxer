@@ -89,11 +89,12 @@ func TestStandardSetRegistersResolveColumnNamesFactory(t *testing.T) {
 	require.NoError(t, RegisterStandard(r))
 
 	// Concrete entries are the four expansions (descriptiveStatistics,
-	// docsearch, LW_ID_*, LW_ constructors); the two schema-bound passes —
-	// handle resolution and LW_GET extraction — are factories.
+	// docsearch, LW_ID_*, LW_ constructors); the three schema-bound passes —
+	// handle resolution, LW_GET extraction, and the target-adopting
+	// constructor variant (ADR-0181 §SD8 M2) — are factories.
 	require.Len(t, r.Entries(passreg.StagePreExecute), 4)
 	fs := r.Factories(passreg.StagePreExecute)
-	require.Len(t, fs, 2)
+	require.Len(t, fs, 3)
 	var f passreg.Factory
 	for _, cand := range fs {
 		if cand.Name == "ResolveColumnNames" {

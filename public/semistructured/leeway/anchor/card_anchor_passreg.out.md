@@ -21,6 +21,7 @@ generator: go test, TestDqlPassRegistryGeneration
 | pre-execute | 80 | `DocsearchExpand` | false | expand docsearch('query') into the ADR-0164 documentation search UNION |
 | pre-execute | 100 | `ExpandLwIdMacros` | false | expand LW_ID_* identity-macro calls into bit arithmetic |
 | pre-execute | 120 | `LwExtractExpand` | true | expand LW_GET/LW_GET_NULL/LW_GET_LIST into leeway locate-and-extract expressions |
+| pre-execute | 129 | `LwConstructExpandTarget` | true | constructor calls adopt a resolved INSERT target's naming — segments, aspects and spelling |
 | pre-execute | 130 | `LwConstructExpand` | false | expand LW_PLAIN/LW_TV* constructor calls into aliased expressions minting physical leeway column names |
 | pre-execute | 150 | `QualifyTables` | false | qualify unqualified table references with the anchor database |
 | pre-execute | 200 | `ResolveColumnNames` | true | resolve friendly leeway column handles to physical names |
@@ -35,6 +36,7 @@ generator: go test, TestDqlPassRegistryGeneration
 | 80 | `DocsearchExpand` | applied | false |
 | 100 | `ExpandLwIdMacros` | applied | false |
 | 120 | `LwExtractExpand` | applied | false |
+| 129 | `LwConstructExpandTarget` | applied | false |
 | 130 | `LwConstructExpand` | applied | false |
 | 150 | `QualifyTables` | applied | true |
 | 200 | `ResolveColumnNames` | applied | true |
