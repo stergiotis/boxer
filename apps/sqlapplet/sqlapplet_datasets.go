@@ -68,12 +68,15 @@ type datasetBinder struct {
 	bound   map[string]string   // alias → handle currently bound in play
 	pending map[string]struct{} // aliases with no live dataset
 
-	// Mailbox from the arriving side to the render thread.
-	toBind    map[string]string   // alias → handle to bind (event or poll)
-	toUnbind  map[string]struct{} // handles retracted
-	toRevise  map[string]uint64   // alias → revision of a republish
-	unsub     func()              // events subscription; nil in poll mode
-	pollMode  bool                // events unavailable: poll for pending
+	// Mailbox from the arriving side to the render thread: events in
+	// arrival order. Order matters — a `retracted` of the bound handle
+	// followed by a `published` of the alias's successor must unbind and
+	// then bind, so the log is replayed sequentially against (bound,
+	// pending) rather than folded into per-kind sets. Poll results enter
+	// the same log as synthetic `published` events.
+	events    []adhocdata.Event
+	unsub     func() // events subscription; nil in poll mode
+	pollMode  bool   // events unavailable: poll for pending
 	inFlight  bool
 	nextAt    time.Time
 	notice    []byte
@@ -119,101 +122,100 @@ func newDatasetBinder(bus app.BusI, logger zerolog.Logger, hint string, aliases 
 	return
 }
 
-// onEvent is the bus-goroutine half: it parks what the render thread must do
-// and returns. Nothing here reaches play.
+// onEvent is the bus-goroutine half: it appends to the log and returns.
+// Nothing here reaches play, and nothing here decides — the decision needs
+// the (bound, pending) state as it stands when the event is applied, which
+// is the render thread's, in order.
 func (b *datasetBinder) onEvent(ev adhocdata.Event) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	switch ev.Op {
-	case adhocdata.EventOpPublished:
-		if _, waiting := b.pending[ev.Alias]; waiting {
-			if b.toBind == nil {
-				b.toBind = make(map[string]string, 1)
-			}
-			b.toBind[ev.Alias] = ev.Handle
-			return
-		}
-		if h, isBound := b.bound[ev.Alias]; isBound && h == ev.Handle {
-			// A republish onto the handle we hold: same binding, fresh
-			// data (ADR-0134 §SD5). A publish under a bound alias onto a
-			// DIFFERENT handle is deliberately ignored: an open applet
-			// tracks re-captures through the stable handle and does not
-			// re-resolve to a newer one (ADR-0134, update 2026-08-01).
-			if b.toRevise == nil {
-				b.toRevise = make(map[string]uint64, 1)
-			}
-			b.toRevise[ev.Alias] = ev.Revision
-		}
-	case adhocdata.EventOpRetracted:
-		if b.toUnbind == nil {
-			b.toUnbind = make(map[string]struct{}, 1)
-		}
-		b.toUnbind[ev.Handle] = struct{}{}
-	}
+	b.events = append(b.events, ev)
+	b.mu.Unlock()
 }
 
-// sync is the render-thread half: it applies whatever arrived since the last
-// frame to target, then, in poll mode, starts the next resolve if one is due.
-// It reports whether anything was newly bound (the caller re-runs the
-// buffer), and the notice text with whether it changed (the caller pushes it
-// into play only on a change — SetDatasetNotice reparses, and this runs every
-// frame).
+// sync is the render-thread half: it replays the events that arrived since
+// the last frame, in order, against target, then, in poll mode, starts the
+// next resolve if one is due. It reports whether anything was newly bound
+// (the caller re-runs the buffer), and the notice text with whether it
+// changed (the caller pushes it into play only on a change —
+// SetDatasetNotice reparses, and this runs every frame).
+//
+// Replay rules, per event: a `published` under a pending alias binds it; a
+// `published` onto the handle a bound alias holds is a republish and
+// notifies the revision (ADR-0134 §SD5); a `published` under a bound alias
+// onto a DIFFERENT handle is deliberately ignored — an open applet tracks
+// re-captures through the stable handle and does not re-resolve to a newer
+// sibling (ADR-0134, update 2026-08-01); a `retracted` of a bound handle
+// unbinds its alias and returns it to pending. Because the log is ordered,
+// a retract followed by a publish of the alias's successor unbinds and then
+// binds within one frame; a publish followed by a retract of the same
+// handle binds and then unbinds — the state after the frame is the state
+// the service's own history produced. A retract of a handle nobody holds is
+// a no-op, which also makes a duplicated or late `retracted` harmless: a
+// handle never comes back once retracted.
 func (b *datasetBinder) sync(target datasetTargetI) (bound bool, notice []byte, noticeChanged bool) {
 	b.mu.Lock()
-	unbind := b.toUnbind
-	bind := b.toBind
-	revise := b.toRevise
-	b.toUnbind, b.toBind, b.toRevise = nil, nil, nil
-	// Retracted handles map back to the aliases bound to them; resolve that
-	// under the lock, act outside it.
-	var unbindAliases []string
-	for alias, h := range b.bound {
-		if _, gone := unbind[h]; gone {
-			unbindAliases = append(unbindAliases, alias)
-		}
-	}
+	events := b.events
+	b.events = nil
 	b.mu.Unlock()
 
-	// Act outside the lock: target reaches into play's client, and the
-	// handoff mutex has no business spanning that.
-	slices.Sort(unbindAliases)
-	for _, alias := range unbindAliases {
-		if uErr := target.UnbindDataset(alias); uErr != nil {
-			b.log.Warn().Err(uErr).Str("alias", alias).Msg("sqlapplet: dataset unbind rejected")
-		} else {
-			b.log.Info().Str("alias", alias).Msg("sqlapplet: dataset alias unbound after retract; waiting for the next publish")
+	changed := false
+	for _, ev := range events {
+		switch ev.Op {
+		case adhocdata.EventOpPublished:
+			b.mu.Lock()
+			_, waiting := b.pending[ev.Alias]
+			held, isBound := b.bound[ev.Alias]
+			b.mu.Unlock()
+			switch {
+			case waiting:
+				// Act outside the lock: target reaches into play's client,
+				// and the handoff mutex has no business spanning that.
+				if bErr := target.BindDataset(ev.Alias, ev.Handle); bErr != nil {
+					// A malformed handle is the service's problem, not a
+					// transient one — settle the alias anyway rather than
+					// retry it forever.
+					b.log.Warn().Err(bErr).Str("alias", ev.Alias).Msg("sqlapplet: dataset bind rejected")
+					b.mu.Lock()
+					delete(b.pending, ev.Alias)
+					b.mu.Unlock()
+				} else {
+					b.log.Info().Str("alias", ev.Alias).Str("handle", ev.Handle).Msg("sqlapplet: dataset alias bound after open")
+					b.mu.Lock()
+					b.bound[ev.Alias] = ev.Handle
+					delete(b.pending, ev.Alias)
+					b.mu.Unlock()
+					bound = true
+				}
+				changed = true
+			case isBound && held == ev.Handle:
+				target.NotifyDatasetRevision(ev.Alias, ev.Revision)
+			}
+		case adhocdata.EventOpRetracted:
+			b.mu.Lock()
+			var gone []string
+			for alias, h := range b.bound {
+				if h == ev.Handle {
+					gone = append(gone, alias)
+				}
+			}
+			b.mu.Unlock()
+			slices.Sort(gone)
+			for _, alias := range gone {
+				if uErr := target.UnbindDataset(alias); uErr != nil {
+					b.log.Warn().Err(uErr).Str("alias", alias).Msg("sqlapplet: dataset unbind rejected")
+				} else {
+					b.log.Info().Str("alias", alias).Msg("sqlapplet: dataset alias unbound after retract; waiting for the next publish")
+				}
+				b.mu.Lock()
+				delete(b.bound, alias)
+				b.pending[alias] = struct{}{}
+				b.mu.Unlock()
+				changed = true
+			}
 		}
-	}
-	settled := make([]string, 0, len(bind))
-	for alias, handle := range bind {
-		if bErr := target.BindDataset(alias, handle); bErr != nil {
-			// A malformed handle is the service's problem, not a transient
-			// one — settle the alias anyway rather than retry it forever.
-			b.log.Warn().Err(bErr).Str("alias", alias).Msg("sqlapplet: dataset bind rejected")
-		} else {
-			b.log.Info().Str("alias", alias).Str("handle", handle).Msg("sqlapplet: dataset alias bound after open")
-			bound = true
-		}
-		settled = append(settled, alias)
-	}
-	for alias, rev := range revise {
-		target.NotifyDatasetRevision(alias, rev)
 	}
 
 	b.mu.Lock()
-	changed := false
-	for _, alias := range unbindAliases {
-		delete(b.bound, alias)
-		b.pending[alias] = struct{}{}
-		changed = true
-	}
-	for _, alias := range settled {
-		if h, ok := bind[alias]; ok {
-			b.bound[alias] = h
-		}
-		delete(b.pending, alias)
-		changed = true
-	}
 	if changed {
 		b.notice = renderDatasetNotice(slices.Sorted(maps.Keys(b.pending)), b.hint)
 		b.noticeDty = true
@@ -248,11 +250,10 @@ func (b *datasetBinder) resolve(aliases []string) {
 		landed[alias] = res.Handle
 	}
 	b.mu.Lock()
-	if len(landed) > 0 {
-		if b.toBind == nil {
-			b.toBind = make(map[string]string, len(landed))
-		}
-		maps.Copy(b.toBind, landed)
+	// Poll results enter the ordered log as synthetic `published` events,
+	// so the render thread has one replay path.
+	for _, alias := range slices.Sorted(maps.Keys(landed)) {
+		b.events = append(b.events, adhocdata.Event{Op: adhocdata.EventOpPublished, Alias: alias, Handle: landed[alias]})
 	}
 	b.inFlight = false
 	b.nextAt = time.Now().Add(datasetRetryInterval)

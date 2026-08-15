@@ -175,6 +175,46 @@ func TestDatasetBinderSettlesAndUnbinds(t *testing.T) {
 	assert.Equal(t, "adhoc_fresh00000000000", target.bound["items"])
 }
 
+// TestDatasetBinderOrderWithinOneFrame pins that events are replayed in
+// arrival order: a retract of the bound handle followed by a publish of the
+// alias's successor — both landing between two frames — ends bound to the
+// successor, and the reverse order (publish, then retract of that same
+// handle) ends pending. Folding events into per-kind sets loses the first
+// case: the publish is inspected while the alias still looks bound.
+func TestDatasetBinderOrderWithinOneFrame(t *testing.T) {
+	b, _ := newDatasetBinder(&app.NoopBus{}, zerolog.Nop(), "", []string{"items"})
+	require.NotNil(t, b)
+	target := newRecordingTarget()
+	b.onEvent(adhocdata.Event{Op: adhocdata.EventOpPublished, Alias: "items", Handle: "adhoc_h1000000000000000", Revision: 1})
+	b.sync(target)
+	require.Equal(t, "adhoc_h1000000000000000", target.bound["items"])
+
+	// retract h1, publish h2 — one frame.
+	b.onEvent(adhocdata.Event{Op: adhocdata.EventOpRetracted, Alias: "items", Handle: "adhoc_h1000000000000000"})
+	b.onEvent(adhocdata.Event{Op: adhocdata.EventOpPublished, Alias: "items", Handle: "adhoc_h2000000000000000", Revision: 1})
+	bound, notice, changed := b.sync(target)
+	assert.True(t, bound)
+	assert.True(t, changed)
+	assert.Nil(t, notice, "ends bound, nothing pending")
+	assert.Equal(t, "adhoc_h2000000000000000", target.bound["items"])
+	assert.Equal(t, []string{"items"}, target.unbound)
+	assert.Empty(t, b.pendingAliases())
+
+	// publish h3 under a bound alias (ignored), then retract h2 — one frame.
+	b.onEvent(adhocdata.Event{Op: adhocdata.EventOpPublished, Alias: "items", Handle: "adhoc_h3000000000000000", Revision: 1})
+	b.onEvent(adhocdata.Event{Op: adhocdata.EventOpRetracted, Alias: "items", Handle: "adhoc_h2000000000000000"})
+	bound, notice, changed = b.sync(target)
+	assert.False(t, bound)
+	assert.True(t, changed)
+	assert.Contains(t, string(notice), "`items`", "ends pending: h3 was a sibling, not our handle")
+	assert.Equal(t, []string{"items"}, b.pendingAliases())
+
+	// A duplicated / late retract of a handle nobody holds is a no-op.
+	b.onEvent(adhocdata.Event{Op: adhocdata.EventOpRetracted, Alias: "items", Handle: "adhoc_h2000000000000000"})
+	_, _, changed = b.sync(target)
+	assert.False(t, changed)
+}
+
 // TestDatasetBinderLiveWithdrawal runs the binder against a real service
 // over the in-proc bus: subscribe-before-resolve at open, `published` binds
 // without polling, `retracted` unbinds, and the next publish rebinds.
