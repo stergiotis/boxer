@@ -567,8 +567,13 @@ copy-out hint. sqlapplet inherits the same rule.
 
 Milestones:
 
-- **M0 — grammar port.** grammar1 + grammar2 productions and regeneration;
-  a parse-corpus pin against the upstream lineage forms.
+- **M0 — grammar port.** ✓ grammar1 + grammar2 productions and
+  regeneration; a parse-corpus pin against the upstream lineage forms.
+  Shipped 2026-08-15 (`8e09ac79`, `9050c762`): the wrapper is an unlabeled
+  `queryStmt` alternative so `QueryStmtContext` keeps its type, and
+  `nanopass.Parse` refuses a parsed wrapper explicitly until M1 — the
+  grammar admitting what the passes cannot yet carry must fail with its
+  real reason, not a nil-scope panic mid-chain.
 - **M1 — pipeline semantics.** Scope sink, canonicalize node rules for the
   wrapper clause, the pass refusal matrix with tests.
 - **M2 — target adoption.** Segment + spelling adoption via
