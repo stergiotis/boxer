@@ -10,6 +10,9 @@ package marshallreflect_test
 // Rung 1: required scalar [1..1] → option.Option [0..1] (same shape).
 // Rung 2: unit scalar (one-element array value) → container []T, and the
 //         coexistence case — wide reader over rows from BOTH generations.
+// Rung 3: the shape crossing — a scalar slot read under a dynamic-membership
+//         tuple definition, which is section-scoped rather than
+//         membership-scoped and reads differently for that reason.
 // Reverse: container-written rows read under the narrow unit definition.
 
 import (
@@ -17,6 +20,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/functional/option"
@@ -225,4 +229,102 @@ func TestArityEvolution_NarrowUnitReadsItsOwnRows(t *testing.T) {
 	require.NoError(t, marshallreflect.Unmarshal(readers, &got, lookup))
 	require.Len(t, got, 1)
 	require.Equal(t, uint64(8500), got[0].Battery)
+}
+
+// --- rung 3: the shape crossing (scalar → dynamic-membership tuple) ---
+
+// evSymElem is one element of a dynamic-membership tuple over the symbol
+// section: the membership travels IN the element (ADR-0103/0109) rather than
+// being fixed by the field's tag.
+type evSymElem struct {
+	Memb  string `lw:"@membership,verbatim"`
+	Value string `lw:"symbol:value"`
+}
+
+// evTupleSym is the same kind widened across the shape boundary: where
+// evNarrowSym names one membership and takes its value, this takes the
+// section.
+type evTupleSym struct {
+	_        struct{}    `kind:"evNarrowSym"`
+	ID       uint64      `lw:",id"`
+	Tracking []byte      `lw:",naturalKey"`
+	Elems    []evSymElem `lw:"symbol"`
+}
+
+// The crossing works in the widening direction: rows written under the scalar
+// definition read under the tuple definition as one element carrying the
+// membership the writer used and the value it wrote.
+//
+// This is the rung ADR-0183 D5 left unsanctioned pending a pin. It is
+// sanctioned now, with the caveat the next test states.
+func TestArityEvolution_ScalarRowsReadUnderATupleDefinition(t *testing.T) {
+	lookup := marshallreflect.MapLookup{}
+
+	table := anchor.NewInEntityTestTable(memory.NewGoAllocator(), 1)
+	require.NoError(t, marshallreflect.Marshal(table, []evNarrowSym{
+		{ID: 1, Tracking: []byte("A"), Health: "green"},
+	}, lookup))
+	recs, err := table.TransferRecords(nil)
+	require.NoError(t, err)
+	defer func() {
+		for _, r := range recs {
+			r.Release()
+		}
+	}()
+
+	readers, release := evReaders(t, recs[0], "symbol")
+	defer release()
+	var got []evTupleSym
+	require.NoError(t, marshallreflect.Unmarshal(readers, &got, lookup))
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Elems, 1)
+	assert.Equal(t, "health", got[0].Elems[0].Memb, "the membership the narrow writer used")
+	assert.Equal(t, "green", got[0].Elems[0].Value)
+}
+
+// The caveat, and the reason this crossing is not just "wider": a tuple field
+// is scoped to the SECTION, not to a membership. It reads every attribute the
+// section carries, including ones written by a component that has nothing to
+// do with it — which on a shared table means a tuple component sees its
+// neighbours.
+//
+// The scalar shape does not: it is membership-matched, so the same row reads
+// cleanly under the narrow definition. Widening a slot to a tuple therefore
+// changes WHICH attributes a component consumes, not only how many, and that
+// is the thing to know before crossing.
+func TestArityEvolution_TupleReadsTheSectionScalarReadsItsMembership(t *testing.T) {
+	lookup := marshallreflect.MapLookup{}
+
+	table := anchor.NewInEntityTestTable(memory.NewGoAllocator(), 1)
+	require.NoError(t, marshallreflect.Marshal(table, []evTupleSym{
+		{ID: 1, Tracking: []byte("A"), Elems: []evSymElem{
+			{Memb: "health", Value: "green"},
+			{Memb: "otherDomainNote", Value: "not ours"},
+		}},
+	}, lookup))
+	recs, err := table.TransferRecords(nil)
+	require.NoError(t, err)
+	defer func() {
+		for _, r := range recs {
+			r.Release()
+		}
+	}()
+
+	// The tuple reader takes both attributes — the neighbour's included.
+	tupleReaders, releaseTuple := evReaders(t, recs[0], "symbol")
+	defer releaseTuple()
+	var wide []evTupleSym
+	require.NoError(t, marshallreflect.Unmarshal(tupleReaders, &wide, lookup))
+	require.Len(t, wide, 1)
+	assert.Len(t, wide[0].Elems, 2,
+		"a tuple field consumes its section, so a co-resident component's attribute arrives too")
+
+	// The scalar reader takes only its own membership, from the same row.
+	scalarReaders, releaseScalar := evReaders(t, recs[0], "symbol")
+	defer releaseScalar()
+	var narrow []evNarrowSym
+	require.NoError(t, marshallreflect.Unmarshal(scalarReaders, &narrow, lookup))
+	require.Len(t, narrow, 1)
+	assert.Equal(t, "green", narrow[0].Health,
+		"membership matching is what keeps co-resident components apart")
 }

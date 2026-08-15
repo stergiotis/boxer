@@ -35,6 +35,18 @@ status: draft
 > paths. R7's row and §5's statement of it are updated; the reading of
 > what it cost is in ADR-0183 D5.
 >
+> Updated 2026-08-15: the X-class landed (ADR-0183 M3). I1, I2, R1, R2 and
+> R6 have executable homes in
+> `marshallreflect_test/failure_modes_test.go`, the tuple rung joined the
+> arity ladder, and the centerpiece — the main-scenario example §4 found
+> missing — is `runtime/factsschema/meshdemo`. Writing them sharpened one
+> row: **R2 is stricter than recorded here.** An empty container, a nil
+> one and a never-written one are ONE wire observation, so emptiness
+> cannot be asserted at all, only observed; a component that must tell
+> "no items" from "not collected" needs a second slot carrying that. The
+> tuple rung also found that the crossing is section-scoped, so a tuple
+> field consumes a co-resident component's attributes as well as its own.
+>
 > Later the same day, a seam survey grounded §6's costings: API-1 is
 > ~150 LOC against exactly two production `MapLookup` sites (with a
 > naming-style hazard at the snapshot seam); API-3 as drafted missed

@@ -356,9 +356,14 @@ proven lane.
   should fold as a common subexpression, but that is an expectation, not a
   measurement; if a Scan on a wide kind ever reads slow, this is the first
   thing to look at.
-- Sanctioned widening ladder today: required → optional and
-  unit → container (both pinned). Shape crossings (scalar → tuple) are
-  unpinned and unsanctioned until the corpus's tuple rung pins them.
+- Sanctioned widening ladder: required → optional, unit → container, and
+  — pinned at M3 — the shape crossing scalar → dynamic-membership tuple,
+  where rows written under the scalar definition read as one element
+  carrying the writer's membership. The crossing comes with a caveat the
+  corpus states rather than a prohibition: a tuple field is scoped to its
+  SECTION, not to a membership, so it consumes every attribute the section
+  carries — a co-resident component's included. Widening a slot to a tuple
+  changes *which* attributes a component consumes, not only how many.
 
 ### D6 — The plan is the definition; the skins say so (S3)
 
@@ -387,7 +392,8 @@ proven lane.
   retain-discipline, the tuple rung — with the **centerpiece** the
   missing main-scenario example: registry-resolved ids over a shared
   table, one domain formulating a component late over rows another
-  domain wrote earlier — no longer gated, since D2 is built.
+  domain wrote earlier — no longer gated, since D2 is built. ✓ Built at
+  M3.
 - Hygiene the review caught: the marshalling how-to is re-reviewed and
   restamped; `EXPLANATION.md` gets a pass; ADR-0146's Context collision
   table is marked a historical (pre-D4) measurement via dated update; a
@@ -458,7 +464,23 @@ proven lane.
   `MembershipIds` + gen test, built ahead of M1 because ADR-0184 needed
   it. `FactsWrapper` was left alone — see D2 for why that turned out to
   be the point rather than a shortcut.
-- **M3 — failure-mode corpus.** D7's X-class, centerpiece included.
+- **M3 — failure-mode corpus.** ✓ D7's X-class. The centerpiece is
+  `runtime/factsschema/meshdemo`: a fleet agent writing through a
+  generated store and a capacity-planning component formulated afterwards
+  — a Go struct with no generated artifact — reading those rows through
+  ids it resolves from the registry at run time, in memory and through
+  the table. A third domain's rows sit in the same table so the read
+  proves something. The edge corpus
+  (`marshallreflect_test/failure_modes_test.go`) pins I1, I2, R1, R2 and
+  R6; the tuple rung joins the arity ladder.
+
+  Two findings came out of writing it. R2's asymmetry is sharper than the
+  inventory recorded: an empty container, a nil one and a never-written
+  one are **one** wire observation, so emptiness cannot be asserted, only
+  observed — a component needing "no items" distinct from "not collected"
+  must carry a second slot saying so. And the tuple crossing is
+  section-scoped (see D5), which is a hazard on a shared table rather
+  than a wider version of the same read.
 - **M4 — doc unification.** D6 reframing + D7's U1, hygiene items, and
   the doclint rule.
 - **M5 — vocabulary as facts v1.** D3: claim kind, init-time
@@ -484,6 +506,7 @@ M5 and M6 are independent of each other and may swap.
 | front-end parity contract | flush order becomes first-seen section order (D4) | parity corpus, updated once |
 | facts vocabulary (registry members) | one new claim kind (D3) | factsschema regen lane |
 | `membershiprole` API | classifier rename with deprecated alias (D6) | call sites, mechanical |
+| `runtime/factsschema/meshdemo` (new) ✓ | the mesh worked example: a generated store, a late component with no generated artifact, one vocabulary (D7's centerpiece) | a sixth claimed tag value and its assignment golden |
 | doc landscape + doclint rule set | U1 consolidation; stale-stamp rule (D7) | skill, how-to, EXPLANATIONs, ADR-0146 dated update |
 
 ## Alternatives
