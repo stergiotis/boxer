@@ -231,14 +231,26 @@ func (inst *componentState) checkBinding(scope *nanopass.SelectScope, b componen
 			Errorf("a component binds a stored table; this SELECT reads a CTE, subquery or table function")
 		return
 	}
+	if ts.Table != table {
+		err = inst.errCall(spelled, funcExpr).Str("kind", b.Kind).Str("wants", b.Table).
+			Str("found", qualifyTable(ts.Database, ts.Table)).
+			Errorf("this SELECT does not read the table the component is stored in")
+		return
+	}
+	// The database is checked only when one is known. An unqualified FROM on
+	// a host that configured no default database is left to the server, which
+	// resolves it against the session database — refusing it instead would
+	// reject `FROM facts` everywhere, since every pass in the standard
+	// registry is wired with an empty default. A qualifier that IS present
+	// and disagrees is still refused.
 	tsDB := ts.Database
 	if tsDB == "" {
 		tsDB = inst.defaultDatabase
 	}
-	if tsDB != db || ts.Table != table {
+	if tsDB != "" && tsDB != db {
 		err = inst.errCall(spelled, funcExpr).Str("kind", b.Kind).Str("wants", b.Table).
 			Str("found", qualifyTable(tsDB, ts.Table)).
-			Errorf("this SELECT does not read the table the component is stored in")
+			Errorf("this SELECT reads a different database's table of that name")
 		return
 	}
 	return

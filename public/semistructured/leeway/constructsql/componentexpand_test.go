@@ -241,3 +241,24 @@ func TestFunctionsAreDeclaredForThePanel(t *testing.T) {
 	assert.NotEmpty(t, constructsql.ComponentExpansionDependencies(),
 		"the projection calls the read-back family, so the panel must be able to mark it")
 }
+
+// Every pass in the standard registry is wired with an empty default
+// database, so an unqualified FROM must still bind — the server resolves it
+// against the session database. Refusing it would make the family unusable
+// through passreg.
+func TestUnqualifiedTableBindsWhenNoDefaultDatabaseIsConfigured(t *testing.T) {
+	out, err := constructsql.ComponentExpandPass(testSource(t), "").
+		Run("SELECT LW_COMPONENT('SysMem') FROM facts")
+	require.NoError(t, err)
+	assert.Contains(t, out, memProjection)
+	assert.Contains(t, out, "WHERE "+memFilter)
+}
+
+// A qualifier that is present and disagrees is still refused: "some other
+// database also has a table called facts" is not a component read.
+func TestAnotherDatabasesTableOfTheSameNameIsRefused(t *testing.T) {
+	_, err := constructsql.ComponentExpandPass(testSource(t), "").
+		Run("SELECT LW_COMPONENT('SysMem') FROM elsewhere.facts")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "different database's table")
+}
