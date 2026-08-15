@@ -57,8 +57,9 @@ query: setStmt* ctes? selectUnionStmt;
 
 // INSERT wrapper — ADR-0181 §SD8 (Update 2026-08-15), the canonical mirror
 // of grammar1's rule. The TABLE noise word is absent: canonical form keeps
-// one spelling per statement, and INTO already carries the meaning.
-insertStmt: INSERT INTO tableIdentifier columnsClause? selectUnionStmt (SEMICOLON)? EOF;
+// one spelling per statement, and INTO already carries the meaning. The
+// setStmt* prelude mirrors `query`'s, as in grammar1.
+insertStmt: setStmt* INSERT INTO tableIdentifier columnsClause? selectUnionStmt (SEMICOLON)? EOF;
 columnsClause: LPAREN nestedIdentifier (COMMA nestedIdentifier)* RPAREN;
 
 // CTE / WITH-clause shared item — see grammar1's withItem comment. Grammar2

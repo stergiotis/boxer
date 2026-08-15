@@ -42,8 +42,11 @@ multiQuery: query+ EOF;
 // VALUES and FORMAT data clauses carry data rather than authoring, and the
 // FUNCTION target arm has no leeway meaning. The alternative is unlabeled
 // so QueryStmtContext keeps its type — existing consumers see the same
-// context with Query() nil-able.
-insertStmt: INSERT INTO TABLE? tableIdentifier columnsClause? selectUnionStmt (SEMICOLON)? EOF;
+// context with Query() nil-able. The leading setStmt* is this grammar's own
+// established deviation, mirrored from `query`: the SET parameter prelude
+// rides in front of the statement it configures (a filtered INSERT needs
+// its `{name:Type}` bindings exactly like a filtered SELECT).
+insertStmt: setStmt* INSERT INTO TABLE? tableIdentifier columnsClause? selectUnionStmt (SEMICOLON)? EOF;
 columnsClause: LPAREN nestedIdentifier (COMMA nestedIdentifier)* RPAREN;
 
 // CTE / WITH-clause shared item — accepts either a named subquery (CTE) or a

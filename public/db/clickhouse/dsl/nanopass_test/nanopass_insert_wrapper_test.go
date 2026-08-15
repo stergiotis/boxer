@@ -71,6 +71,11 @@ func TestInsertWrapperGrammar1Accepts(t *testing.T) {
 		"INSERT INTO t SELECT 1 UNION ALL SELECT 2",
 		"INSERT INTO t WITH c AS (SELECT 1) SELECT * FROM c",
 		"INSERT INTO {target:Identifier} SELECT 1",
+		// The SET parameter prelude rides in front of the wrapper exactly as
+		// it rides in front of a SELECT — grammar1's own established
+		// deviation from the upstream lineage, mirrored onto insertStmt
+		// (M3: a filtered INSERT needs its bindings like a filtered SELECT).
+		"SET param_event = 'DDOS'; INSERT INTO t SELECT x FROM src WHERE y = {event:String}",
 	}
 	for _, sql := range corpus {
 		tree, errs := parseGrammar1Stmt(sql)
