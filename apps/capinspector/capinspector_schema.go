@@ -1,6 +1,6 @@
 package capinspector
 
-// capschema.go renders the leeway schema of the table a capability's
+// capinspector_schema.go renders the leeway schema of the table a capability's
 // backend persists into — boxer.facts behind the Facts cap and
 // boxer.persiststate behind the persist cap — with the schemaview
 // inspector widget (ADR-0075): a section

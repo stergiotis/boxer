@@ -111,7 +111,7 @@ type App struct {
 
 	// schemaModel is the schemaview inspector's state for the storage
 	// schema of the selected cap (CapSpec.Schema, rendered by
-	// capschema.go). Per-window because the widget mutates selection,
+	// capinspector_schema.go). Per-window because the widget mutates selection,
 	// filter and outline expansion in it; the TableDesc behind it is
 	// process-wide and read-only. schemaCap records which cap the model
 	// is bound to so the picker rebinds exactly once per switch, and
