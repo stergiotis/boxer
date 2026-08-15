@@ -148,9 +148,12 @@ func TestSplicedSlotStaysOutOfThePrelude(t *testing.T) {
 	sql := "-- play: expr cond = status = 'error'\nSELECT a FROM t WHERE {cond:Expr}"
 	app := paneApp(t, sql)
 
-	require.False(t, app.paramPinned("cond"), "a spliced slot has no prelude tier")
+	// No PRELUDE tier — the mirror this test is about. It is nonetheless
+	// pinned, by its own declaration: M3 gave paramPinned a second source, so
+	// the bit no longer means "has a SET" (see TestExprTierBitReadsTheDeclaration).
 	_, synced := app.paramSyncedValues["cond"]
-	require.False(t, synced)
+	require.False(t, synced, "a spliced slot never enters the prelude mirror")
+	require.True(t, app.paramPinned("cond"), "but a declaration pins it")
 
 	// Phase 2: the widget mutates its draft. Phase 3 sends that to the
 	// directive (TestExprDraftDriftWritesTheDirective), and to neither of the
@@ -245,18 +248,18 @@ func TestExprWidgetPrunesFieldsForAbsentSlots(t *testing.T) {
 	require.NotPanics(t, func() { newExprWidget().ClearStateForAbsent(nil) })
 }
 
-// §SD3 puts directive lines in the residual — BELOW the `SET` prelude — and the
-// placement is load-bearing rather than tidy.
+// §SD3 puts directive lines in the residual — BELOW the `SET` prelude. That is
+// the canonical placement, and `SyncParamPrelude` normalises to it by rebuilding
+// the buffer as prelude-then-residual; it is no longer load-bearing.
 //
-// `env.harvestSetPrelude` takes only a LEADING run of `SET` lines, so a comment
-// above them ends the prelude before it starts: `BodyOffset` collapses to 0, the
-// buffer reads as two statements, and a run under the cursor ships the body
-// WITHOUT its `SET param_*` lines — every parameter then reads as unfilled,
-// including ones the buffer plainly binds. That is a defect in the shared
-// prelude definition rather than in this file, and it is asserted here because
-// it is what makes the placement a rule. Should the prelude harvest learn to
-// skip leading comments, this test goes red and the rule can be relaxed.
-func TestExprDirectivesBelongBelowThePrelude(t *testing.T) {
+// It used to be. `env.harvestSetPrelude` took only a LEADING run of `SET` lines,
+// so a comment above them ended the prelude before it started: `BodyOffset`
+// collapsed to 0, the buffer read as two statements, and a run under the cursor
+// shipped the body WITHOUT its `SET param_*` lines — every parameter then
+// reading as unfilled, including ones the buffer plainly binds. ADR-0006's
+// 2026-08-15 Update fixed that in the shared prelude definition. Both orders are
+// asserted here so the placement cannot quietly become load-bearing again.
+func TestExprDirectivesWorkEitherSideOfThePrelude(t *testing.T) {
 	const body = "SELECT {cols:ExprList}, {tbl:Identifier}\nFROM numbers(12)\nWHERE {cond:Expr}"
 	const directives = "-- play: expr cond = number % 3 = 0\n-- play: expr cols = number AS n\n"
 	const prelude = "SET param_tbl = 'number';\n"
@@ -265,19 +268,19 @@ func TestExprDirectivesBelongBelowThePrelude(t *testing.T) {
 	require.Len(t, scanExprHints(prelude+directives+body), 2)
 	require.Len(t, scanExprHints(directives+prelude+body), 2)
 
-	below := paneApp(t, prelude+directives+body)
-	below.caretByte = len(below.sql)
-	runSQL, _, _ := below.runBuffer()
-	_, bound, unfilled := below.resolveRunSignals(runSQL)
-	require.True(t, bound["tbl"], "the prelude survives when the directives sit under it")
-	require.Empty(t, unfilled, "and the declared expressions do not hold the gate")
-
-	above := paneApp(t, directives+prelude+body)
-	above.caretByte = len(above.sql)
-	runSQL, _, _ = above.runBuffer()
-	_, bound, unfilled = above.resolveRunSignals(runSQL)
-	require.False(t, bound["tbl"], "a directive above the prelude loses the prelude entirely")
-	require.Contains(t, unfilled, "tbl", "and a plainly-bound parameter then reads as unfilled")
+	for name, sql := range map[string]string{
+		"directives below the prelude": prelude + directives + body,
+		"directives above the prelude": directives + prelude + body,
+	} {
+		t.Run(name, func(t *testing.T) {
+			app := paneApp(t, sql)
+			app.caretByte = len(app.sql)
+			runSQL, _, _ := app.runBuffer()
+			_, bound, unfilled := app.resolveRunSignals(runSQL)
+			require.True(t, bound["tbl"], "the prelude binds on either side of the directives")
+			require.Empty(t, unfilled, "and the declared expressions do not hold the gate")
+		})
+	}
 }
 
 // The hint text is the only place a reader is told what shape the knob wants,

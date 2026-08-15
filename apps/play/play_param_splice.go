@@ -1,6 +1,7 @@
 package play
 
 import (
+	"maps"
 	"sort"
 	"strings"
 
@@ -139,6 +140,90 @@ func exprMarkFor(spl []exprSplice, errOffset int) (name string, mark nanopass.So
 		return s.Name, nanopass.SourceRange{Start: rel, End: len(s.Value)}, true
 	}
 	return
+}
+
+// pinExprClaim is [PlayApp.pinParamClaim]'s arm for a SQL-valued slot
+// (ADR-0187 (proposed) §SD3): it authors the `-- play: expr` line the prelude
+// would otherwise have been, through the same writer a pinned drift uses so
+// there is one definition of the syntax.
+//
+// The value is the store's — what the field is showing — falling back to the
+// draft for a name the store never held. As with a `SET`, the store KEEPS its
+// value: the directive shadows it at substitution time rather than replacing
+// it, so pinning a predicate a panel publishes does not wipe the panel's, and
+// unpinning finds it still there.
+func (inst *PlayApp) pinExprClaim(subset []paramSlot) {
+	values := make(map[string]string, len(inst.paramSyncedExprs)+len(subset))
+	maps.Copy(values, inst.paramSyncedExprs)
+	for _, s := range subset {
+		v, held := inst.signalRawFor(s.Name)
+		if !held {
+			if ptr, has := inst.paramDrafts[s.Name]; has {
+				v = *ptr
+			}
+		}
+		if v == "" {
+			// An empty declaration is not one (§SD3), so there is nothing to
+			// pin — the slot stays unfilled and the control stays offered.
+			continue
+		}
+		values[s.Name] = v
+	}
+	out, changed := syncExprDirectives(inst.sql, values)
+	if !changed {
+		return
+	}
+	inst.sql = out
+	for _, s := range subset {
+		v, ok := values[s.Name]
+		if !ok {
+			continue
+		}
+		// The tier bit flips now, not when the debounced parse catches up: the
+		// frame in between must not read as live drift and write the value
+		// straight back into the store it just left.
+		inst.paramSyncedExprs[s.Name] = v
+		delete(inst.paramLiveSeeded, s.Name)
+		if ptr, has := inst.paramDrafts[s.Name]; has {
+			*ptr = v
+		}
+	}
+}
+
+// unpinExprClaim is the same migration in reverse: the declaration goes, and
+// the value it carried is seeded into the store so the field keeps showing it
+// and the name is immediately live rather than unfilled.
+func (inst *PlayApp) unpinExprClaim(subset []paramSlot) {
+	values := make(map[string]string, len(inst.paramSyncedExprs))
+	maps.Copy(values, inst.paramSyncedExprs)
+	freed := make(map[string]string, len(subset))
+	for _, s := range subset {
+		v, declared := inst.paramSyncedExprs[s.Name]
+		if !declared {
+			continue
+		}
+		freed[s.Name] = v
+		delete(values, s.Name)
+	}
+	if len(freed) == 0 {
+		return
+	}
+	out, changed := syncExprDirectives(inst.sql, values)
+	if !changed {
+		return
+	}
+	inst.sql = out
+	for _, s := range subset {
+		v, ok := freed[s.Name]
+		if !ok {
+			continue
+		}
+		delete(inst.paramSyncedExprs, s.Name)
+		inst.noteLiveSeeded(s.Name, v)
+		if inst.graph != nil {
+			inst.graph.setSignalRawFrom(s.Name, v, signalWriterParamWidget)
+		}
+	}
 }
 
 // exprDirectiveLine renders one `-- play: expr` declaration.

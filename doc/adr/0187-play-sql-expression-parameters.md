@@ -202,18 +202,18 @@ it. `SyncParamPrelude` rebuilds that block as `buildParamPrelude(…) + residual
 non-param `SET`s shift downward on rewrite; a directive line shifts the same way
 unless its position is decided once, here, rather than discovered.
 
-That decision turned out to be forced rather than stylistic, which the M1
-implementation found. `env.harvestSetPrelude` consumes only a **leading** run of
-`SET` lines, so a comment above them ends the prelude before it starts:
-`BodyOffset` collapses to zero, the buffer reads as two statements, and a
-run-under-cursor ships the body without its `SET param_*` lines — every
-parameter the buffer plainly binds then reads as unfilled. This is a defect in
-the shared prelude definition, not in this decision, and it predates it: any
-comment above a prelude does it, including the `-- play: enum` and
-`-- play: gloss` directives already in the vocabulary. It is recorded here
-because it is what makes the placement a rule, and it is deliberately not fixed
-here — `dsl/env`'s body offset is what every pass-recorded range is sliced
-against, so widening it is its own decision.
+The placement is canonical, not forced. It briefly looked forced: M1 found that
+`env.harvestSetPrelude` consumed only a **leading** run of `SET` lines, so a
+comment above them ended the prelude before it started — `BodyOffset` collapsed
+to zero, the buffer read as two statements, and a run-under-cursor shipped the
+body without its `SET param_*` lines, every parameter the buffer plainly binds
+then reading as unfilled. That was a defect in the shared prelude definition
+rather than in this decision, and it predated it: any comment above a prelude
+did it, `-- play: enum` and `-- play: gloss` included. It is fixed at that
+layer — the prelude now spans comments
+([ADR-0006](./0006-nanopass-environment-and-first-class-pass.md), 2026-08-15
+Update) — so a directive above the prelude costs nothing but a normalising move
+on the next sync.
 
 ### SD4 — The splice: one step, before the registry, on the trace
 
@@ -448,12 +448,19 @@ of the parameter machinery exists.
   takes the **drift write-back** — a moved draft rewrites its own `-- play: expr`
   line — which M3 was going to own. Held back, M2 would have shipped a field
   whose edits reached nothing: the splice reads the buffer and the field writes
-  a draft, and only the write-back makes those the same value. Moving it also
-  keeps `BuildStatement` a pure function of the buffer, which is what the
-  Preview's "as sent" view rests on. The unfilled gates learn the rule that
-  follows: a declared expression is filled, an undeclared one is not.
+  a draft, and only the write-back makes those the same value. The unfilled
+  gates learn the rule that follows: a declared expression is filled, an
+  undeclared one is not.
 - **M3 — tiers.** `paramPinned`'s second source, pin/unpin's directive arm, the
-  live-tier signal path.
+  live-tier signal path. The live value cannot travel the way an ordinary live
+  value does — a `param_*` entry on the URL is a value to ClickHouse, so a
+  predicate sent that way is a string — so it reaches the splice as a client
+  binding, in the shape `SetExposeConditions` and `bindDataset` already
+  established. Two consequences worth stating: an expression is dropped from
+  `sigParams` whatever its tier, or the predicate would ride the request as a
+  string nothing reads; and the substitution is a function of the text alone
+  only at the pinned tier, which is the honest form of the "the Preview shows
+  what runs" claim — both read the same two sources.
 - **M4 — the ceiling.** Post-splice classification; `play` reports, applets
   refuse a raise with the witness; the `Identifier` probe.
 - **M5 — docs.** `features.md` §Query parameters, a snippet, the ADR-0096 and

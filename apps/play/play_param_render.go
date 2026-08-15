@@ -56,6 +56,15 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 			if v, declared := exprHints[s.Name]; declared {
 				*ptr = v
 				newSyncedExprs[s.Name] = v
+			} else if !kept {
+				// No declaration: the slot is at the LIVE tier, and its draft
+				// is born from the store exactly as a live value slot's is, so
+				// a panel already publishing the name shows its predicate the
+				// first frame the field appears.
+				if raw, held := inst.signalRawFor(s.Name); held {
+					*ptr = raw
+					inst.noteLiveSeeded(s.Name, raw)
+				}
 			}
 			newDrafts[s.Name] = ptr
 			continue
@@ -103,9 +112,16 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 // drift is a provenance'd store write. The bit is derived from the prelude
 // mirror the debounced parse maintains, never stored, so deleting a SET line
 // by hand and clicking unpin are the same gesture.
+// A SQL-valued slot has a second source for the same bit (ADR-0187 (proposed)
+// §SD3): it can never be prelude-bound, so what pins it is its own
+// `-- play: expr` line. Two mirrors, one predicate — a caller asking "is this
+// name pinned" must not have to know which kind of slot it is holding.
 func (inst *PlayApp) paramPinned(name string) bool {
-	_, pinned := inst.paramSyncedValues[name]
-	return pinned
+	if _, pinned := inst.paramSyncedValues[name]; pinned {
+		return true
+	}
+	_, declared := inst.paramSyncedExprs[name]
+	return declared
 }
 
 // signalRawFor reads a name's stored raw through this frame's snapshot,
@@ -310,14 +326,6 @@ func (inst *PlayApp) renderClaimTierControl(subset []paramSlot) {
 	if len(subset) == 0 {
 		return
 	}
-	if exprCategoryFor(subset[0].Type).spliced() {
-		// A spliced claim has no pin gesture yet: pinning authors a
-		// `SET param_<name>`, which is exactly the carriage ADR-0187
-		// (proposed) §SD2 rules out for an expression. Withheld rather than
-		// disabled, per ADR-0124 §SD3's rule that a missing capability is an
-		// absent control; M3 gives it a directive arm to write instead.
-		return
-	}
 	pinned := inst.paramPinned(subset[0].Name)
 	label := "pin"
 	if pinned {
@@ -346,6 +354,10 @@ func (inst *PlayApp) renderClaimTierControl(subset []paramSlot) {
 // rather than replacing it, so pinning `tl_min` does not wipe the extent the
 // Timeline publishes, and unpinning finds it still there.
 func (inst *PlayApp) pinParamClaim(subset []paramSlot) {
+	if exprCategoryFor(subset[0].Type).spliced() {
+		inst.pinExprClaim(subset)
+		return
+	}
 	values := make(map[string]string, len(inst.paramSyncedValues)+len(subset))
 	maps.Copy(values, inst.paramSyncedValues)
 	for _, s := range subset {
@@ -386,6 +398,10 @@ func (inst *PlayApp) pinParamClaim(subset []paramSlot) {
 // removed (the name is no longer pinned) nor tear the draft (the store now
 // agrees with it).
 func (inst *PlayApp) unpinParamClaim(subset []paramSlot) {
+	if exprCategoryFor(subset[0].Type).spliced() {
+		inst.unpinExprClaim(subset)
+		return
+	}
 	values := make(map[string]string, len(inst.paramSyncedValues))
 	maps.Copy(values, inst.paramSyncedValues)
 	freed := make(map[string]string, len(subset))
@@ -624,18 +640,28 @@ func (inst *PlayApp) syncParamDriftToPrelude() {
 	pinnedDrift := false
 	exprValues := make(map[string]string, len(inst.paramSlots))
 	exprDrift := false
+	// The live tier's expressions, handed to the client each frame: they are
+	// not in the buffer and they cannot ride the URL (§SD4), so the splice has
+	// to be told them. Rebuilt whole rather than merged, so a name that left
+	// the live tier stops being substituted.
+	liveExprs := make(map[string]string, len(inst.paramSlots))
 	for _, s := range inst.paramSlots {
 		ptr, ok := inst.paramDrafts[s.Name]
 		if !ok {
 			continue
 		}
 		if exprCategoryFor(s.Type).spliced() {
-			// Neither the prelude nor the store is this slot's (§SD2/§SD3): the
-			// prelude would ship an expression to the server as a string, and
-			// the store would publish a predicate under a name a panel may be
-			// reading as a value. Its drift goes to its own `-- play: expr`
-			// line instead, collected here and written once below so a frame
-			// that moved two fields rewrites the buffer once.
+			// The prelude is never this slot's (§SD2) — it would ship an
+			// expression to the server as a string. Its two tiers are its own
+			// directive and the signal store, forked here on the same bit
+			// every other slot uses.
+			if !inst.paramPinned(s.Name) {
+				inst.syncLiveParamDrift(s.Name, *ptr)
+				liveExprs[s.Name] = *ptr
+				continue
+			}
+			// Collected and written once below, so a frame that moved two
+			// fields rewrites the buffer once.
 			exprValues[s.Name] = *ptr
 			if inst.paramSyncedExprs[s.Name] != *ptr {
 				exprDrift = true
@@ -655,6 +681,9 @@ func (inst *PlayApp) syncParamDriftToPrelude() {
 	// SyncParamPrelude rebuilds the leading SET block as prelude + residual and
 	// the directives live in that residual: doing it the other way round would
 	// have the second writer re-derive a buffer the first had just moved.
+	if inst.client != nil {
+		inst.client.SetExprValues(liveExprs)
+	}
 	if exprDrift {
 		if out, changed := syncExprDirectives(inst.sql, exprValues); changed {
 			inst.sql = out

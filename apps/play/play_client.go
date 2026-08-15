@@ -73,6 +73,12 @@ type Client struct {
 	// actually sent to comes from a dispatchDecision (play_dispatch.go), and
 	// the resolver is what turns the base into one. Requests never read this
 	// field; only the resolver and the UI do.
+	// exprValues is the live-tier expression binding (ADR-0187 (proposed)
+	// §SD3), guarded by mu like the other mutable bindings. Replaced whole by
+	// SetExprValues; never mutated in place, so a reader holding it after the
+	// unlock sees a consistent set.
+	exprValues map[string]string
+
 	mu        sync.RWMutex
 	targetURL string
 	// resolver is the E2 seam. nil means staticResolver — every run goes to
@@ -507,7 +513,7 @@ func (inst *Client) buildResidualObserved(sql string, observe func(passreg.Apply
 		params = nil
 	}
 	observeStep(observe, rewriteStepExtractParams, orderExtractParams, exErr, sql, residual)
-	residual = applyExprSplice(residual, observe)
+	residual = inst.applyExprSplice(residual, observe)
 	residual = inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, residual, inst.passBinding, log.Logger, observe)
 	residual = inst.applyExposeConditions(residual, observe)
 	return
@@ -520,19 +526,65 @@ func (inst *Client) buildResidualObserved(sql string, observe func(passreg.Apply
 // registered pass has yet seen a body with an `Expr` slot in it — a type
 // ClickHouse does not know.
 //
-// A pure function of the text, deliberately. The values come from the buffer's
-// own `-- play: expr` lines, so the Preview's "as sent" view and the run resolve
-// the same body from the same bytes, and neither depends on pane state.
+// The values are the buffer's own `-- play: expr` lines over this client's
+// live binding (see [Client.exprValuesFor]) — the same pair of sources for the
+// Preview's "as sent" view and for the run, so the two cannot resolve different
+// bodies. At the pinned tier that makes the substitution a function of the text
+// alone; at the live tier the value is a client binding, exactly as
+// SetExposeConditions and bindDataset already are.
 //
 // Degrades like every step here: an unparseable buffer reports a skip and ships
 // unchanged, and the server answers with the real error.
-func applyExprSplice(sql string, observe func(passreg.ApplyObservation)) (out string) {
-	out, _, err := spliceExprSlots(sql, scanExprHints(sql))
+func (inst *Client) applyExprSplice(sql string, observe func(passreg.ApplyObservation)) (out string) {
+	out, _, err := spliceExprSlots(sql, inst.exprValuesFor(sql))
 	if err != nil {
 		log.Debug().Err(err).Msg("play: expression splice skipped, sending sql verbatim")
 		out = sql
 	}
 	observeStep(observe, rewriteStepSpliceExpr, orderSpliceExpr, err, sql, out)
+	return
+}
+
+// SetExprValues publishes the LIVE-tier expression values (ADR-0187 (proposed)
+// §SD3) — the ones a panel or the pane holds in the signal store rather than in
+// the buffer's `-- play: expr` lines.
+//
+// They cannot travel the way an ordinary live value does. A `param_*` entry on
+// the request URL is a VALUE to ClickHouse, so a predicate sent that way is a
+// string; the only route into the query is the splice, and the splice reads
+// text. Hence a client binding, in the shape SetExposeConditions and
+// bindDataset already established: written from the render thread, read
+// wherever a query is built.
+//
+// Whole-map replacement, so a name that left the live tier stops being
+// substituted rather than lingering as a stale binding.
+func (inst *Client) SetExprValues(values map[string]string) {
+	next := make(map[string]string, len(values))
+	maps.Copy(next, values)
+	inst.mu.Lock()
+	inst.exprValues = next
+	inst.mu.Unlock()
+}
+
+// exprValuesFor merges the two tiers into what the splice substitutes: the
+// buffer's own declarations over the live values.
+//
+// The declaration wins, which is §SD4's shadowing rule applied to this tier
+// pair — a pinned name is buffer-owned, and a panel co-writing the same name
+// must not silently override what the document states. It is also what makes
+// the Preview honest: everything the "as sent" view shows for a pinned name is
+// in the text the reader is looking at.
+func (inst *Client) exprValuesFor(sql string) (values map[string]string) {
+	inst.mu.RLock()
+	live := inst.exprValues
+	inst.mu.RUnlock()
+	declared := scanExprHints(sql)
+	if len(live) == 0 {
+		return declared
+	}
+	values = make(map[string]string, len(live)+len(declared))
+	maps.Copy(values, live)
+	maps.Copy(values, declared)
 	return
 }
 

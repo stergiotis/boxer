@@ -190,11 +190,16 @@ func (inst *PlayApp) unfilledInputs() (names []string) {
 			continue
 		}
 		if exprCategoryFor(s.Type).spliced() {
-			// A SQL-valued slot is filled by its `-- play: expr` line, not by
-			// the prelude and not by a signal (ADR-0187 (proposed) §SD3), and
-			// it is substituted before the body reaches the wire — so a
-			// declared one is not an unfilled input, and an undeclared one is.
+			// A SQL-valued slot is filled by its `-- play: expr` line at the
+			// pinned tier or by the store at the live one (ADR-0187 (proposed)
+			// §SD3), never by the prelude, and it is substituted before the
+			// body reaches the wire. Checked here rather than falling through
+			// because the generic signal test below cannot tell an empty
+			// predicate from a filled one, and `WHERE ()` is not a query.
 			if v, declared := inst.paramSyncedExprs[s.Name]; declared && v != "" {
+				continue
+			}
+			if raw, held := inst.signalRawFor(s.Name); held && raw != "" {
 				continue
 			}
 			names = append(names, s.Name)
