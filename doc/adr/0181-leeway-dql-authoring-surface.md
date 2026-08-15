@@ -601,9 +601,26 @@ Milestones:
   fell through to "read" on a parsed wrapper; it now witnesses the INSERT
   (`SecurityWitnessInsertWrapper`) exactly as the statement-kind
   classifier learned in M1.
-- **M3 — host policy.** play's write opt-in (ADR-0009 registry entry) and
+- **M3 — host policy.** ✓ play's write opt-in (ADR-0009 registry entry) and
   statement-aware FORMAT; docs — the reading-and-authoring how-to's
-  wrapper paragraph and the read-surface page's known-gaps line.
+  wrapper paragraph and the read-surface page's known-gaps line. Shipped
+  2026-08-15 (`b74dad2d`, `d4634249`, `84a56ba1`, `f3e22d54`):
+  `BOXER_PLAY_ALLOW_WRITES` gates Run (refusal with the copy-out hint on
+  the query summary line; sqlapplet hosts the same engine and inherits);
+  an allowed write runs on its own small path — `Client.ExecuteWrite`
+  drains the framed response to its terminal, so a failure raised after
+  the status line fails the run instead of the chclient.Exec gap's silent
+  OK — and reports written rows on the status line, never entering the
+  Arrow result machinery. `BuildStatement` ships a wrapper without
+  FORMAT, so Preview's "as sent" stays the true wire body. One grammar
+  amendment fell out of the gate's own test: the SET parameter prelude
+  now rides `insertStmt` in both grammars (mirroring `query`'s
+  established deviation), because ExtractParams parses the whole buffer
+  and a filtered INSERT needs its bindings like a filtered SELECT.
+
+With M3, this Update's statement-wrapping decision is fully implemented;
+`VALUES` sources, the `FUNCTION` target arm, materialized views and CTAS
+remain out by the decisions above.
 
 Tier-1 surface added by this Update: the grammar1/grammar2 statement
 productions, the pass refusal matrix as a pipeline contract, and play's
