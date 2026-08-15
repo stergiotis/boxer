@@ -369,6 +369,23 @@ entries under `## Updates`.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-08-15 — the truncated faces were the re-fit frame, not only the seed
+
+Milestones recorded a pre-existing width-seed under-measurement as the cause
+of glossed faces truncating against header-fitted columns. Half right: the
+seed (`colCharPx`, 7 px per rune) was ~11% under Hack's 13 px advance, and
+is now 7.8 — but the seed only lives until the re-fit frame. On that frame
+egui_table sizes each column in a sizing pass with the cell rect shrunk to
+the column minimum and takes the cell's *allocated* width, so a `Truncate()`d
+cell reports its truncated width and only the header ever sets the column.
+The per-DB-row grid now emits its cells untruncated on the re-fit frame (the
+frame egui_table discards and re-runs), so a column fits the wider of its
+header and its cells: `4111 •••• •••• 1111 ✓` renders whole. The
+per-attribute grid keeps its own width path (ADR-0151 overrides) and its
+truncation; a face wider than its header there still clips, noted, not fixed.
+
 ## References
 
 - [ADR-0123](./0123-play-content-typed-detail-cells.md) — content-typed detail cells; the gate this ADR keeps.

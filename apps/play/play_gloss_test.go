@@ -268,3 +268,11 @@ func TestGlossLink(t *testing.T) {
 	app.tableOpts.rawCells = true
 	assert.Equal(t, "", app.glossLink(&cols[0], urls, 0), "raw cells: no link either")
 }
+
+// fitRunes bounds what a re-fit cell hands egui_table to measure.
+func TestFitRunes(t *testing.T) {
+	assert.Equal(t, "abc", fitRunes("abc", 3))
+	assert.Equal(t, "ab…", fitRunes("abcd", 2))
+	assert.Equal(t, "••…", fitRunes("••••", 2), "runes, not bytes")
+	assert.Equal(t, "", fitRunes("", 5))
+}

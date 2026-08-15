@@ -292,7 +292,16 @@ func (inst *PlayApp) renderTableOptionsBar() {
 // (a gloss/url cell): clicking it opens the link through the host's opener
 // and does not select the row — the row's other cells still do — since a
 // hyperlink's click is consumed by the widget and not reported back.
-func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, weak bool, selected, selBg, leftAlign bool, tone gloss.ToneE, link string) (clicked bool) {
+//
+// truncate is normally true. It is false on the one frame the grid asks
+// egui_table to re-fit its columns: egui_table sizes a column in a sizing
+// pass with each cell rect shrunk to the column minimum and takes the cell's
+// allocated width, so a Truncate()d button reports its truncated width and
+// only the header ever sets the column — a cell wider than its header
+// (`4111 •••• •••• 1111 ✓`, a long URL) truncated for good. Untruncated on
+// that frame, the button reports its intrinsic width and the column fits it;
+// egui_table discards and re-runs the frame, so the overflow is never shown.
+func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, weak bool, selected, selBg, leftAlign bool, tone gloss.ToneE, link string, truncate bool) (clicked bool) {
 	c.AddSpace(cellPadX)
 	emitCell := func() {
 		emitButton := func() {
@@ -309,11 +318,13 @@ func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, we
 			if weak {
 				rt = rt.Weak()
 			}
-			clicked = c.Button(inst.ids.PrepareSeq(id), rt.End().Keep()).
+			btn := c.Button(inst.ids.PrepareSeq(id), rt.End().Keep()).
 				Frame(false).
-				Selected(selected).
-				Truncate().
-				SendResp().HasPrimaryClicked()
+				Selected(selected)
+			if truncate {
+				btn = btn.Truncate()
+			}
+			clicked = btn.SendResp().HasPrimaryClicked()
 		}
 		if selBg && selected {
 			for range c.Frame(inst.ids.PrepareSeq(id ^ attrSelFrameSalt)).

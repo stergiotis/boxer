@@ -5,6 +5,7 @@ import (
 
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -610,7 +611,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 				if row.firstOfEntity {
 					marker = strconv.FormatInt(row.absRow+1, 10)
 				}
-				if inst.selectableCell(rowBase, cellPadX, marker, true, selected, true, false, gloss.ToneNeutral, "") {
+				if inst.selectableCell(rowBase, cellPadX, marker, true, selected, true, false, gloss.ToneNeutral, "", true) {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}
@@ -628,7 +629,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 				if gc := &glossCols[visCols[pos]]; gc.mediaType == gloss.MediaTypeURL && gc.glossedElem() && !inst.tableOpts.rawCells {
 					link = row.cells[pos]
 				}
-				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, row.cells[pos], false, selected, true, leftAlign, gloss.ToneNeutral, link) {
+				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, row.cells[pos], false, selected, true, leftAlign, gloss.ToneNeutral, link, true) {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}
@@ -669,7 +670,10 @@ func (inst *PlayApp) captureAttrWidths(et c.EndETableFluid, cols []colwidth.Colu
 // cache is sampled from the packed representation (`[len=N]`), so it under-sizes
 // the un-packed scalars; this samples the grid the exploded view actually shows.
 func (inst *PlayApp) attrColWidths(schema *arrow.Schema, visCols []int, rows []attrGridRow) []float32 {
-	const charW = 7.0
+	// charW is the per-DB-row grid's colCharPx: the measured monospace advance
+	// (Hack at 13 px). Runes, not bytes — a glossed `••••••` is six glyphs and
+	// eighteen bytes.
+	const charW = colCharPx
 	const pad = 18.0
 	const minW = 44.0
 	const maxW = 420.0
@@ -677,13 +681,13 @@ func (inst *PlayApp) attrColWidths(schema *arrow.Schema, visCols []int, rows []a
 	widths := make([]float32, len(visCols))
 	for i, arrowCol := range visCols {
 		field := schema.Field(arrowCol)
-		maxChars := len(field.Name)
+		maxChars := utf8.RuneCountInString(field.Name)
 		if lbl := inst.colLabels[field.Name]; lbl != "" {
-			maxChars = len(lbl)
+			maxChars = utf8.RuneCountInString(lbl)
 		}
 		for r := 0; r < len(rows) && r < sampleRows; r++ {
-			if v := rows[r].cells[i]; len(v) > maxChars {
-				maxChars = len(v)
+			if v := rows[r].cells[i]; utf8.RuneCountInString(v) > maxChars {
+				maxChars = utf8.RuneCountInString(v)
 			}
 		}
 		w := float32(maxChars)*charW + pad

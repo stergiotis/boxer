@@ -62,9 +62,20 @@ const (
 	// a specific host makes the flash objectionable. Applies to every Lazy tab.
 	lazyPaneHoldFrames = 0
 	// Column-width heuristic bounds (px).
-	colMinWidth      = 100.0
-	colMaxWidth      = 420.0
-	colCharPx        = 7.0 // approx monospace-ish character advance
+	colMinWidth = 100.0
+	colMaxWidth = 420.0
+	// colCharPx is the monospace glyph advance the width seed multiplies a
+	// rune count by. 7.8 is Hack at 13 px (0.6 em), measured on a headless
+	// tour capture: a 20-glyph cell inks 155 px, a 7-glyph one 53. It was
+	// 7.0, which under-sized every column whose cells outrun its header. The
+	// seed only lives until the re-fit frame (see renderMasterTable's refit
+	// and selectableCell's truncate parameter, which is what actually fits a
+	// column to its cells); a calibrated seed keeps that first frame close
+	// to the final layout instead of visibly jumping.
+	colCharPx = 7.8
+	// colMaxRunes is colMaxWidth in glyphs at colCharPx, less the cell's
+	// button padding and inset: what a re-fit cell may measure at most.
+	colMaxRunes      = 50
 	colSampleRows    = 64
 	historyLabelChar = 46 // one-line label fit target
 	// previewDebounce is the idle window the editor buffer must sit for before
@@ -3063,6 +3074,8 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// Asking for a re-fit on the frame the column set changes is what makes
 	// the widths belong to the result on screen. It has to be one frame:
 	// re-fitting continuously would move the columns while the user reads.
+	// On that frame the cells go out untruncated (selectableCell), so the
+	// re-fit measures their real width rather than a truncated one.
 	refit := inst.tableColsChanged(schema, visCols)
 	for _, arrowCol := range visCols {
 		col := c.EtColumn(inst.colWidths[arrowCol]).Resizable(true)
@@ -3180,7 +3193,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 
 		if vis, _ := et.ColVisible(0); vis {
 			for range et.Cells(local, 0) {
-				if inst.selectableCell(rowBase, cellPadX, fmt.Sprintf("%d", absRow+1), false, selected, false, false, gloss.ToneNeutral, "") {
+				if inst.selectableCell(rowBase, cellPadX, fmt.Sprintf("%d", absRow+1), false, selected, false, false, gloss.ToneNeutral, "", !refit) {
 					emit.Emit(signalSelection, absRow)
 				}
 			}
@@ -3197,7 +3210,13 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 				// gloss/url cell is a hyperlink to its value.
 				text, tone := inst.glossCell(&glossCols[arrowCol], rec.Column(arrowCol), absRow, false)
 				link := inst.glossLink(&glossCols[arrowCol], rec.Column(arrowCol), absRow)
-				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, text, false, selected, false, leftAlign, tone, link) {
+				if refit {
+					// The untruncated re-fit cell must not size a column to a
+					// paragraph: cut what egui measures at the runes that fit
+					// colMaxWidth, the same ceiling the seed has always had.
+					text = fitRunes(text, colMaxRunes)
+				}
+				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, text, false, selected, false, leftAlign, tone, link, !refit) {
 					emit.Emit(signalSelection, absRow)
 				}
 			}
@@ -3307,6 +3326,23 @@ func (inst *PlayApp) ensureColLabels(schema *arrow.Schema) {
 	}
 	inst.colLabels = lwsql.BuildLabels(names)
 	inst.colLabelsForSchema = schema
+}
+
+// fitRunes cuts s to at most n runes plus an ellipsis: the text a re-fit
+// cell hands egui_table to measure, so a paragraph cannot size its column
+// past colMaxWidth.
+func fitRunes(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	i := 0
+	for pos := range s {
+		if i == n {
+			return s[:pos] + "…"
+		}
+		i++
+	}
+	return s
 }
 
 func historyLabel(e HistoryEntry) string {
