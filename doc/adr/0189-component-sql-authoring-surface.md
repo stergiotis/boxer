@@ -337,10 +337,13 @@ against `ExpansionDependencies` the way the extraction family already is, so
     `Scan<Kind>` return the same values for the same rows, against a live
     server. Two read paths from one definition disagreeing is the thing most
     worth catching, and neither path can be its own oracle.
-- **Gap.** SD6's join/alias case is refused rather than supported, so nothing
+- **Gap.** SD6's join case is refused rather than supported, so nothing
   verifies qualified emission — that arrives with the trigger. Presence and
   Validator are published but have no SQL-visible name in v1, so only their
-  Go-level shape is pinned.
+  Go-level shape is pinned. The cross-oracle covers one kind (`SysMem`)
+  rather than all thirteen: it needs rows in the live table, and which kinds
+  have any depends on what the host collected — a per-kind sweep would skip
+  silently on most of them, which reads as coverage it does not have.
 
 ## Status
 
@@ -424,7 +427,39 @@ Proposed — awaiting review by the code owner.
   whose slots are the DTO's Go field names, with its conformance filter in the
   WHERE the statement did not have.
 - **M4 — the cross-oracle test against `Scan<Kind>`,** and the sysmetrics
-  expansion goldens.
+  expansion goldens. ✓
+
+  **The cross-oracle.** `LW_COMPONENT('SysMem')` and `ScanSysMem` are compared
+  as multisets of `(Id, TotalBytes)` against the live table — 6,074 rows
+  agreeing on the run that landed this. Both sides are pinned to one snapshot
+  by an upper bound on the order column, taken once from the table's own
+  `max()`: `boxer.facts` is append-only and may have a scraper writing into it,
+  so an unbounded comparison would race the writer rather than test anything.
+  The passing run logs how many rows it compared, because an oracle that
+  agreed about three rows is not the evidence one that agreed about thousands
+  is.
+
+  **The trap, demonstrated rather than asserted.** A row carrying one
+  membership twice: the `Filter` rejects it and the bare `Projection` answers
+  for it — 2 rows in, 1 conforming, 2 projected. That is ADR-0066's property
+  observed from both sides, and it is what SD4's injection exists to prevent
+  an author from meeting.
+
+  The malformed row cannot be written through the store — the writer cannot
+  produce one — so it is crafted against a **test-owned clone** of
+  `boxer.facts`, created and dropped per run. Two things made that possible
+  and are worth recording: the artefacts' column names are unqualified (§SD6),
+  which is what lets them run against a clone unchanged; and cloning the facts
+  schema needs `allow_suspicious_low_cardinality_types`, because it carries
+  `LowCardinality(UInt64)`.
+
+  **The goldens are three kinds, not thirteen.** The artefacts are already
+  committed in `sysmetrics_store.out.go`, so a re-aspected section or a
+  re-keyed vocabulary shows in that file's diff; pinning every kind would add
+  ~70 KB restating it. The golden covers the three storage shapes this
+  vocabulary has — scalars on array sections, the M4 per-item tables, the M6
+  adjacency list — and a separate test expands all thirteen without a golden,
+  so a kind whose projection failed to generate cannot pass unnoticed.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
