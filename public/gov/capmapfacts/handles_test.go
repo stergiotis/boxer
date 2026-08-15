@@ -12,14 +12,10 @@ import (
 // this list forgets is still checked by TestQueriesResolveEveryHandle through
 // the query text; the list is what makes a failure say which one.
 var allHandles = []string{
-	hId, hTs,
-	hSymValue, hSymLr, hSymLrCard, hSymLmr, hSymLmrCard, hSymMrhp,
-	hStrValue, hStrLr, hStrLrCard, hStrLen,
-	hTxtValue, hTxtLmr, hTxtLmrCard, hTxtMrhp, hTxtLen,
-	hU8Value, hU8Lr, hU8LrCard, hU8Len,
-	hTimeValue, hTimeLmr, hTimeLmrCard, hTimeMrhp, hTimeLen,
-	hF64Value, hF64Lr, hF64LrCard, hF64Len,
-	hFkValue, hFkLr, hFkLrCard,
+	hId, hTs, hSymLr,
+	hSymValue, hSymMrhp,
+	hTxtValue, hTxtMrhp, hTxtLen,
+	hTimeValue, hTimeMrhp, hTimeLen,
 }
 
 // Every handle names a column the generated schema actually has.
@@ -82,16 +78,25 @@ func TestQueriesExpandIntoTheReadBackFamily(t *testing.T) {
 		out, err := prepare(sql, QualifiedTable)
 		require.NoErrorf(t, err, "%s", name)
 		assert.NotContainsf(t, out, "LW_GET", "%s: an LW_GET call survived expansion", name)
+		assert.NotContainsf(t, out, "LW_SEL", "%s: an LW_SEL call survived expansion", name)
 		assert.Containsf(t, out, "LW_VALUE_BY_TAG_EQUAL", "%s: the scalar reads should expand to the read-back family", name)
-		// The lane map the mixed and repeated reads use is the one the
-		// expansion itself emits, which is the point of using it rather than a
-		// hand-rolled prefix sum.
+		// The lane arithmetic is the expansion's, not this package's: the
+		// selector emits the same position-to-attribute map, which is the whole
+		// reason for reading through it.
 		assert.Containsf(t, out, "LW_RAGGED_PARENT_IDS", "%s", name)
 	}
 	assert.Contains(t, prepared(t, competenceSQL(QualifiedTable)), "LW_LIST_BY_TAG_EQUAL",
 		"the array-valued sections should expand to the list form")
 	assert.Contains(t, prepared(t, competenceSQL(QualifiedTable)), "LW_RAGGED_ELEM",
-		"a repeated attribute's value is read by position, not by a running total")
+		"a selected attribute's value is read by position, not by a running total")
+
+	// The plural reads are the selector's. Nothing in this package filters an
+	// identity lane by hand any more — which is what the version before this
+	// one did for the tags, the sections and the lifecycle.
+	authored := competenceSQL(QualifiedTable)
+	assert.Contains(t, authored, "LW_SEL_ATTRS(", "the repeated attributes should be selected, not filtered")
+	assert.Contains(t, authored, "LW_SEL(", "the mixed-channel parameters should be selected, not filtered")
+	assert.NotContains(t, authored, "arrayEnumerate", "an identity lane is no longer filtered by hand here")
 }
 
 func prepared(t *testing.T, sql string) (out string) {

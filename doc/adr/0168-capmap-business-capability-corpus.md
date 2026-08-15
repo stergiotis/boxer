@@ -283,15 +283,18 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   the expansion pass resolves the lanes and emits the read-back call
   (ADR-0181 §SD3). Nothing about the flattened layout is written here any more.
 
-  **Two shapes stay a filter over the membership lane**, and both are
-  deliberate rather than pending. The read-back family locates *the* attribute
-  carrying a membership, while this encoding writes several under one on
-  purpose — a tag each, a section each, a lifecycle entry each; asking for "the"
-  one would return an arbitrary member of a set. And the mixed channel, whose
-  parameter carries the section heading and the lifecycle phase (§SD5), is not
-  among the channels the lane resolver enumerates, so `chan:` cannot name it.
-  Those reads use `LW_RAGGED_PARENT_IDS` — the same position-to-attribute map
-  the expansion emits — rather than a hand-rolled prefix sum.
+  **The plural reads are `LW_SEL`.** This encoding writes several attributes
+  under one membership on purpose — a tag each, a section each, a lifecycle
+  entry each — which is the question `LW_GET` cannot ask, and until the
+  selector landed it was the reason this package still filtered an identity
+  lane by hand. `LW_SEL_ATTRS` returns the attribute indices a membership
+  occupies and `LW_SEL` the membership-lane positions; the value lane and the
+  mixed channel's parameter lane — the section heading, the lifecycle phase
+  (§SD5) — project through them and stay aligned because the two selectors are
+  co-indexed. The gather on an array-valued section goes through
+  `LW_RAGGED_ELEM`, since there an attribute index is not a value index.
+
+  Nothing in this package computes a lane position any more.
 
   **This gives the dump a precondition: a provisioned server.** The read-back
   family is installed by `boxer leeway sqlsurface install`, not by writing to
@@ -368,8 +371,13 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   arithmetic, which is the thing
   [leeway-sql-read-surface](../explanation/leeway-sql-read-surface.md) exists to
   stop. Now: column handles resolved against the generated schema, `LW_GET` for
-  the scalars, `LW_RAGGED_PARENT_IDS` for the two shapes it does not cover, and
-  a version check so an unprovisioned server says so.
+  the scalars, `LW_SEL` for the plural reads, and a version check so an
+  unprovisioned server says so. It took two passes — the first left the plural
+  and mixed-channel reads hand-written because the surface could not express
+  them, and `LW_SEL` plus the mixed channels landed days later. Eleven column
+  handles remain where there were twenty-eight, and every one of them is a
+  value or parameter lane a selector projects through; the identity and
+  cardinality lanes are the expansion's business now.
 
 ## Surfaces — Tier 1
 

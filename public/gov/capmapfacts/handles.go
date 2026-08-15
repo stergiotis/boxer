@@ -28,43 +28,25 @@ const (
 	hId = "`id:id`"
 	hTs = "`timestamp:ts`"
 
-	hSymValue   = "`symbol:value`"
-	hSymLr      = "`symbol:lr`"
-	hSymLrCard  = "`symbol:lrcard`"
-	hSymLmr     = "`symbol:lmr`"
-	hSymLmrCard = "`symbol:lmrcard`"
-	hSymMrhp    = "`symbol:mrhp`"
+	// The membership lane of the symbol section, named only as the WHERE
+	// pruner: a selector is opaque to index analysis, so the `has()` guard is
+	// what keeps a read of one fact kind off the whole table.
+	hSymLr = "`symbol:lr`"
 
-	hStrValue  = "`stringArray:value`"
-	hStrLr     = "`stringArray:lr`"
-	hStrLrCard = "`stringArray:lrcard`"
-	hStrLen    = "`stringArray:len`"
+	// The value and parameter lanes a selector projects through. Every other
+	// lane a read needs — the identity lanes, the cardinalities — is resolved
+	// by LW_GET and LW_SEL themselves, which is why this list is a third of
+	// what it was.
+	hSymValue = "`symbol:value`"
+	hSymMrhp  = "`symbol:mrhp`"
 
-	hTxtValue   = "`textArray:value`"
-	hTxtLmr     = "`textArray:lmr`"
-	hTxtLmrCard = "`textArray:lmrcard`"
-	hTxtMrhp    = "`textArray:mrhp`"
-	hTxtLen     = "`textArray:len`"
+	hTxtValue = "`textArray:value`"
+	hTxtMrhp  = "`textArray:mrhp`"
+	hTxtLen   = "`textArray:len`"
 
-	hU8Value  = "`u8Array:value`"
-	hU8Lr     = "`u8Array:lr`"
-	hU8LrCard = "`u8Array:lrcard`"
-	hU8Len    = "`u8Array:len`"
-
-	hTimeValue   = "`timeArray:value`"
-	hTimeLmr     = "`timeArray:lmr`"
-	hTimeLmrCard = "`timeArray:lmrcard`"
-	hTimeMrhp    = "`timeArray:mrhp`"
-	hTimeLen     = "`timeArray:len`"
-
-	hF64Value  = "`f64Array:value`"
-	hF64Lr     = "`f64Array:lr`"
-	hF64LrCard = "`f64Array:lrcard`"
-	hF64Len    = "`f64Array:len`"
-
-	hFkValue  = "`foreignKey:value`"
-	hFkLr     = "`foreignKey:lr`"
-	hFkLrCard = "`foreignKey:lrcard`"
+	hTimeValue = "`timeArray:value`"
+	hTimeMrhp  = "`timeArray:mrhp`"
+	hTimeLen   = "`timeArray:len`"
 )
 
 // prepare rewrites an authored query into the one that executes: column

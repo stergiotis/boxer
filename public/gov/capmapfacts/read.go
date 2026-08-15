@@ -358,33 +358,37 @@ func membId(m registry.RegisteredNaturalKey) (v uint64) {
 	return m.GetId().Value()
 }
 
-// The two ways this file reads an attribute, and why there are two.
+// How this file reads an attribute — all of it through the SQL read surface.
 //
-// **`LW_GET` where the surface reaches.** An attribute carrying one plain
-// membership is what the read-back family is for (ADR-0181 §SD3): the call
-// names a section and a membership id, and the expansion pass resolves the
-// lanes and emits the locate-and-extract expression. Every scalar this corpus
-// stores — a slug, a name, a level, a relation's endpoints — reads that way,
-// and none of the arithmetic is written here any more.
+// **`LW_GET` locates one.** The call names a section and a membership id, and
+// the expansion pass resolves the lanes and emits the read-back expression
+// (ADR-0181 §SD3). Every scalar this corpus stores — a slug, a name, a level, a
+// relation's endpoints — reads that way.
 //
-// **A filter over the membership lane where it does not.** Two shapes fall
-// outside it, both on purpose:
+// **`LW_SEL` selects several.** A membership carried by more than one attribute
+// of a row is the plural question, and this encoding asks it three times: a tag
+// each, a section each, a lifecycle entry each. `LW_SEL_ATTRS` returns the
+// attribute indices the membership occupies and `LW_SEL` the membership-lane
+// positions, co-indexed with each other, so the value lane and the parameter
+// lane project through them and stay aligned.
 //
-//   - A membership carried by SEVERAL attributes of one row. The read-back
-//     family locates *the* attribute tagged with a membership; this encoding
-//     writes a tag each, a section each, a lifecycle entry each. Asking for
-//     "the" one would return an arbitrary member of a set.
-//   - A membership on the MIXED channel, whose parameter carries the section
-//     heading and the lifecycle phase (§SD5). The lane resolver enumerates the
-//     plain and high-cardinality channels only, so `chan:` cannot name it.
-//
-// Those reads filter the membership lane directly — but through
-// `LW_RAGGED_PARENT_IDS`, the same position-to-attribute map the expansion
-// emits, rather than the hand-rolled prefix sum this file used to carry.
+// The mixed channel is what carries the section heading and the lifecycle phase
+// (§SD5), and it is nameable: `chan:low-card-ref-high-card-params`. That closed
+// the last reason this file had to compute anything itself — the version before
+// this one filtered the identity lane by hand, which is exactly the arithmetic
+// the expansion now emits on its behalf.
+
+// mixedChannel is the channel the section headings and lifecycle phases ride:
+// one membership shared by several attributes, told apart by a parameter.
+const mixedChannel = "chan:low-card-ref-high-card-params"
+
+// plainChannel is the ordinary one-membership-per-attribute channel. Every
+// section carries several channels, so naming one is not optional.
+const plainChannel = "chan:low-card-ref"
 
 // getScalar reads the attribute carrying memb on a scalar section.
 func getScalar(section string, memb uint64) (expr string) {
-	return fmt.Sprintf("LW_GET('%s', '%d', 'chan:low-card-ref')", section, memb)
+	return fmt.Sprintf("LW_GET('%s', '%d', '%s')", section, memb, plainChannel)
 }
 
 // getListFirst reads the first value of the attribute carrying memb on an
@@ -395,48 +399,36 @@ func getScalar(section string, memb uint64) (expr string) {
 // spelling of that, where indexing the run's end would quietly return a
 // different element the day the assumption stops holding.
 func getListFirst(section string, memb uint64) (expr string) {
-	return fmt.Sprintf("arrayElement(LW_GET_LIST('%s', '%d', 'chan:low-card-ref'), 1)", section, memb)
+	return fmt.Sprintf("arrayElement(LW_GET_LIST('%s', '%d', '%s'), 1)", section, memb, plainChannel)
 }
 
-// attrsFor yields the indices of the attributes carrying memb, in write order.
+// selValues reads every attribute carrying memb on a scalar section — the tag
+// list, and the lifecycle names on the mixed channel.
+func selValues(section string, memb uint64, channel string, valueLane string) (expr string) {
+	return fmt.Sprintf("LW_CO_GATHER(%s, LW_SEL_ATTRS('%s', '%d', '%s'))", valueLane, section, memb, channel)
+}
+
+// selArrayValues is selValues for an array-valued section: each selected
+// attribute's single value, in write order — the prose sections, the lifecycle
+// dates.
 //
-// The membership lane is every attribute's memberships concatenated, so a
-// position in it is not an attribute index; LW_RAGGED_PARENT_IDS over the
-// cardinality lane is the map between them, and it is the same one the
-// read-back expansion uses.
-func attrsFor(membCol, cardCol string, memb uint64) (expr string) {
-	return fmt.Sprintf("arrayMap(p -> arrayElement(LW_RAGGED_PARENT_IDS(%s), p), %s)",
-		cardCol, positionsFor(membCol, memb))
+// The gather goes through LW_RAGGED_ELEM rather than the value lane directly,
+// because on those sections the lane is flattened across attributes: an
+// attribute index is not a value index, and pairing the two reads the wrong
+// rows without raising anything.
+func selArrayValues(section string, memb uint64, channel string, valueLane string, lenLane string) (expr string) {
+	return fmt.Sprintf("arrayMap(a -> LW_RAGGED_ELEM(%s, %s, a, 1), LW_SEL_ATTRS('%s', '%d', '%s'))",
+		valueLane, lenLane, section, memb, channel)
 }
 
-// positionsFor yields the positions of memb within the flattened membership
-// column — which is what indexes the mixed-membership parameter (the heading,
-// the lifecycle phase), since that column is flattened the same way.
-func positionsFor(membCol string, memb uint64) (expr string) {
-	return fmt.Sprintf("arrayFilter((i, m) -> m = %d, arrayEnumerate(%s), %s)", memb, membCol, membCol)
-}
-
-// pickScalars reads every attribute carrying memb on a scalar section — the
-// tag list, and the lifecycle names on the mixed channel.
-func pickScalars(valCol, membCol, cardCol string, memb uint64) (expr string) {
-	return fmt.Sprintf("arrayMap(a -> arrayElement(%s, a), %s)", valCol, attrsFor(membCol, cardCol, memb))
-}
-
-// pickArrayValues is pickScalars for an array-valued section: each attribute's
-// single value, in write order — the prose sections and the lifecycle dates.
+// selParameters yields the mixed-membership parameters of memb — the section
+// heading, the lifecycle phase.
 //
-// LW_RAGGED_ELEM takes the attribute's k-th element, which is exact where
-// indexing the flattened lane by a running total is only correct while every
-// attribute holds exactly one value.
-func pickArrayValues(valCol, lenCol, membCol, cardCol string, memb uint64) (expr string) {
-	return fmt.Sprintf("arrayMap(a -> LW_RAGGED_ELEM(%s, %s, a, 1), %s)",
-		valCol, lenCol, attrsFor(membCol, cardCol, memb))
-}
-
-// pickParameters yields the mixed-membership parameters of memb — the section
-// heading, the lifecycle phase — decoded from bytes to text.
-func pickParameters(paramCol, membCol string, memb uint64) (expr string) {
-	return fmt.Sprintf("arrayMap(p -> toString(arrayElement(%s, p)), %s)", paramCol, positionsFor(membCol, memb))
+// It selects with LW_SEL, not LW_SEL_ATTRS: the parameter lane is co-indexed
+// with the membership lane, not with the attributes, and the two differ exactly
+// when an attribute carries more than one membership.
+func selParameters(section string, memb uint64, paramLane string) (expr string) {
+	return fmt.Sprintf("LW_CO_GATHER(%s, LW_SEL('%s', '%d', '%s'))", paramLane, section, memb, mixedChannel)
 }
 
 // newestPerId is the tail every read shares: a re-ingest restates entities
@@ -480,13 +472,13 @@ WHERE has(%s, %d)
 		getListFirst("u8Array", membId(capmapvocab.MembCompLevel)),
 		getListFirst("u8Array", membId(capmapvocab.MembCompMaturity)),
 		getListFirst("u8Array", membId(capmapvocab.MembCompPain)),
-		pickScalars(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompTag)),
-		pickParameters(hTxtMrhp, hTxtLmr, membId(capmapvocab.MembCompSection)),
-		pickArrayValues(hTxtValue, hTxtLen, hTxtLmr, hTxtLmrCard, membId(capmapvocab.MembCompSection)),
-		pickParameters(hSymMrhp, hSymLmr, membId(capmapvocab.MembCompLifecycleBy)),
-		pickScalars(hSymValue, hSymLmr, hSymLmrCard, membId(capmapvocab.MembCompLifecycleBy)),
-		pickParameters(hTimeMrhp, hTimeLmr, membId(capmapvocab.MembCompLifecycleAt)),
-		pickArrayValues(hTimeValue, hTimeLen, hTimeLmr, hTimeLmrCard, membId(capmapvocab.MembCompLifecycleAt)),
+		selValues("symbol", membId(capmapvocab.MembCompTag), plainChannel, hSymValue),
+		selParameters("textArray", membId(capmapvocab.MembCompSection), hTxtMrhp),
+		selArrayValues("textArray", membId(capmapvocab.MembCompSection), mixedChannel, hTxtValue, hTxtLen),
+		selParameters("symbol", membId(capmapvocab.MembCompLifecycleBy), hSymMrhp),
+		selValues("symbol", membId(capmapvocab.MembCompLifecycleBy), mixedChannel, hSymValue),
+		selParameters("timeArray", membId(capmapvocab.MembCompLifecycleAt), hTimeMrhp),
+		selArrayValues("timeArray", membId(capmapvocab.MembCompLifecycleAt), mixedChannel, hTimeValue, hTimeLen),
 		table,
 		hSymLr, membId(capmapvocab.MembKindCompetence),
 		newestPerId())
