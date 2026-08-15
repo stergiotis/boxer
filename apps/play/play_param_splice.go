@@ -10,7 +10,7 @@ import (
 )
 
 // The client-side substitution of SQL-valued placeholders — ADR-0187
-// (proposed) §SD4.
+// §SD4.
 //
 // ClickHouse substitutes values; nothing in its param channel substitutes an
 // expression, so an `{c:Expr}` slot has to be replaced in the text before the
@@ -143,7 +143,7 @@ func exprMarkFor(spl []exprSplice, errOffset int) (name string, mark nanopass.So
 }
 
 // pinExprClaim is [PlayApp.pinParamClaim]'s arm for a SQL-valued slot
-// (ADR-0187 (proposed) §SD3): it authors the `-- play: expr` line the prelude
+// (ADR-0187 §SD3): it authors the `-- play: expr` line the prelude
 // would otherwise have been, through the same writer a pinned drift uses so
 // there is one definition of the syntax.
 //

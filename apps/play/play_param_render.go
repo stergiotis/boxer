@@ -45,7 +45,7 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 		}
 		if exprCategoryFor(s.Type).spliced() {
 			// A client-side-substituted slot has no prelude tier at all
-			// (ADR-0187 (proposed) §SD2), so it never enters newSynced: its
+			// (ADR-0187 §SD2), so it never enters newSynced: its
 			// declared value is the `-- play: expr` line, and putting it in the
 			// prelude would ship an expression to the server as a string.
 			//
@@ -112,7 +112,7 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 // drift is a provenance'd store write. The bit is derived from the prelude
 // mirror the debounced parse maintains, never stored, so deleting a SET line
 // by hand and clicking unpin are the same gesture.
-// A SQL-valued slot has a second source for the same bit (ADR-0187 (proposed)
+// A SQL-valued slot has a second source for the same bit (ADR-0187
 // §SD3): it can never be prelude-bound, so what pins it is its own
 // `-- play: expr` line. Two mirrors, one predicate — a caller asking "is this
 // name pinned" must not have to know which kind of slot it is holding.

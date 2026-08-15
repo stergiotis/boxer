@@ -1,6 +1,6 @@
 package play
 
-// The client-side substitution of SQL-valued placeholders (ADR-0187 (proposed)
+// The client-side substitution of SQL-valued placeholders (ADR-0187
 // §SD4/§SD6, milestone M2): the per-category splice rules, the error-position
 // mapping back onto a field, the directive write-back, and the wire body the
 // whole path produces.

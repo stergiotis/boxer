@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-15
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0187: `play` SQL-expression parameters — client-side substitution, categories, and a class ceiling
 
@@ -487,20 +485,26 @@ of the parameter machinery exists.
 
 ## Status
 
-Proposed 2026-08-15; M0–M4 landed the same day, leaving §M5 (docs). This
-paragraph said "nothing implemented" for five commits after it stopped being
-true, which is the ordinary failure of a Status written at proposal time — it
-is a claim about the tree, and the tree moved. The design dialogue settled three
-questions — where a filled expression's text lives (§SD3), how many grammatical
-categories v1 carries (§SD1), and what an applet may do with one (§SD5) — and
-this record is the result. The Milestones order is deliberate: §M0 ships the
-field alone, because §SD7's widget earns its keep in the Map before any of the
-parameter machinery exists, and descoping there is cheaper than descoping later.
+Accepted 2026-08-15 (reviewed-by: p@stergiotis), proposed and implemented the
+same day: §M0–§M5 all shipped before the flip. This paragraph said "nothing
+implemented" for five commits after it stopped being true, which is the ordinary
+failure of a Status written at proposal time — it is a claim about the tree, and
+the tree moved.
 
-One claim is unverified and marked as such in the Verification plan: that
-ClickHouse substitutes `Identifier` in every position the grammar admits. The
-grammar's own comment claims table and database position only, and §SD2 adopts
-that narrower claim rather than the broader one.
+The design dialogue settled three questions — where a filled expression's text
+lives (§SD3), how many grammatical categories v1 carries (§SD1), and what an
+applet may do with one (§SD5) — and this record is the result. The Milestones
+order is deliberate: §M0 ships the field alone, because §SD7's widget earns its
+keep in the Map before any of the parameter machinery exists, and descoping there
+is cheaper than descoping later.
+
+Two claims moved between proposal and acceptance, and the body carries both
+rather than the version written here first. The `Identifier` positions were
+unverified and are no longer: §M4 probed the pinned server, and substitution
+works more widely than the grammar's comment implies, with the dotted-path limit
+the Verification plan now records. And §SD4's "a pure function of the buffer" was
+true only until §M3 gave the live tier a client binding; both the ADR and the
+code comment say the narrower thing now.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

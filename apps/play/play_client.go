@@ -73,7 +73,7 @@ type Client struct {
 	// actually sent to comes from a dispatchDecision (play_dispatch.go), and
 	// the resolver is what turns the base into one. Requests never read this
 	// field; only the resolver and the UI do.
-	// exprValues is the live-tier expression binding (ADR-0187 (proposed)
+	// exprValues is the live-tier expression binding (ADR-0187
 	// §SD3), guarded by mu like the other mutable bindings. Replaced whole by
 	// SetExprValues; never mutated in place, so a reader holding it after the
 	// unlock sees a consistent set.
@@ -520,7 +520,7 @@ func (inst *Client) buildResidualObserved(sql string, observe func(passreg.Apply
 }
 
 // applyExprSplice substitutes the buffer's SQL-valued placeholders (ADR-0187
-// (proposed) §SD4). It runs between the SET-param harvest and the pass
+// §SD4). It runs between the SET-param harvest and the pass
 // registry, which is the one window where both hold: the prelude is already
 // gone, so a `param_*` value cannot be confused with an expression, and no
 // registered pass has yet seen a body with an `Expr` slot in it — a type
@@ -545,7 +545,7 @@ func (inst *Client) applyExprSplice(sql string, observe func(passreg.ApplyObserv
 	return
 }
 
-// SetExprValues publishes the LIVE-tier expression values (ADR-0187 (proposed)
+// SetExprValues publishes the LIVE-tier expression values (ADR-0187
 // §SD3) — the ones a panel or the pane holds in the signal store rather than in
 // the buffer's `-- play: expr` lines.
 //
@@ -589,7 +589,7 @@ func (inst *Client) exprValuesFor(sql string) (values map[string]string) {
 }
 
 // ExprSubstituted is sql with its SQL-valued placeholders replaced — the body
-// ADR-0187 (proposed) §SD5 classifies.
+// ADR-0187 §SD5 classifies.
 //
 // It substitutes and stops. That is the whole point of its existing separately
 // from [Client.buildResidual]: the class must be judged AFTER the user's

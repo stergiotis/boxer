@@ -1,7 +1,7 @@
 package sqleditor
 
 // A SQL editing surface for a fragment rather than a statement — the control
-// ADR-0187 (proposed) §SD7 puts under a panel's filter, colour block or table
+// ADR-0187 §SD7 puts under a panel's filter, colour block or table
 // source, in place of the plain TextEdit those carry today.
 
 import (
@@ -42,7 +42,7 @@ type FieldFrame struct {
 // which edits statements.
 //
 // That distinction is why it exists rather than being an [Editor] with
-// `Rows: 1` (ADR-0187 (proposed) §SD7). A fragment has no statement split, no
+// `Rows: 1` (ADR-0187 §SD7). A fragment has no statement split, no
 // SET prelude, no run buffer and no gutter, so nearly all of [Frame] and
 // [Result] would be inapplicable rather than merely unused. What the two share
 // is this package: the tones have one definition between them, and so will the

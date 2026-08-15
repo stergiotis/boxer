@@ -1,6 +1,6 @@
 package play
 
-// The two tiers of a SQL-valued slot (ADR-0187 (proposed) §SD3, milestone M3):
+// The two tiers of a SQL-valued slot (ADR-0187 §SD3, milestone M3):
 // the tier bit's second source, the live path through the signal store, and
 // pin/unpin as the migration between them.
 

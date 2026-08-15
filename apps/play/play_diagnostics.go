@@ -255,7 +255,7 @@ func (inst *DiagnosticsDriver) armSecurityContext(raw string, parseErr error) {
 		return
 	}
 	// The class describes what RUNS, so it is judged on the body the
-	// SQL-valued knobs substitute into (ADR-0187 (proposed) §SD5) rather than
+	// SQL-valued knobs substitute into (ADR-0187 §SD5) rather than
 	// on the placeholders the author wrote. Without this the badge would
 	// describe a template nobody executes — a `{cond:Expr}` carrying a `url()`
 	// would still read "read".

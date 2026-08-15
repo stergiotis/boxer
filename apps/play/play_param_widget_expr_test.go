@@ -1,6 +1,6 @@
 package play
 
-// The SQL-expression knob (ADR-0187 (proposed) §SD1/§SD2/§SD3, milestone M1):
+// The SQL-expression knob (ADR-0187 §SD1/§SD2/§SD3, milestone M1):
 // the category classifier, the `-- play: expr` scanner, the advisory lines, and
 // the value-path gates that keep a spliced draft out of the prelude and out of
 // the signal store.

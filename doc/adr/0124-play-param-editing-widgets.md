@@ -730,7 +730,7 @@ worked.
 
 ### 2026-08-15 — the tier bit gains a second source, and the ladder a SQL field
 
-[ADR-0187](./0187-play-sql-expression-parameters.md) (proposed) adds knobs whose
+[ADR-0187](./0187-play-sql-expression-parameters.md) adds knobs whose
 value is SQL rather than a value, and two of this decision's seams generalise to
 carry them.
 
@@ -759,7 +759,7 @@ what the *text* is.
 
 - [ADR-0016](./0016-imzero2-time-range-picker.md) — the range picker and its
   Phase-4 evaluator; `play` is a consumer (§SD3).
-- [ADR-0187](./0187-play-sql-expression-parameters.md) (proposed) — SQL-valued
+- [ADR-0187](./0187-play-sql-expression-parameters.md) — SQL-valued
   knobs: the second tier source, the fourth directive, and the SQL field in the
   §SD2 ladder.
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the

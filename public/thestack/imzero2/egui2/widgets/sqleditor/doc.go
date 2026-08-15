@@ -11,7 +11,7 @@
 //
 // [Editor] edits STATEMENTS. [Field] edits a FRAGMENT — a predicate, a scalar
 // expression, an aliased column list, a table source — for the panel controls
-// that carry raw SQL in a plain TextEdit today (ADR-0187 (proposed) §SD7).
+// that carry raw SQL in a plain TextEdit today (ADR-0187 §SD7).
 //
 // They are separate types rather than one with a row count because a fragment
 // has no statement split, no SET prelude, no run buffer and no gutter: most of

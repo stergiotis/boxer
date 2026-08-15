@@ -191,7 +191,7 @@ func (inst *PlayApp) unfilledInputs() (names []string) {
 		}
 		if exprCategoryFor(s.Type).spliced() {
 			// A SQL-valued slot is filled by its `-- play: expr` line at the
-			// pinned tier or by the store at the live one (ADR-0187 (proposed)
+			// pinned tier or by the store at the live one (ADR-0187
 			// §SD3), never by the prelude, and it is substituted before the
 			// body reaches the wire. Checked here rather than falling through
 			// because the generic signal test below cannot tell an empty

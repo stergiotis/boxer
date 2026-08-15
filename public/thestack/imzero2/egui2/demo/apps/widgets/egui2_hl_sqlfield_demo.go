@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
 
-// Demonstrates the SQL field (ADR-0187 (proposed) §SD7): the fragment-sized
+// Demonstrates the SQL field (ADR-0187 §SD7): the fragment-sized
 // sibling of the editor above, for a panel control whose value is SQL rather
 // than a statement.
 //

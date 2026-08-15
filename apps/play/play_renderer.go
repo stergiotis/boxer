@@ -717,7 +717,7 @@ type PlayApp struct {
 	paramSyncedValues map[string]string
 	paramLiveSeeded   map[string]string
 	// paramSyncedExprs is the same baseline for the SQL-valued slots (ADR-0187
-	// (proposed) §SD3): per spliced name, the value its `-- play: expr` line
+	// §SD3): per spliced name, the value its `-- play: expr` line
 	// last declared. Separate from paramSyncedValues rather than merged into
 	// it, because that map is also the PINNED-tier bit (paramPinned reads its
 	// membership) and an expression has no prelude tier to be pinned to.
@@ -727,7 +727,7 @@ type PlayApp struct {
 	// parse, keyed by slot name, and empty when the substituted buffer parses.
 	exprMarks map[string]nanopass.SourceRange
 	// securityCeiling is the strongest class a substituted body may reach
-	// before the run gate refuses it (ADR-0187 (proposed) §SD5). The zero value
+	// before the run gate refuses it (ADR-0187 §SD5). The zero value
 	// is analysis.QuerySecurityMutating, which is the strongest class there is
 	// and therefore refuses nothing — so play, which sets it never, reports the
 	// class without enforcing it, and an applet sets its mint-time class.
@@ -1036,7 +1036,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 			// The SQL field sits after the enum and before the tail: a declared
 			// option list is more specific than a declared category, so a
 			// dropdown of predicates over an {x:Expr} slot stays possible
-			// (ADR-0187 (proposed) M1).
+			// (ADR-0187 M1).
 			newExprWidget(),
 			newScalarTextWidget(),
 		},
@@ -1625,7 +1625,7 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 			"} — fill it in the PARAMETERS pane, or bind it with SET param_<name> = …"
 		return
 	}
-	// The class ceiling (ADR-0187 (proposed) §SD5), judged on what the
+	// The class ceiling (ADR-0187 §SD5), judged on what the
 	// substitution produces rather than on what the document says. It runs
 	// after the unfilled gate — an unfilled buffer has nothing substituted to
 	// judge, and "fill this in" is the more actionable of the two answers —
@@ -1786,7 +1786,7 @@ func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string,
 	// A SQL-valued slot is filled by its own `-- play: expr` line in the text
 	// that ships, and applyExprSplice substitutes it before the body reaches
 	// the wire — so the gate asks the shipped buffer, exactly as it asks it for
-	// the SET prelude, rather than reading pane state (ADR-0187 (proposed)
+	// the SET prelude, rather than reading pane state (ADR-0187
 	// §SD3/§SD4).
 	exprValues := scanExprHints(sql)
 	for _, s := range slots {

@@ -61,7 +61,7 @@ type MapDriver struct {
 	customColorSQL string
 
 	// The two controls whose value is SQL get the SQL field rather than a
-	// plain TextEdit (ADR-0187 (proposed) §M0). One per control, not one
+	// plain TextEdit (ADR-0187 §M0). One per control, not one
 	// shared: each memoises its own lex job against its own text, so a shared
 	// instance would rebuild both on every frame that drew both. Held by value
 	// — the zero Field is usable, so neither needs reaching into the driver's

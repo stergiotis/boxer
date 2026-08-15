@@ -8,7 +8,7 @@ import (
 )
 
 // The security ceiling a SQL-valued knob is judged against — ADR-0187
-// (proposed) §SD5.
+// §SD5.
 //
 // # Why a ceiling and not a check
 //
@@ -35,7 +35,7 @@ import (
 // enforce" half of §SD5 with no flag to get wrong.
 
 // SetSecurityCeiling declares the strongest class this instance's queries may
-// reach (ADR-0187 (proposed) §SD5). An applet passes its mint-time class; play
+// reach (ADR-0187 §SD5). An applet passes its mint-time class; play
 // leaves it unset, and the zero value refuses nothing.
 //
 // It is a ceiling on the SUBSTITUTED body, so it constrains what a knob may

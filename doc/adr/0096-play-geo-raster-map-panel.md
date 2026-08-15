@@ -514,7 +514,7 @@ bbox-per-view choice (SD1), and panel behaviour.
 Two Updates above leave the same item open: SD6's `{table:Identifier}` /
 `{sampling:UInt64}` human-owned slots "remain unbuilt — the forward path if a
 user-editable raster query is ever wanted".
-[ADR-0187](./0187-play-sql-expression-parameters.md) (proposed) builds the
+[ADR-0187](./0187-play-sql-expression-parameters.md) builds the
 mechanism. `Identifier` is now a recognised parameter category with an editor,
 and the panel's two raw `TextEdit` controls — the `table` field and the Custom
 render's colour block — are `sqleditor.Field`s with syntax colour rather than

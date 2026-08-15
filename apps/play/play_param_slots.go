@@ -115,7 +115,7 @@ func collectParamValues(pr *nanopass.ParseResult) (params map[string]string, err
 // name written twice is two places the substitution has to land, and the
 // deduped list carries only the first. Every other consumer wants the deduped
 // list, which is why this is a second walk rather than a widening of that one
-// (ADR-0187 (proposed) §SD4).
+// (ADR-0187 §SD4).
 func collectParamSlotOccurrences(pr *nanopass.ParseResult) (out []paramSlot) {
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		ps, ok := ctx.(*grammar1.ParamSlotContext)

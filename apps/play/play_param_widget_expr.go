@@ -11,7 +11,7 @@ import (
 )
 
 // The SQL-expression knob: a placeholder whose value is SQL rather than a
-// value — ADR-0187 (proposed) §SD1 and §SD3, milestone M1.
+// value — ADR-0187 §SD1 and §SD3, milestone M1.
 //
 // # Two mechanisms behind one control
 //

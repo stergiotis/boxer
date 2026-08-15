@@ -1,7 +1,7 @@
 package play
 
 // The security ceiling a SQL-valued knob is judged against (ADR-0187
-// (proposed) §SD5, milestone M4): what a substitution may turn a classified
+// §SD5, milestone M4): what a substitution may turn a classified
 // query into, and what happens when it goes further than the document declared.
 
 import (
