@@ -574,8 +574,17 @@ Milestones:
   `nanopass.Parse` refuses a parsed wrapper explicitly until M1 — the
   grammar admitting what the passes cannot yet carry must fail with its
   real reason, not a nil-scope panic mid-chain.
-- **M1 — pipeline semantics.** Scope sink, canonicalize node rules for the
-  wrapper clause, the pass refusal matrix with tests.
+- **M1 — pipeline semantics.** ✓ Scope sink, canonicalize node rules for
+  the wrapper clause, the pass refusal matrix with tests. Shipped
+  2026-08-15 (`0a574507`): the M0 entry guard is out;
+  `ParseResult.InsertStmt` is the accessor the matrix keys on; the sink is
+  structural (the target sits outside every `tableExpr`); canonical form
+  needs only the TABLE-word drop, since quoting and keyword case walk the
+  whole CST already. The audit's one find beyond the named two:
+  `ClassifyStatementKind`'s "a successful parse is the read proof"
+  predated the port — it now checks the tree for the wrapper before
+  answering read-only, keeping the classifier default-deny for the write
+  gate M3 builds on.
 - **M2 — target adoption.** Segment + spelling adoption via
   `ExpandPassWithSegments`; the target shape check; anchor gains `query8`
   (INSERT of constructor-minted columns into a compose-created scratch
