@@ -114,7 +114,7 @@ func (inst *Recorder) Flush(ctx context.Context) (int, error) { return inst.dim.
 // Caveat (S1): raw pcs are stable across restarts only for a fixed-text
 // (non-PIE) build of one binary; a module-relative or symbol-derived key is the
 // ASLR-robust / cross-build refinement (deferred, ADR-0112). A production build
-// would encode via leeway/stopa/naturalkey; this NUL-separated concat (host
+// would encode via leeway/namemint/naturalkey; this NUL-separated concat (host
 // cannot contain NUL; pcs are fixed-width) keeps the standalone slice
 // dependency-light.
 func (inst *Recorder) key(pcs []uintptr) []byte {

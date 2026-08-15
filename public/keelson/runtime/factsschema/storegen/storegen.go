@@ -44,7 +44,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/storage/recordstore/gen"
 )
 

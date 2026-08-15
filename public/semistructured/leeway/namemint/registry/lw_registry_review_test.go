@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/contract"
 	"github.com/stretchr/testify/require"
 )
 

@@ -11,8 +11,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/contract"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

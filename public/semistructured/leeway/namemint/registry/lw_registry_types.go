@@ -1,3 +1,25 @@
+// Package registry is the name mint: where a name is struck into the id that
+// stands for it on the wire, and where that mapping is held.
+//
+// It is the namemint half of a two-level story the import graph tells. A
+// vocabulary package claims its tag value from `identity/tagmint`, then
+// registers its names here; a registration composes the claimed tag with the
+// registration's ordinal into a [identifier.TaggedId]. Nothing else mints
+// membership ids.
+//
+// The name is meant literally, and replaces one that meant nothing: the tree
+// this package sits in was called "stopa", a word carrying no recorded meaning
+// anywhere in the repo, which made the layer's job unreadable from its own
+// import path (ADR-0183 D0). The repo's term for the atom being minted is
+// *name* — natural keys, [naming.StylableName] — so one atom keeps one term.
+//
+// # What the ids are for
+//
+// A membership id is timeless: a row written long ago carries it, and a
+// component formulated today reads that row by resolving the same name to the
+// same id. That is the property everything here exists to protect — which is
+// why what an id is composed from must not depend on anything that can move
+// under a refactor.
 package registry
 
 import (
@@ -7,9 +29,9 @@ import (
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/naturalkey"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/contract"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/naturalkey"
 )
 
 type RegisteredItemLineageI interface {

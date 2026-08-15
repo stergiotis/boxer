@@ -17,7 +17,7 @@ func getOrigin() string {
 	frames := runtime.CallersFrames(pcs[:n])
 	for {
 		frame, more := frames.Next()
-		if frame.Function != "" && !strings.Contains(frame.File, "/semistructured/leeway/stopa/registry/") {
+		if frame.Function != "" && !strings.Contains(frame.File, "/semistructured/leeway/namemint/registry/") {
 			return frame.File + ":" + strconv.Itoa(frame.Line)
 		}
 		if !more {

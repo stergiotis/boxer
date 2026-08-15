@@ -2,7 +2,7 @@ package vdd
 
 import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 )
 
 // Abstract / shared memberships — these intentionally live outside any

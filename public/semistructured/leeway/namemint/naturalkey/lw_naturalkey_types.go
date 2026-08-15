@@ -1,3 +1,10 @@
+// Package naturalkey encodes the machine-readable form of a name a mint
+// registers — the deterministic serialization that makes an identity
+// reproducible from its parts rather than assigned by a counter.
+//
+// It sits under `namemint` with the registry it serves; the umbrella's name
+// says where a name is struck into its id (see the registry package's doc for
+// the two-level minting story).
 package naturalkey
 
 import (

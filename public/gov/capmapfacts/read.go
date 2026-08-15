@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/capmapvocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 )
 
 // Reading the corpus back out of `boxer.facts` — the inverse of [Ingest], and

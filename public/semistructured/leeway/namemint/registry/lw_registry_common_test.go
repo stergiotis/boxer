@@ -8,5 +8,5 @@ import (
 
 func Test_getModuleInfo(t *testing.T) {
 	m := getModuleInfo(0)
-	require.Equal(t, "github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry", m)
+	require.Equal(t, "github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry", m)
 }

@@ -2,9 +2,9 @@ package vdd
 
 import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/contract"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/naturalkey"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/naturalkey"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 )
 
 var KeelsonContract = contract.NewVcsManagedContract()

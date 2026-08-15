@@ -6,7 +6,7 @@ import "github.com/stergiotis/boxer/public/packageprops"
 //
 // Blocked: this package's own code is pure declaration, but the WASM verdict
 // is over the transitive closure, and the registry it declares into reaches
-// arrow-go — sysmvocab → leeway/stopa/registry → leeway/common →
+// arrow-go — sysmvocab → leeway/namemint/registry → leeway/common →
 // arrow/array, which the survey classifies unsupported-external.
 //
 // The first version of this file said "pure registry declarations over the

@@ -48,8 +48,8 @@ package capmapvocab
 import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/contract"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 )
 
 // Contract is this vocabulary's leeway contract — the vcs-managed convention,

@@ -1,4 +1,4 @@
-package naturalkey
+package contract
 
 import "github.com/stergiotis/boxer/public/packageprops"
 
@@ -12,5 +12,5 @@ var PackageProps = packageprops.Props{
 }
 
 func init() {
-	packageprops.Register("github.com/stergiotis/boxer/public/semistructured/leeway/stopa/naturalkey", PackageProps)
+	packageprops.Register("github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract", PackageProps)
 }

@@ -2,7 +2,7 @@ package vdd
 
 import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 )
 
 // TaskProgress narrow memberships — the progress-specific half of the

@@ -9,9 +9,9 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/naturalkey"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/contract"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/naturalkey"
 )
 
 func NewTagValueRegistry[C contract.ContractI](offset identifier.TagValue, estSize int, namingStyle naming.NamingStyleE, contr C) (inst *MembershipTagValueRegistry[C], err error) {

@@ -2,7 +2,7 @@ package vdd
 
 import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 )
 
 // M1-fixture memberships — the demonstration fact-kind used by

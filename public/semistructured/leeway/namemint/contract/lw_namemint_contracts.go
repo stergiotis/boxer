@@ -1,3 +1,12 @@
+// Package contract states what a name mint accepts: which tag values a
+// registry may be built on, and which names and machine-readable forms it may
+// register. A registry holds one contract and consults it on every
+// registration, so a rule stated here is enforced everywhere that flavour of
+// registry is used.
+//
+// The distinction the contracts draw is who governs the assignment. A
+// version-controlled vocabulary's ids are reviewed in a diff and carried by
+// stored rows forever; an ephemeral one's live and die with a test.
 package contract
 
 import (

@@ -12,5 +12,5 @@ var PackageProps = packageprops.Props{
 }
 
 func init() {
-	packageprops.Register("github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry", PackageProps)
+	packageprops.Register("github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry", PackageProps)
 }

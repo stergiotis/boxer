@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/naturalkey"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/naturalkey"
 	"github.com/zeebo/xxh3"
 )
 

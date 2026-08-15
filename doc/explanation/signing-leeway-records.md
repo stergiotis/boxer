@@ -281,7 +281,7 @@ The generic recipe (a consumer discharges the specifics):
 - **Exists:** `common.TableNormalizer.Normalize`, `common.TableMarshaller.EncodeTableCbor`
   (schema plane), `card.JsonCardSchemaEmitter` + `Fingerprint()` (content-addressed
   doc, [ADR-0018](../adr/0018-leeway-card-json-canonical-format.md)),
-  `stopa/naturalkey` (deterministic identity) — all under
+  `namemint/naturalkey` (deterministic identity) — all under
   `public/semistructured/leeway/`. Governance metadata that a consumer can attach to
   columns lives in `useaspects` / `valueaspects`
   ([leeway-column-names](./leeway-column-names.md)).

@@ -9,14 +9,14 @@
 // are the registered NATURAL keys (leeway naming convention requires single
 // stylable tokens, not dotted paths).
 //
-// Built on boxer's stopa/registry pattern — mirrors spinnaker/vdd.
+// Built on boxer's namemint/registry pattern — mirrors spinnaker/vdd.
 package vocab
 
 import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/contract"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 )
 
 // Contract is the runtime's leeway contract — vcs-managed convention (even
