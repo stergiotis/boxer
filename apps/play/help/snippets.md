@@ -194,6 +194,51 @@ guessing. Attributes that carry no tag at all (this fixture's `timeRange`,
 `` `timeRange:beginIncl`[1] `` — as the **Timeline contract** section below
 does.
 
+## Read every attribute carrying a tag (`LW_SEL`)
+
+`LW_GET` locates *one* attribute. Where a tag is carried by several, the
+question is plural and the answer is a **selector**: `LW_SEL` returns the
+positions the tag occupies in the membership lane, `LW_SEL_ATTRS` the
+attribute indices, and you project whatever lane you want through them with
+`LW_CO_GATHER`:
+
+```sql
+SELECT
+  `id:naturalKey`                                                      AS entity,
+  LW_CO_GATHER(`symbol:value`, LW_SEL_ATTRS('symbol', 22, 'chan:low-card-ref')) AS events_on_port_22,
+  length(LW_SEL('symbol', 22, 'chan:low-card-ref'))                    AS how_many
+FROM anchor.facts
+WHERE has(`symbol:lr`, 22)
+```
+
+This is "argwhere + gather": select positions once, then every further lane —
+including a co-section's — projects through the same selector. No `ARRAY JOIN`
+is involved, so the row grain does not change and two tags can be read side by
+side in one statement. The two selectors are co-indexed with each other, so
+both pass to one lambda and stay aligned — that is what lets a membership-axis
+lane and an attribute-axis lane be read together:
+
+```sql
+SELECT arrayMap((p, a) -> (`symbol:lr`[p], `symbol:value`[a]),
+                LW_SEL('symbol', 22, 'chan:low-card-ref'),
+                LW_SEL_ATTRS('symbol', 22, 'chan:low-card-ref')) AS tag_and_value
+FROM anchor.facts
+WHERE has(`symbol:lr`, 22)
+```
+
+Two things this fixture cannot show, said plainly rather than implied. Each of
+its rows carries exactly one `symbol` attribute, so these arrays come back
+with one element — the plural case is the norm on the **mixed** channels,
+where the tag is shared by design and a `param:` token picks one attribute out
+of the set (the canonical JSON mapping stores every `/tags/N` as the tag
+`/tags/_` plus the index in the parameter lane). And the `has()` guard is not
+decoration: a multi-lane `arrayFilter` is opaque to index analysis, so the
+selector prunes nothing on its own.
+
+`LW_SEL` returns indices, so it takes no `col:` token — gather the column you
+want through the selector instead, which is also how one selector serves
+several columns.
+
 ## Membership ids and names (`keelson('memberships')`)
 
 A ref channel carries a `uint64` per tag. This fixture uses plain domain

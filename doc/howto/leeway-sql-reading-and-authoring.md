@@ -106,11 +106,76 @@ SELECT LW_GET('geoPoint', 'here', 'chan:low-card-verbatim', 'col:lat') FROM even
 ```
 
 The channel vocabulary is `low-card-ref`, `low-card-verbatim`,
-`high-card-ref`, `high-card-verbatim`. Mixed and parametrized channels are out
-of scope for extraction (ADR-0181 §SD3), as they are for the read-back
-generator.
+`high-card-ref`, `high-card-verbatim`, and the two **mixed** channels,
+`low-card-ref-high-card-params` and `low-card-verbatim-high-card-params`.
+Parametrized channels are still out of scope: a parametrized membership is one
+opaque blob carrying identity and parameters together, with no shared codec
+saying how it is laid out, so there is no literal you could pass.
 
-## 4. Name a membership instead of its id
+A mixed channel spends a second lane on the high-cardinality half of the tag —
+the array index the canonical JSON mapping elides from a path, so that
+`/tags/0` and `/tags/1` share the tag `/tags/_` and differ only in the
+parameter. Name it with `param:`:
+
+```sql
+SELECT LW_GET('string', '/tags/_', 'param:0001') FROM docs
+```
+
+**On a mixed channel `param:` is required for a single-attribute read**, and
+that is not a restriction so much as the shape of the question. The tag alone
+names a *set* there — that is what the parameter lane is for — so a singular
+read without one would hand back an arbitrary member of it. Reading every
+attribute that carries the tag is the next section.
+
+The parameter is the blob as stored. For the canonical form, that is
+fixed-width lowercase hex, four digits per index, `.`-separated in path order:
+`/tags/1` is `'0001'`, `/a/12/b/3` is `'000c.0003'`, and a path with no elided
+index carries `''`.
+
+## 4. Read every attribute carrying a tag (`LW_SEL`)
+
+`LW_GET` locates *one* attribute. When a tag is carried by several — the
+normal case on a mixed channel, and common enough elsewhere — the question is
+plural, and the answer is a **selector**: `LW_SEL` returns the positions the
+tag occupies, and you project any lane you like through them.
+
+```sql
+SELECT
+  LW_CO_GATHER(`string:value`, LW_SEL_ATTRS('string', '/tags/_')) AS values,
+  LW_CO_GATHER(`string:mvhp`,  LW_SEL('string', '/tags/_'))       AS indices
+FROM docs
+```
+
+This is "argwhere + gather": select positions once, then every further lane —
+including a co-section's — projects through the same selector. It needs no
+`ARRAY JOIN`, so the row grain does not change and two tags can be read side
+by side in one statement.
+
+The pair is the point. `LW_SEL` indexes the **membership** lanes (the tag lane
+and, on a mixed channel, the parameter lane); `LW_SEL_ATTRS` indexes the
+**attribute** lanes (the values). They are co-indexed with each other, so both
+pass to one lambda and stay aligned:
+
+```sql
+SELECT arrayMap((p, a) -> (`string:mvhp`[p], `string:value`[a]),
+                LW_SEL('string', '/tags/_'), LW_SEL_ATTRS('string', '/tags/_'))
+FROM docs
+```
+
+`param:` is **optional** here, and narrows the selection to the pair when
+given — the mirror of the rule in §3, and the same rule underneath: the
+parameter is required exactly when the answer must be unique. An absent tag
+selects nothing, and every consumer of an empty selector — `arrayMap`,
+`arrayFilter`, `LW_CO_GATHER`, `length` — answers empty without a special
+case.
+
+Two sharp edges. A selector returns indices, so `col:` is rejected rather than
+ignored — gather the column you want through the selector instead. And the
+selector itself does not prune: a multi-lane `arrayFilter` is opaque to index
+analysis, so keep a `has()` guard in `WHERE` as the pruner, exactly as §6
+says.
+
+## 5. Name a membership instead of its id
 
 A *verbatim* channel carries names; nothing extra is needed. A *ref* channel
 carries a `uint64` from the process's membership registry, and both directions
@@ -134,7 +199,7 @@ The table publishes the **folded** spelling (`naturalKey` lists as
 `virtual` rows are grouping nodes that never appear on a lane; matching
 against one returns nothing by design.
 
-## 5. Filter soundly
+## 6. Filter soundly
 
 Prefer the cheap necessary condition: `has()` over a membership or value lane
 prunes granules through a skip index; `indexOf(...) != 0` and `countEqual`
@@ -148,7 +213,7 @@ SELECT LW_GET('symbol', 'ticker') FROM events
 WHERE has(`symbol:lv`, 'ticker')   -- sargable guard on the membership lane
 ```
 
-## 6. Regroup lanes (`LW_RAGGED_*`, `LW_CO_*`)
+## 7. Regroup lanes (`LW_RAGGED_*`, `LW_CO_*`)
 
 For work below the attribute grain — nesting a flat stream by its counts,
 per-run reductions, co-lane lookups — use the installed pack rather than
@@ -169,7 +234,7 @@ Prefer the fused forms (`LW_RAGGED_REDUCE`, `LW_RAGGED_EXISTS`,
 to write it by hand, is the
 [array-idioms how-to](./leeway-clickhouse-array-idioms.md).
 
-## 7. Decode a column name you do not recognise
+## 8. Decode a column name you do not recognise
 
 The aspects a physical name encodes are readable in SQL (ADR-0182): `SEG_*`
 takes the full name, `NAMES_*` renders a segment as kebab-cased aspect names,
@@ -184,7 +249,7 @@ FROM system.columns
 WHERE database = 'anchor' AND table = 'facts'
 ```
 
-## 8. Author new leeway columns
+## 9. Author new leeway columns
 
 A computed column with an ordinary alias breaks leeway closure — the result
 stops being a leeway table. The constructors re-admit it: each wraps an

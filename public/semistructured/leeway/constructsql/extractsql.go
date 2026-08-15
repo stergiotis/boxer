@@ -41,6 +41,17 @@ const (
 	NameGet     = "LW_GET"
 	NameGetNull = "LW_GET_NULL"
 	NameGetList = "LW_GET_LIST"
+
+	// NameSel and NameSelAttrs are the selector half: they return index
+	// selectors rather than values, so the caller's own arrayMap /
+	// arrayFilter / LW_CO_GATHER does the reading.
+	//
+	// This is the "argwhere + gather" plan the array-idioms how-to
+	// describes. The pack already ships the gather half (LW_CO_GATHER); the
+	// argwhere half is what these mint, against a section and a membership
+	// instead of a physical lane.
+	NameSel      = "LW_SEL"
+	NameSelAttrs = "LW_SEL_ATTRS"
 )
 
 // ExtractPassName is the registered nanopass name of the extraction pass.
@@ -51,6 +62,7 @@ const ExtractPassName = "LwExtractExpand"
 const (
 	tokenColumn  = "col:"
 	tokenChannel = "chan:"
+	tokenParam   = "param:"
 )
 
 // membershipArgIndex is the one slot in the authoring surface whose value is
@@ -58,17 +70,27 @@ const (
 const membershipArgIndex = 1
 
 // HasExtractMarker is the cheap pre-parse scan (ADR-0181 §SD7). Every
-// spelling of every family member contains "lw_get", quoted included.
+// spelling of every family member contains "lw_get" or "lw_sel", quoted
+// included — LW_SEL_ATTRS is caught by the LW_SEL prefix.
 func HasExtractMarker(sql string) bool {
-	return strings.Contains(strings.ToLower(sql), "lw_get")
+	l := strings.ToLower(sql)
+	return strings.Contains(l, "lw_get") || strings.Contains(l, "lw_sel")
 }
 
 // extractArities per normalized name: a section, a membership, then
-// optional col:/chan: tokens.
+// optional col:/chan:/param: tokens.
 var extractArities = map[string]arity{
-	nanopass.NormalizeCallName(NameGet):     {2, 0},
-	nanopass.NormalizeCallName(NameGetNull): {2, 0},
-	nanopass.NormalizeCallName(NameGetList): {2, 0},
+	nanopass.NormalizeCallName(NameGet):      {2, 0},
+	nanopass.NormalizeCallName(NameGetNull):  {2, 0},
+	nanopass.NormalizeCallName(NameGetList):  {2, 0},
+	nanopass.NormalizeCallName(NameSel):      {2, 0},
+	nanopass.NormalizeCallName(NameSelAttrs): {2, 0},
+}
+
+// isSelector reports whether the normalized name is one of the two selector
+// members, which read no value lane and answer the plural question.
+func isSelector(name string) bool {
+	return name == nanopass.NormalizeCallName(NameSel) || name == nanopass.NormalizeCallName(NameSelAttrs)
 }
 
 // LaneSourceI is what the pass needs of a schema: which sections a table
@@ -198,9 +220,10 @@ func (inst *extractState) expandCall(name string, spelled string, funcExpr *gram
 	want := extractArities[name]
 	if len(args) < want.min {
 		err = inst.errCall(spelled, funcExpr).Int("got", len(args)).Int("min", want.min).
-			Errorf("an extraction call takes a section, a membership, and optional col:/chan: tokens")
+			Errorf("an extraction call takes a section, a membership, and optional col:/chan:/param: tokens")
 		return
 	}
+	selector := isSelector(name)
 	spec := make([]string, 0, len(args))
 	membershipIsId := false
 	for i, arg := range args {
@@ -218,26 +241,34 @@ func (inst *extractState) expandCall(name string, spelled string, funcExpr *gram
 	}
 	section, membership := spec[0], spec[1]
 
-	var subColumn, channel string
+	var subColumn, channel, params string
+	var paramsGiven bool
 	for _, tok := range spec[2:] {
 		switch {
 		case strings.HasPrefix(tok, tokenColumn):
+			// A selector points at attributes, not at a value, so naming a
+			// value column would be a request it cannot honour. Rejected
+			// rather than ignored: silently dropping a token makes a query
+			// that says one thing and does another.
+			if selector {
+				err = inst.errCall(spelled, funcExpr).Str("token", tok).
+					Errorf("a selector returns indices, not values, so it takes no " + tokenColumn + " token; gather the column through the selector instead")
+				return
+			}
 			subColumn = strings.TrimPrefix(tok, tokenColumn)
 		case strings.HasPrefix(tok, tokenChannel):
 			channel = strings.TrimPrefix(tok, tokenChannel)
+		case strings.HasPrefix(tok, tokenParam):
+			params = strings.TrimPrefix(tok, tokenParam)
+			paramsGiven = true
 		default:
 			err = inst.errCall(spelled, funcExpr).Str("token", tok).
-				Errorf("unknown token; expected " + tokenColumn + "<value column> or " + tokenChannel + "<membership channel>")
+				Errorf("unknown token; expected " + tokenColumn + "<value column>, " + tokenChannel + "<membership channel> or " + tokenParam + "<mixed-channel parameter>")
 			return
 		}
 	}
 
 	lanes, qualifier, err := inst.bind(section, funcExpr)
-	if err != nil {
-		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
-		return
-	}
-	valueCol, err := lanes.ValueColumnFor(subColumn)
 	if err != nil {
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
@@ -252,6 +283,11 @@ func (inst *extractState) expandCall(name string, spelled string, funcExpr *gram
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
 	}
+	if paramsGiven && ch.Param == "" {
+		err = inst.errCall(spelled, funcExpr).Str("section", lanes.Section).Str("channel", ch.Name).
+			Errorf("only a mixed channel carries a parameter lane; %s identifies a membership by its name alone", ch.Name)
+		return
+	}
 
 	// The membership cardinality lane is required, and its absence is a
 	// refusal rather than a licence. lwextract reads an empty Card as "the
@@ -260,12 +296,43 @@ func (inst *extractState) expandCall(name string, spelled string, funcExpr *gram
 	// table's listing is not that proof, and taking the fast form on the
 	// strength of it would read a membership position as an attribute index
 	// on every row. The read-back generator refuses the same situation.
-	if ch.Card == "" {
+	//
+	// NameSel is the one member exempt: it selects positions in the identity
+	// lane and never crosses to the attribute axis, so it has nothing to map
+	// and nothing to get wrong.
+	if ch.Card == "" && name != nanopass.NormalizeCallName(NameSel) {
 		err = inst.errCall(spelled, funcExpr).Str("section", lanes.Section).Str("channel", ch.Name).
 			Errorf("the section's membership cardinality column is not among this table's columns; an attribute cannot be located without it")
 		return
 	}
 
+	el := lwextract.Lanes{
+		Ident: qualify(qualifier, ch.Ident),
+		Card:  qualify(qualifier, ch.Card),
+		Param: qualify(qualifier, ch.Param),
+	}
+	req := lwextract.Request{Lanes: el, Membership: lit, Params: marshalling.EscapeString(params), ParamsGiven: paramsGiven}
+
+	var expr string
+	if selector {
+		if name == nanopass.NormalizeCallName(NameSel) {
+			expr, err = lwextract.Selection(req)
+		} else {
+			expr, err = lwextract.SelectionAttrs(req)
+		}
+		if err != nil {
+			err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
+			return
+		}
+		nanopass.ReplaceNode(inst.rw, funcExpr, expr)
+		return
+	}
+
+	valueCol, err := lanes.ValueColumnFor(subColumn)
+	if err != nil {
+		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
+		return
+	}
 	shape := valueCol.Shape
 	wantList := name == nanopass.NormalizeCallName(NameGetList)
 	switch {
@@ -278,20 +345,27 @@ func (inst *extractState) expandCall(name string, spelled string, funcExpr *gram
 			Errorf("section stores an array or set per attribute; read it with " + NameGetList)
 		return
 	}
-
-	el := lwextract.Lanes{
-		Value:  qualify(qualifier, valueCol.Physical),
-		Ident:  qualify(qualifier, ch.Ident),
-		Card:   qualify(qualifier, ch.Card),
-		Length: qualify(qualifier, valueCol.Length),
+	// A mixed channel's identity is shared by design, so a singular read
+	// without a parameter would return an arbitrary member of the set it
+	// names. lwextract refuses it; this says what to do instead, because the
+	// answer is a sibling call rather than a rewrite.
+	if ch.Param != "" && !paramsGiven {
+		err = inst.errCall(spelled, funcExpr).Str("section", lanes.Section).Str("channel", ch.Name).
+			Errorf("a mixed channel identifies an attribute by membership AND parameter; add '" + tokenParam +
+				"<parameter>', or read every attribute carrying the membership with " + NameSel + " / " + NameSelAttrs)
+		return
 	}
-	expr, err := lwextract.Value(lwextract.Request{Lanes: el, Shape: shape, Membership: lit})
+
+	req.Lanes.Value = qualify(qualifier, valueCol.Physical)
+	req.Lanes.Length = qualify(qualifier, valueCol.Length)
+	req.Shape = shape
+	expr, err = lwextract.Value(req)
 	if err != nil {
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
 	}
 	if name == nanopass.NormalizeCallName(NameGetNull) {
-		expr = lwextract.NullWhenAbsent(expr, el, lit)
+		expr = lwextract.NullWhenAbsentFor(req, expr)
 	}
 	nanopass.ReplaceNode(inst.rw, funcExpr, expr)
 	return
@@ -559,6 +633,16 @@ func ExtractFunctions() (fns []Function) {
 			Params: []string{"'section'", "'membership'|id", "'col:…'", "'chan:…'"},
 			Doc:    "read one attribute's array or set value from a leeway section; [] when absent (ADR-0181)",
 		},
+		{
+			Name:   NameSel,
+			Params: []string{"'section'", "'membership'|id", "'chan:…'", "'param:…'"},
+			Doc:    "select the membership-lane positions carrying a membership, to gather any lane through with LW_CO_GATHER; [] when absent (ADR-0181)",
+		},
+		{
+			Name:   NameSelAttrs,
+			Params: []string{"'section'", "'membership'|id", "'chan:…'", "'param:…'"},
+			Doc:    "as " + NameSel + ", but attribute indices — co-indexed with it, so both pass to one lambda (ADR-0181)",
+		},
 	}
 	return
 }
@@ -576,6 +660,12 @@ func ExtractExpansionDependencies() (names []string) {
 		"LW_LIST_BY_TAG_EQUAL",
 		"LW_RAGGED_PARENT_IDS",
 		"LW_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL",
+		// LW_SEL_ATTRS gathers the position→attribute map through the
+		// selector. Both it and LW_RAGGED_PARENT_IDS are pack functions, so
+		// the selector half needs no revision of the surface that the getter
+		// half did not already need — and the mixed arm of every member
+		// expands to built-ins alone.
+		"LW_CO_GATHER",
 	}
 	return
 }

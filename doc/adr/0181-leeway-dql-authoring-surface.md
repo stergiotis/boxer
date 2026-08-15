@@ -631,3 +631,102 @@ No Tier-1 surface moves. The emitted SQL is unchanged for both spellings, so
 the read-back goldens and the pass's idempotence are untouched; what changes
 is the authoring surface, the declared parameter list the vocabulary panel
 prints, and the snippets that carry ids.
+
+## Update 2026-08-15 — mixed channels are readable, and the plural question gets its own call
+
+§SD3 excluded the mixed and parametrized channels, and §SD8 deferred them on
+"ADR-0008 Cut 2 front-end". Both statements are revised here.
+
+**The recorded trigger had already fired, and it was never the binding one.**
+ADR-0008's 2026-06-04 Update records all four Cut-2 channels implemented
+across `mappingplan`, `marshallgen` and `marshallreflect`. More to the point,
+`LwExtractExpand` never consumed that front-end: it resolves lanes from a
+table's physical column NAMES through `lwsql.Resolver`, not from a
+`mappingplan.Plan`. The mappingplan gap is real, but it belongs to the
+read-back *generator*, whose `channelSpec` still maps only the four simple
+channels — so the two consumers of the shared builder were blocked on
+different things, and only one of them was blocked at all.
+
+**The two mixed channels join the extraction vocabulary**, spelled as
+`common.MembershipSpecE.String()` spells them —
+`low-card-ref-high-card-params` and `low-card-verbatim-high-card-params` — so
+`chan:` keeps one vocabulary with the constructor family's
+`ParseMembershipSpec`. A new `param:` token names the high-cardinality half.
+Nothing about the parameter lane needed discovering: `lwsql`'s section index
+already keyed it by role, `MembershipParamPartner` already mapped it back to
+the identity lane whose `…card` covers both, and §SD5's audit generator
+already emits `arraySum(card) = length(param)`.
+
+**Parametrized channels stay out, for a different reason than the one
+recorded.** A parametrized membership is one opaque blob carrying identity and
+parameters together — no separate identity lane to match, and no shared codec
+saying how the blob is laid out (`membership/params.go` covers the *mixed*
+parameter channel; the one in-tree parametrized writer hand-rolls
+`[]byte("k=10")`). There is no literal a caller could pass, so it needs a
+serialization contract first, not a lane lookup. The two deferrals should not
+have been one bullet.
+
+### The plural question, and why it is not a plural getter
+
+A mixed channel's membership is shared **by design** — the parameter lane
+exists because several attributes carry the same membership — so `LW_GET`'s
+contract (*locate THE attribute*) is structurally false there. `LW_GET` on a
+mixed channel therefore requires `param:`; without it the pass refuses.
+
+A refusal with nowhere to go would just push the caller into the hand-written
+lane arithmetic [ADR-0171](./0171-leeway-sql-read-surface.md) exists to
+prevent, so the plural read gets a call of its own: **`LW_SEL` and
+`LW_SEL_ATTRS`**, returning the membership-lane positions and the attribute
+indices a membership occupies, co-indexed with each other so both pass to one
+lambda. `param:` is **optional** on these. The two rules are one rule: *a
+parameter is required exactly when the answer must be unique.*
+
+Three choices inside that, each with a live alternative:
+
+- **A selector, not a plural getter.** The alternative — `LW_GET_ALL`,
+  `LW_GET_ALL_PARAMS`, … — needs one function per lane, multiplies with every
+  lane a section carries, and cannot reach a co-section's lane at all. One
+  selector reaches all of them. This is the "argwhere + gather" plan the
+  array-idioms how-to already prescribes for the hand-written form; the pack
+  shipped the gather half (`LW_CO_GATHER`) and no argwhere half, and that
+  asymmetry is what this closes.
+- **Two co-indexed selectors, not one tuple-returning iterator.** A
+  `(attrIdx, membPos)` iterator reads worse (`t.1`/`t.2`), cannot be handed to
+  `LW_CO_GATHER`, and invites recomputing `LW_RAGGED_PARENT_IDS` *inside* the
+  lambda — the one real performance trap in this shape. Two selectors evaluate
+  it once.
+- **No new server-side function.** Every new form expands to built-ins plus
+  `LW_RAGGED_PARENT_IDS` and `LW_CO_GATHER`, both already in the declared set,
+  so `LW_SURFACE_VERSION` does not move and a server provisioned before this
+  lands runs the output unchanged. The mixed arm of `LW_GET` is likewise
+  built-ins — a partial exception to §SD3's pack-form-only rule, taken because
+  the read-back family's signatures predate the second lane and adding three
+  functions to carry it would have cost a surface revision for expressions
+  ClickHouse renders natively.
+
+`LW_SEL` is the one member exempt from the cardinality-lane requirement: it
+selects positions in the identity lane and never crosses to the attribute
+axis, so it has nothing to map. `col:` is refused on both selectors rather
+than ignored — they return indices, so naming a value column is a request
+they cannot honour.
+
+**Verified** against `clickhouse-local` on a ragged fixture where one
+attribute owns two membership positions, so a position is not an attribute
+index for anything after it: the mixed value forms, the pair-scoped presence
+guard, both selectors, their co-indexing, and the empty-selector case. The
+oracle is hand-decoded from the SoA layout rather than computed by a second
+expression from the same package. The play snippet corpus additions execute
+under `TestSnippetsAgainstFixture`, confirmed by mutation.
+
+**Surfaces.** `LW_SEL` / `LW_SEL_ATTRS` join the client-side names of the
+Tier-1 table above and the vocabulary panel's client population;
+`lwextract.Lanes` gains `Param`, `Request` gains `Params`/`ParamsGiven`, and
+`PresentFor` / `NullWhenAbsentFor` join `lwextract` as the parameter-aware
+forms — the single-lane spellings keep their signatures and their meaning.
+`ExtractExpansionDependencies` gains `LW_CO_GATHER`. No server-side name
+changes, so ADR-0171 §SD2's reconciler scope is untouched.
+
+**Not done here.** The read-back generator still refuses mixed channels; a
+`LW_GET_NULL` guard on a mixed channel matches the pair (which is what makes
+it meaningful) but is only as prunable as its two `has()` conjuncts; and the
+selectors do not prune at all, which the docs say rather than the pass fixing.

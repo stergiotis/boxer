@@ -149,6 +149,19 @@ and lists what it has:
 SELECT LW_GET('geoPoint', 'here', 'col:lat') FROM events
 ```
 
+`LW_GET` is singular — it locates *the* attribute carrying a membership.
+Where a membership is carried by several, the question is plural and the
+answer is a **selector**: `LW_SEL` returns the positions the membership
+occupies and `LW_SEL_ATTRS` the attribute indices, co-indexed with each
+other, so any lane projects through them with the pack's `LW_CO_GATHER`
+without an `ARRAY JOIN` changing the row grain.
+
+The two questions divide on one rule: **a parameter is required exactly when
+the answer must be unique.** On a mixed channel the membership is shared by
+design — the high-cardinality half is what tells its attributes apart — so
+`LW_GET` there requires `param:` and refuses without it, while `LW_SEL`
+treats the same token as an optional narrowing.
+
 ## Naming a membership instead of its id
 
 Memberships come in two spellings. A *verbatim* channel carries the name
@@ -204,9 +217,13 @@ Stated here rather than discovered later:
   [ADR-0025](../adr/0025-pushout-forget-architecture.md) realises as its
   personal-data vault, and settling it twice would mean a migration between
   them.
-- **Mixed and parametrized membership channels** are out of scope for the
-  extraction sugar (ADR-0008 Cut 2); the read-back generator does not model
-  them either.
+- **Parametrized membership channels** are out of scope for the extraction
+  sugar: a parametrized membership is one opaque blob carrying identity and
+  parameters together, with no shared codec saying how it is laid out, so
+  there is no literal a caller could match. The **mixed** channels are
+  readable — `param:` names the high-cardinality half — but the read-back
+  *generator* still does not model them, because its `Plan` front-end maps
+  only the four simple channels.
 - **Statement wrapping** — `INSERT … SELECT` and `CREATE TABLE … AS SELECT`
   do not flow through the pipeline (ADR-0181 §SD8); the wrapper is composed
   by hand around an expanded `SELECT`.

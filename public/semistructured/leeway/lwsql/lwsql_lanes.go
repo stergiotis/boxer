@@ -79,22 +79,40 @@ type Channel struct {
 	// Verbatim says how a membership is spelled: verbatim channels carry
 	// the name itself, ref channels carry a registry id.
 	Verbatim bool
+	// Param is the physical high-cardinality parameter lane of a MIXED
+	// channel, co-indexed with Ident and counted by the same Card. Empty on
+	// the four simple channels, which have no such lane — so its presence is
+	// also how a caller tells the two apart.
+	Param string
 }
 
 // extractChannels is the channel vocabulary, in the order Channels reports
-// them. Mixed and parametrized channels are deliberately absent: their
-// parameter lane needs a recursion the extraction builder does not model
-// (ADR-0008 Cut 2, ADR-0181 §SD3).
+// them.
+//
+// Names follow common.MembershipSpecE.String(), which is the spelling
+// lwsql.ParseMembershipSpec accepts for the constructor family — one channel
+// vocabulary across authoring and extraction, at the price of a long token
+// for the mixed pair.
+//
+// The PARAMETRIZED channels are still absent, and for a different reason
+// than the mixed pair used to be: a parametrized membership is one opaque
+// blob carrying identity and parameters together, with no separate identity
+// lane to match and no shared codec saying how the blob is laid out. There
+// is no literal a caller could supply, so it needs a serialization contract
+// first, not a lane lookup (ADR-0008 Cut 2).
 var extractChannels = []struct {
 	name     string
 	ident    common.ColumnRoleE
 	card     common.ColumnRoleE
+	param    common.ColumnRoleE
 	verbatim bool
 }{
-	{"low-card-ref", common.ColumnRoleLowCardRef, common.ColumnRoleLowCardRefCardinality, false},
-	{"low-card-verbatim", common.ColumnRoleLowCardVerbatim, common.ColumnRoleLowCardVerbatimCardinality, true},
-	{"high-card-ref", common.ColumnRoleHighCardRef, common.ColumnRoleHighCardRefCardinality, false},
-	{"high-card-verbatim", common.ColumnRoleHighCardVerbatim, common.ColumnRoleHighCardVerbatimCardinality, true},
+	{"low-card-ref", common.ColumnRoleLowCardRef, common.ColumnRoleLowCardRefCardinality, "", false},
+	{"low-card-verbatim", common.ColumnRoleLowCardVerbatim, common.ColumnRoleLowCardVerbatimCardinality, "", true},
+	{"high-card-ref", common.ColumnRoleHighCardRef, common.ColumnRoleHighCardRefCardinality, "", false},
+	{"high-card-verbatim", common.ColumnRoleHighCardVerbatim, common.ColumnRoleHighCardVerbatimCardinality, "", true},
+	{"low-card-ref-high-card-params", common.ColumnRoleMixedLowCardRef, common.ColumnRoleMixedLowCardRefCardinality, common.ColumnRoleMixedRefHighCardParameters, false},
+	{"low-card-verbatim-high-card-params", common.ColumnRoleMixedLowCardVerbatim, common.ColumnRoleMixedLowCardVerbatimCardinality, common.ColumnRoleMixedVerbatimHighCardParameters, true},
 }
 
 // ExtractLanesFor reports the section's lanes on the given table. ok is
@@ -133,12 +151,20 @@ func (inst *Resolver) ExtractLanesFor(dbName string, tableName string, section s
 		if !hasIdent {
 			continue
 		}
-		lanes.Channels = append(lanes.Channels, Channel{
+		c := Channel{
 			Name:     ch.name,
 			Ident:    ident,
 			Card:     si.roles[ch.card], // absent is meaningful: one membership per attribute
 			Verbatim: ch.verbatim,
-		})
+		}
+		if ch.param != "" {
+			// Guarded rather than looked up unconditionally: the simple
+			// channels carry ColumnRoleUnspecific here, which is the empty
+			// role, and asking si.roles for it would match a column that
+			// merely failed to declare one.
+			c.Param = si.roles[ch.param]
+		}
+		lanes.Channels = append(lanes.Channels, c)
 	}
 	ok = true
 	return
@@ -211,7 +237,7 @@ func (inst ExtractLanes) ChannelFor(name string) (ch Channel, err error) {
 	if name == "" {
 		switch len(inst.Channels) {
 		case 0:
-			err = eb.Build().Str("section", inst.Section).Errorf("section carries no membership channel this build can read (mixed and parametrized channels are out of scope, ADR-0181 §SD3)")
+			err = eb.Build().Str("section", inst.Section).Errorf("section carries no membership channel this build can read (parametrized channels are out of scope, ADR-0181 §SD3)")
 		case 1:
 			ch = inst.Channels[0]
 		default:

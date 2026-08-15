@@ -172,3 +172,137 @@ SELECT %s FROM (SELECT 1) `
 		})
 	}
 }
+
+// mixed is a mixed channel's lanes: the parameter lane rides beside the
+// identity lane and is counted by the same cardinality column.
+var mixed = lwextract.Lanes{Value: "val", Ident: "lmv", Card: "lmvcard", Length: "len", Param: "mvhp"}
+
+// TestMixedSingularReadRequiresAParameter is the contract that separates the
+// two questions. On a mixed channel the identity is shared by design — the
+// parameter lane exists because several attributes carry the same one — so a
+// singular read without a parameter would return an arbitrary member of that
+// set and present it as the answer.
+func TestMixedSingularReadRequiresAParameter(t *testing.T) {
+	_, err := lwextract.Value(lwextract.Request{Lanes: mixed, Shape: lwextract.ShapeScalar, Membership: "'m'"})
+	require.ErrorContains(t, err, "identity AND parameter")
+
+	_, err = lwextract.Value(lwextract.Request{
+		Lanes: mixed, Shape: lwextract.ShapeScalar, Membership: "'m'", Params: "''", ParamsGiven: true,
+	})
+	require.NoError(t, err, "the empty parameter is a real value, not an omission")
+
+	// The plural question is well posed without one.
+	_, err = lwextract.Selection(lwextract.Request{Lanes: mixed, Membership: "'m'"})
+	require.NoError(t, err)
+
+	// A parameter on a channel that has no parameter lane is a mistake about
+	// the schema, and is refused rather than ignored.
+	_, err = lwextract.Selection(lwextract.Request{Lanes: general, Membership: "'m'", Params: "'x'", ParamsGiven: true})
+	require.ErrorContains(t, err, "no parameter lane")
+}
+
+// TestSelectorsAreCoIndexed pins the property the selector pair exists for:
+// element k of one names the same occurrence as element k of the other, so
+// the two pass as two arguments to one lambda.
+func TestSelectorsAreCoIndexed(t *testing.T) {
+	sel, err := lwextract.Selection(lwextract.Request{Lanes: general, Membership: "42"})
+	require.NoError(t, err)
+	attrs, err := lwextract.SelectionAttrs(lwextract.Request{Lanes: general, Membership: "42"})
+	require.NoError(t, err)
+	require.Contains(t, attrs, sel, "the attribute selector gathers the position selector, so the two cannot drift")
+	require.Contains(t, attrs, "LW_CO_GATHER(LW_RAGGED_PARENT_IDS(lrcard)")
+
+	// One membership per attribute makes the position the attribute index,
+	// so the map is dropped rather than emitted as an identity permutation.
+	fastAttrs, err := lwextract.SelectionAttrs(lwextract.Request{Lanes: oneMembership, Membership: "42"})
+	require.NoError(t, err)
+	require.NotContains(t, fastAttrs, "LW_CO_GATHER")
+}
+
+// TestMixedFormsAgainstClickHouse runs the mixed arm rather than arguing
+// about it, the way TestFastPathEqualsGeneralForm does — the ragged fixture
+// is what makes it a real test: attribute 2 carries two memberships, so a
+// membership position is not an attribute index for anything after it.
+//
+// The oracle is hand-decoded from the SoA layout, not computed by a second
+// expression from this package, so the check cannot agree with itself.
+func TestMixedFormsAgainstClickHouse(t *testing.T) {
+	// val:     ['a','b','c']                                (3 attributes)
+	// lmv:     ['/t/_','/t/_','/a/_','/host']                (4 memberships)
+	// mvhp:    ['0000','0001','0000','']
+	// lmvcard: [1, 2, 1]  -> attribute 2 owns positions 2 and 3
+	const fixture = `
+WITH
+    ['a', 'b', 'c']                             AS val,
+    ['/t/_', '/t/_', '/a/_', '/host']           AS lmv,
+    ['0000', '0001', '0000', '']                AS mvhp,
+    [1, 2, 1]                                   AS lmvcard,
+    [1, 1, 1]                                   AS len
+SELECT %s FROM (SELECT 1) `
+
+	scalar := mixed
+	scalar.Length = ""
+
+	type check struct {
+		name string
+		expr string
+		want string
+	}
+	var checks []check
+	add := func(name string, expr string, want string) {
+		checks = append(checks, check{name: name, expr: expr, want: want})
+	}
+
+	for _, tc := range []struct{ params, want string }{
+		{"'0000'", "a"}, // the pair on attribute 1
+		{"'0001'", "b"}, // the SAME identity on attribute 2 — the whole point
+		{"'9999'", ""},  // absent pair: the type default, never an error
+	} {
+		v, err := lwextract.Value(lwextract.Request{
+			Lanes: scalar, Shape: lwextract.ShapeScalar, Membership: "'/t/_'", Params: tc.params, ParamsGiven: true,
+		})
+		require.NoError(t, err)
+		add("value "+tc.params, v, tc.want)
+	}
+
+	// The guard must answer the PAIR, or a NULL form reports a hit on a row
+	// carrying the identity under some other parameter.
+	add("present hit", lwextract.PresentFor(lwextract.Request{
+		Lanes: scalar, Membership: "'/t/_'", Params: "'0001'", ParamsGiven: true,
+	}), "1")
+	add("present miss", lwextract.PresentFor(lwextract.Request{
+		Lanes: scalar, Membership: "'/t/_'", Params: "'9999'", ParamsGiven: true,
+	}), "0")
+
+	sel, err := lwextract.Selection(lwextract.Request{Lanes: mixed, Membership: "'/t/_'"})
+	require.NoError(t, err)
+	add("selection", sel, "[1,2]")
+
+	attrs, err := lwextract.SelectionAttrs(lwextract.Request{Lanes: mixed, Membership: "'/t/_'"})
+	require.NoError(t, err)
+	add("selection attrs", attrs, "[1,2]")
+
+	// Gathering both axes through the co-indexed pair is the composition the
+	// selectors exist for.
+	add("gather both", "arrayStringConcat(arrayMap((p, a) -> concat(mvhp[p], '=', val[a]), "+sel+", "+attrs+"), ' ')", "0000=a 0001=b")
+
+	// A narrowed selection, and one that selects nothing.
+	selPair, err := lwextract.Selection(lwextract.Request{Lanes: mixed, Membership: "'/t/_'", Params: "'0001'", ParamsGiven: true})
+	require.NoError(t, err)
+	add("selection pair", selPair, "[2]")
+	selMiss, err := lwextract.Selection(lwextract.Request{Lanes: mixed, Membership: "'/nope'"})
+	require.NoError(t, err)
+	add("selection miss", selMiss, "[]")
+
+	exprs := make([]string, 0, len(checks))
+	for _, c := range checks {
+		exprs = append(exprs, "toString("+c.expr+")")
+	}
+	script := readback.HelperUDFsSQL() + "\n" + strings.Replace(fixture, "%s", strings.Join(exprs, ", "), 1)
+	out := runClickHouseLocal(t, script)
+	got := strings.Split(strings.TrimRight(out, "\n"), "\t")
+	require.Len(t, got, len(checks))
+	for i, c := range checks {
+		require.Equal(t, c.want, got[i], "%s: %s", c.name, c.expr)
+	}
+}

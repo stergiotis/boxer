@@ -58,6 +58,11 @@ func extractFixture(t *testing.T) []string {
 	// An array section, for the list form.
 	manip.MergeTaggedValueColumn("samples", "value", f64Array, hints,
 		valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common.MembershipSpecLowCardVerbatim, "", "")
+	// A mixed channel: the identity is shared by design and the parameter
+	// lane carries the high-cardinality half — the shape the canonical JSON
+	// mapping gives every one of its sections.
+	manip.MergeTaggedValueColumn("path", "value", ctabb.S, hints,
+		valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common.MembershipSpecMixedLowCardVerbatimHighCardParameters, "", "")
 
 	tbl, err := manip.BuildTableDesc()
 	require.NoError(t, err)
@@ -324,14 +329,17 @@ func TestUnboundPassIsInert(t *testing.T) {
 // (ADR-0174 §SD6).
 func TestExtractFunctionsRoster(t *testing.T) {
 	fns := constructsql.ExtractFunctions()
-	require.Len(t, fns, 3)
+	require.Len(t, fns, 5)
 	names := make([]string, 0, len(fns))
 	for _, f := range fns {
 		require.NotEmpty(t, f.Doc, f.Name)
 		require.NotEmpty(t, f.Params, f.Name)
 		names = append(names, f.Name)
 	}
-	require.ElementsMatch(t, []string{constructsql.NameGet, constructsql.NameGetNull, constructsql.NameGetList}, names)
+	require.ElementsMatch(t, []string{
+		constructsql.NameGet, constructsql.NameGetNull, constructsql.NameGetList,
+		constructsql.NameSel, constructsql.NameSelAttrs,
+	}, names)
 
 	// Every declared dependency must be a function some expansion can
 	// actually emit. The list is hand-written beside a builder that decides
@@ -341,10 +349,25 @@ func TestExtractFunctionsRoster(t *testing.T) {
 	require.NotEmpty(t, deps)
 	general := lwextract.Lanes{Value: "v", Ident: "i", Card: "c", Length: "l"}
 	fast := lwextract.Lanes{Value: "v", Ident: "i", Length: "l"}
+	mixed := lwextract.Lanes{Value: "v", Ident: "i", Card: "c", Length: "l", Param: "p"}
 	var emitted strings.Builder
-	for _, lanes := range []lwextract.Lanes{general, fast} {
+	for _, lanes := range []lwextract.Lanes{general, fast, mixed} {
+		req := lwextract.Request{Lanes: lanes, Membership: "'m'"}
+		if lanes.Param != "" {
+			req.Params, req.ParamsGiven = "'x'", true
+		}
 		for _, shape := range []lwextract.ShapeE{lwextract.ShapeScalar, lwextract.ShapeList} {
-			expr, err := lwextract.Value(lwextract.Request{Lanes: lanes, Shape: shape, Membership: "'m'"})
+			req.Shape = shape
+			expr, err := lwextract.Value(req)
+			require.NoError(t, err)
+			emitted.WriteString(expr)
+			emitted.WriteString(" ")
+		}
+		// The selector half emits its own dependency (LW_CO_GATHER), so the
+		// corpus this list is checked against has to include it — otherwise
+		// the check passes by never rendering the form that needs it.
+		for _, render := range []func(lwextract.Request) (string, error){lwextract.Selection, lwextract.SelectionAttrs} {
+			expr, err := render(req)
 			require.NoError(t, err)
 			emitted.WriteString(expr)
 			emitted.WriteString(" ")
@@ -703,4 +726,97 @@ func TestOnlyTheMembershipSlotTakesANumber(t *testing.T) {
 	// names both spellings it could have been.
 	_, err = expandExtract(t, "SELECT LW_GET('symbol', col) FROM events")
 	require.ErrorContains(t, err, "string literal or an unsigned decimal registry id")
+}
+
+// TestMixedChannelIsReadable covers the channel the extraction family could
+// not name until the parameter lane joined the vocabulary: the identity is
+// spelled by name and the parameter picks which attribute carrying it.
+func TestMixedChannelIsReadable(t *testing.T) {
+	r := extractResolver(t)
+	lanes, ok := r.ExtractLanesFor("", extractTable, "path")
+	require.True(t, ok)
+	ch, err := lanes.ChannelFor("")
+	require.NoError(t, err)
+	require.Equal(t, "low-card-verbatim-high-card-params", ch.Name)
+	require.True(t, ch.Verbatim)
+	require.Contains(t, ch.Ident, ":lmv:")
+	require.Contains(t, ch.Card, ":lmvcard:")
+	require.Contains(t, ch.Param, ":mvhp:", "the parameter lane resolves from the column names like every other lane")
+
+	out, err := expandExtract(t, "SELECT LW_GET('path', '/tags/_', 'param:0001') FROM events")
+	require.NoError(t, err)
+	require.Contains(t, out, "arrayFirstIndex(")
+	require.Contains(t, out, "'/tags/_'")
+	require.Contains(t, out, "'0001'")
+	require.NotContains(t, out, "LW_GET")
+}
+
+// TestMixedSingularReadNamesTheAlternative is the split the two questions
+// rest on. A singular read of a mixed channel without a parameter is refused
+// — the identity alone names a set — and the refusal points at the selector
+// rather than leaving the caller to hand-write the arithmetic, which is the
+// failure the read surface exists to prevent.
+func TestMixedSingularReadNamesTheAlternative(t *testing.T) {
+	_, err := expandExtract(t, "SELECT LW_GET('path', '/tags/_') FROM events")
+	require.ErrorContains(t, err, "membership AND parameter")
+	require.ErrorContains(t, err, constructsql.NameSel)
+
+	// The plural question needs no parameter.
+	_, err = expandExtract(t, "SELECT LW_SEL('path', '/tags/_') FROM events")
+	require.NoError(t, err)
+
+	// A parameter on a channel with no parameter lane is a mistake about the
+	// schema, and is named rather than ignored.
+	_, err = expandExtract(t, "SELECT LW_GET('symbol', 'ticker', 'param:0001') FROM events")
+	require.ErrorContains(t, err, "only a mixed channel")
+}
+
+// TestSelectorsExpand pins the selector half: positions out, and the
+// attribute selector gathering the position selector so the two stay
+// co-indexed for a single lambda.
+func TestSelectorsExpand(t *testing.T) {
+	r := extractResolver(t)
+	lanes, ok := r.ExtractLanesFor("", extractTable, "symbol")
+	require.True(t, ok)
+	ch, err := lanes.ChannelFor("")
+	require.NoError(t, err)
+	ident := nanopass.QuoteIdentifier(ch.Ident)
+
+	out, err := expandExtract(t, "SELECT LW_SEL('symbol', 'ticker') FROM events")
+	require.NoError(t, err)
+	require.Equal(t,
+		"SELECT arrayFilter((i, m) -> m = 'ticker', arrayEnumerate("+ident+"), "+ident+") FROM events",
+		out)
+
+	attrs, err := expandExtract(t, "SELECT LW_SEL_ATTRS('symbol', 'ticker') FROM events")
+	require.NoError(t, err)
+	require.Contains(t, attrs, "LW_CO_GATHER(LW_RAGGED_PARENT_IDS(")
+	require.Contains(t, attrs, "arrayFilter((i, m) -> m = 'ticker'")
+
+	// Narrowing a selection to the pair is what the parameter does here —
+	// optional, unlike on the singular read.
+	pair, err := expandExtract(t, "SELECT LW_SEL('path', '/tags/_', 'param:0001') FROM events")
+	require.NoError(t, err)
+	require.Contains(t, pair, "arrayFilter((i, m, p) -> m = '/tags/_' AND p = '0001'")
+}
+
+// TestSelectorRejectsTheColumnToken: a selector returns indices, so naming a
+// value column is a request it cannot honour. Dropping the token silently
+// would make the query say one thing and do another.
+func TestSelectorRejectsTheColumnToken(t *testing.T) {
+	_, err := expandExtract(t, "SELECT LW_SEL('geoPoint', 'here', 'col:lat') FROM events")
+	require.ErrorContains(t, err, "returns indices, not values")
+
+	// The channel token still applies — a selector reads one channel's lane.
+	_, err = expandExtract(t, "SELECT LW_SEL('symbol', 'ticker', 'chan:low-card-verbatim') FROM events")
+	require.NoError(t, err)
+}
+
+// TestSelectorMarkerIsScanned guards the pre-parse fast path: a statement
+// carrying only selector calls must still be parsed, or the family silently
+// does not expand (ADR-0181 §SD7).
+func TestSelectorMarkerIsScanned(t *testing.T) {
+	require.True(t, constructsql.HasExtractMarker("select lw_sel('a','b')"))
+	require.True(t, constructsql.HasExtractMarker("SELECT LW_SEL_ATTRS('a','b')"))
+	require.False(t, constructsql.HasExtractMarker("SELECT 1"))
 }
