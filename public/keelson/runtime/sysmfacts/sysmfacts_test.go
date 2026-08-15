@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmvocab"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -153,4 +155,31 @@ func TestGenerationRefusesAMissingMembership(t *testing.T) {
 	_, err := generate(t, ids)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sysmCpuTotalPct")
+}
+
+// The generated Set satisfies the registry contract (ADR-0189 M0/M1). This is
+// the seam where the two milestones meet: the emitter's output and the
+// registry's admission rules are written in different packages and could
+// disagree about what a usable Set is.
+func TestComponentSQLRegistersAndResolves(t *testing.T) {
+	r := componentsql.NewRegistry()
+	require.NoError(t, r.Register(sysmfacts.SysmetricsComponentSQL))
+
+	assert.Len(t, r.Kinds(), 13, "every kind the store carries should be published")
+
+	b, ok := r.Lookup("SysMem")
+	require.True(t, ok)
+	assert.Equal(t, sysmfacts.SysmetricsTableName, b.Table)
+	assert.Equal(t, "Sysmetrics", b.Store)
+
+	// The published Filter is the one the Scan verb uses — same string, not a
+	// second rendering of the same idea.
+	assert.Contains(t, b.Filter, "hasAll(", "the filter should be the baked artefact")
+	assert.Contains(t, b.Projection, "CAST(tuple(", "the projection is a named-tuple extraction")
+
+	// Presence is a strict prefix-by-content of Filter: Filter is
+	// joinAnd(presence ++ validator), so both halves appear in it. That is the
+	// property ADR-0189 records as the duplication cost of publishing all four.
+	assert.Contains(t, b.Filter, b.Presence)
+	assert.Contains(t, b.Filter, b.Validator)
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/sharedsection/internal/lowlevel"
@@ -917,6 +918,38 @@ func (inst *AssetStore) Replay(ctx context.Context, key uint64, fromOrder time.T
 	}
 	sql += assetArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
+}
+
+// AssetComponentSQL publishes this store's ADR-0066 read-back artefacts —
+// the SQL its component definitions generate — for an authoring surface
+// to expand (ADR-0189). A host registers it into a componentsql.Registry;
+// nothing here self-registers.
+//
+// Filter is the same constant the Scan verbs use, so the store's own read
+// path and the authoring surface cannot disagree about what a conforming
+// row is. Projection must not be embedded without Filter — it locates an
+// attribute by indexOf and returns the first match, so on a row carrying a
+// membership twice it answers plausibly and wrongly (ADR-0066).
+//
+// The column references are UNQUALIFIED, so a consumer embedding them in a
+// join must bind them to AssetTableName itself (ADR-0189 SD6).
+var AssetComponentSQL = componentsql.Set{
+	Store: "Asset",
+	Table: AssetTableName,
+	Kinds: map[string]componentsql.Artefacts{
+		"Label": {
+			Presence:   "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 7001)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 7001) = 1",
+			Filter:     assetScanLabelFilter,
+			Projection: "CAST(tuple(\"id:id:u64:::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s::::0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 7001, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID UInt64, Name String)')",
+		},
+		"State": {
+			Presence:   "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 7002)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 7002) = 1",
+			Filter:     assetScanStateFilter,
+			Projection: "CAST(tuple(\"id:id:u64:::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s::::0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 7002, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID UInt64, Phase String)')",
+		},
+	},
 }
 
 // --- decode (Arrow → entity bags). ---

@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -917,6 +918,32 @@ func (inst *PersistStore) GetLive(ctx context.Context, key string) (ent *Persist
 		found = false
 	}
 	return
+}
+
+// PersistComponentSQL publishes this store's ADR-0066 read-back artefacts —
+// the SQL its component definitions generate — for an authoring surface
+// to expand (ADR-0189). A host registers it into a componentsql.Registry;
+// nothing here self-registers.
+//
+// Filter is the same constant the Scan verbs use, so the store's own read
+// path and the authoring surface cannot disagree about what a conforming
+// row is. Projection must not be embedded without Filter — it locates an
+// attribute by indexOf and returns the first match, so on a row carrying a
+// membership twice it answers plausibly and wrongly (ADR-0066).
+//
+// The column references are UNQUALIFIED, so a consumer embedding them in a
+// join must bind them to PersistTableName itself (ADR-0189 SD6).
+var PersistComponentSQL = componentsql.Set{
+	Store: "Persist",
+	Table: PersistTableName,
+	Kinds: map[string]componentsql.Artefacts{
+		"State": {
+			Presence:   "has(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) AND has(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) AND has(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769)",
+			Validator:  "countEqual(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) = 1 AND countEqual(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) = 1",
+			Filter:     persiststateScanStateFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:stateAppId:value:val:s:24:::0::data\", \"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701, LW_RAGGED_PARENT_IDS(\"tv:stateAppId:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateKey:value:val:s:4:::0::data\", \"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712, LW_RAGGED_PARENT_IDS(\"tv:stateKey:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateBlob:value:val:y:4:::0::data\", \"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769, LW_RAGGED_PARENT_IDS(\"tv:stateBlob:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, AppId String, Key String, Value String)')",
+		},
+	},
 }
 
 // --- decode (Arrow → entity bags). ---

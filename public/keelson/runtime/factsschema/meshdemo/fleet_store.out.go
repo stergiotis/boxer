@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -818,6 +819,32 @@ func (inst *FleetStore) Replay(ctx context.Context, key uint64, fromOrder time.T
 	}
 	sql += factsArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
+}
+
+// FleetComponentSQL publishes this store's ADR-0066 read-back artefacts —
+// the SQL its component definitions generate — for an authoring surface
+// to expand (ADR-0189). A host registers it into a componentsql.Registry;
+// nothing here self-registers.
+//
+// Filter is the same constant the Scan verbs use, so the store's own read
+// path and the authoring surface cannot disagree about what a conforming
+// row is. Projection must not be embedded without Filter — it locates an
+// attribute by indexOf and returns the first match, so on a row carrying a
+// membership twice it answers plausibly and wrongly (ADR-0066).
+//
+// The column references are UNQUALIFIED, so a consumer embedding them in a
+// join must bind them to FleetTableName itself (ADR-0189 SD6).
+var FleetComponentSQL = componentsql.Set{
+	Store: "Fleet",
+	Table: FleetTableName,
+	Kinds: map[string]componentsql.Artefacts{
+		"FleetSample": {
+			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [1152921517491748864, 1152921517491748865, 1152921517491748866]) AND has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 1152921517491748867) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1152921517491748868)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1152921517491748864) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1152921517491748865) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1152921517491748866) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 1152921517491748867) = 1 AND if(has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 1152921517491748867), \"tv:u8Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 1152921517491748867), arrayCumSum(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1152921517491748868) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1152921517491748868), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1152921517491748868), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     factsScanFleetSampleFilter,
+			Projection: "CAST(tuple(\"id:id:u64:47::0:\", \"id:naturalKey:y:4::0:\", \"ts:ts:z64:47::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 1152921517491748864, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 1152921517491748865, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 1152921517491748866, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u8Array:value:val:u8h:4:::0::data\", \"tv:u8Array:len:len:u64:4D:::0::data\", \"tv:u8Array:lr:lr:u64:1247:::0::data\", 1152921517491748867, LW_RAGGED_PARENT_IDS(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 1152921517491748868, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(Id UInt64, NaturalKey String, Ts DateTime64(9,\\'UTC\\'), Kind String, Host String, Region String, CpuPercent UInt8, UptimeSeconds UInt64)')",
+		},
+	},
 }
 
 // --- decode (Arrow → entity bags). ---

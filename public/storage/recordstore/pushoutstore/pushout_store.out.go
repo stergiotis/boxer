@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/pushoutstore/internal/lowlevel"
@@ -1181,6 +1182,50 @@ func (inst *PushoutStore) GetLive(ctx context.Context, key string) (ent *Pushout
 		found = false
 	}
 	return
+}
+
+// PushoutComponentSQL publishes this store's ADR-0066 read-back artefacts —
+// the SQL its component definitions generate — for an authoring surface
+// to expand (ADR-0189). A host registers it into a componentsql.Registry;
+// nothing here self-registers.
+//
+// Filter is the same constant the Scan verbs use, so the store's own read
+// path and the authoring surface cannot disagree about what a conforming
+// row is. Projection must not be embedded without Filter — it locates an
+// attribute by indexOf and returns the first match, so on a row carrying a
+// membership twice it answers plausibly and wrongly (ADR-0066).
+//
+// The column references are UNQUALIFIED, so a consumer embedding them in a
+// join must bind them to PushoutTableName itself (ADR-0189 SD6).
+var PushoutComponentSQL = componentsql.Set{
+	Store: "Pushout",
+	Table: PushoutTableName,
+	Kinds: map[string]componentsql.Artefacts{
+		"Envelope": {
+			Presence:   "has(\"tv:envBlob:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:envBlob:lr:lr:u64:1247:::0::data\", 1) = 1",
+			Filter:     pushoutScanEnvelopeFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:envBlob:value:val:y:4:::0::data\", \"tv:envBlob:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:envBlob:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Framed String)')",
+		},
+		"LogEntry": {
+			Presence:   "has(\"tv:logHash:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:logHash:lr:lr:u64:1247:::0::data\", 1) = 1",
+			Filter:     pushoutScanLogEntryFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:logHash:value:val:s:4:::0::data\", \"tv:logHash:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:logHash:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Hash String)')",
+		},
+		"Snapshot": {
+			Presence:   "has(\"tv:snapGraggle:lr:lr:u64:1247:::0::data\", 2)",
+			Validator:  "countEqual(\"tv:snapApplied:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:snapGraggle:lr:lr:u64:1247:::0::data\", 2) = 1",
+			Filter:     pushoutScanSnapshotFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:snapApplied:value:val:sh:4:::0::data\", \"tv:snapApplied:len:len:u64:4D:::0::data\", \"tv:snapApplied:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:snapApplied:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:snapGraggle:value:val:y:4:::0::data\", \"tv:snapGraggle:lr:lr:u64:1247:::0::data\", 2, LW_RAGGED_PARENT_IDS(\"tv:snapGraggle:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Applied Array(String), Graggle String)')",
+		},
+		"Retention": {
+			Presence:   "(has(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) OR has(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) OR has(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3))",
+			Validator:  "countEqual(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) <= 1 AND countEqual(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3) <= 1",
+			Filter:     pushoutScanRetentionFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:retHash:value:val:sh:4:::0::data\", \"tv:retHash:len:len:u64:4D:::0::data\", \"tv:retHash:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:retHash:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:retIndex:value:val:u64h:4:::0::data\", \"tv:retIndex:len:len:u64:4D:::0::data\", \"tv:retIndex:lr:lr:u64:1247:::0::data\", 2, LW_RAGGED_PARENT_IDS(\"tv:retIndex:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:retTime:value:val:i64h:4:::0::data\", \"tv:retTime:len:len:u64:4D:::0::data\", \"tv:retTime:lr:lr:u64:1247:::0::data\", 3, LW_RAGGED_PARENT_IDS(\"tv:retTime:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Hashes Array(String), Indices Array(UInt64), Times Array(Int64))')",
+		},
+	},
 }
 
 // --- decode (Arrow → entity bags). ---

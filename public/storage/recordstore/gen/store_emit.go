@@ -124,6 +124,14 @@ type storeComponent struct {
 	// exact validator) identifying rows that carry a conforming component —
 	// the WHERE body of the Scan verb.
 	filter string
+	// The remaining three ADR-0066 artefacts. Nothing in the store's own read
+	// path uses them — Scan needs only the Filter — but they are published
+	// through the componentsql Set so a SQL author can reach what the
+	// component definition already generates (ADR-0189 §SD1). They cost
+	// nothing to keep: Generate builds all four.
+	presence   string
+	validator  string
+	projection string
 }
 
 // secUse is one distinct tagged section a component set touches: the
@@ -312,6 +320,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	em.emitFlush(&sb)
 	em.emitCacheView(&sb, stateView)
 	em.emitQueryVerbs(&sb, comps, stateView)
+	em.emitComponentSQL(&sb, comps)
 	em.emitDecode(&sb, comps, stateView)
 
 	raw := []byte(sb.String())
@@ -646,6 +655,9 @@ func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetriev
 		return
 	}
 	sc.filter = artefacts.Filter
+	sc.presence = artefacts.Presence
+	sc.validator = artefacts.Validator
+	sc.projection = artefacts.Projection
 	return
 }
 
@@ -745,6 +757,11 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 		p("\t%q", "github.com/stergiotis/boxer/public/functional/option")
 	}
 	p("\t%q", "github.com/stergiotis/boxer/public/observability/eh")
+	if inst.hasComps {
+		// The published artefact Set (ADR-0189 §SD1); emitted only with
+		// components, since a store without them publishes nothing.
+		p("\t%q", "github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql")
+	}
 	// The entity builder always holds the deferred buffer: Commit flushes it
 	// and Raw marks it, whether or not any component is bound.
 	p("\tdmlruntime %q", "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime")
@@ -1793,6 +1810,48 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("\t\tfound = false")
 	p("\t}")
 	p("\treturn")
+	p("}")
+	p("")
+}
+
+// emitComponentSQL publishes the store's ADR-0066 artefacts as one
+// componentsql.Set, so the SQL a component definition generates is reachable
+// from outside the package that bakes it (ADR-0189 §SD1).
+//
+// Emitted only when the store carries components: a Set with no kinds is
+// refused at registration, and the import would be unused.
+func (inst emitter) emitComponentSQL(sb *strings.Builder, comps []storeComponent) {
+	if len(comps) == 0 {
+		return
+	}
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+
+	p("// %sComponentSQL publishes this store's ADR-0066 read-back artefacts —", inst.StoreName)
+	p("// the SQL its component definitions generate — for an authoring surface")
+	p("// to expand (ADR-0189). A host registers it into a componentsql.Registry;")
+	p("// nothing here self-registers.")
+	p("//")
+	p("// Filter is the same constant the Scan verbs use, so the store's own read")
+	p("// path and the authoring surface cannot disagree about what a conforming")
+	p("// row is. Projection must not be embedded without Filter — it locates an")
+	p("// attribute by indexOf and returns the first match, so on a row carrying a")
+	p("// membership twice it answers plausibly and wrongly (ADR-0066).")
+	p("//")
+	p("// The column references are UNQUALIFIED, so a consumer embedding them in a")
+	p("// join must bind them to %sTableName itself (ADR-0189 SD6).", inst.StoreName)
+	p("var %sComponentSQL = componentsql.Set{", inst.StoreName)
+	p("\tStore: %q,", inst.StoreName)
+	p("\tTable: %sTableName,", inst.StoreName)
+	p("\tKinds: map[string]componentsql.Artefacts{")
+	for _, c := range comps {
+		p("\t\t%q: {", c.Kind)
+		p("\t\t\tPresence:   %q,", c.presence)
+		p("\t\t\tValidator:  %q,", c.validator)
+		p("\t\t\tFilter:     %sScan%sFilter,", inst.TableName, c.Kind)
+		p("\t\t\tProjection: %q,", c.projection)
+		p("\t\t},")
+	}
+	p("\t},")
 	p("}")
 	p("")
 }

@@ -260,3 +260,37 @@ func readFile(t *testing.T, path string) string {
 	require.NoError(t, err, "read %s", path)
 	return string(b)
 }
+
+// The store publishes its ADR-0066 artefacts for an authoring surface to
+// expand (ADR-0189 §SD1). Until this existed the Filter was baked unexported
+// and the Projection was generated and discarded, so the SQL a component
+// definition produces was reachable only by copying it out of generated code.
+func TestGenerate_PublishesTheComponentSql(t *testing.T) {
+	out := t.TempDir()
+	require.NoError(t, storegen.Input{
+		PackageName:    "probe",
+		StoreName:      "Probe",
+		ComponentPaths: []string{"./testdata/probe_dto.go"},
+		OutDir:         out,
+		ImportPath:     "example.com/probe",
+		Ids:            map[string]uint64{"storegenProbeHost": 7001, "storegenProbeCount": 7002, "storegenProbeRatio": 7003},
+	}.Generate())
+
+	store := readFile(t, filepath.Join(out, "probe_store.out.go"))
+
+	assert.Contains(t, store, "var ProbeComponentSQL = componentsql.Set{")
+	assert.Contains(t, store, "github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql")
+	assert.Contains(t, store, "Table: ProbeTableName,",
+		"the Set should reference the table constant, not repeat the name")
+
+	// All four artefacts are published — the Projection is the half a query is
+	// written with, and it was the half being thrown away.
+	for _, field := range []string{"Presence:", "Validator:", "Filter:", "Projection:"} {
+		assert.Containsf(t, store, field, "the Set should carry %s", field)
+	}
+
+	// Filter references the baked constant rather than repeating it, so the
+	// Scan verb and the authoring surface cannot disagree about what a
+	// conforming row is.
+	assert.Contains(t, store, "Filter:     factsScanProbeFilter,")
+}

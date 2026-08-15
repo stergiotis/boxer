@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/example/internal/lowlevel"
@@ -1163,6 +1164,50 @@ func (inst *DeviceStore) GetLive(ctx context.Context, key uint64) (ent *DeviceEn
 		found = false
 	}
 	return
+}
+
+// DeviceComponentSQL publishes this store's ADR-0066 read-back artefacts —
+// the SQL its component definitions generate — for an authoring surface
+// to expand (ADR-0189). A host registers it into a componentsql.Registry;
+// nothing here self-registers.
+//
+// Filter is the same constant the Scan verbs use, so the store's own read
+// path and the authoring surface cannot disagree about what a conforming
+// row is. Projection must not be embedded without Filter — it locates an
+// attribute by indexOf and returns the first match, so on a row carrying a
+// membership twice it answers plausibly and wrongly (ADR-0066).
+//
+// The column references are UNQUALIFIED, so a consumer embedding them in a
+// join must bind them to DeviceTableName itself (ADR-0189 SD6).
+var DeviceComponentSQL = componentsql.Set{
+	Store: "Device",
+	Table: DeviceTableName,
+	Kinds: map[string]componentsql.Artefacts{
+		"Identity": {
+			Presence:   "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 2) <= 1",
+			Filter:     deviceScanIdentityFilter,
+			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), if(has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 2), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 2, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), NULL)), 'Tuple(ID UInt64, Status String, Nick Nullable(String))')",
+		},
+		"Battery": {
+			Presence:   "has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     deviceScanBatteryFilter,
+			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID UInt64, Charge UInt64)')",
+		},
+		"Tagged": {
+			Presence:   "has(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 1) <= 1",
+			Filter:     deviceScanTaggedFilter,
+			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:symbolArray:value:val:sh:4::I:0::data\", \"tv:symbolArray:len:len:u64:4D:::0::data\", \"tv:symbolArray:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:symbolArray:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID UInt64, Tags Array(String))')",
+		},
+		"Located": {
+			Presence:   "has(\"tv:geoPoint:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:geoPoint:lr:lr:u64:1247:::0::data\", 1) = 1",
+			Filter:     deviceScanLocatedFilter,
+			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:geoPoint:pointLat:val:f32:4:::0::data\", \"tv:geoPoint:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:geoPoint:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:geoPoint:pointLng:val:f32:4:::0::data\", \"tv:geoPoint:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:geoPoint:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:geoPoint:h3:val:u64:4:::0::data\", \"tv:geoPoint:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:geoPoint:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID UInt64, Lat Float32, Lng Float32, Cell UInt64)')",
+		},
+	},
 }
 
 // --- decode (Arrow → entity bags). ---

@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/cqrsexample/internal/lowlevel"
@@ -1191,6 +1192,56 @@ func (inst *LedgerStore) Replay(ctx context.Context, key string, fromOrder time.
 	}
 	sql += ledgerArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
+}
+
+// LedgerComponentSQL publishes this store's ADR-0066 read-back artefacts —
+// the SQL its component definitions generate — for an authoring surface
+// to expand (ADR-0189). A host registers it into a componentsql.Registry;
+// nothing here self-registers.
+//
+// Filter is the same constant the Scan verbs use, so the store's own read
+// path and the authoring surface cannot disagree about what a conforming
+// row is. Projection must not be embedded without Filter — it locates an
+// attribute by indexOf and returns the first match, so on a row carrying a
+// membership twice it answers plausibly and wrongly (ADR-0066).
+//
+// The column references are UNQUALIFIED, so a consumer embedding them in a
+// join must bind them to LedgerTableName itself (ADR-0189 SD6).
+var LedgerComponentSQL = componentsql.Set{
+	Store: "Ledger",
+	Table: LedgerTableName,
+	Kinds: map[string]componentsql.Artefacts{
+		"Opened": {
+			Presence:   "has(\"tv:acctOwner:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:acctOwner:lr:lr:u64:1247:::0::data\", 1) = 1",
+			Filter:     ledgerScanOpenedFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:acctOwner:value:val:s:4:::0::data\", \"tv:acctOwner:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:acctOwner:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Owner String)')",
+		},
+		"Deposited": {
+			Presence:   "has(\"tv:acctDeposit:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:acctDeposit:lr:lr:u64:1247:::0::data\", 1) = 1 AND if(has(\"tv:acctDeposit:lr:lr:u64:1247:::0::data\", 1), \"tv:acctDeposit:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:acctDeposit:lr:lr:u64:1247:::0::data\", 1), arrayCumSum(\"tv:acctDeposit:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     ledgerScanDepositedFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:acctDeposit:value:val:u64h:4:::0::data\", \"tv:acctDeposit:len:len:u64:4D:::0::data\", \"tv:acctDeposit:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:acctDeposit:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Amount UInt64)')",
+		},
+		"Withdrawn": {
+			Presence:   "has(\"tv:acctWithdraw:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:acctWithdraw:lr:lr:u64:1247:::0::data\", 1) = 1 AND if(has(\"tv:acctWithdraw:lr:lr:u64:1247:::0::data\", 1), \"tv:acctWithdraw:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:acctWithdraw:lr:lr:u64:1247:::0::data\", 1), arrayCumSum(\"tv:acctWithdraw:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     ledgerScanWithdrawnFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:acctWithdraw:value:val:u64h:4:::0::data\", \"tv:acctWithdraw:len:len:u64:4D:::0::data\", \"tv:acctWithdraw:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:acctWithdraw:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Amount UInt64)')",
+		},
+		"Closed": {
+			Presence:   "has(\"tv:acctClosed:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:acctClosed:lr:lr:u64:1247:::0::data\", 1) = 1",
+			Filter:     ledgerScanClosedFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:acctClosed:value:val:s:4:::0::data\", \"tv:acctClosed:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:acctClosed:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Reason String)')",
+		},
+		"AccountState": {
+			Presence:   "has(\"tv:snapOwner:lr:lr:u64:1247:::0::data\", 1) AND has(\"tv:snapBalance:lr:lr:u64:1247:::0::data\", 2) AND has(\"tv:snapClosed:lr:lr:u64:1247:::0::data\", 3) AND has(\"tv:snapAsOf:lr:lr:u64:1247:::0::data\", 4)",
+			Validator:  "countEqual(\"tv:snapOwner:lr:lr:u64:1247:::0::data\", 1) = 1 AND countEqual(\"tv:snapBalance:lr:lr:u64:1247:::0::data\", 2) = 1 AND if(has(\"tv:snapBalance:lr:lr:u64:1247:::0::data\", 2), \"tv:snapBalance:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:snapBalance:lr:lr:u64:1247:::0::data\", 2), arrayCumSum(\"tv:snapBalance:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:snapClosed:lr:lr:u64:1247:::0::data\", 3) = 1 AND countEqual(\"tv:snapAsOf:lr:lr:u64:1247:::0::data\", 4) = 1 AND if(has(\"tv:snapAsOf:lr:lr:u64:1247:::0::data\", 4), \"tv:snapAsOf:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:snapAsOf:lr:lr:u64:1247:::0::data\", 4), arrayCumSum(\"tv:snapAsOf:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     ledgerScanAccountStateFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:snapOwner:value:val:s:4:::0::data\", \"tv:snapOwner:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:snapOwner:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:snapBalance:value:val:u64h:4:::0::data\", \"tv:snapBalance:len:len:u64:4D:::0::data\", \"tv:snapBalance:lr:lr:u64:1247:::0::data\", 2, LW_RAGGED_PARENT_IDS(\"tv:snapBalance:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:snapClosed:value:val:b:4:::0::data\", \"tv:snapClosed:lr:lr:u64:1247:::0::data\", 3, LW_RAGGED_PARENT_IDS(\"tv:snapClosed:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:snapAsOf:value:val:u64h:4:::0::data\", \"tv:snapAsOf:len:len:u64:4D:::0::data\", \"tv:snapAsOf:lr:lr:u64:1247:::0::data\", 4, LW_RAGGED_PARENT_IDS(\"tv:snapAsOf:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Owner String, Balance UInt64, Closed Bool, AsOf UInt64)')",
+		},
+	},
 }
 
 // --- decode (Arrow → entity bags). ---

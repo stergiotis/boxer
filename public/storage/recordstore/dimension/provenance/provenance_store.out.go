@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/dimension/provenance/internal/lowlevel"
@@ -839,6 +840,32 @@ func (inst *ProvenanceStore) Replay(ctx context.Context, key uint64, fromOrder t
 	}
 	sql += provenanceArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
+}
+
+// ProvenanceComponentSQL publishes this store's ADR-0066 read-back artefacts —
+// the SQL its component definitions generate — for an authoring surface
+// to expand (ADR-0189). A host registers it into a componentsql.Registry;
+// nothing here self-registers.
+//
+// Filter is the same constant the Scan verbs use, so the store's own read
+// path and the authoring surface cannot disagree about what a conforming
+// row is. Projection must not be embedded without Filter — it locates an
+// attribute by indexOf and returns the first match, so on a row carrying a
+// membership twice it answers plausibly and wrongly (ADR-0066).
+//
+// The column references are UNQUALIFIED, so a consumer embedding them in a
+// join must bind them to ProvenanceTableName itself (ADR-0189 SD6).
+var ProvenanceComponentSQL = componentsql.Set{
+	Store: "Provenance",
+	Table: ProvenanceTableName,
+	Kinds: map[string]componentsql.Artefacts{
+		"Provenance": {
+			Presence:   "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 2) <= 1",
+			Filter:     provenanceScanProvenanceFilter,
+			Projection: "CAST(tuple(\"id:id:u64:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:symbolArray:value:val:sh:4::I:0::data\", \"tv:symbolArray:len:len:u64:4D:::0::data\", \"tv:symbolArray:lr:lr:u64:1247:::0::data\", 2, LW_RAGGED_PARENT_IDS(\"tv:symbolArray:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID UInt64, Host String, Stack Array(String))')",
+		},
+	},
 }
 
 // --- decode (Arrow → entity bags). ---
