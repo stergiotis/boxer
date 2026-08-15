@@ -22,13 +22,13 @@ import (
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
-	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
@@ -270,7 +270,9 @@ func NewCommand() *cli.Command {
 				capinspector.SetActiveBackend(capinspector.CapFs, "fsbroker")
 			}
 			if persistSvc != nil {
-				capinspector.SetActiveBackend(capinspector.CapPersist, "mem")
+				// The same label the status bar shows ("store" / "mem"),
+				// which is also the BackendImpl id the inspector declares.
+				capinspector.SetActiveBackend(capinspector.CapPersist, persistBackendLabel)
 			}
 			// CapTask backend reads the supervisor wiring: "supervisor"
 			// when the audit hook is live; "task" (the producer surface

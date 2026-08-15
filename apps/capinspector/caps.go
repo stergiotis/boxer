@@ -5,6 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 )
 
@@ -40,9 +41,9 @@ type BackendImpl struct {
 // CapSchema is the durable table a capability's backend writes into:
 // the ClickHouse coordinates plus a loader for the authored leeway
 // schema, which the inspector renders with the schemaview widget
-// (ADR-0075). Nil on caps whose backend owns no table — persist's
-// MemBackend is in-process, and the bus / fs / task caps land their
-// audit trail in the facts table rather than carrying one of their own.
+// (ADR-0075). Nil on caps whose backend owns no table — the bus / fs /
+// task caps land their audit trail in the facts table rather than
+// carrying one of their own. Facts and persist each own one.
 type CapSchema struct {
 	// Database / Table are the CH coordinates the backend writes to.
 	// Rendered as the section header; nothing here connects to them.
@@ -211,7 +212,7 @@ var Registry = map[CapId]CapSpec{
 			"Keys must be a single NATS token (no dots). The windowhost auto- " +
 			"injects the runtime.persist.{ownAlias}.> cap when Manifest.PersistedKeys " +
 			"is non-empty — apps declare keys, not caps.",
-		Backend: "runtime/persist (Service + Client + MemoryBackend)",
+		Backend: "runtime/persist (Service + Client; StoreBackend over boxer.persiststate, MemoryBackend fallback)",
 		AppFilter: func(f app.SubjectFilter) bool {
 			return strings.HasPrefix(f.Pattern, "runtime.persist.")
 		},
@@ -221,11 +222,22 @@ var Registry = map[CapId]CapSpec{
 			}
 			return "runtime.persist." + m.Id.SubjectAlias() + ".>"
 		},
-		// One impl today (mem). The amendment trail names two future
-		// alternatives — disk-backed and facts-backed — that would
-		// each land as a sibling entry here.
+		// Two impls: the durable generated store on boxer.persiststate
+		// (ADR-0105 D3a) when ClickHouse is reachable, else the in-process
+		// memory backend. The carousel reports the resolved one under the
+		// same label the status bar shows (persist:store / persist:mem).
 		Backends: []BackendImpl{
+			{Id: "store", Display: "StoreBackend"},
 			{Id: "mem", Display: "MemBackend"},
+		},
+		// The store backend's own table — the authored persist TableDesc,
+		// not a live DESCRIBE — rendered whichever backend is effective,
+		// for the same reason the facts section is: it describes what
+		// durability looks like.
+		Schema: &CapSchema{
+			Database: persiststore.DatabaseName,
+			Table:    persiststore.TableName,
+			Load:     loadPersistTableDesc,
 		},
 	},
 	CapTask: {

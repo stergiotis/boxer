@@ -1,18 +1,19 @@
 package capinspector
 
 // capschema.go renders the leeway schema of the table a capability's
-// backend persists into — today only boxer.facts, behind the Facts cap
-// — with the schemaview inspector widget (ADR-0075): a section
+// backend persists into — boxer.facts behind the Facts cap and
+// boxer.persiststate behind the persist cap — with the schemaview
+// inspector widget (ADR-0075): a section
 // navigator on the left, and the decoded canonical type / encoding
 // hints / value semantics / membership spec of the selected node on the
 // right. The rest of the detail page says which backend serves the cap
 // and what it promises; this section says what the rows look like once
 // they land.
 //
-// It is the *authored* schema — the mapping LoadRuntimeFactsMapping
-// declares — not a live DESCRIBE TABLE. Nothing here connects to
-// ClickHouse, so the section reads the same whether the effective
-// backend is chstore or the in-memory fallback.
+// It is the *authored* schema — the mapping LoadRuntimeFactsMapping or
+// persiststore's schema declares — not a live DESCRIBE TABLE. Nothing
+// here connects to ClickHouse, so the section reads the same whether the
+// effective backend is the durable one or the in-memory fallback.
 
 import (
 	"strconv"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -46,6 +48,26 @@ func buildFactsTableDesc() (tbl *common.TableDesc, err error) {
 	t, err := manip.BuildTableDesc()
 	if err != nil {
 		err = eh.Errorf("unable to build the boxer.facts table description: %w", err)
+		return
+	}
+	tbl = &t
+	return
+}
+
+// loadPersistTableDesc is CapPersist's CapSchema.Load: the
+// boxer.persiststate TableDesc the generated persist store was emitted
+// from (ADR-0105 D3a), memoised for the same reasons as the facts one.
+var loadPersistTableDesc = sync.OnceValues(buildPersistTableDesc)
+
+func buildPersistTableDesc() (tbl *common.TableDesc, err error) {
+	manip, err := persiststore.GetPersistSchemaInManipulator()
+	if err != nil {
+		err = eh.Errorf("unable to load the boxer.persiststate schema: %w", err)
+		return
+	}
+	t, err := manip.BuildTableDesc()
+	if err != nil {
+		err = eh.Errorf("unable to build the boxer.persiststate table description: %w", err)
 		return
 	}
 	tbl = &t

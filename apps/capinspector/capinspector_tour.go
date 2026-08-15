@@ -108,6 +108,6 @@ func seedTourBackends() {
 	SetActiveBackend(CapFacts, "chstore")
 	SetActiveBackend(CapBus, "inprocbus")
 	SetActiveBackend(CapFs, "fsbroker")
-	SetActiveBackend(CapPersist, "mem")
+	SetActiveBackend(CapPersist, "store")
 	SetActiveBackend(CapTask, "task")
 }
