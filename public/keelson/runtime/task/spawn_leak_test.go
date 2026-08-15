@@ -47,11 +47,20 @@ func TestSpawn_NoMonitorGoroutineLeak(t *testing.T) {
 	}
 }
 
-// TestSpawn_ParentCancelTerminates verifies the complementary path: when the
-// parent context cancels before a terminal verb, the handle is marked
-// terminal (so a later Done no-ops) and the monitor goroutine exits.
-func TestSpawn_ParentCancelTerminates(t *testing.T) {
+// TestSpawn_ParentCancelIsAnnouncedAndWorkerTerminates verifies the
+// complementary path (ADR-0188): when the parent context cancels before a
+// terminal verb, the handle's Ctx cancels, the cancellation is announced on
+// the bus as a task.<id>.cancel carrying CancelReasonParent, and the
+// worker's own Done still publishes the terminal — observers see cancel,
+// then done, instead of a task that silently vanished into "running".
+func TestSpawn_ParentCancelIsAnnouncedAndWorkerTerminates(t *testing.T) {
 	f := newBusFixture(t)
+	obs := &recordingObserver{}
+	unsub, err := WatchAll(f.observer, obs)
+	if err != nil {
+		t.Fatalf("watch: %v", err)
+	}
+	defer unsub()
 	ctx, cancel := context.WithCancel(context.Background())
 	h, err := Spawn(ctx, f.producer, SpawnOpts{Kind: "cancel.test"})
 	if err != nil {
@@ -64,10 +73,30 @@ func TestSpawn_ParentCancelTerminates(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("handle Ctx did not cancel after parent cancel")
 	}
-	// A post-cancel Done must be a no-op (handle already terminal): it
-	// returns nil without publishing.
+	deadline := time.Now().Add(time.Second)
+	for {
+		obs.mu.Lock()
+		n := len(obs.cancel)
+		obs.mu.Unlock()
+		if n == 1 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	obs.mu.Lock()
+	if len(obs.cancel) != 1 || obs.cancel[0].Reason != CancelReasonParent {
+		t.Fatalf("expected one announced cancel with reason %q, got %+v", CancelReasonParent, obs.cancel)
+	}
+	obs.mu.Unlock()
+	// The worker reacts to Cancelled() with its own terminal, which is
+	// published — the handle is not terminal until then.
 	if err := h.Done(nil); err != nil {
 		t.Fatalf("post-cancel Done returned error: %v", err)
+	}
+	obs.mu.Lock()
+	defer obs.mu.Unlock()
+	if len(obs.done) != 1 {
+		t.Fatalf("expected the worker's done to be published after the announced cancel, got %d", len(obs.done))
 	}
 }
 

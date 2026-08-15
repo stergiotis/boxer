@@ -315,17 +315,33 @@ func (inst *Handle) finishLocked() {
 	}
 }
 
-// terminateExternal is invoked by the Spawn-time monitor goroutine when the
+// cancelExternal is invoked by the Spawn-time monitor goroutine when the
 // parent context or the host mount-cancel channel fires before the producer
-// reached a terminal verb. It marks the handle terminal (tearing down the
-// cancel subscription and cancelling Ctx) so a subsequent Done/Error no-ops
-// and the cancel-subscription does not leak — a cancelled task must not
-// publish a terminal event onto a bus that may already be tearing down.
-func (inst *Handle) terminateExternal() {
+// reached a terminal verb. It does what an inbound task.<id>.cancel does —
+// cancels Ctx so the worker sees Cancelled() — and announces the
+// cancellation on the bus with the same verb, best-effort, so observers and
+// the supervisor's audit trail see it; the worker's own Done/Error then
+// publishes the terminal as usual and tears the handle down.
+//
+// Until ADR-0188 this path marked the handle terminal silently, on the
+// premise that the bus might already be tearing down: nothing was
+// published, a later Done/Error no-op'd, and observers only learned of the
+// task's end when the supervisor's heartbeat watchdog abandoned it. The
+// host now keeps the instance's bus client open through Unmount and closes
+// it only afterwards (ADR-0188 §SD2), so the announcement can be made; a
+// worker that outlives the client finds its publish refused (ErrClosed),
+// which is the harmless failure this path used to avoid by staying silent.
+func (inst *Handle) cancelExternal(reason string) {
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
 	if inst.terminated {
+		inst.mu.Unlock()
 		return
 	}
-	inst.finishLocked()
+	if inst.cancel != nil {
+		inst.cancel()
+	}
+	inst.mu.Unlock()
+	if cErr := RequestCancel(inst.bus, inst.id, reason); cErr != nil {
+		inst.logger.Debug().Err(cErr).Str("reason", reason).Msg("task: external cancel not announced")
+	}
 }

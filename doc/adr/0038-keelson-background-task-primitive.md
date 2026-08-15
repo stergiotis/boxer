@@ -202,6 +202,26 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## Updates
 
+### 2026-08-15 — external cancellation is announced, not silent (ADR-0188)
+
+The Spawn-time monitor cascades a parent-context cancel and the host's
+mount-cancel channel into the handle. It used to do so by marking the handle
+terminal without publishing anything — a later `Done`/`Error` no-op'd — on
+the premise that the bus might already be tearing down at that moment.
+Observers therefore never learned of the task's end; the supervisor kept it
+in flight (visible in `keelson('tasks')`, ADR-0188 §SD4) until the heartbeat
+watchdog abandoned it, and `taskdemo`'s own drain-on-Unmount could not
+drain. Since ADR-0188 §SD2 the host closes the mount-cancel channel *before*
+`Unmount` and closes the instance's bus client only afterwards, so the
+premise no longer holds; the monitor now cancels `Ctx` and publishes
+`task.<id>.cancel` with `CancelReasonParent` or `CancelReasonMountReleased`
+— the same verb a cancel button sends — and the worker's `Done`/`Error`
+publishes the terminal as before. A worker that outlives the client finds
+its publish refused with the in-proc client's `ErrClosed`, the harmless case
+the old silence was avoiding. §Consequences' "producers must respect
+`Ctx().Done()`" is unchanged: a worker that never checks is still abandoned
+by the watchdog, not pre-empted.
+
 ### 2026-05-29 — First GUI consumer: ECDF confidence-band warm-up (cached, deduplicated compute job)
 
 The imzero2 ECDF / `distsummary` widget became the first in-tree consumer of this primitive, and it is exactly the workload the Context envisioned: the simultaneous confidence band needs an O(n²) Berk-Jones/Moscovich critical-value inversion that runs ≈minutes at n=10⁴. It had been computed synchronously inside `AppI.Frame` (`widgets/ecdf` → `analytics/stats/ecdfbands.BandsForGrid`), so opening a distsummary inspector over a 10⁴-sample digest froze the UI — "long-running work cannot live there," verbatim.

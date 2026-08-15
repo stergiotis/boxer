@@ -21,6 +21,15 @@ const nanoidLen = 21
 // SpawnOpts configures a new task. All fields are optional except Kind,
 // which is the schema-key observers dispatch on. Title defaults to Kind.
 // Id is auto-generated as a nanoid when empty.
+// Reasons the Spawn-time monitor puts on the task.<id>.cancel it publishes
+// when cancellation arrives from outside the bus (ADR-0188): the parent
+// context handed to Spawn was cancelled, or the host released the mount —
+// the window closed — and cascaded through MountContextI.Cancel().
+const (
+	CancelReasonParent        = "parent context cancelled"
+	CancelReasonMountReleased = "mount released"
+)
+
 type SpawnOpts struct {
 	// Id sets a deterministic task id. Empty means "generate one via
 	// nanoid".
@@ -204,17 +213,21 @@ func spawnWithCancel(parent context.Context, bus app.BusI, opts SpawnOpts, nowFn
 	}
 
 	// Monitor goroutine: cascade external cancellation (parent context or the
-	// host mount-cancel channel) into the handle, and — crucially — exit as
-	// soon as the handle reaches a terminal state via handle.done. The prior
-	// implementation blocked solely on parent.Done(), so a task completed via
-	// Done/Error under a long-lived (or Background) parent leaked this
-	// goroutine for the process lifetime.
+	// host mount-cancel channel) into the handle as an announced cancel, and
+	// — crucially — exit as soon as the handle reaches a terminal state via
+	// handle.done. The prior implementation blocked solely on parent.Done(),
+	// so a task completed via Done/Error under a long-lived (or Background)
+	// parent leaked this goroutine for the process lifetime. After an
+	// external cancel the worker's Done/Error still publishes the terminal
+	// (ADR-0188); the cancel subscription is released there, or with the
+	// instance's bus client at the closing edge for a worker that never
+	// reports.
 	go func() {
 		select {
 		case <-parent.Done():
-			handle.terminateExternal()
+			handle.cancelExternal(CancelReasonParent)
 		case <-cancelCh:
-			handle.terminateExternal()
+			handle.cancelExternal(CancelReasonMountReleased)
 		case <-handle.done:
 			// Terminal reached via Done/Error; finishLocked already tore down
 			// the cancel subscription and cancelled Ctx. Nothing to do.

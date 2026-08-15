@@ -187,7 +187,16 @@ query over effects, not only over launches.
   stamped through a second optional capability, `app.BusInstanceI`; the
   read surface SD4 needs (`Inst.Subscriptions()`, `Inst.LiveClients()`)
   came with the bookkeeping. A singleton shown in two windows carries the
-  mounting window's stop channel and client to the last release.
+  mounting window's stop channel and client to the last release. Follow-up
+  found by driving the closing edge live (2026-08-15): the task monitor
+  used to mark a handle terminal *silently* on parent or mount cancel, on
+  the premise that the bus might be tearing down, so `keelson('tasks')`
+  and the supervisor's audit kept a closed window's task as running until
+  the 30 s abandon watchdog. Under the leave → unmount → unload order the
+  bus is open at that moment, so the cascade now announces a
+  `task.<id>.cancel` (reasons `CancelReasonMountReleased`,
+  `CancelReasonParent`) and leaves the terminal to the worker's own
+  Done/Error, which publishes as usual (ADR-0038 carries a dated Update).
 - **M1 — Dataset withdrawal.** ✓ SD3: service phases, two event subjects,
   `sqlapplet` and play consumers, applet manifest cap. Landed 2026-08-15:
   `RetractGrace` defaults to one bus request timeout (F1 taken as
