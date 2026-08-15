@@ -51,16 +51,22 @@ func TestAdrBookCorpus(t *testing.T) {
 	assert.Equal(t, []TabSel{{ID: "timeline"}, {ID: "table"}, {ID: "detail"}}, tl.Tabs)
 	assert.NotEmpty(t, tl.Preamble, "the preamble strip explains the two encodings")
 
-	// The SET prelude must be the first thing in the buffer. A `--` comment
-	// above it costs the applet every run: mounted live, the identical buffer
-	// with its comment block hoisted over the two SET lines fails with
-	// `keelsonsql: parse: syntax error: 1:0`, and moving the comments back
-	// below them fixes it. Verified by capture in both directions; the
-	// mechanism is not the client-side split/fuse/param-extract chain, which
-	// handles either shape, so this pins the shape that was seen to work
-	// rather than a rule anyone can derive.
-	require.True(t, strings.HasPrefix(tl.SQL, "SET "),
-		"the SET prelude must lead the buffer — a comment above it breaks every run")
+	// The prelude no longer has to lead the buffer, and this test used to
+	// require that it did.
+	//
+	// A `--` comment above the two SET lines cost the applet every run: it
+	// failed with `keelsonsql: parse: syntax error: 1:0`, verified live in both
+	// directions on 2026-08-06. The mechanism was in `dsl/env`, whose prelude
+	// harvest took only a LEADING run of SET lines, so a comment above them
+	// ended the prelude before it started and the bindings never reached the
+	// wire. ADR-0006's 2026-08-15 Update made the harvest comment-tolerant.
+	//
+	// Re-tested live the same day, same applet, comment block hoisted over both
+	// SET lines: 182 rows, `span` and `status` both prelude-bound (the pane
+	// offers `unpin` for each), tree byte-identical to the as-shipped shape
+	// except for frame timings. So the placement is now free, and the buffer
+	// keeps its comments below the prelude because that reads better — not
+	// because moving them breaks it.
 
 	// The Timeline contract (ADR-0097): `_tl_time` plus `_tl_time_end` is the
 	// Intervals mode. A `_tl_label` alongside the end column is not a richer
