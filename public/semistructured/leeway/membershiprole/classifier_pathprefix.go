@@ -17,6 +17,10 @@ import (
 // default is still nil (every membership primary); this is the classifier a
 // caller opts into.
 //
+// The rename ships without a compatibility alias: CODINGSTANDARDS "Typing →
+// No Aliases" forbids the `type X = Y` form (codelint CS008), so the old name
+// is gone rather than deprecated. Every in-tree caller moved with it.
+//
 // Decision order:
 //
 //  1. If the section's UseAspects contain
@@ -87,11 +91,3 @@ func (inst PathPrefixClassifier) classifyParamTreatment(mv membership.Membership
 	}
 	return
 }
-
-// DefaultClassifier is the former name of [PathPrefixClassifier].
-//
-// Deprecated: use PathPrefixClassifier. The rename says what the classifier
-// does — primary is a path prefix — rather than where it sits in a list
-// (ADR-0183 D6). The alias keeps existing callers building; it carries no
-// behaviour of its own.
-type DefaultClassifier = PathPrefixClassifier

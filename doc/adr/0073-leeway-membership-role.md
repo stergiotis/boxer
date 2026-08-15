@@ -119,8 +119,10 @@ append-only; supersession is recorded, not deleted.
 ### 2026-08-15 — `DefaultClassifier` is now `PathPrefixClassifier`
 
 The classifier this ADR calls `DefaultClassifier` is called
-`PathPrefixClassifier` as of ADR-0183 D6; a deprecated type alias keeps the old
-name compiling. Nothing about the classification changed — the rename is the
+`PathPrefixClassifier` as of ADR-0183 D6. There is no compatibility alias:
+CODINGSTANDARDS "Typing → No Aliases" forbids the `type X = Y` form (codelint
+CS008 rejects it), so the old name is gone rather than deprecated. Every
+in-tree caller moved with the rename. Nothing about the classification changed — the rename is the
 point. "Default" said where the type sat rather than what it did, and read as
 "the one to use unless you know better" for a classifier whose whole rule is
 one naming convention (a verbatim membership starting with `/` is primary).

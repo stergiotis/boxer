@@ -482,8 +482,9 @@ proven lane.
   section-scoped (see D5), which is a hazard on a shared table rather
   than a wider version of the same read.
 - **M4 — doc unification.** ✓ D6's reframe (the plan is the definition; the
-  struct is one authoring syntax of three) and the classifier rename with a
-  deprecated alias; D7's U1 — the components skill reordered mesh-first, opening
+  struct is one authoring syntax of three) and the classifier rename — without
+  the deprecated alias D6 asked for, since CODINGSTANDARDS forbids `type X = Y`
+  and codelint CS008 rejects it, so the old name is simply gone; D7's U1 — the components skill reordered mesh-first, opening
   with the type-discipline statement and carrying the load-bearing-ADR map, with
   a table of the silent readings and the test that pins each; the how-to's
   component matter reduced to a pointer at it; both EXPLANATIONs given an
