@@ -18,10 +18,16 @@ const DefaultRequestTimeout = 5 * time.Second
 // they receive permissioned clients via NewClient. Inst owns the
 // subscription table, the client registry, and routes published messages
 // by pattern match.
+//
+// The client registry holds the LIVE clients of each app id in creation
+// order (ADR-0188 §SD1): a window mints one client, and closing that client
+// removes it, so a privileged lookup by app id (the cap broker, the fs
+// Powerbox) always lands on the newest client that is still open rather
+// than on one whose window has been reaped.
 type Inst struct {
 	mu             sync.RWMutex
 	subs           []*subscription
-	clients        map[app.AppIdT]*Client
+	clients        map[app.AppIdT][]*Client
 	nextId         uint64
 	requestTimeout time.Duration
 	log            zerolog.Logger
@@ -34,14 +40,19 @@ type subscription struct {
 	id      uint64
 	pattern string
 	appId   app.AppIdT
-	handler app.MsgHandlerFunc
+	// instanceKey is the host-minted window/embed key of the client that
+	// subscribed (0 when the client was minted without one). It is what
+	// lets the live `subscriptions` table (ADR-0188 §SD4) attribute a
+	// subscription to one window when several windows share an app id.
+	instanceKey uint64
+	handler     app.MsgHandlerFunc
 }
 
 // NewInst returns a fresh router. log receives internal diagnostics; pass
 // zerolog.Nop() in tests to silence.
 func NewInst(log zerolog.Logger) (inst *Inst) {
 	inst = &Inst{
-		clients:        make(map[app.AppIdT]*Client),
+		clients:        make(map[app.AppIdT][]*Client),
 		requestTimeout: DefaultRequestTimeout,
 		log:            log,
 	}
@@ -60,16 +71,78 @@ func (inst *Inst) SetRequestTimeout(d time.Duration) {
 // and subject permission set. The client is the handle apps consume as
 // app.BusI; Inst itself stays internal to the host. The client is also
 // registered on the Inst so privileged consumers (the cap broker) can look
-// it up by AppId. Duplicate appIds replace the prior registration.
+// it up by AppId; several clients may be live under one app id (one per
+// window), and ClientByAppId answers with the newest that has not been
+// closed. Close removes a client from the registry (ADR-0188 §SD1).
 func (inst *Inst) NewClient(appId app.AppIdT, caps []app.SubjectFilter) (c *Client) {
 	c = &Client{
-		inst:  inst,
-		appId: appId,
-		caps:  caps,
+		inst:   inst,
+		appId:  appId,
+		caps:   caps,
+		subIds: make(map[uint64]struct{}),
 	}
 	inst.mu.Lock()
-	inst.clients[appId] = c
+	inst.clients[appId] = append(inst.clients[appId], c)
 	inst.mu.Unlock()
+	return
+}
+
+// dropClient removes c from the live-client registry; a no-op when c was
+// already dropped. Called by Client.Close under no lock of its own.
+func (inst *Inst) dropClient(c *Client) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	live := inst.clients[c.appId]
+	for i, x := range live {
+		if x == c {
+			live = append(live[:i], live[i+1:]...)
+			break
+		}
+	}
+	if len(live) == 0 {
+		delete(inst.clients, c.appId)
+	} else {
+		inst.clients[c.appId] = live
+	}
+}
+
+// LiveClients returns a snapshot of every client that has been minted and
+// not closed, in creation order per app id. It is the read surface of the
+// `client_caps` introspection table (ADR-0188 §SD4).
+func (inst *Inst) LiveClients() (cs []*Client) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	for _, live := range inst.clients {
+		cs = append(cs, live...)
+	}
+	return
+}
+
+// SubscriptionInfo is one row of the live subscription table (ADR-0188
+// §SD4): who holds which pattern, attributed to a window when the client
+// carried an instance key.
+type SubscriptionInfo struct {
+	Id          uint64
+	AppId       app.AppIdT
+	InstanceKey uint64
+	Pattern     string
+}
+
+// Subscriptions returns a snapshot of the subscription table. Reply inboxes
+// allocated by in-flight Requests are included — they are subscriptions
+// like any other and disappear when the request completes.
+func (inst *Inst) Subscriptions() (rows []SubscriptionInfo) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	rows = make([]SubscriptionInfo, 0, len(inst.subs))
+	for _, s := range inst.subs {
+		rows = append(rows, SubscriptionInfo{
+			Id:          s.id,
+			AppId:       s.appId,
+			InstanceKey: s.instanceKey,
+			Pattern:     s.pattern,
+		})
+	}
 	return
 }
 
@@ -83,13 +156,20 @@ func (inst *Inst) NewBusClient(appId app.AppIdT, caps []app.SubjectFilter) (bus 
 	return
 }
 
-// ClientByAppId returns the Client previously created via NewClient for the
-// given AppId. Used by the cap broker to mutate a target app's caps after
-// a grant.
+// ClientByAppId returns the newest live Client created via NewClient for
+// the given AppId. Used by the cap broker to mutate a target app's caps
+// after a grant. Grants stay addressed to an app id — the wire carries no
+// instance key — so with several windows open the newest one receives the
+// grant (recorded as pre-existing in ADR-0188).
 func (inst *Inst) ClientByAppId(appId app.AppIdT) (c *Client, ok bool) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
-	c, ok = inst.clients[appId]
+	live := inst.clients[appId]
+	if len(live) == 0 {
+		return
+	}
+	c = live[len(live)-1]
+	ok = true
 	return
 }
 
@@ -122,7 +202,7 @@ func (inst *Inst) publish(sender app.AppIdT, subject, reply string, payload []by
 	return
 }
 
-func (inst *Inst) subscribe(appId app.AppIdT, pattern string, handler app.MsgHandlerFunc) (id uint64, err error) {
+func (inst *Inst) subscribe(appId app.AppIdT, instanceKey uint64, pattern string, handler app.MsgHandlerFunc) (id uint64, err error) {
 	if handler == nil {
 		err = eh.Errorf("subscribe: nil handler")
 		return
@@ -135,10 +215,11 @@ func (inst *Inst) subscribe(appId app.AppIdT, pattern string, handler app.MsgHan
 	inst.nextId++
 	id = inst.nextId
 	inst.subs = append(inst.subs, &subscription{
-		id:      id,
-		pattern: pattern,
-		appId:   appId,
-		handler: handler,
+		id:          id,
+		pattern:     pattern,
+		appId:       appId,
+		instanceKey: instanceKey,
+		handler:     handler,
 	})
 	inst.mu.Unlock()
 	return

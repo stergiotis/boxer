@@ -21,8 +21,16 @@ import (
 //     SurfaceWindowed apps, Frame is invoked inside a runtime-owned
 //     window scope (title from Manifest.Title, icon from Manifest.Icon).
 //     Apps must NOT call c.Window(...) or c.PanelCentral() themselves.**
-//   - Unmount runs when the host releases the app. Cleanup of bus
-//     subscriptions and persistence flush happens here.
+//   - Unmount runs when the host releases the app. App-private cleanup and
+//     persistence flush happen here. Runtime-mediated effects — bus
+//     subscriptions, runtime capability grants, tasks spawned through
+//     task.ForApp — are released by the host at the closing edge whether or
+//     not Unmount does so (ADR-0188): the host closes MountContextI.Cancel()
+//     first, then runs Unmount, then closes the instance's bus client. An
+//     app may therefore still use its bus inside Unmount; a goroutine that
+//     outlives Unmount and keeps the client sees a closed-client error rather
+//     than a silently live one. Releasing an effect early stays a no-op at
+//     close.
 //
 // All three methods may return an error; the host logs and propagates per
 // host policy (DockHost surfaces the error in the tile chrome; CliHost
@@ -162,6 +170,27 @@ type BusI interface {
 // treats them as advisory (the server enforces via NKey/JWT).
 type BusProvider interface {
 	NewBusClient(appId AppIdT, caps []SubjectFilter) (bus BusI, err error)
+}
+
+// BusCloserI is the optional close capability of a per-instance bus client
+// (ADR-0188 §SD1). A host type-asserts it on the BusI it minted at Open and
+// calls Close once the instance's Unmount has run: the in-proc client drops
+// every subscription it created and leaves the router's live registry
+// (releasing runtime grants with it); the NATS client closes its
+// connection, which has the same meaning. NoopBus does not implement it, so
+// hosts without a transport skip the step. Optional rather than a BusI
+// method so that BusI stays exactly the surface an app programs against.
+type BusCloserI interface {
+	Close() (err error)
+}
+
+// BusInstanceI is the optional per-instance identity capability of a bus
+// client (ADR-0188 §SD1): the host stamps the window or embed key it minted
+// the client for, so subscriptions can be attributed to one instance where
+// several windows share an app id. Optional for the same reason as
+// BusCloserI.
+type BusInstanceI interface {
+	SetInstanceKey(key uint64)
 }
 
 // MsgHandlerFunc is the per-message callback handed to Subscribe. The Msg

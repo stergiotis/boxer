@@ -24,17 +24,108 @@ const InboxPrefix = "_INBOX."
 // declared SubjectFilter caps. The caller obtains a *Client from
 // Inst.NewClient; the type is exported so privileged consumers (e.g. the
 // cap broker) can call AddCap to extend permissions at runtime.
+//
+// A client is the accumulator of one app INSTANCE's bus effects (ADR-0188
+// §SD1): it remembers every subscription it created and every cap it was
+// granted, and Close releases them all at once. The host mints one client
+// per window and closes it after the app's Unmount, so a subscription the
+// app forgot to release, or a grant the broker never revoked, ends with the
+// window rather than with the process.
 type Client struct {
-	inst   *Inst
-	appId  app.AppIdT
-	capsMu sync.RWMutex
-	caps   []app.SubjectFilter
-	inboxN atomic.Uint64
+	inst        *Inst
+	appId       app.AppIdT
+	instanceKey atomic.Uint64
+	capsMu      sync.RWMutex
+	caps        []app.SubjectFilter
+	inboxN      atomic.Uint64
+
+	subMu  sync.Mutex
+	subIds map[uint64]struct{}
+	closed atomic.Bool
 }
 
 var _ app.BusI = (*Client)(nil)
+var _ app.BusCloserI = (*Client)(nil)
+var _ app.BusInstanceI = (*Client)(nil)
+
+// SetInstanceKey stamps the host-minted window/embed key on the client;
+// every subscription created afterwards carries it (ADR-0188 §SD1). Zero
+// means "no instance" (CLI, one-shot bootstrap, tests).
+func (inst *Client) SetInstanceKey(key uint64) {
+	inst.instanceKey.Store(key)
+}
+
+// InstanceKey returns the key set by SetInstanceKey, or 0.
+func (inst *Client) InstanceKey() (key uint64) {
+	key = inst.instanceKey.Load()
+	return
+}
+
+// Close releases everything this client acquired: every subscription it
+// created is dropped from the router, and the client leaves the router's
+// live registry, which is what makes runtime grants (AddCap) die with it.
+// Idempotent; every operation afterwards returns ErrClosed. Handlers that
+// are mid-dispatch on another goroutine finish; none is invoked afterwards
+// for a subscription this client held. Mirrors natsbus.Client.Close, where
+// closing the connection has the same meaning.
+func (inst *Client) Close() (err error) {
+	if !inst.closed.CompareAndSwap(false, true) {
+		return
+	}
+	inst.subMu.Lock()
+	ids := make([]uint64, 0, len(inst.subIds))
+	for id := range inst.subIds {
+		ids = append(ids, id)
+	}
+	inst.subIds = nil
+	inst.subMu.Unlock()
+	for _, id := range ids {
+		inst.inst.unsubscribe(id)
+	}
+	inst.inst.dropClient(inst)
+	return
+}
+
+// IsClosed reports whether Close has run.
+func (inst *Client) IsClosed() (closed bool) {
+	closed = inst.closed.Load()
+	return
+}
+
+func (inst *Client) trackSub(id uint64) (accepted bool) {
+	inst.subMu.Lock()
+	defer inst.subMu.Unlock()
+	if inst.subIds == nil {
+		return
+	}
+	inst.subIds[id] = struct{}{}
+	accepted = true
+	return
+}
+
+func (inst *Client) untrackSub(id uint64) {
+	inst.subMu.Lock()
+	defer inst.subMu.Unlock()
+	if inst.subIds != nil {
+		delete(inst.subIds, id)
+	}
+}
+
+// SubscriptionCount is the number of subscriptions this client currently
+// holds (reply inboxes of in-flight Requests excluded).
+func (inst *Client) SubscriptionCount() (n int) {
+	inst.subMu.Lock()
+	defer inst.subMu.Unlock()
+	n = len(inst.subIds)
+	return
+}
 
 func (inst *Client) Publish(subject string, payload []byte) (err error) {
+	if inst.closed.Load() {
+		err = eb.Build().Str("subject", subject).Str("appId", string(inst.appId)).
+			Errorf("bus publish: %w", ErrClosed)
+		return
+	}
 	if !inst.canPublish(subject) {
 		err = eb.Build().Str("subject", subject).Str("appId", string(inst.appId)).
 			Errorf("bus publish denied: %w", ErrPermissionViolation)
@@ -109,18 +200,32 @@ func (inst *Client) Subscribe(subject string, handler app.MsgHandlerFunc) (unsub
 	// would let any client wildcard-subscribe `_INBOX.>` and read every
 	// reply in the process (file bytes, query results), defeating the
 	// Powerbox subjects whose whole point is mediated access.
+	if inst.closed.Load() {
+		err = eb.Build().Str("subject", subject).Str("appId", string(inst.appId)).
+			Errorf("bus subscribe: %w", ErrClosed)
+		return
+	}
 	if !inst.canSubscribe(subject) {
 		err = eb.Build().Str("subject", subject).Str("appId", string(inst.appId)).
 			Errorf("bus subscribe denied: %w", ErrPermissionViolation)
 		return
 	}
 	var id uint64
-	id, err = inst.inst.subscribe(inst.appId, subject, handler)
+	id, err = inst.inst.subscribe(inst.appId, inst.instanceKey.Load(), subject, handler)
 	if err != nil {
 		err = eh.Errorf("bus subscribe: %w", err)
 		return
 	}
+	if !inst.trackSub(id) {
+		// Close raced this Subscribe: the client is already released, so
+		// the subscription must not outlive it.
+		inst.inst.unsubscribe(id)
+		err = eb.Build().Str("subject", subject).Str("appId", string(inst.appId)).
+			Errorf("bus subscribe: %w", ErrClosed)
+		return
+	}
 	unsubscribe = func() {
+		inst.untrackSub(id)
 		inst.inst.unsubscribe(id)
 	}
 	return
@@ -163,6 +268,11 @@ func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Du
 			Ts:            start,
 		})
 	}()
+	if inst.closed.Load() {
+		err = eb.Build().Str("subject", subject).Str("appId", string(inst.appId)).
+			Errorf("bus request: %w", ErrClosed)
+		return
+	}
 	if !inst.canPublish(subject) {
 		err = eb.Build().Str("subject", subject).Str("appId", string(inst.appId)).
 			Errorf("bus request denied: %w", ErrPermissionViolation)
@@ -171,7 +281,7 @@ func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Du
 	inbox := inst.allocateInbox()
 	replyCh := make(chan []byte, 1)
 	var inboxId uint64
-	inboxId, err = inst.inst.subscribe(inst.appId, inbox, func(msg *app.Msg) {
+	inboxId, err = inst.inst.subscribe(inst.appId, inst.instanceKey.Load(), inbox, func(msg *app.Msg) {
 		select {
 		case replyCh <- msg.Payload:
 		default:

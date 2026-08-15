@@ -179,9 +179,15 @@ query over effects, not only over launches.
 
 ### Milestones
 
-- **M0 — Stop channel and client close.** SD2 and SD1: `Close()` on the
+- **M0 — Stop channel and client close.** ✓ SD2 and SD1: `Close()` on the
   in-proc client, per-window channel, reap order, `AppI` doc comment,
-  `capdemo` left as it is (its leak now closes with the client).
+  `capdemo` left as it is (its leak now closes with the client). Landed
+  2026-08-15: the router keeps the *live* clients per app id and
+  `ClientByAppId` answers with the newest live one; the instance key is
+  stamped through a second optional capability, `app.BusInstanceI`; the
+  read surface SD4 needs (`Inst.Subscriptions()`, `Inst.LiveClients()`)
+  came with the bookkeeping. A singleton shown in two windows carries the
+  mounting window's stop channel and client to the last release.
 - **M1 — Dataset withdrawal.** SD3: service phases, two event subjects,
   `sqlapplet` and play consumers, applet manifest cap.
 - **M2 — Live tables.** SD4: three providers, howto snippet.
@@ -213,8 +219,8 @@ query over effects, not only over launches.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `inprocbus.Client` (exported API) | `Close() error`, instance key on the client and its subscriptions | `windowhost` reap; the embed seam when it lands |
-| `app.BusCloserI` (exported API) | added, optional | none — asserted, not required |
+| `inprocbus.Client` (exported API) | `Close() error`, `SetInstanceKey`, instance key on subscriptions; `Inst` keeps live clients per app id, `ClientByAppId` = newest live | `windowhost` reap; the embed seam when it lands |
+| `app.BusCloserI`, `app.BusInstanceI` (exported API) | added, optional | none — asserted, not required |
 | `app.MountContextI.Cancel()` (contract) | semantics now real under `windowhost` | `AppI` doc comment; `task.ForApp` unchanged |
 | Subjects (named registry) | `adhoc.event.published`, `adhoc.event.retracted` | applet manifests: `Sub adhoc.event.>`; capslock baseline if the SSA sees a new sink |
 | Introspection tables (named registry) | `subscriptions`, `client_caps`, `tasks` | `keelson('tables')` catalog reflects them; howto snippet |

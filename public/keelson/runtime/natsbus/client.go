@@ -21,6 +21,11 @@ type Client struct {
 
 var _ app.BusI = (*Client)(nil)
 
+// Close is the ADR-0188 §SD1 per-instance release: a host closes the client
+// it minted for a window after that window's Unmount, and on this transport
+// closing the connection drops every subscription with it.
+var _ app.BusCloserI = (*Client)(nil)
+
 // Options configures Connect.
 type Options struct {
 	// URL is the NATS server URL (e.g. "nats://127.0.0.1:4222"). Empty uses

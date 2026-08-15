@@ -66,6 +66,15 @@ type window struct {
 	closeReq   bool // set by the in-body Close button or external Close()
 	stopReason string
 
+	// stop is the channel behind this window's MountContextI.Cancel()
+	// (ADR-0188 §SD2). The host closes it at the closing edge BEFORE the
+	// app's Unmount — the "leave" step — so tasks spawned through
+	// task.ForApp cascade-cancel and goroutines watching Cancel() wind
+	// down while the app is still mounted. stopOnce keeps a shared
+	// singleton's carried window from closing it twice.
+	stop     chan struct{}
+	stopOnce sync.Once
+
 	// appIds is the per-window WidgetIdStack handed to the app via
 	// MountCtx.Ids(). The host pre-pushes an instance-unique salt
 	// derived from `key` onto this stack at the start of every Frame
@@ -109,6 +118,14 @@ type instMount struct {
 	mounted  bool
 	mountErr error // sticky; window body renders an error label when set
 	mountCtx *app.StaticMountContext
+	// carried holds windows that closed while the instance stayed
+	// mounted through another window AND whose mount context is the one
+	// the instance was Mounted with (singleton shown twice, the first
+	// window closing first). Their stop channel and bus client are what
+	// the app captured in Mount, so they are released at the LAST
+	// release together with the final window's, not at their own reap
+	// (ADR-0188 §SD1/§SD2).
+	carried []*window
 }
 
 // Inst is the window host: the registry plus the list of open windows.
@@ -633,6 +650,12 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 				Msg("windowhost: bus client construction failed; using NoopBus")
 		} else {
 			busC = client
+			// Per-instance attribution for the live subscription table
+			// (ADR-0188 §SD1); optional capability, so a transport that
+			// does not carry it is simply unattributed.
+			if bi, ok := client.(app.BusInstanceI); ok {
+				bi.SetInstanceKey(uint64(key))
+			}
 			// Storage client wraps the same bus client so MountCtx.Storage()
 			// shares the per-app permission set with MountCtx.Bus().
 			sc, sErr := persist.NewClient(busC, m.Id)
@@ -650,7 +673,11 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	// logger; AppLogger adds app_id; we add instance_id here).
 	perWindowLogger := app.AppLogger(inst.logger, m.Id).
 		With().Uint64("instance_id", uint64(key)).Logger()
-	mountCtx := app.NewStaticMountContext(m.Id, perWindowLogger, storageC, busC, nil)
+	// A real stop channel per window (ADR-0188 §SD2): Cancel() fires at
+	// the closing edge, before Unmount. Before this the host passed nil,
+	// which selects never, so task.ForApp's cascade-cancel was inert.
+	stop := make(chan struct{})
+	mountCtx := app.NewStaticMountContext(m.Id, perWindowLogger, storageC, busC, stop)
 	mountCtx.SetInstanceKey(uint64(key))
 	mountCtx.SetRunId(inst.runId)
 	mountCtx.SetLaunchConfig(cfg)
@@ -687,6 +714,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		appIds:      appIds,
 		mount:       ms,
 		openFlag:    true,
+		stop:        stop,
 	})
 	runId := inst.runId
 	facts := inst.facts
@@ -781,7 +809,7 @@ func (inst *Inst) ReapAll(reason string) {
 // never mounted. The workingset save (ADR-0148) needs the distinction —
 // there is nothing to save from an unmounted instance, and nothing this
 // window may save from a shared one.
-func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext, stillShared bool) {
+func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext, stillShared bool, carried []*window) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	ms := w.mount
@@ -791,13 +819,49 @@ func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext, s
 	ms.refs--
 	if ms.refs > 0 {
 		stillShared = true
+		if ms.mounted && ms.mountCtx == w.mountCtx {
+			// The instance was Mounted with THIS window's context; its
+			// stop channel and bus client are what the app holds. Carry
+			// them to the last release (ADR-0188 §SD1/§SD2).
+			ms.carried = append(ms.carried, w)
+			carried = ms.carried
+		}
 		return
 	}
 	delete(inst.mountState, w.appInst)
+	carried = ms.carried
 	if ms.mounted {
 		unmountCtx = ms.mountCtx
 	}
 	return
+}
+
+// leave closes a window's stop channel — the first step of the closing
+// edge (ADR-0188 §SD2). Idempotent.
+func (w *window) leave() {
+	w.stopOnce.Do(func() {
+		if w.stop != nil {
+			close(w.stop)
+		}
+	})
+}
+
+// unload closes a window's bus client — the last step of the closing edge
+// (ADR-0188 §SD1): every subscription the instance created and every
+// runtime grant it received are released with it. Hosts without a
+// transport hold a NoopBus, which has no closer, and skip. Idempotent
+// through the client.
+func (w *window) unload(logger zerolog.Logger) {
+	bc, ok := w.mountCtx.Bus().(app.BusCloserI)
+	if !ok {
+		return
+	}
+	if cErr := bc.Close(); cErr != nil {
+		logger.Warn().Err(cErr).
+			Str("id", string(w.manifest.Id)).
+			Uint64("windowKey", uint64(w.key)).
+			Msg("windowhost: bus client close")
+	}
 }
 
 // reapWindow runs one reaped window's closing-edge work, outside the host
@@ -806,17 +870,41 @@ func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext, s
 // then Unmount. reason is the stop reason the caller settled on; it also
 // lands on the workingset row as save provenance. unmountMsg names the
 // caller's context in the failure log (reap vs shutdown).
+//
+// The closing edge runs in a fixed order (ADR-0188 §SD2, documented on
+// AppI): leave — close the stop channel, so Cancel() fires and tasks
+// cascade-cancel while the app is still mounted; unmount — the workingset
+// pull and the app's own Unmount, with its bus still usable; unload — close
+// the bus client, releasing every subscription and runtime grant the
+// instance still held. A window that closes while its singleton instance
+// stays mounted through another window releases nothing the app may still
+// be holding: if it is the mounting window its resources are carried to
+// the last release, otherwise its own (unobserved) stop channel and client
+// close now.
 func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) {
-	uc, shared := inst.releaseMount(w)
+	uc, shared, carried := inst.releaseMount(w)
 	if shared {
 		inst.warnWorkingsetSharedInstance(w)
+		if !containsWindow(carried, w) {
+			w.leave()
+			w.unload(inst.logger)
+		}
 		return
 	}
 	if uc == nil {
 		// Never mounted: no state was ever built, so there is nothing to
-		// compose and nothing to unmount.
+		// compose and nothing to unmount; only this window's own
+		// resources go.
+		w.leave()
+		w.unload(inst.logger)
 		return
 	}
+	// leave
+	for _, cw := range carried {
+		cw.leave()
+	}
+	w.leave()
+	// unmount
 	inst.saveWorkingset(w, reason)
 	umErr := w.appInst.Unmount(uc)
 	if umErr != nil {
@@ -825,6 +913,21 @@ func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) {
 			Uint64("windowKey", uint64(w.key)).
 			Msg(unmountMsg)
 	}
+	// unload
+	for _, cw := range carried {
+		cw.unload(inst.logger)
+	}
+	w.unload(inst.logger)
+}
+
+func containsWindow(ws []*window, w *window) (found bool) {
+	for _, x := range ws {
+		if x == w {
+			found = true
+			return
+		}
+	}
+	return
 }
 
 // Close requests removal of the window with the given key, attaching
