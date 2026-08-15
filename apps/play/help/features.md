@@ -228,6 +228,10 @@ did happen is labelled with the two names it claimed, so you can always see what
 the editor inferred. Add a **`-- play: ungroup`** comment line anywhere in the
 query to refuse every fold and get one plain text field per parameter.
 
+`-- play: enum` and `-- play: ungroup` are two of three comment-line
+directives the buffer carries with the SQL; the third, `-- play: gloss`, binds
+a column rendering by rule and is described under [Glosses](#glosses).
+
 A widget whose name nothing fills yet is marked **needs a value**. That is the
 same condition that blocks Run, so filling the widget clears both.
 
@@ -601,8 +605,9 @@ where a name is actually evaluated — which is what decides how it fails:
   `descriptiveStatistics(...)`, `docsearch('...')`, `keelson('...')`, the leeway
   extraction and constructor families (`LW_GET*`, `LW_PLAIN` / `LW_TV*` —
   though what `LW_GET*` expands *into* calls the server-side read-back
-  helpers, and the panel marks that dependency), and `LW_ID_*` (which is both —
-  installable *and* expanded here).
+  helpers, and the panel marks that dependency), `gloss(...)` (an alias
+  declaring how a column renders — see [Glosses](#glosses)), and `LW_ID_*`
+  (which is both — installable *and* expanded here).
 - **play** — the `ts*` family, computed locally over the rows a sub-query returns.
   The server never sees the name.
 

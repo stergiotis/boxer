@@ -445,7 +445,8 @@ ORDER BY bucket
 
 A column named `` `<label>@<mime>` `` renders its cell as that media type in the
 **Detail** tab, instead of as the truncated one line every other ad-hoc column
-gets (ADR-0123; since ADR-0186 these are the content family of the gloss
+gets — and in the **Table**, as its first line, or as `[image/png · 359 B]` for
+an image (ADR-0123; since ADR-0186 these are the content family of the gloss
 catalog — the next snippet). Run this, then click the row in **Table** — Detail
 draws whatever the selection points at. Table-free; runs against any server.
 

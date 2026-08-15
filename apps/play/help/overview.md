@@ -50,6 +50,9 @@ derived from it, so you keep them open while typing:
   runs: installed on the endpoint, expanded by play before the statement ships,
   or computed in play and never sent. Server functions are marked present or
   missing against what the endpoint actually carries.
+- **Glosses** — the catalog of value renderings (a temperature with its unit, a
+  masked value, a URL as a link, markdown as prose, …), the buffer's rendering
+  rules, and how each column of the current result resolved.
 
 **The result panes**, below — these are fed the query's rows:
 
@@ -82,6 +85,12 @@ column names:
 - **Ad-hoc grouping** — for ordinary SQL results (aliased or aggregated
   columns), columns are grouped by name prefix into pinned / relations / data /
   meta sections.
+
+On both paths a column can carry a **gloss** — a named rendering such as
+`` `t@gloss/temperature;unit=C` `` or `` `notes@text/markdown` `` — declared by
+alias, by the `gloss(…)` macro, or by a `-- play: gloss` rule; the Table shows
+its one-line face and Detail its block face where there is one. The Features
+page covers the catalog.
 
 ## Parameters and signals
 
