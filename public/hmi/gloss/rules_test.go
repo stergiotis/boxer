@@ -69,3 +69,26 @@ func TestAffinityRules(t *testing.T) {
 	assert.Equal(t, MediaTypeRaw, r.MediaType)
 	assert.Same(t, rules[0].Instance, c.AffinityRules()[0].Instance, "affinities compile once")
 }
+
+// MatchAll keeps list order — the winner first, then what it shadows — so
+// the Glosses tab can show a rule that never fires (ADR-0186 §SD3).
+func TestMatchAll(t *testing.T) {
+	c := Default()
+	raw, err := c.CompileRule("gloss/raw", `\bsem:secret\b`, "directive line 1")
+	require.NoError(t, err)
+	temp, err := c.CompileRule("gloss/temperature;unit=C", `name:pw`, "directive line 2")
+	require.NoError(t, err)
+	rules := append([]Rule{raw, temp}, c.AffinityRules()...)
+
+	all := MatchAll(rules, "name:pw section:auth role:val ct:s sem:secret arrow:utf8")
+	require.Len(t, all, 3)
+	assert.Equal(t, MediaTypeRaw, all[0].MediaType, "the winner, as MatchFirst returns it")
+	first, ok := MatchFirst(rules, "name:pw section:auth role:val ct:s sem:secret arrow:utf8")
+	require.True(t, ok)
+	assert.Equal(t, first.Source, all[0].Source)
+	assert.Equal(t, "directive line 2", all[1].Source, "shadowed by the earlier directive")
+	assert.Equal(t, SourceAffinity, all[2].Source, "the affinity, shadowed by both")
+	assert.Equal(t, MediaTypeMasked, all[2].MediaType)
+
+	assert.Nil(t, MatchAll(rules, "name:temp_c arrow:float64"), "nothing matches: nil, not empty")
+}

@@ -2,39 +2,52 @@ package gloss
 
 import (
 	"mime"
-	"regexp"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// A Rule binds a gloss to every column whose spec line matches its pattern
-// (ADR-0186 §SD3). Rules come from two places, in this precedence: in-band
-// directives, in buffer order; then the glosses' own affinities, in catalog
-// order. Within a list, the first match wins.
+// A Rule binds a gloss to every column whose spec (ADR-0186 §SD3) its
+// condition holds for. Rules come from three places, in this precedence:
+// in-band directives, in buffer order; a Repository's rule sets, in
+// registration and declaration order; then the glosses' own affinities, in
+// catalog order. Within a list, the first match wins.
 //
 // A rule's instance is bound once: Bind depends on the parameters alone, so
 // every column a rule matches shares it.
 type Rule struct {
-	// Pattern is the RE2 source, matched unanchored and case-sensitively
-	// against the spec line.
+	// Pattern is the condition's text — an RE2 source for a directive or an
+	// affinity, a Predicate's String for a rule declared in code.
 	Pattern string
 	// MediaType is the canonical (folded, parameter-free) type; Params its
 	// parameters as declared.
 	MediaType string
 	Params    map[string]string
 	// Source says where the rule came from, for hover text and the Glosses
-	// tab: a directive's line, or "affinity".
-	Source   string
+	// tab: a directive's line, "set <name>: <rule>", or "affinity".
+	Source string
+	// Set and Name are the rule set and rule a code rule was declared as;
+	// empty for a directive or an affinity.
+	Set  string
+	Name string
+
 	Instance InstanceI
 
-	re *regexp.Regexp
+	pred Predicate
 }
 
+// SourceSet prefixes the Source of every rule declared in a RuleSet.
+const SourceSet = "set"
+
 // Match reports whether the rule applies to a column with this spec line.
+// MatchFirst and MatchAll parse the line once for a list of rules.
 func (inst Rule) Match(specLine string) bool {
-	return inst.re != nil && inst.re.MatchString(specLine)
+	spec := ParseSpec(specLine)
+	return inst.pred.Matches(&spec)
 }
+
+// Matches reports whether the rule applies to a parsed spec.
+func (inst Rule) Matches(spec *Spec) bool { return inst.pred.Matches(spec) }
 
 // Token is the rule's media type with its parameters, in the compact form a
 // directive is written in.
@@ -67,12 +80,12 @@ func (inst *Catalog) CompileRule(token string, pattern string, source string) (r
 		err = eb.Build().Str("mediaType", mt).Errorf("a rule needs a pattern to match against the spec line")
 		return
 	}
-	re, rerr := regexp.Compile(pattern)
-	if rerr != nil {
-		err = eb.Build().Str("pattern", pattern).Errorf("pattern does not compile: %w", rerr)
+	pred := SpecMatches(pattern)
+	if pred.err != nil {
+		err = pred.err
 		return
 	}
-	return Rule{Pattern: pattern, MediaType: mt, Params: params, Source: source, Instance: instance, re: re}, nil
+	return Rule{Pattern: pattern, MediaType: mt, Params: params, Source: source, Instance: instance, pred: pred}, nil
 }
 
 // ParseToken splits a media-type token in the alias spelling into its
@@ -143,13 +156,28 @@ func (inst *Catalog) AffinityRules() []Rule {
 }
 
 // MatchFirst returns the first rule in rules matching the spec line — the
-// caller lists directive rules before affinity rules, so precedence is list
+// caller lists directive rules before a repository's, so precedence is list
 // order.
 func MatchFirst(rules []Rule, specLine string) (r Rule, ok bool) {
+	spec := ParseSpec(specLine)
 	for i := range rules {
-		if rules[i].Match(specLine) {
+		if rules[i].Matches(&spec) {
 			return rules[i], true
 		}
 	}
 	return Rule{}, false
+}
+
+// MatchAll returns every rule in rules matching the spec line, in list
+// order: MatchFirst's answer first, then the rules it shadows (ADR-0186
+// §SD3). The host binds the first and lists the rest in the Glosses tab, so
+// a rule that never fires can be seen not to. Nil when nothing matches.
+func MatchAll(rules []Rule, specLine string) (matched []Rule) {
+	spec := ParseSpec(specLine)
+	for i := range rules {
+		if rules[i].Matches(&spec) {
+			matched = append(matched, rules[i])
+		}
+	}
+	return matched
 }
