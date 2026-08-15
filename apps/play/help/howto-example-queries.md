@@ -121,11 +121,15 @@ that channel, since anchor's sections carry several:
 
 ```sql
 SELECT
-  `id:naturalKey`                                  AS entity,
-  LW_GET_NULL('symbol', '22', 'chan:low-card-ref') AS event_on_port_22
+  `id:naturalKey`                                AS entity,
+  LW_GET_NULL('symbol', 22, 'chan:low-card-ref') AS event_on_port_22
 FROM anchor.facts
-WHERE LW_GET('symbol', '22', 'chan:low-card-ref') != ''
+WHERE LW_GET('symbol', 22, 'chan:low-card-ref') != ''
 ```
+
+A ref channel identifies memberships by a `uint64` registry id, so the tag
+goes in as a plain number. Quoted (`'22'`) means the same thing here, and is
+what a *verbatim* channel takes, since those carry names.
 
 `LW_GET` yields the type default where the tag is absent; `LW_GET_NULL`
 yields `NULL` instead, telling absent from present-with-the-default;

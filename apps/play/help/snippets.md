@@ -154,11 +154,11 @@ domains:
 
 ```sql
 SELECT
-  `id:naturalKey`                                  AS entity,
-  `symbol:value`                                   AS all_events,
-  LW_GET_NULL('symbol', '22', 'chan:low-card-ref') AS event_on_port_22
+  `id:naturalKey`                                AS entity,
+  `symbol:value`                                 AS all_events,
+  LW_GET_NULL('symbol', 22, 'chan:low-card-ref') AS event_on_port_22
 FROM anchor.facts
-WHERE LW_GET('symbol', '22', 'chan:low-card-ref') != ''
+WHERE LW_GET('symbol', 22, 'chan:low-card-ref') != ''
 ```
 
 `LW_GET` returns the type default when the tag is absent (`''` here, which the
@@ -166,8 +166,14 @@ WHERE LW_GET('symbol', '22', 'chan:low-card-ref') != ''
 present-with-the-default. A section whose values are arrays or sets reads with
 `LW_GET_LIST`. The `chan:` token is needed here because the fixture's sections
 carry several membership channels; a single-channel section needs only the two
-arguments. On a ref channel a bound registry also lets the tag be a *name* —
-see the next section.
+arguments.
+
+The tag is written unquoted because a *ref* channel identifies memberships by
+a `uint64` registry id, and this fixture uses domain numbers as those ids.
+Quoting it — `'22'` — means the same thing on a ref channel and expands
+identically; it is also the spelling a *verbatim* channel needs, since those
+carry names rather than ids, and it is what lets a bound registry take the
+tag as a *name* — see the next section.
 
 A section with several value columns takes a `col:` token to say which one.
 `geoPoint` carries three (`pointLat`, `pointLng`, `h3`), and its tag is the
@@ -175,11 +181,11 @@ attacker's autonomous-system number on the high-cardinality ref channel:
 
 ```sql
 SELECT
-  `id:naturalKey`                                                  AS incident,
-  LW_GET('geoPoint', '3360', 'chan:high-card-ref', 'col:pointLat') AS origin_lat,
-  LW_GET('geoPoint', '3360', 'chan:high-card-ref', 'col:pointLng') AS origin_lng
+  `id:naturalKey`                                                AS incident,
+  LW_GET('geoPoint', 3360, 'chan:high-card-ref', 'col:pointLat') AS origin_lat,
+  LW_GET('geoPoint', 3360, 'chan:high-card-ref', 'col:pointLng') AS origin_lng
 FROM anchor.facts
-WHERE LW_GET_NULL('geoPoint', '3360', 'chan:high-card-ref', 'col:h3') IS NOT NULL
+WHERE LW_GET_NULL('geoPoint', 3360, 'chan:high-card-ref', 'col:h3') IS NOT NULL
 ```
 
 Omit a token a call needs and the error lists the candidates rather than
@@ -215,7 +221,8 @@ node that never appears on a lane: matching against one returns nothing, which
 is a wrong question rather than missing data. In the write direction, `LW_GET`
 on a ref channel takes the *name* and compiles it to the id before the
 statement ships (play binds its registry for exactly this), so the SQL still
-carries a constant.
+carries a constant. Where the id is what is at hand, it goes in as a plain
+number — `LW_GET('metric', 6917529027641081861)` — and needs no registry.
 
 ## Ragged lanes (`LW_RAGGED_*`, `LW_CO_*`)
 

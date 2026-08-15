@@ -337,27 +337,28 @@ func callArgs(funcExpr *grammar1.ColumnExprFunctionContext) (args []*grammar1.Co
 	return
 }
 
-// specString decodes one spec argument, which must be a plain single-quoted
-// string literal. Spec strings are names, types and vocabulary tokens; none
-// legitimately contains a quote or backslash, so escape sequences are
-// rejected rather than decoded.
-func specString(arg *grammar1.ColumnArgExprContext) (s string, err error) {
+// argLiteral reports the literal a spec argument is, and nil for anything
+// else — an expression, an identifier, a lambda. Callers phrase their own
+// rejection rather than sharing one here: the slots differ in what they
+// accept, and the membership slot accepts a form the others must refuse.
+func argLiteral(arg *grammar1.ColumnArgExprContext) (lit *grammar1.LiteralContext) {
 	expr := arg.ColumnExpr()
 	if expr == nil {
-		err = eb.Build().Errorf("spec argument must be a string literal, not a lambda")
-		return
+		// A lambda argument, which carries no ColumnExpr at all.
+		return nil
 	}
 	litExpr, isLit := expr.(*grammar1.ColumnExprLiteralContext)
 	if !isLit {
-		err = eb.Build().Str("got", strings.TrimSpace(arg.GetText())).Errorf("spec argument must be a string literal")
-		return
+		return nil
 	}
-	lit, isLitCtx := litExpr.Literal().(*grammar1.LiteralContext)
-	if !isLitCtx || lit.STRING_LITERAL() == nil {
-		err = eb.Build().Str("got", strings.TrimSpace(arg.GetText())).Errorf("spec argument must be a string literal")
-		return
-	}
-	raw := lit.STRING_LITERAL().GetText()
+	lit, _ = litExpr.Literal().(*grammar1.LiteralContext)
+	return lit
+}
+
+// unquoteSpec decodes a spec argument's single-quoted string literal. Spec
+// strings are names, types and vocabulary tokens; none legitimately contains
+// a quote or backslash, so escape sequences are rejected rather than decoded.
+func unquoteSpec(raw string) (s string, err error) {
 	if len(raw) < 2 || !strings.HasPrefix(raw, "'") || !strings.HasSuffix(raw, "'") {
 		err = eb.Build().Str("got", raw).Errorf("spec argument must be a plain single-quoted string")
 		return
@@ -368,6 +369,21 @@ func specString(arg *grammar1.ColumnArgExprContext) (s string, err error) {
 		return
 	}
 	return
+}
+
+// specString decodes one spec argument, which must be a plain single-quoted
+// string literal.
+func specString(arg *grammar1.ColumnArgExprContext) (s string, err error) {
+	if arg.ColumnExpr() == nil {
+		err = eb.Build().Errorf("spec argument must be a string literal, not a lambda")
+		return
+	}
+	lit := argLiteral(arg)
+	if lit == nil || lit.STRING_LITERAL() == nil {
+		err = eb.Build().Str("got", strings.TrimSpace(arg.GetText())).Errorf("spec argument must be a string literal")
+		return
+	}
+	return unquoteSpec(lit.STRING_LITERAL().GetText())
 }
 
 // Function is one constructor family entry, declared as data for the

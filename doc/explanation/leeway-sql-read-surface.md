@@ -178,7 +178,10 @@ appears on a lane: matching against one returns nothing, which is a wrong
 question rather than missing data.
 
 Naming only works where the host bound a registry. Without one, `LW_GET`
-still takes the id and says so.
+still takes the id and says so — quoted or as a plain number,
+`LW_GET('metric', 6917529027641081861)`, which is the same call. The
+unquoted spelling is the id form only: a verbatim channel carries names and
+refuses it, naming the fix.
 
 For filtering, prefer the cheap necessary condition — `has()` over a
 membership lane prunes granules through a skip index, which `indexOf` and

@@ -631,3 +631,76 @@ func TestVerbatimChannelIgnoresTheRegistry(t *testing.T) {
 	require.Contains(t, out, "'ticker'", "a verbatim channel carries the name")
 	require.NotContains(t, out, "42")
 }
+
+// TestRefChannelTakesABareId is ADR-0181 §SD2's 2026-08-15 Update: the one
+// slot whose value is genuinely a number accepts it written as one. The
+// quoted form is unchanged, and both spell the same expansion — a ref id was
+// already emitted as a bare decimal, so this moves the authoring surface
+// only.
+func TestRefChannelTakesABareId(t *testing.T) {
+	const id = "6917529027641081861"
+	bare, err := expandExtract(t, "SELECT LW_GET('metric', "+id+") FROM events")
+	require.NoError(t, err)
+	quoted, err := expandExtract(t, "SELECT LW_GET('metric', '"+id+"') FROM events")
+	require.NoError(t, err)
+	require.Equal(t, quoted, bare, "the two spellings are one call")
+	require.Contains(t, bare, id)
+	require.NotContains(t, bare, "'"+id+"'", "a ref id is a number, not a string")
+
+	// Like the quoted id form, it needs no registry: the binding is a
+	// property of the host, not of the query.
+	bound, err := constructsql.ExtractExpandPassWithIds(extractResolver(t), fakeIds{}, "").
+		Run("SELECT LW_GET('metric', " + id + ") FROM events")
+	require.NoError(t, err)
+	require.Equal(t, bare, bound)
+}
+
+// TestBareIdOnAVerbatimChannelSaysQuoteIt is the one combination the
+// unquoted spelling adds, and it is decidable: a bare number asserts "this
+// is a registry id", which a name-carrying channel cannot honour. The error
+// names the fix rather than escaping the digits into a literal.
+func TestBareIdOnAVerbatimChannelSaysQuoteIt(t *testing.T) {
+	_, err := expandExtract(t, "SELECT LW_GET('symbol', 22) FROM events")
+	require.ErrorContains(t, err, "verbatim channel identifies memberships by name")
+	require.ErrorContains(t, err, "quote it")
+
+	// And the quoted form still reaches a verbatim membership spelled in
+	// digits, which is what keeps the two spellings from colliding.
+	out, err := expandExtract(t, "SELECT LW_GET('symbol', '22') FROM events")
+	require.NoError(t, err)
+	require.Contains(t, out, "'22'", "quoted digits are a name on a verbatim channel")
+}
+
+// TestNumericMembershipTakesOnlyAnUnsignedDecimal keeps the unquoted form as
+// narrow as its justification: every other numeric literal the grammar
+// admits parses fine and can never be a registry id, so each is refused by
+// shape rather than by a failed conversion downstream.
+func TestNumericMembershipTakesOnlyAnUnsignedDecimal(t *testing.T) {
+	for _, spelling := range []string{"-22", "+22", "22.5", "0x16", "inf", "nan"} {
+		_, err := expandExtract(t, "SELECT LW_GET('metric', "+spelling+") FROM events")
+		require.Error(t, err, spelling)
+		require.ErrorContains(t, err, "unsigned decimal", spelling)
+	}
+
+	// A decimal past the uint64 a ref lane carries is refused for what it is,
+	// not reported as an unknown membership name.
+	_, err := expandExtract(t, "SELECT LW_GET('metric', 18446744073709551616) FROM events")
+	require.ErrorContains(t, err, "does not fit in a uint64")
+}
+
+// TestOnlyTheMembershipSlotTakesANumber pins the scope of the relaxation:
+// the section and the token slots are names and vocabulary, where a number
+// is never meaningful, so they keep the string-literal rule the constructor
+// family shares with them.
+func TestOnlyTheMembershipSlotTakesANumber(t *testing.T) {
+	_, err := expandExtract(t, "SELECT LW_GET(42, 'ticker') FROM events")
+	require.ErrorContains(t, err, "must be a string literal")
+
+	_, err = expandExtract(t, "SELECT LW_GET('symbol', 'ticker', 42) FROM events")
+	require.ErrorContains(t, err, "must be a string literal")
+
+	// A membership that is neither literal is still refused, and the message
+	// names both spellings it could have been.
+	_, err = expandExtract(t, "SELECT LW_GET('symbol', col) FROM events")
+	require.ErrorContains(t, err, "string literal or an unsigned decimal registry id")
+}

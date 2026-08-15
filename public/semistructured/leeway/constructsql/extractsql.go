@@ -53,6 +53,10 @@ const (
 	tokenChannel = "chan:"
 )
 
+// membershipArgIndex is the one slot in the authoring surface whose value is
+// genuinely a number, and so the one slot that takes an unquoted spelling.
+const membershipArgIndex = 1
+
 // HasExtractMarker is the cheap pre-parse scan (ADR-0181 §SD7). Every
 // spelling of every family member contains "lw_get", quoted included.
 func HasExtractMarker(sql string) bool {
@@ -169,9 +173,9 @@ func (inst *extractState) walk(node antlr.Tree) (err error) {
 			if _, isExtract := extractArities[name]; isExtract {
 				err = inst.expandCall(name, ident.GetText(), funcExpr)
 				// The subtree is consumed either way: every argument is a
-				// string literal, so nothing below can match, and descending
-				// into a replaced node would stack a second rewrite onto the
-				// same tokens.
+				// literal, so nothing below can match, and descending into a
+				// replaced node would stack a second rewrite onto the same
+				// tokens.
 				return
 			}
 		}
@@ -198,9 +202,14 @@ func (inst *extractState) expandCall(name string, spelled string, funcExpr *gram
 		return
 	}
 	spec := make([]string, 0, len(args))
+	membershipIsId := false
 	for i, arg := range args {
 		var s string
-		s, err = specString(arg)
+		if i == membershipArgIndex {
+			s, membershipIsId, err = membershipArg(arg)
+		} else {
+			s, err = specString(arg)
+		}
 		if err != nil {
 			err = inst.errCall(spelled, funcExpr).Int("argument", i+1).Errorf("%w", err)
 			return
@@ -238,7 +247,7 @@ func (inst *extractState) expandCall(name string, spelled string, funcExpr *gram
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
 	}
-	lit, err := membershipLiteral(membership, ch, inst.ids)
+	lit, err := membershipLiteral(membership, membershipIsId, ch, inst.ids)
 	if err != nil {
 		err = inst.errCall(spelled, funcExpr).Errorf("%w", err)
 		return
@@ -403,23 +412,89 @@ func (inst *extractState) errCall(spelled string, funcExpr *grammar1.ColumnExprF
 	return eb.Build().Str("call", spelled).Int("start", r.Start).Int("end", r.End)
 }
 
+// membershipArg decodes the membership slot. It takes the quoted spec form
+// every other slot takes, and — because a ref channel identifies memberships
+// by a uint64 registry id — an unsigned decimal literal as well
+// (ADR-0181 §SD2, 2026-08-15 Update).
+//
+// The quoted form stays the general one: it is the only spelling that can
+// carry both a name and an id, and which of those a call means is not known
+// until the section resolves against the schema, well after parsing. The
+// unquoted form adds no ambiguity precisely because it is narrower — a bare
+// number can only ever be the id.
+//
+// numeric reports which spelling was used, so the caller can reject the one
+// combination the quoted form leaves legible and this one does not: a bare
+// number against a verbatim channel, which carries names.
+func membershipArg(arg *grammar1.ColumnArgExprContext) (s string, numeric bool, err error) {
+	if lit := argLiteral(arg); lit != nil {
+		if str := lit.STRING_LITERAL(); str != nil {
+			s, err = unquoteSpec(str.GetText())
+			return
+		}
+		if num, isNum := lit.NumberLiteral().(*grammar1.NumberLiteralContext); isNum {
+			s, err = unsignedDecimal(num)
+			numeric = err == nil
+			return
+		}
+	}
+	err = eb.Build().Str("got", strings.TrimSpace(arg.GetText())).
+		Errorf("a membership must be a string literal or an unsigned decimal registry id")
+	return
+}
+
+// unsignedDecimal accepts the bare decimal form and nothing else. A sign, a
+// floating point, hex, octal, INF and NAN all parse as number literals here,
+// and none of them can be a registry id — rejecting them by shape keeps the
+// diagnostic about the id rather than about a failed conversion.
+//
+// The text is carried through unparsed: ids run the full uint64 range, and
+// the caller converts it in the one place that already did.
+func unsignedDecimal(num *grammar1.NumberLiteralContext) (s string, err error) {
+	if num.DECIMAL_LITERAL() == nil || num.DASH() != nil || num.PLUS() != nil {
+		err = eb.Build().Str("got", strings.TrimSpace(num.GetText())).
+			Errorf("a numeric membership must be an unsigned decimal registry id")
+		return
+	}
+	s = num.DECIMAL_LITERAL().GetText()
+	return
+}
+
 // membershipLiteral renders the membership as the channel spells it.
 //
 // A verbatim channel carries the name itself, so any string works. A ref
-// channel carries a registry id: a decimal literal is taken as that id, and
-// anything else is resolved through the bound registry (ADR-0171 §SD4).
+// channel carries a registry id: a decimal is taken as that id, and anything
+// else is resolved through the bound registry (ADR-0171 §SD4).
 //
 // The decimal check comes first and is deliberate. It keeps every query
 // written before §SD4 working unchanged, and it means the id form needs no
 // binding — which matters because the binding is a property of the host, not
-// of the query.
-func membershipLiteral(membership string, ch lwsql.Channel, ids MembershipIdsI) (lit string, err error) {
+// of the query. Its cost is that a ref membership NAMED in digits is
+// unreachable by name; redefining the quoted form to fix that would break
+// every query written against §SD4, so the unquoted spelling is additive
+// rather than a replacement.
+//
+// numeric says the call spelled the membership unquoted, which asserts "this
+// is an id" — an assertion only a ref channel can honour.
+func membershipLiteral(membership string, numeric bool, ch lwsql.Channel, ids MembershipIdsI) (lit string, err error) {
 	if ch.Verbatim {
+		if numeric {
+			err = eb.Build().Str("membership", membership).Str("channel", ch.Name).
+				Errorf("a verbatim channel identifies memberships by name and a bare number can only be a registry id; quote it to mean the name")
+			return
+		}
 		lit = marshalling.EscapeString(membership)
 		return
 	}
 	if id, convErr := strconv.ParseUint(membership, 10, 64); convErr == nil {
 		lit = strconv.FormatUint(id, 10)
+		return
+	}
+	if numeric {
+		// The decoder admitted unsigned decimals only, so the sole way to
+		// reach here is a number too large for the uint64 a ref lane carries.
+		err = eb.Build().Str("membership", membership).Str("channel", ch.Name).
+			Errorf("a registry id does not fit in a uint64")
 		return
 	}
 	if ids == nil {
@@ -471,17 +546,17 @@ func ExtractFunctions() (fns []Function) {
 	fns = []Function{
 		{
 			Name:   NameGet,
-			Params: []string{"'section'", "'membership'", "'col:…'", "'chan:…'"},
+			Params: []string{"'section'", "'membership'|id", "'col:…'", "'chan:…'"},
 			Doc:    "read one attribute's scalar value from a leeway section; the type default when absent (ADR-0181)",
 		},
 		{
 			Name:   NameGetNull,
-			Params: []string{"'section'", "'membership'", "'col:…'", "'chan:…'"},
+			Params: []string{"'section'", "'membership'|id", "'col:…'", "'chan:…'"},
 			Doc:    "as " + NameGet + ", but NULL when the membership is absent — tells absent from present-with-the-default (ADR-0181)",
 		},
 		{
 			Name:   NameGetList,
-			Params: []string{"'section'", "'membership'", "'col:…'", "'chan:…'"},
+			Params: []string{"'section'", "'membership'|id", "'col:…'", "'chan:…'"},
 			Doc:    "read one attribute's array or set value from a leeway section; [] when absent (ADR-0181)",
 		},
 	}

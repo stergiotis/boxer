@@ -113,8 +113,10 @@ ORDER BY name
 
 The `name` column holds the folded spelling (`naturalKey` publishes as
 `natural-key`), so join predicates must use that form — `LW_GET` accepts
-either. A `virtual` row groups related memberships and never appears on a
-lane, so matching data against one returns nothing by design.
+either. An id from this table goes back into a call as a plain number,
+`LW_GET('metric', 6917529027641081861)`, and needs no registry bound. A
+`virtual` row groups related memberships and never appears on a lane, so
+matching data against one returns nothing by design.
 
 ## Caveats
 

@@ -582,3 +582,47 @@ Milestones:
 Tier-1 surface added by this Update: the grammar1/grammar2 statement
 productions, the pass refusal matrix as a pipeline contract, and play's
 write opt-in.
+
+## Update 2026-08-15 — §SD2's call shape: the membership slot takes an unquoted id
+
+§SD2 states the call shape as "every argument after the wrapped expression is
+a string literal", and §SD3 inherited it for the extraction family. That rule
+is now relaxed for exactly one slot: the **membership** of `LW_GET`,
+`LW_GET_NULL` and `LW_GET_LIST` also accepts an unsigned decimal literal.
+`LW_GET('symbol', 22, 'chan:low-card-ref')` is the same call as
+`LW_GET('symbol', '22', …)` and expands to the same SQL.
+
+**Why the original rule reads as it does, and why it does not reach here.**
+The string form must exist and must stay the general spelling: on a ref
+channel the slot holds a name *or* an id (ADR-0171 §SD4), and which of those
+a call means is not known until the section resolves against the schema —
+well after parsing. That argument establishes the string carrier; it does not
+forbid a second, narrower spelling. A bare number can only ever be the id, so
+it adds no ambiguity to resolve later.
+
+**Scope, and the kill-reason for anything wider.** Only the membership slot.
+The section and the `col:`/`chan:` tokens are names and vocabulary, where a
+number is never meaningful, and the constructor family has no numeric slot at
+all — so `specString` keeps its rule and both families keep one decoder for
+everything else. Widening would buy a second spelling for values that have
+only one.
+
+**The one combination the unquoted form adds** is a bare number against a
+*verbatim* channel, which carries names. It is refused, naming the fix, and
+it is decidable: the channel is resolved before the membership is rendered.
+`'22'` on a verbatim channel still means the name `22`, which is what keeps
+the two spellings from colliding. Numeric literals that are not unsigned
+decimals — signed, floating, hex, octal, `INF`, `NAN` — are refused by shape,
+so the diagnostic is about the id rather than about a failed conversion.
+
+**Declined, and worth recording.** Once a bare number unambiguously means the
+id, the quoted decimal could be redefined to mean a *name* spelled in digits,
+closing §SD4's one wart (a ref membership named in digits is unreachable by
+name). Rejected: §SD4's decimal-first rule is what lets every query written
+before it keep working, and every query written since relies on it. The
+unquoted spelling is additive; the wart stands.
+
+No Tier-1 surface moves. The emitted SQL is unchanged for both spellings, so
+the read-back goldens and the pass's idempotence are untouched; what changes
+is the authoring surface, the declared parameter list the vocabulary panel
+prints, and the snippets that carry ids.

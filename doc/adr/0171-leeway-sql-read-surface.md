@@ -665,3 +665,18 @@ sign-off for OQ1 and OQ5), or a consumer needing the exploded form for
 sections that carry no personal data, where the convergence does not
 arise. Either way the shape should be settled once, in one place, rather
 than twice with a migration between them.
+
+## Update 2026-08-15 — §SD4's id form is also spelled without quotes
+
+The 2026-08-14 Update above ends on the decimal spelling being checked before
+the registry, so a query written before it expands unchanged. That decimal
+may now also be written unquoted — `LW_GET('metric', 6917529027641081861)` —
+which is the same call and the same emitted constant.
+
+This is an authoring-surface change owned by
+[ADR-0181](./0181-leeway-dql-authoring-surface.md)'s 2026-08-15 Update, whose
+§SD2 stated the string-literal rule this relaxes; it is recorded here because
+the name/id duality it narrows is §SD4's. Nothing about the registry, the
+table, or the resolution order moves. The one case it adds — a bare number
+against a verbatim channel, which carries names — is refused rather than
+folded into a name, so the forgiving-spelling property above is unaffected.

@@ -119,7 +119,10 @@ are covered (ADR-0171 §SD4):
 - **Writing:** `LW_GET('metric', 'cpuLoad')` on a ref channel resolves the
   name at expansion time, so the shipped SQL still carries a constant. This
   needs the host to bind a registry (play does); without one the call says so
-  and a decimal id always works.
+  and a decimal id always works. The id may be written as a plain number —
+  `LW_GET('metric', 6917529027641081861)` — which is the same call as the
+  quoted form and needs no registry. A verbatim channel takes only the
+  quoted form, because a bare number can only be an id.
 - **Reading:** join a numeric result column against the registry table —
 
   ```sql
