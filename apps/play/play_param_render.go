@@ -22,6 +22,12 @@ import (
 func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues map[string]string) {
 	inst.paramSlots = slots
 
+	// The expression declarations, read off the same buffer this parse
+	// describes (play_renderer.go parses inst.sql verbatim). Scanned here
+	// rather than passed in for the reason renderParamSlots re-scans the enum
+	// and ungroup markers per frame: a marker is part of the buffer.
+	exprHints := scanExprHints(inst.sql)
+
 	newDrafts := make(map[string]*string, len(slots))
 	newSynced := make(map[string]string, len(slots))
 	for _, s := range slots {
@@ -29,6 +35,25 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 		if !kept {
 			v := ""
 			ptr = &v
+		}
+		if exprCategoryFor(s.Type).spliced() {
+			// A client-side-substituted slot has no prelude tier at all
+			// (ADR-0187 (proposed) §SD2), so it never enters newSynced: its
+			// declared value is the `-- play: expr` line, and putting it in the
+			// prelude would ship an expression to the server as a string.
+			//
+			// Seeded only on first sight, not on every parse. The prelude can
+			// overwrite a draft because a pinned drift rewrites the prelude
+			// first, so the overwrite is a no-op; the directive has no
+			// write-back until M3, so overwriting here would revert every
+			// keystroke on the next debounce.
+			if !kept {
+				if v, declared := exprHints[s.Name]; declared {
+					*ptr = v
+				}
+			}
+			newDrafts[s.Name] = ptr
+			continue
 		}
 		if v, hit := preludeValues["param_"+s.Name]; hit {
 			// The parser wins — but only at the PINNED tier, which is what a
@@ -126,9 +151,13 @@ func (inst *PlayApp) renderParamSlots() {
 	// 2026-08-14). Re-scanned per frame for the same reason the ungroup hint is:
 	// a marker is part of the buffer, and the buffer is being edited.
 	enums := scanEnumHints(inst.sql)
+	exprs := scanExprHints(inst.sql)
 	for _, w := range inst.paramWidgets {
 		if aware, ok := w.(enumHintAwareI); ok {
 			aware.SetEnumHints(enums)
+		}
+		if aware, ok := w.(exprHintAwareI); ok {
+			aware.SetExprHints(exprs)
 		}
 	}
 
@@ -228,7 +257,8 @@ func (inst *PlayApp) renderParamSlots() {
 		}
 	}
 
-	inst.renderNearMissNote(slots, grouped, ungroup, mixed, orphanEnumHints(enums, slots))
+	inst.renderNearMissNote(slots, grouped, ungroup, mixed,
+		orphanEnumHints(enums, slots), orphanExprHints(exprs, slots), pendingSpliceNote(slots))
 
 	// Divider between the parameter block and the SQL editor below it.
 	c.Separator().Horizontal().Send()
@@ -271,6 +301,14 @@ func (inst *PlayApp) renderFoldLabel(subset []paramSlot) {
 // then makes atomic for every consumer.
 func (inst *PlayApp) renderClaimTierControl(subset []paramSlot) {
 	if len(subset) == 0 {
+		return
+	}
+	if exprCategoryFor(subset[0].Type).spliced() {
+		// A spliced claim has no pin gesture yet: pinning authors a
+		// `SET param_<name>`, which is exactly the carriage ADR-0187
+		// (proposed) §SD2 rules out for an expression. Withheld rather than
+		// disabled, per ADR-0124 §SD3's rule that a missing capability is an
+		// absent control; M3 gives it a directive arm to write instead.
 		return
 	}
 	pinned := inst.paramPinned(subset[0].Name)
@@ -511,11 +549,17 @@ func mixedTierNote(pairs []mixedTierPair) string {
 //
 // One line, so the cases are ordered by how much they explain: the ungroup
 // opt-out accounts for every missing fold at once; a half-pinned pair is next,
-// being a specific decline with a one-click fix; then an enum hint naming a
-// placeholder the buffer does not have, which is a typo with a visible symptom
-// and no other explanation; then the type mismatch and the generic vocabulary
-// note, both inside nearMissNote.
-func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungroup bool, mixed []mixedTierPair, orphanEnums []string) {
+// being a specific decline with a one-click fix; then a marker naming a
+// placeholder the buffer does not have — enum first, then expression — each a
+// typo with a visible symptom and no other explanation; then the
+// not-yet-substituted expression, which explains a run gate that will not open;
+// then the type mismatch and the generic vocabulary note, both inside
+// nearMissNote.
+//
+// The two marker orphans sit above the pending-splice line because they are
+// mistakes in what the author wrote, where the pending splice is a limitation
+// of what is built (ADR-0187 (proposed) M2 retires it).
+func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungroup bool, mixed []mixedTierPair, orphanEnums []string, orphanExprs []string, pendingSplice string) {
 	unfolded := make([]paramSlot, 0, len(slots))
 	for i, s := range slots {
 		if !grouped[i] {
@@ -528,6 +572,12 @@ func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungro
 	}
 	if note == "" {
 		note = orphanEnumNote(orphanEnums)
+	}
+	if note == "" {
+		note = orphanExprNote(orphanExprs)
+	}
+	if note == "" {
+		note = pendingSplice
 	}
 	if note == "" {
 		note = nearMissNote(unfolded, ungroup)
@@ -577,6 +627,15 @@ func (inst *PlayApp) syncParamDriftToPrelude() {
 	for _, s := range inst.paramSlots {
 		ptr, ok := inst.paramDrafts[s.Name]
 		if !ok {
+			continue
+		}
+		if exprCategoryFor(s.Type).spliced() {
+			// Neither tier is this slot's (ADR-0187 (proposed) §SD2/§SD3): the
+			// prelude would ship an expression to the server as a string, and
+			// the store would publish a predicate under a name a panel may be
+			// reading as a value. Its own two arms — the directive at the
+			// pinned tier, the signal at the live one — arrive with M3; until
+			// then a spliced draft stays in the pane.
 			continue
 		}
 		if !inst.paramPinned(s.Name) {

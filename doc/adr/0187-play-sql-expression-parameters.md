@@ -166,9 +166,13 @@ the same two tiers:
 
 - **Pinned** — the buffer carries `-- play: expr <slot> = <text>`, in the
   directive vocabulary §SD6 established and the 2026-08-14 Update extended.
-  Everything after the **first** `=` past the slot name is the value, verbatim;
-  one leading space is trimmed. Expressions contain `=` constantly, so
-  first-separator-wins is a rule and not an implementation detail.
+  Everything after the **first** `=` past the slot name is the value.
+  Expressions contain `=` constantly, so first-separator-wins is a rule and not
+  an implementation detail — it is also what makes the spacing around the
+  separator free, so `cond=a=1` and `cond = a = 1` declare the same thing. The
+  value is trimmed at both ends: trailing whitespace in a one-line SQL fragment
+  carries nothing, and preserving it would make the drift comparison depend on
+  characters nobody can see.
 - **Live** — a panel writes the value as an ADR-0097 signal, name-keyed like any
   other. A Map lasso publishing a predicate is the shape this exists for; the
   buffer stays untouched.
@@ -192,11 +196,24 @@ single-owner mirror is unharmed — the orchestrator is still the only writer to
 the buffer — but this is the largest piece of work the carriage choice buys, and
 it is where a mixed-tier bug would live.
 
-Directive lines sit in the residual, not in the leading `SET` block.
-`SyncParamPrelude` rebuilds that block as `buildParamPrelude(…) + residual`
+Directive lines sit in the residual — **below** the `SET` prelude, never above
+it. `SyncParamPrelude` rebuilds that block as `buildParamPrelude(…) + residual`
 (`play_param_inject.go:30`), and its own contract already warns that intermixed
 non-param `SET`s shift downward on rewrite; a directive line shifts the same way
 unless its position is decided once, here, rather than discovered.
+
+That decision turned out to be forced rather than stylistic, which the M1
+implementation found. `env.harvestSetPrelude` consumes only a **leading** run of
+`SET` lines, so a comment above them ends the prelude before it starts:
+`BodyOffset` collapses to zero, the buffer reads as two statements, and a
+run-under-cursor ships the body without its `SET param_*` lines — every
+parameter the buffer plainly binds then reads as unfilled. This is a defect in
+the shared prelude definition, not in this decision, and it predates it: any
+comment above a prelude does it, including the `-- play: enum` and
+`-- play: gloss` directives already in the vocabulary. It is recorded here
+because it is what makes the placement a rule, and it is deliberately not fixed
+here — `dsl/env`'s body offset is what every pass-recorded range is sliced
+against, so widening it is its own decision.
 
 ### SD4 — The splice: one step, before the registry, on the trace
 
@@ -417,7 +434,15 @@ of the parameter machinery exists.
 - **M0 — the field.** SQL field in `widgets/sqleditor`, single-line by default;
   the Map's two raw `TextEdit` call sites adopt it. No parameter machinery.
 - **M1 — detection and the directive.** The three categories, the `-- play: expr`
-  scanner, the orphan advisory, the widget registration.
+  scanner, the orphan advisory, the widget registration. `Identifier` is
+  complete here: being a ClickHouse parameter (§SD2) it only gains a better
+  editor over the untouched §SD4 path. `Expr` / `ExprList` are declared and
+  shown but not substituted, so M1 also owns the gates that keep their drafts
+  out of the prelude and out of the signal store — a draft falling through to
+  either would ship an expression as a string — and withholds the tier control
+  until M3 gives pin/unpin a directive arm. One advisory line says the knob is
+  not yet wired, which is what explains a run gate that will not open; M2
+  retires it.
 - **M2 — splice and trace.** The `splice-expr` step at order `-90`, per-category
   splice rules, the Preview trace entry, splice-then-parse validation.
 - **M3 — tiers.** `paramPinned`'s second source, pin/unpin's directive arm, the

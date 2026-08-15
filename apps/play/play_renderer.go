@@ -1005,6 +1005,11 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 			newDateTimeRangeWidget(),
 			newDateTimePairWidget(),
 			newEnumWidget(),
+			// The SQL field sits after the enum and before the tail: a declared
+			// option list is more specific than a declared category, so a
+			// dropdown of predicates over an {x:Expr} slot stays possible
+			// (ADR-0187 (proposed) M1).
+			newExprWidget(),
 			newScalarTextWidget(),
 		},
 	}

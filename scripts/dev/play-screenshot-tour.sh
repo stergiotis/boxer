@@ -139,21 +139,32 @@ SELECT * FROM anchor.facts WHERE \`id:id\` = 10005"
 }
 
 scene_03_detail_glosses() {
-	desc="Detail + Glosses — the rule route on a leeway result (ADR-0186): \`-- play: gloss\` lines bind glosses to physical columns by their spec line, the leeway card and both grids render the faces, and the Glosses tab shows the catalog, the rules and each column's resolution"
+	desc="Detail + Glosses — the rule route on a leeway result (ADR-0186): \`-- play: gloss\` lines bind glosses to physical columns by their spec line, both grids render the inline faces, the leeway card renders a markdown block face, and the Glosses tab shows the catalog, the rules and each column's resolution — including the rule a column's binding shadowed"
 	senv=(BOXER_PLAY_FOCUS_TABLE=1 BOXER_PLAY_FOCUS_GLOSSES=1)
-	sql="-- play: gloss gloss/masked name:text section:text
+	# text/markdown on the text column: the grids show its first line, the
+	# card its block face. The last directive matches both text columns and
+	# loses to the ones above it (first match wins, in buffer order): the
+	# Columns section of the Glosses tab lists it as shadowed on each.
+	sql="-- play: gloss text/markdown name:text section:text
+-- play: gloss gloss/masked name:value section:symbol
 -- play: gloss gloss/bytes name:wordLength
+-- play: gloss gloss/raw section:text
 SET param_selection = 0;
 SELECT \`id:id\`, \`symbol:value\`, \`text:text\`, \`text:wordLength\`, \`geoPoint:pointLat\`
 FROM anchor.facts
 ORDER BY \`id:id\`
 LIMIT 20"
-	# Two captures: the per-DB-row grid (a masked list cell, a byte count that
-	# does not apply to a whole list), then the per-attribute grid, where the
-	# same rules reach the items.
+	# Three captures: the per-DB-row grid (a masked list cell, a byte count
+	# that does not apply to a whole list) beside the card, the per-attribute
+	# grid, where the same rules reach the items, then the Glosses tab
+	# scrolled to its Columns section. The pointer is parked over the tab
+	# first — a wheel event goes to whatever is hovered.
 	steps='{"do":"capture","text":"03_detail_glosses","settleMs":600}
 {"do":"click","name":"per attribute"}
-{"do":"capture","text":"03_detail_glosses_per_attribute","settleMs":600}'
+{"do":"capture","text":"03_detail_glosses_per_attribute","settleMs":600}
+{"do":"click","x":1450,"y":300,"comment":"park the pointer over the Glosses tab"}
+{"do":"scroll","x":0,"y":-4000,"settleMs":500}
+{"do":"capture","text":"03_detail_glosses_columns","settleMs":600}'
 	settle=1800
 }
 
@@ -1283,6 +1294,24 @@ FROM anchor.facts
 WHERE has(\`symbol:value\`, {kind:String})
   AND \`id:id\` BETWEEN {id_min:UInt64} AND {id_max:UInt64}
 ORDER BY \`id:id\`"
+}
+
+scene_19_params_expr() {
+	desc="Parameters — a SQL-valued knob (ADR-0187 M1): {cond:Expr} and {cols:ExprList} get a SQL field seeded from their \`-- play: expr\` line and no pin control, {tbl:Identifier} keeps the prelude path and keeps its pin, and the advisory says the expressions are not substituted yet"
+	# Table-free, so it needs no fixture. The Run gate holds this buffer on
+	# purpose: an expression slot is unfilled until M2 wires the splice, and a
+	# blocked Run with the line explaining it is the state worth capturing.
+	#
+	# The directives sit BELOW the SET prelude, which ADR-0187 §SD3 requires:
+	# a comment above a prelude ends it before it starts, and the run buffer
+	# then ships without its SET lines.
+	senv=(BOXER_PLAY_FOCUS_TABLE=1)
+	sql="SET param_tbl = 'number';
+-- play: expr cond = number % 3 = 0
+-- play: expr cols = number AS n, number * 2 AS doubled
+SELECT {cols:ExprList}, {tbl:Identifier}
+FROM numbers(12)
+WHERE {cond:Expr}"
 }
 
 scene_20_multi_statement() {
