@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
@@ -638,7 +639,7 @@ func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetriev
 		err = eh.Errorf("component %s: resolve membership ids: %w", sc.Kind, err)
 		return
 	}
-	g := readback.NewGenerator(info, readback.NewLookupResolver(mapIdLookup(sc.ids)))
+	g := readback.NewGenerator(info, readback.NewLookupResolver(marshallreflect.MapLookup(sc.ids)))
 	artefacts, err := g.Generate(plan)
 	if err != nil {
 		err = eh.Errorf("component %s: generate read-back artefacts: %w", sc.Kind, err)
@@ -657,18 +658,6 @@ func sortedIdNames(ids map[string]uint64) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// mapIdLookup adapts the wrapper-stated membership-id assignment to the
-// readback resolver's IdLookup.
-type mapIdLookup map[string]uint64
-
-func (inst mapIdLookup) LookupMembership(name string) (id uint64, err error) {
-	id, ok := inst[name]
-	if !ok {
-		err = eh.Errorf("membership %q not found in the generated kind-id assignment", name)
-	}
-	return
 }
 
 // --- emission helpers. The emitted shapes mirror example/device_store.go. ---

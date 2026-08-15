@@ -25,10 +25,18 @@
 // recording mock DML and (transitively) against the typed DMLs that
 // already round-trip in the per-kind keelson codec test suites.
 //
-// The membership-id resolver is pluggable via LookupI — the keelson
-// facts target wraps vdd.KeelsonHrNkRegistry; an anchor or schema-
-// agnostic target can use NoLookup if every membership in its DTOs
-// carries `,verbatim`.
+// The membership-id resolver is pluggable via LookupI, and which resolver a
+// target uses is the decision the rest of this package rests on. Ids for a
+// shared facts table come from the vocabulary registry that owns the names:
+// NewRegistryLookup builds the lookup from that registry's snapshot. A
+// hand-written MapLookup is the closed-world spelling, for a target that owns
+// its own schema; an anchor or schema-agnostic target can use NoLookup if
+// every membership in its DTOs carries `,verbatim`.
+//
+// (This paragraph used to say the keelson facts target wraps
+// vdd.KeelsonHrNkRegistry. It never did — no keelson package imports this one
+// — and the claim survived long enough to be read as a description of how the
+// reflect path gets its ids. ADR-0183 D1 is the correction.)
 //
 // The authoring surface — the flat simple subset, the nested attribute
 // model (the primary escalation surface), and the frozen flat escalation

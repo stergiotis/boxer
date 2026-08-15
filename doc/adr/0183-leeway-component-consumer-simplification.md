@@ -436,12 +436,24 @@ proven lane.
   tests came with it. 44 generated artefacts regenerated — the read
   interface's single-value accessor changed shape, and the stores that bake
   a Filter carry the new term.
-- **M1 — id-source hardening.** D0: claim authority, explicit ordinals
-  (kept at today's values), the vocabulary-tag re-key — one flag-day,
-  now including a regeneration pass for the stores D2 already baked —
-  and the assignment goldens; D1: the reflect-path constructor +
-  closed-world marking + `doc.go` correction. The snapshot helper the
-  rest of D1 rests on landed early, with M2.
+- **M1 — id-source hardening.** ✓ D0: `identity/tagmint` (the claim
+  authority), explicit ordinals at today's values across 404
+  registrations in five vocabularies, the `stopa` → `namemint` rename,
+  the width-32 re-key with its regeneration pass, and the assignment
+  goldens; D1: `NewRegistryLookup` + closed-world marking of hand-built
+  `MapLookup` + the `doc.go` correction + the `mapIdLookup` bridge
+  deleted. The snapshot helper the rest of D1 rests on landed early,
+  with M2.
+
+  It shipped as five commits rather than one flag-day: the claim
+  authority, the rename, the ordinals (ids unmoved), the goldens, then
+  the re-key alone — so the commit that moves every id contains nothing
+  else, and its golden diff is the record of exactly which ids moved.
+
+  The goldens paid for themselves before the re-key landed. Run against
+  the tree as it stood, the union check reported the jsonbench/runtime
+  tag-value duplicate on every id of both vocabularies — the collision
+  this ADR's Context could only argue for from reading.
 - **M2 — storegen slice.** ✓ D2: `runtime/factsschema/storegen` +
   `MembershipIds` + gen test, built ahead of M1 because ADR-0184 needed
   it. `FactsWrapper` was left alone — see D2 for why that turned out to
@@ -460,10 +472,10 @@ M5 and M6 are independent of each other and may swap.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `stopa/registry` natural-key API (renamed `namemint/registry`) | explicit-ordinal registration; `VcsManagedContract` refuses implicit minting (D0) | four vocabulary packages rewrite registrations; ~20 importers update the path; assignment goldens |
-| `identity/identifier` tag space | named runtime-mint tag reserved; `VcsManagedContract` refuses it (D8) | reservation pin test; D3 views partition by tag |
-| `identity/tagmint` (new) | claiming API; token required by the `namemint` registries; parity check and per-package `TagValueRegistry` instances retired (D0) | four vocabulary packages re-key to width-32 claims; facts data regenerated/migrated |
-| `marshallreflect` exported API | constructor + minimal resolver interface added (D1); unit-read refusal ✓ (D5) | `doc.go` correction; arity tests |
+| `stopa/registry` natural-key API (renamed `namemint/registry`) ✓ | explicit-ordinal registration; `VcsManagedContract` refuses implicit minting, `EphemeralContract` keeps it (D0) | five vocabulary packages rewrote 404 registrations; 40 files updated the path; assignment goldens |
+| `identity/identifier` tag space ✓ | named runtime-mint tag reserved at 3524577, itself a claim; `VcsManagedContract` refuses it (D8) | reservation pin test; D3 views partition by tag |
+| `identity/tagmint` (new) ✓ | claiming API; token required by the `namemint` registries; parity check and per-package `TagValueRegistry` instances retired (D0) | five vocabulary packages re-keyed to width-32 claims; facts data must be regenerated |
+| `marshallreflect` exported API ✓ | `NewRegistryLookup` over a materialized snapshot (D1); unit-read refusal (D5) | `doc.go` correction; arity tests; `recordstore/gen`'s private bridge deleted |
 | vdd vocabulary package | claim kind + publication (D3) | reconciliation views |
 | `runtime/factsschema/storegen` (new) ✓ | registry → id-snapshot helper and the facts-bound store generator (D1, D2); no existing surface changed — `FactsWrapper` and the `marshallgen` wrapper contract are untouched | gen tests in the consuming package; naming round-trip pin |
 | `recordstore/gen` emitted builder | Add verbs buffer; double-Add and Raw-mixing refuse loudly (D4) | 6 stores / 48 `*.out.go` regenerate; `sharedsection` tests |
