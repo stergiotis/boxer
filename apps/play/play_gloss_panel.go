@@ -6,6 +6,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
+	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
@@ -14,12 +15,14 @@ import (
 // sibling of the Vocabulary tab. Three sections — the catalog (each gloss
 // with its kinds, parameters, a sample rendering and its affinities), the
 // buffer's effective rules (directive lines, compiled or refused, then the
-// affinities), and the current result's columns with their spec line and
-// resolution. Insert writes a `-- play: gloss` line at the caret.
+// affinities), and the current result's columns with their spec line,
+// resolution and the rules it shadowed. Insert writes a `-- play: gloss`
+// line or a `gloss(…)` call at the caret.
 
-// glossSample is the value each catalog row renders as its sample face —
-// something every gloss can show: a number that reads as a temperature, a
-// length, a size; digits a check digit accepts; text a mask or a link takes.
+// glossSampleNumber and glossSampleText are the values each catalog row
+// renders as its sample face — something every gloss can show: a number that
+// reads as a temperature, a length, a size; digits a check digit accepts;
+// text a mask or a link takes.
 const (
 	glossSampleNumber = "4111111111111111"
 	glossSampleText   = "https://example.com/path"
@@ -51,17 +54,18 @@ func (inst *PlayApp) renderGlossesTab(schema *arrow.Schema) {
 	for rt := range c.RichTextLabel("Columns") {
 		rt.Strong()
 	}
-	for rt := range c.RichTextLabel("The current result, column by column: the spec line the rules see and what it resolved to.") {
+	for rt := range c.RichTextLabel("The current result, column by column: the spec line the rules see, what it resolved to, and the rules that matched but lost.") {
 		rt.Small().Weak()
 	}
 	inst.renderGlossColumns(schema)
 }
 
-// renderGlossCatalogRow draws one gloss: its media type, an Insert button
-// for a directive line, its doc, its parameters and affinities, and a sample
-// face rendered live.
+// renderGlossCatalogRow draws one gloss: its media type, Insert buttons for
+// a directive line and a gloss(…) call, a sample face rendered live, its
+// doc, the value kinds it accepts, its parameters and affinities.
 func (inst *PlayApp) renderGlossCatalogRow(g gloss.GlossI) {
-	token := glossSampleToken(g)
+	token, params := glossSampleToken(g)
+	sample, bound := bindGlossSample(g, token)
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabel(g.MediaType()) {
 			rt.Monospace()
@@ -71,16 +75,21 @@ func (inst *PlayApp) renderGlossCatalogRow(g gloss.GlossI) {
 			// A directive is a line of its own; the caret may be mid-line.
 			inst.InsertSqlAtCaret("\n-- play: gloss " + token + " name:\n")
 		}
-		if sample, ok := glossSampleFace(g, token); ok {
+		if c.Button(inst.ids.PrepareStr("glossCall-"+g.MediaType()), c.Atoms().Text("Insert call").Keep()).
+			SendResp().HasPrimaryClicked() {
+			// A projection item: spliced in place, `expr` left for the author.
+			inst.InsertSqlAtCaret(glosssql.Call("expr", g.MediaType(), params))
+		}
+		if bound && sample.hasFace {
 			for rt := range c.RichTextLabel("e.g.") {
 				rt.Small().Weak()
 			}
-			if col, toned := toneColor(sample.Tone); toned {
-				for rt := range c.RichTextLabelColored(col, color.Transparent, sample.Text) {
+			if col, toned := toneColor(sample.face.Tone); toned {
+				for rt := range c.RichTextLabelColored(col, color.Transparent, sample.face.Text) {
 					rt.Monospace().Small()
 				}
 			} else {
-				for rt := range c.RichTextLabel(sample.Text) {
+				for rt := range c.RichTextLabel(sample.face.Text) {
 					rt.Monospace().Small()
 				}
 			}
@@ -88,6 +97,11 @@ func (inst *PlayApp) renderGlossCatalogRow(g gloss.GlossI) {
 	}
 	for rt := range c.RichTextLabel(g.Doc()) {
 		rt.Small().Weak()
+	}
+	if bound {
+		for rt := range c.RichTextLabel("accepts: " + glossKindsLine(sample.inst)) {
+			rt.Small().Weak()
+		}
 	}
 	if params := g.Params(); len(params) > 0 {
 		var b strings.Builder
@@ -115,11 +129,11 @@ func (inst *PlayApp) renderGlossCatalogRow(g gloss.GlossI) {
 	}
 }
 
-// glossSampleToken is the token the Insert button writes: the media type,
+// glossSampleToken is the token the Insert buttons write: the media type,
 // with the first allowed value of every closed-set parameter — so a required
-// `unit=` lands spelled rather than missing.
-func glossSampleToken(g gloss.GlossI) string {
-	var params map[string]string
+// `unit=` lands spelled rather than missing. params is that choice on its
+// own, for the call spelling.
+func glossSampleToken(g gloss.GlossI) (token string, params map[string]string) {
 	for _, p := range g.Params() {
 		if len(p.Values) > 0 {
 			if params == nil {
@@ -128,26 +142,52 @@ func glossSampleToken(g gloss.GlossI) string {
 			params[p.Name] = p.Values[0]
 		}
 	}
-	return gloss.CompactMediaType(g.MediaType(), params)
+	return gloss.CompactMediaType(g.MediaType(), params), params
 }
 
-// glossSampleFace renders the gloss's inline face over a sample value of a
-// kind it accepts. ok is false when no sample fits (a gloss accepting nothing
-// the samples cover).
-func glossSampleFace(g gloss.GlossI, token string) (face gloss.Inline, ok bool) {
+// glossSample is a gloss bound for the catalog listing: the instance (for
+// the kinds it accepts) and, when a sample value of an accepted kind exists,
+// its inline face.
+type glossSample struct {
+	inst    gloss.InstanceI
+	face    gloss.Inline
+	hasFace bool
+}
+
+// bindGlossSample binds the gloss with its sample token and renders its inline
+// face over a sample value of a kind it accepts. bound is false when the
+// token does not bind (a programming error in the gloss's own parameters);
+// hasFace is false when no sample fits.
+func bindGlossSample(g gloss.GlossI, token string) (sample glossSample, bound bool) {
 	d, declared := (&sampleCatalog{g: g}).parse(token)
 	if !declared || d.Instance == nil {
-		return face, false
+		return sample, false
 	}
+	sample.inst = d.Instance
 	for _, cell := range []gloss.TextCell{
 		{S: glossSampleNumber, K: gloss.ValueKindNumeric},
 		{S: glossSampleText, K: gloss.ValueKindText},
 	} {
 		if accepted, _ := d.Instance.Accepts(cell.K); accepted {
-			return d.Instance.Inline(cell), true
+			sample.face, sample.hasFace = d.Instance.Inline(cell), true
+			break
 		}
 	}
-	return face, false
+	return sample, true
+}
+
+// glossKindsLine spells the value kinds an instance accepts: "any" when it
+// refuses none, else the kinds in enum order.
+func glossKindsLine(inst gloss.InstanceI) string {
+	kinds, all := gloss.AcceptedKinds(inst)
+	if all {
+		return "any"
+	}
+	names := make([]string, len(kinds))
+	for i, k := range kinds {
+		names[i] = k.String()
+	}
+	return strings.Join(names, " · ")
 }
 
 // sampleCatalog binds one gloss for a sample without touching the live
@@ -244,5 +284,20 @@ func (inst *PlayApp) renderGlossColumns(schema *arrow.Schema) {
 		for rt := range c.RichTextLabel("spec: " + gc.specLine) {
 			rt.Small().Weak().Monospace()
 		}
+		if len(gc.shadowed) > 0 {
+			for rt := range c.RichTextLabel("shadowed: " + glossShadowedLine(gc.shadowed)) {
+				rt.Small().Weak()
+			}
+		}
 	}
+}
+
+// glossShadowedLine lists the rules a column's binding shadowed, each as
+// its source, token and pattern, in the order they would have applied.
+func glossShadowedLine(rules []gloss.Rule) string {
+	parts := make([]string, len(rules))
+	for i, r := range rules {
+		parts[i] = r.Source + ": " + r.Token() + " ← " + r.Pattern
+	}
+	return strings.Join(parts, " · ")
 }

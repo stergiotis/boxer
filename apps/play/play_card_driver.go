@@ -185,6 +185,16 @@ func (inst *CardDriver) SetCellGloss(fn leewaywidgets.CellGlossFunc) {
 	}
 }
 
+// SetCellBlock installs the per-value block face on the card emitter
+// (ADR-0186, block faces on the card) — the host's renderer for the values
+// whose gloss has one. Passing nil clears it. A no-op until EnsureFor has
+// built an emitter.
+func (inst *CardDriver) SetCellBlock(fn leewaywidgets.CellBlockFunc) {
+	if inst.emitter != nil {
+		inst.emitter.SetCellBlock(fn)
+	}
+}
+
 // Prepare walks a single-row slice of rec through the Driver, buffering the
 // leeway card rows in the emitter without drawing them (the emitter runs with
 // DeferRender set). Call it before SectionDigests and before Render. A no-op on

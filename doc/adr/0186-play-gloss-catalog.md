@@ -249,7 +249,8 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
 
 ### SD8 — Deferred
 
-- Block faces on the leeway card; reveal-on-click for `gloss/masked`.
+- Block faces on the leeway card (taken up — see the 2026-08-15 Update
+  below); reveal-on-click for `gloss/masked`.
 - A paint variant of the inline face (arrays as sparklines).
 - Rule files / env, and an in-app rule editor over ADR-0185 — text rules
   first, because SQL travels and UI state does not.
@@ -387,6 +388,44 @@ per-attribute grid gets the same one-frame re-fit on column-set change,
 inside ADR-0151's contract: only columns without a user override are
 auto-sized, cells go out untruncated (bounded) on that frame, and the
 read-back is adopted as the crate's width rather than captured as the user's.
+
+### 2026-08-15 — the Glosses tab catches up with SD3 and SD6
+
+M3 recorded the Glosses tab as shipped with three things the text above
+promises still missing: the matches a column's binding shadowed (SD3), each
+gloss's accepted kinds (SD6), and Insert-at-caret for a `gloss(…)` call
+(SD6). Landed now: `gloss.MatchAll` — the winner first, then what it
+shadows; the resolution keeps `MatchFirst`'s answer and stores the rest —
+so the Columns section lists a later directive behind an earlier one, an
+affinity behind a directive, and any rule behind an alias, bound or refused
+(the tab is where "never offered to the rules" becomes visible).
+`gloss.AcceptedKinds` probes an instance once per listing (`any` when it
+refuses nothing). `glosssql.Call` spells the call for a media type and its
+parameters, `Expand`'s dual: `Expand("SELECT " + Call(x, mt, params))`
+yields the alias with the same token, pinned by a round trip over the whole
+default catalog. Tour scene `03_detail_glosses` gains a third directive that
+loses to the two above it and a capture of the Columns section, so the
+shadowed list is in the tour. Nothing changes in the grids or in Detail.
+
+### 2026-08-15 — block faces on the leeway card
+
+SD8 deferred them; SD4 gave the card one seam, the inline text. Taken up
+with a second seam on `Table2CardEmitter`: `SetCellBlock(CellBlockFunc)`,
+asked per value before the text is glossed and answering with a
+`CellBlock{Render, Height}` or declining. The card keeps the inline text —
+`SectionDigests` and the Detail timeline's flags read it — stacks each
+block-faced pair under the row's inline line (a caption when the row has
+more than one pair, then the blocks) and grows the row by what they ask,
+clamped to [one text line, 320 pt]. `play` binds the faces the ad-hoc pane
+already has: markdown, plain text, code and images from the row's artifact
+cache, now keyed by column *and* value ordinal since a card shows every
+attribute of a column, and `gloss/url`'s hyperlink. The height is the
+host's estimate — 18 pt per source line, at most twelve — because a table
+row is declared before its cells are laid out; a face that runs longer
+scrolls inside its area, and images box at 400 × 240. Raw cells switches
+this seam off with the other. Tour scene `03_detail_glosses` binds
+`text/markdown` to the text column, so the card's block face is in the
+tour; reveal-on-click for `gloss/masked` stays deferred.
 
 ## References
 

@@ -101,6 +101,11 @@ type glossColumn struct {
 	// rule's provenance and pattern (`directive line 3: name:.*temp`,
 	// `affinity: \bsem:secret\b`).
 	source string
+	// shadowed are the rules that matched the spec line but did not bind
+	// (ADR-0186 §SD3): every later match behind a winning rule, and every
+	// match behind an alias, which is never offered to the rules. Listed in
+	// the Glosses tab so a rule that never fires can be seen not to.
+	shadowed []gloss.Rule
 	// specLine is the column's written-out form the rules matched against
 	// (ADR-0186 §SD3), shown on hover.
 	specLine string
@@ -176,24 +181,29 @@ func (inst *PlayApp) glossNotes() []string { return inst.glossRes.notes }
 
 // resolveGlossColumn is the per-column resolution: alias, else first
 // matching rule, else plain. It also settles the Accepts verdicts once, so
-// the per-cell path is a field read.
+// the per-cell path is a field read, and keeps the matches that lost for
+// the Glosses tab.
 func (inst *PlayApp) resolveGlossColumn(field arrow.Field, specLine string, rules []gloss.Rule) (gc glossColumn) {
 	gc.specLine = specLine
+	matches := gloss.MatchAll(rules, specLine)
 	if d, declared := inst.glossCatalog().ParseColumn(field.Name); declared {
 		gc.label = d.Label
 		gc.mediaType = d.MediaType
 		gc.params = d.Params
 		gc.source = glossSourceAlias
+		gc.shadowed = matches // an aliased column is never offered to the rules
 		if d.Reason != "" {
 			gc.reason = d.Reason
 			return gc
 		}
 		gc.inst = d.Instance
-	} else if r, ok := gloss.MatchFirst(rules, specLine); ok {
+	} else if len(matches) > 0 {
+		r := matches[0]
 		gc.mediaType = r.MediaType
 		gc.params = r.Params
 		gc.source = r.Source + ": " + r.Pattern
 		gc.inst = r.Instance
+		gc.shadowed = matches[1:]
 	} else {
 		return gc
 	}
@@ -369,5 +379,40 @@ func (inst *PlayApp) cardCellGloss(schema *arrow.Schema) leewaywidgets.CellGloss
 			return text
 		}
 		return inst.glossText(&cols[arrowIdx], text, gloss.KindOfArrow(listElemType(schema.Field(arrowIdx).Type)))
+	}
+}
+
+// cardCellBlock is the leeway card's per-value block-face seam
+// (Table2CardEmitter's SetCellBlock): for a column whose gloss has a block
+// face in this pane — the content family's markdown, code and images, and
+// gloss/url's hyperlink — a renderer over the value's marshalled text with
+// the height the card should reserve; declined for every other value. Nil
+// when no column qualifies or the raw toggle is on, so the emitter skips the
+// seam entirely. Values are counted per column in drive order, which keys
+// the row's artifact cache.
+func (inst *PlayApp) cardCellBlock(schema *arrow.Schema) leewaywidgets.CellBlockFunc {
+	if inst.tableOpts.rawCells || inst.richCells == nil || !inst.anyGlossed(schema) {
+		return nil
+	}
+	cols := inst.glossColumns(schema)
+	qualifies := false
+	for i := range cols {
+		if cardBlockFace(&cols[i]) {
+			qualifies = true
+			break
+		}
+	}
+	if !qualifies {
+		return nil
+	}
+	seen := make(map[int]int, 4)
+	return func(arrowIdx int, text string) (block leewaywidgets.CellBlock, ok bool) {
+		if arrowIdx < 0 || arrowIdx >= len(cols) || !cardBlockFace(&cols[arrowIdx]) {
+			return block, false
+		}
+		ord := seen[arrowIdx]
+		seen[arrowIdx] = ord + 1
+		kind := gloss.KindOfArrow(listElemType(schema.Field(arrowIdx).Type))
+		return inst.cardBlock(&cols[arrowIdx], richKey{col: arrowIdx, ord: ord}, text, kind), true
 	}
 }

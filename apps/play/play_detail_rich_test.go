@@ -217,23 +217,23 @@ func TestRichCellCacheKey(t *testing.T) {
 
 	cache.noteExecuted(time.Unix(100, 0))
 	cache.syncTo(0)
-	first := cache.entryFor(0, d, "row zero")
+	first := cache.entryFor(richKey{}, d, "row zero")
 	assert.Equal(t, "row zero", first.text)
-	assert.Same(t, first, cache.entryFor(0, d, "row zero"), "built once per row")
+	assert.Same(t, first, cache.entryFor(richKey{}, d, "row zero"), "built once per row")
 
 	gen := cache.generation
 
 	// Same result, different row.
 	cache.syncTo(1)
 	assert.Greater(t, cache.generation, gen, "a new row is new image content")
-	assert.Equal(t, "row one", cache.entryFor(0, d, "row one").text)
+	assert.Equal(t, "row one", cache.entryFor(richKey{}, d, "row one").text)
 
 	// Same row, re-run query: the bytes may differ under an unchanged index.
 	cache.syncTo(1)
-	assert.Equal(t, "row one", cache.entryFor(0, d, "row one").text, "no churn on a steady frame")
+	assert.Equal(t, "row one", cache.entryFor(richKey{}, d, "row one").text, "no churn on a steady frame")
 	cache.noteExecuted(time.Unix(200, 0))
 	cache.syncTo(1)
-	assert.Equal(t, "fresh", cache.entryFor(0, d, "fresh").text, "a re-run drops the old bytes")
+	assert.Equal(t, "fresh", cache.entryFor(richKey{}, d, "fresh").text, "a re-run drops the old bytes")
 }
 
 // tinyPNG encodes a w×h opaque PNG for the decode tests.

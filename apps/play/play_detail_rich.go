@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
@@ -25,8 +26,9 @@ import (
 // content-typed detail cells). A result column named `<label>@<media type>`
 // resolves against the gloss catalog (public/hmi/gloss — the parser, the
 // gate and every inline face live there); the content family's block faces —
-// the markdown widget, the code view, the decoded image — are bound here, in
-// the ad-hoc Detail pane:
+// the markdown widget, the code view, the decoded image — are bound here,
+// for the ad-hoc Detail pane and, through Table2CardEmitter's block seam,
+// for the leeway card:
 //
 //	SELECT body AS `notes@text/markdown`, thumb AS `shot@image/png` FROM t
 //
@@ -95,7 +97,8 @@ func mediaTypeOnly(token string) string {
 
 // hasBlockFace reports whether this pane binds a block face to the media
 // type. Everything else — the `gloss/*` family — shows its inline face,
-// wrapped, under the caption.
+// wrapped, under the caption; gloss/url is the one presentation gloss with
+// a face of its own (a hyperlink), handled by name where the faces render.
 func hasBlockFace(mediaType string) bool {
 	switch mediaType {
 	case gloss.MediaTypeMarkdown, gloss.MediaTypePlain, gloss.MediaTypeJSON,
@@ -104,6 +107,11 @@ func hasBlockFace(mediaType string) bool {
 		return true
 	}
 	return false
+}
+
+// isImageType reports the media types whose block face is a decoded image.
+func isImageType(mediaType string) bool {
+	return mediaType == gloss.MediaTypePNG || mediaType == gloss.MediaTypeJPEG || mediaType == gloss.MediaTypeGIF
 }
 
 // cellRaw returns a cell's undecorated content as a string: the bytes of a
@@ -164,7 +172,7 @@ type richCellCache struct {
 
 	forExecuted time.Time
 	forRow      int64
-	entries     map[int]*richEntry
+	entries     map[richKey]*richEntry
 
 	// pendingExecuted is stashed by renderDetailTab before dispatch — the
 	// PanelI Render signature carries no result metadata (the World and Kanban
@@ -178,12 +186,25 @@ type richCellCache struct {
 	generation uint64
 }
 
+// richKey addresses one artifact of the row: the result column and, on the
+// leeway card, which of the column's values — the card shows every attribute
+// of a tagged column, one value each, in drive order; the ad-hoc pane shows
+// one value per column and uses ordinal 0.
+type richKey struct {
+	col int
+	ord int
+}
+
+func (inst richKey) String() string {
+	return strconv.Itoa(inst.col) + "-" + strconv.Itoa(inst.ord)
+}
+
 func newRichCellCache(ids *c.WidgetIdStack) *richCellCache {
 	return &richCellCache{
 		ids:     ids,
 		tracker: c.NewImageVersionTracker[string](),
 		forRow:  -1,
-		entries: make(map[int]*richEntry, 4),
+		entries: make(map[richKey]*richEntry, 4),
 	}
 }
 
@@ -213,12 +234,12 @@ func (inst *richCellCache) syncTo(row int64) {
 // entryFor returns the artifact for one declared cell, building it on first
 // use. raw is frame-lifetime (see cellRaw); everything retained here is
 // derived from it, never it.
-func (inst *richCellCache) entryFor(col int, d gloss.Declaration, raw string) *richEntry {
-	if e, ok := inst.entries[col]; ok {
+func (inst *richCellCache) entryFor(key richKey, d gloss.Declaration, raw string) *richEntry {
+	if e, ok := inst.entries[key]; ok {
 		return e
 	}
 	e := buildRichEntry(d, raw)
-	inst.entries[col] = e
+	inst.entries[key] = e
 	return e
 }
 
@@ -333,7 +354,8 @@ func (inst *PlayApp) renderRichCell(col int, d gloss.Declaration, cell gloss.Arr
 			}
 			return
 		}
-		e := inst.richCells.entryFor(col, d, raw)
+		key := richKey{col: col}
+		e := inst.richCells.entryFor(key, d, raw)
 		if e.reason != "" {
 			c.Label(gloss.FirstLine(raw)).Truncate().Send()
 			for rt := range c.RichTextLabel(e.reason) {
@@ -341,12 +363,12 @@ func (inst *PlayApp) renderRichCell(col int, d gloss.Declaration, cell gloss.Arr
 			}
 			return
 		}
-		inst.richCells.renderBody(col, d, e)
+		inst.richCells.renderBody(key, d, e)
 	}
 }
 
 // renderBody draws the artifact itself.
-func (inst *richCellCache) renderBody(col int, d gloss.Declaration, e *richEntry) {
+func (inst *richCellCache) renderBody(key richKey, d gloss.Declaration, e *richEntry) {
 	switch mediaTypeOnly(d.MediaType) {
 	case gloss.MediaTypeMarkdown:
 		if e.doc == nil {
@@ -354,8 +376,8 @@ func (inst *richCellCache) renderBody(col int, d gloss.Declaration, e *richEntry
 		}
 		// Doc.Render derives its embedded widgets' ids from PrepareSeq(0), 1,
 		// … in document order and does NOT open its own scope, so two docs
-		// under one parent would collide. Scope per column.
-		for range c.IdScope(inst.ids.PrepareStr("play-detail-md-" + strconv.Itoa(col))) {
+		// under one parent would collide. Scope per cell.
+		for range c.IdScope(inst.ids.PrepareStr("play-detail-md-" + key.String())) {
 			e.doc.Render(inst.ids)
 		}
 	case gloss.MediaTypePlain:
@@ -364,33 +386,34 @@ func (inst *richCellCache) renderBody(col int, d gloss.Declaration, e *richEntry
 		if !e.hasJob {
 			return
 		}
-		c.CodeView(inst.ids.PrepareStr("play-detail-code-"+strconv.Itoa(col)), e.job).Send()
+		c.CodeView(inst.ids.PrepareStr("play-detail-code-"+key.String()), e.job).Send()
 	case gloss.MediaTypePNG, gloss.MediaTypeJPEG, gloss.MediaTypeGIF:
-		inst.renderImage(col, e)
+		inst.renderImage(key, e, richImageMaxW, richImageMaxH)
 	}
 }
 
-// renderImage draws a decoded cell image, bounded and version-tracked.
-func (inst *richCellCache) renderImage(col int, e *richEntry) {
+// renderImage draws a decoded cell image, bounded to maxW × maxH and
+// version-tracked.
+func (inst *richCellCache) renderImage(key richKey, e *richEntry, maxW, maxH uint32) {
 	if len(e.pixels) == 0 {
 		return
 	}
-	key := "play-detail-img-" + strconv.Itoa(col)
+	imgKey := "play-detail-img-" + key.String()
 	// Two separate PrepareStr creators: each is a single-use state machine, so
 	// reusing one across Derive() and the Image call panics (the worldmap's
 	// note at paintMap).
-	imgId := inst.ids.PrepareStr(key).Derive()
+	imgId := inst.ids.PrepareStr(imgKey).Derive()
 	// PixelsToSendFor, not PixelsToSend: the Detail pane is a dock tab, whose
 	// body renders every frame into a buffer the host only interprets when the
 	// tab is active. A hidden tab's upload is discarded and the idle LRU can
 	// evict the texture underneath it, so "sent" is not "received". The For
 	// variant consults the host's starved-texture report and re-ships.
-	pixels := inst.tracker.PixelsToSendFor(key, imgId, inst.generation, e.pixels)
+	pixels := inst.tracker.PixelsToSendFor(imgKey, imgId, inst.generation, e.pixels)
 	// Clamp the box to the native size: FitAspectMaxE scales up to fill the
 	// box, and a favicon rendered 640 wide is not a detail view.
-	boxW := min(e.widthPx, richImageMaxW)
-	boxH := min(e.heightPx, richImageMaxH)
-	c.Image(inst.ids.PrepareStr(key),
+	boxW := min(e.widthPx, maxW)
+	boxH := min(e.heightPx, maxH)
+	c.Image(inst.ids.PrepareStr(imgKey),
 		e.widthPx, e.heightPx, inst.generation,
 		uint8(c.FitAspectMaxE), boxW, boxH,
 		uint8(c.FilterLinearE), c.TintNoneRgba, pixels).
@@ -402,4 +425,74 @@ func (inst *richCellCache) renderImage(col int, e *richEntry) {
 // gloss.FirstLine, kept under its play name for the callers here.
 func firstLineOf(raw string) string {
 	return gloss.FirstLine(raw)
+}
+
+// The leeway card's block faces (ADR-0186, its 2026-08-15 Update). The card
+// declares each row's height before the faces are laid out, so a text
+// face's height is estimated from its source lines — cardBlockLineHeight a
+// line, at most cardBlockMaxLines of them — and the face scrolls inside the
+// area when the estimate runs short (wrapped paragraphs, a heading's larger
+// type). Images are boxed smaller than in the ad-hoc pane: a card row is
+// not a detail view of one picture.
+const (
+	cardBlockLineHeight = 18.0
+	cardBlockMaxLines   = 12
+	cardBlockPad        = 8.0
+	cardImageMaxW       = 400
+	cardImageMaxH       = 240
+)
+
+// cardBlockFace reports whether a resolved column gets a block face on the
+// card: bound, its items accepted, and a media type this pane has a face
+// for.
+func cardBlockFace(gc *glossColumn) bool {
+	return gc.glossedElem() && (hasBlockFace(gc.mediaType) || gc.mediaType == gloss.MediaTypeURL)
+}
+
+// cardBlock builds the block face for one card value: the same artifact
+// renderRichCell would show for the value's text, keyed by (column, ordinal)
+// since the card shows every attribute of a column, with the height the
+// card should reserve. text is the value's marshalled text, owned by the
+// caller's buffer — retaining it (a plain-text face does) is fine.
+func (inst *PlayApp) cardBlock(gc *glossColumn, key richKey, text string, kind gloss.ValueKindE) leewaywidgets.CellBlock {
+	if gc.mediaType == gloss.MediaTypeURL {
+		face := gc.inst.Inline(gloss.TextCell{S: text, K: kind})
+		url := strings.TrimSpace(text)
+		return leewaywidgets.CellBlock{Render: func() {
+			c.HyperlinkTo(face.Text, url).OpenInNewTab(true).Send()
+		}}
+	}
+	d, _ := gc.declaration(gc.label)
+	e := inst.richCells.entryFor(key, d, text)
+	if e.reason != "" {
+		// Declared, cannot be honoured: the first line and why, as the
+		// ad-hoc pane shows it.
+		first, reason := gloss.FirstLine(text), e.reason
+		return leewaywidgets.CellBlock{Height: 2*cardBlockLineHeight + cardBlockPad, Render: func() {
+			c.Label(first).Truncate().Send()
+			for rt := range c.RichTextLabel(reason) {
+				rt.Small().Weak()
+			}
+		}}
+	}
+	mt := gc.mediaType
+	scope := "play-card-block-" + key.String()
+	if isImageType(mt) {
+		return leewaywidgets.CellBlock{Height: float32(min(e.heightPx, cardImageMaxH)) + cardBlockPad, Render: func() {
+			for range c.PushId(inst.ids.PrepareStr(scope)).KeepIter() {
+				inst.richCells.renderImage(key, e, cardImageMaxW, cardImageMaxH)
+			}
+		}}
+	}
+	lines := min(strings.Count(text, "\n")+1, cardBlockMaxLines)
+	return leewaywidgets.CellBlock{Height: float32(lines)*cardBlockLineHeight + cardBlockPad, Render: func() {
+		// PushId keeps the ScrollArea's egui id apart from a sibling block's
+		// in the same cell; the vertical scroll takes what the estimate
+		// missed, and AutoShrink lets a short face stop short.
+		for range c.PushId(inst.ids.PrepareStr(scope)).KeepIter() {
+			for range c.ScrollArea().Vscroll(true).AutoShrink(false, true).KeepIter() {
+				inst.richCells.renderBody(key, d, e)
+			}
+		}
+	}}
 }

@@ -624,7 +624,9 @@ showing a value — a temperature with its unit, a Unix epoch as a moment, a spa
 as `1m 05s`, a card number masked with its Luhn verdict, a value masked to six
 bullets, a URL as a link, a byte count in KiB, and the ADR-0123 content types
 (markdown, code, images) as one family. Every gloss
-has a one-line face for the Table grids and, some, a block face for Detail.
+has a one-line face for the Table grids and, some, a block face for Detail —
+in the ad-hoc pane and, stacked under the row's other values, in the leeway
+card.
 
 Three routes bind a column to a gloss, in precedence order:
 
@@ -650,11 +652,14 @@ Three routes bind a column to a gloss, in precedence order:
   columns it matches.
 
 The tab shows the **catalog** (each gloss with its accepted value kinds,
-parameters, a sample rendering, its affinities, and an *Insert rule* button
-that drops a `-- play: gloss` line at the caret), the buffer's effective
+parameters, a sample rendering, its affinities, and two Insert buttons —
+*Insert rule* drops a `-- play: gloss` line at the caret, *Insert call* a
+`gloss(expr, …)` projection item with the same token), the buffer's effective
 **rules** (compiled, or refused with why), and the current result's
-**columns** with their spec line and what each resolved to. **Raw cells** on
-the Table toolbar bypasses every gloss for the session.
+**columns** with their spec line, what each resolved to, and the rules that
+matched but lost: a later directive behind an earlier one, an affinity behind
+a directive, any rule behind an alias. **Raw cells** on the Table toolbar
+bypasses every gloss for the session.
 
 ## Configuration
 

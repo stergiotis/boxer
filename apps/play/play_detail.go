@@ -184,8 +184,10 @@ func (inst *PlayApp) RenderDefaultDetailContent(rec arrow.RecordBatch, schema *a
 	var digests []leewaywidgets.SectionDigest
 	if leeway {
 		// ADR-0186: the card's values pass through their column's gloss —
-		// on the items, since a tagged value is a collection of them.
+		// on the items, since a tagged value is a collection of them — and a
+		// value whose gloss has a block face draws it in the card.
 		inst.cards.SetCellGloss(inst.cardCellGloss(schema))
+		inst.cards.SetCellBlock(inst.cardCellBlock(schema))
 		if err := inst.cards.Prepare(rec, row); err != nil {
 			c.Label(fmt.Sprintf("card prepare error: %s", err)).Wrap().Send()
 		} else {

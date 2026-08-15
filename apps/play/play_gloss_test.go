@@ -1,12 +1,14 @@
 package play
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
+	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,6 +80,61 @@ func TestGlossColumnsResolvePerSchema(t *testing.T) {
 	// Same schema pointer → same slice, no re-resolution.
 	again := app.glossColumns(rec.Schema())
 	assert.Equal(t, &cols[0], &again[0])
+
+	// An aliased column is never offered to the rules: a directive that
+	// matches its spec line is shadowed by the alias — whether the alias
+	// binds or is refused — and a plain column takes it.
+	app.sql = "SELECT 1\n-- play: gloss gloss/raw name:\n"
+	cols = app.glossColumns(rec.Schema())
+	assert.Equal(t, glossSourceAlias, cols[0].source)
+	assert.Equal(t, gloss.MediaTypeTemperature, cols[0].mediaType, "the alias still binds")
+	assert.Equal(t, "directive line 2: gloss/raw ← name:", glossShadowedLine(cols[0].shadowed))
+	assert.Contains(t, cols[3].reason, "unknown media type")
+	assert.Equal(t, "directive line 2: gloss/raw ← name:", glossShadowedLine(cols[3].shadowed), "refused alias: the rule is still not offered")
+	assert.Equal(t, gloss.MediaTypeRaw, cols[2].mediaType, "the plain column takes the directive")
+	assert.Empty(t, cols[2].shadowed)
+}
+
+// The catalog listing: every default gloss binds with its sample token,
+// renders a sample face where a sample fits, and spells its accepted kinds;
+// the Insert buttons write a directive line's token and a gloss(…) call
+// that expands back to the same token.
+func TestGlossCatalogListing(t *testing.T) {
+	cat := gloss.Default()
+	for g := range cat.All() {
+		token, params := glossSampleToken(g)
+		sample, bound := bindGlossSample(g, token)
+		require.True(t, bound, token)
+		assert.NotEmpty(t, glossKindsLine(sample.inst), token)
+		call := glosssql.Call("expr", g.MediaType(), params)
+		mt, p, _, err := cat.BindToken(token)
+		require.NoError(t, err, token)
+		assert.Equal(t, gloss.CompactMediaType(mt, p), token, "the sample token binds as written")
+		out, err := glosssql.Expand("SELECT "+call, cat)
+		require.NoError(t, err, call)
+		assert.Equal(t, `SELECT expr AS "expr@`+token+`"`, out, "Insert call and Insert rule agree on the token")
+	}
+
+	temp, _ := glossSampleToken(mustLookup(t, cat, gloss.MediaTypeTemperature))
+	assert.Equal(t, "gloss/temperature;unit=K", temp, "a required closed-set parameter lands spelled, first value")
+	sample, _ := bindGlossSample(mustLookup(t, cat, gloss.MediaTypeTemperature), temp)
+	assert.True(t, sample.hasFace)
+	assert.Equal(t, "numeric", glossKindsLine(sample.inst))
+	sample, _ = bindGlossSample(mustLookup(t, cat, gloss.MediaTypeMasked), gloss.MediaTypeMasked)
+	assert.Equal(t, "any", glossKindsLine(sample.inst))
+	assert.Equal(t, gloss.MaskedFace, sample.face.Text)
+	sample, _ = bindGlossSample(mustLookup(t, cat, gloss.MediaTypeMarkdown), gloss.MediaTypeMarkdown)
+	assert.Equal(t, "text · bytes", glossKindsLine(sample.inst))
+	sample, _ = bindGlossSample(mustLookup(t, cat, gloss.MediaTypePNG), gloss.MediaTypePNG)
+	assert.Equal(t, "text · bytes", glossKindsLine(sample.inst), "an image column arrives as ClickHouse String: text is accepted")
+	assert.Equal(t, "[image/png · 24 B]", sample.face.Text)
+}
+
+func mustLookup(t *testing.T, cat *gloss.Catalog, mediaType string) gloss.GlossI {
+	t.Helper()
+	g, ok := cat.Lookup(mediaType)
+	require.True(t, ok, mediaType)
+	return g
 }
 
 func TestGlossCellRendersFaceOrPlain(t *testing.T) {
@@ -206,6 +263,8 @@ func TestGlossRulesOnLeewaySchema(t *testing.T) {
 	assert.Equal(t, gloss.MaskedFace, app.glossText(&cols[1], "21.5", gloss.ValueKindNumeric))
 	assert.Empty(t, cols[3].mediaType, "the membership lane carries no matching aspect")
 
+	assert.Empty(t, cols[1].shadowed, "one affinity matches: nothing behind it")
+
 	// A directive outranks the affinity, and gloss/raw suppresses it.
 	app.sql = "SELECT *\n-- play: gloss gloss/raw sem:secret\n-- play: gloss gloss/temperature;unit=C name:temperature\n"
 	cols = app.glossColumns(schema)
@@ -213,6 +272,11 @@ func TestGlossRulesOnLeewaySchema(t *testing.T) {
 	assert.Equal(t, "directive line 2: sem:secret", cols[1].source)
 	assert.Equal(t, "21.5", app.glossText(&cols[1], "21.5", gloss.ValueKindNumeric))
 	assert.Empty(t, app.glossNotes())
+	// The Glosses tab lists what the winner shadowed (§SD3): the later
+	// directive, then the affinity — in the order they would have applied.
+	assert.Equal(t, `directive line 3: gloss/temperature;unit=C ← name:temperature · affinity: gloss/masked ← \bsem:secret\b`,
+		glossShadowedLine(cols[1].shadowed))
+	assert.Empty(t, cols[2].shadowed, "the url column matches its affinity alone")
 
 	// A second directive set: the temperature rule now reaches the column —
 	// on the items (per-attribute grid); the whole list is not a number, so
@@ -275,4 +339,58 @@ func TestFitRunes(t *testing.T) {
 	assert.Equal(t, "ab…", fitRunes("abcd", 2))
 	assert.Equal(t, "••…", fitRunes("••••", 2), "runes, not bytes")
 	assert.Equal(t, "", fitRunes("", 5))
+}
+
+// The card's block seam (ADR-0186 Update): only a column whose gloss has a
+// block face in this pane is claimed — gloss/url's hyperlink, the content
+// family — with a height the card reserves; values are counted per column
+// so the row's artifact cache keys each; the raw toggle and a bare app
+// (no cache) yield no seam at all.
+func TestCardCellBlock(t *testing.T) {
+	app := &PlayApp{richCells: newRichCellCache(nil)}
+	rec := leewayGlossRec(t)
+	defer rec.Release()
+	schema := rec.Schema()
+
+	// Affinities alone: the url column qualifies (a hyperlink face), the
+	// masked one does not (inline only), the id is plain.
+	fn := app.cardCellBlock(schema)
+	require.NotNil(t, fn)
+	_, ok := fn(0, "1")
+	assert.False(t, ok, "plain")
+	_, ok = fn(1, "21.5")
+	assert.False(t, ok, "gloss/masked has no block face")
+	b, ok := fn(2, " https://example.com/1 ")
+	require.True(t, ok)
+	assert.NotNil(t, b.Render)
+	assert.Zero(t, b.Height, "a hyperlink is one line: the card's minimum")
+	_, ok = fn(9, "x")
+	assert.False(t, ok, "out of range")
+
+	// A directive binds markdown to the text column: a scrolling text face,
+	// its height estimated from the source lines and capped, one cache entry
+	// per value in drive order.
+	app.sql = "SELECT *\n-- play: gloss text/markdown name:reading\n"
+	fn = app.cardCellBlock(schema)
+	require.NotNil(t, fn)
+	b, ok = fn(2, "# title\nline two\nline three")
+	require.True(t, ok)
+	assert.InDelta(t, 3*cardBlockLineHeight+cardBlockPad, b.Height, 0.01)
+	b, ok = fn(2, strings.Repeat("x\n", 40))
+	require.True(t, ok)
+	assert.InDelta(t, cardBlockMaxLines*cardBlockLineHeight+cardBlockPad, b.Height, 0.01, "capped")
+	assert.Contains(t, app.richCells.entries, richKey{col: 2, ord: 0})
+	assert.Contains(t, app.richCells.entries, richKey{col: 2, ord: 1})
+	assert.NotNil(t, app.richCells.entries[richKey{col: 2, ord: 0}].doc, "parsed once, retained for the frame's draw")
+
+	// The raw toggle bypasses the seam; so does an app without the cache.
+	app.tableOpts.rawCells = true
+	assert.Nil(t, app.cardCellBlock(schema))
+	app.tableOpts.rawCells = false
+	assert.Nil(t, (&PlayApp{}).cardCellBlock(schema), "no artifact cache: no block faces")
+
+	// A schema without any block-faced column: nil, so the emitter skips it.
+	plain := glossRec(t)
+	defer plain.Release()
+	assert.Nil(t, app.cardCellBlock(plain.Schema()), "temperature, luhn: inline faces only")
 }
