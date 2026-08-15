@@ -728,10 +728,40 @@ its appearing is itself the signal that something has, and it asks for a run,
 since leaving the old result up would make the button look like it had not
 worked.
 
+### 2026-08-15 — the tier bit gains a second source, and the ladder a SQL field
+
+[ADR-0187](./0187-play-sql-expression-parameters.md) (proposed) adds knobs whose
+value is SQL rather than a value, and two of this decision's seams generalise to
+carry them.
+
+**§SD4's tier derivation is no longer "SET-presence".** The 2026-07-22 amendment
+made the mode a function of the prelude mirror, which was exact while every
+value could live in a `SET`. An expression cannot: `ExtractParams` harvests
+every `param_*` onto the URL, where ClickHouse would receive a predicate as a
+string. So a SQL-valued slot is pinned by its own `-- play: expr <name> = <sql>`
+line instead, and `paramPinned` reads two mirrors behind one predicate — a
+caller asking "is this name pinned" must not have to know which kind of slot it
+holds. Both tiers keep their meaning: the pinned one is buffer-owned, the live
+one is a signal, and pin/unpin is still the migration gesture. What is lost is
+narrower than it sounds and is recorded in ADR-0187 §SD4: a *spliced* name's
+buffer no longer runs unaided, because the placeholder names a type ClickHouse
+does not know.
+
+**§SD2's chain absorbed the new widget as a registration**, exactly as it
+claims: the SQL field sits after the enum widget and before the scalar tail, so
+a declared option list still wins over a declared category, and no existing
+widget's `Matches` or `Render` moved. The 2026-08-14 Update's directive
+vocabulary gains a fourth member on the same argument it made for the third —
+nothing in `{name:Type}` can say what the values are, and here nothing can say
+what the *text* is.
+
 ## References
 
 - [ADR-0016](./0016-imzero2-time-range-picker.md) — the range picker and its
   Phase-4 evaluator; `play` is a consumer (§SD3).
+- [ADR-0187](./0187-play-sql-expression-parameters.md) (proposed) — SQL-valued
+  knobs: the second tier source, the fourth directive, and the SQL field in the
+  §SD2 ladder.
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the
   `SetCapabilities` host seam §SD3 hangs off.
 - [ADR-0097](./0097-play-reactive-query-graph.md) — signals, param slots as signal

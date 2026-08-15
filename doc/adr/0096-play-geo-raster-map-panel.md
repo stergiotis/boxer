@@ -509,6 +509,33 @@ to be revisited first.
 Unchanged: the raster template text, the reserved `vp_*` param contract, the
 bbox-per-view choice (SD1), and panel behaviour.
 
+## Update — 2026-08-15: the unbuilt `{table:Identifier}` slot has a mechanism, and a shape it cannot carry
+
+Two Updates above leave the same item open: SD6's `{table:Identifier}` /
+`{sampling:UInt64}` human-owned slots "remain unbuilt — the forward path if a
+user-editable raster query is ever wanted".
+[ADR-0187](./0187-play-sql-expression-parameters.md) (proposed) builds the
+mechanism. `Identifier` is now a recognised parameter category with an editor,
+and the panel's two raw `TextEdit` controls — the `table` field and the Custom
+render's colour block — are `sqleditor.Field`s with syntax colour rather than
+plain text.
+
+**The constraint that matters here, found by probing the pinned server: one
+`Identifier` carries one name, not a dotted path.** `FROM {t:Identifier}` with
+`param_t=default.planes_mercator_sample100` fails with `Code: 60 … Unknown table
+expression identifier` — the value is quoted whole. Every table this panel
+actually reads is qualified, and `sanitizeTable` deliberately admits a whole
+table-function source (`remoteSecure('…', default.planes_…, …)`), which is
+further still from one identifier. So SD6's slot as written would not have
+carried the panel's own values, and taking it up means either two slots
+(`{db:Identifier}.{tbl:Identifier}`) or leaving the source spliced as it is
+today and reserving the parameter for the *predicate* — which is the half SD6
+never plumbed a control for (`play_map.go`'s per-render `where`, ANDed with
+`in_view`).
+
+Nothing about the raster query changes here; this records what the forward path
+now costs, so the next reader does not re-derive it from a `Code: 60`.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding

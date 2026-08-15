@@ -526,6 +526,27 @@ SELECT * FROM anchor.facts
 WHERE has(`symbol:value`, {event:String})
 ```
 
+## A parameter whose value is SQL
+
+`Expr` and `ExprList` hold SQL rather than a value, so the playground
+substitutes them into the query text before sending it; `Identifier` is
+ClickHouse's own name parameter and rides the URL like any value. Each gets a
+one-line SQL field above the editor — edit `cond` there and the `-- play: expr`
+line follows.
+
+The declarations sit **below** the `SET` prelude on purpose: a comment above it
+ends the prelude, and the query would then run without its parameters.
+Table-free, so it runs against any server.
+
+```sql
+SET param_col = 'number';
+-- play: expr cond = number % 3 = 0
+-- play: expr cols = number AS n, number * 2 AS doubled
+SELECT {cols:ExprList}, {col:Identifier}
+FROM numbers(12)
+WHERE {cond:Expr}
+```
+
 ## Signals (unbound parameter)
 
 A placeholder with no `SET` is a live signal. Run refuses while nothing fills

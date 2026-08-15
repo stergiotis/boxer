@@ -167,7 +167,9 @@ would differ from Run. So a tinted region with no `|` beside it reads as
 Write a `{name:Type}` placeholder in the query (e.g. `{event:String}`,
 `{from:DateTime}`) and the playground surfaces an editing widget above the
 editor. On Run, the values are shipped to ClickHouse on the request URL and
-the placeholder is substituted server-side.
+the placeholder is substituted server-side. Three type names are the exception
+— they hold SQL rather than a value, and are substituted before the query is
+sent; see [Parameters whose value is SQL](#parameters-whose-value-is-sql).
 
 Each parameter sits in one of two tiers, and the buffer alone says which:
 
@@ -175,9 +177,10 @@ Each parameter sits in one of two tiers, and the buffer alone says which:
   shared signal value (see **Signals** below), so panels that publish the
   same name keep working and the value is live for every query that reads
   it. This is the default for a new placeholder.
-- **Pinned** — the buffer carries `SET param_<name> = <value>` at the top.
-  The name is a **constant**: buffer-owned, part of the query text,
-  reproducible by copy-paste, and it shadows any signal of the same name.
+- **Pinned** — the buffer carries `SET param_<name> = <value>` at the top
+  (for a SQL-valued knob, a `-- play: expr <name> = <sql>` line instead).
+  The name is a **constant**: buffer-owned, part of the query text, and it
+  shadows any signal of the same name.
 
 The **pin** button beside each widget moves a value between the tiers: *pin*
 writes the current value into the buffer as a `SET`, *unpin* removes that line
@@ -208,6 +211,9 @@ The widget chosen for a slot depends on its shape:
   list does not carry still shows, marked *not in the list*. A hint naming a
   placeholder the query does not have is reported in the line beneath the
   widgets, since its only other symptom is a text field.
+- **SQL field** — a slot typed `Expr`, `ExprList` or `Identifier` gets a
+  one-line SQL editor with syntax colour, because its value is SQL rather than
+  a value. See [Parameters whose value is SQL](#parameters-whose-value-is-sql).
 - **Text field** — every other slot gets a single text input (hint
   `value for {<name> : <Type>}`) where you type the literal value or expression.
 
@@ -231,12 +237,62 @@ did happen is labelled with the two names it claimed, so you can always see what
 the editor inferred. Add a **`-- play: ungroup`** comment line anywhere in the
 query to refuse every fold and get one plain text field per parameter.
 
-`-- play: enum` and `-- play: ungroup` are two of three comment-line
-directives the buffer carries with the SQL; the third, `-- play: gloss`, binds
-a column rendering by rule and is described under [Glosses](#glosses).
+`-- play: enum`, `-- play: ungroup` and `-- play: expr` are three of four
+comment-line directives the buffer carries with the SQL; the fourth,
+`-- play: gloss`, binds a column rendering by rule and is described under
+[Glosses](#glosses).
 
 A widget whose name nothing fills yet is marked **needs a value**. That is the
 same condition that blocks Run, so filling the widget clears both.
+
+### Parameters whose value is SQL
+
+`{name:Type}` normally names a ClickHouse type, and ClickHouse substitutes the
+value server-side. Three names mean something else — the knob holds SQL:
+
+| Slot | What it holds | Where it goes |
+| --- | --- | --- |
+| `{cond:Expr}` | one expression: a predicate, or a scalar | anywhere an expression may appear — `WHERE`, `HAVING`, `GROUP BY`, `ORDER BY`, a `SELECT` item |
+| `{cols:ExprList}` | a comma-separated list, aliases and all | a `SELECT` or `WITH` list |
+| `{col:Identifier}` | one database, table or column **name** | any identifier position |
+
+`Identifier` is ClickHouse's own parameter type and behaves like every other
+value: it rides the request URL, and its `SET param_<name>` line pins it. One
+`Identifier` carries **one** name, not a dotted path — for `db.table` use two
+slots, `{db:Identifier}.{tbl:Identifier}`, since a dotted value is quoted whole
+and the server answers `Unknown table expression identifier`.
+
+`Expr` and `ExprList` cannot ride that channel, because ClickHouse substitutes
+values and an expression is not one. The playground substitutes them into the
+query text itself, just before sending it. Three things follow:
+
+- **They are declared in a comment, not a `SET`.** Filling the field writes
+  `-- play: expr <name> = <sql>` into the buffer; everything after the first
+  `=` is the expression, so a value full of `=` needs no escaping. Put the line
+  **below** any `SET` prelude — a comment above it ends the prelude, and the
+  query then runs without its parameters.
+- **An `Expr` is parenthesised when substituted**, so `WHERE x AND {c:Expr}`
+  with `a OR b` means what it reads as. An `ExprList` is spliced as written,
+  since a list in parentheses would be a tuple.
+- **The buffer no longer runs unaided.** A `{cond:Expr}` pasted into
+  `clickhouse-client` fails on an unknown type — deliberately, rather than
+  running something different. Use the **Preview** tab's *as sent* view for the
+  text that actually executes.
+
+Leave a SQL knob unpinned and it works like any other signal: a panel can
+publish the predicate and the field follows it. **Pin** writes the declaration
+into the buffer; **unpin** removes it and keeps the value live.
+
+If the substituted query does not parse, the error is underlined **in the
+field** when it falls inside what you typed, and reported against the query
+otherwise.
+
+In an applet, a SQL knob cannot make the query do more than the applet
+declared. The applet's security class — read, read-egress, mutating — is a
+ceiling on what the substitution may produce, so an expression that reaches
+outside the endpoint (a `url(…)`, a `remote(…)`) is refused before it runs,
+naming the knob and what raised the class. The playground itself sets no
+ceiling: its editor already accepts arbitrary SQL.
 
 The **Hide prelude** checkbox (top bar, shown only when the query has parameters)
 collapses the `SET param_*` lines: the prelude renders as a read-only label above

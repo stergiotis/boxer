@@ -440,9 +440,9 @@ of the parameter machinery exists.
 
 ## Milestones
 
-- **M0 — the field.** SQL field in `widgets/sqleditor`, single-line by default;
+- **M0 — the field.** ✓ SQL field in `widgets/sqleditor`, single-line by default;
   the Map's two raw `TextEdit` call sites adopt it. No parameter machinery.
-- **M1 — detection and the directive.** The three categories, the `-- play: expr`
+- **M1 — detection and the directive.** ✓ The three categories, the `-- play: expr`
   scanner, the orphan advisory, the widget registration. `Identifier` is
   complete here: being a ClickHouse parameter (§SD2) it only gains a better
   editor over the untouched §SD4 path. `Expr` / `ExprList` are declared and
@@ -452,7 +452,7 @@ of the parameter machinery exists.
   until M3 gives pin/unpin a directive arm. One advisory line says the knob is
   not yet wired, which is what explains a run gate that will not open; M2
   retires it.
-- **M2 — splice and trace.** The `splice-expr` step at order `-90`, per-category
+- **M2 — splice and trace.** ✓ The `splice-expr` step at order `-90`, per-category
   splice rules, the Preview trace entry, splice-then-parse validation. It also
   takes the **drift write-back** — a moved draft rewrites its own `-- play: expr`
   line — which M3 was going to own. Held back, M2 would have shipped a field
@@ -460,7 +460,7 @@ of the parameter machinery exists.
   a draft, and only the write-back makes those the same value. The unfilled
   gates learn the rule that follows: a declared expression is filled, an
   undeclared one is not.
-- **M3 — tiers.** `paramPinned`'s second source, pin/unpin's directive arm, the
+- **M3 — tiers.** ✓ `paramPinned`'s second source, pin/unpin's directive arm, the
   live-tier signal path. The live value cannot travel the way an ordinary live
   value does — a `param_*` entry on the URL is a value to ClickHouse, so a
   predicate sent that way is a string — so it reaches the splice as a client
@@ -470,7 +470,7 @@ of the parameter machinery exists.
   string nothing reads; and the substitution is a function of the text alone
   only at the pinned tier, which is the honest form of the "the Preview shows
   what runs" claim — both read the same two sources.
-- **M4 — the ceiling.** Post-splice classification; `play` reports, applets
+- **M4 — the ceiling.** ✓ Post-splice classification; `play` reports, applets
   refuse a raise with the witness; the `Identifier` probe. The classification
   point is the constraint that shapes the code: it must run AFTER the
   substitution and BEFORE the pass registry, because ADR-0132 §SD5 classifies
@@ -481,11 +481,16 @@ of the parameter machinery exists.
   its strongest member, so an unset ceiling refuses nothing and `play` is the
   default rather than a special case.
 - **M5 — docs.** `features.md` §Query parameters, a snippet, the ADR-0096 and
-  ADR-0124 pointers.
+  ADR-0124 pointers. The ADR-0124 entry is more than a pointer: its §SD4 tier
+  derivation was "SET-presence", and that generalises here rather than being
+  extended, so the amendment belongs in the decision it amends.
 
 ## Status
 
-Proposed 2026-08-15. Nothing implemented. The design dialogue settled three
+Proposed 2026-08-15; M0–M4 landed the same day, leaving §M5 (docs). This
+paragraph said "nothing implemented" for five commits after it stopped being
+true, which is the ordinary failure of a Status written at proposal time — it
+is a claim about the tree, and the tree moved. The design dialogue settled three
 questions — where a filled expression's text lives (§SD3), how many grammatical
 categories v1 carries (§SD1), and what an applet may do with one (§SD5) — and
 this record is the result. The Milestones order is deliberate: §M0 ships the
