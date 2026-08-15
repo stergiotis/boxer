@@ -47,6 +47,15 @@ status: draft
 > tuple rung also found that the crossing is section-scoped, so a tuple
 > field consumes a co-resident component's attributes as well as its own.
 >
+> Updated 2026-08-15 (later): M6 landed, and corrected §6's costing of the
+> write path. The facts encoders were said to hand-roll sealed-section
+> buffering across "~13 encoders, ~62 lines"; in the tree, ONE function does
+> (`chstore.writeLogTypedFields`). The others touch several sections but write
+> them one at a time as single-kind writers, which is not the same problem and
+> gains nothing from deferral. The absorption itself holds: the typed builders
+> now compose two kinds onto one section, which is what `sharedsection` had to
+> use `Raw()` for.
+>
 > Updated 2026-08-15: U1 landed (ADR-0183 M4) and corrected §4's reading of
 > this table. The overlap it records between the components skill,
 > `leeway-advanced` and the marshalling how-to was **not there**: advanced

@@ -507,8 +507,33 @@ proven lane.
   DL015 now says so on every run, which is the outcome the rule exists for.
 - **M5 — vocabulary as facts v1.** D3: claim kind, init-time
   publication, reconciliation views.
-- **M6 — write-path absorption.** D4: buffer, typed builders, facts
-  encoders, RowComposer convergence, parity flush order.
+- **M6 — write-path absorption.** ✓ D4. `dml/runtime.DeferredSectionBuffer`
+  owns the order, the attribution and the two frame invariants;
+  `RowComposer` converges onto it (its own buffer was the spec, so what
+  moved is ownership, not behaviour — and it gains the
+  one-contribution-per-kind refusal); `marshallgen` splits each section
+  driver into an attribute-writing half and the frame handling, which is
+  what lets a caller defer the close; and the generated typed builders
+  enqueue, flush at Commit, and refuse a double Add or a Raw-beside-typed
+  where it happens. 76 generated artefacts regenerate.
+
+  The result is visible in `recordstore/sharedsection`, whose test flipped:
+  two kinds onto one section through the typed verbs now commit and read
+  back as one row carrying both, where the assertion used to pin the error
+  and the example had to route through `Raw()`.
+
+  The facts-encoder half was smaller than the survey read. One function
+  hand-rolled the pattern — `chstore.writeLogTypedFields`, six nullable
+  section handles and a six-branch close block, now the buffer — and it
+  is the only one: `queryrunfacts`, `capmapfacts` and the rest of
+  `chstore` open, write and close one section at a time as single-kind
+  writers, where deferral buys nothing. The "~13 encoders" figure counted
+  encoders that touch several sections, not encoders that had this
+  problem.
+
+  The parity corpus needed no re-baselining: first-seen section order was
+  already the reflect path's order, and the generated path had no order to
+  change until it started deferring.
 
 M5 and M6 are independent of each other and may swap.
 

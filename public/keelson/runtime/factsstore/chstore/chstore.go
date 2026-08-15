@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 )
 
 // Config carries the connection coordinates + qualified target table.
@@ -328,71 +329,75 @@ func encodeLogEntity(ent *dml.InEntityFacts, id uint64, row factsstore.LogRow) {
 }
 
 // writeLogTypedFields fans the non-string LogFields out to their matching
-// canonical-type sections. Each section is opened on first use and closed
-// once at the end so the call structure follows the dml builder contract
-// (every BeginAttribute must be balanced inside a single Begin/EndSection
-// pair).
+// canonical-type sections.
+//
+// A field's kind decides its section, so one row's fields arrive interleaved
+// across up to six of them — and a section frame closes for good, which is why
+// the writes cannot simply follow the field order. The deferred buffer holds
+// them: each field enqueues under its section, and Flush writes each section's
+// fields together and closes it once (ADR-0183 D4). This function used to do
+// that with six nullable section handles and a six-branch close block, which
+// is the same mechanism written out by hand.
+//
+// Per-section field order is preserved, which is the only order the wire
+// records — sections are separate column families, so interleaving across them
+// says nothing.
 func writeLogTypedFields(ent *dml.InEntityFacts, fields []factsstore.LogField, logFieldMembId uint64) {
-	var (
-		i64Sec  *dml.InEntityFactsSectionI64Array
-		u64Sec  *dml.InEntityFactsSectionU64Array
-		f64Sec  *dml.InEntityFactsSectionF64Array
-		boolSec *dml.InEntityFactsSectionBool
-		blobSec *dml.InEntityFactsSectionBlobArray
-		timeSec *dml.InEntityFactsSectionTimeArray
-	)
+	var buf dmlruntime.DeferredSectionBuffer
 	for _, f := range fields {
 		switch f.Kind {
 		case factsstore.LogFieldKindInt:
-			if i64Sec == nil {
-				i64Sec = ent.GetSectionI64Array()
-			}
-			i64Sec.BeginAttributeSingle(f.Int).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+			buf.Enqueue("i64Array", "logField", func() error {
+				ent.GetSectionI64Array().BeginAttributeSingle(f.Int).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+				return nil
+			})
 		case factsstore.LogFieldKindUint:
-			if u64Sec == nil {
-				u64Sec = ent.GetSectionU64Array()
-			}
-			u64Sec.BeginAttributeSingle(f.Uint).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+			buf.Enqueue("u64Array", "logField", func() error {
+				ent.GetSectionU64Array().BeginAttributeSingle(f.Uint).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+				return nil
+			})
 		case factsstore.LogFieldKindFloat:
-			if f64Sec == nil {
-				f64Sec = ent.GetSectionF64Array()
-			}
-			f64Sec.BeginAttributeSingle(f.Float).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+			buf.Enqueue("f64Array", "logField", func() error {
+				ent.GetSectionF64Array().BeginAttributeSingle(f.Float).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+				return nil
+			})
 		case factsstore.LogFieldKindBool:
-			if boolSec == nil {
-				boolSec = ent.GetSectionBool()
-			}
-			boolSec.BeginAttribute(f.Bool).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+			buf.Enqueue("bool", "logField", func() error {
+				ent.GetSectionBool().BeginAttribute(f.Bool).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+				return nil
+			})
 		case factsstore.LogFieldKindBytes:
-			if blobSec == nil {
-				blobSec = ent.GetSectionBlobArray()
-			}
-			blobSec.BeginAttributeSingle(f.Bytes).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+			buf.Enqueue("blobArray", "logField", func() error {
+				ent.GetSectionBlobArray().BeginAttributeSingle(f.Bytes).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+				return nil
+			})
 		case factsstore.LogFieldKindTime:
-			if timeSec == nil {
-				timeSec = ent.GetSectionTimeArray()
-			}
-			timeSec.BeginAttributeSingle(f.Time).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+			buf.Enqueue("timeArray", "logField", func() error {
+				ent.GetSectionTimeArray().BeginAttributeSingle(f.Time).AddMembershipMixedLowCardRef(logFieldMembId, []byte(f.Name)).EndAttribute()
+				return nil
+			})
 		}
 	}
-	if i64Sec != nil {
-		i64Sec.EndSection()
-	}
-	if u64Sec != nil {
-		u64Sec.EndSection()
-	}
-	if f64Sec != nil {
-		f64Sec.EndSection()
-	}
-	if boolSec != nil {
-		boolSec.EndSection()
-	}
-	if blobSec != nil {
-		blobSec.EndSection()
-	}
-	if timeSec != nil {
-		timeSec.EndSection()
-	}
+	// The contributions cannot fail — each is one DML call whose errors the
+	// DML accumulates for the entity commit — so the flush error is nil by
+	// construction and the sections are what needs closing.
+	_ = buf.Flush(func(section string) error {
+		switch section {
+		case "i64Array":
+			ent.GetSectionI64Array().EndSection()
+		case "u64Array":
+			ent.GetSectionU64Array().EndSection()
+		case "f64Array":
+			ent.GetSectionF64Array().EndSection()
+		case "bool":
+			ent.GetSectionBool().EndSection()
+		case "blobArray":
+			ent.GetSectionBlobArray().EndSection()
+		case "timeArray":
+			ent.GetSectionTimeArray().EndSection()
+		}
+		return nil
+	})
 }
 
 // WriteRuntimeStart lands one boxer.facts row tagged KindRuntimeRun.
