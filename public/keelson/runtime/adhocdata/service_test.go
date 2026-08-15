@@ -129,8 +129,19 @@ func TestServiceLifecycle(t *testing.T) {
 	p, _ := reg.Lookup(res.Handle)
 	assert.Equal(t, uint64(2), p.(introspect.EncryptedDatasetI).Revision())
 
-	// Retract: provider, key, and file all gone.
+	// Retract is two-phase (ADR-0188 §SD3). LEAVE: the record stops
+	// resolving at once, but the provider, key and file stay for the grace
+	// period so an already-resolved query completes.
 	require.NoError(t, svc.Retract(res.Handle))
+	_, rErr := svc.Resolve("items")
+	require.Error(t, rErr, "a retracted dataset no longer resolves")
+	_, gErr := svc.Grant(res.Handle)
+	require.Error(t, gErr, "nor is it grantable")
+	_, ok = reg.Lookup(res.Handle)
+	assert.True(t, ok, "the provider stays queryable during the grace")
+	assert.True(t, keys.has(res.Handle))
+	// UNLOAD (run early here): provider, key, and file all gone.
+	svc.FlushRetracts()
 	_, ok = reg.Lookup(res.Handle)
 	assert.False(t, ok)
 	assert.False(t, keys.has(res.Handle))

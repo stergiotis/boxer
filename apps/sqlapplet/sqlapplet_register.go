@@ -350,15 +350,24 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 			},
 		},
 	}
-	// Declared datasets add the one capability their open-time binding
-	// needs (ADR-0134 §SD4, update 2026-08-01); a dataset-less applet
-	// keeps the two-cap surface.
+	// Declared datasets add the two capabilities their binding needs
+	// (ADR-0134 §SD4, ADR-0188 §SD3): resolving an alias at open, and
+	// hearing the service's publish/retract events so the binding follows
+	// the dataset for the life of the window. A dataset-less applet keeps
+	// the two-cap surface.
 	if len(def.Datasets) > 0 {
-		m.Caps = append(m.Caps, app.SubjectFilter{
-			Pattern:   adhocdata.SubjectResolve,
-			Direction: app.CapDirectionPub,
-			Reason:    "resolve declared dataset aliases to their newest live handles at open (ADR-0134 §SD4)",
-		})
+		m.Caps = append(m.Caps,
+			app.SubjectFilter{
+				Pattern:   adhocdata.SubjectResolve,
+				Direction: app.CapDirectionPub,
+				Reason:    "resolve declared dataset aliases to their newest live handles at open (ADR-0134 §SD4)",
+			},
+			app.SubjectFilter{
+				Pattern:   adhocdata.SubjectEventAll,
+				Direction: app.CapDirectionSub,
+				Reason:    "follow declared datasets as they are published and withdrawn (ADR-0188 §SD3)",
+			},
+		)
 	}
 	return
 }

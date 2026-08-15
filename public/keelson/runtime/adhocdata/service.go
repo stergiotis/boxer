@@ -76,6 +76,9 @@ type Config struct {
 	Dir string
 	// Log is the service logger.
 	Log zerolog.Logger
+	// RetractGrace is how long a retracted dataset stays queryable after it
+	// stops resolving (ADR-0188 §SD3); zero means DefaultRetractGrace.
+	RetractGrace time.Duration
 }
 
 // dataset is the service's authoritative record of one live dataset.
@@ -109,7 +112,28 @@ type Service struct {
 	mu         sync.RWMutex
 	datasets   map[string]*dataset
 	totalBytes uint64
+
+	// retractGrace is how long a retracted dataset's provider, key and file
+	// stay in place after it has left resolution (ADR-0188 §SD3): a query
+	// that had already resolved the handle completes; nothing new can find
+	// it. Zero in Config means DefaultRetractGrace.
+	retractGrace time.Duration
+	// unloading holds the datasets that have left but not yet unloaded,
+	// with the timer that will unload them. FlushRetracts and Close run
+	// them early.
+	unloading map[string]*pendingUnload
 }
+
+// pendingUnload is a retracted dataset between its LEAVE and UNLOAD steps.
+type pendingUnload struct {
+	ds    *dataset
+	timer *time.Timer
+}
+
+// DefaultRetractGrace is the RetractGrace applied when Config leaves it
+// zero: one bus request timeout, the longest a consumer's already-issued
+// query can be waiting on the transport (ADR-0188 §SD3, its F1).
+const DefaultRetractGrace = inprocbus.DefaultRequestTimeout
 
 // PublishInput is the in-process shape of a publish (the bus wire mirrors
 // it). Handle empty mints a new dataset; a known Handle republishes it.
@@ -159,12 +183,18 @@ func NewService(cfg Config) (inst *Service, err error) {
 	if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
 		return nil, eh.Errorf("adhocdata: mkdir store dir %q: %w", dir, mkErr)
 	}
+	grace := cfg.RetractGrace
+	if grace <= 0 {
+		grace = DefaultRetractGrace
+	}
 	inst = &Service{
-		reg:      reg,
-		keys:     cfg.Keys,
-		dir:      dir,
-		log:      cfg.Log,
-		datasets: make(map[string]*dataset),
+		reg:          reg,
+		keys:         cfg.Keys,
+		dir:          dir,
+		log:          cfg.Log,
+		datasets:     make(map[string]*dataset),
+		retractGrace: grace,
+		unloading:    make(map[string]*pendingUnload),
 	}
 	if removed := inst.sweep(); removed > 0 {
 		inst.log.Info().Int("removed", removed).Str("dir", dir).Msg("adhocdata: swept leftover dataset files on start")
@@ -190,6 +220,7 @@ func (inst *Service) Close(context.Context) (err error) {
 		inst.unsub()
 		inst.unsub = nil
 	}
+	inst.FlushRetracts()
 	inst.mu.Lock()
 	handles := make([]string, 0, len(inst.datasets))
 	for h := range inst.datasets {
@@ -207,6 +238,35 @@ func (inst *Service) Close(context.Context) (err error) {
 	removed := inst.sweep()
 	inst.log.Info().Int("removed", removed).Msg("adhocdata: deleted dataset files on close")
 	return nil
+}
+
+// FlushRetracts runs the UNLOAD step now for every dataset that has left
+// but whose grace has not elapsed. Close calls it; tests call it to make
+// the two-phase withdrawal synchronous.
+func (inst *Service) FlushRetracts() {
+	inst.mu.Lock()
+	pend := make([]*pendingUnload, 0, len(inst.unloading))
+	for h, pu := range inst.unloading {
+		pu.timer.Stop()
+		pend = append(pend, pu)
+		delete(inst.unloading, h)
+	}
+	inst.mu.Unlock()
+	for _, pu := range pend {
+		inst.unloadDataset(pu.ds)
+	}
+}
+
+// unloadDataset is the UNLOAD step: deregister the key and the provider,
+// delete the file. It runs after RetractGrace, or at once from
+// FlushRetracts / Close.
+func (inst *Service) unloadDataset(ds *dataset) {
+	inst.keys.DeregisterDatasetKey(ds.handle)
+	inst.reg.Unregister(ds.handle)
+	if rmErr := os.Remove(ds.path); rmErr != nil && !os.IsNotExist(rmErr) {
+		inst.log.Warn().Err(rmErr).Str("handle", ds.handle).Msg("adhocdata: remove file on retract")
+	}
+	inst.emitAudit("unload", ds.handle, ds.alias, ds.revision)
 }
 
 // Publish validates and encrypts a dataset, mints or reuses a handle,
@@ -298,9 +358,16 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 		}
 		inst.totalBytes += nbytes
 	}
+	publisher := in.Publisher
+	if existing != nil {
+		publisher = existing.publisher
+	}
 	inst.mu.Unlock()
 
 	inst.emitAudit("publish", handle, in.Alias, revision)
+	inst.publishEvent(SubjectEventPublished, Event{
+		Op: EventOpPublished, Handle: handle, Alias: in.Alias, Publisher: publisher, Revision: revision,
+	})
 	return PublishResult{Handle: handle, Revision: revision, Rows: rows, Bytes: nbytes}, nil
 }
 
@@ -371,8 +438,14 @@ func (inst *Service) Resolve(alias string) (res ResolveResult, err error) {
 	return res, nil
 }
 
-// Retract forgets a dataset: deregister the key, unregister the provider,
-// delete the file, drop the record (ADR-0134 SD2).
+// Retract withdraws a dataset in two phases (ADR-0134 SD2 as revised by
+// ADR-0188 §SD3). LEAVE, now: the record leaves the live set, so the
+// catalog and Resolve stop naming it, the quota is released, and an
+// adhoc.event.retracted goes out to consumers. UNLOAD, after RetractGrace:
+// the key, the provider and the file go, so a query that had already
+// resolved the handle completes instead of failing mid-flight. A republish
+// onto a retracted handle is refused as unknown from the leave step on; a
+// producer that wants the data back publishes afresh.
 func (inst *Service) Retract(handle string) (err error) {
 	inst.mu.Lock()
 	ds := inst.datasets[handle]
@@ -382,14 +455,25 @@ func (inst *Service) Retract(handle string) (err error) {
 	}
 	delete(inst.datasets, handle)
 	inst.totalBytes -= ds.bytes
+	pu := &pendingUnload{ds: ds}
+	pu.timer = time.AfterFunc(inst.retractGrace, func() {
+		inst.mu.Lock()
+		if inst.unloading[handle] != pu {
+			// Flushed or closed in the meantime; that path unloaded it.
+			inst.mu.Unlock()
+			return
+		}
+		delete(inst.unloading, handle)
+		inst.mu.Unlock()
+		inst.unloadDataset(ds)
+	})
+	inst.unloading[handle] = pu
 	inst.mu.Unlock()
 
-	inst.keys.DeregisterDatasetKey(handle)
-	inst.reg.Unregister(handle)
-	if rmErr := os.Remove(ds.path); rmErr != nil && !os.IsNotExist(rmErr) {
-		inst.log.Warn().Err(rmErr).Str("handle", handle).Msg("adhocdata: remove file on retract")
-	}
 	inst.emitAudit("retract", handle, ds.alias, ds.revision)
+	inst.publishEvent(SubjectEventRetracted, Event{
+		Op: EventOpRetracted, Handle: handle, Alias: ds.alias, Publisher: ds.publisher, Revision: ds.revision,
+	})
 	return nil
 }
 
@@ -422,9 +506,13 @@ func (inst *Service) mintHandleLocked() (handle string, err error) {
 		if hErr != nil {
 			return "", hErr
 		}
-		if _, exists := inst.datasets[h]; !exists {
-			return h, nil
+		if _, exists := inst.datasets[h]; exists {
+			continue
 		}
+		if _, leaving := inst.unloading[h]; leaving {
+			continue
+		}
+		return h, nil
 	}
 	return "", eh.Errorf("adhocdata: could not mint a unique handle")
 }

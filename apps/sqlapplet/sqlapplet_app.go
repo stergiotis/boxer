@@ -3,7 +3,6 @@ package sqlapplet
 import (
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/apps/play"
-	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -77,11 +76,11 @@ type appletApp struct {
 	m   app.Manifest
 
 	inner *play.PlayApp
-	// rebind retries the declared dataset aliases that missed at open, and
-	// carries the notice the window shows meanwhile (sqlapplet_datasets.go).
-	// nil once every alias is bound — which for most applets is from the
-	// start, and for all of them eventually.
-	rebind *datasetRebinder
+	// binder keeps the declared dataset aliases bound to live datasets for
+	// the life of the window and carries the notice the window shows while
+	// one is missing (sqlapplet_datasets.go). nil for the dataset-less
+	// applet, which is most of them.
+	binder *datasetBinder
 }
 
 var _ app.AppI = (*appletApp)(nil)
@@ -94,12 +93,15 @@ func (inst *appletApp) Manifest() (m app.Manifest) {
 func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
 	// The minted per-applet id rides the log_comment stamp, so captured
 	// query runs attribute to the applet, not to a shared host (ADR-0132
-	// §SD9 over ADR-0115). Declared `datasets:` aliases resolve here first,
-	// at open, to the newest live dataset published under each (ADR-0134
-	// §SD4, update 2026-08-01); whatever misses is retried from Frame rather
-	// than stranding the window (sqlapplet_datasets.go). An embedder still
-	// overrides both by binding explicit handles instead (§SD7).
-	bindings, unresolved := resolveDatasetAliases(ctx.Bus(), ctx.Log(), inst.def.Datasets)
+	// §SD9 over ADR-0115). Declared `datasets:` aliases are kept bound to
+	// live datasets for the life of the window by the binder
+	// (sqlapplet_datasets.go): it subscribes to the service's events, then
+	// resolves each alias at open to the newest live dataset (ADR-0134
+	// §SD4); a miss stays pending, a later withdrawal unbinds (ADR-0188
+	// §SD3), and the window says what it is waiting for in either case. An
+	// embedder still overrides all of that by binding explicit handles
+	// instead (§SD7).
+	binder, bindings := newDatasetBinder(ctx.Bus(), ctx.Log(), inst.def.DatasetsHint, inst.def.Datasets)
 	inner, err := NewEmbedded(inst.def, EmbedConfig{
 		StampAppId: string(inst.m.Id),
 		RunId:      ctx.RunId(),
@@ -109,36 +111,13 @@ func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
 		Rules:      bookRepository,
 	})
 	if err != nil {
+		if binder != nil {
+			binder.close()
+		}
 		return
 	}
 	inst.inner = inner
-	// What missed at open is retried from Frame until it lands, and the
-	// window says what it is waiting for until then (sqlapplet_datasets.go).
-	inst.rebind = newDatasetRebinder(ctx.Bus(), ctx.Log(), inst.def.DatasetsHint, unresolved)
-	return
-}
-
-// resolveDatasetAliases maps each declared alias to the newest live
-// dataset published under it, and returns the ones that missed. A miss binds
-// nothing rather than failing the mount: the applet still opens, and the
-// caller retries the misses after open rather than stranding the window on
-// the wrong side of a capture-then-open ordering. Blocking bus round-trips in
-// Mount follow the adhocdemo precedent — Mount is not the frame loop; the
-// loop is empty for the common dataset-less applet.
-func resolveDatasetAliases(bus app.BusI, logger zerolog.Logger, aliases []string) (bindings map[string]string, unresolved []string) {
-	if len(aliases) == 0 || bus == nil {
-		return nil, nil
-	}
-	bindings = make(map[string]string, len(aliases))
-	for _, alias := range aliases {
-		res, err := adhocdata.ResolveRequest(bus, alias)
-		if err != nil {
-			logger.Warn().Err(err).Str("alias", alias).Msg("sqlapplet: dataset alias unresolved at open")
-			unresolved = append(unresolved, alias)
-			continue
-		}
-		bindings[alias] = res.Handle
-	}
+	inst.binder = binder
 	return
 }
 
@@ -147,8 +126,8 @@ func (inst *appletApp) Frame(ctx app.FrameContextI) (err error) {
 		err = eh.Errorf("sqlapplet %s: Frame called before Mount", inst.def.Slug)
 		return
 	}
-	if inst.rebind != nil {
-		bound, notice, noticeChanged, done := inst.rebind.sync(inst.inner.BindDataset)
+	if inst.binder != nil {
+		bound, notice, noticeChanged := inst.binder.sync(inst.inner)
 		if noticeChanged {
 			inst.inner.SetDatasetNotice(notice)
 		}
@@ -156,9 +135,6 @@ func (inst *appletApp) Frame(ctx app.FrameContextI) (err error) {
 			// AutoRun already fired against the unbound buffer at open, so
 			// the newly bound alias needs its own run to become visible.
 			inst.inner.RequestRun()
-		}
-		if done {
-			inst.rebind = nil
 		}
 	}
 	err = inst.inner.Render()
@@ -170,10 +146,13 @@ func (inst *appletApp) Unmount(ctx app.MountContextI) (err error) {
 		inst.inner.Close()
 	}
 	inst.inner = nil
-	// Dropping the rebinder starts no further attempts. One may still be in
-	// flight; it finishes against a closed window, parks a result nobody
-	// reads, and is collected with the struct.
-	inst.rebind = nil
+	// Releasing the binder drops its events subscription; a poll that is
+	// still in flight finishes against a closed window, parks a result
+	// nobody reads, and is collected with the struct.
+	if inst.binder != nil {
+		inst.binder.close()
+		inst.binder = nil
+	}
 	return
 }
 

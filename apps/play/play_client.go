@@ -599,6 +599,14 @@ func (inst *Client) bindDataset(alias, handle string) {
 	inst.mu.Unlock()
 }
 
+// unbindDataset drops one alias binding (ADR-0188 §SD3). Called from
+// PlayApp.UnbindDataset; a no-op for an unbound alias.
+func (inst *Client) unbindDataset(alias string) {
+	inst.mu.Lock()
+	delete(inst.datasetBindings, alias)
+	inst.mu.Unlock()
+}
+
 // rewriteDatasetAliases applies the bound ad-hoc dataset alias→handle
 // rewrite; a no-op when nothing is bound.
 func (inst *Client) rewriteDatasetAliases(sql string) string {

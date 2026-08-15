@@ -188,8 +188,13 @@ query over effects, not only over launches.
   read surface SD4 needs (`Inst.Subscriptions()`, `Inst.LiveClients()`)
   came with the bookkeeping. A singleton shown in two windows carries the
   mounting window's stop channel and client to the last release.
-- **M1 — Dataset withdrawal.** SD3: service phases, two event subjects,
-  `sqlapplet` and play consumers, applet manifest cap.
+- **M1 — Dataset withdrawal.** ✓ SD3: service phases, two event subjects,
+  `sqlapplet` and play consumers, applet manifest cap. Landed 2026-08-15:
+  `RetractGrace` defaults to one bus request timeout (F1 taken as
+  written; `FlushRetracts` makes it synchronous for `Close` and tests);
+  the applet binder subscribes before it resolves at open and keeps the
+  seconds-scale poll only as a fallback for a bus that cannot subscribe
+  to the events; ADR-0134 carries a dated Update.
 - **M2 — Live tables.** SD4: three providers, howto snippet.
 - **M3 — Interleaving lane.** The property test in Verification, and a
   dated Update on ADR-0026 pointing here for revocation and lifecycle.

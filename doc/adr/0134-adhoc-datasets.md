@@ -682,6 +682,44 @@ wait to a frame. It is the better mechanism and wants its own wire surface;
 the retry is bounded, self-terminating, and costs nothing once bound, so it
 is not worth blocking on.
 
+### 2026-08-15 — withdrawal is two-phase, and the service announces both directions (ADR-0188 §SD3)
+
+The deferral above landed as one half of a wire surface that also covers
+the direction this ADR never addressed: a dataset that *leaves*. Retract
+was one step inside the producer's `Unmount`, and a consumer bound to the
+handle learned of the loss on its next query, as an unknown table. Both are
+decided in [ADR-0188](./0188-app-instance-effect-tracking.md) §SD3 and
+built here:
+
+- **`Retract` is leave → notify → unload.** The dataset leaves resolution
+  at once — the catalog and `adhoc.resolve` stop naming it, its quota is
+  released, a republish onto the handle is refused as unknown — and an
+  `adhoc.event.retracted` goes out; the provider, key and file stay for
+  `RetractGrace` (default one bus request timeout) so a query that had
+  already resolved the handle completes, then unload. `Close` and
+  `FlushRetracts` run the unload early.
+- **`adhoc.event.published`** carries every publish and republish
+  (handle, alias, publisher, revision) — the push notification deferred
+  above. Consumers declare `Sub adhoc.event.>`; `adhocdata.SubscribeEvents`
+  decodes.
+- **The applet host follows the dataset for the life of the window.**
+  `sqlapplet`'s binder subscribes to the events *before* the open-time
+  resolve, so no publish can fall between the two; a `published` under a
+  pending alias binds without polling; a `retracted` of the bound handle
+  unbinds (`play.UnbindDataset`), returns the alias to pending, and the
+  notice over the empty panes says so; the next publish under the alias
+  binds again — a different producer's dataset if that is what appears,
+  which the handle tells apart. The stance of the entry above is kept: a
+  publish under a bound alias onto a different handle does not re-resolve;
+  a republish onto the bound handle notifies the revision. The poll remains
+  only as the fallback for a window whose bus cannot subscribe to the
+  events. Minted dataset-declaring applet manifests carry the extra
+  `Sub adhoc.event.>`.
+
+The withdrawal guard is bounded rather than exact — the service records
+publishers, not grantees — which ADR-0188 records as a deferral with its
+trigger.
+
 Internal:
 
 - [ADR-0094 — keelson introspection tables](./0094-keelson-introspection-tables.md)

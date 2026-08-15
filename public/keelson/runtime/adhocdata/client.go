@@ -83,3 +83,27 @@ func RetractRequest(bus app.BusI, handle string) (err error) {
 	}
 	return nil
 }
+
+// SubscribeEvents delivers every dataset transition the service publishes
+// (ADR-0188 §SD3) to handler, decoded. The caller's bus must carry
+// `Sub adhoc.event.>`; the returned unsubscribe releases the subscription
+// (the host releases it at the closing edge as well). Payloads that fail
+// to decode are dropped with a log line by the caller's own choosing —
+// handler is only ever invoked with a well-formed Event.
+func SubscribeEvents(bus app.BusI, handler func(ev Event)) (unsubscribe func(), err error) {
+	if bus == nil {
+		err = eh.Errorf("adhocdata: subscribe events: nil bus")
+		return
+	}
+	unsubscribe, err = bus.Subscribe(SubjectEventAll, func(msg *app.Msg) {
+		ev, dErr := DecodeEvent(msg.Subject, msg.Payload)
+		if dErr != nil {
+			return
+		}
+		handler(ev)
+	})
+	if err != nil {
+		err = eh.Errorf("adhocdata: subscribe events: %w", err)
+	}
+	return
+}

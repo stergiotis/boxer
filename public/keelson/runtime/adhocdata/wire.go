@@ -1,6 +1,8 @@
 package adhocdata
 
 import (
+	"strings"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -16,6 +18,112 @@ const (
 	SubjectResolve = "adhoc.resolve"
 	subjectAll     = "adhoc.>"
 )
+
+// Event subjects (fire-and-forget, CBOR — ADR-0188 §SD3). The service
+// publishes one event per dataset transition so consumers react in a frame
+// instead of polling: `published` on every publish and republish (the
+// push notification ADR-0134 deferred), `retracted` at the LEAVE step of a
+// two-phase withdrawal — the dataset has already stopped resolving when the
+// event goes out, and its provider stays queryable for RetractGrace so a
+// query that had already resolved the handle completes. Consumers declare
+// `Sub adhoc.event.>` (SubjectEventAll) to receive them.
+const (
+	SubjectEventPublished = "adhoc.event.published"
+	SubjectEventRetracted = "adhoc.event.retracted"
+	SubjectEventAll       = "adhoc.event.>"
+	subjectEventPrefix    = "adhoc.event."
+)
+
+// Event is one dataset transition as consumers see it (decoded from the
+// wire by DecodeEvent / SubscribeEvents).
+type Event struct {
+	// Op is EventPublished or EventRetracted.
+	Op EventOpE
+	// Handle is the dataset handle the transition concerns.
+	Handle string
+	// Alias is the stable alias the dataset was published under.
+	Alias string
+	// Publisher is the app that published it (bus sender or embedder stamp).
+	Publisher string
+	// Revision is the dataset revision after a publish, or the last live
+	// revision at a retract.
+	Revision uint64
+}
+
+// EventOpE names the dataset transition an Event carries.
+type EventOpE uint8
+
+const (
+	EventOpUnspecified EventOpE = 0
+	EventOpPublished   EventOpE = 1
+	EventOpRetracted   EventOpE = 2
+)
+
+func (inst EventOpE) String() (s string) {
+	switch inst {
+	case EventOpPublished:
+		s = "published"
+	case EventOpRetracted:
+		s = "retracted"
+	default:
+		s = "unspecified"
+	}
+	return
+}
+
+type wireEvent struct {
+	V         uint8  `json:"v"`
+	Op        string `json:"op"`
+	Handle    string `json:"handle"`
+	Alias     string `json:"alias,omitempty"`
+	Publisher string `json:"publisher,omitempty"`
+	Revision  uint64 `json:"revision,omitempty"`
+}
+
+// DecodeEvent decodes an adhoc.event.* payload. Consumers that subscribe
+// directly (rather than through SubscribeEvents) call it in their handler.
+func DecodeEvent(subject string, payload []byte) (ev Event, err error) {
+	w, err := buscodec.Decode[wireEvent](payload)
+	if err != nil {
+		err = eh.Errorf("adhocdata: decode event: %w", err)
+		return
+	}
+	switch subject {
+	case SubjectEventPublished:
+		ev.Op = EventOpPublished
+	case SubjectEventRetracted:
+		ev.Op = EventOpRetracted
+	default:
+		err = eh.Errorf("adhocdata: unknown event subject %q", subject)
+		return
+	}
+	ev.Handle = w.Handle
+	ev.Alias = w.Alias
+	ev.Publisher = w.Publisher
+	ev.Revision = w.Revision
+	return
+}
+
+// publishEvent emits one adhoc.event.* message; a service without a bus
+// (in-process Go callers only) emits nothing. Failures are logged, not
+// returned: an event is best-effort notification, the state transition it
+// reports has already happened.
+func (inst *Service) publishEvent(subject string, ev Event) {
+	if inst.busClient == nil {
+		return
+	}
+	payload, err := buscodec.Encode(wireEvent{
+		V: wireVersion, Op: ev.Op.String(), Handle: ev.Handle, Alias: ev.Alias,
+		Publisher: ev.Publisher, Revision: ev.Revision,
+	})
+	if err != nil {
+		inst.log.Warn().Err(err).Str("subject", subject).Msg("adhocdata: encode event")
+		return
+	}
+	if pubErr := inst.busClient.Publish(subject, payload); pubErr != nil {
+		inst.log.Warn().Err(pubErr).Str("subject", subject).Msg("adhocdata: publish event")
+	}
+}
 
 const wireVersion uint8 = 1
 
@@ -97,6 +205,11 @@ func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
 }
 
 func (inst *Service) handleRequest(msg *app.Msg) {
+	if strings.HasPrefix(msg.Subject, subjectEventPrefix) {
+		// The service's own events echo back through its adhoc.> request
+		// subscription; they are not requests.
+		return
+	}
 	if msg.Reply == "" {
 		inst.log.Warn().Str("subject", msg.Subject).Msg("adhocdata: request without reply inbox")
 		return

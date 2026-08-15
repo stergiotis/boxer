@@ -42,6 +42,23 @@ func (inst *PlayApp) BindDataset(alias, handle string) error {
 	return nil
 }
 
+// UnbindDataset drops the alias→handle binding BindDataset installed, so the
+// alias passes through unrewritten again (and a query naming it fails
+// readably as an unknown keelson table). The embedder calls it when the
+// dataset behind the alias is withdrawn — the ADR-0188 §SD3 `retracted`
+// event — and binds afresh when a new dataset appears under the alias.
+// Unbinding an alias that is not bound is a no-op.
+func (inst *PlayApp) UnbindDataset(alias string) error {
+	if !validDatasetIdentifier(alias) {
+		return eh.Errorf("play: invalid dataset alias %q", alias)
+	}
+	if inst.client == nil {
+		return eh.Errorf("play: UnbindDataset needs a client")
+	}
+	inst.client.unbindDataset(alias)
+	return nil
+}
+
 // NotifyDatasetRevision signals that a bound dataset was republished at a
 // new revision. Under Live main it triggers the ordinary auto-run path so
 // the applet re-queries the fresh data; an explicit Run always works
