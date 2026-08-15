@@ -310,6 +310,27 @@ See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-pol
 
 ## Updates
 
+### 2026-08-14 — the single-value read reports its mismatch
+
+The emitted decode read a `,unit` field through
+`GetAttrValueSingleOrDefault`, on the reasoning recorded above: the
+writer-side pairing guarantee (always `BeginAttributeSingle`) means the
+lenient accessor never silently zeros *for codec-emitted data*. That
+holds, and it is the wrong scope — under a shared facts table the wire a
+codec reads is not only its own writer's, and a foreign multi-element
+value under a unit definition decoded present with the field zero-filled,
+which nothing downstream could tell from a legitimate zero.
+
+The emitted read interface therefore declares
+`GetAttrValueSingle(entityIdx, attrIdx) (T, error)` and the decode
+refuses the mismatch, naming the row, the section, the membership and the
+field. The reflect codec moved with it — both front-ends still pick the
+accessor through `goplan.SingleValueReadAccessor` — and the
+ClickHouse-side conformance check gained the matching value-count term.
+The lenient accessor stays on the read-access surface for callers that
+want it. See
+[ADR-0183 D5](./0183-leeway-component-consumer-simplification.md).
+
 ### 2026-05-18 — M1-M6: byte-appender path (retired)
 
 The original generator emitted RowBinary bytes directly via the

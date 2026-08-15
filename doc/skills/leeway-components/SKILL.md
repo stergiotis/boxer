@@ -149,6 +149,12 @@ Corollaries of the per-plan regime:
   readback projection-surplus test), so a projection is only as
   trustworthy as the Filter beside it. (Before D4, scalars errored while
   containers silently concatenated; that split is gone.)
+- **Value count is uniform too** (ADR-0183 D5): a `,unit` field promises
+  its attribute carries exactly one value, and a longer one is refused on
+  the same three paths — it used to decode present with the field
+  zero-filled, which nothing could tell from a legitimate zero. Widening
+  `unit → []T` stays safe (a one-element attribute reads as a
+  one-element slice); it is the narrowing direction that is loud.
 - `Detect[T](readers, i)` returns `Absent | Approximate | Exact` without
   decoding values; `ReadComponent[T]` is `Detect` + projection;
   `ArchetypePresence` folds per-kind verdicts — an **archetype** is the set

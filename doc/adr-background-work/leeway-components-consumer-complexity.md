@@ -30,6 +30,11 @@ status: draft
 > narrowing silently zero-fills (a new finding) — are folded into §4 and
 > §5, and the components skill's arity sentence was corrected.
 >
+> Updated 2026-08-14: the value-count finding is **closed** — ADR-0183 M0
+> made a unit-shaped read refuse a multi-element value on all three read
+> paths. R7's row and §5's statement of it are updated; the reading of
+> what it cost is in ADR-0183 D5.
+>
 > Later the same day, a seam survey grounded §6's costings: API-1 is
 > ~150 LOC against exactly two production `MapLookup` sites (with a
 > naming-style hazard at the snapshot seam); API-3 as drafted missed
@@ -143,8 +148,9 @@ symptoms while the source keeps generating new ones.
    satisfied the narrow contract satisfies the wide one. Under B2 there
    is no flag-day, so wide readers and narrow writers coexist
    indefinitely; narrowing is the breaking direction — D4 makes
-   attribute-count narrowing loud, but the value-count rung was found to
-   zero-fill silently (R7's pinned finding). The data-oriented-design rule of thumb **"where
+   attribute-count narrowing loud, and the value-count rung — found to
+   zero-fill silently (R7's pinned finding) — is loud too since ADR-0183
+   M0. The data-oriented-design rule of thumb **"where
    there is one, there are many"** (Mike Acton's CppCon 2014 principles,
    with the companion advice to look on the time axis) is this
    consequence's cultural form: today's arity is a snapshot on the time
@@ -401,7 +407,7 @@ plain labels (**contained**, **framing**). Remedy classes are defined in
 | R4 | Arity behaviour history: pre-D4 split (measured) vs post-D4 uniform (decided). Projection-alone **pinned 2026-08-12**: it takes the first match; the Validator/Filter is the CH enforcement point (readback projection-surplus test; the skill's sentence corrected) | asymmetry (pinned) | the readback test; ADR-0146 Context (still a stale snapshot) | D (mark the Context table historical via dated update) — the X item landed |
 | R5 | A fat DTO spanning several components can only answer "is all of this here" — component DTOs must claim only their own slots for `Detect` to work | surprise | ADR-0146 update; `ecsdemo` | D + X (already half-covered by ecsdemo; consolidate). Benchmark note: B2's domain-owned narrow DTOs make the fat DTO an anti-pattern the mesh discourages structurally |
 | R6 | `string` fields are `CopyNone` — they alias the Arrow buffer; a DTO outliving released readers is a lifetime footgun that type-checks fine | **silent** (use-after-release) | scattered; where stated durably is **to be confirmed** during unification | X (a test demonstrating retain-record discipline) + D |
-| R7 | Arity widening over live data (fact 2's third consequence), **pinned 2026-08-12** (`arity_evolution_test.go`): required → optional and unit → container both read narrow-written rows with their values, wide readers and narrow writers coexist in one table, and widening is admits-superset at the contract layer. The pin also surfaced a **new silent defect**: the reverse value-count direction — a container-written multi-element value under a unit definition — neither errors nor truncates; it decodes present with the field **zero-filled** (attribute-count narrowing stays loud, D4). The R3 disjunction interaction is pinned for the Option-widened kind in the readback suite | **silent** (narrowing rung, pinned as found) | `arity_evolution_test.go`; the readback projection-surplus test | API (unit read refuses a multi-element value — D4's spirit at the value level; small fix, own decision); D (state the monotone-evolution invariant once); the tuple rung of the corpus remains open |
+| R7 | Arity widening over live data (fact 2's third consequence), **pinned 2026-08-12** (`arity_evolution_test.go`): required → optional and unit → container both read narrow-written rows with their values, wide readers and narrow writers coexist in one table, and widening is admits-superset at the contract layer. The pin also surfaced a **new silent defect**: the reverse value-count direction — a container-written multi-element value under a unit definition — neither errored nor truncated; it decoded present with the field **zero-filled** (attribute-count narrowing was already loud, D4). **Closed 2026-08-14** by ADR-0183 M0: the refusal landed on all three read paths, `arity_evolution_test.go`'s assertions moved to it, and the two Go front-ends are pinned to refuse the same wire. The R3 disjunction interaction is pinned for the Option-widened kind in the readback suite | **resolved** (narrowing rung loud on every path) | `arity_evolution_test.go`; `arity_parity_test.go`; the readback projection-surplus and unit-refusal tests | D (state the monotone-evolution invariant once); the tuple rung of the corpus remains open |
 
 ### 5.4 Front-end and policy asymmetries (S2/S3 fringe)
 

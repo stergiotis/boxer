@@ -321,12 +321,32 @@ proven lane.
   definition must keep reading rows written under the narrower one; wide
   readers and narrow writers coexist indefinitely (B2 has no flag-day);
   narrowing is the breaking direction and must be loud.
-- The pinned silent defect is fixed: a **unit-shaped read refuses a
-  multi-element value** with an attributed error, on every read path —
-  reflect decode, generated codec, and the CH readback validator —
+- **Built.** The pinned silent defect is fixed: a **unit-shaped read
+  refuses a multi-element value** with an attributed error, on every read
+  path — reflect decode, generated codec, and the CH readback validator —
   extending ADR-0146 D4's attribute-count discipline to the value-count
-  rung. The as-found assertions in `arity_evolution_test.go` move to the
-  new behaviour.
+  rung. The as-found assertions in `arity_evolution_test.go` moved to the
+  new behaviour, and the two Go front-ends refuse the same wire in
+  `arity_parity_test.go`, as they already did for the attribute-count rung.
+  Both Go paths read through one accessor choice
+  (`goplan.SingleValueReadAccessor`), which now names
+  `GetAttrValueSingle` and its trailing error; the lenient
+  `GetAttrValueSingleOrDefault` stays on the read-access surface for a
+  caller that has decided it wants the zero, and no codec reads through it.
+- The SQL half cost more than the Go half, for a reason worth recording:
+  the validator term lands inside the Filter a generated `Scan` embeds,
+  which must run where the leeway helper pack is not installed (ADR-0100
+  S2). Locating the *list* needs `LW_LIST_BY_TAG_EQUAL`; counting its
+  elements does not, so `lwextract.ValueCount` finds the owning attribute
+  with built-ins and reads the length lane there. That restates what
+  `LW_RAGGED_PARENT_IDS` does, so a clickhouse-local test runs both forms
+  over the same fixtures rather than trusting the restatement.
+- The term is per unit slot, so a `,unit`-heavy DTO's baked Filter grows
+  noticeably — the sysmetrics PSI kind's is several times its former
+  length. The repeated `arrayCumSum` is over the same lane per section and
+  should fold as a common subexpression, but that is an expectation, not a
+  measurement; if a Scan on a wide kind ever reads slow, this is the first
+  thing to look at.
 - Sanctioned widening ladder today: required → optional and
   unit → container (both pinned). Shape crossings (scalar → tuple) are
   unpinned and unsanctioned until the corpus's tuple rung pins them.
@@ -402,8 +422,11 @@ proven lane.
 
 ### Milestones
 
-- **M0 — value-arity refusal on every read path.** D5's fix; the pinned
-  assertions move.
+- **M0 — value-arity refusal on every read path.** ✓ D5's fix on all three
+  paths; the pinned assertions moved, and the parity and clickhouse-local
+  tests came with it. 44 generated artefacts regenerated — the read
+  interface's single-value accessor changed shape, and the stores that bake
+  a Filter carry the new term.
 - **M1 — id-source hardening.** D0: claim authority, explicit ordinals
   (kept at today's values), the vocabulary-tag re-key — one flag-day,
   now including a regeneration pass for the stores D2 already baked —
@@ -431,12 +454,12 @@ M5 and M6 are independent of each other and may swap.
 | `stopa/registry` natural-key API (renamed `namemint/registry`) | explicit-ordinal registration; `VcsManagedContract` refuses implicit minting (D0) | four vocabulary packages rewrite registrations; ~20 importers update the path; assignment goldens |
 | `identity/identifier` tag space | named runtime-mint tag reserved; `VcsManagedContract` refuses it (D8) | reservation pin test; D3 views partition by tag |
 | `identity/tagmint` (new) | claiming API; token required by the `namemint` registries; parity check and per-package `TagValueRegistry` instances retired (D0) | four vocabulary packages re-key to width-32 claims; facts data regenerated/migrated |
-| `marshallreflect` exported API | constructor + minimal resolver interface added (D1); unit-read refusal (D5) | `doc.go` correction; arity tests |
+| `marshallreflect` exported API | constructor + minimal resolver interface added (D1); unit-read refusal ✓ (D5) | `doc.go` correction; arity tests |
 | vdd vocabulary package | claim kind + publication (D3) | reconciliation views |
 | `runtime/factsschema/storegen` (new) ✓ | registry → id-snapshot helper and the facts-bound store generator (D1, D2); no existing surface changed — `FactsWrapper` and the `marshallgen` wrapper contract are untouched | gen tests in the consuming package; naming round-trip pin |
 | `recordstore/gen` emitted builder | Add verbs buffer; double-Add and Raw-mixing refuse loudly (D4) | 6 stores / 48 `*.out.go` regenerate; `sharedsection` tests |
 | `dml/runtime` | deferred-section buffer added; second-visit error gains section name (D4) | facts encoders (`chstore`, `queryrunfacts`, `capmapfacts`); DML regeneration |
-| generated codec read path + CH readback validator | unit-read refusal (D5) | readback suite |
+| generated codec read path + CH readback validator ✓ | unit-read refusal (D5); the single-value read interface gains its error, and the validator a built-ins-only value-count term | readback suite; 44 generated artefacts |
 | front-end parity contract | flush order becomes first-seen section order (D4) | parity corpus, updated once |
 | facts vocabulary (registry members) | one new claim kind (D3) | factsschema regen lane |
 | `membershiprole` API | classifier rename with deprecated alias (D6) | call sites, mechanical |
