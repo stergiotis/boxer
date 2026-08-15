@@ -190,8 +190,11 @@ was free for the `Scan` verb, which only ever reads one table, and it is a
 constraint the moment the strings are embedded in arbitrary SQL: in a join,
 those names are ambiguous.
 
-v1 therefore supports the scope whose `FROM` names the bound table once and
-unaliased, and refuses the rest with a message that says so. Qualifying the
+v1 therefore supports the scope whose `FROM` names exactly one table, and that
+table the bound one; everything else is refused with a message that says so.
+(M2 refined this: the check is on table *count*, not on the alias. A single
+aliased source resolves unqualified names unambiguously — it is the second
+source that creates the problem.) Qualifying the
 columns means the artefacts can no longer be opaque strings — the generator
 would emit them structured, or emit a qualifier hole — which is a change to
 ADR-0066's output shape and is **deferred with the trigger: the first query
@@ -371,7 +374,28 @@ Proposed — awaiting review by the code owner.
   objectionable, or a kind emitting a degenerate artefact.** Dropping
   Presence and Validator from the Set instead would save the same 26 KB and
   is the cheaper answer if only the two named artefacts are ever wanted.
-- **M2 — `LwComponentExpand`: the functions, injection, refusals (SD3–SD5).**
+- **M2 — `LwComponentExpand`: the functions, injection, refusals (SD3–SD5).** ✓
+  Landed in
+  [`leeway/constructsql`](../../public/semistructured/leeway/constructsql)
+  rather than a package of its own: that is where the rest of the `LW_`
+  authoring family and the `Function` type the vocabulary panel reads already
+  live, and one prefix reading from one package is the point.
+
+  Two refinements to §SD5/§SD6 as written, both from building it:
+
+  - **An explicit `LW_COMPONENT_FILTER` discharges the injection, but only
+    from `WHERE`.** The same call in a projection list computes a boolean per
+    row and restricts nothing, so counting it as satisfying the kind would
+    hand back precisely the first-match read SD4 exists to prevent. The pass
+    checks which clause the call sits in.
+  - **The join refusal is stated as "exactly one table in scope"** rather than
+    §SD6's "once and unaliased". An alias on a single source is harmless —
+    unqualified names still resolve — while a second source is the ambiguity,
+    so the check is on table count. A CTE, subquery or table-function source
+    is refused separately and by name.
+
+  The wiring — `passreg` registration and play's registry — is M3's, so the
+  pass exists and is tested but nothing runs it yet.
 - **M3 — play wires the registry and the pass (SD7, SD8).**
   The Vocabulary tab marks the family's server dependencies.
 - **M4 — the cross-oracle test against `Scan<Kind>`,** and the sysmetrics
