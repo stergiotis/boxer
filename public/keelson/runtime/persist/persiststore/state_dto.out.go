@@ -10,12 +10,12 @@ import (
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
 
-// --- Package-local membership ids (schema-agnostic target). ---
+// --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindPersistAppId uint64 = 1
-	kindPersistKey   uint64 = 2
-	kindPersistValue uint64 = 3
+	kindRuntimeApp          uint64 = 9223372049739677701
+	kindRuntimePersistKey   uint64 = 9223372049739677712
+	kindRuntimePersistValue uint64 = 9223372049739677769
 )
 
 // stateStateAppIdAttrI is the InAttr-side view of the stateAppId section. P-variants only —
@@ -105,19 +105,19 @@ func stateAddSections[
 	// --- stateAppId. ---
 	stateAppIdSec := dml.GetSectionStateAppId()
 	stateAppIdSecAttr_AppId := stateAppIdSec.BeginAttribute(row.AppId)
-	stateAppIdSecAttr_AppId.AddMembershipLowCardRefP(kindPersistAppId)
+	stateAppIdSecAttr_AppId.AddMembershipLowCardRefP(kindRuntimeApp)
 	stateAppIdSecAttr_AppId.EndAttributeP()
 	stateAppIdSec.EndSection()
 	// --- stateKey. ---
 	stateKeySec := dml.GetSectionStateKey()
 	stateKeySecAttr_Key := stateKeySec.BeginAttribute(row.Key)
-	stateKeySecAttr_Key.AddMembershipLowCardRefP(kindPersistKey)
+	stateKeySecAttr_Key.AddMembershipLowCardRefP(kindRuntimePersistKey)
 	stateKeySecAttr_Key.EndAttributeP()
 	stateKeySec.EndSection()
 	// --- stateBlob. ---
 	stateBlobSec := dml.GetSectionStateBlob()
 	stateBlobSecAttr_Value := stateBlobSec.BeginAttribute(row.Value)
-	stateBlobSecAttr_Value.AddMembershipLowCardRefP(kindPersistValue)
+	stateBlobSecAttr_Value.AddMembershipLowCardRefP(kindRuntimePersistValue)
 	stateBlobSecAttr_Value.EndAttributeP()
 	stateBlobSec.EndSection()
 	return
@@ -188,7 +188,7 @@ func stateReadRow[
 	for attrJ := int64(0); attrJ < nstateAppId; attrJ++ {
 		for membID := range stateAppIdMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindPersistAppId:
+			case kindRuntimeApp:
 				if stateAppIdAppIdLastAttr != attrJ+1 {
 					stateAppIdAppIdLastAttr = attrJ + 1
 					stateAppIdAppIdCount++
@@ -199,7 +199,7 @@ func stateReadRow[
 		}
 	}
 	if stateAppIdAppIdCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stateAppId").Str("membership", "persistAppId").Int("got", stateAppIdAppIdCount).Errorf("slot stateAppId@persistAppId (field AppId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stateAppIdAppIdCount)
+		err = eb.Build().Int("row", i).Str("section", "stateAppId").Str("membership", "runtimeApp").Int("got", stateAppIdAppIdCount).Errorf("slot stateAppId@runtimeApp (field AppId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stateAppIdAppIdCount)
 		return
 	}
 	if stateAppIdAppIdCount == 1 {
@@ -214,7 +214,7 @@ func stateReadRow[
 	for attrJ := int64(0); attrJ < nstateKey; attrJ++ {
 		for membID := range stateKeyMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindPersistKey:
+			case kindRuntimePersistKey:
 				if stateKeyKeyLastAttr != attrJ+1 {
 					stateKeyKeyLastAttr = attrJ + 1
 					stateKeyKeyCount++
@@ -225,7 +225,7 @@ func stateReadRow[
 		}
 	}
 	if stateKeyKeyCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stateKey").Str("membership", "persistKey").Int("got", stateKeyKeyCount).Errorf("slot stateKey@persistKey (field Key) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stateKeyKeyCount)
+		err = eb.Build().Int("row", i).Str("section", "stateKey").Str("membership", "runtimePersistKey").Int("got", stateKeyKeyCount).Errorf("slot stateKey@runtimePersistKey (field Key) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stateKeyKeyCount)
 		return
 	}
 	if stateKeyKeyCount == 1 {
@@ -240,7 +240,7 @@ func stateReadRow[
 	for attrJ := int64(0); attrJ < nstateBlob; attrJ++ {
 		for membID := range stateBlobMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindPersistValue:
+			case kindRuntimePersistValue:
 				if stateBlobValueLastAttr != attrJ+1 {
 					stateBlobValueLastAttr = attrJ + 1
 					stateBlobValueCount++
@@ -253,7 +253,7 @@ func stateReadRow[
 		}
 	}
 	if stateBlobValueCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stateBlob").Str("membership", "persistValue").Int("got", stateBlobValueCount).Errorf("slot stateBlob@persistValue (field Value) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stateBlobValueCount)
+		err = eb.Build().Int("row", i).Str("section", "stateBlob").Str("membership", "runtimePersistValue").Int("got", stateBlobValueCount).Errorf("slot stateBlob@runtimePersistValue (field Value) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stateBlobValueCount)
 		return
 	}
 	if stateBlobValueCount == 1 {

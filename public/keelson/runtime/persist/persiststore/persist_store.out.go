@@ -59,7 +59,7 @@ func persiststateKeyLiteral(k string) string { return marshalling.EscapeString(k
 // carried in the membership columns. Verbatim-channel memberships embed
 // their literal name instead and are absent here.
 //
-// The ids are declaration-order (1..N per component) and are baked into
+// The ids are caller-assigned (a registry-stable snapshot), baked into
 // both the component codecs and this store's Scan filters. Nothing on the
 // wire records which assignment wrote a row, so rows written under a
 // different one decode as ABSENT rather than failing — VerifySchema
@@ -67,9 +67,9 @@ func persiststateKeyLiteral(k string) string { return marshalling.EscapeString(k
 // regenerated store at existing rows.
 var PersistMembershipIds = map[string]map[string]uint64{
 	"State": {
-		"persistAppId": 1,
-		"persistKey":   2,
-		"persistValue": 3,
+		"runtimeApp":          9223372049739677701,
+		"runtimePersistKey":   9223372049739677712,
+		"runtimePersistValue": 9223372049739677769,
 	},
 }
 
@@ -763,7 +763,7 @@ func (inst *persiststateFetcher) FetchItemSinglePartition(ctx context.Context, p
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	persiststateScanStateFilter = "has(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 1) AND has(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 2) AND has(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 3) AND countEqual(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 1) = 1 AND countEqual(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 2) = 1 AND countEqual(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 3) = 1"
+	persiststateScanStateFilter = "has(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) AND has(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) AND has(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) AND countEqual(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) = 1 AND countEqual(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) = 1"
 )
 
 // ScanState iterates the entities whose rows carry a conforming State

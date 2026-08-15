@@ -78,11 +78,13 @@ var (
 	MembAuditRequestSizeB   = NkRegistry.MustBegin("runtimeAuditRequestSizeB", 14).End()
 	MembAuditResponseSizeB  = NkRegistry.MustBegin("runtimeAuditResponseSizeB", 15).End()
 
-	// Persist fields. On the legacy boxer.facts state rows PersistKey tagged
+	// Persist fields. On the generated persist store (`boxer.persiststate`,
+	// ADR-0105 D3a) MembPersistKey tags the key string and MembPersistValue
+	// (below, ordinal 73) the value bytes; app identity there is
+	// MembRuntimeApp. On the legacy boxer.facts state rows PersistKey tagged
 	// both the symbol (key) and blob (value) attributes, and PersistTombstone
 	// on the bool section marked a key as deleted — the tombstone term is
-	// still what DeleteWorkingset and DeleteColumnWidth write. App persist
-	// state itself now lives on the generated persist store (ADR-0105 D3a).
+	// still what DeleteWorkingset and DeleteColumnWidth write.
 	MembPersistKey       = NkRegistry.MustBegin("runtimePersistKey", 16).End()
 	MembPersistTombstone = NkRegistry.MustBegin("runtimePersistTombstone", 17).End()
 
@@ -248,6 +250,14 @@ var (
 	MembColWidthColumnKey = NkRegistry.MustBegin("runtimeColWidthColumnKey", 70).End()
 	MembColWidthPoints    = NkRegistry.MustBegin("runtimeColWidthPoints", 71).End()
 	MembColWidthFontSize  = NkRegistry.MustBegin("runtimeColWidthFontSize", 72).End()
+
+	// Persist value (ADR-0105, Update 2026-08-15) — the state bytes on the
+	// generated persist store's blob section. Minted when that store moved
+	// from declaration-order ids to this vocabulary, so a store field
+	// reorder can no longer renumber what is on disk; a fresh ordinal
+	// rather than a second use of MembPersistKey so the value reads under
+	// its own name from SQL.
+	MembPersistValue = NkRegistry.MustBegin("runtimePersistValue", 73).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -274,4 +284,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindWorkingset, MembWorkingsetName,
 	MembKindColumnWidth, MembColWidthTier, MembColWidthScope,
 	MembColWidthColumnKey, MembColWidthPoints, MembColWidthFontSize,
+	MembPersistValue,
 }

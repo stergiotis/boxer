@@ -276,8 +276,9 @@ implementation start (see Updates). D1 (`data/storeexec`) and D2
 (`runtime/factsschema/storegen`) are built. D3a is built and wired — the
 persist backend runs on the generated `boxer.persiststate` store, and the
 2026-07-31 deviation is discharged; since 2026-08-15 the facts-bound
-predecessor and the `FactsStoreI` state verbs are gone. D3b's generator
-precondition is met; the facts-bound grants/audit store itself is not built.
+predecessor and the `FactsStoreI` state verbs are gone, and the store's
+memberships are the runtime vocabulary's. D3b's generator precondition is
+met; the facts-bound grants/audit store itself is not built.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
@@ -439,9 +440,9 @@ callers have, so the removal is now available — but it touches `chstore`,
 the in-memory store and that one integration test, and D5's opportunistic
 posture argues against scheduling the sweep for its own sake.
 
-### 2026-08-15 — the state verbs leave `FactsStoreI`; a transport defect in D3a fixed
+### 2026-08-15 — the state verbs leave `FactsStoreI`; the store adopts the vocabulary; a transport defect in D3a fixed
 
-Two things landed together, closing what the 2026-08-14 entry left open
+Three things landed together, closing what the 2026-08-14 entry left open
 and one thing it did not know.
 
 **The persist store never provisioned itself in production.** `EnsureTable`
@@ -472,6 +473,21 @@ the in-memory state trail, `chstore.composeLatestStateSql` and its callers.
 `MembKindState` / `MembPersistKey` / `MembPersistTombstone` stay registered —
 rows carry them, and the tombstone term is still what `DeleteWorkingset` and
 `DeleteColumnWidth` write.
+
+**`persiststore` bakes registry ids, not declaration-order ids.** The 08-14
+store used `recordstore/gen`'s default numbering (1..3 by field order): the
+generated file itself warns that a differently-numbered writer decodes as
+*absent*, so inserting a field before `Value` would have silently orphaned
+every row on disk — the failure ADR-0183 D0 exists to prevent. The store now
+generates under `marshallgen.FixedIdsWrapper` over
+`storegen.MembershipIds(vocab.NkRegistry)`, exactly as a facts-bound store
+does: `AppId` is `runtimeApp`, `Key` is `runtimePersistKey`, and `Value` is
+the newly minted `runtimePersistValue` (ordinal 73; a fresh term rather
+than a second use of `runtimePersistKey`, so the value reads under its own
+name from SQL). A test pins the baked map to the registry. One consequence
+worth stating: both keelson tables now carry registry ids, so whatever
+publishes the runtime vocabulary — `keelson('memberships')` carries only vdd
+today — names a `boxer.persiststate` column the way it names a facts one.
 
 ## References
 
