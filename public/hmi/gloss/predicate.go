@@ -10,7 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
-// A Predicate is one condition on a column's Spec, carrying the text it
+// Predicate is one condition on a column's Spec, carrying the text it
 // reads as — `section=sensor`, `name~^temp`, `sem=secret` — so a rule
 // declared in code shows the same way in the Glosses tab. Predicates are
 // values: build them with the constructors below and combine them with

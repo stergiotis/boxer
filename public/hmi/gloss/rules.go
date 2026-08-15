@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// A Rule binds a gloss to every column whose spec (ADR-0186 §SD3) its
+// Rule binds a gloss to every column whose spec (ADR-0186 §SD3) its
 // condition holds for. Rules come from three places, in this precedence:
 // in-band directives, in buffer order; a Repository's rule sets, in
 // registration and declaration order; then the glosses' own affinities, in

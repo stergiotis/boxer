@@ -4,7 +4,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// A Repository is the standing rules a host hands play (ADR-0186, its
+// Repository is the standing rules a host hands play (ADR-0186, its
 // 2026-08-15 Update on rules as code): rule sets over one catalog, in
 // registration order, then the catalog's own affinities. It is a value a
 // host builds at wiring time and injects — PlayApp takes one in its

@@ -4,10 +4,10 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// A RuleSet is an ordered, named list of rules declared in code — the
+// RuleSet is an ordered, named list of rules declared in code — the
 // standing rules of a deployment, checked in beside the glosses they bind
 // and registered on a Repository (ADR-0186, its 2026-08-15 Update on
-// rules as code). It is built with a chain that reads as the rules do:
+// rules as code). It is built with a chain that reads as the rules do.
 //
 //	var sensors = gloss.Rules("acme-sensors").
 //		Rule("kelvin readings").
@@ -58,7 +58,7 @@ func (inst *RuleSet) Rule(name string) *RuleBuilder {
 	return b
 }
 
-// A RuleBuilder is one rule between Rule and Show.
+// RuleBuilder is one rule between Rule and Show.
 type RuleBuilder struct {
 	set  *RuleSet
 	decl ruleDecl
@@ -89,7 +89,7 @@ func (inst *RuleBuilder) Show(mediaType string, params ...Param) *RuleSet {
 	return inst.set
 }
 
-// A Param is one media-type parameter of a Show — `unit=K`.
+// Param is one media-type parameter of a Show — `unit=K`.
 type Param struct {
 	Name  string
 	Value string
