@@ -27,6 +27,7 @@ import (
 	introspectproviders "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	introspectprovidersgui "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -84,6 +85,11 @@ type Deps struct {
 	// the table names do not depend on the build lane. Beware the
 	// typed-nil interface trap: assign only a non-nil sampler.
 	Coverage introspectproviders.CoverageSourceI
+	// Tasks is the running task supervisor, backing keelson.tasks
+	// (ADR-0188 §SD4). nil is allowed and leaves that table empty rather
+	// than absent; keelson.subscriptions and keelson.client_caps read Bus.
+	// Same typed-nil trap: assign only a supervisor that started.
+	Tasks *supervisor.Supervisor
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -126,6 +132,12 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// with empty tables.
 	if e := introspectproviders.RegisterCoverage(reg, deps.Coverage); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: coverage provider registration failed")
+	}
+	// ADR-0188 §SD4: the live effect graph — subscriptions and caps per
+	// bus client, tasks per instance. Registered unconditionally; a nil bus
+	// or supervisor answers with empty tables.
+	if e := introspectproviders.RegisterEffects(reg, deps.Bus, deps.Tasks); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: effects provider registration failed")
 	}
 	// ADR-0126 §SD5: a process-lifetime metric-plane consumer feeds the
 	// observed-topology tables (keelson.procs, keelson.sockets). imztop's

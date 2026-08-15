@@ -417,6 +417,26 @@ Three things about it are worth recording as pattern rather than detail:
 `keelson.tables` / `keelson.columns` picked the new table up with no work, as
 §SD1's registry enumeration intends.
 
+## Update (2026-08-15) — the live effect graph: `keelson.subscriptions`, `keelson.client_caps`, `keelson.tasks`
+
+[ADR-0188](./0188-app-instance-effect-tracking.md) §SD4: what an app instance
+has actually *acquired* — as opposed to what it declares (`keelson.apps`) or
+shows (`keelson.windows`) — read from the bookkeeping the runtime keeps anyway.
+
+  | table | source | freshness |
+  |-------|--------|-----------|
+  | `keelson.subscriptions` | `inprocbus.Inst.Subscriptions()` — one row per live subscription, reply inboxes flagged `is_inbox` | Live |
+  | `keelson.client_caps` | `inprocbus.Inst.LiveClients()` × `Client.Caps()` — manifest caps, the host-injected persist cap, and every runtime grant; `declared` compares against the app's registration | Live |
+  | `keelson.tasks` | `supervisor.Supervisor.InflightSnapshot()` — one row per task created and not yet terminal | Live |
+
+All three carry the instance key (`instance_key` / `owner_instance_key`),
+which joins `keelson.windows.key`, so "which window holds what" is a query.
+`RegisterEffects(reg, bus, tasks)` follows the workingsets shape: registered
+unconditionally through its own function, and a nil bus or supervisor yields
+empty tables rather than absent ones. The row set is exactly what the closing
+edge releases (ADR-0188 §SD1), which is what makes the tables a check on it:
+a window that has been reaped leaves no row in any of them.
+
 ## References
 
 - [ADR-0009 — environment variable registry](./0009-environment-variable-registry.md)

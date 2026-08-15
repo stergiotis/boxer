@@ -148,6 +148,50 @@ WHERE edge_kind IN ('app-pub', 'app-sub')
 Edge patterns are the manifests' filter strings verbatim; overlap
 between a pub pattern and a sub pattern is not computed here.
 
+## What does an open window hold right now?
+
+The declared graph above says what an app *may* do. Three live tables say
+what each running instance has actually acquired
+([ADR-0188 §SD4](../adr/0188-app-instance-effect-tracking.md)):
+`keelson.subscriptions` (bus subscriptions), `keelson.client_caps` (the
+permission set of each live bus client — manifest caps plus runtime
+grants), and `keelson.tasks` (in-flight tasks). All three carry the
+window's instance key, so they join `keelson.windows`. The rows are exactly
+what the host releases when the window closes, which makes the tables the
+check on that release: a reaped window leaves no row.
+
+Everything one window holds:
+
+```sql
+WITH w AS (SELECT key, app_id, title FROM keelson('windows'))
+SELECT * FROM (
+    SELECT w.title AS title, 'subscription' AS effect, s.pattern AS what
+    FROM keelson('subscriptions') AS s
+    JOIN w ON s.instance_key = w.key
+    UNION ALL
+    SELECT w.title, 'task', concat(t.kind, ' ', t.task_id)
+    FROM keelson('tasks') AS t
+    JOIN w ON t.owner_instance_key = w.key
+)
+ORDER BY title, effect, what
+```
+
+(ClickHouse binds a trailing `ORDER BY` to the last `SELECT` of a
+`UNION ALL`, hence the wrapping subquery.)
+
+Grants that no manifest declares — the runtime-granted surface, per window:
+
+```sql
+SELECT app_id, instance_key, pattern, direction, reason
+FROM keelson('client_caps')
+WHERE NOT declared
+ORDER BY app_id, instance_key, pattern
+```
+
+Subscriptions attributed to no window (services, the CLI, or a client
+minted without an instance key) show `instance_key = 0`; reply inboxes of
+in-flight requests are subscriptions too and are flagged `is_inbox`.
+
 ## Visualize: the play Network tab
 
 The layered-graph result panel

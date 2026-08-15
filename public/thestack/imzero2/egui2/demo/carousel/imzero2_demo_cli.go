@@ -517,6 +517,11 @@ func NewCommand() *cli.Command {
 			if covSampler != nil {
 				introspectDeps.Coverage = covSampler
 			}
+			// keelson('tasks') reads the supervisor's in-flight map (ADR-0188
+			// §SD4); nil when it failed to start leaves the table empty.
+			if taskSup != nil {
+				introspectDeps.Tasks = taskSup
+			}
 			introspectStop, introspectErr := introspecthost.Start(introspectDeps)
 			if introspectErr != nil {
 				log.Warn().Err(introspectErr).Msg("introspect: table source unavailable")

@@ -195,7 +195,12 @@ query over effects, not only over launches.
   the applet binder subscribes before it resolves at open and keeps the
   seconds-scale poll only as a fallback for a bus that cannot subscribe
   to the events; ADR-0134 carries a dated Update.
-- **M2 — Live tables.** SD4: three providers, howto snippet.
+- **M2 — Live tables.** ✓ SD4: three providers, howto snippet. Landed
+  2026-08-15 as `RegisterEffects` in the introspection providers package
+  (ADR-0094 carries a dated Update); `client_caps` is its own table (F3
+  taken as written) with a `declared` column in place of an origin enum,
+  since the client records no origin per cap and a comparison against the
+  registered manifest is checkable where a label would not be.
 - **M3 — Interleaving lane.** The property test in Verification, and a
   dated Update on ADR-0026 pointing here for revocation and lifecycle.
 
