@@ -585,10 +585,22 @@ Milestones:
   predated the port — it now checks the tree for the wrapper before
   answering read-only, keeping the classifier default-deny for the write
   gate M3 builds on.
-- **M2 — target adoption.** Segment + spelling adoption via
-  `ExpandPassWithSegments`; the target shape check; anchor gains `query8`
-  (INSERT of constructor-minted columns into a compose-created scratch
-  table, executed in the integration lane; the snippets sweep extends).
+- **M2 — target adoption.** ✓ Segment + spelling adoption; the target
+  shape check; anchor gains `query8`, executed in the integration lane.
+  Shipped 2026-08-15 (`429bee40`, `cd5d0c01`, `2a2df989`, `3fcd123b`).
+  Adoption landed **resolve-first** rather than compose-with-adopted
+  segments: a mint's logical identity resolves against the target through
+  the fold-tolerant machinery handles use, so the emitted alias is the
+  target's own column — segments, aspect hints and spelling — and
+  `ExpandPassWithSegments` remains the compose fallback for a miss, whose
+  loud verdict is `LwShapeCheckTarget`'s (fold-equivalent containment plus
+  positional column-list agreement). Registered as the
+  `LwConstructExpandTarget` factory one order before the unbound entry, so
+  unbound hosts are untouched. The audit caught a second stale read-proof:
+  `ClassifyQuerySecurity` — whose class ADR-0132's applet gate trusts —
+  fell through to "read" on a parsed wrapper; it now witnesses the INSERT
+  (`SecurityWitnessInsertWrapper`) exactly as the statement-kind
+  classifier learned in M1.
 - **M3 — host policy.** play's write opt-in (ADR-0009 registry entry) and
   statement-aware FORMAT; docs — the reading-and-authoring how-to's
   wrapper paragraph and the read-surface page's known-gaps line.
