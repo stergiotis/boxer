@@ -15,7 +15,9 @@ import (
 // SlowFrameThresholdNs is the real-work budget at or above which
 // [FrameMetrics.RecordBytes] emits a structured warning. "Real work" is the
 // Go-side widget build (render) plus the Rust-side interpret — the two slots
-// the app can actually regress. Sync wait is deliberately excluded; see
+// the app can actually regress, and disjoint ones (the Rust side nets out the
+// time it spent waiting on Go's stream, so this is not render counted twice).
+// Sync wait is deliberately excluded; see
 // [shouldWarnSlowFrame] for why. Set to 1.5 × the 60 Hz frame budget so
 // jitter that stays inside vsync slack stays quiet, but a frame whose work
 // missed its deadline surfaces with its breakdown (render_us / sync_us /
@@ -251,7 +253,19 @@ func (inst *FrameMetrics) RecordBytes(written int, read int) {
 
 // shouldWarnSlowFrame reports whether a frame's real work — Go-side widget
 // build (renderNs) plus Rust-side interpret (interpretNs) — crossed
-// thresholdNs. It deliberately ignores sync wait: when a window is occluded
+// thresholdNs.
+//
+// Summing the two slots only measures the work once because the Rust side
+// reports its interpret span net of the time it spent blocked reading Go's
+// opcode stream. That subtraction is what keeps the two slots disjoint: Go
+// streams a frame opcode by opcode and the lock-step keeps it from running
+// ahead, so an unadjusted Rust span would cover Go's whole widget build and
+// this sum would charge renderNs twice — halving the effective budget. The
+// invariant lives in `Interpreter::read_blocked_ns` (interpreter.rs) with no
+// compile-time link to this file; a change there moves this threshold's real
+// meaning. See ADR-0062 §SD3 and its 2026-08-15 update.
+//
+// It deliberately ignores sync wait: when a window is occluded
 // or simply idle the compositor throttles vblank delivery (≈1 Hz on Wayland),
 // and with vsync the Go frame loop blocks in Sync for that whole interval.
 // That inflates total wall-clock to ~1 s while render and interpret stay in

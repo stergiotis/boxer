@@ -2474,6 +2474,19 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub last_interpret_us: u32,
     pub last_pass_nr: u64,
 
+    // Nanoseconds this pass spent BLOCKED waiting for Go to emit the next
+    // opcode, accumulated by `begin_consume_message` and subtracted from the
+    // wall-clock span in `interpret_commands_outer`.
+    //
+    // Go streams a frame opcode by opcode (each `SendSingleUseMsg` flushes),
+    // and the lock-step keeps Go from running ahead — it is released only when
+    // this pass serves the previous frame's fetches. So Go builds its widgets
+    // *while this pass is already inside the read loop*, and an unadjusted
+    // span bills Go's whole widget build to Rust. Subtracting the blocked time
+    // is what keeps `last_interpret_us` a measure of Rust dispatch rather than
+    // a second copy of the Go side's `render_us`. See ADR-0062.
+    read_blocked_ns: u64,
+
     // SVG export hand-off — written by the `exportSvg` IDL opcode (during
     // FFFI dispatch), read by `SvgExportPlugin::on_end_pass` later the same
     // pass. The plugin is registered in `App::new` with a clone of this
@@ -2673,6 +2686,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             snarl_events_pending: Vec::with_capacity(32),
             last_interpret_us: 0,
             last_pass_nr: 0,
+            read_blocked_ns: 0,
             export_state: std::sync::Arc::new(std::sync::Mutex::new(ExportState::default())),
             texture_cache: std::sync::Arc::new(std::sync::Mutex::new(TexturePixelCache::default())),
             link_zones: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
@@ -2850,6 +2864,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     }
     pub fn interpret_commands_outer(&mut self, ctx: &egui::Context) -> InterpretResult<()> {
         let t0 = std::time::Instant::now();
+        self.read_blocked_ns = 0;
         self.handle_screenshot_event(ctx);
         // Advance per-frame state for widgets that need it. Must run exactly
         // once per real frame; `interpret_outer` alone does not qualify
@@ -2880,8 +2895,16 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         let mut root = Some(&mut root_ui);
         let result = self.interpret_outer(ctx, &mut root);
         // Capture even on error so the overlay keeps reporting the time spent
-        // before the failure rather than freezing on a stale value.
-        let micros = t0.elapsed().as_micros();
+        // before the failure rather than freezing on a stale value. The span is
+        // net of the time spent blocked on Go's stream (see `read_blocked_ns`),
+        // so what lands here is Rust's own dispatch cost and not a second copy
+        // of the Go side's widget-build time. saturating_sub because the two
+        // clocks are sampled independently and a pass that did nothing but wait
+        // can measure a hair of blocked time past its own span.
+        let micros = t0
+            .elapsed()
+            .saturating_sub(std::time::Duration::from_nanos(self.read_blocked_ns))
+            .as_micros();
         self.last_interpret_us = if micros > u32::MAX as u128 {
             u32::MAX
         } else {
@@ -2980,7 +3003,27 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         &mut self,
         from_repr: fn(discriminator: u32) -> Option<T>,
     ) -> InterpretResult<Option<T>> {
-        match self.io.read_plain_u32() {
+        // The message-length word is where a pass parks when Go has not yet
+        // emitted the next opcode, so this is the read to charge to waiting.
+        // Go flushes each message whole (`SendSingleUseMsg` → `FlushMessages`),
+        // so once the length word arrives the rest of the message is already in
+        // the pipe buffer and the field reads that follow do not block — one
+        // clock pair per message captures essentially all of the wait, instead
+        // of one per field. A message large enough for Go's bufio writer to
+        // split is the exception: the tail of that write is charged to Rust,
+        // which is bulk transfer rather than idling, so it is left in.
+        // Replay reads come from an in-memory cursor and can never block, so
+        // they skip the timer entirely.
+        let header = if self.io.is_replaying() {
+            self.io.read_plain_u32()
+        } else {
+            let t_wait = std::time::Instant::now();
+            let r = self.io.read_plain_u32();
+            self.read_blocked_ns =
+                self.read_blocked_ns.saturating_add(t_wait.elapsed().as_nanos() as u64);
+            r
+        };
+        match header {
             Ok(msg_len) => {
                 let msg_len_offset = self.io.read_bytes_count - 4;
                 tracing::trace!(msg_len = msg_len, "read msg");

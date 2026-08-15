@@ -131,6 +131,20 @@ A follow-up investigation into reports of uneven ("flaky") scrolling measured th
 
 No decision change: the continuous default and the real-work slow-frame gate stand. The practical upshot — under continuous + `vsync` a compositor pacing floor remains, addressable only by `-vsync off` or the compositor — is captured as a how-to: [triage janky rendering](../howto/imzero2-render-troubleshooting.md).
 
+### 2026-08-15 — `interpret_us` is now net of stream-wait; the two gated slots were not disjoint
+
+A re-investigation of recurring slow-frame warnings — prompted by the suspicion that the ~1 Hz occlusion throttle from the Context was still the cause — confirmed the gate holds against that, and found a separate defect in what it sums.
+
+**The throttle is not the cause.** Reproducing the Context's scenario with the compositor pinned to 1 Hz gives `total_us ≈ 999_800`, `render_us ≈ 800`, `interpret_us ≈ 1_600` — and fires on 0 of 21 frames. Slowing an identical workload (the same 184 tour captures) from 60 Hz to 10 Hz moved `sync_us` 16.5 ms → 99.5 ms, a clean 6×, while the warning count went 110 → 108. Display-wait stays in `sync`, as SD3 intended.
+
+**The two gated slots overlapped.** Go streams a frame opcode by opcode — every `SendSingleUseMsg` flushes — and `interpret_commands_outer` stamped its `t0` before a read loop whose `begin_consume_message` blocks on the pipe. Because the lock-step releases Go only once the pass is *already inside* that loop, Go's widget build ran while the Rust span was open, so the span covered it: `interpret_us > render_us` in 1140 of 1141 frames, correlation +0.887, with a near-constant ~565 µs offset that is Rust's actual dispatch. Summing the two slots therefore charged `render` twice, and the 25 ms budget tripped at ~12 ms of Go render. SD3's reasoning was right; its arithmetic assumed a disjointness the wire protocol did not provide. The `{13 ms, 13 ms → fires}` case in the gate's own test is this scenario.
+
+**Change.** The interpreter accumulates the time each pass spends blocked on the message-length word (`read_blocked_ns`, [`interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs)) and subtracts it from the span, so `last_interpret_us` reports dispatch rather than a second copy of `render_us`. Measured on the same scenes: median `interpret_us` 1121 → 620 µs on the demo carousel, and 32.1 → 9.1 ms on the tour's >256 KiB frames, with `render_us` unchanged and whole-run wall clock up 0.4 % from the added clock reads.
+
+**Residual.** A message large enough for Go's writer to split still parks the pass mid-message, and that wait is left in — bulk transfer rather than idling. The subtraction is also a cross-language invariant with no compile-time link to the Go-side sum, the same fragility SD1/SD2 already carry; it is noted at [`shouldWarnSlowFrame`](../../public/thestack/imzero2/metrics/metrics.go).
+
+No decision change: the continuous default, reactive opt-in, and the real-work gate all stand. This restores the budget SD3 intended.
+
 ## References
 
 - [ADR-0009](0009-environment-variable-registry.md) — environment-variable registry; `CategorialStringVar` and the default-on-unrecognised-value convention used here.
