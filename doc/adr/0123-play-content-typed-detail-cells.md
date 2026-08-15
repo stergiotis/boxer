@@ -1,23 +1,21 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-15
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0123: `play` content-typed detail cells — `label@mime`
 
 ## Status
 
-Proposed, pre-human-review. **Extended by
-[ADR-0186](./0186-play-gloss-catalog.md)** (2026-08-15): the vocabulary below
-becomes the content-type family of a catalog of *glosses*, the §SD2 gate is
-kept verbatim with "known type" meaning "in the catalog", and the §SD1/§SD7
-Table-tab and leeway-card deferrals are taken up there.
+Accepted 2026-08-15. **Extended by
+[ADR-0186](./0186-play-gloss-catalog.md)** (accepted the same day): the
+vocabulary below is the content family of a catalog of *glosses*, the §SD2
+gate is kept verbatim with "known type" meaning "in the catalog", and the
+§SD1/§SD7 Table-tab and leeway-card deferrals are taken up there. From here,
+changes land as dated entries under `## Updates`.
 
 The pane is built: `play_detail_rich.go` with its tests, the `cellRaw` /
 `renderRichCell` seam in `renderDetailSection`, the `executed` handoff into the
@@ -187,10 +185,11 @@ are dropped from the default set: there is no vault behind a database cell, so
 `NoopResolver` would resolve them to `/page` URLs that go nowhere. Frontmatter is
 dropped because a cell is not a note — a leading `---` is content here.
 
-**Known limitation, not fixed here:** the markdown widget's renderer drops
-tables and math even though the parser recognises them (its package doc says so).
-A GFM table in a declared markdown cell therefore renders as nothing. That is an
-upstream gap; this ADR notes it rather than growing to fix it.
+**A limitation that has since closed:** when this was written the markdown
+widget's renderer dropped tables and math even though the parser recognised
+them, so a GFM table in a declared cell rendered as nothing. The widget has
+had a native table path since helphost generation 2, and tables render; math
+is still absent (`obsidian.FeatureMath` is declared and consulted by nothing).
 
 ### SD4 — Raw cells, not `formatCell`
 
@@ -246,7 +245,7 @@ Rendering bounds the image with `FitAspectMaxE` inside a fixed box.
 - **`text/markdown` as source**, i.e. `codeview.BuildMarkdown` — the
   show-me-the-source variant of a type that already renders. Needs a second
   spelling; no one has asked.
-- **webp / avif / svg**, and GFM tables inside markdown cells (§SD3).
+- **webp / avif / svg**; math inside markdown cells (§SD3 — tables render now).
 
 ## Alternatives
 
@@ -278,7 +277,8 @@ non-colliding by construction — a MIME type contains no colon, so `splitHandle
 passes `` `notes@text/markdown` `` through untouched; and the slash gate keeps
 this convention off `dot_done@success`. That is three conventions deep on one
 namespace, and the next one should probably ask whether the namespace is the
-right place at all.
+right place at all — ADR-0186 did, and answered with a rule set over a
+written-out column rather than a fourth name shape.
 
 `play` grows a dependency on `image/png`, `image/jpeg` and `image/gif` decoders.
 The Detail pane can now spend real time on a frame — bounded by §SD6, but a
