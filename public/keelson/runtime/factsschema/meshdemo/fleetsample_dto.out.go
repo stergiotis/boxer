@@ -86,6 +86,57 @@ type fleetSampleEntityI[
 	GetSectionU64Array() U64ArraySec
 }
 
+// fleetSampleEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func fleetSampleEmitSectionSymbol[
+	SymbolAttr fleetSampleSymbolAttrI,
+	SymbolSec fleetSampleSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row FleetSample) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindMeshKindFleetSample)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
+	symbolSecAttr_Host.AddMembershipLowCardRefP(kindMeshHost)
+	symbolSecAttr_Host.EndAttributeP()
+	symbolSecAttr_Region := symbolSec.BeginAttribute(row.Region)
+	symbolSecAttr_Region.AddMembershipLowCardRefP(kindMeshRegion)
+	symbolSecAttr_Region.EndAttributeP()
+	return
+}
+
+// fleetSampleEmitSectionU8Array writes this kind's u8Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func fleetSampleEmitSectionU8Array[
+	U8ArrayAttr fleetSampleU8ArrayAttrI,
+	U8ArraySec fleetSampleU8ArraySecI[U8ArrayAttr, Ent],
+	Ent any,
+](u8ArraySec U8ArraySec, row FleetSample) (err error) {
+	u8ArraySecAttr_CpuPercent := u8ArraySec.BeginAttributeSingle(row.CpuPercent)
+	u8ArraySecAttr_CpuPercent.AddMembershipLowCardRefP(kindMeshCpuPercent)
+	u8ArraySecAttr_CpuPercent.EndAttributeP()
+	return
+}
+
+// fleetSampleEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func fleetSampleEmitSectionU64Array[
+	U64ArrayAttr fleetSampleU64ArrayAttrI,
+	U64ArraySec fleetSampleU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row FleetSample) (err error) {
+	u64ArraySecAttr_UptimeSeconds := u64ArraySec.BeginAttributeSingle(row.UptimeSeconds)
+	u64ArraySecAttr_UptimeSeconds.AddMembershipLowCardRefP(kindMeshUptimeSeconds)
+	u64ArraySecAttr_UptimeSeconds.EndAttributeP()
+	return
+}
+
 // fleetSampleAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -106,27 +157,24 @@ func fleetSampleAddSections[
 ](dml DML, row FleetSample) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
-	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindMeshKindFleetSample)
-	symbolSecAttr_Kind.EndAttributeP()
-	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
-	symbolSecAttr_Host.AddMembershipLowCardRefP(kindMeshHost)
-	symbolSecAttr_Host.EndAttributeP()
-	symbolSecAttr_Region := symbolSec.BeginAttribute(row.Region)
-	symbolSecAttr_Region.AddMembershipLowCardRefP(kindMeshRegion)
-	symbolSecAttr_Region.EndAttributeP()
+	err = fleetSampleEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- u8Array. ---
 	u8ArraySec := dml.GetSectionU8Array()
-	u8ArraySecAttr_CpuPercent := u8ArraySec.BeginAttributeSingle(row.CpuPercent)
-	u8ArraySecAttr_CpuPercent.AddMembershipLowCardRefP(kindMeshCpuPercent)
-	u8ArraySecAttr_CpuPercent.EndAttributeP()
+	err = fleetSampleEmitSectionU8Array(u8ArraySec, row)
+	if err != nil {
+		return
+	}
 	u8ArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	u64ArraySecAttr_UptimeSeconds := u64ArraySec.BeginAttributeSingle(row.UptimeSeconds)
-	u64ArraySecAttr_UptimeSeconds.AddMembershipLowCardRefP(kindMeshUptimeSeconds)
-	u64ArraySecAttr_UptimeSeconds.EndAttributeP()
+	err = fleetSampleEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
 	u64ArraySec.EndSection()
 	return
 }

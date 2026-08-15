@@ -157,44 +157,33 @@ type sysTopologyEntityI[
 	GetSectionU64Array() U64ArraySec
 }
 
-// sysTopologyAddSections contributes this kind's tagged sections to the OPEN
-// entity on dml — the BuildEntities body without the entity frame.
-// The caller owns BeginEntity / plain setters / CommitEntity.
-func sysTopologyAddSections[
+// sysTopologyEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysTopologyEmitSectionSymbol[
 	SymbolAttr sysTopologySymbolAttrI,
 	SymbolSec sysTopologySymbolSecI[SymbolAttr, Ent],
-	U32ArrayAttr sysTopologyU32ArrayAttrI,
-	U32ArraySec sysTopologyU32ArraySecI[U32ArrayAttr, Ent],
-	I32ArrayAttr sysTopologyI32ArrayAttrI,
-	I32ArraySec sysTopologyI32ArraySecI[I32ArrayAttr, Ent],
-	SymbolArrayAttr sysTopologySymbolArrayAttrI,
-	SymbolArraySec sysTopologySymbolArraySecI[SymbolArrayAttr, Ent],
-	U8ArrayAttr sysTopologyU8ArrayAttrI,
-	U8ArraySec sysTopologyU8ArraySecI[U8ArrayAttr, Ent],
-	U64ArrayAttr sysTopologyU64ArrayAttrI,
-	U64ArraySec sysTopologyU64ArraySecI[U64ArrayAttr, Ent],
 	Ent any,
-	DML sysTopologyEntityI[
-		SymbolAttr, SymbolSec,
-		U32ArrayAttr, U32ArraySec,
-		I32ArrayAttr, I32ArraySec,
-		SymbolArrayAttr, SymbolArraySec,
-		U8ArrayAttr, U8ArraySec,
-		U64ArrayAttr, U64ArraySec,
-		Ent,
-	],
-](dml DML, row SysTopology) (err error) {
-	// --- symbol. ---
-	symbolSec := dml.GetSectionSymbol()
+](symbolSec SymbolSec, row SysTopology) (err error) {
 	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
 	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindTopology)
 	symbolSecAttr_Kind.EndAttributeP()
 	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
 	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmTopologyHost)
 	symbolSecAttr_Host.EndAttributeP()
-	symbolSec.EndSection()
-	// --- u32Array. ---
-	u32ArraySec := dml.GetSectionU32Array()
+	return
+}
+
+// sysTopologyEmitSectionU32Array writes this kind's u32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysTopologyEmitSectionU32Array[
+	U32ArrayAttr sysTopologyU32ArrayAttrI,
+	U32ArraySec sysTopologyU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+](u32ArraySec U32ArraySec, row SysTopology) (err error) {
 	if len(row.Node) > 0 {
 		u32ArraySecAttr_Node := u32ArraySec.BeginAttribute()
 		for _, v := range row.Node {
@@ -219,9 +208,18 @@ func sysTopologyAddSections[
 		u32ArraySecAttr_FreqMaxMHz.AddMembershipLowCardRefP(kindSysmTopoFreqMaxMhz)
 		u32ArraySecAttr_FreqMaxMHz.EndAttributeP()
 	}
-	u32ArraySec.EndSection()
-	// --- i32Array. ---
-	i32ArraySec := dml.GetSectionI32Array()
+	return
+}
+
+// sysTopologyEmitSectionI32Array writes this kind's i32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysTopologyEmitSectionI32Array[
+	I32ArrayAttr sysTopologyI32ArrayAttrI,
+	I32ArraySec sysTopologyI32ArraySecI[I32ArrayAttr, Ent],
+	Ent any,
+](i32ArraySec I32ArraySec, row SysTopology) (err error) {
 	i32ArraySecAttr_LogicalCount := i32ArraySec.BeginAttributeSingle(row.LogicalCount)
 	i32ArraySecAttr_LogicalCount.AddMembershipLowCardRefP(kindSysmTopoLogicalCount)
 	i32ArraySecAttr_LogicalCount.EndAttributeP()
@@ -241,9 +239,18 @@ func sysTopologyAddSections[
 		i32ArraySecAttr_OSIndex.AddMembershipLowCardRefP(kindSysmTopoOsIndex)
 		i32ArraySecAttr_OSIndex.EndAttributeP()
 	}
-	i32ArraySec.EndSection()
-	// --- symbolArray. ---
-	symbolArraySec := dml.GetSectionSymbolArray()
+	return
+}
+
+// sysTopologyEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysTopologyEmitSectionSymbolArray[
+	SymbolArrayAttr sysTopologySymbolArrayAttrI,
+	SymbolArraySec sysTopologySymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row SysTopology) (err error) {
 	if len(row.NodeKind) > 0 {
 		symbolArraySecAttr_NodeKind := symbolArraySec.BeginAttribute()
 		for _, v := range row.NodeKind {
@@ -276,9 +283,18 @@ func sysTopologyAddSections[
 		symbolArraySecAttr_FreqDriver.AddMembershipLowCardRefP(kindSysmTopoFreqDriver)
 		symbolArraySecAttr_FreqDriver.EndAttributeP()
 	}
-	symbolArraySec.EndSection()
-	// --- u8Array. ---
-	u8ArraySec := dml.GetSectionU8Array()
+	return
+}
+
+// sysTopologyEmitSectionU8Array writes this kind's u8Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysTopologyEmitSectionU8Array[
+	U8ArrayAttr sysTopologyU8ArrayAttrI,
+	U8ArraySec sysTopologyU8ArraySecI[U8ArrayAttr, Ent],
+	Ent any,
+](u8ArraySec U8ArraySec, row SysTopology) (err error) {
 	if len(row.CacheLevel) > 0 {
 		u8ArraySecAttr_CacheLevel := u8ArraySec.BeginAttribute()
 		for _, v := range row.CacheLevel {
@@ -295,9 +311,18 @@ func sysTopologyAddSections[
 		u8ArraySecAttr_FreqPresent.AddMembershipLowCardRefP(kindSysmTopoFreqPresent)
 		u8ArraySecAttr_FreqPresent.EndAttributeP()
 	}
-	u8ArraySec.EndSection()
-	// --- u64Array. ---
-	u64ArraySec := dml.GetSectionU64Array()
+	return
+}
+
+// sysTopologyEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysTopologyEmitSectionU64Array[
+	U64ArrayAttr sysTopologyU64ArrayAttrI,
+	U64ArraySec sysTopologyU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row SysTopology) (err error) {
 	if len(row.CacheSizeBytes) > 0 {
 		u64ArraySecAttr_CacheSizeBytes := u64ArraySec.BeginAttribute()
 		for _, v := range row.CacheSizeBytes {
@@ -313,6 +338,77 @@ func sysTopologyAddSections[
 		}
 		u64ArraySecAttr_MemBytes.AddMembershipLowCardRefP(kindSysmTopoMemBytes)
 		u64ArraySecAttr_MemBytes.EndAttributeP()
+	}
+	return
+}
+
+// sysTopologyAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func sysTopologyAddSections[
+	SymbolAttr sysTopologySymbolAttrI,
+	SymbolSec sysTopologySymbolSecI[SymbolAttr, Ent],
+	U32ArrayAttr sysTopologyU32ArrayAttrI,
+	U32ArraySec sysTopologyU32ArraySecI[U32ArrayAttr, Ent],
+	I32ArrayAttr sysTopologyI32ArrayAttrI,
+	I32ArraySec sysTopologyI32ArraySecI[I32ArrayAttr, Ent],
+	SymbolArrayAttr sysTopologySymbolArrayAttrI,
+	SymbolArraySec sysTopologySymbolArraySecI[SymbolArrayAttr, Ent],
+	U8ArrayAttr sysTopologyU8ArrayAttrI,
+	U8ArraySec sysTopologyU8ArraySecI[U8ArrayAttr, Ent],
+	U64ArrayAttr sysTopologyU64ArrayAttrI,
+	U64ArraySec sysTopologyU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+	DML sysTopologyEntityI[
+		SymbolAttr, SymbolSec,
+		U32ArrayAttr, U32ArraySec,
+		I32ArrayAttr, I32ArraySec,
+		SymbolArrayAttr, SymbolArraySec,
+		U8ArrayAttr, U8ArraySec,
+		U64ArrayAttr, U64ArraySec,
+		Ent,
+	],
+](dml DML, row SysTopology) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	err = sysTopologyEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
+	symbolSec.EndSection()
+	// --- u32Array. ---
+	u32ArraySec := dml.GetSectionU32Array()
+	err = sysTopologyEmitSectionU32Array(u32ArraySec, row)
+	if err != nil {
+		return
+	}
+	u32ArraySec.EndSection()
+	// --- i32Array. ---
+	i32ArraySec := dml.GetSectionI32Array()
+	err = sysTopologyEmitSectionI32Array(i32ArraySec, row)
+	if err != nil {
+		return
+	}
+	i32ArraySec.EndSection()
+	// --- symbolArray. ---
+	symbolArraySec := dml.GetSectionSymbolArray()
+	err = sysTopologyEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
+	}
+	symbolArraySec.EndSection()
+	// --- u8Array. ---
+	u8ArraySec := dml.GetSectionU8Array()
+	err = sysTopologyEmitSectionU8Array(u8ArraySec, row)
+	if err != nil {
+		return
+	}
+	u8ArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	err = sysTopologyEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
 	}
 	u64ArraySec.EndSection()
 	return

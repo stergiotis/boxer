@@ -131,6 +131,113 @@ type sysCpuEntityI[
 	GetSectionI32Array() I32ArraySec
 }
 
+// sysCpuEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysCpuEmitSectionSymbol[
+	SymbolAttr sysCpuSymbolAttrI,
+	SymbolSec sysCpuSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row SysCpu) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindCpu)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
+	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmCpuHost)
+	symbolSecAttr_Host.EndAttributeP()
+	return
+}
+
+// sysCpuEmitSectionU8Array writes this kind's u8Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysCpuEmitSectionU8Array[
+	U8ArrayAttr sysCpuU8ArrayAttrI,
+	U8ArraySec sysCpuU8ArraySecI[U8ArrayAttr, Ent],
+	Ent any,
+](u8ArraySec U8ArraySec, row SysCpu) (err error) {
+	u8ArraySecAttr_TotalPercent := u8ArraySec.BeginAttributeSingle(row.TotalPercent)
+	u8ArraySecAttr_TotalPercent.AddMembershipLowCardRefP(kindSysmCpuTotalPct)
+	u8ArraySecAttr_TotalPercent.EndAttributeP()
+	if len(row.PerCorePercent) > 0 {
+		u8ArraySecAttr_PerCorePercent := u8ArraySec.BeginAttribute()
+		for _, v := range row.PerCorePercent {
+			u8ArraySecAttr_PerCorePercent.AddToContainerP(v)
+		}
+		u8ArraySecAttr_PerCorePercent.AddMembershipLowCardRefP(kindSysmCpuPerCorePct)
+		u8ArraySecAttr_PerCorePercent.EndAttributeP()
+	}
+	return
+}
+
+// sysCpuEmitSectionU32Array writes this kind's u32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysCpuEmitSectionU32Array[
+	U32ArrayAttr sysCpuU32ArrayAttrI,
+	U32ArraySec sysCpuU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+](u32ArraySec U32ArraySec, row SysCpu) (err error) {
+	if len(row.PerCoreFreqMHz) > 0 {
+		u32ArraySecAttr_PerCoreFreqMHz := u32ArraySec.BeginAttribute()
+		for _, v := range row.PerCoreFreqMHz {
+			u32ArraySecAttr_PerCoreFreqMHz.AddToContainerP(v)
+		}
+		u32ArraySecAttr_PerCoreFreqMHz.AddMembershipLowCardRefP(kindSysmCpuPerCoreFreqMhz)
+		u32ArraySecAttr_PerCoreFreqMHz.EndAttributeP()
+	}
+	return
+}
+
+// sysCpuEmitSectionF32Array writes this kind's f32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysCpuEmitSectionF32Array[
+	F32ArrayAttr sysCpuF32ArrayAttrI,
+	F32ArraySec sysCpuF32ArraySecI[F32ArrayAttr, Ent],
+	Ent any,
+](f32ArraySec F32ArraySec, row SysCpu) (err error) {
+	f32ArraySecAttr_LoadAvg1 := f32ArraySec.BeginAttributeSingle(row.LoadAvg1)
+	f32ArraySecAttr_LoadAvg1.AddMembershipLowCardRefP(kindSysmCpuLoadAvg1)
+	f32ArraySecAttr_LoadAvg1.EndAttributeP()
+	f32ArraySecAttr_LoadAvg5 := f32ArraySec.BeginAttributeSingle(row.LoadAvg5)
+	f32ArraySecAttr_LoadAvg5.AddMembershipLowCardRefP(kindSysmCpuLoadAvg5)
+	f32ArraySecAttr_LoadAvg5.EndAttributeP()
+	f32ArraySecAttr_LoadAvg15 := f32ArraySec.BeginAttributeSingle(row.LoadAvg15)
+	f32ArraySecAttr_LoadAvg15.AddMembershipLowCardRefP(kindSysmCpuLoadAvg15)
+	f32ArraySecAttr_LoadAvg15.EndAttributeP()
+	if row.UsageWatts.Has {
+		f32ArraySecAttr_UsageWatts := f32ArraySec.BeginAttributeSingle(row.UsageWatts.Val)
+		f32ArraySecAttr_UsageWatts.AddMembershipLowCardRefP(kindSysmCpuUsageWatts)
+		f32ArraySecAttr_UsageWatts.EndAttributeP()
+	}
+	return
+}
+
+// sysCpuEmitSectionI32Array writes this kind's i32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysCpuEmitSectionI32Array[
+	I32ArrayAttr sysCpuI32ArrayAttrI,
+	I32ArraySec sysCpuI32ArraySecI[I32ArrayAttr, Ent],
+	Ent any,
+](i32ArraySec I32ArraySec, row SysCpu) (err error) {
+	if len(row.ActiveCPUs) > 0 {
+		i32ArraySecAttr_ActiveCPUs := i32ArraySec.BeginAttribute()
+		for _, v := range row.ActiveCPUs {
+			i32ArraySecAttr_ActiveCPUs.AddToContainerP(v)
+		}
+		i32ArraySecAttr_ActiveCPUs.AddMembershipLowCardRefP(kindSysmCpuActiveCpus)
+		i32ArraySecAttr_ActiveCPUs.EndAttributeP()
+	}
+	return
+}
+
 // sysCpuAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -157,64 +264,37 @@ func sysCpuAddSections[
 ](dml DML, row SysCpu) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
-	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindCpu)
-	symbolSecAttr_Kind.EndAttributeP()
-	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
-	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmCpuHost)
-	symbolSecAttr_Host.EndAttributeP()
+	err = sysCpuEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- u8Array. ---
 	u8ArraySec := dml.GetSectionU8Array()
-	u8ArraySecAttr_TotalPercent := u8ArraySec.BeginAttributeSingle(row.TotalPercent)
-	u8ArraySecAttr_TotalPercent.AddMembershipLowCardRefP(kindSysmCpuTotalPct)
-	u8ArraySecAttr_TotalPercent.EndAttributeP()
-	if len(row.PerCorePercent) > 0 {
-		u8ArraySecAttr_PerCorePercent := u8ArraySec.BeginAttribute()
-		for _, v := range row.PerCorePercent {
-			u8ArraySecAttr_PerCorePercent.AddToContainerP(v)
-		}
-		u8ArraySecAttr_PerCorePercent.AddMembershipLowCardRefP(kindSysmCpuPerCorePct)
-		u8ArraySecAttr_PerCorePercent.EndAttributeP()
+	err = sysCpuEmitSectionU8Array(u8ArraySec, row)
+	if err != nil {
+		return
 	}
 	u8ArraySec.EndSection()
 	// --- u32Array. ---
 	u32ArraySec := dml.GetSectionU32Array()
-	if len(row.PerCoreFreqMHz) > 0 {
-		u32ArraySecAttr_PerCoreFreqMHz := u32ArraySec.BeginAttribute()
-		for _, v := range row.PerCoreFreqMHz {
-			u32ArraySecAttr_PerCoreFreqMHz.AddToContainerP(v)
-		}
-		u32ArraySecAttr_PerCoreFreqMHz.AddMembershipLowCardRefP(kindSysmCpuPerCoreFreqMhz)
-		u32ArraySecAttr_PerCoreFreqMHz.EndAttributeP()
+	err = sysCpuEmitSectionU32Array(u32ArraySec, row)
+	if err != nil {
+		return
 	}
 	u32ArraySec.EndSection()
 	// --- f32Array. ---
 	f32ArraySec := dml.GetSectionF32Array()
-	f32ArraySecAttr_LoadAvg1 := f32ArraySec.BeginAttributeSingle(row.LoadAvg1)
-	f32ArraySecAttr_LoadAvg1.AddMembershipLowCardRefP(kindSysmCpuLoadAvg1)
-	f32ArraySecAttr_LoadAvg1.EndAttributeP()
-	f32ArraySecAttr_LoadAvg5 := f32ArraySec.BeginAttributeSingle(row.LoadAvg5)
-	f32ArraySecAttr_LoadAvg5.AddMembershipLowCardRefP(kindSysmCpuLoadAvg5)
-	f32ArraySecAttr_LoadAvg5.EndAttributeP()
-	f32ArraySecAttr_LoadAvg15 := f32ArraySec.BeginAttributeSingle(row.LoadAvg15)
-	f32ArraySecAttr_LoadAvg15.AddMembershipLowCardRefP(kindSysmCpuLoadAvg15)
-	f32ArraySecAttr_LoadAvg15.EndAttributeP()
-	if row.UsageWatts.Has {
-		f32ArraySecAttr_UsageWatts := f32ArraySec.BeginAttributeSingle(row.UsageWatts.Val)
-		f32ArraySecAttr_UsageWatts.AddMembershipLowCardRefP(kindSysmCpuUsageWatts)
-		f32ArraySecAttr_UsageWatts.EndAttributeP()
+	err = sysCpuEmitSectionF32Array(f32ArraySec, row)
+	if err != nil {
+		return
 	}
 	f32ArraySec.EndSection()
 	// --- i32Array. ---
 	i32ArraySec := dml.GetSectionI32Array()
-	if len(row.ActiveCPUs) > 0 {
-		i32ArraySecAttr_ActiveCPUs := i32ArraySec.BeginAttribute()
-		for _, v := range row.ActiveCPUs {
-			i32ArraySecAttr_ActiveCPUs.AddToContainerP(v)
-		}
-		i32ArraySecAttr_ActiveCPUs.AddMembershipLowCardRefP(kindSysmCpuActiveCpus)
-		i32ArraySecAttr_ActiveCPUs.EndAttributeP()
+	err = sysCpuEmitSectionI32Array(i32ArraySec, row)
+	if err != nil {
+		return
 	}
 	i32ArraySec.EndSection()
 	return

@@ -147,6 +147,28 @@ func TextDocBuildEntities[
 	return
 }
 
+// TextDocEmitSectionText writes this kind's text attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TextDocEmitSectionText[
+	TextAttr TextDocTextAttrI,
+	TextSec TextDocTextSecI[TextAttr, Ent],
+	Ent any,
+](textSec TextSec, row TextDoc) (err error) {
+	if len(row.WordBag) != len(row.WordLength) {
+		err = eb.Build().Str("section", "text").Str("field", "WordBag").Errorf("co-container slices have different lengths")
+		return
+	}
+	textSecAttr := textSec.BeginAttribute(row.Text)
+	for k := range row.WordLength {
+		textSecAttr.AddToCoContainersP(row.WordLength[k], row.WordBag[k])
+	}
+	textSecAttr.AddMembershipLowCardRefP(kindProse)
+	textSecAttr.EndAttributeP()
+	return
+}
+
 // TextDocAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -161,16 +183,10 @@ func TextDocAddSections[
 ](dml DML, row TextDoc) (err error) {
 	// --- text. ---
 	textSec := dml.GetSectionText()
-	if len(row.WordBag) != len(row.WordLength) {
-		err = eb.Build().Str("section", "text").Str("field", "WordBag").Errorf("co-container slices have different lengths")
+	err = TextDocEmitSectionText(textSec, row)
+	if err != nil {
 		return
 	}
-	textSecAttr := textSec.BeginAttribute(row.Text)
-	for k := range row.WordLength {
-		textSecAttr.AddToCoContainersP(row.WordLength[k], row.WordBag[k])
-	}
-	textSecAttr.AddMembershipLowCardRefP(kindProse)
-	textSecAttr.EndAttributeP()
 	textSec.EndSection()
 	return
 }

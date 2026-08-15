@@ -66,6 +66,41 @@ type provenanceEntityI[
 	GetSectionSymbolArray() SymbolArraySec
 }
 
+// provenanceEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func provenanceEmitSectionSymbol[
+	SymbolAttr provenanceSymbolAttrI,
+	SymbolSec provenanceSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row Provenance) (err error) {
+	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
+	symbolSecAttr_Host.AddMembershipLowCardRefP(kindProvHost)
+	symbolSecAttr_Host.EndAttributeP()
+	return
+}
+
+// provenanceEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func provenanceEmitSectionSymbolArray[
+	SymbolArrayAttr provenanceSymbolArrayAttrI,
+	SymbolArraySec provenanceSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row Provenance) (err error) {
+	if len(row.Stack) > 0 {
+		symbolArraySecAttr_Stack := symbolArraySec.BeginAttribute()
+		for _, v := range row.Stack {
+			symbolArraySecAttr_Stack.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Stack.AddMembershipLowCardRefP(kindProvStack)
+		symbolArraySecAttr_Stack.EndAttributeP()
+	}
+	return
+}
+
 // provenanceAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -83,19 +118,16 @@ func provenanceAddSections[
 ](dml DML, row Provenance) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
-	symbolSecAttr_Host.AddMembershipLowCardRefP(kindProvHost)
-	symbolSecAttr_Host.EndAttributeP()
+	err = provenanceEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- symbolArray. ---
 	symbolArraySec := dml.GetSectionSymbolArray()
-	if len(row.Stack) > 0 {
-		symbolArraySecAttr_Stack := symbolArraySec.BeginAttribute()
-		for _, v := range row.Stack {
-			symbolArraySecAttr_Stack.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Stack.AddMembershipLowCardRefP(kindProvStack)
-		symbolArraySecAttr_Stack.EndAttributeP()
+	err = provenanceEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	return

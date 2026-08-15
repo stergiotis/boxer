@@ -47,6 +47,26 @@ type taggedEntityI[
 	GetSectionSymbolArray() SymbolArraySec
 }
 
+// taggedEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func taggedEmitSectionSymbolArray[
+	SymbolArrayAttr taggedSymbolArrayAttrI,
+	SymbolArraySec taggedSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row Tagged) (err error) {
+	if len(row.Tags) > 0 {
+		symbolArraySecAttr_Tags := symbolArraySec.BeginAttribute()
+		for _, v := range row.Tags {
+			symbolArraySecAttr_Tags.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindDeviceTags)
+		symbolArraySecAttr_Tags.EndAttributeP()
+	}
+	return
+}
+
 // taggedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -61,13 +81,9 @@ func taggedAddSections[
 ](dml DML, row Tagged) (err error) {
 	// --- symbolArray. ---
 	symbolArraySec := dml.GetSectionSymbolArray()
-	if len(row.Tags) > 0 {
-		symbolArraySecAttr_Tags := symbolArraySec.BeginAttribute()
-		for _, v := range row.Tags {
-			symbolArraySecAttr_Tags.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindDeviceTags)
-		symbolArraySecAttr_Tags.EndAttributeP()
+	err = taggedEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	return

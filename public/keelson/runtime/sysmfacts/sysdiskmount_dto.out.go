@@ -132,41 +132,33 @@ type sysDiskMountEntityI[
 	GetSectionF32Array() F32ArraySec
 }
 
-// sysDiskMountAddSections contributes this kind's tagged sections to the OPEN
-// entity on dml — the BuildEntities body without the entity frame.
-// The caller owns BeginEntity / plain setters / CommitEntity.
-func sysDiskMountAddSections[
+// sysDiskMountEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysDiskMountEmitSectionSymbol[
 	SymbolAttr sysDiskMountSymbolAttrI,
 	SymbolSec sysDiskMountSymbolSecI[SymbolAttr, Ent],
-	SymbolArrayAttr sysDiskMountSymbolArrayAttrI,
-	SymbolArraySec sysDiskMountSymbolArraySecI[SymbolArrayAttr, Ent],
-	U8ArrayAttr sysDiskMountU8ArrayAttrI,
-	U8ArraySec sysDiskMountU8ArraySecI[U8ArrayAttr, Ent],
-	U64ArrayAttr sysDiskMountU64ArrayAttrI,
-	U64ArraySec sysDiskMountU64ArraySecI[U64ArrayAttr, Ent],
-	F32ArrayAttr sysDiskMountF32ArrayAttrI,
-	F32ArraySec sysDiskMountF32ArraySecI[F32ArrayAttr, Ent],
 	Ent any,
-	DML sysDiskMountEntityI[
-		SymbolAttr, SymbolSec,
-		SymbolArrayAttr, SymbolArraySec,
-		U8ArrayAttr, U8ArraySec,
-		U64ArrayAttr, U64ArraySec,
-		F32ArrayAttr, F32ArraySec,
-		Ent,
-	],
-](dml DML, row SysDiskMount) (err error) {
-	// --- symbol. ---
-	symbolSec := dml.GetSectionSymbol()
+](symbolSec SymbolSec, row SysDiskMount) (err error) {
 	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
 	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindDiskMount)
 	symbolSecAttr_Kind.EndAttributeP()
 	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
 	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmDiskMountHost)
 	symbolSecAttr_Host.EndAttributeP()
-	symbolSec.EndSection()
-	// --- symbolArray. ---
-	symbolArraySec := dml.GetSectionSymbolArray()
+	return
+}
+
+// sysDiskMountEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysDiskMountEmitSectionSymbolArray[
+	SymbolArrayAttr sysDiskMountSymbolArrayAttrI,
+	SymbolArraySec sysDiskMountSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row SysDiskMount) (err error) {
 	if len(row.Device) > 0 {
 		symbolArraySecAttr_Device := symbolArraySec.BeginAttribute()
 		for _, v := range row.Device {
@@ -199,9 +191,18 @@ func sysDiskMountAddSections[
 		symbolArraySecAttr_BlockName.AddMembershipLowCardRefP(kindSysmDiskMountBlockName)
 		symbolArraySecAttr_BlockName.EndAttributeP()
 	}
-	symbolArraySec.EndSection()
-	// --- u8Array. ---
-	u8ArraySec := dml.GetSectionU8Array()
+	return
+}
+
+// sysDiskMountEmitSectionU8Array writes this kind's u8Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysDiskMountEmitSectionU8Array[
+	U8ArrayAttr sysDiskMountU8ArrayAttrI,
+	U8ArraySec sysDiskMountU8ArraySecI[U8ArrayAttr, Ent],
+	Ent any,
+](u8ArraySec U8ArraySec, row SysDiskMount) (err error) {
 	if len(row.Real) > 0 {
 		u8ArraySecAttr_Real := u8ArraySec.BeginAttribute()
 		for _, v := range row.Real {
@@ -210,9 +211,18 @@ func sysDiskMountAddSections[
 		u8ArraySecAttr_Real.AddMembershipLowCardRefP(kindSysmDiskMountReal)
 		u8ArraySecAttr_Real.EndAttributeP()
 	}
-	u8ArraySec.EndSection()
-	// --- u64Array. ---
-	u64ArraySec := dml.GetSectionU64Array()
+	return
+}
+
+// sysDiskMountEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysDiskMountEmitSectionU64Array[
+	U64ArrayAttr sysDiskMountU64ArrayAttrI,
+	U64ArraySec sysDiskMountU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row SysDiskMount) (err error) {
 	if len(row.TotalBytes) > 0 {
 		u64ArraySecAttr_TotalBytes := u64ArraySec.BeginAttribute()
 		for _, v := range row.TotalBytes {
@@ -237,9 +247,18 @@ func sysDiskMountAddSections[
 		u64ArraySecAttr_UsedBytes.AddMembershipLowCardRefP(kindSysmDiskMountUsedBytes)
 		u64ArraySecAttr_UsedBytes.EndAttributeP()
 	}
-	u64ArraySec.EndSection()
-	// --- f32Array. ---
-	f32ArraySec := dml.GetSectionF32Array()
+	return
+}
+
+// sysDiskMountEmitSectionF32Array writes this kind's f32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysDiskMountEmitSectionF32Array[
+	F32ArrayAttr sysDiskMountF32ArrayAttrI,
+	F32ArraySec sysDiskMountF32ArraySecI[F32ArrayAttr, Ent],
+	Ent any,
+](f32ArraySec F32ArraySec, row SysDiskMount) (err error) {
 	if len(row.UsedPercent) > 0 {
 		f32ArraySecAttr_UsedPercent := f32ArraySec.BeginAttribute()
 		for _, v := range row.UsedPercent {
@@ -247,6 +266,67 @@ func sysDiskMountAddSections[
 		}
 		f32ArraySecAttr_UsedPercent.AddMembershipLowCardRefP(kindSysmDiskMountUsedPct)
 		f32ArraySecAttr_UsedPercent.EndAttributeP()
+	}
+	return
+}
+
+// sysDiskMountAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func sysDiskMountAddSections[
+	SymbolAttr sysDiskMountSymbolAttrI,
+	SymbolSec sysDiskMountSymbolSecI[SymbolAttr, Ent],
+	SymbolArrayAttr sysDiskMountSymbolArrayAttrI,
+	SymbolArraySec sysDiskMountSymbolArraySecI[SymbolArrayAttr, Ent],
+	U8ArrayAttr sysDiskMountU8ArrayAttrI,
+	U8ArraySec sysDiskMountU8ArraySecI[U8ArrayAttr, Ent],
+	U64ArrayAttr sysDiskMountU64ArrayAttrI,
+	U64ArraySec sysDiskMountU64ArraySecI[U64ArrayAttr, Ent],
+	F32ArrayAttr sysDiskMountF32ArrayAttrI,
+	F32ArraySec sysDiskMountF32ArraySecI[F32ArrayAttr, Ent],
+	Ent any,
+	DML sysDiskMountEntityI[
+		SymbolAttr, SymbolSec,
+		SymbolArrayAttr, SymbolArraySec,
+		U8ArrayAttr, U8ArraySec,
+		U64ArrayAttr, U64ArraySec,
+		F32ArrayAttr, F32ArraySec,
+		Ent,
+	],
+](dml DML, row SysDiskMount) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	err = sysDiskMountEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
+	symbolSec.EndSection()
+	// --- symbolArray. ---
+	symbolArraySec := dml.GetSectionSymbolArray()
+	err = sysDiskMountEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
+	}
+	symbolArraySec.EndSection()
+	// --- u8Array. ---
+	u8ArraySec := dml.GetSectionU8Array()
+	err = sysDiskMountEmitSectionU8Array(u8ArraySec, row)
+	if err != nil {
+		return
+	}
+	u8ArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	err = sysDiskMountEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
+	u64ArraySec.EndSection()
+	// --- f32Array. ---
+	f32ArraySec := dml.GetSectionF32Array()
+	err = sysDiskMountEmitSectionF32Array(f32ArraySec, row)
+	if err != nil {
+		return
 	}
 	f32ArraySec.EndSection()
 	return

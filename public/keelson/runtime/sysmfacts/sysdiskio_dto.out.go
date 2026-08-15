@@ -108,6 +108,92 @@ type sysDiskIoEntityI[
 	GetSectionU8Array() U8ArraySec
 }
 
+// sysDiskIoEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysDiskIoEmitSectionSymbol[
+	SymbolAttr sysDiskIoSymbolAttrI,
+	SymbolSec sysDiskIoSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row SysDiskIo) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindDiskIo)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
+	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmDiskIoHost)
+	symbolSecAttr_Host.EndAttributeP()
+	return
+}
+
+// sysDiskIoEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysDiskIoEmitSectionSymbolArray[
+	SymbolArrayAttr sysDiskIoSymbolArrayAttrI,
+	SymbolArraySec sysDiskIoSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row SysDiskIo) (err error) {
+	if len(row.Name) > 0 {
+		symbolArraySecAttr_Name := symbolArraySec.BeginAttribute()
+		for _, v := range row.Name {
+			symbolArraySecAttr_Name.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Name.AddMembershipLowCardRefP(kindSysmDiskIoName)
+		symbolArraySecAttr_Name.EndAttributeP()
+	}
+	return
+}
+
+// sysDiskIoEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysDiskIoEmitSectionU64Array[
+	U64ArrayAttr sysDiskIoU64ArrayAttrI,
+	U64ArraySec sysDiskIoU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row SysDiskIo) (err error) {
+	if len(row.ReadBytesPerSec) > 0 {
+		u64ArraySecAttr_ReadBytesPerSec := u64ArraySec.BeginAttribute()
+		for _, v := range row.ReadBytesPerSec {
+			u64ArraySecAttr_ReadBytesPerSec.AddToContainerP(v)
+		}
+		u64ArraySecAttr_ReadBytesPerSec.AddMembershipLowCardRefP(kindSysmDiskIoReadBytesPerSec)
+		u64ArraySecAttr_ReadBytesPerSec.EndAttributeP()
+	}
+	if len(row.WriteBytesPerSec) > 0 {
+		u64ArraySecAttr_WriteBytesPerSec := u64ArraySec.BeginAttribute()
+		for _, v := range row.WriteBytesPerSec {
+			u64ArraySecAttr_WriteBytesPerSec.AddToContainerP(v)
+		}
+		u64ArraySecAttr_WriteBytesPerSec.AddMembershipLowCardRefP(kindSysmDiskIoWriteBytesPerSec)
+		u64ArraySecAttr_WriteBytesPerSec.EndAttributeP()
+	}
+	return
+}
+
+// sysDiskIoEmitSectionU8Array writes this kind's u8Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysDiskIoEmitSectionU8Array[
+	U8ArrayAttr sysDiskIoU8ArrayAttrI,
+	U8ArraySec sysDiskIoU8ArraySecI[U8ArrayAttr, Ent],
+	Ent any,
+](u8ArraySec U8ArraySec, row SysDiskIo) (err error) {
+	if len(row.BusyPercent) > 0 {
+		u8ArraySecAttr_BusyPercent := u8ArraySec.BeginAttribute()
+		for _, v := range row.BusyPercent {
+			u8ArraySecAttr_BusyPercent.AddToContainerP(v)
+		}
+		u8ArraySecAttr_BusyPercent.AddMembershipLowCardRefP(kindSysmDiskIoBusyPct)
+		u8ArraySecAttr_BusyPercent.EndAttributeP()
+	}
+	return
+}
+
 // sysDiskIoAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -131,52 +217,30 @@ func sysDiskIoAddSections[
 ](dml DML, row SysDiskIo) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
-	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindDiskIo)
-	symbolSecAttr_Kind.EndAttributeP()
-	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
-	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmDiskIoHost)
-	symbolSecAttr_Host.EndAttributeP()
+	err = sysDiskIoEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- symbolArray. ---
 	symbolArraySec := dml.GetSectionSymbolArray()
-	if len(row.Name) > 0 {
-		symbolArraySecAttr_Name := symbolArraySec.BeginAttribute()
-		for _, v := range row.Name {
-			symbolArraySecAttr_Name.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Name.AddMembershipLowCardRefP(kindSysmDiskIoName)
-		symbolArraySecAttr_Name.EndAttributeP()
+	err = sysDiskIoEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	if len(row.ReadBytesPerSec) > 0 {
-		u64ArraySecAttr_ReadBytesPerSec := u64ArraySec.BeginAttribute()
-		for _, v := range row.ReadBytesPerSec {
-			u64ArraySecAttr_ReadBytesPerSec.AddToContainerP(v)
-		}
-		u64ArraySecAttr_ReadBytesPerSec.AddMembershipLowCardRefP(kindSysmDiskIoReadBytesPerSec)
-		u64ArraySecAttr_ReadBytesPerSec.EndAttributeP()
-	}
-	if len(row.WriteBytesPerSec) > 0 {
-		u64ArraySecAttr_WriteBytesPerSec := u64ArraySec.BeginAttribute()
-		for _, v := range row.WriteBytesPerSec {
-			u64ArraySecAttr_WriteBytesPerSec.AddToContainerP(v)
-		}
-		u64ArraySecAttr_WriteBytesPerSec.AddMembershipLowCardRefP(kindSysmDiskIoWriteBytesPerSec)
-		u64ArraySecAttr_WriteBytesPerSec.EndAttributeP()
+	err = sysDiskIoEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
 	}
 	u64ArraySec.EndSection()
 	// --- u8Array. ---
 	u8ArraySec := dml.GetSectionU8Array()
-	if len(row.BusyPercent) > 0 {
-		u8ArraySecAttr_BusyPercent := u8ArraySec.BeginAttribute()
-		for _, v := range row.BusyPercent {
-			u8ArraySecAttr_BusyPercent.AddToContainerP(v)
-		}
-		u8ArraySecAttr_BusyPercent.AddMembershipLowCardRefP(kindSysmDiskIoBusyPct)
-		u8ArraySecAttr_BusyPercent.EndAttributeP()
+	err = sysDiskIoEmitSectionU8Array(u8ArraySec, row)
+	if err != nil {
+		return
 	}
 	u8ArraySec.EndSection()
 	return

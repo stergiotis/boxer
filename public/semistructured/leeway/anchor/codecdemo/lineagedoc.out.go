@@ -212,6 +212,68 @@ func LineageDocBuildEntities[
 	return
 }
 
+// LineageDocEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func LineageDocEmitSectionSymbol[
+	SymbolAttr LineageDocSymbolAttrI,
+	SymbolSec LineageDocSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row LineageDoc) (err error) {
+	for _, symbolSecElem := range row.Types {
+		symbolSecAttr := symbolSec.BeginAttribute(symbolSecElem.Kind)
+		for _, mv := range symbolSecElem.Ancestors {
+			symbolSecAttr.AddMembershipLowCardRefP(mv)
+		}
+		symbolSecAttr.EndAttributeP()
+	}
+	return
+}
+
+// LineageDocEmitSectionForeignKey writes this kind's foreignKey attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func LineageDocEmitSectionForeignKey[
+	ForeignKeyAttr LineageDocForeignKeyAttrI,
+	ForeignKeySec LineageDocForeignKeySecI[ForeignKeyAttr, Ent],
+	Ent any,
+](foreignKeySec ForeignKeySec, row LineageDoc) (err error) {
+	for _, foreignKeySecElem := range row.Edges {
+		foreignKeySecAttr := foreignKeySec.BeginAttribute(foreignKeySecElem.Target)
+		foreignKeySecAttr.AddMembershipLowCardRefP(foreignKeySecElem.Predicate)
+		foreignKeySecAttr.AddMembershipLowCardRefP(foreignKeySecElem.Generic)
+		foreignKeySecAttr.EndAttributeP()
+	}
+	return
+}
+
+// LineageDocEmitSectionText writes this kind's text attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func LineageDocEmitSectionText[
+	TextAttr LineageDocTextAttrI,
+	TextSec LineageDocTextSecI[TextAttr, Ent],
+	Ent any,
+](textSec TextSec, row LineageDoc) (err error) {
+	for _, textSecElem := range row.Notes {
+		if len(textSecElem.WordBag) != len(textSecElem.WordLength) {
+			err = eb.Build().Str("section", "text").Str("field", "WordBag").Errorf("co-container slices have different lengths")
+			return
+		}
+		textSecAttr := textSec.BeginAttribute(textSecElem.Text)
+		for k := range textSecElem.WordLength {
+			textSecAttr.AddToCoContainersP(textSecElem.WordLength[k], textSecElem.WordBag[k])
+		}
+		textSecAttr.AddMembershipLowCardVerbatimP([]byte(textSecElem.Name))
+		textSecAttr.AddMembershipLowCardRefP(textSecElem.Kind)
+		textSecAttr.EndAttributeP()
+	}
+	return
+}
+
 // LineageDocAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -232,37 +294,23 @@ func LineageDocAddSections[
 ](dml DML, row LineageDoc) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	for _, symbolSecElem := range row.Types {
-		symbolSecAttr := symbolSec.BeginAttribute(symbolSecElem.Kind)
-		for _, mv := range symbolSecElem.Ancestors {
-			symbolSecAttr.AddMembershipLowCardRefP(mv)
-		}
-		symbolSecAttr.EndAttributeP()
+	err = LineageDocEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
 	}
 	symbolSec.EndSection()
 	// --- foreignKey. ---
 	foreignKeySec := dml.GetSectionForeignKey()
-	for _, foreignKeySecElem := range row.Edges {
-		foreignKeySecAttr := foreignKeySec.BeginAttribute(foreignKeySecElem.Target)
-		foreignKeySecAttr.AddMembershipLowCardRefP(foreignKeySecElem.Predicate)
-		foreignKeySecAttr.AddMembershipLowCardRefP(foreignKeySecElem.Generic)
-		foreignKeySecAttr.EndAttributeP()
+	err = LineageDocEmitSectionForeignKey(foreignKeySec, row)
+	if err != nil {
+		return
 	}
 	foreignKeySec.EndSection()
 	// --- text. ---
 	textSec := dml.GetSectionText()
-	for _, textSecElem := range row.Notes {
-		if len(textSecElem.WordBag) != len(textSecElem.WordLength) {
-			err = eb.Build().Str("section", "text").Str("field", "WordBag").Errorf("co-container slices have different lengths")
-			return
-		}
-		textSecAttr := textSec.BeginAttribute(textSecElem.Text)
-		for k := range textSecElem.WordLength {
-			textSecAttr.AddToCoContainersP(textSecElem.WordLength[k], textSecElem.WordBag[k])
-		}
-		textSecAttr.AddMembershipLowCardVerbatimP([]byte(textSecElem.Name))
-		textSecAttr.AddMembershipLowCardRefP(textSecElem.Kind)
-		textSecAttr.EndAttributeP()
+	err = LineageDocEmitSectionText(textSec, row)
+	if err != nil {
+		return
 	}
 	textSec.EndSection()
 	return

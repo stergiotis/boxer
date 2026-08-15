@@ -129,6 +129,120 @@ type sysSocketEntityI[
 	GetSectionU32Array() U32ArraySec
 }
 
+// sysSocketEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysSocketEmitSectionSymbol[
+	SymbolAttr sysSocketSymbolAttrI,
+	SymbolSec sysSocketSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row SysSocket) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindSocket)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
+	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmSocketHost)
+	symbolSecAttr_Host.EndAttributeP()
+	return
+}
+
+// sysSocketEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysSocketEmitSectionSymbolArray[
+	SymbolArrayAttr sysSocketSymbolArrayAttrI,
+	SymbolArraySec sysSocketSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row SysSocket) (err error) {
+	if len(row.Proto) > 0 {
+		symbolArraySecAttr_Proto := symbolArraySec.BeginAttribute()
+		for _, v := range row.Proto {
+			symbolArraySecAttr_Proto.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Proto.AddMembershipLowCardRefP(kindSysmSocketProto)
+		symbolArraySecAttr_Proto.EndAttributeP()
+	}
+	if len(row.Addr) > 0 {
+		symbolArraySecAttr_Addr := symbolArraySec.BeginAttribute()
+		for _, v := range row.Addr {
+			symbolArraySecAttr_Addr.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Addr.AddMembershipLowCardRefP(kindSysmSocketAddr)
+		symbolArraySecAttr_Addr.EndAttributeP()
+	}
+	return
+}
+
+// sysSocketEmitSectionU16Array writes this kind's u16Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysSocketEmitSectionU16Array[
+	U16ArrayAttr sysSocketU16ArrayAttrI,
+	U16ArraySec sysSocketU16ArraySecI[U16ArrayAttr, Ent],
+	Ent any,
+](u16ArraySec U16ArraySec, row SysSocket) (err error) {
+	if len(row.Port) > 0 {
+		u16ArraySecAttr_Port := u16ArraySec.BeginAttribute()
+		for _, v := range row.Port {
+			u16ArraySecAttr_Port.AddToContainerP(v)
+		}
+		u16ArraySecAttr_Port.AddMembershipLowCardRefP(kindSysmSocketPort)
+		u16ArraySecAttr_Port.EndAttributeP()
+	}
+	return
+}
+
+// sysSocketEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysSocketEmitSectionU64Array[
+	U64ArrayAttr sysSocketU64ArrayAttrI,
+	U64ArraySec sysSocketU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row SysSocket) (err error) {
+	if len(row.Inode) > 0 {
+		u64ArraySecAttr_Inode := u64ArraySec.BeginAttribute()
+		for _, v := range row.Inode {
+			u64ArraySecAttr_Inode.AddToContainerP(v)
+		}
+		u64ArraySecAttr_Inode.AddMembershipLowCardRefP(kindSysmSocketInode)
+		u64ArraySecAttr_Inode.EndAttributeP()
+	}
+	return
+}
+
+// sysSocketEmitSectionU32Array writes this kind's u32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysSocketEmitSectionU32Array[
+	U32ArrayAttr sysSocketU32ArrayAttrI,
+	U32ArraySec sysSocketU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+](u32ArraySec U32ArraySec, row SysSocket) (err error) {
+	if len(row.Uid) > 0 {
+		u32ArraySecAttr_Uid := u32ArraySec.BeginAttribute()
+		for _, v := range row.Uid {
+			u32ArraySecAttr_Uid.AddToContainerP(v)
+		}
+		u32ArraySecAttr_Uid.AddMembershipLowCardRefP(kindSysmSocketUid)
+		u32ArraySecAttr_Uid.EndAttributeP()
+	}
+	if len(row.Pid) > 0 {
+		u32ArraySecAttr_Pid := u32ArraySec.BeginAttribute()
+		for _, v := range row.Pid {
+			u32ArraySecAttr_Pid.AddToContainerP(v)
+		}
+		u32ArraySecAttr_Pid.AddMembershipLowCardRefP(kindSysmSocketPid)
+		u32ArraySecAttr_Pid.EndAttributeP()
+	}
+	return
+}
+
 // sysSocketAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -155,71 +269,37 @@ func sysSocketAddSections[
 ](dml DML, row SysSocket) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
-	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindSocket)
-	symbolSecAttr_Kind.EndAttributeP()
-	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
-	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmSocketHost)
-	symbolSecAttr_Host.EndAttributeP()
+	err = sysSocketEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- symbolArray. ---
 	symbolArraySec := dml.GetSectionSymbolArray()
-	if len(row.Proto) > 0 {
-		symbolArraySecAttr_Proto := symbolArraySec.BeginAttribute()
-		for _, v := range row.Proto {
-			symbolArraySecAttr_Proto.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Proto.AddMembershipLowCardRefP(kindSysmSocketProto)
-		symbolArraySecAttr_Proto.EndAttributeP()
-	}
-	if len(row.Addr) > 0 {
-		symbolArraySecAttr_Addr := symbolArraySec.BeginAttribute()
-		for _, v := range row.Addr {
-			symbolArraySecAttr_Addr.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Addr.AddMembershipLowCardRefP(kindSysmSocketAddr)
-		symbolArraySecAttr_Addr.EndAttributeP()
+	err = sysSocketEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	// --- u16Array. ---
 	u16ArraySec := dml.GetSectionU16Array()
-	if len(row.Port) > 0 {
-		u16ArraySecAttr_Port := u16ArraySec.BeginAttribute()
-		for _, v := range row.Port {
-			u16ArraySecAttr_Port.AddToContainerP(v)
-		}
-		u16ArraySecAttr_Port.AddMembershipLowCardRefP(kindSysmSocketPort)
-		u16ArraySecAttr_Port.EndAttributeP()
+	err = sysSocketEmitSectionU16Array(u16ArraySec, row)
+	if err != nil {
+		return
 	}
 	u16ArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	if len(row.Inode) > 0 {
-		u64ArraySecAttr_Inode := u64ArraySec.BeginAttribute()
-		for _, v := range row.Inode {
-			u64ArraySecAttr_Inode.AddToContainerP(v)
-		}
-		u64ArraySecAttr_Inode.AddMembershipLowCardRefP(kindSysmSocketInode)
-		u64ArraySecAttr_Inode.EndAttributeP()
+	err = sysSocketEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
 	}
 	u64ArraySec.EndSection()
 	// --- u32Array. ---
 	u32ArraySec := dml.GetSectionU32Array()
-	if len(row.Uid) > 0 {
-		u32ArraySecAttr_Uid := u32ArraySec.BeginAttribute()
-		for _, v := range row.Uid {
-			u32ArraySecAttr_Uid.AddToContainerP(v)
-		}
-		u32ArraySecAttr_Uid.AddMembershipLowCardRefP(kindSysmSocketUid)
-		u32ArraySecAttr_Uid.EndAttributeP()
-	}
-	if len(row.Pid) > 0 {
-		u32ArraySecAttr_Pid := u32ArraySec.BeginAttribute()
-		for _, v := range row.Pid {
-			u32ArraySecAttr_Pid.AddToContainerP(v)
-		}
-		u32ArraySecAttr_Pid.AddMembershipLowCardRefP(kindSysmSocketPid)
-		u32ArraySecAttr_Pid.EndAttributeP()
+	err = sysSocketEmitSectionU32Array(u32ArraySec, row)
+	if err != nil {
+		return
 	}
 	u32ArraySec.EndSection()
 	return

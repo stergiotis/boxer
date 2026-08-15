@@ -76,32 +76,33 @@ type sysMemEntityI[
 	GetSectionU64Array() U64ArraySec
 }
 
-// sysMemAddSections contributes this kind's tagged sections to the OPEN
-// entity on dml — the BuildEntities body without the entity frame.
-// The caller owns BeginEntity / plain setters / CommitEntity.
-func sysMemAddSections[
+// sysMemEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysMemEmitSectionSymbol[
 	SymbolAttr sysMemSymbolAttrI,
 	SymbolSec sysMemSymbolSecI[SymbolAttr, Ent],
-	U64ArrayAttr sysMemU64ArrayAttrI,
-	U64ArraySec sysMemU64ArraySecI[U64ArrayAttr, Ent],
 	Ent any,
-	DML sysMemEntityI[
-		SymbolAttr, SymbolSec,
-		U64ArrayAttr, U64ArraySec,
-		Ent,
-	],
-](dml DML, row SysMem) (err error) {
-	// --- symbol. ---
-	symbolSec := dml.GetSectionSymbol()
+](symbolSec SymbolSec, row SysMem) (err error) {
 	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
 	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindMem)
 	symbolSecAttr_Kind.EndAttributeP()
 	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
 	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmMemHost)
 	symbolSecAttr_Host.EndAttributeP()
-	symbolSec.EndSection()
-	// --- u64Array. ---
-	u64ArraySec := dml.GetSectionU64Array()
+	return
+}
+
+// sysMemEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysMemEmitSectionU64Array[
+	U64ArrayAttr sysMemU64ArrayAttrI,
+	U64ArraySec sysMemU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row SysMem) (err error) {
 	u64ArraySecAttr_TotalBytes := u64ArraySec.BeginAttributeSingle(row.TotalBytes)
 	u64ArraySecAttr_TotalBytes.AddMembershipLowCardRefP(kindSysmMemTotalBytes)
 	u64ArraySecAttr_TotalBytes.EndAttributeP()
@@ -135,6 +136,37 @@ func sysMemAddSections[
 	u64ArraySecAttr_ARCMinBytes := u64ArraySec.BeginAttributeSingle(row.ARCMinBytes)
 	u64ArraySecAttr_ARCMinBytes.AddMembershipLowCardRefP(kindSysmMemArcMinBytes)
 	u64ArraySecAttr_ARCMinBytes.EndAttributeP()
+	return
+}
+
+// sysMemAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func sysMemAddSections[
+	SymbolAttr sysMemSymbolAttrI,
+	SymbolSec sysMemSymbolSecI[SymbolAttr, Ent],
+	U64ArrayAttr sysMemU64ArrayAttrI,
+	U64ArraySec sysMemU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+	DML sysMemEntityI[
+		SymbolAttr, SymbolSec,
+		U64ArrayAttr, U64ArraySec,
+		Ent,
+	],
+](dml DML, row SysMem) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	err = sysMemEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
+	symbolSec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	err = sysMemEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
 	u64ArraySec.EndSection()
 	return
 }

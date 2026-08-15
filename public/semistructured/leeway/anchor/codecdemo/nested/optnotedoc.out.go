@@ -137,6 +137,24 @@ func OptNoteDocBuildEntities[
 	return
 }
 
+// OptNoteDocEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func OptNoteDocEmitSectionSymbol[
+	SymbolAttr OptNoteDocSymbolAttrI,
+	SymbolSec OptNoteDocSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row OptNoteDoc) (err error) {
+	if row.Note.Has {
+		symbolSecElem := row.Note.Val
+		symbolSecAttr := symbolSec.BeginAttribute(symbolSecElem.Val)
+		symbolSecAttr.AddMembershipLowCardRefP(kindNote)
+		symbolSecAttr.EndAttributeP()
+	}
+	return
+}
+
 // OptNoteDocAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -151,11 +169,9 @@ func OptNoteDocAddSections[
 ](dml DML, row OptNoteDoc) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	if row.Note.Has {
-		symbolSecElem := row.Note.Val
-		symbolSecAttr := symbolSec.BeginAttribute(symbolSecElem.Val)
-		symbolSecAttr.AddMembershipLowCardRefP(kindNote)
-		symbolSecAttr.EndAttributeP()
+	err = OptNoteDocEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
 	}
 	symbolSec.EndSection()
 	return

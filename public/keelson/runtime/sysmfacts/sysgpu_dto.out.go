@@ -171,6 +171,176 @@ type sysGpuEntityI[
 	GetSectionU32Array() U32ArraySec
 }
 
+// sysGpuEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysGpuEmitSectionSymbol[
+	SymbolAttr sysGpuSymbolAttrI,
+	SymbolSec sysGpuSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row SysGpu) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindGpu)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
+	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmGpuHost)
+	symbolSecAttr_Host.EndAttributeP()
+	return
+}
+
+// sysGpuEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysGpuEmitSectionSymbolArray[
+	SymbolArrayAttr sysGpuSymbolArrayAttrI,
+	SymbolArraySec sysGpuSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row SysGpu) (err error) {
+	if len(row.Vendor) > 0 {
+		symbolArraySecAttr_Vendor := symbolArraySec.BeginAttribute()
+		for _, v := range row.Vendor {
+			symbolArraySecAttr_Vendor.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Vendor.AddMembershipLowCardRefP(kindSysmGpuVendor)
+		symbolArraySecAttr_Vendor.EndAttributeP()
+	}
+	if len(row.Name) > 0 {
+		symbolArraySecAttr_Name := symbolArraySec.BeginAttribute()
+		for _, v := range row.Name {
+			symbolArraySecAttr_Name.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Name.AddMembershipLowCardRefP(kindSysmGpuName)
+		symbolArraySecAttr_Name.EndAttributeP()
+	}
+	if len(row.PCIID) > 0 {
+		symbolArraySecAttr_PCIID := symbolArraySec.BeginAttribute()
+		for _, v := range row.PCIID {
+			symbolArraySecAttr_PCIID.AddToContainerP(v)
+		}
+		symbolArraySecAttr_PCIID.AddMembershipLowCardRefP(kindSysmGpuPciId)
+		symbolArraySecAttr_PCIID.EndAttributeP()
+	}
+	return
+}
+
+// sysGpuEmitSectionI32Array writes this kind's i32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysGpuEmitSectionI32Array[
+	I32ArrayAttr sysGpuI32ArrayAttrI,
+	I32ArraySec sysGpuI32ArraySecI[I32ArrayAttr, Ent],
+	Ent any,
+](i32ArraySec I32ArraySec, row SysGpu) (err error) {
+	if len(row.Index) > 0 {
+		i32ArraySecAttr_Index := i32ArraySec.BeginAttribute()
+		for _, v := range row.Index {
+			i32ArraySecAttr_Index.AddToContainerP(v)
+		}
+		i32ArraySecAttr_Index.AddMembershipLowCardRefP(kindSysmGpuIndex)
+		i32ArraySecAttr_Index.EndAttributeP()
+	}
+	return
+}
+
+// sysGpuEmitSectionU8Array writes this kind's u8Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysGpuEmitSectionU8Array[
+	U8ArrayAttr sysGpuU8ArrayAttrI,
+	U8ArraySec sysGpuU8ArraySecI[U8ArrayAttr, Ent],
+	Ent any,
+](u8ArraySec U8ArraySec, row SysGpu) (err error) {
+	if len(row.BusyPercent) > 0 {
+		u8ArraySecAttr_BusyPercent := u8ArraySec.BeginAttribute()
+		for _, v := range row.BusyPercent {
+			u8ArraySecAttr_BusyPercent.AddToContainerP(v)
+		}
+		u8ArraySecAttr_BusyPercent.AddMembershipLowCardRefP(kindSysmGpuBusyPct)
+		u8ArraySecAttr_BusyPercent.EndAttributeP()
+	}
+	return
+}
+
+// sysGpuEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysGpuEmitSectionU64Array[
+	U64ArrayAttr sysGpuU64ArrayAttrI,
+	U64ArraySec sysGpuU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row SysGpu) (err error) {
+	if len(row.MemoryUsedBytes) > 0 {
+		u64ArraySecAttr_MemoryUsedBytes := u64ArraySec.BeginAttribute()
+		for _, v := range row.MemoryUsedBytes {
+			u64ArraySecAttr_MemoryUsedBytes.AddToContainerP(v)
+		}
+		u64ArraySecAttr_MemoryUsedBytes.AddMembershipLowCardRefP(kindSysmGpuMemoryUsedBytes)
+		u64ArraySecAttr_MemoryUsedBytes.EndAttributeP()
+	}
+	if len(row.MemoryTotalBytes) > 0 {
+		u64ArraySecAttr_MemoryTotalBytes := u64ArraySec.BeginAttribute()
+		for _, v := range row.MemoryTotalBytes {
+			u64ArraySecAttr_MemoryTotalBytes.AddToContainerP(v)
+		}
+		u64ArraySecAttr_MemoryTotalBytes.AddMembershipLowCardRefP(kindSysmGpuMemoryTotalBytes)
+		u64ArraySecAttr_MemoryTotalBytes.EndAttributeP()
+	}
+	return
+}
+
+// sysGpuEmitSectionF32Array writes this kind's f32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysGpuEmitSectionF32Array[
+	F32ArrayAttr sysGpuF32ArrayAttrI,
+	F32ArraySec sysGpuF32ArraySecI[F32ArrayAttr, Ent],
+	Ent any,
+](f32ArraySec F32ArraySec, row SysGpu) (err error) {
+	if len(row.PowerWatts) > 0 {
+		f32ArraySecAttr_PowerWatts := f32ArraySec.BeginAttribute()
+		for _, v := range row.PowerWatts {
+			f32ArraySecAttr_PowerWatts.AddToContainerP(v)
+		}
+		f32ArraySecAttr_PowerWatts.AddMembershipLowCardRefP(kindSysmGpuPowerWatts)
+		f32ArraySecAttr_PowerWatts.EndAttributeP()
+	}
+	if len(row.TempC) > 0 {
+		f32ArraySecAttr_TempC := f32ArraySec.BeginAttribute()
+		for _, v := range row.TempC {
+			f32ArraySecAttr_TempC.AddToContainerP(v)
+		}
+		f32ArraySecAttr_TempC.AddMembershipLowCardRefP(kindSysmGpuTempC)
+		f32ArraySecAttr_TempC.EndAttributeP()
+	}
+	return
+}
+
+// sysGpuEmitSectionU32Array writes this kind's u32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysGpuEmitSectionU32Array[
+	U32ArrayAttr sysGpuU32ArrayAttrI,
+	U32ArraySec sysGpuU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+](u32ArraySec U32ArraySec, row SysGpu) (err error) {
+	if len(row.FreqMHz) > 0 {
+		u32ArraySecAttr_FreqMHz := u32ArraySec.BeginAttribute()
+		for _, v := range row.FreqMHz {
+			u32ArraySecAttr_FreqMHz.AddToContainerP(v)
+		}
+		u32ArraySecAttr_FreqMHz.AddMembershipLowCardRefP(kindSysmGpuFreqMhz)
+		u32ArraySecAttr_FreqMHz.EndAttributeP()
+	}
+	return
+}
+
 // sysGpuAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -203,109 +373,51 @@ func sysGpuAddSections[
 ](dml DML, row SysGpu) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
-	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindGpu)
-	symbolSecAttr_Kind.EndAttributeP()
-	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
-	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmGpuHost)
-	symbolSecAttr_Host.EndAttributeP()
+	err = sysGpuEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- symbolArray. ---
 	symbolArraySec := dml.GetSectionSymbolArray()
-	if len(row.Vendor) > 0 {
-		symbolArraySecAttr_Vendor := symbolArraySec.BeginAttribute()
-		for _, v := range row.Vendor {
-			symbolArraySecAttr_Vendor.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Vendor.AddMembershipLowCardRefP(kindSysmGpuVendor)
-		symbolArraySecAttr_Vendor.EndAttributeP()
-	}
-	if len(row.Name) > 0 {
-		symbolArraySecAttr_Name := symbolArraySec.BeginAttribute()
-		for _, v := range row.Name {
-			symbolArraySecAttr_Name.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Name.AddMembershipLowCardRefP(kindSysmGpuName)
-		symbolArraySecAttr_Name.EndAttributeP()
-	}
-	if len(row.PCIID) > 0 {
-		symbolArraySecAttr_PCIID := symbolArraySec.BeginAttribute()
-		for _, v := range row.PCIID {
-			symbolArraySecAttr_PCIID.AddToContainerP(v)
-		}
-		symbolArraySecAttr_PCIID.AddMembershipLowCardRefP(kindSysmGpuPciId)
-		symbolArraySecAttr_PCIID.EndAttributeP()
+	err = sysGpuEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	// --- i32Array. ---
 	i32ArraySec := dml.GetSectionI32Array()
-	if len(row.Index) > 0 {
-		i32ArraySecAttr_Index := i32ArraySec.BeginAttribute()
-		for _, v := range row.Index {
-			i32ArraySecAttr_Index.AddToContainerP(v)
-		}
-		i32ArraySecAttr_Index.AddMembershipLowCardRefP(kindSysmGpuIndex)
-		i32ArraySecAttr_Index.EndAttributeP()
+	err = sysGpuEmitSectionI32Array(i32ArraySec, row)
+	if err != nil {
+		return
 	}
 	i32ArraySec.EndSection()
 	// --- u8Array. ---
 	u8ArraySec := dml.GetSectionU8Array()
-	if len(row.BusyPercent) > 0 {
-		u8ArraySecAttr_BusyPercent := u8ArraySec.BeginAttribute()
-		for _, v := range row.BusyPercent {
-			u8ArraySecAttr_BusyPercent.AddToContainerP(v)
-		}
-		u8ArraySecAttr_BusyPercent.AddMembershipLowCardRefP(kindSysmGpuBusyPct)
-		u8ArraySecAttr_BusyPercent.EndAttributeP()
+	err = sysGpuEmitSectionU8Array(u8ArraySec, row)
+	if err != nil {
+		return
 	}
 	u8ArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	if len(row.MemoryUsedBytes) > 0 {
-		u64ArraySecAttr_MemoryUsedBytes := u64ArraySec.BeginAttribute()
-		for _, v := range row.MemoryUsedBytes {
-			u64ArraySecAttr_MemoryUsedBytes.AddToContainerP(v)
-		}
-		u64ArraySecAttr_MemoryUsedBytes.AddMembershipLowCardRefP(kindSysmGpuMemoryUsedBytes)
-		u64ArraySecAttr_MemoryUsedBytes.EndAttributeP()
-	}
-	if len(row.MemoryTotalBytes) > 0 {
-		u64ArraySecAttr_MemoryTotalBytes := u64ArraySec.BeginAttribute()
-		for _, v := range row.MemoryTotalBytes {
-			u64ArraySecAttr_MemoryTotalBytes.AddToContainerP(v)
-		}
-		u64ArraySecAttr_MemoryTotalBytes.AddMembershipLowCardRefP(kindSysmGpuMemoryTotalBytes)
-		u64ArraySecAttr_MemoryTotalBytes.EndAttributeP()
+	err = sysGpuEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
 	}
 	u64ArraySec.EndSection()
 	// --- f32Array. ---
 	f32ArraySec := dml.GetSectionF32Array()
-	if len(row.PowerWatts) > 0 {
-		f32ArraySecAttr_PowerWatts := f32ArraySec.BeginAttribute()
-		for _, v := range row.PowerWatts {
-			f32ArraySecAttr_PowerWatts.AddToContainerP(v)
-		}
-		f32ArraySecAttr_PowerWatts.AddMembershipLowCardRefP(kindSysmGpuPowerWatts)
-		f32ArraySecAttr_PowerWatts.EndAttributeP()
-	}
-	if len(row.TempC) > 0 {
-		f32ArraySecAttr_TempC := f32ArraySec.BeginAttribute()
-		for _, v := range row.TempC {
-			f32ArraySecAttr_TempC.AddToContainerP(v)
-		}
-		f32ArraySecAttr_TempC.AddMembershipLowCardRefP(kindSysmGpuTempC)
-		f32ArraySecAttr_TempC.EndAttributeP()
+	err = sysGpuEmitSectionF32Array(f32ArraySec, row)
+	if err != nil {
+		return
 	}
 	f32ArraySec.EndSection()
 	// --- u32Array. ---
 	u32ArraySec := dml.GetSectionU32Array()
-	if len(row.FreqMHz) > 0 {
-		u32ArraySecAttr_FreqMHz := u32ArraySec.BeginAttribute()
-		for _, v := range row.FreqMHz {
-			u32ArraySecAttr_FreqMHz.AddToContainerP(v)
-		}
-		u32ArraySecAttr_FreqMHz.AddMembershipLowCardRefP(kindSysmGpuFreqMhz)
-		u32ArraySecAttr_FreqMHz.EndAttributeP()
+	err = sysGpuEmitSectionU32Array(u32ArraySec, row)
+	if err != nil {
+		return
 	}
 	u32ArraySec.EndSection()
 	return

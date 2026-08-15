@@ -46,6 +46,21 @@ type envelopeEntityI[
 	GetSectionEnvBlob() EnvBlobSec
 }
 
+// envelopeEmitSectionEnvBlob writes this kind's envBlob attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func envelopeEmitSectionEnvBlob[
+	EnvBlobAttr envelopeEnvBlobAttrI,
+	EnvBlobSec envelopeEnvBlobSecI[EnvBlobAttr, Ent],
+	Ent any,
+](envBlobSec EnvBlobSec, row Envelope) (err error) {
+	envBlobSecAttr_Framed := envBlobSec.BeginAttribute(row.Framed)
+	envBlobSecAttr_Framed.AddMembershipLowCardRefP(kindPushoutFramed)
+	envBlobSecAttr_Framed.EndAttributeP()
+	return
+}
+
 // envelopeAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -60,9 +75,10 @@ func envelopeAddSections[
 ](dml DML, row Envelope) (err error) {
 	// --- envBlob. ---
 	envBlobSec := dml.GetSectionEnvBlob()
-	envBlobSecAttr_Framed := envBlobSec.BeginAttribute(row.Framed)
-	envBlobSecAttr_Framed.AddMembershipLowCardRefP(kindPushoutFramed)
-	envBlobSecAttr_Framed.EndAttributeP()
+	err = envelopeEmitSectionEnvBlob(envBlobSec, row)
+	if err != nil {
+		return
+	}
 	envBlobSec.EndSection()
 	return
 }

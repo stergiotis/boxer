@@ -109,38 +109,33 @@ type sysProcCmdEntityI[
 	GetSectionSymbolArray() SymbolArraySec
 }
 
-// sysProcCmdAddSections contributes this kind's tagged sections to the OPEN
-// entity on dml — the BuildEntities body without the entity frame.
-// The caller owns BeginEntity / plain setters / CommitEntity.
-func sysProcCmdAddSections[
+// sysProcCmdEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcCmdEmitSectionSymbol[
 	SymbolAttr sysProcCmdSymbolAttrI,
 	SymbolSec sysProcCmdSymbolSecI[SymbolAttr, Ent],
-	U32ArrayAttr sysProcCmdU32ArrayAttrI,
-	U32ArraySec sysProcCmdU32ArraySecI[U32ArrayAttr, Ent],
-	StringArrayAttr sysProcCmdStringArrayAttrI,
-	StringArraySec sysProcCmdStringArraySecI[StringArrayAttr, Ent],
-	SymbolArrayAttr sysProcCmdSymbolArrayAttrI,
-	SymbolArraySec sysProcCmdSymbolArraySecI[SymbolArrayAttr, Ent],
 	Ent any,
-	DML sysProcCmdEntityI[
-		SymbolAttr, SymbolSec,
-		U32ArrayAttr, U32ArraySec,
-		StringArrayAttr, StringArraySec,
-		SymbolArrayAttr, SymbolArraySec,
-		Ent,
-	],
-](dml DML, row SysProcCmd) (err error) {
-	// --- symbol. ---
-	symbolSec := dml.GetSectionSymbol()
+](symbolSec SymbolSec, row SysProcCmd) (err error) {
 	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
 	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindProcCmd)
 	symbolSecAttr_Kind.EndAttributeP()
 	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
 	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmProcCmdHost)
 	symbolSecAttr_Host.EndAttributeP()
-	symbolSec.EndSection()
-	// --- u32Array. ---
-	u32ArraySec := dml.GetSectionU32Array()
+	return
+}
+
+// sysProcCmdEmitSectionU32Array writes this kind's u32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcCmdEmitSectionU32Array[
+	U32ArrayAttr sysProcCmdU32ArrayAttrI,
+	U32ArraySec sysProcCmdU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+](u32ArraySec U32ArraySec, row SysProcCmd) (err error) {
 	if len(row.Pid) > 0 {
 		u32ArraySecAttr_Pid := u32ArraySec.BeginAttribute()
 		for _, v := range row.Pid {
@@ -165,9 +160,18 @@ func sysProcCmdAddSections[
 		u32ArraySecAttr_Gid.AddMembershipLowCardRefP(kindSysmProcCmdGid)
 		u32ArraySecAttr_Gid.EndAttributeP()
 	}
-	u32ArraySec.EndSection()
-	// --- stringArray. ---
-	stringArraySec := dml.GetSectionStringArray()
+	return
+}
+
+// sysProcCmdEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcCmdEmitSectionStringArray[
+	StringArrayAttr sysProcCmdStringArrayAttrI,
+	StringArraySec sysProcCmdStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row SysProcCmd) (err error) {
 	if len(row.Cmd) > 0 {
 		stringArraySecAttr_Cmd := stringArraySec.BeginAttribute()
 		for _, v := range row.Cmd {
@@ -176,9 +180,18 @@ func sysProcCmdAddSections[
 		stringArraySecAttr_Cmd.AddMembershipLowCardRefP(kindSysmProcCmdLine)
 		stringArraySecAttr_Cmd.EndAttributeP()
 	}
-	stringArraySec.EndSection()
-	// --- symbolArray. ---
-	symbolArraySec := dml.GetSectionSymbolArray()
+	return
+}
+
+// sysProcCmdEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcCmdEmitSectionSymbolArray[
+	SymbolArrayAttr sysProcCmdSymbolArrayAttrI,
+	SymbolArraySec sysProcCmdSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row SysProcCmd) (err error) {
 	if len(row.User) > 0 {
 		symbolArraySecAttr_User := symbolArraySec.BeginAttribute()
 		for _, v := range row.User {
@@ -186,6 +199,57 @@ func sysProcCmdAddSections[
 		}
 		symbolArraySecAttr_User.AddMembershipLowCardRefP(kindSysmProcCmdUser)
 		symbolArraySecAttr_User.EndAttributeP()
+	}
+	return
+}
+
+// sysProcCmdAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func sysProcCmdAddSections[
+	SymbolAttr sysProcCmdSymbolAttrI,
+	SymbolSec sysProcCmdSymbolSecI[SymbolAttr, Ent],
+	U32ArrayAttr sysProcCmdU32ArrayAttrI,
+	U32ArraySec sysProcCmdU32ArraySecI[U32ArrayAttr, Ent],
+	StringArrayAttr sysProcCmdStringArrayAttrI,
+	StringArraySec sysProcCmdStringArraySecI[StringArrayAttr, Ent],
+	SymbolArrayAttr sysProcCmdSymbolArrayAttrI,
+	SymbolArraySec sysProcCmdSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+	DML sysProcCmdEntityI[
+		SymbolAttr, SymbolSec,
+		U32ArrayAttr, U32ArraySec,
+		StringArrayAttr, StringArraySec,
+		SymbolArrayAttr, SymbolArraySec,
+		Ent,
+	],
+](dml DML, row SysProcCmd) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	err = sysProcCmdEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
+	symbolSec.EndSection()
+	// --- u32Array. ---
+	u32ArraySec := dml.GetSectionU32Array()
+	err = sysProcCmdEmitSectionU32Array(u32ArraySec, row)
+	if err != nil {
+		return
+	}
+	u32ArraySec.EndSection()
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	err = sysProcCmdEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
+	stringArraySec.EndSection()
+	// --- symbolArray. ---
+	symbolArraySec := dml.GetSectionSymbolArray()
+	err = sysProcCmdEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	return

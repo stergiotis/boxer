@@ -329,6 +329,18 @@ func writeBuildEntitiesFunc(sb *strings.Builder, plan *mappingplan.Plan, groups 
 func writeAddSectionsFunc(sb *strings.Builder, plan *mappingplan.Plan, groups []goplan.SectionGroup, mode EmitModeE) (err error) {
 	kind := kindIdent(plan.KindType, mode)
 
+	// The per-section halves come first: a caller that owns the frame for
+	// SEVERAL kinds cannot let each kind close its own sections, because
+	// EndSection closes one for good and the next kind would find it shut.
+	// Emitting the attribute writes separately from the frame handling is what
+	// lets such a caller defer the close (ADR-0183 D4, dml/runtime's
+	// DeferredSectionBuffer); AddSections below is those halves plus the
+	// frame handling, for the single-kind caller who wants both.
+	err = writeSectionEmitFuncs(sb, plan, groups, mode)
+	if err != nil {
+		return
+	}
+
 	linef(sb, 0, "// %sAddSections contributes this kind's tagged sections to the OPEN", kind)
 	line(sb, 0, "// entity on dml — the BuildEntities body without the entity frame.")
 	line(sb, 0, "// The caller owns BeginEntity / plain setters / CommitEntity.")
@@ -349,14 +361,50 @@ func writeAddSectionsFunc(sb *strings.Builder, plan *mappingplan.Plan, groups []
 	linef(sb, 0, "](dml DML, row %s) (err error) {", plan.KindType)
 
 	for _, g := range groups {
-		err = writeSectionDriver(sb, g, rowValueSrc())
-		if err != nil {
-			return
-		}
+		method := methodFor(g.Section)
+		secVar := lowerFirst(method) + "Sec"
+		linef(sb, 2, "// --- %s. ---", g.Section)
+		linef(sb, 2, "%s := dml.GetSection%s()", secVar, method)
+		linef(sb, 2, "err = %sEmitSection%s(%s, row)", kind, method, secVar)
+		line(sb, 2, "if err != nil {")
+		line(sb, 3, "return")
+		line(sb, 2, "}")
+		linef(sb, 2, "%s.EndSection()", secVar)
 	}
 
 	line(sb, 1, "return")
 	line(sb, 0, "}\n")
+	return
+}
+
+// writeSectionEmitFuncs emits one attribute-writing function per section: the
+// section driver without GetSection and without EndSection, over a section
+// handle the caller already holds.
+//
+// This is the unit a deferred write path needs. A builder assembling one
+// entity from several components enqueues these and closes each section once,
+// after every component that touched it has written — which is the only order
+// the DML's frame state machine admits (ADR-0183 D4).
+func writeSectionEmitFuncs(sb *strings.Builder, plan *mappingplan.Plan, groups []goplan.SectionGroup, mode EmitModeE) (err error) {
+	kind := kindIdent(plan.KindType, mode)
+	for _, g := range groups {
+		method := methodFor(g.Section)
+		linef(sb, 0, "// %sEmitSection%s writes this kind's %s attributes into an", kind, method, g.Section)
+		line(sb, 0, "// ALREADY-OPEN section frame, and does not close it. The caller owns")
+		line(sb, 0, "// the frame: one kind's AddSections, or a builder deferring the close")
+		line(sb, 0, "// until every component that shares the section has written.")
+		linef(sb, 0, "func %sEmitSection%s[", kind, method)
+		linef(sb, 1, "%sAttr %s%sAttrI,", method, kind, method)
+		linef(sb, 1, "%sSec %s%sSecI[%sAttr, Ent],", method, kind, method, method)
+		line(sb, 1, "Ent any,")
+		linef(sb, 0, "](%s %s%s, row %s) (err error) {", lowerFirst(method)+"Sec", method, "Sec", plan.KindType)
+		err = writeSectionAttributes(sb, g, rowValueSrc())
+		if err != nil {
+			return
+		}
+		line(sb, 1, "return")
+		line(sb, 0, "}\n")
+	}
 	return
 }
 
@@ -395,18 +443,25 @@ func writeSectionDriver(sb *strings.Builder, g goplan.SectionGroup, src valueSrc
 	secVar := lowerFirst(method) + "Sec"
 	linef(sb, 2, "// --- %s. ---", g.Section)
 	linef(sb, 2, "%s := dml.GetSection%s()", secVar, method)
+	err = writeSectionAttributes(sb, g, src)
+	if err != nil {
+		return
+	}
+	linef(sb, 2, "%s.EndSection()", secVar)
+	return
+}
 
+// writeSectionAttributes emits the attribute writes for one section into an
+// open frame — the driver above without the frame handling.
+func writeSectionAttributes(sb *strings.Builder, g goplan.SectionGroup, src valueSrc) (err error) {
+	method := methodFor(g.Section)
+	secVar := lowerFirst(method) + "Sec"
 	if ts, ok := g.TupleSpec(); ok {
 		writeTupleSectionDriver(sb, g, ts, secVar, src)
-		linef(sb, 2, "%s.EndSection()", secVar)
 		return
 	}
 	if len(g.SubColumns) > 1 {
 		err = writeMultiSubColumnDriver(sb, g, secVar, src)
-		if err != nil {
-			return
-		}
-		linef(sb, 2, "%s.EndSection()", secVar)
 		return
 	}
 	for _, f := range g.SubColumns[0].Fields {
@@ -415,7 +470,6 @@ func writeSectionDriver(sb *strings.Builder, g goplan.SectionGroup, src valueSrc
 			return
 		}
 	}
-	linef(sb, 2, "%s.EndSection()", secVar)
 	return
 }
 

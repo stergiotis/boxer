@@ -46,6 +46,21 @@ type logEntryEntityI[
 	GetSectionLogHash() LogHashSec
 }
 
+// logEntryEmitSectionLogHash writes this kind's logHash attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func logEntryEmitSectionLogHash[
+	LogHashAttr logEntryLogHashAttrI,
+	LogHashSec logEntryLogHashSecI[LogHashAttr, Ent],
+	Ent any,
+](logHashSec LogHashSec, row LogEntry) (err error) {
+	logHashSecAttr_Hash := logHashSec.BeginAttribute(row.Hash)
+	logHashSecAttr_Hash.AddMembershipLowCardRefP(kindPushoutHash)
+	logHashSecAttr_Hash.EndAttributeP()
+	return
+}
+
 // logEntryAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -60,9 +75,10 @@ func logEntryAddSections[
 ](dml DML, row LogEntry) (err error) {
 	// --- logHash. ---
 	logHashSec := dml.GetSectionLogHash()
-	logHashSecAttr_Hash := logHashSec.BeginAttribute(row.Hash)
-	logHashSecAttr_Hash.AddMembershipLowCardRefP(kindPushoutHash)
-	logHashSecAttr_Hash.EndAttributeP()
+	err = logEntryEmitSectionLogHash(logHashSec, row)
+	if err != nil {
+		return
+	}
 	logHashSec.EndSection()
 	return
 }

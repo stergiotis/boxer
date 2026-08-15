@@ -87,6 +87,66 @@ type retentionEntityI[
 	GetSectionRetTime() RetTimeSec
 }
 
+// retentionEmitSectionRetHash writes this kind's retHash attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func retentionEmitSectionRetHash[
+	RetHashAttr retentionRetHashAttrI,
+	RetHashSec retentionRetHashSecI[RetHashAttr, Ent],
+	Ent any,
+](retHashSec RetHashSec, row Retention) (err error) {
+	if len(row.Hashes) > 0 {
+		retHashSecAttr_Hashes := retHashSec.BeginAttribute()
+		for _, v := range row.Hashes {
+			retHashSecAttr_Hashes.AddToContainerP(v)
+		}
+		retHashSecAttr_Hashes.AddMembershipLowCardRefP(kindPushoutRetHash)
+		retHashSecAttr_Hashes.EndAttributeP()
+	}
+	return
+}
+
+// retentionEmitSectionRetIndex writes this kind's retIndex attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func retentionEmitSectionRetIndex[
+	RetIndexAttr retentionRetIndexAttrI,
+	RetIndexSec retentionRetIndexSecI[RetIndexAttr, Ent],
+	Ent any,
+](retIndexSec RetIndexSec, row Retention) (err error) {
+	if len(row.Indices) > 0 {
+		retIndexSecAttr_Indices := retIndexSec.BeginAttribute()
+		for _, v := range row.Indices {
+			retIndexSecAttr_Indices.AddToContainerP(v)
+		}
+		retIndexSecAttr_Indices.AddMembershipLowCardRefP(kindPushoutRetIdx)
+		retIndexSecAttr_Indices.EndAttributeP()
+	}
+	return
+}
+
+// retentionEmitSectionRetTime writes this kind's retTime attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func retentionEmitSectionRetTime[
+	RetTimeAttr retentionRetTimeAttrI,
+	RetTimeSec retentionRetTimeSecI[RetTimeAttr, Ent],
+	Ent any,
+](retTimeSec RetTimeSec, row Retention) (err error) {
+	if len(row.Times) > 0 {
+		retTimeSecAttr_Times := retTimeSec.BeginAttribute()
+		for _, v := range row.Times {
+			retTimeSecAttr_Times.AddToContainerP(v)
+		}
+		retTimeSecAttr_Times.AddMembershipLowCardRefP(kindPushoutRetTime)
+		retTimeSecAttr_Times.EndAttributeP()
+	}
+	return
+}
+
 // retentionAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -107,35 +167,23 @@ func retentionAddSections[
 ](dml DML, row Retention) (err error) {
 	// --- retHash. ---
 	retHashSec := dml.GetSectionRetHash()
-	if len(row.Hashes) > 0 {
-		retHashSecAttr_Hashes := retHashSec.BeginAttribute()
-		for _, v := range row.Hashes {
-			retHashSecAttr_Hashes.AddToContainerP(v)
-		}
-		retHashSecAttr_Hashes.AddMembershipLowCardRefP(kindPushoutRetHash)
-		retHashSecAttr_Hashes.EndAttributeP()
+	err = retentionEmitSectionRetHash(retHashSec, row)
+	if err != nil {
+		return
 	}
 	retHashSec.EndSection()
 	// --- retIndex. ---
 	retIndexSec := dml.GetSectionRetIndex()
-	if len(row.Indices) > 0 {
-		retIndexSecAttr_Indices := retIndexSec.BeginAttribute()
-		for _, v := range row.Indices {
-			retIndexSecAttr_Indices.AddToContainerP(v)
-		}
-		retIndexSecAttr_Indices.AddMembershipLowCardRefP(kindPushoutRetIdx)
-		retIndexSecAttr_Indices.EndAttributeP()
+	err = retentionEmitSectionRetIndex(retIndexSec, row)
+	if err != nil {
+		return
 	}
 	retIndexSec.EndSection()
 	// --- retTime. ---
 	retTimeSec := dml.GetSectionRetTime()
-	if len(row.Times) > 0 {
-		retTimeSecAttr_Times := retTimeSec.BeginAttribute()
-		for _, v := range row.Times {
-			retTimeSecAttr_Times.AddToContainerP(v)
-		}
-		retTimeSecAttr_Times.AddMembershipLowCardRefP(kindPushoutRetTime)
-		retTimeSecAttr_Times.EndAttributeP()
+	err = retentionEmitSectionRetTime(retTimeSec, row)
+	if err != nil {
+		return
 	}
 	retTimeSec.EndSection()
 	return

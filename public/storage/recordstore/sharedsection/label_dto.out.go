@@ -46,6 +46,21 @@ type labelEntityI[
 	GetSectionSymbol() SymbolSec
 }
 
+// labelEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func labelEmitSectionSymbol[
+	SymbolAttr labelSymbolAttrI,
+	SymbolSec labelSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row Label) (err error) {
+	symbolSecAttr_Name := symbolSec.BeginAttribute(row.Name)
+	symbolSecAttr_Name.AddMembershipLowCardRefP(kindAssetName)
+	symbolSecAttr_Name.EndAttributeP()
+	return
+}
+
 // labelAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -60,9 +75,10 @@ func labelAddSections[
 ](dml DML, row Label) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Name := symbolSec.BeginAttribute(row.Name)
-	symbolSecAttr_Name.AddMembershipLowCardRefP(kindAssetName)
-	symbolSecAttr_Name.EndAttributeP()
+	err = labelEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	return
 }

@@ -46,6 +46,21 @@ type stateEntityI[
 	GetSectionSymbol() SymbolSec
 }
 
+// stateEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func stateEmitSectionSymbol[
+	SymbolAttr stateSymbolAttrI,
+	SymbolSec stateSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row State) (err error) {
+	symbolSecAttr_Phase := symbolSec.BeginAttribute(row.Phase)
+	symbolSecAttr_Phase.AddMembershipLowCardRefP(kindAssetPhase)
+	symbolSecAttr_Phase.EndAttributeP()
+	return
+}
+
 // stateAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -60,9 +75,10 @@ func stateAddSections[
 ](dml DML, row State) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Phase := symbolSec.BeginAttribute(row.Phase)
-	symbolSecAttr_Phase.AddMembershipLowCardRefP(kindAssetPhase)
-	symbolSecAttr_Phase.EndAttributeP()
+	err = stateEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	return
 }

@@ -132,6 +132,23 @@ func ManyTagsDocBuildEntities[
 	return
 }
 
+// ManyTagsDocEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func ManyTagsDocEmitSectionSymbol[
+	SymbolAttr ManyTagsDocSymbolAttrI,
+	SymbolSec ManyTagsDocSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row ManyTagsDoc) (err error) {
+	for _, symbolSecElem := range row.Blocks {
+		symbolSecAttr := symbolSec.BeginAttribute(symbolSecElem.Val)
+		symbolSecAttr.AddMembershipLowCardRefP(kindTags)
+		symbolSecAttr.EndAttributeP()
+	}
+	return
+}
+
 // ManyTagsDocAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -146,10 +163,9 @@ func ManyTagsDocAddSections[
 ](dml DML, row ManyTagsDoc) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	for _, symbolSecElem := range row.Blocks {
-		symbolSecAttr := symbolSec.BeginAttribute(symbolSecElem.Val)
-		symbolSecAttr.AddMembershipLowCardRefP(kindTags)
-		symbolSecAttr.EndAttributeP()
+	err = ManyTagsDocEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
 	}
 	symbolSec.EndSection()
 	return

@@ -137,6 +137,25 @@ func LineageNestedBuildEntities[
 	return
 }
 
+// LineageNestedEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func LineageNestedEmitSectionSymbol[
+	SymbolAttr LineageNestedSymbolAttrI,
+	SymbolSec LineageNestedSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row LineageNested) (err error) {
+	for _, symbolSecElem := range row.Types {
+		symbolSecAttr := symbolSec.BeginAttribute(symbolSecElem.Kind)
+		for _, mv := range symbolSecElem.Ancestors {
+			symbolSecAttr.AddMembershipLowCardRefP(uint64(mv))
+		}
+		symbolSecAttr.EndAttributeP()
+	}
+	return
+}
+
 // LineageNestedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -151,12 +170,9 @@ func LineageNestedAddSections[
 ](dml DML, row LineageNested) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	for _, symbolSecElem := range row.Types {
-		symbolSecAttr := symbolSec.BeginAttribute(symbolSecElem.Kind)
-		for _, mv := range symbolSecElem.Ancestors {
-			symbolSecAttr.AddMembershipLowCardRefP(uint64(mv))
-		}
-		symbolSecAttr.EndAttributeP()
+	err = LineageNestedEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
 	}
 	symbolSec.EndSection()
 	return

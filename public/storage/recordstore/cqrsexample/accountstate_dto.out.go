@@ -103,6 +103,66 @@ type accountStateEntityI[
 	GetSectionSnapAsOf() SnapAsOfSec
 }
 
+// accountStateEmitSectionSnapOwner writes this kind's snapOwner attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func accountStateEmitSectionSnapOwner[
+	SnapOwnerAttr accountStateSnapOwnerAttrI,
+	SnapOwnerSec accountStateSnapOwnerSecI[SnapOwnerAttr, Ent],
+	Ent any,
+](snapOwnerSec SnapOwnerSec, row AccountState) (err error) {
+	snapOwnerSecAttr_Owner := snapOwnerSec.BeginAttribute(row.Owner)
+	snapOwnerSecAttr_Owner.AddMembershipLowCardRefP(kindLedgerSnapOwner)
+	snapOwnerSecAttr_Owner.EndAttributeP()
+	return
+}
+
+// accountStateEmitSectionSnapBalance writes this kind's snapBalance attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func accountStateEmitSectionSnapBalance[
+	SnapBalanceAttr accountStateSnapBalanceAttrI,
+	SnapBalanceSec accountStateSnapBalanceSecI[SnapBalanceAttr, Ent],
+	Ent any,
+](snapBalanceSec SnapBalanceSec, row AccountState) (err error) {
+	snapBalanceSecAttr_Balance := snapBalanceSec.BeginAttributeSingle(row.Balance)
+	snapBalanceSecAttr_Balance.AddMembershipLowCardRefP(kindLedgerSnapBalance)
+	snapBalanceSecAttr_Balance.EndAttributeP()
+	return
+}
+
+// accountStateEmitSectionSnapClosed writes this kind's snapClosed attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func accountStateEmitSectionSnapClosed[
+	SnapClosedAttr accountStateSnapClosedAttrI,
+	SnapClosedSec accountStateSnapClosedSecI[SnapClosedAttr, Ent],
+	Ent any,
+](snapClosedSec SnapClosedSec, row AccountState) (err error) {
+	snapClosedSecAttr_Closed := snapClosedSec.BeginAttribute(row.Closed)
+	snapClosedSecAttr_Closed.AddMembershipLowCardRefP(kindLedgerSnapClosed)
+	snapClosedSecAttr_Closed.EndAttributeP()
+	return
+}
+
+// accountStateEmitSectionSnapAsOf writes this kind's snapAsOf attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func accountStateEmitSectionSnapAsOf[
+	SnapAsOfAttr accountStateSnapAsOfAttrI,
+	SnapAsOfSec accountStateSnapAsOfSecI[SnapAsOfAttr, Ent],
+	Ent any,
+](snapAsOfSec SnapAsOfSec, row AccountState) (err error) {
+	snapAsOfSecAttr_AsOf := snapAsOfSec.BeginAttributeSingle(row.AsOf)
+	snapAsOfSecAttr_AsOf.AddMembershipLowCardRefP(kindLedgerSnapAsOf)
+	snapAsOfSecAttr_AsOf.EndAttributeP()
+	return
+}
+
 // accountStateAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -126,27 +186,31 @@ func accountStateAddSections[
 ](dml DML, row AccountState) (err error) {
 	// --- snapOwner. ---
 	snapOwnerSec := dml.GetSectionSnapOwner()
-	snapOwnerSecAttr_Owner := snapOwnerSec.BeginAttribute(row.Owner)
-	snapOwnerSecAttr_Owner.AddMembershipLowCardRefP(kindLedgerSnapOwner)
-	snapOwnerSecAttr_Owner.EndAttributeP()
+	err = accountStateEmitSectionSnapOwner(snapOwnerSec, row)
+	if err != nil {
+		return
+	}
 	snapOwnerSec.EndSection()
 	// --- snapBalance. ---
 	snapBalanceSec := dml.GetSectionSnapBalance()
-	snapBalanceSecAttr_Balance := snapBalanceSec.BeginAttributeSingle(row.Balance)
-	snapBalanceSecAttr_Balance.AddMembershipLowCardRefP(kindLedgerSnapBalance)
-	snapBalanceSecAttr_Balance.EndAttributeP()
+	err = accountStateEmitSectionSnapBalance(snapBalanceSec, row)
+	if err != nil {
+		return
+	}
 	snapBalanceSec.EndSection()
 	// --- snapClosed. ---
 	snapClosedSec := dml.GetSectionSnapClosed()
-	snapClosedSecAttr_Closed := snapClosedSec.BeginAttribute(row.Closed)
-	snapClosedSecAttr_Closed.AddMembershipLowCardRefP(kindLedgerSnapClosed)
-	snapClosedSecAttr_Closed.EndAttributeP()
+	err = accountStateEmitSectionSnapClosed(snapClosedSec, row)
+	if err != nil {
+		return
+	}
 	snapClosedSec.EndSection()
 	// --- snapAsOf. ---
 	snapAsOfSec := dml.GetSectionSnapAsOf()
-	snapAsOfSecAttr_AsOf := snapAsOfSec.BeginAttributeSingle(row.AsOf)
-	snapAsOfSecAttr_AsOf.AddMembershipLowCardRefP(kindLedgerSnapAsOf)
-	snapAsOfSecAttr_AsOf.EndAttributeP()
+	err = accountStateEmitSectionSnapAsOf(snapAsOfSec, row)
+	if err != nil {
+		return
+	}
 	snapAsOfSec.EndSection()
 	return
 }

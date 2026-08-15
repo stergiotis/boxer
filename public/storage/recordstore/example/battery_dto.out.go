@@ -46,6 +46,21 @@ type batteryEntityI[
 	GetSectionU64Array() U64ArraySec
 }
 
+// batteryEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func batteryEmitSectionU64Array[
+	U64ArrayAttr batteryU64ArrayAttrI,
+	U64ArraySec batteryU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row Battery) (err error) {
+	u64ArraySecAttr_Charge := u64ArraySec.BeginAttributeSingle(row.Charge)
+	u64ArraySecAttr_Charge.AddMembershipLowCardRefP(kindDeviceCharge)
+	u64ArraySecAttr_Charge.EndAttributeP()
+	return
+}
+
 // batteryAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -60,9 +75,10 @@ func batteryAddSections[
 ](dml DML, row Battery) (err error) {
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	u64ArraySecAttr_Charge := u64ArraySec.BeginAttributeSingle(row.Charge)
-	u64ArraySecAttr_Charge.AddMembershipLowCardRefP(kindDeviceCharge)
-	u64ArraySecAttr_Charge.EndAttributeP()
+	err = batteryEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
 	u64ArraySec.EndSection()
 	return
 }

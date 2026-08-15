@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/pushoutstore/internal/lowlevel"
@@ -323,13 +324,40 @@ type PushoutEntityBuilder struct {
 	key   string
 	// ent mirrors the typed Add* calls so Commit can write the entity
 	// through to attached cache views; raw marks commits that touched
-	// the DML directly (or double-added a component) — those cannot be
-	// materialized faithfully and invalidate the key instead.
+	// the DML directly — those cannot be materialized faithfully and
+	// invalidate the key instead.
 	ent PushoutEntity
 	raw bool
+	// buf holds each component's section contributions until Commit, so
+	// components sharing a section share its frame. It also holds the
+	// frame invariants: one contribution per kind, and typed Adds
+	// exclusive with Raw (ADR-0183 D4).
+	buf dmlruntime.DeferredSectionBuffer
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+}
+
+// endSection closes one section's frame. The buffer calls it once per
+// section, after every component that contributed to it has written.
+func (inst *PushoutEntityBuilder) endSection(section string) error {
+	switch section {
+	case "envBlob":
+		inst.store.dml.GetSectionEnvBlob().EndSection()
+	case "logHash":
+		inst.store.dml.GetSectionLogHash().EndSection()
+	case "snapApplied":
+		inst.store.dml.GetSectionSnapApplied().EndSection()
+	case "snapGraggle":
+		inst.store.dml.GetSectionSnapGraggle().EndSection()
+	case "retHash":
+		inst.store.dml.GetSectionRetHash().EndSection()
+	case "retIndex":
+		inst.store.dml.GetSectionRetIndex().EndSection()
+	case "retTime":
+		inst.store.dml.GetSectionRetTime().EndSection()
+	}
+	return nil
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
@@ -344,63 +372,104 @@ func (inst *PushoutStore) Begin(id string, ts time.Time) *PushoutEntityBuilder {
 	return b
 }
 
-// AddEnvelope contributes the Envelope component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddEnvelope contributes the Envelope component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *PushoutEntityBuilder) AddEnvelope(row Envelope) *PushoutEntityBuilder {
-	err := envelopeAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Envelope"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Envelope.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Envelope = option.Some(row)
-	}
+	inst.buf.Enqueue("envBlob", "Envelope", func() error {
+		return envelopeEmitSectionEnvBlob(inst.store.dml.GetSectionEnvBlob(), row)
+	})
+	inst.ent.Envelope = option.Some(row)
 	return inst
 }
 
-// AddLogEntry contributes the LogEntry component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddLogEntry contributes the LogEntry component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *PushoutEntityBuilder) AddLogEntry(row LogEntry) *PushoutEntityBuilder {
-	err := logEntryAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("LogEntry"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.LogEntry.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.LogEntry = option.Some(row)
-	}
+	inst.buf.Enqueue("logHash", "LogEntry", func() error {
+		return logEntryEmitSectionLogHash(inst.store.dml.GetSectionLogHash(), row)
+	})
+	inst.ent.LogEntry = option.Some(row)
 	return inst
 }
 
-// AddSnapshot contributes the Snapshot component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSnapshot contributes the Snapshot component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *PushoutEntityBuilder) AddSnapshot(row Snapshot) *PushoutEntityBuilder {
-	err := snapshotAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Snapshot"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Snapshot.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Snapshot = option.Some(row)
-	}
+	inst.buf.Enqueue("snapApplied", "Snapshot", func() error {
+		return snapshotEmitSectionSnapApplied(inst.store.dml.GetSectionSnapApplied(), row)
+	})
+	inst.buf.Enqueue("snapGraggle", "Snapshot", func() error {
+		return snapshotEmitSectionSnapGraggle(inst.store.dml.GetSectionSnapGraggle(), row)
+	})
+	inst.ent.Snapshot = option.Some(row)
 	return inst
 }
 
-// AddRetention contributes the Retention component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddRetention contributes the Retention component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *PushoutEntityBuilder) AddRetention(row Retention) *PushoutEntityBuilder {
-	err := retentionAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Retention"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Retention.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Retention = option.Some(row)
-	}
+	inst.buf.Enqueue("retHash", "Retention", func() error {
+		return retentionEmitSectionRetHash(inst.store.dml.GetSectionRetHash(), row)
+	})
+	inst.buf.Enqueue("retIndex", "Retention", func() error {
+		return retentionEmitSectionRetIndex(inst.store.dml.GetSectionRetIndex(), row)
+	})
+	inst.buf.Enqueue("retTime", "Retention", func() error {
+		return retentionEmitSectionRetTime(inst.store.dml.GetSectionRetTime(), row)
+	})
+	inst.ent.Retention = option.Some(row)
 	return inst
 }
 
@@ -410,6 +479,9 @@ func (inst *PushoutEntityBuilder) AddRetention(row Retention) *PushoutEntityBuil
 // returned value by inference (raw := b.Raw()) and chain its
 // methods, but cannot name the type in their own signatures.
 func (inst *PushoutEntityBuilder) Raw() *lowlevel.InEntityPushoutTable {
+	if err := inst.buf.MarkRaw(); err != nil {
+		inst.store.dml.AppendError(err)
+	}
 	inst.raw = true // direct DML writes cannot be mirrored into the entity
 	return inst.store.dml
 }
@@ -423,6 +495,10 @@ func (inst *PushoutEntityBuilder) Raw() *lowlevel.InEntityPushoutTable {
 // instead. A failed Commit rolls the frame back — the entity is
 // discarded and the store stays usable.
 func (inst *PushoutEntityBuilder) Commit() (err error) {
+	if ferr := inst.buf.Flush(inst.endSection); ferr != nil {
+		inst.store.dml.AppendError(ferr) // surfaced by CommitEntity below
+	}
+	inst.buf.Reset()
 	err = lowlevel.InEntityPushoutTableCommitEntity(inst.store.dml)
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed) // release Begin's ambient stamps (consumed by the closed attributes)
 	if err != nil {
@@ -443,6 +519,7 @@ func (inst *PushoutEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *PushoutEntityBuilder) Rollback() (err error) {
+	inst.buf.Reset() // the buffered contributions are abandoned with the frame
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityPushoutTableRollbackEntity(inst.store.dml)
 }

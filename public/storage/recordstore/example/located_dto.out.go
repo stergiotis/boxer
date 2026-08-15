@@ -46,6 +46,21 @@ type locatedEntityI[
 	GetSectionGeoPoint() GeoPointSec
 }
 
+// locatedEmitSectionGeoPoint writes this kind's geoPoint attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func locatedEmitSectionGeoPoint[
+	GeoPointAttr locatedGeoPointAttrI,
+	GeoPointSec locatedGeoPointSecI[GeoPointAttr, Ent],
+	Ent any,
+](geoPointSec GeoPointSec, row Located) (err error) {
+	geoPointSecAttr := geoPointSec.BeginAttribute(row.Lat, row.Lng, row.Cell)
+	geoPointSecAttr.AddMembershipLowCardRefP(kindDeviceLoc)
+	geoPointSecAttr.EndAttributeP()
+	return
+}
+
 // locatedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -60,9 +75,10 @@ func locatedAddSections[
 ](dml DML, row Located) (err error) {
 	// --- geoPoint. ---
 	geoPointSec := dml.GetSectionGeoPoint()
-	geoPointSecAttr := geoPointSec.BeginAttribute(row.Lat, row.Lng, row.Cell)
-	geoPointSecAttr.AddMembershipLowCardRefP(kindDeviceLoc)
-	geoPointSecAttr.EndAttributeP()
+	err = locatedEmitSectionGeoPoint(geoPointSec, row)
+	if err != nil {
+		return
+	}
 	geoPointSec.EndSection()
 	return
 }

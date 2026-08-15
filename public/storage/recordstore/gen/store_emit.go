@@ -745,6 +745,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 		p("\t%q", "github.com/stergiotis/boxer/public/functional/option")
 	}
 	p("\t%q", "github.com/stergiotis/boxer/public/observability/eh")
+	// The entity builder always holds the deferred buffer: Commit flushes it
+	// and Raw marks it, whether or not any component is bound.
+	p("\tdmlruntime %q", "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime")
 	p("\t%q", "github.com/stergiotis/boxer/public/storage/recordstore")
 	if !inst.Flat {
 		p("\t%q", inst.ImportPath+"/internal/lowlevel")
@@ -1062,6 +1065,43 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("")
 }
 
+// emitBuilderEndSection renders the callback the deferred buffer closes
+// sections through. It covers the union of the components' sections, since the
+// buffer names a section by string and the DML names it by method.
+func (inst emitter) emitBuilderEndSection(sb *strings.Builder, comps []storeComponent) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	seen := map[string]struct{}{}
+	sections := make([]string, 0, 4)
+	for _, c := range comps {
+		for _, g := range c.groups {
+			if _, has := seen[g.Section]; has {
+				continue
+			}
+			seen[g.Section] = struct{}{}
+			sections = append(sections, g.Section)
+		}
+	}
+	p("// endSection closes one section's frame. The buffer calls it once per")
+	p("// section, after every component that contributed to it has written.")
+	p("func (inst *%s) endSection(section string) error {", inst.builderType())
+	if len(sections) == 0 {
+		p("\t_ = section")
+		p("\treturn nil")
+		p("}")
+		p("")
+		return
+	}
+	p("\tswitch section {")
+	for _, sec := range sections {
+		p("\tcase %q:", sec)
+		p("\t\tinst.store.dml.GetSection%s().EndSection()", mappingplan.UpperFirst(sec))
+	}
+	p("\t}")
+	p("\treturn nil")
+	p("}")
+	p("")
+}
+
 func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, stateView bool) {
 	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
 	p("// %s assembles one entity: envelope from Begin, components", inst.builderType())
@@ -1071,15 +1111,21 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("\tkey %s", inst.keyGoType)
 	p("\t// ent mirrors the typed Add* calls so Commit can write the entity")
 	p("\t// through to attached cache views; raw marks commits that touched")
-	p("\t// the DML directly (or double-added a component) — those cannot be")
-	p("\t// materialized faithfully and invalidate the key instead.")
+	p("\t// the DML directly — those cannot be materialized faithfully and")
+	p("\t// invalidate the key instead.")
 	p("\tent %s", inst.entityType())
 	p("\traw bool")
+	p("\t// buf holds each component's section contributions until Commit, so")
+	p("\t// components sharing a section share its frame. It also holds the")
+	p("\t// frame invariants: one contribution per kind, and typed Adds")
+	p("\t// exclusive with Raw (ADR-0183 D4).")
+	p("\tbuf dmlruntime.DeferredSectionBuffer")
 	p("\t// pushed counts the ambient memberships Begin pushed via the stampers;")
 	p("\t// Commit/Rollback pop exactly that many (ADR-0112 M1).")
 	p("\tpushed int")
 	p("}")
 	p("")
+	inst.emitBuilderEndSection(sb, comps)
 	hasPT := len(inst.model.passthrough) > 0
 	p("// Begin opens one entity with the envelope roles as typed arguments")
 	extras := make([]string, 0, 2)
@@ -1117,18 +1163,29 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("}")
 	p("")
 	for _, c := range comps {
-		p("// Add%s contributes the %s component to the open entity via the", c.Kind, c.Kind)
-		p("// generated entity-frame-free section driver (ADR-0100 SD6).")
+		p("// Add%s contributes the %s component to the open entity.", c.Kind, c.Kind)
+		p("//")
+		p("// The attributes are buffered, not written: a section frame closes for")
+		p("// good, so a component that closed its own sections would shut out the")
+		p("// next component sharing one. Commit writes them, one frame per section")
+		p("// in first-seen order (ADR-0183 D4).")
+		p("//")
+		p("// A second Add of this component, or an Add on an entity already using")
+		p("// Raw(), is refused: both used to mark the row un-mirrorable and carry")
+		p("// on, which made its read-back shape depend on a call the writer had")
+		p("// probably made by accident.")
 		p("func (inst *%s) Add%s(row %s) *%s {", inst.builderType(), c.Kind, c.Kind, inst.builderType())
-		p("\terr := %s(inst.store.dml, row)", inst.codecName(c.Kind, "AddSections"))
-		p("\tif err != nil {")
+		p("\tif err := inst.buf.StartKind(%q); err != nil {", c.Kind)
 		p("\t\tinst.store.dml.AppendError(err)")
+		p("\t\treturn inst")
 		p("\t}")
-		p("\tif inst.ent.%s.Has {", c.Kind)
-		p("\t\tinst.raw = true // double add: the read-back shape is undefined")
-		p("\t} else {")
-		p("\t\tinst.ent.%s = option.Some(row)", c.Kind)
-		p("\t}")
+		for _, g := range c.groups {
+			method := mappingplan.UpperFirst(g.Section)
+			p("\tinst.buf.Enqueue(%q, %q, func() error {", g.Section, c.Kind)
+			p("\t\treturn %s(inst.store.dml.GetSection%s(), row)", inst.codecName(c.Kind, "EmitSection"+method), method)
+			p("\t})")
+		}
+		p("\tinst.ent.%s = option.Some(row)", c.Kind)
 		p("\treturn inst")
 		p("}")
 		p("")
@@ -1141,6 +1198,9 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 		p("// methods, but cannot name the type in their own signatures.")
 	}
 	p("func (inst *%s) Raw() *%s%s {", inst.builderType(), inst.lowQ(), inst.dmlType())
+	p("\tif err := inst.buf.MarkRaw(); err != nil {")
+	p("\t\tinst.store.dml.AppendError(err)")
+	p("\t}")
 	p("\tinst.raw = true // direct DML writes cannot be mirrored into the entity")
 	p("\treturn inst.store.dml")
 	p("}")
@@ -1154,6 +1214,10 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("// instead. A failed Commit rolls the frame back — the entity is")
 	p("// discarded and the store stays usable.")
 	p("func (inst *%s) Commit() (err error) {", inst.builderType())
+	p("\tif ferr := inst.buf.Flush(inst.endSection); ferr != nil {")
+	p("\t\tinst.store.dml.AppendError(ferr) // surfaced by CommitEntity below")
+	p("\t}")
+	p("\tinst.buf.Reset()")
 	p("\terr = %s", inst.ctrlCall("inst.store.dml", "CommitEntity"))
 	p("\tinst.store.dml.PopMembershipsHighCardRef(inst.pushed) // release Begin's ambient stamps (consumed by the closed attributes)")
 	p("\tif err != nil {")
@@ -1174,6 +1238,7 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("// Rollback abandons the open entity frame without committing it;")
 	p("// already-buffered rows and the store remain usable.")
 	p("func (inst *%s) Rollback() (err error) {", inst.builderType())
+	p("\tinst.buf.Reset() // the buffered contributions are abandoned with the frame")
 	p("\tinst.store.dml.PopMembershipsHighCardRef(inst.pushed)")
 	p("\treturn %s", inst.ctrlCall("inst.store.dml", "RollbackEntity"))
 	p("}")

@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/meshdemo/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -268,13 +269,32 @@ type FleetEntityBuilder struct {
 	key   uint64
 	// ent mirrors the typed Add* calls so Commit can write the entity
 	// through to attached cache views; raw marks commits that touched
-	// the DML directly (or double-added a component) — those cannot be
-	// materialized faithfully and invalidate the key instead.
+	// the DML directly — those cannot be materialized faithfully and
+	// invalidate the key instead.
 	ent FleetEntity
 	raw bool
+	// buf holds each component's section contributions until Commit, so
+	// components sharing a section share its frame. It also holds the
+	// frame invariants: one contribution per kind, and typed Adds
+	// exclusive with Raw (ADR-0183 D4).
+	buf dmlruntime.DeferredSectionBuffer
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+}
+
+// endSection closes one section's frame. The buffer calls it once per
+// section, after every component that contributed to it has written.
+func (inst *FleetEntityBuilder) endSection(section string) error {
+	switch section {
+	case "symbol":
+		inst.store.dml.GetSectionSymbol().EndSection()
+	case "u8Array":
+		inst.store.dml.GetSectionU8Array().EndSection()
+	case "u64Array":
+		inst.store.dml.GetSectionU64Array().EndSection()
+	}
+	return nil
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
@@ -289,18 +309,32 @@ func (inst *FleetStore) Begin(id uint64, ts time.Time, env FleetEnvelope) *Fleet
 	return b
 }
 
-// AddFleetSample contributes the FleetSample component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddFleetSample contributes the FleetSample component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *FleetEntityBuilder) AddFleetSample(row FleetSample) *FleetEntityBuilder {
-	err := fleetSampleAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("FleetSample"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.FleetSample.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.FleetSample = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "FleetSample", func() error {
+		return fleetSampleEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("u8Array", "FleetSample", func() error {
+		return fleetSampleEmitSectionU8Array(inst.store.dml.GetSectionU8Array(), row)
+	})
+	inst.buf.Enqueue("u64Array", "FleetSample", func() error {
+		return fleetSampleEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.ent.FleetSample = option.Some(row)
 	return inst
 }
 
@@ -310,6 +344,9 @@ func (inst *FleetEntityBuilder) AddFleetSample(row FleetSample) *FleetEntityBuil
 // returned value by inference (raw := b.Raw()) and chain its
 // methods, but cannot name the type in their own signatures.
 func (inst *FleetEntityBuilder) Raw() *lowlevel.InEntityFactsTable {
+	if err := inst.buf.MarkRaw(); err != nil {
+		inst.store.dml.AppendError(err)
+	}
 	inst.raw = true // direct DML writes cannot be mirrored into the entity
 	return inst.store.dml
 }
@@ -323,6 +360,10 @@ func (inst *FleetEntityBuilder) Raw() *lowlevel.InEntityFactsTable {
 // instead. A failed Commit rolls the frame back — the entity is
 // discarded and the store stays usable.
 func (inst *FleetEntityBuilder) Commit() (err error) {
+	if ferr := inst.buf.Flush(inst.endSection); ferr != nil {
+		inst.store.dml.AppendError(ferr) // surfaced by CommitEntity below
+	}
+	inst.buf.Reset()
 	err = lowlevel.InEntityFactsTableCommitEntity(inst.store.dml)
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed) // release Begin's ambient stamps (consumed by the closed attributes)
 	if err != nil {
@@ -343,6 +384,7 @@ func (inst *FleetEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *FleetEntityBuilder) Rollback() (err error) {
+	inst.buf.Reset() // the buffered contributions are abandoned with the frame
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityFactsTableRollbackEntity(inst.store.dml)
 }

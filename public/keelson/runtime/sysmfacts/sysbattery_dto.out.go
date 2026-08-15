@@ -132,6 +132,144 @@ type sysBatteryEntityI[
 	GetSectionI64Array() I64ArraySec
 }
 
+// sysBatteryEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysBatteryEmitSectionSymbol[
+	SymbolAttr sysBatterySymbolAttrI,
+	SymbolSec sysBatterySymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row SysBattery) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindBattery)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
+	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmBatteryHost)
+	symbolSecAttr_Host.EndAttributeP()
+	return
+}
+
+// sysBatteryEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysBatteryEmitSectionSymbolArray[
+	SymbolArrayAttr sysBatterySymbolArrayAttrI,
+	SymbolArraySec sysBatterySymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row SysBattery) (err error) {
+	if len(row.Name) > 0 {
+		symbolArraySecAttr_Name := symbolArraySec.BeginAttribute()
+		for _, v := range row.Name {
+			symbolArraySecAttr_Name.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Name.AddMembershipLowCardRefP(kindSysmBatteryName)
+		symbolArraySecAttr_Name.EndAttributeP()
+	}
+	if len(row.Type) > 0 {
+		symbolArraySecAttr_Type := symbolArraySec.BeginAttribute()
+		for _, v := range row.Type {
+			symbolArraySecAttr_Type.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Type.AddMembershipLowCardRefP(kindSysmBatteryType)
+		symbolArraySecAttr_Type.EndAttributeP()
+	}
+	if len(row.AcName) > 0 {
+		symbolArraySecAttr_AcName := symbolArraySec.BeginAttribute()
+		for _, v := range row.AcName {
+			symbolArraySecAttr_AcName.AddToContainerP(v)
+		}
+		symbolArraySecAttr_AcName.AddMembershipLowCardRefP(kindSysmAcAdapterName)
+		symbolArraySecAttr_AcName.EndAttributeP()
+	}
+	return
+}
+
+// sysBatteryEmitSectionU8Array writes this kind's u8Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysBatteryEmitSectionU8Array[
+	U8ArrayAttr sysBatteryU8ArrayAttrI,
+	U8ArraySec sysBatteryU8ArraySecI[U8ArrayAttr, Ent],
+	Ent any,
+](u8ArraySec U8ArraySec, row SysBattery) (err error) {
+	if len(row.Percent) > 0 {
+		u8ArraySecAttr_Percent := u8ArraySec.BeginAttribute()
+		for _, v := range row.Percent {
+			u8ArraySecAttr_Percent.AddToContainerP(v)
+		}
+		u8ArraySecAttr_Percent.AddMembershipLowCardRefP(kindSysmBatteryPercent)
+		u8ArraySecAttr_Percent.EndAttributeP()
+	}
+	if len(row.State) > 0 {
+		u8ArraySecAttr_State := u8ArraySec.BeginAttribute()
+		for _, v := range row.State {
+			u8ArraySecAttr_State.AddToContainerP(v)
+		}
+		u8ArraySecAttr_State.AddMembershipLowCardRefP(kindSysmBatteryState)
+		u8ArraySecAttr_State.EndAttributeP()
+	}
+	if len(row.AcOnline) > 0 {
+		u8ArraySecAttr_AcOnline := u8ArraySec.BeginAttribute()
+		for _, v := range row.AcOnline {
+			u8ArraySecAttr_AcOnline.AddToContainerP(v)
+		}
+		u8ArraySecAttr_AcOnline.AddMembershipLowCardRefP(kindSysmAcAdapterOnline)
+		u8ArraySecAttr_AcOnline.EndAttributeP()
+	}
+	return
+}
+
+// sysBatteryEmitSectionF32Array writes this kind's f32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysBatteryEmitSectionF32Array[
+	F32ArrayAttr sysBatteryF32ArrayAttrI,
+	F32ArraySec sysBatteryF32ArraySecI[F32ArrayAttr, Ent],
+	Ent any,
+](f32ArraySec F32ArraySec, row SysBattery) (err error) {
+	if len(row.PowerWatts) > 0 {
+		f32ArraySecAttr_PowerWatts := f32ArraySec.BeginAttribute()
+		for _, v := range row.PowerWatts {
+			f32ArraySecAttr_PowerWatts.AddToContainerP(v)
+		}
+		f32ArraySecAttr_PowerWatts.AddMembershipLowCardRefP(kindSysmBatteryPowerWatts)
+		f32ArraySecAttr_PowerWatts.EndAttributeP()
+	}
+	return
+}
+
+// sysBatteryEmitSectionI64Array writes this kind's i64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysBatteryEmitSectionI64Array[
+	I64ArrayAttr sysBatteryI64ArrayAttrI,
+	I64ArraySec sysBatteryI64ArraySecI[I64ArrayAttr, Ent],
+	Ent any,
+](i64ArraySec I64ArraySec, row SysBattery) (err error) {
+	if len(row.SecondsToFull) > 0 {
+		i64ArraySecAttr_SecondsToFull := i64ArraySec.BeginAttribute()
+		for _, v := range row.SecondsToFull {
+			i64ArraySecAttr_SecondsToFull.AddToContainerP(v)
+		}
+		i64ArraySecAttr_SecondsToFull.AddMembershipLowCardRefP(kindSysmBatterySecondsToFull)
+		i64ArraySecAttr_SecondsToFull.EndAttributeP()
+	}
+	if len(row.SecondsToEmpty) > 0 {
+		i64ArraySecAttr_SecondsToEmpty := i64ArraySec.BeginAttribute()
+		for _, v := range row.SecondsToEmpty {
+			i64ArraySecAttr_SecondsToEmpty.AddToContainerP(v)
+		}
+		i64ArraySecAttr_SecondsToEmpty.AddMembershipLowCardRefP(kindSysmBatterySecondsToEmpty)
+		i64ArraySecAttr_SecondsToEmpty.EndAttributeP()
+	}
+	return
+}
+
 // sysBatteryAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -158,95 +296,37 @@ func sysBatteryAddSections[
 ](dml DML, row SysBattery) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
-	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindBattery)
-	symbolSecAttr_Kind.EndAttributeP()
-	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
-	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmBatteryHost)
-	symbolSecAttr_Host.EndAttributeP()
+	err = sysBatteryEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- symbolArray. ---
 	symbolArraySec := dml.GetSectionSymbolArray()
-	if len(row.Name) > 0 {
-		symbolArraySecAttr_Name := symbolArraySec.BeginAttribute()
-		for _, v := range row.Name {
-			symbolArraySecAttr_Name.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Name.AddMembershipLowCardRefP(kindSysmBatteryName)
-		symbolArraySecAttr_Name.EndAttributeP()
-	}
-	if len(row.Type) > 0 {
-		symbolArraySecAttr_Type := symbolArraySec.BeginAttribute()
-		for _, v := range row.Type {
-			symbolArraySecAttr_Type.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Type.AddMembershipLowCardRefP(kindSysmBatteryType)
-		symbolArraySecAttr_Type.EndAttributeP()
-	}
-	if len(row.AcName) > 0 {
-		symbolArraySecAttr_AcName := symbolArraySec.BeginAttribute()
-		for _, v := range row.AcName {
-			symbolArraySecAttr_AcName.AddToContainerP(v)
-		}
-		symbolArraySecAttr_AcName.AddMembershipLowCardRefP(kindSysmAcAdapterName)
-		symbolArraySecAttr_AcName.EndAttributeP()
+	err = sysBatteryEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	// --- u8Array. ---
 	u8ArraySec := dml.GetSectionU8Array()
-	if len(row.Percent) > 0 {
-		u8ArraySecAttr_Percent := u8ArraySec.BeginAttribute()
-		for _, v := range row.Percent {
-			u8ArraySecAttr_Percent.AddToContainerP(v)
-		}
-		u8ArraySecAttr_Percent.AddMembershipLowCardRefP(kindSysmBatteryPercent)
-		u8ArraySecAttr_Percent.EndAttributeP()
-	}
-	if len(row.State) > 0 {
-		u8ArraySecAttr_State := u8ArraySec.BeginAttribute()
-		for _, v := range row.State {
-			u8ArraySecAttr_State.AddToContainerP(v)
-		}
-		u8ArraySecAttr_State.AddMembershipLowCardRefP(kindSysmBatteryState)
-		u8ArraySecAttr_State.EndAttributeP()
-	}
-	if len(row.AcOnline) > 0 {
-		u8ArraySecAttr_AcOnline := u8ArraySec.BeginAttribute()
-		for _, v := range row.AcOnline {
-			u8ArraySecAttr_AcOnline.AddToContainerP(v)
-		}
-		u8ArraySecAttr_AcOnline.AddMembershipLowCardRefP(kindSysmAcAdapterOnline)
-		u8ArraySecAttr_AcOnline.EndAttributeP()
+	err = sysBatteryEmitSectionU8Array(u8ArraySec, row)
+	if err != nil {
+		return
 	}
 	u8ArraySec.EndSection()
 	// --- f32Array. ---
 	f32ArraySec := dml.GetSectionF32Array()
-	if len(row.PowerWatts) > 0 {
-		f32ArraySecAttr_PowerWatts := f32ArraySec.BeginAttribute()
-		for _, v := range row.PowerWatts {
-			f32ArraySecAttr_PowerWatts.AddToContainerP(v)
-		}
-		f32ArraySecAttr_PowerWatts.AddMembershipLowCardRefP(kindSysmBatteryPowerWatts)
-		f32ArraySecAttr_PowerWatts.EndAttributeP()
+	err = sysBatteryEmitSectionF32Array(f32ArraySec, row)
+	if err != nil {
+		return
 	}
 	f32ArraySec.EndSection()
 	// --- i64Array. ---
 	i64ArraySec := dml.GetSectionI64Array()
-	if len(row.SecondsToFull) > 0 {
-		i64ArraySecAttr_SecondsToFull := i64ArraySec.BeginAttribute()
-		for _, v := range row.SecondsToFull {
-			i64ArraySecAttr_SecondsToFull.AddToContainerP(v)
-		}
-		i64ArraySecAttr_SecondsToFull.AddMembershipLowCardRefP(kindSysmBatterySecondsToFull)
-		i64ArraySecAttr_SecondsToFull.EndAttributeP()
-	}
-	if len(row.SecondsToEmpty) > 0 {
-		i64ArraySecAttr_SecondsToEmpty := i64ArraySec.BeginAttribute()
-		for _, v := range row.SecondsToEmpty {
-			i64ArraySecAttr_SecondsToEmpty.AddToContainerP(v)
-		}
-		i64ArraySecAttr_SecondsToEmpty.AddMembershipLowCardRefP(kindSysmBatterySecondsToEmpty)
-		i64ArraySecAttr_SecondsToEmpty.EndAttributeP()
+	err = sysBatteryEmitSectionI64Array(i64ArraySec, row)
+	if err != nil {
+		return
 	}
 	i64ArraySec.EndSection()
 	return

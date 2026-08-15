@@ -270,6 +270,86 @@ func DroneEntityBuildEntities[
 	return
 }
 
+// DroneEntityEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func DroneEntityEmitSectionSymbol[
+	SymbolAttr DroneEntitySymbolAttrI,
+	SymbolSec DroneEntitySymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row DroneEntity) (err error) {
+	symbolSecAttr_Status := symbolSec.BeginAttribute(row.Status)
+	symbolSecAttr_Status.AddMembershipLowCardRefP(kindDroneStatus)
+	symbolSecAttr_Status.EndAttributeP()
+	return
+}
+
+// DroneEntityEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func DroneEntityEmitSectionU64Array[
+	U64ArrayAttr DroneEntityU64ArrayAttrI,
+	U64ArraySec DroneEntityU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row DroneEntity) (err error) {
+	u64ArraySecAttr_Battery := u64ArraySec.BeginAttributeSingle(row.Battery)
+	u64ArraySecAttr_Battery.AddMembershipLowCardRefP(kindDroneBattery)
+	u64ArraySecAttr_Battery.EndAttributeP()
+	return
+}
+
+// DroneEntityEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func DroneEntityEmitSectionSymbolArray[
+	SymbolArrayAttr DroneEntitySymbolArrayAttrI,
+	SymbolArraySec DroneEntitySymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row DroneEntity) (err error) {
+	if len(row.Tags) > 0 {
+		symbolArraySecAttr_Tags := symbolArraySec.BeginAttribute()
+		for _, v := range row.Tags {
+			symbolArraySecAttr_Tags.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindDroneTags)
+		symbolArraySecAttr_Tags.EndAttributeP()
+	}
+	return
+}
+
+// DroneEntityEmitSectionGeoPoint writes this kind's geoPoint attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func DroneEntityEmitSectionGeoPoint[
+	GeoPointAttr DroneEntityGeoPointAttrI,
+	GeoPointSec DroneEntityGeoPointSecI[GeoPointAttr, Ent],
+	Ent any,
+](geoPointSec GeoPointSec, row DroneEntity) (err error) {
+	geoPointSecAttr := geoPointSec.BeginAttribute(row.Lat, row.Lng, row.Cell)
+	geoPointSecAttr.AddMembershipLowCardRefP(kindDroneLoc)
+	geoPointSecAttr.EndAttributeP()
+	return
+}
+
+// DroneEntityEmitSectionTimeRange writes this kind's timeRange attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func DroneEntityEmitSectionTimeRange[
+	TimeRangeAttr DroneEntityTimeRangeAttrI,
+	TimeRangeSec DroneEntityTimeRangeSecI[TimeRangeAttr, Ent],
+	Ent any,
+](timeRangeSec TimeRangeSec, row DroneEntity) (err error) {
+	timeRangeSecAttr := timeRangeSec.BeginAttribute(row.WindowBegin, row.WindowEnd)
+	timeRangeSecAttr.AddMembershipLowCardRefP(kindDroneWindow)
+	timeRangeSecAttr.EndAttributeP()
+	return
+}
+
 // DroneEntityAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -296,38 +376,38 @@ func DroneEntityAddSections[
 ](dml DML, row DroneEntity) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Status := symbolSec.BeginAttribute(row.Status)
-	symbolSecAttr_Status.AddMembershipLowCardRefP(kindDroneStatus)
-	symbolSecAttr_Status.EndAttributeP()
+	err = DroneEntityEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	u64ArraySecAttr_Battery := u64ArraySec.BeginAttributeSingle(row.Battery)
-	u64ArraySecAttr_Battery.AddMembershipLowCardRefP(kindDroneBattery)
-	u64ArraySecAttr_Battery.EndAttributeP()
+	err = DroneEntityEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
 	u64ArraySec.EndSection()
 	// --- symbolArray. ---
 	symbolArraySec := dml.GetSectionSymbolArray()
-	if len(row.Tags) > 0 {
-		symbolArraySecAttr_Tags := symbolArraySec.BeginAttribute()
-		for _, v := range row.Tags {
-			symbolArraySecAttr_Tags.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindDroneTags)
-		symbolArraySecAttr_Tags.EndAttributeP()
+	err = DroneEntityEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	// --- geoPoint. ---
 	geoPointSec := dml.GetSectionGeoPoint()
-	geoPointSecAttr := geoPointSec.BeginAttribute(row.Lat, row.Lng, row.Cell)
-	geoPointSecAttr.AddMembershipLowCardRefP(kindDroneLoc)
-	geoPointSecAttr.EndAttributeP()
+	err = DroneEntityEmitSectionGeoPoint(geoPointSec, row)
+	if err != nil {
+		return
+	}
 	geoPointSec.EndSection()
 	// --- timeRange. ---
 	timeRangeSec := dml.GetSectionTimeRange()
-	timeRangeSecAttr := timeRangeSec.BeginAttribute(row.WindowBegin, row.WindowEnd)
-	timeRangeSecAttr.AddMembershipLowCardRefP(kindDroneWindow)
-	timeRangeSecAttr.EndAttributeP()
+	err = DroneEntityEmitSectionTimeRange(timeRangeSec, row)
+	if err != nil {
+		return
+	}
 	timeRangeSec.EndSection()
 	return
 }

@@ -47,6 +47,26 @@ type identityEntityI[
 	GetSectionSymbol() SymbolSec
 }
 
+// identityEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func identityEmitSectionSymbol[
+	SymbolAttr identitySymbolAttrI,
+	SymbolSec identitySymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row Identity) (err error) {
+	symbolSecAttr_Status := symbolSec.BeginAttribute(row.Status)
+	symbolSecAttr_Status.AddMembershipLowCardRefP(kindDeviceStatus)
+	symbolSecAttr_Status.EndAttributeP()
+	if row.Nick.Has {
+		symbolSecAttr_Nick := symbolSec.BeginAttribute(row.Nick.Val)
+		symbolSecAttr_Nick.AddMembershipLowCardRefP(kindDeviceNick)
+		symbolSecAttr_Nick.EndAttributeP()
+	}
+	return
+}
+
 // identityAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -61,13 +81,9 @@ func identityAddSections[
 ](dml DML, row Identity) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Status := symbolSec.BeginAttribute(row.Status)
-	symbolSecAttr_Status.AddMembershipLowCardRefP(kindDeviceStatus)
-	symbolSecAttr_Status.EndAttributeP()
-	if row.Nick.Has {
-		symbolSecAttr_Nick := symbolSec.BeginAttribute(row.Nick.Val)
-		symbolSecAttr_Nick.AddMembershipLowCardRefP(kindDeviceNick)
-		symbolSecAttr_Nick.EndAttributeP()
+	err = identityEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
 	}
 	symbolSec.EndSection()
 	return

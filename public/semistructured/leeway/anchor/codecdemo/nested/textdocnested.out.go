@@ -144,6 +144,31 @@ func TextDocNestedBuildEntities[
 	return
 }
 
+// TextDocNestedEmitSectionText writes this kind's text attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TextDocNestedEmitSectionText[
+	TextAttr TextDocNestedTextAttrI,
+	TextSec TextDocNestedTextSecI[TextAttr, Ent],
+	Ent any,
+](textSec TextSec, row TextDocNested) (err error) {
+	{
+		textSecElem := row.Body
+		if len(textSecElem.WordBag) != len(textSecElem.WordLength) {
+			err = eb.Build().Str("section", "text").Str("field", "WordBag").Errorf("co-container slices have different lengths")
+			return
+		}
+		textSecAttr := textSec.BeginAttribute(textSecElem.Text)
+		for k := range textSecElem.WordLength {
+			textSecAttr.AddToCoContainersP(textSecElem.WordLength[k], textSecElem.WordBag[k])
+		}
+		textSecAttr.AddMembershipLowCardRefP(kindProse)
+		textSecAttr.EndAttributeP()
+	}
+	return
+}
+
 // TextDocNestedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -158,18 +183,9 @@ func TextDocNestedAddSections[
 ](dml DML, row TextDocNested) (err error) {
 	// --- text. ---
 	textSec := dml.GetSectionText()
-	{
-		textSecElem := row.Body
-		if len(textSecElem.WordBag) != len(textSecElem.WordLength) {
-			err = eb.Build().Str("section", "text").Str("field", "WordBag").Errorf("co-container slices have different lengths")
-			return
-		}
-		textSecAttr := textSec.BeginAttribute(textSecElem.Text)
-		for k := range textSecElem.WordLength {
-			textSecAttr.AddToCoContainersP(textSecElem.WordLength[k], textSecElem.WordBag[k])
-		}
-		textSecAttr.AddMembershipLowCardRefP(kindProse)
-		textSecAttr.EndAttributeP()
+	err = TextDocNestedEmitSectionText(textSec, row)
+	if err != nil {
+		return
 	}
 	textSec.EndSection()
 	return

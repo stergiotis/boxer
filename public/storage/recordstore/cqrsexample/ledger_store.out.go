@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/cqrsexample/internal/lowlevel"
@@ -321,13 +322,42 @@ type LedgerEntityBuilder struct {
 	key   string
 	// ent mirrors the typed Add* calls so Commit can write the entity
 	// through to attached cache views; raw marks commits that touched
-	// the DML directly (or double-added a component) — those cannot be
-	// materialized faithfully and invalidate the key instead.
+	// the DML directly — those cannot be materialized faithfully and
+	// invalidate the key instead.
 	ent LedgerEntity
 	raw bool
+	// buf holds each component's section contributions until Commit, so
+	// components sharing a section share its frame. It also holds the
+	// frame invariants: one contribution per kind, and typed Adds
+	// exclusive with Raw (ADR-0183 D4).
+	buf dmlruntime.DeferredSectionBuffer
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+}
+
+// endSection closes one section's frame. The buffer calls it once per
+// section, after every component that contributed to it has written.
+func (inst *LedgerEntityBuilder) endSection(section string) error {
+	switch section {
+	case "acctOwner":
+		inst.store.dml.GetSectionAcctOwner().EndSection()
+	case "acctDeposit":
+		inst.store.dml.GetSectionAcctDeposit().EndSection()
+	case "acctWithdraw":
+		inst.store.dml.GetSectionAcctWithdraw().EndSection()
+	case "acctClosed":
+		inst.store.dml.GetSectionAcctClosed().EndSection()
+	case "snapOwner":
+		inst.store.dml.GetSectionSnapOwner().EndSection()
+	case "snapBalance":
+		inst.store.dml.GetSectionSnapBalance().EndSection()
+	case "snapClosed":
+		inst.store.dml.GetSectionSnapClosed().EndSection()
+	case "snapAsOf":
+		inst.store.dml.GetSectionSnapAsOf().EndSection()
+	}
+	return nil
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
@@ -341,78 +371,127 @@ func (inst *LedgerStore) Begin(id string, ts time.Time) *LedgerEntityBuilder {
 	return b
 }
 
-// AddOpened contributes the Opened component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddOpened contributes the Opened component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *LedgerEntityBuilder) AddOpened(row Opened) *LedgerEntityBuilder {
-	err := openedAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Opened"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Opened.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Opened = option.Some(row)
-	}
+	inst.buf.Enqueue("acctOwner", "Opened", func() error {
+		return openedEmitSectionAcctOwner(inst.store.dml.GetSectionAcctOwner(), row)
+	})
+	inst.ent.Opened = option.Some(row)
 	return inst
 }
 
-// AddDeposited contributes the Deposited component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddDeposited contributes the Deposited component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *LedgerEntityBuilder) AddDeposited(row Deposited) *LedgerEntityBuilder {
-	err := depositedAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Deposited"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Deposited.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Deposited = option.Some(row)
-	}
+	inst.buf.Enqueue("acctDeposit", "Deposited", func() error {
+		return depositedEmitSectionAcctDeposit(inst.store.dml.GetSectionAcctDeposit(), row)
+	})
+	inst.ent.Deposited = option.Some(row)
 	return inst
 }
 
-// AddWithdrawn contributes the Withdrawn component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddWithdrawn contributes the Withdrawn component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *LedgerEntityBuilder) AddWithdrawn(row Withdrawn) *LedgerEntityBuilder {
-	err := withdrawnAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Withdrawn"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Withdrawn.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Withdrawn = option.Some(row)
-	}
+	inst.buf.Enqueue("acctWithdraw", "Withdrawn", func() error {
+		return withdrawnEmitSectionAcctWithdraw(inst.store.dml.GetSectionAcctWithdraw(), row)
+	})
+	inst.ent.Withdrawn = option.Some(row)
 	return inst
 }
 
-// AddClosed contributes the Closed component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddClosed contributes the Closed component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *LedgerEntityBuilder) AddClosed(row Closed) *LedgerEntityBuilder {
-	err := closedAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Closed"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Closed.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Closed = option.Some(row)
-	}
+	inst.buf.Enqueue("acctClosed", "Closed", func() error {
+		return closedEmitSectionAcctClosed(inst.store.dml.GetSectionAcctClosed(), row)
+	})
+	inst.ent.Closed = option.Some(row)
 	return inst
 }
 
-// AddAccountState contributes the AccountState component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddAccountState contributes the AccountState component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *LedgerEntityBuilder) AddAccountState(row AccountState) *LedgerEntityBuilder {
-	err := accountStateAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("AccountState"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.AccountState.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.AccountState = option.Some(row)
-	}
+	inst.buf.Enqueue("snapOwner", "AccountState", func() error {
+		return accountStateEmitSectionSnapOwner(inst.store.dml.GetSectionSnapOwner(), row)
+	})
+	inst.buf.Enqueue("snapBalance", "AccountState", func() error {
+		return accountStateEmitSectionSnapBalance(inst.store.dml.GetSectionSnapBalance(), row)
+	})
+	inst.buf.Enqueue("snapClosed", "AccountState", func() error {
+		return accountStateEmitSectionSnapClosed(inst.store.dml.GetSectionSnapClosed(), row)
+	})
+	inst.buf.Enqueue("snapAsOf", "AccountState", func() error {
+		return accountStateEmitSectionSnapAsOf(inst.store.dml.GetSectionSnapAsOf(), row)
+	})
+	inst.ent.AccountState = option.Some(row)
 	return inst
 }
 
@@ -422,6 +501,9 @@ func (inst *LedgerEntityBuilder) AddAccountState(row AccountState) *LedgerEntity
 // returned value by inference (raw := b.Raw()) and chain its
 // methods, but cannot name the type in their own signatures.
 func (inst *LedgerEntityBuilder) Raw() *lowlevel.InEntityLedgerTable {
+	if err := inst.buf.MarkRaw(); err != nil {
+		inst.store.dml.AppendError(err)
+	}
 	inst.raw = true // direct DML writes cannot be mirrored into the entity
 	return inst.store.dml
 }
@@ -435,6 +517,10 @@ func (inst *LedgerEntityBuilder) Raw() *lowlevel.InEntityLedgerTable {
 // instead. A failed Commit rolls the frame back — the entity is
 // discarded and the store stays usable.
 func (inst *LedgerEntityBuilder) Commit() (err error) {
+	if ferr := inst.buf.Flush(inst.endSection); ferr != nil {
+		inst.store.dml.AppendError(ferr) // surfaced by CommitEntity below
+	}
+	inst.buf.Reset()
 	err = lowlevel.InEntityLedgerTableCommitEntity(inst.store.dml)
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed) // release Begin's ambient stamps (consumed by the closed attributes)
 	if err != nil {
@@ -455,6 +541,7 @@ func (inst *LedgerEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *LedgerEntityBuilder) Rollback() (err error) {
+	inst.buf.Reset() // the buffered contributions are abandoned with the frame
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityLedgerTableRollbackEntity(inst.store.dml)
 }

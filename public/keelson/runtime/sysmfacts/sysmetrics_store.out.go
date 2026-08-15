@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -487,13 +488,48 @@ type SysmetricsEntityBuilder struct {
 	key   uint64
 	// ent mirrors the typed Add* calls so Commit can write the entity
 	// through to attached cache views; raw marks commits that touched
-	// the DML directly (or double-added a component) — those cannot be
-	// materialized faithfully and invalidate the key instead.
+	// the DML directly — those cannot be materialized faithfully and
+	// invalidate the key instead.
 	ent SysmetricsEntity
 	raw bool
+	// buf holds each component's section contributions until Commit, so
+	// components sharing a section share its frame. It also holds the
+	// frame invariants: one contribution per kind, and typed Adds
+	// exclusive with Raw (ADR-0183 D4).
+	buf dmlruntime.DeferredSectionBuffer
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+}
+
+// endSection closes one section's frame. The buffer calls it once per
+// section, after every component that contributed to it has written.
+func (inst *SysmetricsEntityBuilder) endSection(section string) error {
+	switch section {
+	case "symbol":
+		inst.store.dml.GetSectionSymbol().EndSection()
+	case "u8Array":
+		inst.store.dml.GetSectionU8Array().EndSection()
+	case "u32Array":
+		inst.store.dml.GetSectionU32Array().EndSection()
+	case "f32Array":
+		inst.store.dml.GetSectionF32Array().EndSection()
+	case "i32Array":
+		inst.store.dml.GetSectionI32Array().EndSection()
+	case "u64Array":
+		inst.store.dml.GetSectionU64Array().EndSection()
+	case "bool":
+		inst.store.dml.GetSectionBool().EndSection()
+	case "symbolArray":
+		inst.store.dml.GetSectionSymbolArray().EndSection()
+	case "i64Array":
+		inst.store.dml.GetSectionI64Array().EndSection()
+	case "stringArray":
+		inst.store.dml.GetSectionStringArray().EndSection()
+	case "u16Array":
+		inst.store.dml.GetSectionU16Array().EndSection()
+	}
+	return nil
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
@@ -508,198 +544,449 @@ func (inst *SysmetricsStore) Begin(id uint64, ts time.Time, env SysmetricsEnvelo
 	return b
 }
 
-// AddSysCpu contributes the SysCpu component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysCpu contributes the SysCpu component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysCpu(row SysCpu) *SysmetricsEntityBuilder {
-	err := sysCpuAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysCpu"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysCpu.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysCpu = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysCpu", func() error {
+		return sysCpuEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("u8Array", "SysCpu", func() error {
+		return sysCpuEmitSectionU8Array(inst.store.dml.GetSectionU8Array(), row)
+	})
+	inst.buf.Enqueue("u32Array", "SysCpu", func() error {
+		return sysCpuEmitSectionU32Array(inst.store.dml.GetSectionU32Array(), row)
+	})
+	inst.buf.Enqueue("f32Array", "SysCpu", func() error {
+		return sysCpuEmitSectionF32Array(inst.store.dml.GetSectionF32Array(), row)
+	})
+	inst.buf.Enqueue("i32Array", "SysCpu", func() error {
+		return sysCpuEmitSectionI32Array(inst.store.dml.GetSectionI32Array(), row)
+	})
+	inst.ent.SysCpu = option.Some(row)
 	return inst
 }
 
-// AddSysCpuInfo contributes the SysCpuInfo component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysCpuInfo contributes the SysCpuInfo component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysCpuInfo(row SysCpuInfo) *SysmetricsEntityBuilder {
-	err := sysCpuInfoAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysCpuInfo"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysCpuInfo.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysCpuInfo = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysCpuInfo", func() error {
+		return sysCpuInfoEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("i32Array", "SysCpuInfo", func() error {
+		return sysCpuInfoEmitSectionI32Array(inst.store.dml.GetSectionI32Array(), row)
+	})
+	inst.ent.SysCpuInfo = option.Some(row)
 	return inst
 }
 
-// AddSysMem contributes the SysMem component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysMem contributes the SysMem component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysMem(row SysMem) *SysmetricsEntityBuilder {
-	err := sysMemAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysMem"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysMem.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysMem = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysMem", func() error {
+		return sysMemEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("u64Array", "SysMem", func() error {
+		return sysMemEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.ent.SysMem = option.Some(row)
 	return inst
 }
 
-// AddSysPsi contributes the SysPsi component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysPsi contributes the SysPsi component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysPsi(row SysPsi) *SysmetricsEntityBuilder {
-	err := sysPsiAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysPsi"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysPsi.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysPsi = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysPsi", func() error {
+		return sysPsiEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("bool", "SysPsi", func() error {
+		return sysPsiEmitSectionBool(inst.store.dml.GetSectionBool(), row)
+	})
+	inst.buf.Enqueue("f32Array", "SysPsi", func() error {
+		return sysPsiEmitSectionF32Array(inst.store.dml.GetSectionF32Array(), row)
+	})
+	inst.buf.Enqueue("u64Array", "SysPsi", func() error {
+		return sysPsiEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.ent.SysPsi = option.Some(row)
 	return inst
 }
 
-// AddSysNet contributes the SysNet component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysNet contributes the SysNet component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysNet(row SysNet) *SysmetricsEntityBuilder {
-	err := sysNetAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysNet"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysNet.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysNet = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysNet", func() error {
+		return sysNetEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("symbolArray", "SysNet", func() error {
+		return sysNetEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.buf.Enqueue("i32Array", "SysNet", func() error {
+		return sysNetEmitSectionI32Array(inst.store.dml.GetSectionI32Array(), row)
+	})
+	inst.buf.Enqueue("u8Array", "SysNet", func() error {
+		return sysNetEmitSectionU8Array(inst.store.dml.GetSectionU8Array(), row)
+	})
+	inst.buf.Enqueue("u64Array", "SysNet", func() error {
+		return sysNetEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.ent.SysNet = option.Some(row)
 	return inst
 }
 
-// AddSysDiskMount contributes the SysDiskMount component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysDiskMount contributes the SysDiskMount component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysDiskMount(row SysDiskMount) *SysmetricsEntityBuilder {
-	err := sysDiskMountAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysDiskMount"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysDiskMount.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysDiskMount = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysDiskMount", func() error {
+		return sysDiskMountEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("symbolArray", "SysDiskMount", func() error {
+		return sysDiskMountEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.buf.Enqueue("u8Array", "SysDiskMount", func() error {
+		return sysDiskMountEmitSectionU8Array(inst.store.dml.GetSectionU8Array(), row)
+	})
+	inst.buf.Enqueue("u64Array", "SysDiskMount", func() error {
+		return sysDiskMountEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.buf.Enqueue("f32Array", "SysDiskMount", func() error {
+		return sysDiskMountEmitSectionF32Array(inst.store.dml.GetSectionF32Array(), row)
+	})
+	inst.ent.SysDiskMount = option.Some(row)
 	return inst
 }
 
-// AddSysDiskIo contributes the SysDiskIo component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysDiskIo contributes the SysDiskIo component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysDiskIo(row SysDiskIo) *SysmetricsEntityBuilder {
-	err := sysDiskIoAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysDiskIo"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysDiskIo.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysDiskIo = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysDiskIo", func() error {
+		return sysDiskIoEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("symbolArray", "SysDiskIo", func() error {
+		return sysDiskIoEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.buf.Enqueue("u64Array", "SysDiskIo", func() error {
+		return sysDiskIoEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.buf.Enqueue("u8Array", "SysDiskIo", func() error {
+		return sysDiskIoEmitSectionU8Array(inst.store.dml.GetSectionU8Array(), row)
+	})
+	inst.ent.SysDiskIo = option.Some(row)
 	return inst
 }
 
-// AddSysBattery contributes the SysBattery component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysBattery contributes the SysBattery component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysBattery(row SysBattery) *SysmetricsEntityBuilder {
-	err := sysBatteryAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysBattery"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysBattery.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysBattery = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysBattery", func() error {
+		return sysBatteryEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("symbolArray", "SysBattery", func() error {
+		return sysBatteryEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.buf.Enqueue("u8Array", "SysBattery", func() error {
+		return sysBatteryEmitSectionU8Array(inst.store.dml.GetSectionU8Array(), row)
+	})
+	inst.buf.Enqueue("f32Array", "SysBattery", func() error {
+		return sysBatteryEmitSectionF32Array(inst.store.dml.GetSectionF32Array(), row)
+	})
+	inst.buf.Enqueue("i64Array", "SysBattery", func() error {
+		return sysBatteryEmitSectionI64Array(inst.store.dml.GetSectionI64Array(), row)
+	})
+	inst.ent.SysBattery = option.Some(row)
 	return inst
 }
 
-// AddSysGpu contributes the SysGpu component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysGpu contributes the SysGpu component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysGpu(row SysGpu) *SysmetricsEntityBuilder {
-	err := sysGpuAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysGpu"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysGpu.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysGpu = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysGpu", func() error {
+		return sysGpuEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("symbolArray", "SysGpu", func() error {
+		return sysGpuEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.buf.Enqueue("i32Array", "SysGpu", func() error {
+		return sysGpuEmitSectionI32Array(inst.store.dml.GetSectionI32Array(), row)
+	})
+	inst.buf.Enqueue("u8Array", "SysGpu", func() error {
+		return sysGpuEmitSectionU8Array(inst.store.dml.GetSectionU8Array(), row)
+	})
+	inst.buf.Enqueue("u64Array", "SysGpu", func() error {
+		return sysGpuEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.buf.Enqueue("f32Array", "SysGpu", func() error {
+		return sysGpuEmitSectionF32Array(inst.store.dml.GetSectionF32Array(), row)
+	})
+	inst.buf.Enqueue("u32Array", "SysGpu", func() error {
+		return sysGpuEmitSectionU32Array(inst.store.dml.GetSectionU32Array(), row)
+	})
+	inst.ent.SysGpu = option.Some(row)
 	return inst
 }
 
-// AddSysProc contributes the SysProc component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysProc contributes the SysProc component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysProc(row SysProc) *SysmetricsEntityBuilder {
-	err := sysProcAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysProc"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysProc.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysProc = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysProc", func() error {
+		return sysProcEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("u32Array", "SysProc", func() error {
+		return sysProcEmitSectionU32Array(inst.store.dml.GetSectionU32Array(), row)
+	})
+	inst.buf.Enqueue("symbolArray", "SysProc", func() error {
+		return sysProcEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.buf.Enqueue("f32Array", "SysProc", func() error {
+		return sysProcEmitSectionF32Array(inst.store.dml.GetSectionF32Array(), row)
+	})
+	inst.buf.Enqueue("u64Array", "SysProc", func() error {
+		return sysProcEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.buf.Enqueue("i32Array", "SysProc", func() error {
+		return sysProcEmitSectionI32Array(inst.store.dml.GetSectionI32Array(), row)
+	})
+	inst.buf.Enqueue("u8Array", "SysProc", func() error {
+		return sysProcEmitSectionU8Array(inst.store.dml.GetSectionU8Array(), row)
+	})
+	inst.buf.Enqueue("i64Array", "SysProc", func() error {
+		return sysProcEmitSectionI64Array(inst.store.dml.GetSectionI64Array(), row)
+	})
+	inst.ent.SysProc = option.Some(row)
 	return inst
 }
 
-// AddSysProcCmd contributes the SysProcCmd component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysProcCmd contributes the SysProcCmd component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysProcCmd(row SysProcCmd) *SysmetricsEntityBuilder {
-	err := sysProcCmdAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysProcCmd"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysProcCmd.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysProcCmd = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysProcCmd", func() error {
+		return sysProcCmdEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("u32Array", "SysProcCmd", func() error {
+		return sysProcCmdEmitSectionU32Array(inst.store.dml.GetSectionU32Array(), row)
+	})
+	inst.buf.Enqueue("stringArray", "SysProcCmd", func() error {
+		return sysProcCmdEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
+	})
+	inst.buf.Enqueue("symbolArray", "SysProcCmd", func() error {
+		return sysProcCmdEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.ent.SysProcCmd = option.Some(row)
 	return inst
 }
 
-// AddSysSocket contributes the SysSocket component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysSocket contributes the SysSocket component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysSocket(row SysSocket) *SysmetricsEntityBuilder {
-	err := sysSocketAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysSocket"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysSocket.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysSocket = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysSocket", func() error {
+		return sysSocketEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("symbolArray", "SysSocket", func() error {
+		return sysSocketEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.buf.Enqueue("u16Array", "SysSocket", func() error {
+		return sysSocketEmitSectionU16Array(inst.store.dml.GetSectionU16Array(), row)
+	})
+	inst.buf.Enqueue("u64Array", "SysSocket", func() error {
+		return sysSocketEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.buf.Enqueue("u32Array", "SysSocket", func() error {
+		return sysSocketEmitSectionU32Array(inst.store.dml.GetSectionU32Array(), row)
+	})
+	inst.ent.SysSocket = option.Some(row)
 	return inst
 }
 
-// AddSysTopology contributes the SysTopology component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddSysTopology contributes the SysTopology component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *SysmetricsEntityBuilder) AddSysTopology(row SysTopology) *SysmetricsEntityBuilder {
-	err := sysTopologyAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("SysTopology"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.SysTopology.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.SysTopology = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "SysTopology", func() error {
+		return sysTopologyEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("u32Array", "SysTopology", func() error {
+		return sysTopologyEmitSectionU32Array(inst.store.dml.GetSectionU32Array(), row)
+	})
+	inst.buf.Enqueue("i32Array", "SysTopology", func() error {
+		return sysTopologyEmitSectionI32Array(inst.store.dml.GetSectionI32Array(), row)
+	})
+	inst.buf.Enqueue("symbolArray", "SysTopology", func() error {
+		return sysTopologyEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.buf.Enqueue("u8Array", "SysTopology", func() error {
+		return sysTopologyEmitSectionU8Array(inst.store.dml.GetSectionU8Array(), row)
+	})
+	inst.buf.Enqueue("u64Array", "SysTopology", func() error {
+		return sysTopologyEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.ent.SysTopology = option.Some(row)
 	return inst
 }
 
@@ -709,6 +996,9 @@ func (inst *SysmetricsEntityBuilder) AddSysTopology(row SysTopology) *Sysmetrics
 // returned value by inference (raw := b.Raw()) and chain its
 // methods, but cannot name the type in their own signatures.
 func (inst *SysmetricsEntityBuilder) Raw() *lowlevel.InEntityFactsTable {
+	if err := inst.buf.MarkRaw(); err != nil {
+		inst.store.dml.AppendError(err)
+	}
 	inst.raw = true // direct DML writes cannot be mirrored into the entity
 	return inst.store.dml
 }
@@ -722,6 +1012,10 @@ func (inst *SysmetricsEntityBuilder) Raw() *lowlevel.InEntityFactsTable {
 // instead. A failed Commit rolls the frame back — the entity is
 // discarded and the store stays usable.
 func (inst *SysmetricsEntityBuilder) Commit() (err error) {
+	if ferr := inst.buf.Flush(inst.endSection); ferr != nil {
+		inst.store.dml.AppendError(ferr) // surfaced by CommitEntity below
+	}
+	inst.buf.Reset()
 	err = lowlevel.InEntityFactsTableCommitEntity(inst.store.dml)
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed) // release Begin's ambient stamps (consumed by the closed attributes)
 	if err != nil {
@@ -742,6 +1036,7 @@ func (inst *SysmetricsEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *SysmetricsEntityBuilder) Rollback() (err error) {
+	inst.buf.Reset() // the buffered contributions are abandoned with the frame
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityFactsTableRollbackEntity(inst.store.dml)
 }

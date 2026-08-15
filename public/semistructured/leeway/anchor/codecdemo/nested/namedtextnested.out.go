@@ -144,6 +144,31 @@ func NamedTextNestedBuildEntities[
 	return
 }
 
+// NamedTextNestedEmitSectionText writes this kind's text attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func NamedTextNestedEmitSectionText[
+	TextAttr NamedTextNestedTextAttrI,
+	TextSec NamedTextNestedTextSecI[TextAttr, Ent],
+	Ent any,
+](textSec TextSec, row NamedTextNested) (err error) {
+	for _, textSecElem := range row.Notes {
+		if len(textSecElem.WordBag) != len(textSecElem.WordLength) {
+			err = eb.Build().Str("section", "text").Str("field", "WordBag").Errorf("co-container slices have different lengths")
+			return
+		}
+		textSecAttr := textSec.BeginAttribute(textSecElem.Text)
+		for k := range textSecElem.WordLength {
+			textSecAttr.AddToCoContainersP(textSecElem.WordLength[k], textSecElem.WordBag[k])
+		}
+		textSecAttr.AddMembershipLowCardVerbatimP([]byte(textSecElem.Name))
+		textSecAttr.AddMembershipLowCardRefP(uint64(textSecElem.Kind))
+		textSecAttr.EndAttributeP()
+	}
+	return
+}
+
 // NamedTextNestedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -158,18 +183,9 @@ func NamedTextNestedAddSections[
 ](dml DML, row NamedTextNested) (err error) {
 	// --- text. ---
 	textSec := dml.GetSectionText()
-	for _, textSecElem := range row.Notes {
-		if len(textSecElem.WordBag) != len(textSecElem.WordLength) {
-			err = eb.Build().Str("section", "text").Str("field", "WordBag").Errorf("co-container slices have different lengths")
-			return
-		}
-		textSecAttr := textSec.BeginAttribute(textSecElem.Text)
-		for k := range textSecElem.WordLength {
-			textSecAttr.AddToCoContainersP(textSecElem.WordLength[k], textSecElem.WordBag[k])
-		}
-		textSecAttr.AddMembershipLowCardVerbatimP([]byte(textSecElem.Name))
-		textSecAttr.AddMembershipLowCardRefP(uint64(textSecElem.Kind))
-		textSecAttr.EndAttributeP()
+	err = NamedTextNestedEmitSectionText(textSec, row)
+	if err != nil {
+		return
 	}
 	textSec.EndSection()
 	return

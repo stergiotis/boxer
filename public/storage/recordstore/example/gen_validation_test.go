@@ -414,7 +414,11 @@ type KindA struct {
 	require.NotContains(t, string(dto), "KindAFillFromArrow")
 	store, err := os.ReadFile(filepath.Join(outDir, "valcheck_store.out.go"))
 	require.NoError(t, err)
-	require.Contains(t, string(store), "kindAAddSections(inst.store.dml, row)")
+	// The builder defers: it enqueues the per-section emitter rather than
+	// calling the whole-DTO driver, so a second component sharing a section
+	// still finds it open (ADR-0183 D4).
+	require.Contains(t, string(store), `inst.buf.Enqueue("solo", "KindA"`)
+	require.Contains(t, string(store), "kindAEmitSectionSolo(inst.store.dml.GetSectionSolo(), row)")
 }
 
 // TestGenerateFullCodecs: the opt-out restores the complete exported
@@ -449,7 +453,7 @@ type KindA struct {
 	require.Contains(t, string(dto), "func KindAAddSections[")
 	store, err := os.ReadFile(filepath.Join(outDir, "valcheck_store.out.go"))
 	require.NoError(t, err)
-	require.Contains(t, string(store), "KindAAddSections(inst.store.dml, row)")
+	require.Contains(t, string(store), "KindAEmitSectionSolo(inst.store.dml.GetSectionSolo(), row)")
 	// FullCodecs keeps the control surface exported (private control is off,
 	// so <Kind>BuildEntities can drive the frame — ADR-0100 SD6); the store
 	// drives it by plain method calls, not the type-prefixed drivers.

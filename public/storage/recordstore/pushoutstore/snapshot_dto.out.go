@@ -66,6 +66,41 @@ type snapshotEntityI[
 	GetSectionSnapGraggle() SnapGraggleSec
 }
 
+// snapshotEmitSectionSnapApplied writes this kind's snapApplied attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func snapshotEmitSectionSnapApplied[
+	SnapAppliedAttr snapshotSnapAppliedAttrI,
+	SnapAppliedSec snapshotSnapAppliedSecI[SnapAppliedAttr, Ent],
+	Ent any,
+](snapAppliedSec SnapAppliedSec, row Snapshot) (err error) {
+	if len(row.Applied) > 0 {
+		snapAppliedSecAttr_Applied := snapAppliedSec.BeginAttribute()
+		for _, v := range row.Applied {
+			snapAppliedSecAttr_Applied.AddToContainerP(v)
+		}
+		snapAppliedSecAttr_Applied.AddMembershipLowCardRefP(kindPushoutApplied)
+		snapAppliedSecAttr_Applied.EndAttributeP()
+	}
+	return
+}
+
+// snapshotEmitSectionSnapGraggle writes this kind's snapGraggle attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func snapshotEmitSectionSnapGraggle[
+	SnapGraggleAttr snapshotSnapGraggleAttrI,
+	SnapGraggleSec snapshotSnapGraggleSecI[SnapGraggleAttr, Ent],
+	Ent any,
+](snapGraggleSec SnapGraggleSec, row Snapshot) (err error) {
+	snapGraggleSecAttr_Graggle := snapGraggleSec.BeginAttribute(row.Graggle)
+	snapGraggleSecAttr_Graggle.AddMembershipLowCardRefP(kindPushoutGraggle)
+	snapGraggleSecAttr_Graggle.EndAttributeP()
+	return
+}
+
 // snapshotAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -83,20 +118,17 @@ func snapshotAddSections[
 ](dml DML, row Snapshot) (err error) {
 	// --- snapApplied. ---
 	snapAppliedSec := dml.GetSectionSnapApplied()
-	if len(row.Applied) > 0 {
-		snapAppliedSecAttr_Applied := snapAppliedSec.BeginAttribute()
-		for _, v := range row.Applied {
-			snapAppliedSecAttr_Applied.AddToContainerP(v)
-		}
-		snapAppliedSecAttr_Applied.AddMembershipLowCardRefP(kindPushoutApplied)
-		snapAppliedSecAttr_Applied.EndAttributeP()
+	err = snapshotEmitSectionSnapApplied(snapAppliedSec, row)
+	if err != nil {
+		return
 	}
 	snapAppliedSec.EndSection()
 	// --- snapGraggle. ---
 	snapGraggleSec := dml.GetSectionSnapGraggle()
-	snapGraggleSecAttr_Graggle := snapGraggleSec.BeginAttribute(row.Graggle)
-	snapGraggleSecAttr_Graggle.AddMembershipLowCardRefP(kindPushoutGraggle)
-	snapGraggleSecAttr_Graggle.EndAttributeP()
+	err = snapshotEmitSectionSnapGraggle(snapGraggleSec, row)
+	if err != nil {
+		return
+	}
 	snapGraggleSec.EndSection()
 	return
 }

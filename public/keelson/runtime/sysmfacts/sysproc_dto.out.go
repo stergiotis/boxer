@@ -194,6 +194,220 @@ type sysProcEntityI[
 	GetSectionI64Array() I64ArraySec
 }
 
+// sysProcEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcEmitSectionSymbol[
+	SymbolAttr sysProcSymbolAttrI,
+	SymbolSec sysProcSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row SysProc) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindProc)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
+	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmProcHost)
+	symbolSecAttr_Host.EndAttributeP()
+	return
+}
+
+// sysProcEmitSectionU32Array writes this kind's u32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcEmitSectionU32Array[
+	U32ArrayAttr sysProcU32ArrayAttrI,
+	U32ArraySec sysProcU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+](u32ArraySec U32ArraySec, row SysProc) (err error) {
+	if len(row.Pid) > 0 {
+		u32ArraySecAttr_Pid := u32ArraySec.BeginAttribute()
+		for _, v := range row.Pid {
+			u32ArraySecAttr_Pid.AddToContainerP(v)
+		}
+		u32ArraySecAttr_Pid.AddMembershipLowCardRefP(kindSysmProcPid)
+		u32ArraySecAttr_Pid.EndAttributeP()
+	}
+	if len(row.Ppid) > 0 {
+		u32ArraySecAttr_Ppid := u32ArraySec.BeginAttribute()
+		for _, v := range row.Ppid {
+			u32ArraySecAttr_Ppid.AddToContainerP(v)
+		}
+		u32ArraySecAttr_Ppid.AddMembershipLowCardRefP(kindSysmProcPpid)
+		u32ArraySecAttr_Ppid.EndAttributeP()
+	}
+	return
+}
+
+// sysProcEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcEmitSectionSymbolArray[
+	SymbolArrayAttr sysProcSymbolArrayAttrI,
+	SymbolArraySec sysProcSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row SysProc) (err error) {
+	if len(row.Name) > 0 {
+		symbolArraySecAttr_Name := symbolArraySec.BeginAttribute()
+		for _, v := range row.Name {
+			symbolArraySecAttr_Name.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Name.AddMembershipLowCardRefP(kindSysmProcName)
+		symbolArraySecAttr_Name.EndAttributeP()
+	}
+	if len(row.State) > 0 {
+		symbolArraySecAttr_State := symbolArraySec.BeginAttribute()
+		for _, v := range row.State {
+			symbolArraySecAttr_State.AddToContainerP(v)
+		}
+		symbolArraySecAttr_State.AddMembershipLowCardRefP(kindSysmProcState)
+		symbolArraySecAttr_State.EndAttributeP()
+	}
+	if len(row.Component) > 0 {
+		symbolArraySecAttr_Component := symbolArraySec.BeginAttribute()
+		for _, v := range row.Component {
+			symbolArraySecAttr_Component.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Component.AddMembershipLowCardRefP(kindSysmProcComponent)
+		symbolArraySecAttr_Component.EndAttributeP()
+	}
+	if len(row.CgroupUnit) > 0 {
+		symbolArraySecAttr_CgroupUnit := symbolArraySec.BeginAttribute()
+		for _, v := range row.CgroupUnit {
+			symbolArraySecAttr_CgroupUnit.AddToContainerP(v)
+		}
+		symbolArraySecAttr_CgroupUnit.AddMembershipLowCardRefP(kindSysmProcCgroupUnit)
+		symbolArraySecAttr_CgroupUnit.EndAttributeP()
+	}
+	return
+}
+
+// sysProcEmitSectionF32Array writes this kind's f32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcEmitSectionF32Array[
+	F32ArrayAttr sysProcF32ArrayAttrI,
+	F32ArraySec sysProcF32ArraySecI[F32ArrayAttr, Ent],
+	Ent any,
+](f32ArraySec F32ArraySec, row SysProc) (err error) {
+	if len(row.CPUPercent) > 0 {
+		f32ArraySecAttr_CPUPercent := f32ArraySec.BeginAttribute()
+		for _, v := range row.CPUPercent {
+			f32ArraySecAttr_CPUPercent.AddToContainerP(v)
+		}
+		f32ArraySecAttr_CPUPercent.AddMembershipLowCardRefP(kindSysmProcCpuPct)
+		f32ArraySecAttr_CPUPercent.EndAttributeP()
+	}
+	return
+}
+
+// sysProcEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcEmitSectionU64Array[
+	U64ArrayAttr sysProcU64ArrayAttrI,
+	U64ArraySec sysProcU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row SysProc) (err error) {
+	if len(row.RSSBytes) > 0 {
+		u64ArraySecAttr_RSSBytes := u64ArraySec.BeginAttribute()
+		for _, v := range row.RSSBytes {
+			u64ArraySecAttr_RSSBytes.AddToContainerP(v)
+		}
+		u64ArraySecAttr_RSSBytes.AddMembershipLowCardRefP(kindSysmProcRssBytes)
+		u64ArraySecAttr_RSSBytes.EndAttributeP()
+	}
+	if len(row.VMSizeBytes) > 0 {
+		u64ArraySecAttr_VMSizeBytes := u64ArraySec.BeginAttribute()
+		for _, v := range row.VMSizeBytes {
+			u64ArraySecAttr_VMSizeBytes.AddToContainerP(v)
+		}
+		u64ArraySecAttr_VMSizeBytes.AddMembershipLowCardRefP(kindSysmProcVmSizeBytes)
+		u64ArraySecAttr_VMSizeBytes.EndAttributeP()
+	}
+	return
+}
+
+// sysProcEmitSectionI32Array writes this kind's i32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcEmitSectionI32Array[
+	I32ArrayAttr sysProcI32ArrayAttrI,
+	I32ArraySec sysProcI32ArraySecI[I32ArrayAttr, Ent],
+	Ent any,
+](i32ArraySec I32ArraySec, row SysProc) (err error) {
+	if len(row.NumThreads) > 0 {
+		i32ArraySecAttr_NumThreads := i32ArraySec.BeginAttribute()
+		for _, v := range row.NumThreads {
+			i32ArraySecAttr_NumThreads.AddToContainerP(v)
+		}
+		i32ArraySecAttr_NumThreads.AddMembershipLowCardRefP(kindSysmProcNumThreads)
+		i32ArraySecAttr_NumThreads.EndAttributeP()
+	}
+	if len(row.Nice) > 0 {
+		i32ArraySecAttr_Nice := i32ArraySec.BeginAttribute()
+		for _, v := range row.Nice {
+			i32ArraySecAttr_Nice.AddToContainerP(v)
+		}
+		i32ArraySecAttr_Nice.AddMembershipLowCardRefP(kindSysmProcNice)
+		i32ArraySecAttr_Nice.EndAttributeP()
+	}
+	if len(row.Priority) > 0 {
+		i32ArraySecAttr_Priority := i32ArraySec.BeginAttribute()
+		for _, v := range row.Priority {
+			i32ArraySecAttr_Priority.AddToContainerP(v)
+		}
+		i32ArraySecAttr_Priority.AddMembershipLowCardRefP(kindSysmProcPriority)
+		i32ArraySecAttr_Priority.EndAttributeP()
+	}
+	return
+}
+
+// sysProcEmitSectionU8Array writes this kind's u8Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcEmitSectionU8Array[
+	U8ArrayAttr sysProcU8ArrayAttrI,
+	U8ArraySec sysProcU8ArraySecI[U8ArrayAttr, Ent],
+	Ent any,
+](u8ArraySec U8ArraySec, row SysProc) (err error) {
+	if len(row.KernelThread) > 0 {
+		u8ArraySecAttr_KernelThread := u8ArraySec.BeginAttribute()
+		for _, v := range row.KernelThread {
+			u8ArraySecAttr_KernelThread.AddToContainerP(v)
+		}
+		u8ArraySecAttr_KernelThread.AddMembershipLowCardRefP(kindSysmProcKernelThread)
+		u8ArraySecAttr_KernelThread.EndAttributeP()
+	}
+	return
+}
+
+// sysProcEmitSectionI64Array writes this kind's i64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysProcEmitSectionI64Array[
+	I64ArrayAttr sysProcI64ArrayAttrI,
+	I64ArraySec sysProcI64ArraySecI[I64ArrayAttr, Ent],
+	Ent any,
+](i64ArraySec I64ArraySec, row SysProc) (err error) {
+	if len(row.StartedAtUnixMs) > 0 {
+		i64ArraySecAttr_StartedAtUnixMs := i64ArraySec.BeginAttribute()
+		for _, v := range row.StartedAtUnixMs {
+			i64ArraySecAttr_StartedAtUnixMs.AddToContainerP(v)
+		}
+		i64ArraySecAttr_StartedAtUnixMs.AddMembershipLowCardRefP(kindSysmProcStartedAtMs)
+		i64ArraySecAttr_StartedAtUnixMs.EndAttributeP()
+	}
+	return
+}
+
 // sysProcAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -229,144 +443,58 @@ func sysProcAddSections[
 ](dml DML, row SysProc) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
-	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindProc)
-	symbolSecAttr_Kind.EndAttributeP()
-	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
-	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmProcHost)
-	symbolSecAttr_Host.EndAttributeP()
+	err = sysProcEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- u32Array. ---
 	u32ArraySec := dml.GetSectionU32Array()
-	if len(row.Pid) > 0 {
-		u32ArraySecAttr_Pid := u32ArraySec.BeginAttribute()
-		for _, v := range row.Pid {
-			u32ArraySecAttr_Pid.AddToContainerP(v)
-		}
-		u32ArraySecAttr_Pid.AddMembershipLowCardRefP(kindSysmProcPid)
-		u32ArraySecAttr_Pid.EndAttributeP()
-	}
-	if len(row.Ppid) > 0 {
-		u32ArraySecAttr_Ppid := u32ArraySec.BeginAttribute()
-		for _, v := range row.Ppid {
-			u32ArraySecAttr_Ppid.AddToContainerP(v)
-		}
-		u32ArraySecAttr_Ppid.AddMembershipLowCardRefP(kindSysmProcPpid)
-		u32ArraySecAttr_Ppid.EndAttributeP()
+	err = sysProcEmitSectionU32Array(u32ArraySec, row)
+	if err != nil {
+		return
 	}
 	u32ArraySec.EndSection()
 	// --- symbolArray. ---
 	symbolArraySec := dml.GetSectionSymbolArray()
-	if len(row.Name) > 0 {
-		symbolArraySecAttr_Name := symbolArraySec.BeginAttribute()
-		for _, v := range row.Name {
-			symbolArraySecAttr_Name.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Name.AddMembershipLowCardRefP(kindSysmProcName)
-		symbolArraySecAttr_Name.EndAttributeP()
-	}
-	if len(row.State) > 0 {
-		symbolArraySecAttr_State := symbolArraySec.BeginAttribute()
-		for _, v := range row.State {
-			symbolArraySecAttr_State.AddToContainerP(v)
-		}
-		symbolArraySecAttr_State.AddMembershipLowCardRefP(kindSysmProcState)
-		symbolArraySecAttr_State.EndAttributeP()
-	}
-	if len(row.Component) > 0 {
-		symbolArraySecAttr_Component := symbolArraySec.BeginAttribute()
-		for _, v := range row.Component {
-			symbolArraySecAttr_Component.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Component.AddMembershipLowCardRefP(kindSysmProcComponent)
-		symbolArraySecAttr_Component.EndAttributeP()
-	}
-	if len(row.CgroupUnit) > 0 {
-		symbolArraySecAttr_CgroupUnit := symbolArraySec.BeginAttribute()
-		for _, v := range row.CgroupUnit {
-			symbolArraySecAttr_CgroupUnit.AddToContainerP(v)
-		}
-		symbolArraySecAttr_CgroupUnit.AddMembershipLowCardRefP(kindSysmProcCgroupUnit)
-		symbolArraySecAttr_CgroupUnit.EndAttributeP()
+	err = sysProcEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	// --- f32Array. ---
 	f32ArraySec := dml.GetSectionF32Array()
-	if len(row.CPUPercent) > 0 {
-		f32ArraySecAttr_CPUPercent := f32ArraySec.BeginAttribute()
-		for _, v := range row.CPUPercent {
-			f32ArraySecAttr_CPUPercent.AddToContainerP(v)
-		}
-		f32ArraySecAttr_CPUPercent.AddMembershipLowCardRefP(kindSysmProcCpuPct)
-		f32ArraySecAttr_CPUPercent.EndAttributeP()
+	err = sysProcEmitSectionF32Array(f32ArraySec, row)
+	if err != nil {
+		return
 	}
 	f32ArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	if len(row.RSSBytes) > 0 {
-		u64ArraySecAttr_RSSBytes := u64ArraySec.BeginAttribute()
-		for _, v := range row.RSSBytes {
-			u64ArraySecAttr_RSSBytes.AddToContainerP(v)
-		}
-		u64ArraySecAttr_RSSBytes.AddMembershipLowCardRefP(kindSysmProcRssBytes)
-		u64ArraySecAttr_RSSBytes.EndAttributeP()
-	}
-	if len(row.VMSizeBytes) > 0 {
-		u64ArraySecAttr_VMSizeBytes := u64ArraySec.BeginAttribute()
-		for _, v := range row.VMSizeBytes {
-			u64ArraySecAttr_VMSizeBytes.AddToContainerP(v)
-		}
-		u64ArraySecAttr_VMSizeBytes.AddMembershipLowCardRefP(kindSysmProcVmSizeBytes)
-		u64ArraySecAttr_VMSizeBytes.EndAttributeP()
+	err = sysProcEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
 	}
 	u64ArraySec.EndSection()
 	// --- i32Array. ---
 	i32ArraySec := dml.GetSectionI32Array()
-	if len(row.NumThreads) > 0 {
-		i32ArraySecAttr_NumThreads := i32ArraySec.BeginAttribute()
-		for _, v := range row.NumThreads {
-			i32ArraySecAttr_NumThreads.AddToContainerP(v)
-		}
-		i32ArraySecAttr_NumThreads.AddMembershipLowCardRefP(kindSysmProcNumThreads)
-		i32ArraySecAttr_NumThreads.EndAttributeP()
-	}
-	if len(row.Nice) > 0 {
-		i32ArraySecAttr_Nice := i32ArraySec.BeginAttribute()
-		for _, v := range row.Nice {
-			i32ArraySecAttr_Nice.AddToContainerP(v)
-		}
-		i32ArraySecAttr_Nice.AddMembershipLowCardRefP(kindSysmProcNice)
-		i32ArraySecAttr_Nice.EndAttributeP()
-	}
-	if len(row.Priority) > 0 {
-		i32ArraySecAttr_Priority := i32ArraySec.BeginAttribute()
-		for _, v := range row.Priority {
-			i32ArraySecAttr_Priority.AddToContainerP(v)
-		}
-		i32ArraySecAttr_Priority.AddMembershipLowCardRefP(kindSysmProcPriority)
-		i32ArraySecAttr_Priority.EndAttributeP()
+	err = sysProcEmitSectionI32Array(i32ArraySec, row)
+	if err != nil {
+		return
 	}
 	i32ArraySec.EndSection()
 	// --- u8Array. ---
 	u8ArraySec := dml.GetSectionU8Array()
-	if len(row.KernelThread) > 0 {
-		u8ArraySecAttr_KernelThread := u8ArraySec.BeginAttribute()
-		for _, v := range row.KernelThread {
-			u8ArraySecAttr_KernelThread.AddToContainerP(v)
-		}
-		u8ArraySecAttr_KernelThread.AddMembershipLowCardRefP(kindSysmProcKernelThread)
-		u8ArraySecAttr_KernelThread.EndAttributeP()
+	err = sysProcEmitSectionU8Array(u8ArraySec, row)
+	if err != nil {
+		return
 	}
 	u8ArraySec.EndSection()
 	// --- i64Array. ---
 	i64ArraySec := dml.GetSectionI64Array()
-	if len(row.StartedAtUnixMs) > 0 {
-		i64ArraySecAttr_StartedAtUnixMs := i64ArraySec.BeginAttribute()
-		for _, v := range row.StartedAtUnixMs {
-			i64ArraySecAttr_StartedAtUnixMs.AddToContainerP(v)
-		}
-		i64ArraySecAttr_StartedAtUnixMs.AddMembershipLowCardRefP(kindSysmProcStartedAtMs)
-		i64ArraySecAttr_StartedAtUnixMs.EndAttributeP()
+	err = sysProcEmitSectionI64Array(i64ArraySec, row)
+	if err != nil {
+		return
 	}
 	i64ArraySec.EndSection()
 	return

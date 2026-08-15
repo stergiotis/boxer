@@ -135,6 +135,21 @@ func SensorReadingBuildEntities[
 	return
 }
 
+// SensorReadingEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func SensorReadingEmitSectionSymbol[
+	SymbolAttr SensorReadingSymbolAttrI,
+	SymbolSec SensorReadingSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row SensorReading) (err error) {
+	symbolSecAttr_Reading := symbolSec.BeginAttribute(row.Reading)
+	symbolSecAttr_Reading.AddMembershipMixedLowCardRefP(row.ReadingC.Id, row.ReadingC.Params)
+	symbolSecAttr_Reading.EndAttributeP()
+	return
+}
+
 // SensorReadingAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -149,9 +164,10 @@ func SensorReadingAddSections[
 ](dml DML, row SensorReading) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Reading := symbolSec.BeginAttribute(row.Reading)
-	symbolSecAttr_Reading.AddMembershipMixedLowCardRefP(row.ReadingC.Id, row.ReadingC.Params)
-	symbolSecAttr_Reading.EndAttributeP()
+	err = SensorReadingEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	return
 }

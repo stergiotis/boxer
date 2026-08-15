@@ -126,44 +126,48 @@ type sysPsiEntityI[
 	GetSectionU64Array() U64ArraySec
 }
 
-// sysPsiAddSections contributes this kind's tagged sections to the OPEN
-// entity on dml — the BuildEntities body without the entity frame.
-// The caller owns BeginEntity / plain setters / CommitEntity.
-func sysPsiAddSections[
+// sysPsiEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysPsiEmitSectionSymbol[
 	SymbolAttr sysPsiSymbolAttrI,
 	SymbolSec sysPsiSymbolSecI[SymbolAttr, Ent],
-	BoolAttr sysPsiBoolAttrI,
-	BoolSec sysPsiBoolSecI[BoolAttr, Ent],
-	F32ArrayAttr sysPsiF32ArrayAttrI,
-	F32ArraySec sysPsiF32ArraySecI[F32ArrayAttr, Ent],
-	U64ArrayAttr sysPsiU64ArrayAttrI,
-	U64ArraySec sysPsiU64ArraySecI[U64ArrayAttr, Ent],
 	Ent any,
-	DML sysPsiEntityI[
-		SymbolAttr, SymbolSec,
-		BoolAttr, BoolSec,
-		F32ArrayAttr, F32ArraySec,
-		U64ArrayAttr, U64ArraySec,
-		Ent,
-	],
-](dml DML, row SysPsi) (err error) {
-	// --- symbol. ---
-	symbolSec := dml.GetSectionSymbol()
+](symbolSec SymbolSec, row SysPsi) (err error) {
 	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
 	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindPsi)
 	symbolSecAttr_Kind.EndAttributeP()
 	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
 	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmPsiHost)
 	symbolSecAttr_Host.EndAttributeP()
-	symbolSec.EndSection()
-	// --- bool. ---
-	boolSec := dml.GetSectionBool()
+	return
+}
+
+// sysPsiEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysPsiEmitSectionBool[
+	BoolAttr sysPsiBoolAttrI,
+	BoolSec sysPsiBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row SysPsi) (err error) {
 	boolSecAttr_Available := boolSec.BeginAttribute(row.Available)
 	boolSecAttr_Available.AddMembershipLowCardRefP(kindSysmPsiAvailable)
 	boolSecAttr_Available.EndAttributeP()
-	boolSec.EndSection()
-	// --- f32Array. ---
-	f32ArraySec := dml.GetSectionF32Array()
+	return
+}
+
+// sysPsiEmitSectionF32Array writes this kind's f32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysPsiEmitSectionF32Array[
+	F32ArrayAttr sysPsiF32ArrayAttrI,
+	F32ArraySec sysPsiF32ArraySecI[F32ArrayAttr, Ent],
+	Ent any,
+](f32ArraySec F32ArraySec, row SysPsi) (err error) {
 	f32ArraySecAttr_CpuSomeAvg10 := f32ArraySec.BeginAttributeSingle(row.CpuSomeAvg10)
 	f32ArraySecAttr_CpuSomeAvg10.AddMembershipLowCardRefP(kindSysmPsiCpuSomeAvg10)
 	f32ArraySecAttr_CpuSomeAvg10.EndAttributeP()
@@ -218,9 +222,18 @@ func sysPsiAddSections[
 	f32ArraySecAttr_IoFullAvg300 := f32ArraySec.BeginAttributeSingle(row.IoFullAvg300)
 	f32ArraySecAttr_IoFullAvg300.AddMembershipLowCardRefP(kindSysmPsiIoFullAvg300)
 	f32ArraySecAttr_IoFullAvg300.EndAttributeP()
-	f32ArraySec.EndSection()
-	// --- u64Array. ---
-	u64ArraySec := dml.GetSectionU64Array()
+	return
+}
+
+// sysPsiEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysPsiEmitSectionU64Array[
+	U64ArrayAttr sysPsiU64ArrayAttrI,
+	U64ArraySec sysPsiU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row SysPsi) (err error) {
 	u64ArraySecAttr_CpuSomeTotalUs := u64ArraySec.BeginAttributeSingle(row.CpuSomeTotalUs)
 	u64ArraySecAttr_CpuSomeTotalUs.AddMembershipLowCardRefP(kindSysmPsiCpuSomeTotalUs)
 	u64ArraySecAttr_CpuSomeTotalUs.EndAttributeP()
@@ -239,6 +252,57 @@ func sysPsiAddSections[
 	u64ArraySecAttr_IoFullTotalUs := u64ArraySec.BeginAttributeSingle(row.IoFullTotalUs)
 	u64ArraySecAttr_IoFullTotalUs.AddMembershipLowCardRefP(kindSysmPsiIoFullTotalUs)
 	u64ArraySecAttr_IoFullTotalUs.EndAttributeP()
+	return
+}
+
+// sysPsiAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func sysPsiAddSections[
+	SymbolAttr sysPsiSymbolAttrI,
+	SymbolSec sysPsiSymbolSecI[SymbolAttr, Ent],
+	BoolAttr sysPsiBoolAttrI,
+	BoolSec sysPsiBoolSecI[BoolAttr, Ent],
+	F32ArrayAttr sysPsiF32ArrayAttrI,
+	F32ArraySec sysPsiF32ArraySecI[F32ArrayAttr, Ent],
+	U64ArrayAttr sysPsiU64ArrayAttrI,
+	U64ArraySec sysPsiU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+	DML sysPsiEntityI[
+		SymbolAttr, SymbolSec,
+		BoolAttr, BoolSec,
+		F32ArrayAttr, F32ArraySec,
+		U64ArrayAttr, U64ArraySec,
+		Ent,
+	],
+](dml DML, row SysPsi) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	err = sysPsiEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
+	symbolSec.EndSection()
+	// --- bool. ---
+	boolSec := dml.GetSectionBool()
+	err = sysPsiEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
+	boolSec.EndSection()
+	// --- f32Array. ---
+	f32ArraySec := dml.GetSectionF32Array()
+	err = sysPsiEmitSectionF32Array(f32ArraySec, row)
+	if err != nil {
+		return
+	}
+	f32ArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	err = sysPsiEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
 	u64ArraySec.EndSection()
 	return
 }

@@ -46,6 +46,21 @@ type depositedEntityI[
 	GetSectionAcctDeposit() AcctDepositSec
 }
 
+// depositedEmitSectionAcctDeposit writes this kind's acctDeposit attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func depositedEmitSectionAcctDeposit[
+	AcctDepositAttr depositedAcctDepositAttrI,
+	AcctDepositSec depositedAcctDepositSecI[AcctDepositAttr, Ent],
+	Ent any,
+](acctDepositSec AcctDepositSec, row Deposited) (err error) {
+	acctDepositSecAttr_Amount := acctDepositSec.BeginAttributeSingle(row.Amount)
+	acctDepositSecAttr_Amount.AddMembershipLowCardRefP(kindLedgerDeposit)
+	acctDepositSecAttr_Amount.EndAttributeP()
+	return
+}
+
 // depositedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -60,9 +75,10 @@ func depositedAddSections[
 ](dml DML, row Deposited) (err error) {
 	// --- acctDeposit. ---
 	acctDepositSec := dml.GetSectionAcctDeposit()
-	acctDepositSecAttr_Amount := acctDepositSec.BeginAttributeSingle(row.Amount)
-	acctDepositSecAttr_Amount.AddMembershipLowCardRefP(kindLedgerDeposit)
-	acctDepositSecAttr_Amount.EndAttributeP()
+	err = depositedEmitSectionAcctDeposit(acctDepositSec, row)
+	if err != nil {
+		return
+	}
 	acctDepositSec.EndSection()
 	return
 }

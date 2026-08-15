@@ -46,6 +46,21 @@ type closedEntityI[
 	GetSectionAcctClosed() AcctClosedSec
 }
 
+// closedEmitSectionAcctClosed writes this kind's acctClosed attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func closedEmitSectionAcctClosed[
+	AcctClosedAttr closedAcctClosedAttrI,
+	AcctClosedSec closedAcctClosedSecI[AcctClosedAttr, Ent],
+	Ent any,
+](acctClosedSec AcctClosedSec, row Closed) (err error) {
+	acctClosedSecAttr_Reason := acctClosedSec.BeginAttribute(row.Reason)
+	acctClosedSecAttr_Reason.AddMembershipLowCardRefP(kindLedgerClosed)
+	acctClosedSecAttr_Reason.EndAttributeP()
+	return
+}
+
 // closedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -60,9 +75,10 @@ func closedAddSections[
 ](dml DML, row Closed) (err error) {
 	// --- acctClosed. ---
 	acctClosedSec := dml.GetSectionAcctClosed()
-	acctClosedSecAttr_Reason := acctClosedSec.BeginAttribute(row.Reason)
-	acctClosedSecAttr_Reason.AddMembershipLowCardRefP(kindLedgerClosed)
-	acctClosedSecAttr_Reason.EndAttributeP()
+	err = closedEmitSectionAcctClosed(acctClosedSec, row)
+	if err != nil {
+		return
+	}
 	acctClosedSec.EndSection()
 	return
 }

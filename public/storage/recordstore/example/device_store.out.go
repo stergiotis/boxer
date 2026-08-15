@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/example/internal/lowlevel"
@@ -320,13 +321,34 @@ type DeviceEntityBuilder struct {
 	key   uint64
 	// ent mirrors the typed Add* calls so Commit can write the entity
 	// through to attached cache views; raw marks commits that touched
-	// the DML directly (or double-added a component) — those cannot be
-	// materialized faithfully and invalidate the key instead.
+	// the DML directly — those cannot be materialized faithfully and
+	// invalidate the key instead.
 	ent DeviceEntity
 	raw bool
+	// buf holds each component's section contributions until Commit, so
+	// components sharing a section share its frame. It also holds the
+	// frame invariants: one contribution per kind, and typed Adds
+	// exclusive with Raw (ADR-0183 D4).
+	buf dmlruntime.DeferredSectionBuffer
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+}
+
+// endSection closes one section's frame. The buffer calls it once per
+// section, after every component that contributed to it has written.
+func (inst *DeviceEntityBuilder) endSection(section string) error {
+	switch section {
+	case "symbol":
+		inst.store.dml.GetSectionSymbol().EndSection()
+	case "u64Array":
+		inst.store.dml.GetSectionU64Array().EndSection()
+	case "symbolArray":
+		inst.store.dml.GetSectionSymbolArray().EndSection()
+	case "geoPoint":
+		inst.store.dml.GetSectionGeoPoint().EndSection()
+	}
+	return nil
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
@@ -341,63 +363,95 @@ func (inst *DeviceStore) Begin(id uint64, ts time.Time) *DeviceEntityBuilder {
 	return b
 }
 
-// AddIdentity contributes the Identity component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddIdentity contributes the Identity component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *DeviceEntityBuilder) AddIdentity(row Identity) *DeviceEntityBuilder {
-	err := identityAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Identity"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Identity.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Identity = option.Some(row)
-	}
+	inst.buf.Enqueue("symbol", "Identity", func() error {
+		return identityEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.ent.Identity = option.Some(row)
 	return inst
 }
 
-// AddBattery contributes the Battery component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddBattery contributes the Battery component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *DeviceEntityBuilder) AddBattery(row Battery) *DeviceEntityBuilder {
-	err := batteryAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Battery"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Battery.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Battery = option.Some(row)
-	}
+	inst.buf.Enqueue("u64Array", "Battery", func() error {
+		return batteryEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.ent.Battery = option.Some(row)
 	return inst
 }
 
-// AddTagged contributes the Tagged component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddTagged contributes the Tagged component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *DeviceEntityBuilder) AddTagged(row Tagged) *DeviceEntityBuilder {
-	err := taggedAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Tagged"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Tagged.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Tagged = option.Some(row)
-	}
+	inst.buf.Enqueue("symbolArray", "Tagged", func() error {
+		return taggedEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.ent.Tagged = option.Some(row)
 	return inst
 }
 
-// AddLocated contributes the Located component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddLocated contributes the Located component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *DeviceEntityBuilder) AddLocated(row Located) *DeviceEntityBuilder {
-	err := locatedAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("Located"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.Located.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.Located = option.Some(row)
-	}
+	inst.buf.Enqueue("geoPoint", "Located", func() error {
+		return locatedEmitSectionGeoPoint(inst.store.dml.GetSectionGeoPoint(), row)
+	})
+	inst.ent.Located = option.Some(row)
 	return inst
 }
 
@@ -407,6 +461,9 @@ func (inst *DeviceEntityBuilder) AddLocated(row Located) *DeviceEntityBuilder {
 // returned value by inference (raw := b.Raw()) and chain its
 // methods, but cannot name the type in their own signatures.
 func (inst *DeviceEntityBuilder) Raw() *lowlevel.InEntityDeviceTable {
+	if err := inst.buf.MarkRaw(); err != nil {
+		inst.store.dml.AppendError(err)
+	}
 	inst.raw = true // direct DML writes cannot be mirrored into the entity
 	return inst.store.dml
 }
@@ -420,6 +477,10 @@ func (inst *DeviceEntityBuilder) Raw() *lowlevel.InEntityDeviceTable {
 // instead. A failed Commit rolls the frame back — the entity is
 // discarded and the store stays usable.
 func (inst *DeviceEntityBuilder) Commit() (err error) {
+	if ferr := inst.buf.Flush(inst.endSection); ferr != nil {
+		inst.store.dml.AppendError(ferr) // surfaced by CommitEntity below
+	}
+	inst.buf.Reset()
 	err = lowlevel.InEntityDeviceTableCommitEntity(inst.store.dml)
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed) // release Begin's ambient stamps (consumed by the closed attributes)
 	if err != nil {
@@ -440,6 +501,7 @@ func (inst *DeviceEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *DeviceEntityBuilder) Rollback() (err error) {
+	inst.buf.Reset() // the buffered contributions are abandoned with the frame
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityDeviceTableRollbackEntity(inst.store.dml)
 }

@@ -46,6 +46,21 @@ type openedEntityI[
 	GetSectionAcctOwner() AcctOwnerSec
 }
 
+// openedEmitSectionAcctOwner writes this kind's acctOwner attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func openedEmitSectionAcctOwner[
+	AcctOwnerAttr openedAcctOwnerAttrI,
+	AcctOwnerSec openedAcctOwnerSecI[AcctOwnerAttr, Ent],
+	Ent any,
+](acctOwnerSec AcctOwnerSec, row Opened) (err error) {
+	acctOwnerSecAttr_Owner := acctOwnerSec.BeginAttribute(row.Owner)
+	acctOwnerSecAttr_Owner.AddMembershipLowCardRefP(kindLedgerOwner)
+	acctOwnerSecAttr_Owner.EndAttributeP()
+	return
+}
+
 // openedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -60,9 +75,10 @@ func openedAddSections[
 ](dml DML, row Opened) (err error) {
 	// --- acctOwner. ---
 	acctOwnerSec := dml.GetSectionAcctOwner()
-	acctOwnerSecAttr_Owner := acctOwnerSec.BeginAttribute(row.Owner)
-	acctOwnerSecAttr_Owner.AddMembershipLowCardRefP(kindLedgerOwner)
-	acctOwnerSecAttr_Owner.EndAttributeP()
+	err = openedEmitSectionAcctOwner(acctOwnerSec, row)
+	if err != nil {
+		return
+	}
 	acctOwnerSec.EndSection()
 	return
 }

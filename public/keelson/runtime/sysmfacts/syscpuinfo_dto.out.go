@@ -67,6 +67,42 @@ type sysCpuInfoEntityI[
 	GetSectionI32Array() I32ArraySec
 }
 
+// sysCpuInfoEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysCpuInfoEmitSectionSymbol[
+	SymbolAttr sysCpuInfoSymbolAttrI,
+	SymbolSec sysCpuInfoSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row SysCpuInfo) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindCpuInfo)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
+	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmCpuInfoHost)
+	symbolSecAttr_Host.EndAttributeP()
+	symbolSecAttr_ModelName := symbolSec.BeginAttribute(row.ModelName)
+	symbolSecAttr_ModelName.AddMembershipLowCardRefP(kindSysmCpuModelName)
+	symbolSecAttr_ModelName.EndAttributeP()
+	return
+}
+
+// sysCpuInfoEmitSectionI32Array writes this kind's i32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysCpuInfoEmitSectionI32Array[
+	I32ArrayAttr sysCpuInfoI32ArrayAttrI,
+	I32ArraySec sysCpuInfoI32ArraySecI[I32ArrayAttr, Ent],
+	Ent any,
+](i32ArraySec I32ArraySec, row SysCpuInfo) (err error) {
+	i32ArraySecAttr_LogicalCores := i32ArraySec.BeginAttributeSingle(row.LogicalCores)
+	i32ArraySecAttr_LogicalCores.AddMembershipLowCardRefP(kindSysmCpuLogicalCores)
+	i32ArraySecAttr_LogicalCores.EndAttributeP()
+	return
+}
+
 // sysCpuInfoAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -84,21 +120,17 @@ func sysCpuInfoAddSections[
 ](dml DML, row SysCpuInfo) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
-	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindCpuInfo)
-	symbolSecAttr_Kind.EndAttributeP()
-	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
-	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmCpuInfoHost)
-	symbolSecAttr_Host.EndAttributeP()
-	symbolSecAttr_ModelName := symbolSec.BeginAttribute(row.ModelName)
-	symbolSecAttr_ModelName.AddMembershipLowCardRefP(kindSysmCpuModelName)
-	symbolSecAttr_ModelName.EndAttributeP()
+	err = sysCpuInfoEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- i32Array. ---
 	i32ArraySec := dml.GetSectionI32Array()
-	i32ArraySecAttr_LogicalCores := i32ArraySec.BeginAttributeSingle(row.LogicalCores)
-	i32ArraySecAttr_LogicalCores.AddMembershipLowCardRefP(kindSysmCpuLogicalCores)
-	i32ArraySecAttr_LogicalCores.EndAttributeP()
+	err = sysCpuInfoEmitSectionI32Array(i32ArraySec, row)
+	if err != nil {
+		return
+	}
 	i32ArraySec.EndSection()
 	return
 }

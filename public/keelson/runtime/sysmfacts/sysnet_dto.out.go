@@ -132,41 +132,33 @@ type sysNetEntityI[
 	GetSectionU64Array() U64ArraySec
 }
 
-// sysNetAddSections contributes this kind's tagged sections to the OPEN
-// entity on dml — the BuildEntities body without the entity frame.
-// The caller owns BeginEntity / plain setters / CommitEntity.
-func sysNetAddSections[
+// sysNetEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysNetEmitSectionSymbol[
 	SymbolAttr sysNetSymbolAttrI,
 	SymbolSec sysNetSymbolSecI[SymbolAttr, Ent],
-	SymbolArrayAttr sysNetSymbolArrayAttrI,
-	SymbolArraySec sysNetSymbolArraySecI[SymbolArrayAttr, Ent],
-	I32ArrayAttr sysNetI32ArrayAttrI,
-	I32ArraySec sysNetI32ArraySecI[I32ArrayAttr, Ent],
-	U8ArrayAttr sysNetU8ArrayAttrI,
-	U8ArraySec sysNetU8ArraySecI[U8ArrayAttr, Ent],
-	U64ArrayAttr sysNetU64ArrayAttrI,
-	U64ArraySec sysNetU64ArraySecI[U64ArrayAttr, Ent],
 	Ent any,
-	DML sysNetEntityI[
-		SymbolAttr, SymbolSec,
-		SymbolArrayAttr, SymbolArraySec,
-		I32ArrayAttr, I32ArraySec,
-		U8ArrayAttr, U8ArraySec,
-		U64ArrayAttr, U64ArraySec,
-		Ent,
-	],
-](dml DML, row SysNet) (err error) {
-	// --- symbol. ---
-	symbolSec := dml.GetSectionSymbol()
+](symbolSec SymbolSec, row SysNet) (err error) {
 	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
 	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindSysmKindNet)
 	symbolSecAttr_Kind.EndAttributeP()
 	symbolSecAttr_Host := symbolSec.BeginAttribute(row.Host)
 	symbolSecAttr_Host.AddMembershipLowCardRefP(kindSysmNetHost)
 	symbolSecAttr_Host.EndAttributeP()
-	symbolSec.EndSection()
-	// --- symbolArray. ---
-	symbolArraySec := dml.GetSectionSymbolArray()
+	return
+}
+
+// sysNetEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysNetEmitSectionSymbolArray[
+	SymbolArrayAttr sysNetSymbolArrayAttrI,
+	SymbolArraySec sysNetSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row SysNet) (err error) {
 	if len(row.Name) > 0 {
 		symbolArraySecAttr_Name := symbolArraySec.BeginAttribute()
 		for _, v := range row.Name {
@@ -183,9 +175,18 @@ func sysNetAddSections[
 		symbolArraySecAttr_HardwareAddr.AddMembershipLowCardRefP(kindSysmNetHardwareAddr)
 		symbolArraySecAttr_HardwareAddr.EndAttributeP()
 	}
-	symbolArraySec.EndSection()
-	// --- i32Array. ---
-	i32ArraySec := dml.GetSectionI32Array()
+	return
+}
+
+// sysNetEmitSectionI32Array writes this kind's i32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysNetEmitSectionI32Array[
+	I32ArrayAttr sysNetI32ArrayAttrI,
+	I32ArraySec sysNetI32ArraySecI[I32ArrayAttr, Ent],
+	Ent any,
+](i32ArraySec I32ArraySec, row SysNet) (err error) {
 	if len(row.Index) > 0 {
 		i32ArraySecAttr_Index := i32ArraySec.BeginAttribute()
 		for _, v := range row.Index {
@@ -194,9 +195,18 @@ func sysNetAddSections[
 		i32ArraySecAttr_Index.AddMembershipLowCardRefP(kindSysmNetIndex)
 		i32ArraySecAttr_Index.EndAttributeP()
 	}
-	i32ArraySec.EndSection()
-	// --- u8Array. ---
-	u8ArraySec := dml.GetSectionU8Array()
+	return
+}
+
+// sysNetEmitSectionU8Array writes this kind's u8Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysNetEmitSectionU8Array[
+	U8ArrayAttr sysNetU8ArrayAttrI,
+	U8ArraySec sysNetU8ArraySecI[U8ArrayAttr, Ent],
+	Ent any,
+](u8ArraySec U8ArraySec, row SysNet) (err error) {
 	if len(row.Up) > 0 {
 		u8ArraySecAttr_Up := u8ArraySec.BeginAttribute()
 		for _, v := range row.Up {
@@ -213,9 +223,18 @@ func sysNetAddSections[
 		u8ArraySecAttr_Running.AddMembershipLowCardRefP(kindSysmNetRunning)
 		u8ArraySecAttr_Running.EndAttributeP()
 	}
-	u8ArraySec.EndSection()
-	// --- u64Array. ---
-	u64ArraySec := dml.GetSectionU64Array()
+	return
+}
+
+// sysNetEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func sysNetEmitSectionU64Array[
+	U64ArrayAttr sysNetU64ArrayAttrI,
+	U64ArraySec sysNetU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row SysNet) (err error) {
 	if len(row.RxBytes) > 0 {
 		u64ArraySecAttr_RxBytes := u64ArraySec.BeginAttribute()
 		for _, v := range row.RxBytes {
@@ -247,6 +266,67 @@ func sysNetAddSections[
 		}
 		u64ArraySecAttr_TxBytesPerSec.AddMembershipLowCardRefP(kindSysmNetTxBytesPerSec)
 		u64ArraySecAttr_TxBytesPerSec.EndAttributeP()
+	}
+	return
+}
+
+// sysNetAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func sysNetAddSections[
+	SymbolAttr sysNetSymbolAttrI,
+	SymbolSec sysNetSymbolSecI[SymbolAttr, Ent],
+	SymbolArrayAttr sysNetSymbolArrayAttrI,
+	SymbolArraySec sysNetSymbolArraySecI[SymbolArrayAttr, Ent],
+	I32ArrayAttr sysNetI32ArrayAttrI,
+	I32ArraySec sysNetI32ArraySecI[I32ArrayAttr, Ent],
+	U8ArrayAttr sysNetU8ArrayAttrI,
+	U8ArraySec sysNetU8ArraySecI[U8ArrayAttr, Ent],
+	U64ArrayAttr sysNetU64ArrayAttrI,
+	U64ArraySec sysNetU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+	DML sysNetEntityI[
+		SymbolAttr, SymbolSec,
+		SymbolArrayAttr, SymbolArraySec,
+		I32ArrayAttr, I32ArraySec,
+		U8ArrayAttr, U8ArraySec,
+		U64ArrayAttr, U64ArraySec,
+		Ent,
+	],
+](dml DML, row SysNet) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	err = sysNetEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
+	symbolSec.EndSection()
+	// --- symbolArray. ---
+	symbolArraySec := dml.GetSectionSymbolArray()
+	err = sysNetEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
+	}
+	symbolArraySec.EndSection()
+	// --- i32Array. ---
+	i32ArraySec := dml.GetSectionI32Array()
+	err = sysNetEmitSectionI32Array(i32ArraySec, row)
+	if err != nil {
+		return
+	}
+	i32ArraySec.EndSection()
+	// --- u8Array. ---
+	u8ArraySec := dml.GetSectionU8Array()
+	err = sysNetEmitSectionU8Array(u8ArraySec, row)
+	if err != nil {
+		return
+	}
+	u8ArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	err = sysNetEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
 	}
 	u64ArraySec.EndSection()
 	return
