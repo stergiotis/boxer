@@ -7,6 +7,21 @@
 // It was play's editor until ADR-0147 §SD1; the extraction is what lets a
 // second SQL surface inherit the affordances rather than re-implement them.
 //
+// # Two surfaces
+//
+// [Editor] edits STATEMENTS. [Field] edits a FRAGMENT — a predicate, a scalar
+// expression, an aliased column list, a table source — for the panel controls
+// that carry raw SQL in a plain TextEdit today (ADR-0187 (proposed) §SD7).
+//
+// They are separate types rather than one with a row count because a fragment
+// has no statement split, no SET prelude, no run buffer and no gutter: most of
+// [Frame] and nearly all of [Result] would be inapplicable to it. What they
+// share is this package — the tones below have one definition between them,
+// and so will the completion catalog.
+//
+// Everything from here down describes [Editor]; [Field]'s whole contract is
+// its own doc comment.
+//
 // # The seam runs in both directions
 //
 // *Inwards*, the embedder contributes what only it can know: the bound buffer,

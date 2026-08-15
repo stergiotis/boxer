@@ -265,6 +265,14 @@ It is `c.TextEdit(…, false)` — egui's single-line form, so Enter inserts not
 and needs no IDL change — with `HighlightJob(codeview.BuildSqlLex(v))` for
 colour and `SectionStyled` for the error underline.
 
+**It takes a row count, defaulting to one.** A fragment is a line, and §SD3's
+directive carriage requires that a *parameter's* value be one; but a panel
+control's value is panel state under no such constraint, and the Map's colour
+block is three lines today. A field that could not be more than one line would
+have left that call site on a raw `TextEdit` and made §M0 unsatisfiable as
+written. The default carries the intent; the knob keeps the widget usable by the
+consumer that motivated it.
+
 **The widget does not depend on the parameter.** The Map owns a panel-local
 template and splices its own controls into it (ADR-0096's 2026-07-10 divergence
 Update), so it consumes the field directly and never touches a slot, a tier or a
@@ -406,8 +414,8 @@ of the parameter machinery exists.
 
 ## Milestones
 
-- **M0 — the field.** Single-line SQL field in `widgets/sqleditor`; the Map's
-  two raw `TextEdit` call sites adopt it. No parameter machinery.
+- **M0 — the field.** SQL field in `widgets/sqleditor`, single-line by default;
+  the Map's two raw `TextEdit` call sites adopt it. No parameter machinery.
 - **M1 — detection and the directive.** The three categories, the `-- play: expr`
   scanner, the orphan advisory, the widget registration.
 - **M2 — splice and trace.** The `splice-expr` step at order `-90`, per-category
