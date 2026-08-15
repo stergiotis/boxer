@@ -81,7 +81,7 @@ func NewCommand() *cli.Command {
 			"`SELECT id FROM table WHERE <expr>` and evaluates via clickhouse-local:\n" +
 			"   imzero2 demo --launch \"subject_alias IN ('play','widgets')\"\n" +
 			"   imzero2 demo --launch \"legacy_code = 5\"\n" +
-			"   imzero2 demo --launch \"category = 'tools'\"\n" +
+			"   imzero2 demo --launch \"has(topics, 'observability') AND kind = 'app'\"\n" +
 			"\n" +
 			"See doc/howto/launch-apps-non-interactively.md for the full recipe.",
 		Flags: slices.Concat(cfg.ToCliFlags(config.IdentityNameTransf, config.IdentityNameTransf),
