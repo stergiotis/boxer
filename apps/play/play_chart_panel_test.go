@@ -599,6 +599,48 @@ func TestChartAvailableMarks(t *testing.T) {
 	assert.Equal(t, chartMarkHeatmap, d.activeMark(), "a pick that is no longer available falls back")
 }
 
+// The log choice outlives the result it was made on, so it can survive into a
+// result the control is withdrawn from — a value at or below zero. Drawing it
+// there would be a log axis with nothing on screen to turn it off, over values
+// a log axis cannot place, so every consumer asks logActive rather than the
+// flag. (The complementary half — that the choice is not DISCARDED, so a later
+// positive result comes back the way the reader left it — is the second
+// assertion.)
+func TestChartLogIsInactiveWhereTheControlIsWithdrawn(t *testing.T) {
+	positive := arrow.NewSchema([]arrow.Field{
+		{Name: chartColX, Type: arrow.BinaryTypes.String},
+		{Name: chartColY, Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+	rec := chartRecord(t, positive, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.StringBuilder).AppendValues([]string{"a", "b"}, nil)
+		b.Field(1).(*array.Float64Builder).AppendValues([]float64{10, 1000}, nil)
+	})
+	defer rec.Release()
+
+	d, k := chartFold(t, positive, rec)
+	require.True(t, d.logOK, "every value is positive, so the control is offered")
+	d.logScale = true // the reader checks `log y`
+	assert.True(t, d.logActive())
+
+	// A result whose values reach zero: same schema, so only the DATA
+	// withdraws the control.
+	withZero := chartRecord(t, positive, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.StringBuilder).AppendValues([]string{"a", "b"}, nil)
+		b.Field(1).(*array.Float64Builder).AppendValues([]float64{0, 1000}, nil)
+	})
+	defer withZero.Release()
+	d.noteExecuted(time.Unix(2, 0))
+	d.rebuild(withZero, positive, k)
+	require.False(t, d.logOK)
+	assert.True(t, d.logScale, "the reader's choice is kept, not discarded")
+	assert.False(t, d.logActive(), "but nothing draws a log axis while the control is absent")
+
+	// The choice returns with the data that can carry it.
+	d.noteExecuted(time.Unix(3, 0))
+	d.rebuild(rec, positive, k)
+	assert.True(t, d.logActive(), "a positive result again, checked as the reader left it")
+}
+
 // §SD5: selection is the nearest point in AXIS-NORMALISED space, so "nearest"
 // means nearest on screen even when the two axes have wildly different spans.
 func TestChartNearestRowIsAxisNormalised(t *testing.T) {

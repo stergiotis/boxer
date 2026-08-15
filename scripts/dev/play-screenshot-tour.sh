@@ -943,15 +943,24 @@ FROM default.planes_mercator_sample100
 WHERE altitude > 0
 GROUP BY x
 ORDER BY x"
-	# Three captures, each one click apart: the continuous-axis default (Line),
+	# Four captures, each one click apart: the continuous-axis default (Line),
 	# the Scatter chip, then log y — offered here because every drawn value is
 	# strictly positive, and worth engaging because the lanes span two orders of
-	# magnitude.
+	# magnitude — and then log y OFF again.
+	#
+	# The last pair is the point of the last two steps. A toggle clicked ONCE
+	# only ever evidences the direction that works, and turning a control back
+	# off is a different path whenever the consumer keeps state: this scene
+	# clicked log y once for a week while unchecking it left the axis
+	# logarithmic, because implot's axis scale was retained rather than
+	# re-declared each frame (ADR-0172 verification item 17).
 	steps='{"do":"capture","text":"08_chart_numeric","settleMs":600}
 {"do":"click","name":"Scatter"}
 {"do":"capture","text":"08_chart_scatter","settleMs":600}
 {"do":"click","name":"log y"}
-{"do":"capture","text":"08_chart_logy","settleMs":600}'
+{"do":"capture","text":"08_chart_logy","settleMs":600}
+{"do":"click","name":"log y"}
+{"do":"capture","text":"08_chart_logy_off","settleMs":600}'
 	settle=2000
 }
 

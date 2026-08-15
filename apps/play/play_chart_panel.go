@@ -610,6 +610,18 @@ func (inst *ChartDriver) renderChips() {
 	}
 }
 
+// logActive is whether a log scale is in force: the reader's choice AND this
+// result still admitting one. The two can disagree, because the choice outlives
+// the result it was made on — a query whose values reach zero withdraws the
+// control (renderChips) without discarding what the reader asked for, so a
+// later positive result comes back the way they left it.
+//
+// Every consumer asks THIS rather than the flag. Reading the flag alone draws a
+// log axis for a result that has no control on screen to turn it off, and over
+// values a log axis cannot place: applyFitMargin's multiplicative pad leans on
+// the same guarantee.
+func (inst *ChartDriver) logActive() bool { return inst.logScale && inst.logOK }
+
 // applyFitMargin widens the auto-fit so an extreme sample is drawn inside the
 // plot rather than on its border. Two carve-outs, both about not asserting
 // something the data does not:
@@ -631,7 +643,7 @@ func (inst *ChartDriver) applyFitMargin(p *implot.Plot, mark chartMarkE) {
 		p.IncludeX(inst.xMin - padX)
 		p.IncludeX(inst.xMax + padX)
 	}
-	if inst.logScale {
+	if inst.logActive() {
 		p.IncludeY(inst.yMax * (1 + chartFitMargin))
 		p.IncludeY(inst.yMin / (1 + chartFitMargin))
 		return
@@ -676,7 +688,7 @@ func (inst *ChartDriver) renderLanes(w float32, h float32, k chartClaim, emit Si
 		if inst.xAxis == chartAxisTemporal {
 			p.SetupAxisScale(implot.AxisX1, implot.ScaleTime)
 		}
-		if inst.logScale {
+		if inst.logActive() {
 			p.SetupAxisScale(implot.AxisY1, implot.ScaleLog10)
 		}
 		if inst.xAxis == chartAxisCategorical && len(inst.catLabels) <= chartMaxTickLabels {
@@ -741,7 +753,7 @@ func (inst *ChartDriver) renderGrid(w float32, h float32, k chartClaim, emit Sig
 		inst.cm.DataMin, inst.cm.DataMax = g.vmin-0.5, g.vmin+0.5
 	}
 	inst.cm.Scale = colormap.ScaleLinearE
-	if inst.logScale && inst.logOK {
+	if inst.logActive() {
 		inst.cm.Scale = colormap.ScaleLogE
 	}
 	// The colorbar comes out of the same budget as the plot, so the pair

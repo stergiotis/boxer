@@ -194,6 +194,13 @@ every drawn value is strictly positive — a log axis over a zero is a picture o
 nothing, and an absent affordance is cheaper to understand than a plot that
 silently drops points.
 
+The choice outlives the result it was made on, so it can survive into a result
+the control is withdrawn from; the withdrawal then has to reach the *drawing*
+too, or the reader gets the log axis without the checkbox that would undo it.
+Every consumer therefore reads the choice **and** the offer together
+(`ChartDriver.logActive`), which keeps the choice for a later result that can
+carry it without asserting it over one that cannot.
+
 The marks are chips because they are a mutually-exclusive set; the log scale is
 a checkbox because it is an independent boolean. It shipped as a fourth chip and
 was reported as *not toggling* — it did toggle, but a pressed-button state is
@@ -483,7 +490,24 @@ changes:
     caps (row truncation, series cap, the 40k-cell reject), and tick labels
     crowding when many long categories share a narrow pane — the cap is a
     count (40) where the constraint is really width.
-17. **Done 2026-08-06.** `08_chart_rownumber` — §SD2's implicit abscissa on the
+17. **Done 2026-08-15, from a use report.** The log control was driven **off**
+    as well as on, which no scene had done: item 11 above clicks `log y` once
+    and captures, and one click only ever exercises the direction that works.
+    Unchecking it put the checkbox back and left the plot logarithmic. The
+    checkbox was innocent — the port held the axis scale in a plot's *retained*
+    state with `SetupAxisScale` its only writer, so the last frame that asked
+    for log stood for every frame after it. Scale is per-frame Setup state and
+    now resets each `Begin`, which fixes the same latent trap for a temporal
+    `x`: one time-typed result would otherwise have kept formatting every later
+    numeric one as dates, in this panel and any other caller. `08_chart_numeric`
+    now clicks the control a second time and captures `08_chart_logy_off`, so
+    the direction that was never driven is a scene rather than a one-off.
+
+    The panel's own half of it — a log axis surviving into a result whose
+    values reach zero, where there is no control on screen to undo it — is the
+    `logActive` gate above; it is unit-tested rather than driven, the scene for
+    it being item 16's still-open negative case.
+18. **Done 2026-08-06.** `08_chart_rownumber` — §SD2's implicit abscissa on the
     shape that motivated it: a 30-row `GROUP BY` ranked by its own aggregate,
     drawn as the curve of its values against their rank, axis titled `row` and
     the status line reading `x: the row number, in result order (implicit — the
@@ -492,12 +516,12 @@ changes:
     opens is the whole of that decision, and it is visible in the pair. Its
     trace then clicks **Bar** and re-captures, the reading a short ranking
     usually wants and the reason the chips stay offered on an invented axis.
-18. **Done 2026-08-06.** `08_chart_rownumber_series` — the same rule with a
+19. **Done 2026-08-06.** `08_chart_rownumber_series` — the same rule with a
     `series` column: two interleaved runs of unequal length, numbered 1‥6 and
     1‥4 inside their own groups, overlaid rather than laid end to end, with the
     shorter run ENDING rather than being padded. Axis `row in series`, status
     line `x: the row number inside each \`series\``.
-19. **Re-driven 2026-08-06.** `08_chart_bars` and `08_chart_heatmap` as controls
+20. **Re-driven 2026-08-06.** `08_chart_bars` and `08_chart_heatmap` as controls
     on the paths §SD2 restructured — the categorical status line and the 24 × 7
     grid are unchanged, which is what says the optional `x` cost the explicit
     one nothing.
