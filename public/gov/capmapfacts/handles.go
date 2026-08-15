@@ -4,9 +4,11 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
 
@@ -65,27 +67,39 @@ const (
 	hFkLrCard = "`foreignKey:lrcard`"
 )
 
-// resolveHandles rewrites every handle in sql to the physical column name the
-// generated schema gives it.
+// prepare rewrites an authored query into the one that executes: column
+// handles become physical names, and `LW_GET` calls become the read-back
+// expressions that locate an attribute by membership.
 //
-// The schema comes from [dml.CreateSchemaFacts] rather than from the server:
-// the names are a property of the code that writes the table, so a dump can be
-// composed — and tested — with nothing running. It also means a handle that
-// does not resolve is a mistake in this package, caught here, rather than a
-// column ClickHouse will complain about later.
+// Both resolve against the schema [dml.CreateSchemaFacts] generates rather than
+// against the server: the names and lanes are a property of the code that
+// writes the table, so a dump can be composed — and tested — with nothing
+// running, and a handle or a section this package spells wrongly fails here
+// instead of as a column ClickHouse has never heard of.
+//
+// Handles first, extraction second. The expansion emits physical names, and
+// those contain colons; feeding them back through the handle resolver would
+// invite it to read one as a `section:column` of its own.
 //
 // table is the qualified name the query reads; its database half is what
 // resolves the unqualified references inside.
-func resolveHandles(sql string, table string) (out string, err error) {
+func prepare(sql string, table string) (out string, err error) {
 	database, _, qualified := strings.Cut(table, ".")
 	if !qualified || database == "" {
 		return "", eh.Errorf("capmapfacts: %q is not a database-qualified table", table)
 	}
-	provider := passes.NewStaticSchemaProvider(map[string][]string{table: factsColumnNames()})
-	pass := passes.ResolveColumnNames(lwsql.NewResolver(provider), database, nil)
-	out, err = pass.Apply(env.NewEnvironment(), sql)
-	if err != nil {
-		return "", eh.Errorf("capmapfacts: unable to resolve column handles: %w", err)
+	resolver := lwsql.NewResolver(passes.NewStaticSchemaProvider(
+		map[string][]string{table: factsColumnNames()}))
+
+	out = sql
+	for _, pass := range []nanopass.Pass{
+		passes.ResolveColumnNames(resolver, database, nil),
+		constructsql.ExtractExpandPass(resolver, database),
+	} {
+		out, err = pass.Apply(env.NewEnvironment(), out)
+		if err != nil {
+			return "", eh.Errorf("capmapfacts: %s: %w", pass.Name, err)
+		}
 	}
 	return out, nil
 }

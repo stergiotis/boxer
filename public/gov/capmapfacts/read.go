@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapvocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/registry"
 )
 
@@ -71,6 +72,9 @@ func ReadCorpus(ctx context.Context, q QuerierI, table string) (corpus capmapcor
 	}
 	if table == "" {
 		table = QualifiedTable
+	}
+	if err = requireSurface(ctx, q); err != nil {
+		return corpus, err
 	}
 	comps, err := readCompetences(ctx, q, table)
 	if err != nil {
@@ -170,6 +174,44 @@ func readCompetences(ctx context.Context, q QuerierI, table string) (comps []cap
 		comps = append(comps, comp)
 	}
 	return comps, nil
+}
+
+// requireSurface refuses to read from a server that has not been provisioned
+// with the SQL read surface, and says how to fix it.
+//
+// The queries expand into the read-back family (ADR-0181 §SD3), so a server
+// without it answers `Unknown function LW_VALUE_BY_TAG_EQUAL` — true, and no
+// help at all to an operator who is trying to recover a corpus. This is the
+// version handshake ADR-0171 §SD2 exists for, used for the thing it was meant
+// for: telling a caller *why* an expansion cannot run here.
+//
+// A mismatched version is refused rather than attempted. The expansion this
+// build emits is written against the surface this build declares, and a
+// silently-different one is the failure mode that produces wrong rows rather
+// than an error.
+func requireSurface(ctx context.Context, q QuerierI) (err error) {
+	body, err := q.Query(ctx, "SELECT "+lwsqlsurface.VersionFunctionName+"() AS v FORMAT TabSeparated")
+	if err != nil {
+		return eh.Errorf(
+			"capmapfacts: this server carries no leeway SQL read surface (%s), which the read-back queries expand into; install it with `boxer leeway sqlsurface install`: %w",
+			lwsqlsurface.VersionFunctionName, err)
+	}
+	defer func() { _ = body.Close() }()
+	raw, rErr := io.ReadAll(body)
+	if rErr != nil {
+		return eh.Errorf("capmapfacts: unable to read the surface version: %w", rErr)
+	}
+	got, pErr := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
+	if pErr != nil {
+		return eh.Errorf("capmapfacts: %s() answered %q, which is not a version: %w",
+			lwsqlsurface.VersionFunctionName, strings.TrimSpace(string(raw)), pErr)
+	}
+	if got != uint64(lwsqlsurface.Version) {
+		return eh.Errorf(
+			"capmapfacts: this server carries leeway SQL read surface v%d and this build emits v%d; reconcile them with `boxer leeway sqlsurface install`",
+			got, lwsqlsurface.Version)
+	}
+	return nil
 }
 
 // nilIfEmpty is what keeps "read from the store" and "read from markdown"
@@ -281,15 +323,14 @@ func readRelations(ctx context.Context, q QuerierI, table string, slugById map[u
 	return rels, nil
 }
 
-// queryJSON resolves the query's column handles, runs it, and decodes its
-// JSONEachRow body.
+// queryJSON prepares the query, runs it, and decodes its JSONEachRow body.
 //
-// Resolution happens here rather than in the builders because it is the one
-// place both queries pass through, and it happens before the FORMAT clause is
-// appended because the pass parses what it is given and FORMAT is not part of
-// the statement grammar it reads.
+// Preparation happens here rather than in the builders because it is the one
+// place both queries pass through, and before the FORMAT clause is appended
+// because the passes parse what they are given and FORMAT is not part of the
+// statement grammar they read.
 func queryJSON[T any](ctx context.Context, q QuerierI, table string, sql string) (rows []T, err error) {
-	resolved, err := resolveHandles(sql, table)
+	resolved, err := prepare(sql, table)
 	if err != nil {
 		return nil, err
 	}
@@ -317,18 +358,55 @@ func membId(m registry.RegisteredNaturalKey) (v uint64) {
 	return m.GetId().Value()
 }
 
+// The two ways this file reads an attribute, and why there are two.
+//
+// **`LW_GET` where the surface reaches.** An attribute carrying one plain
+// membership is what the read-back family is for (ADR-0181 §SD3): the call
+// names a section and a membership id, and the expansion pass resolves the
+// lanes and emits the locate-and-extract expression. Every scalar this corpus
+// stores — a slug, a name, a level, a relation's endpoints — reads that way,
+// and none of the arithmetic is written here any more.
+//
+// **A filter over the membership lane where it does not.** Two shapes fall
+// outside it, both on purpose:
+//
+//   - A membership carried by SEVERAL attributes of one row. The read-back
+//     family locates *the* attribute tagged with a membership; this encoding
+//     writes a tag each, a section each, a lifecycle entry each. Asking for
+//     "the" one would return an arbitrary member of a set.
+//   - A membership on the MIXED channel, whose parameter carries the section
+//     heading and the lifecycle phase (§SD5). The lane resolver enumerates the
+//     plain and high-cardinality channels only, so `chan:` cannot name it.
+//
+// Those reads filter the membership lane directly — but through
+// `LW_RAGGED_PARENT_IDS`, the same position-to-attribute map the expansion
+// emits, rather than the hand-rolled prefix sum this file used to carry.
+
+// getScalar reads the attribute carrying memb on a scalar section.
+func getScalar(section string, memb uint64) (expr string) {
+	return fmt.Sprintf("LW_GET('%s', '%d', 'chan:low-card-ref')", section, memb)
+}
+
+// getListFirst reads the first value of the attribute carrying memb on an
+// array-valued section.
+//
+// Every attribute this encoding writes on those sections holds exactly one
+// value, so the first is the only one — and asking for the first is the honest
+// spelling of that, where indexing the run's end would quietly return a
+// different element the day the assumption stops holding.
+func getListFirst(section string, memb uint64) (expr string) {
+	return fmt.Sprintf("arrayElement(LW_GET_LIST('%s', '%d', 'chan:low-card-ref'), 1)", section, memb)
+}
+
 // attrsFor yields the indices of the attributes carrying memb, in write order.
 //
-// It goes through the cardinality column rather than using the membership's
-// position directly, because `lr` is every attribute's memberships
-// concatenated: position and attribute index agree only while every earlier
-// attribute contributed exactly one. That happens to hold for what [Ingest]
-// writes today, and would stop holding the day an attribute with a mixed
-// membership is written before a plain one.
+// The membership lane is every attribute's memberships concatenated, so a
+// position in it is not an attribute index; LW_RAGGED_PARENT_IDS over the
+// cardinality lane is the map between them, and it is the same one the
+// read-back expansion uses.
 func attrsFor(membCol, cardCol string, memb uint64) (expr string) {
-	return fmt.Sprintf(
-		"arrayMap(p -> arrayFirstIndex(x -> x >= p, arrayCumSum(%s)), arrayFilter((i, m) -> m = %d, arrayEnumerate(%s), %s))",
-		cardCol, memb, membCol, membCol)
+	return fmt.Sprintf("arrayMap(p -> arrayElement(LW_RAGGED_PARENT_IDS(%s), p), %s)",
+		cardCol, positionsFor(membCol, memb))
 }
 
 // positionsFor yields the positions of memb within the flattened membership
@@ -338,37 +416,21 @@ func positionsFor(membCol string, memb uint64) (expr string) {
 	return fmt.Sprintf("arrayFilter((i, m) -> m = %d, arrayEnumerate(%s), %s)", memb, membCol, membCol)
 }
 
-// pickScalar reads the one value of a scalar section's attribute carrying memb,
-// or zero when the row has none.
-//
-// The index is clamped to 1 before it reaches arrayElement: the guard and the
-// pick are both evaluated (ClickHouse's `if` is not lazy over columns), and a
-// zero index is the one arrayElement refuses.
-func pickScalar(valCol, membCol, cardCol string, memb uint64, zero string) (expr string) {
-	attrs := attrsFor(membCol, cardCol, memb)
-	return fmt.Sprintf("if(empty(%[1]s), %[2]s, arrayElement(%[3]s, greatest(%[1]s[1], 1)))", attrs, zero, valCol)
-}
-
-// pickArrayValue is pickScalar for an array-valued section, where the value
-// column is flattened by `len` and an attribute's values start where the
-// previous attribute's ended. Every attribute this encoding writes holds
-// exactly one value, so the attribute's last value is its only one.
-func pickArrayValue(valCol, lenCol, membCol, cardCol string, memb uint64, zero string) (expr string) {
-	attrs := attrsFor(membCol, cardCol, memb)
-	return fmt.Sprintf("if(empty(%[1]s), %[2]s, arrayElement(%[3]s, greatest(arrayElement(arrayCumSum(%[4]s), greatest(%[1]s[1], 1)), 1)))",
-		attrs, zero, valCol, lenCol)
-}
-
-// pickArrayValues is pickArrayValue for every attribute carrying memb, in write
-// order — tags, prose sections, lifecycle entries.
-func pickArrayValues(valCol, lenCol, membCol, cardCol string, memb uint64) (expr string) {
-	attrs := attrsFor(membCol, cardCol, memb)
-	return fmt.Sprintf("arrayMap(a -> arrayElement(%s, greatest(arrayElement(arrayCumSum(%s), a), 1)), %s)", valCol, lenCol, attrs)
-}
-
-// pickScalars is pickScalar for every attribute carrying memb — the tag list.
+// pickScalars reads every attribute carrying memb on a scalar section — the
+// tag list, and the lifecycle names on the mixed channel.
 func pickScalars(valCol, membCol, cardCol string, memb uint64) (expr string) {
 	return fmt.Sprintf("arrayMap(a -> arrayElement(%s, a), %s)", valCol, attrsFor(membCol, cardCol, memb))
+}
+
+// pickArrayValues is pickScalars for an array-valued section: each attribute's
+// single value, in write order — the prose sections and the lifecycle dates.
+//
+// LW_RAGGED_ELEM takes the attribute's k-th element, which is exact where
+// indexing the flattened lane by a running total is only correct while every
+// attribute holds exactly one value.
+func pickArrayValues(valCol, lenCol, membCol, cardCol string, memb uint64) (expr string) {
+	return fmt.Sprintf("arrayMap(a -> LW_RAGGED_ELEM(%s, %s, a, 1), %s)",
+		valCol, lenCol, attrsFor(membCol, cardCol, memb))
 }
 
 // pickParameters yields the mixed-membership parameters of memb — the section
@@ -407,17 +469,17 @@ func competenceSQL(table string) (sql string) {
 FROM %s
 WHERE has(%s, %d)
 %s`,
-		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompSlug), "''"),
-		pickArrayValue(hStrValue, hStrLen, hStrLr, hStrLrCard, membId(capmapvocab.MembCompName), "''"),
-		pickArrayValue(hStrValue, hStrLen, hStrLr, hStrLrCard, membId(capmapvocab.MembCompAbbrev), "''"),
-		pickArrayValue(hStrValue, hStrLen, hStrLr, hStrLrCard, membId(capmapvocab.MembCompSynopsis), "''"),
-		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompDomain), "''"),
-		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompCatalog), "''"),
-		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompOwner), "''"),
-		pickArrayValue(hStrValue, hStrLen, hStrLr, hStrLrCard, membId(capmapvocab.MembCompVaultPath), "''"),
-		pickArrayValue(hU8Value, hU8Len, hU8Lr, hU8LrCard, membId(capmapvocab.MembCompLevel), "0"),
-		pickArrayValue(hU8Value, hU8Len, hU8Lr, hU8LrCard, membId(capmapvocab.MembCompMaturity), "0"),
-		pickArrayValue(hU8Value, hU8Len, hU8Lr, hU8LrCard, membId(capmapvocab.MembCompPain), "0"),
+		getScalar("symbol", membId(capmapvocab.MembCompSlug)),
+		getListFirst("stringArray", membId(capmapvocab.MembCompName)),
+		getListFirst("stringArray", membId(capmapvocab.MembCompAbbrev)),
+		getListFirst("stringArray", membId(capmapvocab.MembCompSynopsis)),
+		getScalar("symbol", membId(capmapvocab.MembCompDomain)),
+		getScalar("symbol", membId(capmapvocab.MembCompCatalog)),
+		getScalar("symbol", membId(capmapvocab.MembCompOwner)),
+		getListFirst("stringArray", membId(capmapvocab.MembCompVaultPath)),
+		getListFirst("u8Array", membId(capmapvocab.MembCompLevel)),
+		getListFirst("u8Array", membId(capmapvocab.MembCompMaturity)),
+		getListFirst("u8Array", membId(capmapvocab.MembCompPain)),
 		pickScalars(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembCompTag)),
 		pickParameters(hTxtMrhp, hTxtLmr, membId(capmapvocab.MembCompSection)),
 		pickArrayValues(hTxtValue, hTxtLen, hTxtLmr, hTxtLmrCard, membId(capmapvocab.MembCompSection)),
@@ -442,13 +504,13 @@ func relationSQL(table string) (sql string) {
 FROM %s
 WHERE has(%s, %d)
 %s`,
-		pickScalar(hFkValue, hFkLr, hFkLrCard, membId(capmapvocab.MembRelSource), "0"),
-		pickScalar(hFkValue, hFkLr, hFkLrCard, membId(capmapvocab.MembRelTarget), "0"),
-		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembRelTargetText), "''"),
-		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembRelKind), "''"),
-		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembRelResolution), "''"),
-		pickScalar(hSymValue, hSymLr, hSymLrCard, membId(capmapvocab.MembRelSection), "''"),
-		pickArrayValue(hF64Value, hF64Len, hF64Lr, hF64LrCard, membId(capmapvocab.MembRelNcd), "0"),
+		getScalar("foreignKey", membId(capmapvocab.MembRelSource)),
+		getScalar("foreignKey", membId(capmapvocab.MembRelTarget)),
+		getScalar("symbol", membId(capmapvocab.MembRelTargetText)),
+		getScalar("symbol", membId(capmapvocab.MembRelKind)),
+		getScalar("symbol", membId(capmapvocab.MembRelResolution)),
+		getScalar("symbol", membId(capmapvocab.MembRelSection)),
+		getListFirst("f64Array", membId(capmapvocab.MembRelNcd)),
 		table,
 		hSymLr, membId(capmapvocab.MembKindRelation),
 		newestPerId())

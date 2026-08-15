@@ -29,7 +29,7 @@ var allHandles = []string{
 // here, at `go test`, instead of at the first dump against a real server.
 func TestEveryHandleResolves(t *testing.T) {
 	for _, h := range allHandles {
-		out, err := resolveHandles("SELECT "+h+" FROM "+QualifiedTable, QualifiedTable)
+		out, err := prepare("SELECT "+h+" FROM "+QualifiedTable, QualifiedTable)
 		require.NoErrorf(t, err, "%s", h)
 		// The pass passes an unresolvable handle through untouched, so "the
 		// handle is gone" is exactly the property worth asserting.
@@ -42,7 +42,7 @@ func TestEveryHandleResolves(t *testing.T) {
 // sections, which is easy to get wrong: the timestamp's section is `timestamp`
 // while its physical name begins `ts:`.
 func TestPlainColumnHandles(t *testing.T) {
-	out, err := resolveHandles("SELECT "+hId+", "+hTs+" FROM "+QualifiedTable, QualifiedTable)
+	out, err := prepare("SELECT "+hId+", "+hTs+" FROM "+QualifiedTable, QualifiedTable)
 	require.NoError(t, err)
 	assert.Contains(t, out, `"id:id:`)
 	assert.Contains(t, out, `"ts:ts:`)
@@ -56,7 +56,7 @@ func TestQueriesResolveEveryHandle(t *testing.T) {
 		"competences": competenceSQL(QualifiedTable),
 		"relations":   relationSQL(QualifiedTable),
 	} {
-		out, err := resolveHandles(sql, QualifiedTable)
+		out, err := prepare(sql, QualifiedTable)
 		require.NoErrorf(t, err, "%s", name)
 		for _, h := range allHandles {
 			assert.NotContainsf(t, out, h, "%s: %s survived resolution", name, h)
@@ -66,10 +66,45 @@ func TestQueriesResolveEveryHandle(t *testing.T) {
 	}
 }
 
+// The scalar reads are the read surface's, not this package's arithmetic.
+//
+// `LW_GET` expands client-side into the read-back family, so what is sent
+// carries none of the calls this package authored — and if an expansion ever
+// silently declined, the call would travel to the server as an unknown
+// function. Asserting both directions is what makes that impossible to miss.
+func TestQueriesExpandIntoTheReadBackFamily(t *testing.T) {
+	for name, sql := range map[string]string{
+		"competences": competenceSQL(QualifiedTable),
+		"relations":   relationSQL(QualifiedTable),
+	} {
+		require.Containsf(t, sql, "LW_GET", "%s: the authored query should read through the surface", name)
+
+		out, err := prepare(sql, QualifiedTable)
+		require.NoErrorf(t, err, "%s", name)
+		assert.NotContainsf(t, out, "LW_GET", "%s: an LW_GET call survived expansion", name)
+		assert.Containsf(t, out, "LW_VALUE_BY_TAG_EQUAL", "%s: the scalar reads should expand to the read-back family", name)
+		// The lane map the mixed and repeated reads use is the one the
+		// expansion itself emits, which is the point of using it rather than a
+		// hand-rolled prefix sum.
+		assert.Containsf(t, out, "LW_RAGGED_PARENT_IDS", "%s", name)
+	}
+	assert.Contains(t, prepared(t, competenceSQL(QualifiedTable)), "LW_LIST_BY_TAG_EQUAL",
+		"the array-valued sections should expand to the list form")
+	assert.Contains(t, prepared(t, competenceSQL(QualifiedTable)), "LW_RAGGED_ELEM",
+		"a repeated attribute's value is read by position, not by a running total")
+}
+
+func prepared(t *testing.T, sql string) (out string) {
+	t.Helper()
+	out, err := prepare(sql, QualifiedTable)
+	require.NoError(t, err)
+	return out
+}
+
 // A dump names its table on the command line, so an unqualified one is an
 // operator's typo rather than a programming error — it has to say so.
 func TestResolveHandlesNeedsAQualifiedTable(t *testing.T) {
-	_, err := resolveHandles("SELECT 1", "facts")
+	_, err := prepare("SELECT 1", "facts")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "qualified")
 }

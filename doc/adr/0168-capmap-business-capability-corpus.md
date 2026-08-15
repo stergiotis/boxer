@@ -269,21 +269,29 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   from the same source the writer writes through and a test asserts every
   handle resolves with no server in reach.
 
-  **What is still hand-written, and why.** The locate-an-attribute-by-membership
-  expressions are the surface's `LW_GET` family (ADR-0181 §SD3), and this does
-  not use them yet: they expand into the read-back UDFs, which are not installed
-  on the servers this was developed against, and the installer that would put
-  them there is not committed. Adopting them also gives `boxer capmap dump` a
-  provisioned-server precondition it does not have today, which wants deciding
-  once — together, when the surface lands — rather than half now. The two forms
-  are equivalent for what the encoder writes; the surface's is shorter and
-  tested elsewhere.
+  **The scalar reads are `LW_GET`.** Each names a section and a membership id;
+  the expansion pass resolves the lanes and emits the read-back call
+  (ADR-0181 §SD3). Nothing about the flattened layout is written here any more.
 
-  One more thing `LW_GET` would not cover as it stands: the read-back family
-  locates **the** attribute carrying a membership, and this encoding writes
-  several under one membership on purpose — a tag each, a section each, a
-  lifecycle entry each. Those reads stay a filter over the membership lane
-  whatever happens to the scalar ones.
+  **Two shapes stay a filter over the membership lane**, and both are
+  deliberate rather than pending. The read-back family locates *the* attribute
+  carrying a membership, while this encoding writes several under one on
+  purpose — a tag each, a section each, a lifecycle entry each; asking for "the"
+  one would return an arbitrary member of a set. And the mixed channel, whose
+  parameter carries the section heading and the lifecycle phase (§SD5), is not
+  among the channels the lane resolver enumerates, so `chan:` cannot name it.
+  Those reads use `LW_RAGGED_PARENT_IDS` — the same position-to-attribute map
+  the expansion emits — rather than a hand-rolled prefix sum.
+
+  **This gives the dump a precondition: a provisioned server.** The read-back
+  family is installed by `boxer leeway sqlsurface install`, not by writing to
+  the table, so a store that has only ever been written to cannot be read back
+  until an operator provisions it. `ReadCorpus` therefore checks
+  `LW_SURFACE_VERSION()` first and refuses with that sentence, because the
+  alternative — `Unknown function LW_VALUE_BY_TAG_EQUAL` — is no help to
+  somebody recovering a corpus. A version that does not match what this build
+  emits is refused rather than attempted: a silently different surface is the
+  failure mode that returns wrong rows instead of an error.
 
   Two things the read-back had to get right, neither of which a unit test can
   reach. A section's memberships are stored flattened across attributes with a
@@ -345,6 +353,13 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   `boxer capmap dump` joins them; `ingest` becomes `load` and keeps its old name
   as an alias. Writing the renderer is also what supplied the parse-render test
   §Verification plan had claimed for two milestones and did not have.
+- **M10 — the read-back moves onto the SQL read surface (SD11).** It landed
+  spelling 28 physical column names out and hand-writing the flattened-layout
+  arithmetic, which is the thing
+  [leeway-sql-read-surface](../explanation/leeway-sql-read-surface.md) exists to
+  stop. Now: column handles resolved against the generated schema, `LW_GET` for
+  the scalars, `LW_RAGGED_PARENT_IDS` for the two shapes it does not cover, and
+  a version check so an unprovisioned server says so.
 
 ## Surfaces — Tier 1
 
