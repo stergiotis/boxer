@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -472,6 +473,10 @@ type PlayApp struct {
 	// richCells memoises the ADR-0123 content-typed cells of the Detail pane's
 	// selected row (a parsed markdown doc, a highlighted job, decoded pixels).
 	richCells *richCellCache
+
+	// glosses is the ADR-0186 catalog every `<label>@<media type>` declaration
+	// resolves against. Read through glossCatalog(), which defaults it.
+	glosses *gloss.Catalog
 
 	// diag owns the Diagnostics dock tab's EXPLAIN AST probe (its own lane
 	// against the live endpoint); the pane itself is the single owner of the

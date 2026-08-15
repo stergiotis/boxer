@@ -1,0 +1,114 @@
+package gloss
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func instFor(t *testing.T, name string) InstanceI {
+	t.Helper()
+	d, declared := Default().ParseColumn(name)
+	require.True(t, declared, name)
+	require.Empty(t, d.Reason, name)
+	require.NotNil(t, d.Instance)
+	return d.Instance
+}
+
+func num(s string) TextCell { return TextCell{S: s, K: ValueKindNumeric} }
+func txt(s string) TextCell { return TextCell{S: s, K: ValueKindText} }
+
+// One golden per inline face (ADR-0186 §Verification).
+func TestTemperatureFace(t *testing.T) {
+	assert.Equal(t, Inline{Text: "21.5 °C"}, instFor(t, "t@gloss/temperature;unit=C").Inline(num("21.5")))
+	assert.Equal(t, Inline{Text: "293.7 K"}, instFor(t, "t@gloss/temperature;unit=K").Inline(num("293.7")))
+	assert.Equal(t, Inline{Text: "70.7 °F"}, instFor(t, "t@gloss/temperature; unit=F").Inline(num("70.7")))
+	assert.Equal(t, Inline{Text: "-40.0 °C"}, instFor(t, "t@gloss/temperature;unit=C").Inline(num("-40")))
+
+	// The unit is the stored unit and is required; its spelling is
+	// case-sensitive.
+	d, declared := Default().ParseColumn("t@gloss/temperature")
+	require.True(t, declared)
+	assert.Nil(t, d.Instance)
+	assert.Contains(t, d.Reason, "requires unit=")
+	d, _ = Default().ParseColumn("t@gloss/temperature;unit=k")
+	assert.Nil(t, d.Instance)
+	assert.Contains(t, d.Reason, `unit="k" is not allowed`)
+	d, _ = Default().ParseColumn("t@gloss/temperature;unti=K")
+	assert.Nil(t, d.Instance)
+	assert.Contains(t, d.Reason, "unknown parameter")
+
+	// Kind discipline: a temperature is a number.
+	ok, reason := instFor(t, "t@gloss/temperature;unit=C").Accepts(ValueKindText)
+	assert.False(t, ok)
+	assert.Contains(t, reason, "expects numeric, got text")
+	// A cell that will not parse still shows something.
+	assert.Equal(t, Inline{Text: "n/a"}, instFor(t, "t@gloss/temperature;unit=C").Inline(txt("n/a")))
+}
+
+func TestLengthFace(t *testing.T) {
+	m := instFor(t, "h@gloss/length;unit=m")
+	assert.Equal(t, "1.83 m", m.Inline(num("1.83")).Text)
+	assert.Equal(t, "1.234 km", m.Inline(num("1234")).Text)
+	assert.Equal(t, "2.5 cm", m.Inline(num("0.025")).Text)
+	assert.Equal(t, "0.4 mm", m.Inline(num("0.0004")).Text)
+	assert.Equal(t, "-1.50 m", m.Inline(num("-1.5")).Text, "sign kept, scale by magnitude")
+	assert.Equal(t, "1.50 m", instFor(t, "h@gloss/length;unit=cm").Inline(num("150")).Text)
+	assert.Equal(t, "3.05 m", instFor(t, "h@gloss/length;unit=ft").Inline(num("10")).Text, "feet convert to SI")
+	assert.Equal(t, "12.000 km", instFor(t, "h@gloss/length;unit=km").Inline(num("12")).Text)
+	d, _ := Default().ParseColumn("h@gloss/length")
+	assert.Contains(t, d.Reason, "requires unit=")
+}
+
+func TestBytesFace(t *testing.T) {
+	b := instFor(t, "sz@gloss/bytes")
+	assert.Equal(t, Inline{Text: "40 KiB"}, b.Inline(num("40858")))
+	assert.Equal(t, Inline{Text: "0 B"}, b.Inline(num("0")))
+	assert.Equal(t, Inline{Text: "-1", Tone: ToneError}, b.Inline(num("-1")), "a negative size is shown as-is, in the error tone")
+}
+
+func TestLuhnFace(t *testing.T) {
+	l := instFor(t, "pan@gloss/luhn")
+	assert.Equal(t, Inline{Text: "4111 •••• •••• 1111 ✓", Tone: ToneSuccess}, l.Inline(txt("4111111111111111")))
+	assert.Equal(t, Inline{Text: "4111 •••• •••• 1112 ✗", Tone: ToneError}, l.Inline(txt("4111 1111 1111 1112")))
+	assert.Equal(t, Inline{Text: "3782 •••• •••• 005 ✓", Tone: ToneSuccess}, l.Inline(txt("3782-822463-10005")), "a 15-digit Amex groups from the left")
+	assert.Equal(t, Inline{Text: "7992 •••• 713 ✓", Tone: ToneSuccess}, l.Inline(num("79927398713")), "the canonical Luhn example, digits from a numeric cell")
+	assert.Equal(t, Inline{Text: "12ab", Tone: ToneWarning}, l.Inline(txt("12ab")), "not a number: shown as-is, warning")
+	assert.Equal(t, Inline{Text: "7", Tone: ToneWarning}, l.Inline(txt("7")), "too short to check")
+	assert.True(t, LuhnValid("79927398713"))
+	assert.False(t, LuhnValid("79927398710"))
+}
+
+func TestSecretFace(t *testing.T) {
+	s := instFor(t, "pw@gloss/secret")
+	short := s.Inline(txt("a"))
+	long := s.Inline(txt("correct horse battery staple"))
+	assert.Equal(t, SecretMask, short.Text)
+	assert.Equal(t, short, long, "the mask never reveals the length")
+	ok, _ := s.Accepts(ValueKindOther)
+	assert.True(t, ok, "anything can be a secret")
+	assert.Equal(t, []string{`\bsem:secret\b`}, s.Gloss().Affinities())
+}
+
+func TestURLFace(t *testing.T) {
+	u := instFor(t, "link@gloss/url")
+	assert.Equal(t, Inline{Text: "https://example.com/a", Tone: ToneAccent}, u.Inline(txt("https://example.com/a\nsecond line dropped")))
+	ok, _ := u.Accepts(ValueKindNumeric)
+	assert.False(t, ok)
+	assert.Equal(t, []string{`\bsem:url\b`}, u.Gloss().Affinities())
+}
+
+// The catalog order is pinned end to end: content family, then gloss/* with
+// raw last (raw's affinity-override role does not depend on it, but the
+// reject message lists this order).
+func TestDefaultOrderPresentation(t *testing.T) {
+	var order []string
+	for g := range Default().All() {
+		order = append(order, g.MediaType())
+	}
+	assert.Equal(t, []string{
+		MediaTypeTemperature, MediaTypeLength, MediaTypeBytes, MediaTypeLuhn,
+		MediaTypeSecret, MediaTypeURL, MediaTypeRaw,
+	}, order[8:])
+}

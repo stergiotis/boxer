@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -249,8 +250,8 @@ func entityHeader(rec arrow.RecordBatch, row int64) (typeLabel string, natKey st
 // renderDetailSection prints all non-empty columns whose sectionForColumn
 // matches `section`. Skipped columns save vertical space in the card.
 //
-// A column named `<label>@<mime>` renders as that media type instead
-// (ADR-0123, play_detail_rich.go). Declared columns are read through cellRaw,
+// A column named `<label>@<media type>` renders through its gloss instead
+// (ADR-0186, play_detail_rich.go). Declared columns are read through cellRaw,
 // never formatCell — formatCell hex-encodes Binary, so an image column would
 // cost two bytes of string per byte of blob on every frame just to reach the
 // empty-skip below.
@@ -270,13 +271,13 @@ func (inst *PlayApp) renderDetailSection(rec arrow.RecordBatch, schema *arrow.Sc
 		if sectionForColumn(name) != section {
 			continue
 		}
-		if d, declared := parseRichColumn(name); declared {
+		if d, declared := inst.glossCatalog().ParseColumn(name); declared {
 			raw, ok := cellRaw(rec, i, row)
 			if !ok || raw == "" {
 				continue
 			}
 			emitHeading()
-			inst.renderRichCell(i, d, raw)
+			inst.renderRichCell(i, d, gloss.ArrowCell{Arr: rec.Column(i), Row: int(row)})
 			continue
 		}
 		val := formatCell(rec, i, row)

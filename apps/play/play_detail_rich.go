@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"mime"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -21,39 +19,18 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
-// play_detail_rich.go is ADR-0123: content-typed detail cells. A result column
-// named `<label>@<mime>` renders its cell as that media type in the ad-hoc
-// (non-leeway) Detail pane, instead of as the truncated one-line label every
-// other column gets:
+// play_detail_rich.go is the block-face side of ADR-0186 (née ADR-0123's
+// content-typed detail cells). A result column named `<label>@<media type>`
+// resolves against the gloss catalog (public/hmi/gloss — the parser, the
+// gate and every inline face live there); the content family's block faces —
+// the markdown widget, the code view, the decoded image — are bound here, in
+// the ad-hoc Detail pane:
 //
 //	SELECT body AS `notes@text/markdown`, thumb AS `shot@image/png` FROM t
 //
 // Declared, never sniffed. A String column whose text happens to open with '#'
 // is not thereby markdown, and a pane that guesses is a pane that is
 // confidently wrong on somebody's data.
-
-// richSep introduces a column's content-type declaration. It is ADR-0122
-// §SD2's separator, reused with its reasoning intact: measured against
-// clickhouse-local, '@' parses backtick-quoted and raises a syntax error
-// unquoted, so a forgotten backtick fails at once — where '#' would silently
-// open a line comment and leave a plausible column behind. ':' is unavailable
-// for a different reason: ADR-0116's splitHandle claims any identifier with
-// exactly one colon as a leeway `section:column` handle. A media type contains
-// no colon, so a declared name rides through that resolver untouched.
-const richSep = "@"
-
-// The declared vocabulary (ADR-0123 §SD3). Closed: an open one has no way to
-// be wrong out loud.
-const (
-	mimeMarkdown = "text/markdown"
-	mimePlain    = "text/plain"
-	mimeJSON     = "application/json"
-	mimeSQL      = "application/sql"
-	mimeGo       = "text/x-go"
-	mimePNG      = "image/png"
-	mimeJPEG     = "image/jpeg"
-	mimeGIF      = "image/gif"
-)
 
 // richMaxTextBytes bounds a text cell. Past it the cell falls back to the
 // ordinary truncated label with the reason attached: the renderers that would
@@ -84,153 +61,67 @@ const richMaxImagePixels = imagedecode.DefaultMaxPixels
 // `---` is content here, not metadata.
 //
 // FeatureGFM is on and buys what it says: tables, strikethrough and task
-// lists all render in a declared cell. (This comment used to say a GFM table
-// "renders as nothing" — true when ADR-0123 §SD3 was written, and stale since
-// helphost generation 2 gave the widget a native table path.) Footnotes are
-// the one GFM construct still missing, and they are missing everywhere: the
-// footnote extension is wired to no feature flag at all, so `[^1]` stays
-// literal prose rather than disappearing.
+// lists all render in a declared cell. Footnotes are the one GFM construct
+// still missing, and they are missing everywhere: the footnote extension is
+// wired to no feature flag at all, so `[^1]` stays literal prose.
 //
-// Math is absent for the original reason: obsidian.FeatureMath is declared,
-// reserved and consulted by nothing, so setting it would change neither the
-// parse nor the render. It is not part of obsidian.FeatureAll for that reason.
+// Math is absent: obsidian.FeatureMath is declared, reserved and consulted by
+// nothing, so setting it would change neither the parse nor the render.
 const richMarkdownFeatures = obsidian.FeatureGFM |
 	obsidian.FeatureCallout |
 	obsidian.FeatureHighlight |
 	obsidian.FeatureComment
 
-// richKindE is the renderer a declared media type resolves to.
-type richKindE uint8
-
-const (
-	richKindNone richKindE = iota
-	richKindMarkdown
-	richKindPlain
-	richKindJSON
-	richKindSQL
-	richKindGo
-	richKindImage
-)
-
-// richDecl is a parsed `<label>@<mime>` column name.
-//
-// A reason means the column declared *something* — the token after '@' carried
-// a slash — that this pane cannot render. The cell then falls back to the
-// ordinary truncated label with the reason shown beside it. That is the point
-// of the slash gate (§SD2): a typo like `notes@text/markdwn` must not quietly
-// render as plain text, but `user@example.com` must not be nagged about.
-type richDecl struct {
-	label  string
-	mime   string
-	kind   richKindE
-	reason string
+// glossCatalog is the catalog every declaration and rule resolves against.
+// Lazily the default set, so a bare &PlayApp{} in a unit test resolves like
+// the wired app does; a host that wants more registers before first use.
+func (inst *PlayApp) glossCatalog() *gloss.Catalog {
+	if inst.glosses == nil {
+		inst.glosses = gloss.Default()
+	}
+	return inst.glosses
 }
 
-// parseRichColumn resolves a column name against the §SD2 contract.
-// declared=false means the name is an ordinary column and nothing about the
-// pane's existing behaviour changes.
-//
-// The gate is the slash, NOT "mime.ParseMediaType succeeds" — that function
-// does not require one. ParseMediaType("success") returns ("success", nil):
-// no error. Gating on a clean parse would make ADR-0122's own
-// `dot_done@success` resolve to a media type named "success", fail the
-// vocabulary lookup, and paint an "unknown content type" diagnostic into the
-// Detail pane of every board query.
-func parseRichColumn(name string) (d richDecl, declared bool) {
-	label, token, found := strings.Cut(name, richSep)
-	if !found || !strings.Contains(token, "/") {
-		return d, false
+// hasBlockFace reports whether this pane binds a block face to the media
+// type. Everything else — the `gloss/*` family — shows its inline face,
+// wrapped, under the caption.
+func hasBlockFace(mediaType string) bool {
+	switch mediaType {
+	case gloss.MediaTypeMarkdown, gloss.MediaTypePlain, gloss.MediaTypeJSON,
+		gloss.MediaTypeSQL, gloss.MediaTypeGo,
+		gloss.MediaTypePNG, gloss.MediaTypeJPEG, gloss.MediaTypeGIF:
+		return true
 	}
-	if label == "" {
-		// `@text/markdown` — a declaration with nothing to call it. Show the
-		// raw name rather than an empty caption.
-		label = name
-	}
-	d.label = label
-	mt, _, err := mime.ParseMediaType(token)
-	if err != nil {
-		d.mime = token
-		d.reason = fmt.Sprintf("not a media type: %s", err)
-		return d, true
-	}
-	d.mime = mt
-	d.kind = richKindFor(mt)
-	if d.kind == richKindNone {
-		d.reason = fmt.Sprintf("unknown content type %q — known: %s", mt, richKnownTypes())
-	}
-	return d, true
+	return false
 }
 
-// richKindFor maps a canonical media type to its renderer. mt is already
-// lower-cased and parameter-free — mime.ParseMediaType did both, which is why
-// `TEXT/Markdown` and `text/markdown; charset=utf-8` need no handling here.
-func richKindFor(mt string) richKindE {
-	switch mt {
-	case mimeMarkdown:
-		return richKindMarkdown
-	case mimePlain:
-		return richKindPlain
-	case mimeJSON:
-		return richKindJSON
-	case mimeSQL:
-		return richKindSQL
-	case mimeGo:
-		return richKindGo
-	case mimePNG, mimeJPEG, mimeGIF:
-		return richKindImage
-	}
-	return richKindNone
-}
-
-// richKnownTypes lists the vocabulary for a reject message. Written out rather
-// than derived from a map so the order is the table's, not a map's.
-func richKnownTypes() string {
-	return strings.Join([]string{
-		mimeMarkdown, mimePlain, mimeJSON, mimeSQL, mimeGo,
-		mimePNG, mimeJPEG, mimeGIF,
-	}, ", ")
-}
-
-// cellRaw returns a cell's undecorated content as a string.
+// cellRaw returns a cell's undecorated content as a string: the bytes of a
+// string or binary value, else the plain rendering, so a nonsense-but-
+// harmless `SELECT 42 AS x@text/plain` renders the number rather than
+// nothing.
 //
 // It exists because formatCell must never touch a declared cell: formatCell
-// hex-encodes Binary (play_format.go:62), so reading a one-megabyte PNG
-// through it costs two megabytes of string — and the section loop calls it on
-// every column merely to test the empty-skip.
+// hex-encodes Binary, so reading a one-megabyte PNG through it costs two
+// megabytes of string — and the section loop calls it on every column merely
+// to test the empty-skip.
 //
-// The string aliases the Arrow buffer for the string and binary types
-// (String.Value returns a substring; Binary.ValueString is documented
-// zero-copy), so it is valid for the record's lifetime and MUST NOT be
-// retained past the frame. The cache stores what it derives, never this.
-//
-// Anything that is not a string or binary column falls back to formatCell, so
-// a nonsense-but-harmless `SELECT 42 AS ` + "`x@text/markdown`" + ` renders
-// the number rather than nothing.
+// The string aliases the Arrow buffer for the string and binary types (see
+// gloss.ArrowCell.Raw), so it is valid for the record's lifetime and MUST NOT
+// be retained past the frame. The cache stores what it derives, never this.
 func cellRaw(rec arrow.RecordBatch, col int, row int64) (raw string, ok bool) {
-	arr := rec.Column(col)
-	if row < 0 || int(row) >= arr.Len() || arr.IsNull(int(row)) {
+	cell := gloss.ArrowCell{Arr: rec.Column(col), Row: int(row)}
+	if cell.IsNull() {
 		return "", false
 	}
-	i := int(row)
-	switch a := arr.(type) {
-	case *array.String:
-		return a.Value(i), true
-	case *array.LargeString:
-		return a.Value(i), true
-	case *array.Binary:
-		return a.ValueString(i), true
-	case *array.LargeBinary:
-		return a.ValueString(i), true
-	case *array.FixedSizeBinary:
-		return string(a.Value(i)), true
-	default:
-		return formatArrayElem(arr, row), true
+	if raw, ok = cell.Raw(); ok {
+		return raw, true
 	}
+	return cell.Text(), true
 }
 
 // richEntry is one rendered-once artifact. Exactly one of doc / job / pixels
-// is live, selected by the declaration's kind — unless reason is set, in which
-// case none are and the cell falls back to a truncated label.
+// is live, selected by the declaration's media type — unless reason is set,
+// in which case none are and the cell falls back to a truncated label.
 type richEntry struct {
 	doc      *markdown.Doc
 	job      typed.RetainedFffiHolderTyped[c.CodeViewJobS]
@@ -244,7 +135,7 @@ type richEntry struct {
 
 // richCellCache memoises the artifacts for the columns of ONE row.
 //
-// Every renderer here needs this, and codeview's interning is not it:
+// Every block face here needs this, and the interning in codeview is not it:
 // BuildRetained interns the *already-serialized* buffer
 // (unique.Make(string(raw)), fffi2_typed_impl.go:170), so the highlighter and
 // the buffer construction still run on every call. markdown.Parse builds a
@@ -311,7 +202,7 @@ func (inst *richCellCache) syncTo(row int64) {
 // entryFor returns the artifact for one declared cell, building it on first
 // use. raw is frame-lifetime (see cellRaw); everything retained here is
 // derived from it, never it.
-func (inst *richCellCache) entryFor(col int, d richDecl, raw string) *richEntry {
+func (inst *richCellCache) entryFor(col int, d gloss.Declaration, raw string) *richEntry {
 	if e, ok := inst.entries[col]; ok {
 		return e
 	}
@@ -323,35 +214,36 @@ func (inst *richCellCache) entryFor(col int, d richDecl, raw string) *richEntry 
 // buildRichEntry does the once-per-(result, row, column) work: parse, highlight
 // or decode. A failure is not an error to log but a string to show — the cell
 // falls back to the truncated label carrying the reason.
-func buildRichEntry(d richDecl, raw string) *richEntry {
+func buildRichEntry(d gloss.Declaration, raw string) *richEntry {
 	e := &richEntry{}
-	if d.reason != "" {
-		e.reason = d.reason
+	if d.Reason != "" {
+		e.reason = d.Reason
 		return e
 	}
-	if d.kind != richKindImage && len(raw) > richMaxTextBytes {
+	isImage := d.MediaType == gloss.MediaTypePNG || d.MediaType == gloss.MediaTypeJPEG || d.MediaType == gloss.MediaTypeGIF
+	if !isImage && len(raw) > richMaxTextBytes {
 		e.reason = fmt.Sprintf("%s is over the %s inline limit",
 			humanize.IBytes(uint64(len(raw))), humanize.IBytes(richMaxTextBytes))
 		return e
 	}
-	switch d.kind {
-	case richKindMarkdown:
+	switch d.MediaType {
+	case gloss.MediaTypeMarkdown:
 		e.doc = markdown.Parse([]byte(raw), markdown.WithFeatures(richMarkdownFeatures))
-	case richKindPlain:
+	case gloss.MediaTypePlain:
 		// EnsureUTF8 for the same reason formatCell does it: a ClickHouse
 		// String is byte-arbitrary, and shipping invalid UTF-8 through
 		// c.Label breaks the FFFI wire mid-frame.
 		e.text = utfsafe.EnsureUTF8(raw)
-	case richKindJSON:
+	case gloss.MediaTypeJSON:
 		e.job = codeview.BuildJson(richIndentJSON(raw))
 		e.hasJob = true
-	case richKindSQL:
+	case gloss.MediaTypeSQL:
 		e.job = codeview.BuildSql(utfsafe.EnsureUTF8(raw))
 		e.hasJob = true
-	case richKindGo:
+	case gloss.MediaTypeGo:
 		e.job = codeview.BuildGo(utfsafe.EnsureUTF8(raw))
 		e.hasJob = true
-	case richKindImage:
+	case gloss.MediaTypePNG, gloss.MediaTypeJPEG, gloss.MediaTypeGIF:
 		pixels, w, h, err := imagedecode.DecodeRGBA8([]byte(raw), richMaxImagePixels)
 		if err != nil {
 			e.reason = err.Error()
@@ -378,21 +270,47 @@ func richIndentJSON(raw string) string {
 // its declared type, then the rendered body beneath it. Unlike an ordinary
 // cell — a Horizontal of label and value — a document needs the full width, so
 // the body sits under the caption rather than beside it.
-func (inst *PlayApp) renderRichCell(col int, d richDecl, raw string) {
-	e := inst.richCells.entryFor(col, d, raw)
+//
+// Three bodies: the reason (declared, cannot be honoured — the plain first
+// line plus why), a block face when this pane binds one to the media type,
+// else the gloss's inline face, wrapped.
+func (inst *PlayApp) renderRichCell(col int, d gloss.Declaration, cell gloss.ArrowCell) {
+	raw, ok := cell.Raw()
+	if !ok {
+		raw = cell.Text()
+	}
+	reason := d.Reason
+	if reason == "" {
+		if ok, why := d.Instance.Accepts(cell.Kind()); !ok {
+			reason = why
+		}
+	}
 	for range c.Vertical().KeepIter() {
 		for range c.Horizontal().KeepIter() {
-			for rt := range c.RichTextLabel(d.label) {
+			for rt := range c.RichTextLabel(d.Label) {
 				rt.Weak()
 			}
-			for rt := range c.RichTextLabel(d.mime) {
+			for rt := range c.RichTextLabel(d.MediaType) {
 				rt.Small().Weak()
 			}
 		}
-		if e.reason != "" {
+		if reason != "" {
 			// The declared render is unavailable: show the cell as it would
 			// have looked without the declaration, and say why.
-			c.Label(firstLineOf(raw)).Truncate().Send()
+			c.Label(gloss.FirstLine(raw)).Truncate().Send()
+			for rt := range c.RichTextLabel(reason) {
+				rt.Small().Weak()
+			}
+			return
+		}
+		if !hasBlockFace(d.MediaType) {
+			face := d.Instance.Inline(cell)
+			c.Label(face.Text).Wrap().Send()
+			return
+		}
+		e := inst.richCells.entryFor(col, d, raw)
+		if e.reason != "" {
+			c.Label(gloss.FirstLine(raw)).Truncate().Send()
 			for rt := range c.RichTextLabel(e.reason) {
 				rt.Small().Weak()
 			}
@@ -403,9 +321,9 @@ func (inst *PlayApp) renderRichCell(col int, d richDecl, raw string) {
 }
 
 // renderBody draws the artifact itself.
-func (inst *richCellCache) renderBody(col int, d richDecl, e *richEntry) {
-	switch d.kind {
-	case richKindMarkdown:
+func (inst *richCellCache) renderBody(col int, d gloss.Declaration, e *richEntry) {
+	switch d.MediaType {
+	case gloss.MediaTypeMarkdown:
 		if e.doc == nil {
 			return
 		}
@@ -415,14 +333,14 @@ func (inst *richCellCache) renderBody(col int, d richDecl, e *richEntry) {
 		for range c.IdScope(inst.ids.PrepareStr("play-detail-md-" + strconv.Itoa(col))) {
 			e.doc.Render(inst.ids)
 		}
-	case richKindPlain:
+	case gloss.MediaTypePlain:
 		c.Label(e.text).Wrap().Send()
-	case richKindJSON, richKindSQL, richKindGo:
+	case gloss.MediaTypeJSON, gloss.MediaTypeSQL, gloss.MediaTypeGo:
 		if !e.hasJob {
 			return
 		}
 		c.CodeView(inst.ids.PrepareStr("play-detail-code-"+strconv.Itoa(col)), e.job).Send()
-	case richKindImage:
+	case gloss.MediaTypePNG, gloss.MediaTypeJPEG, gloss.MediaTypeGIF:
 		inst.renderImage(col, e)
 	}
 }
@@ -454,17 +372,9 @@ func (inst *richCellCache) renderImage(col int, e *richEntry) {
 		Send()
 }
 
-// firstLineOf is the fallback rendering for a declared cell that could not be
-// rendered as declared: the first line, for a Truncate()d label. Cutting at
-// the newline matters because Truncate() clips on width — a multi-megabyte
-// blob would otherwise be shipped across the wire in full to draw forty
-// visible characters.
+// firstLineOf is the fallback rendering for text that could not be rendered
+// as declared, and the one-line form other panes give an error message:
+// gloss.FirstLine, kept under its play name for the callers here.
 func firstLineOf(raw string) string {
-	if i := strings.IndexByte(raw, '\n'); i >= 0 {
-		raw = raw[:i]
-	}
-	if len(raw) > 256 {
-		raw = raw[:256]
-	}
-	return utfsafe.EnsureUTF8(raw)
+	return gloss.FirstLine(raw)
 }
