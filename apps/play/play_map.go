@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
 
 // MapDriver is the ADR-0096 geo-raster map panel: a walkers slippy map whose
@@ -58,6 +59,15 @@ type MapDriver struct {
 	// used when the "Custom" render is active.
 	renderIdx      int
 	customColorSQL string
+
+	// The two controls whose value is SQL get the SQL field rather than a
+	// plain TextEdit (ADR-0187 (proposed) §M0). One per control, not one
+	// shared: each memoises its own lex job against its own text, so a shared
+	// instance would rebuild both on every frame that drew both. Held by value
+	// — the zero Field is usable, so neither needs reaching into the driver's
+	// constructor.
+	tableField sqleditor.Field
+	colorField sqleditor.Field
 
 	// Debounce on the quantized viewHash: reset the timer whenever it changes,
 	// fire only once the camera has been stable for mapDebounce.
@@ -425,8 +435,11 @@ func (inst *MapDriver) cancelFetch() {
 func (inst *MapDriver) renderControls() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("table").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
-		c.TextEdit(inst.ids.PrepareStr("map-table"), inst.table, false).
-			DesiredWidth(240).SendRespVal(&inst.table)
+		inst.tableField.Render(inst.ids, sqleditor.FieldFrame{
+			IDSlot: "map-table",
+			Value:  &inst.table,
+			Width:  240,
+		})
 		c.SliderF64(inst.ids.PrepareStr("map-sampling"), inst.sampling, 1, 100).
 			Text("sampling").SendRespVal(&inst.sampling)
 	}
@@ -434,8 +447,16 @@ func (inst *MapDriver) renderControls() {
 		inst.renderModeCombo()
 	}
 	if builtinRenders[inst.renderIdx].custom {
-		c.TextEdit(inst.ids.PrepareStr("map-color"), inst.customColorSQL, true).
-			DesiredWidth(420).SendRespVal(&inst.customColorSQL)
+		// Four rows, not the three the default block occupies: that is what
+		// egui's multiline default gave this control before it was a SQL
+		// field, and an adoption is the wrong commit to retune a panel's
+		// height in.
+		inst.colorField.Render(inst.ids, sqleditor.FieldFrame{
+			IDSlot: "map-color",
+			Value:  &inst.customColorSQL,
+			Rows:   4,
+			Width:  420,
+		})
 	}
 	for range c.Horizontal().KeepIter() {
 		c.SliderF64(inst.ids.PrepareStr("map-opacity"), inst.opacity, 0.1, 1.0).
