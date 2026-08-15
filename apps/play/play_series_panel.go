@@ -706,12 +706,17 @@ func (inst *SeriesDriver) rebuildOverlays(scoreRec arrow.RecordBatch, spanRec ar
 	inst.readout, inst.haveRead = buildSeriesReadout(sc.score, sc.baseline, sc.t, inst.labels)
 }
 
-// renderControls is the smoothing segment plus the envelope toggle.
+// renderControls is the smoothing segment plus the envelope toggle. The
+// toggle carries a tooltip: the envelope is the one control here whose effect
+// is meant to be invisible, so what it does — and what it promises not to do —
+// has to be readable somewhere other than the footer's sample counts.
 func (inst *SeriesDriver) renderControls() {
 	for range c.HorizontalTop().KeepIter() {
 		inst.smooth.RenderControls(inst.ids)
-		c.Checkbox(inst.ids.PrepareStr("series-decimate"), inst.decimate, "envelope").
-			SendRespVal(&inst.decimate)
+		for range c.HoverText("Draws at most two samples per pixel column — the smallest and the largest value in it — so a long series stays cheap to draw. It cannot drop an extreme: whatever the data reaches inside a pixel, the line reaches too. Drawing only, and only when there is more than one sample per pixel; hover, selection and every analysis read the full series. Turn it off to check the drawing against the undecimated one.").KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("series-decimate"), inst.decimate, "envelope").
+				SendRespVal(&inst.decimate)
+		}
 	}
 }
 
