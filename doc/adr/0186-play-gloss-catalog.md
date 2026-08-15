@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-15
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0186: `play` glosses — a catalog of named value renderings for the Table and Detail panes
 
@@ -365,7 +362,9 @@ predating this ADR and left to its owner.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-08-15, with M0–M5 shipped (see Milestones) and the corrections
+found while implementing folded in above. From here, changes land as dated
+entries under `## Updates`.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
