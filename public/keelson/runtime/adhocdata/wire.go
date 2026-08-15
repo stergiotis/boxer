@@ -1,6 +1,7 @@
 package adhocdata
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -162,6 +163,11 @@ type wireGrantRep struct {
 type wireResolveReq struct {
 	V     uint8  `json:"v"`
 	Alias string `json:"alias"`
+	// Handle, when set, asks the service to report in the reply whether
+	// this handle is still live (ADR-0188 §SD3 reconcile): a consumer bound
+	// to it verifies its binding and learns the alias's newest dataset in
+	// one round trip, without a grant.
+	Handle string `json:"handle,omitempty"`
 }
 
 type wireResolveRep struct {
@@ -173,6 +179,13 @@ type wireResolveRep struct {
 	Rows            uint64 `json:"rows,omitempty"`
 	Bytes           uint64 `json:"bytes,omitempty"`
 	CreatedAtUnixUs int64  `json:"created_at_unix_us,omitempty"`
+	// HandleLive answers wireResolveReq.Handle: true when that handle is
+	// still in the live set (not left, not unloading). Meaningful whether
+	// or not the alias itself resolved.
+	HandleLive bool `json:"handle_live,omitempty"`
+	// NoLive marks a failed resolve as ErrNoLiveDataset rather than a
+	// malformed request, so the caller can wait instead of retrying.
+	NoLive bool `json:"no_live,omitempty"`
 }
 
 type wireRetractReq struct {
@@ -271,14 +284,17 @@ func (inst *Service) handleResolve(msg *app.Msg) {
 		inst.reply(msg.Reply, wireResolveRep{V: wireVersion, Error: "decode: " + err.Error()})
 		return
 	}
+	live := req.Handle != "" && inst.IsLive(req.Handle)
 	res, rErr := inst.Resolve(req.Alias)
 	if rErr != nil {
-		inst.reply(msg.Reply, wireResolveRep{V: wireVersion, Error: rErr.Error()})
+		inst.reply(msg.Reply, wireResolveRep{
+			V: wireVersion, Error: rErr.Error(), HandleLive: live, NoLive: errors.Is(rErr, ErrNoLiveDataset),
+		})
 		return
 	}
 	inst.reply(msg.Reply, wireResolveRep{
 		V: wireVersion, OK: true, Handle: res.Handle, Revision: res.Revision,
-		Rows: res.Rows, Bytes: res.Bytes, CreatedAtUnixUs: res.CreatedAtUnixUs,
+		Rows: res.Rows, Bytes: res.Bytes, CreatedAtUnixUs: res.CreatedAtUnixUs, HandleLive: live,
 	})
 }
 

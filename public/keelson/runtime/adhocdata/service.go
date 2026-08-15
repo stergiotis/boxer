@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Quotas bound the store (ADR-0134 SD1). A publish that would breach one
@@ -401,6 +403,23 @@ type ResolveResult struct {
 	CreatedAtUnixUs int64
 }
 
+// ErrNoLiveDataset is Resolve's answer when nothing is published under the
+// alias (or everything under it has been retracted). It travels the wire as
+// its own flag so a bus caller can tell it from a transport failure with
+// errors.Is — the difference between "wait" and "retry".
+var ErrNoLiveDataset = errors.New("no live dataset under alias")
+
+// IsLive reports whether handle names a dataset in the live set — published
+// and not retracted. A dataset in its retract grace (left, not yet unloaded)
+// is not live: it still answers queries but no longer resolves, and a
+// consumer verifying its binding should rebind (ADR-0188 §SD3).
+func (inst *Service) IsLive(handle string) (live bool) {
+	inst.mu.RLock()
+	_, live = inst.datasets[handle]
+	inst.mu.RUnlock()
+	return
+}
+
 // Resolve maps a stable alias to the newest live dataset published under
 // it — newest by creation instant, ties broken on handle for determinism.
 // It is what lets a committed applet declare `datasets: [pprof_cpu]` and
@@ -424,7 +443,7 @@ func (inst *Service) Resolve(alias string) (res ResolveResult, err error) {
 	}
 	if best == nil {
 		inst.mu.RUnlock()
-		return res, eh.Errorf("adhocdata: no live dataset published under alias %q", alias)
+		return res, eb.Build().Str("alias", alias).Errorf("adhocdata: resolve: %w", ErrNoLiveDataset)
 	}
 	res = ResolveResult{
 		Handle:          best.handle,

@@ -165,6 +165,26 @@ does not know its grantees (grants are audited, not recorded), and
 first-party consumers under the hygiene model do not need an ack protocol
 to be correct — the deferral below records the exact form.
 
+**Events are hints; request/reply is truth.** The bus makes no delivery
+promise the binder may rely on: the in-proc router delivers synchronously
+and in order to whoever is subscribed at that instant and loses nothing,
+but NATS core (ADR-0026 §SD4, the transport the client-facing shape must
+survive unchanged) is at-most-once — a slow consumer or a reconnect drops
+messages — and an at-least-once transport would redeliver late. So the
+binder treats a `published` under a pending alias as a reason to *ask*
+(`adhoc.resolve`, off the render thread) and binds the answer; treats a
+`retracted` as monotone truth (a retracted handle never returns, so a
+duplicate or late one is a no-op); replays hints in arrival order; and runs
+a slow reconcile tick (`datasetReconcileInterval`, 30 s) that re-asks for
+pending aliases and, in the same round trip, verifies each bound handle —
+`adhoc.resolve` accepts an optional `handle` and answers `handle_live` —
+swapping a binding whose handle has left for its successor. A lost hint is
+therefore a delay of at most one tick, a stale hint is corrected by the
+answer, and the open-time race is closed by subscribing before resolving
+(per-connection ordering at the server makes that sufficient on NATS as
+well). Where events cannot be subscribed at all the tick runs at the
+seconds-scale poll interval.
+
 ### SD4 — The live effect graph as introspection tables
 
 Three `FreshnessLive` providers, registered where the state lives, in the
@@ -203,7 +223,12 @@ query over effects, not only over launches.
   written; `FlushRetracts` makes it synchronous for `Close` and tests);
   the applet binder subscribes before it resolves at open and keeps the
   seconds-scale poll only as a fallback for a bus that cannot subscribe
-  to the events; ADR-0134 carries a dated Update.
+  to the events; ADR-0134 carries a dated Update. Adjusted the same day
+  after the delivery-guarantee review: the binder is level-triggered —
+  hints trigger a resolve, a 30 s reconcile verifies bound handles through
+  the extended `adhoc.resolve` — and replays hints in arrival order (an
+  earlier fold into per-kind sets lost a publish that followed a retract
+  within one frame).
 - **M2 — Live tables.** ✓ SD4: three providers, howto snippet. Landed
   2026-08-15 as `RegisterEffects` in the introspection providers package
   (ADR-0094 carries a dated Update); `client_caps` is its own table (F3
@@ -248,6 +273,7 @@ query over effects, not only over launches.
 | Subjects (named registry) | `adhoc.event.published`, `adhoc.event.retracted` | applet manifests: `Sub adhoc.event.>`; capslock baseline if the SSA sees a new sink |
 | Introspection tables (named registry) | `subscriptions`, `client_caps`, `tasks` | `keelson('tables')` catalog reflects them; howto snippet |
 | `adhocdata.Service.Retract` (exported API) | two-phase, `RetractGrace` | producers unchanged; consumers gain a subscription |
+| `adhoc.resolve` (wire, additive) | request `handle`, reply `handle_live` / `no_live`; `adhocdata.ResolveVerifyRequest`, `ErrNoLiveDataset`, `Service.IsLive` | the applet binder's reconcile; older callers unaffected |
 
 ## Alternatives
 
@@ -327,8 +353,18 @@ query over effects, not only over launches.
 - **What would fail.** A leaked subscription or task after close; a
   publish in `Unmount` failing; a retracted handle still resolving; a bound
   alias not returning to pending.
+- **Lane.** Default `go test`: `sqlapplet` — a binder over a fake resolver
+  binds from a hint's *answer* rather than its handle, recovers a lost
+  `published` and a lost `retracted` from the tick alone, keeps a binding
+  whose handle is live when a newer sibling appears, and replays a
+  retract-then-publish frame in order; the live variant drops the events
+  subscription and lets the tick swap the binding against the real service.
+- **What would fail.** A binding stuck pending or bound to a dead handle
+  under message loss; a stale hint binding a retracted handle.
 - **Gap.** `fsbroker` handle entries and lifecycle subjects are deferred
-  above; the NATS lane is integration-tagged and not run by default.
+  above; the NATS lane is integration-tagged and not run by default, so
+  the at-most-once behaviour is exercised only by simulation (dropped
+  subscription, fake resolver), not against a NATS server.
 
 ## Status
 

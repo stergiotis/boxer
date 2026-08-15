@@ -720,6 +720,15 @@ The withdrawal guard is bounded rather than exact — the service records
 publishers, not grantees — which ADR-0188 records as a deferral with its
 trigger.
 
+Later the same day, after a review of what the bus promises: the events
+are hints and request/reply is truth. `adhoc.resolve` accepts an optional
+`handle` and answers `handle_live` (and a typed `no_live` for "nothing under
+the alias"), so a consumer verifies its binding and learns the alias's
+newest dataset in one round trip; the applet binder resolves on a
+`published` hint instead of trusting its handle, replays hints in arrival
+order, and reconciles every 30 s — a lost or stale event costs at most one
+tick under a lossy transport (ADR-0188 §SD3).
+
 Internal:
 
 - [ADR-0094 — keelson introspection tables](./0094-keelson-introspection-tables.md)
