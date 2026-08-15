@@ -3,6 +3,7 @@ package play
 import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -67,6 +68,7 @@ type tableDisplayOpts struct {
 	showSupport       bool // reveal the card / len / cusum support columns
 	showMembership    bool // reveal the ref / verbatim / parametrized membership columns
 	hideEmptySections bool // suppress tagged sections with no attribute on the current page
+	rawCells          bool // ADR-0186: bypass every gloss and show the plain rendering
 }
 
 // leewayColumnClasses returns the per-Arrow-column leeway classification for the
@@ -283,11 +285,19 @@ func (inst *PlayApp) renderTableOptionsBar() {
 // area, the button id, the height flooring, the selection band — is unchanged,
 // since VerticalCenteredJustified is exactly this same top-down cross-justified
 // layout with Center rather than Min cross-alignment.
-func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, weak bool, selected, selBg, leftAlign bool) (clicked bool) {
+//
+// tone colours the text per ADR-0186's inline face (a Luhn ✓ in success, a
+// ✗ in error); gloss.ToneNeutral leaves the cell's text style alone.
+func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, weak bool, selected, selBg, leftAlign bool, tone gloss.ToneE) (clicked bool) {
 	c.AddSpace(cellPadX)
 	emitCell := func() {
 		emitButton := func() {
-			rt := c.Atoms().BeginRichText(text).Monospace()
+			var rt c.RichTextScope
+			if col, toned := toneColor(tone); toned {
+				rt = c.Atoms().BeginRichTextColored(col, color.Transparent, text).Monospace()
+			} else {
+				rt = c.Atoms().BeginRichText(text).Monospace()
+			}
 			if weak {
 				rt = rt.Weak()
 			}

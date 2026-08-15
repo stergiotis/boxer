@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
@@ -90,6 +91,12 @@ type attrExplodeSink struct {
 	nCols    int
 
 	rows []attrGridRow // output (backing array reused across frames)
+
+	// glossFn, when set, passes each value cell's text through the column's
+	// gloss inline face (ADR-0186) — arrowIdx is the value column, text the
+	// driver-marshalled item. Nil = identity. Bound per drive by reset's
+	// caller, since the resolution belongs to the schema, not the sink.
+	glossFn func(arrowIdx int, text string) string
 
 	// Per-entity / per-section running state. entityStart is the index in rows
 	// where the current entity's first visual row sits; secRow is the running
@@ -313,7 +320,7 @@ func (inst *attrExplodeSink) EndColumn() {
 	if inst.isCollection {
 		items = append(items, inst.curItems...) // may be empty (card 0)
 	} else {
-		items = append(items, utfsafe.EnsureUTF8(inst.curBuf.String()))
+		items = append(items, inst.glossed(utfsafe.EnsureUTF8(inst.curBuf.String())))
 	}
 	inst.attrColIdx = append(inst.attrColIdx, inst.curCol)
 	inst.attrColItems = append(inst.attrColItems, items)
@@ -352,7 +359,15 @@ func (inst *attrExplodeSink) EndSetValue()                  {}
 // (unlike the packed view) they are not joined.
 func (inst *attrExplodeSink) BeginValueItem(int) { inst.curBuf.Reset() }
 func (inst *attrExplodeSink) EndValueItem() {
-	inst.curItems = append(inst.curItems, utfsafe.EnsureUTF8(inst.curBuf.String()))
+	inst.curItems = append(inst.curItems, inst.glossed(utfsafe.EnsureUTF8(inst.curBuf.String())))
+}
+
+// glossed applies the current value column's gloss to one item's text.
+func (inst *attrExplodeSink) glossed(text string) string {
+	if inst.glossFn == nil {
+		return text
+	}
+	return inst.glossFn(inst.curCol, text)
 }
 
 func (inst *attrExplodeSink) Write(pp []byte) (int, error)       { return inst.curBuf.Write(pp) }
@@ -438,6 +453,15 @@ func (inst *PlayApp) renderAttrTable(rec arrow.RecordBatch, schema *arrow.Schema
 	taggedExtra, plainExtra := buildAttrExtras(classes, visCols)
 	sink := &inst.attrSink
 	sink.reset(slice, pageStart, taggedExtra, plainExtra, visCols, schema.NumFields())
+	// ADR-0186: value cells render through the column's gloss on the items —
+	// the element kind, since this grid explodes a list down its rows.
+	glossCols := inst.glossColumns(schema)
+	sink.glossFn = func(arrowIdx int, text string) string {
+		if arrowIdx < 0 || arrowIdx >= len(glossCols) {
+			return text
+		}
+		return inst.glossText(&glossCols[arrowIdx], text, gloss.KindOfArrow(listElemType(schema.Field(arrowIdx).Type)))
+	}
 	if err := driver.DriveRecordBatch(sink, slice); err != nil {
 		log.Warn().Err(err).Msg("play: per-attribute drive failed — falling back to per-DB-row grid")
 		inst.renderMasterTable(rec, schema, numRows, selectedRow, emit)
@@ -570,7 +594,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 				if row.firstOfEntity {
 					marker = strconv.FormatInt(row.absRow+1, 10)
 				}
-				if inst.selectableCell(rowBase, cellPadX, marker, true, selected, true, false) {
+				if inst.selectableCell(rowBase, cellPadX, marker, true, selected, true, false, gloss.ToneNeutral) {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}
@@ -582,7 +606,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 			}
 			leftAlign := stringLikeArrowType(listElemType(schema.Field(arrowCol).Type))
 			for range et.Cells(local, colPos) {
-				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, row.cells[pos], false, selected, true, leftAlign) {
+				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, row.cells[pos], false, selected, true, leftAlign, gloss.ToneNeutral) {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}

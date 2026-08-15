@@ -477,6 +477,9 @@ type PlayApp struct {
 	// glosses is the ADR-0186 catalog every `<label>@<media type>` declaration
 	// resolves against. Read through glossCatalog(), which defaults it.
 	glosses *gloss.Catalog
+	// glossRes caches the per-column gloss resolution of the schema last seen
+	// by the Table grids (play_gloss.go).
+	glossRes glossResolution
 
 	// diag owns the Diagnostics dock tab's EXPLAIN AST probe (its own lane
 	// against the live endpoint); the pane itself is the single owner of the
@@ -2725,6 +2728,9 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	// Tier-1 pin affordance (ADR-0115 S4): freeze the rows this tab
 	// shows into a queryable table.
 	inst.renderPinControl(rec)
+	// ADR-0186 raw toggle: bypass every gloss for the session — the escape
+	// hatch a wrong rule needs. Offered only once a column is glossed.
+	inst.renderGlossControl(schema)
 	c.AddSpace(pad)
 	c.Separator().Send()
 	dispatchPanel(tablePanel{app: inst}, map[ChannelID]channelInput{
@@ -3047,6 +3053,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// lengths. The cache is invalidated when the Arrow *Schema pointer
 	// changes, i.e. on a new query.
 	inst.ensureColLabels(schema)
+	glossCols := inst.glossColumns(schema)
 	inst.ensureColWidths(rec, schema, pageStart, pageEnd)
 	// egui_table keeps its own width per column *position*, and re-fits to
 	// content only on a table's first show ever — so without this a second
@@ -3108,16 +3115,27 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		for range et.Headers(0, colPos) {
 			c.AddSpace(cellPadX)
 			field := schema.Field(arrowCol)
+			gc := &glossCols[arrowCol]
 			name := field.Name
 			if label := inst.colLabels[name]; label != "" {
 				name = label
+			}
+			// A declared column (ADR-0186) is captioned by its label; the
+			// declared media type rides beside the type tag, small, and the
+			// resolution — or the refusal — goes on hover with the rest.
+			if gc.label != "" {
+				name = gc.label
+			}
+			hover := field.Name + " — " + field.Type.String()
+			if gh := glossHover(gc); gh != "" {
+				hover += " — " + gh
 			}
 			// The header is a frameless button: clicking it cycles this
 			// column's sort (asc → desc → unsorted). The physical column name
 			// and the full type stay on hover, as the name did when the header
 			// was a plain label — so a leeway handle never hides the name it
 			// stands for, and abbreviating the type below loses nothing.
-			for range c.HoverText(field.Name + " — " + field.Type.String() + " — click to sort").KeepIter() {
+			for range c.HoverText(hover + " — click to sort").KeepIter() {
 				if c.Button(ids.PrepareSeq(tableSortIDSalt+uint64(arrowCol)),
 					c.Atoms().BeginRichText(name+inst.tableSort.glyph(arrowCol)).Strong().Monospace().End().Keep()).
 					Frame(false).
@@ -3128,6 +3146,11 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			}
 			for rt := range c.RichTextLabel(shortArrowType(field.Type)) {
 				rt.Small().Weak().Monospace()
+			}
+			if gc.mediaType != "" {
+				for rt := range c.RichTextLabel(gc.mediaType) {
+					rt.Small().Weak().Monospace()
+				}
 			}
 		}
 	}
@@ -3156,7 +3179,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 
 		if vis, _ := et.ColVisible(0); vis {
 			for range et.Cells(local, 0) {
-				if inst.selectableCell(rowBase, cellPadX, fmt.Sprintf("%d", absRow+1), false, selected, false, false) {
+				if inst.selectableCell(rowBase, cellPadX, fmt.Sprintf("%d", absRow+1), false, selected, false, false, gloss.ToneNeutral) {
 					emit.Emit(signalSelection, absRow)
 				}
 			}
@@ -3168,7 +3191,10 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			}
 			leftAlign := stringLikeArrowType(schema.Field(arrowCol).Type)
 			for range et.Cells(local, colPos) {
-				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, formatCell(rec, arrowCol, absRow), false, selected, false, leftAlign) {
+				// ADR-0186: the cell text is the column's gloss inline face when
+				// one resolves (and the raw toggle is off), else formatCell.
+				text, tone := inst.glossCell(&glossCols[arrowCol], rec.Column(arrowCol), absRow, false)
+				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, text, false, selected, false, leftAlign, tone) {
 					emit.Emit(signalSelection, absRow)
 				}
 			}
@@ -3203,18 +3229,30 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 	// Reserve the same left inset renderMasterTable leads each cell with, so a
 	// padded cell doesn't truncate content that would otherwise fit.
 	cellPadX := styletokens.PaddingTight(inst.density)
+	glossCols := inst.glossColumns(schema)
 	for col := 0; col < ncols; col++ {
 		// The header shows the friendly label when there is one, so size to it
 		// rather than the (longer) physical name — plus the short type tag it
-		// renders beside the label, which is part of the header's width.
+		// renders beside the label, which is part of the header's width. A
+		// declared column's caption is its label, and its media-type tag also
+		// counts (ADR-0186); the cells sample through the gloss, since that is
+		// what they render.
 		field := schema.Field(col)
+		gc := &glossCols[col]
 		headerText := field.Name
 		if lbl := inst.colLabels[headerText]; lbl != "" {
 			headerText = lbl
 		}
+		if gc.label != "" {
+			headerText = gc.label
+		}
 		maxChars := utf8.RuneCountInString(headerText) + 1 + utf8.RuneCountInString(shortArrowType(field.Type))
+		if gc.mediaType != "" {
+			maxChars += 1 + utf8.RuneCountInString(gc.mediaType)
+		}
 		for r := int64(0); r < sampleN; r++ {
-			if n := utf8.RuneCountInString(formatCell(rec, col, pageStart+r)); n > maxChars {
+			text, _ := inst.glossCell(gc, rec.Column(col), pageStart+r, false)
+			if n := utf8.RuneCountInString(text); n > maxChars {
 				maxChars = n
 			}
 		}
