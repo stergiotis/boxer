@@ -261,7 +261,10 @@ or without the property the paper proves for it.
 
 Each item names the paper's construct, the site here, and a cut sized to
 descope-over-gate. None of them requires a component framework; each is a
-tracking or declaration change to a contract that already exists.
+tracking or declaration change to a contract that already exists. L2, L3,
+L4 and L7 are taken up as one decision in
+[ADR-0188](../adr/0188-app-instance-effect-tracking.md); L1 is the
+composition survey's F3; L5, L6 and L8 stand as recorded here.
 
 **L1 — Declare provisions, and bind consumers to a provider identity.**
 The paper's component is `(d, p, e)`; the manifest carries `d` and lacks
