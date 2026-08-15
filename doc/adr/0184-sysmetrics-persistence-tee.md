@@ -238,20 +238,47 @@ This is a real cost of SD1 over O2, recorded as such.
 ### SD6 — Read surface: `LW_GET`, and the id-not-name caveat
 
 ADR-0090 §SD3's promise that metrics become "`play`/ClickHouse-queryable the
-moment persistence is wanted" is met at ship time. `LW_GET` /
-`LW_GET_NULL` / `LW_GET_LIST` expand against the metric sections;
+moment persistence is wanted" is met at ship time. The `LW_GET*` family expands
+against the metric sections;
 [the read-surface page](../explanation/leeway-sql-read-surface.md) is the entry
 point, and hand-writing array arithmetic against these tables is the documented
 mistake, not the fallback.
 
+**Two rules of the surface, neither optional on this table.** Both were
+written down wrong here first and corrected by building the expansion golden
+the verification plan asks for:
+
+- **The channel token is mandatory.** Every `boxer.facts` section carries more
+  than one membership channel, so a call without `chan:` is refused rather
+  than defaulted. This vocabulary writes on the ordinary
+  one-membership-per-attribute channel, `chan:low-card-ref`.
+- **The verb follows the section's arity, not the Go field's.** Only `symbol`
+  and `bool` store one value per attribute and read through `LW_GET`. Every
+  `*Array` section stores a run per attribute and reads through
+  `LW_GET_LIST` — including where the DTO field is a plain scalar, which is
+  then the run's only element, read as
+  `arrayElement(LW_GET_LIST(…), 1)`. `LW_GET` and `LW_GET_NULL` are refused
+  on those sections outright, so an `option.Option` field's absence reads as
+  an **empty run, not NULL**.
+
+So a scalar metric reads
+`arrayElement(LW_GET_LIST('f32Array', '<id>', 'chan:low-card-ref'), 1)`, not
+the `LW_GET('f32Array', '<id>')` an earlier draft of this section gave — that
+form is refused by the pass on both counts.
+
 **Named caveat.** `membershipLiteral` requires a **registry id**, not a name,
 for a ref-channel membership — there is no server-side name lookup
-([ADR-0171](./0171-leeway-sql-read-surface.md) §SD4 is that gap). An ad-hoc
-query reads `LW_GET('f32Array', '<id>')`. Ref channels remain right for storage
-(a small closed set of metric names, compact on the wire); the ergonomic cost is
-mitigated by generated Go constants, `leeway id`, and — if ADR-0183 D3 is
-accepted — its `vocabclaim` publication, which turns the id into a join rather
-than a lookup the author must perform by hand.
+([ADR-0171](./0171-leeway-sql-read-surface.md) §SD4 is that gap). Ref channels
+remain right for storage (a small closed set of metric names, compact on the
+wire); the ergonomic cost is mitigated by generated Go constants, `leeway id`,
+and — if ADR-0183 D3 is accepted — its `vocabclaim` publication, which turns
+the id into a join rather than a lookup the author must perform by hand.
+
+The mitigation is narrower than it reads: `providers.MembershipLookup`, which
+backs `keelson('memberships')`, resolves against the **runtime** vocabulary
+only, so a sysmetrics membership name does not resolve there today. A Go
+caller binds `sysmvocab.NkRegistry` and writes names; an ad-hoc SQL author
+writes ids.
 
 ### SD7 — Retention and rollup, and what ADR-0150 actually needs
 
@@ -395,9 +422,21 @@ runs as a standalone sink against a remote scraper without change.
 
 ## Verification plan — Tier 1
 
-- **Lane.** Default `go test` for the store round-trip (`clickhouse-local` via
-  `recordstore/chexec`, skip-if-absent) and the vocabulary goldens; the
-  `//go:build integration` lane for `storeexec` against a live server.
+- **Lane.** Default `go test` for the vocabulary goldens, the generated-store
+  shape checks and the read-surface expansion golden; the
+  `//go:build integration` lane for `storeexec` **and the store round-trip**,
+  against a live server.
+
+  This is not where the plan first put the round-trip. It was written for the
+  default lane over `clickhouse-local` via `recordstore/chexec`,
+  skip-if-absent, and it landed in the integration lane over `chclient` +
+  `storeexec` instead. The move is deliberate and was worth making: the live
+  path exercises the real HTTP transport and the table
+  `chstore.SetupTable` actually provisioned, which is what makes SD2's
+  claim checkable rather than asserted. The cost is recorded rather than
+  glossed — **the default lane carries no store round-trip**, so a machine
+  with no server verifies the shapes and the schema agreement but not a
+  write followed by a read.
 - **What would fail.**
   - A generated-store shape test asserting `EnsureTable` is **absent** under
     `ExternallyProvisioned` and `VerifySchema` is present — the SD2 guarantee,
@@ -412,12 +451,20 @@ runs as a standalone sink against a remote scraper without change.
     read back through the generated `Scan` verb, assert per-domain equality of
     the raw counters.
   - An `LW_GET` expansion test over the metric sections, pinned as a golden, so
-    a naming-convention change is caught at the read surface too.
+    a naming-convention change is caught at the read surface too. One authored
+    query per storage shape, covering every section the DTOs use; the golden
+    holds the physical column names *and* the membership ids the calls expand
+    into, so a re-aspected section and a re-keyed vocabulary both go red. It
+    is the check the store's own round-trip cannot perform — that writes and
+    reads through the same generated code, so a rename moves both sides
+    together and the test stays green.
 - **Gap.** SD5's index policy is declared but unapplied, so nothing verifies it
   prunes — that verification arrives with the `chstore` change its trigger
   gates. SD7's claim that no TTL preserves the analysis window is an argument,
   not a test. Live-host collector behaviour stays covered by the existing
-  sysmetrics tests; this ADR adds no collector coverage.
+  sysmetrics tests; this ADR adds no collector coverage. The read-surface
+  golden expands the calls but does not execute them, so it demonstrates
+  addressability, not that a query returns the right rows.
 
 ## Status
 
