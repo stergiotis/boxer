@@ -765,7 +765,7 @@ type M1SampleSymbolMembsReadI interface {
 
 // M1SampleU8ArrayAttrsReadI is the Attributes-side view of the u8Array section.
 type M1SampleU8ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint8
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint8, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -776,7 +776,7 @@ type M1SampleU8ArrayMembsReadI interface {
 
 // M1SampleU16ArrayAttrsReadI is the Attributes-side view of the u16Array section.
 type M1SampleU16ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint16
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint16, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -788,7 +788,7 @@ type M1SampleU16ArrayMembsReadI interface {
 // M1SampleU32ArrayAttrsReadI is the Attributes-side view of the u32Array section.
 type M1SampleU32ArrayAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint32]
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint32, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -799,7 +799,7 @@ type M1SampleU32ArrayMembsReadI interface {
 
 // M1SampleU64ArrayAttrsReadI is the Attributes-side view of the u64Array section.
 type M1SampleU64ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -810,7 +810,7 @@ type M1SampleU64ArrayMembsReadI interface {
 
 // M1SampleF32ArrayAttrsReadI is the Attributes-side view of the f32Array section.
 type M1SampleF32ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) float32
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (float32, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -821,7 +821,7 @@ type M1SampleF32ArrayMembsReadI interface {
 
 // M1SampleF64ArrayAttrsReadI is the Attributes-side view of the f64Array section.
 type M1SampleF64ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) float64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (float64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -843,7 +843,7 @@ type M1SampleBoolMembsReadI interface {
 
 // M1SampleBlobArrayAttrsReadI is the Attributes-side view of the blobArray section.
 type M1SampleBlobArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) []byte
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) ([]byte, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -854,7 +854,7 @@ type M1SampleBlobArrayMembsReadI interface {
 
 // M1SampleTimeArrayAttrsReadI is the Attributes-side view of the timeArray section.
 type M1SampleTimeArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) time.Time
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (time.Time, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -865,7 +865,7 @@ type M1SampleTimeArrayMembsReadI interface {
 
 // M1SampleStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
 type M1SampleStringArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -990,7 +990,11 @@ func M1SampleFillFromArrow[
 						u8ArraySeverityLastAttr = attrJ + 1
 						u8ArraySeverityCount++
 					}
-					val := u8ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := u8ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u8Array").Str("membership", "m1Severity").Str("field", "Severity").Errorf("slot u8Array@m1Severity (field Severity) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					u8ArraySeverityVal = val
 				}
 			}
@@ -1013,7 +1017,11 @@ func M1SampleFillFromArrow[
 						u16ArrayMajorVerLastAttr = attrJ + 1
 						u16ArrayMajorVerCount++
 					}
-					val := u16ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := u16ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u16Array").Str("membership", "m1MajorVer").Str("field", "MajorVer").Errorf("slot u16Array@m1MajorVer (field MajorVer) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					u16ArrayMajorVerVal = val
 				}
 			}
@@ -1039,7 +1047,11 @@ func M1SampleFillFromArrow[
 						u32ArraySequenceLastAttr = attrJ + 1
 						u32ArraySequenceCount++
 					}
-					val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "m1Sequence").Str("field", "Sequence").Errorf("slot u32Array@m1Sequence (field Sequence) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					u32ArraySequenceVal = val
 				case kindM1CapBits:
 					if u32ArrayCapBitsLastAttr != attrJ+1 {
@@ -1078,7 +1090,11 @@ func M1SampleFillFromArrow[
 						u64ArrayLatencyNanosLastAttr = attrJ + 1
 						u64ArrayLatencyNanosCount++
 					}
-					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "m1LatencyNanos").Str("field", "LatencyNanos").Errorf("slot u64Array@m1LatencyNanos (field LatencyNanos) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					u64ArrayLatencyNanosVal = val
 				}
 			}
@@ -1101,7 +1117,11 @@ func M1SampleFillFromArrow[
 						f32ArrayCpuPctLastAttr = attrJ + 1
 						f32ArrayCpuPctCount++
 					}
-					val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "m1CpuPct").Str("field", "CpuPct").Errorf("slot f32Array@m1CpuPct (field CpuPct) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					f32ArrayCpuPctVal = val
 				}
 			}
@@ -1124,7 +1144,11 @@ func M1SampleFillFromArrow[
 						f64ArrayLoadAvg1LastAttr = attrJ + 1
 						f64ArrayLoadAvg1Count++
 					}
-					val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := f64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "f64Array").Str("membership", "m1LoadAvg1").Str("field", "LoadAvg1").Errorf("slot f64Array@m1LoadAvg1 (field LoadAvg1) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					f64ArrayLoadAvg1Val = val
 				}
 			}
@@ -1173,14 +1197,22 @@ func M1SampleFillFromArrow[
 						blobArrayPeerV4LastAttr = attrJ + 1
 						blobArrayPeerV4Count++
 					}
-					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := blobArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "m1PeerV4").Str("field", "PeerV4").Errorf("slot blobArray@m1PeerV4 (field PeerV4) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					copy(blobArrayPeerV4Val[:], val)
 				case kindM1PeerV6:
 					if blobArrayPeerV6LastAttr != attrJ+1 {
 						blobArrayPeerV6LastAttr = attrJ + 1
 						blobArrayPeerV6Count++
 					}
-					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := blobArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "m1PeerV6").Str("field", "PeerV6").Errorf("slot blobArray@m1PeerV6 (field PeerV6) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					copy(blobArrayPeerV6Val[:], val)
 				}
 			}
@@ -1208,7 +1240,11 @@ func M1SampleFillFromArrow[
 						timeArrayLastSuccessLastAttr = attrJ + 1
 						timeArrayLastSuccessCount++
 					}
-					val := timeArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := timeArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "timeArray").Str("membership", "m1LastSuccess").Str("field", "LastSuccess").Errorf("slot timeArray@m1LastSuccess (field LastSuccess) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					timeArrayLastSuccessVal = val
 				}
 			}
@@ -1238,7 +1274,11 @@ func M1SampleFillFromArrow[
 						stringArrayOperatorNameLastAttr = attrJ + 1
 						stringArrayOperatorNameCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "m1OperatorName").Str("field", "OperatorName").Errorf("slot stringArray@m1OperatorName (field OperatorName) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArrayOperatorNameVal = val
 				}
 			}
@@ -1382,7 +1422,11 @@ func M1SampleReadRow[
 					u8ArraySeverityLastAttr = attrJ + 1
 					u8ArraySeverityCount++
 				}
-				val := u8ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u8ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u8Array").Str("membership", "m1Severity").Str("field", "Severity").Errorf("slot u8Array@m1Severity (field Severity) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u8ArraySeverityVal = val
 			}
 		}
@@ -1408,7 +1452,11 @@ func M1SampleReadRow[
 					u16ArrayMajorVerLastAttr = attrJ + 1
 					u16ArrayMajorVerCount++
 				}
-				val := u16ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u16ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u16Array").Str("membership", "m1MajorVer").Str("field", "MajorVer").Errorf("slot u16Array@m1MajorVer (field MajorVer) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u16ArrayMajorVerVal = val
 			}
 		}
@@ -1437,7 +1485,11 @@ func M1SampleReadRow[
 					u32ArraySequenceLastAttr = attrJ + 1
 					u32ArraySequenceCount++
 				}
-				val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "m1Sequence").Str("field", "Sequence").Errorf("slot u32Array@m1Sequence (field Sequence) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u32ArraySequenceVal = val
 			case kindM1CapBits:
 				if u32ArrayCapBitsLastAttr != attrJ+1 {
@@ -1482,7 +1534,11 @@ func M1SampleReadRow[
 					u64ArrayLatencyNanosLastAttr = attrJ + 1
 					u64ArrayLatencyNanosCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "m1LatencyNanos").Str("field", "LatencyNanos").Errorf("slot u64Array@m1LatencyNanos (field LatencyNanos) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayLatencyNanosVal = val
 			}
 		}
@@ -1508,7 +1564,11 @@ func M1SampleReadRow[
 					f32ArrayCpuPctLastAttr = attrJ + 1
 					f32ArrayCpuPctCount++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "m1CpuPct").Str("field", "CpuPct").Errorf("slot f32Array@m1CpuPct (field CpuPct) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayCpuPctVal = val
 			}
 		}
@@ -1534,7 +1594,11 @@ func M1SampleReadRow[
 					f64ArrayLoadAvg1LastAttr = attrJ + 1
 					f64ArrayLoadAvg1Count++
 				}
-				val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f64Array").Str("membership", "m1LoadAvg1").Str("field", "LoadAvg1").Errorf("slot f64Array@m1LoadAvg1 (field LoadAvg1) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f64ArrayLoadAvg1Val = val
 			}
 		}
@@ -1589,14 +1653,22 @@ func M1SampleReadRow[
 					blobArrayPeerV4LastAttr = attrJ + 1
 					blobArrayPeerV4Count++
 				}
-				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := blobArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "m1PeerV4").Str("field", "PeerV4").Errorf("slot blobArray@m1PeerV4 (field PeerV4) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				copy(blobArrayPeerV4Val[:], val)
 			case kindM1PeerV6:
 				if blobArrayPeerV6LastAttr != attrJ+1 {
 					blobArrayPeerV6LastAttr = attrJ + 1
 					blobArrayPeerV6Count++
 				}
-				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := blobArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "m1PeerV6").Str("field", "PeerV6").Errorf("slot blobArray@m1PeerV6 (field PeerV6) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				copy(blobArrayPeerV6Val[:], val)
 			}
 		}
@@ -1630,7 +1702,11 @@ func M1SampleReadRow[
 					timeArrayLastSuccessLastAttr = attrJ + 1
 					timeArrayLastSuccessCount++
 				}
-				val := timeArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := timeArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "timeArray").Str("membership", "m1LastSuccess").Str("field", "LastSuccess").Errorf("slot timeArray@m1LastSuccess (field LastSuccess) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				timeArrayLastSuccessVal = val
 			}
 		}
@@ -1657,7 +1733,11 @@ func M1SampleReadRow[
 					stringArrayOperatorNameLastAttr = attrJ + 1
 					stringArrayOperatorNameCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "m1OperatorName").Str("field", "OperatorName").Errorf("slot stringArray@m1OperatorName (field OperatorName) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArrayOperatorNameVal = val
 			}
 		}

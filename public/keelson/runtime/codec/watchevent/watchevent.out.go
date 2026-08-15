@@ -334,7 +334,7 @@ type WatchEventSymbolMembsReadI interface {
 
 // WatchEventStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
 type WatchEventStringArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -345,7 +345,7 @@ type WatchEventStringArrayMembsReadI interface {
 
 // WatchEventU32ArrayAttrsReadI is the Attributes-side view of the u32Array section.
 type WatchEventU32ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint32, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -423,7 +423,11 @@ func WatchEventFillFromArrow[
 						stringArrayNameLastAttr = attrJ + 1
 						stringArrayNameCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "watchEventName").Str("field", "Name").Errorf("slot stringArray@watchEventName (field Name) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArrayNameVal = val
 				}
 			}
@@ -446,7 +450,11 @@ func WatchEventFillFromArrow[
 						u32ArrayCookieLastAttr = attrJ + 1
 						u32ArrayCookieCount++
 					}
-					val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "watchEventCookie").Str("field", "Cookie").Errorf("slot u32Array@watchEventCookie (field Cookie) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					u32ArrayCookieVal = val
 				}
 			}
@@ -523,7 +531,11 @@ func WatchEventReadRow[
 					stringArrayNameLastAttr = attrJ + 1
 					stringArrayNameCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "watchEventName").Str("field", "Name").Errorf("slot stringArray@watchEventName (field Name) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArrayNameVal = val
 			}
 		}
@@ -549,7 +561,11 @@ func WatchEventReadRow[
 					u32ArrayCookieLastAttr = attrJ + 1
 					u32ArrayCookieCount++
 				}
-				val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "watchEventCookie").Str("field", "Cookie").Errorf("slot u32Array@watchEventCookie (field Cookie) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u32ArrayCookieVal = val
 			}
 		}

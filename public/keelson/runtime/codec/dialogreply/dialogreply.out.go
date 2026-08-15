@@ -334,7 +334,7 @@ type DialogReplyBoolMembsReadI interface {
 
 // DialogReplyStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
 type DialogReplyStringArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -345,7 +345,7 @@ type DialogReplyStringArrayMembsReadI interface {
 
 // DialogReplyTextArrayAttrsReadI is the Attributes-side view of the textArray section.
 type DialogReplyTextArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -423,7 +423,11 @@ func DialogReplyFillFromArrow[
 						stringArrayHandleSubjectPrefixLastAttr = attrJ + 1
 						stringArrayHandleSubjectPrefixCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "dialogHandleSubject").Str("field", "HandleSubjectPrefix").Errorf("slot stringArray@dialogHandleSubject (field HandleSubjectPrefix) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArrayHandleSubjectPrefixVal = val
 				}
 			}
@@ -446,7 +450,11 @@ func DialogReplyFillFromArrow[
 						textArrayReasonLastAttr = attrJ + 1
 						textArrayReasonCount++
 					}
-					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Str("field", "Reason").Errorf("slot textArray@reason (field Reason) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					textArrayReasonVal = val
 				}
 			}
@@ -523,7 +531,11 @@ func DialogReplyReadRow[
 					stringArrayHandleSubjectPrefixLastAttr = attrJ + 1
 					stringArrayHandleSubjectPrefixCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "dialogHandleSubject").Str("field", "HandleSubjectPrefix").Errorf("slot stringArray@dialogHandleSubject (field HandleSubjectPrefix) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArrayHandleSubjectPrefixVal = val
 			}
 		}
@@ -549,7 +561,11 @@ func DialogReplyReadRow[
 					textArrayReasonLastAttr = attrJ + 1
 					textArrayReasonCount++
 				}
-				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Str("field", "Reason").Errorf("slot textArray@reason (field Reason) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				textArrayReasonVal = val
 			}
 		}

@@ -116,7 +116,7 @@ type sysCpuInfoSymbolMembsReadI interface {
 
 // sysCpuInfoI32ArrayAttrsReadI is the Attributes-side view of the i32Array section.
 type sysCpuInfoI32ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) int32
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (int32, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -220,7 +220,11 @@ func sysCpuInfoReadRow[
 					i32ArrayLogicalCoresLastAttr = attrJ + 1
 					i32ArrayLogicalCoresCount++
 				}
-				val := i32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := i32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "i32Array").Str("membership", "sysmCpuLogicalCores").Str("field", "LogicalCores").Errorf("slot i32Array@sysmCpuLogicalCores (field LogicalCores) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				i32ArrayLogicalCoresVal = val
 			}
 		}

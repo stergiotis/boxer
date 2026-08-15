@@ -267,7 +267,7 @@ type sysPsiBoolMembsReadI interface {
 
 // sysPsiF32ArrayAttrsReadI is the Attributes-side view of the f32Array section.
 type sysPsiF32ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) float32
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (float32, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -278,7 +278,7 @@ type sysPsiF32ArrayMembsReadI interface {
 
 // sysPsiU64ArrayAttrsReadI is the Attributes-side view of the u64Array section.
 type sysPsiU64ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -449,126 +449,198 @@ func sysPsiReadRow[
 					f32ArrayCpuSomeAvg10LastAttr = attrJ + 1
 					f32ArrayCpuSomeAvg10Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiCpuSomeAvg10").Str("field", "CpuSomeAvg10").Errorf("slot f32Array@sysmPsiCpuSomeAvg10 (field CpuSomeAvg10) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayCpuSomeAvg10Val = val
 			case kindSysmPsiCpuSomeAvg60:
 				if f32ArrayCpuSomeAvg60LastAttr != attrJ+1 {
 					f32ArrayCpuSomeAvg60LastAttr = attrJ + 1
 					f32ArrayCpuSomeAvg60Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiCpuSomeAvg60").Str("field", "CpuSomeAvg60").Errorf("slot f32Array@sysmPsiCpuSomeAvg60 (field CpuSomeAvg60) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayCpuSomeAvg60Val = val
 			case kindSysmPsiCpuSomeAvg300:
 				if f32ArrayCpuSomeAvg300LastAttr != attrJ+1 {
 					f32ArrayCpuSomeAvg300LastAttr = attrJ + 1
 					f32ArrayCpuSomeAvg300Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiCpuSomeAvg300").Str("field", "CpuSomeAvg300").Errorf("slot f32Array@sysmPsiCpuSomeAvg300 (field CpuSomeAvg300) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayCpuSomeAvg300Val = val
 			case kindSysmPsiCpuFullAvg10:
 				if f32ArrayCpuFullAvg10LastAttr != attrJ+1 {
 					f32ArrayCpuFullAvg10LastAttr = attrJ + 1
 					f32ArrayCpuFullAvg10Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiCpuFullAvg10").Str("field", "CpuFullAvg10").Errorf("slot f32Array@sysmPsiCpuFullAvg10 (field CpuFullAvg10) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayCpuFullAvg10Val = val
 			case kindSysmPsiCpuFullAvg60:
 				if f32ArrayCpuFullAvg60LastAttr != attrJ+1 {
 					f32ArrayCpuFullAvg60LastAttr = attrJ + 1
 					f32ArrayCpuFullAvg60Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiCpuFullAvg60").Str("field", "CpuFullAvg60").Errorf("slot f32Array@sysmPsiCpuFullAvg60 (field CpuFullAvg60) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayCpuFullAvg60Val = val
 			case kindSysmPsiCpuFullAvg300:
 				if f32ArrayCpuFullAvg300LastAttr != attrJ+1 {
 					f32ArrayCpuFullAvg300LastAttr = attrJ + 1
 					f32ArrayCpuFullAvg300Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiCpuFullAvg300").Str("field", "CpuFullAvg300").Errorf("slot f32Array@sysmPsiCpuFullAvg300 (field CpuFullAvg300) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayCpuFullAvg300Val = val
 			case kindSysmPsiMemorySomeAvg10:
 				if f32ArrayMemorySomeAvg10LastAttr != attrJ+1 {
 					f32ArrayMemorySomeAvg10LastAttr = attrJ + 1
 					f32ArrayMemorySomeAvg10Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiMemorySomeAvg10").Str("field", "MemorySomeAvg10").Errorf("slot f32Array@sysmPsiMemorySomeAvg10 (field MemorySomeAvg10) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayMemorySomeAvg10Val = val
 			case kindSysmPsiMemorySomeAvg60:
 				if f32ArrayMemorySomeAvg60LastAttr != attrJ+1 {
 					f32ArrayMemorySomeAvg60LastAttr = attrJ + 1
 					f32ArrayMemorySomeAvg60Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiMemorySomeAvg60").Str("field", "MemorySomeAvg60").Errorf("slot f32Array@sysmPsiMemorySomeAvg60 (field MemorySomeAvg60) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayMemorySomeAvg60Val = val
 			case kindSysmPsiMemorySomeAvg300:
 				if f32ArrayMemorySomeAvg300LastAttr != attrJ+1 {
 					f32ArrayMemorySomeAvg300LastAttr = attrJ + 1
 					f32ArrayMemorySomeAvg300Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiMemorySomeAvg300").Str("field", "MemorySomeAvg300").Errorf("slot f32Array@sysmPsiMemorySomeAvg300 (field MemorySomeAvg300) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayMemorySomeAvg300Val = val
 			case kindSysmPsiMemoryFullAvg10:
 				if f32ArrayMemoryFullAvg10LastAttr != attrJ+1 {
 					f32ArrayMemoryFullAvg10LastAttr = attrJ + 1
 					f32ArrayMemoryFullAvg10Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiMemoryFullAvg10").Str("field", "MemoryFullAvg10").Errorf("slot f32Array@sysmPsiMemoryFullAvg10 (field MemoryFullAvg10) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayMemoryFullAvg10Val = val
 			case kindSysmPsiMemoryFullAvg60:
 				if f32ArrayMemoryFullAvg60LastAttr != attrJ+1 {
 					f32ArrayMemoryFullAvg60LastAttr = attrJ + 1
 					f32ArrayMemoryFullAvg60Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiMemoryFullAvg60").Str("field", "MemoryFullAvg60").Errorf("slot f32Array@sysmPsiMemoryFullAvg60 (field MemoryFullAvg60) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayMemoryFullAvg60Val = val
 			case kindSysmPsiMemoryFullAvg300:
 				if f32ArrayMemoryFullAvg300LastAttr != attrJ+1 {
 					f32ArrayMemoryFullAvg300LastAttr = attrJ + 1
 					f32ArrayMemoryFullAvg300Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiMemoryFullAvg300").Str("field", "MemoryFullAvg300").Errorf("slot f32Array@sysmPsiMemoryFullAvg300 (field MemoryFullAvg300) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayMemoryFullAvg300Val = val
 			case kindSysmPsiIoSomeAvg10:
 				if f32ArrayIoSomeAvg10LastAttr != attrJ+1 {
 					f32ArrayIoSomeAvg10LastAttr = attrJ + 1
 					f32ArrayIoSomeAvg10Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiIoSomeAvg10").Str("field", "IoSomeAvg10").Errorf("slot f32Array@sysmPsiIoSomeAvg10 (field IoSomeAvg10) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayIoSomeAvg10Val = val
 			case kindSysmPsiIoSomeAvg60:
 				if f32ArrayIoSomeAvg60LastAttr != attrJ+1 {
 					f32ArrayIoSomeAvg60LastAttr = attrJ + 1
 					f32ArrayIoSomeAvg60Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiIoSomeAvg60").Str("field", "IoSomeAvg60").Errorf("slot f32Array@sysmPsiIoSomeAvg60 (field IoSomeAvg60) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayIoSomeAvg60Val = val
 			case kindSysmPsiIoSomeAvg300:
 				if f32ArrayIoSomeAvg300LastAttr != attrJ+1 {
 					f32ArrayIoSomeAvg300LastAttr = attrJ + 1
 					f32ArrayIoSomeAvg300Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiIoSomeAvg300").Str("field", "IoSomeAvg300").Errorf("slot f32Array@sysmPsiIoSomeAvg300 (field IoSomeAvg300) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayIoSomeAvg300Val = val
 			case kindSysmPsiIoFullAvg10:
 				if f32ArrayIoFullAvg10LastAttr != attrJ+1 {
 					f32ArrayIoFullAvg10LastAttr = attrJ + 1
 					f32ArrayIoFullAvg10Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiIoFullAvg10").Str("field", "IoFullAvg10").Errorf("slot f32Array@sysmPsiIoFullAvg10 (field IoFullAvg10) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayIoFullAvg10Val = val
 			case kindSysmPsiIoFullAvg60:
 				if f32ArrayIoFullAvg60LastAttr != attrJ+1 {
 					f32ArrayIoFullAvg60LastAttr = attrJ + 1
 					f32ArrayIoFullAvg60Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiIoFullAvg60").Str("field", "IoFullAvg60").Errorf("slot f32Array@sysmPsiIoFullAvg60 (field IoFullAvg60) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayIoFullAvg60Val = val
 			case kindSysmPsiIoFullAvg300:
 				if f32ArrayIoFullAvg300LastAttr != attrJ+1 {
 					f32ArrayIoFullAvg300LastAttr = attrJ + 1
 					f32ArrayIoFullAvg300Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmPsiIoFullAvg300").Str("field", "IoFullAvg300").Errorf("slot f32Array@sysmPsiIoFullAvg300 (field IoFullAvg300) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayIoFullAvg300Val = val
 			}
 		}
@@ -745,42 +817,66 @@ func sysPsiReadRow[
 					u64ArrayCpuSomeTotalUsLastAttr = attrJ + 1
 					u64ArrayCpuSomeTotalUsCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmPsiCpuSomeTotalUs").Str("field", "CpuSomeTotalUs").Errorf("slot u64Array@sysmPsiCpuSomeTotalUs (field CpuSomeTotalUs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayCpuSomeTotalUsVal = val
 			case kindSysmPsiCpuFullTotalUs:
 				if u64ArrayCpuFullTotalUsLastAttr != attrJ+1 {
 					u64ArrayCpuFullTotalUsLastAttr = attrJ + 1
 					u64ArrayCpuFullTotalUsCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmPsiCpuFullTotalUs").Str("field", "CpuFullTotalUs").Errorf("slot u64Array@sysmPsiCpuFullTotalUs (field CpuFullTotalUs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayCpuFullTotalUsVal = val
 			case kindSysmPsiMemorySomeTotalUs:
 				if u64ArrayMemorySomeTotalUsLastAttr != attrJ+1 {
 					u64ArrayMemorySomeTotalUsLastAttr = attrJ + 1
 					u64ArrayMemorySomeTotalUsCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmPsiMemorySomeTotalUs").Str("field", "MemorySomeTotalUs").Errorf("slot u64Array@sysmPsiMemorySomeTotalUs (field MemorySomeTotalUs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayMemorySomeTotalUsVal = val
 			case kindSysmPsiMemoryFullTotalUs:
 				if u64ArrayMemoryFullTotalUsLastAttr != attrJ+1 {
 					u64ArrayMemoryFullTotalUsLastAttr = attrJ + 1
 					u64ArrayMemoryFullTotalUsCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmPsiMemoryFullTotalUs").Str("field", "MemoryFullTotalUs").Errorf("slot u64Array@sysmPsiMemoryFullTotalUs (field MemoryFullTotalUs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayMemoryFullTotalUsVal = val
 			case kindSysmPsiIoSomeTotalUs:
 				if u64ArrayIoSomeTotalUsLastAttr != attrJ+1 {
 					u64ArrayIoSomeTotalUsLastAttr = attrJ + 1
 					u64ArrayIoSomeTotalUsCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmPsiIoSomeTotalUs").Str("field", "IoSomeTotalUs").Errorf("slot u64Array@sysmPsiIoSomeTotalUs (field IoSomeTotalUs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayIoSomeTotalUsVal = val
 			case kindSysmPsiIoFullTotalUs:
 				if u64ArrayIoFullTotalUsLastAttr != attrJ+1 {
 					u64ArrayIoFullTotalUsLastAttr = attrJ + 1
 					u64ArrayIoFullTotalUsCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmPsiIoFullTotalUs").Str("field", "IoFullTotalUs").Errorf("slot u64Array@sysmPsiIoFullTotalUs (field IoFullTotalUs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayIoFullTotalUsVal = val
 			}
 		}

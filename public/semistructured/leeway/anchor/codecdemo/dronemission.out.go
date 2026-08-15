@@ -214,7 +214,7 @@ type DroneMissionSymbolMembsReadI interface {
 
 // DroneMissionU64ArrayAttrsReadI is the Attributes-side view of the u64Array section.
 type DroneMissionU64ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -286,7 +286,11 @@ func DroneMissionFillFromArrow[
 						u64ArrayBatteryLastAttr = attrJ + 1
 						u64ArrayBatteryCount++
 					}
-					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "battery").Str("field", "Battery").Errorf("slot u64Array@battery (field Battery) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					u64ArrayBatteryVal = val
 				}
 			}
@@ -359,7 +363,11 @@ func DroneMissionReadRow[
 					u64ArrayBatteryLastAttr = attrJ + 1
 					u64ArrayBatteryCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "battery").Str("field", "Battery").Errorf("slot u64Array@battery (field Battery) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayBatteryVal = val
 			}
 		}

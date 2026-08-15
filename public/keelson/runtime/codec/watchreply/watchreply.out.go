@@ -375,7 +375,7 @@ type WatchReplyBoolMembsReadI interface {
 
 // WatchReplyStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
 type WatchReplyStringArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -397,7 +397,7 @@ type WatchReplySymbolMembsReadI interface {
 
 // WatchReplyTextArrayAttrsReadI is the Attributes-side view of the textArray section.
 type WatchReplyTextArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -479,7 +479,11 @@ func WatchReplyFillFromArrow[
 						stringArrayEventSubjectLastAttr = attrJ + 1
 						stringArrayEventSubjectCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "watchEventSubject").Str("field", "EventSubject").Errorf("slot stringArray@watchEventSubject (field EventSubject) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArrayEventSubjectVal = val
 				}
 			}
@@ -525,7 +529,11 @@ func WatchReplyFillFromArrow[
 						textArrayReasonLastAttr = attrJ + 1
 						textArrayReasonCount++
 					}
-					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Str("field", "Reason").Errorf("slot textArray@reason (field Reason) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					textArrayReasonVal = val
 				}
 			}
@@ -606,7 +614,11 @@ func WatchReplyReadRow[
 					stringArrayEventSubjectLastAttr = attrJ + 1
 					stringArrayEventSubjectCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "watchEventSubject").Str("field", "EventSubject").Errorf("slot stringArray@watchEventSubject (field EventSubject) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArrayEventSubjectVal = val
 			}
 		}
@@ -658,7 +670,11 @@ func WatchReplyReadRow[
 					textArrayReasonLastAttr = attrJ + 1
 					textArrayReasonCount++
 				}
-				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Str("field", "Reason").Errorf("slot textArray@reason (field Reason) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				textArrayReasonVal = val
 			}
 		}

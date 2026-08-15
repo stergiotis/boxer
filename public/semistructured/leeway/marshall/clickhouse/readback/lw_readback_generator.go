@@ -418,6 +418,30 @@ func (g *Generator) field(f *mappingplan.TaggedField, contract mappingplan.ReadC
 
 	countExpr := lwextract.CountEqual(lanes, lit)
 
+	// Value-count rung (ADR-0183 D5). The physical column admits N elements
+	// per attribute; `,unit` declares that N is one, and the projection
+	// above indexes element 1 on that promise. Both Go read paths refuse a
+	// longer value rather than silently taking the first element, so the
+	// conformance check says the same thing here — otherwise a row that no
+	// Go reader accepts still passes the Filter its own kind generates.
+	var unitCount string
+	if unit {
+		unitCount, err = lwextract.ValueCount(lwextract.Request{
+			Lanes:      lanes,
+			Shape:      loc.shape(),
+			Membership: lit,
+		})
+		if err != nil {
+			return
+		}
+	}
+	withUnitCount := func(term, bound string) string {
+		if unitCount == "" {
+			return term
+		}
+		return term + " AND " + unitCount + " " + bound
+	}
+
 	switch {
 	case f.IsConst:
 		// Fixed value: the membership is present exactly once and carries the
@@ -471,11 +495,13 @@ func (g *Generator) field(f *mappingplan.TaggedField, contract mappingplan.ReadC
 			res.valExpr = valExpr
 		}
 		res.optPresence = []presenceTerm{{col: idCol, lit: lit}}
-		res.validator = countExpr + " <= 1"
+		// An absent optional locates the empty list, whose count is zero, so
+		// the same "at most one" bound covers both absence and presence.
+		res.validator = withUnitCount(countExpr+" <= 1", "<= 1")
 	default:
 		res.valExpr = valExpr
 		res.presence = []presenceTerm{{col: idCol, lit: lit}}
-		res.validator = countExpr + " = 1"
+		res.validator = withUnitCount(countExpr+" = 1", "= 1")
 	}
 	return
 }

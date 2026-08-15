@@ -37,6 +37,7 @@ type DroneMission struct {
 
 	// Battery maps to anchor's u64Array section (non-scalar uint64).
 	// Single-value attribute via BeginAttributeSingle on the write
-	// path; single-value read via GetAttrValueSingleOrDefault.
+	// path; single-value read via GetAttrValueSingle, which refuses an
+	// attribute carrying more than the one value `,unit` promises.
 	Battery uint64 `lw:"battery,u64Array,unit"`
 }

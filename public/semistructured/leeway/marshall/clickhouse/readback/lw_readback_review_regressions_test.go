@@ -232,6 +232,58 @@ func TestRegressionUnitProjectsScalar(t *testing.T) {
 	}
 }
 
+// rbWideUnit writes the same two slots as a CONTAINER — several elements in
+// one attribute — which is what rbUnit's `,unit` fields declare cannot
+// happen.
+type rbWideUnit struct {
+	_ struct{} `kind:"rbUnitDrone"`
+
+	ID       uint64   `lw:",id"`
+	Tracking []byte   `lw:",naturalKey"`
+	Battery  []uint64 `lw:"battery,u64Array"`
+	Spare    []uint64 `lw:"spare,u64Array"`
+}
+
+// The Go read paths refuse a multi-element value under a `,unit` definition
+// (ADR-0183 D5), so the SQL conformance check has to say the same thing:
+// otherwise a row no Go reader accepts still passes the Filter its own kind
+// generates, and the projection quietly reports element 1 of a longer list.
+// The attribute count is one in every row here — only the value count
+// separates the conforming rows from the rest.
+func TestRegressionUnitRefusesMultiValued(t *testing.T) {
+	rows := []rbWideUnit{
+		{ID: 1, Tracking: []byte("A"), Battery: []uint64{88}, Spare: []uint64{7}},     // both single: conforms
+		{ID: 2, Tracking: []byte("B"), Battery: []uint64{88, 99}, Spare: []uint64{7}}, // required slot too wide
+		{ID: 3, Tracking: []byte("C"), Battery: []uint64{88}, Spare: []uint64{7, 8}},  // optional slot too wide
+		{ID: 4, Tracking: []byte("D"), Battery: []uint64{88}},                         // optional slot absent: conforms
+	}
+	lookup := marshallreflect.MapLookup{"battery": 11, "spare": 12}
+	plan, err := marshallreflect.PlanFor[rbUnit]()
+	if err != nil {
+		t.Fatalf("PlanFor: %v", err)
+	}
+	a, err := NewGenerator(buildAnchorIR(t), NewLookupResolver(lookup)).Generate(plan)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	arrowPath := rbMarshalArrow(t, rows, lookup)
+	script := HelperUDFsSQL() + "\nSELECT p.ID, val FROM (SELECT " +
+		a.Projection + " AS p, " + a.Validator + " AS val FROM file('" +
+		arrowPath + "', 'Arrow')) ORDER BY p.ID"
+	out := strings.TrimSpace(runClickHouseLocal(t, script))
+	want := []string{"1\t1", "2\t0", "3\t0", "4\t1"}
+	got := strings.Split(out, "\n")
+	if len(got) != len(want) {
+		t.Fatalf("want %d rows, got:\n%s\nscript:\n%s", len(want), out, script)
+	}
+	for i := range want {
+		if strings.TrimSpace(got[i]) != want[i] {
+			t.Errorf("row %d = %q, want %q — the validator's value-count term is what separates these\nscript:\n%s", i+1, got[i], want[i], script)
+		}
+	}
+}
+
 // Const on a non-scalar value section is rejected at generation time rather
 // than emitting `array = 'const'` SQL that errors at query time.
 func TestRegressionConstOnArrayRejected(t *testing.T) {

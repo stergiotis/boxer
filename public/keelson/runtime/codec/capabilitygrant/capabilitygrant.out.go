@@ -420,7 +420,7 @@ func CapabilityGrantAddSections[
 
 // CapabilityGrantStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
 type CapabilityGrantStringArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -530,7 +530,11 @@ func CapabilityGrantFillFromArrow[
 						stringArraySubjectLastAttr = attrJ + 1
 						stringArraySubjectCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "cgSubject").Str("field", "Subject").Errorf("slot stringArray@cgSubject (field Subject) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArraySubjectVal = val
 				}
 			}
@@ -687,7 +691,11 @@ func CapabilityGrantReadRow[
 					stringArraySubjectLastAttr = attrJ + 1
 					stringArraySubjectCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "cgSubject").Str("field", "Subject").Errorf("slot stringArray@cgSubject (field Subject) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArraySubjectVal = val
 			}
 		}

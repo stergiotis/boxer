@@ -234,7 +234,7 @@ type sysCpuSymbolMembsReadI interface {
 // sysCpuU8ArrayAttrsReadI is the Attributes-side view of the u8Array section.
 type sysCpuU8ArrayAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint8]
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint8
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint8, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -256,7 +256,7 @@ type sysCpuU32ArrayMembsReadI interface {
 
 // sysCpuF32ArrayAttrsReadI is the Attributes-side view of the f32Array section.
 type sysCpuF32ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) float32
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (float32, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -368,7 +368,11 @@ func sysCpuReadRow[
 					u8ArrayTotalPercentLastAttr = attrJ + 1
 					u8ArrayTotalPercentCount++
 				}
-				val := u8ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u8ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u8Array").Str("membership", "sysmCpuTotalPct").Str("field", "TotalPercent").Errorf("slot u8Array@sysmCpuTotalPct (field TotalPercent) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u8ArrayTotalPercentVal = val
 			case kindSysmCpuPerCorePct:
 				if u8ArrayPerCorePercentLastAttr != attrJ+1 {
@@ -446,28 +450,44 @@ func sysCpuReadRow[
 					f32ArrayLoadAvg1LastAttr = attrJ + 1
 					f32ArrayLoadAvg1Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmCpuLoadAvg1").Str("field", "LoadAvg1").Errorf("slot f32Array@sysmCpuLoadAvg1 (field LoadAvg1) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayLoadAvg1Val = val
 			case kindSysmCpuLoadAvg5:
 				if f32ArrayLoadAvg5LastAttr != attrJ+1 {
 					f32ArrayLoadAvg5LastAttr = attrJ + 1
 					f32ArrayLoadAvg5Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmCpuLoadAvg5").Str("field", "LoadAvg5").Errorf("slot f32Array@sysmCpuLoadAvg5 (field LoadAvg5) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayLoadAvg5Val = val
 			case kindSysmCpuLoadAvg15:
 				if f32ArrayLoadAvg15LastAttr != attrJ+1 {
 					f32ArrayLoadAvg15LastAttr = attrJ + 1
 					f32ArrayLoadAvg15Count++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmCpuLoadAvg15").Str("field", "LoadAvg15").Errorf("slot f32Array@sysmCpuLoadAvg15 (field LoadAvg15) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayLoadAvg15Val = val
 			case kindSysmCpuUsageWatts:
 				if f32ArrayUsageWattsLastAttr != attrJ+1 {
 					f32ArrayUsageWattsLastAttr = attrJ + 1
 					f32ArrayUsageWattsCount++
 				}
-				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "sysmCpuUsageWatts").Str("field", "UsageWatts").Errorf("slot f32Array@sysmCpuUsageWatts (field UsageWatts) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f32ArrayUsageWattsVal = val
 			}
 		}

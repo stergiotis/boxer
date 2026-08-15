@@ -541,6 +541,26 @@ type accumulator struct {
 	Count  int
 }
 
+// readSingleValue performs one single-value read through the accessor
+// goplan.SingleValueReadAccessor picks for the field's shape, and turns the
+// value-count refusal that accessor may report into an error naming the
+// field (ADR-0183 D5). The accessor's own error already carries the
+// section, the entity and attribute index, and the offending element count;
+// what it cannot know is which DTO field declared the value to be single,
+// which is the half a consumer needs to act.
+func readSingleValue(attrs reflect.Value, f mappingplan.TaggedField, i int, attrJ int64) (v reflect.Value, err error) {
+	method, reportsMismatch := goplan.SingleValueReadAccessor(f)
+	rets := mustCall(attrs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))
+	if reportsMismatch {
+		if e, _ := rets[len(rets)-1].Interface().(error); e != nil {
+			err = eb.Build().Str("field", f.GoFieldName).Str("section", f.LWSection).Str("membership", f.LWMembership).Errorf("slot %s@%s (field %s) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", f.LWSection, f.LWMembership, f.GoFieldName, e)
+			return
+		}
+	}
+	v = rets[0]
+	return
+}
+
 func consumeValue(attrs reflect.Value, i int, attrJ int64, f mappingplan.TaggedField, a *accumulator) (err error) {
 	switch {
 	case f.IsRoaring():
@@ -568,7 +588,11 @@ func consumeValue(attrs reflect.Value, i int, attrJ int64, f mappingplan.TaggedF
 	default:
 		// Single-value read — accessor chosen by field shape, shared with
 		// the codegen emitter via goplan.SingleValueReadAccessor.
-		v := mustCall(attrs, goplan.SingleValueReadAccessor(f), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+		v, verr := readSingleValue(attrs, f, i, attrJ)
+		if verr != nil {
+			err = verr
+			return
+		}
 		switch goplan.CopyStrategy(f.GoType()) {
 		case goplan.CopyFixedByte:
 			// Copy bytes into a fresh [N]byte array from the wire blob.
@@ -961,9 +985,6 @@ func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, me
 
 	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
 	carrierType := carrierStructType(row, f)
-	// Mirror the codegen emitter's accessor choice so the two front-ends read
-	// the same accessor (shared via goplan.SingleValueReadAccessor).
-	valMethod := goplan.SingleValueReadAccessor(*f)
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 
 	// A carrier section carries exactly one membership (resolveCarriers), so
@@ -1009,7 +1030,10 @@ func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, me
 				continue
 			}
 			carrierVal = cv
-			valAcc = readCarrierValue(attrs, f, valMethod, i, attrJ)
+			valAcc, err = readCarrierValue(attrs, f, i, attrJ)
+			if err != nil {
+				return
+			}
 			count++
 		}
 		if f.IsOption {
@@ -1070,8 +1094,14 @@ func readCarrierStruct(membs reflect.Value, f *mappingplan.TaggedField, carrierT
 
 // readCarrierValue reads a single section value for attribute attrJ into a
 // value of f's Go type, applying the per-type copy strategy.
-func readCarrierValue(attrs reflect.Value, f *mappingplan.TaggedField, valMethod string, i int, attrJ int64) reflect.Value {
-	v := mustCall(attrs, valMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+func readCarrierValue(attrs reflect.Value, f *mappingplan.TaggedField, i int, attrJ int64) (out reflect.Value, err error) {
+	// The accessor choice mirrors the codegen emitter's, shared via
+	// goplan.SingleValueReadAccessor, so the two front-ends read the same
+	// accessor and refuse the same values.
+	v, err := readSingleValue(attrs, *f, i, attrJ)
+	if err != nil {
+		return
+	}
 	switch goplan.CopyStrategy(f.GoType()) {
 	case goplan.CopyFixedByte:
 		arr := reflect.New(goTypeReflect(f.GoType())).Elem()
@@ -1079,12 +1109,13 @@ func readCarrierValue(attrs reflect.Value, f *mappingplan.TaggedField, valMethod
 		for k := 0; k < arr.Len() && k < len(src); k++ {
 			arr.Index(k).SetUint(uint64(src[k]))
 		}
-		return arr
+		out = arr
 	case goplan.CopyBytes:
-		return reflect.ValueOf(append([]byte(nil), v.Bytes()...))
+		out = reflect.ValueOf(append([]byte(nil), v.Bytes()...))
 	default:
-		return v
+		out = v
 	}
+	return
 }
 
 // goTypeReflect maps the source-form Go type name back to the

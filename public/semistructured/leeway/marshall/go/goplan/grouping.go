@@ -278,20 +278,34 @@ func ClassifyBegin(f mappingplan.TaggedField) FieldBeginShape {
 }
 
 // SingleValueReadAccessor returns the RA accessor that yields a field's
-// single per-attribute value: GetAttrValueValue for the scalar-section
-// shape (ShapeScalarBegin, whose section exposes the value directly),
-// GetAttrValueSingleOrDefault otherwise (the HA / single-slot sections).
+// single per-attribute value, and whether that accessor reports a
+// value-count mismatch as a trailing error.
+//
+// GetAttrValueValue for the scalar-section shape (ShapeScalarBegin, whose
+// section exposes the value directly — one value per attribute by
+// construction, so there is nothing to report). GetAttrValueSingle
+// otherwise (the HA / single-slot sections): their column physically
+// admits N elements per attribute, and a `,unit` field declares that N is
+// one, so N != 1 is a contract violation the accessor names
+// (ADR-0183 D5).
+//
+// Its lenient sibling GetAttrValueSingleOrDefault stays on the RA surface
+// — a caller may want the zero value — but no codec front-end reads
+// through it any more: a multi-element value under a unit definition
+// decoded as a present row with the field zero-filled, which no reader
+// could tell from a legitimate zero.
+//
 // Both back-ends route their single-value reads through here — the codegen
 // emitter prints the returned name, the reflect codec calls it via
 // mustCall — so the accessor choice cannot drift between them (it
 // previously lived as four hand-copied switches, two of which silently
 // omitted a shape).
-func SingleValueReadAccessor(f mappingplan.TaggedField) string {
+func SingleValueReadAccessor(f mappingplan.TaggedField) (method string, reportsMismatch bool) {
 	switch ClassifyBegin(f) {
 	case ShapeScalarBegin:
-		return "GetAttrValueValue"
+		return "GetAttrValueValue", false
 	default:
-		return "GetAttrValueSingleOrDefault"
+		return "GetAttrValueSingle", true
 	}
 }
 

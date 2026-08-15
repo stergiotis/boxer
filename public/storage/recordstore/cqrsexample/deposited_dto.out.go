@@ -69,7 +69,7 @@ func depositedAddSections[
 
 // depositedAcctDepositAttrsReadI is the Attributes-side view of the acctDeposit section.
 type depositedAcctDepositAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -107,7 +107,11 @@ func depositedReadRow[
 					acctDepositAmountLastAttr = attrJ + 1
 					acctDepositAmountCount++
 				}
-				val := acctDepositAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := acctDepositAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "acctDeposit").Str("membership", "ledgerDeposit").Str("field", "Amount").Errorf("slot acctDeposit@ledgerDeposit (field Amount) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				acctDepositAmountVal = val
 			}
 		}

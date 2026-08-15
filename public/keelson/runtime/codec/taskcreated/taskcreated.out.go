@@ -468,7 +468,7 @@ func TaskCreatedAddSections[
 
 // TaskCreatedStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
 type TaskCreatedStringArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -490,7 +490,7 @@ type TaskCreatedSymbolMembsReadI interface {
 
 // TaskCreatedTextArrayAttrsReadI is the Attributes-side view of the textArray section.
 type TaskCreatedTextArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -501,7 +501,7 @@ type TaskCreatedTextArrayMembsReadI interface {
 
 // TaskCreatedU64ArrayAttrsReadI is the Attributes-side view of the u64Array section.
 type TaskCreatedU64ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -523,7 +523,7 @@ type TaskCreatedBoolMembsReadI interface {
 
 // TaskCreatedI64ArrayAttrsReadI is the Attributes-side view of the i64Array section.
 type TaskCreatedI64ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) int64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (int64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -596,21 +596,33 @@ func TaskCreatedFillFromArrow[
 						stringArrayTaskIdLastAttr = attrJ + 1
 						stringArrayTaskIdCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "taskId").Str("field", "TaskId").Errorf("slot stringArray@taskId (field TaskId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArrayTaskIdVal = val
 				case kindAppId:
 					if stringArrayOwnerAppIdLastAttr != attrJ+1 {
 						stringArrayOwnerAppIdLastAttr = attrJ + 1
 						stringArrayOwnerAppIdCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "appId").Str("field", "OwnerAppId").Errorf("slot stringArray@appId (field OwnerAppId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArrayOwnerAppIdVal = val
 				case kindRunId:
 					if stringArrayOwnerRunIdLastAttr != attrJ+1 {
 						stringArrayOwnerRunIdLastAttr = attrJ + 1
 						stringArrayOwnerRunIdCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "runId").Str("field", "OwnerRunId").Errorf("slot stringArray@runId (field OwnerRunId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArrayOwnerRunIdVal = val
 				}
 			}
@@ -666,7 +678,11 @@ func TaskCreatedFillFromArrow[
 						textArrayTitleLastAttr = attrJ + 1
 						textArrayTitleCount++
 					}
-					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "title").Str("field", "Title").Errorf("slot textArray@title (field Title) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					textArrayTitleVal = val
 				}
 			}
@@ -689,7 +705,11 @@ func TaskCreatedFillFromArrow[
 						u64ArrayOwnerTileKeyLastAttr = attrJ + 1
 						u64ArrayOwnerTileKeyCount++
 					}
-					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "tileKey").Str("field", "OwnerTileKey").Errorf("slot u64Array@tileKey (field OwnerTileKey) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					u64ArrayOwnerTileKeyVal = val
 				}
 			}
@@ -735,7 +755,11 @@ func TaskCreatedFillFromArrow[
 						i64ArrayEstimatedMsLastAttr = attrJ + 1
 						i64ArrayEstimatedMsCount++
 					}
-					val := i64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := i64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "taskEstimatedMs").Str("field", "EstimatedMs").Errorf("slot i64Array@taskEstimatedMs (field EstimatedMs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					i64ArrayEstimatedMsVal = val
 				}
 			}
@@ -804,21 +828,33 @@ func TaskCreatedReadRow[
 					stringArrayTaskIdLastAttr = attrJ + 1
 					stringArrayTaskIdCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "taskId").Str("field", "TaskId").Errorf("slot stringArray@taskId (field TaskId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArrayTaskIdVal = val
 			case kindAppId:
 				if stringArrayOwnerAppIdLastAttr != attrJ+1 {
 					stringArrayOwnerAppIdLastAttr = attrJ + 1
 					stringArrayOwnerAppIdCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "appId").Str("field", "OwnerAppId").Errorf("slot stringArray@appId (field OwnerAppId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArrayOwnerAppIdVal = val
 			case kindRunId:
 				if stringArrayOwnerRunIdLastAttr != attrJ+1 {
 					stringArrayOwnerRunIdLastAttr = attrJ + 1
 					stringArrayOwnerRunIdCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "runId").Str("field", "OwnerRunId").Errorf("slot stringArray@runId (field OwnerRunId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArrayOwnerRunIdVal = val
 			}
 		}
@@ -886,7 +922,11 @@ func TaskCreatedReadRow[
 					textArrayTitleLastAttr = attrJ + 1
 					textArrayTitleCount++
 				}
-				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "title").Str("field", "Title").Errorf("slot textArray@title (field Title) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				textArrayTitleVal = val
 			}
 		}
@@ -912,7 +952,11 @@ func TaskCreatedReadRow[
 					u64ArrayOwnerTileKeyLastAttr = attrJ + 1
 					u64ArrayOwnerTileKeyCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "tileKey").Str("field", "OwnerTileKey").Errorf("slot u64Array@tileKey (field OwnerTileKey) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayOwnerTileKeyVal = val
 			}
 		}
@@ -964,7 +1008,11 @@ func TaskCreatedReadRow[
 					i64ArrayEstimatedMsLastAttr = attrJ + 1
 					i64ArrayEstimatedMsCount++
 				}
-				val := i64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := i64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "taskEstimatedMs").Str("field", "EstimatedMs").Errorf("slot i64Array@taskEstimatedMs (field EstimatedMs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				i64ArrayEstimatedMsVal = val
 			}
 		}

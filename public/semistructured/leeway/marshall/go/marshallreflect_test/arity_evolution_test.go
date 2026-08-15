@@ -166,18 +166,18 @@ func TestArityEvolution_UnitToContainer(t *testing.T) {
 	require.Equal(t, []uint64{10, 20, 30}, got[2].Battery, "a wide-written row reads unchanged beside it")
 }
 
-// TestArityEvolution_NarrowingIsSilent pins the reverse direction AS FOUND —
-// and what it finds is a defect candidate, not a contract: a two-element
-// container-written value read under the narrow unit definition neither
-// errors nor truncates; it decodes a present row with the field ZERO-FILLED.
-// Attribute-count narrowing is loud (D4, arity_enforcement_test.go); this
-// value-count rung is silent, indistinguishable from a legitimate zero.
-// Recorded as R7's narrowing finding in
-// doc/adr-background-work/leeway-components-consumer-complexity.md; the
-// D4-consistent behaviour would be an error naming the slot. If this test
-// starts failing because an error appears, that is the fix arriving — move
-// the assertions, not the behaviour, back.
-func TestArityEvolution_NarrowingIsSilent(t *testing.T) {
+// TestArityEvolution_NarrowingIsLoud pins the reverse direction: a
+// two-element container-written value read under the narrow unit definition
+// is refused, naming the field that declared the value single (ADR-0183 D5).
+//
+// It used to decode a present row with the field ZERO-FILLED — no error, no
+// truncation, and nothing to tell it from a legitimate zero. That was R7's
+// narrowing finding in
+// doc/adr-background-work/leeway-components-consumer-complexity.md, and the
+// rung below D4's attribute-count discipline (arity_enforcement_test.go):
+// narrowing is the breaking direction, so it must be loud on every read
+// path.
+func TestArityEvolution_NarrowingIsLoud(t *testing.T) {
 	lookup := marshallreflect.MapLookup{"battery": 9}
 
 	table := anchor.NewInEntityTestTable(memory.NewGoAllocator(), 1)
@@ -195,9 +195,34 @@ func TestArityEvolution_NarrowingIsSilent(t *testing.T) {
 	readers, release := evReaders(t, recs[0], "u64Array")
 	defer release()
 	var got []evNarrowUnit
-	require.NoError(t, marshallreflect.Unmarshal(readers, &got, lookup),
-		"pinned as found: no error is raised today")
+	err = marshallreflect.Unmarshal(readers, &got, lookup)
+	require.Error(t, err, "a multi-element value under a unit definition is a contract violation, not a zero")
+	require.ErrorContains(t, err, "Battery", "the error names the field that declared the value single")
+	require.ErrorContains(t, err, "exactly one")
+}
+
+// A unit definition still reads the one-element rows it was written for —
+// the refusal above is about the count, not about the shape crossing, and
+// the narrow reader keeps working over its own generation's data.
+func TestArityEvolution_NarrowUnitReadsItsOwnRows(t *testing.T) {
+	lookup := marshallreflect.MapLookup{"battery": 9}
+
+	table := anchor.NewInEntityTestTable(memory.NewGoAllocator(), 1)
+	require.NoError(t, marshallreflect.Marshal(table, []evNarrowUnit{
+		{ID: 5, Tracking: []byte("E"), Battery: 8500},
+	}, lookup))
+	recs, err := table.TransferRecords(nil)
+	require.NoError(t, err)
+	defer func() {
+		for _, r := range recs {
+			r.Release()
+		}
+	}()
+
+	readers, release := evReaders(t, recs[0], "u64Array")
+	defer release()
+	var got []evNarrowUnit
+	require.NoError(t, marshallreflect.Unmarshal(readers, &got, lookup))
 	require.Len(t, got, 1)
-	require.Equal(t, uint64(0), got[0].Battery,
-		"pinned as found: the multi-element value zero-fills — the silent class")
+	require.Equal(t, uint64(8500), got[0].Battery)
 }

@@ -1158,7 +1158,7 @@ func (inst *ReadAccessWidgetTablePlainEntityRoutingAttributes) GetAttrValueSingl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1968
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1976
 
 func (inst *ReadAccessWidgetTableTaggedSymbolAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
@@ -1182,7 +1182,7 @@ func (inst *ReadAccessWidgetTableTaggedGeoPointAttributes) GetNumberOfAttributes
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2066
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2074
 
 type ReadAccessWidgetTableTaggedSymbol struct {
 	Attributes  *ReadAccessWidgetTableTaggedSymbolAttributes
@@ -1535,7 +1535,7 @@ func (inst *ReadAccessWidgetTableTaggedGeoPoint) GetSectionMembershipSpec() comm
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2416
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2424
 
 type ReadAccessWidgetTable struct {
 	EntityId        *ReadAccessWidgetTablePlainEntityIdAttributes

@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwextract"
 )
 
 // udfTruthTestSQL is the truth-table that exercises every helper UDF; it
@@ -43,6 +45,59 @@ func TestHelperUDFs_TruthTable(t *testing.T) {
 	out := runClickHouseLocal(t, HelperUDFsSQL()+"\n"+udfTruthTestSQL)
 	if failed := strings.TrimSpace(out); failed != "" {
 		t.Fatalf("UDF truth-table checks failed:\n%s", failed)
+	}
+}
+
+// TestValueCountMatchesTheUdfPack pins the one place a rendered expression
+// restates what a helper UDF does. lwextract.ValueCount cannot call
+// LW_LIST_BY_TAG_EQUAL / LW_RAGGED_PARENT_IDS, because its term lands in the
+// Filter a generated Scan embeds where no helper pack is installed
+// (ADR-0100 S2) — so it locates the owning attribute with built-ins and reads
+// the length lane there. That is a restatement, and a restatement drifts
+// unless something compares the two. This runs both forms over the same
+// fixtures, including the shapes the built-in form has to get right on its
+// own: an attribute carrying several memberships, one carrying none, and an
+// absent membership (where the search would otherwise answer attribute 1).
+func TestValueCountMatchesTheUdfPack(t *testing.T) {
+	lanes := lwextract.Lanes{Value: "valFlat", Ident: "tags", Card: "card", Length: "lens"}
+	udf, err := lwextract.Value(lwextract.Request{Lanes: lanes, Shape: lwextract.ShapeList, Membership: "t"})
+	if err != nil {
+		t.Fatalf("Value: %v", err)
+	}
+	builtin, err := lwextract.ValueCount(lwextract.Request{Lanes: lanes, Shape: lwextract.ShapeList, Membership: "t"})
+	if err != nil {
+		t.Fatalf("ValueCount: %v", err)
+	}
+	if strings.Contains(builtin, "LW_") {
+		t.Fatalf("the value count must stay inside the built-ins-only budget:\n%s", builtin)
+	}
+
+	// Per fixture: the per-attribute membership cardinality, the per-attribute
+	// element count, the flattened membership tags, and the tag to look for.
+	fixtures := []string{
+		"[1, 1, 1] AS card, [1, 2, 1] AS lens, [7, 8, 9] AS tags, 8 AS t", // one membership each
+		"[2, 1] AS card, [3, 1] AS lens, [7, 8, 9] AS tags, 8 AS t",       // an attribute carrying two
+		"[0, 2, 1] AS card, [0, 2, 5] AS lens, [7, 8, 9] AS tags, 8 AS t", // an attribute carrying none
+		"[2, 1] AS card, [3, 1] AS lens, [7, 8, 9] AS tags, 42 AS t",      // absent
+		"[1, 1, 1] AS card, [0, 4, 1] AS lens, [7, 8, 9] AS tags, 7 AS t", // an empty list first
+		"[1, 3] AS card, [2, 6] AS lens, [7, 8, 9, 10] AS tags, 10 AS t",  // last membership of the last attribute
+	}
+	var sb strings.Builder
+	sb.WriteString(HelperUDFsSQL())
+	for _, f := range fixtures {
+		sb.WriteString("\nSELECT length(" + udf + ") AS viaUdf, " + builtin + " AS viaBuiltin FROM (SELECT " + f +
+			", arrayFlatten(arrayMap((n) -> range(n), lens)) AS valFlat);")
+	}
+	out := strings.TrimSpace(runClickHouseLocal(t, sb.String()))
+	rows := strings.Split(out, "\n")
+	if len(rows) != len(fixtures) {
+		t.Fatalf("want %d rows, got:\n%s", len(fixtures), out)
+	}
+	for i, row := range rows {
+		cols := strings.Split(strings.TrimSpace(row), "\t")
+		if len(cols) != 2 || cols[0] != cols[1] {
+			t.Errorf("fixture %d (%s): UDF form and built-in form disagree: %q", i, fixtures[i], row)
+		}
 	}
 }
 

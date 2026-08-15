@@ -152,7 +152,7 @@ type sysMemSymbolMembsReadI interface {
 
 // sysMemU64ArrayAttrsReadI is the Attributes-side view of the u64Array section.
 type sysMemU64ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -268,77 +268,121 @@ func sysMemReadRow[
 					u64ArrayTotalBytesLastAttr = attrJ + 1
 					u64ArrayTotalBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemTotalBytes").Str("field", "TotalBytes").Errorf("slot u64Array@sysmMemTotalBytes (field TotalBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayTotalBytesVal = val
 			case kindSysmMemFreeBytes:
 				if u64ArrayFreeBytesLastAttr != attrJ+1 {
 					u64ArrayFreeBytesLastAttr = attrJ + 1
 					u64ArrayFreeBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemFreeBytes").Str("field", "FreeBytes").Errorf("slot u64Array@sysmMemFreeBytes (field FreeBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayFreeBytesVal = val
 			case kindSysmMemAvailableBytes:
 				if u64ArrayAvailableBytesLastAttr != attrJ+1 {
 					u64ArrayAvailableBytesLastAttr = attrJ + 1
 					u64ArrayAvailableBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemAvailableBytes").Str("field", "AvailableBytes").Errorf("slot u64Array@sysmMemAvailableBytes (field AvailableBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayAvailableBytesVal = val
 			case kindSysmMemBuffersBytes:
 				if u64ArrayBuffersBytesLastAttr != attrJ+1 {
 					u64ArrayBuffersBytesLastAttr = attrJ + 1
 					u64ArrayBuffersBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemBuffersBytes").Str("field", "BuffersBytes").Errorf("slot u64Array@sysmMemBuffersBytes (field BuffersBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayBuffersBytesVal = val
 			case kindSysmMemCachedBytes:
 				if u64ArrayCachedBytesLastAttr != attrJ+1 {
 					u64ArrayCachedBytesLastAttr = attrJ + 1
 					u64ArrayCachedBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemCachedBytes").Str("field", "CachedBytes").Errorf("slot u64Array@sysmMemCachedBytes (field CachedBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayCachedBytesVal = val
 			case kindSysmMemSwapTotalBytes:
 				if u64ArraySwapTotalBytesLastAttr != attrJ+1 {
 					u64ArraySwapTotalBytesLastAttr = attrJ + 1
 					u64ArraySwapTotalBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemSwapTotalBytes").Str("field", "SwapTotalBytes").Errorf("slot u64Array@sysmMemSwapTotalBytes (field SwapTotalBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArraySwapTotalBytesVal = val
 			case kindSysmMemSwapFreeBytes:
 				if u64ArraySwapFreeBytesLastAttr != attrJ+1 {
 					u64ArraySwapFreeBytesLastAttr = attrJ + 1
 					u64ArraySwapFreeBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemSwapFreeBytes").Str("field", "SwapFreeBytes").Errorf("slot u64Array@sysmMemSwapFreeBytes (field SwapFreeBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArraySwapFreeBytesVal = val
 			case kindSysmMemUsedBytes:
 				if u64ArrayUsedBytesLastAttr != attrJ+1 {
 					u64ArrayUsedBytesLastAttr = attrJ + 1
 					u64ArrayUsedBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemUsedBytes").Str("field", "UsedBytes").Errorf("slot u64Array@sysmMemUsedBytes (field UsedBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayUsedBytesVal = val
 			case kindSysmMemSwapUsedBytes:
 				if u64ArraySwapUsedBytesLastAttr != attrJ+1 {
 					u64ArraySwapUsedBytesLastAttr = attrJ + 1
 					u64ArraySwapUsedBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemSwapUsedBytes").Str("field", "SwapUsedBytes").Errorf("slot u64Array@sysmMemSwapUsedBytes (field SwapUsedBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArraySwapUsedBytesVal = val
 			case kindSysmMemArcSizeBytes:
 				if u64ArrayARCSizeBytesLastAttr != attrJ+1 {
 					u64ArrayARCSizeBytesLastAttr = attrJ + 1
 					u64ArrayARCSizeBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemArcSizeBytes").Str("field", "ARCSizeBytes").Errorf("slot u64Array@sysmMemArcSizeBytes (field ARCSizeBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayARCSizeBytesVal = val
 			case kindSysmMemArcMinBytes:
 				if u64ArrayARCMinBytesLastAttr != attrJ+1 {
 					u64ArrayARCMinBytesLastAttr = attrJ + 1
 					u64ArrayARCMinBytesCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmMemArcMinBytes").Str("field", "ARCMinBytes").Errorf("slot u64Array@sysmMemArcMinBytes (field ARCMinBytes) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayARCMinBytesVal = val
 			}
 		}

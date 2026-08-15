@@ -457,7 +457,7 @@ func TaskProgressAddSections[
 
 // TaskProgressStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
 type TaskProgressStringArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -468,7 +468,7 @@ type TaskProgressStringArrayMembsReadI interface {
 
 // TaskProgressU64ArrayAttrsReadI is the Attributes-side view of the u64Array section.
 type TaskProgressU64ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -490,7 +490,7 @@ type TaskProgressSymbolMembsReadI interface {
 
 // TaskProgressF64ArrayAttrsReadI is the Attributes-side view of the f64Array section.
 type TaskProgressF64ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) float64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (float64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -501,7 +501,7 @@ type TaskProgressF64ArrayMembsReadI interface {
 
 // TaskProgressI64ArrayAttrsReadI is the Attributes-side view of the i64Array section.
 type TaskProgressI64ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) int64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (int64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -512,7 +512,7 @@ type TaskProgressI64ArrayMembsReadI interface {
 
 // TaskProgressTextArrayAttrsReadI is the Attributes-side view of the textArray section.
 type TaskProgressTextArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -579,7 +579,11 @@ func TaskProgressFillFromArrow[
 						stringArrayTaskIdLastAttr = attrJ + 1
 						stringArrayTaskIdCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "taskId").Str("field", "TaskId").Errorf("slot stringArray@taskId (field TaskId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArrayTaskIdVal = val
 				}
 			}
@@ -605,14 +609,22 @@ func TaskProgressFillFromArrow[
 						u64ArrayCurrentLastAttr = attrJ + 1
 						u64ArrayCurrentCount++
 					}
-					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "progressCurrent").Str("field", "Current").Errorf("slot u64Array@progressCurrent (field Current) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					u64ArrayCurrentVal = val
 				case kindProgressTotal:
 					if u64ArrayTotalLastAttr != attrJ+1 {
 						u64ArrayTotalLastAttr = attrJ + 1
 						u64ArrayTotalCount++
 					}
-					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "progressTotal").Str("field", "Total").Errorf("slot u64Array@progressTotal (field Total) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					u64ArrayTotalVal = val
 				}
 			}
@@ -663,7 +675,11 @@ func TaskProgressFillFromArrow[
 						f64ArrayThroughputPerSecLastAttr = attrJ + 1
 						f64ArrayThroughputPerSecCount++
 					}
-					val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := f64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "f64Array").Str("membership", "progressThroughputPerSec").Str("field", "ThroughputPerSec").Errorf("slot f64Array@progressThroughputPerSec (field ThroughputPerSec) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					f64ArrayThroughputPerSecVal = val
 				}
 			}
@@ -686,7 +702,11 @@ func TaskProgressFillFromArrow[
 						i64ArrayEtaMsLastAttr = attrJ + 1
 						i64ArrayEtaMsCount++
 					}
-					val := i64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := i64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "progressEtaMs").Str("field", "EtaMs").Errorf("slot i64Array@progressEtaMs (field EtaMs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					i64ArrayEtaMsVal = val
 				}
 			}
@@ -709,7 +729,11 @@ func TaskProgressFillFromArrow[
 						textArrayNoteLastAttr = attrJ + 1
 						textArrayNoteCount++
 					}
-					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "note").Str("field", "Note").Errorf("slot textArray@note (field Note) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					textArrayNoteVal = val
 				}
 			}
@@ -772,7 +796,11 @@ func TaskProgressReadRow[
 					stringArrayTaskIdLastAttr = attrJ + 1
 					stringArrayTaskIdCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "taskId").Str("field", "TaskId").Errorf("slot stringArray@taskId (field TaskId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArrayTaskIdVal = val
 			}
 		}
@@ -801,14 +829,22 @@ func TaskProgressReadRow[
 					u64ArrayCurrentLastAttr = attrJ + 1
 					u64ArrayCurrentCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "progressCurrent").Str("field", "Current").Errorf("slot u64Array@progressCurrent (field Current) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayCurrentVal = val
 			case kindProgressTotal:
 				if u64ArrayTotalLastAttr != attrJ+1 {
 					u64ArrayTotalLastAttr = attrJ + 1
 					u64ArrayTotalCount++
 				}
-				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "progressTotal").Str("field", "Total").Errorf("slot u64Array@progressTotal (field Total) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				u64ArrayTotalVal = val
 			}
 		}
@@ -868,7 +904,11 @@ func TaskProgressReadRow[
 					f64ArrayThroughputPerSecLastAttr = attrJ + 1
 					f64ArrayThroughputPerSecCount++
 				}
-				val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := f64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "f64Array").Str("membership", "progressThroughputPerSec").Str("field", "ThroughputPerSec").Errorf("slot f64Array@progressThroughputPerSec (field ThroughputPerSec) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				f64ArrayThroughputPerSecVal = val
 			}
 		}
@@ -894,7 +934,11 @@ func TaskProgressReadRow[
 					i64ArrayEtaMsLastAttr = attrJ + 1
 					i64ArrayEtaMsCount++
 				}
-				val := i64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := i64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "progressEtaMs").Str("field", "EtaMs").Errorf("slot i64Array@progressEtaMs (field EtaMs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				i64ArrayEtaMsVal = val
 			}
 		}
@@ -920,7 +964,11 @@ func TaskProgressReadRow[
 					textArrayNoteLastAttr = attrJ + 1
 					textArrayNoteCount++
 				}
-				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "note").Str("field", "Note").Errorf("slot textArray@note (field Note) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				textArrayNoteVal = val
 			}
 		}

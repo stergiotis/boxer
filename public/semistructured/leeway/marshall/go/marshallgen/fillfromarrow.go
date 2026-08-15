@@ -47,8 +47,9 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g g
 	// this section. Section is scalar (only GetAttrValueValue T) iff
 	// every field uses a scalar-section write shape (no Unit, no
 	// container); non-scalar otherwise (GetAttrValueValue iter.Seq[T]
-	// for container shapes, GetAttrValueSingleOrDefault T for Unit
-	// single-value shapes).
+	// for container shapes, GetAttrValueSingle (T, error) for Unit
+	// single-value shapes — the error is the value-count refusal,
+	// ADR-0183 D5).
 	var hasScalarValue, hasSingleVal, hasIterVal bool
 	for _, sc := range g.SubColumns {
 		for _, f := range sc.Fields {
@@ -102,7 +103,7 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g g
 				linef(sb, 1, "GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]", vt)
 			}
 			if hasSingleVal {
-				linef(sb, 1, "GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) %s", vt)
+				linef(sb, 1, "GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (%s, error)", vt)
 			}
 		}
 	}
@@ -562,6 +563,47 @@ func writeCarrierMembLoopHeader(sb *strings.Builder, depth int, f mappingplan.Ta
 	}
 }
 
+// singleValueCall renders the single-value read call for a field and reports
+// whether the accessor returns a trailing error — the value-count refusal a
+// `,unit` field's column can raise (ADR-0183 D5). The accessor choice is
+// goplan.SingleValueReadAccessor's, shared with the reflect codec so the two
+// front-ends cannot pick different accessors, nor refuse different values,
+// for the same shape.
+func singleValueCall(f mappingplan.TaggedField, attrsVar string) (call string, reportsMismatch bool) {
+	method, reportsMismatch := goplan.SingleValueReadAccessor(f)
+	call = fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, method)
+	return
+}
+
+// writeValueCountRefusal emits the check on a single-value read's trailing
+// error. The accessor's own message carries the section and the entity /
+// attribute index; this adds the row and the DTO field that declared the
+// value single, which is what tells a consumer where to look.
+func writeValueCountRefusal(sb *strings.Builder, depth int, f mappingplan.TaggedField, errVar string) {
+	linef(sb, depth, "if %s != nil {", errVar)
+	linef(sb, depth+1, "err = eb.Build().Int(\"row\", i).Str(\"section\", %q).Str(\"membership\", %q).Str(\"field\", %q).Errorf(\"slot %s@%s (field %s) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %%w\", %s)",
+		f.LWSection, f.LWMembership, f.GoFieldName, f.LWSection, f.LWMembership, f.GoFieldName, errVar)
+	line(sb, depth+1, "return")
+	line(sb, depth, "}")
+}
+
+// writeSingleValueSource emits whatever the caller needs before reading a
+// field's single per-attribute value, and returns the expression to read it
+// from plus whether that expression is a local it bound. For an accessor
+// that cannot report a value-count mismatch nothing is emitted and the
+// expression is the call itself; for one that can (the `,unit` shapes) the
+// call is bound to `val` and its error refused first, so the caller's own
+// emission stays a plain expression either way.
+func writeSingleValueSource(sb *strings.Builder, depth int, f mappingplan.TaggedField, attrsVar string) (expr string, bound bool) {
+	call, reportsMismatch := singleValueCall(f, attrsVar)
+	if !reportsMismatch {
+		return call, false
+	}
+	linef(sb, depth, "val, valErr := %s", call)
+	writeValueCountRefusal(sb, depth, f, "valErr")
+	return "val", true
+}
+
 // writeCarrierValueRead emits the read of a single section value into valVar at
 // the given depth — a defensive copy for []byte / fixed-byte, straight
 // assignment otherwise.
@@ -582,7 +624,6 @@ func writeCarrierScalarDecode(sb *strings.Builder, f mappingplan.TaggedField, at
 	valVar := prefix + f.GoFieldName + "Val"
 	carrierVar := prefix + f.GoFieldName + "Carrier"
 	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
-	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, goplan.SingleValueReadAccessor(f))
 
 	linef(sb, 2, "var %s %s", valVar, f.GoType())
 	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
@@ -590,6 +631,7 @@ func writeCarrierScalarDecode(sb *strings.Builder, f mappingplan.TaggedField, at
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
 	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
 	writeCarrierMembLoopHeader(sb, 3, f, membsVar, readMethod)
+	valRead, _ := writeSingleValueSource(sb, 4, f, attrsVar)
 	writeCarrierValueRead(sb, 4, f, valVar, valRead)
 	linef(sb, 4, "%s = %s", carrierVar, carrierStructLiteral(f, carrierMembValExpr(f), "params"))
 	linef(sb, 4, "%sCount++", prefix)
@@ -610,7 +652,6 @@ func writeCarrierOptionDecode(sb *strings.Builder, f mappingplan.TaggedField, at
 	valVar := prefix + f.GoFieldName + "Val"
 	carrierVar := prefix + f.GoFieldName + "Carrier"
 	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
-	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, goplan.SingleValueReadAccessor(f))
 
 	linef(sb, 2, "var %s %s", valVar, f.GoType())
 	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
@@ -618,6 +659,7 @@ func writeCarrierOptionDecode(sb *strings.Builder, f mappingplan.TaggedField, at
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
 	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
 	writeCarrierMembLoopHeader(sb, 3, f, membsVar, readMethod)
+	valRead, _ := writeSingleValueSource(sb, 4, f, attrsVar)
 	writeCarrierValueRead(sb, 4, f, valVar, valRead)
 	linef(sb, 4, "%s = %s", carrierVar, carrierStructLiteral(f, carrierMembValExpr(f), "params"))
 	linef(sb, 4, "%sCount++", prefix)
@@ -745,12 +787,6 @@ func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, 
 		// arity is still checked, and nothing is consumed.
 		return
 	}
-	// Single-value read accessor chosen by field shape, shared with the
-	// reflect codec via goplan.SingleValueReadAccessor so the two
-	// front-ends cannot pick different accessors for the same shape.
-	singleVal := func() string {
-		return fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, goplan.SingleValueReadAccessor(f))
-	}
 	switch {
 	case f.IsSlice():
 		linef(sb, 5, "for v := range %s.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", attrsVar)
@@ -774,7 +810,12 @@ func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, 
 		// append time (writeFieldAppend writes the Has bool); the
 		// per-attribute fill into <prefix><Field>Val / Count is identical, so
 		// both shapes share this arm.
-		linef(sb, 5, "val := %s", singleVal())
+		valRead, bound := writeSingleValueSource(sb, 5, f, attrsVar)
+		if !bound {
+			// Nothing was bound above; bind the local the copy strategies
+			// below read from.
+			linef(sb, 5, "val := %s", valRead)
+		}
 		switch goplan.CopyStrategy(f.GoType()) {
 		case goplan.CopyFixedByte:
 			linef(sb, 5, "copy(%s%sVal[:], val)", prefix, f.GoFieldName)

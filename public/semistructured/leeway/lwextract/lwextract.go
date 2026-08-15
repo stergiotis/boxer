@@ -134,6 +134,55 @@ func Value(req Request) (expr string, err error) {
 	return
 }
 
+// ValueCount renders how many elements the located list carries — the
+// value-count half of the read surface, for a validator that pins how many
+// a `,unit` slot may hold (ADR-0183 D5). An absent membership renders 0,
+// following Value's type-default rule: locating nothing yields the empty
+// list, whose length is zero.
+//
+// Unlike Value this uses ClickHouse BUILT-INS ONLY, because a validator term
+// ends up inside the Filter a generated Scan embeds, which must run where the
+// leeway helper pack is not installed (ADR-0100 S2). The count needs only the
+// length lane at the owning attribute, never the values, so it can stay
+// inside that budget where locating the list itself cannot.
+//
+// ShapeScalar carries one value per attribute by construction, so there is
+// no such count to render and the request is rejected rather than answered
+// with a constant. Request.Unit is ignored — the count is of the list, not
+// of the element the unit shape indexes out of it.
+func ValueCount(req Request) (expr string, err error) {
+	if req.Shape != ShapeList {
+		err = eb.Build().Stringer("shape", req.Shape).Errorf("a value count is only defined for a list extraction")
+		return
+	}
+	req.Unit = false
+	err = req.validate()
+	if err != nil {
+		return
+	}
+	l := req.Lanes
+	at := "indexOf(" + l.Ident + ", " + req.Membership + ")"
+	if l.Card == "" {
+		// One membership per attribute makes the membership index the
+		// attribute index. An absent membership indexes at 0, which
+		// ClickHouse answers with the type default — the zero this
+		// function documents.
+		expr = l.Length + "[" + at + "]"
+		return
+	}
+	// The owning attribute of a flattened membership position is the first
+	// whose cumulative membership count reaches it — LW_RAGGED_PARENT_IDS
+	// read at that position, without materialising the expansion (an
+	// attribute carrying no membership shares its predecessor's cumulative
+	// count, so the FIRST index reaching the position always has one).
+	// Absent, the position is 0 and the search answers 1, which is a real
+	// attribute — so this form needs the presence guard the fast one gets
+	// from ClickHouse's out-of-range default.
+	owner := "arrayFirstIndex(cum -> cum >= " + at + ", arrayCumSum(" + l.Card + "))"
+	expr = "if(" + Present(l, req.Membership) + ", " + l.Length + "[" + owner + "], 0)"
+	return
+}
+
 // Present renders the necessary condition that the attribute exists: the
 // membership occurs in the identity lane.
 //

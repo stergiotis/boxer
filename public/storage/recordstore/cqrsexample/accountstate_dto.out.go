@@ -164,7 +164,7 @@ type accountStateSnapOwnerMembsReadI interface {
 
 // accountStateSnapBalanceAttrsReadI is the Attributes-side view of the snapBalance section.
 type accountStateSnapBalanceAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -186,7 +186,7 @@ type accountStateSnapClosedMembsReadI interface {
 
 // accountStateSnapAsOfAttrsReadI is the Attributes-side view of the snapAsOf section.
 type accountStateSnapAsOfAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -262,7 +262,11 @@ func accountStateReadRow[
 					snapBalanceBalanceLastAttr = attrJ + 1
 					snapBalanceBalanceCount++
 				}
-				val := snapBalanceAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := snapBalanceAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "snapBalance").Str("membership", "ledgerSnapBalance").Str("field", "Balance").Errorf("slot snapBalance@ledgerSnapBalance (field Balance) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				snapBalanceBalanceVal = val
 			}
 		}
@@ -314,7 +318,11 @@ func accountStateReadRow[
 					snapAsOfAsOfLastAttr = attrJ + 1
 					snapAsOfAsOfCount++
 				}
-				val := snapAsOfAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := snapAsOfAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "snapAsOf").Str("membership", "ledgerSnapAsOf").Str("field", "AsOf").Errorf("slot snapAsOf@ledgerSnapAsOf (field AsOf) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				snapAsOfAsOfVal = val
 			}
 		}

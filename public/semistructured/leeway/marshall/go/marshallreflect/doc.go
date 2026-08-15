@@ -171,7 +171,9 @@
 //   - GetNumberOfAttributes(e) int64 — attribute count for entity e.
 //   - GetAttrValueValue(e, a) iter.Seq[T] — container / multi values (also the
 //     scalar shape's single value, returned as T).
-//   - GetAttrValueSingleOrDefault(e, a) T — single value for HA / single-slot shapes.
+//   - GetAttrValueSingle(e, a) (T, error) — single value for HA / single-slot
+//     shapes; the error reports an attribute whose value count is not one,
+//     which a `,unit` field declares cannot happen (ADR-0183 D5).
 //   - GetAttrValue<Col>(e, a) T — multi-sub-column scalar sub-column accessor;
 //     Col = UpperFirst(sub-column).
 //   - GetAttrValue<Col>(e, a) iter.Seq[T] — multi-sub-column container
@@ -179,7 +181,9 @@
 //     back as a nil slice).
 //
 // The single-value accessor is chosen by goplan.SingleValueReadAccessor, so the
-// reflect codec and the generated codec cannot diverge on the choice.
+// reflect codec and the generated codec cannot diverge on the choice, nor on
+// which values they refuse. The RA surface also carries the lenient sibling
+// GetAttrValueSingleOrDefault(e, a) T, which neither codec reads through.
 //
 // Membership reader, per section:
 //   - GetMembValue<Suffix>(e, a) — simple channels: iter.Seq[uint64] (Ref) or iter.Seq[[]byte] (Verbatim).

@@ -343,7 +343,7 @@ type sysTopologyU32ArrayMembsReadI interface {
 // sysTopologyI32ArrayAttrsReadI is the Attributes-side view of the i32Array section.
 type sysTopologyI32ArrayAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[int32]
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) int32
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (int32, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -549,7 +549,11 @@ func sysTopologyReadRow[
 					i32ArrayLogicalCountLastAttr = attrJ + 1
 					i32ArrayLogicalCountCount++
 				}
-				val := i32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := i32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "i32Array").Str("membership", "sysmTopoLogicalCount").Str("field", "LogicalCount").Errorf("slot i32Array@sysmTopoLogicalCount (field LogicalCount) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				i32ArrayLogicalCountVal = val
 			case kindSysmTopoParentIdx:
 				if i32ArrayParentLastAttr != attrJ+1 {

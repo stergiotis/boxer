@@ -356,7 +356,7 @@ func PlayLaunchAddSections[
 
 // PlayLaunchTextArrayAttrsReadI is the Attributes-side view of the textArray section.
 type PlayLaunchTextArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -436,14 +436,22 @@ func PlayLaunchFillFromArrow[
 						textArraySqlLastAttr = attrJ + 1
 						textArraySqlCount++
 					}
-					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "playLaunchSql").Str("field", "Sql").Errorf("slot textArray@playLaunchSql (field Sql) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					textArraySqlVal = val
 				case kindPlayLaunchBandsSql:
 					if textArrayBandsSqlLastAttr != attrJ+1 {
 						textArrayBandsSqlLastAttr = attrJ + 1
 						textArrayBandsSqlCount++
 					}
-					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "playLaunchBandsSql").Str("field", "BandsSql").Errorf("slot textArray@playLaunchBandsSql (field BandsSql) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					textArrayBandsSqlVal = val
 				}
 			}
@@ -578,14 +586,22 @@ func PlayLaunchReadRow[
 					textArraySqlLastAttr = attrJ + 1
 					textArraySqlCount++
 				}
-				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "playLaunchSql").Str("field", "Sql").Errorf("slot textArray@playLaunchSql (field Sql) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				textArraySqlVal = val
 			case kindPlayLaunchBandsSql:
 				if textArrayBandsSqlLastAttr != attrJ+1 {
 					textArrayBandsSqlLastAttr = attrJ + 1
 					textArrayBandsSqlCount++
 				}
-				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "playLaunchBandsSql").Str("field", "BandsSql").Errorf("slot textArray@playLaunchBandsSql (field BandsSql) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				textArrayBandsSqlVal = val
 			}
 		}

@@ -69,7 +69,7 @@ func withdrawnAddSections[
 
 // withdrawnAcctWithdrawAttrsReadI is the Attributes-side view of the acctWithdraw section.
 type withdrawnAcctWithdrawAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -107,7 +107,11 @@ func withdrawnReadRow[
 					acctWithdrawAmountLastAttr = attrJ + 1
 					acctWithdrawAmountCount++
 				}
-				val := acctWithdrawAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := acctWithdrawAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "acctWithdraw").Str("membership", "ledgerWithdraw").Str("field", "Amount").Errorf("slot acctWithdraw@ledgerWithdraw (field Amount) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				acctWithdrawAmountVal = val
 			}
 		}

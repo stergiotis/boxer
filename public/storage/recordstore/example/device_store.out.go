@@ -864,7 +864,7 @@ func (inst *deviceFetcher) FetchItemSinglePartition(ctx context.Context, partiti
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
 	deviceScanIdentityFilter = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 1) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 2) <= 1"
-	deviceScanBatteryFilter  = "has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1) = 1"
+	deviceScanBatteryFilter  = "has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 1), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 	deviceScanTaggedFilter   = "has(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 1) <= 1"
 	deviceScanLocatedFilter  = "has(\"tv:geoPoint:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:geoPoint:lr:lr:u64:1247:::0::data\", 1) = 1"
 )

@@ -334,7 +334,7 @@ type PersistReplyBoolMembsReadI interface {
 
 // PersistReplyBlobArrayAttrsReadI is the Attributes-side view of the blobArray section.
 type PersistReplyBlobArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) []byte
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) ([]byte, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -345,7 +345,7 @@ type PersistReplyBlobArrayMembsReadI interface {
 
 // PersistReplyTextArrayAttrsReadI is the Attributes-side view of the textArray section.
 type PersistReplyTextArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -423,7 +423,11 @@ func PersistReplyFillFromArrow[
 						blobArrayValueLastAttr = attrJ + 1
 						blobArrayValueCount++
 					}
-					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := blobArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "persistValue").Str("field", "Value").Errorf("slot blobArray@persistValue (field Value) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					cp := make([]byte, len(val))
 					copy(cp, val)
 					blobArrayValueVal = cp
@@ -448,7 +452,11 @@ func PersistReplyFillFromArrow[
 						textArrayReasonLastAttr = attrJ + 1
 						textArrayReasonCount++
 					}
-					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Str("field", "Reason").Errorf("slot textArray@reason (field Reason) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					textArrayReasonVal = val
 				}
 			}
@@ -525,7 +533,11 @@ func PersistReplyReadRow[
 					blobArrayValueLastAttr = attrJ + 1
 					blobArrayValueCount++
 				}
-				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := blobArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "persistValue").Str("field", "Value").Errorf("slot blobArray@persistValue (field Value) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				cp := make([]byte, len(val))
 				copy(cp, val)
 				blobArrayValueVal = cp
@@ -553,7 +565,11 @@ func PersistReplyReadRow[
 					textArrayReasonLastAttr = attrJ + 1
 					textArrayReasonCount++
 				}
-				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Str("field", "Reason").Errorf("slot textArray@reason (field Reason) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				textArrayReasonVal = val
 			}
 		}

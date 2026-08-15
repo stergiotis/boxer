@@ -375,7 +375,7 @@ func GrantRequestAddSections[
 
 // GrantRequestStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
 type GrantRequestStringArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -386,7 +386,7 @@ type GrantRequestStringArrayMembsReadI interface {
 
 // GrantRequestTextArrayAttrsReadI is the Attributes-side view of the textArray section.
 type GrantRequestTextArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -470,14 +470,22 @@ func GrantRequestFillFromArrow[
 						stringArrayAppIdLastAttr = attrJ + 1
 						stringArrayAppIdCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "appId").Str("field", "AppId").Errorf("slot stringArray@appId (field AppId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArrayAppIdVal = val
 				case kindCapFilterPattern:
 					if stringArrayFilterPatternLastAttr != attrJ+1 {
 						stringArrayFilterPatternLastAttr = attrJ + 1
 						stringArrayFilterPatternCount++
 					}
-					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "capFilterPattern").Str("field", "FilterPattern").Errorf("slot stringArray@capFilterPattern (field FilterPattern) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					stringArrayFilterPatternVal = val
 				}
 			}
@@ -505,7 +513,11 @@ func GrantRequestFillFromArrow[
 						textArrayFilterReasonLastAttr = attrJ + 1
 						textArrayFilterReasonCount++
 					}
-					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Str("field", "FilterReason").Errorf("slot textArray@reason (field FilterReason) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					textArrayFilterReasonVal = val
 				}
 			}
@@ -609,14 +621,22 @@ func GrantRequestReadRow[
 					stringArrayAppIdLastAttr = attrJ + 1
 					stringArrayAppIdCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "appId").Str("field", "AppId").Errorf("slot stringArray@appId (field AppId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArrayAppIdVal = val
 			case kindCapFilterPattern:
 				if stringArrayFilterPatternLastAttr != attrJ+1 {
 					stringArrayFilterPatternLastAttr = attrJ + 1
 					stringArrayFilterPatternCount++
 				}
-				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "capFilterPattern").Str("field", "FilterPattern").Errorf("slot stringArray@capFilterPattern (field FilterPattern) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				stringArrayFilterPatternVal = val
 			}
 		}
@@ -650,7 +670,11 @@ func GrantRequestReadRow[
 					textArrayFilterReasonLastAttr = attrJ + 1
 					textArrayFilterReasonCount++
 				}
-				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Str("field", "FilterReason").Errorf("slot textArray@reason (field FilterReason) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				textArrayFilterReasonVal = val
 			}
 		}

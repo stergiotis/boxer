@@ -1695,10 +1695,18 @@ func (inst *%s%s) Len() (nEntities int) {
 						return
 					}
 					// GetAttrValueSingleOrDefault — sibling of GetAttrValueSingle
-					// that silently degrades to zero values when any non-scalar
-					// subtype's cardinality != 1. Implemented as a one-line
-					// forward to Single (named returns auto-zero on Single's
-					// early-return failure path), so the two stay in sync.
+					// that degrades to zero values when any non-scalar
+					// subtype's cardinality != 1, without saying so.
+					// Implemented as a one-line forward to Single (named
+					// returns auto-zero on Single's early-return failure
+					// path), so the two stay in sync.
+					//
+					// Neither codec front-end reads through it: a value the
+					// caller declared single decoding as a zero is
+					// indistinguishable from a legitimate zero, so both take
+					// Single and report the mismatch (ADR-0183 D5). It stays
+					// on the surface for a caller that wants the lenient
+					// reading and has decided it can.
 					var sigArgs []string
 					var callArgs []string
 					for _, c := range scalarCols {

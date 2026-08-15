@@ -304,7 +304,7 @@ type WatchRequestBoolMembsReadI interface {
 
 // WatchRequestI32ArrayAttrsReadI is the Attributes-side view of the i32Array section.
 type WatchRequestI32ArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) int32
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (int32, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -393,7 +393,11 @@ func WatchRequestFillFromArrow[
 						i32ArrayPollIntervalMsLastAttr = attrJ + 1
 						i32ArrayPollIntervalMsCount++
 					}
-					val := i32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := i32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "i32Array").Str("membership", "watchPollIntervalMs").Str("field", "PollIntervalMs").Errorf("slot i32Array@watchPollIntervalMs (field PollIntervalMs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					i32ArrayPollIntervalMsVal = val
 				}
 			}
@@ -484,7 +488,11 @@ func WatchRequestReadRow[
 					i32ArrayPollIntervalMsLastAttr = attrJ + 1
 					i32ArrayPollIntervalMsCount++
 				}
-				val := i32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := i32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "i32Array").Str("membership", "watchPollIntervalMs").Str("field", "PollIntervalMs").Errorf("slot i32Array@watchPollIntervalMs (field PollIntervalMs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				i32ArrayPollIntervalMsVal = val
 			}
 		}

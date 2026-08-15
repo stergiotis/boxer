@@ -282,7 +282,7 @@ func AppletCreateAddSections[
 
 // AppletCreateTextArrayAttrsReadI is the Attributes-side view of the textArray section.
 type AppletCreateTextArrayAttrsReadI interface {
-	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
@@ -344,7 +344,11 @@ func AppletCreateFillFromArrow[
 						textArraySqlLastAttr = attrJ + 1
 						textArraySqlCount++
 					}
-					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "appletCreateSql").Str("field", "Sql").Errorf("slot textArray@appletCreateSql (field Sql) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
 					textArraySqlVal = val
 				}
 			}
@@ -414,7 +418,11 @@ func AppletCreateReadRow[
 					textArraySqlLastAttr = attrJ + 1
 					textArraySqlCount++
 				}
-				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val, valErr := textArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "appletCreateSql").Str("field", "Sql").Errorf("slot textArray@appletCreateSql (field Sql) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
 				textArraySqlVal = val
 			}
 		}
