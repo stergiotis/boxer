@@ -142,7 +142,7 @@ func TestMembershipRendererGeneration(t *testing.T) {
 	writeFile("./card_anchor_membership_renderer.out.md", doc.String(), t)
 }
 
-// TestMembershipRoleClassifierGeneration tabulates the DefaultClassifier's
+// TestMembershipRoleClassifierGeneration tabulates the PathPrefixClassifier's
 // verdicts for representative membership values against anchor sections in
 // card_anchor_membership_roles.out.md. The same classifier runs inside the
 // card emitters (it keys their byAttribute grouping); the table makes the
@@ -175,9 +175,9 @@ func TestMembershipRoleClassifierGeneration(t *testing.T) {
 		{"symbol", "mixed ref 5 + params (the fourth anchor membership spec)", membership.MembershipValue{Kind: membership.IdentityPerRowId, Ref: 5, Params: "\x01\x00"}},
 	}
 
-	classifier := membershiprole.DefaultClassifier{}
+	classifier := membershiprole.PathPrefixClassifier{}
 	doc := &strings.Builder{}
-	doc.WriteString(dqlDocHeader("anchor — membership role classification (DefaultClassifier)", "TestMembershipRoleClassifierGeneration"))
+	doc.WriteString(dqlDocHeader("anchor — membership role classification (PathPrefixClassifier)", "TestMembershipRoleClassifierGeneration"))
 	doc.WriteString("| section | membership | role | param treatment |\n|---|---|---|---|\n")
 	for _, c := range cases {
 		role, pt := classifier.Classify(secCtx(c.section), c.mv)

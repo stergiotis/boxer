@@ -116,6 +116,21 @@ append-only; supersession is recorded, not deleted.
 
 ## Updates
 
+### 2026-08-15 — `DefaultClassifier` is now `PathPrefixClassifier`
+
+The classifier this ADR calls `DefaultClassifier` is called
+`PathPrefixClassifier` as of ADR-0183 D6; a deprecated type alias keeps the old
+name compiling. Nothing about the classification changed — the rename is the
+point. "Default" said where the type sat rather than what it did, and read as
+"the one to use unless you know better" for a classifier whose whole rule is
+one naming convention (a verbatim membership starting with `/` is primary).
+A reader of the read path could not evaluate its fitness without opening it.
+
+The actual default is unchanged and is still nil: without a classifier every
+membership is treated as discriminative, which is what the codec has always
+done (this ADR's own E1 note, and ADR-0146 D3). `PathPrefixClassifier` is what
+a caller opts into.
+
 ### 2026-07-27 — E1's read-side rule does not reach the marshall codec
 
 The classifier, the default policy and the section use-aspects are implemented

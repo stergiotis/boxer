@@ -176,7 +176,7 @@ type membershipRec struct {
 func NewJsonCardEmitter(enc *jsontext.Encoder, _ *common.IntermediateTableRepresentation, opts ...JsonCardEmitterOption) (inst *JsonCardEmitter) {
 	inst = &JsonCardEmitter{
 		enc:        enc,
-		classifier: membershiprole.DefaultClassifier{},
+		classifier: membershiprole.PathPrefixClassifier{},
 		renderer:   membership.DefaultRenderer(),
 	}
 	for _, o := range opts {

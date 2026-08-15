@@ -16,8 +16,8 @@ func mustEncode(t *testing.T, aspects ...useaspects.AspectE) (set useaspects.Asp
 	return
 }
 
-func TestDefaultClassifier_UseAspectShortCircuits(t *testing.T) {
-	cls := DefaultClassifier{}
+func TestPathPrefixClassifier_UseAspectShortCircuits(t *testing.T) {
+	cls := PathPrefixClassifier{}
 
 	cases := []struct {
 		name    string
@@ -49,8 +49,8 @@ func TestDefaultClassifier_UseAspectShortCircuits(t *testing.T) {
 	}
 }
 
-func TestDefaultClassifier_VerbatimNamingConvention(t *testing.T) {
-	cls := DefaultClassifier{}
+func TestPathPrefixClassifier_VerbatimNamingConvention(t *testing.T) {
+	cls := PathPrefixClassifier{}
 
 	cases := []struct {
 		name string
@@ -93,8 +93,8 @@ func TestDefaultClassifier_VerbatimNamingConvention(t *testing.T) {
 	}
 }
 
-func TestDefaultClassifier_RefShapedDefaultPrimary(t *testing.T) {
-	cls := DefaultClassifier{}
+func TestPathPrefixClassifier_RefShapedDefaultPrimary(t *testing.T) {
+	cls := PathPrefixClassifier{}
 
 	for _, kind := range []membership.IdentityEncoding{
 		membership.IdentityRef,
@@ -109,8 +109,8 @@ func TestDefaultClassifier_RefShapedDefaultPrimary(t *testing.T) {
 	}
 }
 
-func TestDefaultClassifier_ParamTreatment(t *testing.T) {
-	cls := DefaultClassifier{}
+func TestPathPrefixClassifier_ParamTreatment(t *testing.T) {
+	cls := PathPrefixClassifier{}
 
 	cases := []struct {
 		name string
@@ -134,8 +134,8 @@ func TestDefaultClassifier_ParamTreatment(t *testing.T) {
 	}
 }
 
-func TestDefaultClassifier_PathPrefixOverride(t *testing.T) {
-	cls := DefaultClassifier{PathPrefix: "tag:"}
+func TestPathPrefixClassifier_PathPrefixOverride(t *testing.T) {
+	cls := PathPrefixClassifier{PathPrefix: "tag:"}
 
 	primary := membership.MembershipValue{Kind: membership.IdentityVerbatim, Verbatim: "tag:hostname"}
 	secondary := membership.MembershipValue{Kind: membership.IdentityVerbatim, Verbatim: "/hostname"}
@@ -148,8 +148,8 @@ func TestDefaultClassifier_PathPrefixOverride(t *testing.T) {
 	}
 }
 
-func TestDefaultClassifier_NoneKindReturnsNoneRole(t *testing.T) {
-	cls := DefaultClassifier{}
+func TestPathPrefixClassifier_NoneKindReturnsNoneRole(t *testing.T) {
+	cls := PathPrefixClassifier{}
 	got, pt := cls.Classify(SectionContext{}, membership.MembershipValue{})
 	if got != MembershipRoleNone {
 		t.Fatalf("zero membership.MembershipValue should classify as None: got %d", got)

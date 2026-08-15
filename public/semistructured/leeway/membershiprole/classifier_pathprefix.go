@@ -7,15 +7,22 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 )
 
-// DefaultClassifier classifies via section use-aspect hint plus a
+// PathPrefixClassifier classifies via section use-aspect hint plus a
 // path-prefix naming convention.
+//
+// It was called DefaultClassifier, which said where it sat rather than what it
+// did — a name that reads as "the one to use unless you know better" for a
+// classifier whose rule is one specific naming convention, and that a reader
+// of the read path could not evaluate without opening it (ADR-0183 D6). The
+// default is still nil (every membership primary); this is the classifier a
+// caller opts into.
 //
 // Decision order:
 //
 //  1. If the section's UseAspects contain
 //     [useaspects.AspectSectionMembershipsAllPrimary] or
 //     [useaspects.AspectSectionMembershipsAllSecondary], that answer wins.
-//  2. For verbatim-shaped kinds, a [DefaultClassifier.PathPrefix]-prefixed
+//  2. For verbatim-shaped kinds, a [PathPrefixClassifier.PathPrefix]-prefixed
 //     verbatim is Primary; any other verbatim is Secondary.
 //  3. For ref-shaped kinds, the default is Primary. Applications needing a
 //     registry-based decision wrap or replace this classifier.
@@ -26,21 +33,21 @@ import (
 // not have section-canonical-type information available to detect it.
 //
 // The zero value is usable; PathPrefix defaults to "/".
-type DefaultClassifier struct {
+type PathPrefixClassifier struct {
 	// PathPrefix is the prefix that marks a verbatim membership as primary.
 	// Empty value defaults to "/".
 	PathPrefix string
 }
 
-var _ ClassifierI = DefaultClassifier{}
+var _ ClassifierI = PathPrefixClassifier{}
 
-func (inst DefaultClassifier) Classify(sec SectionContext, mv membership.MembershipValue) (role MembershipRoleE, paramTreatment ParamTreatmentE) {
+func (inst PathPrefixClassifier) Classify(sec SectionContext, mv membership.MembershipValue) (role MembershipRoleE, paramTreatment ParamTreatmentE) {
 	role = inst.classifyRole(sec, mv)
 	paramTreatment = inst.classifyParamTreatment(mv)
 	return
 }
 
-func (inst DefaultClassifier) effectivePrefix() (prefix string) {
+func (inst PathPrefixClassifier) effectivePrefix() (prefix string) {
 	prefix = inst.PathPrefix
 	if prefix == "" {
 		prefix = "/"
@@ -48,7 +55,7 @@ func (inst DefaultClassifier) effectivePrefix() (prefix string) {
 	return
 }
 
-func (inst DefaultClassifier) classifyRole(sec SectionContext, mv membership.MembershipValue) (role MembershipRoleE) {
+func (inst PathPrefixClassifier) classifyRole(sec SectionContext, mv membership.MembershipValue) (role MembershipRoleE) {
 	if sec.HasUseAspect(useaspects.AspectSectionMembershipsAllPrimary) {
 		role = MembershipRolePrimary
 		return
@@ -72,7 +79,7 @@ func (inst DefaultClassifier) classifyRole(sec SectionContext, mv membership.Mem
 	return
 }
 
-func (inst DefaultClassifier) classifyParamTreatment(mv membership.MembershipValue) (paramTreatment ParamTreatmentE) {
+func (inst PathPrefixClassifier) classifyParamTreatment(mv membership.MembershipValue) (paramTreatment ParamTreatmentE) {
 	// A params blob is present exactly for the three per-row identity encodings
 	// (ADR-0072) — derive it rather than re-enumerating them.
 	if mv.Kind.HasParams() {
@@ -80,3 +87,11 @@ func (inst DefaultClassifier) classifyParamTreatment(mv membership.MembershipVal
 	}
 	return
 }
+
+// DefaultClassifier is the former name of [PathPrefixClassifier].
+//
+// Deprecated: use PathPrefixClassifier. The rename says what the classifier
+// does — primary is a path prefix — rather than where it sits in a list
+// (ADR-0183 D6). The alias keeps existing callers building; it carries no
+// behaviour of its own.
+type DefaultClassifier = PathPrefixClassifier

@@ -57,7 +57,7 @@ generated files, and schema *writers* that merely stamp aspects):
 | vocabulary | read by name | reader |
 | --- | --- | --- |
 | `encodingaspects` | 14 codec aspects | ClickHouse DDL codec derivation (`generateTypeAndCodec`) + `GetEncodingHintImplementationStatus` filtering |
-| `useaspects` | `SectionMembershipsAllPrimary`, `…AllSecondary` | `membershiprole.DefaultClassifier` (advisory short-circuit; piped through `marshallreflect` and streamreadaccess) |
+| `useaspects` | `SectionMembershipsAllPrimary`, `…AllSecondary` | `membershiprole.PathPrefixClassifier` (advisory short-circuit; piped through `marshallreflect` and streamreadaccess) |
 | `valueaspects` | `HumanReadable`, `MachineReadable` | table widget hide rule (`table2_emitter.go`: machine ∧ ¬human ⇒ hidden) |
 
 **18 of 144 aspects are ever read.** Roughly seven more appear only as writes

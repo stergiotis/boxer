@@ -80,7 +80,7 @@ data pillar (`keelson/data/*`) and leaves the runtime spine by reference.
 | Artifact | Shows |
 | --- | --- |
 | `card_anchor_integration3_test.go` | The `streamreadaccess.Driver` over generated batches feeding the card emitters: structured recorder, Unicode, JSON and HTML cards, and the schema emitter with its blake3 fingerprint (all golden-pinned). |
-| `card_anchor_membership_test.go` | The ADR-0072 representation plane: ids on the wire, names at read time — a demo-local `RefFormatterI` injected via `WithRenderer` swaps hex refs for domain names in the card JSON; and the `membershiprole.DefaultClassifier` policy tabulated against anchor sections. |
+| `card_anchor_membership_test.go` | The ADR-0072 representation plane: ids on the wire, names at read time — a demo-local `RefFormatterI` injected via `WithRenderer` swaps hex refs for domain names in the card JSON; and the `membershiprole.PathPrefixClassifier` policy tabulated against anchor sections. |
 
 ## Regenerating
 

@@ -9,7 +9,7 @@ generator: go test, TestMembershipRoleClassifierGeneration
 > **Status: draft — pre-human-review.** Machine-generated demo artifact;
 > regenerate via `go test`, do not edit.
 
-# anchor — membership role classification (DefaultClassifier)
+# anchor — membership role classification (PathPrefixClassifier)
 
 | section | membership | role | param treatment |
 |---|---|---|---|

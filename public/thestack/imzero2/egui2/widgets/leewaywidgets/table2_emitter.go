@@ -208,7 +208,7 @@ type table2Tag struct {
 }
 
 // NewTable2CardEmitter constructs a Table2CardEmitter with an optional
-// membership classifier (membershiprole.DefaultClassifier{} when nil).
+// membership classifier (membershiprole.PathPrefixClassifier{} when nil).
 func NewTable2CardEmitter(ids *c.WidgetIdStack, palette ColorPaletteE, classifier membershiprole.ClassifierI) (inst *Table2CardEmitter) {
 	var pal imgcolor.Palette
 	switch palette {
@@ -222,7 +222,7 @@ func NewTable2CardEmitter(ids *c.WidgetIdStack, palette ColorPaletteE, classifie
 		pal = colormap.Inferno
 	}
 	if classifier == nil {
-		classifier = membershiprole.DefaultClassifier{}
+		classifier = membershiprole.PathPrefixClassifier{}
 	}
 	inst = &Table2CardEmitter{
 		ids:               ids,

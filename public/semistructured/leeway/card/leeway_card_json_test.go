@@ -85,7 +85,7 @@ func TestJsonCardEmitter_SecondaryLabels(t *testing.T) {
 	sink.BeginTaggedSections()
 	driveOneAttribute(t, sink, "null", "value", "", func() {
 		sink.AddMembershipVerbatim(true, "/metrics/error")
-		// Plain identifier verbatim → secondary under DefaultClassifier.
+		// Plain identifier verbatim → secondary under PathPrefixClassifier.
 		sink.AddMembershipVerbatim(true, "errormsg")
 	})
 	_ = sink.EndTaggedSections()
@@ -435,4 +435,4 @@ func (indexClassifier) Classify(sec membershiprole.SectionContext, mv membership
 // constructor signature changes.
 var _ streamreadaccess.SinkI = (*JsonCardEmitter)(nil)
 var _ = common.PlainItemTypeE(0)
-var _ membershiprole.ClassifierI = membershiprole.DefaultClassifier{}
+var _ membershiprole.ClassifierI = membershiprole.PathPrefixClassifier{}

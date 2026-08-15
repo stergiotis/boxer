@@ -187,7 +187,7 @@ func (inst *MySink) AddMembershipVerbatim(lowCard bool, verbatim, humanReadable 
 
 The five `AddMembership*` shapes map onto the five `MembershipKindE` values one-to-one. `SectionContext` is populated at `BeginSection` and `BeginPlainSection` from the section's `UseAspects` field, which carries `useaspects.AspectSectionMembershipsAllPrimary` / `useaspects.AspectSectionMembershipsAllSecondary` when the application sets them.
 
-`DefaultClassifier` covers the common case (path-prefix verbatim → primary, plain identifier → secondary, ref-shaped → primary). Applications with different conventions implement `ClassifierI` directly.
+`PathPrefixClassifier` covers the common case (path-prefix verbatim → primary, plain identifier → secondary, ref-shaped → primary). Applications with different conventions implement `ClassifierI` directly.
 
 ### When to use the classifier
 

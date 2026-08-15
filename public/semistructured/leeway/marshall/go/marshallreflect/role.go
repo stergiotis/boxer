@@ -17,9 +17,9 @@ import (
 // treats every membership as discriminative — which is what it has always done,
 // and remains the default.
 //
-// # Why the default is nil and not DefaultClassifier
+// # Why the default is nil and not PathPrefixClassifier
 //
-// membershiprole.DefaultClassifier marks primary by a path prefix (default
+// membershiprole.PathPrefixClassifier marks primary by a path prefix (default
 // "/"). Ordinary DTO memberships — `health`, `battery`, `droneStatus` — carry
 // no such prefix, so under that policy they all classify as SECONDARY and every
 // field would read back empty. It is the right default for the card / widget

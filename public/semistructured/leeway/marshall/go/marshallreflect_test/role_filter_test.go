@@ -22,7 +22,7 @@ import (
 )
 
 // secondaryNames classifies the listed memberships as annotations and
-// everything else as identity-bearing — the inverse of DefaultClassifier's
+// everything else as identity-bearing — the inverse of PathPrefixClassifier's
 // path-prefix convention, and the shape an application with a small annotation
 // vocabulary would write.
 type secondaryNames map[string]bool
@@ -162,12 +162,12 @@ func TestRole_DetectAgreesWithDecode(t *testing.T) {
 	require.Equal(t, mappingplan.PresenceExact, p)
 }
 
-// The trap ADR-0146 D3 records, as an executable statement: DefaultClassifier
+// The trap ADR-0146 D3 records, as an executable statement: PathPrefixClassifier
 // marks primary by a "/" prefix, so ordinary DTO memberships classify as
 // SECONDARY and every field reads back unpopulated. It is the right policy for
 // the card / widget paths, whose memberships are `/`-prefixed paths, and the
 // wrong one for the codec — which is why the codec's default is nil, not this.
-func TestRole_DefaultClassifierIsWrongForPlainMemberships(t *testing.T) {
+func TestRole_PathPrefixClassifierIsWrongForPlainMemberships(t *testing.T) {
 	rec, release := rfWrite(t)
 	defer release()
 	readers, rel := rfReaders(t, rec)
@@ -175,9 +175,9 @@ func TestRole_DefaultClassifierIsWrongForPlainMemberships(t *testing.T) {
 
 	var health []rfHealth
 	err := marshallreflect.Unmarshal(readers, &health, nil,
-		marshallreflect.WithRoleClassifier(membershiprole.DefaultClassifier{}))
+		marshallreflect.WithRoleClassifier(membershiprole.PathPrefixClassifier{}))
 	require.Error(t, err,
-		"`health` has no / prefix, so DefaultClassifier calls it secondary and nothing selects")
+		"`health` has no / prefix, so PathPrefixClassifier calls it secondary and nothing selects")
 
 	// Passing no classifier — the actual default — decodes fine.
 	health = nil

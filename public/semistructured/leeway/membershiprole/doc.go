@@ -9,7 +9,7 @@
 // annotations ("labels") in its output.
 //
 // The role decision is application policy, not a Leeway protocol concern. The
-// package ships [DefaultClassifier] as a zero-config implementation that
+// package ships [PathPrefixClassifier] as a zero-config implementation that
 // consults the section's [useaspects.AspectSectionMembershipsAllPrimary] /
 // [useaspects.AspectSectionMembershipsAllSecondary] hints and falls back to a
 // path-prefix naming convention for verbatim-shaped memberships.

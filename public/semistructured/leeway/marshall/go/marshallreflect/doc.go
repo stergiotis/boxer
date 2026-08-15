@@ -206,7 +206,7 @@
 //     membership the classifier calls SECONDARY annotates an attribute rather
 //     than locating one, so it no longer pulls a value into a like-named field.
 //     The default — no classifier — treats every membership as primary.
-//     membershiprole.DefaultClassifier is NOT a safe choice here: it marks
+//     membershiprole.PathPrefixClassifier is NOT a safe choice here: it marks
 //     primary by a "/" prefix, which ordinary DTO memberships do not carry, so
 //     under it every field reads back unpopulated. See role.go.
 //   - WithSectionAspects supplies the per-section use-aspect set the classifier
