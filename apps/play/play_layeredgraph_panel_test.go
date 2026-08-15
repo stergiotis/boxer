@@ -615,3 +615,77 @@ func TestNetworkInkOnRampStaysReadable(t *testing.T) {
 			"weight %.2f: ink on #%02x%02x%02x is only %.2f:1", w, fill.R, fill.G, fill.B, got)
 	}
 }
+
+// The canvas is the pane. It used to be the pane's WIDTH and the layout's
+// aspect, which left the bottom of a wide leaf empty — the canvas paints its
+// own background, so the gap read as the panel ending early.
+func TestNetworkCanvasFillsThePane(t *testing.T) {
+	// A bipartite fleet graph: far wider than it is tall, so the aspect asks
+	// for a box a fraction of the leaf's height — the shape that left the
+	// bottom of the pane empty.
+	wide := &layeredgraph.Layout{Width: 2400, Height: 140}
+
+	d := &NetworkDriver{}
+
+	// No probe yet (the first frame, and the frame a Lazy tab comes back on):
+	// a plausible leaf rather than the floor, so the frame before the real box
+	// lands is not a jump.
+	w, h := d.canvasBox(wide)
+	assert.Equal(t, networkPaneFill.fallbackW-networkPaneFill.slack, w)
+	assert.Equal(t, networkPaneFill.fallbackH-networkPaneFill.slack, h)
+
+	// The property: whatever the pane reports, a wide graph's box fills it,
+	// with no aspect ceiling in the way.
+	for _, pane := range []float32{300, 460, 720, 1100, 2000} {
+		d.paneW, d.paneH = 900, pane
+		_, h := d.canvasBox(wide)
+		assert.Equalf(t, pane-networkPaneFill.slack, h, "a %vpt pane must fill", pane)
+	}
+
+	// Both floors hold for a leaf too small to hold a drawing; the tab scrolls.
+	d.paneW, d.paneH = 40, 40
+	w, h = d.canvasBox(wide)
+	assert.Equal(t, networkPaneFill.minW, w)
+	assert.Equal(t, networkPaneFill.minH, h)
+
+	// The width alone is capped — an ultrawide leaf must not stretch the
+	// drawing across the screen.
+	d.paneW, d.paneH = 4000, 4000
+	w, h = d.canvasBox(wide)
+	assert.Equal(t, networkPaneFill.maxW, w)
+	assert.Equal(t, float32(4000-networkPaneFill.slack), h)
+
+	// No layout yet (the empty state, and the frames before the engine has
+	// answered): the pane alone decides.
+	d.paneW, d.paneH = 900, 500
+	_, h = d.canvasBox(nil)
+	assert.Equal(t, float32(500-networkPaneFill.slack), h)
+}
+
+// The pane is a FLOOR on the canvas, not a ceiling. A deep chain fitted into a
+// short leaf would take its scale from the height and come out smaller than the
+// width allows — legibility the fill is not worth — so it keeps the taller box
+// and the tab scrolls, as it did before the fill.
+func TestNetworkTallLayoutKeepsItsOwnBox(t *testing.T) {
+	tall := &layeredgraph.Layout{Width: 120, Height: 900}
+	d := &NetworkDriver{paneW: 1300, paneH: 380}
+
+	w, h := d.canvasBox(tall)
+	assert.Equal(t, float32(networkCanvasMaxH), h, "a chain taller than the ceiling takes the ceiling")
+	assert.Greater(t, h, d.paneH, "and it is taller than the pane, so the tab scrolls to it")
+	assert.Equal(t, float32(1300-networkPaneFill.slack), w, "the width is the pane's either way")
+
+	// The dead band: a layout asking for a box within a scrollbar's width of
+	// the pane takes the pane, so the two answers cannot alternate frame to
+	// frame as the leaf's scrollbar opens and closes.
+	near := &layeredgraph.Layout{Width: 1288, Height: 380} // ≈ the pane, aspect 1:1 with it
+	_, h = d.canvasBox(near)
+	assert.Equal(t, float32(380-networkPaneFill.slack), h)
+
+	// Past the band it wins, and the width the aspect is measured against is
+	// the canvas's, not the pane's.
+	steep := &layeredgraph.Layout{Width: 1288, Height: 600}
+	_, hSteep := d.canvasBox(steep)
+	assert.Greater(t, hSteep, float32(380-networkPaneFill.slack))
+	assert.InDelta(t, float64(w*600/1288), float64(hSteep), 0.01)
+}

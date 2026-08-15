@@ -68,7 +68,28 @@ const (
 	// dropped and counted in the status line rather than silently truncated.
 	networkMaxVertices = 400
 	networkMaxEdges    = 1000
+
+	// networkCanvasMaxH bounds the box a TALL layout asks for (see canvasBox).
+	// The pane's own height needs no ceiling, since filling the leaf is the
+	// point.
+	networkCanvasMaxH = 720
+	// networkAspectMargin is how far past the pane a layout's own height must
+	// reach before it takes the box. It exists to break a feedback loop, not
+	// for looks: a canvas past the pane opens the leaf's scrollbar, which
+	// narrows the pane, which shortens the height the aspect asks for — so
+	// without a dead band a layout landing within a scrollbar's width of the
+	// pane would flip between the two answers every other frame. Comfortably
+	// over the worst case, which is the ~12pt bar times the steepest aspect
+	// the ceiling still leaves unclamped (maxH/minW = 2).
+	networkAspectMargin = 40
 )
+
+// networkPaneFill is the canvas's box before the layout gets a say — the shared
+// pane rule (play_pane_box.go).
+var networkPaneFill = paneFill{
+	slack: 12, minW: 360, maxW: 1600, minH: 200,
+	fallbackW: 760, fallbackH: 460,
+}
 
 // networkIDSalt namespaces the panel's canvas + per-node sense-region ids —
 // distinct from the System graph's vizIDSalt so the two drawings never collide;
@@ -240,6 +261,13 @@ type NetworkDriver struct {
 
 	rankDir layeredgraph.RankDir
 	view    view.ViewState
+
+	// paneW / paneH are the last box the pane probe reported. Held across
+	// frames rather than read fresh: the probe answers nothing on the first
+	// frame and again on the frame a hidden tab comes back (a seq that did not
+	// capture is absent from the drain), and resizing the canvas to a fallback
+	// on those frames would flash.
+	paneW, paneH float32
 
 	// selectedID highlights the last-clicked node, and is published as the
 	// `selection_key` signal so a query can follow the click.
@@ -645,30 +673,37 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 		return
 	}
 
-	lw, lh := inst.layout.Width, inst.layout.Height
-	if lw <= 0 || lh <= 0 {
+	if inst.layout.Width <= 0 || inst.layout.Height <= 0 {
 		return
 	}
-	// Fill the pane width: a full-width separator, then a Seq-keyed UiRect probe
-	// reads its span next frame (the passes-tab idiom — a per-seq R21 slot, so
-	// it contends with nobody, unlike the single CaptureAvailableSize register
-	// that the frame's last capture wins; captureUiAvailableRect is the same
-	// slot without the separator, height included).
-	// Height follows the layout's aspect (clamped); the tab scrolls
-	// if the graph is taller than the leaf. Filling the width is what maximises
-	// the drawing — view.Render fits uniformly, so a wide graph is
-	// width-constrained and a taller canvas would only add margin. One-frame
-	// lag; the first frame falls back to a conservative width.
-	sm := c.CurrentApplicationState.StateManager
-	c.Separator().Horizontal().Send()
-	probeSeq := networkIDSalt ^ inst.idSeed ^ 0x1
-	c.CaptureUiRect(probeSeq)
-	paneW := float32(760)
-	if r, ok := sm.GetUiRect(probeSeq); ok && r.MaxX > r.MinX {
-		paneW = r.MaxX - r.MinX
+	// The hint goes ABOVE the canvas, as the Icicle's and the Treemap's
+	// readouts do, and here it is what lets the canvas be the LAST widget in
+	// the body: the probe below reports the room left for the next widget, so
+	// with the hint underneath, taking that room would push it past the fold
+	// and hold a scrollbar open — which narrows the pane, which resizes the
+	// canvas.
+	for rt := range c.RichTextLabel("drag pans, ctrl+scroll zooms; click a node to highlight it") {
+		rt.Small().Weak()
 	}
-	w := min(max(paneW-12, 360), 1600)
-	h := min(max(w*float32(lh/lw), 200), 720)
+
+	// Fill the pane, both ways: a full-width separator, then a seq-keyed probe
+	// of the free rect that reads back next frame (a per-seq r21 slot, so it
+	// contends with nobody, unlike the single CaptureAvailableSize register
+	// that the frame's last capture wins). Emitted after the chrome and BEFORE
+	// the canvas, since the rect is the room left for the NEXT widget.
+	//
+	// The height used to be the layout's aspect alone, on the reasoning that
+	// view.Render fits uniformly so a taller canvas only adds margin. That is
+	// true of the drawing and false of the pane: the canvas paints its own
+	// background, so a wide graph — the aspect at its shortest — left the
+	// bottom of the leaf empty. The pane's height is now a FLOOR on the box,
+	// which is what captureUiAvailableRect makes readable and the ui-rect probe
+	// this replaced did not.
+	c.Separator().Horizontal().Send()
+	if availW, availH, ok := c.CapturePaneSize(networkIDSalt ^ inst.idSeed ^ 0x1); ok {
+		inst.paneW, inst.paneH = availW, availH
+	}
+	w, h := inst.canvasBox(inst.layout)
 
 	seqPalette := styletokens.SequentialDefault()
 	style := view.DefaultStyle()
@@ -780,9 +815,30 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 			emit.Emit(signalSelectionKey, inst.selectedID)
 		}
 	}
-	for rt := range c.RichTextLabel("drag pans, ctrl+scroll zooms; click a node to highlight it") {
-		rt.Small().Weak()
+}
+
+// canvasBox is the drawing's box: the pane, less a margin, with the width
+// capped so an ultrawide leaf does not stretch the drawing across the screen
+// and the height raised to what a TALL layout asks for.
+//
+// The pane is a floor on the height, not a ceiling, because the fit is uniform:
+// a layout taller than it is wide, given a box the pane's height, would have
+// its scale set by that height and come out smaller — and less legible — than
+// the width already allows. Such a graph keeps the taller box and the tab
+// scrolls to it, which is what the panel has always done; what changes is that
+// a wide one no longer leaves the bottom of the leaf empty.
+func (inst *NetworkDriver) canvasBox(lay *layeredgraph.Layout) (w, h float32) {
+	w, h = networkPaneFill.box(inst.paneW, inst.paneH)
+	if lay == nil || lay.Width <= 0 || lay.Height <= 0 {
+		return
 	}
+	// The height at which the fit stops being width-limited — the tallest box
+	// the drawing can use — clamped to the box a layered graph is legible in.
+	full := min(max(w*float32(lay.Height/lay.Width), networkPaneFill.minH), networkCanvasMaxH)
+	if full > h+networkAspectMargin {
+		h = full
+	}
+	return
 }
 
 // renderControls draws the layout-direction toggle (§SD4). Changing it re-keys
