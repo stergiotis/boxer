@@ -57,7 +57,7 @@ func assetKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 // carried in the membership columns. Verbatim-channel memberships embed
 // their literal name instead and are absent here.
 //
-// The ids are caller-assigned (a registry-stable snapshot) and are baked
+// The ids are caller-assigned (a registry-stable snapshot), baked into
 // both the component codecs and this store's Scan filters. Nothing on the
 // wire records which assignment wrote a row, so rows written under a
 // different one decode as ABSENT rather than failing — VerifySchema
@@ -95,6 +95,15 @@ func (inst *AssetEntity) Archetype() (a []string) {
 }
 
 type AssetStoreConfig struct {
+	// Table overrides the ClickHouse table this store binds — the baked
+	// AssetTableName — for every statement it issues (DDL, DESCRIBE, INSERT,
+	// SELECT). Optionally database-qualified ("<db>.<table>"), unquoted-
+	// identifier shape only ([A-Za-z_][A-Za-z0-9_]* per part; the
+	// constructor panics otherwise). Empty (the default) binds the baked
+	// name. The schema is unchanged — this moves WHERE the rows land, not
+	// what they look like — so a scratch table for a test or a per-
+	// deployment table needs no regeneration.
+	Table string
 	// DDLTail is a raw suffix appended verbatim after the composed
 	// CREATE TABLE at EnsureTable time — the escape hatch for clauses
 	// the generation-time table options (ADR-0102) do not carry.
@@ -151,11 +160,25 @@ func NewAssetStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Asset
 	if len(cfg.Stampers) > 0 {
 		panic("AssetStore: Stampers configured, but no section of the asset schema declares a HighCardRef membership column — stamps would be dropped silently; declare the channel (AddSectionMembership) or drop the stampers")
 	}
+	if cfg.Table != "" {
+		if terr := recordstore.CheckTableRef(cfg.Table); terr != nil {
+			panic("AssetStore: " + terr.Error())
+		}
+	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
 	inst = &AssetStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityAssetTable(alloc, 64), dirty: make(map[uint64]struct{}), stampers: cfg.Stampers}
 	return
+}
+
+// tableName is the table reference every statement uses: the configured
+// override when set, else the baked AssetTableName.
+func (inst *AssetStore) tableName() string {
+	if inst.cfg.Table != "" {
+		return inst.cfg.Table
+	}
+	return AssetTableName
 }
 
 // applyStampers consults the configured stampers and pushes their surrogate
@@ -199,14 +222,27 @@ func (inst *AssetStore) notifyFlush(key uint64) {
 
 // EnsureTable applies the composed CREATE TABLE (plus the DDLTail
 // suffix, when configured). Idempotent (CREATE TABLE IF NOT EXISTS).
+// The embedded script is issued one statement per Exec — the
+// optional CREATE DATABASE, then the CREATE TABLE — because the
+// ClickHouse HTTP interface rejects a multi-statement body; under a
+// Table override the statements are re-pointed at the override
+// (recordstore.ProvisioningStatements: header and database only, the
+// column block stays byte-identical).
 func (inst *AssetStore) EnsureTable(ctx context.Context) (err error) {
-	sql := assetDDLCreate
-	if inst.cfg.DDLTail != "" {
-		sql += " " + inst.cfg.DDLTail
-	}
-	err = inst.exec.Exec(ctx, sql)
+	stmts, err := recordstore.ProvisioningStatements(assetDDLCreate, AssetTableName, inst.cfg.Table)
 	if err != nil {
-		err = eh.Errorf("ensure table %s: %w", AssetTableName, err)
+		err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+		return
+	}
+	if inst.cfg.DDLTail != "" {
+		stmts[len(stmts)-1] += " " + inst.cfg.DDLTail
+	}
+	for _, sql := range stmts {
+		err = inst.exec.Exec(ctx, sql)
+		if err != nil {
+			err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+			return
+		}
 	}
 	return
 }
@@ -228,14 +264,14 @@ func (inst *AssetStore) EnsureTable(ctx context.Context) (err error) {
 // store at rows it did not write.
 func (inst *AssetStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+AssetTableName+assetArrowOutputSettings) {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+inst.tableName()+assetArrowOutputSettings) {
 		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", AssetTableName, rerr)
+			err = eh.Errorf("describe table %s: %w", inst.tableName(), rerr)
 			return
 		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", AssetTableName, rec.Column(0).DataType())
+			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.tableName(), rec.Column(0).DataType())
 			rec.Release()
 			return
 		}
@@ -246,12 +282,12 @@ func (inst *AssetStore) VerifySchema(ctx context.Context) (err error) {
 	}
 	want := lowlevel.CreateSchemaAssetTable().Fields()
 	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", AssetTableName, len(live), len(want))
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.tableName(), len(live), len(want))
 		return
 	}
 	for i, f := range want {
 		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", AssetTableName, i, live[i], f.Name)
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.tableName(), i, live[i], f.Name)
 			return
 		}
 	}
@@ -444,10 +480,10 @@ func (inst *AssetStore) Flush(ctx context.Context) (n int, err error) {
 	records = append(inst.pending, records...)
 	inst.pending = nil
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, AssetTableName, records)
+		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", AssetTableName, err)
+			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
 			return
 		}
 	}
@@ -687,7 +723,7 @@ func (inst *AssetCache[W]) InvalidateAll() {
 func (inst *AssetStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(AssetTableName)
+	sb.WriteString(inst.tableName())
 	sb.WriteString(" WHERE " + AssetColKey + " IN (")
 	for i, k := range keys {
 		if i > 0 {
@@ -760,7 +796,7 @@ func (inst *AssetStore) ScanLabel(ctx context.Context, opts recordstore.ScanOpts
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + AssetTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + AssetColOrder + " ASC, " + AssetColKey + " ASC"
 	if opts.Limit > 0 {
@@ -789,7 +825,7 @@ func (inst *AssetStore) ScanState(ctx context.Context, opts recordstore.ScanOpts
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + AssetTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + AssetColOrder + " ASC, " + AssetColKey + " ASC"
 	if opts.Limit > 0 {
@@ -804,7 +840,7 @@ func (inst *AssetStore) ScanState(ctx context.Context, opts recordstore.ScanOpts
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *AssetStore) Latest(ctx context.Context, key uint64) (ent *AssetEntity, found bool, err error) {
-	sql := "SELECT * FROM " + AssetTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + AssetColKey + " = " + assetKeyLiteral(key) +
 		" ORDER BY " + AssetColOrder + " DESC LIMIT 1" + assetArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -827,7 +863,7 @@ func (inst *AssetStore) Latest(ctx context.Context, key uint64) (ent *AssetEntit
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *AssetStore) Replay(ctx context.Context, key uint64, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*AssetEntity, error] {
-	sql := "SELECT * FROM " + AssetTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + AssetColKey + " = " + assetKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + AssetColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"

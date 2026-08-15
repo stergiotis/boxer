@@ -21,12 +21,12 @@ Each `Storage.Set` / `.Get` / `.Delete` translates to a
 service is the bus subscriber on `runtime.persist.>`; it parses
 `(alias, key, op)` and dispatches to a pluggable `StorageBackendI`.
 
-**Backend today:** `persist.NewMemoryBackend()` — process-scoped,
-does NOT survive restart. The status line's `persist:mem` segment
-makes this explicit. A future facts-backed backend (writing to
-`boxer.facts` via `WriteState`) will make state durable when
-ClickHouse is reachable; until then `persist:mem` is the truthful
-readout.
+**Backend today:** `persist.StoreBackend` when ClickHouse is reachable
+— a generated record store over `boxer.persiststate` (ADR-0105 D3a),
+so state survives restart; the status line reads `persist:store`.
+When ClickHouse is not reachable the runtime falls back to
+`persist.NewMemoryBackend()`, process-scoped, and the status line's
+`persist:mem` segment says so.
 
 **Key constraint:** a single NATS token — no dots, no wildcards.
 The service rejects dotted keys with "malformed subject"; use

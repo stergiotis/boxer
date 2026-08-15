@@ -34,7 +34,7 @@ const (
 )
 
 // Physical leeway wire-column names of boxer.facts the pipeline SQL
-// references (the chstore composeLatestStateSql convention; the DDL
+// references (the chstore composeLatestWorkingsetSql convention; the DDL
 // parse test in mv_test.go asserts they exist in ddl.ColumnsSQL).
 const (
 	ColId       = "`id:id:u64:47::0:`"

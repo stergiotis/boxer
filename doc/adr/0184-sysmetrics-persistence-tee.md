@@ -156,12 +156,14 @@ that cannot provision cannot be wired up to provision by a later caller who did
 not read this ADR. The tee calls `VerifySchema` at startup and refuses to write
 on mismatch.
 
-The transport turns out to agree independently. `EnsureTable` runs its DDL as
-one multi-statement script, and the ClickHouse HTTP interface rejects a
+The transport agreed independently while M0 was built: `EnsureTable` ran its
+DDL as one multi-statement script, and the ClickHouse HTTP interface rejects a
 multi-statement body outright ("Multi-statements are not allowed", verified
-against 26.7.3 while building M0). So a store bound to the HTTP executor could
-not provision itself even if it were allowed to. SD2 is what makes that a
-declared property rather than a runtime surprise.
+against 26.7.3). That accident is gone — since 2026-08-15 a generated
+`EnsureTable` issues one statement per `Exec` (ADR-0100's Update of that
+date), so a store bound to the HTTP executor *can* provision itself. SD2 is
+therefore the only thing keeping a facts-bound store from running DDL, which
+is why it is a declared property rather than a runtime surprise.
 
 ### SD3 — Fact model: one append-shaped kind per domain
 

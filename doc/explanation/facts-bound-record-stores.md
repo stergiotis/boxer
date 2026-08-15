@@ -21,10 +21,12 @@ alternative exists or that the generated one is the direction of travel.
 
 **`factsstore.FactsStoreI` / `chstore`** is the older lane. It carries one
 hand-written verb per kind — `WriteGrant`, `WriteAudit`, `WriteLog`,
-`WriteState`, `WriteWorkingset`, `WriteColumnWidth`, and the run-lifecycle
-family — each hand-encoding the leeway DML, and hand-composed SQL for the
-read-backs. It is production-wired (the imzero2 host app, `apps/capinspector`)
-and it is not going away on a schedule.
+`WriteWorkingset`, `WriteColumnWidth`, and the run-lifecycle family — each
+hand-encoding the leeway DML, and hand-composed SQL for the read-backs. It is
+production-wired (the imzero2 host app, `apps/capinspector`) and it is not
+going away on a schedule. (App persist state used to be a verb here too; it
+left for its own generated store, `boxer.persiststate`, and the verbs were
+removed — ADR-0105 D3a and its 2026-08-15 Update.)
 
 **A facts-bound record store** is generated: you write a DTO, register your
 memberships in a vocabulary, and a generator emits the ingest, scan and decode

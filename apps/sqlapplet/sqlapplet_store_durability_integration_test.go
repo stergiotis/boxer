@@ -11,33 +11,44 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
+	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
-// durabilityDb is a scratch database, not the runtime's own boxer.facts.
-// The store writes user-authored applet documents; pointing this at the
-// live table would mix test documents into whatever the developer's
-// running desktop has stored.
+// durabilityDb is a scratch database, not the runtime's own boxer. The
+// store writes user-authored applet documents; pointing this at the live
+// `boxer.persiststate` would mix test documents into whatever the
+// developer's running desktop has stored. The persist store's runtime table
+// override (ADR-0100, 2026-08-15) is what lets the generated store — whose
+// baked table is `boxer.persiststate` — be aimed here.
 const durabilityDb = "sqlapplet_store_durability_test"
 
-// bootStore stands up one complete "process worth" of wiring over an
-// already-constructed facts store: a fresh bus, a fresh persist service on
-// the facts backend, a fresh registry, and the store service booting from
-// whatever it finds in persist. Nothing is shared with a previous boot
-// except the ClickHouse rows themselves — which is the whole point, since
-// the in-process reload test (TestStoreReloadMintsAtBoot) keeps the persist
-// service alive across the "reboot" and therefore passed throughout the
-// period when nothing was durable at all.
-func bootStore(t *testing.T, cfg chstore.Config) (reg *app.Registry, svc *StoreService, caller *inprocbus.Client) {
+// bootStore stands up one complete "process worth" of wiring over the
+// production persist backend, aimed at table: a fresh executor over the
+// HTTP client, a fresh persist service on the store backend, a fresh
+// registry, and the store service booting from whatever it finds in
+// persist. Nothing is shared with a previous boot except the ClickHouse
+// rows themselves — which is the whole point, since the in-process reload
+// test (TestStoreReloadMintsAtBoot) keeps the persist service alive across
+// the "reboot" and therefore passed throughout the period when nothing was
+// durable at all.
+//
+// This is the wiring the carousel performs (storeexec over chclient, then
+// OpenStoreBackend), so it also proves that a generated store provisions
+// itself through the HTTP transport — EnsureTable issues its statements one
+// per Exec, because the HTTP interface rejects a multi-statement body.
+func bootStore(t *testing.T, cli *chclient.Client, table string) (reg *app.Registry, svc *StoreService, caller *inprocbus.Client) {
 	t.Helper()
-	store, err := chstore.New(cfg)
+	exec, err := storeexec.New(cli, nil)
 	require.NoError(t, err)
-	backend, err := persist.NewFactsBackend(store)
+	backend, err := persist.OpenStoreBackendAt(context.Background(), exec, nil, table)
 	require.NoError(t, err)
+	t.Cleanup(backend.Close)
 
 	bus := inprocbus.NewInst(zerolog.Nop())
 	ps, err := persist.NewService(bus, zerolog.Nop(), backend)
@@ -56,7 +67,7 @@ func bootStore(t *testing.T, cfg chstore.Config) (reg *app.Registry, svc *StoreS
 }
 
 // TestStoreSurvivesProcessRestart_LiveCH is the end-to-end durability check
-// for ADR-0132 O4 over the ADR-0026 §SD6 facts backend: an applet saved by
+// for ADR-0132 O4 over the ADR-0105 D3a store backend: an applet saved by
 // one boot must be minted by the next boot, with only ClickHouse in between.
 //
 // It also asserts the negative — the same second boot on a memory backend
@@ -69,22 +80,19 @@ func TestStoreSurvivesProcessRestart_LiveCH(t *testing.T) {
 		t.Skipf("ClickHouse not reachable at %s: %v", chclient.Defaults().URL, err)
 	}
 
-	cfg := chstore.Defaults()
-	cfg.Database = durabilityDb
+	table := durabilityDb + "." + persiststore.TableName
 	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+durabilityDb))
 	t.Cleanup(func() {
 		_ = cli.Exec(ctx, "DROP DATABASE IF EXISTS "+durabilityDb)
 	})
-	setup, err := chstore.New(cfg)
-	require.NoError(t, err)
-	require.NoError(t, setup.SetupTable(ctx, ""))
 
 	const slug = "durability-probe"
 	const sql = "SELECT * FROM keelson('workingsets')"
 
-	// Boot 1 — author saves an applet.
+	// Boot 1 — author saves an applet. The first boot also provisions the
+	// scratch database and table (OpenStoreBackendAt runs EnsureTable).
 	{
-		reg, _, caller := bootStore(t, cfg)
+		reg, _, caller := bootStore(t, cli, table)
 		_, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + slug))
 		require.False(t, ok, "the scratch database must start empty")
 
@@ -92,10 +100,10 @@ func TestStoreSurvivesProcessRestart_LiveCH(t *testing.T) {
 		require.True(t, rep.OK, "refused: %s", rep.Error)
 	}
 
-	// Boot 2 — everything above is gone: new chstore client, new bus, new
+	// Boot 2 — everything above is gone: new executor, new bus, new
 	// persist service, new registry. Only the ClickHouse rows survive.
 	{
-		reg, svc, _ := bootStore(t, cfg)
+		reg, svc, _ := bootStore(t, cli, table)
 		m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + slug))
 		require.True(t, ok, "a saved applet must mint at the next boot")
 		assert.Equal(t, "Durability probe", m.Display)
@@ -130,13 +138,15 @@ func TestStoreSurvivesProcessRestart_LiveCH(t *testing.T) {
 	}
 }
 
-// TestStoreWritesFactRows_LiveCH asserts the shape of what durability rests
-// on: the store's documents land as KindState rows attributed to the store's
-// own durable app id. The id matters — it is a synthetic runtime service
-// identity that is never registered as an app, which is why the persist
-// service attributes it from the bus envelope rather than resolving the
-// subject alias through the registry.
-func TestStoreWritesFactRows_LiveCH(t *testing.T) {
+// TestStoreWritesStateRows_LiveCH asserts the shape of what durability
+// rests on: the store's documents land as persist-state rows attributed to
+// the store's own durable app id. The id matters — it is a synthetic
+// runtime service identity that is never registered as an app, which is
+// why the persist service attributes it from the bus envelope rather than
+// resolving the subject alias through the registry. Read back through the
+// generated store's own scan, so the assertion follows the schema rather
+// than a hand-written physical column name.
+func TestStoreWritesStateRows_LiveCH(t *testing.T) {
 	ctx := context.Background()
 	cli := chclient.New(chclient.Defaults(), nil)
 	if err := cli.Ping(ctx); err != nil {
@@ -144,42 +154,29 @@ func TestStoreWritesFactRows_LiveCH(t *testing.T) {
 	}
 
 	const db = durabilityDb + "_rows"
-	cfg := chstore.Defaults()
-	cfg.Database = db
+	table := db + "." + persiststore.TableName
 	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db))
 	t.Cleanup(func() {
 		_ = cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db)
 	})
-	setup, err := chstore.New(cfg)
-	require.NoError(t, err)
-	require.NoError(t, setup.SetupTable(ctx, ""))
 
-	_, _, caller := bootStore(t, cfg)
+	_, _, caller := bootStore(t, cli, table)
 	rep := saveDoc(t, caller, "row-probe", testDoc("Row probe", "SELECT 1"))
 	require.True(t, rep.OK, "refused: %s", rep.Error)
 
 	// One row per persist Set: the document and the index. Both carry the
-	// store's durable id on the MembRuntimeApp mixed membership, which is
-	// what the symbol value column holds.
-	rows, err := queryScalar(ctx, cli,
-		"SELECT count() FROM "+db+".facts WHERE has(`tv:symbol:value:val:s:124::I:0::data`, 'runtime.appletstore')")
+	// store's durable id in the state component's AppId.
+	exec, err := storeexec.New(cli, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "2", rows,
+	reader := persiststore.NewPersistStore(exec, nil, persiststore.PersistStoreConfig{Table: table})
+	defer reader.Close()
+	rows := 0
+	for ent, serr := range reader.ScanState(ctx, recordstore.ScanOpts{}) {
+		require.NoError(t, serr)
+		if ent.State.Has && ent.State.Val.AppId == "runtime.appletstore" {
+			rows++
+		}
+	}
+	assert.Equal(t, 2, rows,
 		"expected one state row for the document and one for the index")
-}
-
-// queryScalar runs sql and returns the single value it selects, trimmed.
-func queryScalar(ctx context.Context, cli *chclient.Client, sql string) (out string, err error) {
-	body, err := cli.Query(ctx, sql)
-	if err != nil {
-		return
-	}
-	defer body.Close()
-	buf := make([]byte, 4096)
-	n, _ := body.Read(buf)
-	out = string(buf[:n])
-	for len(out) > 0 && (out[len(out)-1] == '\n' || out[len(out)-1] == '\r') {
-		out = out[:len(out)-1]
-	}
-	return
 }

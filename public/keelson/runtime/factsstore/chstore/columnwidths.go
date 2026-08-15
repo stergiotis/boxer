@@ -64,7 +64,8 @@ func (inst *Store) WriteColumnWidth(row factsstore.ColumnWidthRow) (id uint64, e
 
 // DeleteColumnWidth writes a tombstone for one override key: the identity
 // attributes plus MembPersistTombstone on the bool section, the term
-// DeleteState and DeleteWorkingset already share.
+// DeleteWorkingset already uses (and the facts-bound persist tombstones
+// used before persist state left this table).
 func (inst *Store) DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
 	id := inst.nextId.Add(1)
 	ts := time.Now().UTC()
@@ -228,8 +229,8 @@ func parseListColumnWidthsRows(appId app.AppIdT, raw []byte) (rows []factsstore.
 
 // naturalKeyForColumnWidth seeds the domain-stable identifier: the entry's
 // identity tuple, so repeated captures of one column share a natural key
-// and the trail reads as one entity observed over time — the shape
-// WriteState already uses for (app, key).
+// and the trail reads as one entity observed over time — the shape the
+// workingset rows use for (app, name).
 func naturalKeyForColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (out []byte) {
 	h := blake3.New(16, nil)
 	_, _ = h.Write([]byte("columnWidth"))

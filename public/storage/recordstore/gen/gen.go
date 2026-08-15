@@ -313,8 +313,10 @@ func (inst Input) Generate() (err error) {
 	}
 	if inst.Database != "" {
 		// Provision the database ahead of the qualified CREATE TABLE so
-		// EnsureTable succeeds against a fresh server — the executor runs
-		// the embedded file as one multi-statement script.
+		// EnsureTable succeeds against a fresh server. The file is a
+		// two-statement script; the emitted EnsureTable splits it
+		// (recordstore.ProvisioningStatements) and issues one statement
+		// per Exec, which the HTTP executor requires.
 		ddlSql = "CREATE DATABASE IF NOT EXISTS " + inst.Database + ";\n\n" + ddlSql
 	}
 	err = inst.write(inst.TableName+"_ddl_clickhouse.out.sql", []byte(ddlSql))

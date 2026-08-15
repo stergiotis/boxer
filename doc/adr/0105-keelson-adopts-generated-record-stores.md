@@ -275,8 +275,9 @@ Accepted (2026-07-05); reconciled in place 2026-07-11, before
 implementation start (see Updates). D1 (`data/storeexec`) and D2
 (`runtime/factsschema/storegen`) are built. D3a is built and wired — the
 persist backend runs on the generated `boxer.persiststate` store, and the
-2026-07-31 deviation is discharged. D3b's generator precondition is met;
-the facts-bound grants/audit store itself is not built.
+2026-07-31 deviation is discharged; since 2026-08-15 the facts-bound
+predecessor and the `FactsStoreI` state verbs are gone. D3b's generator
+precondition is met; the facts-bound grants/audit store itself is not built.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
@@ -437,6 +438,40 @@ Not taken here: removing `WriteState`/`DeleteState`/`LatestState` from
 callers have, so the removal is now available — but it touches `chstore`,
 the in-memory store and that one integration test, and D5's opportunistic
 posture argues against scheduling the sweep for its own sake.
+
+### 2026-08-15 — the state verbs leave `FactsStoreI`; a transport defect in D3a fixed
+
+Two things landed together, closing what the 2026-08-14 entry left open
+and one thing it did not know.
+
+**The persist store never provisioned itself in production.** `EnsureTable`
+shipped its embedded DDL as one two-statement script (`CREATE DATABASE …;
+CREATE TABLE …`), and the ClickHouse HTTP interface rejects a multi-statement
+body — the very fact `data/storeexec`'s own integration test pins. So the
+carousel's `OpenStoreBackend` failed at open through the HTTP executor and
+fell back to `MemoryBackend` (`persist:mem`, with a warning), and
+`boxer.persiststate` did not exist on the server the 08-14 entry called
+"wired" (checked 2026-08-15: `system.tables` had no such table). The
+`clickhouse-local` executor the tests use runs scripts, which is why the
+suite was green. Fixed at the root: a generated `EnsureTable` now issues one
+statement per `Exec` (`recordstore.ProvisioningStatements`; ADR-0100's Update
+of this date), verified end to end through `storeexec` against a live server
+by the sqlapplet durability test (next paragraph). The live table provisions itself on
+the next carousel boot; nothing was written under the old wiring, so there is
+nothing to migrate.
+
+**`FactsBackend` and `WriteState`/`LatestState`/`DeleteState` are removed.**
+The 08-14 entry kept them only because a generated store baked its table and
+the durability integration test needed a scratch database. That is now a
+runtime binding — `<Store>StoreConfig.Table` (ADR-0100, same date),
+surfaced here as `persist.OpenStoreBackendAt(ctx, exec, alloc, table)` — and
+`apps/sqlapplet`'s durability test runs the production backend over a
+scratch database through the HTTP executor, which is more faithful than the
+facts-bound path it used before. Gone with the verbs: `factsstore.StateRow`,
+the in-memory state trail, `chstore.composeLatestStateSql` and its callers.
+`MembKindState` / `MembPersistKey` / `MembPersistTombstone` stay registered —
+rows carry them, and the tombstone term is still what `DeleteWorkingset` and
+`DeleteColumnWidth` write.
 
 ## References
 

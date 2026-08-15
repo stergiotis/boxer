@@ -26,10 +26,12 @@
 //     SETTINGS in ClickHouse's grammar.
 //   - The statement must be a single statement. The HTTP interface rejects a
 //     multi-statement script outright ("Multi-statements are not allowed",
-//     verified against 26.7.3), so the multi-statement DDL script a generated
-//     EnsureTable emits cannot run through this executor. Send one statement
-//     per Exec, or bind the store as externally provisioned (ADR-0184 SD2) so
-//     it never emits the script at all.
+//     verified against 26.7.3). A generated EnsureTable honours this — it
+//     issues its CREATE DATABASE and CREATE TABLE one per Exec
+//     (recordstore.ProvisioningStatements) — so a store may provision itself
+//     through this executor; before 2026-08-15 it shipped the embedded
+//     script whole and could not. Callers issuing their own DDL send one
+//     statement per Exec.
 //
 // # What a mid-result failure looks like
 //

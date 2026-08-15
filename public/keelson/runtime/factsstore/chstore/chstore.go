@@ -1,14 +1,16 @@
 // Package chstore is the ClickHouse-backed factsstore.FactsStoreI per
 // ADR-0026 M2.5c. Writes go through the generated leeway DML builders
 // (runtime/factsschema/dml.InEntityFacts) and ship as Arrow IPC via
-// chclient.InsertArrow. Read operations (LatestState / DeleteState) are
-// stubbed in M2.5c — the leeway-shaped SELECT against array-encoded
-// membership columns is non-trivial and lands in a later sub-phase.
+// chclient.InsertArrow. Reads (RecentLogs, the run-session views, the
+// workingset and column-width latest-wins lists) are hand-composed
+// leeway-shaped SELECTs against the array-encoded membership columns —
+// the code class ADR-0105 D5 replaces with generated stores kind by kind.
+// App persist state left this table for its own generated store
+// (ADR-0105 D3a); the state verbs went with it.
 package chstore
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -89,7 +91,7 @@ func (inst *Store) Ping(ctx context.Context) (err error) {
 // initialisation (SetupTable(ctx, "")) uses.
 //
 // Time-ordered by default: every audit read (RecentLogs, LifecyclesByRun,
-// LatestState) is ORDER BY ts, so a sorted primary key turns those into a
+// the latest-wins lists) is ORDER BY ts, so a sorted primary key turns those into a
 // sparse-index range read instead of the full scan that ORDER BY tuple()
 // forced. Retention — TTL / partitioning to bound a forever-growing
 // heartbeat table — is intentionally left to the operator's own engine
@@ -544,141 +546,6 @@ func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) 
 	}
 
 	err = inst.commitAndShip(context.Background(), ent)
-	return
-}
-
-// WriteState lands one boxer.facts row tagged KindState; the value bytes
-// go in the blob section under the PersistKey membership.
-func (inst *Store) WriteState(row factsstore.StateRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
-	ts := defaultTs(row.Ts)
-	nk := naturalKeyFor("state", row.AppId, []byte(row.Key), nil)
-	ent := dml.NewInEntityFacts(inst.allocator, 1)
-	ent.BeginEntity().SetId(id, nk).SetTimestamp(ts)
-	sym := ent.GetSectionSymbol()
-	sym.BeginAttribute("state").AddMembershipLowCardRef(vocab.MembKindState.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(string(row.AppId)).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeApp.GetId().Value(), []byte(row.AppId)).EndAttribute()
-	sym.BeginAttribute(row.Key).AddMembershipLowCardRef(vocab.MembPersistKey.GetId().Value()).EndAttribute()
-	sym.EndSection()
-	blob := ent.GetSectionBlobArray()
-	blob.BeginAttributeSingle(row.Value).AddMembershipLowCardRef(vocab.MembPersistKey.GetId().Value()).EndAttribute()
-	blob.EndSection()
-	err = inst.commitAndShip(context.Background(), ent)
-	return
-}
-
-// LatestState returns the most recent state value for (appId, key). The
-// (appId, key) match and the value read are membership-keyed — appId via the
-// MembRuntimeApp mixed-membership (arrayFirst over symbol.mrhp), key via the
-// MembPersistKey low-card-ref (the same cumulative-sum lookup pickLcrString
-// uses), and the value via the MembPersistKey-tagged blob attribute. This
-// matches RecentLogs / LifecyclesByRun and deliberately does NOT rely on the
-// positional order of symbol attributes, which the canonicalized,
-// low-cardinality symbol encoding does not guarantee. The blob value is
-// hex-encoded over the wire for binary safety; tombstone rows (the most
-// recent write for (appId, key) is a DeleteState) return found=false.
-func (inst *Store) LatestState(appId app.AppIdT, key string) (value []byte, found bool, err error) {
-	ctx := context.Background()
-	sql := composeLatestStateSql(inst.qualifiedTable(), appId, key)
-	body, err := inst.cli.Query(ctx, sql)
-	if err != nil {
-		err = eh.Errorf("chstore: latest state query: %w", err)
-		return
-	}
-	defer body.Close()
-	buf := make([]byte, 65536)
-	n, _ := body.Read(buf)
-	raw := strings.TrimRight(string(buf[:n]), "\n")
-	if raw == "" {
-		return
-	}
-	parts := strings.Split(raw, "\t")
-	if len(parts) != 2 {
-		err = eh.Errorf("chstore: latest state: unexpected row shape: %q", raw)
-		return
-	}
-	if parts[1] == "1" {
-		return
-	}
-	value, err = hex.DecodeString(parts[0])
-	if err != nil {
-		err = eh.Errorf("chstore: latest state: hex decode: %w", err)
-		return
-	}
-	found = true
-	return
-}
-
-// DeleteState writes a tombstone row for (appId, key): same shape as a
-// state row plus a bool-section attribute marked with MembPersistTombstone.
-// LatestState treats the most-recent tombstone as found=false.
-func (inst *Store) DeleteState(appId app.AppIdT, key string) (err error) {
-	id := inst.nextId.Add(1)
-	ts := time.Now().UTC()
-	nk := naturalKeyFor("state-tomb", appId, []byte(key), nil)
-	ent := dml.NewInEntityFacts(inst.allocator, 1)
-	ent.BeginEntity().SetId(id, nk).SetTimestamp(ts)
-	sym := ent.GetSectionSymbol()
-	sym.BeginAttribute("state").AddMembershipLowCardRef(vocab.MembKindState.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(string(appId)).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeApp.GetId().Value(), []byte(appId)).EndAttribute()
-	sym.BeginAttribute(key).AddMembershipLowCardRef(vocab.MembPersistKey.GetId().Value()).EndAttribute()
-	sym.EndSection()
-	b := ent.GetSectionBool()
-	b.BeginAttribute(true).AddMembershipLowCardRef(vocab.MembPersistTombstone.GetId().Value()).EndAttribute()
-	b.EndSection()
-	err = inst.commitAndShip(context.Background(), ent)
-	return
-}
-
-// composeLatestStateSql builds the membership-keyed LatestState query. The
-// appId match reuses appIdPredicate (MembRuntimeApp via symbol.mrhp), the key
-// match reuses pickLcrString (MembPersistKey via the lrcard cumulative sum),
-// and the value reads the MembPersistKey-tagged blob attribute by the same
-// cumulative-sum lookup over the blobArray columns — none of which depend on
-// the positional order of symbol attributes.
-func composeLatestStateSql(table string, appId app.AppIdT, key string) (sql string) {
-	const (
-		symLR      = "`tv:symbol:lr:lr:u64:1247:::0::data`"
-		symLMR     = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-		symValue   = "`tv:symbol:value:val:s:124::I:0::data`"
-		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
-		blobValue  = "`tv:blobArray:value:val:yh:4:::0::data`"
-		blobLR     = "`tv:blobArray:lr:lr:u64:1247:::0::data`"
-		blobLRCard = "`tv:blobArray:lrcard:lrcard:u64:4E:::0::data`"
-		boolLR     = "`tv:bool:lr:lr:u64:1247:::0::data`"
-		tsCol      = "`ts:ts:z64:47::0:`"
-	)
-	// Value: the blob attribute tagged MembPersistKey, located the same way
-	// pickLcrString locates a scalar — find the membership in lr, map through
-	// arrayCumSum(lrcard) to the value position — then hex-encode the bytes.
-	// '' (the not-found default) hex-encodes to '', which the caller parses
-	// as an empty value; row existence (the WHERE) drives the found flag.
-	blobIdxInLr := fmt.Sprintf("indexOf(%s, %d)", blobLR, vocab.MembPersistKey.GetId().Value())
-	valuePick := fmt.Sprintf("hex(if(%s > 0, arrayElement(%s, indexOf(arrayCumSum(%s), %s)), ''))",
-		blobIdxInLr, blobValue, blobLRCard, blobIdxInLr)
-	keyPick := pickLcrString(symValue, symLR, symLRCard, vocab.MembPersistKey.GetId().Value())
-	whereParts := []string{
-		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindState.GetId().Value()),
-		fmt.Sprintf("has(%s, %d)", symLMR, vocab.MembRuntimeApp.GetId().Value()),
-		appIdPredicate(appId),
-		fmt.Sprintf("(%s) = %s", keyPick, quoteSqlString(key)),
-	}
-	sql = fmt.Sprintf(`
-SELECT
-  %s AS v_hex,
-  has(%s, %d) AS is_tombstone
-FROM %s
-WHERE %s
-ORDER BY %s DESC
-LIMIT 1
-FORMAT TabSeparated`,
-		valuePick,
-		boolLR, vocab.MembPersistTombstone.GetId().Value(),
-		table,
-		strings.Join(whereParts, " AND "),
-		tsCol)
 	return
 }
 

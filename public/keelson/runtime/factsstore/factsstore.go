@@ -1,13 +1,18 @@
 // Package factsstore is the durable view of runtime facts per ADR-0026 §SD6.
-// Capability grants from the broker, audit records from the bus, and state
-// writes from the persist service all flow through FactsStoreI. Two backends
-// implement it: InMemoryFactsStore here, and the boxer.facts-backed Store in
+// Capability grants from the broker, audit records from the bus, the run and
+// app lifecycle trail, launches, workingsets and column-width overrides all
+// flow through FactsStoreI. Two backends implement it: InMemoryFactsStore
+// here, and the boxer.facts-backed Store in
 // [github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore],
 // which writes CH+leeway rows through the factsschema package.
 // chstore.NewWithFallback picks between them at runtime, degrading to the
 // in-memory store when ClickHouse is unreachable.
 //
-// Row types are typed per-kind so the broker / persist / audit code stays
+// App persist state does not flow through here any more: it lives on a
+// generated record store over its own table (persist.StoreBackend, ADR-0105
+// D3a), and the facts-bound state verbs were removed once that landed.
+//
+// Row types are typed per-kind so the broker / audit / lifecycle code stays
 // readable; the leeway translation lives behind the FactsStoreI boundary, and
 // this package deliberately imports no leeway at all.
 //
@@ -19,7 +24,7 @@
 // instead. The name of this package is the main reason someone misses that,
 // so: start at doc/explanation/facts-bound-record-stores.md, which covers
 // which lane to pick, the two DTO shapes the generated lane still refuses,
-// and why the state and keyed-lookup verbs cannot move yet.
+// and why the keyed-lookup verbs cannot move yet.
 package factsstore
 
 import (
@@ -63,16 +68,6 @@ type AuditRow struct {
 	RequestSizeB  uint32
 	ResponseSizeB uint32
 	Ts            time.Time
-}
-
-// StateRow is one persisted state write. Maps to a boxer.facts row with
-// KindState + AppRefPrefix(appId) + PersistKey memberships; the value lives
-// on the blob section.
-type StateRow struct {
-	AppId app.AppIdT
-	Key   string
-	Value []byte
-	Ts    time.Time
 }
 
 // RuntimeStartRow records one process boot: a "this run started" event
@@ -193,7 +188,7 @@ type LaunchRow struct {
 // TileKey and Reason are provenance, not identity: which window wrote the
 // record and why it closed ("user-close" / "shutdown" / …). Rows are
 // append-only; the latest row for (AppId, Name) wins and a tombstone
-// (DeleteWorkingset) reads back as not-found — the LatestState semantics.
+// (DeleteWorkingset) reads back as not-found — the persist-state semantics.
 type WorkingsetRow struct {
 	RunId   string
 	AppId   app.AppIdT
@@ -234,7 +229,7 @@ const (
 // blake3short of (column name, type discriminator), so a type change
 // invalidates the override by construction rather than by a rule someone
 // has to remember. Rows are append-only; the latest row for a key wins and
-// a tombstone (DeleteColumnWidth) reads back as absent — the LatestState
+// a tombstone (DeleteColumnWidth) reads back as absent — the persist-state
 // semantics, reused a third time after workingsets.
 //
 // Points and FontSize travel together because a width is only meaningful
@@ -417,14 +412,17 @@ type LogRow struct {
 }
 
 // FactsStoreI is the contract implementations satisfy. Write methods
-// correspond to the recorded fact kinds; LatestState / DeleteState
-// support the persist service when run with a facts-backed
-// StorageBackendI. All methods return errors so the CH-backed
-// implementation can surface transport failures.
+// correspond to the recorded fact kinds; the workingset and column-width
+// verbs add latest-wins reads and tombstone deletes over their trails. All
+// methods return errors so the CH-backed implementation can surface
+// transport failures.
+//
+// App persist state is not here: it lives on the generated store behind
+// persist.StoreBackend (ADR-0105 D3a), and the facts-bound state verbs it
+// replaced were removed once it had no callers (ADR-0105, 2026-08-15).
 type FactsStoreI interface {
 	WriteGrant(row GrantRow) (id uint64, err error)
 	WriteAudit(row AuditRow) (id uint64, err error)
-	WriteState(row StateRow) (id uint64, err error)
 	WriteLog(row LogRow) (id uint64, err error)
 	// WriteLogs persists a batch of log rows. Implementations should land
 	// the whole batch in one transport operation (e.g. a single Arrow
@@ -435,8 +433,6 @@ type FactsStoreI interface {
 	WriteRuntimeHeartbeat(row HeartbeatRow) (id uint64, err error)
 	WriteAppLifecycle(row AppLifecycleRow) (id uint64, err error)
 	WriteLaunch(row LaunchRow) (id uint64, err error)
-	LatestState(appId app.AppIdT, key string) (value []byte, found bool, err error)
-	DeleteState(appId app.AppIdT, key string) (err error)
 	// WriteWorkingset appends one saved workingset record (ADR-0148 §SD6).
 	// Append-only: a second write for the same (AppId, Name) supersedes the
 	// first without erasing it, so the row trail is the history.
@@ -477,33 +473,26 @@ type FactsStoreI interface {
 	DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error)
 }
 
-// InMemoryFactsStore is the M2.5 backend. Stores grants / audit / state in
-// six slices, monotonically id'd. LatestState scans state in reverse so
-// the most recent write wins; DeleteState appends a tombstone (empty
-// Value) so the read path naturally returns not-found until a subsequent
-// Write.
+// InMemoryFactsStore is the M2.5 backend. Stores each kind in its own
+// slice, monotonically id'd. The workingset and column-width trails are
+// read latest-wins by a reverse scan; a delete appends a tombstone so the
+// read path naturally returns not-found until a subsequent write.
 type InMemoryFactsStore struct {
 	mu         sync.RWMutex
 	grants     []GrantRow
 	audit      []AuditRow
-	state      []stateEntry
 	logs       []LogRow
 	runs       []RuntimeStartRow
 	heartbeats []HeartbeatRow
 	lifecycles []AppLifecycleRow
 	launches   []LaunchRow
 	// workingsets is the append-only workingset trail (ADR-0148 §SD6),
-	// read latest-wins by the same reverse scan LatestState uses.
+	// read latest-wins by a reverse scan.
 	workingsets []workingsetEntry
 	// colWidths is the append-only column-width override trail
 	// (ADR-0151), collapsed latest-wins per key by ListColumnWidths.
 	colWidths []colWidthEntry
 	nextId    atomic.Uint64
-}
-
-type stateEntry struct {
-	row       StateRow
-	tombstone bool
 }
 
 type workingsetEntry struct {
@@ -536,17 +525,6 @@ func (inst *InMemoryFactsStore) WriteAudit(row AuditRow) (id uint64, err error) 
 	id = inst.nextId.Add(1)
 	inst.mu.Lock()
 	inst.audit = append(inst.audit, row)
-	inst.mu.Unlock()
-	return
-}
-
-func (inst *InMemoryFactsStore) WriteState(row StateRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
-	stored := make([]byte, len(row.Value))
-	copy(stored, row.Value)
-	row.Value = stored
-	inst.mu.Lock()
-	inst.state = append(inst.state, stateEntry{row: row})
 	inst.mu.Unlock()
 	return
 }
@@ -745,41 +723,12 @@ func SortWorkingsets(rows []WorkingsetRow) {
 	})
 }
 
-// DeleteWorkingset appends a tombstone for (appId, name) — the
-// DeleteState pattern, so history stays in the trail.
+// DeleteWorkingset appends a tombstone for (appId, name), so history
+// stays in the trail.
 func (inst *InMemoryFactsStore) DeleteWorkingset(appId app.AppIdT, name string) (err error) {
 	inst.mu.Lock()
 	inst.workingsets = append(inst.workingsets, workingsetEntry{
 		row:       WorkingsetRow{AppId: appId, Name: name, Ts: time.Now().UTC()},
-		tombstone: true,
-	})
-	inst.mu.Unlock()
-	return
-}
-
-func (inst *InMemoryFactsStore) LatestState(appId app.AppIdT, key string) (value []byte, found bool, err error) {
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	for i := len(inst.state) - 1; i >= 0; i-- {
-		e := inst.state[i]
-		if e.row.AppId != appId || e.row.Key != key {
-			continue
-		}
-		if e.tombstone {
-			return
-		}
-		value = make([]byte, len(e.row.Value))
-		copy(value, e.row.Value)
-		found = true
-		return
-	}
-	return
-}
-
-func (inst *InMemoryFactsStore) DeleteState(appId app.AppIdT, key string) (err error) {
-	inst.mu.Lock()
-	inst.state = append(inst.state, stateEntry{
-		row:       StateRow{AppId: appId, Key: key, Ts: time.Now()},
 		tombstone: true,
 	})
 	inst.mu.Unlock()
@@ -862,24 +811,6 @@ func (inst *InMemoryFactsStore) Workingsets() (rows []WorkingsetRow) {
 		}
 		rows = append(rows, e.row)
 	}
-	return
-}
-
-// StateRows returns a snapshot of all state-write rows (including
-// tombstones-as-empty-values) ordered by insertion.
-func (inst *InMemoryFactsStore) StateRows() (rows []StateRow) {
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	rows = make([]StateRow, 0, len(inst.state))
-	for _, e := range inst.state {
-		if e.tombstone {
-			continue
-		}
-		rows = append(rows, e.row)
-	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		return rows[i].Ts.Before(rows[j].Ts)
-	})
 	return
 }
 

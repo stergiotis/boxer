@@ -185,9 +185,11 @@ var sharedRA = gen.Scaffold{
 // wired up to run it by a later caller who did not read ADR-0184 §SD2, which
 // is the point of deciding it here rather than at each call site.
 //
-// The transport agrees independently: the ClickHouse HTTP interface rejects
-// the multi-statement script EnsureTable emits, so a facts-bound store bound
-// to `keelson/data/storeexec` could not provision itself even if allowed to.
+// (Until 2026-08-15 the transport also enforced this by accident — the
+// ClickHouse HTTP interface rejects multi-statement bodies and EnsureTable
+// shipped its script whole. EnsureTable now issues one statement per Exec,
+// so the suppression here is the only thing keeping a facts-bound store from
+// running DDL, which is why it is decided here.)
 //
 // The DDL *file* is still written — it is the physical schema the store
 // decodes positionally, and whoever does provision the table needs it.

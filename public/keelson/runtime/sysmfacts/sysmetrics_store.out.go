@@ -50,7 +50,7 @@ func factsKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 // carried in the membership columns. Verbatim-channel memberships embed
 // their literal name instead and are absent here.
 //
-// The ids are caller-assigned (a registry-stable snapshot) and are baked
+// The ids are caller-assigned (a registry-stable snapshot), baked into
 // both the component codecs and this store's Scan filters. Nothing on the
 // wire records which assignment wrote a row, so rows written under a
 // different one decode as ABSENT rather than failing — VerifySchema
@@ -316,6 +316,15 @@ func (inst *SysmetricsEntity) Archetype() (a []string) {
 }
 
 type SysmetricsStoreConfig struct {
+	// Table overrides the ClickHouse table this store binds — the baked
+	// SysmetricsTableName — for every statement it issues (DDL, DESCRIBE, INSERT,
+	// SELECT). Optionally database-qualified ("<db>.<table>"), unquoted-
+	// identifier shape only ([A-Za-z_][A-Za-z0-9_]* per part; the
+	// constructor panics otherwise). Empty (the default) binds the baked
+	// name. The schema is unchanged — this moves WHERE the rows land, not
+	// what they look like — so a scratch table for a test or a per-
+	// deployment table needs no regeneration.
+	Table string
 	// Stampers are consulted on every Begin (ADR-0112 M1): each yields
 	// surrogate ids stamped as additive HighCardRef memberships onto the
 	// entity's attributes. Empty (the default) leaves the store unstamped
@@ -363,11 +372,25 @@ type SysmetricsStore struct {
 
 // NewSysmetricsStore wires the store. A nil alloc selects the Go allocator.
 func NewSysmetricsStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg SysmetricsStoreConfig) (inst *SysmetricsStore) {
+	if cfg.Table != "" {
+		if terr := recordstore.CheckTableRef(cfg.Table); terr != nil {
+			panic("SysmetricsStore: " + terr.Error())
+		}
+	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
 	inst = &SysmetricsStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityFactsTable(alloc, 64), dirty: make(map[uint64]struct{}), stampers: cfg.Stampers}
 	return
+}
+
+// tableName is the table reference every statement uses: the configured
+// override when set, else the baked SysmetricsTableName.
+func (inst *SysmetricsStore) tableName() string {
+	if inst.cfg.Table != "" {
+		return inst.cfg.Table
+	}
+	return SysmetricsTableName
 }
 
 // applyStampers consults the configured stampers and pushes their surrogate
@@ -427,14 +450,14 @@ func (inst *SysmetricsStore) notifyFlush(key uint64) {
 // store at rows it did not write.
 func (inst *SysmetricsStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+SysmetricsTableName+factsArrowOutputSettings) {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+inst.tableName()+factsArrowOutputSettings) {
 		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", SysmetricsTableName, rerr)
+			err = eh.Errorf("describe table %s: %w", inst.tableName(), rerr)
 			return
 		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", SysmetricsTableName, rec.Column(0).DataType())
+			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.tableName(), rec.Column(0).DataType())
 			rec.Release()
 			return
 		}
@@ -445,12 +468,12 @@ func (inst *SysmetricsStore) VerifySchema(ctx context.Context) (err error) {
 	}
 	want := lowlevel.CreateSchemaFactsTable().Fields()
 	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", SysmetricsTableName, len(live), len(want))
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.tableName(), len(live), len(want))
 		return
 	}
 	for i, f := range want {
 		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", SysmetricsTableName, i, live[i], f.Name)
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.tableName(), i, live[i], f.Name)
 			return
 		}
 	}
@@ -1073,10 +1096,10 @@ func (inst *SysmetricsStore) Flush(ctx context.Context) (n int, err error) {
 	records = append(inst.pending, records...)
 	inst.pending = nil
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, SysmetricsTableName, records)
+		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", SysmetricsTableName, err)
+			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
 			return
 		}
 	}
@@ -1316,7 +1339,7 @@ func (inst *SysmetricsCache[W]) InvalidateAll() {
 func (inst *SysmetricsStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(SysmetricsTableName)
+	sb.WriteString(inst.tableName())
 	sb.WriteString(" WHERE " + SysmetricsColKey + " IN (")
 	for i, k := range keys {
 		if i > 0 {
@@ -1400,7 +1423,7 @@ func (inst *SysmetricsStore) ScanSysCpu(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1429,7 +1452,7 @@ func (inst *SysmetricsStore) ScanSysCpuInfo(ctx context.Context, opts recordstor
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1458,7 +1481,7 @@ func (inst *SysmetricsStore) ScanSysMem(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1487,7 +1510,7 @@ func (inst *SysmetricsStore) ScanSysPsi(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1516,7 +1539,7 @@ func (inst *SysmetricsStore) ScanSysNet(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1545,7 +1568,7 @@ func (inst *SysmetricsStore) ScanSysDiskMount(ctx context.Context, opts recordst
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1574,7 +1597,7 @@ func (inst *SysmetricsStore) ScanSysDiskIo(ctx context.Context, opts recordstore
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1603,7 +1626,7 @@ func (inst *SysmetricsStore) ScanSysBattery(ctx context.Context, opts recordstor
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1632,7 +1655,7 @@ func (inst *SysmetricsStore) ScanSysGpu(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1661,7 +1684,7 @@ func (inst *SysmetricsStore) ScanSysProc(ctx context.Context, opts recordstore.S
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1690,7 +1713,7 @@ func (inst *SysmetricsStore) ScanSysProcCmd(ctx context.Context, opts recordstor
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1719,7 +1742,7 @@ func (inst *SysmetricsStore) ScanSysSocket(ctx context.Context, opts recordstore
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1748,7 +1771,7 @@ func (inst *SysmetricsStore) ScanSysTopology(ctx context.Context, opts recordsto
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1763,7 +1786,7 @@ func (inst *SysmetricsStore) ScanSysTopology(ctx context.Context, opts recordsto
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *SysmetricsStore) Latest(ctx context.Context, key uint64) (ent *SysmetricsEntity, found bool, err error) {
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + SysmetricsColKey + " = " + factsKeyLiteral(key) +
 		" ORDER BY " + SysmetricsColOrder + " DESC LIMIT 1" + factsArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -1786,7 +1809,7 @@ func (inst *SysmetricsStore) Latest(ctx context.Context, key uint64) (ent *Sysme
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *SysmetricsStore) Replay(ctx context.Context, key uint64, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*SysmetricsEntity, error] {
-	sql := "SELECT * FROM " + SysmetricsTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + SysmetricsColKey + " = " + factsKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + SysmetricsColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"

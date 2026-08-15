@@ -12,13 +12,13 @@ import (
 )
 
 // StoreBackend is the durable StorageBackendI over a generated record
-// store (ADR-0105 D3a). It supersedes FactsBackend: same three verbs,
-// same StorageI surface for apps, but the rows land on the store-owned
-// `boxer.persiststate` table instead of `boxer.facts`.
+// store (ADR-0105 D3a). It replaced the facts-bound backend: same three
+// verbs, same StorageI surface for apps, but the rows land on the
+// store-owned `boxer.persiststate` table instead of `boxer.facts`.
 //
 // What that buys is the reason ADR-0105 exists. The state verbs want a
 // latest-wins read over a mutable key. On the append-only facts table
-// that read is hand-written leeway-encoded SQL — nested argMax over
+// that read was hand-written leeway-encoded SQL — nested argMax over
 // membership lookups, the code class ADR-0105 is deleting. Here the
 // generated state view answers it directly: Delete appends a tombstone,
 // the newest row for a key wins, and GetLive reads a tombstoned key as
@@ -63,11 +63,29 @@ var _ StorageBackendI = (*StoreBackend)(nil)
 // answers reads with the wrong columns, and finding that at wiring time
 // beats finding it on an app's first Get.
 func OpenStoreBackend(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocator) (inst *StoreBackend, err error) {
+	return OpenStoreBackendAt(ctx, exec, alloc, "")
+}
+
+// OpenStoreBackendAt is OpenStoreBackend over a table other than the
+// store's baked `boxer.persiststate`: table is the store's runtime
+// override (optionally database-qualified; empty selects the baked name).
+// The schema is the same, only where the rows land moves — a scratch
+// database for an integration test that must not touch the developer's
+// live state, or a per-deployment table. Provisioning and the schema check
+// run against the override.
+func OpenStoreBackendAt(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocator, table string) (inst *StoreBackend, err error) {
 	if exec == nil {
 		err = eh.Errorf("persist: OpenStoreBackend: nil executor")
 		return
 	}
-	st := persiststore.NewPersistStore(exec, alloc, persiststore.PersistStoreConfig{})
+	if table != "" {
+		err = recordstore.CheckTableRef(table)
+		if err != nil {
+			err = eh.Errorf("persist: OpenStoreBackendAt: %w", err)
+			return
+		}
+	}
+	st := persiststore.NewPersistStore(exec, alloc, persiststore.PersistStoreConfig{Table: table})
 	err = st.EnsureTable(ctx)
 	if err != nil {
 		err = eh.Errorf("persist: open store backend: %w", err)
@@ -95,10 +113,9 @@ func stateKey(ref StorageRef, key string) (id string) {
 
 // Get resolves (app, key) to the latest value. A key that was never
 // written and a key whose newest row is a tombstone both report
-// found=false — the same semantics FactsBackend gave through
-// LatestState, and the ones the persist contract promises. An empty
-// stored value round-trips as found=true with a zero-length slice,
-// distinct from absent.
+// found=false — the semantics the persist contract promises (and the
+// facts-bound predecessor answered). An empty stored value round-trips
+// as found=true with a zero-length slice, distinct from absent.
 //
 // The read goes through the cache view: a Set writes through at Commit,
 // so the next Get for that key is answered without a round-trip, which

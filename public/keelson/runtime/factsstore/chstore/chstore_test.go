@@ -88,22 +88,6 @@ func TestStore_WriteAudit_LiveCH(t *testing.T) {
 	assert.Equal(t, uint64(1), n)
 }
 
-func TestStore_WriteState_LiveCH(t *testing.T) {
-	s, cleanup := newLiveStore(t)
-	defer cleanup()
-	id, err := s.WriteState(factsstore.StateRow{
-		AppId: "github.com/example/play",
-		Key:   "tabs",
-		Value: []byte(`[{"name":"main"}]`),
-		Ts:    time.Now().UTC(),
-	})
-	require.NoError(t, err)
-	assert.NotZero(t, id)
-	n, err := s.Count(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, uint64(1), n)
-}
-
 func TestStore_AllThreeKinds_OneTable_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
@@ -115,8 +99,8 @@ func TestStore_AllThreeKinds_OneTable_LiveCH(t *testing.T) {
 		AppId: "a", Subject: "x.y", Result: "ok", LatencyMs: 1, Ts: time.Now().UTC(),
 	})
 	require.NoError(t, err)
-	_, err = s.WriteState(factsstore.StateRow{
-		AppId: "a", Key: "k", Value: []byte("v"), Ts: time.Now().UTC(),
+	_, err = s.WriteLaunch(factsstore.LaunchRow{
+		RunId: "r1", CallerAppId: "a", TargetAppId: "b", TileKey: 1, Ts: time.Now().UTC(),
 	})
 	require.NoError(t, err)
 	n, err := s.Count(context.Background())
@@ -290,116 +274,9 @@ func TestStore_RecentLogs_Empty_LiveCH(t *testing.T) {
 	assert.Empty(t, rows)
 }
 
-func TestStore_LatestState_RoundTrip_LiveCH(t *testing.T) {
-	s, cleanup := newLiveStore(t)
-	defer cleanup()
-	want := []byte(`[{"name":"main"}]`)
-	_, err := s.WriteState(factsstore.StateRow{
-		AppId: "play", Key: "tabs", Value: want, Ts: time.Now().UTC(),
-	})
-	require.NoError(t, err)
-	got, found, err := s.LatestState("play", "tabs")
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, want, got)
-}
-
-func TestStore_LatestState_MissingKey_LiveCH(t *testing.T) {
-	s, cleanup := newLiveStore(t)
-	defer cleanup()
-	_, found, err := s.LatestState("play", "absent-key")
-	require.NoError(t, err)
-	assert.False(t, found)
-}
-
-func TestStore_LatestState_LatestWins_LiveCH(t *testing.T) {
-	s, cleanup := newLiveStore(t)
-	defer cleanup()
-	t0 := time.Now().UTC()
-	_, err := s.WriteState(factsstore.StateRow{
-		AppId: "play", Key: "tabs", Value: []byte("v1"), Ts: t0,
-	})
-	require.NoError(t, err)
-	_, err = s.WriteState(factsstore.StateRow{
-		AppId: "play", Key: "tabs", Value: []byte("v2"), Ts: t0.Add(time.Second),
-	})
-	require.NoError(t, err)
-	got, found, err := s.LatestState("play", "tabs")
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, "v2", string(got))
-}
-
-func TestStore_LatestState_AppIsolation_LiveCH(t *testing.T) {
-	s, cleanup := newLiveStore(t)
-	defer cleanup()
-	_, err := s.WriteState(factsstore.StateRow{AppId: "play", Key: "tabs", Value: []byte("p"), Ts: time.Now().UTC()})
-	require.NoError(t, err)
-	_, err = s.WriteState(factsstore.StateRow{AppId: "imztop", Key: "tabs", Value: []byte("i"), Ts: time.Now().UTC()})
-	require.NoError(t, err)
-	got, found, err := s.LatestState("play", "tabs")
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, "p", string(got))
-	got, found, err = s.LatestState("imztop", "tabs")
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, "i", string(got))
-}
-
-func TestStore_DeleteState_Tombstones_LiveCH(t *testing.T) {
-	s, cleanup := newLiveStore(t)
-	defer cleanup()
-	_, err := s.WriteState(factsstore.StateRow{
-		AppId: "play", Key: "tabs", Value: []byte("v1"), Ts: time.Now().UTC(),
-	})
-	require.NoError(t, err)
-	// Sanity: present.
-	_, found, err := s.LatestState("play", "tabs")
-	require.NoError(t, err)
-	require.True(t, found)
-	// Tombstone.
-	err = s.DeleteState("play", "tabs")
-	require.NoError(t, err)
-	_, found, err = s.LatestState("play", "tabs")
-	require.NoError(t, err)
-	assert.False(t, found, "tombstone should hide the prior value")
-}
-
-func TestStore_DeleteState_ThenWrite_Resurrects_LiveCH(t *testing.T) {
-	s, cleanup := newLiveStore(t)
-	defer cleanup()
-	t0 := time.Now().UTC()
-	_, err := s.WriteState(factsstore.StateRow{AppId: "play", Key: "k", Value: []byte("v1"), Ts: t0})
-	require.NoError(t, err)
-	err = s.DeleteState("play", "k")
-	require.NoError(t, err)
-	// Write again later in time — should reappear.
-	_, err = s.WriteState(factsstore.StateRow{AppId: "play", Key: "k", Value: []byte("v2"), Ts: t0.Add(2 * time.Second)})
-	require.NoError(t, err)
-	got, found, err := s.LatestState("play", "k")
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, "v2", string(got))
-}
-
-func TestStore_LatestState_BinaryValue_LiveCH(t *testing.T) {
-	s, cleanup := newLiveStore(t)
-	defer cleanup()
-	binary := []byte{0x00, 0xFF, 0x10, 0x7F, 0x80, 0xCA, 0xFE}
-	_, err := s.WriteState(factsstore.StateRow{
-		AppId: "play", Key: "blob", Value: binary, Ts: time.Now().UTC(),
-	})
-	require.NoError(t, err)
-	got, found, err := s.LatestState("play", "blob")
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, binary, got, "hex transport must preserve raw bytes")
-}
-
 // Workingset trail (ADR-0148 §SD6). Same probe-and-skip shape as the
-// LatestState tests above — these need a live CH, and the package's
-// convention is to skip rather than split the file across lanes.
+// tests above — these need a live CH, and the package's convention is to
+// skip rather than split the file across lanes.
 
 func TestStore_LatestWorkingset_RoundTrip_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
@@ -585,7 +462,7 @@ func TestStore_ListWorkingsets_IgnoresOtherKinds_LiveCH(t *testing.T) {
 		Ts: time.Now().UTC(),
 	})
 	require.NoError(t, err)
-	_, err = s.WriteState(factsstore.StateRow{AppId: "play", Key: "k", Value: []byte("v")})
+	_, err = s.WriteAudit(factsstore.AuditRow{AppId: "play", Subject: "x.y", Result: "ok", Ts: time.Now().UTC()})
 	require.NoError(t, err)
 	rows, err := s.ListWorkingsets()
 	require.NoError(t, err)

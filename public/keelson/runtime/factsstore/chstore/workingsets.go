@@ -67,7 +67,7 @@ func (inst *Store) WriteWorkingset(row factsstore.WorkingsetRow) (id uint64, err
 }
 
 // LatestWorkingset returns the most recent record for (appId, name). The
-// match and both reads are membership-keyed exactly as LatestState's are —
+// match and both reads are membership-keyed exactly as RecentLogs' are —
 // appId via the MembRuntimeApp mixed-membership, the name via the
 // MembWorkingsetName low-card-ref, the kind via MembLaunchConfigKind, and
 // the config via the MembLaunchConfig-tagged blob attribute — so nothing
@@ -147,8 +147,9 @@ func (inst *Store) ListWorkingsets() (rows []factsstore.WorkingsetRow, err error
 
 // DeleteWorkingset writes a tombstone row for (appId, name): the identity
 // attributes of a workingset row plus a bool-section attribute marked with
-// MembPersistTombstone — the same term DeleteState uses, reused rather than
-// duplicated because the kind tag already disambiguates the row.
+// MembPersistTombstone — the term the facts-bound persist tombstones used,
+// reused rather than duplicated because the kind tag already disambiguates
+// the row.
 // LatestWorkingset treats the most-recent tombstone as found=false.
 func (inst *Store) DeleteWorkingset(appId app.AppIdT, name string) (err error) {
 	id := inst.nextId.Add(1)
@@ -170,9 +171,9 @@ func (inst *Store) DeleteWorkingset(appId app.AppIdT, name string) (err error) {
 }
 
 // composeLatestWorkingsetSql builds the membership-keyed LatestWorkingset
-// query — composeLatestStateSql's shape with the workingset kind tag, the
-// name in place of the persist key, and the config kind as a third
-// projected column.
+// query — the shape the facts-bound persist read had, with the workingset
+// kind tag, the name in place of the persist key, and the config kind as
+// a third projected column.
 func composeLatestWorkingsetSql(table string, appId app.AppIdT, name string) (sql string) {
 	const (
 		symLR      = "`tv:symbol:lr:lr:u64:1247:::0::data`"

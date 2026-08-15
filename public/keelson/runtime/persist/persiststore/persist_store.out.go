@@ -100,6 +100,15 @@ func (inst *PersistEntity) IsTombstone() bool {
 }
 
 type PersistStoreConfig struct {
+	// Table overrides the ClickHouse table this store binds — the baked
+	// PersistTableName — for every statement it issues (DDL, DESCRIBE, INSERT,
+	// SELECT). Optionally database-qualified ("<db>.<table>"), unquoted-
+	// identifier shape only ([A-Za-z_][A-Za-z0-9_]* per part; the
+	// constructor panics otherwise). Empty (the default) binds the baked
+	// name. The schema is unchanged — this moves WHERE the rows land, not
+	// what they look like — so a scratch table for a test or a per-
+	// deployment table needs no regeneration.
+	Table string
 	// DDLTail is a raw suffix appended verbatim after the composed
 	// CREATE TABLE at EnsureTable time — the escape hatch for clauses
 	// the generation-time table options (ADR-0102) do not carry.
@@ -151,11 +160,25 @@ type PersistStore struct {
 
 // NewPersistStore wires the store. A nil alloc selects the Go allocator.
 func NewPersistStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg PersistStoreConfig) (inst *PersistStore) {
+	if cfg.Table != "" {
+		if terr := recordstore.CheckTableRef(cfg.Table); terr != nil {
+			panic("PersistStore: " + terr.Error())
+		}
+	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
 	inst = &PersistStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityPersiststateTable(alloc, 64), dirty: make(map[string]struct{}), stampers: cfg.Stampers}
 	return
+}
+
+// tableName is the table reference every statement uses: the configured
+// override when set, else the baked PersistTableName.
+func (inst *PersistStore) tableName() string {
+	if inst.cfg.Table != "" {
+		return inst.cfg.Table
+	}
+	return PersistTableName
 }
 
 // applyStampers consults the configured stampers and pushes their surrogate
@@ -199,14 +222,27 @@ func (inst *PersistStore) notifyFlush(key string) {
 
 // EnsureTable applies the composed CREATE TABLE (plus the DDLTail
 // suffix, when configured). Idempotent (CREATE TABLE IF NOT EXISTS).
+// The embedded script is issued one statement per Exec — the
+// optional CREATE DATABASE, then the CREATE TABLE — because the
+// ClickHouse HTTP interface rejects a multi-statement body; under a
+// Table override the statements are re-pointed at the override
+// (recordstore.ProvisioningStatements: header and database only, the
+// column block stays byte-identical).
 func (inst *PersistStore) EnsureTable(ctx context.Context) (err error) {
-	sql := persiststateDDLCreate
-	if inst.cfg.DDLTail != "" {
-		sql += " " + inst.cfg.DDLTail
-	}
-	err = inst.exec.Exec(ctx, sql)
+	stmts, err := recordstore.ProvisioningStatements(persiststateDDLCreate, PersistTableName, inst.cfg.Table)
 	if err != nil {
-		err = eh.Errorf("ensure table %s: %w", PersistTableName, err)
+		err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+		return
+	}
+	if inst.cfg.DDLTail != "" {
+		stmts[len(stmts)-1] += " " + inst.cfg.DDLTail
+	}
+	for _, sql := range stmts {
+		err = inst.exec.Exec(ctx, sql)
+		if err != nil {
+			err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+			return
+		}
 	}
 	return
 }
@@ -228,14 +264,14 @@ func (inst *PersistStore) EnsureTable(ctx context.Context) (err error) {
 // store at rows it did not write.
 func (inst *PersistStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+PersistTableName+persiststateArrowOutputSettings) {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+inst.tableName()+persiststateArrowOutputSettings) {
 		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", PersistTableName, rerr)
+			err = eh.Errorf("describe table %s: %w", inst.tableName(), rerr)
 			return
 		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", PersistTableName, rec.Column(0).DataType())
+			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.tableName(), rec.Column(0).DataType())
 			rec.Release()
 			return
 		}
@@ -246,12 +282,12 @@ func (inst *PersistStore) VerifySchema(ctx context.Context) (err error) {
 	}
 	want := lowlevel.CreateSchemaPersiststateTable().Fields()
 	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", PersistTableName, len(live), len(want))
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.tableName(), len(live), len(want))
 		return
 	}
 	for i, f := range want {
 		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", PersistTableName, i, live[i], f.Name)
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.tableName(), i, live[i], f.Name)
 			return
 		}
 	}
@@ -406,10 +442,10 @@ func (inst *PersistStore) Flush(ctx context.Context) (n int, err error) {
 	records = append(inst.pending, records...)
 	inst.pending = nil
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, PersistTableName, records)
+		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", PersistTableName, err)
+			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
 			return
 		}
 	}
@@ -677,7 +713,7 @@ func (inst *PersistCache[W]) GetLiveAcceptStale(key string) (ent *PersistEntity,
 func (inst *PersistStore) fetchLatestSQL(keys []string) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(PersistTableName)
+	sb.WriteString(inst.tableName())
 	sb.WriteString(" WHERE " + PersistColKey + " IN (")
 	for i, k := range keys {
 		if i > 0 {
@@ -749,7 +785,7 @@ func (inst *PersistStore) ScanState(ctx context.Context, opts recordstore.ScanOp
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + PersistTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + PersistColOrder + " ASC, " + PersistColKey + " ASC"
 	if opts.Limit > 0 {
@@ -764,7 +800,7 @@ func (inst *PersistStore) ScanState(ctx context.Context, opts recordstore.ScanOp
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *PersistStore) Latest(ctx context.Context, key string) (ent *PersistEntity, found bool, err error) {
-	sql := "SELECT * FROM " + PersistTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + PersistColKey + " = " + persiststateKeyLiteral(key) +
 		" ORDER BY " + PersistColOrder + " DESC LIMIT 1" + persiststateArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -787,7 +823,7 @@ func (inst *PersistStore) Latest(ctx context.Context, key string) (ent *PersistE
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *PersistStore) Replay(ctx context.Context, key string, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*PersistEntity, error] {
-	sql := "SELECT * FROM " + PersistTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + PersistColKey + " = " + persiststateKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + PersistColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"

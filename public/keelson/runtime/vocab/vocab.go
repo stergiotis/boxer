@@ -78,11 +78,11 @@ var (
 	MembAuditRequestSizeB   = NkRegistry.MustBegin("runtimeAuditRequestSizeB", 14).End()
 	MembAuditResponseSizeB  = NkRegistry.MustBegin("runtimeAuditResponseSizeB", 15).End()
 
-	// Persist fields. The PersistKey membership is used both in the symbol
-	// section (the key string) and in the blob section (the value bytes).
-	// PersistTombstone is set on the bool section when a row marks a
-	// previously-persisted key as deleted; LatestState short-circuits
-	// found=false when it encounters this membership.
+	// Persist fields. On the legacy boxer.facts state rows PersistKey tagged
+	// both the symbol (key) and blob (value) attributes, and PersistTombstone
+	// on the bool section marked a key as deleted — the tombstone term is
+	// still what DeleteWorkingset and DeleteColumnWidth write. App persist
+	// state itself now lives on the generated persist store (ADR-0105 D3a).
 	MembPersistKey       = NkRegistry.MustBegin("runtimePersistKey", 16).End()
 	MembPersistTombstone = NkRegistry.MustBegin("runtimePersistTombstone", 17).End()
 
@@ -209,7 +209,7 @@ var (
 	// MembLaunchConfig for the payload, MembLifecycleStopReason for the
 	// save provenance ("user-close" / "shutdown" / …), and
 	// MembPersistTombstone on the bool section for a DeleteWorkingset row
-	// (the LatestState short-circuit pattern). Only two terms are new: the
+	// (the persist-state tombstone pattern). Only two terms are new: the
 	// kind tag, and the caller-chosen set name on the symbol section (v1
 	// wires exactly one name, "default" — §SD3).
 	//
@@ -225,7 +225,7 @@ var (
 	// the history and last-writer-wins lands at entry granularity instead
 	// of document granularity. App identity reuses MembRuntimeApp and a
 	// cleared override reuses MembPersistTombstone on the bool section, the
-	// LatestState short-circuit pattern that DeleteWorkingset also follows.
+	// persist-state tombstone pattern that DeleteWorkingset also follows.
 	//
 	// The identity of an entry is (app, tier, scope, columnKey). Tier is one
 	// of "instance" / "shape" / "column" (§SD1) and is genuinely

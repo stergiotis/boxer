@@ -8,7 +8,7 @@ import (
 )
 
 // aliasRef is the ref an alias-only caller addresses — no attributed
-// AppId, the shape MemoryBackend keys on and the shape FactsBackend must
+// AppId, the shape MemoryBackend keys on and the shape StoreBackend must
 // fall back for. Shared by the backend tests in this package.
 func aliasRef(alias string) (ref StorageRef) {
 	ref = StorageRef{Alias: alias}

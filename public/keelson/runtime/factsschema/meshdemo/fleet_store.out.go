@@ -50,7 +50,7 @@ func factsKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 // carried in the membership columns. Verbatim-channel memberships embed
 // their literal name instead and are absent here.
 //
-// The ids are caller-assigned (a registry-stable snapshot) and are baked
+// The ids are caller-assigned (a registry-stable snapshot), baked into
 // both the component codecs and this store's Scan filters. Nothing on the
 // wire records which assignment wrote a row, so rows written under a
 // different one decode as ABSENT rather than failing — VerifySchema
@@ -97,6 +97,15 @@ func (inst *FleetEntity) Archetype() (a []string) {
 }
 
 type FleetStoreConfig struct {
+	// Table overrides the ClickHouse table this store binds — the baked
+	// FleetTableName — for every statement it issues (DDL, DESCRIBE, INSERT,
+	// SELECT). Optionally database-qualified ("<db>.<table>"), unquoted-
+	// identifier shape only ([A-Za-z_][A-Za-z0-9_]* per part; the
+	// constructor panics otherwise). Empty (the default) binds the baked
+	// name. The schema is unchanged — this moves WHERE the rows land, not
+	// what they look like — so a scratch table for a test or a per-
+	// deployment table needs no regeneration.
+	Table string
 	// Stampers are consulted on every Begin (ADR-0112 M1): each yields
 	// surrogate ids stamped as additive HighCardRef memberships onto the
 	// entity's attributes. Empty (the default) leaves the store unstamped
@@ -144,11 +153,25 @@ type FleetStore struct {
 
 // NewFleetStore wires the store. A nil alloc selects the Go allocator.
 func NewFleetStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg FleetStoreConfig) (inst *FleetStore) {
+	if cfg.Table != "" {
+		if terr := recordstore.CheckTableRef(cfg.Table); terr != nil {
+			panic("FleetStore: " + terr.Error())
+		}
+	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
 	inst = &FleetStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityFactsTable(alloc, 64), dirty: make(map[uint64]struct{}), stampers: cfg.Stampers}
 	return
+}
+
+// tableName is the table reference every statement uses: the configured
+// override when set, else the baked FleetTableName.
+func (inst *FleetStore) tableName() string {
+	if inst.cfg.Table != "" {
+		return inst.cfg.Table
+	}
+	return FleetTableName
 }
 
 // applyStampers consults the configured stampers and pushes their surrogate
@@ -208,14 +231,14 @@ func (inst *FleetStore) notifyFlush(key uint64) {
 // store at rows it did not write.
 func (inst *FleetStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+FleetTableName+factsArrowOutputSettings) {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+inst.tableName()+factsArrowOutputSettings) {
 		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", FleetTableName, rerr)
+			err = eh.Errorf("describe table %s: %w", inst.tableName(), rerr)
 			return
 		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", FleetTableName, rec.Column(0).DataType())
+			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.tableName(), rec.Column(0).DataType())
 			rec.Release()
 			return
 		}
@@ -226,12 +249,12 @@ func (inst *FleetStore) VerifySchema(ctx context.Context) (err error) {
 	}
 	want := lowlevel.CreateSchemaFactsTable().Fields()
 	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", FleetTableName, len(live), len(want))
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.tableName(), len(live), len(want))
 		return
 	}
 	for i, f := range want {
 		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", FleetTableName, i, live[i], f.Name)
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.tableName(), i, live[i], f.Name)
 			return
 		}
 	}
@@ -386,10 +409,10 @@ func (inst *FleetStore) Flush(ctx context.Context) (n int, err error) {
 	records = append(inst.pending, records...)
 	inst.pending = nil
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, FleetTableName, records)
+		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", FleetTableName, err)
+			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
 			return
 		}
 	}
@@ -629,7 +652,7 @@ func (inst *FleetCache[W]) InvalidateAll() {
 func (inst *FleetStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(FleetTableName)
+	sb.WriteString(inst.tableName())
 	sb.WriteString(" WHERE " + FleetColKey + " IN (")
 	for i, k := range keys {
 		if i > 0 {
@@ -701,7 +724,7 @@ func (inst *FleetStore) ScanFleetSample(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + FleetTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + where +
 		" ORDER BY " + FleetColOrder + " ASC, " + FleetColKey + " ASC"
 	if opts.Limit > 0 {
@@ -716,7 +739,7 @@ func (inst *FleetStore) ScanFleetSample(ctx context.Context, opts recordstore.Sc
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *FleetStore) Latest(ctx context.Context, key uint64) (ent *FleetEntity, found bool, err error) {
-	sql := "SELECT * FROM " + FleetTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + FleetColKey + " = " + factsKeyLiteral(key) +
 		" ORDER BY " + FleetColOrder + " DESC LIMIT 1" + factsArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -739,7 +762,7 @@ func (inst *FleetStore) Latest(ctx context.Context, key uint64) (ent *FleetEntit
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *FleetStore) Replay(ctx context.Context, key uint64, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*FleetEntity, error] {
-	sql := "SELECT * FROM " + FleetTableName +
+	sql := "SELECT * FROM " + inst.tableName() +
 		" WHERE " + FleetColKey + " = " + factsKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + FleetColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"

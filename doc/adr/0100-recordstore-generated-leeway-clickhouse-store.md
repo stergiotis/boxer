@@ -891,6 +891,38 @@ verb nobody should be able to call.
   asserts the switch's blast radius is the four DDL regions and nothing
   else.
 
+### 2026-08-15 — the table is a runtime binding too: `<Store>StoreConfig.Table`
+
+Where a store's rows land was fixed at generation time (`gen.Input.TableName`
+/ `Database`, baked into `<Store>TableName` and every statement). That made
+the generated *code* the unit of table identity, so a second table with the
+same schema — a scratch table for a test, a per-environment or per-tenant
+table — meant a second generated package. ADR-0105 hit this first: its
+durability integration test could not aim the generated persist store at a
+scratch database and stayed on the superseded facts-bound backend for that
+reason alone.
+
+- `<Store>StoreConfig.Table` overrides the baked name for every statement the
+  store issues (DDL, `DESCRIBE`, `INSERT`, every `SELECT`). Optionally
+  database-qualified, unquoted-identifier shape only; the constructor panics
+  otherwise (`recordstore.CheckTableRef`), the same posture as the stamper
+  lane-hygiene guards. Empty is the existing behaviour.
+- `EnsureTable` under an override re-points the embedded script through
+  `recordstore.RetargetDDL`: the `CREATE DATABASE` prelude is dropped or
+  replaced to match the override's qualification, and the `CREATE TABLE`
+  header is re-named. Only the header is touched — the column block, the
+  ADR-0102 clauses and the `.out.sql` file are unchanged, so an override
+  table has the schema the store decodes positionally. The helper refuses a
+  script whose header it does not recognise rather than provisioning under
+  the wrong name; a runtime helper rather than emitted per store, so it is
+  written and tested once.
+- The schema is not a runtime binding and does not become one: the override
+  moves *where* rows land, never what they look like. `<Store>TableName`
+  stays exported for callers composing their own SQL against the baked name.
+- Verified over `clickhouse-local` (bare and qualified overrides; the baked
+  table is neither provisioned nor written; a malformed override panics).
+  All in-tree stores regenerated.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

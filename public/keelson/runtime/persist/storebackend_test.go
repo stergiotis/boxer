@@ -12,10 +12,10 @@ import (
 )
 
 // newStoreBackend opens a backend over a fresh clickhouse-local location.
-// The suite mirrors factsbackend_test.go case for case: the migration
-// ADR-0105 D3a describes only holds if the replacement answers the same
-// contract, so the cheapest way to say that is to ask it the same
-// questions.
+// The suite was written to mirror the facts-bound predecessor's case for
+// case (that backend is gone since 2026-08-15): the migration ADR-0105 D3a
+// describes only holds if the replacement answers the same contract, so
+// the cheapest way to say that is to ask it the same questions.
 func newStoreBackend(t *testing.T) (b *StoreBackend) {
 	t.Helper()
 	return openStoreBackendAt(t, t.TempDir())

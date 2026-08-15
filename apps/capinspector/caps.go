@@ -125,11 +125,13 @@ var Registry = map[CapId]CapSpec{
 	},
 	CapFacts: {
 		Id:            CapFacts,
-		Display:       "Audit + state backend",
+		Display:       "Audit + facts backend",
 		SubjectFamily: "(audit backend — not a subject)",
 		Description: "Where grants, audit records, app-lifecycle rows, " +
-			"heartbeats, and persist state land. chstore.NewWithFallback " +
-			"returns a live ClickHouse-backed Store when reachable; otherwise " +
+			"heartbeats, workingsets and column widths land (persist state " +
+			"has its own store, boxer.persiststate — see the persist " +
+			"capability). chstore.NewWithFallback returns a live " +
+			"ClickHouse-backed Store when reachable; otherwise " +
 			"InMemoryFactsStore. Read paths: LookupRunStart, LifecyclesByRun, " +
 			"LastHeartbeatForRun, RecentLogs.",
 		Backend: "runtime/factsstore + runtime/factsstore/chstore",

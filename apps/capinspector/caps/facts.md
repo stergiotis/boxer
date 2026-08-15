@@ -5,14 +5,17 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** Rendered by the capability
-> inspector for the Facts cap. Refine as the CH-backed persist
-> backend lands and the storage story consolidates.
+> inspector for the Facts cap. Refine as the storage story
+> consolidates.
 
-# Audit + state backend
+# Audit + facts backend
 
 The durable home of grants, audit records, app-lifecycle rows,
-heartbeats, and (eventually) persist state. Backed by ClickHouse
-when reachable; falls back to `InMemoryFactsStore` when CH is down.
+heartbeats, workingsets and column-width overrides. Backed by
+ClickHouse when reachable; falls back to `InMemoryFactsStore` when CH
+is down. App persist state is not here: it lives on its own generated
+store, `boxer.persiststate` (ADR-0105 D3a) — see the persist
+capability.
 
 `chstore.NewWithFallback` returns the strongest live backend; the
 status line's `facts:ch` vs `facts:mem` segment is the truthful
