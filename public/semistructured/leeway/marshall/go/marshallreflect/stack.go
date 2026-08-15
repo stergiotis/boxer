@@ -5,6 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
+	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
 )
@@ -47,18 +48,20 @@ type RowComposer struct {
 	lookup LookupI
 	inRow  bool
 	// The open row's section contributions, buffered until CommitRow. A
-	// section frame is opened once per entity, so several DTOs contributing to
-	// one section must share that frame — which means their attributes cannot
-	// be written as they arrive. sectionOrder preserves first-seen order.
-	sectionOrder []string
-	bySection    map[string][]sectionContribution
-}
-
-// sectionContribution is one DTO's attributes for one section, waiting for the
-// frame to open at CommitRow.
-type sectionContribution struct {
-	row   reflect.Value
-	group goplan.SectionGroup
+	// section frame is closed for good by EndSection, so several DTOs
+	// contributing to one section must share that frame — which means the
+	// close cannot happen as each DTO finishes.
+	//
+	// The buffer is dml/runtime's, shared with the generated typed builders
+	// (ADR-0183 D4). This composer's own buffer was its specification, so what
+	// changed here is who owns the order and the frame invariants, not what
+	// they are.
+	buf dmlruntime.DeferredSectionBuffer
+	// open caches the section handles this row has asked the DML for. A
+	// generated DML returns the same instance every time, but a mock records
+	// the calls, and one GetSection per section per entity is what the frame
+	// contract looks like from outside.
+	open map[string]reflect.Value
 }
 
 // NewRowComposer wraps `dml` and `lookup` for repeated per-row
@@ -71,9 +74,9 @@ func NewRowComposer(dml any, lookup LookupI) *RowComposer {
 		lookup = NoLookup{}
 	}
 	return &RowComposer{
-		dml:       reflect.ValueOf(dml),
-		lookup:    lookup,
-		bySection: map[string][]sectionContribution{},
+		dml:    reflect.ValueOf(dml),
+		lookup: lookup,
+		open:   map[string]reflect.Value{},
 	}
 }
 
@@ -98,13 +101,13 @@ func (c *RowComposer) BeginRow(plainOwner any) (err error) {
 	}
 	mustCall(c.dml, "BeginEntity")
 	c.inRow = true
-	c.sectionOrder = c.sectionOrder[:0]
-	clear(c.bySection)
+	c.buf.Reset()
+	clear(c.open)
 
 	if err = marshalPlain(c.dml, rowVal, plan); err != nil {
 		return
 	}
-	c.buffer(rowVal, groups)
+	err = c.buffer(plan, rowVal, groups)
 	return
 }
 
@@ -121,36 +124,53 @@ func (c *RowComposer) AddSections(row any) (err error) {
 		err = eb.Build().Str("call", "AddSections").Errorf("AddSections called outside of a row — call BeginRow first")
 		return
 	}
-	rowVal, _, groups, err := resolvePlan(row)
+	rowVal, plan, groups, err := resolvePlan(row)
 	if err != nil {
 		return
 	}
-	c.buffer(rowVal, groups)
+	err = c.buffer(plan, rowVal, groups)
 	return
 }
 
 // buffer records a DTO's per-section contributions for the open row.
-func (c *RowComposer) buffer(rowVal reflect.Value, groups []goplan.SectionGroup) {
-	for _, g := range groups {
-		if _, seen := c.bySection[g.Section]; !seen {
-			c.sectionOrder = append(c.sectionOrder, g.Section)
-		}
-		c.bySection[g.Section] = append(c.bySection[g.Section], sectionContribution{row: rowVal, group: g})
+//
+// The kind is stated so the buffer can hold the one-contribution-per-kind
+// invariant and attribute a failure at flush; a DTO with no kind tag (a plain
+// struct used as a section carrier) contributes under its Go type name, which
+// is the only name it has.
+func (c *RowComposer) buffer(plan *mappingplan.Plan, rowVal reflect.Value, groups []goplan.SectionGroup) (err error) {
+	kind := plan.KindName
+	if kind == "" {
+		kind = plan.KindType
 	}
+	if err = c.buf.StartKind(kind); err != nil {
+		return
+	}
+	for _, g := range groups {
+		c.buf.Enqueue(g.Section, kind, func() error {
+			return emitSectionAttributes(c.section(g.Section), rowVal, g, c.lookup)
+		})
+	}
+	return
 }
 
 // flushSections writes the buffered contributions: one frame per section,
 // carrying every DTO that contributed to it, in call order.
 func (c *RowComposer) flushSections() (err error) {
-	for _, section := range c.sectionOrder {
-		sec := openSection(c.dml, section)
-		for _, contrib := range c.bySection[section] {
-			if err = emitSectionAttributes(sec, contrib.row, contrib.group, c.lookup); err != nil {
-				return eb.Build().Str("section", section).Errorf("section %s: %w", section, err)
-			}
-		}
-		closeSection(sec)
+	return c.buf.Flush(func(section string) error {
+		closeSection(c.section(section))
+		return nil
+	})
+}
+
+// section returns this row's handle for a section, asking the DML once.
+func (c *RowComposer) section(name string) (sec reflect.Value) {
+	sec, has := c.open[name]
+	if has {
+		return
 	}
+	sec = openSection(c.dml, name)
+	c.open[name] = sec
 	return
 }
 
@@ -168,8 +188,7 @@ func (c *RowComposer) CommitRow() (err error) {
 	if err = c.flushSections(); err != nil {
 		return
 	}
-	c.sectionOrder = c.sectionOrder[:0]
-	clear(c.bySection)
+	c.buf.Reset()
 	rets := mustCall(c.dml, "CommitEntity")
 	if len(rets) == 1 && !rets[0].IsNil() {
 		err = rets[0].Interface().(error)

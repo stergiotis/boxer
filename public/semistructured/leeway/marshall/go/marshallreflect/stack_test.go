@@ -411,3 +411,27 @@ func TestRowComposer_EmptyContainerIsSpliced(t *testing.T) {
 	require.NotContains(t, joined, "AddToContainerP", "an empty container emits nothing")
 	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
 }
+
+// The composer now holds the frame invariant the generated builders hold
+// (ADR-0183 D4): one contribution per kind per entity. Two DTOs of one kind on
+// one row would claim the same slots twice, which the read side reports as an
+// arity error rather than as two components — so the refusal belongs where the
+// second contribution is made, not three layers later.
+func TestRowComposer_RefusesASecondContributionFromOneKind(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
+	err := m.AddSections(stackedA{Id: 1, Color: "blue"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "one contribution per kind")
+
+	// Different kinds on the same row stay legal, which is the whole point of
+	// the composer.
+	require.NoError(t, m.AddSections(stackedB{Id: 99, Label: "alpha"}))
+	require.NoError(t, m.CommitRow())
+
+	// The next row starts clean.
+	require.NoError(t, m.BeginRow(stackedA{Id: 2, Color: "green"}))
+	require.NoError(t, m.CommitRow())
+}
