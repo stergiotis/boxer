@@ -238,7 +238,7 @@ or without the property the paper proves for it.
 | Declared dependencies `d` | `Manifest.Caps` (subjects), `Manifest.LaunchKind` (the DTO accepted), applet `datasets:` aliases; play panels declare `Channels()` and tabs declare `Writes` | partial — three surfaces, none reviewed by the host at open |
 | Declared provisions `p` | none in the manifest; the [app-composition survey](../adr-background-work/app-composition-survey.md) names "output ports" its one missing manifest surface (F3) | absent |
 | Effect with inverse | `fsbroker` pairs `AddCap` at handle resolve with `RemoveCap` at handle close — the one runtime inverse the tree holds; everything else is `defer`, push/pop, or a closure the app must remember to call | absent as a mechanism |
-| Accumulator applied at unload | `windowhost.reapWindow`: release refcount, save workingset, call `Unmount`; no unsubscribe, no cap revocation, no task cancel; `MountContextI.Cancel()` is wired to a `nil` channel, so `task.ForApp`'s auto-terminate never fires under windowhost | absent |
+| Accumulator applied at unload | `windowhost.reapWindow`: release refcount, save workingset, call `Unmount`; no unsubscribe, no cap revocation, no task cancel; `MountContextI.Cancel()` is wired to a `nil` channel, so `task.ForApp`'s auto-terminate never fires under windowhost; `natsbus.Client` has a `Close()`, `inprocbus.Client` does not | absent |
 | Satisfaction and notification | `sqlapplet`'s `datasetRebinder` polls until a declared alias resolves, then stops; ad-hoc dataset republish bumps a revision that re-runs consumers | partial — appear-only; a retracted provider triggers nothing |
 | Guard (drain dependents, then withdraw) | producers `Retract` in their own `Unmount`; the consumer window stays open and its next query fails at name resolution; play's per-lane `closed` flag is a hand-rolled local guard | absent at app level |
 | Provider identity in the target view | none — a consumer is bound to an alias, not to the publishing instance | absent |
@@ -297,10 +297,13 @@ registers the unsubscribe; `task.ForApp` registers a cancel; a resolved
 `fs.handle` registers its close; the host runs the stack at reap. Three
 observations make this cheap here rather than speculative: the seam already
 exists (`MountContextI`); the one dead wire is known (`windowhost` passes a
-`nil` stop channel, and ADR-0155 SD4 already fixed it for embeds while
-leaving the window case as a recorded follow-up); and the bus keeps every
-subscription's owning app id, so an app-scoped sweep at reap needs no new
-bookkeeping. This is tracking, not negotiation — it does not grow the
+`nil` stop channel; ADR-0155 SD4 decides a real channel for embedded
+instances — not yet built — and leaves the window case as a recorded
+follow-up); and the bus keeps every subscription's owning app id, so a
+per-client sweep at reap needs little new bookkeeping — per *client*, not
+per app id, since two windows of one app share an id and a sweep by id
+would take a sibling's subscriptions with it. This is tracking, not
+negotiation — it does not grow the
 four-method contract the survey's DN1 protects — and it is the change that
 lets a lint say "an acquisition outside the mount context is an error", the
 same shape as CS011 and CS012.
