@@ -353,6 +353,14 @@ Empty/loading states are explicit: a spinner with *Executing query…* while run
 *Run a query to see results.* before the first query, and *0 rows — the query ran but
 matched nothing.* for an empty result.
 
+A column bound to a **gloss** (ADR-0186 — see [Glosses](#glosses)) shows the
+gloss's one-line face in its cells instead of the plain value — `21.5 °C`,
+`4111 •••• •••• 1111 ✓` in the success or error tone, `••••••`, `40 KiB` — and
+its media type beside the type tag in the header; the header hover names how
+the binding was made and shows the column's spec line. A **Raw cells** toggle
+on the toolbar switches every gloss off for the session. Both grids honour the
+glosses; the per-attribute grid applies them to a list column's items.
+
 ### Detail
 
 A structured card for the row selected in the Table tab. The card picks its rendering
@@ -364,6 +372,12 @@ from the result's column names:
   path.
 - **Ad-hoc grouping** — for ordinary SQL results (aliased or aggregated columns),
   columns are grouped by name prefix into pinned / relations / data / meta sections.
+  A glossed column ([Glosses](#glosses)) renders through its gloss here: a
+  block face where the gloss has one — markdown, highlighted JSON / SQL / Go,
+  a decoded image, a hyperlink — else its one-line face under a caption naming
+  the column and the media type. A declaration the catalog cannot honour shows
+  the plain first line and says why. On the leeway card, values pass through
+  their column's gloss too (one line per value; the card has no block faces).
 
 Above either card, when the selected row carries one or more **datetime attributes**,
 a compact **timeline** plots them on a shared UTC axis. Each attribute is one legend
@@ -592,6 +606,44 @@ where a name is actually evaluated — which is what decides how it fails:
 
 Until the endpoint has answered, server rows show `?` rather than a verdict: an
 unanswered probe is not the same as an empty server. Switching endpoints re-asks.
+
+### Glosses
+
+The result-side sibling of Vocabulary (ADR-0186). A **gloss** is a named way of
+showing a value — a temperature with its unit, a card number masked with its
+Luhn verdict, a secret as six bullets, a URL as a link, a byte count in KiB, and
+the ADR-0123 content types (markdown, code, images) as one family. Every gloss
+has a one-line face for the Table grids and, some, a block face for Detail.
+
+Three routes bind a column to a gloss, in precedence order:
+
+- **an alias** — `` AS `label@gloss/temperature;unit=C` ``. The token after `@`
+  is a media type: an IANA one for content (`text/markdown`) or play's private
+  `gloss/…` for presentation. Parameters ride after `;` and are validated —
+  an undeclared or misspelt parameter is refused with the reason, as an unknown
+  type is; the ADR-0123 rule that a slash-less `@` (an email-like name,
+  `dot_done@success`) is not a declaration still holds;
+- **the `gloss(…)` macro** — `gloss(expr, 'gloss/length', 'unit', 'm')`
+  expands, before the statement ships, into that alias: no backticks, parameter
+  values as typed literals, `'label', 'name'` to name the alias, and an unknown
+  gloss or parameter is a Diagnostics error carrying the call's position;
+- **a rule** — `-- play: gloss <media type> <regex>` anywhere in the buffer,
+  matched top to bottom against each column's **spec line**: `name:temperature
+  section:sensor role:val ct:f64 sem:measured … arrow:float64` for a leeway
+  column (the `LW_TV` token spelling — what you would type to mint it), just
+  `name:temp_c arrow:float64` for a plain one. This is how a leeway column,
+  whose physical name cannot be aliased without the result losing its leeway
+  shape, gets a gloss. Some glosses bring an affinity rule along —
+  `gloss/secret` for `sem:secret`, `gloss/url` for `sem:url`, `application/json`
+  for `sem:json*` — and `gloss/raw` in a rule switches an affinity off for the
+  columns it matches.
+
+The tab shows the **catalog** (each gloss with its accepted value kinds,
+parameters, a sample rendering, its affinities, and an *Insert rule* button
+that drops a `-- play: gloss` line at the caret), the buffer's effective
+**rules** (compiled, or refused with why), and the current result's
+**columns** with their spec line and what each resolved to. **Raw cells** on
+the Table toolbar bypasses every gloss for the session.
 
 ## Configuration
 

@@ -445,8 +445,9 @@ ORDER BY bucket
 
 A column named `` `<label>@<mime>` `` renders its cell as that media type in the
 **Detail** tab, instead of as the truncated one line every other ad-hoc column
-gets (ADR-0123). Run this, then click the row in **Table** — Detail draws
-whatever the selection points at. Table-free; runs against any server.
+gets (ADR-0123; since ADR-0186 these are the content family of the gloss
+catalog — the next snippet). Run this, then click the row in **Table** — Detail
+draws whatever the selection points at. Table-free; runs against any server.
 
 Declared, never sniffed: nothing renders as markdown unless it says so. The
 backticks are not optional — unquoted, both the `@` and the `/` are syntax
@@ -469,6 +470,45 @@ SELECT
   'SELECT count() FROM anchor.facts WHERE ts > now() - 3600' AS `q@application/sql`,
   'no wrapping,\nno truncation,\njust the bytes'   AS `stack@text/plain`,
   unhex('89504e470d0a1a0a0000000d4948445200000010000000100203000000629d17f200000009504c5445202020e6b55d3b6ea563f88312000000414944415478da620003a955ab9630a8ad5a35834173d5aa0c06adac952b18b4662d5bc1a0b56cd60a06ad95593002cc054b8094801583b5810d000140000000ffff54231bef9464752c0000000049454e44ae426082') AS `shot@image/png`
+```
+
+## Glosses (units, check digits, masks, links)
+
+A **gloss** is a named way of showing a value (ADR-0186): a temperature with
+its unit, a card number masked with its Luhn verdict, a secret as six bullets,
+a URL as a link, a byte count in KiB. Glosses render in the **Table** grids
+(one line, sometimes toned) and in **Detail** (a block where the gloss has
+one). Three ways to reach one, in precedence order:
+
+- an alias, `` AS `label@gloss/temperature;unit=C` `` — the ADR-0123 spelling
+  with a private `gloss/` type; parameters ride after `;` and are validated
+  (`;unti=C` is refused out loud, never rendered as °C);
+- the `gloss(expr, 'gloss/…', 'key', value…)` macro, which writes that alias
+  for you — no backticks, typed parameter values, and an unknown gloss is a
+  Diagnostics error at rewrite time; `'label', 'name'` names the alias;
+- a `-- play: gloss <media type> <regex>` line, matched against each column's
+  **spec line** — its name, section, role, type and aspects in the
+  `LW_TV` token spelling (`name:temperature section:sensor role:val ct:f64
+  sem:secret …`) — which is how a leeway column, whose name cannot be aliased
+  without losing its shape, gets one. Some glosses bring a rule along:
+  `gloss/secret` for `sem:secret`, `gloss/url` for `sem:url`.
+
+The **Glosses** tab lists the catalog, the buffer's rules, and how each column
+of the current result resolved; **Raw cells** on the Table toolbar switches
+every gloss off for the session. Table-free; runs against any server. The
+last column here carries a typo on purpose.
+
+```sql
+-- play: gloss gloss/length;unit=m name:height
+SELECT number AS n,
+       gloss(20 + number * 1.7, 'gloss/temperature', 'unit', 'C', 'label', 'temp'),
+       1.5 + number * 0.31 AS height,
+       ['4111111111111111', '4111111111111112', '378282246310005'][1 + number % 3] AS `card@gloss/luhn`,
+       1024 * number * number AS `size@gloss/bytes`,
+       'hunter2' AS `pw@gloss/secret`,
+       'https://example.com/' || toString(number) AS `link@gloss/url`,
+       20 + number * 1.7 AS `oops@gloss/temperature;unti=C`
+FROM numbers(12)
 ```
 
 ## Parameter prelude

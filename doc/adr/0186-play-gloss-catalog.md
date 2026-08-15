@@ -95,7 +95,10 @@ render in both Table grids and both Detail paths.
 - **`Accepts(kind)`** over a small value-kind enum (numeric / text / bytes /
   temporal / bool / other), derivable from an Arrow type or a leeway canonical
   type, so the Arrow-backed grids and the text-backed card ask the same
-  question. A mismatch is loud in the ADR-0123 style, never a coercion.
+  question. A mismatch is loud in the ADR-0123 style, never a coercion —
+  which also retires 0123's "odd but total" `SELECT 42 AS x@text/markdown`:
+  the content family accepts text and bytes and refuses a number with the
+  reason.
 - **Parameters** are declared by the gloss and bound once per column
   (`Bind(params) → Instance`), not per cell. An **affinity** is a default rule
   the gloss brings along (SD3).
@@ -138,15 +141,16 @@ case-sensitive — `unit=K` needs that.
 ### SD3 — The rule route: spec line, rules, precedence, directive
 
 **Spec line** — a one-line token spelling of a result column, computed once
-per schema and cached like `colLabels`; built by a new `lwsql.SpecLine`, the
-read-direction dual of `Composer` (0181 §SD6). Prefixes are ADR-0181's where
-one exists; aspects are one token each, in enum order, by `String()`;
-backbone columns carry `item:` and no `section:`/`use:`; a non-leeway column
-carries `name:` and `arrow:` only.
+per (schema, directive set) and cached like `colLabels`; the leeway tokens
+come from a new `lwsql.SpecLines`, the read-direction dual of `Composer`
+(0181 §SD6), and the host appends `arrow:<type>` last. Prefixes are
+ADR-0181's where one exists; aspects are one token each, in enum order, by
+`String()`; backbone columns carry `item:` and no `section:`/`use:`; a
+non-leeway column carries `name:` and `arrow:` only.
 
 ```text
-name:temperature section:sensor role:val ct:f64 arrow:float64 enc:… sem:measured sem:scale-of-measurement-metric-ratio use:…
-name:ts item:ts ct:z64 arrow:timestamp[ms, tz=UTC] sem:transaction-time
+name:temperature section:sensor role:val ct:f64 enc:… sem:measured sem:scale-of-measurement-metric-ratio use:… arrow:list<item: float64, nullable>
+name:ts item:ts ct:z64 sem:transaction-time arrow:timestamp[ms, tz=UTC]
 name:temp_c arrow:float64
 ```
 
@@ -177,13 +181,15 @@ Units have no aspect and hence no affinity; that is what the directive is for.
 | surface | face | mechanism |
 | --- | --- | --- |
 | Table, per-row grid | inline | cell text and width seed come from the bound instance instead of `formatCell`; Tone colours the run |
-| Table, per-attribute grid | inline | applied where the sink builds each cell string, on the inner array |
+| Table, per-attribute grid | inline | applied where the sink builds each cell string, on the items (element kind); header tag as above |
 | Detail, ad-hoc | block, else inline | ADR-0123's `renderRichCell` generalised; its `(executed, row)` cache keeps its shape |
 | Detail, leeway card | inline | one setter on `Table2CardEmitter`: a per-column glosser consulted in `BeginColumn` beside the hide rule, applied to the cell text in `EndColumn` |
 | column header | — | label + small gloss name; physical name, spec line and rule on hover |
 
-A **raw** toggle on the Table options bar bypasses every gloss for the session.
-Sorting is untouched: it permutes rows on the raw values.
+A **Raw cells** toggle on the Table toolbar row (beside the pager and the
+pin — the leeway options bar is leeway-only, and glosses are not) bypasses
+every gloss for the session, in the grids and in Detail. Sorting is untouched:
+it permutes rows on the raw values.
 
 ### SD5 — The v0 catalog
 
@@ -191,8 +197,8 @@ Sorting is untouched: it permutes rows on the raw values.
 | --- | --- | --- | --- | --- | --- |
 | `text/markdown`, `text/plain`, `application/json`, `application/sql`, `text/x-go` | text, bytes | `charset` | first line | as ADR-0123 | json ← `sem:json*` |
 | `image/png`, `image/jpeg`, `image/gif` | bytes | (`encoding` reserved) | `[<type> · <size>]`, no decode | as ADR-0123 | — |
-| `gloss/temperature` | numeric | `unit` ∈ K, C, F — the stored unit | `21.5 °C` | — | — |
-| `gloss/length` | numeric | `unit` ∈ m, cm, mm, km, ft — the stored unit | auto-scaled SI, `1.234 km` | — | — |
+| `gloss/temperature` | numeric | `unit` ∈ K, C, F — the stored unit, required | `21.5 °C` | — | — |
+| `gloss/length` | numeric | `unit` ∈ m, cm, mm, km, ft — the stored unit, required | auto-scaled SI, `1.234 km` | — | — |
 | `gloss/bytes` | numeric ≥ 0 | — | `humanize.IBytes` | — | — |
 | `gloss/luhn` | text, numeric | — | groups of four, middle groups masked, ✓/✗ tone by check digit | mask + verdict | — |
 | `gloss/secret` | any | — | `••••••`, never length-revealing | same | ← `sem:secret` |
@@ -233,8 +239,13 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
   would.
 - Legal only as a whole projection item (0181 §SD2's rule).
 - The media type and its parameters are validated at rewrite time against the
-  catalog (late-bound Factory, ADR-0108 §SD7): a Diagnostics error with a
-  source range instead of a per-cell note. Listed in the Vocabulary tab.
+  catalog: a Diagnostics error with a source range instead of a per-cell
+  note. Registered as a passreg **Entry** over the built-in catalog, not the
+  late-bound Factory first planned — the unbound `/query` path applies no
+  factory, and a call left unexpanded there would reach the server as an
+  unknown function. A host with a wider catalog registers
+  `glosssql.ExpandPass(cat)` in place of the standard entry. Listed in the
+  Vocabulary tab's Client section.
 
 ### SD8 — Deferred
 
@@ -253,11 +264,11 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
 | --- | --- | --- |
 | `public/hmi/gloss` (new exported Go API) | catalog, `Gloss`/`Instance`, value kinds, cell accessor, rules engine, built-in inline faces | play's block-face bindings; the SD7 pass; tests moved from `play_detail_rich_test.go` |
 | `public/hmi/gloss/glosssql` + passreg standard set | new pass entry `gloss(…)` | `defaults.RegisterStandard`; the Vocabulary tab's Client list |
-| `lwsql` (exported Go API under `public/`) | +`SpecLine` | golden over the leeway fixture names |
+| `lwsql` (exported Go API under `public/`) | +`SpecLines` | golden over the leeway fixture names |
 | `leewaywidgets.Table2CardEmitter` (exported Go API under `public/`) | +1 setter for a per-column glosser | play's card driver wiring |
 | result-column convention (ADR-0123 §SD2/§SD3) | "known type" = catalog; `gloss/` family; parameters validated | 0123's status and §SD7; `features.md` §Table/§Detail; `snippets.md` |
 | `-- play:` directive family (ADR-0124) | +`gloss` | `features.md` cross-reference |
-| play tab roster | +Glosses | Panes menu; tab marks |
+| play tab roster | +Glosses (chrome in sqlapplet, like Vocabulary) | Panes menu; tab marks; the derived `BOXER_PLAY_FOCUS_GLOSSES` knob in `doc/env-vars.md` |
 
 ## Alternatives
 
@@ -311,8 +322,9 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
 
 - **Lane.** Default `go test` for the catalog, the parse table, every inline
   face, the rules engine and the spec line; a nanopass golden for `gloss(…)`;
-  `clickhouse-local` for the alias measurement; a headless play scene for the
-  Table + Detail rendering, per the play screenshot recipe.
+  `clickhouse-local` for the alias measurement; two headless tour scenes
+  (`02_table_glosses`, `03_detail_glosses` with a per-attribute capture) for
+  the Table + Detail rendering.
 - **What would fail.**
   - The ADR-0123 parse cases, moved verbatim (`dot_done@success` silent,
     `notes@text/markdwn` loud, `TEXT/Markdown` folded), plus `;unit=K`
@@ -330,16 +342,21 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
 
 ## Milestones
 
-- **M0 — core.** `public/hmi/gloss`: catalog, kinds, cell accessor, params,
-  the content family's inline faces; ADR-0123's parser and tests migrated,
-  behaviour identical.
-- **M1 — Table.** Inline faces in both grids, width seed, tone runs, header
+- **M0 — core.** ✓ `public/hmi/gloss`: catalog, kinds, cell accessor, params,
+  the content family's inline faces; ADR-0123's parser and tests migrated.
+- **M1 — Table.** ✓ Inline faces in both grids, width seed, tone runs, header
   label + hover, raw toggle; the seven `gloss/*` members of SD5.
-- **M2 — rules.** `lwsql.SpecLine`, rules engine, affinities, the directive,
+- **M2 — rules.** ✓ `lwsql.SpecLines`, rules engine, affinities, the directive,
   precedence and hover provenance.
-- **M3 — Detail.** Block faces bound in play; the card seam; the Glosses tab.
-- **M4 — macro.** `glosssql`, passreg entry, Vocabulary listing, goldens.
-- **M5 — docs.** `features.md`, `snippets.md`, the ADR-0123 pointers.
+- **M3 — Detail.** ✓ Block faces bound in play; the card seam; the Glosses tab.
+- **M4 — macro.** ✓ `glosssql`, passreg entry, Vocabulary listing, goldens.
+- **M5 — docs.** ✓ `features.md`, `snippets.md`, the ADR-0123 pointers, two
+  tour scenes.
+
+Recorded, not milestones: the Table width seed (`colCharPx`, 7 px per rune)
+under-measures the monospace advance (~7.6 px at the tour's density), which a
+gloss face wider than its header makes visible as truncation — a calibration
+predating this ADR and left to its owner.
 
 ## Status
 

@@ -106,6 +106,25 @@ ORDER BY positions DESC
 LIMIT 40"
 }
 
+scene_02_table_glosses() {
+	desc="Table — glosses (ADR-0186): the gloss(…) macro and explicit \`label@gloss/…\` aliases per column, a \`-- play: gloss\` directive binding a plain column by name, a Luhn ✓/✗ tone, a masked secret, and a mistyped parameter refused out loud"
+	# Table-free, so it needs no fixture. The last column carries a typo in
+	# its parameter name (unti=C) on purpose: it must render plain with the
+	# refusal on the header hover, never as a temperature. The first glossed
+	# column goes through the gloss(…) macro (§SD7), the rest through aliases.
+	senv=(BOXER_PLAY_FOCUS_TABLE=1)
+	sql="-- play: gloss gloss/length;unit=m name:height
+SELECT number AS n,
+       gloss(20 + number * 1.7, 'gloss/temperature', 'unit', 'C', 'label', 'temp'),
+       1.5 + number * 0.31 AS height,
+       ['4111111111111111', '4111111111111112', '378282246310005'][1 + number % 3] AS \`card@gloss/luhn\`,
+       1024 * number * number AS \`size@gloss/bytes\`,
+       'hunter2' AS \`pw@gloss/secret\`,
+       'https://example.com/' || toString(number) AS \`link@gloss/url\`,
+       20 + number * 1.7 AS \`oops@gloss/temperature;unti=C\`
+FROM numbers(12)"
+}
+
 scene_03_detail_card() {
 	desc="Detail — the leeway entity card for a single row: the plain id section, every tagged section, membership chips"
 	# Detail claims its channel from the `selection` signal, so a scripted
@@ -115,6 +134,25 @@ scene_03_detail_card() {
 	senv=(BOXER_PLAY_FOCUS_TABLE=1)
 	sql="SET param_selection = 0;
 SELECT * FROM anchor.facts WHERE \`id:id\` = 10005"
+}
+
+scene_03_detail_glosses() {
+	desc="Detail + Glosses — the rule route on a leeway result (ADR-0186): \`-- play: gloss\` lines bind glosses to physical columns by their spec line, the leeway card and both grids render the faces, and the Glosses tab shows the catalog, the rules and each column's resolution"
+	senv=(BOXER_PLAY_FOCUS_TABLE=1 BOXER_PLAY_FOCUS_GLOSSES=1)
+	sql="-- play: gloss gloss/secret name:text section:text
+-- play: gloss gloss/bytes name:wordLength
+SET param_selection = 0;
+SELECT \`id:id\`, \`symbol:value\`, \`text:text\`, \`text:wordLength\`, \`geoPoint:pointLat\`
+FROM anchor.facts
+ORDER BY \`id:id\`
+LIMIT 20"
+	# Two captures: the per-DB-row grid (a masked list cell, a byte count that
+	# does not apply to a whole list), then the per-attribute grid, where the
+	# same rules reach the items.
+	steps='{"do":"capture","text":"03_detail_glosses","settleMs":600}
+{"do":"click","name":"per attribute"}
+{"do":"capture","text":"03_detail_glosses_per_attribute","settleMs":600}'
+	settle=1800
 }
 
 scene_04_timeline() {
