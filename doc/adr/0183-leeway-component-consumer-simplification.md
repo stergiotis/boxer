@@ -374,7 +374,7 @@ proven lane.
 - `Plan`'s Go residue (`GoType()`, `KindVar()`, Add-method descriptors)
   is recorded as a named constraint any future non-Go plan source
   inherits; no code moves now.
-- `DefaultClassifier` is renamed to what it is (working name
+- `PathPrefixClassifier` is renamed to what it is (working name
   `PathPrefixClassifier`) with a deprecated alias; `nil` (all-primary)
   remains the default. Generated-side role filtering (F2) is descoped
   until a consumer needs it, consistent with the ADR-0073 adoption gap.
@@ -481,8 +481,29 @@ proven lane.
   must carry a second slot saying so. And the tuple crossing is
   section-scoped (see D5), which is a hazard on a shared table rather
   than a wider version of the same read.
-- **M4 — doc unification.** D6 reframing + D7's U1, hygiene items, and
-  the doclint rule.
+- **M4 — doc unification.** ✓ D6's reframe (the plan is the definition; the
+  struct is one authoring syntax of three) and the classifier rename with a
+  deprecated alias; D7's U1 — the components skill reordered mesh-first, opening
+  with the type-discipline statement and carrying the load-bearing-ADR map, with
+  a table of the silent readings and the test that pins each; the how-to's
+  component matter reduced to a pointer at it; both EXPLANATIONs given an
+  orientation pass; ADR-0146's collision table marked a pre-D4 measurement by
+  dated update; and the stale-stamp rule shipped as **DL015** (DL013 and DL014
+  were already reserved).
+
+  Three of U1's expectations did not hold, and the record is worth more than
+  the target. `leeway-advanced` had no component matter to shed — its
+  description already delegates here — and the how-to's was two sentences, so
+  the duplication was concentrated in what the skill itself restated rather
+  than spread across neighbours. **The landscape therefore grew by about 60
+  lines rather than shrinking**: the skill gained the mesh framing, the type
+  discipline, the plan reframe, the ADR map and the corpus table, and nothing
+  in the neighbours was a duplicate of any of it. Meeting the number would have
+  meant deleting material that is not duplication — the ECS theory in
+  `ecsdemo`'s EXPLANATION, the tag grammar in the how-to — so it was not met.
+  And the how-to could not honestly be restamped: `reviewed-by` names a person
+  and its content was corrected mechanically, so its stamp stays stale and
+  DL015 now says so on every run, which is the outcome the rule exists for.
 - **M5 — vocabulary as facts v1.** D3: claim kind, init-time
   publication, reconciliation views.
 - **M6 — write-path absorption.** D4: buffer, typed builders, facts
@@ -596,7 +617,7 @@ M5 and M6 are independent of each other and may swap.
   `leeway/namemint` (D0). Double-Add of one kind: silent `raw = true` fallback
   becomes an error. Mixing `Raw()` with typed Adds in one entity frame:
   refused. Multi-element values under unit-shaped slots: read error on
-  all paths (previously silent zero-fill). `DefaultClassifier`:
+  all paths (previously silent zero-fill). `PathPrefixClassifier`:
   deprecated alias.
 - **Path.** The four vocabulary packages keep today's ordinals (dump
   via `IterateAll()`, splice each into its registration) and claim

@@ -47,6 +47,14 @@ status: draft
 > tuple rung also found that the crossing is section-scoped, so a tuple
 > field consumes a co-resident component's attributes as well as its own.
 >
+> Updated 2026-08-15: U1 landed (ADR-0183 M4) and corrected §4's reading of
+> this table. The overlap it records between the components skill,
+> `leeway-advanced` and the marshalling how-to was **not there**: advanced
+> delegates to the skill in its own description, and the how-to carried two
+> sentences of component matter. §6's net-negative-prose rule was therefore
+> not met — the landscape grew ~60 lines — because the skill absorbed material
+> that had no home rather than material that had two.
+>
 > Later the same day, a seam survey grounded §6's costings: API-1 is
 > ~150 LOC against exactly two production `MapLookup` sites (with a
 > naming-style hazard at the snapshot seam); API-3 as drafted missed
@@ -425,7 +433,7 @@ plain labels (**contained**, **framing**). Remedy classes are defined in
 
 | # | Edge | Severity | Where the truth lives | Remedy candidates |
 | --- | --- | --- | --- | --- |
-| F1 | `DefaultClassifier` marks primary by `/` prefix, so ordinary DTO memberships classify *secondary*; nil (all-primary) is the only symmetric default, and the name invites the wrong choice | asymmetry | ADR-0073; ADR-0146 M4 | API (rename to what it is, e.g. path-prefix classifier; nil stays default); D |
+| F1 | `PathPrefixClassifier` marks primary by `/` prefix, so ordinary DTO memberships classify *secondary*; nil (all-primary) is the only symmetric default, and the name invites the wrong choice | asymmetry | ADR-0073; ADR-0146 M4 | API (rename to what it is, e.g. path-prefix classifier; nil stays default); D |
 | F2 | Role filtering exists only in the reflect front-end; generated codecs resolve memberships at init and take no per-read policy | asymmetry | ADR-0146 M4 | S (descope generated-side roles until a consumer needs them — consistent with the 0073 adoption gap) or API (build it) |
 | F3 | Go-type → `FieldShape` derivation is per-front-end — the one place the two parsers can drift | contained | parity corpus gates it | none — maintain the corpus; noted so the unification names it as the mechanism |
 

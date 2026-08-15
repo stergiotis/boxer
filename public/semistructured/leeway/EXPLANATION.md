@@ -214,9 +214,12 @@ rows that never carried `user`; it filters them out.
 
 ## Maturity notes
 
-As of mid-2026, the write/marshal/DDL spine is the most exercised part of the
-pipeline. Read-back beyond scalars, stream read access, the leeway query
-language, and complete table-level DDL clauses are still partial.
+As of 2026-08, the write/marshal/DDL spine remains the most exercised part of
+the pipeline. Read-back has since grown its own surfaces — a generated
+per-component read path (ADR-0146), a ClickHouse read-back generator
+(ADR-0066), and an installed SQL vocabulary (ADR-0171/0181) — so "read-back is
+partial", which this section said through mid-2026, now understates it. Stream
+read access and complete table-level DDL clauses are still partial.
 
 ## Further reading
 
@@ -234,5 +237,11 @@ language, and complete table-level DDL clauses are still partial.
   [ADR-0073: leeway membership role](../../../doc/adr/0073-leeway-membership-role.md),
   [ADR-0074: leeway marshall package layout](../../../doc/adr/0074-leeway-marshall-package-layout.md),
   [ADR-0075: leeway typed component views](../../../doc/adr/0075-leeway-typed-component-views.md)
+- The layer above this one — components: flat DTOs projected out of these
+  rows, who may share a section, and where membership ids come from — is the
+  [leeway-components skill](../../../doc/skills/leeway-components/SKILL.md).
+  This document explains the pipeline; that one explains consuming it.
+- Reading a table back from SQL rather than through Go:
+  [the SQL read surface](../../../doc/explanation/leeway-sql-read-surface.md).
 - Orientation:
   [Why boxer](../../../doc/explanation/why-boxer.md)

@@ -354,6 +354,27 @@ for the edit-policy tiers.
 
 ## Updates
 
+### 2026-08-15 — the Context's collision table is a pre-D4 measurement
+
+The three-row table in the Context ("Measured against a row carrying two
+attributes under one membership") records what the three surfaces did *before*
+this ADR: scalars errored, `Option` went silently absent, containers silently
+concatenated. D4 is the decision that ended that split, so the table has
+described history since the day this ADR was accepted — and reads as current
+behaviour to anyone who finds it without also finding D4.
+
+Current behaviour, for a reader arriving here: arity is uniform on every path.
+A surplus attribute on a claimed slot is an error in `marshallreflect`, in the
+generated `ReadRow`, and in the readback `Validator`; the `Projection` alone
+still takes the first match, which is why a projection is only as trustworthy
+as the Filter beside it. Since ADR-0183 D5 the same uniformity covers the
+value-count rung: an attribute carrying more than one value under a `,unit`
+field is refused on all three.
+
+The executable statement of the contract is
+`marshallreflect_test/failure_modes_test.go` and its neighbours; the ADR
+remains the record of why (ADR-0183 D7).
+
 ### 2026-07-27 — the lookup-vs-wire deferral resolves to a diagnosis, not a check
 
 §Scope deferred "verifying resolved `lookup` ids against the wire". Attempting

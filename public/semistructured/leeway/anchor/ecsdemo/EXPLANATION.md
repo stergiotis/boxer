@@ -10,6 +10,14 @@ status: draft
 
 # ecsdemo — Entity-Component-System, and how this example realizes it
 
+> **Where this sits.** This demo is the **closed world**: one program owns the
+> writing and the reading, and the shared `MapLookup` below is a map it wrote
+> itself. That is a legitimate shape and not the main one — for two domains
+> sharing a facts table with ids from a vocabulary registry, see
+> [`runtime/factsschema/meshdemo`](../../../../keelson/runtime/factsschema/meshdemo/).
+> The layer's rules live in the
+> [leeway-components skill](../../../../../doc/skills/leeway-components/SKILL.md).
+
 `ecsdemo` is a small, didactic Entity-Component-System used as a two-stage
 example under `anchor/`: stage 1 (the `stage1/` subpackage) serializes the model
 with `encoding/json/v2`; stage 2 (the `stage2/` subpackage) expresses the same

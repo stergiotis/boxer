@@ -67,7 +67,12 @@ They round-trip through each other. Author the DTO once; pick the driver per use
   declares a package-level `kindXxx` symbol per ref membership and lets a
   `WrapperEmitterI` fill it (keelson's `factswrapper` resolves it from `vdd`);
   reflect takes a `LookupI` at call time — or `NoLookup{}` when every membership
-  in the DTO carries `,verbatim`.
+  in the DTO carries `,verbatim`. Where the ids come from is a decision, not a
+  detail: on a shared table they come from the vocabulary registry
+  (`marshallreflect.NewRegistryLookup` over its snapshot), and a hand-written
+  `MapLookup` is the closed-world spelling. The
+  [leeway-components skill](../skills/leeway-components/SKILL.md) is the home
+  for that choice and its failure modes.
 - **The `lw` marker package** (nested model only) — channel markers (`lw.Ref`,
   `lw.Verbatim`, …), the value-shape marker `lw.Single`, and the lane types
   (`lw.IPv4`, `lw.IPv6`, the CIDR prefixes). Each replaces a flat-grammar flag
@@ -126,7 +131,9 @@ the wire shape (classified by `mappingplan.ClassifyBegin`):
 | `[]T` / `*roaring.Bitmap` | —                | 1 attr · N vals      | `BeginAttribute()` + `AddToContainerP(v)`×N |
 
 The flag is the signal; section names are not inspected. `,unit` requires a
-scalar shape. The former N×1 shapes (`,explode` — one attribute per element)
+scalar shape, and it is a promise the read side holds you to: an attribute
+carrying more than one value under a `,unit` field is refused on every read path
+(ADR-0183 D5), where it used to decode as a zero. The former N×1 shapes (`,explode` — one attribute per element)
 were removed by ADR-0113 D1: author a nested
 [`[]Attr` section](#attribute-cardinality) instead. `,ct=<canonical>` may
 **relabel** a field's canonical type (e.g. a `uint32` as IPv4 via `,ct=v`, or a
@@ -720,10 +727,13 @@ type DroneMission struct {
 - [`marshallgen` EXPLANATION](../../public/semistructured/leeway/marshall/go/marshallgen/EXPLANATION.md) — how the generator works, the channel table, the read-side asymmetry, and the emit trade-offs.
 - [The `goplan` toolkit](../../public/semistructured/leeway/marshall/go/goplan/) and [the `mappingplan` model](../../public/semistructured/leeway/mappingplan/) — the shared tag grammar, `PlanBuilder` validation, section grouping, and the membership channels.
 - Worked DTOs: [`anchor/codecdemo/`](../../public/semistructured/leeway/anchor/codecdemo/) — `textdoc` (multi-sub-column), `labeledtextdoc` (tuple), `lineagedoc` (multi-membership + ref tuple), `sensorreading` (carriers), and [`codecdemo/nested/`](../../public/semistructured/leeway/anchor/codecdemo/nested/) for the nested forms.
-- Multi-DTO composition — several component DTOs contributing to one entity,
-  shared sections included — is outside this how-to's single-DTO scope: see
-  `RowComposer` and [ADR-0146](../adr/0146-leeway-marshall-component-read-contract.md)
-  (overlap is expected; contributions share one buffered frame per section),
-  with [`anchor/ecsdemo/`](../../public/semistructured/leeway/anchor/ecsdemo/)
-  as the worked example.
+- Everything above this line is one DTO. Several component DTOs over one
+  entity, shared sections, where membership ids come from, and what reads
+  silently wrong when they disagree are the
+  [leeway-components skill](../skills/leeway-components/SKILL.md)'s subject —
+  it is the entry point for that layer, with
+  [`meshdemo`](../../public/keelson/runtime/factsschema/meshdemo/) as the
+  worked example and
+  [`anchor/ecsdemo/`](../../public/semistructured/leeway/anchor/ecsdemo/) as
+  the closed-world one.
 - Decisions: [ADR-0113](../adr/0113-leeway-marshall-nested-primary-consolidation.md) (nested primary, the frozen flat escalation, the D1 cull), [ADR-0074](../adr/0074-leeway-marshall-package-layout.md) (package layout), [ADR-0101](../adr/0101-leeway-marshall-mixed-shape-sections.md) (mixed shapes), [ADR-0103](../adr/0103-leeway-marshall-dynamic-membership-tuples.md) / [ADR-0109](../adr/0109-leeway-marshall-multi-membership-ref-tuples.md) (tuples), [ADR-0100](../adr/0100-recordstore-generated-leeway-clickhouse-store.md) (`ReadRow` / store).
