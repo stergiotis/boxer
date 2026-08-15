@@ -242,3 +242,29 @@ func TestGlossRulesOnLeewaySchema(t *testing.T) {
 	again := app.glossColumns(schema)
 	assert.Equal(t, &cols[0], &again[0])
 }
+
+// A gloss/url cell is a hyperlink to its value; every other cell is not.
+func TestGlossLink(t *testing.T) {
+	app := &PlayApp{}
+	mem := memory.NewGoAllocator()
+	sb := array.NewStringBuilder(mem)
+	defer sb.Release()
+	sb.AppendValues([]string{" https://example.com/a ", ""}, []bool{true, false})
+	urls := sb.NewArray()
+	defer urls.Release()
+	fb := array.NewFloat64Builder(mem)
+	defer fb.Release()
+	fb.Append(1)
+	nums := fb.NewArray()
+	defer nums.Release()
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "link@gloss/url", Type: arrow.BinaryTypes.String},
+		{Name: "t@gloss/temperature;unit=C", Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+	cols := app.glossColumns(schema)
+	assert.Equal(t, "https://example.com/a", app.glossLink(&cols[0], urls, 0), "trimmed value")
+	assert.Equal(t, "", app.glossLink(&cols[0], urls, 1), "a null cell links nowhere")
+	assert.Equal(t, "", app.glossLink(&cols[1], nums, 0), "only gloss/url links")
+	app.tableOpts.rawCells = true
+	assert.Equal(t, "", app.glossLink(&cols[0], urls, 0), "raw cells: no link either")
+}

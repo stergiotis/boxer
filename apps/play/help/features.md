@@ -355,7 +355,9 @@ matched nothing.* for an empty result.
 
 A column bound to a **gloss** (ADR-0186 — see [Glosses](#glosses)) shows the
 gloss's one-line face in its cells instead of the plain value — `21.5 °C`,
-`4111 •••• •••• 1111 ✓` in the success or error tone, `••••••`, `40 KiB` — and
+`4111 •••• •••• 1111 ✓` in the success or error tone, `••••••`, `40 KiB`, a
+`gloss/url` cell as a clickable link (it opens the URL; the row's other cells
+still select the row) — and
 its media type beside the type tag in the header; the header hover names how
 the binding was made and shows the column's spec line. A **Raw cells** toggle
 on the toolbar switches every gloss off for the session. Both grids honour the

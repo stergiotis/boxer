@@ -202,7 +202,7 @@ it permutes rows on the raw values.
 | `gloss/bytes` | numeric ≥ 0 | — | `humanize.IBytes` | — | — |
 | `gloss/luhn` | text, numeric | — | groups of four, middle groups masked, ✓/✗ tone by check digit | mask + verdict | — |
 | `gloss/secret` | any | — | `••••••`, never length-revealing | same | ← `sem:secret` |
-| `gloss/url` | text | — | text in accent tone | `HyperlinkTo` | ← `sem:url` |
+| `gloss/url` | text | — | the URL, accent tone; a hyperlink cell in the grids | `HyperlinkTo` | ← `sem:url` |
 | `gloss/raw` | any | — | `formatCell` | — | — |
 
 One or two exemplars per archetype — unit formatting, check digit, masking,

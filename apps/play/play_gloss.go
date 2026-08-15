@@ -226,6 +226,21 @@ func (inst *PlayApp) glossCell(gc *glossColumn, arr arrow.Array, row int64, elem
 	return face.Text, face.Tone
 }
 
+// glossLink returns the URL a gloss/url cell opens — the value itself,
+// trimmed — when the column is glossed as gloss/url, accepted, and the raw
+// toggle is off; empty for every other cell. The grids render such a cell as
+// a hyperlink instead of a selectable button.
+func (inst *PlayApp) glossLink(gc *glossColumn, arr arrow.Array, row int64) string {
+	if gc == nil || inst.tableOpts.rawCells || gc.mediaType != gloss.MediaTypeURL || !gc.glossed() {
+		return ""
+	}
+	raw, ok := gloss.ArrowCell{Arr: arr, Row: int(row)}.Raw()
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(raw)
+}
+
 // glossText is the text-backed variant for a grid that already holds the
 // cell as a string (the per-attribute grid's driver-marshalled values):
 // the inline face over a TextCell of the given kind, or the text unchanged.

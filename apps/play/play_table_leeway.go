@@ -287,11 +287,19 @@ func (inst *PlayApp) renderTableOptionsBar() {
 // layout with Center rather than Min cross-alignment.
 //
 // tone colours the text per ADR-0186's inline face (a Luhn ✓ in success, a
-// ✗ in error); gloss.ToneNeutral leaves the cell's text style alone.
-func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, weak bool, selected, selBg, leftAlign bool, tone gloss.ToneE) (clicked bool) {
+// ✗ in error); gloss.ToneNeutral leaves the cell's text style alone. link,
+// when non-empty, makes the cell a hyperlink to that URL instead of a button
+// (a gloss/url cell): clicking it opens the link through the host's opener
+// and does not select the row — the row's other cells still do — since a
+// hyperlink's click is consumed by the widget and not reported back.
+func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, weak bool, selected, selBg, leftAlign bool, tone gloss.ToneE, link string) (clicked bool) {
 	c.AddSpace(cellPadX)
 	emitCell := func() {
 		emitButton := func() {
+			if link != "" {
+				c.HyperlinkTo(text, link).OpenInNewTab(true).Send()
+				return
+			}
 			var rt c.RichTextScope
 			if col, toned := toneColor(tone); toned {
 				rt = c.Atoms().BeginRichTextColored(col, color.Transparent, text).Monospace()

@@ -3180,7 +3180,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 
 		if vis, _ := et.ColVisible(0); vis {
 			for range et.Cells(local, 0) {
-				if inst.selectableCell(rowBase, cellPadX, fmt.Sprintf("%d", absRow+1), false, selected, false, false, gloss.ToneNeutral) {
+				if inst.selectableCell(rowBase, cellPadX, fmt.Sprintf("%d", absRow+1), false, selected, false, false, gloss.ToneNeutral, "") {
 					emit.Emit(signalSelection, absRow)
 				}
 			}
@@ -3193,9 +3193,11 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			leftAlign := stringLikeArrowType(schema.Field(arrowCol).Type)
 			for range et.Cells(local, colPos) {
 				// ADR-0186: the cell text is the column's gloss inline face when
-				// one resolves (and the raw toggle is off), else formatCell.
+				// one resolves (and the raw toggle is off), else formatCell; a
+				// gloss/url cell is a hyperlink to its value.
 				text, tone := inst.glossCell(&glossCols[arrowCol], rec.Column(arrowCol), absRow, false)
-				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, text, false, selected, false, leftAlign, tone) {
+				link := inst.glossLink(&glossCols[arrowCol], rec.Column(arrowCol), absRow)
+				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, text, false, selected, false, leftAlign, tone, link) {
 					emit.Emit(signalSelection, absRow)
 				}
 			}

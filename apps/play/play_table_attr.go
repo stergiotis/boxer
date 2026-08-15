@@ -610,7 +610,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 				if row.firstOfEntity {
 					marker = strconv.FormatInt(row.absRow+1, 10)
 				}
-				if inst.selectableCell(rowBase, cellPadX, marker, true, selected, true, false, gloss.ToneNeutral) {
+				if inst.selectableCell(rowBase, cellPadX, marker, true, selected, true, false, gloss.ToneNeutral, "") {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}
@@ -622,7 +622,13 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 			}
 			leftAlign := stringLikeArrowType(listElemType(schema.Field(arrowCol).Type))
 			for range et.Cells(local, colPos) {
-				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, row.cells[pos], false, selected, true, leftAlign, gloss.ToneNeutral) {
+				// A gloss/url item is a hyperlink to itself (its text is the
+				// URL: the face is the first line of the value).
+				link := ""
+				if gc := &glossCols[visCols[pos]]; gc.mediaType == gloss.MediaTypeURL && gc.glossedElem() && !inst.tableOpts.rawCells {
+					link = row.cells[pos]
+				}
+				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, row.cells[pos], false, selected, true, leftAlign, gloss.ToneNeutral, link) {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}

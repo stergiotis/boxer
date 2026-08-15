@@ -1,9 +1,9 @@
 package gloss
 
-// MediaTypeURL shows a URL as a link: the text in the accent tone inline
-// (a table cell click selects the row, so the cell itself is not a link),
-// and a hyperlink block face in the host. Its affinity is the aspect
-// vocabulary's `sem:url`.
+// MediaTypeURL shows a URL as a link: the inline face is the URL's first
+// line in the accent tone — the caption a host puts on the hyperlink it
+// renders in its grids and in Detail — and the value itself is what the link
+// opens. Its affinity is the aspect vocabulary's `sem:url`.
 const MediaTypeURL = "gloss/url"
 
 func urlGloss() GlossI {
