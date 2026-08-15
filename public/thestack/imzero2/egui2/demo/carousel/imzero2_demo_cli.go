@@ -50,6 +50,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
@@ -459,6 +460,13 @@ func NewCommand() *cli.Command {
 			}
 			if passErr := play.RegisterPasses(passreg.Default); passErr != nil {
 				log.Warn().Err(passErr).Msg("passreg: play host pass registration failed")
+			}
+			// The component registry LW_COMPONENT reads (ADR-0189 §SD7),
+			// aggregated at the same wiring site and for the same reason:
+			// which components this process can read is a property of what it
+			// links, and stating it here is what keeps that reviewable.
+			if compErr := play.RegisterComponents(componentsql.Default); compErr != nil {
+				log.Warn().Err(compErr).Msg("componentsql: play component registration failed")
 			}
 
 			// This module's Go package graph as keelson('go_packages') and

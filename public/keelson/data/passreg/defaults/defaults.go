@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 )
 
 // RegisterStandard registers the standard set into r:
@@ -139,6 +140,28 @@ func RegisterStandard(r *passreg.Registry) (err error) {
 			}
 			return passes.ResolveColumnNames(resolver, "", nil), true
 		},
+	})
+	if err != nil {
+		return
+	}
+
+	// LW_COMPONENT / LW_COMPONENT_FILTER (ADR-0189 §SD3) is an Entry rather
+	// than a Factory: unlike the schema-bound passes around it, what it needs
+	// is a registry a host populates once at its wiring site (§SD7), not a
+	// per-consumer binding. A host that registered no store gets a pass that
+	// refuses any component call by name — which is the right answer, since
+	// the alternative is a call that expands to nothing.
+	//
+	// Ordered at 110: after identsql (100), so an LW_ID_* macro around a
+	// component call is already expanded, and before the extraction family
+	// (120) so one statement may mix both. Neither emits the other's calls,
+	// so the order is for determinism rather than dependency.
+	err = r.Register(passreg.Entry{
+		Pass:        constructsql.ComponentExpandPass(componentsql.Default, ""),
+		Stage:       passreg.StagePreExecute,
+		Order:       110,
+		Description: "expand LW_COMPONENT/LW_COMPONENT_FILTER into a component's projection and conformance filter",
+		Provenance:  "github.com/stergiotis/boxer/public/semistructured/leeway/constructsql",
 	})
 	if err != nil {
 		return

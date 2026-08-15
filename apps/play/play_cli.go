@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
@@ -73,6 +74,13 @@ func NewCliCommand() *cli.Command {
 			}
 			if passErr := RegisterPasses(passreg.Default); passErr != nil {
 				log.Warn().Err(passErr).Msg("play: host pass registration failed")
+			}
+			// The component registry the LW_COMPONENT pass reads (ADR-0189
+			// §SD7). Best-effort like the passes: unregistered kinds make
+			// LW_COMPONENT refuse by name, which is a query-level error
+			// rather than a reason not to boot.
+			if compErr := RegisterComponents(componentsql.Default); compErr != nil {
+				log.Warn().Err(compErr).Msg("play: component registration failed")
 			}
 
 			clientCfg := ClientConfig{

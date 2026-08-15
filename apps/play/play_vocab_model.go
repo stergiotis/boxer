@@ -241,6 +241,24 @@ func vocabDeclared() (out []vocabEntry) {
 			Dependencies: constructsql.ExtractExpansionDependencies(),
 		})
 	}
+	// The component family (ADR-0189 §SD8). The two names differ in what they
+	// need installed, which is why only one carries dependencies:
+	// LW_COMPONENT_FILTER expands to ClickHouse built-ins and runs against any
+	// endpoint, while LW_COMPONENT expands to the named-tuple projection,
+	// which calls the read-back helpers. Availability is a further condition
+	// this column cannot show: a kind resolves only if its store was
+	// registered at the host's wiring site.
+	for _, f := range constructsql.ComponentFunctions() {
+		e := vocabEntry{
+			Name: f.Name, Params: f.Params, Doc: f.Doc,
+			Where: vocabClient, Family: "leeway components (ADR-0189)",
+			Declared: true, Available: true,
+		}
+		if f.Name == constructsql.NameComponent {
+			e.Dependencies = constructsql.ComponentExpansionDependencies()
+		}
+		out = append(out, e)
+	}
 
 	for _, f := range tsFuncs {
 		params := make([]string, 0, len(f.Args))

@@ -3,6 +3,8 @@ package play
 import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 )
 
 // RegisterPasses adds play's host-scoped entries to the shared pre-execute
@@ -35,4 +37,18 @@ func RegisterPasses(r *passreg.Registry) (err error) {
 		Description: "rewrite the statement into canonical form (sugar to function calls, canonical quoting and keyword case)",
 		Provenance:  "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes",
 	})
+}
+
+// RegisterComponents publishes the generated stores play can read through
+// LW_COMPONENT into a component registry (ADR-0189 §SD7).
+//
+// Explicit rather than by package init: a registry populated by import has an
+// extent that depends on the link set, so the same query would resolve a kind
+// in one binary and not another. Listing the stores here keeps what play knows
+// about reviewable at the wiring site, next to RegisterPasses.
+//
+// Only stores whose tables play actually reads belong here. sysmetrics is the
+// first — its rows are what ADR-0184's tee writes, and what loadstudy reads.
+func RegisterComponents(r *componentsql.Registry) (err error) {
+	return r.Register(sysmfacts.SysmetricsComponentSQL)
 }

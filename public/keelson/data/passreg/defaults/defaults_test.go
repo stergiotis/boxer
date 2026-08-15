@@ -24,12 +24,13 @@ func TestRegisterStandard(t *testing.T) {
 	require.NoError(t, RegisterStandard(r))
 
 	es := r.Entries(passreg.StagePreExecute)
-	require.Len(t, es, 5)
+	require.Len(t, es, 6)
 	require.Equal(t, "ExpandDescriptiveStatistics", es[0].Pass.Name, "ADR-0161 expansion orders first (75)")
 	require.Equal(t, "DocsearchExpand", es[1].Pass.Name, "ADR-0164 expansion between the two (80)")
 	require.Equal(t, "ExpandLwIdMacros", es[2].Pass.Name)
-	require.Equal(t, "LwConstructExpand", es[3].Pass.Name, "ADR-0181 constructor expansion orders after identsql (130)")
-	require.Equal(t, "GlossExpand", es[4].Pass.Name, "ADR-0186 gloss(…) expansion orders after the constructors (140)")
+	require.Equal(t, "LwComponentExpand", es[3].Pass.Name, "ADR-0189 component expansion orders after identsql and before extraction (110)")
+	require.Equal(t, "LwConstructExpand", es[4].Pass.Name, "ADR-0181 constructor expansion orders after identsql (130)")
+	require.Equal(t, "GlossExpand", es[5].Pass.Name, "ADR-0186 gloss(…) expansion orders after the constructors (140)")
 	for _, e := range es {
 		require.NotEmpty(t, e.Description)
 		require.NotEmpty(t, e.Provenance)
@@ -38,7 +39,7 @@ func TestRegisterStandard(t *testing.T) {
 	// Registering twice into the same registry must fail loudly (duplicate
 	// key), not silently double the entries.
 	require.Error(t, RegisterStandard(r))
-	require.Len(t, r.Entries(passreg.StagePreExecute), 5)
+	require.Len(t, r.Entries(passreg.StagePreExecute), 6)
 }
 
 // TestStandardSetExpandsDescriptiveStatistics proves the ADR-0161 wiring end
@@ -89,11 +90,14 @@ func TestStandardSetRegistersResolveColumnNamesFactory(t *testing.T) {
 	r := passreg.NewRegistry()
 	require.NoError(t, RegisterStandard(r))
 
-	// Concrete entries are the four expansions (descriptiveStatistics,
-	// docsearch, LW_ID_*, LW_ constructors); the three schema-bound passes —
-	// handle resolution, LW_GET extraction, and the target-adopting
-	// constructor variant (ADR-0181 §SD8 M2) — are factories.
-	require.Len(t, r.Entries(passreg.StagePreExecute), 5)
+	// Concrete entries are the expansions that need no per-consumer binding
+	// (descriptiveStatistics, docsearch, LW_ID_*, LW_COMPONENT, LW_
+	// constructors, gloss); the three schema-bound passes — handle
+	// resolution, LW_GET extraction, and the target-adopting constructor
+	// variant (ADR-0181 §SD8 M2) — are factories. LW_COMPONENT is an entry
+	// despite needing a registry: that registry is a host-wired global, not
+	// a per-consumer binding (ADR-0189 §SD7).
+	require.Len(t, r.Entries(passreg.StagePreExecute), 6)
 	fs := r.Factories(passreg.StagePreExecute)
 	require.Len(t, fs, 3)
 	var f passreg.Factory
