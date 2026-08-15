@@ -27,6 +27,7 @@ var dqlQueryFiles = []string{
 	"card_anchor_dql_query5.sql",
 	"card_anchor_dql_query6.sql",
 	"card_anchor_dql_query7.sql",
+	"card_anchor_dql_query8.sql",
 }
 
 // dqlDocHeader returns the front-matter stanza plus title for a generated

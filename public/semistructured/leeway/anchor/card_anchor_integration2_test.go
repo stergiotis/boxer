@@ -7,6 +7,7 @@ import (
 	"embed"
 	_ "embed"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
@@ -74,4 +75,24 @@ func TestLeewayClickHouse(t *testing.T) {
 		assert.NoError(t, err, q, result)
 		fmt.Printf("=== %s ===\n%s\n", p, result)
 	}
+
+	// Query 8 is the write-back demo (ADR-0181 §SD8 M2): create the silver
+	// target, execute the INSERT … SELECT whose mints adopted its names, and
+	// verify the slice landed. Types are the plain equivalents of facts' —
+	// an INSERT converts, and a Memory-engine fixture earns no codecs.
+	err = ch.Exec(ctx, `CREATE OR REPLACE TABLE anchor.silver (
+		"id:id:u64:47::0:" UInt64,
+		"id:naturalKey:y:4::0:" String,
+		"tv:symbol:value:val:s:124::I:0::data" Array(String),
+		"tv:symbol:lr:lr:u64:1247:::0::data" Array(UInt64),
+		"tv:symbol:lrcard:lrcard:u64:4E:::0::data" Array(UInt64)
+	) ENGINE = Memory`)
+	require.NoError(t, err)
+	err = ch.Exec(ctx, getSqlContent("card_anchor_dql_query8.out.sql", t))
+	require.NoError(t, err)
+	silver, err := queryToString(ctx, ch,
+		`SELECT count(), countIf(has("tv:symbol:value:val:s:124::I:0::data", 'DDOS')) FROM anchor.silver`)
+	require.NoError(t, err)
+	require.Equal(t, "20\t2", strings.TrimSpace(silver),
+		"the cyber slice: 20 incidents, of which the two DDOS rows (i ∈ {5,15})")
 }

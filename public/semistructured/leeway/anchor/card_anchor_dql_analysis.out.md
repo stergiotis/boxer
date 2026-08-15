@@ -74,6 +74,16 @@ generator: go test, TestDqlAnalysisGeneration
 - columns (7 refs): `id:id:u64:47::0:`, `id:naturalKey:y:4::0:`, `tv:geoPoint:h3:val:u64:4:::0::geo`, `tv:symbol:value:val:s:124::I:0::data`, `tv:timeRange:beginIncl:val:z64:47:::0::data`
 - functions: `has`
 
+## card_anchor_dql_query8.sql
+
+- statement kind: `mutating`
+- security class: `mutating`
+  - witness: insert wrapper `anchor.silver`
+- tables: `anchor.silver`, `anchor.facts`
+- passthrough tables (ADR-0117): (none)
+- columns (7 refs): `id:id:u64:47::0:`, `id:naturalKey:y:4::0:`, `tv:symbol:lr:lr:u64:1247:::0::data`, `tv:symbol:lrcard:lrcard:u64:4E:::0::data`, `tv:symbol:value:val:s:124::I:0::data`, `x`
+- functions: `array`, `arrayMap`, `hasAny`, `upper`
+
 ## co/ragged pack installer (ADR-0162)
 
 - statement kind: `mutating`

@@ -329,7 +329,7 @@ SELECT "id:id", "id:naturalKey", "symbol:value", "symbol:lrcard", "timeRange:beg
 SELECT "id:id:u64:47::0:", "id:naturalKey:y:4::0:", "tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lrcard:lrcard:u64:4E:::0::data", "tv:timeRange:beginIncl:val:z64:47:::0::data", "tv:timeRange:endExcl:val:z64:47:::0::data", "LW_TV"("arrayMap"("x" -> "CAST"(0.0, 'Float32'), "tv:geoPoint:pointLat:val:f32:4:::0::geo"), 'geoPoint', 'pointLat', 'f32'), "LW_TV"("arrayMap"("x" -> "CAST"(0.0, 'Float32'), "tv:geoPoint:pointLng:val:f32:4:::0::geo"), 'geoPoint', 'pointLng', 'f32'), "LW_TV"("tv:geoPoint:h3:val:u64:4:::0::geo", 'geoPoint', 'h3', 'u64'), "LW_TV_MEMB"("CAST"("array"(), 'Array(UInt64)'), 'geoPoint', 'high-card-ref'), "LW_TV_SUPPORT"("CAST"("array"(), 'Array(UInt64)'), 'geoPoint', 'hrcard') FROM "anchor"."facts" WHERE "has"("tv:symbol:value:val:s:124::I:0::data", 'DELIVERED') OR "has"("tv:symbol:value:val:s:124::I:0::data", 'IN_TRANSIT')
 ```
 
-### after LwConstructExpand
+### after LwConstructExpandTarget
 
 ```sql
 SELECT "id:id:u64:47::0:", "id:naturalKey:y:4::0:", "tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lrcard:lrcard:u64:4E:::0::data", "tv:timeRange:beginIncl:val:z64:47:::0::data", "tv:timeRange:endExcl:val:z64:47:::0::data", "arrayMap"("x" -> "CAST"(0.0, 'Float32'), "tv:geoPoint:pointLat:val:f32:4:::0::geo") AS "tv:geo-point:point-lat:val:f32::::0::", "arrayMap"("x" -> "CAST"(0.0, 'Float32'), "tv:geoPoint:pointLng:val:f32:4:::0::geo") AS "tv:geo-point:point-lng:val:f32::::0::", "tv:geoPoint:h3:val:u64:4:::0::geo" AS "tv:geo-point:h3:val:u64::::0::", "CAST"("array"(), 'Array(UInt64)') AS "tv:geo-point:hr:hr:u64:47:::0::", "CAST"("array"(), 'Array(UInt64)') AS "tv:geo-point:hrcard:hrcard:u64:4E:::0::" FROM "anchor"."facts" WHERE "has"("tv:symbol:value:val:s:124::I:0::data", 'DELIVERED') OR "has"("tv:symbol:value:val:s:124::I:0::data", 'IN_TRANSIT')
@@ -452,7 +452,7 @@ WITH "arrayDistinct"("groupArrayArray"("symbols")) AS "distinct_symbols", "toUIn
 WITH "arrayDistinct"("groupArrayArray"("symbols")) AS "distinct_symbols", "toUInt64"("count"()) AS "event_count" SELECT "LW_PLAIN"("cityHash64"("h3_index", "event_date"), 'id', 'u64', 'item:id'), "LW_PLAIN"("concat"('COMPOSITE-H3-', "toString"("h3_index"), '-20260311'), 'naturalKey', 'y', 'item:id'), "LW_TV"("distinct_symbols", 'symbol', 'value', 's'), "LW_TV"("array"("event_count"), 'u64Array', 'value', 'u64h'), "LW_TV"("array"("concat"('Regional summary: ', "toString"("event_count"), ' events. Includes: ', "arrayStringConcat"("distinct_symbols", ', '))), 'text', 'text', 's'), "LW_TV"("array"("CAST"(0.0, 'Float32')), 'geoPoint', 'pointLat', 'f32'), "LW_TV"("array"("CAST"(0.0, 'Float32')), 'geoPoint', 'pointLng', 'f32'), "LW_TV"("array"("h3_index"), 'geoPoint', 'h3', 'u64'), "LW_TV"("array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")), 9, 'UTC')), 'timeRange', 'beginIncl', 'z64'), "LW_TV"("array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")) + 86400, 9, 'UTC')), 'timeRange', 'endExcl', 'z64') FROM ( SELECT "arrayElement"("tv:geoPoint:h3:val:u64:4:::0::geo", 1) AS "h3_index", "toDate"("arrayElement"("tv:timeRange:beginIncl:val:z64:47:::0::data", 1)) AS "event_date", "tv:symbol:value:val:s:124::I:0::data" AS "symbols" FROM "anchor"."facts" WHERE "length"("tv:geoPoint:h3:val:u64:4:::0::geo") > 0 ) WHERE "event_date" = '2026-03-11' GROUP BY "h3_index", "event_date"
 ```
 
-### after LwConstructExpand
+### after LwConstructExpandTarget
 
 ```sql
 WITH "arrayDistinct"("groupArrayArray"("symbols")) AS "distinct_symbols", "toUInt64"("count"()) AS "event_count" SELECT "cityHash64"("h3_index", "event_date") AS "id:id:u64:::0:", "concat"('COMPOSITE-H3-', "toString"("h3_index"), '-20260311') AS "id:natural-key:y:::0:", "distinct_symbols" AS "tv:symbol:value:val:s::::0::", "array"("event_count") AS "tv:u64-array:value:val:u64h::::0::", "array"("concat"('Regional summary: ', "toString"("event_count"), ' events. Includes: ', "arrayStringConcat"("distinct_symbols", ', '))) AS "tv:text:text:val:s::::0::", "array"("CAST"(0.0, 'Float32')) AS "tv:geo-point:point-lat:val:f32::::0::", "array"("CAST"(0.0, 'Float32')) AS "tv:geo-point:point-lng:val:f32::::0::", "array"("h3_index") AS "tv:geo-point:h3:val:u64::::0::", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")), 9, 'UTC')) AS "tv:time-range:begin-incl:val:z64::::0::", "array"("toDateTime64"("toStartOfDay"("toDateTime"("event_date")) + 86400, 9, 'UTC')) AS "tv:time-range:end-excl:val:z64::::0::" FROM ( SELECT "arrayElement"("tv:geoPoint:h3:val:u64:4:::0::geo", 1) AS "h3_index", "toDate"("arrayElement"("tv:timeRange:beginIncl:val:z64:47:::0::data", 1)) AS "event_date", "tv:symbol:value:val:s:124::I:0::data" AS "symbols" FROM "anchor"."facts" WHERE "length"("tv:geoPoint:h3:val:u64:4:::0::geo") > 0 ) WHERE "event_date" = '2026-03-11' GROUP BY "h3_index", "event_date"
@@ -654,5 +654,85 @@ SELECT "id:id", "id:naturalKey", "symbol:value", "timeRange:beginIncl", "geoPoin
 
 ```sql
 SELECT "id:id:u64:47::0:", "id:naturalKey:y:4::0:", "tv:symbol:value:val:s:124::I:0::data", "tv:timeRange:beginIncl:val:z64:47:::0::data", "tv:geoPoint:h3:val:u64:4:::0::geo" FROM "anchor"."facts" WHERE "has"("tv:symbol:value:val:s:124::I:0::data", 'DELIVERED') OR "has"("tv:symbol:value:val:s:124::I:0::data", 'SEISMIC_ANOMALY')
+```
+
+## card_anchor_dql_query8.sql
+
+### source (friendly handles)
+
+```sql
+/* Query 8 — write-back: a cyber "silver" slice via INSERT … SELECT (ADR-0181 §SD8).
+
+The INSERT wrapper flows through the same pipeline as queries 1-7, and the
+constructor mints ADOPT the target: anchor.silver spells its columns in the
+fixture's own camelCase convention with aspect hints, and the .out.sql
+neighbour shows every LW_TV / LW_TV_MEMB / LW_TV_SUPPORT call resolving to
+silver's exact physical names — where the same calls against an unknown
+target compose folded, aspect-free fresh-table names instead (compare
+query 5's mints).
+
+The target is a scope sink: no handle resolves against it, and the source
+handles bind to `facts` exactly as in a bare SELECT. No column list — the
+SELECT produces silver's five columns in DDL order, which the target shape
+check (LwShapeCheckTarget, exercised in the package tests) verifies by name.
+
+The integration lane creates anchor.silver and executes this statement.
+*/
+INSERT INTO anchor.silver
+SELECT
+    `id:id`,
+    `id:naturalKey`,
+
+    -- normalise the attack vector for the shared slice
+    LW_TV(arrayMap(x -> upper(x), `symbol:value`), 'symbol', 'value', 's'),
+
+    -- the targeted-port tags ride along, lanes intact
+    LW_TV_MEMB(`symbol:lr`, 'symbol', 'low-card-ref'),
+    LW_TV_SUPPORT(`symbol:lrcard`, 'symbol', 'lrcard')
+
+FROM facts
+WHERE hasAny(`symbol:value`, ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
+```
+
+### after StripComments
+
+```sql
+ 
+INSERT INTO anchor.silver
+SELECT
+    `id:id`,
+    `id:naturalKey`,
+
+         LW_TV(arrayMap(x -> upper(x), `symbol:value`), 'symbol', 'value', 's'),
+
+         LW_TV_MEMB(`symbol:lr`, 'symbol', 'low-card-ref'),
+    LW_TV_SUPPORT(`symbol:lrcard`, 'symbol', 'lrcard')
+
+FROM facts
+WHERE hasAny(`symbol:value`, ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
+```
+
+### after CanonicalizeFull
+
+```sql
+INSERT INTO "anchor"."silver" SELECT "id:id", "id:naturalKey", "LW_TV"("arrayMap"("x" -> "upper"("x"), "symbol:value"), 'symbol', 'value', 's'), "LW_TV_MEMB"("symbol:lr", 'symbol', 'low-card-ref'), "LW_TV_SUPPORT"("symbol:lrcard", 'symbol', 'lrcard') FROM "facts" WHERE "hasAny"("symbol:value", "array"('DDOS', 'PORT_SCAN', 'SQL_INJECTION'))
+```
+
+### after QualifyTables
+
+```sql
+INSERT INTO "anchor"."silver" SELECT "id:id", "id:naturalKey", "LW_TV"("arrayMap"("x" -> "upper"("x"), "symbol:value"), 'symbol', 'value', 's'), "LW_TV_MEMB"("symbol:lr", 'symbol', 'low-card-ref'), "LW_TV_SUPPORT"("symbol:lrcard", 'symbol', 'lrcard') FROM "anchor"."facts" WHERE "hasAny"("symbol:value", "array"('DDOS', 'PORT_SCAN', 'SQL_INJECTION'))
+```
+
+### after ResolveColumnNames
+
+```sql
+INSERT INTO "anchor"."silver" SELECT "id:id:u64:47::0:", "id:naturalKey:y:4::0:", "LW_TV"("arrayMap"("x" -> "upper"("x"), "tv:symbol:value:val:s:124::I:0::data"), 'symbol', 'value', 's'), "LW_TV_MEMB"("tv:symbol:lr:lr:u64:1247:::0::data", 'symbol', 'low-card-ref'), "LW_TV_SUPPORT"("tv:symbol:lrcard:lrcard:u64:4E:::0::data", 'symbol', 'lrcard') FROM "anchor"."facts" WHERE "hasAny"("tv:symbol:value:val:s:124::I:0::data", "array"('DDOS', 'PORT_SCAN', 'SQL_INJECTION'))
+```
+
+### after LwConstructExpandTarget
+
+```sql
+INSERT INTO "anchor"."silver" SELECT "id:id:u64:47::0:", "id:naturalKey:y:4::0:", "arrayMap"("x" -> "upper"("x"), "tv:symbol:value:val:s:124::I:0::data") AS "tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data" AS "tv:symbol:lr:lr:u64:1247:::0::data", "tv:symbol:lrcard:lrcard:u64:4E:::0::data" AS "tv:symbol:lrcard:lrcard:u64:4E:::0::data" FROM "anchor"."facts" WHERE "hasAny"("tv:symbol:value:val:s:124::I:0::data", "array"('DDOS', 'PORT_SCAN', 'SQL_INJECTION'))
 ```
 

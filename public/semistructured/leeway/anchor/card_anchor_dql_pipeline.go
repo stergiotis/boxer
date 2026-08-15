@@ -30,12 +30,29 @@ func DqlPhysicalColumnNames() (names []string) {
 	return
 }
 
-// NewDqlSchemaProvider serves the anchor.facts column list to schema-aware
+// NewDqlSchemaProvider serves the anchor column lists to schema-aware
 // passes without a live server.
 func NewDqlSchemaProvider() *passes.StaticSchemaProvider {
 	return passes.NewStaticSchemaProvider(map[string][]string{
-		"anchor.facts": DqlPhysicalColumnNames(),
+		"anchor.facts":  DqlPhysicalColumnNames(),
+		"anchor.silver": SilverPhysicalColumnNames(),
 	})
+}
+
+// SilverPhysicalColumnNames is the write-back demo target (ADR-0181 §SD8):
+// a five-column slice of the facts schema, spelled exactly as facts spells
+// it — camelCase names, aspect hints included. That spelling is the point:
+// query 8's constructor mints ADOPT these names (M2), where the same calls
+// against an unknown target would compose folded, aspect-free fresh-table
+// names. The integration lane creates the table and executes the INSERT.
+func SilverPhysicalColumnNames() []string {
+	return []string{
+		"id:id:u64:47::0:",
+		"id:naturalKey:y:4::0:",
+		"tv:symbol:value:val:s:124::I:0::data",
+		"tv:symbol:lr:lr:u64:1247:::0::data",
+		"tv:symbol:lrcard:lrcard:u64:4E:::0::data",
+	}
 }
 
 // NewDqlResolver builds the lwsql resolver that maps friendly column handles
@@ -60,7 +77,7 @@ func DqlPreExecuteStages(resolver *lwsql.Resolver, diag func(passes.ColumnDiagno
 		passes.QualifyTables(`"anchor"`),
 		passes.ResolveColumnNames(resolver, "anchor", diag),
 		constructsql.ExtractExpandPass(resolver, "anchor"),
-		constructsql.ExpandPass,
+		constructsql.ExpandPassWithTargetAdoption(resolver, "anchor"),
 		nanopass.ValidateGrammar2,
 	}
 }
