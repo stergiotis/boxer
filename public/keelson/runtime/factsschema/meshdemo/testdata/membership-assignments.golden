@@ -1,0 +1,10 @@
+# ordinal	name	id
+# The committed assignment table (ADR-0183 D1). A changed line here
+# re-points rows already stored under the old id; a new line does not.
+# Regenerate with BOXER_VOCAB_GOLDEN_REGEN=1 go test ./<the vocabulary package>/...
+0	mesh-kind-fleet-sample	1152921517491748864
+1	mesh-host	1152921517491748865
+2	mesh-region	1152921517491748866
+3	mesh-cpu-percent	1152921517491748867
+4	mesh-uptime-seconds	1152921517491748868
+5	mesh-drained-at	1152921517491748869
