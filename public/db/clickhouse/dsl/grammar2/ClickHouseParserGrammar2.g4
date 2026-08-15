@@ -51,8 +51,15 @@ options {
 }
 
 // Top-level statements
-queryStmt: query (FORMAT IDENTIFIER)? (SEMICOLON)? EOF;
+queryStmt: query (FORMAT IDENTIFIER)? (SEMICOLON)? EOF
+         | insertStmt;
 query: setStmt* ctes? selectUnionStmt;
+
+// INSERT wrapper — ADR-0181 §SD8 (Update 2026-08-15), the canonical mirror
+// of grammar1's rule. The TABLE noise word is absent: canonical form keeps
+// one spelling per statement, and INTO already carries the meaning.
+insertStmt: INSERT INTO tableIdentifier columnsClause? selectUnionStmt (SEMICOLON)? EOF;
+columnsClause: LPAREN nestedIdentifier (COMMA nestedIdentifier)* RPAREN;
 
 // CTE / WITH-clause shared item — see grammar1's withItem comment. Grammar2
 // (the canonical form) keeps the same shape so canonicalised SQL can mix

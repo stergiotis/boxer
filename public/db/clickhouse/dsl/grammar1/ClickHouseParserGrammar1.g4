@@ -1,7 +1,9 @@
 // Grammar1 — ClickHouse SELECT parser with keywordForAlias eliminated.
 //
 // This grammar accepts the full ClickHouse SELECT surface area (including all
-// syntactic sugar like expr::Type, [1,2], t.1, DATE 'str', etc.).
+// syntactic sugar like expr::Type, [1,2], t.1, DATE 'str', etc.), plus the
+// INSERT INTO … SELECT wrapper (ADR-0181 §SD8 — SELECT source only; no
+// VALUES, no FORMAT data clause, no CTAS).
 //
 // The keywordForAlias rule is removed entirely. Bare (non-AS) aliases accept
 // only IDENTIFIER tokens. Keyword aliases require the AS prefix:
@@ -29,9 +31,20 @@ options {
 }
 
 // Top-level statements
-queryStmt: query (FORMAT identifierOrNull)? (SEMICOLON)? EOF;
+queryStmt: query (FORMAT identifierOrNull)? (SEMICOLON)? EOF
+         | insertStmt;
 query: setStmt* ctes? selectUnionStmt;
 multiQuery: query+ EOF;
+
+// INSERT wrapper — ADR-0181 §SD8 (Update 2026-08-15), ported from the
+// upstream utils/antlr lineage trimmed to the decided scope: a SELECT
+// source only. The alternatives deliberately absent from the port: the
+// VALUES and FORMAT data clauses carry data rather than authoring, and the
+// FUNCTION target arm has no leeway meaning. The alternative is unlabeled
+// so QueryStmtContext keeps its type — existing consumers see the same
+// context with Query() nil-able.
+insertStmt: INSERT INTO TABLE? tableIdentifier columnsClause? selectUnionStmt (SEMICOLON)? EOF;
+columnsClause: LPAREN nestedIdentifier (COMMA nestedIdentifier)* RPAREN;
 
 // CTE / WITH-clause shared item — accepts either a named subquery (CTE) or a
 // scalar/column expression with alias. ClickHouse permits both forms in a

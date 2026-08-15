@@ -13,6 +13,12 @@ type ClickHouseParserGrammar2Visitor interface {
 	// Visit a parse tree produced by ClickHouseParserGrammar2#query.
 	VisitQuery(ctx *QueryContext) interface{}
 
+	// Visit a parse tree produced by ClickHouseParserGrammar2#insertStmt.
+	VisitInsertStmt(ctx *InsertStmtContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParserGrammar2#columnsClause.
+	VisitColumnsClause(ctx *ColumnsClauseContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParserGrammar2#WithItemNamedQuery.
 	VisitWithItemNamedQuery(ctx *WithItemNamedQueryContext) interface{}
 

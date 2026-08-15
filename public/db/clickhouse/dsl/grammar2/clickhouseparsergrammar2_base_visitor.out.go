@@ -15,6 +15,14 @@ func (v *BaseClickHouseParserGrammar2Visitor) VisitQuery(ctx *QueryContext) inte
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserGrammar2Visitor) VisitInsertStmt(ctx *InsertStmtContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserGrammar2Visitor) VisitColumnsClause(ctx *ColumnsClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserGrammar2Visitor) VisitWithItemNamedQuery(ctx *WithItemNamedQueryContext) interface{} {
 	return v.VisitChildren(ctx)
 }

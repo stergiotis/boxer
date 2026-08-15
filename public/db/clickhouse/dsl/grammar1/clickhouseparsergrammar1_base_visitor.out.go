@@ -19,6 +19,14 @@ func (v *BaseClickHouseParserGrammar1Visitor) VisitMultiQuery(ctx *MultiQueryCon
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserGrammar1Visitor) VisitInsertStmt(ctx *InsertStmtContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserGrammar1Visitor) VisitColumnsClause(ctx *ColumnsClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserGrammar1Visitor) VisitWithItemNamedQuery(ctx *WithItemNamedQueryContext) interface{} {
 	return v.VisitChildren(ctx)
 }
