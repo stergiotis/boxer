@@ -281,7 +281,11 @@ query text itself, just before sending it. Three things follow:
 
 Leave a SQL knob unpinned and it works like any other signal: a panel can
 publish the predicate and the field follows it. **Pin** writes the declaration
-into the buffer; **unpin** removes it and keeps the value live.
+into the buffer; **unpin** removes it and keeps the value live. The mechanism is
+the one under [Signals](#signals-live-parameters), and the Snippets tab's
+*Signals (unbound parameter)* entry demonstrates it with an ordinary value.
+There is no pasteable example of the SQL case: a live value is, by definition,
+not in the buffer — so a snippet cannot carry one.
 
 If the substituted query does not parse, the error is underlined **in the
 field** when it falls inside what you typed, and reported against the query
