@@ -3,6 +3,7 @@ package anchor
 import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
 
@@ -46,15 +47,20 @@ func NewDqlResolver() *lwsql.Resolver {
 // DqlPreExecuteStages returns the pre-execute rewrite chain, one Pass per
 // stage so callers can observe intermediate forms. Order follows the host
 // convention (see play.RegisterPasses): canonicalize first so later passes
-// consume canonical shapes; ValidateGrammar2 is the terminal proof that the
-// output is canonical-only SQL. diag receives one ColumnDiagnostic per
-// unresolvable handle (nil to drop them silently, as on an execution path).
+// consume canonical shapes; resolve before the leeway expansions, since an
+// extraction binds sections against resolved scopes and a constructor's
+// argument may itself carry handles; ValidateGrammar2 is the terminal proof
+// that the output is canonical-only SQL. diag receives one ColumnDiagnostic
+// per unresolvable handle (nil to drop them silently, as on an execution
+// path).
 func DqlPreExecuteStages(resolver *lwsql.Resolver, diag func(passes.ColumnDiagnostic)) []nanopass.Pass {
 	return []nanopass.Pass{
 		passes.StripComments,
 		passes.CanonicalizeFull(100),
 		passes.QualifyTables(`"anchor"`),
 		passes.ResolveColumnNames(resolver, "anchor", diag),
+		constructsql.ExtractExpandPass(resolver, "anchor"),
+		constructsql.ExpandPass,
 		nanopass.ValidateGrammar2,
 	}
 }

@@ -2,17 +2,27 @@
 
 The drone operator must hand flight data to an aviation authority without the
 exact GPS coordinates or the customer refs attached to the geoPoint section.
-This keeps symbol and timeRange, zeroes the coordinates with arrayMap, keeps
-the coarse H3 index, and blanks the high-cardinality membership columns.
+This keeps symbol and timeRange, zeroes the coordinates, keeps the coarse H3
+index, and blanks the high-cardinality membership columns.
 
 Two naming mechanisms combine so the result is itself leeway-shaped:
 
   - An unaliased handle (`id:id`, `symbol:value`, …) resolves to its physical
     column, and ClickHouse derives the result name from the rewritten
     expression — the output column is automatically the physical name.
-  - A computed column needs an explicit alias, and that alias must be the
-    physical name (spelled out verbatim; the resolve pass rewrites references,
-    never aliases). The alias is what defines the silver entity's shape.
+  - A computed column is wrapped in a constructor (ADR-0181 §SD2): LW_TV
+    mints the physical tagged-value name, LW_TV_MEMB / LW_TV_SUPPORT the
+    membership lanes, each expanding into `<expr> AS "<physical name>"`
+    before the statement ships. Minted names carry fresh-table default
+    segments rather than the source's aspect hints, and the folded spelling
+    (`geoPoint` mints as `geo-point`, the same fold the membership registry
+    applies) — the name records authoring intent, and the intent here is
+    "these lanes were transformed".
+
+geoPoint is re-minted whole — h3 included, though it passes through
+unchanged — because a section's columns must agree on their name segments:
+mixing the source's `geo`-group physicals with fresh mints would leave a
+section no reader classifies as one.
 */
 SELECT
     `id:id`,
@@ -25,13 +35,13 @@ SELECT
     `timeRange:endExcl`,
 
     -- anonymize geoPoint: zero the coordinates, keep the H3 index
-    arrayMap(x -> CAST(0.0 AS Float32), `geoPoint:pointLat`) AS `tv:geoPoint:pointLat:val:f32:g:0:0:0::geo`,
-    arrayMap(x -> CAST(0.0 AS Float32), `geoPoint:pointLng`) AS `tv:geoPoint:pointLng:val:f32:g:0:0:0::geo`,
-    `geoPoint:h3`,
+    LW_TV(arrayMap(x -> CAST(0.0 AS Float32), `geoPoint:pointLat`), 'geoPoint', 'pointLat', 'f32'),
+    LW_TV(arrayMap(x -> CAST(0.0 AS Float32), `geoPoint:pointLng`), 'geoPoint', 'pointLng', 'f32'),
+    LW_TV(`geoPoint:h3`, 'geoPoint', 'h3', 'u64'),
 
     -- erase the high-cardinality references (customer ids)
-    CAST([] AS Array(UInt64)) AS `tv:geoPoint:hr:hr:u64:2k:0:0:0::geo`,
-    CAST([] AS Array(UInt64)) AS `tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo`
+    LW_TV_MEMB(CAST([] AS Array(UInt64)), 'geoPoint', 'high-card-ref'),
+    LW_TV_SUPPORT(CAST([] AS Array(UInt64)), 'geoPoint', 'hrcard')
 
 FROM facts
 WHERE has(`symbol:value`, 'DELIVERED')
