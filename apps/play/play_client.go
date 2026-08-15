@@ -588,6 +588,26 @@ func (inst *Client) exprValuesFor(sql string) (values map[string]string) {
 	return
 }
 
+// ExprSubstituted is sql with its SQL-valued placeholders replaced — the body
+// ADR-0187 (proposed) §SD5 classifies.
+//
+// It substitutes and stops. That is the whole point of its existing separately
+// from [Client.buildResidual]: the class must be judged AFTER the user's
+// expression enters and BEFORE the pass registry runs, because ADR-0132 §SD5
+// classifies the authored buffer precisely so a `keelson('…')` macro is not
+// mistaken for the `url()` it may expand into. Running the passes first would
+// reverse that decision silently.
+//
+// The prelude is left in place, so the only difference from the buffer the
+// classifier reads today is the substitution.
+//
+// An unparseable buffer comes back unchanged with the error; the caller then
+// classifies what the user wrote, which the classifier already fails closed on.
+func (inst *Client) ExprSubstituted(sql string) (out string, err error) {
+	out, _, err = spliceExprSlots(sql, inst.exprValuesFor(sql))
+	return
+}
+
 // bindDataset binds an alias to a dataset handle for the client-side
 // alias→handle rewrite (ADR-0134 §SD4). Called from PlayApp.BindDataset.
 func (inst *Client) bindDataset(alias, handle string) {

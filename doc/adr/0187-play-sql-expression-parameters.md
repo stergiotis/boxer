@@ -128,7 +128,7 @@ Three type names in the existing `columnTypeExpr` position:
 | --- | --- | --- |
 | `{c:Expr}` | one expression — a predicate or a scalar | any column-expression position |
 | `{c:ExprList}` | aliased column-expression list | a `SELECT` / `WITH` list position |
-| `{t:Identifier}` | a database, table or column name | table and database position |
+| `{t:Identifier}` | ONE database, table or column name | any identifier position — column, table, database, `ORDER BY`, `GROUP BY` |
 
 No grammar change: `columnTypeExpr: identifier` already admits an unknown type
 name, and §SD1 of ADR-0124 already finds the slot and records `Type` verbatim.
@@ -424,10 +424,19 @@ of the parameter machinery exists.
     into `x AND {c:Expr}` must not reassociate.
   - A tier test goes red if a directive-carried value reads as live, which is the
     pre-existing `paramPinned` behaviour this ADR changes.
-- **Gap.** No live assertion that ClickHouse substitutes `Identifier` in every
-  position the grammar admits; the grammar's own comment claims table and
-  database position, and that is the claim adopted here. Worth a probe against
-  the pinned server before §M4 rather than a permanent gap.
+- **Gap — closed at §M4 by probing the pinned server.** ClickHouse substitutes
+  `Identifier` in column, table, database, `ORDER BY` and `GROUP BY` position,
+  which is *wider* than the grammar comment's "table and database" and is why
+  §SD1's row now says any identifier position.
+
+  The probe also found the trap that comment does not imply: **one `Identifier`
+  carries ONE name, not a dotted path.** `FROM {t:Identifier}` with
+  `param_t=system.one` fails with `Code: 60 … Unknown table expression
+  identifier 'system.one'` — the value is quoted whole, as a single identifier.
+  A qualified reference needs two slots, `FROM {d:Identifier}.{t:Identifier}`.
+  This lands directly on the ADR-0096 slot §SD2 closes, whose intended values
+  (`default.planes_mercator_sample100`) are exactly the dotted shape, so it is
+  recorded here rather than left to be rediscovered.
 
 ## Milestones
 
@@ -462,7 +471,15 @@ of the parameter machinery exists.
   only at the pinned tier, which is the honest form of the "the Preview shows
   what runs" claim — both read the same two sources.
 - **M4 — the ceiling.** Post-splice classification; `play` reports, applets
-  refuse a raise with the witness; the `Identifier` probe.
+  refuse a raise with the witness; the `Identifier` probe. The classification
+  point is the constraint that shapes the code: it must run AFTER the
+  substitution and BEFORE the pass registry, because ADR-0132 §SD5 classifies
+  the authored buffer precisely so a `keelson('…')` macro is not mistaken for
+  the `url()` it may expand into — so the Diagnostics driver and the run gate
+  both take a substitute-and-stop seam rather than the existing
+  `buildResidual`. The ceiling needs no flag: the class enum's zero value is
+  its strongest member, so an unset ceiling refuses nothing and `play` is the
+  default rather than a special case.
 - **M5 — docs.** `features.md` §Query parameters, a snippet, the ADR-0096 and
   ADR-0124 pointers.
 

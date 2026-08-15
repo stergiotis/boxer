@@ -66,6 +66,12 @@ func NewEmbedded(def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err erro
 	// flows into the engine and widens no egress, so a dataset applet stays
 	// read-class (ADR-0134 §SD4).
 	inner.AutoRun = def.Class == analysis.QuerySecurityRead
+	// The mint-time class is also a CEILING on what a SQL-valued knob may turn
+	// this query into (ADR-0187 (proposed) §SD5). Without it an `{c:Expr}` knob
+	// would let a reader of a frozen read-class applet splice in a `url(…)` and
+	// reach outside the endpoint the document promised — the applet's whole
+	// premise being that a committed, classified query is the entire surface.
+	inner.SetSecurityCeiling(def.Class)
 	if def.HasUnboundSlots {
 		inner.SetLiveMain(true)
 	}

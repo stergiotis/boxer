@@ -81,6 +81,12 @@ type DiagnosticsDriver struct {
 	// BuildStatement). Injected so tests can run the driver on a mock executor
 	// without a Client.
 	buildResidual func(string) (string, map[string]string)
+	// substitute replaces the buffer's SQL-valued placeholders and stops
+	// (Client.ExprSubstituted) — deliberately NOT buildResidual, which also
+	// runs the pass registry that ADR-0132 §SD5 classifies before. Injected
+	// the same way, and nil outside a Client, where the class then describes
+	// the buffer as written.
+	substitute func(string) (string, error)
 
 	// probeFor is the raw buffer the current probe belongs to ("" = no probe
 	// wanted); probeNode is its compiled EXPLAIN AST demand.
@@ -151,6 +157,7 @@ func NewDiagnosticsDriver(client *Client) *DiagnosticsDriver {
 		d.lane = newNodeLane(probeExecutor{client: client, opts: newExecOptions("diagnostics")},
 			memory.NewGoAllocator(), diagProbeTimeout)
 		d.buildResidual = client.buildResidual
+		d.substitute = client.ExprSubstituted
 	}
 	return d
 }
@@ -246,6 +253,20 @@ func (inst *DiagnosticsDriver) armSecurityContext(raw string, parseErr error) {
 	inst.secWitnesses = nil
 	if parseErr != nil || raw == "" {
 		return
+	}
+	// The class describes what RUNS, so it is judged on the body the
+	// SQL-valued knobs substitute into (ADR-0187 (proposed) §SD5) rather than
+	// on the placeholders the author wrote. Without this the badge would
+	// describe a template nobody executes — a `{cond:Expr}` carrying a `url()`
+	// would still read "read".
+	//
+	// Substitution only: the pass registry must NOT have run, because
+	// ADR-0132 §SD5 classifies before it so a `keelson('…')` macro is not
+	// mistaken for the `url()` it may expand into.
+	if inst.substitute != nil {
+		if out, serr := inst.substitute(raw); serr == nil {
+			raw = out
+		}
 	}
 	pr, err := nanopass.Parse(raw)
 	if err != nil {

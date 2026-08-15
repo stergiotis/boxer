@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -725,6 +726,12 @@ type PlayApp struct {
 	// declared values in and parsing the result. Refreshed by the debounced
 	// parse, keyed by slot name, and empty when the substituted buffer parses.
 	exprMarks map[string]nanopass.SourceRange
+	// securityCeiling is the strongest class a substituted body may reach
+	// before the run gate refuses it (ADR-0187 (proposed) §SD5). The zero value
+	// is analysis.QuerySecurityMutating, which is the strongest class there is
+	// and therefore refuses nothing — so play, which sets it never, reports the
+	// class without enforcing it, and an applet sets its mint-time class.
+	securityCeiling analysis.QuerySecurityClassE
 	// paramDefaults is what Reset restores: the prelude values the buffer was
 	// LOADED with, captured when a buffer is installed and not touched again.
 	// It cannot be re-read from the prelude on demand, because a widget's drift
@@ -1616,6 +1623,15 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 		// editor stays the fallback for names the buffer does not reference.
 		inst.runBlockedReason = "unfilled parameter {" + strings.Join(unfilled, "}, {") +
 			"} — fill it in the PARAMETERS pane, or bind it with SET param_<name> = …"
+		return
+	}
+	// The class ceiling (ADR-0187 (proposed) §SD5), judged on what the
+	// substitution produces rather than on what the document says. It runs
+	// after the unfilled gate — an unfilled buffer has nothing substituted to
+	// judge, and "fill this in" is the more actionable of the two answers —
+	// and before the lane, because refusing the request is the whole point.
+	if reason := inst.exprCeilingRefusal(runSQL); reason != "" {
+		inst.runBlockedReason = reason
 		return
 	}
 	inst.runBlockedReason = ""
@@ -2989,6 +3005,7 @@ func (inst *PlayApp) demandKanbanLanes() (rec arrow.RecordBatch, schema *arrow.S
 	}
 	view := d.lanesLane.demand(compiledNode{
 		SQL:    fuseNode(inst.currentSplit, kanbanLanesNodeID),
+		NodeID: kanbanLanesNodeID,
 		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
 	})
 	d.lanesLoading = view.loading
