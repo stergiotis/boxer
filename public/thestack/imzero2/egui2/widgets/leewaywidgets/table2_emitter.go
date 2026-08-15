@@ -119,6 +119,11 @@ type Table2CardEmitter struct {
 	// the card (ADR-0186 §SD4): the host's per-column gloss inline face,
 	// consulted next to the hide rule. Nil = identity.
 	cellGloss CellGlossFunc
+	// cellBlock, when set, is asked for a block face per value before the
+	// text is glossed (ADR-0186, block faces on the card); curBlocks collects
+	// the current column's claims until EndColumn attaches them to the pair.
+	cellBlock CellBlockFunc
+	curBlocks []CellBlock
 
 	// Buffered output rows for the entire batch — flushed at EndBatch.
 	unified []table2UnifiedRow
@@ -188,6 +193,12 @@ const (
 type table2NamedValue struct {
 	name  string
 	value string
+	// blocks are the value's block faces (ADR-0186), one per scalar or item
+	// the host's CellBlockFunc claimed; nil for a text-only value. When set,
+	// the values cell draws them under the pair's name instead of value —
+	// which stays the inline face, for SectionDigests and for a host that
+	// reads the text back.
+	blocks []CellBlock
 }
 
 // table2SectionStats accumulates per-section value-volume metrics for
@@ -528,10 +539,35 @@ func (inst *Table2CardEmitter) composedSectionName() string {
 type CellGlossFunc func(arrowIdx int, text string) string
 
 // SetCellGloss installs (or, with nil, removes) the per-value gloss. It is
-// the one display seam a host has into the card's values, beside the hide
-// rule BeginColumn applies from the value semantics.
+// the text seam a host has into the card's values, beside the hide rule
+// BeginColumn applies from the value semantics; SetCellBlock is the other.
 func (inst *Table2CardEmitter) SetCellGloss(fn CellGlossFunc) {
 	inst.cellGloss = fn
+}
+
+// CellBlock is a block face for one value (ADR-0186 §SD1, on the card since
+// its 2026-08-15 Update): Render draws it inside the values cell, under the
+// pair's name and in place of the value's text; Height is the points it
+// asks for, and the row grows to fit — clamped to [one text line,
+// table2BlockMaxHeight], so a face that may run longer draws into its own
+// vertical ScrollArea. Render runs at draw time, once per frame the card is
+// drawn, and must scope its own widget ids.
+type CellBlock struct {
+	Render func()
+	Height float32
+}
+
+// CellBlockFunc returns the block face for one value, or ok=false to keep
+// the text. Like CellGlossFunc it is keyed by the value column's Arrow index
+// and runs per value per drive; it sees the value's marshalled text before
+// the gloss rewrites it, since a block face wants the document, not its
+// first line. The order of calls within a column is the value order, so a
+// host that caches per value can count.
+type CellBlockFunc func(arrowIdx int, text string) (block CellBlock, ok bool)
+
+// SetCellBlock installs (or, with nil, removes) the per-value block face.
+func (inst *Table2CardEmitter) SetCellBlock(fn CellBlockFunc) {
+	inst.cellBlock = fn
 }
 
 func (inst *Table2CardEmitter) BeginColumn(colAddr streamreadaccess.PhysicalColumnAddr, _ naming.StylableName, _ canonicaltypes.PrimitiveAstNodeI, valueSemantics valueaspects.AspectSet) {
@@ -542,6 +578,7 @@ func (inst *Table2CardEmitter) BeginColumn(colAddr streamreadaccess.PhysicalColu
 		inst.colHidden[inst.columnIdx] = hidden
 	}
 	inst.cellBuf.Reset()
+	inst.curBlocks = nil
 	inst.inCollection = false
 }
 
@@ -557,9 +594,11 @@ func (inst *Table2CardEmitter) EndColumn() {
 		return
 	}
 	inst.currentRow.valuePairs = append(inst.currentRow.valuePairs, table2NamedValue{
-		name:  inst.colNames[inst.columnIdx],
-		value: utfsafe.EnsureUTF8(inst.cellBuf.String()),
+		name:   inst.colNames[inst.columnIdx],
+		value:  utfsafe.EnsureUTF8(inst.cellBuf.String()),
+		blocks: inst.curBlocks,
 	})
+	inst.curBlocks = nil
 	inst.inCollection = false
 }
 
@@ -573,10 +612,11 @@ func (inst *Table2CardEmitter) EndScalarValue() (err error) {
 	return inst.err
 }
 
-// applyCellGloss rewrites the text written since itemStart through the
-// host's gloss, when one is installed and the text changed.
+// applyCellGloss offers the text written since itemStart to the host's
+// block seam, then rewrites it through the gloss, when either is installed.
+// The block seam sees the text first and unrewritten.
 func (inst *Table2CardEmitter) applyCellGloss() {
-	if inst.cellGloss == nil {
+	if inst.cellGloss == nil && inst.cellBlock == nil {
 		return
 	}
 	all := inst.cellBuf.String()
@@ -584,6 +624,14 @@ func (inst *Table2CardEmitter) applyCellGloss() {
 		return
 	}
 	item := all[inst.itemStart:]
+	if inst.cellBlock != nil {
+		if b, ok := inst.cellBlock(inst.curArrowIdx, item); ok && b.Render != nil {
+			inst.curBlocks = append(inst.curBlocks, b)
+		}
+	}
+	if inst.cellGloss == nil {
+		return
+	}
 	glossed := inst.cellGloss(inst.curArrowIdx, item)
 	if glossed == item {
 		return
@@ -706,6 +754,16 @@ const (
 	// text from kissing the outline.
 	table2SectionHeaderOuterMargin = 2.0
 	table2SectionHeaderInnerMargin = 4.0
+
+	// Block faces (ADR-0186) stack under a row's inline values: a caption
+	// line per block pair when the row has more than one pair, each block
+	// at its requested height within [table2RowHeightSingle,
+	// table2BlockMaxHeight], and a gap after it. The maximum keeps one
+	// document from turning the card into that document; a face that may
+	// run longer scrolls inside its own area.
+	table2BlockCaptionHeight = 16.0
+	table2BlockGap           = 4.0
+	table2BlockMaxHeight     = 320.0
 
 	table2EntityColW  = 60.0
 	table2SectionColW = 200.0
@@ -1012,18 +1070,55 @@ func rowHeight(row *table2UnifiedRow) (h float32) {
 		n = len(row.secondary)
 	}
 	// Heuristic: ~2 packed `name=value` pairs fit per visual line in the
-	// values column at table2ValuesColW.
-	pairLines := (len(row.valuePairs) + 1) / 2
+	// values column at table2ValuesColW. Block-faced pairs are not packed:
+	// they stack under the inline line at their own heights.
+	inlinePairs, blocksH := valuesCellExtent(row.valuePairs)
+	pairLines := (inlinePairs + 1) / 2
 	if pairLines > n {
 		n = pairLines
 	}
 	switch {
 	case n >= 3:
-		return table2RowHeightTriple
+		h = table2RowHeightTriple
 	case n == 2:
-		return table2RowHeightDouble
+		h = table2RowHeightDouble
+	default:
+		h = table2RowHeightSingle
 	}
-	return table2RowHeightSingle
+	if blocksH > 0 {
+		valuesH := blocksH
+		if inlinePairs > 0 {
+			valuesH += table2RowHeightSingle
+		}
+		h = max(h, valuesH)
+	}
+	return h
+}
+
+// valuesCellExtent measures a row's values cell for rowHeight: how many
+// pairs pack into the inline line, and the height the block-faced pairs
+// stack under it (caption when the row has more than one pair, each block
+// clamped, a gap after each). blocksH is 0 for a row without block faces.
+func valuesCellExtent(pairs []table2NamedValue) (inlinePairs int, blocksH float32) {
+	for i := range pairs {
+		if len(pairs[i].blocks) == 0 {
+			inlinePairs++
+			continue
+		}
+		if len(pairs) > 1 {
+			blocksH += table2BlockCaptionHeight
+		}
+		for _, b := range pairs[i].blocks {
+			blocksH += clampBlockHeight(b.Height) + table2BlockGap
+		}
+	}
+	return inlinePairs, blocksH
+}
+
+// clampBlockHeight bounds a block face's requested height to what a row
+// gives it: at least one text line, at most table2BlockMaxHeight.
+func clampBlockHeight(h float32) float32 {
+	return min(max(h, table2RowHeightSingle), table2BlockMaxHeight)
 }
 
 func renderEntityCell(row *table2UnifiedRow) {
@@ -1089,6 +1184,11 @@ func renderChipCell(tags []table2Tag, muted bool, kind rowKindE) {
 // carries identity (chip for tagged/co, column name for plain), so a `name=`
 // prefix would just repeat it. Multi-column rows keep the explicit
 // `name=value · name=value` form so each pair is unambiguous.
+//
+// A pair with block faces (ADR-0186) is not packed: the inline pairs keep
+// their line, and each block pair follows as its caption (the name, when the
+// row has more than one pair) and its blocks, drawn by the host at the
+// heights rowHeight reserved.
 func renderValuesCell(pairs []table2NamedValue, kind rowKindE) {
 	if kind != rowKindData {
 		return
@@ -1099,7 +1199,43 @@ func renderValuesCell(pairs []table2NamedValue, kind rowKindE) {
 		}
 		return
 	}
-	if len(pairs) == 1 {
+	inlinePairs, blocksH := valuesCellExtent(pairs)
+	if blocksH == 0 {
+		renderPackedValues(pairs, len(pairs) > 1)
+		return
+	}
+	for range c.Vertical().KeepIter() {
+		if inlinePairs > 0 {
+			inline := make([]table2NamedValue, 0, inlinePairs)
+			for i := range pairs {
+				if len(pairs[i].blocks) == 0 {
+					inline = append(inline, pairs[i])
+				}
+			}
+			// Names stay: the block pairs below are the other pairs of the row.
+			renderPackedValues(inline, len(pairs) > 1)
+		}
+		for i := range pairs {
+			p := &pairs[i]
+			if len(p.blocks) == 0 {
+				continue
+			}
+			if len(pairs) > 1 {
+				for rt := range c.RichTextLabel(p.name) {
+					rt.Monospace().Small().Weak()
+				}
+			}
+			for _, b := range p.blocks {
+				b.Render()
+			}
+		}
+	}
+}
+
+// renderPackedValues draws value pairs as one text line: the value alone
+// when the row has one pair, `name=value · name=value` when named.
+func renderPackedValues(pairs []table2NamedValue, named bool) {
+	if !named && len(pairs) == 1 {
 		v := pairs[0].value
 		if v == "" {
 			for rt := range c.RichTextLabel(emDash) {
