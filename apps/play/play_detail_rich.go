@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -14,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
@@ -80,6 +82,15 @@ func (inst *PlayApp) glossCatalog() *gloss.Catalog {
 		inst.glosses = gloss.Default()
 	}
 	return inst.glosses
+}
+
+// mediaTypeOnly strips a compact token's parameters: the block-face binding
+// keys on the type alone.
+func mediaTypeOnly(token string) string {
+	if i := strings.IndexByte(token, ';'); i >= 0 {
+		return token[:i]
+	}
+	return token
 }
 
 // hasBlockFace reports whether this pane binds a block face to the media
@@ -220,13 +231,14 @@ func buildRichEntry(d gloss.Declaration, raw string) *richEntry {
 		e.reason = d.Reason
 		return e
 	}
-	isImage := d.MediaType == gloss.MediaTypePNG || d.MediaType == gloss.MediaTypeJPEG || d.MediaType == gloss.MediaTypeGIF
+	mt := mediaTypeOnly(d.MediaType)
+	isImage := mt == gloss.MediaTypePNG || mt == gloss.MediaTypeJPEG || mt == gloss.MediaTypeGIF
 	if !isImage && len(raw) > richMaxTextBytes {
 		e.reason = fmt.Sprintf("%s is over the %s inline limit",
 			humanize.IBytes(uint64(len(raw))), humanize.IBytes(richMaxTextBytes))
 		return e
 	}
-	switch d.MediaType {
+	switch mt {
 	case gloss.MediaTypeMarkdown:
 		e.doc = markdown.Parse([]byte(raw), markdown.WithFeatures(richMarkdownFeatures))
 	case gloss.MediaTypePlain:
@@ -303,9 +315,15 @@ func (inst *PlayApp) renderRichCell(col int, d gloss.Declaration, cell gloss.Arr
 			}
 			return
 		}
-		if !hasBlockFace(d.MediaType) {
+		if !hasBlockFace(mediaTypeOnly(d.MediaType)) {
 			face := d.Instance.Inline(cell)
-			c.Label(face.Text).Wrap().Send()
+			if col, toned := toneColor(face.Tone); toned {
+				for rt := range c.RichTextLabelColored(col, color.Transparent, face.Text) {
+					rt.Monospace()
+				}
+			} else {
+				c.Label(face.Text).Wrap().Send()
+			}
 			return
 		}
 		e := inst.richCells.entryFor(col, d, raw)
@@ -322,7 +340,7 @@ func (inst *PlayApp) renderRichCell(col int, d gloss.Declaration, cell gloss.Arr
 
 // renderBody draws the artifact itself.
 func (inst *richCellCache) renderBody(col int, d gloss.Declaration, e *richEntry) {
-	switch d.MediaType {
+	switch mediaTypeOnly(d.MediaType) {
 	case gloss.MediaTypeMarkdown:
 		if e.doc == nil {
 			return

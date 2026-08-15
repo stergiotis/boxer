@@ -266,12 +266,16 @@ func (inst *PlayApp) renderDetailSection(rec arrow.RecordBatch, schema *arrow.Sc
 		}
 		rowsShown++
 	}
+	glossCols := inst.glossColumns(schema)
 	for i := 0; i < schema.NumFields(); i++ {
 		name := schema.Field(i).Name
 		if sectionForColumn(name) != section {
 			continue
 		}
-		if d, declared := inst.glossCatalog().ParseColumn(name); declared {
+		// A glossed column — declared by alias or bound by a rule — renders
+		// through its gloss: a block face when the pane binds one, else the
+		// inline face; a declaration that could not be honoured says why.
+		if d, glossed := glossCols[i].declaration(shortColumnLabel(name)); glossed && !inst.tableOpts.rawCells {
 			raw, ok := cellRaw(rec, i, row)
 			if !ok || raw == "" {
 				continue
