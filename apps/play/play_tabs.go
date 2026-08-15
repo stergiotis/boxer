@@ -318,6 +318,12 @@ var builtinTabDefs = []builtinTabDef{
 	// name you can use. Lazy, so a session that never opens it never runs the
 	// system.functions probe (ADR-0174 §SD2).
 	{id: "vocabulary", dockID: dockTabVocabulary, title: "Vocabulary", zone: TabZoneTools, lazy: true},
+	// Glosses is the result-side sibling of Vocabulary (ADR-0186 §SD6): the
+	// catalog of value renderings, the buffer's effective rules, and how each
+	// column of the current result resolved. Lazy — its body walks the
+	// resolution and the catalog, and a session that never opens it needs
+	// neither on screen.
+	{id: "glosses", dockID: dockTabGlosses, title: "Glosses", zone: TabZoneTools, lazy: true},
 	// Experiments drives one batch through a chosen leeway sink. It is a tool
 	// pane, not a result view: its default source is a built-in fixture, so it
 	// says something before a query has run and keeps saying it when the
@@ -668,6 +674,8 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderPassesTab) }
 		case "vocabulary":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderVocabularyTab) }
+		case "glosses":
+			spec.Render = func(f *TabFrame) { scrollTab(func() { inst.renderGlossesTab(f.Schema) }) }
 		case "flow":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderFlowTab) }
 		case "docs":

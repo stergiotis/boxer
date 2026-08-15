@@ -102,6 +102,7 @@ const (
 	dockTabTreemap     uint64 = 24
 	dockTabChart       uint64 = 25
 	dockTabVocabulary  uint64 = 26
+	dockTabGlosses     uint64 = 27
 )
 
 type PlayApp struct {

@@ -545,6 +545,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 			}
 		}
 	}
+	glossCols := inst.glossColumns(schema)
 	for pos, arrowCol := range visCols {
 		colPos := uint32(pos + 1)
 		if vis, _ := et.ColVisible(colPos); !vis {
@@ -553,18 +554,28 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 		for range et.Headers(0, colPos) {
 			c.AddSpace(cellPadX)
 			field := schema.Field(arrowCol)
+			gc := &glossCols[arrowCol]
 			// The full type goes on hover and the header carries the short
 			// tag, for the same reason the per-DB-row grid does it: whatever
 			// the header renders is a floor under the column's width, and the
 			// spelled-out type is routinely wider than the values below it.
+			// A glossed column (ADR-0186) adds its media type, small, and its
+			// resolution to the hover.
+			hover := field.Type.String()
 			if label := inst.colLabels[field.Name]; label != "" {
-				for range c.HoverText(field.Name + " — " + field.Type.String()).KeepIter() {
+				hover = field.Name + " — " + hover
+			}
+			if gh := glossHover(gc); gh != "" {
+				hover += " — " + gh
+			}
+			if label := inst.colLabels[field.Name]; label != "" {
+				for range c.HoverText(hover).KeepIter() {
 					for rt := range c.RichTextLabel(label) {
 						rt.Strong().Monospace()
 					}
 				}
 			} else {
-				for range c.HoverText(field.Type.String()).KeepIter() {
+				for range c.HoverText(hover).KeepIter() {
 					for rt := range c.RichTextLabel(field.Name) {
 						rt.Strong().Monospace()
 					}
@@ -572,6 +583,11 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 			}
 			for rt := range c.RichTextLabel(shortArrowType(field.Type)) {
 				rt.Small().Weak().Monospace()
+			}
+			if gc.mediaType != "" {
+				for rt := range c.RichTextLabel(gc.mediaType) {
+					rt.Small().Weak().Monospace()
+				}
 			}
 		}
 	}

@@ -176,6 +176,15 @@ func (inst *CardDriver) SetTagClickHandler(fn func(display, detail string)) {
 	}
 }
 
+// SetCellGloss installs the per-value gloss on the card emitter (ADR-0186
+// §SD4) — the host's inline face over the marshalled text of each value.
+// Passing nil clears it. A no-op until EnsureFor has built an emitter.
+func (inst *CardDriver) SetCellGloss(fn leewaywidgets.CellGlossFunc) {
+	if inst.emitter != nil {
+		inst.emitter.SetCellGloss(fn)
+	}
+}
+
 // Prepare walks a single-row slice of rec through the Driver, buffering the
 // leeway card rows in the emitter without drawing them (the emitter runs with
 // DeferRender set). Call it before SectionDigests and before Render. A no-op on

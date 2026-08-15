@@ -109,6 +109,16 @@ type Table2CardEmitter struct {
 	cellBuf      strings.Builder
 	inCollection bool
 	itemIdx      int32
+	// curArrowIdx is the value column's Arrow index (BeginColumn's address),
+	// and itemStart the cellBuf offset where the current scalar or item's
+	// text begins — what cellGloss rewrites at EndScalarValue / EndValueItem.
+	curArrowIdx int
+	itemStart   int
+
+	// cellGloss, when set, rewrites each value's text before it is laid into
+	// the card (ADR-0186 §SD4): the host's per-column gloss inline face,
+	// consulted next to the hide rule. Nil = identity.
+	cellGloss CellGlossFunc
 
 	// Buffered output rows for the entire batch — flushed at EndBatch.
 	unified []table2UnifiedRow
@@ -509,8 +519,24 @@ func (inst *Table2CardEmitter) composedSectionName() string {
 
 // --- column / value ---
 
-func (inst *Table2CardEmitter) BeginColumn(_ streamreadaccess.PhysicalColumnAddr, _ naming.StylableName, _ canonicaltypes.PrimitiveAstNodeI, valueSemantics valueaspects.AspectSet) {
+// CellGlossFunc rewrites one value cell's text before the card lays it out
+// (ADR-0186 §SD4): arrowIdx is the value column's Arrow index in the driven
+// batch, text the marshalled scalar or one item of a collection. It returns
+// text unchanged for a column it does not gloss. It runs per value per drive,
+// so it must be cheap — the host resolves the column once and applies an
+// inline face here.
+type CellGlossFunc func(arrowIdx int, text string) string
+
+// SetCellGloss installs (or, with nil, removes) the per-value gloss. It is
+// the one display seam a host has into the card's values, beside the hide
+// rule BeginColumn applies from the value semantics.
+func (inst *Table2CardEmitter) SetCellGloss(fn CellGlossFunc) {
+	inst.cellGloss = fn
+}
+
+func (inst *Table2CardEmitter) BeginColumn(colAddr streamreadaccess.PhysicalColumnAddr, _ naming.StylableName, _ canonicaltypes.PrimitiveAstNodeI, valueSemantics valueaspects.AspectSet) {
 	inst.columnIdx++
+	inst.curArrowIdx = colAddr.Index
 	if int(inst.columnIdx) < len(inst.colHidden) {
 		hidden := valueSemantics.Contains(valueaspects.AspectMachineReadable) && !valueSemantics.Contains(valueaspects.AspectHumanReadable)
 		inst.colHidden[inst.columnIdx] = hidden
@@ -539,9 +565,34 @@ func (inst *Table2CardEmitter) EndColumn() {
 
 func (inst *Table2CardEmitter) BeginScalarValue() {
 	inst.inCollection = false
+	inst.itemStart = inst.cellBuf.Len()
 }
 
-func (inst *Table2CardEmitter) EndScalarValue() (err error) { return inst.err }
+func (inst *Table2CardEmitter) EndScalarValue() (err error) {
+	inst.applyCellGloss()
+	return inst.err
+}
+
+// applyCellGloss rewrites the text written since itemStart through the
+// host's gloss, when one is installed and the text changed.
+func (inst *Table2CardEmitter) applyCellGloss() {
+	if inst.cellGloss == nil {
+		return
+	}
+	all := inst.cellBuf.String()
+	if inst.itemStart > len(all) {
+		return
+	}
+	item := all[inst.itemStart:]
+	glossed := inst.cellGloss(inst.curArrowIdx, item)
+	if glossed == item {
+		return
+	}
+	head := all[:inst.itemStart]
+	inst.cellBuf.Reset()
+	inst.cellBuf.WriteString(head)
+	inst.cellBuf.WriteString(glossed)
+}
 
 func (inst *Table2CardEmitter) BeginHomogenousArrayValue(_ int) {
 	inst.inCollection = true
@@ -567,9 +618,10 @@ func (inst *Table2CardEmitter) BeginValueItem(index int) {
 	if index > 0 {
 		inst.cellBuf.WriteString(", ")
 	}
+	inst.itemStart = inst.cellBuf.Len()
 }
 
-func (inst *Table2CardEmitter) EndValueItem() {}
+func (inst *Table2CardEmitter) EndValueItem() { inst.applyCellGloss() }
 
 func (inst *Table2CardEmitter) Write(p []byte) (n int, err error) {
 	return inst.WriteString(string(p))

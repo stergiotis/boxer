@@ -21,8 +21,10 @@ const appletMaxHistory = 25
 // Experiments: a sink playground whose default subject is a built-in fixture
 // rather than the applet's own result. And so is Vocabulary (ADR-0174): it
 // lists what a buffer could call, which an applet — a published query with no
-// editor — has no buffer for.
-var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments", "vocabulary"}
+// editor — has no buffer for. Glosses (ADR-0186) is chrome for the same
+// reason: it explains how a buffer's rules resolved, an authoring view; the
+// glosses themselves still render in an applet's Table and Detail.
+var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments", "vocabulary", "glosses"}
 
 // orderedResultTabIDs is resultTabIDs in play's registration order, for
 // deterministic removal when an explicit `tabs:` list prunes the set.

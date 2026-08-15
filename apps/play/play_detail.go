@@ -183,6 +183,9 @@ func (inst *PlayApp) RenderDefaultDetailContent(rec arrow.RecordBatch, schema *a
 	cardReady := false
 	var digests []leewaywidgets.SectionDigest
 	if leeway {
+		// ADR-0186: the card's values pass through their column's gloss —
+		// on the items, since a tagged value is a collection of them.
+		inst.cards.SetCellGloss(inst.cardCellGloss(schema))
 		if err := inst.cards.Prepare(rec, row); err != nil {
 			c.Label(fmt.Sprintf("card prepare error: %s", err)).Wrap().Send()
 		} else {

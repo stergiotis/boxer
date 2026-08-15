@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 )
 
 // play_gloss.go is ADR-0186's per-column resolution: which gloss, if any,
@@ -336,4 +337,22 @@ func (inst *glossColumn) declaration(caption string) (d gloss.Declaration, ok bo
 		Instance:  inst.inst,
 		Reason:    inst.reason,
 	}, true
+}
+
+// cardCellGloss is the leeway card's per-value gloss (Table2CardEmitter's
+// SetCellGloss seam): the same resolution the grids use, applied to the
+// marshalled text of each value with the column's element kind. Nil when
+// nothing in the schema is glossed or the raw toggle is on, so the emitter
+// skips the rewrite entirely.
+func (inst *PlayApp) cardCellGloss(schema *arrow.Schema) leewaywidgets.CellGlossFunc {
+	if inst.tableOpts.rawCells || !inst.anyGlossed(schema) {
+		return nil
+	}
+	cols := inst.glossColumns(schema)
+	return func(arrowIdx int, text string) string {
+		if arrowIdx < 0 || arrowIdx >= len(cols) {
+			return text
+		}
+		return inst.glossText(&cols[arrowIdx], text, gloss.KindOfArrow(listElemType(schema.Field(arrowIdx).Type)))
+	}
 }

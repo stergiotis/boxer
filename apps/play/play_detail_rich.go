@@ -317,6 +317,13 @@ func (inst *PlayApp) renderRichCell(col int, d gloss.Declaration, cell gloss.Arr
 		}
 		if !hasBlockFace(mediaTypeOnly(d.MediaType)) {
 			face := d.Instance.Inline(cell)
+			if mediaTypeOnly(d.MediaType) == gloss.MediaTypeURL {
+				// The one presentation gloss with a block face of its own: a
+				// hyperlink to the value, opened by the host's opener. The
+				// inline face is the caption; the URL is the raw value.
+				c.HyperlinkTo(face.Text, raw).OpenInNewTab(true).Send()
+				return
+			}
 			if col, toned := toneColor(face.Tone); toned {
 				for rt := range c.RichTextLabelColored(col, color.Transparent, face.Text) {
 					rt.Monospace()
