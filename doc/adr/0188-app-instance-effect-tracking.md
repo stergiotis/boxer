@@ -346,6 +346,9 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 - [spatiotemporal-composability-lessons](../explanation/spatiotemporal-composability-lessons.md)
   — L2, L3, L4, L7 and the paper's leave-then-unload guard.
+- [dataset-following-os-analogues](../explanation/dataset-following-os-analogues.md)
+  — §SD3's two-phase withdrawal and identity-over-value against POSIX,
+  macOS, Android and Fuchsia; names the guard axis the deferral moves along.
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — `AppI`,
   `MountContextI`, capability subjects, "revokes (later)", §SD3 lifecycle
   subjects, §SD5 transport parity.

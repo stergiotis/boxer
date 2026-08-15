@@ -290,7 +290,9 @@ bounded wait, then deregister — is local to `adhocdata.Service` and the
 `datasetRebinder`, and gives the survey's "propagation policy" (D12) its
 deactivation half. The paper's argument that the guard cannot deadlock rests
 on the provider having already left the resolution table before it waits;
-keep that ordering.
+keep that ordering. Built as ADR-0188 §SD3; how the result compares with
+the file, service and component lifecycles of POSIX, macOS, Android and
+Fuchsia is in [dataset-following-os-analogues](./dataset-following-os-analogues.md).
 
 **L3 — Turn `Unmount` from authored into derived.** The paper's Algorithm 1
 is a disposer stack: every acquisition through the context prepends its
