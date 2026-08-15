@@ -217,6 +217,13 @@ type PlayApp struct {
 	liveMain         bool
 	runIsAuto        bool
 	runBlockedReason string
+	// The write gate (ADR-0181 §SD8 M3): writeGateNotice carries Run's
+	// refusal of an ungated INSERT wrapper for the status bar — set and
+	// cleared only in executeRun, so it renders unconditionally, unlike
+	// runBlockedReason whose validity is re-derived from the unfilled set.
+	// writeRun is the async write's delivery seam.
+	writeGateNotice string
+	writeRun        writeRunState
 	// The Live circuit breaker (the 2026-07-22 review remediation):
 	// autoRunStreak counts consecutive machine-driven auto-runs against
 	// autoRunStreakSql (the buffer they ran), and liveSuspendReason carries
@@ -1561,6 +1568,24 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 		return
 	}
 	inst.runBlockedReason = ""
+	// ADR-0181 §SD8 M3: an INSERT wrapper executes only behind the explicit
+	// write opt-in, and never through the Arrow result machinery — a write
+	// answers with a summary, not a stream. Refusal and outcome both ride
+	// the query summary line; the result panels keep the last read.
+	inst.writeGateNotice = ""
+	if runIsInsertWrapper(runSQL) {
+		if AllowWrites.Get() == "" {
+			inst.writeGateNotice = "the INSERT is gated — set BOXER_PLAY_ALLOW_WRITES=1 to execute writes from play, or copy Preview → As sent and run it via clickhouse-client"
+			return
+		}
+		inst.executeWriteRun(runSQL, sigParams)
+		if !auto {
+			inst.noteWorkingsetIntent()
+			inst.resumeLiveAfterHumanAction()
+		}
+		return
+	}
+	inst.writeRun.clear()
 	inst.lastRunScope = scope
 	// ADR-0097 3c: split the buffer into the node graph and fuse to the
 	// sink for execution. For a single statement the fused SQL is the

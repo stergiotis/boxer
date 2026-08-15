@@ -70,6 +70,12 @@ var (
 		Category:    env.CategoryE("boxer-play"),
 	})
 
+	AllowWrites = env.NewString(env.Spec{
+		Name:        "BOXER_PLAY_ALLOW_WRITES",
+		Description: "non-empty lets Run execute an INSERT … SELECT wrapper (ADR-0181 §SD8); unset, Run refuses the write with a copy-out hint. Governs every play-engined host, sqlapplet included",
+		Category:    env.CategoryE("boxer-play"),
+	})
+
 	// The BOXER_PLAY_FOCUS_* knobs are registered per built-in body tab in
 	// play_tabs.go (registerFocusVars, slice 6a) — derived from the tab
 	// definitions instead of hand-written here.

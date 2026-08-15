@@ -290,6 +290,15 @@ func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, su
 	if inst.runBlockedReason != "" && len(inst.unfilledInputs()) > 0 {
 		s = "Run blocked: " + inst.runBlockedReason
 	}
+	// The write gate's refusal and the async write's outcome (ADR-0181
+	// §SD8 M3). Both are set on Run and cleared by the next Run, so they
+	// render as they stand — no re-derivation, unlike the unfilled gate.
+	if inst.writeGateNotice != "" {
+		s = "Run blocked: " + inst.writeGateNotice
+	}
+	if w := inst.writeRun.status(); w != "" {
+		s = w
+	}
 	// The Live circuit breaker's verdict outranks the summary: Live went off
 	// on its own, which the user has to be told, and the line names what was
 	// cycling. Cleared by the next human Run.

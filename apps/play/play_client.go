@@ -227,6 +227,16 @@ func (inst *Client) BuildStatement(sql string) (body string, params map[string]s
 // a re-derivation of it.
 func (inst *Client) buildStatementObserved(sql string, observe func(passreg.ApplyObservation)) (body string, params map[string]string) {
 	residual, params := inst.buildResidualObserved(sql, observe)
+	// ADR-0181 §SD8 M3: an INSERT wrapper takes no FORMAT clause — the
+	// appended FORMAT is exactly why DDL from play fails, and a write
+	// answers with a summary, not a stream. The step still reports itself
+	// (applied, unchanged), so the Preview trace accounts for the wire body
+	// carrying no FORMAT rather than looking like a skipped rewrite.
+	if pr, perr := nanopass.Parse(residual); perr == nil && pr.InsertStmt() != nil {
+		body = residual
+		observeStep(observe, rewriteStepSetFormat, orderSetFormat, nil, residual, body)
+		return
+	}
 	body, setErr := passes.SetFormat("ArrowStream").Run(residual)
 	if setErr != nil {
 		log.Debug().Err(setErr).Msg("play: SetFormat failed, falling back to textual append")
