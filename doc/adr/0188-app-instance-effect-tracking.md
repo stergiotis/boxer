@@ -183,7 +183,12 @@ therefore a delay of at most one tick, a stale hint is corrected by the
 answer, and the open-time race is closed by subscribing before resolving
 (per-connection ordering at the server makes that sufficient on NATS as
 well). Where events cannot be subscribed at all the tick runs at the
-seconds-scale poll interval.
+seconds-scale poll interval. The tick also carries revisions: a republish
+whose hint was lost is noticed as a higher revision on the same handle.
+Two knobs exist for the headless lane, not for operation:
+`BOXER_SQLAPPLET_DATASET_EVENTS` (`on` / `drop` — subscribe but discard,
+the slow-consumer simulation / `off`) and `BOXER_SQLAPPLET_DATASET_RECONCILE`
+(the interval; default 30 s).
 
 ### SD4 — The live effect graph as introspection tables
 
@@ -359,6 +364,12 @@ query over effects, not only over launches.
   whose handle is live when a newer sibling appears, and replays a
   retract-then-publish frame in order; the live variant drops the events
   subscription and lets the tick swap the binding against the real service.
+- **Lane.** Headless, by hand
+  ([launch-apps-non-interactively § 6b](../howto/launch-apps-non-interactively.md)):
+  with `BOXER_SQLAPPLET_DATASET_EVENTS=drop` and a 40 s interval, imzrt's
+  `Capture Heap` published 4 s after the `profile-heap` applet mounted and
+  the applet bound at the first tick, 38 s later; with events on, in the
+  same second (2026-08-15).
 - **What would fail.** A binding stuck pending or bound to a dead handle
   under message loss; a stale hint binding a retracted handle.
 - **Gap.** `fsbroker` handle entries and lifecycle subjects are deferred

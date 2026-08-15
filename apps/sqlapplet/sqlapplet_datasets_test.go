@@ -61,18 +61,21 @@ type fakeResolver struct {
 	mu      sync.Mutex
 	newest  map[string]string   // alias → newest live handle
 	live    map[string]struct{} // live handles
+	rev     map[string]uint64   // handle → revision
 	failing bool                // transport failure on every call
 	asked   int
 }
 
 func newFakeResolver() *fakeResolver {
-	return &fakeResolver{newest: map[string]string{}, live: map[string]struct{}{}}
+	return &fakeResolver{newest: map[string]string{}, live: map[string]struct{}{}, rev: map[string]uint64{}}
 }
 
+// publish mints (revision 1) or republishes (revision+1) handle under alias.
 func (f *fakeResolver) publish(alias, handle string) {
 	f.mu.Lock()
 	f.newest[alias] = handle
 	f.live[handle] = struct{}{}
+	f.rev[handle]++
 	f.mu.Unlock()
 }
 
@@ -98,7 +101,7 @@ func (f *fakeResolver) questions() (n int) {
 	return
 }
 
-func (f *fakeResolver) resolveVerify(alias string, boundHandle string) (handle string, boundLive bool, err error) {
+func (f *fakeResolver) resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.asked++
@@ -107,6 +110,7 @@ func (f *fakeResolver) resolveVerify(alias string, boundHandle string) (handle s
 		return
 	}
 	handle = f.newest[alias]
+	revision = f.rev[handle]
 	if boundHandle != "" {
 		_, boundLive = f.live[boundHandle]
 	}
@@ -313,6 +317,23 @@ func TestDatasetBinderReconcileCatchesLostEvents(t *testing.T) {
 	assert.True(t, changed)
 	assert.Contains(t, string(notice), "`items`")
 	assert.Equal(t, []string{"items"}, b.pendingAliases())
+
+	// A lost republish hint (same handle, revision 2): the tick notifies
+	// the revision. A revision first learned by the tick is only recorded.
+	f.publish("items", "adhoc_h5000000000000000")
+	due(b)
+	settle(t, b, target)
+	require.Equal(t, "adhoc_h5000000000000000", target.bound["items"])
+	assert.Empty(t, target.revised)
+	f.publish("items", "adhoc_h5000000000000000") // revision 2, no hint
+	due(b)
+	_, _, changed = settle(t, b, target)
+	assert.False(t, changed, "a republish moves no binding")
+	assert.Equal(t, uint64(2), target.revised["items"], "the tick notified the revision")
+	f.retract("items", "adhoc_h5000000000000000")
+	due(b)
+	settle(t, b, target)
+	require.Equal(t, []string{"items"}, b.pendingAliases())
 
 	// A transport failure changes nothing and is retried next tick.
 	f.setFailing(true)

@@ -50,6 +50,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // datasetRetryInterval bounds the tick rate when events are unavailable and
@@ -76,14 +77,14 @@ type datasetTargetI interface {
 // substitute a fake.
 type datasetResolverI interface {
 	// resolveVerify returns the alias's newest live handle (handle == "" when
-	// nothing is live under it) and whether boundHandle — when non-empty —
-	// is itself still live. err is a transport failure only.
-	resolveVerify(alias string, boundHandle string) (handle string, boundLive bool, err error)
+	// nothing is live under it) with its revision, and whether boundHandle —
+	// when non-empty — is itself still live. err is a transport failure only.
+	resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, err error)
 }
 
 type busResolver struct{ bus app.BusI }
 
-func (r busResolver) resolveVerify(alias string, boundHandle string) (handle string, boundLive bool, err error) {
+func (r busResolver) resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, err error) {
 	res, live, rErr := adhocdata.ResolveVerifyRequest(r.bus, alias, boundHandle)
 	// "no live dataset under alias" is an answer, not a transport failure:
 	// the service replied, and boundLive is meaningful on that reply.
@@ -96,16 +97,19 @@ func (r busResolver) resolveVerify(alias string, boundHandle string) (handle str
 		return
 	}
 	handle = res.Handle
+	revision = res.Revision
 	boundLive = live
 	return
 }
 
 // verdict is one reconciled fact about an alias, parked by the worker for the
-// render thread: what the alias currently resolves to, and whether the handle
-// the alias was bound to at the time of asking is still live.
+// render thread: what the alias currently resolves to (and at which
+// revision), and whether the handle the alias was bound to at the time of
+// asking is still live.
 type verdict struct {
 	alias       string
 	handle      string // newest live handle under alias; "" when none
+	revision    uint64 // revision of that handle
 	askedHandle string // the bound handle the question was about; "" for a pending alias
 	askedLive   bool
 }
@@ -120,9 +124,10 @@ type datasetBinder struct {
 	hint     string
 	interval time.Duration
 
-	mu      sync.Mutex
-	bound   map[string]string   // alias → handle currently bound in play
-	pending map[string]struct{} // aliases with no live dataset
+	mu       sync.Mutex
+	bound    map[string]string   // alias → handle currently bound in play
+	revision map[string]uint64   // alias → last revision seen of the bound handle; 0 = unknown
+	pending  map[string]struct{} // aliases with no live dataset
 
 	// Mailbox from the arriving side to the render thread, in arrival order:
 	// hints from the bus and verdicts from the worker. Order matters — a
@@ -151,14 +156,28 @@ func newDatasetBinder(bus app.BusI, logger zerolog.Logger, hint string, aliases 
 		return
 	}
 	b = newDatasetBinderWith(busResolver{bus: bus}, logger, hint)
-	unsub, subErr := adhocdata.SubscribeEvents(bus, b.onEvent)
+	if d := DatasetReconcile.Get(); d > 0 {
+		b.interval = d
+	}
+	handler := b.onEvent
+	mode := DatasetEvents.Get()
+	if mode == "drop" {
+		// Fault injection (see DatasetEvents): the subscription is real,
+		// the events go nowhere, the tick does the work.
+		handler = func(adhocdata.Event) {}
+		logger.Warn().Msg("sqlapplet: BOXER_SQLAPPLET_DATASET_EVENTS=drop — dataset events are discarded; the reconcile tick alone keeps bindings in step")
+	}
+	var subErr error
+	if mode == "off" {
+		subErr = eh.Errorf("events disabled by BOXER_SQLAPPLET_DATASET_EVENTS=off")
+	} else {
+		b.unsub, subErr = adhocdata.SubscribeEvents(bus, handler)
+	}
 	if subErr != nil {
 		// No hints for this window: the tick alone keeps the binding in
 		// step, at the seconds-scale poll interval.
 		logger.Debug().Err(subErr).Msg("sqlapplet: dataset events unavailable; polling for declared aliases")
 		b.interval = datasetRetryInterval
-	} else {
-		b.unsub = unsub
 	}
 	bindings, unresolved := resolveDatasetAliases(bus, logger, aliases)
 	b.seed(bindings, unresolved)
@@ -175,6 +194,7 @@ func newDatasetBinderWith(resolver datasetResolverI, logger zerolog.Logger, hint
 		hint:     hint,
 		interval: datasetReconcileInterval,
 		bound:    make(map[string]string),
+		revision: make(map[string]uint64),
 		pending:  make(map[string]struct{}),
 		dirty:    make(map[string]struct{}),
 	}
@@ -244,6 +264,9 @@ func (b *datasetBinder) sync(target datasetTargetI) (bound bool, notice []byte, 
 			if waiting {
 				b.dirty[ev.Alias] = struct{}{}
 			}
+			if isBound && held == ev.Handle && ev.Revision > b.revision[ev.Alias] {
+				b.revision[ev.Alias] = ev.Revision
+			}
 			b.mu.Unlock()
 			if isBound && held == ev.Handle {
 				target.NotifyDatasetRevision(ev.Alias, ev.Revision)
@@ -258,10 +281,11 @@ func (b *datasetBinder) sync(target datasetTargetI) (bound bool, notice []byte, 
 		b.mu.Lock()
 		held, isBound := b.bound[v.alias]
 		_, waiting := b.pending[v.alias]
+		known := b.revision[v.alias]
 		b.mu.Unlock()
 		switch {
 		case waiting && v.handle != "":
-			if b.bindAlias(target, v.alias, v.handle) {
+			if b.bindAlias(target, v.alias, v.handle, v.revision) {
 				bound = true
 			}
 			changed = true
@@ -270,9 +294,20 @@ func (b *datasetBinder) sync(target datasetTargetI) (bound bool, notice []byte, 
 			b.unbindHandle(target, held)
 			changed = true
 			if v.handle != "" && v.handle != held {
-				if b.bindAlias(target, v.alias, v.handle) {
+				if b.bindAlias(target, v.alias, v.handle, v.revision) {
 					bound = true
 				}
+			}
+		case isBound && v.askedHandle == held && v.handle == held && v.revision > known:
+			// Same handle, newer revision: a republish whose hint was lost
+			// (or that landed before the first tick, when the revision was
+			// unknown — then it is only recorded, since the applet ran at
+			// open against data at least that fresh).
+			b.mu.Lock()
+			b.revision[v.alias] = v.revision
+			b.mu.Unlock()
+			if known != 0 {
+				target.NotifyDatasetRevision(v.alias, v.revision)
 			}
 		}
 	}
@@ -318,7 +353,7 @@ func (b *datasetBinder) sync(target datasetTargetI) (bound bool, notice []byte, 
 // bindAlias binds on the render thread and records the outcome. A malformed
 // handle is the service's problem, not a transient one — the alias settles
 // out of pending anyway rather than being retried forever.
-func (b *datasetBinder) bindAlias(target datasetTargetI, alias string, handle string) (bound bool) {
+func (b *datasetBinder) bindAlias(target datasetTargetI, alias string, handle string, revision uint64) (bound bool) {
 	if bErr := target.BindDataset(alias, handle); bErr != nil {
 		b.log.Warn().Err(bErr).Str("alias", alias).Msg("sqlapplet: dataset bind rejected")
 		b.mu.Lock()
@@ -326,9 +361,10 @@ func (b *datasetBinder) bindAlias(target datasetTargetI, alias string, handle st
 		b.mu.Unlock()
 		return
 	}
-	b.log.Info().Str("alias", alias).Str("handle", handle).Msg("sqlapplet: dataset alias bound after open")
+	b.log.Info().Str("alias", alias).Str("handle", handle).Uint64("revision", revision).Msg("sqlapplet: dataset alias bound after open")
 	b.mu.Lock()
 	b.bound[alias] = handle
+	b.revision[alias] = revision
 	delete(b.pending, alias)
 	b.mu.Unlock()
 	bound = true
@@ -355,6 +391,7 @@ func (b *datasetBinder) unbindHandle(target datasetTargetI, handle string) (chan
 		}
 		b.mu.Lock()
 		delete(b.bound, alias)
+		delete(b.revision, alias)
 		b.pending[alias] = struct{}{}
 		b.mu.Unlock()
 		changed = true
@@ -369,7 +406,7 @@ func (b *datasetBinder) unbindHandle(target datasetTargetI, handle string) (chan
 func (b *datasetBinder) reconcile(pending []string, bound map[string]string) {
 	var out []verdict
 	for _, alias := range pending {
-		handle, _, err := b.resolver.resolveVerify(alias, "")
+		handle, rev, _, err := b.resolver.resolveVerify(alias, "")
 		if err != nil {
 			b.log.Debug().Err(err).Str("alias", alias).Msg("sqlapplet: dataset alias still unresolved")
 			continue
@@ -377,16 +414,16 @@ func (b *datasetBinder) reconcile(pending []string, bound map[string]string) {
 		if handle == "" {
 			continue
 		}
-		out = append(out, verdict{alias: alias, handle: handle})
+		out = append(out, verdict{alias: alias, handle: handle, revision: rev})
 	}
 	for _, alias := range slices.Sorted(maps.Keys(bound)) {
 		held := bound[alias]
-		handle, live, err := b.resolver.resolveVerify(alias, held)
+		handle, rev, live, err := b.resolver.resolveVerify(alias, held)
 		if err != nil {
 			b.log.Debug().Err(err).Str("alias", alias).Msg("sqlapplet: dataset binding not verified this round")
 			continue
 		}
-		out = append(out, verdict{alias: alias, handle: handle, askedHandle: held, askedLive: live})
+		out = append(out, verdict{alias: alias, handle: handle, revision: rev, askedHandle: held, askedLive: live})
 	}
 	b.mu.Lock()
 	b.verdicts = append(b.verdicts, out...)

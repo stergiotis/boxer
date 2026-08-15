@@ -184,6 +184,40 @@ key 3. This is the property the interleaving lane
 (`TestClosingEdge_InterleavingLeavesNoTrace`) checks after every step; the
 page you are reading is the by-hand version.
 
+## 6b. Worked example — the dataset binder's reconcile, with events lost
+
+The dataset binder (ADR-0188 §SD3) treats the service's events as hints and
+a slow reconcile tick as truth, so it survives a transport that loses
+events. To watch the tick do the work, drop the events with the
+fault-injection knob and shorten the tick:
+
+```sh
+BOXER_SQLAPPLET_DATASET_EVENTS=drop BOXER_SQLAPPLET_DATASET_RECONCILE=40s   … --launch "subject_alias IN ('play','imzrt','profile-heap')"
+```
+
+`profile-heap` declares `datasets: [pprof_heap]` and opens with the notice
+"Waiting for dataset `pprof_heap`…"; imzrt's Profiles tab publishes it. The
+dock tab strip is not in the accessibility tree, so the tab is a raw
+pointer click (its position from a `capture` step, here 318,149 at
+1500×950); the button is anchored by name:
+
+```sh
+printf '%s
+' '{"do":"click","x":318,"y":149,"settleMs":600}'                '{"do":"click","name":"Capture Heap","settleMs":600}' > "$S/e.jsonl"
+"$S/main_go" imzero2 drive --url "ws://127.0.0.1:$PORT/" --trace "$S/e.jsonl" --settle 200
+```
+
+Then poll `--dumpTree` for the notice every two seconds. On 2026-08-15:
+applet mounted 22:33:26, dataset published 22:33:30, the notice stayed for
+38 s, and the applet bound at 22:34:08 — the first tick after mount, the
+`sqlapplet: dataset alias bound after open` line in `host.log` giving the
+instant. The control run with `BOXER_SQLAPPLET_DATASET_EVENTS=on` bound in
+the same second as the publish (22:34:47 → 22:34:47), and a second
+`Capture Heap` bumped `keelson('adhoc').revision` to 2, which the applet
+takes as a re-run hint. Two earlier attempts landed the publish within a
+second of a tick boundary and proved nothing — pick an interval long enough
+that the tick is unmistakable.
+
 ## 7. Clean up
 
 Kill your host and its Rust child by PID; never by name — several sessions

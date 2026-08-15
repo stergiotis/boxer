@@ -287,6 +287,31 @@ var WindowSize = env.NewString(env.Spec{
 	Category:    env.CategoryE("boxer-sqlapplet"),
 })
 
+// DatasetEvents is a fault-injection knob for the dataset binder's event path
+// (ADR-0188 §SD3). "on" subscribes to adhoc.event.> and acts on the events
+// (the default); "drop" subscribes but discards every event, which is what a
+// slow consumer on NATS core experiences and leaves the reconcile tick alone
+// to keep the binding in step; "off" does not subscribe at all, the
+// pre-events poll. It exists so the headless lane can show the reconcile
+// working against a running host; it is not an operating knob.
+var DatasetEvents = env.NewCategorialString(env.Spec{
+	Name:        "BOXER_SQLAPPLET_DATASET_EVENTS",
+	Default:     "on",
+	Description: "dataset binder event path (ADR-0188 §SD3): on = subscribe and act; drop = subscribe but discard, reconcile alone binds (fault injection); off = do not subscribe, poll",
+	Category:    env.CategoryE("boxer-sqlapplet"),
+}, []string{"on", "drop", "off"})
+
+// DatasetReconcile overrides the binder's reconcile interval — how often a
+// window with events subscribed re-asks for pending aliases and verifies its
+// bound handles (ADR-0188 §SD3). The default is the value the binder would
+// use anyway; shorten it for the headless lane or under a lossy transport.
+var DatasetReconcile = env.NewDuration(env.Spec{
+	Name:        "BOXER_SQLAPPLET_DATASET_RECONCILE",
+	Default:     "30s",
+	Description: "dataset binder reconcile interval with events subscribed (ADR-0188 §SD3); a Go duration such as 30s or 5s",
+	Category:    env.CategoryE("boxer-sqlapplet"),
+})
+
 // appletSurfaceHints reads [WindowSize] into a manifest's window hints.
 //
 // The registry caches an environment value on first read, which is right for a
