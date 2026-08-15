@@ -113,6 +113,16 @@ func Parse(sql string) (pr *ParseResult, err error) {
 		return
 	}
 
+	// ADR-0181 §SD8 M0: the grammar parses the INSERT wrapper, but no pass
+	// understands it yet — scope building, canonicalize node rules and the
+	// refusal matrix are M1. Refusing at the entry keeps a wrapped statement
+	// failing with its real reason instead of a nil-scope panic three passes
+	// later.
+	if tree.InsertStmt() != nil {
+		err = eb.Build().Errorf("INSERT INTO … SELECT parses, but the pass pipeline does not carry it yet (ADR-0181 §SD8, M1 pending); expand the SELECT alone and compose the wrapper around it")
+		return
+	}
+
 	pr = &ParseResult{
 		Tree:        tree,
 		TokenStream: stream,
