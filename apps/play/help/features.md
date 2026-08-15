@@ -30,11 +30,14 @@ so wide leeway-encoded tables arrive without a row-by-row decode. The endpoint
 defaults to `http://localhost:8123/`; the top bar shows the active connection as
 `<url>  as <user>`.
 
-You never write a `FORMAT` clause — the app rewrites the query to end with
-`FORMAT ArrowStream` before sending. One consequence: DDL such as `TRUNCATE` /
-`CREATE` / `ALTER` does **not** round-trip through the playground, because the
-appended `FORMAT` clause is invalid on those statements. Run DDL from a regular
-ClickHouse client instead.
+You never write a `FORMAT` clause — the app rewrites a read to end with
+`FORMAT ArrowStream` before sending. An `INSERT INTO … SELECT` is the one
+statement that both parses and *writes* (ADR-0181 §SD8): it ships without a
+`FORMAT` clause, and Run refuses it until `BOXER_PLAY_ALLOW_WRITES=1` is set —
+the refusal names the switch — after which the status line reports the rows
+written instead of filling the result panes. Everything else that changes
+state (`TRUNCATE` / `CREATE` / `ALTER` / DDL generally) still does **not**
+round-trip through the playground; run it from a regular ClickHouse client.
 
 See **Configuration** for the connection flags and environment variables.
 
@@ -667,6 +670,9 @@ The editor buffer (`lastSql`) and the timeline bands SQL persist across sessions
 the automation variables `BOXER_PLAY_AUTORUN` (run the initial SQL on launch),
 `BOXER_PLAY_SCREENSHOT` (capture to a path), and `BOXER_PLAY_EXIT_ON_SHOT`
 (quit after the screenshot) drive headless captures.
+`BOXER_PLAY_ALLOW_WRITES` opts Run into executing an `INSERT … SELECT`
+(see *Connecting to ClickHouse* above); it governs every play-engined host,
+the applets included.
 
 ## The demo data
 
