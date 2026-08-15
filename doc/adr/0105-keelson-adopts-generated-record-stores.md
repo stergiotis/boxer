@@ -278,7 +278,10 @@ persist backend runs on the generated `boxer.persiststate` store, and the
 2026-07-31 deviation is discharged; since 2026-08-15 the facts-bound
 predecessor and the `FactsStoreI` state verbs are gone, and the store's
 memberships are the runtime vocabulary's. D3b's generator precondition is
-met; the facts-bound grants/audit store itself is not built.
+met; the facts-bound grants/audit store itself is not built. D3a was extended
+on 2026-08-15 to every state-shaped kind — workingsets and column widths join
+persist state on `boxer.persiststate`; see the Updates for the decision and
+its milestones.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
@@ -488,6 +491,132 @@ name from SQL). A test pins the baked map to the registry. One consequence
 worth stating: both keelson tables now carry registry ids, so whatever
 publishes the runtime vocabulary — `keelson('memberships')` carries only vdd
 today — names a `boxer.persiststate` column the way it names a facts one.
+
+### 2026-08-15 — D3a extends to every state-shaped kind
+
+**Decided.** This entry was drafted for review the same day and accepted on
+the grounds the maintainer stated: unify the data (the ADR-0148
+data-centricity invariant), improve correctness, and minimise edge cases —
+with every row keelson has stored to date declared expendable, which is what
+lets P4 below be a re-provision rather than a migration. It exists because
+the review that produced the entry above found the split's costs concentrated
+in one place, and D5's opportunistic posture now has the trigger it asked
+for.
+
+**Why now.** Three kinds are state-shaped — persist state, workingsets
+(ADR-0148 §SD6) and column-width overrides (ADR-0151) — and two of them still
+live on `boxer.facts` behind the hand-written `argMax` lane this ADR exists
+to delete (`chstore/workingsets.go`, `chstore/columnwidths.go`, ~650 lines);
+the 07-31 entry recorded them as carrying "the same target and the same
+exit" as persist state. ADR-0185's state manager (proposed) is the second
+consumer: as drafted it spans two substrates, fans `forget` out over both
+with no transaction, folds "what is live" in Go because the generator has no
+live scan, and adds one more verb to the interface D5 is hollowing out. Every
+one of those costs is the split between *state on one table, state on the
+other*, not the split between state and trail.
+
+**P1 — one state table, kind-agnostic.** `boxer.persiststate` keeps its
+envelope (string Key, z64 Order, u8 Lifecycle — the roles a state view
+needs) and trades its three per-domain sections for a small typed set —
+`symbol` (low-card strings: app id, kind labels, tiers), `string`, `blob`,
+`u64`, `f64` — so a state kind is a DTO plus vocabulary entries and never a
+schema change: ADR-0026 §SD6's "why one table" argument, applied to state.
+Kind is component presence (the entity's archetype); no kind membership is
+written. Around 50 physical columns against 185 on facts, so a `Get` stays
+a small `SELECT *`.
+
+**P2 — keys are kind-namespaced.** `state/<app>/<key>`, `ws/<app>/<name>`,
+`cw/<app>/<tier>/<scope>/<columnKey>`. One table has one Key space, and the
+state view is per key: a workingset and a persist key both spelled
+`<app>/default` would be one entity whose newest row wins for both, and a
+`Get` would find a row carrying the other kind's component. The prefix also
+makes a per-kind live scan a primary-key range read (`ORDER BY (id, ts)`).
+
+**P3 — the generator gains `ScanLive<Kind>`.** Latest row per key over a
+key range (`ORDER BY <order> DESC LIMIT 1 BY <key>`), decoded, keeping the
+entities that carry the kind and are not tombstones. The collapse must run
+over *all* rows in the range before any kind test — a tombstone is a
+component-less row for the same key, and filtering by kind first resurrects
+the last non-tombstone row, the rule ADR-0185 spells as `HAVING argMax` not
+`WHERE NOT`. `ScanOpts` gains a `KeyPrefix` (string keys) so callers do not
+hand-write the range over the physical column. ADR-0185 SD2 declined this
+verb on "one consumer"; with three kinds it has three, and its Go fold goes.
+
+**P4 — no migration: drop and re-provision.** The maintainer declared every
+row keelson has stored to date expendable, so nothing is copied, read twice,
+or dual-written. `boxer.persiststate` is dropped and re-provisioned at its v2
+shape; existing workingset and column-width rows stay on `boxer.facts` as
+readable trail and stop being read; a restore or a resolver starts empty once
+and refills through use (workingsets on close, widths on drag).
+
+This is the entry's largest single simplification and the reason to do it
+now rather than later. A migration would have needed a dual-read window, a
+copy pass, and a rule for reconciling a key present in both places — three
+edge classes, each with its own failure mode, all of which simply do not
+exist here. Persist-state keys re-spell from `<app>/<key>` to
+`state/<app>/<key>` in the same change; that is free today (the entry above
+records that no live rows ever existed) and grows more expensive every day it
+waits.
+
+The cost is stated plainly rather than softened: saved workingsets stop being
+restored and tuned column widths reset to their estimators, once, at the
+milestone that moves each kind.
+
+**P5 — what goes away.** The workingset and column-width verbs on
+`FactsStoreI` and their `chstore` / in-memory implementations;
+`MembPersistTombstone` stops being written (kept registered: rows carry it);
+`windowhost`'s workingset save/restore, `colwidth.Resolver` (behind its
+`StoreI`, which `FactsStoreI` satisfies today) and the `keelson('workingsets')`
+provider retarget to the state store; ADR-0185's manager gets one substrate for state, one live scan
+per kind, and no fold.
+
+**Rejected variants (kill clauses, so they are not re-derived).**
+- *One TableDesc for facts and state* — a facts-shaped state table, or state
+  back on `boxer.facts` with a u8 lifecycle column: needs the facts column
+  and a live `ALTER` plus a full regeneration sweep, keys a KV store on a
+  hashed u64 with `naturalKey` as tie-check, and pays a 185-column `SELECT *`
+  per `Get`; the sharable part (RA scaffolding) is smaller than the store's
+  own. It re-opens D3a for a payoff the state-side consolidation already
+  delivers.
+- *One table per state kind* — three DDL owners, three stores, and §SD6's
+  original objection: a schema per kind.
+- *Leave workingsets and column widths on facts* — the status quo: the
+  `argMax` lane persists, and ADR-0185 pays two substrates indefinitely.
+
+**Surfaces.**
+
+| surface | change | moves with it |
+| --- | --- | --- |
+| `boxer.persiststate` DDL (persist TableDesc v2) | sections replaced by the typed set (P1); keys re-spelled (P2) | `persist_store.out.go`, `state_dto.go`, `VerifySchema` on a pre-v2 table fails → drop and re-provision |
+| `recordstore/gen` emitted API | `+ScanLive<Kind>`, `+ScanOpts.KeyPrefix` (P3) | every in-tree store regenerates; ADR-0100 dated Update |
+| `factsstore.FactsStoreI` | `−WriteWorkingset/LatestWorkingset/ListWorkingsets/DeleteWorkingset`, `−WriteColumnWidth/ListColumnWidths/DeleteColumnWidth` (P5) | `chstore/workingsets.go`, `chstore/columnwidths.go`, in-memory twins, their tests |
+| `runtime/vocab` | `+` workingset / column-width state memberships as needed (or reuse of the launch cohort's terms) | assignment golden |
+| `windowhost`, `egui2/colwidth`, `introspect/providers/workingsets` | read/write the state store instead of `FactsStoreI` | ADR-0148 §SD7 provider contract unchanged in shape |
+| ADR-0148, ADR-0151 (accepted) | dated Updates: substrate moves | — |
+| ADR-0185 (proposed) | in place: one substrate, `ScanLive` instead of the fold, `ListAllColumnWidths` unnecessary | — |
+| ADR-0026 §SD6 reading | the principle becomes *trail on `boxer.facts`, state on `boxer.persiststate`* — a two-table stance stated once, instead of per-kind exceptions | — |
+
+**Verification.** `recordstore/example` round-trip gains a `ScanLive` case
+including the tombstone-first-then-kind ordering (what would fail: a
+resurrected key). Persist, workingset and column-width backends keep their
+existing suites case for case over `clickhouse-local`.
+
+**The live `storeexec` lane gates every milestone, not just the last one.**
+That is this entry's one process rule, and it is here because of the defect
+the entry above records: generated `EnsureTable` shipped a multi-statement
+script that `clickhouse-local` accepts and ClickHouse over HTTP rejects, so
+production ran on `persist:mem` for a day with every test green. The
+divergence between the two executors is the failure class this work is most
+exposed to, and a suite that only ever runs on the permissive one cannot see
+it. Gap: no automated proof that a pre-v2 live table is refused rather than
+misread — `VerifySchema` at open is the guard, and under P4 the table is
+dropped rather than upgraded, so the window is narrow by construction.
+
+**Milestones.** M0 — generator: `ScanLive<Kind>` + `KeyPrefix`. M1 — persist
+TableDesc v2, keys re-spelled, `StoreBackend` unchanged in contract. M2 —
+workingsets on the state store; ADR-0148 Update. M3 — column widths;
+ADR-0151 Update. M4 — `FactsStoreI` verbs and `chstore` files removed;
+ADR-0185 edited in place; ADR-0026 §SD6 reading recorded.
 
 ## References
 
