@@ -23,6 +23,7 @@ generator: go test, TestDqlPassRegistryGeneration
 | pre-execute | 120 | `LwExtractExpand` | true | expand LW_GET/LW_GET_NULL/LW_GET_LIST into leeway locate-and-extract expressions |
 | pre-execute | 129 | `LwConstructExpandTarget` | true | constructor calls adopt a resolved INSERT target's naming — segments, aspects and spelling |
 | pre-execute | 130 | `LwConstructExpand` | false | expand LW_PLAIN/LW_TV* constructor calls into aliased expressions minting physical leeway column names |
+| pre-execute | 140 | `GlossExpand` | false | expand gloss(expr, 'media type', 'key', value…) into a `label@media type;k=v` alias, validated against the gloss catalog |
 | pre-execute | 150 | `QualifyTables` | false | qualify unqualified table references with the anchor database |
 | pre-execute | 200 | `ResolveColumnNames` | true | resolve friendly leeway column handles to physical names |
 
@@ -38,6 +39,7 @@ generator: go test, TestDqlPassRegistryGeneration
 | 120 | `LwExtractExpand` | applied | false |
 | 129 | `LwConstructExpandTarget` | applied | false |
 | 130 | `LwConstructExpand` | applied | false |
+| 140 | `GlossExpand` | applied | false |
 | 150 | `QualifyTables` | applied | true |
 | 200 | `ResolveColumnNames` | applied | true |
 

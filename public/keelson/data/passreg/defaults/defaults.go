@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
@@ -31,6 +32,11 @@ import (
 //     on queries without authoring calls. Ordered after identsql (100)
 //     so an LW_ID_* macro inside a constructor's expression argument is
 //     already expanded when the span is kept.
+//   - glosssql.ExpandPass (GlossExpand, ADR-0186 §SD7): gloss(expr,
+//     'media type', 'key', value…) → `<expr> AS "<label>@<media type>"`,
+//     validated against the built-in gloss catalog. Same client-only
+//     shape and marker pre-scan as the constructors; ordered after them
+//     (140).
 //   - ResolveColumnNames (friendly leeway column handles → physical
 //     names, ADR-0116) at StagePreExecute, as a late-bound Factory
 //     (ADR-0108 §SD7): it needs a per-consumer schema resolver, so it is
@@ -85,6 +91,19 @@ func RegisterStandard(r *passreg.Registry) (err error) {
 			Order:       130,
 			Description: "expand LW_PLAIN/LW_TV* constructor calls into aliased expressions minting physical leeway column names",
 			Provenance:  "github.com/stergiotis/boxer/public/semistructured/leeway/constructsql",
+		},
+		{
+			// gloss(…) (ADR-0186 §SD7) — the display-side sibling of the
+			// constructors: an alias declaring how a column renders, validated
+			// against the built-in gloss catalog. Ordered after them (140) for
+			// determinism only; neither emits the other's calls. An Entry, not
+			// a Factory: the unbound /query path must expand it too, else the
+			// call would reach the server as an unknown function.
+			Pass:        glosssql.ExpandPass(nil),
+			Stage:       passreg.StagePreExecute,
+			Order:       140,
+			Description: "expand gloss(expr, 'media type', 'key', value…) into a `label@media type;k=v` alias, validated against the gloss catalog",
+			Provenance:  "github.com/stergiotis/boxer/public/hmi/gloss/glosssql",
 		},
 	} {
 		err = r.Register(e)

@@ -24,11 +24,12 @@ func TestRegisterStandard(t *testing.T) {
 	require.NoError(t, RegisterStandard(r))
 
 	es := r.Entries(passreg.StagePreExecute)
-	require.Len(t, es, 4)
+	require.Len(t, es, 5)
 	require.Equal(t, "ExpandDescriptiveStatistics", es[0].Pass.Name, "ADR-0161 expansion orders first (75)")
 	require.Equal(t, "DocsearchExpand", es[1].Pass.Name, "ADR-0164 expansion between the two (80)")
 	require.Equal(t, "ExpandLwIdMacros", es[2].Pass.Name)
 	require.Equal(t, "LwConstructExpand", es[3].Pass.Name, "ADR-0181 constructor expansion orders after identsql (130)")
+	require.Equal(t, "GlossExpand", es[4].Pass.Name, "ADR-0186 gloss(…) expansion orders after the constructors (140)")
 	for _, e := range es {
 		require.NotEmpty(t, e.Description)
 		require.NotEmpty(t, e.Provenance)
@@ -37,7 +38,7 @@ func TestRegisterStandard(t *testing.T) {
 	// Registering twice into the same registry must fail loudly (duplicate
 	// key), not silently double the entries.
 	require.Error(t, RegisterStandard(r))
-	require.Len(t, r.Entries(passreg.StagePreExecute), 4)
+	require.Len(t, r.Entries(passreg.StagePreExecute), 5)
 }
 
 // TestStandardSetExpandsDescriptiveStatistics proves the ADR-0161 wiring end
@@ -92,7 +93,7 @@ func TestStandardSetRegistersResolveColumnNamesFactory(t *testing.T) {
 	// docsearch, LW_ID_*, LW_ constructors); the three schema-bound passes —
 	// handle resolution, LW_GET extraction, and the target-adopting
 	// constructor variant (ADR-0181 §SD8 M2) — are factories.
-	require.Len(t, r.Entries(passreg.StagePreExecute), 4)
+	require.Len(t, r.Entries(passreg.StagePreExecute), 5)
 	fs := r.Factories(passreg.StagePreExecute)
 	require.Len(t, fs, 3)
 	var f passreg.Factory

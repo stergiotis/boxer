@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
+	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
@@ -216,6 +217,15 @@ func vocabDeclared() (out []vocabEntry) {
 		out = append(out, vocabEntry{
 			Name: f.Name, Params: f.Params, Doc: f.Doc,
 			Where: vocabClient, Family: "leeway authoring (ADR-0181)",
+			Declared: true, Available: true,
+		})
+	}
+	// The gloss(…) macro (ADR-0186 §SD7): client-only like the constructors,
+	// an alias declaring how a column renders.
+	for _, f := range glosssql.Functions() {
+		out = append(out, vocabEntry{
+			Name: f.Name, Params: f.Params, Doc: f.Doc,
+			Where: vocabClient, Family: "glosses (ADR-0186)",
 			Declared: true, Available: true,
 		})
 	}
