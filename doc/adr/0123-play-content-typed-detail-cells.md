@@ -13,7 +13,11 @@ date: 2026-07-15
 
 ## Status
 
-Proposed, pre-human-review.
+Proposed, pre-human-review. **Extended by
+[ADR-0186](./0186-play-gloss-catalog.md)** (2026-08-15): the vocabulary below
+becomes the content-type family of a catalog of *glosses*, the §SD2 gate is
+kept verbatim with "known type" meaning "in the catalog", and the §SD1/§SD7
+Table-tab and leeway-card deferrals are taken up there.
 
 The pane is built: `play_detail_rich.go` with its tests, the `cellRaw` /
 `renderRichCell` seam in `renderDetailSection`, the `executed` handoff into the
@@ -105,7 +109,8 @@ of truth for a question already answered. Non-leeway results have no such
 channel, which is the whole reason they need one.
 
 The Table tab is untouched for a duller reason: a cell there is one line high.
-Detail is the pane with room for a block.
+Detail is the pane with room for a block. (ADR-0186 gives every rendering a
+one-line *inline face* and lifts this restriction.)
 
 ### SD2 — The gate is the slash, not "parses as a media type"
 
@@ -237,7 +242,7 @@ Rendering bounds the image with `FitAspectMaxE` inside a fixed box.
   `String` already holds a blob verbatim. `;encoding=base64` is the shape if it
   is wanted (§SD2). A path or URL source would put a fetcher, a sandbox policy
   and a timeout into a detail pane, and is a separate decision.
-- **The Table tab**, and the leeway card path (§SD1).
+- **The Table tab**, and the leeway card path (§SD1) — taken up by ADR-0186.
 - **`text/markdown` as source**, i.e. `codeview.BuildMarkdown` — the
   show-me-the-source variant of a type that already renders. Needs a second
   spelling; no one has asked.
