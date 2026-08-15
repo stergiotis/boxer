@@ -532,3 +532,39 @@ func TestSetExcludeDropsFindingsByPath(t *testing.T) {
 	filtered.SetExclude([]string{"attic/"})
 	assert.Equal(t, []string{"kept.md"}, count(filtered))
 }
+
+// DL015 reports a stable stamp older than the file's last edit. The last-edit
+// date is stated here rather than read from git: the fixtures and this
+// assertion land in one commit, so their real history is younger than either.
+func TestRuleDL015ReportsStaleStamps(t *testing.T) {
+	rule := newRuleDL015With(func(path string) (string, bool) {
+		switch filepath.Base(path) {
+		case "stale_stamp.md":
+			return "2026-06-30", true
+		case "fresh_stamp.md":
+			return "2026-06-01", true // same day as the stamp: the restamp itself
+		}
+		return "2026-06-30", true
+	})
+	findings := collectFindings(t, rule, []string{"testdata/dl015"})
+	bases := map[string]string{}
+	for _, f := range findings {
+		require.Equal(t, "DL015", f.RuleId)
+		require.Equal(t, FindingSeverityWarn, f.Severity)
+		bases[filepath.Base(f.Path)] = f.Message
+	}
+	require.Contains(t, bases, "stale_stamp.md")
+	require.Contains(t, bases["stale_stamp.md"], "2026-01-10")
+	require.Contains(t, bases["stale_stamp.md"], "2026-06-30")
+	require.NotContains(t, bases, "fresh_stamp.md", "a same-day edit is the restamp, not drift")
+	require.NotContains(t, bases, "draft_doc.md", "a draft makes no verification claim")
+	require.NotContains(t, bases, "placeholder_stamp.md", "a template placeholder is not a date")
+}
+
+// Without a last-edit date — no repository, no history, no git — the rule says
+// nothing rather than guessing.
+func TestRuleDL015IsSilentWithoutHistory(t *testing.T) {
+	rule := newRuleDL015With(func(string) (string, bool) { return "", false })
+	findings := collectFindings(t, rule, []string{"testdata/dl015"})
+	require.Empty(t, findings)
+}

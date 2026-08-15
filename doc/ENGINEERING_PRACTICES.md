@@ -186,9 +186,12 @@ implemented as subcommands of the project binary.
 ### `boxer gov doclint`
 
 Sources under [github.com/stergiotis/boxer/public/gov/doclint](../public/gov/doclint).
-Implements numbered rules `DL001`–`DL011` over Markdown front-matter, draft
-banners, ADR section completeness, link resolution, banned filenames, and Go
-doc-comment hygiene. Findings carry one of three severities:
+Implements numbered rules over Markdown front-matter, draft banners, ADR
+section completeness and sub-item declarations, link resolution, banned
+filenames, Go doc-comment hygiene, and stale review stamps. The numbering has
+gaps: an id is reserved when a check is planned and assigned when it is
+implemented, so `DL013` and `DL014` name checks that do not exist yet while
+`DL015` ships (the register is DOCUMENTATION_STANDARD §8's table). Findings carry one of three severities:
 
 - `error` — sets the script's exit code to 1.
 - `warn` — visible in output but non-blocking.
