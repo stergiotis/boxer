@@ -1,0 +1,172 @@
+# The sysmetrics read surface, expanded (ADR-0184 §SD6).
+#
+# Each block is one authored query and what the client-side LW_GET* pass
+# ships to the server. A changed line is a changed physical column, so a
+# re-aspected section or a renamed membership goes red here rather than at
+# the first dump against a real server.
+#
+# Regenerate with BOXER_SYSMFACTS_READSURFACE_REGEN=1 go test ./public/keelson/runtime/sysmfacts/...
+
+## cpu
+-- authored
+SELECT LW_GET('symbol', 'sysmCpuHost', 'chan:low-card-ref') AS host,
+       arrayElement(LW_GET_LIST('u8Array', 'sysmCpuTotalPct', 'chan:low-card-ref'), 1) AS total_pct,
+       LW_GET_LIST('u8Array', 'sysmCpuPerCorePct', 'chan:low-card-ref') AS per_core_pct,
+       LW_GET_LIST('u32Array', 'sysmCpuPerCoreFreqMhz', 'chan:low-card-ref') AS per_core_freq_mhz,
+       arrayElement(LW_GET_LIST('f32Array', 'sysmCpuLoadAvg1', 'chan:low-card-ref'), 1) AS load_avg_1,
+       LW_GET_LIST('f32Array', 'sysmCpuUsageWatts', 'chan:low-card-ref') AS usage_watts,
+       LW_GET_LIST('i32Array', 'sysmCpuActiveCpus', 'chan:low-card-ref') AS active_cpus
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595843, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       arrayElement(LW_LIST_BY_TAG_EQUAL("tv:u8Array:value:val:u8h:4:::0::data", "tv:u8Array:len:len:u64:4D:::0::data", "tv:u8Array:lr:lr:u64:1247:::0::data", 2305843022098595846, LW_RAGGED_PARENT_IDS("tv:u8Array:lrcard:lrcard:u64:4E:::0::data")), 1) AS total_pct,
+       LW_LIST_BY_TAG_EQUAL("tv:u8Array:value:val:u8h:4:::0::data", "tv:u8Array:len:len:u64:4D:::0::data", "tv:u8Array:lr:lr:u64:1247:::0::data", 2305843022098595847, LW_RAGGED_PARENT_IDS("tv:u8Array:lrcard:lrcard:u64:4E:::0::data")) AS per_core_pct,
+       LW_LIST_BY_TAG_EQUAL("tv:u32Array:value:val:u32h:4:::0::data", "tv:u32Array:len:len:u64:4D:::0::data", "tv:u32Array:lr:lr:u64:1247:::0::data", 2305843022098595848, LW_RAGGED_PARENT_IDS("tv:u32Array:lrcard:lrcard:u64:4E:::0::data")) AS per_core_freq_mhz,
+       arrayElement(LW_LIST_BY_TAG_EQUAL("tv:f32Array:value:val:f32h:4A:::0::data", "tv:f32Array:len:len:u64:4D:::0::data", "tv:f32Array:lr:lr:u64:1247:::0::data", 2305843022098595849, LW_RAGGED_PARENT_IDS("tv:f32Array:lrcard:lrcard:u64:4E:::0::data")), 1) AS load_avg_1,
+       LW_LIST_BY_TAG_EQUAL("tv:f32Array:value:val:f32h:4A:::0::data", "tv:f32Array:len:len:u64:4D:::0::data", "tv:f32Array:lr:lr:u64:1247:::0::data", 2305843022098595852, LW_RAGGED_PARENT_IDS("tv:f32Array:lrcard:lrcard:u64:4E:::0::data")) AS usage_watts,
+       LW_LIST_BY_TAG_EQUAL("tv:i32Array:value:val:i32h:4:::0::data", "tv:i32Array:len:len:u64:4D:::0::data", "tv:i32Array:lr:lr:u64:1247:::0::data", 2305843022098595853, LW_RAGGED_PARENT_IDS("tv:i32Array:lrcard:lrcard:u64:4E:::0::data")) AS active_cpus
+FROM boxer.facts
+
+## cpuinfo
+-- authored
+SELECT LW_GET('symbol', 'sysmCpuInfoHost', 'chan:low-card-ref') AS host,
+       LW_GET('symbol', 'sysmCpuModelName', 'chan:low-card-ref') AS model_name,
+       arrayElement(LW_GET_LIST('i32Array', 'sysmCpuLogicalCores', 'chan:low-card-ref'), 1) AS logical_cores
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595844, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595854, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS model_name,
+       arrayElement(LW_LIST_BY_TAG_EQUAL("tv:i32Array:value:val:i32h:4:::0::data", "tv:i32Array:len:len:u64:4D:::0::data", "tv:i32Array:lr:lr:u64:1247:::0::data", 2305843022098595855, LW_RAGGED_PARENT_IDS("tv:i32Array:lrcard:lrcard:u64:4E:::0::data")), 1) AS logical_cores
+FROM boxer.facts
+
+## mem
+-- authored
+SELECT LW_GET('symbol', 'sysmMemHost', 'chan:low-card-ref') AS host,
+       arrayElement(LW_GET_LIST('u64Array', 'sysmMemTotalBytes', 'chan:low-card-ref'), 1) AS total_bytes,
+       arrayElement(LW_GET_LIST('u64Array', 'sysmMemAvailableBytes', 'chan:low-card-ref'), 1) AS available_bytes,
+       arrayElement(LW_GET_LIST('u64Array', 'sysmMemUsedBytes', 'chan:low-card-ref'), 1) AS used_bytes
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595845, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       arrayElement(LW_LIST_BY_TAG_EQUAL("tv:u64Array:value:val:u64h:4:::0::data", "tv:u64Array:len:len:u64:4D:::0::data", "tv:u64Array:lr:lr:u64:1247:::0::data", 2305843022098595856, LW_RAGGED_PARENT_IDS("tv:u64Array:lrcard:lrcard:u64:4E:::0::data")), 1) AS total_bytes,
+       arrayElement(LW_LIST_BY_TAG_EQUAL("tv:u64Array:value:val:u64h:4:::0::data", "tv:u64Array:len:len:u64:4D:::0::data", "tv:u64Array:lr:lr:u64:1247:::0::data", 2305843022098595858, LW_RAGGED_PARENT_IDS("tv:u64Array:lrcard:lrcard:u64:4E:::0::data")), 1) AS available_bytes,
+       arrayElement(LW_LIST_BY_TAG_EQUAL("tv:u64Array:value:val:u64h:4:::0::data", "tv:u64Array:len:len:u64:4D:::0::data", "tv:u64Array:lr:lr:u64:1247:::0::data", 2305843022098595863, LW_RAGGED_PARENT_IDS("tv:u64Array:lrcard:lrcard:u64:4E:::0::data")), 1) AS used_bytes
+FROM boxer.facts
+
+## psi
+-- authored
+SELECT LW_GET('symbol', 'sysmPsiHost', 'chan:low-card-ref') AS host,
+       LW_GET('bool', 'sysmPsiAvailable', 'chan:low-card-ref') AS available,
+       arrayElement(LW_GET_LIST('f32Array', 'sysmPsiCpuSomeAvg10', 'chan:low-card-ref'), 1) AS cpu_some_avg10,
+       arrayElement(LW_GET_LIST('u64Array', 'sysmPsiCpuSomeTotalUs', 'chan:low-card-ref'), 1) AS cpu_some_total_us
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595869, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       LW_VALUE_BY_TAG_EQUAL("tv:bool:value:val:b:4:::0::data", "tv:bool:lr:lr:u64:1247:::0::data", 2305843022098595894, LW_RAGGED_PARENT_IDS("tv:bool:lrcard:lrcard:u64:4E:::0::data")) AS available,
+       arrayElement(LW_LIST_BY_TAG_EQUAL("tv:f32Array:value:val:f32h:4A:::0::data", "tv:f32Array:len:len:u64:4D:::0::data", "tv:f32Array:lr:lr:u64:1247:::0::data", 2305843022098595870, LW_RAGGED_PARENT_IDS("tv:f32Array:lrcard:lrcard:u64:4E:::0::data")), 1) AS cpu_some_avg10,
+       arrayElement(LW_LIST_BY_TAG_EQUAL("tv:u64Array:value:val:u64h:4:::0::data", "tv:u64Array:len:len:u64:4D:::0::data", "tv:u64Array:lr:lr:u64:1247:::0::data", 2305843022098595873, LW_RAGGED_PARENT_IDS("tv:u64Array:lrcard:lrcard:u64:4E:::0::data")), 1) AS cpu_some_total_us
+FROM boxer.facts
+
+## net
+-- authored
+SELECT LW_GET('symbol', 'sysmNetHost', 'chan:low-card-ref') AS host,
+       LW_GET_LIST('symbolArray', 'sysmNetName', 'chan:low-card-ref') AS name,
+       LW_GET_LIST('i32Array', 'sysmNetIndex', 'chan:low-card-ref') AS if_index,
+       LW_GET_LIST('u8Array', 'sysmNetUp', 'chan:low-card-ref') AS up,
+       LW_GET_LIST('u64Array', 'sysmNetRxBytesPerSec', 'chan:low-card-ref') AS rx_bytes_per_sec
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595896, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       LW_LIST_BY_TAG_EQUAL("tv:symbolArray:value:val:sh:124::I:0::data", "tv:symbolArray:len:len:u64:4D:::0::data", "tv:symbolArray:lr:lr:u64:1247:::0::data", 2305843022098595897, LW_RAGGED_PARENT_IDS("tv:symbolArray:lrcard:lrcard:u64:4E:::0::data")) AS name,
+       LW_LIST_BY_TAG_EQUAL("tv:i32Array:value:val:i32h:4:::0::data", "tv:i32Array:len:len:u64:4D:::0::data", "tv:i32Array:lr:lr:u64:1247:::0::data", 2305843022098595898, LW_RAGGED_PARENT_IDS("tv:i32Array:lrcard:lrcard:u64:4E:::0::data")) AS if_index,
+       LW_LIST_BY_TAG_EQUAL("tv:u8Array:value:val:u8h:4:::0::data", "tv:u8Array:len:len:u64:4D:::0::data", "tv:u8Array:lr:lr:u64:1247:::0::data", 2305843022098595900, LW_RAGGED_PARENT_IDS("tv:u8Array:lrcard:lrcard:u64:4E:::0::data")) AS up,
+       LW_LIST_BY_TAG_EQUAL("tv:u64Array:value:val:u64h:4:::0::data", "tv:u64Array:len:len:u64:4D:::0::data", "tv:u64Array:lr:lr:u64:1247:::0::data", 2305843022098595904, LW_RAGGED_PARENT_IDS("tv:u64Array:lrcard:lrcard:u64:4E:::0::data")) AS rx_bytes_per_sec
+FROM boxer.facts
+
+## diskmount
+-- authored
+SELECT LW_GET('symbol', 'sysmDiskMountHost', 'chan:low-card-ref') AS host,
+       LW_GET_LIST('symbolArray', 'sysmDiskMountPoint', 'chan:low-card-ref') AS mount_point,
+       LW_GET_LIST('u64Array', 'sysmDiskMountFreeBytes', 'chan:low-card-ref') AS free_bytes,
+       LW_GET_LIST('f32Array', 'sysmDiskMountUsedPct', 'chan:low-card-ref') AS used_pct
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595907, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       LW_LIST_BY_TAG_EQUAL("tv:symbolArray:value:val:sh:124::I:0::data", "tv:symbolArray:len:len:u64:4D:::0::data", "tv:symbolArray:lr:lr:u64:1247:::0::data", 2305843022098595909, LW_RAGGED_PARENT_IDS("tv:symbolArray:lrcard:lrcard:u64:4E:::0::data")) AS mount_point,
+       LW_LIST_BY_TAG_EQUAL("tv:u64Array:value:val:u64h:4:::0::data", "tv:u64Array:len:len:u64:4D:::0::data", "tv:u64Array:lr:lr:u64:1247:::0::data", 2305843022098595914, LW_RAGGED_PARENT_IDS("tv:u64Array:lrcard:lrcard:u64:4E:::0::data")) AS free_bytes,
+       LW_LIST_BY_TAG_EQUAL("tv:f32Array:value:val:f32h:4A:::0::data", "tv:f32Array:len:len:u64:4D:::0::data", "tv:f32Array:lr:lr:u64:1247:::0::data", 2305843022098595916, LW_RAGGED_PARENT_IDS("tv:f32Array:lrcard:lrcard:u64:4E:::0::data")) AS used_pct
+FROM boxer.facts
+
+## gpu
+-- authored
+SELECT LW_GET('symbol', 'sysmGpuHost', 'chan:low-card-ref') AS host,
+       LW_GET_LIST('symbolArray', 'sysmGpuName', 'chan:low-card-ref') AS name,
+       LW_GET_LIST('u8Array', 'sysmGpuBusyPct', 'chan:low-card-ref') AS busy_pct,
+       LW_GET_LIST('f32Array', 'sysmGpuTempC', 'chan:low-card-ref') AS temp_c,
+       LW_GET_LIST('u32Array', 'sysmGpuFreqMhz', 'chan:low-card-ref') AS freq_mhz
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595935, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       LW_LIST_BY_TAG_EQUAL("tv:symbolArray:value:val:sh:124::I:0::data", "tv:symbolArray:len:len:u64:4D:::0::data", "tv:symbolArray:lr:lr:u64:1247:::0::data", 2305843022098595938, LW_RAGGED_PARENT_IDS("tv:symbolArray:lrcard:lrcard:u64:4E:::0::data")) AS name,
+       LW_LIST_BY_TAG_EQUAL("tv:u8Array:value:val:u8h:4:::0::data", "tv:u8Array:len:len:u64:4D:::0::data", "tv:u8Array:lr:lr:u64:1247:::0::data", 2305843022098595940, LW_RAGGED_PARENT_IDS("tv:u8Array:lrcard:lrcard:u64:4E:::0::data")) AS busy_pct,
+       LW_LIST_BY_TAG_EQUAL("tv:f32Array:value:val:f32h:4A:::0::data", "tv:f32Array:len:len:u64:4D:::0::data", "tv:f32Array:lr:lr:u64:1247:::0::data", 2305843022098595944, LW_RAGGED_PARENT_IDS("tv:f32Array:lrcard:lrcard:u64:4E:::0::data")) AS temp_c,
+       LW_LIST_BY_TAG_EQUAL("tv:u32Array:value:val:u32h:4:::0::data", "tv:u32Array:len:len:u64:4D:::0::data", "tv:u32Array:lr:lr:u64:1247:::0::data", 2305843022098595945, LW_RAGGED_PARENT_IDS("tv:u32Array:lrcard:lrcard:u64:4E:::0::data")) AS freq_mhz
+FROM boxer.facts
+
+## proc
+-- authored
+SELECT LW_GET('symbol', 'sysmProcHost', 'chan:low-card-ref') AS host,
+       LW_GET_LIST('u32Array', 'sysmProcPid', 'chan:low-card-ref') AS pid,
+       LW_GET_LIST('symbolArray', 'sysmProcName', 'chan:low-card-ref') AS name,
+       LW_GET_LIST('f32Array', 'sysmProcCpuPct', 'chan:low-card-ref') AS cpu_pct,
+       LW_GET_LIST('i64Array', 'sysmProcStartedAtMs', 'chan:low-card-ref') AS started_at_ms
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595947, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       LW_LIST_BY_TAG_EQUAL("tv:u32Array:value:val:u32h:4:::0::data", "tv:u32Array:len:len:u64:4D:::0::data", "tv:u32Array:lr:lr:u64:1247:::0::data", 2305843022098595948, LW_RAGGED_PARENT_IDS("tv:u32Array:lrcard:lrcard:u64:4E:::0::data")) AS pid,
+       LW_LIST_BY_TAG_EQUAL("tv:symbolArray:value:val:sh:124::I:0::data", "tv:symbolArray:len:len:u64:4D:::0::data", "tv:symbolArray:lr:lr:u64:1247:::0::data", 2305843022098595950, LW_RAGGED_PARENT_IDS("tv:symbolArray:lrcard:lrcard:u64:4E:::0::data")) AS name,
+       LW_LIST_BY_TAG_EQUAL("tv:f32Array:value:val:f32h:4A:::0::data", "tv:f32Array:len:len:u64:4D:::0::data", "tv:f32Array:lr:lr:u64:1247:::0::data", 2305843022098595952, LW_RAGGED_PARENT_IDS("tv:f32Array:lrcard:lrcard:u64:4E:::0::data")) AS cpu_pct,
+       LW_LIST_BY_TAG_EQUAL("tv:i64Array:value:val:i64h:4:::0::data", "tv:i64Array:len:len:u64:4D:::0::data", "tv:i64Array:lr:lr:u64:1247:::0::data", 2305843022098595959, LW_RAGGED_PARENT_IDS("tv:i64Array:lrcard:lrcard:u64:4E:::0::data")) AS started_at_ms
+FROM boxer.facts
+
+## proccmd
+-- authored
+SELECT LW_GET('symbol', 'sysmProcCmdHost', 'chan:low-card-ref') AS host,
+       LW_GET_LIST('u32Array', 'sysmProcCmdPid', 'chan:low-card-ref') AS pid,
+       LW_GET_LIST('stringArray', 'sysmProcCmdLine', 'chan:low-card-ref') AS cmd_line
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595963, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       LW_LIST_BY_TAG_EQUAL("tv:u32Array:value:val:u32h:4:::0::data", "tv:u32Array:len:len:u64:4D:::0::data", "tv:u32Array:lr:lr:u64:1247:::0::data", 2305843022098595964, LW_RAGGED_PARENT_IDS("tv:u32Array:lrcard:lrcard:u64:4E:::0::data")) AS pid,
+       LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 2305843022098595965, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")) AS cmd_line
+FROM boxer.facts
+
+## socket
+-- authored
+SELECT LW_GET('symbol', 'sysmSocketHost', 'chan:low-card-ref') AS host,
+       LW_GET_LIST('symbolArray', 'sysmSocketProto', 'chan:low-card-ref') AS proto,
+       LW_GET_LIST('u16Array', 'sysmSocketPort', 'chan:low-card-ref') AS port,
+       LW_GET_LIST('u32Array', 'sysmSocketPid', 'chan:low-card-ref') AS pid
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595970, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       LW_LIST_BY_TAG_EQUAL("tv:symbolArray:value:val:sh:124::I:0::data", "tv:symbolArray:len:len:u64:4D:::0::data", "tv:symbolArray:lr:lr:u64:1247:::0::data", 2305843022098595971, LW_RAGGED_PARENT_IDS("tv:symbolArray:lrcard:lrcard:u64:4E:::0::data")) AS proto,
+       LW_LIST_BY_TAG_EQUAL("tv:u16Array:value:val:u16h:4:::0::data", "tv:u16Array:len:len:u64:4D:::0::data", "tv:u16Array:lr:lr:u64:1247:::0::data", 2305843022098595973, LW_RAGGED_PARENT_IDS("tv:u16Array:lrcard:lrcard:u64:4E:::0::data")) AS port,
+       LW_LIST_BY_TAG_EQUAL("tv:u32Array:value:val:u32h:4:::0::data", "tv:u32Array:len:len:u64:4D:::0::data", "tv:u32Array:lr:lr:u64:1247:::0::data", 2305843022098595976, LW_RAGGED_PARENT_IDS("tv:u32Array:lrcard:lrcard:u64:4E:::0::data")) AS pid
+FROM boxer.facts
+
+## topology
+-- authored
+SELECT LW_GET('symbol', 'sysmTopologyHost', 'chan:low-card-ref') AS host,
+       LW_GET_LIST('u32Array', 'sysmTopoNodeIdx', 'chan:low-card-ref') AS node_idx,
+       LW_GET_LIST('i32Array', 'sysmTopoParentIdx', 'chan:low-card-ref') AS parent_idx,
+       LW_GET_LIST('symbolArray', 'sysmTopoKind', 'chan:low-card-ref') AS kind,
+       LW_GET_LIST('u64Array', 'sysmTopoCacheSizeBytes', 'chan:low-card-ref') AS cache_size_bytes
+FROM boxer.facts
+-- expanded
+SELECT LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 2305843022098595978, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")) AS host,
+       LW_LIST_BY_TAG_EQUAL("tv:u32Array:value:val:u32h:4:::0::data", "tv:u32Array:len:len:u64:4D:::0::data", "tv:u32Array:lr:lr:u64:1247:::0::data", 2305843022098595979, LW_RAGGED_PARENT_IDS("tv:u32Array:lrcard:lrcard:u64:4E:::0::data")) AS node_idx,
+       LW_LIST_BY_TAG_EQUAL("tv:i32Array:value:val:i32h:4:::0::data", "tv:i32Array:len:len:u64:4D:::0::data", "tv:i32Array:lr:lr:u64:1247:::0::data", 2305843022098595980, LW_RAGGED_PARENT_IDS("tv:i32Array:lrcard:lrcard:u64:4E:::0::data")) AS parent_idx,
+       LW_LIST_BY_TAG_EQUAL("tv:symbolArray:value:val:sh:124::I:0::data", "tv:symbolArray:len:len:u64:4D:::0::data", "tv:symbolArray:lr:lr:u64:1247:::0::data", 2305843022098595981, LW_RAGGED_PARENT_IDS("tv:symbolArray:lrcard:lrcard:u64:4E:::0::data")) AS kind,
+       LW_LIST_BY_TAG_EQUAL("tv:u64Array:value:val:u64h:4:::0::data", "tv:u64Array:len:len:u64:4D:::0::data", "tv:u64Array:lr:lr:u64:1247:::0::data", 2305843022098595985, LW_RAGGED_PARENT_IDS("tv:u64Array:lrcard:lrcard:u64:4E:::0::data")) AS cache_size_bytes
+FROM boxer.facts
