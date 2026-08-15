@@ -307,6 +307,66 @@ func WatchReplyBuildEntities[
 	return
 }
 
+// WatchReplyEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func WatchReplyEmitSectionBool[
+	BoolAttr WatchReplyBoolAttrI,
+	BoolSec WatchReplyBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row WatchReply) (err error) {
+	boolSecAttr_Started := boolSec.BeginAttribute(row.Started)
+	boolSecAttr_Started.AddMembershipLowCardRefP(kindWatchStarted)
+	boolSecAttr_Started.EndAttributeP()
+	return
+}
+
+// WatchReplyEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func WatchReplyEmitSectionStringArray[
+	StringArrayAttr WatchReplyStringArrayAttrI,
+	StringArraySec WatchReplyStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row WatchReply) (err error) {
+	stringArraySecAttr_EventSubject := stringArraySec.BeginAttributeSingle(row.EventSubject)
+	stringArraySecAttr_EventSubject.AddMembershipLowCardRefP(kindWatchEventSubject)
+	stringArraySecAttr_EventSubject.EndAttributeP()
+	return
+}
+
+// WatchReplyEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func WatchReplyEmitSectionSymbol[
+	SymbolAttr WatchReplySymbolAttrI,
+	SymbolSec WatchReplySymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row WatchReply) (err error) {
+	symbolSecAttr_Backend := symbolSec.BeginAttribute(row.Backend)
+	symbolSecAttr_Backend.AddMembershipLowCardRefP(kindWatchBackend)
+	symbolSecAttr_Backend.EndAttributeP()
+	return
+}
+
+// WatchReplyEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func WatchReplyEmitSectionTextArray[
+	TextArrayAttr WatchReplyTextArrayAttrI,
+	TextArraySec WatchReplyTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row WatchReply) (err error) {
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	return
+}
+
 // WatchReplyAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -330,27 +390,31 @@ func WatchReplyAddSections[
 ](dml DML, row WatchReply) (err error) {
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	boolSecAttr_Started := boolSec.BeginAttribute(row.Started)
-	boolSecAttr_Started.AddMembershipLowCardRefP(kindWatchStarted)
-	boolSecAttr_Started.EndAttributeP()
+	err = WatchReplyEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
 	boolSec.EndSection()
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_EventSubject := stringArraySec.BeginAttributeSingle(row.EventSubject)
-	stringArraySecAttr_EventSubject.AddMembershipLowCardRefP(kindWatchEventSubject)
-	stringArraySecAttr_EventSubject.EndAttributeP()
+	err = WatchReplyEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Backend := symbolSec.BeginAttribute(row.Backend)
-	symbolSecAttr_Backend.AddMembershipLowCardRefP(kindWatchBackend)
-	symbolSecAttr_Backend.EndAttributeP()
+	err = WatchReplyEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
-	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
-	textArraySecAttr_Reason.EndAttributeP()
+	err = WatchReplyEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	return
 }

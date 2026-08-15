@@ -275,6 +275,51 @@ func PersistReplyBuildEntities[
 	return
 }
 
+// PersistReplyEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func PersistReplyEmitSectionBool[
+	BoolAttr PersistReplyBoolAttrI,
+	BoolSec PersistReplyBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row PersistReply) (err error) {
+	boolSecAttr_Found := boolSec.BeginAttribute(row.Found)
+	boolSecAttr_Found.AddMembershipLowCardRefP(kindPersistFound)
+	boolSecAttr_Found.EndAttributeP()
+	return
+}
+
+// PersistReplyEmitSectionBlobArray writes this kind's blobArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func PersistReplyEmitSectionBlobArray[
+	BlobArrayAttr PersistReplyBlobArrayAttrI,
+	BlobArraySec PersistReplyBlobArraySecI[BlobArrayAttr, Ent],
+	Ent any,
+](blobArraySec BlobArraySec, row PersistReply) (err error) {
+	blobArraySecAttr_Value := blobArraySec.BeginAttributeSingle(row.Value)
+	blobArraySecAttr_Value.AddMembershipLowCardRefP(kindPersistValue)
+	blobArraySecAttr_Value.EndAttributeP()
+	return
+}
+
+// PersistReplyEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func PersistReplyEmitSectionTextArray[
+	TextArrayAttr PersistReplyTextArrayAttrI,
+	TextArraySec PersistReplyTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row PersistReply) (err error) {
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	return
+}
+
 // PersistReplyAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -295,21 +340,24 @@ func PersistReplyAddSections[
 ](dml DML, row PersistReply) (err error) {
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	boolSecAttr_Found := boolSec.BeginAttribute(row.Found)
-	boolSecAttr_Found.AddMembershipLowCardRefP(kindPersistFound)
-	boolSecAttr_Found.EndAttributeP()
+	err = PersistReplyEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
 	boolSec.EndSection()
 	// --- blobArray. ---
 	blobArraySec := dml.GetSectionBlobArray()
-	blobArraySecAttr_Value := blobArraySec.BeginAttributeSingle(row.Value)
-	blobArraySecAttr_Value.AddMembershipLowCardRefP(kindPersistValue)
-	blobArraySecAttr_Value.EndAttributeP()
+	err = PersistReplyEmitSectionBlobArray(blobArraySec, row)
+	if err != nil {
+		return
+	}
 	blobArraySec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
-	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
-	textArraySecAttr_Reason.EndAttributeP()
+	err = PersistReplyEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	return
 }

@@ -408,6 +408,130 @@ func ErrorBuildEntities[
 	return
 }
 
+// ErrorEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func ErrorEmitSectionStringArray[
+	StringArrayAttr ErrorStringArrayAttrI,
+	StringArraySec ErrorStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row Error) (err error) {
+	if len(row.Messages) > 0 {
+		stringArraySecAttr_Messages := stringArraySec.BeginAttribute()
+		for _, v := range row.Messages {
+			stringArraySecAttr_Messages.AddToContainerP(v)
+		}
+		stringArraySecAttr_Messages.AddMembershipLowCardRefP(kindErrorMsg)
+		stringArraySecAttr_Messages.EndAttributeP()
+	}
+	if len(row.Sources) > 0 {
+		stringArraySecAttr_Sources := stringArraySec.BeginAttribute()
+		for _, v := range row.Sources {
+			stringArraySecAttr_Sources.AddToContainerP(v)
+		}
+		stringArraySecAttr_Sources.AddMembershipLowCardRefP(kindErrorSource)
+		stringArraySecAttr_Sources.EndAttributeP()
+	}
+	return
+}
+
+// ErrorEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func ErrorEmitSectionSymbolArray[
+	SymbolArrayAttr ErrorSymbolArrayAttrI,
+	SymbolArraySec ErrorSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row Error) (err error) {
+	if len(row.Funcs) > 0 {
+		symbolArraySecAttr_Funcs := symbolArraySec.BeginAttribute()
+		for _, v := range row.Funcs {
+			symbolArraySecAttr_Funcs.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Funcs.AddMembershipLowCardRefP(kindErrorFunc)
+		symbolArraySecAttr_Funcs.EndAttributeP()
+	}
+	if len(row.StreamNames) > 0 {
+		symbolArraySecAttr_StreamNames := symbolArraySec.BeginAttribute()
+		for _, v := range row.StreamNames {
+			symbolArraySecAttr_StreamNames.AddToContainerP(v)
+		}
+		symbolArraySecAttr_StreamNames.AddMembershipLowCardRefP(kindErrorStreamName)
+		symbolArraySecAttr_StreamNames.EndAttributeP()
+	}
+	return
+}
+
+// ErrorEmitSectionU32Array writes this kind's u32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func ErrorEmitSectionU32Array[
+	U32ArrayAttr ErrorU32ArrayAttrI,
+	U32ArraySec ErrorU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+](u32ArraySec U32ArraySec, row Error) (err error) {
+	if len(row.Lines) > 0 {
+		u32ArraySecAttr_Lines := u32ArraySec.BeginAttribute()
+		for _, v := range row.Lines {
+			u32ArraySecAttr_Lines.AddToContainerP(v)
+		}
+		u32ArraySecAttr_Lines.AddMembershipLowCardRefP(kindErrorLine)
+		u32ArraySecAttr_Lines.EndAttributeP()
+	}
+	return
+}
+
+// ErrorEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func ErrorEmitSectionU64Array[
+	U64ArrayAttr ErrorU64ArrayAttrI,
+	U64ArraySec ErrorU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row Error) (err error) {
+	if len(row.FactIds) > 0 {
+		u64ArraySecAttr_FactIds := u64ArraySec.BeginAttribute()
+		for _, v := range row.FactIds {
+			u64ArraySecAttr_FactIds.AddToContainerP(v)
+		}
+		u64ArraySecAttr_FactIds.AddMembershipLowCardRefP(kindErrorFactId)
+		u64ArraySecAttr_FactIds.EndAttributeP()
+	}
+	if len(row.ParentIds) > 0 {
+		u64ArraySecAttr_ParentIds := u64ArraySec.BeginAttribute()
+		for _, v := range row.ParentIds {
+			u64ArraySecAttr_ParentIds.AddToContainerP(v)
+		}
+		u64ArraySecAttr_ParentIds.AddMembershipLowCardRefP(kindErrorParentId)
+		u64ArraySecAttr_ParentIds.EndAttributeP()
+	}
+	return
+}
+
+// ErrorEmitSectionBlobArray writes this kind's blobArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func ErrorEmitSectionBlobArray[
+	BlobArrayAttr ErrorBlobArrayAttrI,
+	BlobArraySec ErrorBlobArraySecI[BlobArrayAttr, Ent],
+	Ent any,
+](blobArraySec BlobArraySec, row Error) (err error) {
+	if len(row.Data) > 0 {
+		blobArraySecAttr_Data := blobArraySec.BeginAttribute()
+		for _, v := range row.Data {
+			blobArraySecAttr_Data.AddToContainerP(v)
+		}
+		blobArraySecAttr_Data.AddMembershipLowCardRefP(kindErrorData)
+		blobArraySecAttr_Data.EndAttributeP()
+	}
+	return
+}
+
 // ErrorAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -434,81 +558,37 @@ func ErrorAddSections[
 ](dml DML, row Error) (err error) {
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	if len(row.Messages) > 0 {
-		stringArraySecAttr_Messages := stringArraySec.BeginAttribute()
-		for _, v := range row.Messages {
-			stringArraySecAttr_Messages.AddToContainerP(v)
-		}
-		stringArraySecAttr_Messages.AddMembershipLowCardRefP(kindErrorMsg)
-		stringArraySecAttr_Messages.EndAttributeP()
-	}
-	if len(row.Sources) > 0 {
-		stringArraySecAttr_Sources := stringArraySec.BeginAttribute()
-		for _, v := range row.Sources {
-			stringArraySecAttr_Sources.AddToContainerP(v)
-		}
-		stringArraySecAttr_Sources.AddMembershipLowCardRefP(kindErrorSource)
-		stringArraySecAttr_Sources.EndAttributeP()
+	err = ErrorEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
 	}
 	stringArraySec.EndSection()
 	// --- symbolArray. ---
 	symbolArraySec := dml.GetSectionSymbolArray()
-	if len(row.Funcs) > 0 {
-		symbolArraySecAttr_Funcs := symbolArraySec.BeginAttribute()
-		for _, v := range row.Funcs {
-			symbolArraySecAttr_Funcs.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Funcs.AddMembershipLowCardRefP(kindErrorFunc)
-		symbolArraySecAttr_Funcs.EndAttributeP()
-	}
-	if len(row.StreamNames) > 0 {
-		symbolArraySecAttr_StreamNames := symbolArraySec.BeginAttribute()
-		for _, v := range row.StreamNames {
-			symbolArraySecAttr_StreamNames.AddToContainerP(v)
-		}
-		symbolArraySecAttr_StreamNames.AddMembershipLowCardRefP(kindErrorStreamName)
-		symbolArraySecAttr_StreamNames.EndAttributeP()
+	err = ErrorEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	// --- u32Array. ---
 	u32ArraySec := dml.GetSectionU32Array()
-	if len(row.Lines) > 0 {
-		u32ArraySecAttr_Lines := u32ArraySec.BeginAttribute()
-		for _, v := range row.Lines {
-			u32ArraySecAttr_Lines.AddToContainerP(v)
-		}
-		u32ArraySecAttr_Lines.AddMembershipLowCardRefP(kindErrorLine)
-		u32ArraySecAttr_Lines.EndAttributeP()
+	err = ErrorEmitSectionU32Array(u32ArraySec, row)
+	if err != nil {
+		return
 	}
 	u32ArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	if len(row.FactIds) > 0 {
-		u64ArraySecAttr_FactIds := u64ArraySec.BeginAttribute()
-		for _, v := range row.FactIds {
-			u64ArraySecAttr_FactIds.AddToContainerP(v)
-		}
-		u64ArraySecAttr_FactIds.AddMembershipLowCardRefP(kindErrorFactId)
-		u64ArraySecAttr_FactIds.EndAttributeP()
-	}
-	if len(row.ParentIds) > 0 {
-		u64ArraySecAttr_ParentIds := u64ArraySec.BeginAttribute()
-		for _, v := range row.ParentIds {
-			u64ArraySecAttr_ParentIds.AddToContainerP(v)
-		}
-		u64ArraySecAttr_ParentIds.AddMembershipLowCardRefP(kindErrorParentId)
-		u64ArraySecAttr_ParentIds.EndAttributeP()
+	err = ErrorEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
 	}
 	u64ArraySec.EndSection()
 	// --- blobArray. ---
 	blobArraySec := dml.GetSectionBlobArray()
-	if len(row.Data) > 0 {
-		blobArraySecAttr_Data := blobArraySec.BeginAttribute()
-		for _, v := range row.Data {
-			blobArraySecAttr_Data.AddToContainerP(v)
-		}
-		blobArraySecAttr_Data.AddMembershipLowCardRefP(kindErrorData)
-		blobArraySecAttr_Data.EndAttributeP()
+	err = ErrorEmitSectionBlobArray(blobArraySec, row)
+	if err != nil {
+		return
 	}
 	blobArraySec.EndSection()
 	return

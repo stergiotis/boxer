@@ -243,6 +243,36 @@ func LaunchReplyBuildEntities[
 	return
 }
 
+// LaunchReplyEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func LaunchReplyEmitSectionU64Array[
+	U64ArrayAttr LaunchReplyU64ArrayAttrI,
+	U64ArraySec LaunchReplyU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row LaunchReply) (err error) {
+	u64ArraySecAttr_WindowKey := u64ArraySec.BeginAttributeSingle(row.WindowKey)
+	u64ArraySecAttr_WindowKey.AddMembershipLowCardRefP(kindTileKey)
+	u64ArraySecAttr_WindowKey.EndAttributeP()
+	return
+}
+
+// LaunchReplyEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func LaunchReplyEmitSectionTextArray[
+	TextArrayAttr LaunchReplyTextArrayAttrI,
+	TextArraySec LaunchReplyTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row LaunchReply) (err error) {
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	return
+}
+
 // LaunchReplyAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -260,15 +290,17 @@ func LaunchReplyAddSections[
 ](dml DML, row LaunchReply) (err error) {
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	u64ArraySecAttr_WindowKey := u64ArraySec.BeginAttributeSingle(row.WindowKey)
-	u64ArraySecAttr_WindowKey.AddMembershipLowCardRefP(kindTileKey)
-	u64ArraySecAttr_WindowKey.EndAttributeP()
+	err = LaunchReplyEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
 	u64ArraySec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
-	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
-	textArraySecAttr_Reason.EndAttributeP()
+	err = LaunchReplyEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	return
 }

@@ -243,6 +243,36 @@ func AppletCreateBuildEntities[
 	return
 }
 
+// AppletCreateEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func AppletCreateEmitSectionTextArray[
+	TextArrayAttr AppletCreateTextArrayAttrI,
+	TextArraySec AppletCreateTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row AppletCreate) (err error) {
+	textArraySecAttr_Sql := textArraySec.BeginAttributeSingle(row.Sql)
+	textArraySecAttr_Sql.AddMembershipLowCardRefP(kindAppletCreateSql)
+	textArraySecAttr_Sql.EndAttributeP()
+	return
+}
+
+// AppletCreateEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func AppletCreateEmitSectionSymbol[
+	SymbolAttr AppletCreateSymbolAttrI,
+	SymbolSec AppletCreateSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row AppletCreate) (err error) {
+	symbolSecAttr_Endpoint := symbolSec.BeginAttribute(row.Endpoint)
+	symbolSecAttr_Endpoint.AddMembershipLowCardRefP(kindAppletCreateEndpoint)
+	symbolSecAttr_Endpoint.EndAttributeP()
+	return
+}
+
 // AppletCreateAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -260,15 +290,17 @@ func AppletCreateAddSections[
 ](dml DML, row AppletCreate) (err error) {
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_Sql := textArraySec.BeginAttributeSingle(row.Sql)
-	textArraySecAttr_Sql.AddMembershipLowCardRefP(kindAppletCreateSql)
-	textArraySecAttr_Sql.EndAttributeP()
+	err = AppletCreateEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Endpoint := symbolSec.BeginAttribute(row.Endpoint)
-	symbolSecAttr_Endpoint.AddMembershipLowCardRefP(kindAppletCreateEndpoint)
-	symbolSecAttr_Endpoint.EndAttributeP()
+	err = AppletCreateEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	return
 }

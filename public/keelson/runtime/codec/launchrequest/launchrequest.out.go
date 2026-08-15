@@ -275,6 +275,51 @@ func LaunchRequestBuildEntities[
 	return
 }
 
+// LaunchRequestEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func LaunchRequestEmitSectionStringArray[
+	StringArrayAttr LaunchRequestStringArrayAttrI,
+	StringArraySec LaunchRequestStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row LaunchRequest) (err error) {
+	stringArraySecAttr_TargetAppId := stringArraySec.BeginAttributeSingle(row.TargetAppId)
+	stringArraySecAttr_TargetAppId.AddMembershipLowCardRefP(kindAppId)
+	stringArraySecAttr_TargetAppId.EndAttributeP()
+	return
+}
+
+// LaunchRequestEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func LaunchRequestEmitSectionSymbol[
+	SymbolAttr LaunchRequestSymbolAttrI,
+	SymbolSec LaunchRequestSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row LaunchRequest) (err error) {
+	symbolSecAttr_ConfigKind := symbolSec.BeginAttribute(row.ConfigKind)
+	symbolSecAttr_ConfigKind.AddMembershipLowCardRefP(kindLaunchConfigKind)
+	symbolSecAttr_ConfigKind.EndAttributeP()
+	return
+}
+
+// LaunchRequestEmitSectionBlobArray writes this kind's blobArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func LaunchRequestEmitSectionBlobArray[
+	BlobArrayAttr LaunchRequestBlobArrayAttrI,
+	BlobArraySec LaunchRequestBlobArraySecI[BlobArrayAttr, Ent],
+	Ent any,
+](blobArraySec BlobArraySec, row LaunchRequest) (err error) {
+	blobArraySecAttr_Config := blobArraySec.BeginAttributeSingle(row.Config)
+	blobArraySecAttr_Config.AddMembershipLowCardRefP(kindLaunchConfig)
+	blobArraySecAttr_Config.EndAttributeP()
+	return
+}
+
 // LaunchRequestAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -295,21 +340,24 @@ func LaunchRequestAddSections[
 ](dml DML, row LaunchRequest) (err error) {
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_TargetAppId := stringArraySec.BeginAttributeSingle(row.TargetAppId)
-	stringArraySecAttr_TargetAppId.AddMembershipLowCardRefP(kindAppId)
-	stringArraySecAttr_TargetAppId.EndAttributeP()
+	err = LaunchRequestEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_ConfigKind := symbolSec.BeginAttribute(row.ConfigKind)
-	symbolSecAttr_ConfigKind.AddMembershipLowCardRefP(kindLaunchConfigKind)
-	symbolSecAttr_ConfigKind.EndAttributeP()
+	err = LaunchRequestEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- blobArray. ---
 	blobArraySec := dml.GetSectionBlobArray()
-	blobArraySecAttr_Config := blobArraySec.BeginAttributeSingle(row.Config)
-	blobArraySecAttr_Config.AddMembershipLowCardRefP(kindLaunchConfig)
-	blobArraySecAttr_Config.EndAttributeP()
+	err = LaunchRequestEmitSectionBlobArray(blobArraySec, row)
+	if err != nil {
+		return
+	}
 	blobArraySec.EndSection()
 	return
 }

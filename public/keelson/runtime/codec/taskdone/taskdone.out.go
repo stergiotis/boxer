@@ -243,6 +243,36 @@ func TaskDoneBuildEntities[
 	return
 }
 
+// TaskDoneEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskDoneEmitSectionStringArray[
+	StringArrayAttr TaskDoneStringArrayAttrI,
+	StringArraySec TaskDoneStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row TaskDone) (err error) {
+	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
+	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
+	stringArraySecAttr_TaskId.EndAttributeP()
+	return
+}
+
+// TaskDoneEmitSectionBlobArray writes this kind's blobArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskDoneEmitSectionBlobArray[
+	BlobArrayAttr TaskDoneBlobArrayAttrI,
+	BlobArraySec TaskDoneBlobArraySecI[BlobArrayAttr, Ent],
+	Ent any,
+](blobArraySec BlobArraySec, row TaskDone) (err error) {
+	blobArraySecAttr_Result := blobArraySec.BeginAttributeSingle(row.Result)
+	blobArraySecAttr_Result.AddMembershipLowCardRefP(kindTaskResult)
+	blobArraySecAttr_Result.EndAttributeP()
+	return
+}
+
 // TaskDoneAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -260,15 +290,17 @@ func TaskDoneAddSections[
 ](dml DML, row TaskDone) (err error) {
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
-	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
-	stringArraySecAttr_TaskId.EndAttributeP()
+	err = TaskDoneEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- blobArray. ---
 	blobArraySec := dml.GetSectionBlobArray()
-	blobArraySecAttr_Result := blobArraySec.BeginAttributeSingle(row.Result)
-	blobArraySecAttr_Result.AddMembershipLowCardRefP(kindTaskResult)
-	blobArraySecAttr_Result.EndAttributeP()
+	err = TaskDoneEmitSectionBlobArray(blobArraySec, row)
+	if err != nil {
+		return
+	}
 	blobArraySec.EndSection()
 	return
 }

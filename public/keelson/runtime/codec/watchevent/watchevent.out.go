@@ -275,6 +275,51 @@ func WatchEventBuildEntities[
 	return
 }
 
+// WatchEventEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func WatchEventEmitSectionSymbol[
+	SymbolAttr WatchEventSymbolAttrI,
+	SymbolSec WatchEventSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row WatchEvent) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindWatchEventKind)
+	symbolSecAttr_Kind.EndAttributeP()
+	return
+}
+
+// WatchEventEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func WatchEventEmitSectionStringArray[
+	StringArrayAttr WatchEventStringArrayAttrI,
+	StringArraySec WatchEventStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row WatchEvent) (err error) {
+	stringArraySecAttr_Name := stringArraySec.BeginAttributeSingle(row.Name)
+	stringArraySecAttr_Name.AddMembershipLowCardRefP(kindWatchEventName)
+	stringArraySecAttr_Name.EndAttributeP()
+	return
+}
+
+// WatchEventEmitSectionU32Array writes this kind's u32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func WatchEventEmitSectionU32Array[
+	U32ArrayAttr WatchEventU32ArrayAttrI,
+	U32ArraySec WatchEventU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+](u32ArraySec U32ArraySec, row WatchEvent) (err error) {
+	u32ArraySecAttr_Cookie := u32ArraySec.BeginAttributeSingle(row.Cookie)
+	u32ArraySecAttr_Cookie.AddMembershipLowCardRefP(kindWatchEventCookie)
+	u32ArraySecAttr_Cookie.EndAttributeP()
+	return
+}
+
 // WatchEventAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -295,21 +340,24 @@ func WatchEventAddSections[
 ](dml DML, row WatchEvent) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
-	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindWatchEventKind)
-	symbolSecAttr_Kind.EndAttributeP()
+	err = WatchEventEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_Name := stringArraySec.BeginAttributeSingle(row.Name)
-	stringArraySecAttr_Name.AddMembershipLowCardRefP(kindWatchEventName)
-	stringArraySecAttr_Name.EndAttributeP()
+	err = WatchEventEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- u32Array. ---
 	u32ArraySec := dml.GetSectionU32Array()
-	u32ArraySecAttr_Cookie := u32ArraySec.BeginAttributeSingle(row.Cookie)
-	u32ArraySecAttr_Cookie.AddMembershipLowCardRefP(kindWatchEventCookie)
-	u32ArraySecAttr_Cookie.EndAttributeP()
+	err = WatchEventEmitSectionU32Array(u32ArraySec, row)
+	if err != nil {
+		return
+	}
 	u32ArraySec.EndSection()
 	return
 }

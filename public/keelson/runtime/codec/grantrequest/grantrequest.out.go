@@ -315,6 +315,69 @@ func GrantRequestBuildEntities[
 	return
 }
 
+// GrantRequestEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func GrantRequestEmitSectionStringArray[
+	StringArrayAttr GrantRequestStringArrayAttrI,
+	StringArraySec GrantRequestStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row GrantRequest) (err error) {
+	stringArraySecAttr_AppId := stringArraySec.BeginAttributeSingle(row.AppId)
+	stringArraySecAttr_AppId.AddMembershipLowCardRefP(kindAppId)
+	stringArraySecAttr_AppId.EndAttributeP()
+	stringArraySecAttr_FilterPattern := stringArraySec.BeginAttributeSingle(row.FilterPattern)
+	stringArraySecAttr_FilterPattern.AddMembershipLowCardRefP(kindCapFilterPattern)
+	stringArraySecAttr_FilterPattern.EndAttributeP()
+	return
+}
+
+// GrantRequestEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func GrantRequestEmitSectionTextArray[
+	TextArrayAttr GrantRequestTextArrayAttrI,
+	TextArraySec GrantRequestTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row GrantRequest) (err error) {
+	textArraySecAttr_FilterReason := textArraySec.BeginAttributeSingle(row.FilterReason)
+	textArraySecAttr_FilterReason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_FilterReason.EndAttributeP()
+	return
+}
+
+// GrantRequestEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func GrantRequestEmitSectionSymbol[
+	SymbolAttr GrantRequestSymbolAttrI,
+	SymbolSec GrantRequestSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row GrantRequest) (err error) {
+	symbolSecAttr_FilterDirection := symbolSec.BeginAttribute(row.FilterDirection)
+	symbolSecAttr_FilterDirection.AddMembershipLowCardRefP(kindCapDirection)
+	symbolSecAttr_FilterDirection.EndAttributeP()
+	return
+}
+
+// GrantRequestEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func GrantRequestEmitSectionBool[
+	BoolAttr GrantRequestBoolAttrI,
+	BoolSec GrantRequestBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row GrantRequest) (err error) {
+	boolSecAttr_FilterSticky := boolSec.BeginAttribute(row.FilterSticky)
+	boolSecAttr_FilterSticky.AddMembershipLowCardRefP(kindCapFilterSticky)
+	boolSecAttr_FilterSticky.EndAttributeP()
+	return
+}
+
 // GrantRequestAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -338,30 +401,31 @@ func GrantRequestAddSections[
 ](dml DML, row GrantRequest) (err error) {
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_AppId := stringArraySec.BeginAttributeSingle(row.AppId)
-	stringArraySecAttr_AppId.AddMembershipLowCardRefP(kindAppId)
-	stringArraySecAttr_AppId.EndAttributeP()
-	stringArraySecAttr_FilterPattern := stringArraySec.BeginAttributeSingle(row.FilterPattern)
-	stringArraySecAttr_FilterPattern.AddMembershipLowCardRefP(kindCapFilterPattern)
-	stringArraySecAttr_FilterPattern.EndAttributeP()
+	err = GrantRequestEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_FilterReason := textArraySec.BeginAttributeSingle(row.FilterReason)
-	textArraySecAttr_FilterReason.AddMembershipLowCardRefP(kindReason)
-	textArraySecAttr_FilterReason.EndAttributeP()
+	err = GrantRequestEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_FilterDirection := symbolSec.BeginAttribute(row.FilterDirection)
-	symbolSecAttr_FilterDirection.AddMembershipLowCardRefP(kindCapDirection)
-	symbolSecAttr_FilterDirection.EndAttributeP()
+	err = GrantRequestEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	boolSecAttr_FilterSticky := boolSec.BeginAttribute(row.FilterSticky)
-	boolSecAttr_FilterSticky.AddMembershipLowCardRefP(kindCapFilterSticky)
-	boolSecAttr_FilterSticky.EndAttributeP()
+	err = GrantRequestEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
 	boolSec.EndSection()
 	return
 }

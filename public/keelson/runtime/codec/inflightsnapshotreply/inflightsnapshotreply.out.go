@@ -447,6 +447,154 @@ func InflightSnapshotReplyBuildEntities[
 	return
 }
 
+// InflightSnapshotReplyEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func InflightSnapshotReplyEmitSectionStringArray[
+	StringArrayAttr InflightSnapshotReplyStringArrayAttrI,
+	StringArraySec InflightSnapshotReplyStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row InflightSnapshotReply) (err error) {
+	if len(row.Ids) > 0 {
+		stringArraySecAttr_Ids := stringArraySec.BeginAttribute()
+		for _, v := range row.Ids {
+			stringArraySecAttr_Ids.AddToContainerP(v)
+		}
+		stringArraySecAttr_Ids.AddMembershipLowCardRefP(kindInflightTaskId)
+		stringArraySecAttr_Ids.EndAttributeP()
+	}
+	if len(row.OwnerAppIds) > 0 {
+		stringArraySecAttr_OwnerAppIds := stringArraySec.BeginAttribute()
+		for _, v := range row.OwnerAppIds {
+			stringArraySecAttr_OwnerAppIds.AddToContainerP(v)
+		}
+		stringArraySecAttr_OwnerAppIds.AddMembershipLowCardRefP(kindInflightAppId)
+		stringArraySecAttr_OwnerAppIds.EndAttributeP()
+	}
+	return
+}
+
+// InflightSnapshotReplyEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func InflightSnapshotReplyEmitSectionSymbolArray[
+	SymbolArrayAttr InflightSnapshotReplySymbolArrayAttrI,
+	SymbolArraySec InflightSnapshotReplySymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row InflightSnapshotReply) (err error) {
+	if len(row.Kinds) > 0 {
+		symbolArraySecAttr_Kinds := symbolArraySec.BeginAttribute()
+		for _, v := range row.Kinds {
+			symbolArraySecAttr_Kinds.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Kinds.AddMembershipLowCardRefP(kindInflightTaskKind)
+		symbolArraySecAttr_Kinds.EndAttributeP()
+	}
+	if len(row.States) > 0 {
+		symbolArraySecAttr_States := symbolArraySec.BeginAttribute()
+		for _, v := range row.States {
+			symbolArraySecAttr_States.AddToContainerP(v)
+		}
+		symbolArraySecAttr_States.AddMembershipLowCardRefP(kindInflightState)
+		symbolArraySecAttr_States.EndAttributeP()
+	}
+	if len(row.Units) > 0 {
+		symbolArraySecAttr_Units := symbolArraySec.BeginAttribute()
+		for _, v := range row.Units {
+			symbolArraySecAttr_Units.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Units.AddMembershipLowCardRefP(kindInflightUnit)
+		symbolArraySecAttr_Units.EndAttributeP()
+	}
+	return
+}
+
+// InflightSnapshotReplyEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func InflightSnapshotReplyEmitSectionTextArray[
+	TextArrayAttr InflightSnapshotReplyTextArrayAttrI,
+	TextArraySec InflightSnapshotReplyTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row InflightSnapshotReply) (err error) {
+	if len(row.Titles) > 0 {
+		textArraySecAttr_Titles := textArraySec.BeginAttribute()
+		for _, v := range row.Titles {
+			textArraySecAttr_Titles.AddToContainerP(v)
+		}
+		textArraySecAttr_Titles.AddMembershipLowCardRefP(kindInflightTitle)
+		textArraySecAttr_Titles.EndAttributeP()
+	}
+	return
+}
+
+// InflightSnapshotReplyEmitSectionI64Array writes this kind's i64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func InflightSnapshotReplyEmitSectionI64Array[
+	I64ArrayAttr InflightSnapshotReplyI64ArrayAttrI,
+	I64ArraySec InflightSnapshotReplyI64ArraySecI[I64ArrayAttr, Ent],
+	Ent any,
+](i64ArraySec I64ArraySec, row InflightSnapshotReply) (err error) {
+	if len(row.CreatedAtMss) > 0 {
+		i64ArraySecAttr_CreatedAtMss := i64ArraySec.BeginAttribute()
+		for _, v := range row.CreatedAtMss {
+			i64ArraySecAttr_CreatedAtMss.AddToContainerP(v)
+		}
+		i64ArraySecAttr_CreatedAtMss.AddMembershipLowCardRefP(kindInflightCreatedAtMs)
+		i64ArraySecAttr_CreatedAtMss.EndAttributeP()
+	}
+	if len(row.LastEmitMss) > 0 {
+		i64ArraySecAttr_LastEmitMss := i64ArraySec.BeginAttribute()
+		for _, v := range row.LastEmitMss {
+			i64ArraySecAttr_LastEmitMss.AddToContainerP(v)
+		}
+		i64ArraySecAttr_LastEmitMss.AddMembershipLowCardRefP(kindInflightLastEmitMs)
+		i64ArraySecAttr_LastEmitMss.EndAttributeP()
+	}
+	if len(row.EtaMss) > 0 {
+		i64ArraySecAttr_EtaMss := i64ArraySec.BeginAttribute()
+		for _, v := range row.EtaMss {
+			i64ArraySecAttr_EtaMss.AddToContainerP(v)
+		}
+		i64ArraySecAttr_EtaMss.AddMembershipLowCardRefP(kindInflightEtaMs)
+		i64ArraySecAttr_EtaMss.EndAttributeP()
+	}
+	return
+}
+
+// InflightSnapshotReplyEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func InflightSnapshotReplyEmitSectionU64Array[
+	U64ArrayAttr InflightSnapshotReplyU64ArrayAttrI,
+	U64ArraySec InflightSnapshotReplyU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row InflightSnapshotReply) (err error) {
+	if len(row.Currents) > 0 {
+		u64ArraySecAttr_Currents := u64ArraySec.BeginAttribute()
+		for _, v := range row.Currents {
+			u64ArraySecAttr_Currents.AddToContainerP(v)
+		}
+		u64ArraySecAttr_Currents.AddMembershipLowCardRefP(kindInflightCurrent)
+		u64ArraySecAttr_Currents.EndAttributeP()
+	}
+	if len(row.Totals) > 0 {
+		u64ArraySecAttr_Totals := u64ArraySec.BeginAttribute()
+		for _, v := range row.Totals {
+			u64ArraySecAttr_Totals.AddToContainerP(v)
+		}
+		u64ArraySecAttr_Totals.AddMembershipLowCardRefP(kindInflightTotal)
+		u64ArraySecAttr_Totals.EndAttributeP()
+	}
+	return
+}
+
 // InflightSnapshotReplyAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -473,105 +621,37 @@ func InflightSnapshotReplyAddSections[
 ](dml DML, row InflightSnapshotReply) (err error) {
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	if len(row.Ids) > 0 {
-		stringArraySecAttr_Ids := stringArraySec.BeginAttribute()
-		for _, v := range row.Ids {
-			stringArraySecAttr_Ids.AddToContainerP(v)
-		}
-		stringArraySecAttr_Ids.AddMembershipLowCardRefP(kindInflightTaskId)
-		stringArraySecAttr_Ids.EndAttributeP()
-	}
-	if len(row.OwnerAppIds) > 0 {
-		stringArraySecAttr_OwnerAppIds := stringArraySec.BeginAttribute()
-		for _, v := range row.OwnerAppIds {
-			stringArraySecAttr_OwnerAppIds.AddToContainerP(v)
-		}
-		stringArraySecAttr_OwnerAppIds.AddMembershipLowCardRefP(kindInflightAppId)
-		stringArraySecAttr_OwnerAppIds.EndAttributeP()
+	err = InflightSnapshotReplyEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
 	}
 	stringArraySec.EndSection()
 	// --- symbolArray. ---
 	symbolArraySec := dml.GetSectionSymbolArray()
-	if len(row.Kinds) > 0 {
-		symbolArraySecAttr_Kinds := symbolArraySec.BeginAttribute()
-		for _, v := range row.Kinds {
-			symbolArraySecAttr_Kinds.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Kinds.AddMembershipLowCardRefP(kindInflightTaskKind)
-		symbolArraySecAttr_Kinds.EndAttributeP()
-	}
-	if len(row.States) > 0 {
-		symbolArraySecAttr_States := symbolArraySec.BeginAttribute()
-		for _, v := range row.States {
-			symbolArraySecAttr_States.AddToContainerP(v)
-		}
-		symbolArraySecAttr_States.AddMembershipLowCardRefP(kindInflightState)
-		symbolArraySecAttr_States.EndAttributeP()
-	}
-	if len(row.Units) > 0 {
-		symbolArraySecAttr_Units := symbolArraySec.BeginAttribute()
-		for _, v := range row.Units {
-			symbolArraySecAttr_Units.AddToContainerP(v)
-		}
-		symbolArraySecAttr_Units.AddMembershipLowCardRefP(kindInflightUnit)
-		symbolArraySecAttr_Units.EndAttributeP()
+	err = InflightSnapshotReplyEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
 	}
 	symbolArraySec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	if len(row.Titles) > 0 {
-		textArraySecAttr_Titles := textArraySec.BeginAttribute()
-		for _, v := range row.Titles {
-			textArraySecAttr_Titles.AddToContainerP(v)
-		}
-		textArraySecAttr_Titles.AddMembershipLowCardRefP(kindInflightTitle)
-		textArraySecAttr_Titles.EndAttributeP()
+	err = InflightSnapshotReplyEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
 	}
 	textArraySec.EndSection()
 	// --- i64Array. ---
 	i64ArraySec := dml.GetSectionI64Array()
-	if len(row.CreatedAtMss) > 0 {
-		i64ArraySecAttr_CreatedAtMss := i64ArraySec.BeginAttribute()
-		for _, v := range row.CreatedAtMss {
-			i64ArraySecAttr_CreatedAtMss.AddToContainerP(v)
-		}
-		i64ArraySecAttr_CreatedAtMss.AddMembershipLowCardRefP(kindInflightCreatedAtMs)
-		i64ArraySecAttr_CreatedAtMss.EndAttributeP()
-	}
-	if len(row.LastEmitMss) > 0 {
-		i64ArraySecAttr_LastEmitMss := i64ArraySec.BeginAttribute()
-		for _, v := range row.LastEmitMss {
-			i64ArraySecAttr_LastEmitMss.AddToContainerP(v)
-		}
-		i64ArraySecAttr_LastEmitMss.AddMembershipLowCardRefP(kindInflightLastEmitMs)
-		i64ArraySecAttr_LastEmitMss.EndAttributeP()
-	}
-	if len(row.EtaMss) > 0 {
-		i64ArraySecAttr_EtaMss := i64ArraySec.BeginAttribute()
-		for _, v := range row.EtaMss {
-			i64ArraySecAttr_EtaMss.AddToContainerP(v)
-		}
-		i64ArraySecAttr_EtaMss.AddMembershipLowCardRefP(kindInflightEtaMs)
-		i64ArraySecAttr_EtaMss.EndAttributeP()
+	err = InflightSnapshotReplyEmitSectionI64Array(i64ArraySec, row)
+	if err != nil {
+		return
 	}
 	i64ArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	if len(row.Currents) > 0 {
-		u64ArraySecAttr_Currents := u64ArraySec.BeginAttribute()
-		for _, v := range row.Currents {
-			u64ArraySecAttr_Currents.AddToContainerP(v)
-		}
-		u64ArraySecAttr_Currents.AddMembershipLowCardRefP(kindInflightCurrent)
-		u64ArraySecAttr_Currents.EndAttributeP()
-	}
-	if len(row.Totals) > 0 {
-		u64ArraySecAttr_Totals := u64ArraySec.BeginAttribute()
-		for _, v := range row.Totals {
-			u64ArraySecAttr_Totals.AddToContainerP(v)
-		}
-		u64ArraySecAttr_Totals.AddMembershipLowCardRefP(kindInflightTotal)
-		u64ArraySecAttr_Totals.EndAttributeP()
+	err = InflightSnapshotReplyEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
 	}
 	u64ArraySec.EndSection()
 	return

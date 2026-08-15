@@ -299,6 +299,60 @@ func PlayLaunchBuildEntities[
 	return
 }
 
+// PlayLaunchEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func PlayLaunchEmitSectionTextArray[
+	TextArrayAttr PlayLaunchTextArrayAttrI,
+	TextArraySec PlayLaunchTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row PlayLaunch) (err error) {
+	textArraySecAttr_Sql := textArraySec.BeginAttributeSingle(row.Sql)
+	textArraySecAttr_Sql.AddMembershipLowCardRefP(kindPlayLaunchSql)
+	textArraySecAttr_Sql.EndAttributeP()
+	textArraySecAttr_BandsSql := textArraySec.BeginAttributeSingle(row.BandsSql)
+	textArraySecAttr_BandsSql.AddMembershipLowCardRefP(kindPlayLaunchBandsSql)
+	textArraySecAttr_BandsSql.EndAttributeP()
+	return
+}
+
+// PlayLaunchEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func PlayLaunchEmitSectionBool[
+	BoolAttr PlayLaunchBoolAttrI,
+	BoolSec PlayLaunchBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row PlayLaunch) (err error) {
+	boolSecAttr_AutoRun := boolSec.BeginAttribute(row.AutoRun)
+	boolSecAttr_AutoRun.AddMembershipLowCardRefP(kindPlayLaunchAutoRun)
+	boolSecAttr_AutoRun.EndAttributeP()
+	boolSecAttr_Live := boolSec.BeginAttribute(row.Live)
+	boolSecAttr_Live.AddMembershipLowCardRefP(kindPlayLaunchLive)
+	boolSecAttr_Live.EndAttributeP()
+	return
+}
+
+// PlayLaunchEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func PlayLaunchEmitSectionSymbol[
+	SymbolAttr PlayLaunchSymbolAttrI,
+	SymbolSec PlayLaunchSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row PlayLaunch) (err error) {
+	symbolSecAttr_Tab := symbolSec.BeginAttribute(row.Tab)
+	symbolSecAttr_Tab.AddMembershipLowCardRefP(kindPlayLaunchTab)
+	symbolSecAttr_Tab.EndAttributeP()
+	symbolSecAttr_Endpoint := symbolSec.BeginAttribute(row.Endpoint)
+	symbolSecAttr_Endpoint.AddMembershipLowCardRefP(kindPlayLaunchEndpoint)
+	symbolSecAttr_Endpoint.EndAttributeP()
+	return
+}
+
 // PlayLaunchAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -319,30 +373,24 @@ func PlayLaunchAddSections[
 ](dml DML, row PlayLaunch) (err error) {
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_Sql := textArraySec.BeginAttributeSingle(row.Sql)
-	textArraySecAttr_Sql.AddMembershipLowCardRefP(kindPlayLaunchSql)
-	textArraySecAttr_Sql.EndAttributeP()
-	textArraySecAttr_BandsSql := textArraySec.BeginAttributeSingle(row.BandsSql)
-	textArraySecAttr_BandsSql.AddMembershipLowCardRefP(kindPlayLaunchBandsSql)
-	textArraySecAttr_BandsSql.EndAttributeP()
+	err = PlayLaunchEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	boolSecAttr_AutoRun := boolSec.BeginAttribute(row.AutoRun)
-	boolSecAttr_AutoRun.AddMembershipLowCardRefP(kindPlayLaunchAutoRun)
-	boolSecAttr_AutoRun.EndAttributeP()
-	boolSecAttr_Live := boolSec.BeginAttribute(row.Live)
-	boolSecAttr_Live.AddMembershipLowCardRefP(kindPlayLaunchLive)
-	boolSecAttr_Live.EndAttributeP()
+	err = PlayLaunchEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
 	boolSec.EndSection()
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Tab := symbolSec.BeginAttribute(row.Tab)
-	symbolSecAttr_Tab.AddMembershipLowCardRefP(kindPlayLaunchTab)
-	symbolSecAttr_Tab.EndAttributeP()
-	symbolSecAttr_Endpoint := symbolSec.BeginAttribute(row.Endpoint)
-	symbolSecAttr_Endpoint.AddMembershipLowCardRefP(kindPlayLaunchEndpoint)
-	symbolSecAttr_Endpoint.EndAttributeP()
+	err = PlayLaunchEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	return
 }

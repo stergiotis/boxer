@@ -387,6 +387,102 @@ func TaskCreatedBuildEntities[
 	return
 }
 
+// TaskCreatedEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskCreatedEmitSectionStringArray[
+	StringArrayAttr TaskCreatedStringArrayAttrI,
+	StringArraySec TaskCreatedStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row TaskCreated) (err error) {
+	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
+	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
+	stringArraySecAttr_TaskId.EndAttributeP()
+	stringArraySecAttr_OwnerAppId := stringArraySec.BeginAttributeSingle(row.OwnerAppId)
+	stringArraySecAttr_OwnerAppId.AddMembershipLowCardRefP(kindAppId)
+	stringArraySecAttr_OwnerAppId.EndAttributeP()
+	stringArraySecAttr_OwnerRunId := stringArraySec.BeginAttributeSingle(row.OwnerRunId)
+	stringArraySecAttr_OwnerRunId.AddMembershipLowCardRefP(kindRunId)
+	stringArraySecAttr_OwnerRunId.EndAttributeP()
+	return
+}
+
+// TaskCreatedEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskCreatedEmitSectionSymbol[
+	SymbolAttr TaskCreatedSymbolAttrI,
+	SymbolSec TaskCreatedSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row TaskCreated) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindTaskKind)
+	symbolSecAttr_Kind.EndAttributeP()
+	return
+}
+
+// TaskCreatedEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskCreatedEmitSectionTextArray[
+	TextArrayAttr TaskCreatedTextArrayAttrI,
+	TextArraySec TaskCreatedTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row TaskCreated) (err error) {
+	textArraySecAttr_Title := textArraySec.BeginAttributeSingle(row.Title)
+	textArraySecAttr_Title.AddMembershipLowCardRefP(kindTitle)
+	textArraySecAttr_Title.EndAttributeP()
+	return
+}
+
+// TaskCreatedEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskCreatedEmitSectionU64Array[
+	U64ArrayAttr TaskCreatedU64ArrayAttrI,
+	U64ArraySec TaskCreatedU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row TaskCreated) (err error) {
+	u64ArraySecAttr_OwnerTileKey := u64ArraySec.BeginAttributeSingle(row.OwnerTileKey)
+	u64ArraySecAttr_OwnerTileKey.AddMembershipLowCardRefP(kindTileKey)
+	u64ArraySecAttr_OwnerTileKey.EndAttributeP()
+	return
+}
+
+// TaskCreatedEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskCreatedEmitSectionBool[
+	BoolAttr TaskCreatedBoolAttrI,
+	BoolSec TaskCreatedBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row TaskCreated) (err error) {
+	boolSecAttr_CancellableB := boolSec.BeginAttribute(row.CancellableB)
+	boolSecAttr_CancellableB.AddMembershipLowCardRefP(kindTaskCancellableB)
+	boolSecAttr_CancellableB.EndAttributeP()
+	return
+}
+
+// TaskCreatedEmitSectionI64Array writes this kind's i64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskCreatedEmitSectionI64Array[
+	I64ArrayAttr TaskCreatedI64ArrayAttrI,
+	I64ArraySec TaskCreatedI64ArraySecI[I64ArrayAttr, Ent],
+	Ent any,
+](i64ArraySec I64ArraySec, row TaskCreated) (err error) {
+	i64ArraySecAttr_EstimatedMs := i64ArraySec.BeginAttributeSingle(row.EstimatedMs)
+	i64ArraySecAttr_EstimatedMs.AddMembershipLowCardRefP(kindTaskEstimatedMs)
+	i64ArraySecAttr_EstimatedMs.EndAttributeP()
+	return
+}
+
 // TaskCreatedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -416,45 +512,45 @@ func TaskCreatedAddSections[
 ](dml DML, row TaskCreated) (err error) {
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
-	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
-	stringArraySecAttr_TaskId.EndAttributeP()
-	stringArraySecAttr_OwnerAppId := stringArraySec.BeginAttributeSingle(row.OwnerAppId)
-	stringArraySecAttr_OwnerAppId.AddMembershipLowCardRefP(kindAppId)
-	stringArraySecAttr_OwnerAppId.EndAttributeP()
-	stringArraySecAttr_OwnerRunId := stringArraySec.BeginAttributeSingle(row.OwnerRunId)
-	stringArraySecAttr_OwnerRunId.AddMembershipLowCardRefP(kindRunId)
-	stringArraySecAttr_OwnerRunId.EndAttributeP()
+	err = TaskCreatedEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
-	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindTaskKind)
-	symbolSecAttr_Kind.EndAttributeP()
+	err = TaskCreatedEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_Title := textArraySec.BeginAttributeSingle(row.Title)
-	textArraySecAttr_Title.AddMembershipLowCardRefP(kindTitle)
-	textArraySecAttr_Title.EndAttributeP()
+	err = TaskCreatedEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	u64ArraySecAttr_OwnerTileKey := u64ArraySec.BeginAttributeSingle(row.OwnerTileKey)
-	u64ArraySecAttr_OwnerTileKey.AddMembershipLowCardRefP(kindTileKey)
-	u64ArraySecAttr_OwnerTileKey.EndAttributeP()
+	err = TaskCreatedEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
 	u64ArraySec.EndSection()
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	boolSecAttr_CancellableB := boolSec.BeginAttribute(row.CancellableB)
-	boolSecAttr_CancellableB.AddMembershipLowCardRefP(kindTaskCancellableB)
-	boolSecAttr_CancellableB.EndAttributeP()
+	err = TaskCreatedEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
 	boolSec.EndSection()
 	// --- i64Array. ---
 	i64ArraySec := dml.GetSectionI64Array()
-	i64ArraySecAttr_EstimatedMs := i64ArraySec.BeginAttributeSingle(row.EstimatedMs)
-	i64ArraySecAttr_EstimatedMs.AddMembershipLowCardRefP(kindTaskEstimatedMs)
-	i64ArraySecAttr_EstimatedMs.EndAttributeP()
+	err = TaskCreatedEmitSectionI64Array(i64ArraySec, row)
+	if err != nil {
+		return
+	}
 	i64ArraySec.EndSection()
 	return
 }

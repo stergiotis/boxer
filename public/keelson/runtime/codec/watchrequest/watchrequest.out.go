@@ -251,6 +251,39 @@ func WatchRequestBuildEntities[
 	return
 }
 
+// WatchRequestEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func WatchRequestEmitSectionBool[
+	BoolAttr WatchRequestBoolAttrI,
+	BoolSec WatchRequestBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row WatchRequest) (err error) {
+	boolSecAttr_PollFallback := boolSec.BeginAttribute(row.PollFallback)
+	boolSecAttr_PollFallback.AddMembershipLowCardRefP(kindWatchPollFallback)
+	boolSecAttr_PollFallback.EndAttributeP()
+	boolSecAttr_Recursive := boolSec.BeginAttribute(row.Recursive)
+	boolSecAttr_Recursive.AddMembershipLowCardRefP(kindWatchRecursive)
+	boolSecAttr_Recursive.EndAttributeP()
+	return
+}
+
+// WatchRequestEmitSectionI32Array writes this kind's i32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func WatchRequestEmitSectionI32Array[
+	I32ArrayAttr WatchRequestI32ArrayAttrI,
+	I32ArraySec WatchRequestI32ArraySecI[I32ArrayAttr, Ent],
+	Ent any,
+](i32ArraySec I32ArraySec, row WatchRequest) (err error) {
+	i32ArraySecAttr_PollIntervalMs := i32ArraySec.BeginAttributeSingle(row.PollIntervalMs)
+	i32ArraySecAttr_PollIntervalMs.AddMembershipLowCardRefP(kindWatchPollIntervalMs)
+	i32ArraySecAttr_PollIntervalMs.EndAttributeP()
+	return
+}
+
 // WatchRequestAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -268,18 +301,17 @@ func WatchRequestAddSections[
 ](dml DML, row WatchRequest) (err error) {
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	boolSecAttr_PollFallback := boolSec.BeginAttribute(row.PollFallback)
-	boolSecAttr_PollFallback.AddMembershipLowCardRefP(kindWatchPollFallback)
-	boolSecAttr_PollFallback.EndAttributeP()
-	boolSecAttr_Recursive := boolSec.BeginAttribute(row.Recursive)
-	boolSecAttr_Recursive.AddMembershipLowCardRefP(kindWatchRecursive)
-	boolSecAttr_Recursive.EndAttributeP()
+	err = WatchRequestEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
 	boolSec.EndSection()
 	// --- i32Array. ---
 	i32ArraySec := dml.GetSectionI32Array()
-	i32ArraySecAttr_PollIntervalMs := i32ArraySec.BeginAttributeSingle(row.PollIntervalMs)
-	i32ArraySecAttr_PollIntervalMs.AddMembershipLowCardRefP(kindWatchPollIntervalMs)
-	i32ArraySecAttr_PollIntervalMs.EndAttributeP()
+	err = WatchRequestEmitSectionI32Array(i32ArraySec, row)
+	if err != nil {
+		return
+	}
 	i32ArraySec.EndSection()
 	return
 }

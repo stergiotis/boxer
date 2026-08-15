@@ -275,6 +275,51 @@ func DialogReplyBuildEntities[
 	return
 }
 
+// DialogReplyEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func DialogReplyEmitSectionBool[
+	BoolAttr DialogReplyBoolAttrI,
+	BoolSec DialogReplyBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row DialogReply) (err error) {
+	boolSecAttr_Approved := boolSec.BeginAttribute(row.Approved)
+	boolSecAttr_Approved.AddMembershipLowCardRefP(kindDialogApproved)
+	boolSecAttr_Approved.EndAttributeP()
+	return
+}
+
+// DialogReplyEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func DialogReplyEmitSectionStringArray[
+	StringArrayAttr DialogReplyStringArrayAttrI,
+	StringArraySec DialogReplyStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row DialogReply) (err error) {
+	stringArraySecAttr_HandleSubjectPrefix := stringArraySec.BeginAttributeSingle(row.HandleSubjectPrefix)
+	stringArraySecAttr_HandleSubjectPrefix.AddMembershipLowCardRefP(kindDialogHandleSubject)
+	stringArraySecAttr_HandleSubjectPrefix.EndAttributeP()
+	return
+}
+
+// DialogReplyEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func DialogReplyEmitSectionTextArray[
+	TextArrayAttr DialogReplyTextArrayAttrI,
+	TextArraySec DialogReplyTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row DialogReply) (err error) {
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	return
+}
+
 // DialogReplyAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -295,21 +340,24 @@ func DialogReplyAddSections[
 ](dml DML, row DialogReply) (err error) {
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	boolSecAttr_Approved := boolSec.BeginAttribute(row.Approved)
-	boolSecAttr_Approved.AddMembershipLowCardRefP(kindDialogApproved)
-	boolSecAttr_Approved.EndAttributeP()
+	err = DialogReplyEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
 	boolSec.EndSection()
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_HandleSubjectPrefix := stringArraySec.BeginAttributeSingle(row.HandleSubjectPrefix)
-	stringArraySecAttr_HandleSubjectPrefix.AddMembershipLowCardRefP(kindDialogHandleSubject)
-	stringArraySecAttr_HandleSubjectPrefix.EndAttributeP()
+	err = DialogReplyEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
-	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
-	textArraySecAttr_Reason.EndAttributeP()
+	err = DialogReplyEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	return
 }

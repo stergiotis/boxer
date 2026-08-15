@@ -379,6 +379,99 @@ func TaskProgressBuildEntities[
 	return
 }
 
+// TaskProgressEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskProgressEmitSectionStringArray[
+	StringArrayAttr TaskProgressStringArrayAttrI,
+	StringArraySec TaskProgressStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row TaskProgress) (err error) {
+	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
+	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
+	stringArraySecAttr_TaskId.EndAttributeP()
+	return
+}
+
+// TaskProgressEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskProgressEmitSectionU64Array[
+	U64ArrayAttr TaskProgressU64ArrayAttrI,
+	U64ArraySec TaskProgressU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row TaskProgress) (err error) {
+	u64ArraySecAttr_Current := u64ArraySec.BeginAttributeSingle(row.Current)
+	u64ArraySecAttr_Current.AddMembershipLowCardRefP(kindProgressCurrent)
+	u64ArraySecAttr_Current.EndAttributeP()
+	u64ArraySecAttr_Total := u64ArraySec.BeginAttributeSingle(row.Total)
+	u64ArraySecAttr_Total.AddMembershipLowCardRefP(kindProgressTotal)
+	u64ArraySecAttr_Total.EndAttributeP()
+	return
+}
+
+// TaskProgressEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskProgressEmitSectionSymbol[
+	SymbolAttr TaskProgressSymbolAttrI,
+	SymbolSec TaskProgressSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row TaskProgress) (err error) {
+	symbolSecAttr_Unit := symbolSec.BeginAttribute(row.Unit)
+	symbolSecAttr_Unit.AddMembershipLowCardRefP(kindProgressUnit)
+	symbolSecAttr_Unit.EndAttributeP()
+	return
+}
+
+// TaskProgressEmitSectionF64Array writes this kind's f64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskProgressEmitSectionF64Array[
+	F64ArrayAttr TaskProgressF64ArrayAttrI,
+	F64ArraySec TaskProgressF64ArraySecI[F64ArrayAttr, Ent],
+	Ent any,
+](f64ArraySec F64ArraySec, row TaskProgress) (err error) {
+	f64ArraySecAttr_ThroughputPerSec := f64ArraySec.BeginAttributeSingle(row.ThroughputPerSec)
+	f64ArraySecAttr_ThroughputPerSec.AddMembershipLowCardRefP(kindProgressThroughputPerSec)
+	f64ArraySecAttr_ThroughputPerSec.EndAttributeP()
+	return
+}
+
+// TaskProgressEmitSectionI64Array writes this kind's i64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskProgressEmitSectionI64Array[
+	I64ArrayAttr TaskProgressI64ArrayAttrI,
+	I64ArraySec TaskProgressI64ArraySecI[I64ArrayAttr, Ent],
+	Ent any,
+](i64ArraySec I64ArraySec, row TaskProgress) (err error) {
+	i64ArraySecAttr_EtaMs := i64ArraySec.BeginAttributeSingle(row.EtaMs)
+	i64ArraySecAttr_EtaMs.AddMembershipLowCardRefP(kindProgressEtaMs)
+	i64ArraySecAttr_EtaMs.EndAttributeP()
+	return
+}
+
+// TaskProgressEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskProgressEmitSectionTextArray[
+	TextArrayAttr TaskProgressTextArrayAttrI,
+	TextArraySec TaskProgressTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row TaskProgress) (err error) {
+	textArraySecAttr_Note := textArraySec.BeginAttributeSingle(row.Note)
+	textArraySecAttr_Note.AddMembershipLowCardRefP(kindNote)
+	textArraySecAttr_Note.EndAttributeP()
+	return
+}
+
 // TaskProgressAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -408,42 +501,45 @@ func TaskProgressAddSections[
 ](dml DML, row TaskProgress) (err error) {
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
-	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
-	stringArraySecAttr_TaskId.EndAttributeP()
+	err = TaskProgressEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	u64ArraySecAttr_Current := u64ArraySec.BeginAttributeSingle(row.Current)
-	u64ArraySecAttr_Current.AddMembershipLowCardRefP(kindProgressCurrent)
-	u64ArraySecAttr_Current.EndAttributeP()
-	u64ArraySecAttr_Total := u64ArraySec.BeginAttributeSingle(row.Total)
-	u64ArraySecAttr_Total.AddMembershipLowCardRefP(kindProgressTotal)
-	u64ArraySecAttr_Total.EndAttributeP()
+	err = TaskProgressEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
 	u64ArraySec.EndSection()
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Unit := symbolSec.BeginAttribute(row.Unit)
-	symbolSecAttr_Unit.AddMembershipLowCardRefP(kindProgressUnit)
-	symbolSecAttr_Unit.EndAttributeP()
+	err = TaskProgressEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- f64Array. ---
 	f64ArraySec := dml.GetSectionF64Array()
-	f64ArraySecAttr_ThroughputPerSec := f64ArraySec.BeginAttributeSingle(row.ThroughputPerSec)
-	f64ArraySecAttr_ThroughputPerSec.AddMembershipLowCardRefP(kindProgressThroughputPerSec)
-	f64ArraySecAttr_ThroughputPerSec.EndAttributeP()
+	err = TaskProgressEmitSectionF64Array(f64ArraySec, row)
+	if err != nil {
+		return
+	}
 	f64ArraySec.EndSection()
 	// --- i64Array. ---
 	i64ArraySec := dml.GetSectionI64Array()
-	i64ArraySecAttr_EtaMs := i64ArraySec.BeginAttributeSingle(row.EtaMs)
-	i64ArraySecAttr_EtaMs.AddMembershipLowCardRefP(kindProgressEtaMs)
-	i64ArraySecAttr_EtaMs.EndAttributeP()
+	err = TaskProgressEmitSectionI64Array(i64ArraySec, row)
+	if err != nil {
+		return
+	}
 	i64ArraySec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_Note := textArraySec.BeginAttributeSingle(row.Note)
-	textArraySecAttr_Note.AddMembershipLowCardRefP(kindNote)
-	textArraySecAttr_Note.EndAttributeP()
+	err = TaskProgressEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	return
 }

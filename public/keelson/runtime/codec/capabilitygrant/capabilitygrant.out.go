@@ -352,6 +352,83 @@ func CapabilityGrantBuildEntities[
 	return
 }
 
+// CapabilityGrantEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func CapabilityGrantEmitSectionStringArray[
+	StringArrayAttr CapabilityGrantStringArrayAttrI,
+	StringArraySec CapabilityGrantStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row CapabilityGrant) (err error) {
+	stringArraySecAttr_Subject := stringArraySec.BeginAttributeSingle(row.Subject)
+	stringArraySecAttr_Subject.AddMembershipLowCardRefP(kindCgSubject)
+	stringArraySecAttr_Subject.EndAttributeP()
+	return
+}
+
+// CapabilityGrantEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func CapabilityGrantEmitSectionSymbol[
+	SymbolAttr CapabilityGrantSymbolAttrI,
+	SymbolSec CapabilityGrantSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row CapabilityGrant) (err error) {
+	symbolSecAttr_Capability := symbolSec.BeginAttribute(row.Capability)
+	symbolSecAttr_Capability.AddMembershipLowCardRefP(kindCgCapability)
+	symbolSecAttr_Capability.EndAttributeP()
+	return
+}
+
+// CapabilityGrantEmitSectionU32Range writes this kind's u32Range attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func CapabilityGrantEmitSectionU32Range[
+	U32RangeAttr CapabilityGrantU32RangeAttrI,
+	U32RangeSec CapabilityGrantU32RangeSecI[U32RangeAttr, Ent],
+	Ent any,
+](u32RangeSec U32RangeSec, row CapabilityGrant) (err error) {
+	u32RangeSecAttr := u32RangeSec.BeginAttribute(row.ValidityBegin, row.ValidityEnd)
+	u32RangeSecAttr.AddMembershipLowCardRefP(kindCgValidity)
+	u32RangeSecAttr.EndAttributeP()
+	return
+}
+
+// CapabilityGrantEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func CapabilityGrantEmitSectionBool[
+	BoolAttr CapabilityGrantBoolAttrI,
+	BoolSec CapabilityGrantBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row CapabilityGrant) (err error) {
+	boolSecAttr_Active := boolSec.BeginAttribute(row.Active)
+	boolSecAttr_Active.AddMembershipLowCardRefP(kindCgActive)
+	boolSecAttr_Active.EndAttributeP()
+	return
+}
+
+// CapabilityGrantEmitSectionForeignKey writes this kind's foreignKey attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func CapabilityGrantEmitSectionForeignKey[
+	ForeignKeyAttr CapabilityGrantForeignKeyAttrI,
+	ForeignKeySec CapabilityGrantForeignKeySecI[ForeignKeyAttr, Ent],
+	Ent any,
+](foreignKeySec ForeignKeySec, row CapabilityGrant) (err error) {
+	if row.GranterFact.Has {
+		foreignKeySecAttr_GranterFact := foreignKeySec.BeginAttribute(row.GranterFact.Val)
+		foreignKeySecAttr_GranterFact.AddMembershipLowCardRefP(kindCgGranter)
+		foreignKeySecAttr_GranterFact.EndAttributeP()
+	}
+	return
+}
+
 // CapabilityGrantAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -378,34 +455,37 @@ func CapabilityGrantAddSections[
 ](dml DML, row CapabilityGrant) (err error) {
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_Subject := stringArraySec.BeginAttributeSingle(row.Subject)
-	stringArraySecAttr_Subject.AddMembershipLowCardRefP(kindCgSubject)
-	stringArraySecAttr_Subject.EndAttributeP()
+	err = CapabilityGrantEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Capability := symbolSec.BeginAttribute(row.Capability)
-	symbolSecAttr_Capability.AddMembershipLowCardRefP(kindCgCapability)
-	symbolSecAttr_Capability.EndAttributeP()
+	err = CapabilityGrantEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- u32Range. ---
 	u32RangeSec := dml.GetSectionU32Range()
-	u32RangeSecAttr := u32RangeSec.BeginAttribute(row.ValidityBegin, row.ValidityEnd)
-	u32RangeSecAttr.AddMembershipLowCardRefP(kindCgValidity)
-	u32RangeSecAttr.EndAttributeP()
+	err = CapabilityGrantEmitSectionU32Range(u32RangeSec, row)
+	if err != nil {
+		return
+	}
 	u32RangeSec.EndSection()
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	boolSecAttr_Active := boolSec.BeginAttribute(row.Active)
-	boolSecAttr_Active.AddMembershipLowCardRefP(kindCgActive)
-	boolSecAttr_Active.EndAttributeP()
+	err = CapabilityGrantEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
 	boolSec.EndSection()
 	// --- foreignKey. ---
 	foreignKeySec := dml.GetSectionForeignKey()
-	if row.GranterFact.Has {
-		foreignKeySecAttr_GranterFact := foreignKeySec.BeginAttribute(row.GranterFact.Val)
-		foreignKeySecAttr_GranterFact.AddMembershipLowCardRefP(kindCgGranter)
-		foreignKeySecAttr_GranterFact.EndAttributeP()
+	err = CapabilityGrantEmitSectionForeignKey(foreignKeySec, row)
+	if err != nil {
+		return
 	}
 	foreignKeySec.EndSection()
 	return

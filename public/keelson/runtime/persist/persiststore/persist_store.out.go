@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -301,13 +302,32 @@ type PersistEntityBuilder struct {
 	key   string
 	// ent mirrors the typed Add* calls so Commit can write the entity
 	// through to attached cache views; raw marks commits that touched
-	// the DML directly (or double-added a component) — those cannot be
-	// materialized faithfully and invalidate the key instead.
+	// the DML directly — those cannot be materialized faithfully and
+	// invalidate the key instead.
 	ent PersistEntity
 	raw bool
+	// buf holds each component's section contributions until Commit, so
+	// components sharing a section share its frame. It also holds the
+	// frame invariants: one contribution per kind, and typed Adds
+	// exclusive with Raw (ADR-0183 D4).
+	buf dmlruntime.DeferredSectionBuffer
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+}
+
+// endSection closes one section's frame. The buffer calls it once per
+// section, after every component that contributed to it has written.
+func (inst *PersistEntityBuilder) endSection(section string) error {
+	switch section {
+	case "stateAppId":
+		inst.store.dml.GetSectionStateAppId().EndSection()
+	case "stateKey":
+		inst.store.dml.GetSectionStateKey().EndSection()
+	case "stateBlob":
+		inst.store.dml.GetSectionStateBlob().EndSection()
+	}
+	return nil
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
@@ -322,18 +342,32 @@ func (inst *PersistStore) Begin(id string, ts time.Time) *PersistEntityBuilder {
 	return b
 }
 
-// AddState contributes the State component to the open entity via the
-// generated entity-frame-free section driver (ADR-0100 SD6).
+// AddState contributes the State component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
 func (inst *PersistEntityBuilder) AddState(row State) *PersistEntityBuilder {
-	err := stateAddSections(inst.store.dml, row)
-	if err != nil {
+	if err := inst.buf.StartKind("State"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	if inst.ent.State.Has {
-		inst.raw = true // double add: the read-back shape is undefined
-	} else {
-		inst.ent.State = option.Some(row)
-	}
+	inst.buf.Enqueue("stateAppId", "State", func() error {
+		return stateEmitSectionStateAppId(inst.store.dml.GetSectionStateAppId(), row)
+	})
+	inst.buf.Enqueue("stateKey", "State", func() error {
+		return stateEmitSectionStateKey(inst.store.dml.GetSectionStateKey(), row)
+	})
+	inst.buf.Enqueue("stateBlob", "State", func() error {
+		return stateEmitSectionStateBlob(inst.store.dml.GetSectionStateBlob(), row)
+	})
+	inst.ent.State = option.Some(row)
 	return inst
 }
 
@@ -343,6 +377,9 @@ func (inst *PersistEntityBuilder) AddState(row State) *PersistEntityBuilder {
 // returned value by inference (raw := b.Raw()) and chain its
 // methods, but cannot name the type in their own signatures.
 func (inst *PersistEntityBuilder) Raw() *lowlevel.InEntityPersiststateTable {
+	if err := inst.buf.MarkRaw(); err != nil {
+		inst.store.dml.AppendError(err)
+	}
 	inst.raw = true // direct DML writes cannot be mirrored into the entity
 	return inst.store.dml
 }
@@ -356,6 +393,10 @@ func (inst *PersistEntityBuilder) Raw() *lowlevel.InEntityPersiststateTable {
 // instead. A failed Commit rolls the frame back — the entity is
 // discarded and the store stays usable.
 func (inst *PersistEntityBuilder) Commit() (err error) {
+	if ferr := inst.buf.Flush(inst.endSection); ferr != nil {
+		inst.store.dml.AppendError(ferr) // surfaced by CommitEntity below
+	}
+	inst.buf.Reset()
 	err = lowlevel.InEntityPersiststateTableCommitEntity(inst.store.dml)
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed) // release Begin's ambient stamps (consumed by the closed attributes)
 	if err != nil {
@@ -376,6 +417,7 @@ func (inst *PersistEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *PersistEntityBuilder) Rollback() (err error) {
+	inst.buf.Reset() // the buffered contributions are abandoned with the frame
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityPersiststateTableRollbackEntity(inst.store.dml)
 }

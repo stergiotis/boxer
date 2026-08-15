@@ -604,6 +604,207 @@ func M1SampleBuildEntities[
 	return
 }
 
+// M1SampleEmitSectionSymbol writes this kind's symbol attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionSymbol[
+	SymbolAttr M1SampleSymbolAttrI,
+	SymbolSec M1SampleSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+](symbolSec SymbolSec, row M1Sample) (err error) {
+	symbolSecAttr_Source := symbolSec.BeginAttribute(row.Source)
+	symbolSecAttr_Source.AddMembershipLowCardRefP(kindM1Source)
+	symbolSecAttr_Source.EndAttributeP()
+	return
+}
+
+// M1SampleEmitSectionU8Array writes this kind's u8Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionU8Array[
+	U8ArrayAttr M1SampleU8ArrayAttrI,
+	U8ArraySec M1SampleU8ArraySecI[U8ArrayAttr, Ent],
+	Ent any,
+](u8ArraySec U8ArraySec, row M1Sample) (err error) {
+	u8ArraySecAttr_Severity := u8ArraySec.BeginAttributeSingle(row.Severity)
+	u8ArraySecAttr_Severity.AddMembershipLowCardRefP(kindM1Severity)
+	u8ArraySecAttr_Severity.EndAttributeP()
+	return
+}
+
+// M1SampleEmitSectionU16Array writes this kind's u16Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionU16Array[
+	U16ArrayAttr M1SampleU16ArrayAttrI,
+	U16ArraySec M1SampleU16ArraySecI[U16ArrayAttr, Ent],
+	Ent any,
+](u16ArraySec U16ArraySec, row M1Sample) (err error) {
+	u16ArraySecAttr_MajorVer := u16ArraySec.BeginAttributeSingle(row.MajorVer)
+	u16ArraySecAttr_MajorVer.AddMembershipLowCardRefP(kindM1MajorVer)
+	u16ArraySecAttr_MajorVer.EndAttributeP()
+	return
+}
+
+// M1SampleEmitSectionU32Array writes this kind's u32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionU32Array[
+	U32ArrayAttr M1SampleU32ArrayAttrI,
+	U32ArraySec M1SampleU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+](u32ArraySec U32ArraySec, row M1Sample) (err error) {
+	u32ArraySecAttr_Sequence := u32ArraySec.BeginAttributeSingle(row.Sequence)
+	u32ArraySecAttr_Sequence.AddMembershipLowCardRefP(kindM1Sequence)
+	u32ArraySecAttr_Sequence.EndAttributeP()
+	if row.CapBits != nil && !row.CapBits.IsEmpty() {
+		u32ArraySecAttr_CapBits := u32ArraySec.BeginAttribute()
+		it := row.CapBits.Iterator()
+		for it.HasNext() {
+			u32ArraySecAttr_CapBits.AddToContainerP(it.Next())
+		}
+		u32ArraySecAttr_CapBits.AddMembershipLowCardRefP(kindM1CapBits)
+		u32ArraySecAttr_CapBits.EndAttributeP()
+	}
+	return
+}
+
+// M1SampleEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionU64Array[
+	U64ArrayAttr M1SampleU64ArrayAttrI,
+	U64ArraySec M1SampleU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row M1Sample) (err error) {
+	u64ArraySecAttr_LatencyNanos := u64ArraySec.BeginAttributeSingle(row.LatencyNanos)
+	u64ArraySecAttr_LatencyNanos.AddMembershipLowCardRefP(kindM1LatencyNanos)
+	u64ArraySecAttr_LatencyNanos.EndAttributeP()
+	return
+}
+
+// M1SampleEmitSectionF32Array writes this kind's f32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionF32Array[
+	F32ArrayAttr M1SampleF32ArrayAttrI,
+	F32ArraySec M1SampleF32ArraySecI[F32ArrayAttr, Ent],
+	Ent any,
+](f32ArraySec F32ArraySec, row M1Sample) (err error) {
+	f32ArraySecAttr_CpuPct := f32ArraySec.BeginAttributeSingle(row.CpuPct)
+	f32ArraySecAttr_CpuPct.AddMembershipLowCardRefP(kindM1CpuPct)
+	f32ArraySecAttr_CpuPct.EndAttributeP()
+	return
+}
+
+// M1SampleEmitSectionF64Array writes this kind's f64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionF64Array[
+	F64ArrayAttr M1SampleF64ArrayAttrI,
+	F64ArraySec M1SampleF64ArraySecI[F64ArrayAttr, Ent],
+	Ent any,
+](f64ArraySec F64ArraySec, row M1Sample) (err error) {
+	f64ArraySecAttr_LoadAvg1 := f64ArraySec.BeginAttributeSingle(row.LoadAvg1)
+	f64ArraySecAttr_LoadAvg1.AddMembershipLowCardRefP(kindM1LoadAvg1)
+	f64ArraySecAttr_LoadAvg1.EndAttributeP()
+	return
+}
+
+// M1SampleEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionBool[
+	BoolAttr M1SampleBoolAttrI,
+	BoolSec M1SampleBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row M1Sample) (err error) {
+	boolSecAttr_Healthy := boolSec.BeginAttribute(row.Healthy)
+	boolSecAttr_Healthy.AddMembershipLowCardRefP(kindM1Healthy)
+	boolSecAttr_Healthy.EndAttributeP()
+	return
+}
+
+// M1SampleEmitSectionBlobArray writes this kind's blobArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionBlobArray[
+	BlobArrayAttr M1SampleBlobArrayAttrI,
+	BlobArraySec M1SampleBlobArraySecI[BlobArrayAttr, Ent],
+	Ent any,
+](blobArraySec BlobArraySec, row M1Sample) (err error) {
+	blobArraySecAttr_PeerV4 := blobArraySec.BeginAttributeSingle(row.PeerV4[:])
+	blobArraySecAttr_PeerV4.AddMembershipLowCardRefP(kindM1PeerV4)
+	blobArraySecAttr_PeerV4.EndAttributeP()
+	blobArraySecAttr_PeerV6 := blobArraySec.BeginAttributeSingle(row.PeerV6[:])
+	blobArraySecAttr_PeerV6.AddMembershipLowCardRefP(kindM1PeerV6)
+	blobArraySecAttr_PeerV6.EndAttributeP()
+	return
+}
+
+// M1SampleEmitSectionTimeArray writes this kind's timeArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionTimeArray[
+	TimeArrayAttr M1SampleTimeArrayAttrI,
+	TimeArraySec M1SampleTimeArraySecI[TimeArrayAttr, Ent],
+	Ent any,
+](timeArraySec TimeArraySec, row M1Sample) (err error) {
+	if row.LastSuccess.Has {
+		timeArraySecAttr_LastSuccess := timeArraySec.BeginAttributeSingle(row.LastSuccess.Val)
+		timeArraySecAttr_LastSuccess.AddMembershipLowCardRefP(kindM1LastSuccess)
+		timeArraySecAttr_LastSuccess.EndAttributeP()
+	}
+	return
+}
+
+// M1SampleEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionStringArray[
+	StringArrayAttr M1SampleStringArrayAttrI,
+	StringArraySec M1SampleStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row M1Sample) (err error) {
+	if row.OperatorName.Has {
+		stringArraySecAttr_OperatorName := stringArraySec.BeginAttributeSingle(row.OperatorName.Val)
+		stringArraySecAttr_OperatorName.AddMembershipLowCardRefP(kindM1OperatorName)
+		stringArraySecAttr_OperatorName.EndAttributeP()
+	}
+	return
+}
+
+// M1SampleEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func M1SampleEmitSectionTextArray[
+	TextArrayAttr M1SampleTextArrayAttrI,
+	TextArraySec M1SampleTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row M1Sample) (err error) {
+	if len(row.Tags) > 0 {
+		textArraySecAttr_Tags := textArraySec.BeginAttribute()
+		for _, v := range row.Tags {
+			textArraySecAttr_Tags.AddToContainerP(v)
+		}
+		textArraySecAttr_Tags.AddMembershipLowCardRefP(kindM1Tags)
+		textArraySecAttr_Tags.EndAttributeP()
+	}
+	return
+}
+
 // M1SampleAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -651,95 +852,86 @@ func M1SampleAddSections[
 ](dml DML, row M1Sample) (err error) {
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	symbolSecAttr_Source := symbolSec.BeginAttribute(row.Source)
-	symbolSecAttr_Source.AddMembershipLowCardRefP(kindM1Source)
-	symbolSecAttr_Source.EndAttributeP()
+	err = M1SampleEmitSectionSymbol(symbolSec, row)
+	if err != nil {
+		return
+	}
 	symbolSec.EndSection()
 	// --- u8Array. ---
 	u8ArraySec := dml.GetSectionU8Array()
-	u8ArraySecAttr_Severity := u8ArraySec.BeginAttributeSingle(row.Severity)
-	u8ArraySecAttr_Severity.AddMembershipLowCardRefP(kindM1Severity)
-	u8ArraySecAttr_Severity.EndAttributeP()
+	err = M1SampleEmitSectionU8Array(u8ArraySec, row)
+	if err != nil {
+		return
+	}
 	u8ArraySec.EndSection()
 	// --- u16Array. ---
 	u16ArraySec := dml.GetSectionU16Array()
-	u16ArraySecAttr_MajorVer := u16ArraySec.BeginAttributeSingle(row.MajorVer)
-	u16ArraySecAttr_MajorVer.AddMembershipLowCardRefP(kindM1MajorVer)
-	u16ArraySecAttr_MajorVer.EndAttributeP()
+	err = M1SampleEmitSectionU16Array(u16ArraySec, row)
+	if err != nil {
+		return
+	}
 	u16ArraySec.EndSection()
 	// --- u32Array. ---
 	u32ArraySec := dml.GetSectionU32Array()
-	u32ArraySecAttr_Sequence := u32ArraySec.BeginAttributeSingle(row.Sequence)
-	u32ArraySecAttr_Sequence.AddMembershipLowCardRefP(kindM1Sequence)
-	u32ArraySecAttr_Sequence.EndAttributeP()
-	if row.CapBits != nil && !row.CapBits.IsEmpty() {
-		u32ArraySecAttr_CapBits := u32ArraySec.BeginAttribute()
-		it := row.CapBits.Iterator()
-		for it.HasNext() {
-			u32ArraySecAttr_CapBits.AddToContainerP(it.Next())
-		}
-		u32ArraySecAttr_CapBits.AddMembershipLowCardRefP(kindM1CapBits)
-		u32ArraySecAttr_CapBits.EndAttributeP()
+	err = M1SampleEmitSectionU32Array(u32ArraySec, row)
+	if err != nil {
+		return
 	}
 	u32ArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
-	u64ArraySecAttr_LatencyNanos := u64ArraySec.BeginAttributeSingle(row.LatencyNanos)
-	u64ArraySecAttr_LatencyNanos.AddMembershipLowCardRefP(kindM1LatencyNanos)
-	u64ArraySecAttr_LatencyNanos.EndAttributeP()
+	err = M1SampleEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
 	u64ArraySec.EndSection()
 	// --- f32Array. ---
 	f32ArraySec := dml.GetSectionF32Array()
-	f32ArraySecAttr_CpuPct := f32ArraySec.BeginAttributeSingle(row.CpuPct)
-	f32ArraySecAttr_CpuPct.AddMembershipLowCardRefP(kindM1CpuPct)
-	f32ArraySecAttr_CpuPct.EndAttributeP()
+	err = M1SampleEmitSectionF32Array(f32ArraySec, row)
+	if err != nil {
+		return
+	}
 	f32ArraySec.EndSection()
 	// --- f64Array. ---
 	f64ArraySec := dml.GetSectionF64Array()
-	f64ArraySecAttr_LoadAvg1 := f64ArraySec.BeginAttributeSingle(row.LoadAvg1)
-	f64ArraySecAttr_LoadAvg1.AddMembershipLowCardRefP(kindM1LoadAvg1)
-	f64ArraySecAttr_LoadAvg1.EndAttributeP()
+	err = M1SampleEmitSectionF64Array(f64ArraySec, row)
+	if err != nil {
+		return
+	}
 	f64ArraySec.EndSection()
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	boolSecAttr_Healthy := boolSec.BeginAttribute(row.Healthy)
-	boolSecAttr_Healthy.AddMembershipLowCardRefP(kindM1Healthy)
-	boolSecAttr_Healthy.EndAttributeP()
+	err = M1SampleEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
 	boolSec.EndSection()
 	// --- blobArray. ---
 	blobArraySec := dml.GetSectionBlobArray()
-	blobArraySecAttr_PeerV4 := blobArraySec.BeginAttributeSingle(row.PeerV4[:])
-	blobArraySecAttr_PeerV4.AddMembershipLowCardRefP(kindM1PeerV4)
-	blobArraySecAttr_PeerV4.EndAttributeP()
-	blobArraySecAttr_PeerV6 := blobArraySec.BeginAttributeSingle(row.PeerV6[:])
-	blobArraySecAttr_PeerV6.AddMembershipLowCardRefP(kindM1PeerV6)
-	blobArraySecAttr_PeerV6.EndAttributeP()
+	err = M1SampleEmitSectionBlobArray(blobArraySec, row)
+	if err != nil {
+		return
+	}
 	blobArraySec.EndSection()
 	// --- timeArray. ---
 	timeArraySec := dml.GetSectionTimeArray()
-	if row.LastSuccess.Has {
-		timeArraySecAttr_LastSuccess := timeArraySec.BeginAttributeSingle(row.LastSuccess.Val)
-		timeArraySecAttr_LastSuccess.AddMembershipLowCardRefP(kindM1LastSuccess)
-		timeArraySecAttr_LastSuccess.EndAttributeP()
+	err = M1SampleEmitSectionTimeArray(timeArraySec, row)
+	if err != nil {
+		return
 	}
 	timeArraySec.EndSection()
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	if row.OperatorName.Has {
-		stringArraySecAttr_OperatorName := stringArraySec.BeginAttributeSingle(row.OperatorName.Val)
-		stringArraySecAttr_OperatorName.AddMembershipLowCardRefP(kindM1OperatorName)
-		stringArraySecAttr_OperatorName.EndAttributeP()
+	err = M1SampleEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
 	}
 	stringArraySec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	if len(row.Tags) > 0 {
-		textArraySecAttr_Tags := textArraySec.BeginAttribute()
-		for _, v := range row.Tags {
-			textArraySecAttr_Tags.AddToContainerP(v)
-		}
-		textArraySecAttr_Tags.AddMembershipLowCardRefP(kindM1Tags)
-		textArraySecAttr_Tags.EndAttributeP()
+	err = M1SampleEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
 	}
 	textArraySec.EndSection()
 	return

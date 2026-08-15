@@ -84,6 +84,51 @@ type stateEntityI[
 	GetSectionStateBlob() StateBlobSec
 }
 
+// stateEmitSectionStateAppId writes this kind's stateAppId attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func stateEmitSectionStateAppId[
+	StateAppIdAttr stateStateAppIdAttrI,
+	StateAppIdSec stateStateAppIdSecI[StateAppIdAttr, Ent],
+	Ent any,
+](stateAppIdSec StateAppIdSec, row State) (err error) {
+	stateAppIdSecAttr_AppId := stateAppIdSec.BeginAttribute(row.AppId)
+	stateAppIdSecAttr_AppId.AddMembershipLowCardRefP(kindRuntimeApp)
+	stateAppIdSecAttr_AppId.EndAttributeP()
+	return
+}
+
+// stateEmitSectionStateKey writes this kind's stateKey attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func stateEmitSectionStateKey[
+	StateKeyAttr stateStateKeyAttrI,
+	StateKeySec stateStateKeySecI[StateKeyAttr, Ent],
+	Ent any,
+](stateKeySec StateKeySec, row State) (err error) {
+	stateKeySecAttr_Key := stateKeySec.BeginAttribute(row.Key)
+	stateKeySecAttr_Key.AddMembershipLowCardRefP(kindRuntimePersistKey)
+	stateKeySecAttr_Key.EndAttributeP()
+	return
+}
+
+// stateEmitSectionStateBlob writes this kind's stateBlob attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func stateEmitSectionStateBlob[
+	StateBlobAttr stateStateBlobAttrI,
+	StateBlobSec stateStateBlobSecI[StateBlobAttr, Ent],
+	Ent any,
+](stateBlobSec StateBlobSec, row State) (err error) {
+	stateBlobSecAttr_Value := stateBlobSec.BeginAttribute(row.Value)
+	stateBlobSecAttr_Value.AddMembershipLowCardRefP(kindRuntimePersistValue)
+	stateBlobSecAttr_Value.EndAttributeP()
+	return
+}
+
 // stateAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -104,21 +149,24 @@ func stateAddSections[
 ](dml DML, row State) (err error) {
 	// --- stateAppId. ---
 	stateAppIdSec := dml.GetSectionStateAppId()
-	stateAppIdSecAttr_AppId := stateAppIdSec.BeginAttribute(row.AppId)
-	stateAppIdSecAttr_AppId.AddMembershipLowCardRefP(kindRuntimeApp)
-	stateAppIdSecAttr_AppId.EndAttributeP()
+	err = stateEmitSectionStateAppId(stateAppIdSec, row)
+	if err != nil {
+		return
+	}
 	stateAppIdSec.EndSection()
 	// --- stateKey. ---
 	stateKeySec := dml.GetSectionStateKey()
-	stateKeySecAttr_Key := stateKeySec.BeginAttribute(row.Key)
-	stateKeySecAttr_Key.AddMembershipLowCardRefP(kindRuntimePersistKey)
-	stateKeySecAttr_Key.EndAttributeP()
+	err = stateEmitSectionStateKey(stateKeySec, row)
+	if err != nil {
+		return
+	}
 	stateKeySec.EndSection()
 	// --- stateBlob. ---
 	stateBlobSec := dml.GetSectionStateBlob()
-	stateBlobSecAttr_Value := stateBlobSec.BeginAttribute(row.Value)
-	stateBlobSecAttr_Value.AddMembershipLowCardRefP(kindRuntimePersistValue)
-	stateBlobSecAttr_Value.EndAttributeP()
+	err = stateEmitSectionStateBlob(stateBlobSec, row)
+	if err != nil {
+		return
+	}
 	stateBlobSec.EndSection()
 	return
 }

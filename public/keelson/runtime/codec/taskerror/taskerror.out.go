@@ -251,6 +251,39 @@ func TaskErrorBuildEntities[
 	return
 }
 
+// TaskErrorEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskErrorEmitSectionStringArray[
+	StringArrayAttr TaskErrorStringArrayAttrI,
+	StringArraySec TaskErrorStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row TaskError) (err error) {
+	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
+	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
+	stringArraySecAttr_TaskId.EndAttributeP()
+	return
+}
+
+// TaskErrorEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func TaskErrorEmitSectionTextArray[
+	TextArrayAttr TaskErrorTextArrayAttrI,
+	TextArraySec TaskErrorTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row TaskError) (err error) {
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	textArraySecAttr_ErrorText := textArraySec.BeginAttributeSingle(row.ErrorText)
+	textArraySecAttr_ErrorText.AddMembershipLowCardRefP(kindErrorText)
+	textArraySecAttr_ErrorText.EndAttributeP()
+	return
+}
+
 // TaskErrorAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -268,18 +301,17 @@ func TaskErrorAddSections[
 ](dml DML, row TaskError) (err error) {
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
-	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
-	stringArraySecAttr_TaskId.EndAttributeP()
+	err = TaskErrorEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
-	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
-	textArraySecAttr_Reason.EndAttributeP()
-	textArraySecAttr_ErrorText := textArraySec.BeginAttributeSingle(row.ErrorText)
-	textArraySecAttr_ErrorText.AddMembershipLowCardRefP(kindErrorText)
-	textArraySecAttr_ErrorText.EndAttributeP()
+	err = TaskErrorEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	return
 }

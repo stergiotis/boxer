@@ -275,6 +275,51 @@ func GrantReplyBuildEntities[
 	return
 }
 
+// GrantReplyEmitSectionBool writes this kind's bool attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func GrantReplyEmitSectionBool[
+	BoolAttr GrantReplyBoolAttrI,
+	BoolSec GrantReplyBoolSecI[BoolAttr, Ent],
+	Ent any,
+](boolSec BoolSec, row GrantReply) (err error) {
+	boolSecAttr_Approved := boolSec.BeginAttribute(row.Approved)
+	boolSecAttr_Approved.AddMembershipLowCardRefP(kindGrantApproved)
+	boolSecAttr_Approved.EndAttributeP()
+	return
+}
+
+// GrantReplyEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func GrantReplyEmitSectionStringArray[
+	StringArrayAttr GrantReplyStringArrayAttrI,
+	StringArraySec GrantReplyStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row GrantReply) (err error) {
+	stringArraySecAttr_GrantId := stringArraySec.BeginAttributeSingle(row.GrantId)
+	stringArraySecAttr_GrantId.AddMembershipLowCardRefP(kindGrantId)
+	stringArraySecAttr_GrantId.EndAttributeP()
+	return
+}
+
+// GrantReplyEmitSectionTextArray writes this kind's textArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func GrantReplyEmitSectionTextArray[
+	TextArrayAttr GrantReplyTextArrayAttrI,
+	TextArraySec GrantReplyTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+](textArraySec TextArraySec, row GrantReply) (err error) {
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	return
+}
+
 // GrantReplyAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -295,21 +340,24 @@ func GrantReplyAddSections[
 ](dml DML, row GrantReply) (err error) {
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	boolSecAttr_Approved := boolSec.BeginAttribute(row.Approved)
-	boolSecAttr_Approved.AddMembershipLowCardRefP(kindGrantApproved)
-	boolSecAttr_Approved.EndAttributeP()
+	err = GrantReplyEmitSectionBool(boolSec, row)
+	if err != nil {
+		return
+	}
 	boolSec.EndSection()
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	stringArraySecAttr_GrantId := stringArraySec.BeginAttributeSingle(row.GrantId)
-	stringArraySecAttr_GrantId.AddMembershipLowCardRefP(kindGrantId)
-	stringArraySecAttr_GrantId.EndAttributeP()
+	err = GrantReplyEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
 	stringArraySec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
-	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
-	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
-	textArraySecAttr_Reason.EndAttributeP()
+	err = GrantReplyEmitSectionTextArray(textArraySec, row)
+	if err != nil {
+		return
+	}
 	textArraySec.EndSection()
 	return
 }
