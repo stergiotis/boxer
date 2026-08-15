@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
@@ -175,36 +176,19 @@ func orphanExprNote(names []string) string {
 		", which this buffer has no {Expr} or {ExprList} placeholder for — the declaration is ignored"
 }
 
-// pendingSpliceNote is M1's honest report: the knob is declared and shown, and
-// the value does not reach the query yet. M2 deletes this.
-//
-// It names the slots rather than counting them, because the reader's next
-// question is which one — and a buffer with an expression slot cannot run at
-// all, so this is the explanation for a run gate that will not open.
-func pendingSpliceNote(slots []paramSlot) string {
-	var names []string
-	for _, s := range slots {
-		if exprCategoryFor(s.Type).spliced() {
-			names = append(names, "{"+s.Name+"}")
-		}
-	}
-	if len(names) == 0 {
-		return ""
-	}
-	return strings.Join(names, ", ") +
-		" holds SQL, not a value — declared by \"-- play: expr\" and not yet substituted into the query"
-}
-
-// exprHintAwareI is the opt-in a widget implements to receive the buffer's
-// expression declarations. It mirrors [enumHintAwareI] and [evaluatorAwareI]:
-// the orchestrator holds what a widget needs from outside its own slots.
+// exprHintAwareI is the opt-in a widget implements to receive what the
+// orchestrator knows about expressions from outside a widget's own slots: the
+// buffer's declarations, and the error marks the splice-then-parse validation
+// derived (§SD6). It mirrors [enumHintAwareI] and [evaluatorAwareI].
 type exprHintAwareI interface {
 	SetExprHints(hints map[string]string)
+	SetExprMarks(marks map[string]nanopass.SourceRange)
 }
 
 // exprWidget renders a SQL-valued knob as a [sqleditor.Field].
 type exprWidget struct {
 	hints map[string]string
+	marks map[string]nanopass.SourceRange
 	// One Field per slot: each memoises its own lex job against its own text,
 	// so a shared instance would rebuild every field's job on any frame that
 	// drew two. Pruned by ClearStateForAbsent, which is what that method is
@@ -220,6 +204,8 @@ var (
 )
 
 func (w *exprWidget) SetExprHints(hints map[string]string) { w.hints = hints }
+
+func (w *exprWidget) SetExprMarks(marks map[string]nanopass.SourceRange) { w.marks = marks }
 
 // Matches claims one slot per call — the first of any expression category — so
 // the dispatch loop can hand it several in a row, the way it does the enum
@@ -275,6 +261,10 @@ func (w *exprWidget) renderOne(ids *c.WidgetIdStack, s paramSlot, cat paramExprC
 			IDSlot: "paramSlotExpr-" + s.Name,
 			Value:  draft,
 			Hint:   exprHintTextFor(cat, s.Name),
+			// The mark is in the VALUE's own coordinates, which is what the
+			// field is bound to — exprMarkFor already subtracted the splice
+			// origin, so nothing here has to know where the value landed.
+			Mark: w.marks[s.Name],
 			// The pane's own idiom for "fill the row", as the scalar tail uses.
 			Width: float32(math.Inf(1)),
 		})

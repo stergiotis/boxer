@@ -189,6 +189,17 @@ func (inst *PlayApp) unfilledInputs() (names []string) {
 		if _, bound := inst.paramSyncedValues[s.Name]; bound {
 			continue
 		}
+		if exprCategoryFor(s.Type).spliced() {
+			// A SQL-valued slot is filled by its `-- play: expr` line, not by
+			// the prelude and not by a signal (ADR-0187 (proposed) §SD3), and
+			// it is substituted before the body reaches the wire — so a
+			// declared one is not an unfilled input, and an undeclared one is.
+			if v, declared := inst.paramSyncedExprs[s.Name]; declared && v != "" {
+				continue
+			}
+			names = append(names, s.Name)
+			continue
+		}
 		if inst.frameSig != nil {
 			if _, heldHere := inst.frameSig.Get(s.Name); heldHere {
 				continue

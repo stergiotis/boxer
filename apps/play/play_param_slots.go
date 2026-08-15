@@ -108,6 +108,39 @@ func collectParamValues(pr *nanopass.ParseResult) (params map[string]string, err
 	return
 }
 
+// collectParamSlotOccurrences walks EVERY `{name : Type}` occurrence and
+// returns each with its own source range, in document order.
+//
+// The dedup [collectParamSlots] performs is exactly wrong for a rewriter: a
+// name written twice is two places the substitution has to land, and the
+// deduped list carries only the first. Every other consumer wants the deduped
+// list, which is why this is a second walk rather than a widening of that one
+// (ADR-0187 (proposed) §SD4).
+func collectParamSlotOccurrences(pr *nanopass.ParseResult) (out []paramSlot) {
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		ps, ok := ctx.(*grammar1.ParamSlotContext)
+		if !ok {
+			return true
+		}
+		ident := ps.Identifier()
+		typeCtx := ps.ColumnTypeExpr()
+		if ident == nil || typeCtx == nil {
+			return true
+		}
+		name := strings.Trim(ident.GetText(), "`")
+		if name == "" {
+			return true
+		}
+		out = append(out, paramSlot{
+			Name: name,
+			Type: strings.TrimSpace(nanopass.NodeText(pr, typeCtx)),
+			Src:  pr.SourceRangeOf(ps),
+		})
+		return true
+	})
+	return
+}
+
 // collectSlotTypes walks EVERY `{name : Type}` occurrence (no dedup, unlike
 // collectParamSlots) and returns each name's distinct declared types in
 // occurrence order. More than one entry for a name is the cross-node type

@@ -444,9 +444,16 @@ of the parameter machinery exists.
   not yet wired, which is what explains a run gate that will not open; M2
   retires it.
 - **M2 — splice and trace.** The `splice-expr` step at order `-90`, per-category
-  splice rules, the Preview trace entry, splice-then-parse validation.
+  splice rules, the Preview trace entry, splice-then-parse validation. It also
+  takes the **drift write-back** — a moved draft rewrites its own `-- play: expr`
+  line — which M3 was going to own. Held back, M2 would have shipped a field
+  whose edits reached nothing: the splice reads the buffer and the field writes
+  a draft, and only the write-back makes those the same value. Moving it also
+  keeps `BuildStatement` a pure function of the buffer, which is what the
+  Preview's "as sent" view rests on. The unfilled gates learn the rule that
+  follows: a declared expression is filled, an undeclared one is not.
 - **M3 — tiers.** `paramPinned`'s second source, pin/unpin's directive arm, the
-  second drift baseline, the live-tier signal path.
+  live-tier signal path.
 - **M4 — the ceiling.** Post-splice classification; `play` reports, applets
   refuse a raise with the witness; the `Identifier` probe.
 - **M5 — docs.** `features.md` §Query parameters, a snippet, the ADR-0096 and

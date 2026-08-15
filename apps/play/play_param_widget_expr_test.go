@@ -135,24 +135,10 @@ func TestOrphanExprHints(t *testing.T) {
 	}
 }
 
-func TestOrphanAndPendingNotes(t *testing.T) {
+func TestOrphanExprNote(t *testing.T) {
 	require.Equal(t, "", orphanExprNote(nil))
 	require.Contains(t, orphanExprNote([]string{"cond"}), "cond")
 	require.Contains(t, orphanExprNote([]string{"cond"}), "the declaration is ignored")
-
-	require.Equal(t, "", pendingSpliceNote(nil))
-	require.Equal(t, "", pendingSpliceNote([]paramSlot{{Name: "lim", Type: "UInt64"}}))
-	// Identifier is substituted server-side and runs today, so it is not
-	// pending anything and must not be named here.
-	require.Equal(t, "", pendingSpliceNote([]paramSlot{{Name: "tbl", Type: "Identifier"}}))
-	note := pendingSpliceNote([]paramSlot{
-		{Name: "cond", Type: "Expr"},
-		{Name: "lim", Type: "UInt64"},
-		{Name: "cols", Type: "ExprList"},
-	})
-	require.Contains(t, note, "{cond}")
-	require.Contains(t, note, "{cols}")
-	require.NotContains(t, note, "lim")
 }
 
 // The gate that matters most: a spliced slot must never reach the `param_*`
@@ -166,23 +152,28 @@ func TestSplicedSlotStaysOutOfThePrelude(t *testing.T) {
 	_, synced := app.paramSyncedValues["cond"]
 	require.False(t, synced)
 
-	// Phase 2: the widget mutates its draft. Phase 3 must not turn that into a
-	// SET, and must not publish it to the signal store either.
+	// Phase 2: the widget mutates its draft. Phase 3 sends that to the
+	// directive (TestExprDraftDriftWritesTheDirective), and to neither of the
+	// two places it must never reach.
 	draft, has := app.paramDrafts["cond"]
 	require.True(t, has)
 	*draft = "status = 'warn'"
 	app.syncParamDriftToPrelude()
 
-	require.Equal(t, sql, app.sql, "no prelude rewrite for a spliced draft")
-	require.NotContains(t, app.sql, "SET param_cond")
+	require.NotContains(t, app.sql, "SET param_cond", "never the prelude")
 	_, published := app.graph.signals().Get("cond")
-	require.False(t, published, "a spliced draft is not a signal write until M3")
+	require.False(t, published, "and never the signal store — that is M3's live tier")
 }
 
-// The declared value seeds the draft on first sight, so the pane shows what the
-// buffer says. It must NOT re-seed on every parse: there is no write-back until
-// M3, so re-seeding would revert each keystroke on the next debounce.
-func TestSplicedDraftSeedsFromTheDeclarationOnce(t *testing.T) {
+// The declaration wins over the draft on every parse, exactly as a prelude
+// value does at the pinned tier.
+//
+// M1 asserted the opposite — seed once, never re-seed — because it had no
+// write-back and re-seeding would have reverted each keystroke. M2 gave the
+// directive its write-back, so drift rewrites the declaration BEFORE this parse
+// reads it and the overwrite is a no-op. Inverted rather than deleted, so the
+// record shows the M1 rule was retired deliberately.
+func TestSplicedDraftFollowsTheDeclaration(t *testing.T) {
 	sql := "-- play: expr cond = a = 1\nSELECT x FROM t WHERE {cond:Expr}"
 	app := paneApp(t, sql)
 
@@ -190,9 +181,12 @@ func TestSplicedDraftSeedsFromTheDeclarationOnce(t *testing.T) {
 	require.True(t, has)
 	require.Equal(t, "a = 1", *draft, "the declaration seeds the draft")
 
+	// A draft moved WITHOUT its drift being synced is the transient mid-frame
+	// state; the next parse restores what the buffer says, because the buffer
+	// is the record.
 	*draft = "b = 2"
 	reparse(t, app)
-	require.Equal(t, "b = 2", *app.paramDrafts["cond"], "a later parse must not revert the edit")
+	require.Equal(t, "a = 1", *app.paramDrafts["cond"], "the parser wins, as it does for a prelude value")
 }
 
 // Identifier is the half that already works: a real ClickHouse parameter, so it
@@ -276,7 +270,7 @@ func TestExprDirectivesBelongBelowThePrelude(t *testing.T) {
 	runSQL, _, _ := below.runBuffer()
 	_, bound, unfilled := below.resolveRunSignals(runSQL)
 	require.True(t, bound["tbl"], "the prelude survives when the directives sit under it")
-	require.Equal(t, []string{"cols", "cond"}, unfilled, "only the unsubstituted expressions block a run")
+	require.Empty(t, unfilled, "and the declared expressions do not hold the gate")
 
 	above := paneApp(t, directives+prelude+body)
 	above.caretByte = len(above.sql)

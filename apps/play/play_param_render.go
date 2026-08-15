@@ -3,9 +3,11 @@ package play
 import (
 	"maps"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
 
 // refreshParamSlotsFromParse is called from updatePreview after a
@@ -27,9 +29,14 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 	// rather than passed in for the reason renderParamSlots re-scans the enum
 	// and ungroup markers per frame: a marker is part of the buffer.
 	exprHints := scanExprHints(inst.sql)
+	// The error mark the fields draw, derived once per parse rather than per
+	// frame: a field edit rewrites its own directive line, so the buffer moves
+	// whenever a value does and this parse is where both land (§SD6).
+	inst.exprMarks = computeExprMarks(inst.sql, exprHints)
 
 	newDrafts := make(map[string]*string, len(slots))
 	newSynced := make(map[string]string, len(slots))
+	newSyncedExprs := make(map[string]string, len(slots))
 	for _, s := range slots {
 		ptr, kept := inst.paramDrafts[s.Name]
 		if !kept {
@@ -42,15 +49,13 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 			// declared value is the `-- play: expr` line, and putting it in the
 			// prelude would ship an expression to the server as a string.
 			//
-			// Seeded only on first sight, not on every parse. The prelude can
-			// overwrite a draft because a pinned drift rewrites the prelude
-			// first, so the overwrite is a no-op; the directive has no
-			// write-back until M3, so overwriting here would revert every
-			// keystroke on the next debounce.
-			if !kept {
-				if v, declared := exprHints[s.Name]; declared {
-					*ptr = v
-				}
+			// The declaration wins over the draft, exactly as the prelude does
+			// at the pinned tier and for the same reason: drift rewrites the
+			// directive first (syncExprDrift), so by the time this parse runs
+			// the two already agree and the overwrite is a no-op.
+			if v, declared := exprHints[s.Name]; declared {
+				*ptr = v
+				newSyncedExprs[s.Name] = v
 			}
 			newDrafts[s.Name] = ptr
 			continue
@@ -76,6 +81,7 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 	}
 	inst.paramDrafts = newDrafts
 	inst.paramSyncedValues = newSynced
+	inst.paramSyncedExprs = newSyncedExprs
 
 	present := make(map[string]struct{}, len(slots))
 	for _, s := range slots {
@@ -158,6 +164,7 @@ func (inst *PlayApp) renderParamSlots() {
 		}
 		if aware, ok := w.(exprHintAwareI); ok {
 			aware.SetExprHints(exprs)
+			aware.SetExprMarks(inst.exprMarks)
 		}
 	}
 
@@ -258,7 +265,7 @@ func (inst *PlayApp) renderParamSlots() {
 	}
 
 	inst.renderNearMissNote(slots, grouped, ungroup, mixed,
-		orphanEnumHints(enums, slots), orphanExprHints(exprs, slots), pendingSpliceNote(slots))
+		orphanEnumHints(enums, slots), orphanExprHints(exprs, slots))
 
 	// Divider between the parameter block and the SQL editor below it.
 	c.Separator().Horizontal().Send()
@@ -551,15 +558,9 @@ func mixedTierNote(pairs []mixedTierPair) string {
 // opt-out accounts for every missing fold at once; a half-pinned pair is next,
 // being a specific decline with a one-click fix; then a marker naming a
 // placeholder the buffer does not have — enum first, then expression — each a
-// typo with a visible symptom and no other explanation; then the
-// not-yet-substituted expression, which explains a run gate that will not open;
-// then the type mismatch and the generic vocabulary note, both inside
+// typo with a visible symptom and no other explanation; then the type mismatch and the generic vocabulary note, both inside
 // nearMissNote.
-//
-// The two marker orphans sit above the pending-splice line because they are
-// mistakes in what the author wrote, where the pending splice is a limitation
-// of what is built (ADR-0187 (proposed) M2 retires it).
-func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungroup bool, mixed []mixedTierPair, orphanEnums []string, orphanExprs []string, pendingSplice string) {
+func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungroup bool, mixed []mixedTierPair, orphanEnums []string, orphanExprs []string) {
 	unfolded := make([]paramSlot, 0, len(slots))
 	for i, s := range slots {
 		if !grouped[i] {
@@ -575,9 +576,6 @@ func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungro
 	}
 	if note == "" {
 		note = orphanExprNote(orphanExprs)
-	}
-	if note == "" {
-		note = pendingSplice
 	}
 	if note == "" {
 		note = nearMissNote(unfolded, ungroup)
@@ -624,18 +622,24 @@ func (inst *PlayApp) syncParamDriftToPrelude() {
 	}
 	pinnedValues := make(map[string]string, len(inst.paramSlots))
 	pinnedDrift := false
+	exprValues := make(map[string]string, len(inst.paramSlots))
+	exprDrift := false
 	for _, s := range inst.paramSlots {
 		ptr, ok := inst.paramDrafts[s.Name]
 		if !ok {
 			continue
 		}
 		if exprCategoryFor(s.Type).spliced() {
-			// Neither tier is this slot's (ADR-0187 (proposed) §SD2/§SD3): the
+			// Neither the prelude nor the store is this slot's (§SD2/§SD3): the
 			// prelude would ship an expression to the server as a string, and
 			// the store would publish a predicate under a name a panel may be
-			// reading as a value. Its own two arms — the directive at the
-			// pinned tier, the signal at the live one — arrive with M3; until
-			// then a spliced draft stays in the pane.
+			// reading as a value. Its drift goes to its own `-- play: expr`
+			// line instead, collected here and written once below so a frame
+			// that moved two fields rewrites the buffer once.
+			exprValues[s.Name] = *ptr
+			if inst.paramSyncedExprs[s.Name] != *ptr {
+				exprDrift = true
+			}
 			continue
 		}
 		if !inst.paramPinned(s.Name) {
@@ -646,6 +650,16 @@ func (inst *PlayApp) syncParamDriftToPrelude() {
 		if inst.paramSyncedValues[s.Name] != *ptr {
 			pinnedDrift = true
 		}
+	}
+	// The directive rewrite runs FIRST and the prelude rewrite second, because
+	// SyncParamPrelude rebuilds the leading SET block as prelude + residual and
+	// the directives live in that residual: doing it the other way round would
+	// have the second writer re-derive a buffer the first had just moved.
+	if exprDrift {
+		if out, changed := syncExprDirectives(inst.sql, exprValues); changed {
+			inst.sql = out
+		}
+		maps.Copy(inst.paramSyncedExprs, exprValues)
 	}
 	if !pinnedDrift {
 		return
@@ -660,6 +674,39 @@ func (inst *PlayApp) syncParamDriftToPrelude() {
 	}
 	inst.sql = out
 	maps.Copy(inst.paramSyncedValues, pinnedValues)
+}
+
+// computeExprMarks is §SD6's validation: splice the declared values into the
+// buffer, parse the result, and map a syntax error inside a spliced value back
+// onto the field it came from.
+//
+// Splice-then-parse rather than validating a fragment on its own. The buffer
+// with its placeholders in place always parses — a placeholder is a grammar
+// production — so the only thing worth asking about is the substituted text,
+// and asking about it needs no fragment entry rule and no wrapper whose context
+// the expression will not actually execute in.
+//
+// One mark, from the first error. A parse reports the first fault it cannot
+// recover from; naming more would be guessing at cascades.
+func computeExprMarks(sql string, values map[string]string) (marks map[string]nanopass.SourceRange) {
+	if len(values) == 0 {
+		return
+	}
+	spliced, spl, err := spliceExprSlots(sql, values)
+	if err != nil || len(spl) == 0 {
+		return
+	}
+	pos := firstSyntaxError(spliced)
+	if !pos.Ok {
+		return
+	}
+	name, mark, ok := exprMarkFor(spl, sqleditor.ByteOffsetOfLineCol(spliced, pos.Line, pos.Column))
+	if !ok {
+		// The fault is outside every spliced value, so it belongs to the query
+		// and the editor's own error underline already has it (§SD6).
+		return
+	}
+	return map[string]nanopass.SourceRange{name: mark}
 }
 
 // syncLiveParamDrafts makes idle live drafts follow the store, so a value a

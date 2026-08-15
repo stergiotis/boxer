@@ -1297,19 +1297,17 @@ ORDER BY \`id:id\`"
 }
 
 scene_19_params_expr() {
-	desc="Parameters — a SQL-valued knob (ADR-0187 M1): {cond:Expr} and {cols:ExprList} get a SQL field seeded from their \`-- play: expr\` line and no pin control, {tbl:Identifier} keeps the prelude path and keeps its pin, and the advisory says the expressions are not substituted yet"
-	# Table-free, so it needs no fixture. The Run gate holds this buffer on
-	# purpose: an expression slot is unfilled until M2 wires the splice, and a
-	# blocked Run with the line explaining it is the state worth capturing.
+	desc="Parameters — a SQL-valued knob (ADR-0187): {cond:Expr} and {cols:ExprList} take a whole SQL fragment, edited in a lexically-coloured field and substituted client-side before the body ships, while {col:Identifier} rides ClickHouse's own parameter channel and keeps its pin"
+	# Table-free, so it needs no fixture.
 	#
 	# The directives sit BELOW the SET prelude, which ADR-0187 §SD3 requires:
 	# a comment above a prelude ends it before it starts, and the run buffer
 	# then ships without its SET lines.
 	senv=(BOXER_PLAY_FOCUS_TABLE=1)
-	sql="SET param_tbl = 'number';
+	sql="SET param_col = 'number';
 -- play: expr cond = number % 3 = 0
 -- play: expr cols = number AS n, number * 2 AS doubled
-SELECT {cols:ExprList}, {tbl:Identifier}
+SELECT {cols:ExprList}, {col:Identifier}
 FROM numbers(12)
 WHERE {cond:Expr}"
 }

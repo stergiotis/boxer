@@ -258,10 +258,12 @@ func (inst *Client) buildStatementObserved(sql string, observe func(passreg.Appl
 // play step from a registered pass at a glance.
 const (
 	orderExtractParams    = -100
+	orderSpliceExpr       = -90
 	orderExposeConditions = 1_000_000
 	orderSetFormat        = 1_000_100
 
 	rewriteStepExtractParams    = "extract-params"
+	rewriteStepSpliceExpr       = "splice-expr"
 	rewriteStepExposeConditions = "expose-conditions"
 	rewriteStepSetFormat        = "set-format"
 )
@@ -505,8 +507,32 @@ func (inst *Client) buildResidualObserved(sql string, observe func(passreg.Apply
 		params = nil
 	}
 	observeStep(observe, rewriteStepExtractParams, orderExtractParams, exErr, sql, residual)
+	residual = applyExprSplice(residual, observe)
 	residual = inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, residual, inst.passBinding, log.Logger, observe)
 	residual = inst.applyExposeConditions(residual, observe)
+	return
+}
+
+// applyExprSplice substitutes the buffer's SQL-valued placeholders (ADR-0187
+// (proposed) §SD4). It runs between the SET-param harvest and the pass
+// registry, which is the one window where both hold: the prelude is already
+// gone, so a `param_*` value cannot be confused with an expression, and no
+// registered pass has yet seen a body with an `Expr` slot in it — a type
+// ClickHouse does not know.
+//
+// A pure function of the text, deliberately. The values come from the buffer's
+// own `-- play: expr` lines, so the Preview's "as sent" view and the run resolve
+// the same body from the same bytes, and neither depends on pane state.
+//
+// Degrades like every step here: an unparseable buffer reports a skip and ships
+// unchanged, and the server answers with the real error.
+func applyExprSplice(sql string, observe func(passreg.ApplyObservation)) (out string) {
+	out, _, err := spliceExprSlots(sql, scanExprHints(sql))
+	if err != nil {
+		log.Debug().Err(err).Msg("play: expression splice skipped, sending sql verbatim")
+		out = sql
+	}
+	observeStep(observe, rewriteStepSpliceExpr, orderSpliceExpr, err, sql, out)
 	return
 }
 

@@ -486,9 +486,12 @@ type PlayApp struct {
 	// selected row (a parsed markdown doc, a highlighted job, decoded pixels).
 	richCells *richCellCache
 
-	// glosses is the ADR-0186 catalog every `<label>@<media type>` declaration
-	// resolves against. Read through glossCatalog(), which defaults it.
-	glosses *gloss.Catalog
+	// rules is the ADR-0186 rule repository the host handed the constructor:
+	// the catalog every `<label>@<media type>` declaration resolves against
+	// and the standing rules (sets declared in code, then the affinities) a
+	// column is offered after the buffer's directives. Read through
+	// glossRules(), which defaults it for a bare test app.
+	rules *gloss.Repository
 	// glossRes caches the per-column gloss resolution of the schema last seen
 	// by the Table grids (play_gloss.go).
 	glossRes glossResolution
@@ -712,6 +715,16 @@ type PlayApp struct {
 	paramDrafts       map[string]*string
 	paramSyncedValues map[string]string
 	paramLiveSeeded   map[string]string
+	// paramSyncedExprs is the same baseline for the SQL-valued slots (ADR-0187
+	// (proposed) §SD3): per spliced name, the value its `-- play: expr` line
+	// last declared. Separate from paramSyncedValues rather than merged into
+	// it, because that map is also the PINNED-tier bit (paramPinned reads its
+	// membership) and an expression has no prelude tier to be pinned to.
+	paramSyncedExprs map[string]string
+	// exprMarks is the per-field error underline §SD6 derives by splicing the
+	// declared values in and parsing the result. Refreshed by the debounced
+	// parse, keyed by slot name, and empty when the substituted buffer parses.
+	exprMarks map[string]nanopass.SourceRange
 	// paramDefaults is what Reset restores: the prelude values the buffer was
 	// LOADED with, captured when a buffer is installed and not touched again.
 	// It cannot be re-read from the prelude on demand, because a widget's drift
@@ -932,8 +945,15 @@ func playInstanceSalt() uint64 {
 	return (playInstanceSeq.Add(1) * 0x9e3779b97f4a7c15) ^ playSaltTag
 }
 
-func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
+// NewPlayApp builds the playground over a client, its query graph, the
+// buffer it opens with, and the gloss rule repository (ADR-0186) — the
+// standing rules and the catalog the host hands in; nil means play's own
+// DefaultRepository.
+func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *gloss.Repository) *PlayApp {
 	salt := playInstanceSalt()
+	if rules == nil {
+		rules = DefaultRepository()
+	}
 	mk := func() *c.WidgetIdStack {
 		s := c.NewWidgetIdStack()
 		s.SetBaseSalt(salt)
@@ -965,6 +985,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		autoEndpoint:     true,
 		density:          styletokens.DensityFromEnv(),
 		sql:              initialSQL,
+		rules:            rules,
 		sigEmit:          graphEmitter{graph: graph},
 		cards:            cards,
 		projector:        NewProjector(projectorIds, cards),
@@ -1746,12 +1767,23 @@ func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string,
 	// resolves through the same helper so the shipped params and the staleness
 	// check agree (otherwise the default reads as perpetual divergence).
 	sigParams = resolveSignalNamesWithDefaults(names, bound, inst.frameSig)
+	// A SQL-valued slot is filled by its own `-- play: expr` line in the text
+	// that ships, and applyExprSplice substitutes it before the body reaches
+	// the wire — so the gate asks the shipped buffer, exactly as it asks it for
+	// the SET prelude, rather than reading pane state (ADR-0187 (proposed)
+	// §SD3/§SD4).
+	exprValues := scanExprHints(sql)
 	for _, s := range slots {
 		if bound[s.Name] {
 			continue
 		}
 		if _, resolved := sigParams["param_"+s.Name]; resolved {
 			continue
+		}
+		if exprCategoryFor(s.Type).spliced() {
+			if v, declared := exprValues[s.Name]; declared && v != "" {
+				continue
+			}
 		}
 		unfilled = append(unfilled, s.Name)
 	}
