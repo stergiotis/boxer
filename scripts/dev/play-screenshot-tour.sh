@@ -119,7 +119,9 @@ SELECT number AS n,
        1.5 + number * 0.31 AS height,
        ['4111111111111111', '4111111111111112', '378282246310005'][1 + number % 3] AS \`card@gloss/luhn\`,
        1024 * number * number AS \`size@gloss/bytes\`,
-       'hunter2' AS \`pw@gloss/secret\`,
+       'hunter2' AS \`pw@gloss/masked\`,
+       toUnixTimestamp(now()) + number * 86400 AS \`when@gloss/epoch\`,
+       number * 90500 AS \`took@gloss/duration;unit=ms\`,
        'https://example.com/' || toString(number) AS \`link@gloss/url\`,
        20 + number * 1.7 AS \`oops@gloss/temperature;unti=C\`
 FROM numbers(12)"
@@ -139,7 +141,7 @@ SELECT * FROM anchor.facts WHERE \`id:id\` = 10005"
 scene_03_detail_glosses() {
 	desc="Detail + Glosses — the rule route on a leeway result (ADR-0186): \`-- play: gloss\` lines bind glosses to physical columns by their spec line, the leeway card and both grids render the faces, and the Glosses tab shows the catalog, the rules and each column's resolution"
 	senv=(BOXER_PLAY_FOCUS_TABLE=1 BOXER_PLAY_FOCUS_GLOSSES=1)
-	sql="-- play: gloss gloss/secret name:text section:text
+	sql="-- play: gloss gloss/masked name:text section:text
 -- play: gloss gloss/bytes name:wordLength
 SET param_selection = 0;
 SELECT \`id:id\`, \`symbol:value\`, \`text:text\`, \`text:wordLength\`, \`geoPoint:pointLat\`

@@ -195,7 +195,7 @@ func TestGlossRulesOnLeewaySchema(t *testing.T) {
 	assert.Empty(t, cols[0].mediaType, "the id has no affinity")
 	assert.Contains(t, glossHover(&cols[0]), "spec: name:id item:id ct:u64 arrow:uint64", "a plain column still shows its spec line")
 
-	assert.Equal(t, gloss.MediaTypeSecret, cols[1].mediaType)
+	assert.Equal(t, gloss.MediaTypeMasked, cols[1].mediaType)
 	assert.Equal(t, `affinity: \bsem:secret\b`, cols[1].source)
 	assert.True(t, cols[1].glossed(), "a secret accepts any kind: the per-row cell of the list column is masked whole")
 	assert.True(t, cols[1].glossedElem(), "…and so are its items in the per-attribute grid")
@@ -203,7 +203,7 @@ func TestGlossRulesOnLeewaySchema(t *testing.T) {
 
 	assert.Equal(t, gloss.MediaTypeURL, cols[2].mediaType)
 	assert.Equal(t, "https://example.com/1", app.glossText(&cols[2], "https://example.com/1", gloss.KindOfArrow(arrow.BinaryTypes.String)))
-	assert.Equal(t, gloss.SecretMask, app.glossText(&cols[1], "21.5", gloss.ValueKindNumeric))
+	assert.Equal(t, gloss.MaskedFace, app.glossText(&cols[1], "21.5", gloss.ValueKindNumeric))
 	assert.Empty(t, cols[3].mediaType, "the membership lane carries no matching aspect")
 
 	// A directive outranks the affinity, and gloss/raw suppresses it.
@@ -236,7 +236,7 @@ func TestGlossRulesOnLeewaySchema(t *testing.T) {
 	assert.Contains(t, notes[0], "unknown media type")
 	assert.Contains(t, notes[1], "requires unit=")
 	assert.Contains(t, notes[2], "no slash")
-	assert.Equal(t, gloss.MediaTypeSecret, cols[1].mediaType, "back to the affinity")
+	assert.Equal(t, gloss.MediaTypeMasked, cols[1].mediaType, "back to the affinity")
 
 	// The cache keys on the directive set: same schema, same lines → no work.
 	again := app.glossColumns(schema)

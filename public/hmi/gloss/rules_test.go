@@ -34,8 +34,9 @@ func TestCompileRule(t *testing.T) {
 	assert.ErrorContains(t, err, "does not compile")
 }
 
-// The affinities in v0: secret, url, the json family — narrow, in catalog
-// order (content family first, so application/json precedes gloss/secret).
+// The affinities in v0: masked (sem:secret), url, the json family — narrow,
+// in catalog order (content family first, so application/json precedes
+// gloss/masked).
 func TestAffinityRules(t *testing.T) {
 	c := Default()
 	rules := c.AffinityRules()
@@ -46,13 +47,13 @@ func TestAffinityRules(t *testing.T) {
 	}
 	assert.Equal(t, []string{
 		MediaTypeJSON + ` ← \bsem:json(-scalar|-array|-object)?\b`,
-		MediaTypeSecret + ` ← \bsem:secret\b`,
+		MediaTypeMasked + ` ← \bsem:secret\b`,
 		MediaTypeURL + ` ← \bsem:url\b`,
 	}, got)
 
 	r, ok := MatchFirst(rules, "name:pw section:auth role:val ct:s sem:secret arrow:utf8")
 	require.True(t, ok)
-	assert.Equal(t, MediaTypeSecret, r.MediaType)
+	assert.Equal(t, MediaTypeMasked, r.MediaType)
 	_, ok = MatchFirst(rules, "name:pw section:auth role:val ct:s sem:secretive")
 	assert.False(t, ok, "word boundary: sem:secretive is not sem:secret")
 	_, ok = MatchFirst(rules, "name:body ct:s sem:json-object")

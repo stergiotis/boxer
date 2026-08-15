@@ -80,15 +80,62 @@ func TestLuhnFace(t *testing.T) {
 	assert.False(t, LuhnValid("79927398710"))
 }
 
-func TestSecretFace(t *testing.T) {
-	s := instFor(t, "pw@gloss/secret")
+func TestMaskedFace(t *testing.T) {
+	s := instFor(t, "pw@gloss/masked")
 	short := s.Inline(txt("a"))
 	long := s.Inline(txt("correct horse battery staple"))
-	assert.Equal(t, SecretMask, short.Text)
+	assert.Equal(t, MaskedFace, short.Text)
 	assert.Equal(t, short, long, "the mask never reveals the length")
 	ok, _ := s.Accepts(ValueKindOther)
-	assert.True(t, ok, "anything can be a secret")
-	assert.Equal(t, []string{`\bsem:secret\b`}, s.Gloss().Affinities())
+	assert.True(t, ok, "anything can be masked")
+	assert.Equal(t, []string{`\bsem:secret\b`}, s.Gloss().Affinities(), "the affinity keeps the vocabulary's own aspect name")
+}
+
+// gloss/epoch: seconds by default, the resolution by unit=, and the s/ms
+// mix-up made loud by the warning tone.
+func TestEpochFace(t *testing.T) {
+	e := instFor(t, "ts@gloss/epoch")
+	assert.Equal(t, Inline{Text: "2026-08-15T12:00:00Z"}, e.Inline(num("1786795200")))
+	assert.Equal(t, Inline{Text: "1969-12-31T23:59:59Z"}, e.Inline(num("-1")))
+	assert.Equal(t, Inline{Text: "2026-08-15T12:00:00.250Z"}, instFor(t, "ts@gloss/epoch;unit=ms").Inline(num("1786795200250")))
+	assert.Equal(t, Inline{Text: "2026-08-15T12:00:00.000250Z"}, instFor(t, "ts@gloss/epoch;unit=us").Inline(num("1786795200000250")))
+	assert.Equal(t, Inline{Text: "2026-08-15T12:00:00.000000250Z"}, instFor(t, "ts@gloss/epoch;unit=ns").Inline(num("1786795200000000250")))
+	assert.Equal(t, Inline{Text: "2026-08-15T12:00:00Z"}, e.Inline(num("1786795200.5")), "a seconds column shows whole seconds")
+
+	// Milliseconds read as seconds: year 58,000-odd — shown raw, in warning,
+	// with the year that gave it away. (The other direction, seconds read
+	// as milliseconds, is January 1970: a real moment, shown as such.)
+	face := e.Inline(num("1786795200250"))
+	assert.Equal(t, ToneWarning, face.Tone)
+	assert.Contains(t, face.Text, "1786795200250")
+	assert.Equal(t, "1970-01-21T16:19:55.200Z", instFor(t, "ts@gloss/epoch;unit=ms").Inline(num("1786795200")).Text)
+
+	d, _ := Default().ParseColumn("ts@gloss/epoch;unit=sec")
+	assert.Contains(t, d.Reason, "not allowed")
+	ok, reason := e.Accepts(ValueKindText)
+	assert.False(t, ok)
+	assert.Contains(t, reason, "expects numeric")
+}
+
+// gloss/duration: the stored unit is required; the face picks the two
+// largest units that apply.
+func TestDurationFace(t *testing.T) {
+	ms := instFor(t, "took@gloss/duration;unit=ms")
+	assert.Equal(t, "12.3 ms", ms.Inline(num("12.34")).Text)
+	assert.Equal(t, "1.50 s", ms.Inline(num("1500")).Text)
+	assert.Equal(t, "1m 05s", ms.Inline(num("65000")).Text)
+	assert.Equal(t, "1h 02m", ms.Inline(num("3720000")).Text)
+	assert.Equal(t, "3d 4h 05m", ms.Inline(num("273900000")).Text)
+	assert.Equal(t, "0 s", ms.Inline(num("0")).Text)
+	assert.Equal(t, "-1.50 s", ms.Inline(num("-1500")).Text)
+	assert.Equal(t, "123 ns", instFor(t, "d@gloss/duration;unit=ns").Inline(num("123")).Text)
+	assert.Equal(t, "12.3 µs", instFor(t, "d@gloss/duration;unit=us").Inline(num("12.3")).Text)
+	assert.Equal(t, "2h 30m", instFor(t, "d@gloss/duration;unit=min").Inline(num("150")).Text)
+	assert.Equal(t, "1d 0h 00m", instFor(t, "d@gloss/duration;unit=h").Inline(num("24")).Text)
+	assert.Equal(t, ToneWarning, instFor(t, "d@gloss/duration;unit=h").Inline(num("1e12")).Tone, "past what a Duration holds: raw, warning")
+
+	d, _ := Default().ParseColumn("took@gloss/duration")
+	assert.Contains(t, d.Reason, "requires unit=")
 }
 
 func TestURLFace(t *testing.T) {
@@ -108,7 +155,7 @@ func TestDefaultOrderPresentation(t *testing.T) {
 		order = append(order, g.MediaType())
 	}
 	assert.Equal(t, []string{
-		MediaTypeTemperature, MediaTypeLength, MediaTypeBytes, MediaTypeLuhn,
-		MediaTypeSecret, MediaTypeURL, MediaTypeRaw,
+		MediaTypeTemperature, MediaTypeLength, MediaTypeEpoch, MediaTypeDuration,
+		MediaTypeBytes, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeRaw,
 	}, order[8:])
 }

@@ -612,9 +612,10 @@ unanswered probe is not the same as an empty server. Switching endpoints re-asks
 ### Glosses
 
 The result-side sibling of Vocabulary (ADR-0186). A **gloss** is a named way of
-showing a value — a temperature with its unit, a card number masked with its
-Luhn verdict, a secret as six bullets, a URL as a link, a byte count in KiB, and
-the ADR-0123 content types (markdown, code, images) as one family. Every gloss
+showing a value — a temperature with its unit, a Unix epoch as a moment, a span
+as `1m 05s`, a card number masked with its Luhn verdict, a value masked to six
+bullets, a URL as a link, a byte count in KiB, and the ADR-0123 content types
+(markdown, code, images) as one family. Every gloss
 has a one-line face for the Table grids and, some, a block face for Detail.
 
 Three routes bind a column to a gloss, in precedence order:
@@ -636,7 +637,7 @@ Three routes bind a column to a gloss, in precedence order:
   `name:temp_c arrow:float64` for a plain one. This is how a leeway column,
   whose physical name cannot be aliased without the result losing its leeway
   shape, gets a gloss. Some glosses bring an affinity rule along —
-  `gloss/secret` for `sem:secret`, `gloss/url` for `sem:url`, `application/json`
+  `gloss/masked` for `sem:secret`, `gloss/url` for `sem:url`, `application/json`
   for `sem:json*` — and `gloss/raw` in a rule switches an affinity off for the
   columns it matches.
 

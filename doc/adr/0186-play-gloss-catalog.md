@@ -89,7 +89,8 @@ render in both Table grids and both Detail paths.
 - **Inline face** — one line, monospace-safe, cheap enough for every visible
   cell every frame: `Inline{Text, Tone}`, Tone from the ADR-0031 semantic
   palette. `4111 •••• •••• 1111` in *success* or *error* by check digit;
-  `21.5 °C`; `1.83 m`; `••••••`; `[image/png · 359 B]`.
+  `21.5 °C`; `1.83 m`; `2026-08-15T12:00:00Z`; `1m 05s`; `••••••`;
+  `[image/png · 359 B]`.
 - **Block face** — optional, Detail only: markdown, code view, image,
   hyperlink. Without one, Detail shows the inline face wrapped.
 - **`Accepts(kind)`** over a small value-kind enum (numeric / text / bytes /
@@ -172,7 +173,7 @@ as a note, as `-- play: enum` errors do; the buffer still runs.
 -- play: gloss gloss/raw sem:secret
 ```
 
-**Affinities in v0**, narrow: `gloss/secret` ← `\bsem:secret\b`, `gloss/url`
+**Affinities in v0**, narrow: `gloss/masked` ← `\bsem:secret\b`, `gloss/url`
 ← `\bsem:url\b`, `application/json` ← `\bsem:json(-scalar|-array|-object)?\b`.
 Units have no aspect and hence no affinity; that is what the directive is for.
 
@@ -199,9 +200,11 @@ it permutes rows on the raw values.
 | `image/png`, `image/jpeg`, `image/gif` | bytes | (`encoding` reserved) | `[<type> · <size>]`, no decode | as ADR-0123 | — |
 | `gloss/temperature` | numeric | `unit` ∈ K, C, F — the stored unit, required | `21.5 °C` | — | — |
 | `gloss/length` | numeric | `unit` ∈ m, cm, mm, km, ft — the stored unit, required | auto-scaled SI, `1.234 km` | — | — |
+| `gloss/epoch` | numeric | `unit` ∈ s (default), ms, us, ns — the stored resolution | RFC 3339 UTC, `2026-08-15T12:00:00Z`; an absurd year (the s/ms mix-up) shows raw in warning | — | — |
+| `gloss/duration` | numeric | `unit` ∈ ns, us, ms, s, min, h — the stored unit, required | the two largest units that apply: `12.3 ms`, `1m 05s`, `3d 4h 05m` | — | — |
 | `gloss/bytes` | numeric ≥ 0 | — | `humanize.IBytes` | — | — |
 | `gloss/luhn` | text, numeric | — | groups of four, middle groups masked, ✓/✗ tone by check digit | mask + verdict | — |
-| `gloss/secret` | any | — | `••••••`, never length-revealing | same | ← `sem:secret` |
+| `gloss/masked` | any | — | `••••••`, never length-revealing | same | ← `sem:secret` |
 | `gloss/url` | text | — | the URL, accent tone; a hyperlink cell in the grids | `HyperlinkTo` | ← `sem:url` |
 | `gloss/raw` | any | — | `formatCell` | — | — |
 
@@ -249,12 +252,12 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
 
 ### SD8 — Deferred
 
-- Block faces on the leeway card; reveal-on-click for `gloss/secret`.
+- Block faces on the leeway card; reveal-on-click for `gloss/masked`.
 - A paint variant of the inline face (arrays as sparklines).
 - Rule files / env, and an in-app rule editor over ADR-0185 — text rules
   first, because SQL travels and UI state does not.
-- Unit conversion; `iban`, `isbn`, `epoch`, `duration`, `percent`, colour
-  swatches; ADR-0123 §SD7's own list (base64, URL sources, webp/avif/svg).
+- Unit conversion; `iban`, `isbn`, `percent`, colour swatches; ADR-0123
+  §SD7's own list (base64, URL sources, webp/avif/svg).
 - Reading kanban's `dot_*@<tone>` tokens as glosses — it would move
   ADR-0122's contract; not taken.
 
@@ -330,10 +333,10 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
     `notes@text/markdwn` loud, `TEXT/Markdown` folded), plus `;unit=K`
     accepted and `;unti=K` / `unit=k` refused.
   - One golden per inline face — Luhn pass and fail with their tones; a
-    `gloss/secret` face of equal length for inputs of different lengths.
+    `gloss/masked` face of equal length for inputs of different lengths.
   - A spec-line golden over the leeway fixture names.
   - Precedence: alias › directive › affinity; a `gloss/raw` directive
-    suppresses `gloss/secret`'s affinity.
+    suppresses `gloss/masked`'s affinity.
   - The `gloss(…)` golden: label rules, typed parameters, the position rule, a
     non-literal argument rejected with a source range.
 - **Gap.** The card hook's look and the hover text are checked by hand at the
@@ -345,7 +348,9 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
 - **M0 — core.** ✓ `public/hmi/gloss`: catalog, kinds, cell accessor, params,
   the content family's inline faces; ADR-0123's parser and tests migrated.
 - **M1 — Table.** ✓ Inline faces in both grids, width seed, tone runs, header
-  label + hover, raw toggle; the seven `gloss/*` members of SD5.
+  label + hover, raw toggle; the `gloss/*` members of SD5 (`epoch` and
+  `duration` joined after M5, and `gloss/secret` was renamed `gloss/masked` —
+  the word collided).
 - **M2 — rules.** ✓ `lwsql.SpecLines`, rules engine, affinities, the directive,
   precedence and hover provenance.
 - **M3 — Detail.** ✓ Block faces bound in play; the card seam; the Glosses tab.

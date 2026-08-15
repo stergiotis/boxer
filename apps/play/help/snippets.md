@@ -475,8 +475,9 @@ SELECT
 ## Glosses (units, check digits, masks, links)
 
 A **gloss** is a named way of showing a value (ADR-0186): a temperature with
-its unit, a card number masked with its Luhn verdict, a secret as six bullets,
-a URL as a link, a byte count in KiB. Glosses render in the **Table** grids
+its unit, a Unix epoch as a moment, a span as `1m 05s`, a card number masked
+with its Luhn verdict, a value masked to six bullets, a URL as a link, a byte
+count in KiB. Glosses render in the **Table** grids
 (one line, sometimes toned) and in **Detail** (a block where the gloss has
 one). Three ways to reach one, in precedence order:
 
@@ -491,7 +492,7 @@ one). Three ways to reach one, in precedence order:
   `LW_TV` token spelling (`name:temperature section:sensor role:val ct:f64
   sem:secret …`) — which is how a leeway column, whose name cannot be aliased
   without losing its shape, gets one. Some glosses bring a rule along:
-  `gloss/secret` for `sem:secret`, `gloss/url` for `sem:url`.
+  `gloss/masked` for `sem:secret`, `gloss/url` for `sem:url`.
 
 The **Glosses** tab lists the catalog, the buffer's rules, and how each column
 of the current result resolved; **Raw cells** on the Table toolbar switches
@@ -505,7 +506,9 @@ SELECT number AS n,
        1.5 + number * 0.31 AS height,
        ['4111111111111111', '4111111111111112', '378282246310005'][1 + number % 3] AS `card@gloss/luhn`,
        1024 * number * number AS `size@gloss/bytes`,
-       'hunter2' AS `pw@gloss/secret`,
+       'hunter2' AS `pw@gloss/masked`,
+       toUnixTimestamp(now()) + number * 86400 AS `when@gloss/epoch`,
+       number * 90500 AS `took@gloss/duration;unit=ms`,
        'https://example.com/' || toString(number) AS `link@gloss/url`,
        20 + number * 1.7 AS `oops@gloss/temperature;unti=C`
 FROM numbers(12)
