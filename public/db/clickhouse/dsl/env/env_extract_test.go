@@ -221,6 +221,14 @@ func TestBodyOffsetLocatesExtractBody(t *testing.T) {
 		"   ",
 		"-- a comment\nSELECT 1", // no prelude; comment stays in the body
 		"NOTASET foo\nSELECT 1",  // unparseable prelude line stays in the body
+		// Comments the prelude spans. The body starts past the SET they
+		// precede, so the offset is what moves, not the suffix rule.
+		"-- c\nSET param_a = 1;\nSELECT 1",
+		"/* c */\nSET param_a = 1;\nSELECT 1",
+		"/* one\ntwo */\nSET param_a = 1;\nSELECT 1",
+		"SET param_a = 1; -- why\nSELECT 1",
+		"SET a = 1;\n-- mid\nSET param_b = 2;\nSELECT 1",
+		"-- only a comment, no SET\nSELECT 1;\nSET x = 1;",
 		// Whitespace OUTSIDE the ASCII cutset the body skip uses. These
 		// discriminate that cutset from unicode.IsSpace, which the rest of
 		// the table cannot — every other input here uses only space, tab,
@@ -237,4 +245,133 @@ func TestBodyOffsetLocatesExtractBody(t *testing.T) {
 		assert.Equal(t, body, in[off:],
 			"BodyOffset must name where Extract's body starts (input %q)", in)
 	}
+}
+
+// A comment must not end the prelude before it starts. It used to: the harvest
+// took only a leading run of pure SET lines, so a header comment collapsed
+// BodyOffset to zero, the buffer read as two statements, and a run-under-cursor
+// shipped the body without the `SET param_*` lines that bind it — every
+// parameter then reading as unfilled. See ADR-0006's 2026-08-15 Update; the
+// repo's own `-- play: …` directives are written exactly here.
+func TestPreludeSpansComments(t *testing.T) {
+	const body = "SELECT {x:String}"
+	for name, in := range map[string]string{
+		"line comment above":       "-- c\n" + body2Set + body,
+		"slash comment above":      "// c\n" + body2Set + body,
+		"block comment above":      "/* c */\n" + body2Set + body,
+		"block comment over lines": "/* one\ntwo */\n" + body2Set + body,
+		"comment trailing the SET": "SET param_x = '1'; -- why\n" + body,
+		"comment between SETs":     "SET a = 1;\n-- mid\n" + body2Set + body,
+	} {
+		t.Run(name, func(t *testing.T) {
+			e, gotBody, err := env.Extract(in)
+			require.NoError(t, err)
+			assert.Equal(t, body, gotBody, "the prelude is consumed whole")
+			assert.Equal(t, "'1'", e.Params["param_x"].Raw, "the binding survives the comment")
+			assert.NotEmpty(t, e.PreludeComments, "the comment is kept, not dropped")
+		})
+	}
+}
+
+// body2Set is the one-line prelude the comment cases above wrap.
+const body2Set = "SET param_x = '1';\n"
+
+// A leading run with no SET in it is not a prelude. Without this the offset
+// would move for every documented query, shifting each pass-recorded range by
+// the length of the buffer's own header.
+func TestCommentWithoutSetIsNotAPrelude(t *testing.T) {
+	for _, in := range []string{
+		"-- a comment\nSELECT 1",
+		"/* a comment */\nSELECT 1",
+		"-- a comment\nSELECT 1;\nSET x = 1;",
+	} {
+		e, body, err := env.Extract(in)
+		require.NoError(t, err)
+		assert.Equal(t, 0, env.BodyOffset(in), "input %q", in)
+		assert.Equal(t, in, body, "input %q", in)
+		assert.Empty(t, e.PreludeComments, "input %q", in)
+	}
+}
+
+// A comment the prelude absorbs has left the body, and Integrate rebuilds the
+// prelude from the Environment alone — so without PreludeComments the harvest
+// would silently delete it. Above a prelude it comes back where it was;
+// interleaved it floats to the top, the same normalisation the SET lines
+// already undergo by being emitted alphabetically.
+func TestRoundTripKeepsPreludeComments(t *testing.T) {
+	identical := []string{
+		"-- c\nSET param_a = 1;\nSELECT {param_a: UInt64}",
+		"// c\nSET param_a = 1;\nSELECT {param_a: UInt64}",
+		"/* c */\nSET param_a = 1;\nSELECT {param_a: UInt64}",
+		"/* one\ntwo */\nSET param_a = 1;\nSELECT {param_a: UInt64}",
+		// Below the last SET the comment is body text and never moved.
+		"SET param_a = 1;\n-- c\nSELECT {param_a: UInt64}",
+	}
+	for _, in := range identical {
+		e, body, err := env.Extract(in)
+		require.NoError(t, err)
+		out, err := e.Integrate(body)
+		require.NoError(t, err)
+		assert.Equal(t, in, out, "round-trip must be byte-identical (input %q)", in)
+	}
+
+	normalised := map[string]string{
+		"SET param_a = 1; -- why\nSELECT 1":              "-- why\nSET param_a = 1;\nSELECT 1",
+		"SET a = 1;\n-- mid\nSET param_b = 2;\nSELECT 1": "-- mid\nSET a = 1;\nSET param_b = 2;\nSELECT 1",
+	}
+	for in, want := range normalised {
+		e, body, err := env.Extract(in)
+		require.NoError(t, err)
+		out, err := e.Integrate(body)
+		require.NoError(t, err)
+		assert.Equal(t, want, out, "input %q", in)
+	}
+}
+
+// The scanner tracks quotes and comments in one walk, so neither can hide
+// inside the other. Everything here would have been harvested wrongly — or
+// harvested at all — by checking for them separately.
+func TestPreludeCommentScannerEdges(t *testing.T) {
+	t.Run("a comment marker inside a string value is not a comment", func(t *testing.T) {
+		e, body, err := env.Extract("SET param_s = 'a--b';\nSELECT 1")
+		require.NoError(t, err)
+		assert.Equal(t, "'a--b'", e.Params["param_s"].Raw)
+		assert.Equal(t, "SELECT 1", body)
+		assert.Empty(t, e.PreludeComments)
+	})
+
+	t.Run("a quote inside a comment does not open a string", func(t *testing.T) {
+		e, body, err := env.Extract("-- don't\nSET param_a = 1;\nSELECT 1")
+		require.NoError(t, err)
+		assert.Equal(t, "1", e.Params["param_a"].Raw)
+		assert.Equal(t, "SELECT 1", body)
+	})
+
+	t.Run("a value spanning lines still ends the prelude", func(t *testing.T) {
+		// Unchanged: it cannot be split line-wise, so it stays in the body
+		// where the grammar parses it correctly.
+		in := "SET param_a = 'x\ny';\nSELECT 1"
+		e, body, err := env.Extract(in)
+		require.NoError(t, err)
+		assert.Equal(t, in, body)
+		assert.Empty(t, e.Params)
+	})
+
+	t.Run("a block comment mid-statement leaves a separator behind", func(t *testing.T) {
+		// Dropping it outright would splice `1/*c*/2` into the value `12`.
+		// A space makes ClickHouse reject it instead.
+		e, _, err := env.Extract("SET param_a = 1/*c*/2;\nSELECT 1")
+		require.NoError(t, err)
+		assert.Equal(t, "1 2", e.Params["param_a"].Raw)
+	})
+
+	t.Run("hash is deliberately not a comment", func(t *testing.T) {
+		// ClickHouse takes `#` as a line comment; grammar1's lexer — which
+		// every downstream consumer uses — does not, and env growing a second
+		// comment vocabulary would be a worse defect than the one being fixed.
+		in := "# c\nSET param_a = 1;\nSELECT 1"
+		_, body, err := env.Extract(in)
+		require.NoError(t, err)
+		assert.Equal(t, in, body, "the line ends the prelude, as any unparseable one does")
+	})
 }

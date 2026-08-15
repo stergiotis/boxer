@@ -5,13 +5,16 @@ import (
 	"strings"
 )
 
-// Integrate produces SQL by emitting the SET-line prelude followed by body.
-// SET lines are emitted in alphabetical order. StatementSettings and Format
-// are read-only views populated by [Extract] — they live in body and are
-// not re-emitted here.
+// Integrate produces SQL by emitting [Environment.PreludeComments], then the
+// SET-line prelude, then body. SET lines are emitted in alphabetical order.
+// StatementSettings and Format are read-only views populated by [Extract] —
+// they live in body and are not re-emitted here.
 //
-// Integrate is the inverse of [Extract] up to whitespace and SET-line
-// ordering. Round-trip is normalising, not byte-identical.
+// Integrate is the inverse of [Extract] up to whitespace, SET-line ordering,
+// and comment position. Round-trip is normalising, not byte-identical: a
+// comment above a prelude does come back where it was, but one written
+// between two SET lines floats to the top, the same way the SET lines
+// themselves are re-ordered.
 func (e *Environment) Integrate(body string) (sql string, err error) {
 	if e == nil {
 		sql = body
@@ -19,6 +22,7 @@ func (e *Environment) Integrate(body string) (sql string, err error) {
 	}
 
 	var sb strings.Builder
+	sb.WriteString(e.PreludeComments)
 
 	keys := make([]string, 0, len(e.SessionSettings))
 	for k := range e.SessionSettings {

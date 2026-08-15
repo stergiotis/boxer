@@ -259,6 +259,90 @@ Accepted — 2026-05-01 (reviewed by p@stergiotis). The Pass / Environment desig
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-08-15 — the SET prelude is comment-tolerant
+
+`Extract` harvested only a leading run of lines that were *entirely* `SET`
+statements, so a comment anywhere in that region ended the prelude before it
+started. Five shapes lost their bindings:
+
+| buffer | `BodyOffset` | harvested |
+| --- | --- | --- |
+| `-- c` above the `SET` | 0 | nothing |
+| `/* c */` above | 0 | nothing |
+| `// c` above | 0 | nothing |
+| `SET param_x = '1'; -- why` | 0 | nothing |
+| `SET a = 1;` / `-- mid` / `SET param_x = '1';` | 11 | `a` only |
+
+The partial harvest is the worst of them: half a prelude, no error.
+
+This is not cosmetic downstream. `sqleditor.BodyStatementRanges` splits at
+`BodyOffset`, so a buffer whose prelude collapsed reads as two statements, and
+a run-under-cursor ships the body **without** its `SET param_*` lines — every
+parameter the buffer plainly binds then reports as unfilled and the Run gate
+blocks on a wrong list. The repo's own directive vocabulary reaches it:
+`-- play: enum`, `-- play: gloss` and `-- play: expr` are written at the top of
+a buffer.
+
+**The prelude is now the longest leading run of lines containing nothing but
+blanks, comments and `SET` statements, truncated to end at the last line
+carrying a `SET`.** A run with no `SET` in it is not a prelude.
+
+Both clauses are load-bearing. Comment-tolerance is the fix; the truncation is
+what keeps a `-- doc comment` above a bare `SELECT` at offset 0, so a
+documented query does not shift every pass-recorded range by the length of its
+own header.
+
+"Comment" is grammar1's set — `--`, `//`, and `/* … */` including the form that
+spans lines. Not `#`, which ClickHouse accepts as a line comment but the lexer
+every downstream consumer uses does not; `env` growing a second comment
+vocabulary would be a worse defect than the one being fixed. An unterminated
+quote still ends the prelude, but that check now runs on what is left of a line
+after its comments are removed, so `-- don't` no longer reads as an open quote.
+
+`BodyOffset` keeps its definition. The prelude is still consumed whole lines at
+a time, so the body is still a byte-identical suffix and
+`sql[BodyOffset(sql):] == body` still holds.
+
+**`Integrate` gains a matching obligation.** An absorbed comment leaves the
+body, and `Integrate` rebuilds the prelude from the `Environment` alone — so
+with nowhere to keep it, the fix would silently delete exactly the directive
+lines that motivated it. `Environment.PreludeComments` holds that text verbatim
+and `Integrate` emits it above the `SET` block. Round-trip stays byte-identical
+for a comment above a prelude; comments between `SET` lines float to the top,
+the same normalisation the `SET` lines already undergo by being emitted
+alphabetically.
+
+#### Surfaces
+
+| Surface | Change | Moves with it |
+| --- | --- | --- |
+| `env.Extract` / `env.BodyOffset` | the prelude spans comments | nothing — the suffix invariant is unchanged |
+| `env.Environment` | added: `PreludeComments string` | `Integrate`, which emits it first |
+| `env.Integrate` | emits `PreludeComments` above the `SET` block | the round-trip corpus |
+| `sqleditor.WithPrelude` / `PreludeRange` | code unchanged; `sql[:bodyOffset]` may now carry comments | a narrowed run carries them (inert to ClickHouse); the tint covers them |
+| `passes.StripComments` | code unchanged | a prelude comment is env, not body, so a body pass no longer removes it — visible only in `play`'s read-only preview |
+| [ADR-0187](./0187-play-sql-expression-parameters.md) §SD3 | "directives below the prelude" relaxed from forced to canonical | `apps/play/play_param_widget_expr_test.go` |
+
+#### Out of scope
+
+`SET param_a = 1; SELECT {a:UInt64}` — prelude and body on **one line** — is
+still not harvested, because the prelude stays line-granular. That predates
+this update and has a standing workaround: read settings off the CST with
+`iterateSettingExprs`, as `play`'s `collectParamSettings` does. Letting the body
+start mid-line is a different decision about `BodyOffset` than this one.
+
+#### Verification
+
+`public/db/clickhouse/dsl/env/env_extract_test.go` covers the five shapes for
+both the harvest and the round-trip, and its existing
+`TestBodyOffsetLocatesExtractBody` table — which pins `sql[off:] == body` and
+the `-- a comment` / bare `SELECT` non-prelude case — gains them too. In
+`apps/play`, `TestExprDirectivesBelongBelowThePrelude` inverts and is renamed
+`TestExprDirectivesWorkEitherSideOfThePrelude`: both orders now bind. No
+integration lane is involved; the change is pure text handling.
+
 ## References
 
 - [ADR-0002: Nanopass Pipeline Discipline](0002-nanopass-discipline.md) — the substrate this ADR refines (stateless passes on CST + scopes).

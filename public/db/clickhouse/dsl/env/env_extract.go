@@ -16,7 +16,8 @@ const ParamPrefix = "param_"
 // The Environment owns:
 //
 //   - The leading `SET key = value;` prelude (split into Params vs.
-//     SessionSettings — see SET-line classification rules below).
+//     SessionSettings — see SET-line classification rules below), and any
+//     comments interleaved with it (env.PreludeComments).
 //   - `{name: Type}` slot occurrences in the body (populating Param.Type).
 //   - Read-only views of the inline `... SETTINGS k=v` clause
 //     (env.StatementSettings) and trailing `FORMAT FormatName` clause
@@ -37,8 +38,9 @@ const ParamPrefix = "param_"
 func Extract(sql string) (e *Environment, body string, err error) {
 	e = NewEnvironment()
 
-	preludeEntries, off := bodyStart(sql)
+	preludeEntries, comments, off := bodyStart(sql)
 	body = sql[off:]
+	e.PreludeComments = joinComments(sql, comments)
 
 	if body != "" {
 		scanBody(body, e)
@@ -71,7 +73,7 @@ func Extract(sql string) (e *Environment, body string, err error) {
 //
 // Costs the prelude scan only, not the CST walk Extract additionally runs.
 func BodyOffset(sql string) int {
-	_, off := bodyStart(sql)
+	_, _, off := bodyStart(sql)
 	return off
 }
 
@@ -85,9 +87,9 @@ func BodyOffset(sql string) int {
 // instead of a promise two functions have to keep independently. The two used
 // to spell the cutset separately; widening one of them to unicode whitespace
 // would have skewed every pass-recorded range by the difference, silently.
-func bodyStart(sql string) (entries []preludeEntry, off int) {
-	entries, body := harvestSetPrelude(sql)
-	return entries, len(sql) - len(strings.TrimLeft(body, " \t\r\n"))
+func bodyStart(sql string) (entries []preludeEntry, comments []commentSpan, off int) {
+	entries, comments, end := harvestSetPrelude(sql)
+	return entries, comments, len(sql) - len(strings.TrimLeft(sql[end:], " \t\r\n"))
 }
 
 type preludeEntry struct {
@@ -95,46 +97,176 @@ type preludeEntry struct {
 	raw  string
 }
 
-// harvestSetPrelude pulls leading `SET key = value;` lines out of sql,
-// returning their (name, raw) pairs and the remaining body. A single line
-// may carry several semicolon-separated SET statements; the split is
-// quote-aware so a `;` inside a string value never terminates a statement.
-// A line that does not parse cleanly in its entirety is left to the body —
-// half-harvesting would silently drop or corrupt statements.
-func harvestSetPrelude(sql string) (entries []preludeEntry, body string) {
-	lines := strings.Split(sql, "\n")
-	consumed := 0
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
+// commentSpan is one comment's byte range in the SQL it was scanned from.
+type commentSpan struct {
+	start int
+	end   int
+}
+
+// harvestSetPrelude pulls the `SET key = value;` prelude out of sql,
+// returning its (name, raw) pairs, the comments interleaved with it, and the
+// byte offset just past the last line carrying a SET.
+//
+// The prelude is the longest leading run of lines holding nothing but blanks,
+// comments and SET statements, truncated to end at the last line carrying a
+// SET (ADR-0006, 2026-08-15 Update). Both halves of that rule are
+// load-bearing. Spanning comments is what keeps a `-- play: …` directive — or
+// any header comment — from ending the prelude before it starts, which used to
+// collapse BodyOffset to zero and strip a buffer's parameter bindings off its
+// own run. Truncating at the last SET is what keeps a comment above a bare
+// SELECT *in* the body, so a documented query does not shift every
+// pass-recorded range by the length of its own header.
+//
+// A single line may carry several semicolon-separated SET statements; the
+// split is quote-aware so a `;` inside a string value never terminates a
+// statement. A line that does not parse cleanly in its entirety is left to the
+// body — half-harvesting would silently drop or corrupt statements.
+func harvestSetPrelude(sql string) (entries []preludeEntry, comments []commentSpan, end int) {
+	// Comments are held back until a SET line commits them: the ones trailing
+	// the last SET belong to the body, and until the next line is read there
+	// is no telling which side of that edge they are on.
+	var pending []commentSpan
+	inBlock := false
+	for pos := 0; pos <= len(sql); {
+		lineEnd, next := len(sql), len(sql)+1
+		if nl := strings.IndexByte(sql[pos:], '\n'); nl >= 0 {
+			lineEnd, next = pos+nl, pos+nl+1
+		}
+		code, lineComments, stillInBlock, openQuote := scanPreludeLine(sql[pos:lineEnd], pos, inBlock)
+		if openQuote {
+			break
+		}
+		trimmed := strings.TrimSpace(code)
 		if trimmed == "" {
-			consumed++
+			pending = append(pending, lineComments...)
+			inBlock = stillInBlock
+			pos = next
 			continue
 		}
 		lineEntries, ok := parseSetLine(trimmed)
 		if !ok {
 			break
 		}
+		comments = append(comments, pending...)
+		comments = append(comments, lineComments...)
+		pending = pending[:0]
 		entries = append(entries, lineEntries...)
-		consumed++
+		inBlock = stillInBlock
+		end = min(next, len(sql))
+		pos = next
 	}
-	if consumed >= len(lines) {
-		return entries, ""
+	return entries, comments, end
+}
+
+// scanPreludeLine splits one candidate prelude line into the code left once
+// its comments are removed and the byte ranges of the comments removed, base
+// being the line's own offset within the SQL so those ranges index it.
+//
+// Quotes and comments are tracked in one left-to-right walk, which is the only
+// way to get both right: a `--` inside a string literal does not open a
+// comment, and an apostrophe inside a comment does not open a string. The
+// comment forms are grammar1's — `--`, `//` and `/* … */` — deliberately not
+// ClickHouse's `#`, which the lexer every downstream consumer uses does not
+// take either.
+//
+// inBlock carries a `/* … */` opened on an earlier line and stillInBlock
+// reports the state at this line's end, so a block comment may span the
+// prelude. A closed block comment consumed mid-line leaves a space behind
+// rather than nothing: it separates tokens in ClickHouse, and dropping it
+// would silently splice `1/*c*/2` into the value `12`.
+//
+// openQuote reports a quoted region still open at the line's end. A SET whose
+// string value spans lines cannot be split line-wise, so the caller ends the
+// prelude there and the statement stays in the body, where the grammar parses
+// it correctly.
+func scanPreludeLine(line string, base int, inBlock bool) (code string, comments []commentSpan, stillInBlock, openQuote bool) {
+	var b strings.Builder
+	i := 0
+	if inBlock {
+		j := strings.Index(line, "*/")
+		if j < 0 {
+			return "", []commentSpan{{start: base, end: base + len(line)}}, true, false
+		}
+		comments = append(comments, commentSpan{start: base, end: base + j + 2})
+		b.WriteByte(' ')
+		i = j + 2
 	}
-	return entries, strings.Join(lines[consumed:], "\n")
+	for i < len(line) {
+		ch := line[i]
+		if ch == '\'' || ch == '"' || ch == '`' {
+			start := i
+			i++
+			closed := false
+			for i < len(line) {
+				if line[i] == '\\' && i+1 < len(line) {
+					i += 2
+					continue
+				}
+				if line[i] == ch {
+					if i+1 < len(line) && line[i+1] == ch {
+						i += 2
+						continue
+					}
+					i++
+					closed = true
+					break
+				}
+				i++
+			}
+			b.WriteString(line[start:i])
+			if !closed {
+				return b.String(), comments, false, true
+			}
+			continue
+		}
+		if i+1 < len(line) && (ch == '-' && line[i+1] == '-' || ch == '/' && line[i+1] == '/') {
+			comments = append(comments, commentSpan{start: base + i, end: base + len(line)})
+			return b.String(), comments, false, false
+		}
+		if i+1 < len(line) && ch == '/' && line[i+1] == '*' {
+			j := strings.Index(line[i+2:], "*/")
+			if j < 0 {
+				comments = append(comments, commentSpan{start: base + i, end: base + len(line)})
+				return b.String(), comments, true, false
+			}
+			comments = append(comments, commentSpan{start: base + i, end: base + i + 2 + j + 2})
+			b.WriteByte(' ')
+			i += 2 + j + 2
+			continue
+		}
+		b.WriteByte(ch)
+		i++
+	}
+	return b.String(), comments, false, false
+}
+
+// joinComments renders the harvested comment spans as the text
+// [Environment.Integrate] re-emits: each span on its own line, verbatim.
+//
+// A block comment spanning n lines arrives as n spans — one per line, each
+// stopping at its line's end — so joining them with the newlines this puts
+// back reproduces it byte for byte.
+func joinComments(sql string, comments []commentSpan) string {
+	if len(comments) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, c := range comments {
+		b.WriteString(sql[c.start:c.end])
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 // parseSetLine matches one or more `SET key = value;` statements on a
 // single line (case-insensitive SET, `=` with or without surrounding
 // spaces). ok is false — and no entries are returned — unless the WHOLE
 // line consists of SET statements.
+//
+// Takes the line with its comments already removed by [scanPreludeLine],
+// which is also where the unterminated-quote rule lives: every quoted region
+// here is closed.
 func parseSetLine(line string) (entries []preludeEntry, ok bool) {
-	// A statement whose string value spans lines (SET a = 'x\ny';) cannot
-	// be split line-wise — an unterminated quote on this line means the
-	// whole prelude attempt stops here and the statement stays in the
-	// body, where the grammar parses it correctly.
-	if lineHasUnterminatedQuote(line) {
-		return nil, false
-	}
 	rest := line
 	for {
 		rest = strings.TrimSpace(rest)
@@ -189,41 +321,6 @@ func plausibleSettingName(name string) bool {
 		}
 	}
 	return true
-}
-
-// lineHasUnterminatedQuote reports whether a quoted region opened on this
-// line is still open at its end.
-func lineHasUnterminatedQuote(s string) bool {
-	for i := 0; i < len(s); {
-		ch := s[i]
-		if ch == '\'' || ch == '"' || ch == '`' {
-			q := ch
-			i++
-			closed := false
-			for i < len(s) {
-				if s[i] == '\\' && i+1 < len(s) {
-					i += 2
-					continue
-				}
-				if s[i] == q {
-					if i+1 < len(s) && s[i+1] == q {
-						i += 2
-						continue
-					}
-					i++
-					closed = true
-					break
-				}
-				i++
-			}
-			if !closed {
-				return true
-			}
-			continue
-		}
-		i++
-	}
-	return false
 }
 
 // indexOutsideQuotes returns the index of the first occurrence of c in s

@@ -5,8 +5,9 @@
 //
 // Decision and scope: see ADR-0006 (doc/adr/0006-nanopass-environment-and-first-class-pass.md).
 //
-// v1 scope. [Extract] handles the leading `SET key = value;` prelude (split into
-// session settings vs. params via the `param_` name prefix) and populates
+// v1 scope. [Extract] handles the leading `SET key = value;` prelude — comments
+// included, see [Environment.PreludeComments] — (split into session settings vs.
+// params via the `param_` name prefix) and populates
 // [Param].Type by scanning `{name: Type}` slots in the body. The inline
 // `... SETTINGS k=v` clause and the `... FORMAT FormatName` clause are not
 // stripped from the body in v1 — passes that operate on them continue to
@@ -35,6 +36,18 @@ type Environment struct {
 	// Format holds the value of a `FORMAT FormatName` clause. "" if absent.
 	// Populated only when a pass explicitly writes here in v1.
 	Format string
+
+	// PreludeComments holds the comments [Extract] found in the prelude
+	// region, verbatim, each followed by a newline. Empty when there were
+	// none.
+	//
+	// It exists so the prelude can span comments without eating them. The
+	// prelude is rebuilt from this Environment rather than carried as text,
+	// so a comment that leaves the body has to be kept somewhere or it is
+	// deleted on the next [Environment.Integrate] — silently, and precisely
+	// on the `-- play: …` directive lines that sit above a prelude.
+	// See ADR-0006's 2026-08-15 Update.
+	PreludeComments string
 }
 
 // Setting represents a single SETTINGS-style key/value pair.
