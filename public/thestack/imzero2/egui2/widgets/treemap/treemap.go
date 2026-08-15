@@ -167,6 +167,19 @@ func WithLeafClickSensing(enabled bool) Option {
 	return func(t *Treemap) { t.leafClickSensing = enabled }
 }
 
+// WithStatusLine controls the summary/hover line drawn UNDER the container:
+// the hovered cell, or the focus's item count and total. Default: shown.
+//
+// Pass false when the host already draws its own readout. The line is a second
+// voice on the same subject, and it speaks the widget's vocabulary — the totals
+// go through formatBytes, which is right for a filesystem and wrong for a host
+// counting something else. It is also chrome the caller has to budget its pane
+// for, so a host sizing the container to fill its pane can turn it off instead
+// of reserving a row for a line it did not want.
+func WithStatusLine(enabled bool) Option {
+	return func(t *Treemap) { t.statusLineHidden = !enabled }
+}
+
 // WithFilterSiblings controls whether non-active siblings are excluded from
 // the treemap layout when the user has drilled down past root. When true,
 // only the active breadcrumb child and its descendants occupy layout space;
@@ -426,6 +439,11 @@ type Treemap struct {
 	// leafClickSensing: when true, frontier leaf cells sense clicks and the
 	// result is accessible via ClickedLeaf(). Default: false.
 	leafClickSensing bool
+
+	// statusLineHidden suppresses the summary/hover line under the container
+	// (WithStatusLine). Stated negatively so the zero value keeps drawing it,
+	// which is what every caller before the option got.
+	statusLineHidden bool
 
 	// Retained chrome colors (breadcrumb / container / leaf-view backgrounds)
 	colorBreadcrumbBg  color.Color
@@ -1263,11 +1281,13 @@ func (t *Treemap) renderBody() {
 			}
 		}
 
-		if hoverInfo != "" {
-			c.Label(hoverInfo).Send()
-		} else {
-			c.Label(fmt.Sprintf("%d items  |  total size: %s  |  hover for info, click to drill",
-				len(cur.Children), formatBytes(cur.TotalSize()))).Send()
+		if !t.statusLineHidden {
+			if hoverInfo != "" {
+				c.Label(hoverInfo).Send()
+			} else {
+				c.Label(fmt.Sprintf("%d items  |  total size: %s  |  hover for info, click to drill",
+					len(cur.Children), formatBytes(cur.TotalSize()))).Send()
+			}
 		}
 
 		switch {
