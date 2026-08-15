@@ -74,8 +74,14 @@ func (inst *Field) Render(ids *c.WidgetIdStack, f FieldFrame) {
 	if rows == 0 {
 		rows = 1
 	}
+	// CodeEditor is egui's `code_editor()` preset, which sets monospace AND
+	// tab-capture. The font is wanted; the tab-capture is not, and it is
+	// released rather than inherited: a field is a CONTROL in a strip, not a
+	// document, so Tab has to reach the control beside it. [Editor] keeps the
+	// capture because there an indent is part of the text being written.
 	b := c.TextEdit(ids.PrepareStr(f.IDSlot), view, rows > 1).
 		CodeEditor().
+		LockFocus(false).
 		DesiredRows(rows).
 		HintText(f.Hint)
 	if f.Width > 0 {
