@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-15
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0188: App-instance effect tracking — derived teardown, guarded dataset withdrawal, live-effect tables
 
@@ -379,12 +377,18 @@ query over effects, not only over launches.
 
 ## Status
 
-Proposed — awaiting review by the code owner. Open forks for the dialogue:
-(F1) `RetractGrace` default — one request timeout, or a frame-scale value
-with the deferral's exact guard pulled forward; (F2) whether M0's reap
-order should also publish the reserved `runtime.app.{id}.unmount`
-lifecycle subject now that a payload with an instance key exists;
-(F3) `client_caps` as its own table versus columns on `subscriptions`.
+Accepted 2026-08-15, with M0–M3 already landed under `proposed` status by
+the owner's direction, the record edited in place as implementation
+taught (the milestone notes above): the task monitor announces external
+cancellation instead of terminating silently, and the dataset binder is
+level-triggered — events as hints, request/reply as truth, a reconcile
+tick — after a review of what the bus promises. Of the three forks the
+proposal left open, F1 (`RetractGrace` = one bus request timeout) and F3
+(`client_caps` as its own table, with a `declared` column) were taken as
+written; F2 (publishing the reserved `runtime.app.{id}.unmount` lifecycle
+subject at reap) was not taken and stays under *Deferred* above with its
+trigger. From here on the record changes only through dated `## Updates`
+entries.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
