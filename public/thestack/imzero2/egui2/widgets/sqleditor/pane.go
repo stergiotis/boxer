@@ -15,6 +15,7 @@ package sqleditor
 // nothing else — it does no completion of its own.
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"strconv"
 	"strings"
 
@@ -251,8 +252,11 @@ func (inst *Pane) renderNameCell(in PaneInput, r tree.Row, accept func(sqlcomple
 			if accept == nil || !row.match {
 				continue
 			}
+			// A Phosphor glyph, not a bare `↵`: an affordance's glyph must
+			// come from a font the client loads, or its size and baseline
+			// belong to whichever face in the fallback chain answered.
 			if c.Button(in.Ids.PrepareSeq(paneInsertIDBase+uint64(r.Node)),
-				c.Atoms().Text("↵").Keep()).SendResp().HasPrimaryClicked() {
+				c.Atoms().Text(icons.PhArrowElbowDownLeft).Keep()).SendResp().HasPrimaryClicked() {
 				accept(row.item, strings.TrimPrefix(row.item.Insert, in.Typed))
 			}
 		}
