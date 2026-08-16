@@ -440,3 +440,66 @@ func TestGlossRepositoryRules(t *testing.T) {
 	assert.Same(t, DefaultRepository(), b.glossRules())
 	assert.Same(t, DefaultRepository(), NewLivePlayApp(nil, "", 4, nil).glossRules())
 }
+
+// gloss/taggedid's block face (ADR-0186, its 2026-08-16 Update): the split
+// spelled out under the inline face, and the copy row only where the
+// clipboard is reachable. The heights the card reserves come from the same
+// settled block the render walks, so they cannot disagree.
+func TestTaggedIdBlock(t *testing.T) {
+	// tag value 12 (6-bit code) over body 58.
+	const id = "12393906174523605050"
+	app := &PlayApp{}
+	inst := glossInstanceFor(t, gloss.MediaTypeTaggedId)
+	cell := gloss.TextCell{S: id, K: gloss.ValueKindNumeric}
+
+	b := app.taggedIdBlockFor(inst.Inline(cell), cell)
+	require.True(t, b.split)
+	assert.Equal(t, "c:3a", b.face.Text)
+	assert.Equal(t, uint32(12), b.parts.TagValue)
+	assert.Equal(t, uint64(58), b.parts.Body)
+	assert.False(t, b.copyable, "no bus: the clipboard is unreachable")
+	assert.InDelta(t, taggedIdFaceHeight+2*taggedIdLineHeight+cardBlockPad, b.height(), 0.01,
+		"face + tag line + counter line, no copy row")
+
+	// A word that is not a tagged id: the plain value and why, no copy row.
+	notId := gloss.TextCell{S: "4294967296", K: gloss.ValueKindNumeric}
+	b = app.taggedIdBlockFor(inst.Inline(notId), notId)
+	assert.False(t, b.split)
+	assert.Equal(t, gloss.ToneWarning, b.face.Tone)
+	assert.Contains(t, b.note, "fibonacci comma")
+	assert.InDelta(t, taggedIdFaceHeight+taggedIdLineHeight+cardBlockPad, b.height(), 0.01)
+
+	// A null: the empty face alone.
+	b = app.taggedIdBlockFor(gloss.Inline{}, gloss.ArrowCell{})
+	assert.False(t, b.split)
+	assert.Empty(t, b.note)
+	assert.InDelta(t, taggedIdFaceHeight+cardBlockPad, b.height(), 0.01)
+}
+
+// The card claims a tagged-id column the way it claims a URL one, and
+// reserves the height the block reports.
+func TestCardCellBlockTaggedId(t *testing.T) {
+	app := &PlayApp{richCells: newRichCellCache(nil)}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "id@gloss/taggedid", Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
+	}, nil)
+	fn := app.cardCellBlock(schema)
+	require.NotNil(t, fn)
+	b, ok := fn(0, "12393906174523605050")
+	require.True(t, ok)
+	require.NotNil(t, b.Render)
+	assert.InDelta(t, taggedIdFaceHeight+2*taggedIdLineHeight+cardBlockPad, b.Height, 0.01)
+	// No entry is cached: the block reads the value, it does not build an
+	// artifact from it.
+	assert.NotContains(t, app.richCells.entries, richKey{col: 0, ord: 0})
+}
+
+// glossInstanceFor binds a catalog member with no parameters.
+func glossInstanceFor(t *testing.T, mediaType string) gloss.InstanceI {
+	t.Helper()
+	g, ok := gloss.Default().Lookup(mediaType)
+	require.True(t, ok, mediaType)
+	inst, err := g.Bind(nil)
+	require.NoError(t, err)
+	return inst
+}

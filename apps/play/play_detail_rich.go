@@ -345,11 +345,17 @@ func (inst *PlayApp) renderRichCell(col int, d gloss.Declaration, cell gloss.Arr
 		}
 		if !hasBlockFace(mediaTypeOnly(d.MediaType)) {
 			face := d.Instance.Inline(cell)
-			if mediaTypeOnly(d.MediaType) == gloss.MediaTypeURL {
-				// The one presentation gloss with a block face of its own: a
+			switch mediaTypeOnly(d.MediaType) {
+			case gloss.MediaTypeURL:
+				// A presentation gloss with a block face of its own: a
 				// hyperlink to the value, opened by the host's opener. The
 				// inline face is the caption; the URL is the raw value.
 				c.HyperlinkTo(face.Text, raw).OpenInNewTab(true).Send()
+				return
+			case gloss.MediaTypeTaggedId:
+				// The other one: the split spelled out, and the whole word
+				// in the two spellings a query and a debugger want.
+				inst.renderTaggedIdBlock("detail-"+strconv.Itoa(col), inst.taggedIdBlockFor(face, cell))
 				return
 			}
 			if col, toned := toneColor(face.Tone); toned {
@@ -371,6 +377,124 @@ func (inst *PlayApp) renderRichCell(col int, d gloss.Declaration, cell gloss.Arr
 			return
 		}
 		inst.richCells.renderBody(key, d, e)
+	}
+}
+
+// taggedIdBlock is one tagged-id cell's block face, settled before it is
+// drawn. The leeway card declares a row's height before the faces are laid
+// out, so height() and renderTaggedIdBlock must agree — computing the shape
+// once, here, is what keeps them from drifting apart.
+type taggedIdBlock struct {
+	face  gloss.Inline
+	parts gloss.TaggedIdParts
+	// split is false for a word that is not a tagged id at all — no
+	// fibonacci comma, or a code past the uint32 tag-value domain. The face
+	// then shows the plain value in the warning tone and note says why.
+	split bool
+	note  string
+	// copyable is CanCopy at the time the block was built: without a bus the
+	// clipboard is unreachable and the buttons are withheld rather than
+	// rendered dead.
+	copyable bool
+}
+
+// taggedIdBlockFor settles one cell's block face.
+func (inst *PlayApp) taggedIdBlockFor(face gloss.Inline, cell gloss.CellI) (b taggedIdBlock) {
+	b.face = face
+	if cell.IsNull() {
+		return b
+	}
+	v, read := gloss.ReadTaggedId(cell)
+	if !read {
+		b.note = "not a number: no id to split"
+		return b
+	}
+	p, ok := gloss.SplitTaggedId(v)
+	if !ok {
+		b.note = "not a tagged id: the word carries no fibonacci comma"
+		return b
+	}
+	b.parts, b.split, b.copyable = p, true, inst.CanCopy()
+	return b
+}
+
+// The tagged-id block's parts, measured against a rendered card row rather
+// than assumed: a laid-out line is taller than the font size, and the copy
+// row is a button, which is taller again. A row declares its height before
+// its faces are laid out, so an underestimate clips — the first cut counted
+// the buttons as one more text line and cut them in half.
+const (
+	taggedIdFaceHeight   = 24.0
+	taggedIdLineHeight   = 24.0
+	taggedIdButtonHeight = 30.0
+)
+
+// height is what the card reserves for the block: the face, the account
+// beneath it, and the copy row when there is a clipboard to copy to.
+func (inst taggedIdBlock) height() float32 {
+	h := taggedIdFaceHeight
+	switch {
+	case inst.split:
+		h += 2 * taggedIdLineHeight
+	case inst.note != "":
+		h += taggedIdLineHeight
+	}
+	if inst.split && inst.copyable {
+		h += taggedIdButtonHeight
+	}
+	return float32(h) + cardBlockPad
+}
+
+// renderTaggedIdBlock draws gloss/taggedid's block face: the two halves the
+// inline face shows, then what they are — the tag value with its fibonacci
+// code width, the counter with the room its tag leaves — and the whole word
+// in the two spellings that get pasted, decimal for a `WHERE id =` and hex
+// for anything reading bits.
+//
+// scope must be unique per cell: two id columns in one pane would otherwise
+// derive the same button ids, and a duplicate id is a silent SendResp, not
+// a panic.
+func (inst *PlayApp) renderTaggedIdBlock(scope string, b taggedIdBlock) {
+	if col, toned := toneColor(b.face.Tone); toned {
+		for rt := range c.RichTextLabelColored(col, color.Transparent, b.face.Text) {
+			rt.Monospace().Strong()
+		}
+	} else {
+		for rt := range c.RichTextLabel(b.face.Text) {
+			rt.Monospace().Strong()
+		}
+	}
+	if !b.split {
+		if b.note != "" {
+			for rt := range c.RichTextLabel(b.note) {
+				rt.Small().Weak()
+			}
+		}
+		return
+	}
+	p := b.parts
+	for rt := range c.RichTextLabel(fmt.Sprintf("tag value %s · %d-bit code",
+		humanize.Comma(int64(p.TagValue)), p.TagWidth)) {
+		rt.Small().Weak()
+	}
+	for rt := range c.RichTextLabel(fmt.Sprintf("counter %s of %s",
+		humanize.Comma(int64(p.Body)), humanize.Comma(int64(p.MaxBody)))) {
+		rt.Small().Weak()
+	}
+	if !b.copyable {
+		return
+	}
+	dec := strconv.FormatUint(p.Id, 10)
+	hex := p.Hex()
+	for range c.Horizontal().KeepIter() {
+		if c.Button(inst.ids.PrepareStr("play-tid-dec-"+scope), c.Atoms().Text("Copy id").Keep()).
+			SendResp().HasPrimaryClicked() {
+			inst.copyToClipboard(dec)
+		}
+		if c.Button(inst.ids.PrepareStr("play-tid-hex-"+scope), c.Atoms().Text("Copy hex").Keep()).
+			SendResp().HasPrimaryClicked() {
+			inst.copyToClipboard(hex)
+		}
 	}
 }
 
@@ -453,7 +577,8 @@ const (
 // card: bound, its items accepted, and a media type this pane has a face
 // for.
 func cardBlockFace(gc *glossColumn) bool {
-	return gc.glossedElem() && (hasBlockFace(gc.mediaType) || gc.mediaType == gloss.MediaTypeURL)
+	return gc.glossedElem() && (hasBlockFace(gc.mediaType) ||
+		gc.mediaType == gloss.MediaTypeURL || gc.mediaType == gloss.MediaTypeTaggedId)
 }
 
 // cardBlock builds the block face for one card value: the same artifact
@@ -468,6 +593,21 @@ func (inst *PlayApp) cardBlock(gc *glossColumn, key richKey, text string, kind g
 		return leewaywidgets.CellBlock{Render: func() {
 			c.HyperlinkTo(face.Text, url).OpenInNewTab(true).Send()
 		}}
+	}
+	if gc.mediaType == gloss.MediaTypeTaggedId {
+		cell := gloss.TextCell{S: text, K: kind}
+		b := inst.taggedIdBlockFor(gc.inst.Inline(cell), cell)
+		scope := "card-" + key.String()
+		return leewaywidgets.CellBlock{
+			Height: b.height(),
+			Render: func() {
+				// PushId, as the text faces below do: the buttons sit inside
+				// a cell that may hold several of the column's values.
+				for range c.PushId(inst.ids.PrepareStr("play-card-tid-" + scope)).KeepIter() {
+					inst.renderTaggedIdBlock(scope, b)
+				}
+			},
+		}
 	}
 	d, _ := gc.declaration(gc.label)
 	e := inst.richCells.entryFor(key, d, text)

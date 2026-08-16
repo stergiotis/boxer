@@ -511,9 +511,17 @@ SELECT number AS n,
        toUnixTimestamp(now()) + number * 86400 AS `when@gloss/epoch`,
        number * 90500 AS `took@gloss/duration;unit=ms`,
        'https://example.com/' || toString(number) AS `link@gloss/url`,
+       toUInt64(12393906174523604992) + number + 1 AS `id@gloss/taggedid`,
        20 + number * 1.7 AS `oops@gloss/temperature;unti=C`
 FROM numbers(12)
 ```
+
+The `id` column is tag value 12 over a counter, so it reads `c:1`, `c:2`, …
+Select a row and open **Detail**: the tagged id spells its split out there —
+tag value, code width, counter — with **Copy id** and **Copy hex** buttons.
+Swap the expression for `toUInt64(4294967296)` to see the other half of the
+contract: a `UInt64` carrying no fibonacci comma is not a tagged id, and shows
+plain in the warning tone rather than pretending to split.
 
 ## Parameter prelude
 

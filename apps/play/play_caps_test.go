@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
@@ -162,17 +163,18 @@ func TestPlayApp_RestorePersistedSql_EmptyValue_KeepsDefault(t *testing.T) {
 
 func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
-	// Four declared Caps: fs dialog + chlocalbroker pool for the time-range
+	// Five declared Caps: fs dialog + chlocalbroker pool for the time-range
 	// evaluator + windowhost.open for the Save-as-applet launch (ADR-0135
-	// §SD7) + adhoc.publish for the timeseries fixture lab (ADR-0163 §SD7).
-	// The applet-store save cap moved out with the O4 authoring form (now
-	// apps/sqlappletcreator); the fs.handle.> wildcard came out once the
-	// broker's dynamic per-handle grant was shown to be sufficient.
+	// §SD7) + adhoc.publish for the timeseries fixture lab (ADR-0163 §SD7) +
+	// clipboard.write for the Copy buttons. The applet-store save cap moved
+	// out with the O4 authoring form (now apps/sqlappletcreator); the
+	// fs.handle.> wildcard came out once the broker's dynamic per-handle
+	// grant was shown to be sufficient.
 	//
 	// The count is asserted on purpose: a capability is an authority this app
 	// is granted, so adding one has to be a deliberate edit here rather than
 	// something that rides along with a feature.
-	require.Len(t, m.Caps, 4)
+	require.Len(t, m.Caps, 5)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)
@@ -190,6 +192,12 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	assert.Contains(t, patterns, "ch.local.exec."+timerangepicker.PoolName)
 	assert.Contains(t, patterns, windowhost.OpenSubject)
 	assert.Contains(t, patterns, adhocdata.SubjectPublish)
+	// clipboard.write — the Definition pane's per-fence Copy buttons and
+	// gloss/taggedid's block face both request it. It was missing until
+	// 2026-08-16, which made those Copy buttons render and then be denied;
+	// CanCopy gates the affordance on the bus, not on the grant, so an
+	// undeclared cap fails silently. Declared, it is audited on every use.
+	assert.Contains(t, patterns, clipboardbroker.SubjectWrite)
 	assert.NotContains(t, patterns, appletstore.SubjectSave)
 	// PersistedKeys → host-injected runtime.persist.play.> cap. Both keys
 	// are read-only now (ADR-0148 §SD8): the buffers are saved as a

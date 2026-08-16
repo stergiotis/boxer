@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -244,6 +245,11 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Pattern:   adhocdata.SubjectPublish,
 				Direction: app.CapDirectionPub,
 				Reason:    "publish the generated timeseries fixture as ad-hoc datasets (ADR-0163 §SD7)",
+			},
+			{
+				Pattern:   clipboardbroker.SubjectWrite,
+				Direction: app.CapDirectionPub,
+				Reason:    "Copy buttons: the Definition pane's SQL fences and gloss/taggedid's block face (ADR-0026 Update 2026-05-30)",
 			},
 		},
 		// PersistedKeys → host auto-injects the runtime.persist.play.>

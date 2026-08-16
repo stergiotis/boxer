@@ -443,10 +443,12 @@ from the result's column names:
   columns are grouped by name prefix into pinned / relations / data / meta sections.
   A glossed column ([Glosses](#glosses)) renders through its gloss here: a
   block face where the gloss has one — markdown, highlighted JSON / SQL / Go,
-  a decoded image, a hyperlink — else its one-line face under a caption naming
-  the column and the media type. A declaration the catalog cannot honour shows
-  the plain first line and says why. On the leeway card, values pass through
-  their column's gloss too (one line per value; the card has no block faces).
+  a decoded image, a hyperlink, a tagged id split into tag and counter with
+  Copy buttons — else its one-line face under a caption naming the column and
+  the media type. A declaration the catalog cannot honour shows the plain
+  first line and says why. On the leeway card, values pass through their
+  column's gloss too, and a column whose gloss has a block face gets it there
+  as well, stacked under the inline line.
 
 Above either card, when the selected row carries one or more **datetime attributes**,
 a compact **timeline** plots them on a shared UTC axis. Each attribute is one legend
@@ -682,7 +684,8 @@ unanswered probe is not the same as an empty server. Switching endpoints re-asks
 The result-side sibling of Vocabulary (ADR-0186). A **gloss** is a named way of
 showing a value — a temperature with its unit, a Unix epoch as a moment, a span
 as `1m 05s`, a card number masked with its Luhn verdict, a value masked to six
-bullets, a URL as a link, a byte count in KiB, and the ADR-0123 content types
+bullets, a URL as a link, a byte count in KiB, a fibonacci-tagged id split into
+its tag and counter, and the ADR-0123 content types
 (markdown, code, images) as one family. Every gloss
 has a one-line face for the Table grids and, some, a block face for Detail —
 in the ad-hoc pane and, stacked under the row's other values, in the leeway
@@ -716,6 +719,18 @@ Three routes bind a column to a gloss, in precedence order:
   registered on the `gloss.Repository` the host hands play at construction.
   They rank between the buffer's directives and the affinities, and the
   Glosses tab lists them under their set's name.
+
+`gloss/taggedid` is worth calling out because its value is unreadable without
+it. A fibonacci-tagged id (ADR-0106) packs a category and a per-category
+counter into one `UInt64`, so a grid otherwise shows a 19-digit decimal that
+says nothing: the gloss shows the two halves in hex instead, tag first —
+`12393906174523605050` reads as `c:3a`. In Detail and on the leeway card it
+spells the split out — the tag value with its fibonacci code width, the
+counter with the room its tag leaves — and offers **Copy id** (the decimal, for
+a `WHERE id =`) and **Copy hex**. A word that is not a tagged id, or a tag over
+the reserved counter 0, shows plain in the warning tone rather than pretending
+to split. It has no affinity: being a surrogate key does not make a column
+fibonacci-tagged, so bind it by alias or by rule.
 
 The tab shows the **catalog** (each gloss with its accepted value kinds,
 parameters, a sample rendering, its affinities, and two Insert buttons —

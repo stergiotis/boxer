@@ -127,6 +127,26 @@ SELECT number AS n,
 FROM numbers(12)"
 }
 
+scene_02_table_taggedid() {
+	desc="Table + Detail — gloss/taggedid (ADR-0186): a fibonacci-tagged id (ADR-0106) shown as tag value and counter in hex, and spelled out in Detail with Copy buttons; a UInt64 carrying no comma is refused in the warning tone"
+	# Table-free. The three id columns are tag value 12 (a 6-bit code, so
+	# `c:…`), tag value 1 (the 2-bit code, whose ids sit above 2^63 — the
+	# reason CellI needed an unsigned read), and a lone bit, which is not a
+	# tagged id at all.
+	senv=(BOXER_PLAY_FOCUS_TABLE=1)
+	sql="SELECT number AS n,
+       toUInt64(12393906174523604992) + number + 1 AS \`id@gloss/taggedid\`,
+       toUInt64(13835058055282163712) + number + 1 AS \`hot@gloss/taggedid\`,
+       toUInt64(4294967296) AS \`oops@gloss/taggedid\`
+FROM numbers(8)"
+	# The grid first, then a later row selected — the Detail block face has
+	# to follow the selection, so clicking row 1 (already selected on load)
+	# would capture the same frame twice and prove nothing.
+	steps='{"do":"capture","text":"02_table_taggedid","settleMs":600}
+{"do":"click","name":"c:5"}
+{"do":"capture","text":"02_table_taggedid_detail","settleMs":600}'
+}
+
 scene_03_detail_card() {
 	desc="Detail — the leeway entity card for a single row: the plain id section, every tagged section, membership chips"
 	# Detail claims its channel from the `selection` signal, so a scripted

@@ -195,11 +195,27 @@ func (inst *PlayApp) renderDefinitionDoc(doc *markdown.Doc) {
 	}
 	for act := range doc.RenderActions(inst.ids, "Copy",
 		markdown.WithCodeActionFilter(sqlBlockActionable)) {
-		// Off the frame goroutine — Request blocks until the broker acks
-		// (the clipboard rule).
-		text := act.Text
-		go func() {
-			_, _ = inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
-		}()
+		inst.copyToClipboard(act.Text)
 	}
 }
+
+// copyToClipboard hands text to the clipboard Powerbox (ADR-0026 Update
+// 2026-05-30). It runs off the frame goroutine because Request blocks until
+// the broker acks, and it is a Request rather than a Publish because only
+// the request leg is audited — a capability routed over Publish is invisible
+// to the audit trail that justifies making it a capability.
+//
+// Silent without a bus: callers check CanCopy and withhold the affordance
+// rather than render a dead one.
+func (inst *PlayApp) copyToClipboard(text string) {
+	if inst.bus == nil {
+		return
+	}
+	go func() {
+		_, _ = inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
+	}()
+}
+
+// CanCopy reports whether the clipboard is reachable from this instance —
+// what an affordance that only exists to copy is gated on.
+func (inst *PlayApp) CanCopy() bool { return inst.bus != nil }
