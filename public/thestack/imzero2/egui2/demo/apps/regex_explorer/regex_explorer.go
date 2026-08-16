@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 )
 
@@ -30,6 +31,41 @@ import (
 // (minus the 280-pt cheatsheet panel); tune for readability. Compare
 // configview, which uses a finite DesiredWidth(280) for the same reason.
 const editorWidth = float32(800)
+
+// Per-match render caps. Three surfaces here fan out one unit of UI per
+// match, so their cost tracks the match count rather than the size of the
+// input: a pattern like `.` over a few KB of haystack yields thousands of
+// matches from an input that is itself a few KB. Uncapped, one such
+// pattern put ~325 KB of tab body on the FFFI wire every frame and left
+// the client laying out thousands of text jobs — a 30-80 ms frame.
+//
+// The two numbers differ because the units do. A highlight segment is one
+// styled run inside a single LabelAtoms: one layout job with N sections. A
+// match row is an id scope, a Horizontal and several labels — a widget
+// each, an order of magnitude dearer.
+//
+// Both are display budgets, not analysis limits. Every surface keeps
+// reporting the exact match count, and the haystack is still shown in
+// full past the highlight cap (unstyled); only what is drawn is bounded.
+const (
+	maxHighlightedMatches = 500
+	maxMatchRows          = 200
+)
+
+// Dock tab ids. Stable across frames by contract — they name entries in
+// the persistent egui_dock layout state, so renumbering them discards a
+// user's splits and drag-order. They also key the per-tab [lazypane.Pane],
+// which is why they are declared rather than spelled at the call site.
+const (
+	tabIDPreview uint64 = 1
+	tabIDList    uint64 = 2
+	tabIDReplace uint64 = 3
+)
+
+// appInstanceSeq hands each [newApp] a process-unique number for its
+// lazypane probe keys. Not persisted and not stable across runs: it seeds
+// per-run probe state only, never a widget id or a stored layout.
+var appInstanceSeq atomic.Uint64
 
 // App holds per-window state for the regex explorer: the current pattern
 // and haystack bound to the UI text-edit widgets, the last result of each
@@ -125,6 +161,22 @@ type App struct {
 	// mu comment above.
 	ids *c.WidgetIdStack
 
+	// One [lazypane.Pane] per dock tab, keyed by tab id and persistent
+	// across frames (each carries a visibility phase machine). The dock
+	// helper runs every tab's body every frame and ships all of them,
+	// while the client keeps only the active tab's buffer and discards
+	// the rest uninterpreted — so without these gates two hidden tabs'
+	// widgets are built, serialised and written to the wire for nothing.
+	// Render-thread-confined, like [App.ids].
+	tabPanes map[uint64]*lazypane.Pane
+
+	// instanceSeq disambiguates this App's lazypane probe keys from
+	// another live instance's. [lazypane.New] hashes its key into an r21
+	// probe seq that is NOT salted by [App.ids], so two explorers alive at
+	// once — two windows, or two demo scenes in one gallery frame — would
+	// otherwise share one probe and read each other's visibility.
+	instanceSeq uint64
+
 	compileCacheMu sync.Mutex
 	compileCache   map[string]compileResult
 
@@ -149,8 +201,10 @@ type App struct {
 // stack so interactive multi-window renders don't collide.
 func newApp() (inst *App) {
 	inst = &App{
-		ids:   c.NewWidgetIdStack(),
-		alloc: memory.NewGoAllocator(),
+		ids:         c.NewWidgetIdStack(),
+		alloc:       memory.NewGoAllocator(),
+		tabPanes:    make(map[uint64]*lazypane.Pane, 3),
+		instanceSeq: appInstanceSeq.Add(1),
 	}
 	return
 }
@@ -330,15 +384,9 @@ func (inst *App) renderBody() {
 
 	c.UiSetMinHeight(260)
 	for dock := range c.DockArea(inst.ids.PrepareStr("tabs")) {
-		for range dock.Tab(1, "Preview (Go)") {
-			inst.renderPreviewTab()
-		}
-		for range dock.Tab(2, "List") {
-			inst.renderListTab()
-		}
-		for range dock.Tab(3, "Replace") {
-			inst.renderReplaceTab()
-		}
+		inst.renderTab(dock, tabIDPreview, "Preview (Go)", inst.renderPreviewTab)
+		inst.renderTab(dock, tabIDList, "List", inst.renderListTab)
+		inst.renderTab(dock, tabIDReplace, "Replace", inst.renderReplaceTab)
 	}
 
 	// Converge the lanes on whatever is in the editors now. Runs every
@@ -346,6 +394,63 @@ func (inst *App) renderBody() {
 	// query is in flight is not lost, it is simply picked up by the next
 	// frame that finds a lane free (see [queryLane]).
 	inst.reconcileQueries()
+}
+
+// renderTab emits one dock tab, gating its body behind that tab's
+// [lazypane.Pane]: while the tab is hidden the body is replaced by a
+// visibility probe and a loading placeholder, and the real content lands
+// one frame after activation.
+//
+// The saving is not cosmetic. [c.DockAreaFluid.Tab] runs every declared
+// tab's body every frame and ships all of them in one deferred block map,
+// but the client keeps only the active tab's buffer and discards the rest
+// uninterpreted — so the two hidden tabs' widgets were being built,
+// serialised and written to the wire to be thrown away. All three bodies
+// also fan out per match (one styled atom per match in Preview, one row
+// per match in List), so the waste scales with the match count rather
+// than with the size of the UI.
+//
+// Queries are unaffected: the lanes are level-triggered and converge in
+// reconcileQueries after this block, not from the tab bodies, so a hidden
+// tab's result still tracks the current inputs (see [queryLane]).
+func (inst *App) renderTab(dock *c.DockAreaFluid, tabID uint64, title string, body func()) {
+	for range dock.Tab(tabID, title) {
+		if inst.tabPane(tabID, title).Skip() {
+			continue
+		}
+		body()
+	}
+}
+
+// tabPane returns the persistent lazypane gate for one tab, constructing
+// it on first use. The key namespaces the probe seq by instance and tab
+// (see [App.instanceSeq]); Title is refreshed every frame because it is
+// what the placeholder names. The nil-map branch keeps a zero-value App
+// renderable; every current caller comes through newApp.
+func (inst *App) tabPane(tabID uint64, title string) (pane *lazypane.Pane) {
+	if inst.tabPanes == nil {
+		inst.tabPanes = make(map[uint64]*lazypane.Pane, 3)
+	}
+	pane = inst.tabPanes[tabID]
+	if pane == nil {
+		pane = lazypane.New(fmt.Sprintf("regex-explorer-tab-%d-%d", inst.instanceSeq, tabID), title)
+		inst.tabPanes[tabID] = pane
+	}
+	pane.Title = title
+	return
+}
+
+// renderTruncationNote states what a per-match surface left undrawn. Weak
+// and terse: every caller already prints the exact total in the heading
+// above it, so this line only has to say that the drawing stopped early
+// and by how much. Silent when nothing was dropped.
+func renderTruncationNote(shown int, total int) {
+	if shown >= total {
+		return
+	}
+	c.LabelAtoms(c.Atoms().BeginRichText(
+		fmt.Sprintf("… %d more not shown (display capped at %d)", total-shown, shown),
+	).Weak().End().Keep()).Send()
 }
 
 // renderEvalHandoff draws the extraction hand-off row (ADR-0017 §SD6):
@@ -598,8 +703,10 @@ func (inst *App) renderReplaceTab() {
 }
 
 // renderListTab draws the ClickHouse extractAll result — one row per
-// element. Rendered as a ScrollArea with sequential labels; match counts
-// are expected to stay small during interactive use.
+// element. Rendered as a ScrollArea with sequential labels, capped at
+// maxMatchRows: the rows are plain widgets rather than a culling table,
+// so a pattern that matches thousands of times would otherwise emit
+// thousands of them every frame. The heading keeps the exact count.
 //
 // When the pattern captures, extractAll returns capture group 1 rather
 // than the full match, and the tab says so and shows the full
@@ -640,6 +747,9 @@ func (inst *App) renderListTab() {
 
 	for range c.ScrollArea().Vscroll(true).KeepIter() {
 		for i, m := range out.Matches {
+			if i >= maxMatchRows {
+				break
+			}
 			for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 				for range c.Horizontal().KeepIter() {
 					c.Label(fmt.Sprintf("%d:", i)).Send()
@@ -651,6 +761,7 @@ func (inst *App) renderListTab() {
 				}
 			}
 		}
+		renderTruncationNote(min(maxMatchRows, len(out.Matches)), len(out.Matches))
 	}
 }
 

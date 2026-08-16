@@ -117,6 +117,10 @@ func nonEmptyMatches(re *regexp.Regexp, haystack string) (matches [][]int) {
 // match segments use StyledTextColored with the IDS accent fill. An
 // invalid pattern yields the unstyled haystack — the compile error is
 // surfaced next to the pattern input (see [renderPatternCompileError]).
+//
+// Highlighting stops after maxHighlightedMatches. The haystack itself is
+// still painted in full: the tail simply falls into the trailing plain
+// segment, and a weak note says so.
 func (inst *App) renderHighlightedHaystack(pattern string, haystack string) {
 	if haystack == "" {
 		c.Label("(empty haystack)").Send()
@@ -147,9 +151,17 @@ func (inst *App) renderHighlightedHaystack(pattern string, haystack string) {
 	matchFg := color.Hex(styletokens.NeutralBgExtreme.AsHex()).Keep()
 	matchBg := color.Hex(styletokens.AccentDefault.AsHex()).Keep()
 
+	// Past maxHighlightedMatches the tail falls into the trailing plain
+	// segment below, so the haystack still reads in full — only the
+	// styling stops. Unlike the row caps, this one drops no content.
+	styled := matches
+	if len(styled) > maxHighlightedMatches {
+		styled = styled[:maxHighlightedMatches]
+	}
+
 	atoms := c.Atoms()
 	cursor := 0
-	for _, match := range matches {
+	for _, match := range styled {
 		start, end := match[0], match[1]
 		if start > cursor {
 			atoms.Text(haystack[cursor:start])
@@ -162,11 +174,19 @@ func (inst *App) renderHighlightedHaystack(pattern string, haystack string) {
 		atoms.Text(haystack[cursor:])
 	}
 	c.LabelAtoms(atoms.Keep()).Send()
+
+	if len(styled) < len(matches) {
+		c.LabelAtoms(c.Atoms().BeginRichText(
+			fmt.Sprintf("highlighting the first %d of %d matches — the rest of the haystack is shown unstyled",
+				len(styled), len(matches)),
+		).Weak().End().Keep()).Send()
+	}
 }
 
 // renderCaptureGroups draws the per-match capture-group breakdown under
 // the highlighted haystack: one row per match, one tinted cell per group,
-// with the group's byte range.
+// with the group's byte range. Capped at maxMatchRows — the heading above
+// still reports the exact match count.
 //
 // This is the half of ADR-0054's premise that had never been built. The
 // ADR chose Go as the offset authority precisely because
@@ -195,6 +215,9 @@ func (inst *App) renderCaptureGroups(pattern string, haystack string) {
 	c.Label(fmt.Sprintf("Capture groups (%d per match, %d match(es)):", re.NumSubexp(), len(matches))).Send()
 
 	for mi, m := range matches {
+		if mi >= maxMatchRows {
+			break
+		}
 		for range c.IdScope(inst.ids.PrepareSeq(uint64(mi))) {
 			for range c.Horizontal().KeepIter() {
 				c.Label(fmt.Sprintf("%d:", mi)).Send()
@@ -224,6 +247,7 @@ func (inst *App) renderCaptureGroups(pattern string, haystack string) {
 			}
 		}
 	}
+	renderTruncationNote(min(maxMatchRows, len(matches)), len(matches))
 }
 
 // groupLabel names capture group k: its (?P<name>…) name when it has one,
