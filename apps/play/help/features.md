@@ -679,6 +679,36 @@ where a name is actually evaluated — which is what decides how it fails:
 Until the endpoint has answered, server rows show `?` rather than a verdict: an
 unanswered probe is not the same as an empty server. Switching endpoints re-asks.
 
+### Completion
+
+The caret-side sibling of Vocabulary: what may stand **where the caret is**,
+rather than everything this build can name. Inside `LW_COMPONENT('…')` it is the
+registered component kinds; inside `tupleElement(LW_COMPONENT('SysMem'), '…')`
+it is that kind's fields with their types; inside `keelson('…')` the
+introspection tables and this session's bound datasets; at a `FROM` or a column
+position, the endpoint's own tables and columns. It reads the enclosing call and
+which argument the caret is in, so a position whose valid values depend on a
+neighbouring argument — the field depends on the kind — gets the right list and
+not a longer one.
+
+Where nothing can answer exactly, the pane says so instead of showing a guess.
+"waiting for the endpoint" means a catalogue listing has not come back yet;
+"member access on a name needs the statement's scope" means the background parse
+has not caught up; "no signature is declared for …" means the function does not
+say what its arguments are. None of those are an empty list.
+
+The pane is a table, not a popup: it takes no focus, a click on a matching row
+inserts the rest of that name, and **Tab** types as far as the matching rows
+agree — the whole name when only one matches, the common prefix when several do.
+Tab means a tab character whenever there is nothing to complete.
+
+The editor says the same thing on the token itself. A literal that resolves
+against its position is underlined quietly; once the buffer settles, every
+*other* literal in a position this build can check is underlined too — quietly
+if it resolves, in the error tone if it does not, so a mistyped component kind is
+visible before the run refuses it. A literal whose vocabulary needs an endpoint
+answer that has not arrived is left alone rather than accused.
+
 ### Glosses
 
 The result-side sibling of Vocabulary (ADR-0186). A **gloss** is a named way of

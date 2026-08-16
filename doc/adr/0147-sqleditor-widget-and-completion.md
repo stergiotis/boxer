@@ -307,6 +307,37 @@ live — where they can be seen, and with no regen risk.
 
 ## Updates
 
+### 2026-08-16 — Amended by ADR-0190; M1–M4 replaced, M5 reduced to one key
+
+[ADR-0190](./0190-sqleditor-exact-completion-context.md) builds this ADR's M1
+and supersedes the parts of it that described how. §SD5's clause-and-position
+classifier is replaced by an exact caret model: a lexical *site* per frame —
+the enclosing call, the argument ordinal, the literal being typed, the member
+receiver — upgraded on quiescence by a sentinel parse that adds the statement's
+aliases, CTEs and FROM sources. That parse is what discharges this ADR's **O2
+deferral**: the repair is deterministic rather than heuristic, because the site
+already knows which brackets and which literal are open, so neither a
+`ParseBestEffort` sibling nor a guessing repair layer was needed. §SD6–§SD9 are
+unchanged and are what the new engine's providers are wired through.
+
+§SD10–§SD12 and M4 are reduced to one key. The candidate list is a docked
+**pane** rather than a popup (ADR-0190 §SD8), so there is nothing to steer with
+arrows, nothing to accept with Enter and nothing to dismiss with Escape — a
+click completes, and the rows stay ordinary widgets the headless driver can
+assert. What survives is this ADR's key-capture mechanism, used for Tab alone
+(ADR-0190 §SD5): a `TextEdit` builder method whose consume runs before
+`apply_widget`, for the reason §SD10 gave — a fetcher drains at frame end, after
+the widget has turned the key into a tab character. It reports through
+ADR-0177's key-capture register rather than the per-widget value channel §SD10
+imagined, that register having been built since and carrying exactly a code and
+its modifiers. §SD11's replace-range method was not needed: a suffix insert at
+the caret's own end composes with `InsertAtCursor` without one.
+
+M2's probes landed as ADR-0190 describes them, with one correction to this
+ADR's plan: the typed column probe is a lane of the completion engine's own
+rather than a typed sibling on `passes.SchemaProviderI`, so the synchronous
+schema path the pre-execute passes use is untouched.
+
 ### 2026-07-31 — M0 landed, plus a caret-entity seam ahead of schedule
 
 M0 (SD1–SD4) is implemented and `sqlappletcreator` has adopted the widget
