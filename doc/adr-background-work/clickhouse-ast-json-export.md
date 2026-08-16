@@ -209,10 +209,11 @@ Four uses, none of which requires offsets:
 
 ## 6. The rest of the parser landscape
 
-Three other candidates were surveyed on 2026-08-16, because "replace the CST"
-invites asking whether some other parser should replace it. None is a
-replacement either; recorded here so the question is not re-opened from
-scratch.
+Three other candidates were surveyed — the first two on 2026-08-16, the third
+on 2026-08-17 — because "replace the CST" invites asking whether some other
+parser should replace it. None is a replacement either; recorded here so the
+question is not re-opened from scratch. All three readings are of source, not
+of running builds.
 
 **The Web UI's WASM tokenizer is the C++ lexer, not a parser.** `play.html`
 embeds `build/src/Parsers/Lexer.wasm`, which `src/Parsers/CMakeLists.txt`
@@ -260,13 +261,70 @@ Data types are parsed structurally — any bare word plus optional parenthesised
 parameters — so new types work without a list update, at the cost of accepting
 nonsense ones.
 
-**`polyglot-sql` is in the server, and parses everything except ClickHouse
-SQL.** Commit `d7bc47e3` (2026-03-14) vendored the third-party crate into
+**`polyglot-sql` is in the server, but only on the ingress path.** Commit
+`d7bc47e3` (2026-03-14) vendored the third-party crate into
 `rust/workspace/polyglot` behind `allow_experimental_polyglot_dialect`. It
 takes the raw query text — explicitly bypassing the ClickHouse lexer, because
 "foreign dialects may contain syntax that the ClickHouse Lexer cannot tokenize
 correctly" — transpiles it to ClickHouse SQL, and hands that to the normal C++
-parser.
+parser. That is how ClickHouse *uses* it, and it is not a statement about the
+crate: polyglot has a ClickHouse dialect and parses ClickHouse SQL in both
+directions. Because it is the one candidate here with a Go SDK, it was
+surveyed on its own terms.
+
+### `polyglot-sql` as a nanopass substrate
+
+Read at `tobilg/polyglot` on 2026-08-17 (upstream 0.9.1; ClickHouse pins
+0.1.15). A Rust/WASM SQL transpiler for 30-plus dialects, explicitly "inspired
+by sqlglot", 294k lines in the main crate, MIT, created 2026-01-15, 933 stars,
+effectively one author, 63 published versions in six months.
+
+It is better than the ClickHouse AST on the two axes §3 cares about, and worse
+on the one that matters more:
+
+- **Comments survive.** AST nodes carry `leading_comments`, `trailing_comments`
+  and `pre_alias_comments` as `Vec<String>`. Anchored to nodes, not positioned
+  in text.
+- **Some spans exist.** `Option<Span>` — byte start/end plus line and column —
+  on exactly five types: `Identifier`, `Column`, `TableRef`, `Star`,
+  `Function`. That is the name-like set, which is the useful half for
+  completion and qualification, but `Option` on five of N node types gives no
+  general answer for `env.BodyOffset` arithmetic or parameter-slot placement.
+- **Still not lossless.** There is no preserve-original mode; the generator
+  re-emits text, and preservation is spot-level (numeric literals keep their
+  original spelling, window-frame and parameter-mode keywords keep their case).
+  Derived practice (4) cannot hold over it either.
+- **ClickHouse is a minor dialect.** `dialects/clickhouse.rs` is 698 lines,
+  against DuckDB 7715, Snowflake 4114, TSQL 3862, Postgres 1879. A
+  ClickHouse-only pipeline would be the demanding consumer of one of the
+  thinner dialects.
+
+Three specifics rule it out as a substrate rather than merely disfavour it:
+
+- **Query parameters are absent.** `query_param` / `QueryParameter` has no
+  occurrence in the crate. The only `{name:Type}` handling is one line in
+  `parser.rs` for *table* position (`{db:Identifier}.table`).
+  [ADR-0187](../adr/0187-play-sql-expression-parameters.md) is SQL *expression*
+  parameters, already shipped through M5.
+- **Aggregate combinators are name-mapped, not grammatical.** `countIf`,
+  `sumIf` and `avgIf` are hardcoded entries in the dialect file; ClickHouse
+  composes roughly twenty combinators over its whole function surface. (Fairly:
+  parametric aggregates, `f(params)(args)`, *are* parsed.)
+- **The failure mode is a transpiler's.** `write_unsupported_comment` emits
+  `/* message */` **into the generated SQL** when a construct cannot be
+  expressed. That is a reasonable diagnostic for a transpiler and a silent
+  corruption vector for a pipeline whose contract is valid SQL in, valid SQL
+  out.
+
+Operationally it would add a native artefact: the Go SDK uses purego rather
+than cgo, calling `libpolyglot_sql_ffi.so`, which the SDK deliberately neither
+bundles nor downloads — the caller builds and version-matches it per release.
+
+Where it would be a good fit is the direction boxer does not currently go:
+dialect **ingress** (the [ADR-0139](../adr/0139-semantic-layer-text2dsl.md)
+text2dsl direction, should non-ClickHouse SQL ever need accepting) and its
+column-lineage / OpenLineage output. Recorded here so the substrate question is
+not re-opened without those distinctions.
 
 ## 7. Costed options
 
