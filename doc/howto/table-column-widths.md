@@ -59,7 +59,10 @@ cols := []colwidth.Column{
 widths := res.Resolve(tableTag, cols, fontSize, myDefaults)
 
 for i, w := range widths {
-    c.EtColumn(float32(w)).Resizable(true).Send()
+    c.EtColumn(float32(w)).
+        Resizable(true).
+        RangeMinMax(minWidth, maxWidth). // the same bounds as Opts.Min/MaxPoints
+        Send()
     _ = i
 }
 et := c.EndETable(ids.PrepareStr(tableTag), numRows, rowH, 1, 0).
@@ -137,6 +140,18 @@ drags, so their widths only change when Go says so.
 The shape tier is matched on read — it exists so a table under a new tag can
 inherit widths — but nothing writes it yet.
 
+**`Opts.MinPoints` is not a drag floor.** It clamps what the resolver resolves
+and stores; egui_table's own floor is `Column::range`, which defaults to 4 px.
+Leave them apart and a column can be dragged below the stored floor, sit there
+for the session, and jump back up on the next load. Pass the same two numbers
+to `EtColumn(...).RangeMinMax(...)`, and derive the floor from the *cell*
+rather than the text: it has to hold the inset on **both** sides, or the
+narrowest column puts its right-hand gridline through the glyphs of its own
+header. egui_table adds no cell margins itself, so whatever inset a cell
+leads with has to be spent again at the trailing edge — play does it with a
+Frame per cell (`cellInset`), whose inner margin also joins what a sizing pass
+measures, so an auto-fitted column fits its content and its insets.
+
 ## Clearing an override
 
 `Clear` returns one column to defaults; `ClearAll` does a whole table. Both
@@ -186,7 +201,7 @@ collaborators. Acquire it once, on a frame:
 ```go
 if h, ok := ctx.(colwidth.HostI); ok {
     if st := h.ColumnWidthStore(); st != nil {
-        res, _ = colwidth.New(st, colwidth.Opts{AppId: ctx.AppId(), MinPoints: 24, MaxPoints: 1200})
+        res, _ = colwidth.New(st, colwidth.Opts{AppId: ctx.AppId(), MinPoints: minWidth, MaxPoints: maxWidth})
         _ = res.Load()
     }
 }

@@ -549,7 +549,9 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 	// per-DB-row grid.
 	c.EtColumn(float32(resolved[0])).Resizable(false).Send()
 	for i := range visCols {
-		col := c.EtColumn(float32(resolved[i+1])).Resizable(true)
+		col := c.EtColumn(float32(resolved[i+1])).
+			Resizable(true).
+			RangeMinMax(inst.colDragMinWidth(), colDragMaxWidth)
 		if refit && resolved[i+1] == float64(widths[i]) {
 			col = col.AutoSizeThisFrame(true)
 		}
@@ -563,10 +565,11 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 
 	if vis, _ := et.ColVisible(0); vis {
 		for range et.Headers(0, 0) {
-			c.AddSpace(cellPadX)
-			for rt := range c.RichTextLabel("#") {
-				rt.Weak().Monospace()
-			}
+			inst.headerCell(attrHdrIdOffset, cellPadX, func() {
+				for rt := range c.RichTextLabel("#") {
+					rt.Weak().Monospace()
+				}
+			})
 		}
 	}
 	glossCols := inst.glossColumns(schema)
@@ -576,7 +579,6 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 			continue
 		}
 		for range et.Headers(0, colPos) {
-			c.AddSpace(cellPadX)
 			field := schema.Field(arrowCol)
 			gc := &glossCols[arrowCol]
 			// The full type goes on hover and the header carries the short
@@ -592,27 +594,25 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 			if gh := glossHover(gc); gh != "" {
 				hover += " — " + gh
 			}
-			if label := inst.colLabels[field.Name]; label != "" {
+			inst.headerCell(attrHdrIdOffset+uint64(arrowCol)+1, cellPadX, func() {
+				caption := field.Name
+				if label := inst.colLabels[field.Name]; label != "" {
+					caption = label
+				}
 				for range c.HoverText(hover).KeepIter() {
-					for rt := range c.RichTextLabel(label) {
+					for rt := range c.RichTextLabel(caption) {
 						rt.Strong().Monospace()
 					}
 				}
-			} else {
-				for range c.HoverText(hover).KeepIter() {
-					for rt := range c.RichTextLabel(field.Name) {
-						rt.Strong().Monospace()
-					}
-				}
-			}
-			for rt := range c.RichTextLabel(shortArrowType(field.Type)) {
-				rt.Small().Weak().Monospace()
-			}
-			if gc.mediaType != "" {
-				for rt := range c.RichTextLabel(gc.mediaType) {
+				for rt := range c.RichTextLabel(shortArrowType(field.Type)) {
 					rt.Small().Weak().Monospace()
 				}
-			}
+				if gc.mediaType != "" {
+					for rt := range c.RichTextLabel(gc.mediaType) {
+						rt.Small().Weak().Monospace()
+					}
+				}
+			})
 		}
 	}
 
@@ -705,10 +705,13 @@ func (inst *PlayApp) attrColWidths(schema *arrow.Schema, visCols []int, rows []a
 	// (Hack at 13 px). Runes, not bytes — a glossed `••••••` is six glyphs and
 	// eighteen bytes.
 	const charW = colCharPx
-	const pad = 18.0
-	const minW = 44.0
 	const maxW = 420.0
 	const sampleRows = 96
+	// pad is the button's own padding plus the inset cellInset spends on each
+	// side of the cell; minW keeps the seed at or above the floor a column can
+	// be dragged to, so a seeded column never starts below its own minimum.
+	pad := 18.0 + 2*styletokens.PaddingTight(inst.density)
+	minW := max(float32(44.0), inst.colDragMinWidth())
 	widths := make([]float32, len(visCols))
 	for i, arrowCol := range visCols {
 		field := schema.Field(arrowCol)
@@ -771,9 +774,13 @@ func (inst *PlayApp) ensureColWidthRes(ctx app.FrameContextI) {
 		// instance follows the content to a windowed one.
 		AppId: ctx.AppId(),
 		// Below the minimum a column cannot be grabbed to drag back out;
-		// above the maximum one column pushes every other off-screen.
-		MinPoints: 24,
-		MaxPoints: 1200,
+		// above the maximum one column pushes every other off-screen. Both
+		// match the range the grids hand egui_table (EtColumn.RangeMinMax),
+		// so what the user can drag to is exactly what can be stored — the
+		// floor counts the cell inset on *both* sides, which it did not
+		// before: a column at the old floor put the gridline in the glyphs.
+		MinPoints: float64(inst.colDragMinWidth()),
+		MaxPoints: colDragMaxWidth,
 	})
 	if err != nil {
 		log.Warn().Err(err).Msg("play: column-width resolver unavailable")

@@ -65,6 +65,18 @@ const (
 	// Column-width heuristic bounds (px).
 	colMinWidth = 100.0
 	colMaxWidth = 420.0
+	// colMinContentPx is the narrowest run of *content* a column keeps when
+	// the user drags it in — a couple of monospace glyphs, enough to see that
+	// something is there and to find the resize handle again. The width floor
+	// the grids actually enforce is this plus the cell inset on both sides
+	// (colDragMinWidth): counting only the leading inset, as the floor used
+	// to, left the trailing gridline sitting in the glyphs of the header.
+	colMinContentPx = 24.0
+	// colDragMaxWidth is the widest a column may be dragged, and the ceiling
+	// stored overrides are clamped to. One constant for both so the live drag
+	// and the stored value cannot disagree — a column pinned at the drag
+	// ceiling would otherwise be re-clamped on load and read as a change.
+	colDragMaxWidth = 1200.0
 	// colCharPx is the monospace glyph advance the width seed multiplies a
 	// rune count by. 7.8 is Hack at 13 px (0.6 em), measured on a headless
 	// tour capture: a 20-glyph cell inks 155 px, a 7-glyph one 53. It was
@@ -3237,7 +3249,9 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// never stores a width for it and the one emitted here always stands.
 	c.EtColumn(float32(resolved[0])).Resizable(false).Send()
 	for i, arrowCol := range visCols {
-		col := c.EtColumn(float32(resolved[i+1])).Resizable(true)
+		col := c.EtColumn(float32(resolved[i+1])).
+			Resizable(true).
+			RangeMinMax(inst.colDragMinWidth(), colDragMaxWidth)
 		if refit && resolved[i+1] == float64(inst.colWidths[arrowCol]) {
 			col = col.AutoSizeThisFrame(true)
 		}
@@ -3277,10 +3291,11 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// numbers below.
 	if vis, _ := et.ColVisible(0); vis {
 		for range et.Headers(0, 0) {
-			c.AddSpace(cellPadX)
-			for rt := range c.RichTextLabel("#") {
-				rt.Weak().Monospace()
-			}
+			inst.headerCell(0, cellPadX, func() {
+				for rt := range c.RichTextLabel("#") {
+					rt.Weak().Monospace()
+				}
+			})
 		}
 	}
 	for pos, arrowCol := range visCols {
@@ -3289,7 +3304,6 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			continue
 		}
 		for range et.Headers(0, colPos) {
-			c.AddSpace(cellPadX)
 			field := schema.Field(arrowCol)
 			gc := &glossCols[arrowCol]
 			name := field.Name
@@ -3306,28 +3320,31 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			if gh := glossHover(gc); gh != "" {
 				hover += " — " + gh
 			}
-			// The header is a frameless button: clicking it cycles this
-			// column's sort (asc → desc → unsorted). The physical column name
-			// and the full type stay on hover, as the name did when the header
-			// was a plain label — so a leeway handle never hides the name it
-			// stands for, and abbreviating the type below loses nothing.
-			for range c.HoverText(hover + " — click to sort").KeepIter() {
-				if c.Button(ids.PrepareSeq(tableSortIDSalt+uint64(arrowCol)),
-					c.Atoms().BeginRichText(name+inst.tableSort.glyph(arrowCol)).Strong().Monospace().End().Keep()).
-					Frame(false).
-					Truncate().
-					SendResp().HasPrimaryClicked() {
-					inst.tableSort.clicked(arrowCol)
+			inst.headerCell(uint64(arrowCol)+1, cellPadX, func() {
+				// The header is a frameless button: clicking it cycles this
+				// column's sort (asc → desc → unsorted). The physical column
+				// name and the full type stay on hover, as the name did when
+				// the header was a plain label — so a leeway handle never
+				// hides the name it stands for, and abbreviating the type
+				// below loses nothing.
+				for range c.HoverText(hover + " — click to sort").KeepIter() {
+					if c.Button(ids.PrepareSeq(tableSortIDSalt+uint64(arrowCol)),
+						c.Atoms().BeginRichText(name+inst.tableSort.glyph(arrowCol)).Strong().Monospace().End().Keep()).
+						Frame(false).
+						Truncate().
+						SendResp().HasPrimaryClicked() {
+						inst.tableSort.clicked(arrowCol)
+					}
 				}
-			}
-			for rt := range c.RichTextLabel(shortArrowType(field.Type)) {
-				rt.Small().Weak().Monospace()
-			}
-			if gc.mediaType != "" {
-				for rt := range c.RichTextLabel(gc.mediaType) {
+				for rt := range c.RichTextLabel(shortArrowType(field.Type)) {
 					rt.Small().Weak().Monospace()
 				}
-			}
+				if gc.mediaType != "" {
+					for rt := range c.RichTextLabel(gc.mediaType) {
+						rt.Small().Weak().Monospace()
+					}
+				}
+			})
 		}
 	}
 
@@ -3476,8 +3493,9 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 	if sampleN > colSampleRows {
 		sampleN = colSampleRows
 	}
-	// Reserve the same left inset renderMasterTable leads each cell with, so a
-	// padded cell doesn't truncate content that would otherwise fit.
+	// Reserve the inset renderMasterTable gives each cell, on both sides
+	// (cellInset), so a padded cell doesn't truncate content that would
+	// otherwise fit.
 	cellPadX := styletokens.PaddingTight(inst.density)
 	glossCols := inst.glossColumns(schema)
 	for col := 0; col < ncols; col++ {
@@ -3506,7 +3524,7 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 				maxChars = n
 			}
 		}
-		w := float32(maxChars)*colCharPx + 16.0 + cellPadX
+		w := float32(maxChars)*colCharPx + 16.0 + 2*cellPadX
 		if w < colMinWidth {
 			w = colMinWidth
 		}

@@ -715,6 +715,37 @@ follows the calling context's `AppId` (ADR-0155 §SD3), so each re-host keys on
 its own app id — a hand-embedded engine stores under the embedder, which is
 the documented rule and not a special case.
 
+## Update — 2026-08-16: the floor was a text floor, and only one of two
+
+Reported from use: dragged to its narrowest, a column looks lopsided and its
+vertical gridline sits in the glyphs of the header. Two separate omissions,
+both on the minimum.
+
+**The floor counted one inset, not two.** egui_table adds no cell margins —
+its docs say to add them yourself — and clips each cell to the column rect.
+Both play grids led each cell with a bare `AddSpace`, which pads the left
+only, so content ran to the gridline and anything wider than the column was
+cut on the border itself. A width floor derived from that geometry is a text
+floor wearing a margin's name. Cells now carry the inset on both sides
+(a Frame per cell, `InnerMarginSides` + `UiClipToMaxRect`, which is the idiom
+logviewer already used), and the floor is a content minimum plus twice the
+inset. The Frame's margin also joins what a sizing pass measures, so an
+auto-fitted column now fits its content *and* its insets — previously it
+fitted content plus the leading inset and the trailing one had to come out of
+the content.
+
+**`Opts.MinPoints` was never the drag floor.** It clamps what the resolver
+resolves and captures; the live floor is `egui_table::Column::range`, whose
+default is 4 px and which nothing here had ever set. So a column could be
+dragged to 4, sit there all session, and come back at 24 on the next load —
+the clamp reading as a jump rather than as a limit. The two are now the same
+pair of numbers, handed to `EtColumn(...).RangeMinMax(...)` and to `Opts`
+from one place. Nothing in the storage model changes: `Resolve` and `Observe`
+already clamped, so a stored width below the raised floor resolves and reports
+at the floor and is not mistaken for a fresh drag.
+
+Both are adopter-side; the resolver is untouched. The how-to carries the rule.
+
 ## Status
 
 Accepted 2026-07-30. The fact kind and M1–M6 are all implemented (Updates
