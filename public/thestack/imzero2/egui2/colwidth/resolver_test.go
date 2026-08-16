@@ -313,6 +313,39 @@ func TestObserve_FirstShowSuppressesTheFollowingFrameToo(t *testing.T) {
 	assert.Zero(t, r.Len(), "and nothing must reach the store")
 }
 
+// A call site that hands the crate authority for one frame — asking
+// egui_table to auto-size — must not have the fit read back as a gesture.
+// The fit's result arrives a report *after* the frame that asked for it, so a
+// flag describing "this frame" cannot cover it; MarkReseed is how the call
+// site says so in a way that survives the lag. Measured on play's per-DB-row
+// grid before it existed: a re-fit on first show wrote eight override rows
+// for a table nobody had touched.
+func TestObserve_MarkReseedAdoptsTheFitAndTheReportAfterIt(t *testing.T) {
+	r, _ := newResolver(t)
+	cols := []Column{colA}
+
+	// Steady state: the crate has settled on 140 and nothing is pending.
+	for frame := range 3 {
+		r.Resolve("tbl", cols, 12, []float64{50})
+		r.Observe("tbl", cols, []float64{140}, 12, frame == 0, t0)
+	}
+	require.Zero(t, r.PendingCount())
+
+	// The call site asks the crate to fit this frame.
+	r.Resolve("tbl", cols, 12, []float64{50})
+	r.MarkReseed("tbl")
+	// The report for that frame still describes the pre-fit layout...
+	r.Observe("tbl", cols, []float64{140}, 12, false, t0)
+	// ...and the fit's own result only lands on the next one.
+	r.Observe("tbl", cols, []float64{260}, 12, false, t0)
+	assert.Zero(t, r.PendingCount(), "a fit the app asked for is not a user gesture")
+
+	// The window is two reports wide and then closes, so a real drag after it
+	// is still captured.
+	r.Observe("tbl", cols, []float64{300}, 12, false, t0)
+	assert.Equal(t, 2, r.PendingCount(), "instance and column tiers, for a genuine drag")
+}
+
 // Adopting the crate's width must not read back as "my resolved widths
 // changed". If it did, the epoch would bump every frame and the binding
 // would re-seed the crate against its own layout — the per-frame

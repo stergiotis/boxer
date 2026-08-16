@@ -59,6 +59,26 @@ const (
 	tableRowPerAttr
 )
 
+// Column-width identity is keyed on (name, type) (ADR-0151 §SD1), and the two
+// granularities render the *same* column differently: the per-DB-row grid
+// shows a List column packed as `[len=N]`, the per-attribute grid explodes it
+// to its inner scalar. A width chosen for one is therefore wrong for the
+// other, and without a discriminator the column tier — which matches on
+// identity alone, across tables — would carry it from whichever grid the user
+// dragged into the one they did not.
+//
+// §SD1 allows "an app-chosen format tag" where a column has no single
+// canonical render type, which is exactly this case. These are that tag. They
+// are *appended* to the Arrow type rather than replacing it, so a genuine type
+// change still invalidates the override as the ADR intends; they must differ
+// from each other, which is the whole point, and both are spelled out here
+// rather than derived from the enum so that renaming a view cannot silently
+// re-key every stored width.
+const (
+	tableViewTagRow  = ";view=row"
+	tableViewTagAttr = ";view=attr"
+)
+
 // tableDisplayOpts is the Table pane options-bar state (see PlayApp.tableOpts).
 // The zero value — per-DB-row, both reveals off — reproduces the plain value
 // grid, so a result that has just become leeway-shaped renders the same columns

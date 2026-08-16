@@ -538,6 +538,12 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 	// this frame (selectableCell), else the fit would see their truncated
 	// width and only ever fit the header.
 	refit := inst.attrColsChanged(schema, visCols)
+	if refit && inst.colWidthRes != nil {
+		// See the per-DB-row grid: the fit's result lands a report after this
+		// frame, so the window has to be opened here rather than inferred
+		// from a flag at capture time.
+		inst.colWidthRes.MarkReseed(attrTableTag)
+	}
 
 	// Leading "#" (source DB row) column + the data columns, same order as the
 	// per-DB-row grid.
@@ -659,7 +665,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 		}
 	}
 	et.Send()
-	inst.captureAttrWidths(et, cols, refit)
+	inst.captureAttrWidths(et, cols)
 }
 
 // captureAttrWidths feeds the widths egui_table settled on back into the
@@ -668,9 +674,10 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 // The first report a table makes is its force-autofit frame, whose widths
 // are the crate's idea rather than the user's; passing firstShow on that
 // frame is what stops the estimator's first result being frozen as an
-// override nobody chose. A re-fit frame (attrColsChanged) is the same kind
-// of frame and is adopted the same way.
-func (inst *PlayApp) captureAttrWidths(et c.EndETableFluid, cols []colwidth.Column, refit bool) {
+// override nobody chose. A re-fit frame is the same kind of frame, and is
+// covered by the MarkReseed at the emission site rather than by a flag here —
+// its result arrives a report later than the frame that asked for it.
+func (inst *PlayApp) captureAttrWidths(et c.EndETableFluid, cols []colwidth.Column) {
 	if inst.colWidthRes == nil {
 		return
 	}
@@ -682,7 +689,7 @@ func (inst *PlayApp) captureAttrWidths(et c.EndETableFluid, cols []colwidth.Colu
 		}
 		firstShow := !inst.attrWidthsSeen
 		inst.attrWidthsSeen = true
-		inst.colWidthRes.Observe(attrTableTag, cols, widths, 0, firstShow || refit, now)
+		inst.colWidthRes.Observe(attrTableTag, cols, widths, 0, firstShow, now)
 	}
 	if _, err := inst.colWidthRes.Flush(now); err != nil {
 		log.Warn().Err(err).Msg("play: storing column widths failed; will retry")
@@ -787,12 +794,16 @@ func (inst *PlayApp) ensureColWidthRes(ctx app.FrameContextI) {
 // would change identity if the label builder ever did, while the field
 // name is what the query actually returned. The type participates so a
 // column that changes type drops its stored width.
+//
+// Every type carries tableViewTagAttr, so this grid's widths never reach the
+// per-DB-row grid through the column tier: the two show the same column's
+// contents differently and a width fitted to one does not fit the other.
 func (inst *PlayApp) attrColumnKeys(schema *arrow.Schema, visCols []int) (cols []colwidth.Column) {
 	cols = make([]colwidth.Column, 0, len(visCols)+1)
-	cols = append(cols, colwidth.Column{Name: "#", Type: "rownum"})
+	cols = append(cols, colwidth.Column{Name: "#", Type: "rownum" + tableViewTagAttr})
 	for _, arrowCol := range visCols {
 		f := schema.Field(arrowCol)
-		cols = append(cols, colwidth.Column{Name: f.Name, Type: f.Type.String()})
+		cols = append(cols, colwidth.Column{Name: f.Name, Type: f.Type.String() + tableViewTagAttr})
 	}
 	return
 }

@@ -102,6 +102,17 @@ lets anyone resize. Omitting it shifts every later column onto the wrong
 identity, and the length check is what turns that from a silent mis-capture
 into a dropped report.
 
+**The column tier crosses tables, so two views of one column collide.** It
+matches on `(name, type)` alone — that is what lets a recurring field keep
+its width in a differently-shaped result. If your app renders the same column
+two ways, though, a width fitted to one is wrong in the other and the tier
+will carry it over anyway. `Type` is yours to choose where the data has no
+single render type, so give each view its own tag; play appends `;view=row`
+or `;view=attr` to the Arrow type for its two Table granularities. Append it
+rather than replacing the type, so a real type change still invalidates the
+override — and expect a tag you add later to orphan whatever that view had
+already stored.
+
 **Growth is captured like a drag.** egui_table grows a column to fit the
 widest *visible* cell and stores the result. The resolver cannot tell that
 apart from a drag, so scrolling wider content into view can widen a column and

@@ -264,6 +264,26 @@ func rescale(points, capturedAt, current float64) (out float64) {
 	return
 }
 
+// MarkReseed opens the same settle window Resolve opens when it bumps an
+// epoch, for a frame on which the *call site* hands the crate authority over
+// the widths — asking egui_table to auto-size this frame is the case it was
+// added for.
+//
+// Without it a call site has no way to say so that survives the read-back's
+// lag. Passing firstShow on the frame it asks for the fit covers that frame's
+// report, which describes the columns as they were *before* the fit; the
+// fit's own result arrives one report later, with the flag already back to
+// false, and is read as a gesture. Measured on play's per-DB-row grid: a
+// re-fit on first show wrote eight override rows for a table nobody had
+// touched.
+//
+// It is deliberately the same two-frame window and the same field, not a
+// parallel mechanism: "the crate chose these widths, not the user" is one
+// idea, and a second counter would be a second thing to get right.
+func (inst *Resolver) MarkReseed(tableTag string) {
+	inst.tableFor(tableTag).settle = reseedSettleFrames
+}
+
 // Epoch is the table's apply generation. The binding writes Go's widths
 // into the crate's state only when this changes; between bumps the crate's
 // own state — the user's live drag — wins.

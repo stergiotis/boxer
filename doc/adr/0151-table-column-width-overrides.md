@@ -299,6 +299,9 @@ which is part of why the single document was chosen over per-table keys.
   consumers.
 - **M6 — Affordances.** Header context "clear override"; docs
   (`doc/howto` note on width behavior).
+- **M7 — play adoption on the per-DB-row grid.** ✓ The second adopter, plus
+  the per-view type discriminator the column tier needs once two grids
+  render the same column (Update 2026-08-16).
 
 ## Update — 2026-07-30: `colw` becomes modelled facts, not a persist document
 
@@ -605,6 +608,67 @@ frame it moves, so anything a hand can do outruns the window.
 `Resolve` for a table changes its order from nothing to something, which
 opens the same window. play's `attrWidthsSeen`, which the Update above
 criticised for never re-arming, is belt-and-braces for the same reason.
+
+## Update — 2026-08-16: the second grid, and the tier collision it exposed
+
+M4 adopted the resolver on the per-attribute grid only. play's *default*
+Table view is the per-DB-row grid, which never joined — so for the view
+almost everyone uses, widths were preserved neither across queries, nor
+across opening the app again, nor across restarts. Reported from use, and
+all three symptoms are the same omission seen from three distances.
+
+**The across-queries symptom had a second cause worth recording**, because
+it would have survived adoption on its own. `tableColsChanged` gates the
+one-frame re-fit on `schema != inst.tableFitSchema` — a *pointer* compare,
+which a Run always fails since every result carries a fresh `*arrow.Schema`.
+So a re-fit fired on every Run, even a repeat of the identical query, and
+`AutoSizeThisFrame` measured the user's drag away. The `f3f48a2c` exemption
+("only columns whose resolved width is the seed's are auto-sized") could not
+help, because with no resolver every column's width *was* the seed. Adoption
+supplies the overrides that make the exemption bite; the pointer compare is
+left as it is, since re-fitting a column nobody has touched is what it is
+for.
+
+**The column tier needed a discriminator.** §SD1 keys that tier on
+`(name, type)` alone and matches it across tables, which is what lets a
+recurring column keep its width. Two grids over one result break that
+assumption: the per-DB-row grid renders a List column packed as `[len=N]`,
+the per-attribute grid explodes it to its inner scalar, so a width fitted to
+one is wrong in the other — and the column tier would have carried it over.
+The fix uses the escape §SD1 already provides, "an app-chosen format tag" in
+place of a canonical type: each grid appends its own view tag
+(`;view=row` / `;view=attr`) to the Arrow type. Appended rather than
+substituted, so a genuine type change still invalidates the override, which
+is the property §SD1 leans on. The two tags are spelled out as constants
+rather than derived from the granularity enum, so renaming a view cannot
+silently re-key every stored width.
+
+**Adoption forced one resolver addition, `MarkReseed`.** The first live run
+of the adopted grid wrote eight override rows on startup for a table nobody
+had touched — the failure mode this ADR has now hit three times. The cause is
+the same lag as before seen from a new angle: a call site that asks
+egui_table to auto-size holds that intent for one frame, but the fit's result
+arrives in the *next* report, by which time the flag it was passing to
+`Observe` is false again and the fit reads as a gesture. `firstShow` could
+not cover it either, since a re-fit happens mid-session.
+
+So the call site now says so directly: `MarkReseed(tableTag)` opens the same
+two-report settle window `Resolve` opens when it bumps an epoch. It is
+deliberately the same field and the same constant rather than a parallel
+counter — "the crate chose these widths, not the user" is one idea, and the
+per-view flag both grids used to pass to `Observe` is gone. §SD5 gave the
+resolver capture detection; this is the part of it a call site could not
+express.
+
+Two consequences are worth stating plainly. Tagging the attr grid too —
+rather than leaving it bare and tagging only the new grid — **re-keys the
+overrides that grid had already stored**; they are orphaned, not migrated.
+That is the sanctioned outcome for a type change and the alternative was a
+permanent asymmetry, but it is a one-time loss rather than nothing. And the
+instance tier now has two scopes, `results` and `attr-results`, so a drag in
+one grid no longer reaches the other at all — which is the intended
+semantics here, since the two are different renderings rather than two views
+of one layout.
 
 ## Status
 

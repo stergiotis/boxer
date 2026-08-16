@@ -625,6 +625,10 @@ type PlayApp struct {
 	// estimator's rather than the user's — capturing it would freeze a
 	// width nobody chose. The first report a table makes is that frame.
 	attrWidthsSeen bool
+	// masterWidthsSeen is the same gate for the per-DB-row grid. It is a
+	// separate flag because the two grids are separate etables with separate
+	// first shows — one is not evidence about the other.
+	masterWidthsSeen bool
 	// attrFitSchema / attrFitCols are the per-attribute grid's memory of the
 	// column set it last re-fitted for (attrColsChanged), the sibling of
 	// tableFitSchema / tableFitCols.
@@ -3124,11 +3128,6 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// same amount so the inset doesn't eat into a column's fitted width.
 	cellPadX := styletokens.PaddingTight(inst.density)
 
-	// Leading "#" selector column (click to select row) + the data columns.
-	// It never takes part in a re-fit: it is not resizable, so egui_table
-	// never stores a width for it and the one emitted here always stands.
-	c.EtColumn(44.0).Resizable(false).Send()
-
 	// Emit per-column widths from the schema-keyed cache. Resampling every
 	// frame from the current page's content would reflow the table each
 	// time the pager advances, since different pages have different string
@@ -3137,6 +3136,26 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	inst.ensureColLabels(schema)
 	glossCols := inst.glossColumns(schema)
 	inst.ensureColWidths(rec, schema, pageStart, pageEnd)
+
+	// ADR-0151: a width the user set outranks the sampled estimator, which
+	// becomes the default for columns they have not touched. cols and the
+	// EtColumn sequence stay index-aligned — the leading "#" column takes
+	// part so the positional read-back lines up, and since it is not
+	// resizable the binding reports our own width straight back for it and
+	// nothing is ever captured.
+	cols := inst.masterColumnKeys(schema, visCols)
+	resolved := make([]float64, 0, len(cols))
+	resolved = append(resolved, masterRowNumColWidth)
+	for _, arrowCol := range visCols {
+		resolved = append(resolved, float64(inst.colWidths[arrowCol]))
+	}
+	if inst.colWidthRes != nil {
+		// Font size 0: play has no single text size to attribute a width to,
+		// and passing one it does not render at would rescale stored widths
+		// against a fiction. Zero disables rescaling, the documented meaning.
+		resolved = inst.colWidthRes.Resolve(masterTableTag, cols, 0, resolved)
+	}
+
 	// egui_table keeps its own width per column *position*, and re-fits to
 	// content only on a table's first show ever — so without this a second
 	// query inherits the first one's widths by position, and a revealed
@@ -3146,10 +3165,28 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// re-fitting continuously would move the columns while the user reads.
 	// On that frame the cells go out untruncated (selectableCell), so the
 	// re-fit measures their real width rather than a truncated one.
+	//
+	// A column whose resolved width is not the seed's carries a user
+	// override, which outranks any fit, so it sits the re-fit out. Without
+	// that test every Run measured the drag away — tableColsChanged compares
+	// the *Schema pointer, and a Run always returns a fresh one, so a re-fit
+	// fires even for a repeat of the same query.
 	refit := inst.tableColsChanged(schema, visCols)
-	for _, arrowCol := range visCols {
-		col := c.EtColumn(inst.colWidths[arrowCol]).Resizable(true)
-		if refit {
+	if refit && inst.colWidthRes != nil {
+		// Tell the resolver the crate is about to choose these widths. The
+		// read-back lags, so the fit's result lands a report *after* refit
+		// has gone false; without this window it reads as a drag and every
+		// auto-sized column acquires an override nobody asked for.
+		inst.colWidthRes.MarkReseed(masterTableTag)
+	}
+
+	// Leading "#" selector column (click to select row) + the data columns.
+	// It never takes part in a re-fit: it is not resizable, so egui_table
+	// never stores a width for it and the one emitted here always stands.
+	c.EtColumn(float32(resolved[0])).Resizable(false).Send()
+	for i, arrowCol := range visCols {
+		col := c.EtColumn(float32(resolved[i+1])).Resizable(true)
+		if refit && resolved[i+1] == float64(inst.colWidths[arrowCol]) {
 			col = col.AutoSizeThisFrame(true)
 		}
 		col.Send()
@@ -3160,10 +3197,13 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// order[p]. nil means "record order", the unsorted case.
 	order := inst.tableSort.orderFor(rec, totalRows)
 
-	et := c.EndETable(ids.PrepareStr("results"),
+	et := c.EndETable(ids.PrepareStr(masterTableTag),
 		uint64(displayRows),
 		18.0, 1, 1).
 		Striped(true)
+	if inst.colWidthRes != nil {
+		et = et.ApplyWidths(inst.colWidthRes.Epoch(masterTableTag))
+	}
 	// Selection is stored as an absolute row index; translate to the
 	// page-local row when highlighting so the stripe lands on the right line.
 	// Under a sort that is the row's *displayed* position, not its record
@@ -3293,6 +3333,72 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		}
 	}
 	et.Send()
+	inst.captureMasterWidths(et, cols)
+}
+
+// masterTableTag is the stable instance-tier scope for the per-DB-row grid's
+// column-width overrides, and the etable's id. One constant so the two cannot
+// drift apart. It differs from attrTableTag so the two grids keep separate
+// instance-tier entries; the column tier is kept apart by tableViewTagRow.
+const masterTableTag = "results"
+
+// masterRowNumColWidth is the fixed width of the leading "#" column. It is not
+// resizable, so it never acquires an override; it takes part in the resolver's
+// column list only to keep indices aligned with the EtColumn sequence and with
+// the positional width read-back.
+const masterRowNumColWidth = 44.0
+
+// masterColumnKeys builds the resolver's column identities for the per-DB-row
+// grid, index-aligned with the EtColumn sequence: the leading "#" column
+// first, then the visible data columns.
+//
+// Identity is the raw Arrow field name and type rather than the friendly label
+// the header renders, for the reason attrColumnKeys records: the label is
+// derived and would re-key every stored width if the label builder changed.
+// Every type carries tableViewTagRow so a width fitted to this grid's packed
+// `[len=N]` rendering never reaches the per-attribute grid's exploded scalars
+// through the column tier.
+func (inst *PlayApp) masterColumnKeys(schema *arrow.Schema, visCols []int) (cols []colwidth.Column) {
+	cols = make([]colwidth.Column, 0, len(visCols)+1)
+	cols = append(cols, colwidth.Column{Name: "#", Type: "rownum" + tableViewTagRow})
+	for _, arrowCol := range visCols {
+		f := schema.Field(arrowCol)
+		cols = append(cols, colwidth.Column{Name: f.Name, Type: f.Type.String() + tableViewTagRow})
+	}
+	return
+}
+
+// captureMasterWidths feeds the widths egui_table settled on back into the
+// resolver and lets the debounce write them.
+//
+// The first report a table makes is its force-autofit frame, whose widths are
+// the crate's idea rather than the user's; passing firstShow on that frame is
+// what stops the estimator's first result being frozen as an override nobody
+// chose. A re-fit frame is the same kind of frame, and is covered by the
+// MarkReseed at the emission site rather than by a flag here — its result
+// arrives a report later than the frame that asked for it.
+func (inst *PlayApp) captureMasterWidths(et c.EndETableFluid, cols []colwidth.Column) {
+	if inst.colWidthRes == nil {
+		return
+	}
+	now := time.Now()
+	if fetched, ok := et.ColumnWidths(); ok {
+		widths := make([]float64, len(fetched))
+		for i, w := range fetched {
+			widths[i] = float64(w)
+		}
+		firstShow := !inst.masterWidthsSeen
+		inst.masterWidthsSeen = true
+		// refit is not passed here: it describes *this* frame, and the fit it
+		// asks for is only visible a report later. MarkReseed at the emission
+		// site is what covers that, and it covers this frame too.
+		inst.colWidthRes.Observe(masterTableTag, cols, widths, 0, firstShow, now)
+	}
+	if _, err := inst.colWidthRes.Flush(now); err != nil {
+		// inst.logger, not the package logger the attr grid's twin uses:
+		// this file logs through the app's own logger throughout.
+		inst.logger.Warn().Err(err).Msg("play: storing column widths failed; will retry")
+	}
 }
 
 // ensureColWidths samples per-column widths the first time a given schema
