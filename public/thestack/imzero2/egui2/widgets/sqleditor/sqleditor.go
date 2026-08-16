@@ -338,6 +338,16 @@ func spansWithin(spans []highlight.Span, stmt StatementRange, ok bool) (out []hi
 	return
 }
 
+// SetCaretForTest places the caret where the TextEdit would have reported it.
+//
+// For an embedder's test: the real caret arrives over the FFI after a render,
+// so a headless test of anything derived from it — the active statement, the
+// entity, the completion site — has no other way to say where it is. Char
+// offsets, as the widget reports them.
+func (inst *Editor) SetCaretForTest(chars uint64) {
+	inst.caretPacked = chars | chars<<32
+}
+
 // Result returns what the last [Editor.Bind] published, for a consumer that
 // runs outside the render call — a status line, a run gate, a docs pane.
 func (inst *Editor) Result() (res Result) { return inst.result }

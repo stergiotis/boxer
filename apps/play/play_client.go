@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -625,6 +626,22 @@ func (inst *Client) unbindDataset(alias string) {
 	inst.mu.Lock()
 	delete(inst.datasetBindings, alias)
 	inst.mu.Unlock()
+}
+
+// DatasetAliases are the ad-hoc dataset aliases bound in this session, sorted.
+//
+// They are tables no catalogue enumerates — they exist because this session
+// bound them (ADR-0134 §SD4) — which is why the completion engine's table
+// answers are routed per buffer rather than per build (ADR-0190 §SD12).
+func (inst *Client) DatasetAliases() (aliases []string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	aliases = make([]string, 0, len(inst.datasetBindings))
+	for alias := range inst.datasetBindings {
+		aliases = append(aliases, alias)
+	}
+	sort.Strings(aliases)
+	return
 }
 
 // rewriteDatasetAliases applies the bound ad-hoc dataset alias→handle

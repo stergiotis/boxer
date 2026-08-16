@@ -23,7 +23,7 @@ const appletMaxHistory = 25
 // editor — has no buffer for. Glosses (ADR-0186) is chrome for the same
 // reason: it explains how a buffer's rules resolved, an authoring view; the
 // glosses themselves still render in an applet's Table and Detail.
-var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments", "vocabulary", "glosses"}
+var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments", "vocabulary", "glosses", "completion"}
 
 // orderedResultTabIDs is resultTabIDs in play's registration order, for
 // deterministic removal when an explicit `tabs:` list prunes the set.

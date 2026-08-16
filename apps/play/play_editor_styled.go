@@ -15,6 +15,7 @@ package play
 
 import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlcomplete"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -110,6 +111,16 @@ func (inst *PlayApp) editorStyledSections() (out []codeview.StyledSection) {
 			Flags: codeview.StyleUnderline,
 			Color: styleErrorTone,
 		})
+	}
+	// The resolved-token tint (ADR-0190 §SD9): the token under the caret
+	// carries the success tone when it names something the argument's domain
+	// actually has.
+	//
+	// Only on an EXACT match, and never an error tone here: a name half typed
+	// is not a wrong one, and the off-caret literals that can be reported wrong
+	// are the scope tier's to validate.
+	if sec, ok := inst.resolvedTokenSection(); ok {
+		out = append(out, sec)
 	}
 	// The Flow tab's clicked clause (ADR-0153): a background on the clause's
 	// bytes, present only while every coordinate hop re-verified (see
@@ -247,4 +258,32 @@ func (inst *PlayApp) caretSubqueryRange() (r nanopass.SourceRange) {
 		Start: stmt.Src.Start + sub.Src.Start,
 		End:   stmt.Src.Start + sub.Src.End,
 	}
+}
+
+// resolvedTokenSection is the editor half of the two-way match report
+// (ADR-0190 §SD9): an underline in the resolved tone over the token the
+// completion engine matched exactly.
+//
+// It is deliberately outside editorStyledSections' quiescence gate in spirit
+// but inside it in fact — the gate is applied by the caller, and the
+// completion answer is derived from the buffer and the caret alone, so it is
+// never stale in the way a pipeline result is. Keeping it under the same gate
+// costs a tint during a burst of typing and buys one rule about when overlays
+// are trustworthy instead of two.
+func (inst *PlayApp) resolvedTokenSection() (sec codeview.StyledSection, ok bool) {
+	res := inst.completion.result
+	if res.Match != sqlcomplete.MatchExact {
+		return
+	}
+	r := res.Partial
+	if r.Stop <= r.Start || r.Stop > len(inst.sql) {
+		return
+	}
+	sec = codeview.StyledSection{
+		Start: uint32(r.Start), Stop: uint32(r.Stop),
+		Flags: codeview.StyleUnderline,
+		Color: sqleditor.ToneResolved,
+	}
+	ok = true
+	return
 }

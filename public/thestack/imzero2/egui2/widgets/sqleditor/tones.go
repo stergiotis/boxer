@@ -15,8 +15,19 @@ import (
 )
 
 var (
-	// ToneError underlines a token a failed parse pointed at.
+	// ToneError underlines a token a failed parse pointed at, and — since
+	// ADR-0190 §SD9 — a closed-domain literal that does not resolve. Never
+	// while the token is being typed: the caret's own token gets an error tone
+	// only from the parse, because a name half-written is not a wrong one.
 	ToneError = color.Hex(styletokens.ErrorDefault.AsHex())
+	// ToneResolved underlines a literal that resolved against its argument's
+	// domain — a registered component kind, a field the kind projects
+	// (ADR-0190 §SD9).
+	//
+	// It is the quiet half of the same report ToneError makes, and the same
+	// tone the completion pane outlines its exact row with, so the editor and
+	// the pane cannot say "this resolves" in two different colours.
+	ToneResolved = color.Hex(styletokens.SuccessDefault.AsHex())
 	// ToneWarning underlines something the run gate is still waiting for.
 	ToneWarning = color.Hex(styletokens.WarningDefault.AsHex())
 	// ToneStatementTint backs the statement under the caret. One faint step

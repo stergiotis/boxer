@@ -115,6 +115,7 @@ const (
 	dockTabChart       uint64 = 25
 	dockTabVocabulary  uint64 = 26
 	dockTabGlosses     uint64 = 27
+	dockTabCompletion  uint64 = 28
 )
 
 type PlayApp struct {
@@ -306,7 +307,11 @@ type PlayApp struct {
 	// per-instance like snippetsHl for the same reason (the widget owns a
 	// compiled pattern across frames).
 	vocabTab vocabTabState
-	vocabHl  regexedit.Edit
+	// completion is the ADR-0190 pane's state and this frame's answer. It is
+	// refreshed from the editor's Bind whether or not the tab is open, because
+	// the editor's own tint reads the same result.
+	completion completionState
+	vocabHl    regexedit.Edit
 	// Per-buffer outcomes of the client-side rewrite (play_passes_tab.go),
 	// shared by the Passes and Diagnostics tabs and computed on first demand
 	// per frame — both tabs are lazy, so a session with neither open pays
@@ -2485,6 +2490,10 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	// One caret per frame, in inst.sql coordinates, for the producers below
 	// and for everything outside this render that reads it.
 	inst.caretByte = res.Caret
+	// The completion answer is derived here rather than in the tab body, for
+	// the same reason: the editor's resolved-token tint below reads it, and a
+	// tab that is closed must not change what the editor says (ADR-0190 §SD9).
+	inst.refreshCompletion(res)
 
 	if prelude != "" {
 		for rt := range c.RichTextLabel(strings.TrimRight(prelude, "\n")) {
