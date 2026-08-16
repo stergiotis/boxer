@@ -23,6 +23,7 @@ func presentationFamily() []GlossI {
 		epochGloss{},
 		durationGloss{},
 		bytesGloss(),
+		taggedIdGloss(),
 		luhnGloss(),
 		maskedGloss(),
 		urlGloss(),

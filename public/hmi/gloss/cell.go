@@ -27,6 +27,13 @@ type CellI interface {
 	Raw() (raw string, ok bool)
 	Float64() (v float64, ok bool)
 	Int64() (v int64, ok bool)
+	// Uint64 reads an integer cell as an unsigned 64-bit word. It exists
+	// because the top of the UInt64 range is neither an Int64 (which refuses
+	// it) nor a Float64 (which rounds it): a fibonacci-tagged id carries its
+	// tag in the high bits, so most of them are above 2^63 and every bit of
+	// them is meaningful. A negative signed value is not a uint64 and reads
+	// as not-ok rather than wrapping.
+	Uint64() (v uint64, ok bool)
 }
 
 // ArrowCell reads (Arr, Row). A row out of range reads as null.
@@ -152,6 +159,41 @@ func (inst ArrowCell) Int64() (v int64, ok bool) {
 	return 0, false
 }
 
+func (inst ArrowCell) Uint64() (v uint64, ok bool) {
+	if inst.IsNull() {
+		return 0, false
+	}
+	i := inst.Row
+	switch a := inst.Arr.(type) {
+	case *array.Uint8:
+		return uint64(a.Value(i)), true
+	case *array.Uint16:
+		return uint64(a.Value(i)), true
+	case *array.Uint32:
+		return uint64(a.Value(i)), true
+	case *array.Uint64:
+		return a.Value(i), true
+	case *array.Int8:
+		return nonNegative(int64(a.Value(i)))
+	case *array.Int16:
+		return nonNegative(int64(a.Value(i)))
+	case *array.Int32:
+		return nonNegative(int64(a.Value(i)))
+	case *array.Int64:
+		return nonNegative(a.Value(i))
+	}
+	return 0, false
+}
+
+// nonNegative is the signed→unsigned read: a negative value is not a uint64
+// and is refused rather than wrapped to the top of the range.
+func nonNegative(v int64) (u uint64, ok bool) {
+	if v < 0 {
+		return 0, false
+	}
+	return uint64(v), true
+}
+
 // TextCell wraps an already formatted value: the leeway card's cell text, or
 // a test's literal. Numeric access parses the text.
 type TextCell struct {
@@ -173,6 +215,15 @@ func (inst TextCell) Float64() (v float64, ok bool) {
 }
 func (inst TextCell) Int64() (v int64, ok bool) {
 	v, err := strconv.ParseInt(inst.S, 10, 64)
+	return v, err == nil
+}
+
+// Uint64 parses the text in base 10, matching Int64 and Float64 — they read
+// the marshalled value, not a literal, so a prefixed base would be a
+// different value than the cell shows. A gloss that wants to accept `0x…`
+// typed by a user parses the text itself.
+func (inst TextCell) Uint64() (v uint64, ok bool) {
+	v, err := strconv.ParseUint(inst.S, 10, 64)
 	return v, err == nil
 }
 
