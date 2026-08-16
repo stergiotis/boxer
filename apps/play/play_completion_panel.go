@@ -363,3 +363,31 @@ func sortCompletionItems(items []sqlcomplete.Item) {
 		return a < b
 	})
 }
+
+// completionWantsTab reports whether the editor should take Tab this frame
+// (ADR-0190 §SD10).
+//
+// Three conditions, and each one is a case where a captured Tab would be a
+// key eaten for nothing: there must be candidates the typed text extends, the
+// caret must sit at the end of that text (a suffix insert is only valid
+// there), and they must agree on something more than what is already written.
+// Otherwise Tab stays a tab character.
+func (inst *PlayApp) completionWantsTab() bool {
+	st := &inst.completion
+	if !st.atEnd || len(st.result.Prefix) == 0 {
+		return false
+	}
+	_, ok := st.result.TabCompletion(st.typed)
+	return ok
+}
+
+// applyTabCompletion splices what the captured Tab completes to.
+func (inst *PlayApp) applyTabCompletion() {
+	st := &inst.completion
+	if !st.atEnd {
+		return
+	}
+	if suffix, ok := st.result.TabCompletion(st.typed); ok {
+		inst.InsertSqlAtCaret(suffix)
+	}
+}

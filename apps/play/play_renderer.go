@@ -2464,6 +2464,11 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 		Rows:    rows,
 		Insert:  pending,
 		Density: inst.density,
+		// Tab is asked for only while last frame's answer had something to
+		// complete, so it means a tab character the rest of the time
+		// (ADR-0190 §SD10). Last frame's, because the flag is part of the
+		// frame this Bind is about to resolve.
+		CaptureTab: inst.completionWantsTab(),
 	}
 	var prelude string
 	if inst.paramHidePrelude {
@@ -2494,6 +2499,12 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	// the same reason: the editor's resolved-token tint below reads it, and a
 	// tab that is closed must not change what the editor says (ADR-0190 §SD9).
 	inst.refreshCompletion(res)
+	// A captured Tab arrives one frame after the press, like the caret. What
+	// it inserts goes through the same pending-insert seam the pane's click
+	// and the Snippets tab use.
+	if res.TabPressed && !res.TabShift {
+		inst.applyTabCompletion()
+	}
 
 	if prelude != "" {
 		for rt := range c.RichTextLabel(strings.TrimRight(prelude, "\n")) {

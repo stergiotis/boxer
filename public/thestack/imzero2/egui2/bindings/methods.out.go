@@ -4317,6 +4317,13 @@ func (inst TextEditFluid) SetCursor(sel uint64, focus bool) TextEditFluid {
 	return inst
 }
 
+func (inst TextEditFluid) CaptureTab() TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdCaptureTab))
+
+	return inst
+}
+
 func (inst TextEditFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(TextEditMethodIdBuild))

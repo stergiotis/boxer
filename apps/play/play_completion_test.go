@@ -217,3 +217,28 @@ func TestCompletionFindingSections(t *testing.T) {
 	app.sql = "SELECT 1"
 	assert.Empty(t, app.completionFindingSections())
 }
+
+// The Tab gate (ADR-0190 §SD10): the key is only taken when it would insert
+// something, so Tab means a tab character the rest of the time.
+func TestCompletionWantsTab(t *testing.T) {
+	app := tabsTestApp()
+	st := &app.completion
+
+	assert.False(t, app.completionWantsTab(), "nothing to complete")
+
+	st.result = sqlcomplete.Result{
+		Items:  []sqlcomplete.Item{{Text: "SysMem", Insert: "SysMem"}, {Text: "SysCPU", Insert: "SysCPU"}},
+		Prefix: []int{0, 1},
+		Exact:  -1,
+	}
+	st.typed = "S"
+	st.atEnd = true
+	assert.True(t, app.completionWantsTab(), "the two agree on Sys")
+
+	st.typed = "Sys"
+	assert.False(t, app.completionWantsTab(), "they agree on nothing more")
+
+	st.typed = "S"
+	st.atEnd = false
+	assert.False(t, app.completionWantsTab(), "a suffix insert needs the caret at the end")
+}

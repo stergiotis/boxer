@@ -468,3 +468,49 @@ func trimForMessage(s string) string {
 	}
 	return s[:37] + "…"
 }
+
+// TabCompletion is what one captured Tab inserts (ADR-0190 §SD10): the suffix
+// of the unique prefix match, or — when several match — the longest common
+// prefix beyond what has been typed.
+//
+// Shell-style, deliberately. A list with several candidates is not a menu here:
+// the pane already shows them, so the key's job is to type the part they agree
+// on and leave the choice visible. When they agree on nothing more, ok is false
+// and the key inserts nothing, which is what a shell does too.
+//
+// typed is what precedes the caret; the caller must have checked that the caret
+// is at the token's end (a suffix insert is only valid there).
+func (inst Result) TabCompletion(typed string) (suffix string, ok bool) {
+	if len(inst.Prefix) == 0 {
+		return
+	}
+	if it, exact := inst.ExactItem(); exact && len(inst.Prefix) == 1 {
+		// The one match is what is already written: nothing to add, and
+		// reporting a completion would make Tab look like it did something.
+		if it.Insert == typed {
+			return
+		}
+	}
+	common := inst.Items[inst.Prefix[0]].Insert
+	for _, i := range inst.Prefix[1:] {
+		common = commonPrefix(common, inst.Items[i].Insert)
+		if common == "" {
+			return
+		}
+	}
+	if len(common) <= len(typed) || !strings.HasPrefix(common, typed) {
+		return
+	}
+	suffix = common[len(typed):]
+	ok = true
+	return
+}
+
+func commonPrefix(a string, b string) string {
+	n := min(len(a), len(b))
+	i := 0
+	for i < n && a[i] == b[i] {
+		i++
+	}
+	return a[:i]
+}

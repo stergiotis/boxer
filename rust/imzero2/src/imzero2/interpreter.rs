@@ -2212,6 +2212,12 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // applied only on frames the method is present, because a range re-applied
     // every frame would pin the caret and make the editor unusable.
     text_edit_pending_set_cursor: Option<(u64, bool)>,
+    // Scratch slot for TextEditFluid.CaptureTab (ADR-0147 SD10, built for
+    // ADR-0190 SD5): take Tab away from the editor for ONE frame and report it
+    // on the ADR-0177 key-capture register. One-shot like insertAtCursor — a
+    // completion pane emits it only while it has something to complete, so Tab
+    // means a tab character every other frame.
+    text_edit_pending_capture_tab: bool,
     // ADR-0088 runtime codec pipeline: `setVideoPipeline` stashes the
     // requested codec here (0=H.264, 1=VP9, 2=AV1); the headless host drains
     // it after dispatch and re-points the encoder. `video_cap_*` are pushed
@@ -2593,6 +2599,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             text_edit_pending_no_wrap: false,
             text_edit_pending_report_cursor: false,
             text_edit_pending_set_cursor: None,
+            text_edit_pending_capture_tab: false,
             r9_et_prefetch_ids: Vec::with_capacity(8),
             r9_et_prefetch_values: Vec::with_capacity(32),
             r10_true_ids: Vec::with_capacity(1024),
@@ -12169,6 +12176,11 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                             let mut focus = self.io.read_plain_b()?;
                             self.text_edit_pending_set_cursor = Some((sel, focus));
                         }
+                        TextEditBuilderMethodId::CaptureTab => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TextEditBuilderMethodId::CaptureTab");
+                            self.text_edit_pending_capture_tab = true;
+                        }
                     }
                 }
                 if d == 0 {
@@ -12197,6 +12209,57 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                 });
                 if let Some(cl) = hl_layouter.as_mut() {
                     w = w.layouter(cl);
+                }
+                // captureTab (ADR-0147 §SD10): remove one Tab press from the queue before
+                // the widget sees it, and report it on ADR-0177's key-capture register.
+                //
+                // BEFORE the widget, not after: with code_editor()/lock_focus(true) the
+                // TextEdit turns Tab into a tab character while it runs, so anything reading
+                // the queue afterwards sees a key that has already been spent. That ordering
+                // is why this is a builder method rather than a fetcher.
+                //
+                // Gated on focus, so a Tab pressed while the caret is elsewhere still moves
+                // focus normally. The id is the TextEdit's own — construction gives it
+                // i — so no focus salt is involved, unlike a Frame's capture.
+                //
+                // Modifiers ride along rather than narrowing the match (ADR-0177 §SD5), so
+                // Shift+Tab arrives as Tab with shift set and the Go side decides.
+                if std::mem::take(&mut self.text_edit_pending_capture_tab) {
+                    if let Some(ctx) = u.as_deref().map(|ui| ui.ctx().clone()) {
+                        if ctx.memory(|m| m.has_focus(i)) {
+                            let mods_now = ctx.input(|inp| inp.modifiers);
+                            let mods_byte = (mods_now.shift as u8)
+                                | ((mods_now.ctrl as u8) << 1)
+                                | ((mods_now.alt as u8) << 2)
+                                | ((mods_now.command as u8) << 3);
+                            let mut hit = false;
+                            ctx.input_mut(|inp| {
+                                let before = inp.events.len();
+                                inp.events.retain(|ev| {
+                                    !matches!(
+                                        ev,
+                                        egui::Event::Key {
+                                            key: egui::Key::Tab,
+                                            pressed: true,
+                                            ..
+                                        }
+                                    )
+                                });
+                                hit = inp.events.len() != before;
+                            });
+                            if hit {
+                                self.r26_key_capture_push(
+                                    i.value(),
+                                    crate::imzero2::keycodes::imzero_key_code(egui::Key::Tab),
+                                    mods_byte,
+                                );
+                                // R26 is read at the END of this frame, so Go acts on the
+                                // capture while building the NEXT one — and the keypress that
+                                // would have asked for that frame has just been eaten here.
+                                ctx.request_repaint();
+                            }
+                        }
+                    }
                 }
                 let resp =
 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)

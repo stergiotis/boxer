@@ -68,6 +68,7 @@ status: draft
 | FetchR23CanvasWheel | Fetcher | No | 0 | 0 | - | - |
 | FetchR24CanvasPointers | Fetcher | No | 0 | 0 | - | - |
 | FetchR25EtColWidths | Fetcher | No | 0 | 0 | - | - |
+| FetchR26KeyCaptures | Fetcher | No | 0 | 0 | - | - |
 | FetchR7 | Fetcher | No | 0 | 0 | - | - |
 | FetchR9EtPrefetch | Fetcher | No | 0 | 0 | - | - |
 | FetchR9F64 | Fetcher | No | 0 | 0 | - | - |
@@ -77,7 +78,7 @@ status: draft
 | FetchSnarlEvents | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoCapabilities | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoStreamInfo | Fetcher | No | 0 | 0 | - | - |
-| Frame | BuilderFactory | Yes | 0 | 0 | 21 | Immediate, Retained, BlockIterator |
+| Frame | BuilderFactory | Yes | 0 | 0 | 23 | Immediate, Retained, BlockIterator |
 | Graph | BuilderFactory | Yes | 0 | 0 | 31 | Immediate, Retained |
 | GraphEdge | BuilderFactory | No | 2 | 0 | 2 | Immediate |
 | GraphNode | BuilderFactory | No | 2 | 0 | 1 | Immediate |
@@ -148,6 +149,7 @@ status: draft
 | ProgressBar | BuilderFactory | No | 1 | 0 | 7 | Immediate, Retained |
 | PushId | BuilderFactory | Yes | 0 | 0 | 0 | Immediate, BlockIterator |
 | RadioButton | BuilderFactory | Yes | 1 | 1 | 0 | Immediate |
+| RequestFocus | Procedural | No | 1 | 0 | - | - |
 | RequestRepaint | Procedural | No | 0 | 0 | - | - |
 | RequestRepaintAfter | Procedural | No | 1 | 0 | - | - |
 | RequestScreenshot | Procedural | No | 1 | 0 | - | - |
@@ -174,12 +176,13 @@ status: draft
 | SnarlPin | BuilderFactory | No | 5 | 0 | 0 | Immediate |
 | Spinner | BuilderFactory | No | 0 | 0 | 1 | Immediate |
 | StyledSections | BuilderFactory | No | 0 | 0 | 1 | Retained |
+| SurrenderFocus | Procedural | No | 1 | 0 | - | - |
 | Table | BuilderFactory | Yes | 2 | 0 | 6 | Immediate, Retained |
 | TableCellRichText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
 | TableCellText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
 | TableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
 | TableHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
-| TextEdit | BuilderFactory | Yes | 2 | 0 | 17 | Immediate |
+| TextEdit | BuilderFactory | Yes | 2 | 0 | 18 | Immediate |
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | UiClipToMaxRect | Procedural | No | 0 | 0 | - | - |
@@ -789,6 +792,8 @@ EtHeaderText
 - **MultiplyWithOpacity**(val: f32)
 - **SenseClick**()
 - **SenseDrag**()
+- **Focusable**()
+- **CaptureKeys**(mask: u64)
 - **HoverCursorPointer**()
 - **PresetGroup**()
 - **PresetWindow**()
@@ -2614,6 +2619,7 @@ TableHeaderText
 - **NoWrapLayout**()
 - **ReportCursor**()
 - **SetCursor**(sel: u64, focus: b)
+- **CaptureTab**()
 
 #### Return Type
 
@@ -3083,6 +3089,19 @@ Block
 
 ---
 
+### RequestFocus
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| id | plain | u64 |
+
+---
+
 ### RequestRepaint
 
 - **Type:** Procedural
@@ -3196,6 +3215,19 @@ Block
 
 - **Type:** Procedural
 - **Identity:** No
+
+---
+
+### SurrenderFocus
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| id | plain | u64 |
 
 ---
 
@@ -3591,6 +3623,20 @@ Block
 | ids | u64h |
 | counts | u64h |
 | widths | f32h |
+
+---
+
+### FetchR26KeyCaptures
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| ids | u64h |
+| codes | u8h |
+| mods | u8h |
 
 ---
 

@@ -1320,6 +1320,7 @@ pub enum TextEditBuilderMethodId {
     NoWrapLayout = 15,
     ReportCursor = 16,
     SetCursor = 17,
+    CaptureTab = 18,
 }
 
 #[allow(dead_code)]

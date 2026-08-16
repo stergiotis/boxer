@@ -581,6 +581,22 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				BeginMethod("setCursor").Arg("sel", ctabb.U64).Arg("focus", ctabb.B).
 				CodeClientRust(rustClientCode("self.text_edit_pending_set_cursor = Some((sel, focus));\n")).
 				EndMethod().
+				// captureTab (ADR-0147 §SD10, built for ADR-0190 §SD5): take
+				// Tab away from the editor for one frame and report it through
+				// ADR-0177's key-capture channel.
+				//
+				// One key, opt-in per frame. A completion pane emits it only
+				// while it has something to complete, so Tab inserts a tab
+				// character every other frame — which is what a code editor's
+				// Tab means and what someone who is not completing expects.
+				//
+				// The consume happens BEFORE the widget runs (see the apply
+				// block), which is the whole reason this is a builder method
+				// and not a fetcher: a fetcher drains at frame end, long after
+				// the TextEdit turned the key into a tab character.
+				BeginMethod("captureTab").
+				CodeClientRust(rustClientCode("self.text_edit_pending_capture_tab = true;\n")).
+				EndMethod().
 				Build()...).
 			WithConstructionCodeClientRust(rustClientCode("if multiline { egui::TextEdit::multiline(&mut text).id({{Id}}) } else { egui::TextEdit::singleline(&mut text).id({{Id}}) };\n")).
 			WithSettingImmediate(true).
@@ -607,6 +623,45 @@ let mut hl_layouter = self.text_edit_pending_highlight.take().map(|job| {
 });
 if let Some(cl) = hl_layouter.as_mut() {
     {{Instance}} = {{Instance}}.layouter(cl);
+}
+// captureTab (ADR-0147 §SD10): remove one Tab press from the queue before
+// the widget sees it, and report it on ADR-0177's key-capture register.
+//
+// BEFORE the widget, not after: with code_editor()/lock_focus(true) the
+// TextEdit turns Tab into a tab character while it runs, so anything reading
+// the queue afterwards sees a key that has already been spent. That ordering
+// is why this is a builder method rather than a fetcher.
+//
+// Gated on focus, so a Tab pressed while the caret is elsewhere still moves
+// focus normally. The id is the TextEdit's own — construction gives it
+// {{Id}} — so no focus salt is involved, unlike a Frame's capture.
+//
+// Modifiers ride along rather than narrowing the match (ADR-0177 §SD5), so
+// Shift+Tab arrives as Tab with shift set and the Go side decides.
+if std::mem::take(&mut self.text_edit_pending_capture_tab) {
+    if let Some(ctx) = {{EguiUiOptionalOuter}}.as_deref().map(|ui| ui.ctx().clone()) {
+        if ctx.memory(|m| m.has_focus({{Id}})) {
+            let mods_now = ctx.input(|inp| inp.modifiers);
+            let mods_byte = (mods_now.shift as u8)
+                | ((mods_now.ctrl as u8) << 1)
+                | ((mods_now.alt as u8) << 2)
+                | ((mods_now.command as u8) << 3);
+            let mut hit = false;
+            ctx.input_mut(|inp| {
+                let before = inp.events.len();
+                inp.events.retain(|ev| !matches!(ev,
+                    egui::Event::Key { key: egui::Key::Tab, pressed: true, .. }));
+                hit = inp.events.len() != before;
+            });
+            if hit {
+                self.r26_key_capture_push({{Id}}.value(), crate::imzero2::keycodes::imzero_key_code(egui::Key::Tab), mods_byte);
+                // R26 is read at the END of this frame, so Go acts on the
+                // capture while building the NEXT one — and the keypress that
+                // would have asked for that frame has just been eaten here.
+                ctx.request_repaint();
+            }
+        }
+    }
 }
 let resp =`),
 				applyCodeWidgetRust(true),

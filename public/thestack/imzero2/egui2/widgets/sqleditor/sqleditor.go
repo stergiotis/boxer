@@ -7,8 +7,10 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 )
 
@@ -55,6 +57,14 @@ type Frame struct {
 	// Density resolves the design system's spacing tokens; the zero value is
 	// the default preset.
 	Density styletokens.DensityE
+	// CaptureTab takes Tab away from the editor for THIS frame and reports it
+	// on [Result.TabPressed] (ADR-0190 §SD10, on ADR-0147 §SD10's mechanism).
+	//
+	// Per frame and opt-in: an embedder sets it only while it has something to
+	// complete, so Tab means a tab character the rest of the time — which is
+	// what a code editor's Tab means and what someone who is not completing
+	// expects. Left false the editor behaves exactly as it did.
+	CaptureTab bool
 }
 
 // Decoration is the sparse overlay channel the embedder contributes — the
@@ -126,6 +136,16 @@ type Result struct {
 	// whenever the buffer or the caret moves — which is the state the engine
 	// treats as "the site alone is the model".
 	Scope *sqlcomplete.Scope
+	// TabPressed reports that [Frame.CaptureTab] took a Tab this frame.
+	//
+	// It arrives one frame after the press, like the caret: the capture is
+	// read back at the end of the frame the key was consumed in. The embedder
+	// acts on it by putting the completion in the NEXT frame's [Frame.Insert].
+	TabPressed bool
+	// TabShift is true when the captured Tab carried Shift. The capture
+	// matches the key alone and reports the modifiers (ADR-0177 §SD5), so a
+	// consumer that wants only the bare Tab checks this.
+	TabShift bool
 	// Site is the caret's completion context: the enclosing call frames with
 	// the caret's ordinal, the string literal it is inside, the member access
 	// it follows, the token being typed, and the brackets still open
@@ -156,6 +176,13 @@ type Editor struct {
 	// completion is the ADR-0190 §SD3 scope tier: a sentinel parse of the
 	// caret's statement, on a worker.
 	completion completionTier
+
+	// captured records that last frame asked for the Tab capture, and slotID
+	// the widget id it asked on. Without the flag a stale capture from an
+	// earlier frame would be read once more; without the id there is nothing
+	// to read it under, since the id is minted during Render.
+	captured bool
+	slotID   uint64
 
 	// Statement-split memo, keyed by the buffer it describes.
 	stmtRanges []StatementRange
@@ -309,6 +336,7 @@ func (inst *Editor) Bind(f Frame) (res Result) {
 	// Offsets stay canonical — the slice narrows which spans are walked, not
 	// what they index.
 	site := highlight.SiteAt(spansWithin(spans, stmt, ok), caret)
+	tabPressed, tabShift := inst.takeCapturedTab(f)
 	// The scope tier reads the same statement, in that statement's own
 	// coordinates: grammar1's QueryStmt is single-statement, so the repair and
 	// the parse operate on one, and the site is rebased for them rather than
@@ -335,8 +363,30 @@ func (inst *Editor) Bind(f Frame) (res Result) {
 		EntityOk:   entityOk,
 		Site:       site,
 		Scope:      scope,
+		TabPressed: tabPressed,
+		TabShift:   tabShift,
 	}
 	return inst.result
+}
+
+// takeCapturedTab reads back the Tab [Frame.CaptureTab] consumed last frame.
+//
+// The read is by the editor's own widget id, which is the id the TextEdit
+// registers with egui — the capture needs no focus salt, unlike a Frame's.
+func (inst *Editor) takeCapturedTab(f Frame) (pressed bool, shift bool) {
+	if !inst.captured {
+		return
+	}
+	inst.captured = false
+	for _, k := range c.CurrentApplicationState.StateManager.GetCapturedKeys(
+		widgethandle.Make(inst.slotID)) {
+		if k.Code != keycodes.Tab {
+			continue
+		}
+		pressed = true
+		shift = k.Shift()
+	}
+	return
 }
 
 // spansWithin narrows a buffer's spans to one statement's extent. The spans
@@ -471,6 +521,9 @@ func (inst *Editor) Render(ids *c.WidgetIdStack, d Decoration) {
 // content width, not +Inf, or the tail of a long line is clipped and the
 // enclosing scroll area never learns it is there.
 func (inst *Editor) textField(ids *c.WidgetIdStack, f Frame, view string, rows uint32, styled []codeview.StyledSection, widthPx float32) {
+	// Derive() resolves the prepared id to the value the widget registers
+	// under, which is what the key capture is read back by.
+	inst.slotID = ids.PrepareStr(f.IDSlot).Derive()
 	b := c.TextEdit(ids.PrepareStr(f.IDSlot), view, true).
 		CodeEditor().
 		NoWrapLayout().
@@ -492,6 +545,13 @@ func (inst *Editor) textField(ids *c.WidgetIdStack, f Frame, view string, rows u
 		if job, ok := codeview.BuildStyledSections(styled); ok {
 			b = b.SectionStyled(job)
 		}
+	}
+	// One key, this frame only (ADR-0190 §SD10). Emitted after the other
+	// methods for readability alone; the builder applies them in send order and
+	// this one only sets a flag the apply block reads before the widget.
+	if f.CaptureTab {
+		b = b.CaptureTab()
+		inst.captured = true
 	}
 	b.ReportCursor().SendRespValCursor(f.Value, &inst.caretPacked)
 }

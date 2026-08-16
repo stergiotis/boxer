@@ -369,3 +369,48 @@ func TestValidate(t *testing.T) {
 		assert.Empty(t, e.Validate("", nil, -1))
 	})
 }
+
+// Tab is shell-style: the unique match's suffix, or the longest common prefix
+// of several, and nothing when they agree on no more (§SD10).
+func TestTabCompletion(t *testing.T) {
+	e := testEngine(t)
+
+	t.Run("a unique match completes", func(t *testing.T) {
+		res := e.Complete(req(t, `SELECT LW_COMPONENT('SysM|`))
+		suffix, ok := res.TabCompletion("SysM")
+		require.True(t, ok)
+		assert.Equal(t, "em", suffix)
+	})
+
+	t.Run("several extend to what they agree on", func(t *testing.T) {
+		res := e.Complete(req(t, `SELECT LW_COMPONENT('S|`))
+		suffix, ok := res.TabCompletion("S")
+		require.True(t, ok)
+		assert.Equal(t, "ys", suffix, "SysCPU and SysMem agree on Sys")
+	})
+
+	t.Run("nothing more to agree on", func(t *testing.T) {
+		res := e.Complete(req(t, `SELECT LW_COMPONENT('Sys|`))
+		_, ok := res.TabCompletion("Sys")
+		assert.False(t, ok)
+	})
+
+	t.Run("a fully typed candidate adds nothing", func(t *testing.T) {
+		res := e.Complete(req(t, `SELECT LW_COMPONENT('SysMem|`))
+		_, ok := res.TabCompletion("SysMem")
+		assert.False(t, ok)
+	})
+
+	t.Run("no candidates at all", func(t *testing.T) {
+		res := e.Complete(req(t, `SELECT nosuchfn('a|`))
+		_, ok := res.TabCompletion("a")
+		assert.False(t, ok)
+	})
+
+	t.Run("a field list completes the same way", func(t *testing.T) {
+		res := e.Complete(req(t, `SELECT tupleElement(LW_COMPONENT('SysMem'), 'Tot|`))
+		suffix, ok := res.TabCompletion("Tot")
+		require.True(t, ok)
+		assert.Equal(t, "al", suffix, "TotalBytes and TotalPercent agree on Total")
+	})
+}
