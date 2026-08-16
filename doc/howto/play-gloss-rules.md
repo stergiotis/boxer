@@ -37,8 +37,16 @@ var sensorRules = gloss.Rules("acme-sensors").
 		Show(gloss.MediaTypeBytes).
 	Rule("secrets").
 		When(gloss.Sem(valueaspects.AspectSecret)).
-		Show(gloss.MediaTypeMasked)
+		Show(gloss.MediaTypeMasked).
+	Rule("tagged ids").
+		When(gloss.Name("id"), gloss.CT("u64")).
+		Show(gloss.MediaTypeTaggedId)
 ```
+
+The last one is the shape a rule set is for: `gloss/taggedid` brings no
+affinity of its own — being a surrogate key does not make a column
+fibonacci-tagged — so a deployment that mints tagged ids says so once, here,
+rather than in every query.
 
 `When` takes predicates over the column's spec — what an author would type
 to mint it (`name:temperature section:sensor role:val ct:f64 sem:… arrow:…`):

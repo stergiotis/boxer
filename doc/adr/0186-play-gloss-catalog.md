@@ -8,6 +8,17 @@ reviewed-date: 2026-08-15
 
 # ADR-0186: `play` glosses — a catalog of named value renderings for the Table and Detail panes
 
+**In one paragraph:** a *gloss* is a named way of showing a value.
+`gloss/duration;unit=ms` shows `65000` as `1m 05s`; `gloss/bytes` shows `40858`
+as `40 KiB`; `gloss/luhn` groups a card number into fours, masks the middle
+groups and ticks its check digit (`4111 •••• •••• 1111 ✓`); `gloss/taggedid`
+splits a 19-digit identifier into its tag and counter (`12393906174523605050`
+reads as `c:3a`). A column reaches a gloss by an explicit
+`` `label@<media type>` `` alias, by a rule matched against a written-out
+spelling of the column — a `-- play: gloss` line in the buffer, or a standing
+rule set in Go — or by a default the gloss brings along (an *affinity*).
+Glosses render in both Table grids and both Detail paths.
+
 ## Context
 
 [ADR-0123](./0123-play-content-typed-detail-cells.md) renders a column named
@@ -21,25 +32,38 @@ the renderings, reach them by an explicit `@name` **and** by mapping leeway
 columns to renderings with a regex over a written-out form of the column name
 and its aspects, and render them in the Table as well as in Detail.
 
-What constrains the design:
+Six constraints shape the design:
 
-- A Table cell is one line of monospace text from `formatCell`, drawn per
+- **A Table cell is one line of monospace text** from `formatCell`, drawn per
   visible cell per frame, with column widths seeded from the same function;
   there is no per-cell hook.
-- The leeway Detail card (`Table2CardEmitter`) receives values as text, and
+- **The leeway Detail card** (`Table2CardEmitter`) receives values as text, and
   `BeginColumn` already applies a display rule keyed on value semantics
   (machine-readable and not human-readable → hidden).
-- The aspect vocabularies (ADR-0182) carry `sem:secret`, `sem:url`,
-  `sem:json*` — matchable — but by their admission criterion no units and no
-  media typing; "this float is kelvin" belongs in a catalog, not an aspect.
-- ADR-0181 §SD2 spells aspects as prefixed tokens (`item:` `enc:` `sem:`
-  `use:`); `lwsql` composes names from them (§SD6) but does not decompose.
-- An explicit `@` needs an alias, and an alias strips a column's leeway-ness —
-  the result falls off the card path. A leeway column can only be reached by a
-  rule keyed on its physical name.
-- ADR-0124's `-- play: ungroup` / `-- play: enum` are the in-band directive
-  family; ADR-0181's `LwConstructExpand` in the passreg standard set
-  (ADR-0108) is the client-only constructor-macro shape.
+- **Aspects carry semantics but no units.** The aspect vocabularies (ADR-0182)
+  carry `sem:secret`, `sem:url`, `sem:json*` — matchable — but by their
+  admission criterion no units and no media typing; "this float is kelvin"
+  belongs in a catalog, not an aspect.
+- **`lwsql` composes names but does not decompose them.** ADR-0181 §SD2 spells
+  aspects as prefixed tokens (`item:` `enc:` `sem:` `use:`); `lwsql` composes
+  names from them (§SD6) but has no read side.
+- **An alias strips a column's leeway-ness.** An explicit `@` needs an alias,
+  and the aliased result falls off the card path. A leeway column can only be
+  reached by a rule keyed on its physical name.
+- **The conventions already exist.** ADR-0124's `-- play: ungroup` /
+  `-- play: enum` are the in-band directive family; ADR-0181's
+  `LwConstructExpand` in the passreg standard set (ADR-0108) is the
+  client-only constructor-macro shape.
+
+**Terms.** *gloss* — a named way of showing a value, a member of the catalog.
+*content family* — ADR-0123's media types, now one family of the same catalog.
+*presentation gloss* — a `gloss/…` type for non-document values. *inline face*
+— the one line a cell shows; *block face* — a larger, Detail-only rendering.
+*affinity* — a default rule a gloss brings (e.g. `sem:secret` →
+`gloss/masked`). *spec line* — a one-line token spelling of a column, what
+rules match against. *card path* — the leeway Detail card, which receives
+values as text. *passreg* — the SQL pass registry (ADR-0108), where the
+client-side `gloss(…)` macro registers.
 
 ## Design space (QOC)
 
@@ -136,7 +160,11 @@ without a space after `;`; unquoted it fails at the `@` (ADR-0122's finding).
 `ParseMediaType` folds the type and parameter names and keeps parameter values
 case-sensitive — `unit=K` needs that.
 
-### SD3 — The rule route: spec line, rules, precedence, directive
+### SD3 — The rule route: spec line, rules, directive, affinities, precedence
+
+An alias only reaches columns you can name. To reach a leeway column — and to
+let one rule serve many columns — play computes a **spec line** for each result
+column and matches rules against it.
 
 **Spec line** — a one-line token spelling of a result column, computed once
 per (schema, directive set) and cached like `colLabels`; the leeway tokens
@@ -155,11 +183,6 @@ name:temp_c arrow:float64
 **Rule** — a Go RE2 regex, unanchored, case-sensitive, over the spec line, plus
 a media type. Rules are ordered; the first match wins.
 
-**Precedence per column** — explicit alias › directive rules in buffer order ›
-affinities in catalog order › none. An aliased column is never offered to the
-rules. The header hover names the winner, its source and the spec line; the
-Glosses tab (SD6) lists shadowed matches.
-
 **Directive** — joins the ADR-0124 family. `<token>` is the first
 whitespace-delimited word in compact `;k=v` form; the regex is the rest of the
 line. Unknown type, undeclared parameter, empty or invalid regex each surface
@@ -174,6 +197,20 @@ as a note, as `-- play: enum` errors do; the buffer still runs.
 ← `\bsem:url\b`, `application/json` ← `\bsem:json(-scalar|-array|-object)?\b`.
 Units have no aspect and hence no affinity; that is what the directive is for.
 
+**Precedence per column**, strongest first:
+
+1. an **explicit alias** — an aliased column is never offered to the rules;
+2. **`-- play: gloss` directives**, in buffer order;
+3. **standing rule sets** from the injected repository, in registration order
+   (added by the 2026-08-15 Update on standing rules below, which replaced this
+   ADR's original plan to leave them to files or an editor);
+4. **affinities**, in catalog order;
+5. otherwise, **no gloss**.
+
+The buffer sits above code so a query's `gloss/raw` can switch a standing rule
+off for itself. The header hover names the winner, its source and the spec
+line; the Glosses tab (SD6) lists shadowed matches.
+
 ### SD4 — Where glosses render
 
 | surface | face | mechanism |
@@ -181,7 +218,7 @@ Units have no aspect and hence no affinity; that is what the directive is for.
 | Table, per-row grid | inline | cell text and width seed come from the bound instance instead of `formatCell`; Tone colours the run |
 | Table, per-attribute grid | inline | applied where the sink builds each cell string, on the items (element kind); header tag as above |
 | Detail, ad-hoc | block, else inline | ADR-0123's `renderRichCell` generalised; its `(executed, row)` cache keeps its shape |
-| Detail, leeway card | inline | one setter on `Table2CardEmitter`: a per-column glosser consulted in `BeginColumn` beside the hide rule, applied to the cell text in `EndColumn` |
+| Detail, leeway card | inline + block | two setters on `Table2CardEmitter`: `SetCellGloss`, a per-column glosser consulted in `BeginColumn` beside the hide rule and applied to the cell text in `EndColumn`; and `SetCellBlock` (2026-08-15 Update on block faces) |
 | column header | — | label + small gloss name; physical name, spec line and rule on hover |
 
 A **Raw cells** toggle on the Table toolbar row (beside the pager and the
@@ -200,6 +237,7 @@ it permutes rows on the raw values.
 | `gloss/epoch` | numeric | `unit` ∈ s (default), ms, us, ns — the stored resolution | RFC 3339 UTC, `2026-08-15T12:00:00Z`; an absurd year (the s/ms mix-up) shows raw in warning | — | — |
 | `gloss/duration` | numeric | `unit` ∈ ns, us, ms, s, min, h — the stored unit, required | the two largest units that apply: `12.3 ms`, `1m 05s`, `3d 4h 05m` | — | — |
 | `gloss/bytes` | numeric ≥ 0 | — | `humanize.IBytes` | — | — |
+| `gloss/taggedid` | numeric, text | — | tag value and counter in hex, `c:3a` (added by the 2026-08-16 Update) | the split spelled out + copy | — |
 | `gloss/luhn` | text, numeric | — | groups of four, middle groups masked, ✓/✗ tone by check digit | mask + verdict | — |
 | `gloss/masked` | any | — | `••••••`, never length-revealing | same | ← `sem:secret` |
 | `gloss/url` | text | — | the URL, accent tone; a hyperlink cell in the grids | `HyperlinkTo` | ← `sem:url` |
@@ -215,8 +253,14 @@ conversion (`;show=F`) is deferred, v0 formats the stored unit.
 A result-side sibling of the Vocabulary tab (ADR-0174): each gloss with its
 kinds, parameters, a sample rendering and affinities; the buffer's effective
 rules; and each column of the current result with its spec line and resolution
-(gloss, source, or why a declaration was refused). Insert-at-caret writes a
-`-- play: gloss` line or a `gloss(…)` call.
+(gloss, source, or why a declaration was refused). It also lists what a
+column's binding **shadowed** — the winner first, then the matches behind it,
+so a later directive shows behind an earlier one, an affinity behind a
+directive, and any rule behind an alias; the tab is where "never offered to the
+rules" becomes visible. Insert-at-caret writes a `-- play: gloss` line or a
+`gloss(…)` call. (The shadowed list, the accepted-kinds column and the
+`gloss(…)` insertion landed in the 2026-08-15 Update on the Glosses tab below,
+over `gloss.MatchAll` and `gloss.AcceptedKinds`.)
 
 ### SD7 — `gloss(…)`, a constructor macro
 
@@ -246,28 +290,40 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
   unknown function. A host with a wider catalog registers
   `glosssql.ExpandPass(cat)` in place of the standard entry. Listed in the
   Vocabulary tab's Client section.
+- `glosssql.Call` is `Expand`'s dual: it spells the call for a media type and
+  its parameters, so `Expand("SELECT " + Call(x, mt, params))` yields the alias
+  with the same token — pinned by a round trip over the whole default catalog
+  (2026-08-15 Update on the Glosses tab below).
 
 ### SD8 — Deferred
 
-- Block faces on the leeway card (taken up — see the 2026-08-15 Update
-  below); reveal-on-click for `gloss/masked`.
+Still deferred:
+
+- Reveal-on-click for `gloss/masked`.
 - A paint variant of the inline face (arrays as sparklines).
-- Rule files / env, and an in-app rule editor over ADR-0185 — text rules
-  first, because SQL travels and UI state does not. (Retired by the
-  2026-08-15 Update below: standing rules are code.)
 - Unit conversion; `iban`, `isbn`, `percent`, colour swatches; ADR-0123
   §SD7's own list (base64, URL sources, webp/avif/svg).
 - Reading kanban's `dot_*@<tone>` tokens as glosses — it would move
   ADR-0122's contract; not taken.
+
+Deferred here, settled since — each by its own 2026-08-15 Update below:
+
+- **Block faces on the leeway card** — taken up, on a second card seam (SD4).
+- **Rule files / env, and an in-app rule editor over ADR-0185** — the plan was
+  text rules first, because SQL travels and UI state does not. Retired: standing
+  rules are Go instead, under version control (SD3).
 
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | `public/hmi/gloss` (new exported Go API) | catalog, `Gloss`/`Instance`, value kinds, cell accessor, rules engine, built-in inline faces | play's block-face bindings; the SD7 pass; tests moved from `play_detail_rich_test.go` |
+| `gloss.CellI` (exported interface) | +`Uint64()` (2026-08-16 Update) | `ArrowCell`, `TextCell`, any out-of-tree implementation |
+| `leewaywidgets.Table2CardEmitter` | plain-section fan-out keeps `blocks` (2026-08-16 Update) | plain-section row heights on the card |
+| play's capability manifest | +`clipboard.write` (2026-08-16 Update) | `play_caps_test.go`'s asserted cap count |
 | `public/hmi/gloss/glosssql` + passreg standard set | new pass entry `gloss(…)` | `defaults.RegisterStandard`; the Vocabulary tab's Client list |
 | `lwsql` (exported Go API under `public/`) | +`SpecLines` | golden over the leeway fixture names |
-| `leewaywidgets.Table2CardEmitter` (exported Go API under `public/`) | +1 setter for a per-column glosser | play's card driver wiring |
+| `leewaywidgets.Table2CardEmitter` (exported Go API under `public/`) | +`SetCellGloss` (inline); +`SetCellBlock` (block, 2026-08-15 Update on block faces) | play's card driver wiring |
 | result-column convention (ADR-0123 §SD2/§SD3) | "known type" = catalog; `gloss/` family; parameters validated | 0123's status and §SD7; `features.md` §Table/§Detail; `snippets.md` |
 | `-- play:` directive family (ADR-0124) | +`gloss` | `features.md` cross-reference |
 | play tab roster | +Glosses (chrome in sqlapplet, like Vocabulary) | Panes menu; tab marks; the derived `BOXER_PLAY_FOCUS_GLOSSES` knob in `doc/env-vars.md` |
@@ -324,9 +380,12 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
 
 - **Lane.** Default `go test` for the catalog, the parse table, every inline
   face, the rules engine and the spec line; a nanopass golden for `gloss(…)`;
-  `clickhouse-local` for the alias measurement; two headless tour scenes
-  (`02_table_glosses`, `03_detail_glosses` with a per-attribute capture) for
-  the Table + Detail rendering.
+  `clickhouse-local` for the alias measurement; headless tour scenes for the
+  Table + Detail rendering — `02_table_glosses`, `03_detail_glosses` (with a
+  per-attribute capture and, from the Glosses-tab Update, a capture of the
+  shadowed Columns section), and `02_table_taggedid` (the grid, then a
+  later row's Detail block face, and the card's plain-section face against
+  `anchor.facts`).
 - **What would fail.**
   - The ADR-0123 parse cases, moved verbatim (`dot_done@success` silent,
     `notes@text/markdwn` loud, `TEXT/Markdown` folded), plus `;unit=K`
@@ -334,8 +393,8 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
   - One golden per inline face — Luhn pass and fail with their tones; a
     `gloss/masked` face of equal length for inputs of different lengths.
   - A spec-line golden over the leeway fixture names.
-  - Precedence: alias › directive › affinity; a `gloss/raw` directive
-    suppresses `gloss/masked`'s affinity.
+  - Precedence: alias › directive › repository set › affinity; a `gloss/raw`
+    directive suppresses `gloss/masked`'s affinity.
   - The `gloss(…)` golden: label rules, typed parameters, the position rule, a
     non-literal argument rejected with a source range.
 - **Gap.** The card hook's look and the hover text are checked by hand at the
@@ -360,7 +419,10 @@ SELECT gloss(reading, 'gloss/temperature', 'unit', 'K'),
 Recorded, not milestones: the Table width seed (`colCharPx`, 7 px per rune)
 under-measures the monospace advance (~7.6 px at the tour's density), which a
 gloss face wider than its header makes visible as truncation — a calibration
-predating this ADR and left to its owner.
+predating this ADR and left to its owner. (Superseded by the 2026-08-15 Update
+on the re-fit frame below: the seed was half the story, is now 7.8, and the
+re-fit frame was the rest. The reading above is kept as what was believed at
+M5.)
 
 ## Status
 
@@ -467,9 +529,66 @@ counts (`(^|_)bytes$`), nanosecond and millisecond durations (`_ns$`,
 applet window through `EmbedConfig.Rules`. The recipe is
 [doc/howto/play-gloss-rules.md](../howto/play-gloss-rules.md).
 
+### 2026-08-16 — `gloss/taggedid`, and the unsigned read it needed
+
+A tenth presentation gloss: `gloss/taggedid` shows a fibonacci-tagged
+identifier ([ADR-0106](./0106-identity-fibonacci-tags-build-tag-retirement.md))
+as its two halves — the tag value, a colon, the per-tag counter, both in hex —
+rather than as the one 19-digit decimal it is stored as. `12393906174523605050`
+reads as `c:3a`. The split is the one `LW_ID_TAG_VALUE` / `LW_ID_BODY` compute
+server-side, done client-side so a column of ids reads without changing the
+projection.
+
+Three things fell out of it:
+
+- **`CellI` gained `Uint64()`.** The smallest tag sets the top two bits, so
+  most tagged ids are above 2^63: `Int64()` refuses them and `Float64()`
+  rounds the counter away. The typed accessor also keeps the face inside its
+  one-allocation budget, which parsing `Text()` would not. `ArrowCell` reads
+  every integer array and refuses a negative rather than wrapping it;
+  `TextCell` parses base 10, like its `Int64`. The gloss itself falls back to
+  parsing the text as decimal or `0x`-hex, so a `toString(id)` column and the
+  text-backed leeway card both work.
+- **A block face with copy buttons.** Like `gloss/url`, the gloss is
+  special-cased by name where the block faces render: the inline face, then
+  the tag value with its code width and the counter with the room its tag
+  leaves, then **Copy id** (decimal, for a `WHERE id =`) and **Copy hex**.
+  One settled `taggedIdBlock` feeds both the render and the height the card
+  reserves, so the two cannot disagree — the heights themselves are measured
+  against a rendered row, since a button is taller than a text line and an
+  underestimate clips rather than merely crowds.
+- **play declares `clipboard.write`.** It did not, and the Definition pane's
+  per-fence Copy buttons had been requesting it and being denied. The
+  capability is now declared with the count assertion in `play_caps_test.go`
+  moved deliberately; `PlayApp.CanCopy` gates the affordance on a wired bus,
+  which is why the omission was silent rather than loud.
+
+Wiring the card block face turned up a gap in the 2026-08-15 Update's own
+work: `Table2CardEmitter.EndPlainValue` fans a **plain** section out into one
+row per value column, rebuilding each pair rather than moving it, and it did
+not carry `blocks` over. A claimed block therefore never drew in a plain
+section — which is precisely where a leeway entity's id sits, so it was the
+one place `gloss/taggedid`'s block face was needed. Fixed, with a test that
+drives the plain fan-out and fails without it. The tagged path was never
+affected, which is why the markdown card face read as working.
+
+No parameters — the split is a property of the value — and **no affinity**:
+`sem:` says a column is a surrogate key, not that its surrogates are
+fibonacci-tagged, and glossing a plain sequence as a tagged id would fill the
+column with warnings. Deployments that mint tagged ids bind it by alias or by
+a rule set. What the face cannot show, it says: a word carrying no fibonacci
+comma shows plain in the warning tone, and so does a real tag over the
+reserved counter 0 — a well-formed word that was never minted.
+
+Verified live through the headless tour: a new `02_table_taggedid` scene
+captures the grid and, after selecting a later row, the Detail block face;
+the leeway card's plain-section face was captured against `anchor.facts` with
+its ids shifted into a tag.
+
 ## References
 
 - [ADR-0123](./0123-play-content-typed-detail-cells.md) — content-typed detail cells; the gate this ADR keeps.
+- [ADR-0106](./0106-identity-fibonacci-tags-build-tag-retirement.md) — the fibonacci-tagged id scheme `gloss/taggedid` reads.
 - [ADR-0122](./0122-play-kanban-panel.md) §SD2 — the measured `@` separator; `dot_*@<token>`.
 - [ADR-0116](./0116-play-leeway-column-handle-resolution.md), [ADR-0121](./0121-selection-condition-columns.md) — the other conventions on result column names.
 - [ADR-0124](./0124-play-param-editing-widgets.md) — the `-- play:` directive family.

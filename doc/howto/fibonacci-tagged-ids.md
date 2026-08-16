@@ -218,10 +218,33 @@ templates — `identsql.UdfDdlStatements()` is the programmatic seam behind
   `bitShiftRight` silently no-ops on signed shift amounts. If you hand-write
   variants, keep masks shift-only and force shift amounts to `UInt8`.
 
+## Read them in play
+
+`gloss/taggedid` (ADR-0186) shows a tagged-id column as its two halves in
+hex — tag value, colon, counter — so `12393906174523605050` reads `c:3a`
+without the projection changing. Bind it with an alias:
+
+```sql
+SELECT id AS `id@gloss/taggedid`, ts, payload FROM events
+```
+
+…or, for a leeway column whose name cannot be aliased, with a rule —
+`-- play: gloss gloss/taggedid name:id` in the buffer, or a checked-in rule
+set ([play-gloss-rules.md](./play-gloss-rules.md)). Detail spells the split
+out with the tag's code width and the room its tag leaves, and offers Copy
+buttons for the decimal and the hex spellings of the whole word. A value that
+carries no comma shows plain in the warning tone — the same verdict
+`LW_ID_IS_VALID` gives, without a round trip.
+
+There is no affinity: a `sem:` aspect says a column is a surrogate key, not
+that its surrogates are fibonacci-tagged.
+
 ## Related
 
 - [ADR-0106](../adr/0106-identity-fibonacci-tags-build-tag-retirement.md) —
   the scheme decision, the split contract, kill-reasons for alternatives.
+- [ADR-0186](../adr/0186-play-gloss-catalog.md) — `gloss/taggedid` and the
+  rest of the gloss catalog.
 - [identgen EXPLANATION](../../public/identity/identgen/EXPLANATION.md) —
   generator taxonomy and invariants.
 - `public/identity/identsql` — the pass, the UDF emission, and the
