@@ -47,3 +47,9 @@ U+27E6	public/semistructured/leeway/card/leeway_card_braillespark.go
 U+27E7	public/semistructured/leeway/card/leeway_card_braillespark.go
 U+27E8	public/semistructured/leeway/card/leeway_card_topospark.go
 U+27E9	public/semistructured/leeway/card/leeway_card_topospark.go
+# The luhn gloss's verdict mark is one remove further out: the face is text a
+# LIBRARY returns, and the Monospace() call is in the consumer. Every path that
+# draws a gloss inline face today is one — play's grid cells (selectableCell),
+# the Detail pane's toned face, and the catalog row's sample — so DejaVu covers
+# it; a consumer that drew a face proportionally would make this entry wrong.
+U+2717	public/hmi/gloss/luhn.go
