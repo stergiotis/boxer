@@ -158,3 +158,42 @@ func TestSetCellBlock(t *testing.T) {
 	assert.Nil(t, blockSaw)
 	assert.Nil(t, e.currentRow.valuePairs[0].blocks)
 }
+
+// A plain section fans each value column out into its own row, rebuilding the
+// pair rather than moving it — so it has to carry the block face over by hand.
+// It did not, which made a plain section the one place a claimed block never
+// drew: exactly where a leeway entity's id sits, and so exactly where
+// gloss/taggedid's block face belongs.
+func TestSetCellBlockSurvivesThePlainFanOut(t *testing.T) {
+	e := NewTable2CardEmitter(nil, ColorPaletteViridis, nil)
+	e.colNames = []string{"id", "naturalKey"}
+	e.colHidden = []bool{false, false}
+	e.SetCellBlock(func(arrowIdx int, _ string) (CellBlock, bool) {
+		if arrowIdx != 0 {
+			return CellBlock{}, false
+		}
+		return CellBlock{Render: func() {}, Height: 62}, true
+	})
+
+	e.BeginPlainValue()
+	e.BeginColumn(streamreadaccess.PhysicalColumnAddr{Index: 0}, "id", nil, valueaspects.EmptyAspectSet)
+	e.BeginScalarValue()
+	_, _ = e.WriteString("12393906174523605050")
+	require.NoError(t, e.EndScalarValue())
+	e.EndColumn()
+	e.BeginColumn(streamreadaccess.PhysicalColumnAddr{Index: 1}, "naturalKey", nil, valueaspects.EmptyAspectSet)
+	e.BeginScalarValue()
+	_, _ = e.WriteString("abc")
+	require.NoError(t, e.EndScalarValue())
+	e.EndColumn()
+	require.NoError(t, e.EndPlainValue())
+
+	require.Len(t, e.unified, 2, "one row per value column")
+	require.Len(t, e.unified[0].valuePairs, 1)
+	require.Len(t, e.unified[0].valuePairs[0].blocks, 1, "the id's block face survives the fan-out")
+	assert.InDelta(t, 62, e.unified[0].valuePairs[0].blocks[0].Height, 0.01)
+	assert.Nil(t, e.unified[1].valuePairs[0].blocks, "the declined column stays text-only")
+	// The row grows for it: one lone block, so no caption.
+	assert.InDelta(t, 62+table2BlockGap, rowHeight(&e.unified[0]), 0.01)
+	assert.InDelta(t, table2RowHeightSingle, rowHeight(&e.unified[1]), 0.01)
+}

@@ -431,6 +431,11 @@ func (inst *Table2CardEmitter) BeginPlainValue() {
 // role a primary membership chip plays in tagged sections. The values cell
 // then carries just the bare value (renderValuesCell drops the `name=`
 // prefix when there is exactly one pair).
+//
+// The fan-out rebuilds each pair rather than moving it, so it must carry the
+// block faces over explicitly: dropping them made a plain section the one
+// place a claimed block never drew, which is exactly where a leeway entity's
+// id lives.
 func (inst *Table2CardEmitter) EndPlainValue() (err error) {
 	if inst.currentRow == nil {
 		return inst.err
@@ -444,7 +449,7 @@ func (inst *Table2CardEmitter) EndPlainValue() (err error) {
 			sectionName:      inst.currentRow.sectionName,
 			sectionAccentIdx: inst.currentRow.sectionAccentIdx,
 			primary:          []table2Tag{{display: p.name}},
-			valuePairs:       []table2NamedValue{{name: "", value: p.value}},
+			valuePairs:       []table2NamedValue{{name: "", value: p.value, blocks: p.blocks}},
 		})
 	}
 	inst.currentRow = nil
