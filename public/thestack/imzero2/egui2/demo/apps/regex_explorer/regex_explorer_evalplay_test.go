@@ -313,6 +313,16 @@ type evalTestRig struct {
 	app   *App
 	keys  *stubKeyRegistrar
 	opens *capturedOpen
+	// svc is the real service, kept for [evalTestRig.flushRetracts]: a
+	// retract only leaves the dataset queryable for RetractGrace, and the
+	// key stays registered until the UNLOAD step (ADR-0188 §SD3).
+	svc *adhocdata.Service
+}
+
+// flushRetracts runs the pending UNLOAD steps now, so a test can assert on
+// what a retract eventually costs without waiting out the grace.
+func (rig *evalTestRig) flushRetracts() {
+	rig.svc.FlushRetracts()
 }
 
 func setupEvalRig(t *testing.T) (rig *evalTestRig) {
@@ -361,7 +371,7 @@ func setupEvalRig(t *testing.T) (rig *evalTestRig) {
 		{Pattern: windowhost.OpenSubject, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
 	}))
 
-	rig = &evalTestRig{app: inst, keys: keys, opens: opens}
+	rig = &evalTestRig{app: inst, keys: keys, opens: opens, svc: svc}
 	return
 }
 
@@ -475,6 +485,9 @@ func TestRetractEvalDatasetsDropsBothHandles(t *testing.T) {
 	require.Equal(t, 2, rig.keys.live())
 
 	inst.retractEvalDatasets()
+	// The app gives the handles back at once; the service holds the keys for
+	// RetractGrace so an in-flight query still resolves (ADR-0188 §SD3).
+	rig.flushRetracts()
 	assert.Equal(t, 0, rig.keys.live())
 
 	inst.mu.RLock()
@@ -545,8 +558,10 @@ func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 	assert.Equalf(t, before, rig.keys.live(),
 		"repeated failing hand-offs minted more datasets: %d -> %d live", before, rig.keys.live())
 
-	// And what it holds, it gives back.
+	// And what it holds, it gives back — once the grace it was retracted
+	// under has been flushed (ADR-0188 §SD3).
 	inst.retractEvalDatasets()
+	rig.flushRetracts()
 	assert.Equal(t, adhocdata.MaxDatasets-1, rig.keys.live(),
 		"the app's own dataset was not retracted")
 }
