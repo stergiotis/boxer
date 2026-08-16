@@ -31,12 +31,12 @@ func capmapDefsBySlug(t *testing.T) map[string]*AppletDef {
 	t.Helper()
 	defs, errs := ParseBook("capmap", help.MustSub(bookcapmapFS, "bookcapmap"))
 	require.Empty(t, errs)
-	require.Len(t, defs, 4)
+	require.Len(t, defs, 3)
 	bySlug := make(map[string]*AppletDef, len(defs))
 	for _, d := range defs {
 		bySlug[d.Slug] = d
 	}
-	require.Len(t, bySlug, 4)
+	require.Len(t, bySlug, 3)
 	return bySlug
 }
 
@@ -50,22 +50,23 @@ func TestCapmapBookCorpus(t *testing.T) {
 	}
 
 	assert.Equal(t, []TabSel{{ID: "table"}}, bySlug["comp-overview"].Tabs)
-	// The browser places all three of its panes: rows top-left, the note
-	// beside them, the family graph underneath (ADR-0132 Update 2026-08-14).
+	// The browser places all four of its panes: the map in the body, the note
+	// beside it, the list and the family graph underneath (ADR-0132 Update
+	// 2026-08-14). The map names a node as well as a zone, which is what lets
+	// one document feed a rectangle contract and a human-readable list at once.
 	assert.Equal(t, []TabSel{
-		{ID: "table"},
+		{ID: "treemap", Node: "nodes"},
 		{ID: "detail", Zone: "side"},
+		{ID: "table", Zone: "bottom"},
 		{ID: "network", Zone: "bottom"},
 	}, bySlug["comp-browser"].Tabs)
-	assert.Equal(t, []TabSel{{ID: "treemap"}, {ID: "table", Zone: "bottom"}}, bySlug["comp-map"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "detail"}}, bySlug["comp-lint"].Tabs)
 
 	// The knobs whose values are a known set are lists, not text fields. The
 	// ones that are not — a catalog, a tag, a substring — stay text, which is
 	// the honest answer for a value that comes from the data.
 	for slug, want := range map[string][]string{
-		"comp-browser": {"level"},
-		"comp-map":     {"size_by", "color_by"},
+		"comp-browser": {"level", "size_by", "color_by"},
 		"comp-lint":    {"show", "kind"},
 	} {
 		declared := play.DeclaredEnumSlots(bySlug[slug].SQL)
@@ -82,19 +83,19 @@ func TestCapmapBookCorpus(t *testing.T) {
 	assert.NotContains(t, bySlug["comp-browser"].SQL, "SET param_selection_key",
 		"binding it in the prelude would turn the signal into a fixed value")
 
-	// The other three draw whole: every knob is a widget, so they run on mount.
-	for _, slug := range []string{"comp-overview", "comp-map", "comp-lint"} {
+	// The other two draw whole: every knob is a widget, so they run on mount.
+	for _, slug := range []string{"comp-overview", "comp-lint"} {
 		assert.False(t, bySlug[slug].HasUnboundSlots, "%s: every knob is prelude-bound", slug)
 	}
 
-	// The map declares the ADR-0166 nodes contract, not the folded one: a
+	// The map lane declares the ADR-0166 nodes contract, not the folded one: a
 	// competence's own prose has to be able to carry a rectangle, and only the
 	// nodes arm lets an interior node hold a value.
-	mapSQL := bySlug["comp-map"].SQL
+	browserSQL := bySlug["comp-browser"].SQL
 	for _, col := range []string{" AS id", " AS parent", " AS value", " AS label", " AS color"} {
-		assert.Contains(t, mapSQL, col, "comp-map: the nodes contract needs%s", col)
+		assert.Contains(t, browserSQL, col, "comp-browser: the nodes contract needs%s", col)
 	}
-	assert.NotContains(t, mapSQL, " AS stack", "comp-map: the folded arm would win over the nodes arm")
+	assert.NotContains(t, browserSQL, " AS stack", "comp-browser: the folded arm would win over the nodes arm")
 
 	// The browser's body column declares its media type, which is what makes
 	// the Detail tab render markdown rather than escaped text (ADR-0123 §SD2).
@@ -102,7 +103,11 @@ func TestCapmapBookCorpus(t *testing.T) {
 }
 
 // TestMintCapmapBook mints the book beside its siblings, guarding slug
-// collisions across all four embedded corpora.
+// collisions across all five embedded corpora.
+//
+// The count is the running total of every book above, so a document added to
+// ANY of them lands here — this assertion is downstream of four other books
+// and is the one most easily forgotten when one of them grows.
 func TestMintCapmapBook(t *testing.T) {
 	reg := app.NewRegistry()
 	minted, errs := mintBooks(reg, zerolog.Nop(), []registeredBook{
@@ -113,15 +118,15 @@ func TestMintCapmapBook(t *testing.T) {
 		{id: "capmap", fsys: help.MustSub(bookcapmapFS, "bookcapmap"), topics: []app.TopicT{app.TopicCode}},
 	})
 	require.Empty(t, errs)
-	assert.Equal(t, 23, minted)
-	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "comp-map"))
+	assert.Equal(t, 24, minted)
+	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "comp-browser"))
 	require.True(t, ok)
-	assert.Equal(t, "Competence map", m.Display)
+	assert.Equal(t, "Competence browser", m.Display)
 	assert.Equal(t, []app.TopicT{app.TopicCode}, m.Topics)
 }
 
 // capmapTestVault materialises a small vault that exercises every shape the
-// book's four buffers read, and points the corpus at it for the test.
+// book's three buffers read, and points the corpus at it for the test.
 //
 // A fixture rather than this repository's own doc/competences, because that
 // directory is git-ignored (ADR-0168 §SD7): CI has no corpus, and a test that
@@ -281,28 +286,53 @@ func TestCapmapBookQueriesExecute(t *testing.T) {
 	// `toolbelt -> numerical` is drawn because both ends are in the picture,
 	// and it is what stops the co-parent from floating unattached.
 
-	// The map: one row per competence, an interior node carrying its own bytes,
-	// and every node reachable from a root.
-	rows, err = query(bySlug["comp-map"].SQL)
+	// …and its map lane. The CTE name comes from the tab's own binding rather
+	// than from a literal repeated here: `BindTab` does not check that the node
+	// exists — a dangling binding is inert, and the Treemap would quietly fall
+	// back to the query's result, which is the human-readable list and not the
+	// nodes contract. Reading the declaration is what makes that a test failure
+	// instead of an empty picture.
+	var mapNode string
+	for _, sel := range bySlug["comp-browser"].Tabs {
+		if sel.ID == "treemap" {
+			mapNode = sel.Node
+		}
+	}
+	require.NotEmpty(t, mapNode, "the treemap tab must bind to a node")
+	overMap := func(sink string) string {
+		return overSink(asAuthored(bySlug["comp-browser"]), strings.ReplaceAll(sink, "@node", mapNode))
+	}
+
+	rows, err = query(overMap("SELECT id FROM @node"))
 	require.NoError(t, err)
 	assert.Len(t, rows, 5, "one row per competence")
 
-	rows, err = query(overSink(bySlug["comp-map"].SQL, "SELECT id, parent, color FROM nodes WHERE parent = ''"))
+	rows, err = query(overMap("SELECT id, parent, color FROM @node WHERE parent = ''"))
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "exactly one root, or the treemap draws a forest it was not asked for")
 	assert.Equal(t, "toolbelt\t\ttoolbelt", rows[0],
 		"a root with no level-2 ancestor colours by its topmost ancestor, which is itself")
 
 	// A competence with two parents is drawn under exactly one of them.
-	rows, err = query(overSink(bySlug["comp-map"].SQL, "SELECT parent FROM nodes WHERE id = 'num-shared-block'"))
+	rows, err = query(overMap("SELECT parent FROM @node WHERE id = 'num-shared-block'"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"numerical"}, rows, "the alphabetically first parent wins the partition")
 
 	// The interior root has prose of its own, which is the ADR-0166 §SD3 self
 	// cell: a value on an interior node, not silently redistributed downward.
-	rows, err = query(overSink(bySlug["comp-map"].SQL, "SELECT value > 0 FROM nodes WHERE id = 'toolbelt'"))
+	// `words` is the default size channel, so this is the token count.
+	rows, err = query(overMap("SELECT value > 0, unit FROM @node WHERE id = 'toolbelt'"))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, rows)
+	assert.Equal(t, []string{"1\tw"}, rows)
+
+	// The catalog knob is the one filter allowed near the partition, and a
+	// parent it removed is blanked rather than left pointing at nothing.
+	otherCatalog := strings.Replace(asAuthored(bySlug["comp-browser"]),
+		"SET param_catalog = '';", "SET param_catalog = 'nosuch';", 1)
+	require.Contains(t, otherCatalog, "'nosuch'", "the knob has to be rewritten, not appended: the last SET wins")
+	rows, err = query(overSink(otherCatalog, "SELECT count() FROM "+mapNode))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"0"}, rows, "a catalog nothing carries empties the map rather than ignoring the knob")
 
 	// The lint: only the genuinely-missing slug is unresolved. The citation is
 	// external, and the bare link to a directory-backed competence is a dirref

@@ -28,9 +28,9 @@ const sqlFence = "```sql\nSELECT * FROM keelson('env')\n```"
 func TestStarterBookCorpus(t *testing.T) {
 	defs, errs := ParseBook("sqlapplet", help.MustSub(bookFS, "book"))
 	require.Empty(t, errs)
-	require.Len(t, defs, 4)
+	require.Len(t, defs, 5)
 
-	docsSearch, recent, apps, env := defs[0], defs[1], defs[2], defs[3]
+	docsSearch, recent, apps, env, timeline := defs[0], defs[1], defs[2], defs[3], defs[4]
 	assert.Equal(t, "docs-search", docsSearch.Slug)
 	assert.Equal(t, EndpointIntrospection, docsSearch.Endpoint)
 	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "detail"}}, docsSearch.Tabs)
@@ -59,6 +59,16 @@ func TestStarterBookCorpus(t *testing.T) {
 	assert.Equal(t, analysis.QuerySecurityRead, recent.Class)
 	assert.False(t, recent.HasUnboundSlots, "the lim slot is prelude-bound — a param, not a signal")
 
+	assert.Equal(t, "runtime-timeline", timeline.Slug)
+	assert.Equal(t, EndpointIntrospection, timeline.Endpoint,
+		"the trail is read through keelson('runtime_events'), not by decoding memberships in the buffer (ADR-0191 §SD7)")
+	assert.Equal(t, []TabSel{{ID: "timeline"}, {ID: "table"}, {ID: "detail"}}, timeline.Tabs)
+	assert.Equal(t, analysis.QuerySecurityRead, timeline.Class)
+	assert.Equal(t, []app.TopicT{app.TopicRuntime, app.TopicObservability}, timeline.Topics,
+		"frontmatter topics overrides the book default")
+	assert.False(t, timeline.HasUnboundSlots, "all four slots are prelude-bound params")
+	assert.Contains(t, timeline.Preamble, "Lanes are windows")
+
 	// Every def carries the whole document, not just what parsing extracted
 	// from it: the Definition drawer shows the source, so a def that dropped
 	// it would mint an applet unable to say what it is.
@@ -72,7 +82,7 @@ func TestMintStarterBook(t *testing.T) {
 	reg := app.NewRegistry()
 	minted, errs := mintBooks(reg, zerolog.Nop(), []registeredBook{{id: "sqlapplet", fsys: help.MustSub(bookFS, "book"), topics: []app.TopicT{app.TopicRuntime}}})
 	require.Empty(t, errs)
-	assert.Equal(t, 4, minted)
+	assert.Equal(t, 5, minted)
 
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "runtime-apps"))
 	require.True(t, ok)

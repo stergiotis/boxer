@@ -28,12 +28,12 @@ func codevolDefsBySlug(t *testing.T) map[string]*AppletDef {
 	t.Helper()
 	defs, errs := ParseBook("codevol", help.MustSub(bookcodevolFS, "bookcodevol"))
 	require.Empty(t, errs)
-	require.Len(t, defs, 4)
+	require.Len(t, defs, 5)
 	bySlug := make(map[string]*AppletDef, len(defs))
 	for _, d := range defs {
 		bySlug[d.Slug] = d
 	}
-	require.Len(t, bySlug, 4)
+	require.Len(t, bySlug, 5)
 	return bySlug
 }
 
@@ -51,6 +51,14 @@ func TestCodevolBookCorpus(t *testing.T) {
 	assert.Equal(t, []TabSel{{ID: "table"}}, bySlug["vol-modules"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "treemap"}, {ID: "table"}}, bySlug["vol-map"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "table"}}, bySlug["vol-lenses"].Tabs)
+	assert.Equal(t, []TabSel{{ID: "chart"}, {ID: "table"}}, bySlug["vol-top"].Tabs)
+
+	// The chart contract (ADR-0172 §SD1) claims `x` by name and makes every
+	// *other* numeric column a lane. So a chart applet must project exactly
+	// what it means to plot: an extra count or percentage column would
+	// silently become a second grouped bar at an unrelated scale.
+	assert.Contains(t, bySlug["vol-top"].SQL, " AS x", "vol-top: the lanes reading needs an x")
+	assert.NotContains(t, bySlug["vol-top"].SQL, " AS z", "vol-top: a z would switch it to the grid reading")
 
 	// The map declares the ADR-0166 nodes contract; without these the panel
 	// falls back to a different arm and renders nothing useful.
@@ -100,11 +108,14 @@ func (codevolGateSource) Get() ([]codevol.ModuleInfo, codevol.SymbolReport) {
 		// Declared but contributing no symbols — the "zero bytes is not
 		// unused" row the modules applet documents.
 		{Path: "example.com/typesonly", Version: "v0.0.1", Sum: "h1:def=", Party: codevol.PartyThird},
+		// A versioned module: its last path segment is a bare major-version
+		// suffix, which must not become the display name.
+		{Path: "example.com/lib/v4", Version: "v4.1.0", Sum: "h1:ghi=", Party: codevol.PartyThird},
 	}
 	rep := codevol.SymbolReport{
 		ModuleExact: true,
-		TotalText:   1000 + 400 + 250 + 300 + 120,
-		TotalData:   50 + 20 + 10 + 5 + 2,
+		TotalText:   1000 + 400 + 250 + 300 + 120 + 200,
+		TotalData:   50 + 20 + 10 + 5 + 2 + 4,
 		Packages: []codevol.PackageSymbols{
 			{PkgPath: "example.com/main/app", ModulePath: "example.com/main", Party: codevol.PartyFirst,
 				NumSymbols: 10, TextBytes: 1000, DataBytes: 50},
@@ -116,6 +127,8 @@ func (codevolGateSource) Get() ([]codevol.ModuleInfo, codevol.SymbolReport) {
 				NumSymbols: 5, TextBytes: 300, DataBytes: 5},
 			{PkgPath: "runtime", ModulePath: "std", Party: codevol.PartyStdlib,
 				NumSymbols: 2, TextBytes: 120, DataBytes: 2},
+			{PkgPath: "example.com/lib/v4/z", ModulePath: "example.com/lib/v4", Party: codevol.PartyThird,
+				NumSymbols: 2, TextBytes: 200, DataBytes: 4},
 		},
 	}
 	return mods, rep
@@ -164,7 +177,7 @@ func TestCodevolBookQueries(t *testing.T) {
 	}
 
 	bySlug := codevolDefsBySlug(t)
-	for _, slug := range []string{"vol-overview", "vol-modules", "vol-map", "vol-lenses"} {
+	for _, slug := range []string{"vol-overview", "vol-modules", "vol-map", "vol-lenses", "vol-top"} {
 		t.Run(slug, func(t *testing.T) {
 			out := query(bySlug[slug].SQL)
 			// Every buffer must parse, execute and produce rows against the
@@ -212,15 +225,53 @@ WHERE module_path != 'std'
 	assert.Equal(t, "0", query(mapPre+"\nSELECT count() FROM ("+mapBody+") AS n WHERE n.parent != ''"+
 		" AND n.parent NOT IN (SELECT id FROM ("+mapBody+"))"),
 		"vol-map has nodes whose parent is not a node")
-	// Leaf area must sum to the whole 2070 bytes; interior nodes carry no
+	// Leaf area must sum to the whole 2270 bytes; interior nodes carry no
 	// area of their own, which is what keeps a treemap from double-counting.
-	assert.Equal(t, "2070\t0", query(mapPre+"\nSELECT toUInt64(sum(value)),"+
+	assert.Equal(t, "2270\t0", query(mapPre+"\nSELECT toUInt64(sum(value)),"+
 		" toUInt64(sumIf(value, id IN ('binary', 'first', 'third', 'stdlib'))) FROM ("+mapBody+")"))
 	// The standard library has no modules, so it is broken down by top-level
-	// directory instead.
-	assert.Equal(t, "net,runtime", query(mapPre+
+	// directory instead. Ids are party-scoped so the three key spaces — module
+	// paths, stdlib directories, first-party directories — cannot collide.
+	assert.Equal(t, "stdlib/net,stdlib/runtime", query(mapPre+
 		"\nSELECT arrayStringConcat(arraySort(groupArray(id)), ',')"+
 		" FROM ("+mapBody+") WHERE parent = 'stdlib'"))
+	// The main module is subdivided by its own directories, not left as one
+	// undifferentiated rectangle — the whole point of per-party grouping.
+	assert.Equal(t, "app", query(mapPre+
+		"\nSELECT arrayStringConcat(arraySort(groupArray(label)), ',')"+
+		" FROM ("+mapBody+") WHERE parent = 'first'"))
+	// A versioned module keeps its name, not its version suffix.
+	assert.Equal(t, "lib", query(mapPre+
+		"\nSELECT label FROM ("+mapBody+") WHERE id = 'third/example.com/lib/v4'"))
+	// The root introduces no fourth pseudo-party into the colour legend.
+	assert.Equal(t, "binary,first,stdlib,third", query(mapPre+
+		"\nSELECT arrayStringConcat(arraySort(groupUniqArray(color)), ',') FROM ("+mapBody+")"))
+
+	// The chart buffer must satisfy the lanes reading it declares: an `x`
+	// column plus exactly one numeric lane. Two lanes here would be two
+	// grouped bars, which is only honest when they share a unit.
+	topPre, topBody := splitPrelude(bySlug["vol-top"].SQL)
+	// Exactly two projected columns: the abscissa and one lane. A third
+	// numeric column would draw as a second grouped bar at an unrelated
+	// scale, which is the failure mode this buffer is shaped to avoid.
+	firstRow := query(topPre + "\nSELECT * FROM (" + topBody + ") LIMIT 1")
+	assert.Equal(t, 2, len(strings.Split(firstRow, "\t")),
+		"vol-top must project exactly x plus one lane, got: %s", firstRow)
+	// Bars come out biggest-first, which the categorical axis preserves as
+	// row order rather than sorting. The tick is the module's short name: a
+	// full path is unreadable as an axis label.
+	assert.Equal(t, "dep\t400",
+		query(topPre+"\nSELECT x, text_bytes FROM ("+topBody+") LIMIT 1"))
+	// A bare major-version suffix is not a name — example.com/lib/v4 is "lib".
+	assert.Equal(t, "lib\t200",
+		query(topPre+"\nSELECT x, text_bytes FROM ("+topBody+") WHERE text_bytes = 200"))
+	// The party knob is a filter, not decoration.
+	assert.Equal(t, "main\t1000",
+		query("SET param_top = '15';\nSET param_party = 'first';\nSELECT x, text_bytes FROM ("+topBody+") LIMIT 1"))
+	// Zero-byte modules stay out of a bar chart: a zero-height bar reads as
+	// a rendering failure rather than as an absent contribution.
+	assert.Equal(t, "0",
+		query(topPre+"\nSELECT countIf(text_bytes = 0) FROM ("+topBody+")"))
 
 	// go_modules answers even where go_symbols cannot — it is the floor of
 	// the tiering.

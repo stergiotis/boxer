@@ -95,7 +95,8 @@ found code instead of re-deriving this survey. Line numbers are as of
   pins panel set and order, first entry is the landing tab.
 - `apps/sqlapplet/sqlapplet_register.go` — books are `//go:embed` FS vars;
   add `bookcatalog` next to `bookcapmap`/`booktopo`/`bookgodep`.
-  `apps/sqlapplet/bookcapmap/comp-map.md` — chapter front-matter example.
+  `apps/sqlapplet/bookcapmap/comp-browser.md` — chapter front-matter example,
+  including the `<panel>:<node>[@<zone>]` tab form.
 - Seed-shape sources (read the constants, not the memory of them):
   `play_series_panel.go`, `play_kanban_panel.go`, `play_sankey_panel.go`,
   `play_layeredgraph_panel.go`, `play_dist_panel.go`, `play_flow_panel.go`,

@@ -18,14 +18,20 @@ third-party, standard library — each broken into the modules inside it. One
 glance answers what the overview's percentages flatten: which specific
 dependencies are the big ones.
 
-The tree is deliberately **module-grained, not package-grained**. Module
-attribution is exact (resolved against the module list the binary itself
-declares), while package names are derived from symbol names and over-split
-for generic code. This map shows only the part that is exact.
+Each party is subdivided by **its own natural unit**, because they do not
+share one:
 
-The standard library has no modules, so its box is broken down by top-level
-directory (`net`, `crypto`, `runtime`, …) instead — the same shape at the
-same grain.
+- **third-party** by module — attribution there is exact, resolved against
+  the module list the binary itself declares.
+- **the standard library** by top-level directory (`net`, `crypto`,
+  `runtime`, …), because no module owns it.
+- **first-party** by its own directories, two segments deep. Grouping it by
+  module would be technically consistent and useless: this repository is a
+  single module, so the largest box on the map would have no interior.
+
+Package-grained subdivision is deliberately *not* offered: package names are
+derived from symbol names and over-split for generic code, so the map would
+gain detail it cannot stand behind. Everything drawn here is exact.
 
 **The knobs.** `size_by` picks the area: `text` is machine code, the honest
 answer to "how big is this in the binary"; `data` sizes by data symbols
@@ -41,13 +47,21 @@ WITH
            if({size_by:String} = 'data', data_bytes, text_bytes) AS bytes
     FROM keelson('go_symbols')
   ),
-  -- The grouping key: the owning module, except for the standard library,
-  -- which has none — there its top-level directory stands in.
+  -- Each party's natural unit differs, so each gets its own grouping key.
+  -- Using the module for all three would leave first-party as one
+  -- undifferentiated rectangle, since this repository is a single module.
   g AS (
     SELECT party,
-           if(party = 'stdlib',
-              arrayElement(splitByChar('/', pkg_path), 1),
-              module_path) AS grp,
+           multiIf(
+             -- no module owns the standard library; its top directory stands in
+             party = 'stdlib', arrayElement(splitByChar('/', pkg_path), 1),
+             -- one main module, so subdivide it by its own directories
+             party = 'first',
+               arrayStringConcat(arraySlice(
+                 splitByChar('/', if(pkg_path = module_path, '.',
+                                     substring(pkg_path, length(module_path) + 2))),
+                 1, 2), '/'),
+             module_path) AS grp,
            bytes
     FROM s
   ),
@@ -58,16 +72,29 @@ WITH
     GROUP BY party, grp
   ),
   parties AS (SELECT party, sum(bytes) AS bytes FROM agg GROUP BY party),
-  nodes AS (
-    -- leaves: one module (or one stdlib directory)
-    SELECT grp                                        AS id,
-           party                                      AS parent,
-           arrayElement(splitByChar('/', grp), -1)    AS label,
-           toFloat64(bytes)                           AS value,
-           'B'                                        AS unit,
-           party                                      AS color,
-           bytes                                      AS bytes
+  labelled AS (
+    SELECT party, grp, bytes,
+           -- A module path's last segment is its name, except when that
+           -- segment is a bare major-version suffix: `…/arrow-go/v18` is
+           -- named arrow-go, not v18.
+           if(party = 'third',
+              if(match(arrayElement(splitByChar('/', grp), -1), '^v[0-9]+$')
+                 AND length(splitByChar('/', grp)) > 1,
+                 arrayElement(splitByChar('/', grp), -2),
+                 arrayElement(splitByChar('/', grp), -1)),
+              grp) AS label
     FROM agg
+  ),
+  nodes AS (
+    -- leaves: one module, one stdlib directory, or one first-party directory
+    SELECT concat(party, '/', grp) AS id,   -- party-scoped so the three key spaces cannot collide
+           party                   AS parent,
+           label                   AS label,
+           toFloat64(bytes)        AS value,
+           'B'                     AS unit,
+           party                   AS color,
+           bytes                   AS bytes
+    FROM labelled
     UNION ALL
     -- the three party boxes
     SELECT party        AS id,
@@ -79,13 +106,15 @@ WITH
            bytes        AS bytes
     FROM parties
     UNION ALL
-    -- the root
+    -- the root. Its colour is its own name rather than a fourth pseudo-party:
+    -- the legend lists distinct colour values, so inventing one here would put
+    -- a swatch in it for something that is not a party at all.
     SELECT 'binary'          AS id,
            ''                AS parent,
            'binary'          AS label,
            toFloat64(0)      AS value,
            'B'               AS unit,
-           'all'             AS color,
+           'binary'          AS color,
            sum(bytes)        AS bytes
     FROM agg
   ),
