@@ -166,7 +166,7 @@ type Column struct {
 	// the [State] it passed in, during the widget's own render pass, to ask
 	// something the renderer is already holding.
 	//
-	// # Two things about this that bite
+	// # Three things about this that bite
 	//
 	// Interactive widgets are allowed and win the pointer over the row's own
 	// click sense — that is the arbitration in this file's header comment, and
@@ -179,6 +179,18 @@ type Column struct {
 	// chip or a glyph that has to survive a long label belongs in a column of
 	// its own, whose width is reserved before the label is laid out — not
 	// after the label in this one.
+	//
+	// The third is a HEIGHT BUDGET, and it is the one with no diagnostic.
+	// Content is centred on the row by egui_table's own cell layout, but only
+	// while it fits [Input.RowHeight]: something taller is pushed down to the
+	// row's top edge and hangs off the bottom, under the next row and through
+	// the selection outline, silently (see paddedCell for the egui clamp that
+	// does it). At the 22-point default a line of body text fits and a DEFAULT
+	// Button does not — a button is its text plus button_padding.y twice. A
+	// per-row control therefore wants `.Small()`, which drops that padding and
+	// the interact_size floor with it, the way disclose draws the disclosure
+	// control. A host that wants full-size controls in its rows should raise
+	// [Input.RowHeight] instead.
 	Cell func(r Row)
 }
 
@@ -625,11 +637,36 @@ func (in Input) disclose(r Row) (clicked bool) {
 // paddedCell insets a cell's content so it does not sit flush against the
 // column gridlines. The row block behind it owns the fill, the outline and the
 // click sense, so the inset is all a cell Frame has left to do.
+//
+// # The inset is horizontal only, and that is what stops a control hanging out of its row
+//
+// egui_table builds every cell Ui as `left_to_right(Align::Center)` over the
+// cell rect, so cell content is ALREADY centred on the row's midline — this
+// widget adds no centring of its own and needs none. What it can do is take
+// away the room the centring needs.
+//
+// A symmetric inset spent Px[1] top and bottom: at Standard density that is 8
+// of a 22-point row, leaving 14 for content. A default Button is text plus
+// button_padding.y twice — about 25 points at BODY_PT 13 — so it did not fit,
+// and egui does not centre what does not fit. `Layout::next_frame_ignore_wrap`
+// has a clamp for exactly this ("for horizontal layouts we always want to
+// expand down, or we will overlap the row above"): an item taller than its
+// frame is pushed back down to the cursor, so the whole overflow lands BELOW
+// the row instead of straddling it. That is a control sitting visibly low
+// against its own row, and against the selection outline, which is drawn to
+// the row pitch and clips it.
+//
+// Dropping the vertical half is free for content that fits — the centre of a
+// 22-point row and the centre of a 14-point box inset 4 from its top are the
+// same line — and it hands the overflowing case 8 points back before the clamp
+// fires. It does not make the row unbounded: see [Column.Cell] for the budget
+// a cell still has to live inside.
 func (in Input) paddedCell(r Row, col int, density styletokens.DensityE, body func(r Row)) {
 	ncols := uint64(1 + len(in.Columns))
-	for range c.Frame(in.Ids.PrepareSeq(seqCellBase + uint64(r.Node)*ncols + uint64(col))).
+	pad := styletokens.PaddingInner(density)
+	for range c.Frame(in.Ids.PrepareSeq(seqCellBase+uint64(r.Node)*ncols+uint64(col))).
 		OuterMargin(0).
-		InnerMargin(styletokens.PaddingInner(density)).
+		InnerMarginSides(pad, pad, 0, 0).
 		KeepIter() {
 		body(r)
 	}

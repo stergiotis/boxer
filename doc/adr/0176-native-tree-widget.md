@@ -828,6 +828,43 @@ second scene with an `Nth` anchor to tell the two filter boxes apart, and it is
 not built. The unit tests cover each half of it and the render path is
 identical either way, which is why this is recorded rather than blocking.
 
+### 2026-08-16 — SD12's fixed row is a height BUDGET, and it was 8 points short
+
+SD12 recorded what a fixed row height costs a wrapping second line. It did not
+record what the row height costs the row itself, and two adopters were over it
+without any diagnostic saying so.
+
+**A cell taller than its row does not centre — it hangs.** egui_table builds
+every cell `Ui` as `left_to_right(Align::Center)` over the cell rect, so cell
+content is already centred on the row's midline and this widget adds no
+centring of its own. `Layout::next_frame_ignore_wrap` then has a clamp for the
+overflowing case: an item taller than its frame is translated back down to the
+cursor, "or we will overlap the row above". So the whole overflow lands BELOW
+the row rather than straddling it — under the next row, and through the
+selection outline, which is drawn to the row pitch and clips it.
+
+**`paddedCell` was spending a third of the row on inset it did not need.** The
+cell frame took `PaddingInner` on all four sides: at Standard density that is
+8 of a 22-point row, leaving 14 for content. A default `Button` is its text
+plus `button_padding.y` twice — about 25 points at `BODY_PT` 13 — so `play`'s
+Vocabulary Insert and `sqleditor`'s per-row accept both overflowed by roughly
+half a row, on every row, and had done since each was written.
+
+The inset is horizontal only now. It is free for content that fits — the
+centre of a 22-point row and the centre of a 14-point box inset 4 from its top
+are the same line, so nothing that was correct moved — and it hands the
+overflowing case its 8 points back before the clamp fires. That is not enough
+for a full-size button on its own, so the budget is now stated on
+`Column.Cell`: a per-row control wants `.Small()`, which drops
+`button_padding.y` and the `interact_size` floor with it, the way `disclose`
+already draws the disclosure control; a host wanting full-size controls raises
+`RowHeight` instead. Both adopters took `.Small()`.
+
+Found by reading a screenshot rather than by a test, and it is not clear what
+test would have caught it: the widget's own scene asserts SELECTION precisely
+because a capture can look correct while read-back is broken, and this is the
+mirror case — every assertion passed while the picture was wrong.
+
 ## References
 
 - [ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md) — the keyboard capture primitive SD8 defers to; SD2's cursor is its hook in this widget.
