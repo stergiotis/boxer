@@ -174,9 +174,11 @@ func (inst *componentState) expandCall(name string, spelled string, funcExpr *gr
 	if !found {
 		// The alternatives go in the message, not only in a structured field:
 		// a typo and an unwired store produce the same failure, and the list
-		// is what tells them apart at a glance.
+		// is what tells them apart at a glance. keelson('lw_components') is
+		// the same list as a table, for a reader who wants it before writing
+		// the call rather than after (ADR-0189 §SD8).
 		err = inst.errCall(spelled, funcExpr).Str("kind", kind).
-			Errorf("no registered store publishes this component kind; registered: %s",
+			Errorf("no registered store publishes this component kind; keelson('lw_components') lists them: %s",
 				strings.Join(inst.comps.Kinds(), ", "))
 		return
 	}

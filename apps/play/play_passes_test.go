@@ -4,8 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 )
@@ -118,5 +122,51 @@ func TestRegisterComponentsResolvesARealKind(t *testing.T) {
 	}
 	if !strings.Contains(out, " WHERE ") || !strings.Contains(out, "countEqual(") {
 		t.Fatalf("the conformance filter was not injected: %s", out)
+	}
+}
+
+// keelson('lw_components') answers with what play registered (ADR-0189 §SD8).
+// The provider and the registration are written in different packages and
+// neither imports the other, so this is where they can be seen to agree —
+// and it is the query a person actually runs to discover what LW_COMPONENT
+// will accept here.
+func TestKeelsonLwComponentsPublishesWhatPlayRegistered(t *testing.T) {
+	componentsql.Default.Reset()
+	t.Cleanup(componentsql.Default.Reset)
+	if err := RegisterComponents(componentsql.Default); err != nil {
+		t.Fatalf("RegisterComponents: %v", err)
+	}
+
+	reg := introspect.NewRegistry()
+	if err := providers.RegisterStatic(reg); err != nil {
+		t.Fatalf("RegisterStatic: %v", err)
+	}
+	p, ok := reg.Lookup("lw_components")
+	if !ok {
+		t.Fatal("keelson('lw_components') is not registered")
+	}
+
+	batch, err := p.Snapshot(introspect.AllColumns())
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	defer batch.Release()
+
+	// Thirteen kinds, the same count the store publishes — the table must not
+	// quietly show a subset of what a query can actually reach.
+	if got := int(batch.NumRows()); got != len(sysmfacts.SysmetricsComponentSQL.Kinds) {
+		t.Fatalf("lw_components has %d rows, the store publishes %d kinds",
+			got, len(sysmfacts.SysmetricsComponentSQL.Kinds))
+	}
+
+	kinds := batch.Column(0).(*array.String)
+	tables := batch.Column(2).(*array.String)
+	for i := range int(batch.NumRows()) {
+		if _, known := sysmfacts.SysmetricsComponentSQL.Kinds[kinds.Value(i)]; !known {
+			t.Fatalf("lw_components names a kind the store does not publish: %s", kinds.Value(i))
+		}
+		if tables.Value(i) != sysmfacts.SysmetricsTableName {
+			t.Fatalf("%s: table = %s, want %s", kinds.Value(i), tables.Value(i), sysmfacts.SysmetricsTableName)
+		}
 	}
 }

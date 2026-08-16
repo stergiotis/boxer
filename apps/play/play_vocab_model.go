@@ -247,7 +247,8 @@ func vocabDeclared() (out []vocabEntry) {
 	// endpoint, while LW_COMPONENT expands to the named-tuple projection,
 	// which calls the read-back helpers. Availability is a further condition
 	// this column cannot show: a kind resolves only if its store was
-	// registered at the host's wiring site.
+	// registered at the host's wiring site — which is what
+	// keelson('lw_components') answers.
 	for _, f := range constructsql.ComponentFunctions() {
 		e := vocabEntry{
 			Name: f.Name, Params: f.Params, Doc: f.Doc,
