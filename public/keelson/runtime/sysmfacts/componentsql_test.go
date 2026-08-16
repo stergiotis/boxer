@@ -120,3 +120,45 @@ func TestInjectedFilterIsTheStoresOwnFilter(t *testing.T) {
 			"%s: the injected predicate is not the published Filter", kind)
 	}
 }
+
+// TestEveryKindPublishesItsSlots is ADR-0190 §SD6 over the real vocabulary:
+// the field names and types a component read addresses are recoverable from
+// the Projection alone, for every kind this store publishes.
+//
+// The three plain columns every kind carries — Id, NaturalKey, Ts — are the
+// assertion's floor; a kind whose slot list came back empty or truncated would
+// miss them.
+func TestEveryKindPublishesItsSlots(t *testing.T) {
+	r := componentsql.NewRegistry()
+	require.NoError(t, r.Register(sysmfacts.SysmetricsComponentSQL))
+
+	kinds := r.Kinds()
+	require.NotEmpty(t, kinds)
+	for _, kind := range kinds {
+		t.Run(kind, func(t *testing.T) {
+			b, ok := r.Lookup(kind)
+			require.True(t, ok)
+
+			elems, err := b.Elements()
+			require.NoError(t, err)
+			require.NotEmpty(t, elems)
+
+			names := make([]string, len(elems))
+			for i := range elems {
+				names[i] = elems[i].Name
+				assert.NotNilf(t, elems[i].Type, "slot %s has no type", elems[i].Name)
+			}
+			assert.Equal(t, []string{"Id", "NaturalKey", "Ts"}, names[:3])
+
+			ty, err := b.ProjectionType()
+			require.NoError(t, err)
+			assert.Equal(t, "Tuple", ty.Name)
+
+			// Ts is the one slot whose type carries a nested literal, so it is
+			// the one that proves the escaped quotes survived the round trip.
+			ts, ok := ty.Element("Ts")
+			require.True(t, ok)
+			assert.Equal(t, "DateTime64(9, 'UTC')", ts.Type.String())
+		})
+	}
+}

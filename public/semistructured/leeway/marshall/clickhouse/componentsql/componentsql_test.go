@@ -111,3 +111,41 @@ func TestPackageLevelHelpersUseDefault(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "boxer.facts", b.Table)
 }
+
+// The Projection's last string literal is the CAST's type argument. Reading it
+// has to step over the double-quoted physical column names in front of it,
+// which is the only part of the rule that is not obvious.
+func TestElementsReadsTheCastType(t *testing.T) {
+	a := componentsql.Artefacts{
+		Projection: `CAST(tuple("tv:sym:value:val:s:1::I:0::data", "id:id:u64:47::0:"), ` +
+			`'Tuple(Id UInt64, Ts DateTime64(9,\'UTC\'), Watts Nullable(Float32))')`,
+	}
+	elems, err := a.Elements()
+	require.NoError(t, err)
+	require.Len(t, elems, 3)
+	assert.Equal(t, "Id", elems[0].Name)
+	assert.Equal(t, "UInt64", elems[0].Type.String())
+	assert.Equal(t, "Ts", elems[1].Name)
+	assert.Equal(t, "DateTime64(9, 'UTC')", elems[1].Type.String())
+	assert.Equal(t, "Watts", elems[2].Name)
+	assert.Equal(t, "Nullable(Float32)", elems[2].Type.String())
+}
+
+func TestElementsRefusesAnUnreadableProjection(t *testing.T) {
+	cases := []struct {
+		name       string
+		projection string
+	}{
+		{"no literal at all", `CAST(tuple("a", "b"), Tuple(Id UInt64))`},
+		{"the literal is not a type", `CAST(tuple("a"), 'not a type at all!')`},
+		{"casts to something other than a tuple", `CAST(x, 'Array(UInt64)')`},
+		{"a positional tuple names no slots", `CAST(tuple(1, 2), 'Tuple(UInt64, String)')`},
+		{"empty", ``},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := componentsql.Artefacts{Projection: c.projection}.Elements()
+			assert.Error(t, err)
+		})
+	}
+}

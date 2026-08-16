@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	easp "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 )
 
 // mapLookup is a tiny IdLookup for tests: membership name -> ref id.
@@ -500,6 +501,53 @@ func TestGenerator_ExecSetAndMultiSubcol(t *testing.T) {
 	for _, want := range []string{"[100,200,300]", "10", "20"} {
 		if !strings.Contains(proj, want) {
 			t.Errorf("projection = %q, want set [100,200,300] and lo/hi 10/20", proj)
+		}
+	}
+}
+
+// TestGenerator_ProjectionSlotsAreReadable pins the one property ADR-0190 §SD6
+// leans on: the Projection's slot list is recoverable from the Projection
+// itself, so no consumer needs the generator to emit the field names a second
+// time.
+//
+// It lives here, beside the emit, because it is this file's spelling of the
+// CAST that componentsql.Artefacts.Elements reads back. A change to how the
+// generator writes the Projection fails here first.
+func TestGenerator_ProjectionSlotsAreReadable(t *testing.T) {
+	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{"myNums": 42, "window": 7}))
+	plan := &mappingplan.Plan{
+		KindName:  "myDto",
+		PlainCols: []mappingplan.PlainCol{{Column: "id", GoField: "Id", Canonical: ctabb.U64}, {Column: "naturalKey", GoField: "NK", Canonical: ctabb.Y}},
+		Fields: []mappingplan.TaggedField{
+			{GoFieldName: "Sym", Canonical: ctabb.S, LWMembership: "mySym", LWSection: "symbol", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim}},
+			{GoFieldName: "Nums", Canonical: canonicaltypes.PromoteScalarPrim(ctabb.U64, canonicaltypes.ScalarModifierHomogenousArray), LWMembership: "myNums", LWSection: "u64Array", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+			{GoFieldName: "WinBegin", Canonical: ctabb.Z64, LWMembership: "window", LWSection: "timeRange", LWColumn: "beginIncl", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+		},
+	}
+	a, err := g.Generate(plan)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	elems, err := componentsql.Artefacts{Projection: a.Projection}.Elements()
+	if err != nil {
+		t.Fatalf("Elements: %v\n%s", err, a.Projection)
+	}
+
+	wantNames := []string{"Id", "NK", "Sym", "Nums", "WinBegin"}
+	// WinBegin's `DateTime64(9, 'UTC')` arrives with its quotes escaped inside
+	// the CAST's own literal; recovering it unescaped is half of what §SD6 asks
+	// for.
+	wantTypes := []string{"UInt64", "String", "String", "Array(UInt64)", "DateTime64(9, 'UTC')"}
+	if len(elems) != len(wantNames) {
+		t.Fatalf("got %d slots, want %d: %v", len(elems), len(wantNames), elems)
+	}
+	for i := range elems {
+		if elems[i].Name != wantNames[i] {
+			t.Errorf("slot %d: name %q, want %q", i, elems[i].Name, wantNames[i])
+		}
+		if elems[i].Type == nil || elems[i].Type.String() != wantTypes[i] {
+			t.Errorf("slot %d (%s): type %v, want %q", i, elems[i].Name, elems[i].Type, wantTypes[i])
 		}
 	}
 }

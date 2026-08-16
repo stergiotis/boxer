@@ -27,6 +27,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/chtype"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -205,5 +206,97 @@ func sortedKeys(m map[string]Artefacts) (keys []string) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	return
+}
+
+// ProjectionType parses the named Tuple [Artefacts.Projection] casts to.
+//
+// The slot list exists nowhere else: the generator bakes the component's field
+// names and types into the CAST's type literal and emits them a second time
+// nowhere (ADR-0190 §SD6). So this reads the last string literal of the
+// Projection — the CAST's second argument — undoes the quoting it arrived
+// under, and parses it.
+//
+// That "last string literal" rule is tied to the generator's emit shape, which
+// is why [Registry] holds the artefacts a generated store publishes rather than
+// anything hand-written: a change to how ADR-0066's read-back generator spells
+// the Projection fails the test that pins this, not a user's query.
+//
+// It parses on every call. A caller reading it per keystroke should memoise by
+// kind.
+func (inst Artefacts) ProjectionType() (t chtype.Type, err error) {
+	body, ok := lastStringLiteral(inst.Projection)
+	if !ok {
+		err = eb.Build().Errorf("projection carries no string literal to read the slot list from")
+		return
+	}
+	t, err = chtype.Parse(chtype.Unescape(body))
+	if err != nil {
+		err = eb.Build().Errorf("projection's cast type does not parse: %w", err)
+		return
+	}
+	return
+}
+
+// Elements are the component's slots — Go field name and ClickHouse type, in
+// the order the Projection's tuple builds them.
+//
+// An error means the Projection is not the shape ADR-0066's generator emits:
+// either its last literal is not a type, or the type is not a Tuple naming its
+// elements. Both are a generator change, not a caller mistake.
+func (inst Artefacts) Elements() (elems []chtype.Arg, err error) {
+	t, err := inst.ProjectionType()
+	if err != nil {
+		return
+	}
+	elems, ok := t.Elements()
+	if !ok {
+		err = eb.Build().Str("type", t.String()).
+			Errorf("projection casts to something other than a Tuple with named elements")
+		return
+	}
+	return
+}
+
+// lastStringLiteral returns the body — quotes excluded, escapes untouched — of
+// the last complete single-quoted literal in s.
+//
+// It steps over double-quoted identifiers, which is what the physical column
+// names the Projection references are spelled as, so a quote inside one cannot
+// open a literal.
+func lastStringLiteral(s string) (body string, ok bool) {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '"':
+			i++
+			for i < len(s) && s[i] != '"' {
+				if s[i] == '\\' {
+					i++
+				}
+				i++
+			}
+		case '\'':
+			start := i + 1
+			i++
+			for i < len(s) {
+				if s[i] == '\\' {
+					i += 2
+					continue
+				}
+				if s[i] == '\'' {
+					if i+1 < len(s) && s[i+1] == '\'' {
+						i += 2
+						continue
+					}
+					break
+				}
+				i++
+			}
+			if i < len(s) {
+				body = s[start:i]
+				ok = true
+			}
+		}
+	}
 	return
 }
