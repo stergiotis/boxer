@@ -477,3 +477,54 @@ screen at zero matches.
 
 Nothing here closes M3's remaining half — routing a row into the Docs pane is
 still the one piece of this ADR unbuilt.
+
+### 2026-08-16 — A mark is a glyph; a verdict is a sentence
+
+Presentation only again, and it splits one column the previous entry left
+whole. Nothing about what the panel claims moves: the three populations, the
+probe, the declared-vs-probed diff and §SD6's dependency note are all as
+decided.
+
+**The endpoint column was 96 points wide because of its rarest state.** It was
+sized to hold `MISSING`, which is the exception paying for the rule — on a
+provisioned endpoint the column is a run of identical `✓`, so those 96 points
+bought roughly zero bits per row. They came out of the doc column, which was
+truncating mid-sentence at the time. The column is 24 points now, one glyph
+and its inset, and every WORD it used to carry — `MISSING`, `extra`,
+`reserved`, the dependency note — is a coloured prefix on the doc line
+instead. That is 72 points back to the column that was short, and the prose is
+now beside the sentence it qualifies rather than alone in a box too narrow for
+it: `needs LW_…` was already truncating to its hover at 96.
+
+**The split un-hides a fact one column could not hold.** §SD6's dependency
+note REPLACED the mark, being strictly more specific, and that cost the row's
+own installed state on exactly the rows where it is most worth knowing. The
+precedence is unchanged — the note still wins the doc line — but the glyph
+column reports the row's own verdict independently, so nothing is displaced.
+The note also names every missing dependency now rather than the first; naming
+one was the old column's width, not the fact.
+
+**The glyphs are Phosphor, including the check.** The obvious pairing has one
+half that works and one that does not: `✗` (U+2717) is in
+`scripts/ci/glyph-baseline.txt` as accepted tofu, so no font this client loads
+can draw it, while `✓` (U+2713) renders. Mixing a text-face mark with an
+icon-face one also puts two different ems in one column of glyphs, which is
+what ADR-0176's disclosure controls were moved to Phosphor for. `reserved`
+earns no glyph at all: it is a fact about the BUILD, and this column is about
+the endpoint.
+
+The column lost its `endpoint` header, which does not fit in 24 points and
+would clip — the glyphs carry a hover saying what they mean instead, which is
+what the header was doing. The prose marks themselves are unchanged and still
+drawn as words by the completion panel, whose list has room for them; only the
+tree's column reads `vocabMarkGlyph`.
+
+**Verification.** `vocabMarkGlyph` and `vocabDocNote` have tests asserting
+coverage rather than spelling — every verdict `vocabRowMark` can return has to
+leave the reader a glyph, a note, or both, because the two renderers now draw
+from different halves of it and a state neither claims renders as an empty row.
+The `15_vocabulary` scene was re-run against a live endpoint for the picture,
+and a third capture filtered to `motif` — the one term that puts a `reserved`
+row on screen — which is how the note's first rendering was caught reading
+"reserved — reserved for the motif-set ADR". A doc line that already opens
+with its own note now drops the prefix.

@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	"github.com/stergiotis/boxer/public/identity/identsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
@@ -244,6 +245,98 @@ func TestVocabRowMark(t *testing.T) {
 	reserved := vocabEntry{Name: "tsMotifs", Where: vocabPlay, Declared: true, Available: false}
 	mark, _ = vocabRowMark(reserved, vocabPlay, true)
 	assert.Equal(t, vocabMarkReserved, mark)
+}
+
+// TestVocabMarkGlyphAndNote pins the split the endpoint column was narrowed
+// for: a MARK is a glyph and a VERDICT is a sentence, and no state may fall
+// down the gap between them.
+//
+// The property under test is coverage, not spelling. Every verdict
+// [vocabRowMark] can return has to leave the reader something — a glyph, a
+// note, or deliberately both — because the two renderers now draw from
+// different halves of it and a state that neither claims renders as an empty
+// row saying nothing at all.
+func TestVocabMarkGlyphAndNote(t *testing.T) {
+	srv := vocabEntry{Name: "LW_CO_GATHER", Where: vocabServer, Declared: true, Available: true}
+
+	// Present is the state every row is in on a provisioned endpoint: a glyph
+	// and NO note, or the doc column carries a word on all 39 of them.
+	present := srv
+	present.Installed = true
+	glyph, hover := vocabMarkGlyph(vocabMarkPresent)
+	assert.Equal(t, icons.PhCheck, glyph)
+	assert.NotEmpty(t, hover, "the column has no header, so the glyph carries its own")
+	note, _, _ := vocabDocNote(present, vocabMarkPresent, true)
+	assert.Empty(t, note, "the common case says nothing twice")
+
+	// Missing is the one state a user must act on, and it is the one state
+	// that says it in both columns.
+	glyph, _ = vocabMarkGlyph(vocabMarkMissing)
+	assert.Equal(t, icons.PhX, glyph, "not ✗ — U+2717 is baselined tofu, see vocabMarkGlyph")
+	note, full, _ := vocabDocNote(srv, vocabMarkMissing, true)
+	assert.Equal(t, vocabMarkMissing, note)
+	assert.Contains(t, full, "provisioning")
+
+	// An extra IS on the endpoint — that is how the probe found it — so the
+	// glyph is a check and only the note says what is unusual about it.
+	extra := vocabEntry{Name: "myOwnHelper", Where: vocabServer, Declared: false, Available: true}
+	glyph, _ = vocabMarkGlyph(vocabMarkExtra)
+	assert.Equal(t, icons.PhCheck, glyph, "an extra is present, whatever else it is")
+	note, _, _ = vocabDocNote(extra, vocabMarkExtra, true)
+	assert.Equal(t, vocabMarkExtra, note)
+
+	// Reserved is a fact about the BUILD, so the endpoint column stays empty
+	// and the note is the ONLY carrier. This is the state the split could
+	// have dropped.
+	reserved := vocabEntry{Name: "tsMotifs", Where: vocabPlay, Declared: true, Available: false}
+	glyph, _ = vocabMarkGlyph(vocabMarkReserved)
+	assert.Empty(t, glyph, "a client-side name is not an endpoint fact")
+	note, _, _ = vocabDocNote(reserved, vocabMarkReserved, true)
+	assert.Equal(t, vocabMarkReserved, note, "and so the note has to say it")
+
+	// Unknown: a glyph, and no note — the status line above the tree already
+	// says the probe is out.
+	glyph, _ = vocabMarkGlyph(vocabMarkUnknown)
+	assert.Equal(t, icons.PhQuestion, glyph)
+	note, _, _ = vocabDocNote(srv, vocabMarkUnknown, false)
+	assert.Empty(t, note)
+
+	// A client row with no verdict at all: neither half draws, which is the
+	// empty cell the layout expects rather than a hole either renderer left.
+	cli := vocabEntry{Name: "docsearch", Where: vocabClient, Declared: true, Available: true}
+	glyph, _ = vocabMarkGlyph("")
+	assert.Empty(t, glyph)
+	note, _, _ = vocabDocNote(cli, "", true)
+	assert.Empty(t, note)
+}
+
+// TestVocabDocNoteDependencies pins §SD6's note in the column it moved to,
+// and the two things the move bought.
+//
+// It names EVERY missing dependency now: naming only the first was the 96-point
+// column's constraint, not the fact's. And it no longer displaces the row's own
+// endpoint verdict, because that verdict is drawn by a different column — the
+// precedence stays, the loss it used to cause does not.
+func TestVocabDocNoteDependencies(t *testing.T) {
+	e := vocabEntry{
+		Name: "LW_SEL", Where: vocabClient, Declared: true, Available: true,
+		MissingDeps: []string{"LW_CO_GATHER", "LW_RAGGED_STARTS"},
+	}
+
+	note, full, _ := vocabDocNote(e, vocabMarkReserved, true)
+	assert.Contains(t, note, "LW_CO_GATHER")
+	assert.Contains(t, note, "LW_RAGGED_STARTS", "every dependency, not the first")
+	assert.Contains(t, full, "MISSING on this endpoint")
+
+	// The row's own verdict still reaches the reader, through the glyph the
+	// dependency note used to overwrite.
+	glyph, _ := vocabMarkGlyph(vocabMarkMissing)
+	assert.Equal(t, icons.PhX, glyph)
+
+	// An unanswered probe reports nothing: empty MissingDeps means "not
+	// known", never "all present" (vocabMarkInstalled's contract).
+	note, _, _ = vocabDocNote(e, vocabMarkUnknown, false)
+	assert.Empty(t, note)
 }
 
 // TestVocabExtractionDependencies pins ADR-0174 §SD6's marking on the entry

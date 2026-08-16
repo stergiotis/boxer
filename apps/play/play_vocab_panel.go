@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
@@ -71,11 +72,22 @@ const (
 // is left.
 const (
 	vocabCallColWidth float32 = 330
-	// Sized to hold MISSING, not the longest thing the column can say: the
-	// dependency note ("needs LW_…") truncates to its hover, and on a real
-	// endpoint this column is a run of one-glyph ✓ that a wider column would
-	// only push the doc away from.
-	vocabMarkColWidth   float32 = 96
+	// One glyph and its inset, and nothing else: the column answers "is this
+	// name on the endpoint", which is a mark, and every WORD it used to carry
+	// — MISSING, extra, reserved, the dependency note — now prefixes the doc
+	// line instead (vocabDocNote).
+	//
+	// It was 96, sized for MISSING. That is the exception paying for the rule:
+	// on a provisioned endpoint the column is a run of identical ✓, so 96
+	// points bought roughly zero bits per row and spent them out of the doc
+	// column, which was truncating mid-sentence at the time. The prose reads
+	// better beside the sentence it qualifies than alone in a box too narrow
+	// for it — `needs LW_…` was already truncating to a hover at 96.
+	//
+	// A header does not fit in 24 and a clipped header reads as a rendering
+	// fault, so the column has none; the glyphs carry a hover saying what they
+	// mean, which is what the header was doing.
+	vocabMarkColWidth   float32 = 24
 	vocabInsertColWidth float32 = 62
 	vocabDocColMinWidth float32 = 180
 	// vocabScrollbarGutter keeps the doc column clear of the table's own
@@ -344,10 +356,10 @@ func (inst *PlayApp) renderVocabTree(ready bool) {
 			Cell:      inst.renderVocabCallCell,
 		},
 		Columns: []tree.Column{
-			// "endpoint", not "on this endpoint": the column is sized for
-			// MISSING and a header wider than its column is clipped, which
-			// reads as a rendering fault rather than as a narrow column.
-			{Header: "endpoint", Width: vocabMarkColWidth, Cell: inst.renderVocabMarkCell},
+			// Untitled: the column is one glyph wide and a header wider than
+			// its column is clipped, which reads as a rendering fault rather
+			// than as a narrow column. See vocabMarkColWidth.
+			{Header: "", Width: vocabMarkColWidth, Cell: inst.renderVocabMarkCell},
 			{Header: "", Width: vocabInsertColWidth, Cell: inst.renderVocabInsertCell},
 			{Header: "what it does", Width: docW, Cell: inst.renderVocabDocCell},
 		},
@@ -396,34 +408,26 @@ func (inst *PlayApp) renderVocabCallCell(r tree.Row) {
 	}
 }
 
-// renderVocabMarkCell draws what this endpoint says about the row: the
-// server section's present / missing / extra verdict, the reserved marker on
-// an unshipped play name, and §SD6's expansion-dependency note.
+// renderVocabMarkCell draws one glyph: whether this endpoint carries the name.
 //
-// The dependency note replaces the mark rather than sitting beside it — it is
-// strictly more specific, and it is the only thing that can be said about a
-// CLIENT row, whose column is otherwise empty by design.
+// Only that. Everything the endpoint has to say in WORDS — the missing
+// verdict, the extra and reserved markers, §SD6's expansion-dependency note —
+// prefixes the doc line instead (vocabDocNote), which is where there is room
+// for a sentence.
+//
+// The split also un-hides a fact the single column could not hold. The
+// dependency note used to REPLACE the mark, being strictly more specific, and
+// that cost the row's own installed state on exactly the rows where it is most
+// worth knowing. The two now sit in different columns and neither displaces
+// the other.
 func (inst *PlayApp) renderVocabMarkCell(r tree.Row) {
 	n := inst.vocabNode(r.Node)
 	if n == nil || n.Kind != vocabNodeFunc {
 		return
 	}
-	e := n.Entry
-	// The dependency line only appears when something is actually missing.
-	// Listing what an expansion needs on every endpoint that has it would be
-	// noise on every row; naming it on the endpoint where the call will fail
-	// is the whole point (ADR-0174 §SD6).
-	if inst.vocabTab.ready && len(e.MissingDeps) > 0 {
-		full := "expands into " + strings.Join(e.MissingDeps, ", ") + " — MISSING on this endpoint"
-		for range c.HoverText(full).KeepIter() {
-			c.LabelAtoms(c.Atoms().
-				BeginRichTextColored(vocabFgMissing, vocabBgNone, "needs "+e.MissingDeps[0]).Small().End().
-				Keep()).Selectable(false).Truncate().Send()
-		}
-		return
-	}
-	mark, weak := vocabRowMark(e, n.Where, inst.vocabTab.ready)
-	if mark == "" {
+	mark, weak := vocabRowMark(n.Entry, n.Where, inst.vocabTab.ready)
+	glyph, hover := vocabMarkGlyph(mark)
+	if glyph == "" {
 		return
 	}
 	fg := vocabFgMissing
@@ -433,30 +437,44 @@ func (inst *PlayApp) renderVocabMarkCell(r tree.Row) {
 	case mark == vocabMarkExtra:
 		fg = vocabFgExtra
 	}
-	c.LabelAtoms(c.Atoms().BeginRichTextColored(fg, vocabBgNone, mark).Small().End().Keep()).
-		Selectable(false).Truncate().Send()
+	// Hovered because the column has no header to say what the glyph means —
+	// 24 points cannot hold one. This is the header, per row.
+	for range c.HoverText(hover).KeepIter() {
+		c.LabelAtoms(c.Atoms().BeginRichTextColored(fg, vocabBgNone, glyph).Small().End().Keep()).
+			Selectable(false).Truncate().Send()
+	}
 }
 
 // renderVocabInsertCell draws the per-row Insert action, the seam Snippets
 // uses. A button legitimately takes the pointer over its own rect, which
 // costs that rect's row selection — 62 points of a row (ADR-0176 §SD7).
+//
+// Small() because a tree row is 22 points and a default button is about 25:
+// the overflow does not centre, it hangs off the bottom of the row and through
+// the selection outline (ADR-0176 §SD12's height budget, on [tree.Column.Cell]).
 func (inst *PlayApp) renderVocabInsertCell(r tree.Row) {
 	n := inst.vocabNode(r.Node)
 	if n == nil || n.Kind != vocabNodeFunc {
 		return
 	}
 	if c.Button(inst.ids.PrepareSeq(vocabInsertIDBase+uint64(r.Node)),
-		c.Atoms().Text("Insert").Keep()).SendResp().HasPrimaryClicked() {
+		c.Atoms().Text("Insert").Keep()).Small().SendResp().HasPrimaryClicked() {
 		inst.InsertSqlAtCaret(n.Entry.call())
 	}
 }
 
 // renderVocabDocCell draws the one-line doc the declared roster carries, or a
-// section's blurb — what membership in that population means for a user.
+// section's blurb — what membership in that population means for a user — with
+// this endpoint's verdict on the row as a coloured prefix ahead of it.
 //
 // Truncated with the full text on hover, which is what a fixed-height tree row
 // costs (ADR-0176 §SD12). HoverText must wrap exactly ONE widget; wrapping a
-// multi-child layout renders nothing at all, silently.
+// multi-child layout renders nothing at all, silently — which is why the note
+// and the doc are two runs of ONE label rather than two labels in a Horizontal.
+//
+// The runs carry their own separator: atoms are laid out with no gap between
+// them, so a space between two runs has to be inside one of them (the same
+// reason the call cell's count is prefixed with two).
 func (inst *PlayApp) renderVocabDocCell(r tree.Row) {
 	n := inst.vocabNode(r.Node)
 	if n == nil {
@@ -469,12 +487,44 @@ func (inst *PlayApp) renderVocabDocCell(r tree.Row) {
 	case vocabNodeFunc:
 		text = n.Entry.Doc
 	}
-	if text == "" {
+	note, full, fg := "", "", vocabFgMuted
+	if n.Kind == vocabNodeFunc {
+		mark, _ := vocabRowMark(n.Entry, n.Where, inst.vocabTab.ready)
+		note, full, fg = vocabDocNote(n.Entry, mark, inst.vocabTab.ready)
+	}
+	// A doc line that already opens with the note says it once, not twice.
+	// `tsMotifs` reads "reserved for the motif-set ADR", and prefixing that
+	// with `reserved` produced "reserved — reserved for the motif-set ADR".
+	// Dropping the prefix costs its colour, which is the same muted grey as
+	// the doc in the one case this fires on today — and where it would not be,
+	// the glyph column is still carrying that colour.
+	if note != "" && strings.HasPrefix(strings.ToLower(text), strings.ToLower(note)) {
+		note = ""
+	}
+	if text == "" && note == "" {
 		return
 	}
-	for range c.HoverText(text).KeepIter() {
-		c.LabelAtoms(c.Atoms().BeginRichTextColored(vocabFgMuted, vocabBgNone, text).Small().End().Keep()).
-			Selectable(false).Truncate().Send()
+	atoms := c.Atoms()
+	if note != "" {
+		atoms = atoms.BeginRichTextColored(fg, vocabBgNone, note).Small().End()
+		if text != "" {
+			atoms = atoms.BeginRichTextColored(vocabFgMuted, vocabBgNone, " — ").Small().End()
+		}
+	}
+	if text != "" {
+		atoms = atoms.BeginRichTextColored(vocabFgMuted, vocabBgNone, text).Small().End()
+	}
+	// The hover expands the note into the sentence it abbreviates, since the
+	// note is the half most likely to be truncated away — it leads the line.
+	hover := text
+	switch {
+	case full != "" && text != "":
+		hover = full + " — " + text
+	case full != "":
+		hover = full
+	}
+	for range c.HoverText(hover).KeepIter() {
+		c.LabelAtoms(atoms.Keep()).Selectable(false).Truncate().Send()
 	}
 }
 
@@ -489,7 +539,9 @@ func (inst *PlayApp) vocabNode(node int32) *vocabNode {
 	return &nodes[node]
 }
 
-// The mark vocabulary, as drawn in the "on this endpoint" column.
+// The mark vocabulary. These are the WORDS for a row's endpoint verdict, and
+// they are still drawn as words by the completion panel, whose list has room
+// for them. The tree's own column draws vocabMarkGlyph instead.
 const (
 	vocabMarkUnknown  = "?"
 	vocabMarkPresent  = "✓"
@@ -497,6 +549,81 @@ const (
 	vocabMarkExtra    = "extra"
 	vocabMarkReserved = "reserved"
 )
+
+// vocabMarkGlyph renders a [vocabRowMark] verdict for the one-glyph endpoint
+// column, with the sentence its hover says. "" for a verdict the column has
+// nothing to say about, which the caller draws as an empty cell.
+//
+// Phosphor rather than the text marks, and Phosphor for ALL of them rather
+// than keeping ✓ and reaching for the font only where a glyph is missing. Two
+// reasons, and the second is why the column is not half text:
+//
+//   - ✗ (U+2717) is in scripts/ci/glyph-baseline.txt as accepted tofu: no font
+//     this client loads can draw it. ✓ (U+2713) is absent from that file and
+//     does render, so the obvious pairing has one half that works and one half
+//     that is an empty box.
+//   - a mark drawn from the text face and its neighbour drawn from the icon
+//     face are two different ems on one column of glyphs. That is the defect
+//     the tree widget's own disclosure glyphs were moved to Phosphor for.
+//
+// The reserved marker earns no glyph: it says a name this build does not
+// implement refuses rather than travelling, which is a fact about the BUILD.
+// This column is about the endpoint, and a client row's cell is empty by
+// design. It keeps its words, in the doc column.
+func vocabMarkGlyph(mark string) (glyph string, hover string) {
+	switch mark {
+	case vocabMarkUnknown:
+		return icons.PhQuestion, "not asked yet — the endpoint has not said which functions it carries"
+	case vocabMarkPresent:
+		return icons.PhCheck, "installed on this endpoint"
+	case vocabMarkExtra:
+		// A check, not a warning: an extra is on the endpoint — that is how
+		// the probe found it. What is unusual about it is its provenance, and
+		// the colour plus the doc-column note carry that.
+		return icons.PhCheck, "installed on this endpoint, and declared by no roster in this build"
+	case vocabMarkMissing:
+		return icons.PhX, "not installed on this endpoint"
+	}
+	return "", ""
+}
+
+// vocabDocNote is the endpoint's verdict on a row in words, as the coloured
+// prefix the doc line carries — everything the mark column used to spend 96
+// points saying, beside the sentence it qualifies.
+//
+// short is drawn and truncates with the rest of the line; full is what the
+// hover expands it into. A row with nothing to report returns "", which is the
+// common case on a provisioned endpoint and draws the doc line alone.
+//
+// The dependency note still wins over the row's own verdict (ADR-0174 §SD6:
+// it is strictly more specific). That precedence used to cost the row's own
+// installed state, because one column held both; the glyph column reports it
+// independently now, so nothing is displaced. It also names every missing
+// dependency rather than the first — the reason it named one was the width.
+func vocabDocNote(e vocabEntry, mark string, ready bool) (short string, full string, fg color.Color) {
+	// Only when something is actually missing. Listing what an expansion needs
+	// on every endpoint that has it would be noise on every row; naming it on
+	// the endpoint where the call will fail is the whole point (§SD6).
+	if ready && len(e.MissingDeps) > 0 {
+		deps := strings.Join(e.MissingDeps, ", ")
+		return "needs " + deps, "expands into " + deps + " — MISSING on this endpoint", vocabFgMissing
+	}
+	switch mark {
+	case vocabMarkMissing:
+		return vocabMarkMissing,
+			"not installed on this endpoint — provisioning it is the fix, not a different query",
+			vocabFgMissing
+	case vocabMarkExtra:
+		return vocabMarkExtra,
+			"on this endpoint and declared by no roster in this build",
+			vocabFgExtra
+	case vocabMarkReserved:
+		return vocabMarkReserved,
+			"reserved by the vocabulary and not implemented — the call refuses rather than travelling",
+			vocabFgMuted
+	}
+	return "", "", vocabFgMuted
+}
 
 // vocabRowMark is the row's endpoint verdict and whether it renders recessed.
 //
