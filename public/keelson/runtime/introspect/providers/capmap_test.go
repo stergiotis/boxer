@@ -70,7 +70,7 @@ func TestCapmapSchemasCarryTheExpectedColumns(t *testing.T) {
 		want []string
 	}{
 		{competenceProvider{}, []string{"slug", "name", "domain", "catalog", "level", "maturity", "pain", "tags", "fact_id"}},
-		{competencesectionProvider{}, []string{"slug", "ordinal", "heading", "bytes", "text@text/markdown"}},
+		{competencesectionProvider{}, []string{"slug", "ordinal", "heading", "bytes", "words", "text@text/markdown"}},
 		{competencerelationProvider{}, []string{"source_slug", "target", "kind", "resolution", "section", "ncd", "source_fact_id", "target_fact_id"}},
 	} {
 		got := map[string]struct{}{}
@@ -82,6 +82,28 @@ func TestCapmapSchemasCarryTheExpectedColumns(t *testing.T) {
 			assert.Truef(t, ok, "%s must expose a %q column", tc.p.Name(), name)
 		}
 	}
+}
+
+// `words` is a size channel a reader picks by name, so what it counts has to be
+// stated rather than inferred from a number: whitespace-separated tokens over
+// the section's markdown source, punctuation and link syntax included. That is
+// the prototype's definition — the non-empty elements of `splitByWhitespace`
+// over the concatenated prose — restated where the prose is still per-section,
+// so a SUM over the sections of a competence gives the same total.
+func TestCapsectionWordsCountsWhitespaceTokens(t *testing.T) {
+	writeCompVault(t, map[string]string{
+		"analytics/competence.md": "---\nname: Analytics\nlevel: 1\n---\n\n" +
+			"# Vision and Scope\n\none two  three\nfour\n",
+	})
+	batch, err := (competencesectionProvider{}).Snapshot(introspect.AllColumns())
+	require.NoError(t, err)
+	defer batch.Release()
+	require.Equal(t, int64(1), batch.NumRows())
+	idx := batch.Schema().FieldIndices("words")
+	require.Len(t, idx, 1)
+	// Runs of whitespace collapse and a newline is whitespace, so the four
+	// tokens count four however the source happens to be wrapped.
+	assert.EqualValues(t, 4, batch.Column(idx[0]).(interface{ Value(int) int64 }).Value(0))
 }
 
 // The media-typed name is the whole point of the convention: a pane that knows

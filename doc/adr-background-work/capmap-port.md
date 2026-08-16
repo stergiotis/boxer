@@ -489,3 +489,57 @@ different feature with the same syntax, and is not built.
 
 What that leaves for the reading screen is G9 (a predicate input) and G12
 (treemap depth, and the toolbar's quantile readout).
+
+### 12.10 G9 arrived from somewhere else, and the layout arrived for free
+
+**2026-08-15.** Two more of the list are settled, and neither was done as capmap
+work.
+
+**G9 is built, under [ADR-0187](../adr/0187-play-sql-expression-parameters.md).**
+That ADR was proposed and had M0–M4 land the same day: a single-line SQL field
+in `widgets/sqleditor`, three grammatical categories, the `-- play: expr`
+directive, a `splice-expr` rewrite step at order `-90`, two tiers for where a
+filled expression's text lives, and the class ceiling. A `{p:Expr}` slot in a
+`WHERE` is the free predicate bar this section asked for, and it is a general
+play feature rather than a capmap one, which is what §12.8 predicted about this
+half of the list.
+
+The applet arm is the half that mattered here, and it is the safety one. The
+splice lives in `play.Client`, which an applet shares, so before M4 a document
+declaring an expression slot would have had it substituted and executed against
+its **mint-time** classification only — and a spliced `url(…)` is egress from a
+surface whose whole contract is that it reads. M4 re-classifies the substituted
+body and, in an applet, refuses a raise with the witness. No document in any
+book declares an expression slot yet, so nothing had ever triggered it; that is
+why it was a latent hole rather than a live one.
+
+**The Browser's layout needed no new host feature.** G1, G2 and the
+`<panel>:<node>` tab form were enough: one document, `tabs: ["treemap:nodes",
+"detail@side", "table@bottom", "network@bottom"]`, with the Treemap tab bound to
+a `nodes` CTE and the Table tab to the query's own result. ADR-0168 §M11 records
+what it cost. So of §12.8's six items for the reading screen, five are done and
+G12 is the remainder — treemap depth, and the toolbar's quantile readout.
+
+### 12.11 The four remaining lenses are lenses over empty columns
+
+**2026-08-15, measured against the boxer catalog** under `doc/competences/` (79
+competences; in-tree but git-ignored, ADR-0168 §SD7) rather than against the
+reference vault, because it is the corpus anybody running this actually has.
+Each of the prototype's remaining views returns **zero rows**:
+
+| View | Predicate | Why it is empty |
+| --- | --- | --- |
+| `capabilities_gaps` | `maturity != 255 AND pain != 255` | all 79 carry `255`/`255` |
+| `capabilities_stale` | `lifecycle_changed_at != 0` | no note carries `lifecycle:` |
+| `capabilities_orphans` | `level > 1 AND length(parent_ids) = 0` | 78 of 79 have exactly one parent; the level-1 root has none, and the predicate excludes it |
+| `capabilities_multi_parent` | `length(parent_ids) > 1` | the maximum parent count in the catalog is 1 |
+
+There is no broken-parent variant hiding underneath either: all 22 distinct
+`parent_ids` targets resolve to competences that exist. Two of the three
+provider columns the views want fall the same way — `lifecycle_current` and
+`days_since_change` both derive from the `lifecycle_*` arrays, which are
+already exposed and already empty, and both are expressible in SQL over them
+without a new column. The third, `words`, is real signal and landed with §M11.
+
+ADR-0168 §Verification plan turns this into a decision rather than a backlog:
+the corpus stays unassessed, so these four are not ported.

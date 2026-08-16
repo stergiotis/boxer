@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"strings"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
@@ -198,6 +200,7 @@ func competencesectionTable(rows []competencesectionRow) *introspect.Table {
 		Int32("ordinal", func(i int) int32 { return int32(rows[i].Ordinal) }).
 		String("heading", func(i int) string { return rows[i].Heading }).
 		Int64("bytes", func(i int) int64 { return int64(len(rows[i].Text)) }).
+		Int64("words", func(i int) int64 { return int64(len(strings.Fields(rows[i].Text))) }).
 		String("text@text/markdown", func(i int) string { return rows[i].Text })
 }
 

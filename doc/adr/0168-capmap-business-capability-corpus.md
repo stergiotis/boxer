@@ -342,8 +342,9 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   satisfies, which is also what lets the encoding be tested with no ClickHouse
   in reach.
 - **M5 — providers (SD8).**
-- **M6 — the applet book (SD9).** Four lenses under `TopicCode`:
-  `comp-overview`, `comp-browser`, `comp-map`, `comp-lint`. The treemap lens is
+- **M6 — the applet book (SD9).** Lenses under `TopicCode`: `comp-overview`,
+  `comp-browser`, `comp-lint` — four when it landed, three since M11 merged the
+  map into the browser. The treemap lens is
   the one §Deferrals left conditional, and ADR-0166 landing is what made it
   buildable. Its `color` channel is the level-2 ancestor rather than `domain`,
   measured: the shipped catalog has one domain, so colouring by it produces a
@@ -378,6 +379,45 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   handles remain where there were twenty-eight, and every one of them is a
   value or parameter lane a selector projects through; the identity and
   cardinality lanes are the expansion's business now.
+- **M11 — the map and the browser become one screen.** `comp-map` is deleted
+  and `comp-browser` takes its treemap, as `tabs: ["treemap:nodes",
+  "detail@side", "table@bottom", "network@bottom"]`. This is the prototype's
+  Capability Browser as drawn — map, note and list at once — and it needed no
+  host work, because G1/G2's zones and the `<panel>:<node>` tab form were
+  already there. The node form is what makes it one document rather than two
+  hosted side by side: the Treemap tab binds to the `nodes` CTE and the Table
+  tab to the query's own result, so a rectangle contract and a human-readable
+  list come out of one buffer. It is the first document in any book to use it.
+
+  Two things the merge had to decide. Only `catalog` reaches the map — a
+  catalog is a whole subtree, so removing one leaves a tree, while `filter`,
+  `level` and `tag` would cut interior nodes out from under their children;
+  they shape the list alone. And a parent the catalog filter removed is blanked
+  rather than left dangling, so the survivor becomes a root of what is drawn.
+
+  `competencesection` also gains a `words` column, counting whitespace-
+  separated tokens the way the prototype's
+  `arrayCount(x -> x != '', splitByWhitespace(…))` does, and it is the map's
+  default size channel. Bytes count the markdown source including its syntax;
+  words are closer to how much was said.
+
+  **The merge cost the map two knobs, and the reason is worth recording
+  because it is not about capmap.** Driving the merged applet headlessly showed
+  the treemap clipped: six prelude-bound knobs put ~330 px of pane strip above
+  the panes, and a panel that draws into a fixed box has a floor
+  (`play_pane_box.go`) below which it keeps its size and *scrolls* rather than
+  shrinking — so the knobs did not make the picture smaller, they cut its
+  deepest leaves off. `filter` and `tag` were dropped, which recovers ~76 px
+  and is defensible on its own terms (the Table filters its own columns, and no
+  note in the catalog carries a tag), but it is a workaround. The cause is that
+  the applet strip stacks one knob per row because `scalarTextWidget` asks for
+  infinite width — right above an editor, wrong in what ADR-0132 §SD3 calls a
+  strip, where the prototype's own toolbar is one row. A flowing strip was
+  prototyped and reverted: `c.HorizontalWrapped` renders it correctly, but the
+  top panel does not grow for a second wrapped row, so at seven knobs a control
+  was present in the accessibility tree and invisible on screen. That is worse
+  than a short pane, and fixing it is ADR-0132's business rather than this
+  ADR's.
 
 ## Surfaces — Tier 1
 
@@ -388,9 +428,10 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
 | TagValue allocation | Added — a second allocation, and the rule for making further ones | This ADR is the register; the vocabulary package's doc comment cites it |
 | Environment-variable registry ([ADR-0009](./0009-environment-variable-registry.md)) | Added — the corpus location | `doc/env-vars.md`; the package must be reachable from the `public/app` link graph or the spec stays invisible |
 | keelson table-name namespace ([ADR-0094](./0094-keelson-introspection-tables.md)) | Added — `competence`, `competencesection`, `competencerelation` | `RegisterStatic` and the name roster it is pinned by; the applet book's queries |
-| Applet id namespace ([ADR-0132](./0132-sqlapplet-sql-defined-applets.md)) | Added — a fifth book, `capmap`, minting `cap-overview`, `cap-browser`, `cap-map`, `cap-lint` | The cross-book slug-collision test, which counts every minted applet |
+| Applet id namespace ([ADR-0132](./0132-sqlapplet-sql-defined-applets.md)) | Added — a fifth book, `capmap`, minting `comp-overview`, `comp-browser`, `comp-lint` (M11 merged `comp-map` into the browser) | The cross-book slug-collision test, which counts every minted applet — and the coverage book's, which is a running total downstream of this one |
 | `boxer.facts` row vocabulary (again, M8) | Added — `capmapCompetenceTag`, appended last because ids are ordinals (§SD6) | The golden name-to-id test; the encoder; the `tags` provider column |
 | keelson `competence` table columns | Added — `tags` | The applet book's `tag` knob and its coverage rows |
+| keelson `competencesection` table columns | Added — `words` (M11) | The browser's `size_by` knob and its table |
 | `boxer capmap` verb names | Renamed — `ingest` is `load`, which keeps `ingest` as an alias; `dump` is new | The command's own help; the prose in `doc/competences/README.md`, the providers and the book |
 | Exported Go API under `public/` | Added — `capmapcorpus`, `capmapvocab`, `capmapfacts` under `public/gov/`, and the `boxer capmap` command. M8/M9 add `NormalizeTag`, `ParseResolution`, `RenderCompetence`, `WriteVault`, `SortCorpus` and `capmapfacts.ReadCorpus` | Nothing yet; no downstream module compiles against them |
 
@@ -433,7 +474,8 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   into the integration lane.
 - Of the prototype's four webapps, two are replaced (browser, lint) and two are
   deferred with the triage workflow (culler, cull-configer). The treemap gap
-  closed when ADR-0166 landed, and `cap-map` reads its nodes contract. The
+  closed when ADR-0166 landed, and the browser's map lane reads its nodes
+  contract. The
   replacement is not feature-parity: the browser's enumerated filters, its
   reset, its free `WHERE` bar and its pane placement are play and sqlapplet
   features that do not exist yet, and the lenses are knobs and tabs until they
@@ -556,8 +598,27 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   1,722 competences carries the `255` sentinel for both maturity and pain, and
   none carries a lifecycle record. So the scoring half of what §Context calls
   "how mature each part is, where the pain is" has a schema, an encoding and a
-  query surface, and no data. `cap-overview` reports the coverage rather than
+  query surface, and no data. `comp-overview` reports the coverage rather than
   averaging over an empty column.
+
+  **2026-08-15 — decided: it stays that way, and that is a scope line rather
+  than a backlog item.** The boxer catalog under `doc/competences/` measures the
+  same: 79 competences, all `255`/`255`, no `lifecycle:`, no `owner:`. The
+  prototype's Culler is the surface that would have filled them, and §Deferrals
+  put its write path out of scope, so no tool in this design produces an
+  assessment. capmap is therefore a **structure-and-prose** tool: what exists,
+  how it nests, how much has been written about each part, and which links are
+  broken. The consequence worth stating is what it makes *not worth building* —
+  the prototype's remaining four lenses all filter on data nobody enters, and
+  measured against that catalog every one of them returns zero rows:
+  `gaps` (`maturity != 255 AND pain != 255`) and `stale`
+  (`lifecycle_changed_at != 0`) find nothing because no note carries either;
+  `orphans` (`level > 1 AND no parents`) and `multi_parent` find nothing because
+  all 78 non-root competences have exactly one parent and every parent target
+  resolves. A lens over an empty column is worse than no lens: it reads as a
+  clean bill of health. The scoring columns stay in the schema, because the
+  vault's frontmatter declares them and the corpus must round-trip (§SD3), and
+  `comp-overview`'s coverage row stays the place their emptiness is reported.
 
 ## Deferrals
 
@@ -613,6 +674,12 @@ the nine original decisions all still describe what is there. The two things a
 reviewer should weigh before this is accepted are SD11, which pays SD8's
 coupling on purpose for the dump path, and the §Deferrals note on triage, which
 is the only open decision left.
+
+Reconciled again on 2026-08-15: M11 merged the map into the browser, and
+§Verification plan's Gap became a decision — the corpus stays unassessed, so
+capmap is a structure-and-prose tool and the prototype's four scoring lenses are
+not ported. That closes the last open question in §Deferrals; there is nothing
+left for a reviewer to settle before this is accepted or rejected.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
