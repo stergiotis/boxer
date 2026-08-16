@@ -14,10 +14,25 @@ package persiststore
 // on disk carries, silently. Adding a field means minting its membership
 // in the vocabulary first (ADR-0183 D0's explicit ordinals), then
 // regenerating.
+// RunId and InstanceKey are provenance, not identity (ADR-0191 §SD5): which
+// process and which window wrote this value. The key stays "<appId>/<key>",
+// so a second window writing the same key still overwrites rather than
+// forking — the same relationship WorkingsetRow.TileKey has to its own
+// identity. They exist because the row trail is the history of a key, and
+// "who wrote this" was the one question it could not answer; before them,
+// attributing a persist write to a run meant intersecting timestamps with a
+// run's span, which two overlapping processes make wrong rather than absent.
+//
+// Both reuse memberships the runtime vocabulary already has, so nothing is
+// minted: `runtimeRun`, and `runtimeLifecycleTileKey` for the window (the
+// name is the lifecycle cohort's for the reason §SD1 gives — one column to
+// join on).
 type State struct {
-	_     struct{} `kind:"persistState"`
-	ID    string   `lw:",id"`
-	AppId string   `lw:"runtimeApp,stateAppId"`
-	Key   string   `lw:"runtimePersistKey,stateKey"`
-	Value []byte   `lw:"runtimePersistValue,stateBlob"`
+	_           struct{} `kind:"persistState"`
+	ID          string   `lw:",id"`
+	AppId       string   `lw:"runtimeApp,stateAppId"`
+	Key         string   `lw:"runtimePersistKey,stateKey"`
+	Value       []byte   `lw:"runtimePersistValue,stateBlob"`
+	RunId       string   `lw:"runtimeRun,stateRunId"`
+	InstanceKey uint64   `lw:"runtimeLifecycleTileKey,stateInstanceKey"`
 }

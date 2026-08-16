@@ -51,7 +51,12 @@ func (inst *Store) WriteColumnWidth(row factsstore.ColumnWidthRow) (id uint64, e
 	sym.BeginAttribute(row.Tier).AddMembershipLowCardRef(vocab.MembColWidthTier.GetId().Value()).EndAttribute()
 	sym.BeginAttribute(row.Scope).AddMembershipLowCardRef(vocab.MembColWidthScope.GetId().Value()).EndAttribute()
 	sym.BeginAttribute(row.ColumnKey).AddMembershipLowCardRef(vocab.MembColWidthColumnKey.GetId().Value()).EndAttribute()
+	inst.stampRun(sym, "")
 	sym.EndSection()
+
+	u64 := ent.GetSectionU64Array()
+	stampInstance(u64, row.InstanceKey)
+	u64.EndSection()
 
 	f64 := ent.GetSectionF64Array()
 	f64.BeginAttributeSingle(row.Points).AddMembershipLowCardRef(vocab.MembColWidthPoints.GetId().Value()).EndAttribute()
@@ -79,6 +84,7 @@ func (inst *Store) DeleteColumnWidth(appId app.AppIdT, tier string, scope string
 	sym.BeginAttribute(tier).AddMembershipLowCardRef(vocab.MembColWidthTier.GetId().Value()).EndAttribute()
 	sym.BeginAttribute(scope).AddMembershipLowCardRef(vocab.MembColWidthScope.GetId().Value()).EndAttribute()
 	sym.BeginAttribute(columnKey).AddMembershipLowCardRef(vocab.MembColWidthColumnKey.GetId().Value()).EndAttribute()
+	inst.stampRun(sym, "")
 	sym.EndSection()
 	b := ent.GetSectionBool()
 	b.BeginAttribute(true).AddMembershipLowCardRef(vocab.MembPersistTombstone.GetId().Value()).EndAttribute()

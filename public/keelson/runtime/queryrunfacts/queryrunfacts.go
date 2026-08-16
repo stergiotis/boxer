@@ -85,8 +85,14 @@ func (inst Row) Ts() time.Time {
 // the JSON keys are single-sourced with the parser below; omitempty
 // keeps absent fields out of the wire stamp.
 type Stamp struct {
-	RunId      string `json:"run_id,omitempty"`
-	App        string `json:"app,omitempty"`
+	RunId string `json:"run_id,omitempty"`
+	App   string `json:"app,omitempty"`
+	// Instance is the window the query was run from (ADR-0191 §SD4), so a
+	// captured run attributes to the same lane as the app-lifecycle row that
+	// opened it. It rides the stamp rather than a separate channel for the
+	// reason the whole stamp does: log_comment is the only field that
+	// survives the round trip through query_log.
+	Instance   uint64 `json:"instance,omitempty"`
 	Lane       string `json:"lane,omitempty"`
 	AuthoredFp string `json:"authored_fp,omitempty"`
 	SentFp     string `json:"sent_fp,omitempty"`
@@ -195,6 +201,13 @@ func EncodeEntity(ent *dml.InEntityFacts, row Row) {
 	// normalized_query_hash always writes — it is the QueryDef join key;
 	// counters follow the audit-row precedent of absent-when-zero.
 	u64.BeginAttributeSingle(row.NormalizedHash).AddMembershipLowCardRef(vocab.MembQueryRunNormalizedHash.GetId().Value()).EndAttribute()
+	// The window (ADR-0191 §SD4), spelled with the lifecycle cohort's
+	// membership so this row joins its app-lifecycle row on one column.
+	// Absent when zero, matching the counters below.
+	if hasStamp && st.Instance != 0 {
+		u64.BeginAttributeSingle(st.Instance).
+			AddMembershipLowCardRef(vocab.MembLifecycleTileKey.GetId().Value()).EndAttribute()
+	}
 	for _, c := range []struct {
 		value uint64
 		memb  uint64

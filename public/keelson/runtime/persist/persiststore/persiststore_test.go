@@ -27,6 +27,11 @@ func TestBakedIdsAreTheVocabularys(t *testing.T) {
 		"runtimeApp":          vocab.MembRuntimeApp.GetId().Value(),
 		"runtimePersistKey":   vocab.MembPersistKey.GetId().Value(),
 		"runtimePersistValue": vocab.MembPersistValue.GetId().Value(),
+		// Provenance added by ADR-0191 §SD5, on memberships the vocabulary
+		// already had. That is the property worth pinning here: adding two
+		// columns to this table minted nothing, so no id on disk moved.
+		"runtimeRun":              vocab.MembRuntimeRun.GetId().Value(),
+		"runtimeLifecycleTileKey": vocab.MembLifecycleTileKey.GetId().Value(),
 	}, ids)
 	for name, id := range ids {
 		assert.Greater(t, id, uint64(1000), "%s: %d looks like a declaration-order id, not a registry id", name, id)

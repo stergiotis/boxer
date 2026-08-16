@@ -180,3 +180,59 @@ func TestStoreWritesStateRows_LiveCH(t *testing.T) {
 	assert.Equal(t, 2, rows,
 		"expected one state row for the document and one for the index")
 }
+
+// TestStoreRowsCarryTheWritingWindow_LiveCH is ADR-0191 §SD5 through the
+// production path: a persist write records which window made it, all the way
+// from the bus envelope to a scanned-back State component.
+//
+// It goes through StoreBackend.Set with an explicit StorageRef rather than
+// through the appletstore service, because the service IS the writer in the
+// tests above and a service has no window — its rows are correctly
+// unattributed, which would make an assertion there pass for the wrong
+// reason. What this covers is the leg the service cannot: ref → row → CH →
+// scan, over the regenerated store and the migrated table.
+func TestStoreRowsCarryTheWritingWindow_LiveCH(t *testing.T) {
+	ctx := context.Background()
+	cli := chclient.New(chclient.Defaults(), nil)
+	if err := cli.Ping(ctx); err != nil {
+		t.Skipf("ClickHouse not reachable at %s: %v", chclient.Defaults().URL, err)
+	}
+
+	const db = durabilityDb + "_window"
+	table := db + "." + persiststore.TableName
+	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db))
+	t.Cleanup(func() { _ = cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db) })
+
+	exec, err := storeexec.New(cli, nil)
+	require.NoError(t, err)
+	backend, err := persist.OpenStoreBackendAt(ctx, exec, nil, table)
+	require.NoError(t, err)
+	t.Cleanup(backend.Close)
+
+	// Two windows of one app writing the same key: the case the whole
+	// decision exists for, and the one that cannot be told apart without
+	// this. Latest wins, so the second write is what a Get returns — the
+	// trail keeps both, attributed.
+	ref := persist.StorageRef{Alias: "play", AppId: "github.com/example/play"}
+	ref.InstanceKey = 4
+	require.NoError(t, backend.Set(ref, "editorFont", []byte("mono-13")))
+	ref.InstanceKey = 11
+	require.NoError(t, backend.Set(ref, "editorFont", []byte("mono-15")))
+
+	value, found, err := backend.Get(ref, "editorFont")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "mono-15", string(value), "the key stays app-scoped and latest-wins")
+
+	reader := persiststore.NewPersistStore(exec, nil, persiststore.PersistStoreConfig{Table: table})
+	defer reader.Close()
+	seen := make([]uint64, 0, 2)
+	for ent, serr := range reader.ScanState(ctx, recordstore.ScanOpts{}) {
+		require.NoError(t, serr)
+		if ent.State.Has && ent.State.Val.Key == "editorFont" {
+			seen = append(seen, ent.State.Val.InstanceKey)
+		}
+	}
+	assert.ElementsMatch(t, []uint64{4, 11}, seen,
+		"the trail must record which window wrote each value — that is the whole of §SD5")
+}

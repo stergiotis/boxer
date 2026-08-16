@@ -84,6 +84,10 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	ref := StorageRef{Alias: alias}
 	if senderAlias == alias {
 		ref.AppId = msg.Sender
+		// The window, on the same gate and for the same reason (ADR-0191
+		// §SD2): the envelope carries it, so a caller cannot claim a window
+		// it does not have, and an unvouched sender is not attributed at all.
+		ref.InstanceKey = msg.SenderInstance
 	} else if msg.Sender != ServiceAppId {
 		inst.log.Warn().
 			Str("sender", string(msg.Sender)).

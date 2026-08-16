@@ -38,8 +38,7 @@ func (inst *Store) WriteWorkingset(row factsstore.WorkingsetRow) (id uint64, err
 	sym.BeginAttribute("workingset").AddMembershipLowCardRef(vocab.MembKindWorkingset.GetId().Value()).EndAttribute()
 	sym.BeginAttribute(string(row.AppId)).AddMembershipMixedLowCardRef(
 		vocab.MembRuntimeApp.GetId().Value(), []byte(row.AppId)).EndAttribute()
-	sym.BeginAttribute(row.RunId).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeRun.GetId().Value(), []byte(row.RunId)).EndAttribute()
+	inst.stampRun(sym, row.RunId)
 	sym.BeginAttribute(row.Name).AddMembershipLowCardRef(vocab.MembWorkingsetName.GetId().Value()).EndAttribute()
 	if row.Kind != "" {
 		sym.BeginAttribute(row.Kind).AddMembershipLowCardRef(vocab.MembLaunchConfigKind.GetId().Value()).EndAttribute()

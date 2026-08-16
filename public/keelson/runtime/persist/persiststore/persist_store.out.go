@@ -69,9 +69,11 @@ func persiststateKeyLiteral(k string) string { return marshalling.EscapeString(k
 // regenerated store at existing rows.
 var PersistMembershipIds = map[string]map[string]uint64{
 	"State": {
-		"runtimeApp":          9223372049739677701,
-		"runtimePersistKey":   9223372049739677712,
-		"runtimePersistValue": 9223372049739677769,
+		"runtimeApp":              9223372049739677701,
+		"runtimePersistKey":       9223372049739677712,
+		"runtimeRun":              9223372049739677716,
+		"runtimeLifecycleTileKey": 9223372049739677728,
+		"runtimePersistValue":     9223372049739677769,
 	},
 }
 
@@ -327,6 +329,10 @@ func (inst *PersistEntityBuilder) endSection(section string) error {
 		inst.store.dml.GetSectionStateKey().EndSection()
 	case "stateBlob":
 		inst.store.dml.GetSectionStateBlob().EndSection()
+	case "stateRunId":
+		inst.store.dml.GetSectionStateRunId().EndSection()
+	case "stateInstanceKey":
+		inst.store.dml.GetSectionStateInstanceKey().EndSection()
 	}
 	return nil
 }
@@ -367,6 +373,12 @@ func (inst *PersistEntityBuilder) AddState(row State) *PersistEntityBuilder {
 	})
 	inst.buf.Enqueue("stateBlob", "State", func() error {
 		return stateEmitSectionStateBlob(inst.store.dml.GetSectionStateBlob(), row)
+	})
+	inst.buf.Enqueue("stateRunId", "State", func() error {
+		return stateEmitSectionStateRunId(inst.store.dml.GetSectionStateRunId(), row)
+	})
+	inst.buf.Enqueue("stateInstanceKey", "State", func() error {
+		return stateEmitSectionStateInstanceKey(inst.store.dml.GetSectionStateInstanceKey(), row)
 	})
 	inst.ent.State = option.Some(row)
 	return inst
@@ -806,7 +818,7 @@ func (inst *persiststateFetcher) FetchItemSinglePartition(ctx context.Context, p
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	persiststateScanStateFilter = "has(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) AND has(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) AND has(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) AND countEqual(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) = 1 AND countEqual(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) = 1"
+	persiststateScanStateFilter = "has(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) AND has(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) AND has(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) AND has(\"tv:stateRunId:lr:lr:u64:1247:::0::data\", 9223372049739677716) AND has(\"tv:stateInstanceKey:lr:lr:u64:1247:::0::data\", 9223372049739677728) AND countEqual(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) = 1 AND countEqual(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) = 1 AND countEqual(\"tv:stateRunId:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:stateInstanceKey:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1"
 )
 
 // ScanState iterates the entities whose rows carry a conforming State
@@ -938,10 +950,10 @@ var PersistComponentSQL = componentsql.Set{
 	Table: PersistTableName,
 	Kinds: map[string]componentsql.Artefacts{
 		"State": {
-			Presence:   "has(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) AND has(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) AND has(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769)",
-			Validator:  "countEqual(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) = 1 AND countEqual(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) = 1",
+			Presence:   "has(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) AND has(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) AND has(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) AND has(\"tv:stateRunId:lr:lr:u64:1247:::0::data\", 9223372049739677716) AND has(\"tv:stateInstanceKey:lr:lr:u64:1247:::0::data\", 9223372049739677728)",
+			Validator:  "countEqual(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) = 1 AND countEqual(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) = 1 AND countEqual(\"tv:stateRunId:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:stateInstanceKey:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1",
 			Filter:     persiststateScanStateFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:stateAppId:value:val:s:24:::0::data\", \"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701, LW_RAGGED_PARENT_IDS(\"tv:stateAppId:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateKey:value:val:s:4:::0::data\", \"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712, LW_RAGGED_PARENT_IDS(\"tv:stateKey:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateBlob:value:val:y:4:::0::data\", \"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769, LW_RAGGED_PARENT_IDS(\"tv:stateBlob:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, AppId String, Key String, Value String)')",
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:stateAppId:value:val:s:24:::0::data\", \"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701, LW_RAGGED_PARENT_IDS(\"tv:stateAppId:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateKey:value:val:s:4:::0::data\", \"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712, LW_RAGGED_PARENT_IDS(\"tv:stateKey:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateBlob:value:val:y:4:::0::data\", \"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769, LW_RAGGED_PARENT_IDS(\"tv:stateBlob:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateRunId:value:val:s:24:::0::data\", \"tv:stateRunId:lr:lr:u64:1247:::0::data\", 9223372049739677716, LW_RAGGED_PARENT_IDS(\"tv:stateRunId:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateInstanceKey:value:val:u64:4:::0::data\", \"tv:stateInstanceKey:lr:lr:u64:1247:::0::data\", 9223372049739677728, LW_RAGGED_PARENT_IDS(\"tv:stateInstanceKey:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, AppId String, Key String, Value String, RunId String, InstanceKey UInt64)')",
 		},
 	},
 }
@@ -1003,7 +1015,9 @@ func decodePersistRecord(rec arrow.RecordBatch) (ents []*PersistEntity, err erro
 	stateAppIdR := lowlevel.NewReadAccessPersiststateTableTaggedStateAppId()
 	stateKeyR := lowlevel.NewReadAccessPersiststateTableTaggedStateKey()
 	stateBlobR := lowlevel.NewReadAccessPersiststateTableTaggedStateBlob()
-	readers := []persiststateSectionReaderI{idR, tsR, lcR, stateAppIdR, stateKeyR, stateBlobR}
+	stateRunIdR := lowlevel.NewReadAccessPersiststateTableTaggedStateRunId()
+	stateInstanceKeyR := lowlevel.NewReadAccessPersiststateTableTaggedStateInstanceKey()
+	readers := []persiststateSectionReaderI{idR, tsR, lcR, stateAppIdR, stateKeyR, stateBlobR, stateRunIdR, stateInstanceKeyR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1031,7 +1045,7 @@ func decodePersistRecord(rec arrow.RecordBatch) (ents []*PersistEntity, err erro
 			Lifecycle: lcR.ValueLifecycle.Value(i),
 		}
 		{
-			row, ok, e := stateReadRow(i, stateAppIdR.GetAttributes(), stateAppIdR.GetMemberships(), stateKeyR.GetAttributes(), stateKeyR.GetMemberships(), stateBlobR.GetAttributes(), stateBlobR.GetMemberships())
+			row, ok, e := stateReadRow(i, stateAppIdR.GetAttributes(), stateAppIdR.GetMemberships(), stateKeyR.GetAttributes(), stateKeyR.GetMemberships(), stateBlobR.GetAttributes(), stateBlobR.GetMemberships(), stateRunIdR.GetAttributes(), stateRunIdR.GetMemberships(), stateInstanceKeyR.GetAttributes(), stateInstanceKeyR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read state component: %w", e)
 				return

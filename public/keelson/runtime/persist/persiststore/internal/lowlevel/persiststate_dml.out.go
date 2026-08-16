@@ -56,6 +56,26 @@ func CreateSchemaPersiststateTable() (schema *arrow.Schema) {
 		/* 030 */ arrow.Field{Name: "tv:stateKey:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 031 */ arrow.Field{Name: "tv:stateKey:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 032 */ arrow.Field{Name: "tv:stateKey:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 033 */ arrow.Field{Name: "tv:stateRunId:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 034 */ arrow.Field{Name: "tv:stateRunId:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 035 */ arrow.Field{Name: "tv:stateRunId:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 036 */ arrow.Field{Name: "tv:stateRunId:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 037 */ arrow.Field{Name: "tv:stateRunId:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 038 */ arrow.Field{Name: "tv:stateRunId:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 039 */ arrow.Field{Name: "tv:stateRunId:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 040 */ arrow.Field{Name: "tv:stateRunId:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 041 */ arrow.Field{Name: "tv:stateRunId:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 042 */ arrow.Field{Name: "tv:stateRunId:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 043 */ arrow.Field{Name: "tv:stateInstanceKey:value:val:u64:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 044 */ arrow.Field{Name: "tv:stateInstanceKey:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 045 */ arrow.Field{Name: "tv:stateInstanceKey:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 046 */ arrow.Field{Name: "tv:stateInstanceKey:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 047 */ arrow.Field{Name: "tv:stateInstanceKey:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 048 */ arrow.Field{Name: "tv:stateInstanceKey:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 049 */ arrow.Field{Name: "tv:stateInstanceKey:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 050 */ arrow.Field{Name: "tv:stateInstanceKey:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 051 */ arrow.Field{Name: "tv:stateInstanceKey:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 052 */ arrow.Field{Name: "tv:stateInstanceKey:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
@@ -75,9 +95,13 @@ type InEntityPersiststateTable struct {
 	section00State     runtime.EntityStateE
 	section01Inst      *InEntityPersiststateTableSectionStateBlob
 	section01State     runtime.EntityStateE
-	section02Inst      *InEntityPersiststateTableSectionStateKey
+	section02Inst      *InEntityPersiststateTableSectionStateInstanceKey
 	section02State     runtime.EntityStateE
-	activeSections     *[3]bool
+	section03Inst      *InEntityPersiststateTableSectionStateKey
+	section03State     runtime.EntityStateE
+	section04Inst      *InEntityPersiststateTableSectionStateRunId
+	section04State     runtime.EntityStateE
+	activeSections     *[5]bool
 	ambientHighCardRef []uint64
 	plainId0           string
 
@@ -117,7 +141,7 @@ func (inst *InEntityPersiststateTable) setActiveSections(idxs []int) {
 		inst.activeSections = nil
 		return
 	}
-	var mask [3]bool
+	var mask [5]bool
 	for _, i := range idxs {
 		if i >= 0 && i < len(mask) {
 			mask[i] = true
@@ -131,9 +155,11 @@ func (inst *InEntityPersiststateTable) setActiveSections(idxs []int) {
 // SetActiveSections inputs from section names — for example, the
 // marshallgen-driven keelson codec wrappers.
 var InEntityPersiststateTableSectionIndices = map[string]int{
-	"stateAppId": 0,
-	"stateBlob":  1,
-	"stateKey":   2,
+	"stateAppId":       0,
+	"stateBlob":        1,
+	"stateInstanceKey": 2,
+	"stateKey":         3,
+	"stateRunId":       4,
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -225,7 +251,9 @@ func (inst *InEntityPersiststateTable) resetPlainValues() {
 func (inst *InEntityPersiststateTable) initSections(builder *array.RecordBuilder) {
 	inst.section00Inst = NewInEntityPersiststateTableSectionStateAppId(builder, inst)
 	inst.section01Inst = NewInEntityPersiststateTableSectionStateBlob(builder, inst)
-	inst.section02Inst = NewInEntityPersiststateTableSectionStateKey(builder, inst)
+	inst.section02Inst = NewInEntityPersiststateTableSectionStateInstanceKey(builder, inst)
+	inst.section03Inst = NewInEntityPersiststateTableSectionStateKey(builder, inst)
+	inst.section04Inst = NewInEntityPersiststateTableSectionStateRunId(builder, inst)
 }
 func (inst *InEntityPersiststateTable) beginSections() {
 	if mask := inst.activeSections; mask != nil {
@@ -238,22 +266,34 @@ func (inst *InEntityPersiststateTable) beginSections() {
 		if mask[2] {
 			inst.section02Inst.beginSection()
 		}
+		if mask[3] {
+			inst.section03Inst.beginSection()
+		}
+		if mask[4] {
+			inst.section04Inst.beginSection()
+		}
 		return
 	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
+	inst.section03Inst.beginSection()
+	inst.section04Inst.beginSection()
 }
 func (inst *InEntityPersiststateTable) resetSections() {
 	inst.section00Inst.resetSection()
 	inst.section01Inst.resetSection()
 	inst.section02Inst.resetSection()
+	inst.section03Inst.resetSection()
+	inst.section04Inst.resetSection()
 }
 func (inst *InEntityPersiststateTable) CheckErrors() (err error) {
 	err = eh.CheckErrors(inst.errs)
 	err = errors.Join(err, inst.section00Inst.CheckErrors())
 	err = errors.Join(err, inst.section01Inst.CheckErrors())
 	err = errors.Join(err, inst.section02Inst.CheckErrors())
+	err = errors.Join(err, inst.section03Inst.CheckErrors())
+	err = errors.Join(err, inst.section04Inst.CheckErrors())
 
 	return
 }
@@ -263,8 +303,14 @@ func (inst *InEntityPersiststateTable) GetSectionStateAppId() *InEntityPersistst
 func (inst *InEntityPersiststateTable) GetSectionStateBlob() *InEntityPersiststateTableSectionStateBlob {
 	return inst.section01Inst
 }
-func (inst *InEntityPersiststateTable) GetSectionStateKey() *InEntityPersiststateTableSectionStateKey {
+func (inst *InEntityPersiststateTable) GetSectionStateInstanceKey() *InEntityPersiststateTableSectionStateInstanceKey {
 	return inst.section02Inst
+}
+func (inst *InEntityPersiststateTable) GetSectionStateKey() *InEntityPersiststateTableSectionStateKey {
+	return inst.section03Inst
+}
+func (inst *InEntityPersiststateTable) GetSectionStateRunId() *InEntityPersiststateTableSectionStateRunId {
+	return inst.section04Inst
 }
 func (inst *InEntityPersiststateTable) beginEntity() *InEntityPersiststateTable {
 	switch inst.state {
@@ -300,7 +346,23 @@ func (inst *InEntityPersiststateTable) validateEntity() {
 		state := inst.section02Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "stateInstanceKey").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section03Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
 			inst.AppendError(eb.Build().Str("section", "stateKey").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section04Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "stateRunId").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -1061,6 +1123,331 @@ func (inst *InEntityPersiststateTableSectionStateBlobInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
+type InEntityPersiststateTableSectionStateInstanceKey struct {
+	errs                  []error
+	inAttr                *InEntityPersiststateTableSectionStateInstanceKeyInAttr
+	state                 runtime.EntityStateE
+	attributeCount        int
+	parent                *InEntityPersiststateTable
+	scalarFieldBuilder043 *array.Uint64Builder
+	scalarListBuilder043  *array.ListBuilder
+}
+
+func NewInEntityPersiststateTableSectionStateInstanceKey(builder *array.RecordBuilder, parent *InEntityPersiststateTable) (inst *InEntityPersiststateTableSectionStateInstanceKey) {
+	inst = &InEntityPersiststateTableSectionStateInstanceKey{}
+	inAttr := NewInEntityPersiststateTableSectionStateInstanceKeyInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder043 = builder.Field(43).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder043 = builder.Field(43).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKey) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKey) BeginAttribute(value43 uint64) *InEntityPersiststateTableSectionStateInstanceKeyInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder043.Append(value43)
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+
+type InEntityPersiststateTableSectionStateInstanceKeyAttr struct {
+	Value uint64
+}
+
+func (inst *InEntityPersiststateTableSectionStateInstanceKey) Add(attr InEntityPersiststateTableSectionStateInstanceKeyAttr) *InEntityPersiststateTableSectionStateInstanceKeyInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKey) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKey) EndSection() *InEntityPersiststateTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityPersiststateTableSectionStateInstanceKey) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityPersiststateTableSectionStateInstanceKey) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityPersiststateTableSectionStateInstanceKey) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKey) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityPersiststateTableSectionStateInstanceKeyInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityPersiststateTableSectionStateInstanceKey
+	scalarFieldBuilder043            *array.Uint64Builder
+	scalarListBuilder043             *array.ListBuilder
+	membershipFieldBuilder044        *array.Uint64Builder
+	membershipListBuilder044         *array.ListBuilder
+	membershipFieldBuilder045        *array.Uint64Builder
+	membershipListBuilder045         *array.ListBuilder
+	membershipFieldBuilder046        *array.BinaryBuilder
+	membershipListBuilder046         *array.ListBuilder
+	membershipFieldBuilder047        *array.Uint64Builder
+	membershipListBuilder047         *array.ListBuilder
+	membershipFieldBuilder048        *array.BinaryBuilder
+	membershipListBuilder048         *array.ListBuilder
+	membershipSupportFieldBuilder049 *array.Uint64Builder
+	membershipSupportListBuilder049  *array.ListBuilder
+	membershipSupportFieldBuilder050 *array.Uint64Builder
+	membershipSupportListBuilder050  *array.ListBuilder
+	membershipSupportFieldBuilder051 *array.Uint64Builder
+	membershipSupportListBuilder051  *array.ListBuilder
+	membershipSupportFieldBuilder052 *array.Uint64Builder
+	membershipSupportListBuilder052  *array.ListBuilder
+
+	membershipContainerLength044 int
+
+	membershipContainerLength045 int
+
+	membershipContainerLength046 int
+
+	membershipContainerLength047 int
+
+	membershipContainerLength048 int
+}
+
+func NewInEntityPersiststateTableSectionStateInstanceKeyInAttr(builder *array.RecordBuilder, parent *InEntityPersiststateTableSectionStateInstanceKey) (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) {
+	inst = &InEntityPersiststateTableSectionStateInstanceKeyInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder043 = builder.Field(43).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder043 = builder.Field(43).(*array.ListBuilder)
+	inst.membershipFieldBuilder044 = builder.Field(44).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder044 = builder.Field(44).(*array.ListBuilder)
+	inst.membershipFieldBuilder045 = builder.Field(45).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder045 = builder.Field(45).(*array.ListBuilder)
+	inst.membershipFieldBuilder046 = builder.Field(46).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder046 = builder.Field(46).(*array.ListBuilder)
+	inst.membershipFieldBuilder047 = builder.Field(47).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder047 = builder.Field(47).(*array.ListBuilder)
+	inst.membershipFieldBuilder048 = builder.Field(48).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder048 = builder.Field(48).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder049 = builder.Field(49).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder049 = builder.Field(49).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder050 = builder.Field(50).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder050 = builder.Field(50).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder051 = builder.Field(51).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder051 = builder.Field(51).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder052 = builder.Field(52).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder052 = builder.Field(52).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) beginAttribute() {
+	inst.membershipListBuilder044.Append(true)
+	inst.membershipListBuilder045.Append(true)
+	inst.membershipListBuilder046.Append(true)
+	inst.membershipListBuilder047.Append(true)
+	inst.membershipListBuilder048.Append(true)
+	inst.membershipContainerLength044 = 0
+	inst.membershipContainerLength045 = 0
+	inst.membershipContainerLength046 = 0
+	inst.membershipContainerLength047 = 0
+	inst.membershipContainerLength048 = 0
+	inst.scalarListBuilder043.Append(true)
+	inst.membershipSupportListBuilder049.Append(true)
+	inst.membershipSupportListBuilder050.Append(true)
+	inst.membershipSupportListBuilder051.Append(true)
+	inst.membershipSupportListBuilder052.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) AddMembershipHighCardRef(hr44 uint64) *InEntityPersiststateTableSectionStateInstanceKeyInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder044.Append(hr44)
+	inst.membershipContainerLength044++
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) AddMembershipHighCardRefP(hr44 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder044.Append(hr44)
+	inst.membershipContainerLength044++
+	return
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) AddMembershipLowCardRef(lr45 uint64) *InEntityPersiststateTableSectionStateInstanceKeyInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder045.Append(lr45)
+	inst.membershipContainerLength045++
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) AddMembershipLowCardRefP(lr45 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder045.Append(lr45)
+	inst.membershipContainerLength045++
+	return
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) AddMembershipLowCardVerbatim(lv46 []byte) *InEntityPersiststateTableSectionStateInstanceKeyInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder046.Append(lv46)
+	inst.membershipContainerLength046++
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) AddMembershipLowCardVerbatimP(lv46 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder046.Append(lv46)
+	inst.membershipContainerLength046++
+	return
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) AddMembershipMixedLowCardRef(lmr47 uint64, mrhp48 []byte) *InEntityPersiststateTableSectionStateInstanceKeyInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder047.Append(lmr47)
+	inst.membershipFieldBuilder048.Append(mrhp48)
+	inst.membershipContainerLength047++
+	inst.membershipContainerLength048++
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) AddMembershipMixedLowCardRefP(lmr47 uint64, mrhp48 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder047.Append(lmr47)
+	inst.membershipFieldBuilder048.Append(mrhp48)
+	inst.membershipContainerLength047++
+	inst.membershipContainerLength048++
+	return
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength044
+	inst.membershipContainerLength044 = 0
+	inst.membershipSupportFieldBuilder049.Append(uint64(l))
+	l = inst.membershipContainerLength045
+	inst.membershipContainerLength045 = 0
+	inst.membershipSupportFieldBuilder050.Append(uint64(l))
+	l = inst.membershipContainerLength046
+	inst.membershipContainerLength046 = 0
+	inst.membershipSupportFieldBuilder051.Append(uint64(l))
+	l = inst.membershipContainerLength047
+	inst.membershipContainerLength047 = 0
+	inst.membershipSupportFieldBuilder052.Append(uint64(l))
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) EndSection() *InEntityPersiststateTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) EndAttribute() *InEntityPersiststateTableSectionStateInstanceKey {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityPersiststateTableSectionStateInstanceKeyInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
 type InEntityPersiststateTableSectionStateKey struct {
 	errs                  []error
 	inAttr                *InEntityPersiststateTableSectionStateKeyInAttr
@@ -1383,5 +1770,330 @@ func (inst *InEntityPersiststateTableSectionStateKeyInAttr) AppendError(err erro
 	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityPersiststateTableSectionStateKeyInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityPersiststateTableSectionStateRunId struct {
+	errs                  []error
+	inAttr                *InEntityPersiststateTableSectionStateRunIdInAttr
+	state                 runtime.EntityStateE
+	attributeCount        int
+	parent                *InEntityPersiststateTable
+	scalarFieldBuilder033 *array.StringBuilder
+	scalarListBuilder033  *array.ListBuilder
+}
+
+func NewInEntityPersiststateTableSectionStateRunId(builder *array.RecordBuilder, parent *InEntityPersiststateTable) (inst *InEntityPersiststateTableSectionStateRunId) {
+	inst = &InEntityPersiststateTableSectionStateRunId{}
+	inAttr := NewInEntityPersiststateTableSectionStateRunIdInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder033 = builder.Field(33).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder033 = builder.Field(33).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateRunId) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityPersiststateTableSectionStateRunId) BeginAttribute(value33 string) *InEntityPersiststateTableSectionStateRunIdInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder033.Append(value33)
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+
+type InEntityPersiststateTableSectionStateRunIdAttr struct {
+	Value string
+}
+
+func (inst *InEntityPersiststateTableSectionStateRunId) Add(attr InEntityPersiststateTableSectionStateRunIdAttr) *InEntityPersiststateTableSectionStateRunIdInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
+func (inst *InEntityPersiststateTableSectionStateRunId) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityPersiststateTableSectionStateRunId) EndSection() *InEntityPersiststateTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityPersiststateTableSectionStateRunId) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityPersiststateTableSectionStateRunId) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityPersiststateTableSectionStateRunId) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityPersiststateTableSectionStateRunId) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityPersiststateTableSectionStateRunIdInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityPersiststateTableSectionStateRunId
+	scalarFieldBuilder033            *array.StringBuilder
+	scalarListBuilder033             *array.ListBuilder
+	membershipFieldBuilder034        *array.Uint64Builder
+	membershipListBuilder034         *array.ListBuilder
+	membershipFieldBuilder035        *array.Uint64Builder
+	membershipListBuilder035         *array.ListBuilder
+	membershipFieldBuilder036        *array.BinaryBuilder
+	membershipListBuilder036         *array.ListBuilder
+	membershipFieldBuilder037        *array.Uint64Builder
+	membershipListBuilder037         *array.ListBuilder
+	membershipFieldBuilder038        *array.BinaryBuilder
+	membershipListBuilder038         *array.ListBuilder
+	membershipSupportFieldBuilder039 *array.Uint64Builder
+	membershipSupportListBuilder039  *array.ListBuilder
+	membershipSupportFieldBuilder040 *array.Uint64Builder
+	membershipSupportListBuilder040  *array.ListBuilder
+	membershipSupportFieldBuilder041 *array.Uint64Builder
+	membershipSupportListBuilder041  *array.ListBuilder
+	membershipSupportFieldBuilder042 *array.Uint64Builder
+	membershipSupportListBuilder042  *array.ListBuilder
+
+	membershipContainerLength034 int
+
+	membershipContainerLength035 int
+
+	membershipContainerLength036 int
+
+	membershipContainerLength037 int
+
+	membershipContainerLength038 int
+}
+
+func NewInEntityPersiststateTableSectionStateRunIdInAttr(builder *array.RecordBuilder, parent *InEntityPersiststateTableSectionStateRunId) (inst *InEntityPersiststateTableSectionStateRunIdInAttr) {
+	inst = &InEntityPersiststateTableSectionStateRunIdInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder033 = builder.Field(33).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder033 = builder.Field(33).(*array.ListBuilder)
+	inst.membershipFieldBuilder034 = builder.Field(34).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder034 = builder.Field(34).(*array.ListBuilder)
+	inst.membershipFieldBuilder035 = builder.Field(35).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder035 = builder.Field(35).(*array.ListBuilder)
+	inst.membershipFieldBuilder036 = builder.Field(36).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder036 = builder.Field(36).(*array.ListBuilder)
+	inst.membershipFieldBuilder037 = builder.Field(37).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder037 = builder.Field(37).(*array.ListBuilder)
+	inst.membershipFieldBuilder038 = builder.Field(38).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder038 = builder.Field(38).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder039 = builder.Field(39).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder039 = builder.Field(39).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder040 = builder.Field(40).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder040 = builder.Field(40).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder041 = builder.Field(41).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder041 = builder.Field(41).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder042 = builder.Field(42).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder042 = builder.Field(42).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) beginAttribute() {
+	inst.membershipListBuilder034.Append(true)
+	inst.membershipListBuilder035.Append(true)
+	inst.membershipListBuilder036.Append(true)
+	inst.membershipListBuilder037.Append(true)
+	inst.membershipListBuilder038.Append(true)
+	inst.membershipContainerLength034 = 0
+	inst.membershipContainerLength035 = 0
+	inst.membershipContainerLength036 = 0
+	inst.membershipContainerLength037 = 0
+	inst.membershipContainerLength038 = 0
+	inst.scalarListBuilder033.Append(true)
+	inst.membershipSupportListBuilder039.Append(true)
+	inst.membershipSupportListBuilder040.Append(true)
+	inst.membershipSupportListBuilder041.Append(true)
+	inst.membershipSupportListBuilder042.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) AddMembershipHighCardRef(hr34 uint64) *InEntityPersiststateTableSectionStateRunIdInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder034.Append(hr34)
+	inst.membershipContainerLength034++
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) AddMembershipHighCardRefP(hr34 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder034.Append(hr34)
+	inst.membershipContainerLength034++
+	return
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) AddMembershipLowCardRef(lr35 uint64) *InEntityPersiststateTableSectionStateRunIdInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder035.Append(lr35)
+	inst.membershipContainerLength035++
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) AddMembershipLowCardRefP(lr35 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder035.Append(lr35)
+	inst.membershipContainerLength035++
+	return
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) AddMembershipLowCardVerbatim(lv36 []byte) *InEntityPersiststateTableSectionStateRunIdInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder036.Append(lv36)
+	inst.membershipContainerLength036++
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) AddMembershipLowCardVerbatimP(lv36 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder036.Append(lv36)
+	inst.membershipContainerLength036++
+	return
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) AddMembershipMixedLowCardRef(lmr37 uint64, mrhp38 []byte) *InEntityPersiststateTableSectionStateRunIdInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder037.Append(lmr37)
+	inst.membershipFieldBuilder038.Append(mrhp38)
+	inst.membershipContainerLength037++
+	inst.membershipContainerLength038++
+	return inst
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) AddMembershipMixedLowCardRefP(lmr37 uint64, mrhp38 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder037.Append(lmr37)
+	inst.membershipFieldBuilder038.Append(mrhp38)
+	inst.membershipContainerLength037++
+	inst.membershipContainerLength038++
+	return
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength034
+	inst.membershipContainerLength034 = 0
+	inst.membershipSupportFieldBuilder039.Append(uint64(l))
+	l = inst.membershipContainerLength035
+	inst.membershipContainerLength035 = 0
+	inst.membershipSupportFieldBuilder040.Append(uint64(l))
+	l = inst.membershipContainerLength036
+	inst.membershipContainerLength036 = 0
+	inst.membershipSupportFieldBuilder041.Append(uint64(l))
+	l = inst.membershipContainerLength037
+	inst.membershipContainerLength037 = 0
+	inst.membershipSupportFieldBuilder042.Append(uint64(l))
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) EndSection() *InEntityPersiststateTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) EndAttribute() *InEntityPersiststateTableSectionStateRunId {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityPersiststateTableSectionStateRunIdInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
 	"github.com/stergiotis/boxer/public/keelson/runtime/logviewer"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/logging"
 )
 
@@ -147,6 +148,14 @@ func selectFactsStore(ctx context.Context) (store factsstore.FactsStoreI, kind s
 	cfg := chstore.Defaults()
 	if url := chstore.LogFactsURL.Get(); url != "" {
 		cfg.URL = url
+	}
+	// Stamp the run on every row this store writes (ADR-0191 §SD3). A log
+	// line already carries the run as a zerolog field; the membership is
+	// what lets a reader filter on it without unpacking the field lane.
+	// runinfo.Get errors before Init has run — a host that never called it
+	// writes unstamped rows, as it did before.
+	if inst, rErr := runinfo.Get(); rErr == nil {
+		cfg.RunId = inst.RunId
 	}
 	chStore, err := chstore.New(cfg)
 	if err != nil {

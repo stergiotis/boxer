@@ -5,8 +5,13 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
+	"github.com/stergiotis/boxer/public/gov/capmapvocab"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmvocab"
+	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
@@ -95,24 +100,63 @@ type membershipRow struct {
 	parents []string
 }
 
-// membershipRows reads the process's natural-key registry, sorted by name so
-// the table is stable across runs — the registry's own iteration order is an
+// membershipRegistries are the vocabularies this table and [MembershipLookup]
+// answer for (ADR-0191 §SD6). Each claims its own tag value, so the id spaces
+// are disjoint by construction and the union is unambiguous; the names are
+// checked for collision by the provider's own test, since a duplicate would
+// make the lookup order load-bearing.
+//
+// It is a declared list rather than a registration seam because these four are
+// the vocabularies this repository writes to `boxer.facts`, and the whole point
+// of the table is that a reader holding a result column full of uint64s can ask
+// what they are. A list that a package had to opt into would leave exactly the
+// ids nobody thought about unnameable.
+//
+// Two in-tree registries are deliberately absent: `factsschema/meshdemo` is a
+// demo fixture, and `apps/jsonbench` is an app — this is a library, and a
+// library that imports an app inverts the dependency. An out-of-tree adopter's
+// vocabulary is not here either; naming it would need a seam, which is the
+// deferral ADR-0191 records.
+//
+// They all have one shape — a human-readable natural-key registry over the
+// vcs-managed contract — written out rather than shortened behind a type
+// alias, which CS008 refuses.
+func membershipRegistries() (regs []*registry.HumanReadableNaturalKeyRegistry[*contract.VcsManagedContract]) {
+	regs = []*registry.HumanReadableNaturalKeyRegistry[*contract.VcsManagedContract]{
+		vdd.KeelsonHrNkRegistry,
+		vocab.NkRegistry,
+		sysmvocab.NkRegistry,
+		capmapvocab.NkRegistry,
+	}
+	return
+}
+
+// membershipRows reads the process's natural-key registries, sorted by name so
+// the table is stable across runs — a registry's own iteration order is an
 // implementation detail, and an introspection table that reordered itself
-// between queries would be unusable as a diff target.
+// between queries would be unusable as a diff target. Sorting across the union
+// also means the table does not expose which registry a name came from, which
+// is right: the reader's question is what an id means, not who declared it.
 func membershipRows() (rows []membershipRow) {
-	reg := vdd.KeelsonHrNkRegistry
-	rows = make([]membershipRow, 0, reg.Length())
-	for name, e := range reg.IterateAll() {
-		rows = append(rows, membershipRow{
-			name:    string(name),
-			id:      uint64(e.GetId()),
-			virtual: e.GetFlags().HasVirtual(),
-			root:    e.IsRoot(),
-			tag:     uint32(e.GetTagValue()),
-			origin:  e.GetOrigin(),
-			module:  e.GetModuleInfo(),
-			parents: membershipParents(e),
-		})
+	regs := membershipRegistries()
+	total := 0
+	for _, reg := range regs {
+		total += reg.Length()
+	}
+	rows = make([]membershipRow, 0, total)
+	for _, reg := range regs {
+		for name, e := range reg.IterateAll() {
+			rows = append(rows, membershipRow{
+				name:    string(name),
+				id:      uint64(e.GetId()),
+				virtual: e.GetFlags().HasVirtual(),
+				root:    e.IsRoot(),
+				tag:     uint32(e.GetTagValue()),
+				origin:  e.GetOrigin(),
+				module:  e.GetModuleInfo(),
+				parents: membershipParents(e),
+			})
+		}
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
 	return
@@ -162,11 +206,27 @@ type MembershipLookup struct{}
 // LookupMembership resolves a membership name to the id a ref lane carries.
 // Unknown names error rather than returning zero — zero is a valid id shape,
 // and a silent miss would expand into a predicate that matches nothing.
+//
+// It searches every registry in [membershipRegistries], in order, and answers
+// from the first that knows the name. Before ADR-0191 §SD6 it consulted vdd's
+// alone, which meant a `boxer.facts` query naming a runtime membership —
+// `runtimeKindAppLifecycle`, the vocabulary that table is mostly made of — was
+// refused, and the author had to carry the raw uint64 in the SQL text. That is
+// the exact complaint ADR-0171 §SD4 exists to answer, so answering it for one
+// vocabulary and not the others was a half-open door rather than a policy.
+//
+// The names are collision-free across the set (the provider test asserts it),
+// so first-match is total order rather than precedence.
 func (MembershipLookup) LookupMembership(name string) (id uint64, err error) {
-	e, err := vdd.KeelsonHrNkRegistry.Lookup(naming.StylableName(name))
-	if err != nil {
+	key := naming.StylableName(name)
+	for _, reg := range membershipRegistries() {
+		e, lerr := reg.Lookup(key)
+		if lerr != nil {
+			continue
+		}
+		id = uint64(e.GetId())
 		return
 	}
-	id = uint64(e.GetId())
+	err = eh.Errorf("providers: no membership named %q in any registered vocabulary; keelson('memberships') lists them", name)
 	return
 }

@@ -171,6 +171,46 @@ func NewMembershipPackPersiststateTableShared1StateKey() (inst *MembershipPackPe
 	return
 }
 
+func NewMembershipPackPersiststateTableShared1StateRunId() (inst *MembershipPackPersiststateTableShared1) {
+	inst = &MembershipPackPersiststateTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 34
+	inst.ColumnIndexHighCardRefAccel = 39
+	inst.ColumnIndexLowCardRef = 35
+	inst.ColumnIndexLowCardRefAccel = 40
+	inst.ColumnIndexLowCardVerbatim = 36
+	inst.ColumnIndexLowCardVerbatimAccel = 41
+	inst.ColumnIndexMixedLowCardRef = 37
+	inst.ColumnIndexMixedLowCardRefAccel = 42
+	inst.ColumnIndexMixedRefHighCardParameters = 38
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 42
+	return
+}
+
+func NewMembershipPackPersiststateTableShared1StateInstanceKey() (inst *MembershipPackPersiststateTableShared1) {
+	inst = &MembershipPackPersiststateTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 44
+	inst.ColumnIndexHighCardRefAccel = 49
+	inst.ColumnIndexLowCardRef = 45
+	inst.ColumnIndexLowCardRefAccel = 50
+	inst.ColumnIndexLowCardVerbatim = 46
+	inst.ColumnIndexLowCardVerbatimAccel = 51
+	inst.ColumnIndexMixedLowCardRef = 47
+	inst.ColumnIndexMixedLowCardRefAccel = 52
+	inst.ColumnIndexMixedRefHighCardParameters = 48
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 52
+	return
+}
+
 func (inst *MembershipPackPersiststateTableShared1) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRef)
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRefElements)
@@ -427,7 +467,19 @@ type ReadAccessPersiststateTableTaggedStateBlobAttributes struct {
 	ValueValueElements *array.Binary
 }
 
+type ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.Uint64
+}
+
 type ReadAccessPersiststateTableTaggedStateKeyAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.String
+}
+
+type ReadAccessPersiststateTableTaggedStateRunIdAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
 	ValueValueElements *array.String
@@ -578,6 +630,35 @@ func (inst *ReadAccessPersiststateTableTaggedStateBlobAttributes) SetColumnIndic
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessPersiststateTableTaggedStateBlobAttributes)(nil)
 
+func NewReadAccessPersiststateTableTaggedStateInstanceKeyAttributes() (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) {
+	inst = &ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes{}
+	inst.ColumnIndexValue = 43
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes)(nil)
+
 func NewReadAccessPersiststateTableTaggedStateKeyAttributes() (inst *ReadAccessPersiststateTableTaggedStateKeyAttributes) {
 	inst = &ReadAccessPersiststateTableTaggedStateKeyAttributes{}
 	inst.ColumnIndexValue = 23
@@ -607,6 +688,35 @@ func (inst *ReadAccessPersiststateTableTaggedStateKeyAttributes) SetColumnIndice
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessPersiststateTableTaggedStateKeyAttributes)(nil)
 
+func NewReadAccessPersiststateTableTaggedStateRunIdAttributes() (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) {
+	inst = &ReadAccessPersiststateTableTaggedStateRunIdAttributes{}
+	inst.ColumnIndexValue = 33
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessPersiststateTableTaggedStateRunIdAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessPersiststateTableTaggedStateRunIdAttributes)(nil)
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
@@ -634,7 +744,17 @@ func (inst *ReadAccessPersiststateTableTaggedStateBlobAttributes) Reset() {
 	inst.ValueValueElements = nil
 }
 
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
 func (inst *ReadAccessPersiststateTableTaggedStateKeyAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
 }
@@ -676,9 +796,23 @@ func (inst *ReadAccessPersiststateTableTaggedStateBlobAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
 }
 
+var _ runtime.ReleasableI = (*ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes)(nil)
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
 var _ runtime.ReleasableI = (*ReadAccessPersiststateTableTaggedStateKeyAttributes)(nil)
 
 func (inst *ReadAccessPersiststateTableTaggedStateKeyAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessPersiststateTableTaggedStateRunIdAttributes)(nil)
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
 }
@@ -723,7 +857,21 @@ func (inst *ReadAccessPersiststateTableTaggedStateBlobAttributes) Len() (nEntiti
 	return
 }
 
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
 func (inst *ReadAccessPersiststateTableTaggedStateKeyAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
@@ -775,7 +923,23 @@ func (inst *ReadAccessPersiststateTableTaggedStateBlobAttributes) LoadFromRecord
 	return
 }
 
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	return
+}
+
 func (inst *ReadAccessPersiststateTableTaggedStateKeyAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
 	if err != nil {
 		return
@@ -800,6 +964,22 @@ func (inst *ReadAccessPersiststateTableTaggedStateAppIdAttributes) GetAttrValueV
 	return
 }
 func (inst *ReadAccessPersiststateTableTaggedStateKeyAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
@@ -840,6 +1020,16 @@ func (inst *ReadAccessPersiststateTableTaggedStateKeyAttributes) GetNumberOfAttr
 	nAttributes = e - b
 	return
 }
+func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
@@ -867,6 +1057,20 @@ type ReadAccessPersiststateTableTaggedStateKey struct {
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessPersiststateTableTaggedStateKey)(nil)
 
+type ReadAccessPersiststateTableTaggedStateRunId struct {
+	Attributes  *ReadAccessPersiststateTableTaggedStateRunIdAttributes
+	Memberships *MembershipPackPersiststateTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessPersiststateTableTaggedStateRunId)(nil)
+
+type ReadAccessPersiststateTableTaggedStateInstanceKey struct {
+	Attributes  *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes
+	Memberships *MembershipPackPersiststateTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessPersiststateTableTaggedStateInstanceKey)(nil)
+
 func NewReadAccessPersiststateTableTaggedStateBlob() (inst *ReadAccessPersiststateTableTaggedStateBlob) {
 	inst = &ReadAccessPersiststateTableTaggedStateBlob{}
 	inst.Attributes = NewReadAccessPersiststateTableTaggedStateBlobAttributes()
@@ -885,6 +1089,20 @@ func NewReadAccessPersiststateTableTaggedStateKey() (inst *ReadAccessPersiststat
 	inst = &ReadAccessPersiststateTableTaggedStateKey{}
 	inst.Attributes = NewReadAccessPersiststateTableTaggedStateKeyAttributes()
 	inst.Memberships = NewMembershipPackPersiststateTableShared1StateKey()
+	return
+}
+
+func NewReadAccessPersiststateTableTaggedStateRunId() (inst *ReadAccessPersiststateTableTaggedStateRunId) {
+	inst = &ReadAccessPersiststateTableTaggedStateRunId{}
+	inst.Attributes = NewReadAccessPersiststateTableTaggedStateRunIdAttributes()
+	inst.Memberships = NewMembershipPackPersiststateTableShared1StateRunId()
+	return
+}
+
+func NewReadAccessPersiststateTableTaggedStateInstanceKey() (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) {
+	inst = &ReadAccessPersiststateTableTaggedStateInstanceKey{}
+	inst.Attributes = NewReadAccessPersiststateTableTaggedStateInstanceKeyAttributes()
+	inst.Memberships = NewMembershipPackPersiststateTableShared1StateInstanceKey()
 	return
 }
 
@@ -909,6 +1127,20 @@ func (inst *ReadAccessPersiststateTableTaggedStateKey) SetColumnIndices(indices 
 	return
 }
 
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
 func (inst *ReadAccessPersiststateTableTaggedStateBlob) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
@@ -922,6 +1154,18 @@ func (inst *ReadAccessPersiststateTableTaggedStateAppId) GetColumnIndices() (col
 }
 
 func (inst *ReadAccessPersiststateTableTaggedStateKey) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
@@ -945,6 +1189,18 @@ func (inst *ReadAccessPersiststateTableTaggedStateKey) GetColumnIndexFieldNames(
 	return
 }
 
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
 func (inst *ReadAccessPersiststateTableTaggedStateBlob) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
@@ -956,6 +1212,16 @@ func (inst *ReadAccessPersiststateTableTaggedStateAppId) Release() {
 }
 
 func (inst *ReadAccessPersiststateTableTaggedStateKey) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
@@ -1002,6 +1268,34 @@ func (inst *ReadAccessPersiststateTableTaggedStateKey) LoadFromRecord(rec runtim
 	return
 }
 
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
 func (inst *ReadAccessPersiststateTableTaggedStateBlob) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
@@ -1013,6 +1307,16 @@ func (inst *ReadAccessPersiststateTableTaggedStateAppId) Len() (nEntities int) {
 }
 
 func (inst *ReadAccessPersiststateTableTaggedStateKey) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
@@ -1029,6 +1333,14 @@ func (inst *ReadAccessPersiststateTableTaggedStateKey) GetAttributes() *ReadAcce
 	return inst.Attributes
 }
 
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) GetAttributes() *ReadAccessPersiststateTableTaggedStateRunIdAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) GetAttributes() *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes {
+	return inst.Attributes
+}
+
 func (inst *ReadAccessPersiststateTableTaggedStateBlob) GetMemberships() *MembershipPackPersiststateTableShared1 {
 	return inst.Memberships
 }
@@ -1038,6 +1350,14 @@ func (inst *ReadAccessPersiststateTableTaggedStateAppId) GetMemberships() *Membe
 }
 
 func (inst *ReadAccessPersiststateTableTaggedStateKey) GetMemberships() *MembershipPackPersiststateTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) GetMemberships() *MembershipPackPersiststateTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) GetMemberships() *MembershipPackPersiststateTableShared1 {
 	return inst.Memberships
 }
 
@@ -1059,6 +1379,18 @@ func (inst *ReadAccessPersiststateTableTaggedStateKey) GetSectionName() naming.S
 
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessPersiststateTableTaggedStateKey)(nil)
 
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) GetSectionName() naming.StylableName {
+	return "state-run-id"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessPersiststateTableTaggedStateRunId)(nil)
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) GetSectionName() naming.StylableName {
+	return "state-instance-key"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessPersiststateTableTaggedStateInstanceKey)(nil)
+
 func (inst *ReadAccessPersiststateTableTaggedStateBlob) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
@@ -1068,6 +1400,14 @@ func (inst *ReadAccessPersiststateTableTaggedStateAppId) GetSectionUseAspects() 
 }
 
 func (inst *ReadAccessPersiststateTableTaggedStateKey) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
@@ -1083,6 +1423,14 @@ func (inst *ReadAccessPersiststateTableTaggedStateKey) GetSectionStreamingGroup(
 	return "data"
 }
 
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
 func (inst *ReadAccessPersiststateTableTaggedStateBlob) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
@@ -1092,6 +1440,14 @@ func (inst *ReadAccessPersiststateTableTaggedStateAppId) GetSectionCoSectionGrou
 }
 
 func (inst *ReadAccessPersiststateTableTaggedStateKey) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
@@ -1107,18 +1463,28 @@ func (inst *ReadAccessPersiststateTableTaggedStateKey) GetSectionMembershipSpec(
 	return 0b111001
 }
 
+func (inst *ReadAccessPersiststateTableTaggedStateRunId) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2424
 
 type ReadAccessPersiststateTable struct {
-	EntityId        *ReadAccessPersiststateTablePlainEntityIdAttributes
-	EntityTimestamp *ReadAccessPersiststateTablePlainEntityTimestampAttributes
-	EntityLifecycle *ReadAccessPersiststateTablePlainEntityLifecycleAttributes
-	StateBlob       *ReadAccessPersiststateTableTaggedStateBlob
-	StateAppId      *ReadAccessPersiststateTableTaggedStateAppId
-	StateKey        *ReadAccessPersiststateTableTaggedStateKey
+	EntityId         *ReadAccessPersiststateTablePlainEntityIdAttributes
+	EntityTimestamp  *ReadAccessPersiststateTablePlainEntityTimestampAttributes
+	EntityLifecycle  *ReadAccessPersiststateTablePlainEntityLifecycleAttributes
+	StateBlob        *ReadAccessPersiststateTableTaggedStateBlob
+	StateAppId       *ReadAccessPersiststateTableTaggedStateAppId
+	StateKey         *ReadAccessPersiststateTableTaggedStateKey
+	StateRunId       *ReadAccessPersiststateTableTaggedStateRunId
+	StateInstanceKey *ReadAccessPersiststateTableTaggedStateInstanceKey
 }
 
 func NewReadAccessPersiststateTable() (inst *ReadAccessPersiststateTable) {
@@ -1129,6 +1495,8 @@ func NewReadAccessPersiststateTable() (inst *ReadAccessPersiststateTable) {
 	inst.StateBlob = NewReadAccessPersiststateTableTaggedStateBlob()
 	inst.StateAppId = NewReadAccessPersiststateTableTaggedStateAppId()
 	inst.StateKey = NewReadAccessPersiststateTableTaggedStateKey()
+	inst.StateRunId = NewReadAccessPersiststateTableTaggedStateRunId()
+	inst.StateInstanceKey = NewReadAccessPersiststateTableTaggedStateInstanceKey()
 	return
 }
 
@@ -1139,6 +1507,8 @@ func (inst *ReadAccessPersiststateTable) Release() {
 	runtime.ReleaseIfNotNil(inst.StateBlob)
 	runtime.ReleaseIfNotNil(inst.StateAppId)
 	runtime.ReleaseIfNotNil(inst.StateKey)
+	runtime.ReleaseIfNotNil(inst.StateRunId)
+	runtime.ReleaseIfNotNil(inst.StateInstanceKey)
 }
 
 func (inst *ReadAccessPersiststateTable) LoadFromRecord(rec runtime.RecordI) (err error) {
@@ -1184,6 +1554,20 @@ func (inst *ReadAccessPersiststateTable) LoadFromRecord(rec runtime.RecordI) (er
 			return
 		}
 	}
+	if inst.StateRunId != nil {
+		err = inst.StateRunId.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "persiststate-table").Str("fieldName", "StateRunId").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.StateInstanceKey != nil {
+		err = inst.StateInstanceKey.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "persiststate-table").Str("fieldName", "StateInstanceKey").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
 	return
 }
 
@@ -1207,6 +1591,12 @@ func (inst *ReadAccessPersiststateTable) SetColumnIndices(indices []uint32) (res
 	if inst.StateKey != nil {
 		rest = inst.StateKey.SetColumnIndices(rest)
 	}
+	if inst.StateRunId != nil {
+		rest = inst.StateRunId.SetColumnIndices(rest)
+	}
+	if inst.StateInstanceKey != nil {
+		rest = inst.StateInstanceKey.SetColumnIndices(rest)
+	}
 	return
 }
 
@@ -1229,6 +1619,12 @@ func (inst *ReadAccessPersiststateTable) GetColumnIndices() (columnIndices []uin
 	if inst.StateKey != nil {
 		columnIndices = slices.Concat(columnIndices, inst.StateKey.GetColumnIndices())
 	}
+	if inst.StateRunId != nil {
+		columnIndices = slices.Concat(columnIndices, inst.StateRunId.GetColumnIndices())
+	}
+	if inst.StateInstanceKey != nil {
+		columnIndices = slices.Concat(columnIndices, inst.StateInstanceKey.GetColumnIndices())
+	}
 	return
 }
 
@@ -1250,6 +1646,12 @@ func (inst *ReadAccessPersiststateTable) GetColumnIndexFieldNames() (fieldNames 
 	}
 	if inst.StateKey != nil {
 		fieldNames = slices.Concat(fieldNames, inst.StateKey.GetColumnIndexFieldNames())
+	}
+	if inst.StateRunId != nil {
+		fieldNames = slices.Concat(fieldNames, inst.StateRunId.GetColumnIndexFieldNames())
+	}
+	if inst.StateInstanceKey != nil {
+		fieldNames = slices.Concat(fieldNames, inst.StateInstanceKey.GetColumnIndexFieldNames())
 	}
 	return
 }

@@ -52,8 +52,16 @@ func (inst AuditResultE) String() (s string) {
 
 // AuditRecord is one audited request crossing the bus. Populated by the
 // bus and handed to the configured AuditSinkI exactly once per Request.
+//
+// InstanceKey is the requesting window (ADR-0191 §SD4), read off the client
+// that made the call — the same key the host stamped on it at Open. The
+// record is produced inside Client.Request, so it does not need the envelope
+// to carry it; a service receiving the request reads app.Msg.SenderInstance
+// for the same value. Zero means the caller has no window: a service's own
+// client, or a host that mints no keys.
 type AuditRecord struct {
 	AppId         app.AppIdT
+	InstanceKey   uint64
 	Subject       string
 	Result        AuditResultE
 	LatencyMs     uint32

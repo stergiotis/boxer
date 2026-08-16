@@ -46,22 +46,35 @@ var errEmptyRunId = errors.New("factsstore: RunId is required")
 // with the KindGrant + AppRefPrefix(appId) + GrantSubjectPattern /
 // GrantDirection / GrantReason / GrantSticky / GrantVia memberships under
 // ADR-0026 §SD6.
+//
+// InstanceKey is the window that asked, taken from the bus envelope
+// (ADR-0191 §SD4). Zero is unattributed — a grant minted by the host, or one
+// requested over a transport that carries no instance. The grant itself
+// stays addressed to an app id: a cap is an app-level fact, and this records
+// which window's request produced it, not who holds it.
 type GrantRow struct {
-	AppId      app.AppIdT
-	Pattern    string
-	Direction  app.CapDirectionE
-	Reason     string
-	Sticky     bool
-	GrantedVia string
-	Ts         time.Time
-	ExpiresAt  time.Time // zero == no TTL
+	AppId       app.AppIdT
+	InstanceKey uint64
+	Pattern     string
+	Direction   app.CapDirectionE
+	Reason      string
+	Sticky      bool
+	GrantedVia  string
+	Ts          time.Time
+	ExpiresAt   time.Time // zero == no TTL
 }
 
 // AuditRow is one audited bus request. Maps to a boxer.facts row with
 // KindAudit + AppRefPrefix(appId) + AuditRequestSubject / AuditResult /
 // AuditLatencyMs / AuditRequestSize / AuditResponseSize.
+//
+// InstanceKey is the window that made the request (ADR-0191 §SD4), recorded
+// by the bus client that captured it. It is the field this kind most needed:
+// audit is the highest-volume app-attributed kind, and with two windows of
+// one app open the app id alone cannot say which one spoke.
 type AuditRow struct {
 	AppId         app.AppIdT
+	InstanceKey   uint64
 	Subject       string
 	Result        string // "ok" | "denied" | "timeout" | "error"
 	LatencyMs     uint32
@@ -243,14 +256,21 @@ const (
 // caller that lets Ts default to now, and diverge only for a caller that
 // back- or post-dates a write — so a test that stamps a future Ts will see
 // a tombstone lose on one backend and win on the other.
+// InstanceKey is the window that dragged the column (ADR-0191 §SD4), and is
+// provenance rather than identity — the identity stays (app, tier, scope,
+// column key), so a drag in a second window still overwrites the first's
+// entry rather than forking it. It is write-side only: ListColumnWidths
+// resolves the latest entry per key and does not project it back, because
+// resolution asks how wide, not who set it.
 type ColumnWidthRow struct {
-	AppId     app.AppIdT
-	Tier      string
-	Scope     string
-	ColumnKey string
-	Points    float64
-	FontSize  float64
-	Ts        time.Time
+	AppId       app.AppIdT
+	InstanceKey uint64
+	Tier        string
+	Scope       string
+	ColumnKey   string
+	Points      float64
+	FontSize    float64
+	Ts          time.Time
 }
 
 // ColumnWidthKey is the identity tuple of an override, extracted so the
@@ -398,8 +418,15 @@ func (inst *LogErrorContext) Summary() (s string) {
 // from the chain's outermost message, regardless of ErrorContext, so
 // the table-column readers don't need to know about the structured
 // form.
+//
+// InstanceKey is the window the line came from (ADR-0191 §SD4). The host
+// pre-tags each window's logger with an `instance_id` field, so these rows
+// already carried the value inside Fields; the column is a promotion of that
+// field, which is why lines written before it stay readable through the
+// field. Zero for a runtime-internal line, matching an empty AppId.
 type LogRow struct {
 	AppId        app.AppIdT
+	InstanceKey  uint64
 	Level        string
 	Message      string
 	Caller       string
@@ -409,6 +436,64 @@ type LogRow struct {
 	Fields       []LogField
 	Ts           time.Time
 	ErrorContext *LogErrorContext
+}
+
+// RunEventRow is one entry of the runtime's own trail, flattened for
+// reading: what happened, when, and which window it belonged to
+// (ADR-0191 §SD7). It is a *view* over the recorded kinds rather than a kind
+// of its own — nothing writes a RunEventRow.
+//
+// Detail is a rendered one-liner, not structured data: the row's own
+// attribute values joined in written order. A consumer wanting a specific
+// field reads the kind's own membership; this column exists so a trail can be
+// read without knowing twelve encodings.
+type RunEventRow struct {
+	Ts          time.Time
+	Kind        string
+	AppId       app.AppIdT
+	InstanceKey uint64
+	RunId       string
+	Detail      string
+	// Source names the table the row came from, because the two answer
+	// slightly different questions and a reader should be able to tell them
+	// apart: "facts" is the append-only trail, "persiststate" is app state.
+	Source string
+	// FactId is the row's id within its table. Fact ids restart at 1 in every
+	// process, so it identifies a row within a run and nothing wider.
+	FactId string
+}
+
+// Run-event source names, as they appear in RunEventRow.Source.
+const (
+	RunEventSourceFacts   = "facts"
+	RunEventSourcePersist = "persiststate"
+)
+
+// RunEventFilter selects the trail of one run. RunId is required: the whole
+// point of the view is a run's own history, and an unfiltered read of an
+// append-only table has no bound.
+//
+// Since is the run's start. It exists because three kinds still on disk from
+// before ADR-0191 carry no run id at all, and the only thing that can place
+// them is their timestamp — so a reader asks for "rows naming this run, plus
+// unattributed rows since it started". A caller that wants only the exactly
+// attributed rows passes the zero time.
+type RunEventFilter struct {
+	RunId string
+	Since time.Time
+	Limit uint32
+}
+
+// RunEventReaderI is the optional capability a facts store may offer: read
+// back the trail as rows (ADR-0191 §SD7).
+//
+// It is deliberately NOT part of FactsStoreI. Every writer must implement
+// that interface, and a reader that only the ClickHouse-backed store can
+// answer would force the in-memory store and every test fake to carry a
+// method they cannot serve. Consumers type-assert, the ADR-0155 §SD1
+// optional-capability pattern, and treat absence as an empty trail.
+type RunEventReaderI interface {
+	ListRunEvents(filter RunEventFilter) (rows []RunEventRow, err error)
 }
 
 // FactsStoreI is the contract implementations satisfy. Write methods

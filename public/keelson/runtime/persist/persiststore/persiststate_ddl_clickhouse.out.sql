@@ -33,7 +33,27 @@ CREATE TABLE IF NOT EXISTS boxer.persiststate (
 	"tv:stateKey:hrcard:hrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:stateKey:lrcard:lrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:stateKey:lvcard:lvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
-	"tv:stateKey:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
+	"tv:stateKey:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateRunId:value:val:s:24:::0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:stateRunId:hr:hr:u64:47:::0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
+	"tv:stateRunId:lr:lr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:stateRunId:lv:lv:y:124:::0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:stateRunId:lmr:lmr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:stateRunId:mrhp:mrhp:y:4:::0::data" Array(String) CODEC(ZSTD(3)),
+	"tv:stateRunId:hrcard:hrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateRunId:lrcard:lrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateRunId:lvcard:lvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateRunId:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateInstanceKey:value:val:u64:4:::0::data" Array(UInt64) CODEC(ZSTD(3)),
+	"tv:stateInstanceKey:hr:hr:u64:47:::0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
+	"tv:stateInstanceKey:lr:lr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:stateInstanceKey:lv:lv:y:124:::0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:stateInstanceKey:lmr:lmr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:stateInstanceKey:mrhp:mrhp:y:4:::0::data" Array(String) CODEC(ZSTD(3)),
+	"tv:stateInstanceKey:hrcard:hrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateInstanceKey:lrcard:lrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateInstanceKey:lvcard:lvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:stateInstanceKey:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:s:4::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1

@@ -2,15 +2,20 @@ package chstore_test
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 )
 
 // newLiveStore constructs a chstore against the project's localhost CH on
@@ -557,4 +562,274 @@ func TestStore_ColumnWidth_DeleteThenWrite_LiveCH(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.InDelta(t, 30.0, rows[0].Points, 1e-9)
+}
+
+// --- ADR-0191 instance attribution ------------------------------------------
+
+// newLiveStampedStore is newLiveStore with a configured run id, so the
+// §SD3 store-level stamp is active.
+func newLiveStampedStore(t *testing.T, runId string) (s *chstore.Store, cleanup func()) {
+	t.Helper()
+	cfg := chstore.Defaults()
+	cfg.Database = "runtime_chstore_test"
+	cfg.RunId = runId
+	ctx := context.Background()
+	s, err := chstore.New(cfg)
+	require.NoError(t, err)
+	if err := s.Ping(ctx); err != nil {
+		t.Skipf("ClickHouse not reachable at %s: %v", cfg.URL, err)
+	}
+	require.NoError(t, s.DropTable(ctx))
+	require.NoError(t, s.SetupTable(ctx, "MergeTree() ORDER BY tuple()"))
+	cleanup = func() { _ = s.DropTable(context.Background()) }
+	return
+}
+
+// readClient is a plain HTTP client onto the same server the store writes to.
+// The store exposes no generic query verb — by design, its readers are the
+// per-kind ones — so a test asserting the physical encoding brings its own.
+func readClient() *chclient.Client {
+	return chclient.New(chclient.Config{URL: chstore.Defaults().URL, User: chstore.Defaults().User}, nil)
+}
+
+// attributionOf reads back the run id and instance key of the single row in
+// the test table, through the physical lanes rather than through LW_GET: this
+// package ships raw SQL and runs no client-side expansion pass, so naming a
+// membership here is not available. The membership IDS are the point of the
+// assertion anyway — a test that resolved them the same way the writer does
+// would agree with itself.
+//
+// The two lanes are read by different idioms because they are shaped
+// differently, and mixing them up is the mistake this comment exists to stop
+// the next reader repeating. On the MIXED channel the parameter lane (mrhp)
+// is co-indexed with the membership lane (lmr), so arrayFirst over that PAIR
+// is sound — the value lane is not co-indexed with either and pairing it with
+// lmr fails outright ("arrays passed to arrayFirst must have equal size"). On
+// the LOW-CARD-REF channel the value lane is a ragged run per attribute, so
+// the position comes from the cumulative sum of the cardinality lane. Both
+// forms are the ones runsessions.go already composes for its readers.
+func attributionOf(t *testing.T) (runId string, instanceKey string) {
+	t.Helper()
+	const (
+		symLMR    = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		symMRHP   = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
+		u64Value  = "`tv:u64Array:value:val:u64h:4:::0::data`"
+		u64LR     = "`tv:u64Array:lr:lr:u64:1247:::0::data`"
+		u64LRCard = "`tv:u64Array:lrcard:lrcard:u64:4E:::0::data`"
+	)
+	tileKey := vocab.MembLifecycleTileKey.GetId().Value()
+	idxInLr := fmt.Sprintf("indexOf(%s, %d)", u64LR, tileKey)
+	sql := fmt.Sprintf(`
+SELECT
+  arrayFirst((p, m) -> m = %d, %s, %s) AS run_id,
+  toString(if(%s > 0, arrayElement(%s, indexOf(arrayCumSum(%s), %s)), 0)) AS instance_key
+FROM runtime_chstore_test.facts
+LIMIT 1
+FORMAT TabSeparated`,
+		vocab.MembRuntimeRun.GetId().Value(), symMRHP, symLMR,
+		idxInLr, u64Value, u64LRCard, idxInLr)
+
+	body, err := readClient().Query(context.Background(), sql)
+	require.NoError(t, err)
+	defer body.Close()
+	raw, err := io.ReadAll(body)
+	require.NoError(t, err)
+	parts := strings.Split(strings.TrimRight(string(raw), "\n"), "\t")
+	require.Len(t, parts, 2, "expected run_id and instance_key, got %q", string(raw))
+	return parts[0], parts[1]
+}
+
+// TestStore_StampsRunAndInstance_LiveCH is the ADR-0191 round-trip: every
+// kind carries the run (§SD3, from the store) and the window (§SD4, from the
+// row), on the memberships §SD1 reuses.
+//
+// One case per kind that gained something, because the stamp is written per
+// writer and a kind that forgets it is silent — the row lands, reads back,
+// and is simply unattributable. The three kinds that already carried a run
+// are covered by their own tests above.
+func TestStore_StampsRunAndInstance_LiveCH(t *testing.T) {
+	const runId = "run-0191"
+	ts := time.Now().UTC()
+
+	for _, tc := range []struct {
+		kind string
+		want string // expected instance key, as read back
+		//nolint:revive // the writer under test, one per kind
+		write func(s *chstore.Store) error
+	}{
+		{kind: "audit", want: "42", write: func(s *chstore.Store) error {
+			_, err := s.WriteAudit(factsstore.AuditRow{
+				AppId: "github.com/example/play", InstanceKey: 42,
+				Subject: "ch.query.boxer", Result: "ok", Ts: ts,
+			})
+			return err
+		}},
+		{kind: "grant", want: "7", write: func(s *chstore.Store) error {
+			_, err := s.WriteGrant(factsstore.GrantRow{
+				AppId: "github.com/example/play", InstanceKey: 7,
+				Pattern: "ch.query.boxer", Direction: app.CapDirectionPub, Ts: ts,
+			})
+			return err
+		}},
+		{kind: "log", want: "9", write: func(s *chstore.Store) error {
+			_, err := s.WriteLog(factsstore.LogRow{
+				AppId: "github.com/example/play", InstanceKey: 9,
+				Level: "info", Message: "hello", Ts: ts,
+			})
+			return err
+		}},
+		{kind: "columnWidth", want: "3", write: func(s *chstore.Store) error {
+			_, err := s.WriteColumnWidth(factsstore.ColumnWidthRow{
+				AppId: "github.com/example/play", InstanceKey: 3,
+				Tier: factsstore.ColWidthTierColumn, ColumnKey: "k",
+				Points: 100, FontSize: 12, Ts: ts,
+			})
+			return err
+		}},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			s, cleanup := newLiveStampedStore(t, runId)
+			defer cleanup()
+			require.NoError(t, tc.write(s))
+
+			gotRun, gotInstance := attributionOf(t)
+			assert.Equal(t, runId, gotRun,
+				"%s: the store must stamp its run — without it, limiting to a run is a timestamp range", tc.kind)
+			assert.Equal(t, tc.want, gotInstance,
+				"%s: the window must ride the row, or two windows of one app are indistinguishable", tc.kind)
+		})
+	}
+}
+
+// TestStore_RowRunIdWinsOverTheStores_LiveCH pins the precedence in §SD3: a
+// DTO that carries its own run keeps it. They are equal on a live write, so
+// the case that distinguishes them is a backfill — rows written on behalf of
+// a run other than the writing process's.
+func TestStore_RowRunIdWinsOverTheStores_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStampedStore(t, "run-of-this-process")
+	defer cleanup()
+	_, err := s.WriteAppLifecycle(factsstore.AppLifecycleRow{
+		RunId: "run-being-backfilled", AppId: "github.com/example/play",
+		TileKey: 5, Phase: factsstore.AppLifecyclePhaseStarted, Ts: time.Now().UTC(),
+	})
+	require.NoError(t, err)
+
+	gotRun, gotInstance := attributionOf(t)
+	assert.Equal(t, "run-being-backfilled", gotRun)
+	assert.Equal(t, "5", gotInstance)
+}
+
+// TestStore_UnstampedStoreWritesNoRun_LiveCH pins what absence means: a store
+// built without a run id writes rows carrying none, exactly as before
+// ADR-0191, rather than a row belonging to run "".
+func TestStore_UnstampedStoreWritesNoRun_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	_, err := s.WriteAudit(factsstore.AuditRow{
+		AppId: "github.com/example/play", Subject: "x.y", Result: "ok", Ts: time.Now().UTC(),
+	})
+	require.NoError(t, err)
+
+	gotRun, gotInstance := attributionOf(t)
+	assert.Empty(t, gotRun)
+	assert.Equal(t, "0", gotInstance, "an absent instance reads as the type default, not as window 0")
+}
+
+// --- ADR-0191 §SD7: the trail as rows -----------------------------------------
+
+// TestStore_ListRunEvents_LiveCH is the read half of the decision: the kinds
+// this store writes come back as flattened rows a consumer can render without
+// holding the membership vocabulary.
+//
+// One row per kind that carries different identity, because the flattening is
+// per-kind arithmetic and a kind that decodes wrong is silent — it lands with
+// an empty detail or a zero window rather than failing.
+func TestStore_ListRunEvents_LiveCH(t *testing.T) {
+	const runId = "run-events-0191"
+	s, cleanup := newLiveStampedStore(t, runId)
+	defer cleanup()
+	t0 := time.Now().UTC().Truncate(time.Second)
+
+	_, err := s.WriteRuntimeStart(factsstore.RuntimeStartRow{
+		RunId: runId, Hostname: "box-1", Pid: 4242, GoVersion: "go1.26.5", Ts: t0,
+	})
+	require.NoError(t, err)
+	_, err = s.WriteAppLifecycle(factsstore.AppLifecycleRow{
+		RunId: runId, AppId: "github.com/example/play", TileKey: 2,
+		Phase: factsstore.AppLifecyclePhaseStarted, Ts: t0.Add(time.Second),
+	})
+	require.NoError(t, err)
+	_, err = s.WriteAudit(factsstore.AuditRow{
+		AppId: "github.com/example/play", InstanceKey: 2,
+		Subject: "ch.query.boxer", Result: "ok", Ts: t0.Add(2 * time.Second),
+	})
+	require.NoError(t, err)
+
+	rows, err := s.ListRunEvents(factsstore.RunEventFilter{RunId: runId, Since: t0})
+	require.NoError(t, err)
+	require.Len(t, rows, 3, "one row per written kind, oldest first")
+
+	assert.Equal(t, "run start", rows[0].Kind)
+	assert.Empty(t, rows[0].AppId, "a process-level event names no app")
+	assert.Contains(t, rows[0].Detail, "box-1", "the row's own values, joined")
+	assert.Contains(t, rows[0].Detail, "go1.26.5")
+	assert.Equal(t, factsstore.RunEventSourceFacts, rows[0].Source)
+
+	assert.Equal(t, "lifecycle", rows[1].Kind)
+	assert.Equal(t, "github.com/example/play", string(rows[1].AppId))
+	assert.Equal(t, uint64(2), rows[1].InstanceKey)
+	assert.Equal(t, runId, rows[1].RunId)
+	assert.Equal(t, "started", rows[1].Detail)
+	assert.NotContains(t, rows[1].Detail, "github.com/example/play",
+		"the app is its own column and must not be repeated into the detail")
+
+	assert.Equal(t, "audit", rows[2].Kind)
+	assert.Equal(t, uint64(2), rows[2].InstanceKey,
+		"an audit row now lanes with the lifecycle row above it")
+	assert.Contains(t, rows[2].Detail, "ch.query.boxer")
+	assert.Contains(t, rows[2].Detail, "ok")
+}
+
+// TestStore_ListRunEvents_SelectsOneRun_LiveCH pins the attribution rule: a
+// row naming another run is out, and a row naming NO run is in only when it
+// landed after this one started. That second clause is the compromise
+// ADR-0191 leaves for rows written before it — and the reason two overlapping
+// boxer processes blend in the historical part of a trail.
+func TestStore_ListRunEvents_SelectsOneRun_LiveCH(t *testing.T) {
+	const runId = "run-events-mine"
+	s, cleanup := newLiveStampedStore(t, runId)
+	defer cleanup()
+	t0 := time.Now().UTC().Truncate(time.Second)
+
+	// Another run's lifecycle row: named, and not ours.
+	_, err := s.WriteAppLifecycle(factsstore.AppLifecycleRow{
+		RunId: "some-other-run", AppId: "github.com/example/play", TileKey: 1,
+		Phase: factsstore.AppLifecyclePhaseStarted, Ts: t0.Add(time.Second),
+	})
+	require.NoError(t, err)
+	// Ours, named.
+	_, err = s.WriteAppLifecycle(factsstore.AppLifecycleRow{
+		RunId: runId, AppId: "github.com/example/play", TileKey: 3,
+		Phase: factsstore.AppLifecyclePhaseStarted, Ts: t0.Add(2 * time.Second),
+	})
+	require.NoError(t, err)
+
+	rows, err := s.ListRunEvents(factsstore.RunEventFilter{RunId: runId, Since: t0})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "another run's named row must not be in this run's trail")
+	assert.Equal(t, uint64(3), rows[0].InstanceKey)
+
+	// With no Since, only exactly-attributed rows are eligible at all.
+	strict, err := s.ListRunEvents(factsstore.RunEventFilter{RunId: runId})
+	require.NoError(t, err)
+	require.Len(t, strict, 1)
+}
+
+// TestStore_ListRunEvents_RejectsEmptyRunId pins the guard: the view is one
+// run's history, and an unfiltered read of an append-only table has no bound.
+func TestStore_ListRunEvents_RejectsEmptyRunId(t *testing.T) {
+	s, err := chstore.New(chstore.Defaults())
+	require.NoError(t, err)
+	_, err = s.ListRunEvents(factsstore.RunEventFilter{})
+	require.Error(t, err)
 }

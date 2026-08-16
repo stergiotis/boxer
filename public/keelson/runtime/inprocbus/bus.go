@@ -174,9 +174,10 @@ func (inst *Inst) ClientByAppId(appId app.AppIdT) (c *Client, ok bool) {
 }
 
 // publish dispatches a message to all matching subscriptions. n is the
-// number of handlers invoked; sender is recorded on the Msg so handlers
-// can identify the originating app without inspecting payload.
-func (inst *Inst) publish(sender app.AppIdT, subject, reply string, payload []byte) (n int, err error) {
+// number of handlers invoked; sender and senderInstance are recorded on the
+// Msg so handlers can identify the originating app — and, since ADR-0191
+// §SD2, the originating window — without inspecting payload.
+func (inst *Inst) publish(sender app.AppIdT, senderInstance uint64, subject, reply string, payload []byte) (n int, err error) {
 	err = ValidateSubject(subject)
 	if err != nil {
 		return
@@ -190,10 +191,11 @@ func (inst *Inst) publish(sender app.AppIdT, subject, reply string, payload []by
 	}
 	inst.mu.RUnlock()
 	msg := &app.Msg{
-		Subject: subject,
-		Reply:   reply,
-		Sender:  sender,
-		Payload: payload,
+		Subject:        subject,
+		Reply:          reply,
+		Sender:         sender,
+		SenderInstance: senderInstance,
+		Payload:        payload,
 	}
 	for _, s := range matched {
 		s.handler(msg)

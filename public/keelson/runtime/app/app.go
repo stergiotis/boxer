@@ -205,11 +205,24 @@ type MsgHandlerFunc func(msg *Msg)
 // inspect it to know which app spoke. Payload is the body. Handlers that
 // wish to reply call bus.Publish(msg.Reply, replyPayload) explicitly — no
 // Respond helper, keeping the Msg type a plain value.
+//
+// SenderInstance is the publisher's window (ADR-0191 §SD2): the same
+// host-minted key [MountContextI.InstanceKey] returns, stamped by the bus
+// from the client the host opened for that window. It is what lets a
+// service attribute a request to a window rather than to an app — with two
+// windows of one app open, Sender alone cannot. Zero means unattributed: a
+// service's own client, a CLI bootstrap, or a transport that does not carry
+// it (natsbus sets no Sender either).
+//
+// It is deliberately not part of any request payload. The bus stamps it, so
+// a caller cannot claim to be a window it is not — the same reason ADR-0135
+// attributes a launch's caller from the envelope rather than the request.
 type Msg struct {
-	Subject string
-	Reply   string
-	Sender  AppIdT
-	Payload []byte
+	Subject        string
+	Reply          string
+	Sender         AppIdT
+	SenderInstance uint64
+	Payload        []byte
 }
 
 // StorageI is the forward declaration of the CH+leeway-backed cold-state

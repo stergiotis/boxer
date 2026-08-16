@@ -13,9 +13,11 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindRuntimeApp          uint64 = 9223372049739677701
-	kindRuntimePersistKey   uint64 = 9223372049739677712
-	kindRuntimePersistValue uint64 = 9223372049739677769
+	kindRuntimeApp              uint64 = 9223372049739677701
+	kindRuntimePersistKey       uint64 = 9223372049739677712
+	kindRuntimePersistValue     uint64 = 9223372049739677769
+	kindRuntimeRun              uint64 = 9223372049739677716
+	kindRuntimeLifecycleTileKey uint64 = 9223372049739677728
 )
 
 // stateStateAppIdAttrI is the InAttr-side view of the stateAppId section. P-variants only —
@@ -63,6 +65,36 @@ type stateStateBlobSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// stateStateRunIdAttrI is the InAttr-side view of the stateRunId section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type stateStateRunIdAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// stateStateRunIdSecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type stateStateRunIdSecI[Attr any, Ent any] interface {
+	BeginAttribute(value string) Attr
+	EndSection() Ent
+}
+
+// stateStateInstanceKeyAttrI is the InAttr-side view of the stateInstanceKey section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type stateStateInstanceKeyAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// stateStateInstanceKeySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type stateStateInstanceKeySecI[Attr any, Ent any] interface {
+	BeginAttribute(value uint64) Attr
+	EndSection() Ent
+}
+
 // stateEntityI is the entity-builder surface stateAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -77,11 +109,17 @@ type stateEntityI[
 	StateKeySec stateStateKeySecI[StateKeyAttr, Ent],
 	StateBlobAttr stateStateBlobAttrI,
 	StateBlobSec stateStateBlobSecI[StateBlobAttr, Ent],
+	StateRunIdAttr stateStateRunIdAttrI,
+	StateRunIdSec stateStateRunIdSecI[StateRunIdAttr, Ent],
+	StateInstanceKeyAttr stateStateInstanceKeyAttrI,
+	StateInstanceKeySec stateStateInstanceKeySecI[StateInstanceKeyAttr, Ent],
 	Ent any,
 ] interface {
 	GetSectionStateAppId() StateAppIdSec
 	GetSectionStateKey() StateKeySec
 	GetSectionStateBlob() StateBlobSec
+	GetSectionStateRunId() StateRunIdSec
+	GetSectionStateInstanceKey() StateInstanceKeySec
 }
 
 // stateEmitSectionStateAppId writes this kind's stateAppId attributes into an
@@ -129,6 +167,36 @@ func stateEmitSectionStateBlob[
 	return
 }
 
+// stateEmitSectionStateRunId writes this kind's stateRunId attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func stateEmitSectionStateRunId[
+	StateRunIdAttr stateStateRunIdAttrI,
+	StateRunIdSec stateStateRunIdSecI[StateRunIdAttr, Ent],
+	Ent any,
+](stateRunIdSec StateRunIdSec, row State) (err error) {
+	stateRunIdSecAttr_RunId := stateRunIdSec.BeginAttribute(row.RunId)
+	stateRunIdSecAttr_RunId.AddMembershipLowCardRefP(kindRuntimeRun)
+	stateRunIdSecAttr_RunId.EndAttributeP()
+	return
+}
+
+// stateEmitSectionStateInstanceKey writes this kind's stateInstanceKey attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func stateEmitSectionStateInstanceKey[
+	StateInstanceKeyAttr stateStateInstanceKeyAttrI,
+	StateInstanceKeySec stateStateInstanceKeySecI[StateInstanceKeyAttr, Ent],
+	Ent any,
+](stateInstanceKeySec StateInstanceKeySec, row State) (err error) {
+	stateInstanceKeySecAttr_InstanceKey := stateInstanceKeySec.BeginAttribute(row.InstanceKey)
+	stateInstanceKeySecAttr_InstanceKey.AddMembershipLowCardRefP(kindRuntimeLifecycleTileKey)
+	stateInstanceKeySecAttr_InstanceKey.EndAttributeP()
+	return
+}
+
 // stateAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -139,11 +207,17 @@ func stateAddSections[
 	StateKeySec stateStateKeySecI[StateKeyAttr, Ent],
 	StateBlobAttr stateStateBlobAttrI,
 	StateBlobSec stateStateBlobSecI[StateBlobAttr, Ent],
+	StateRunIdAttr stateStateRunIdAttrI,
+	StateRunIdSec stateStateRunIdSecI[StateRunIdAttr, Ent],
+	StateInstanceKeyAttr stateStateInstanceKeyAttrI,
+	StateInstanceKeySec stateStateInstanceKeySecI[StateInstanceKeyAttr, Ent],
 	Ent any,
 	DML stateEntityI[
 		StateAppIdAttr, StateAppIdSec,
 		StateKeyAttr, StateKeySec,
 		StateBlobAttr, StateBlobSec,
+		StateRunIdAttr, StateRunIdSec,
+		StateInstanceKeyAttr, StateInstanceKeySec,
 		Ent,
 	],
 ](dml DML, row State) (err error) {
@@ -168,6 +242,20 @@ func stateAddSections[
 		return
 	}
 	stateBlobSec.EndSection()
+	// --- stateRunId. ---
+	stateRunIdSec := dml.GetSectionStateRunId()
+	err = stateEmitSectionStateRunId(stateRunIdSec, row)
+	if err != nil {
+		return
+	}
+	stateRunIdSec.EndSection()
+	// --- stateInstanceKey. ---
+	stateInstanceKeySec := dml.GetSectionStateInstanceKey()
+	err = stateEmitSectionStateInstanceKey(stateInstanceKeySec, row)
+	if err != nil {
+		return
+	}
+	stateInstanceKeySec.EndSection()
 	return
 }
 
@@ -204,6 +292,28 @@ type stateStateBlobMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// stateStateRunIdAttrsReadI is the Attributes-side view of the stateRunId section.
+type stateStateRunIdAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// stateStateRunIdMembsReadI is the Memberships-side view of the stateRunId section.
+type stateStateRunIdMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
+// stateStateInstanceKeyAttrsReadI is the Attributes-side view of the stateInstanceKey section.
+type stateStateInstanceKeyAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// stateStateInstanceKeyMembsReadI is the Memberships-side view of the stateInstanceKey section.
+type stateStateInstanceKeyMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // stateReadRow reads row i as one optional State component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A slot carrying more
@@ -219,6 +329,10 @@ func stateReadRow[
 	StateKeyMembs stateStateKeyMembsReadI,
 	StateBlobAttrs stateStateBlobAttrsReadI,
 	StateBlobMembs stateStateBlobMembsReadI,
+	StateRunIdAttrs stateStateRunIdAttrsReadI,
+	StateRunIdMembs stateStateRunIdMembsReadI,
+	StateInstanceKeyAttrs stateStateInstanceKeyAttrsReadI,
+	StateInstanceKeyMembs stateStateInstanceKeyMembsReadI,
 ](
 	i int,
 	stateAppIdAttrs StateAppIdAttrs,
@@ -227,6 +341,10 @@ func stateReadRow[
 	stateKeyMembs StateKeyMembs,
 	stateBlobAttrs StateBlobAttrs,
 	stateBlobMembs StateBlobMembs,
+	stateRunIdAttrs StateRunIdAttrs,
+	stateRunIdMembs StateRunIdMembs,
+	stateInstanceKeyAttrs StateInstanceKeyAttrs,
+	stateInstanceKeyMembs StateInstanceKeyMembs,
 ) (row State, present bool, err error) {
 	// --- stateAppId. ---
 	var stateAppIdAppIdVal string
@@ -306,6 +424,58 @@ func stateReadRow[
 	}
 	if stateBlobValueCount == 1 {
 		row.Value = stateBlobValueVal
+		present = true
+	}
+	// --- stateRunId. ---
+	var stateRunIdRunIdVal string
+	var stateRunIdRunIdCount int
+	var stateRunIdRunIdLastAttr int64
+	nstateRunId := stateRunIdAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstateRunId; attrJ++ {
+		for membID := range stateRunIdMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindRuntimeRun:
+				if stateRunIdRunIdLastAttr != attrJ+1 {
+					stateRunIdRunIdLastAttr = attrJ + 1
+					stateRunIdRunIdCount++
+				}
+				val := stateRunIdAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stateRunIdRunIdVal = val
+			}
+		}
+	}
+	if stateRunIdRunIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stateRunId").Str("membership", "runtimeRun").Int("got", stateRunIdRunIdCount).Errorf("slot stateRunId@runtimeRun (field RunId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stateRunIdRunIdCount)
+		return
+	}
+	if stateRunIdRunIdCount == 1 {
+		row.RunId = stateRunIdRunIdVal
+		present = true
+	}
+	// --- stateInstanceKey. ---
+	var stateInstanceKeyInstanceKeyVal uint64
+	var stateInstanceKeyInstanceKeyCount int
+	var stateInstanceKeyInstanceKeyLastAttr int64
+	nstateInstanceKey := stateInstanceKeyAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstateInstanceKey; attrJ++ {
+		for membID := range stateInstanceKeyMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindRuntimeLifecycleTileKey:
+				if stateInstanceKeyInstanceKeyLastAttr != attrJ+1 {
+					stateInstanceKeyInstanceKeyLastAttr = attrJ + 1
+					stateInstanceKeyInstanceKeyCount++
+				}
+				val := stateInstanceKeyAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stateInstanceKeyInstanceKeyVal = val
+			}
+		}
+	}
+	if stateInstanceKeyInstanceKeyCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stateInstanceKey").Str("membership", "runtimeLifecycleTileKey").Int("got", stateInstanceKeyInstanceKeyCount).Errorf("slot stateInstanceKey@runtimeLifecycleTileKey (field InstanceKey) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stateInstanceKeyInstanceKeyCount)
+		return
+	}
+	if stateInstanceKeyInstanceKeyCount == 1 {
+		row.InstanceKey = stateInstanceKeyInstanceKeyVal
 		present = true
 	}
 	return

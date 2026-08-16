@@ -7,6 +7,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -51,6 +52,11 @@ type StoreBackend struct {
 	mu sync.Mutex
 	st *persiststore.PersistStore
 	pc *persiststore.PersistCache[struct{}]
+	// runId stamps every written row with the process that wrote it
+	// (ADR-0191 §SD5). Read once at open rather than per write: it is
+	// process-wide and cannot change. Empty on a host that never called
+	// runinfo.Init, which writes unstamped rows exactly as before.
+	runId string
 }
 
 var _ StorageBackendI = (*StoreBackend)(nil)
@@ -99,6 +105,9 @@ func OpenStoreBackendAt(ctx context.Context, exec recordstore.ExecutorI, alloc m
 	inst = &StoreBackend{
 		st: st,
 		pc: persiststore.NewPersistCache[struct{}](st, persiststore.PersistCacheConfig{}),
+	}
+	if ri, riErr := runinfo.Get(); riErr == nil {
+		inst.runId = ri.RunId
 	}
 	return
 }
@@ -156,6 +165,12 @@ func (inst *StoreBackend) Set(ref StorageRef, key string, value []byte) (err err
 		AppId: string(ref.StateAppId()),
 		Key:   key,
 		Value: value,
+		// Provenance (ADR-0191 §SD5), not identity: the id above is still
+		// "<appId>/<key>", so a second window writing this key overwrites
+		// rather than forks. The tombstone Delete appends carries neither,
+		// because the generated Delete writes no component at all.
+		RunId:       inst.runId,
+		InstanceKey: ref.InstanceKey,
 	}).Commit()
 	if err != nil {
 		inst.st.DiscardPending()

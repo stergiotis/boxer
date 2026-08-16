@@ -29,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // Enabled gates whether a host that calls [Start] actually stands up the
@@ -90,6 +91,15 @@ type Deps struct {
 	// than absent; keelson.subscriptions and keelson.client_caps read Bus.
 	// Same typed-nil trap: assign only a supervisor that started.
 	Tasks *supervisor.Supervisor
+	// PersistExec is the executor the app-state store was opened over,
+	// backing the persist half of keelson.runtime_events (ADR-0191 §SD7).
+	// nil is allowed and leaves the trail to its facts half — a host with no
+	// durable persist backend has no app-state rows to show anyway.
+	//
+	// The executor rather than the live backend: the provider opens its own
+	// read-only store on it, so a scan never contends with the writer's
+	// pending buffer.
+	PersistExec recordstore.ExecutorI
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -126,6 +136,13 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// store answers with an empty table, so the table name is always there.
 	if e := introspectproviders.RegisterWorkingsets(reg, deps.Facts); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: workingsets provider registration failed")
+	}
+	// ADR-0191 §SD7: this run's own event trail, read through the facts
+	// store that wrote it and the persist store beside it. Registered
+	// unconditionally — a nil store, a store that cannot read, or a host
+	// with no runinfo all answer with an empty table.
+	if e := introspectproviders.RegisterRunEvents(reg, deps.Facts, deps.PersistExec); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: run-events provider registration failed")
 	}
 	// ADR-0169 §SD5: live coverage tables over the in-process sampler.
 	// Registered unconditionally — nil (an uninstrumented build) answers

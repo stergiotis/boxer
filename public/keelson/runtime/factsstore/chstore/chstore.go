@@ -32,12 +32,22 @@ import (
 )
 
 // Config carries the connection coordinates + qualified target table.
+//
+// RunId is the process's run identity (ADR-0191 §SD3), stamped onto every row
+// this store writes that does not carry one of its own. It lives here rather
+// than on each row DTO because it is process-wide: eight DTOs repeating one
+// constant is eight chances for them to disagree, and three of them
+// (GrantRow, AuditRow, LogRow) had no field for it at all — which is why
+// "limit to this run" was a timestamp range for those kinds, and silently
+// admitted a concurrent boxer process. Empty leaves rows unstamped, which is
+// what a store built before its host knew the run id gets.
 type Config struct {
 	URL      string
 	User     string
 	Password string
 	Database string
 	Table    string
+	RunId    string
 }
 
 // Defaults targets the project's localhost CH at boxer.facts per the
@@ -191,12 +201,16 @@ func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
 		grantedVia = "policy"
 	}
 	sym.BeginAttribute(grantedVia).AddMembershipLowCardRef(vocab.MembGrantedVia.GetId().Value()).EndAttribute()
+	inst.stampRun(sym, "")
 	sym.EndSection()
 	if row.Reason != "" {
 		str := ent.GetSectionStringArray()
 		str.BeginAttributeSingle(row.Reason).AddMembershipLowCardRef(vocab.MembGrantReason.GetId().Value()).EndAttribute()
 		str.EndSection()
 	}
+	u64 := ent.GetSectionU64Array()
+	stampInstance(u64, row.InstanceKey)
+	u64.EndSection()
 	bsec := ent.GetSectionBool()
 	bsec.BeginAttribute(row.Sticky).AddMembershipLowCardRef(vocab.MembGrantSticky.GetId().Value()).EndAttribute()
 	bsec.EndSection()
@@ -219,7 +233,11 @@ func (inst *Store) WriteAudit(row factsstore.AuditRow) (id uint64, err error) {
 	if row.Result != "" {
 		sym.BeginAttribute(row.Result).AddMembershipLowCardRef(vocab.MembAuditResult.GetId().Value()).EndAttribute()
 	}
+	inst.stampRun(sym, "")
 	sym.EndSection()
+	u64 := ent.GetSectionU64Array()
+	stampInstance(u64, row.InstanceKey)
+	u64.EndSection()
 	u32 := ent.GetSectionU32Array()
 	if row.LatencyMs > 0 {
 		u32.BeginAttributeSingle(row.LatencyMs).AddMembershipLowCardRef(vocab.MembAuditLatencyMs.GetId().Value()).EndAttribute()
@@ -245,7 +263,7 @@ func (inst *Store) WriteAudit(row factsstore.AuditRow) (id uint64, err error) {
 func (inst *Store) WriteLog(row factsstore.LogRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	ent := dml.NewInEntityFacts(inst.allocator, 1)
-	encodeLogEntity(ent, id, row)
+	inst.encodeLogEntity(ent, id, row)
 	err = inst.commitAndShip(context.Background(), ent)
 	return
 }
@@ -266,7 +284,7 @@ func (inst *Store) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error)
 	for i := range rows {
 		id := inst.nextId.Add(1)
 		ids[i] = id
-		encodeLogEntity(ent, id, rows[i])
+		inst.encodeLogEntity(ent, id, rows[i])
 		if cErr := ent.CommitEntity(); cErr != nil {
 			err = eh.Errorf("chstore: write logs: commit entity %d: %w", i, cErr)
 			return
@@ -280,7 +298,7 @@ func (inst *Store) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error)
 // last section, no CommitEntity — the caller commits). Shared by the
 // single-row WriteLog and the batched WriteLogs so the two paths cannot
 // drift in how a log row maps onto the boxer.facts sections.
-func encodeLogEntity(ent *dml.InEntityFacts, id uint64, row factsstore.LogRow) {
+func (inst *Store) encodeLogEntity(ent *dml.InEntityFacts, id uint64, row factsstore.LogRow) {
 	ts := defaultTs(row.Ts)
 	nk := naturalKeyForLog(row, ts)
 	ent.BeginEntity().SetId(id, nk).SetTimestamp(ts)
@@ -302,6 +320,7 @@ func encodeLogEntity(ent *dml.InEntityFacts, id uint64, row factsstore.LogRow) {
 	if row.Service != "" {
 		sym.BeginAttribute(row.Service).AddMembershipLowCardRef(vocab.MembLogService.GetId().Value()).EndAttribute()
 	}
+	inst.stampRun(sym, "")
 	sym.EndSection()
 
 	str := ent.GetSectionStringArray()
@@ -325,7 +344,7 @@ func encodeLogEntity(ent *dml.InEntityFacts, id uint64, row factsstore.LogRow) {
 		txt.EndSection()
 	}
 
-	writeLogTypedFields(ent, row.Fields, logFieldMembId)
+	writeLogTypedFields(ent, row.Fields, logFieldMembId, row.InstanceKey)
 }
 
 // writeLogTypedFields fans the non-string LogFields out to their matching
@@ -342,8 +361,18 @@ func encodeLogEntity(ent *dml.InEntityFacts, id uint64, row factsstore.LogRow) {
 // Per-section field order is preserved, which is the only order the wire
 // records — sections are separate column families, so interleaving across them
 // says nothing.
-func writeLogTypedFields(ent *dml.InEntityFacts, fields []factsstore.LogField, logFieldMembId uint64) {
+func writeLogTypedFields(ent *dml.InEntityFacts, fields []factsstore.LogField, logFieldMembId uint64, instanceKey uint64) {
 	var buf dmlruntime.DeferredSectionBuffer
+	// The window this line came from (ADR-0191 §SD4) rides the same section as
+	// the uint fields and so must go through the same buffer: a section frame
+	// closes for good, and a second opener would be refused. It is enqueued
+	// first so it reads before the fields in the section's attribute order.
+	if instanceKey != 0 {
+		buf.Enqueue("u64Array", "instanceKey", func() error {
+			stampInstance(ent.GetSectionU64Array(), instanceKey)
+			return nil
+		})
+	}
 	for _, f := range fields {
 		switch f.Kind {
 		case factsstore.LogFieldKindInt:
@@ -400,6 +429,52 @@ func writeLogTypedFields(ent *dml.InEntityFacts, fields []factsstore.LogField, l
 	})
 }
 
+// stampRun writes the MembRuntimeRun attribute onto an already-open symbol
+// section (ADR-0191 §SD3). It is the one place the run reaches a row, so
+// every kind carries it the same way and a reader has one membership to
+// filter on.
+//
+// rowRunId wins when the DTO carries one: for a live write it equals the
+// store's, and for a backfill or a test it is the authoritative value. The
+// store's configured run is the fallback, and both empty writes nothing —
+// which reads back as an unattributed row rather than as a row belonging to
+// run "".
+//
+// The attribute VALUE carries the run id as well as the high-cardinality
+// parameter. That is how WriteRuntimeStart has always written it, and it is
+// what lets a reader gather the run through the value lane
+// (LW_CO_GATHER(`symbol:value`, LW_SEL_ATTRS(…))) — the parameter lane holds
+// the same bytes, but LW_GET refuses a mixed channel without a param: token,
+// and here the parameter is the thing being read.
+func (inst *Store) stampRun(sym *dml.InEntityFactsSectionSymbol, rowRunId string) {
+	runId := rowRunId
+	if runId == "" {
+		runId = inst.cfg.RunId
+	}
+	if runId == "" {
+		return
+	}
+	sym.BeginAttribute(runId).AddMembershipMixedLowCardRef(
+		vocab.MembRuntimeRun.GetId().Value(), []byte(runId)).EndAttribute()
+}
+
+// stampInstance writes the window key onto an already-open u64 section
+// (ADR-0191 §SD3). Zero is unattributed — a host-written row, a CLI
+// bootstrap, or a producer that has no window — and writes nothing, so a
+// reader tells "no window" from "window 0" by absence rather than by value.
+//
+// The membership is spelled MembLifecycleTileKey for the reason §SD1 gives:
+// the launch and workingset kinds already reuse it, one column to join on
+// beats a per-kind spelling, and renaming it would renumber an id that rows
+// on disk carry.
+func stampInstance(u64 *dml.InEntityFactsSectionU64Array, instanceKey uint64) {
+	if instanceKey == 0 {
+		return
+	}
+	u64.BeginAttributeSingle(instanceKey).
+		AddMembershipLowCardRef(vocab.MembLifecycleTileKey.GetId().Value()).EndAttribute()
+}
+
 // WriteRuntimeStart lands one boxer.facts row tagged KindRuntimeRun.
 // The run_id is the natural key (entity-id) and rides as the high-card
 // parameter of MembRuntimeRun so child app-lifecycle rows can join by
@@ -413,8 +488,7 @@ func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64,
 
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("runtime-run").AddMembershipLowCardRef(vocab.MembKindRuntimeRun.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(row.RunId).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeRun.GetId().Value(), []byte(row.RunId)).EndAttribute()
+	inst.stampRun(sym, row.RunId)
 	sym.BeginAttribute(row.Hostname).AddMembershipLowCardRef(vocab.MembRunHostname.GetId().Value()).EndAttribute()
 	if row.GoVersion != "" {
 		sym.BeginAttribute(row.GoVersion).AddMembershipLowCardRef(vocab.MembRunGoVersion.GetId().Value()).EndAttribute()
@@ -464,8 +538,7 @@ func (inst *Store) WriteRuntimeHeartbeat(row factsstore.HeartbeatRow) (id uint64
 
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("runtime-heartbeat").AddMembershipLowCardRef(vocab.MembKindRuntimeHeartbeat.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(row.RunId).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeRun.GetId().Value(), []byte(row.RunId)).EndAttribute()
+	inst.stampRun(sym, row.RunId)
 	sym.EndSection()
 
 	err = inst.commitAndShip(context.Background(), ent)
@@ -490,8 +563,7 @@ func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64,
 	sym.BeginAttribute("app-lifecycle").AddMembershipLowCardRef(vocab.MembKindAppLifecycle.GetId().Value()).EndAttribute()
 	sym.BeginAttribute(string(row.AppId)).AddMembershipMixedLowCardRef(
 		vocab.MembRuntimeApp.GetId().Value(), []byte(row.AppId)).EndAttribute()
-	sym.BeginAttribute(row.RunId).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeRun.GetId().Value(), []byte(row.RunId)).EndAttribute()
+	inst.stampRun(sym, row.RunId)
 	sym.BeginAttribute(phase).AddMembershipLowCardRef(vocab.MembLifecyclePhase.GetId().Value()).EndAttribute()
 	sym.EndSection()
 
@@ -533,8 +605,7 @@ func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) 
 		vocab.MembRuntimeApp.GetId().Value(), []byte(row.TargetAppId)).EndAttribute()
 	sym.BeginAttribute(string(row.CallerAppId)).AddMembershipMixedLowCardRef(
 		vocab.MembLaunchCaller.GetId().Value(), []byte(row.CallerAppId)).EndAttribute()
-	sym.BeginAttribute(row.RunId).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeRun.GetId().Value(), []byte(row.RunId)).EndAttribute()
+	inst.stampRun(sym, row.RunId)
 	if row.ConfigKind != "" {
 		sym.BeginAttribute(row.ConfigKind).AddMembershipLowCardRef(vocab.MembLaunchConfigKind.GetId().Value()).EndAttribute()
 	}

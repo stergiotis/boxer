@@ -46,18 +46,19 @@ func stampFp(s string) string {
 // time; empty values simply leave those stamp fields out. The launcher
 // wires it at Mount; the standalone CLI never does, and its runs stamp
 // lane + fingerprints only.
-func (inst *Client) SetStampIdentity(runId string, appId string) {
+func (inst *Client) SetStampIdentity(runId string, appId string, instanceKey uint64) {
 	inst.mu.Lock()
 	inst.stampRunId = runId
 	inst.stampAppId = appId
+	inst.stampInstance = instanceKey
 	inst.mu.Unlock()
 }
 
-// stampIdentity reads the identity pair under the URL lock.
-func (inst *Client) stampIdentity() (runId string, appId string) {
+// stampIdentity reads the identity triple under the URL lock.
+func (inst *Client) stampIdentity() (runId string, appId string, instanceKey uint64) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
-	return inst.stampRunId, inst.stampAppId
+	return inst.stampRunId, inst.stampAppId, inst.stampInstance
 }
 
 // chainFingerprint identifies the rewrite regime between the authored
@@ -124,10 +125,11 @@ func envFingerprint(params map[string]string, signals map[string]string) string 
 // produced; params/signals are the URL binding. Returns "" only when
 // marshalling fails (structurally impossible for this struct).
 func (inst *Client) composeLogComment(authored string, sent string, params map[string]string, signals map[string]string, opts *ExecOptions) string {
-	runId, appId := inst.stampIdentity()
+	runId, appId, instanceKey := inst.stampIdentity()
 	st := queryrunfacts.Stamp{
 		RunId:      runId,
 		App:        appId,
+		Instance:   instanceKey,
 		AuthoredFp: stampFp(authored),
 		SentFp:     stampFp(sent),
 		ChainFp:    inst.chainFingerprint(),
@@ -144,8 +146,8 @@ func (inst *Client) composeLogComment(authored string, sent string, params map[s
 // carries identity but no fingerprints. Returns "" when there is no
 // identity to stamp at all.
 func (inst *Client) composeProbeLogComment(opts *ExecOptions) string {
-	runId, appId := inst.stampIdentity()
-	st := queryrunfacts.Stamp{RunId: runId, App: appId}
+	runId, appId, instanceKey := inst.stampIdentity()
+	st := queryrunfacts.Stamp{RunId: runId, App: appId, Instance: instanceKey}
 	if opts != nil {
 		st.Lane = opts.Label
 	}

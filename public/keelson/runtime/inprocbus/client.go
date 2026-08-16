@@ -131,7 +131,7 @@ func (inst *Client) Publish(subject string, payload []byte) (err error) {
 			Errorf("bus publish denied: %w", ErrPermissionViolation)
 		return
 	}
-	_, err = inst.inst.publish(inst.appId, subject, "", payload)
+	_, err = inst.inst.publish(inst.appId, inst.instanceKey.Load(), subject, "", payload)
 	if err != nil {
 		err = eh.Errorf("bus publish: %w", err)
 	}
@@ -260,6 +260,7 @@ func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Du
 		}
 		sink.Record(audit.AuditRecord{
 			AppId:         inst.appId,
+			InstanceKey:   inst.instanceKey.Load(),
 			Subject:       subject,
 			Result:        result,
 			LatencyMs:     uint32(time.Since(start).Milliseconds()),
@@ -292,7 +293,7 @@ func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Du
 		return
 	}
 	defer inst.inst.unsubscribe(inboxId)
-	_, err = inst.inst.publish(inst.appId, subject, inbox, payload)
+	_, err = inst.inst.publish(inst.appId, inst.instanceKey.Load(), subject, inbox, payload)
 	if err != nil {
 		err = eh.Errorf("bus request: publish: %w", err)
 		return

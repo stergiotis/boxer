@@ -52,6 +52,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
@@ -152,6 +153,15 @@ func NewCommand() *cli.Command {
 					Msg("runinfo: process boot")
 			}
 			factsCfg := chstore.Defaults()
+			if runInst != nil {
+				// Every row this store writes carries the run (ADR-0191
+				// §SD3), including the kinds whose DTOs have no field for
+				// it — audit, grant, log, column width. Before this, "in
+				// this run" for those was a timestamp range, which a
+				// second boxer process overlapping this one silently
+				// joined.
+				factsCfg.RunId = runInst.RunId
+			}
 			facts, isChStore := chstore.NewWithFallback(factsCfg, log.Logger, 2*time.Second)
 			var heartbeatInst *heartbeat.Inst
 			if runInst != nil {
@@ -243,7 +253,7 @@ func NewCommand() *cli.Command {
 			// The open does DDL over HTTP, so it is bounded: a server that
 			// answered the 2s ping and then stalls must not hang boot.
 			persistCtx, persistCancel := gocontext.WithTimeout(gocontext.Background(), 15*time.Second)
-			persistBackend, persistBackendLabel, persistBackendClose := selectPersistBackend(persistCtx, factsCfg, isChStore, log.Logger)
+			persistBackend, persistBackendLabel, persistBackendClose, persistExec := selectPersistBackend(persistCtx, factsCfg, isChStore, log.Logger)
 			persistCancel()
 			defer persistBackendClose()
 			persistSvc, pErr := persist.NewService(bus, log.Logger, persistBackend)
@@ -518,7 +528,11 @@ func NewCommand() *cli.Command {
 				// keelson('workingsets') reports what a restore would find
 				// (ADR-0148 §SD7).
 				Facts: facts,
-				Log:   log.Logger,
+				// The persist store's executor, for the app-state half of
+				// keelson('runtime_events') (ADR-0191 §SD7). nil on the
+				// in-memory backend, which leaves that half empty.
+				PersistExec: persistExec,
+				Log:         log.Logger,
 			}
 			// Guard against the typed-nil interface trap: only hand over the
 			// broker as the ad-hoc decryptor when it actually started.
@@ -647,19 +661,25 @@ func buildStatusSnapshot(runInst *runinfo.Inst, isChStore bool, bus *inprocbus.I
 // A construction failure degrades to the memory backend rather than leaving
 // runtime.persist unbound: losing durability is a smaller regression than
 // losing the subject family, and the label says which one ran.
-func selectPersistBackend(ctx gocontext.Context, cfg chstore.Config, isChStore bool, logger zerolog.Logger) (backend persist.StorageBackendI, label string, closeFn func()) {
+func selectPersistBackend(ctx gocontext.Context, cfg chstore.Config, isChStore bool, logger zerolog.Logger) (backend persist.StorageBackendI, label string, closeFn func(), exec recordstore.ExecutorI) {
 	closeFn = func() {}
 	if isChStore {
-		exec, err := storeexec.New(chclient.New(chclient.Config{
+		storeExec, err := storeexec.New(chclient.New(chclient.Config{
 			URL: cfg.URL, User: cfg.User, Password: cfg.Password,
 		}, nil), nil)
 		if err == nil {
 			var sb *persist.StoreBackend
-			sb, err = persist.OpenStoreBackend(ctx, exec, nil)
+			sb, err = persist.OpenStoreBackend(ctx, storeExec, nil)
 			if err == nil {
 				backend = sb
 				label = "store"
 				closeFn = sb.Close
+				// Returned so the introspection host can read the app-state
+				// half of this run's trail on its own read-only store
+				// (ADR-0191 §SD7). Only on the path that actually opened —
+				// an executor whose store failed to provision would answer
+				// every scan with the same error.
+				exec = storeExec
 				return
 			}
 		}

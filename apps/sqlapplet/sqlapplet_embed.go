@@ -24,6 +24,10 @@ type EmbedConfig struct {
 	StampAppId string
 	// RunId is the runtime run identity for the stamp.
 	RunId string
+	// InstanceKey is the window the stamp attributes runs to (ADR-0191
+	// §SD4). Zero for an embedder that mints no window keys, which stamps
+	// run and app as before.
+	InstanceKey uint64
 	// Bus is the capability bus for SetCapabilities. An applet's declared
 	// capabilities ride the embedder's manifest (§SD8), so this is the
 	// embedder's bus.
@@ -58,7 +62,7 @@ func NewEmbedded(def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err erro
 		return nil, err
 	}
 	client := play.NewClient(clientCfg, nil)
-	client.SetStampIdentity(cfg.RunId, cfg.StampAppId)
+	client.SetStampIdentity(cfg.RunId, cfg.StampAppId, cfg.InstanceKey)
 
 	inner = play.NewLivePlayApp(client, def.SQL, appletMaxHistory, cfg.Rules)
 	// AutoRun only for the read class (ADR-0132 §SD3/§SD5): a mutating or

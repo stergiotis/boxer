@@ -95,6 +95,9 @@ type Client struct {
 	// at Mount; empty outside the runtime (standalone CLI, tests).
 	stampRunId string
 	stampAppId string
+	// stampInstance is the window (ADR-0191 §SD4): with two windows of one
+	// app open, run + app alone cannot say which one issued a query.
+	stampInstance uint64
 
 	// reach remembers which endpoints have demonstrated they can fetch from
 	// this process's loopback plane (ADR-0145 §SD5). Consulted by the

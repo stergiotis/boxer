@@ -14,7 +14,7 @@ import (
 
 func TestComposeLogCommentRoundTrips(t *testing.T) {
 	c := NewClient(ClientConfig{URL: "http://localhost:8123/"}, nil)
-	c.SetStampIdentity("run-abc", "github.com/stergiotis/boxer/apps/play")
+	c.SetStampIdentity("run-abc", "github.com/stergiotis/boxer/apps/play", 3)
 	opts := newExecOptions("main")
 	lc := c.composeLogComment("SELECT 1 -- authored", "SELECT 1 FORMAT ArrowStream",
 		map[string]string{"param_a": "1"}, map[string]string{"param_b": "2"}, opts)
@@ -24,6 +24,9 @@ func TestComposeLogCommentRoundTrips(t *testing.T) {
 	require.True(t, ok, "the capture side must parse the produced stamp")
 	require.Equal(t, "run-abc", st.RunId)
 	require.Equal(t, "github.com/stergiotis/boxer/apps/play", st.App)
+	// The window (ADR-0191 §SD4): a captured run attributes to the lane its
+	// app-lifecycle row opened, not merely to the app.
+	require.Equal(t, uint64(3), st.Instance)
 	require.Equal(t, "main", st.Lane)
 	require.Len(t, st.AuthoredFp, 16)
 	require.Len(t, st.SentFp, 16)
@@ -68,12 +71,13 @@ func TestComposeProbeLogComment(t *testing.T) {
 	c := NewClient(ClientConfig{URL: "http://localhost:8123/"}, nil)
 	require.Empty(t, c.composeProbeLogComment(nil), "no identity, no lane → no stamp")
 
-	c.SetStampIdentity("run-1", "app-1")
+	c.SetStampIdentity("run-1", "app-1", 4)
 	lc := c.composeProbeLogComment(newExecOptions("diagnostics"))
 	st, ok := queryrunfacts.ParseStamp(lc)
 	require.True(t, ok)
 	require.Equal(t, "run-1", st.RunId)
 	require.Equal(t, "app-1", st.App)
+	require.Equal(t, uint64(4), st.Instance)
 	require.Equal(t, "diagnostics", st.Lane)
 	require.Empty(t, st.AuthoredFp, "a probe is not an executed definition")
 	require.Empty(t, st.EnvFp)
@@ -92,7 +96,7 @@ func TestExecuteArrowStreamCarriesStamp(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(ClientConfig{URL: srv.URL}, nil)
-	c.SetStampIdentity("run-wire", "app-wire")
+	c.SetStampIdentity("run-wire", "app-wire", 5)
 	opts := newExecOptions("map")
 	_, _, _, _ = c.ExecuteArrowStream(context.Background(), "SELECT 1", memory.NewGoAllocator(), opts, nil,
 		c.Dispatch("SELECT 1", ""))
@@ -102,6 +106,7 @@ func TestExecuteArrowStreamCarriesStamp(t *testing.T) {
 	require.True(t, ok, "log_comment must carry a parseable stamp, got %q", gotLogComment)
 	require.Equal(t, "run-wire", st.RunId)
 	require.Equal(t, "app-wire", st.App)
+	require.Equal(t, uint64(5), st.Instance)
 	require.Equal(t, "map", st.Lane)
 	require.NotEmpty(t, st.AuthoredFp)
 	require.NotEmpty(t, st.SentFp)

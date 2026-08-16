@@ -38,6 +38,20 @@ import (
 // without the field fall back to Config.AppId.
 const AppIdFieldName = "app_id"
 
+// InstanceKeyFieldName is the zerolog context field naming the window an
+// event came from. windowhost pre-tags every per-window logger with it, so
+// these events have carried the value since ADR-0188; ADR-0191 §SD4 promotes
+// it from a LogField to a first-class column, which is what lets a reader
+// filter on one window without unpacking the field lane.
+//
+// The promotion keeps the field OUT of Fields, exactly as app_id is kept
+// out: a value in both places would be written twice and could be filtered
+// two ways with no rule for which wins. Events written before this — and
+// events from a host that tags nothing — are unaffected: a line with no such
+// field lands with InstanceKey zero, and a line written before the promotion
+// still carries the value in its field lane, where it was always readable.
+const InstanceKeyFieldName = "instance_id"
+
 // Config configures a Sink. All fields are optional; sensible defaults
 // apply for any zero value.
 type Config struct {
@@ -472,6 +486,16 @@ func (inst *Sink) decode(level zerolog.Level, p []byte) (row factsstore.LogRow, 
 			// serve many apps when each app's logger was built via
 			// app.AppLogger.
 			row.AppId = app.AppIdT(asString(v))
+		case InstanceKeyFieldName:
+			// The window (ADR-0191 §SD4). zerolog wrote it with Uint64, so
+			// CBOR decodes an unsigned integer; anything else is a
+			// same-named field from a logger that meant something different
+			// by it, and is left in Fields rather than silently coerced.
+			if u, isUint := v.(uint64); isUint {
+				row.InstanceKey = u
+			} else {
+				row.Fields = append(row.Fields, makeField(k, v))
+			}
 		default:
 			row.Fields = append(row.Fields, makeField(k, v))
 		}

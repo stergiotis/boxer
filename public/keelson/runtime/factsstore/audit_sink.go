@@ -14,6 +14,7 @@ func AsAuditSink(s FactsStoreI) (sink audit.AuditSinkI) {
 	sink = audit.AuditFunc(func(rec audit.AuditRecord) {
 		_, _ = s.WriteAudit(AuditRow{
 			AppId:         rec.AppId,
+			InstanceKey:   rec.InstanceKey,
 			Subject:       rec.Subject,
 			Result:        rec.Result.String(),
 			LatencyMs:     rec.LatencyMs,

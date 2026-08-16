@@ -171,13 +171,20 @@ func (inst *Broker) handleRequest(msg *app.Msg) {
 	inst.mu.Unlock()
 	if fs != nil {
 		_, fsErr := fs.WriteGrant(factsstore.GrantRow{
-			AppId:      req.AppId,
-			Pattern:    req.SubjectFilter.Pattern,
-			Direction:  req.SubjectFilter.Direction,
-			Reason:     decision.Reason,
-			Sticky:     req.SubjectFilter.Sticky,
-			GrantedVia: "policy",
-			Ts:         now,
+			AppId: req.AppId,
+			// Which window asked, attributed from the envelope rather than
+			// the payload (ADR-0191 §SD4) — the request DTO has no such
+			// field, and the bus stamps the envelope, so a caller cannot
+			// claim to be a window it is not. The grant still lands on the
+			// app: a cap is app-level, and ClientByAppId above already
+			// records that the newest client receives it.
+			InstanceKey: msg.SenderInstance,
+			Pattern:     req.SubjectFilter.Pattern,
+			Direction:   req.SubjectFilter.Direction,
+			Reason:      decision.Reason,
+			Sticky:      req.SubjectFilter.Sticky,
+			GrantedVia:  "policy",
+			Ts:          now,
 		})
 		if fsErr != nil {
 			inst.log.Err(fsErr).Str("appId", string(req.AppId)).Msg("broker: facts-store grant write")

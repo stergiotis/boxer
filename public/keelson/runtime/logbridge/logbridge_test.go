@@ -81,6 +81,69 @@ func TestSink_EndToEnd_ZerologToFacts(t *testing.T) {
 	assert.True(t, sawLatency, "latency_ms field missing — fan-out lost it")
 }
 
+// TestSink_LiftsInstanceKeyToItsOwnColumn is ADR-0191 §SD4 on the log path.
+//
+// windowhost pre-tags every per-window logger with `instance_id`, so these
+// events have carried the window since ADR-0188 — inside the field lane,
+// where filtering on it means unpacking a mixed membership per row. The
+// promotion moves it to a column and, crucially, takes it OUT of Fields: a
+// value written to both places would be filterable two ways with no rule for
+// which wins, which is exactly how app_id is already handled.
+func TestSink_LiftsInstanceKeyToItsOwnColumn(t *testing.T) {
+	store := factsstore.NewInMemoryFactsStore()
+	sink, err := logbridge.NewSink(store, logbridge.Config{
+		AppId: "play", Capacity: 32, FlushN: 1, FlushInterval: 20 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	defer sink.Close()
+
+	// The shape windowhost builds: app_id from AppLogger, instance_id added
+	// per window.
+	logger := zerolog.New(sink).With().Timestamp().
+		Uint64(logbridge.InstanceKeyFieldName, 12).Logger()
+	logger.Info().Str("subject", "ch.query.boxer").Msg("query ok")
+
+	waitFor(t, func() bool { return len(store.Logs()) >= 1 }, time.Second)
+	got := store.Logs()[0]
+
+	assert.Equal(t, uint64(12), got.InstanceKey,
+		"the window must reach the column, or a per-window filter has to unpack the field lane")
+	for _, f := range got.Fields {
+		assert.NotEqual(t, logbridge.InstanceKeyFieldName, f.Name,
+			"lifted, not copied — a value in both places is filterable two ways")
+	}
+}
+
+// TestSink_KeepsANonNumericInstanceIdAsAField pins the coercion boundary. A
+// logger that means something else by the same name — a string tag, say — is
+// not this vocabulary's window key, and silently coercing it would put a
+// wrong number in a column readers filter on. It stays a field.
+func TestSink_KeepsANonNumericInstanceIdAsAField(t *testing.T) {
+	store := factsstore.NewInMemoryFactsStore()
+	sink, err := logbridge.NewSink(store, logbridge.Config{
+		AppId: "play", Capacity: 32, FlushN: 1, FlushInterval: 20 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	defer sink.Close()
+
+	logger := zerolog.New(sink).With().Timestamp().
+		Str(logbridge.InstanceKeyFieldName, "not-a-number").Logger()
+	logger.Info().Msg("hello")
+
+	waitFor(t, func() bool { return len(store.Logs()) >= 1 }, time.Second)
+	got := store.Logs()[0]
+
+	assert.Zero(t, got.InstanceKey)
+	var kept bool
+	for _, f := range got.Fields {
+		if f.Name == logbridge.InstanceKeyFieldName {
+			kept = true
+			assert.Equal(t, "not-a-number", f.Str)
+		}
+	}
+	assert.True(t, kept, "an unrecognised shape must survive as a field, not vanish")
+}
+
 // TestSink_RingOverflow_DropsOldest exhausts the ring without giving the
 // flusher a chance to run, then asserts the dropped counter reports the
 // oversupply. We pause the flusher by setting FlushInterval far in the
@@ -121,6 +184,12 @@ func TestSink_RingOverflow_DropsOldest(t *testing.T) {
 // blockingStore satisfies FactsStoreI but parks WriteLog on a gate so the
 // test can keep the ring full. The non-Log methods are unused but must
 // exist to satisfy the interface.
+//
+// This file is behind `binary_log`, so the default `go test ./...` never
+// compiles it and the stub drifted: the state verbs left the interface with
+// ADR-0105 D3a and the column-width verbs joined it with ADR-0151, neither of
+// which went red here. Anyone adding a verb to FactsStoreI has to remember
+// this lane exists.
 type blockingStore struct {
 	gate chan struct{}
 	n    atomic.Uint64
@@ -130,7 +199,6 @@ var _ factsstore.FactsStoreI = (*blockingStore)(nil)
 
 func (s *blockingStore) WriteGrant(_ factsstore.GrantRow) (uint64, error) { return 0, nil }
 func (s *blockingStore) WriteAudit(_ factsstore.AuditRow) (uint64, error) { return 0, nil }
-func (s *blockingStore) WriteState(_ factsstore.StateRow) (uint64, error) { return 0, nil }
 func (s *blockingStore) WriteRuntimeStart(_ factsstore.RuntimeStartRow) (uint64, error) {
 	return 0, nil
 }
@@ -156,10 +224,6 @@ func (s *blockingStore) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err e
 	}
 	return
 }
-func (s *blockingStore) LatestState(_ app.AppIdT, _ string) (value []byte, found bool, err error) {
-	return
-}
-func (s *blockingStore) DeleteState(_ app.AppIdT, _ string) (err error) { return }
 func (s *blockingStore) WriteWorkingset(_ factsstore.WorkingsetRow) (uint64, error) {
 	return 0, nil
 }
@@ -170,6 +234,15 @@ func (s *blockingStore) ListWorkingsets() (rows []factsstore.WorkingsetRow, err 
 	return
 }
 func (s *blockingStore) DeleteWorkingset(_ app.AppIdT, _ string) (err error) { return }
+func (s *blockingStore) WriteColumnWidth(_ factsstore.ColumnWidthRow) (uint64, error) {
+	return 0, nil
+}
+func (s *blockingStore) ListColumnWidths(_ app.AppIdT) (rows []factsstore.ColumnWidthRow, err error) {
+	return
+}
+func (s *blockingStore) DeleteColumnWidth(_ app.AppIdT, _ string, _ string, _ string) (err error) {
+	return
+}
 
 // TestSink_Close_DrainsPending guarantees the close path flushes any
 // buffered rows synchronously so a process exit does not lose log data

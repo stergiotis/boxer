@@ -37,6 +37,17 @@ import (
 type StorageRef struct {
 	Alias string
 	AppId app.AppIdT
+	// InstanceKey is the window that issued the request, taken from the bus
+	// envelope (ADR-0191 §SD2/§SD5). It is provenance on the recorded row,
+	// never part of the key: persist state is keyed "<appId>/<key>" and
+	// stays app-scoped and latest-wins, so two windows of one app write the
+	// same entry and the newer wins — which is the existing behaviour, now
+	// with a record of which one wrote it.
+	//
+	// It rides the same attribution gate as AppId: withheld when the sender
+	// could not be vouched for, because a window key stamped on a row in
+	// someone else's namespace misattributes it exactly as an app id would.
+	InstanceKey uint64
 }
 
 // StateAppId is the app identity a fact-recording backend should stamp on

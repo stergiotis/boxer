@@ -5,7 +5,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/gov/capmapvocab"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmvocab"
+	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
 )
 
@@ -62,6 +65,59 @@ func TestMembershipLookupAgreesWithTheTable(t *testing.T) {
 		got, err := MembershipLookup{}.LookupMembership(r.name)
 		require.NoErrorf(t, err, "%s is in the table but not resolvable", r.name)
 		require.Equalf(t, r.id, got, "%s resolves to a different id than the table publishes", r.name)
+	}
+}
+
+// TestMembershipsCoversEveryFactsWritingVocabulary is ADR-0191 §SD6: the
+// table and the lookup answer for every vocabulary this repository writes to
+// `boxer.facts`, not only vdd's.
+//
+// The failure it guards is silent at the SQL layer and loud nowhere: before
+// §SD6 an author writing LW_GET('symbol', 'runtimeKindAppLifecycle', …) — the
+// vocabulary that table is mostly made of — was refused by the expansion pass
+// and had to carry 9223372049739677725 in the query text instead, and
+// keelson('memberships') could not say what that number meant either.
+//
+// One member per registry is enough: the registries are whole, so a missing
+// one takes all of its names with it.
+func TestMembershipsCoversEveryFactsWritingVocabulary(t *testing.T) {
+	byName := membershipsRowsByName(t)
+	rows := membershipRows()
+
+	for _, memb := range []struct {
+		vocabulary string
+		name       string
+		want       uint64
+	}{
+		{"vdd", "natural-key", uint64(vdd.MembNaturalKey.GetId().Value())},
+		{"runtime", "runtime-kind-app-lifecycle", vocab.MembKindAppLifecycle.GetId().Value()},
+		{"runtime", "runtime-lifecycle-tile-key", vocab.MembLifecycleTileKey.GetId().Value()},
+		{"sysmetrics", "sysm-cpu-host", sysmvocab.MembCpuHost.GetId().Value()},
+		{"capmap", "capmap-competence-slug", capmapvocab.MembCompSlug.GetId().Value()},
+	} {
+		i, ok := byName[memb.name]
+		require.Truef(t, ok, "%s vocabulary: %s missing from the table", memb.vocabulary, memb.name)
+		require.Equalf(t, memb.want, rows[i].id,
+			"%s vocabulary: %s publishes a different id than the wire carries", memb.vocabulary, memb.name)
+
+		got, err := MembershipLookup{}.LookupMembership(memb.name)
+		require.NoErrorf(t, err, "%s vocabulary: %s does not resolve", memb.vocabulary, memb.name)
+		require.Equal(t, memb.want, got)
+	}
+}
+
+// TestMembershipIdsAreDisjointAcrossVocabularies is what makes the union in
+// §SD6 sound. Each registry mints under its own claimed tag value, so two
+// vocabularies cannot collide on an id — and if one ever did, a reader
+// resolving an id back to a name would get an arbitrary answer with nothing
+// saying so. The names are checked for collision by membershipsRowsByName on
+// every call; this is the other half.
+func TestMembershipIdsAreDisjointAcrossVocabularies(t *testing.T) {
+	seen := make(map[uint64]string, 256)
+	for _, r := range membershipRows() {
+		prior, dup := seen[r.id]
+		require.Falsef(t, dup, "id %d is claimed by both %s and %s", r.id, prior, r.name)
+		seen[r.id] = r.name
 	}
 }
 

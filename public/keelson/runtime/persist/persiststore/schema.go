@@ -85,4 +85,16 @@ func loadPersistSchema(manip common.TableManipulatorFluidI) {
 	section("stateAppId", ctabb.S,
 		easp.AspectInterRecordLowCardinality, easp.AspectLightGeneralCompression)
 	section("stateKey", ctabb.S, easp.AspectLightGeneralCompression)
+	// Provenance (ADR-0191 §SD5): the process and the window that wrote the
+	// row. Neither is part of the key — the state stays app-scoped and
+	// latest-wins — but without them a write can only be attributed to a run
+	// by its timestamp, which two overlapping processes make wrong.
+	//
+	// The run id repeats across every row a process writes, so it takes the
+	// same inter-record hint appId does. The window key is a small counter
+	// that repeats within a run and delta-encodes poorly, so it takes only
+	// the general compression.
+	section("stateRunId", ctabb.S,
+		easp.AspectInterRecordLowCardinality, easp.AspectLightGeneralCompression)
+	section("stateInstanceKey", ctabb.U64, easp.AspectLightGeneralCompression)
 }

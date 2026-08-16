@@ -557,7 +557,10 @@ func (inst *PlayApp) renderPinControl(rec arrow.RecordBatch) {
 // valid: it is content-addressed).
 func (inst *PlayApp) pinActiveResult(rec arrow.RecordBatch) {
 	fp := fingerprintRecord(rec)
-	runId, appId := inst.client.stampIdentity()
+	// A pin is content-addressed and its provenance is run + app; the
+	// window (ADR-0191 §SD4) is discarded here because a pin outlives the
+	// window that made it and is looked up by fingerprint, not by lane.
+	runId, appId, _ := inst.client.stampIdentity()
 	meta := pinMetaRow{
 		Fingerprint: fp,
 		DataTable:   pinDataTableName(fp),

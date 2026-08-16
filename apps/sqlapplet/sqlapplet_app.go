@@ -103,12 +103,13 @@ func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
 	// instead (§SD7).
 	binder, bindings := newDatasetBinder(ctx.Bus(), ctx.Log(), inst.def.DatasetsHint, inst.def.Datasets)
 	inner, err := NewEmbedded(inst.def, EmbedConfig{
-		StampAppId: string(inst.m.Id),
-		RunId:      ctx.RunId(),
-		Bus:        ctx.Bus(),
-		Log:        ctx.Log(),
-		Bindings:   bindings,
-		Rules:      bookRepository,
+		StampAppId:  string(inst.m.Id),
+		RunId:       ctx.RunId(),
+		InstanceKey: ctx.InstanceKey(),
+		Bus:         ctx.Bus(),
+		Log:         ctx.Log(),
+		Bindings:    bindings,
+		Rules:       bookRepository,
 	})
 	if err != nil {
 		if binder != nil {

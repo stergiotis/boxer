@@ -773,6 +773,10 @@ func (inst *PlayApp) ensureColWidthRes(ctx app.FrameContextI) {
 		// this the keying identity, so a column dragged in an embedded
 		// instance follows the content to a windowed one.
 		AppId: ctx.AppId(),
+		// Which window did the dragging (ADR-0191 §SD4). Provenance on the
+		// trail only — the override itself stays keyed by app, so this does
+		// not change what a second window resolves.
+		InstanceKey: ctx.InstanceKey(),
 		// Below the minimum a column cannot be grabbed to drag back out;
 		// above the maximum one column pushes every other off-screen. Both
 		// match the range the grids hand egui_table (EtColumn.RangeMinMax),

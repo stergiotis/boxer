@@ -28,6 +28,12 @@ const DefaultMaxEntries = 512
 type Opts struct {
 	// AppId scopes every read and write. Overrides never cross apps.
 	AppId app.AppIdT
+	// InstanceKey is the window a captured width is attributed to on the
+	// trail (ADR-0191 §SD4). It is recorded, never keyed on: an override is
+	// the app's, so a drag in a second window overwrites the first's entry
+	// rather than forking it. Zero — a host that does not mint window keys —
+	// writes an unattributed row, exactly as before.
+	InstanceKey uint64
 	// Debounce overrides DefaultDebounce. Negative is rejected; zero
 	// takes the default.
 	Debounce time.Duration
@@ -387,13 +393,14 @@ func (inst *Resolver) Flush(now time.Time) (written int, err error) {
 			continue
 		}
 		_, werr := inst.store.WriteColumnWidth(factsstore.ColumnWidthRow{
-			AppId:     inst.opts.AppId,
-			Tier:      k.Tier,
-			Scope:     k.Scope,
-			ColumnKey: k.ColumnKey,
-			Points:    e.points,
-			FontSize:  e.fontSize,
-			Ts:        now,
+			AppId:       inst.opts.AppId,
+			InstanceKey: inst.opts.InstanceKey,
+			Tier:        k.Tier,
+			Scope:       k.Scope,
+			ColumnKey:   k.ColumnKey,
+			Points:      e.points,
+			FontSize:    e.fontSize,
+			Ts:          now,
 		})
 		if werr != nil {
 			// Report the first failure and stop; the rest stay dirty and
