@@ -64,6 +64,13 @@ func packagesTable(s *snapshot, vol *volumeCache) *introspect.Table {
 		// generated, and a total that hides it overstates authorship.
 		Int64("generated_files", func(i int) int64 { return int64(v(i).GeneratedFiles) }).
 		Int64("generated_code", func(i int) int64 { return int64(v(i).GeneratedCode) }).
+		// Which tools wrote them (ADR-0173 §SD10), read off the same marker
+		// line generated_files is counted from, so it costs nothing extra. A
+		// list because a quarter of this repository's generated packages
+		// carry more than one tool; group with arrayJoin. Empty for a package
+		// with no generated file, and for every package when the pass could
+		// not run — the same empty-not-absent shape as the counts above.
+		StringList("generators", func(i int) []string { return v(i).Generators }).
 		// C, C++, assembly and headers compiled with a cgo package — invisible
 		// to any Go-only count.
 		Int64("other_lang_lines", func(i int) int64 { return int64(v(i).OtherLangLines) })

@@ -118,6 +118,13 @@ FROM keelson('go_packages') GROUP BY class;
 SELECT path, version FROM keelson('go_modules')
 WHERE NOT is_main
   AND path NOT IN (SELECT module_path FROM keelson('go_symbols'));
+
+-- who wrote the generated code: one row per tool, biggest first.
+-- arrayJoin because a package can carry several generators.
+SELECT arrayJoin(generators) AS tool,
+       sum(generated_code) AS lines, count() AS pkgs
+FROM keelson('go_packages') WHERE class = 'internal'
+GROUP BY tool ORDER BY lines DESC;
 ```
 
 ## 5. When a table is empty
@@ -150,8 +157,14 @@ applies before assuming a defect:
   instrumented", not "not executed".
 - **Every table here describes one Go binary.** The Rust render client is a
   separate executable that no `go_*` table sees, and its answer is very
-  different — a few percent first-party against the Go binary's ~30%. Nor do
-  these tables separate what somebody wrote from what a generator emitted,
-  beyond the `generated` flag. Both are §SD8–§SD10 of
-  [ADR-0173](../adr/0173-code-volume-self-inspection.md) and are not built
-  yet; until they are, read every number on this page as "of the Go binary".
+  different — a few percent first-party against the Go binary's ~30%. That is
+  §SD8–§SD9 of [ADR-0173](../adr/0173-code-volume-self-inspection.md) and is
+  not built yet; until it is, read every number on this page as "of the Go
+  binary".
+- **`generators` is what somebody typed, not a taxonomy.** The marker's tool
+  field is free-form, so `stringer -type=Foo` and `stringer -type=Bar` are two
+  generators, and the closure has around 130 of them. One normalisation is
+  applied — a trailing `(caller)` is dropped, since several generators append
+  the package that invoked them — and invocation arguments are deliberately
+  left alone, because `./boxer.sh designsystem colors vendor` and
+  `… colors gen` really are different generators.
