@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-16
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0189: component SQL as an authoring surface — export the artefacts, register them, expand them
 
@@ -385,7 +383,26 @@ today has the pass registered and an empty registry.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-08-16, with M0–M5 already landed under `proposed` status by the
+owner's direction, the record edited in place as implementation taught. Three
+of those edits changed the decision rather than annotating it, and are the
+ones to read first:
+
+- **§SD6's join restriction** became "exactly one table in scope" rather than
+  "once and unaliased" (M2), and its database half became conditional (M3) —
+  every pass in the standard registry is wired with an empty default
+  database, so the strict form refused `FROM facts` everywhere.
+- **§SD5's discharge rule** admits an author-written `LW_COMPONENT_FILTER`
+  only from `WHERE` (M2). The same call in a projection list restricts
+  nothing, so counting it would hand back the first-match read the injection
+  exists to prevent.
+- **§SD9** was not in the ADR as proposed. It answers a question the owner
+  raised after M4 — whether the registry should be discoverable through
+  `keelson(…)` — and is additive: the registry was already process-global, so
+  only the catalogue was missing.
+
+Post-acceptance edits follow the Tier-2 rule: a dated `## Updates` entry, not
+a silent rewrite.
 
 - **M0 — `componentsql`: the types, the registry, `Default` (SD2).** ✓
   Landed as
