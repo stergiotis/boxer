@@ -255,8 +255,13 @@ func (inst *Pane) renderNameCell(in PaneInput, r tree.Row, accept func(sqlcomple
 			// A Phosphor glyph, not a bare `↵`: an affordance's glyph must
 			// come from a font the client loads, or its size and baseline
 			// belong to whichever face in the fallback chain answered.
+			//
+			// Small() for the height, not the width: a tree row is 22 points
+			// and a default button is about 25, and the overflow does not
+			// centre — it hangs off the bottom of the row and through the
+			// selection outline ([tree.Column.Cell]'s height budget).
 			if c.Button(in.Ids.PrepareSeq(paneInsertIDBase+uint64(r.Node)),
-				c.Atoms().Text(icons.PhArrowElbowDownLeft).Keep()).SendResp().HasPrimaryClicked() {
+				c.Atoms().Text(icons.PhArrowElbowDownLeft).Keep()).Small().SendResp().HasPrimaryClicked() {
 				accept(row.item, strings.TrimPrefix(row.item.Insert, in.Typed))
 			}
 		}
