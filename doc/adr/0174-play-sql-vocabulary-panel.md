@@ -403,3 +403,77 @@ open — the Docs tab already answers for any of these names typed by hand.
 
 M4 landed 2026-08-14 with ADR-0181 §SD3's `LW_GET` family, which is what it
 was sequenced behind.
+
+## Updates
+
+### 2026-08-16 — The rows became an outline, for scanning
+
+Presentation only. No decision above is reversed: the three populations, the
+probe, the declared-vs-probed diff and §SD6's dependency mark are unchanged,
+and nothing about what the panel *claims* moved. What changed is that the rows
+are now drawn through [ADR-0176](./0176-native-tree-widget.md)'s tree —
+population, then declaring family, then the call — instead of as a run of
+`Horizontal` rows.
+
+**Two defects, both about scanning a list rather than reading a row.** The mark
+led each row and its width varied with its own text (`✓` against `MISSING`, in
+the proportional face), so no two rows started their name at the same x: a
+reader going down the list for a name had no left edge to follow. And `Family`
+— which names the declaring roster and the ADR to follow — was computed,
+searched, and never drawn; `vocabFamilyLabel`'s own doc comment called it "the
+panel's Family column" while no such column existed. Columns fix the first by
+construction; the tree fixes the second.
+
+**Family subdivides a section; it does not replace one.** A family sits
+entirely inside one population, so §SD1 still decides what is grouped with
+what, and `LW_ID_*` still appears under both server and client — now as a
+family in each.
+
+**Two things came free and are worth more here than in ADR-0176's other
+adopters.** The extras population is the one this build does not bound — the
+endpoint's undeclared functions, which a live endpoint has reported in the
+hundreds — so a family that collapses and an etable that culls its off-screen
+rows both pay off. The panel opens with the two extras families closed and
+every declared family open, applied once so a reader who opens one keeps it
+open.
+
+**The cost is ADR-0176 §SD12's**, paid by every adopter: a tree row is a fixed
+height, so the doc line that sat *under* each row is now a column beside it,
+truncated, with the full text on hover. Same trade as `fieldview`'s value and
+`configview`'s description. The call prototype and the section titles are
+hovered for the same reason — the widest declared prototype is wider than any
+column this pane can spare.
+
+**Syntax highlighting on the prototypes was considered first and is not what
+this needed.** Measured over the 51 declared prototypes through
+`highlight.HighlightLex`: the corpus produces three distinguishable colours,
+because `CatIdentifier`, `CatPunctuation`, `CatPlain` and `CatWhitespace` all
+resolve to one default gray — 317 of 402 spans. Two-thirds of rows reduce to
+one of three signatures differing only in arity, which the commas already say.
+Only the ~21% of rows carrying a quoted literal gain anything a reader can use.
+Colour went to the **mark** instead, which is where the scan lands once the
+names are aligned: on a provisioned endpoint that column is a run of identical
+recessed `✓` and the few rows that are not are the entire point. The marks also
+lost the trailing `·` that separated them from the call they used to lead.
+
+**Two smaller things fixed in passing.** The extras were filtered against an
+accepted set built without them, so anything typed into the filter silently
+emptied that population; they now join the corpus before it is computed, and
+the set is recomputed when the corpus size changes as well as when the query
+does — which is how a filter typed before the probe answers comes to include
+what the answer brought. And the tab is registered `noScroll`: the etable
+scrolls and culls itself, so the dock's body ScrollArea only added a second
+scrollbar and an unbounded parent.
+
+**Verification.** The grouping is a pure function with its own tests —
+hierarchy shape, per-row counts, key uniqueness (which `tree.State` cannot
+check for us: a shared key is a shared identity), and that a filter emptying a
+population keeps the population's row while dropping its emptied families. The
+rendering is the part no automated lane reaches, and this ADR said a scripted
+capture was worth adding "once the layout settles" — it has, so
+`scripts/dev/play-screenshot-tour.sh` gained a `15_vocabulary` scene: the
+outline as launched, and filtered to a term that leaves the play section on
+screen at zero matches.
+
+Nothing here closes M3's remaining half — routing a row into the Docs pane is
+still the one piece of this ADR unbuilt.
