@@ -122,6 +122,11 @@ func (inst *PlayApp) editorStyledSections() (out []codeview.StyledSection) {
 	if sec, ok := inst.resolvedTokenSection(); ok {
 		out = append(out, sec)
 	}
+	// Every OTHER closed-domain literal, checked against its domain (§SD9):
+	// the quiet tone when it resolves, the error tone when it does not. A
+	// literal whose domain this build cannot enumerate produces no finding at
+	// all, so an unanswered probe leaves the buffer untouched.
+	out = append(out, inst.completionFindingSections()...)
 	// The Flow tab's clicked clause (ADR-0153): a background on the clause's
 	// bytes, present only while every coordinate hop re-verified (see
 	// flowSelectionSection — a stale or moved buffer declines silently).
@@ -285,5 +290,32 @@ func (inst *PlayApp) resolvedTokenSection() (sec codeview.StyledSection, ok bool
 		Color: sqleditor.ToneResolved,
 	}
 	ok = true
+	return
+}
+
+// completionFindingSections tints the literals the completion engine could
+// check (ADR-0190 §SD9). Ranges that no longer index the buffer are dropped
+// rather than clamped: a tint in the wrong place is worse than none.
+func (inst *PlayApp) completionFindingSections() (out []codeview.StyledSection) {
+	findings := inst.completion.findings
+	if len(findings) == 0 {
+		return
+	}
+	out = make([]codeview.StyledSection, 0, len(findings))
+	for i := range findings {
+		r := findings[i].Range
+		if r.Stop <= r.Start || r.Stop > len(inst.sql) {
+			continue
+		}
+		tone := styleErrorTone
+		if findings[i].Resolved {
+			tone = sqleditor.ToneResolved
+		}
+		out = append(out, codeview.StyledSection{
+			Start: uint32(r.Start), Stop: uint32(r.Stop),
+			Flags: codeview.StyleUnderline,
+			Color: tone,
+		})
+	}
 	return
 }

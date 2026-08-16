@@ -232,8 +232,16 @@ func (inst *Engine) domainFor(req Request) (d sqlvocab.Domain, of string, callee
 		return
 	}
 
-	if k, hit := clauseKindFor(req.Site.Clause); hit {
+	if k, hit := clauseKindFor(clauseOf(req)); hit {
 		d = sqlvocab.Domain{Kind: k, Ref: sqlvocab.NoRef}
+		// A clause-derived table or column position names no sibling, so what
+		// scopes it is the statement itself: the database in play for a table,
+		// the statement's single source for a column. An ambiguous source
+		// leaves it empty, and the provider then answers for the endpoint's
+		// default — never for an arbitrarily chosen one of several.
+		if k == sqlvocab.DomainColumn || k == sqlvocab.DomainExpr {
+			of = soleTable(req.Scope)
+		}
 		return
 	}
 	why = "no provider for this position"
@@ -365,6 +373,26 @@ func (inst *Engine) match(res *Result, site highlight.CaretSite) {
 	default:
 		res.Match = MatchNone
 	}
+}
+
+// clauseOf prefers the tree's clause over the site's: the site reads the last
+// top-level keyword before the caret, which a nested expression can mislead,
+// while the tree knows which clause the sentinel landed in.
+func clauseOf(req Request) string {
+	if req.Scope != nil && req.Scope.Clause != "" {
+		return req.Scope.Clause
+	}
+	return req.Site.Clause
+}
+
+// soleTable is the statement's single source, qualified. Empty when the
+// statement has none or more than one — a column offered from one of several
+// sources would be a guess about which.
+func soleTable(sc *Scope) string {
+	if sc == nil || len(sc.Tables) != 1 {
+		return ""
+	}
+	return qualified(sc.Tables[0])
 }
 
 // scopeFrame is the tree's view of the caret's frame, when it describes the

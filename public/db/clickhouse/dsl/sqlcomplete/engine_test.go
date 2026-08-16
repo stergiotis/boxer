@@ -199,7 +199,7 @@ func TestCompleteIsSilentWithAReason(t *testing.T) {
 		{`SELECT LW_GET('symbol', '|`, "waiting for the endpoint"},
 		{`SELECT nosuchfn('|`, "no signature"},
 		{`SELECT gloss(x, 'gloss/nope', '|`, "no gloss key is available"},
-		{`SELECT LW_COMPONENT('SysMem'), |`, "nothing here answers column"},
+		{`SELECT LW_COMPONENT('SysMem'), |`, "nothing here answers expression"},
 		{`SELECT CAST(x AS |`, "keyword-syntax call"},
 		{`SELECT tupleElement(nosuch, '|`, "nothing here can type"},
 		{`SELECT tupleElement(42, '|`, "has no named elements"},
@@ -207,7 +207,7 @@ func TestCompleteIsSilentWithAReason(t *testing.T) {
 		{`SELECT m.|`, "needs the statement's scope"},
 		{`SELECT LW_COMPONENT('SysMem').|`, "not accepted by this build's pipeline yet"},
 		{`SELECT a FROM |`, "nothing here answers table"},
-		{`SELECT | FROM t`, "nothing here answers column"},
+		{`SELECT | FROM t`, "nothing here answers expression"},
 		{`SELECT x SETTINGS |`, "nothing here answers setting"},
 	}
 	for _, c := range cases {
@@ -321,4 +321,51 @@ func fixtureArg(p sqlvocab.Param) string {
 		return "x"
 	}
 	return "'v'"
+}
+
+// Off-caret validation (§SD9): a complete literal in a closed in-process
+// domain is reported resolved or not, and the token under the caret is never
+// reported at all.
+func TestValidate(t *testing.T) {
+	e := testEngine(t)
+
+	t.Run("a wrong kind and a right one", func(t *testing.T) {
+		stmt := `SELECT LW_COMPONENT('SysMem'), LW_COMPONENT('Nonesuch')`
+		got := e.Validate(stmt, nil, -1)
+		require.Len(t, got, 2)
+		assert.Equal(t, "SysMem", got[0].Text)
+		assert.True(t, got[0].Resolved)
+		assert.Equal(t, "Nonesuch", got[1].Text)
+		assert.False(t, got[1].Resolved)
+		assert.Equal(t, "LW_COMPONENT", got[1].Callee)
+		assert.Equal(t, stmt[got[1].Range.Start:got[1].Range.Stop], "Nonesuch")
+	})
+
+	t.Run("a field of the sibling's kind", func(t *testing.T) {
+		got := e.Validate(`SELECT tupleElement(LW_COMPONENT('SysMem'), 'Nope')`, nil, -1)
+		require.Len(t, got, 2)
+		assert.True(t, got[0].Resolved, "the kind itself")
+		assert.False(t, got[1].Resolved, "SysMem has no field called Nope")
+	})
+
+	t.Run("the caret's own token is never reported", func(t *testing.T) {
+		stmt := `SELECT LW_COMPONENT('Nonesuch')`
+		inside := len(`SELECT LW_COMPONENT('Non`)
+		assert.Empty(t, e.Validate(stmt, nil, inside))
+		assert.Len(t, e.Validate(stmt, nil, 0), 1, "with the caret elsewhere it is reported")
+	})
+
+	t.Run("a domain that is not closed in process is left alone", func(t *testing.T) {
+		// The time zone is an endpoint catalogue; a literal marked wrong
+		// because the listing has not landed would be a false accusation.
+		assert.Empty(t, e.Validate(`SELECT toDateTime(ts, 'Nonesuch/Zone')`, nil, -1))
+	})
+
+	t.Run("an unrelated literal is left alone", func(t *testing.T) {
+		assert.Empty(t, e.Validate(`SELECT 'hello', concat('a', 'b')`, nil, -1))
+	})
+
+	t.Run("nothing to say about an empty statement", func(t *testing.T) {
+		assert.Empty(t, e.Validate("", nil, -1))
+	})
 }

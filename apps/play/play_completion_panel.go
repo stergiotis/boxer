@@ -51,6 +51,16 @@ type completionState struct {
 	typed string
 	atEnd bool
 
+	// catalog is the endpoint half of the providers, one probe per question.
+	catalog *catalogProbe
+
+	// findings is the off-caret validation of the buffer's literals (§SD9),
+	// memoised by the buffer it describes. Recomputed only when the buffer
+	// changes, because it walks every literal in the statement while the site
+	// walk is per caret.
+	findings    []sqlcomplete.Finding
+	findingsFor string
+
 	paneW, paneH float32
 }
 
@@ -62,6 +72,7 @@ type completionState struct {
 func (inst *PlayApp) refreshCompletion(res sqleditor.Result) {
 	st := &inst.completion
 	if st.engine == nil {
+		st.catalog = newCatalogProbe(inst.client)
 		st.engine = &sqlcomplete.Engine{
 			Vocab:     sqlvocab.Default,
 			Providers: inst.completionProviders(),
@@ -69,6 +80,13 @@ func (inst *PlayApp) refreshCompletion(res sqleditor.Result) {
 	}
 	st.typed = res.Site.PartialText
 	st.atEnd = res.Site.CaretAtPartialEnd()
+	// The off-caret validation walks every literal, so it is keyed on the
+	// buffer rather than on the caret. The caret is passed anyway: the token
+	// being typed is excluded, because a name half written is not a wrong one.
+	if st.findingsFor != res.Buffer {
+		st.findings = st.engine.Validate(res.Buffer, res.Scope, res.Caret)
+		st.findingsFor = res.Buffer
+	}
 	st.result = st.engine.Complete(sqlcomplete.Request{
 		Site:      res.Site,
 		Scope:     res.Scope,
@@ -153,6 +171,50 @@ func (inst *PlayApp) completionProviders() (p sqlcomplete.Providers) {
 			})
 		}
 		sort.Slice(items, func(i, j int) bool { return items[i].Text < items[j].Text })
+		return items, true
+	}
+	// The endpoint half (§SD12's B rows). Every one is a probe: off the frame
+	// thread, cached, and "not yet" until it answers.
+	p.Catalog = sqlcomplete.Catalog{
+		Databases: func() ([]sqlcomplete.Item, bool) { return inst.completion.catalog.databases() },
+		Tables:    func(db string) ([]sqlcomplete.Item, bool) { return inst.completion.catalog.tables(db) },
+		Columns:   func(table string) ([]sqlcomplete.Item, bool) { return inst.completion.catalog.columns(table) },
+		ColumnType: func(table string, column string) (chtype.Type, bool) {
+			return inst.completion.catalog.columnType(table, column)
+		},
+		Settings:  func() ([]sqlcomplete.Item, bool) { return inst.completion.catalog.settings() },
+		TypeNames: func() ([]sqlcomplete.Item, bool) { return inst.completion.catalog.typeNames() },
+		TimeZones: func() ([]sqlcomplete.Item, bool) { return inst.completion.catalog.timeZones() },
+		Formats:   func() ([]sqlcomplete.Item, bool) { return inst.completion.catalog.formats() },
+		Dictionaries: func() ([]sqlcomplete.Item, bool) {
+			return inst.completion.catalog.dictionaries()
+		},
+	}
+	// A free expression position is not one catalogue: a column of the
+	// statement's source and a callable name are both valid there, and
+	// offering only one of them would be exactly as wrong as offering neither.
+	//
+	// The vocabulary half is this build's own declared set, which needs no
+	// probe; the endpoint's function list rides the Vocabulary tab's lane
+	// (§SD12 B5) — one lane, two readers.
+	p.Expressions = func(table string) (items []sqlcomplete.Item, ready bool) {
+		if table != "" {
+			cols, colsReady := inst.completion.catalog.columns(table)
+			if !colsReady {
+				return nil, false
+			}
+			items = append(items, cols...)
+		}
+		items = append(items, inst.completionVocabularyItems()...)
+		installed, probeReady := inst.vocab.demandAll()
+		if probeReady {
+			for name := range installed {
+				items = append(items, sqlcomplete.Item{
+					Text: name, Kind: sqlcomplete.ItemFunction, Source: "on this endpoint",
+				})
+			}
+		}
+		sortCompletionItems(items)
 		return items, true
 	}
 	p.GlossKeys = func(mediaType string) (items []sqlcomplete.Item, ready bool) {
@@ -253,5 +315,46 @@ func (inst *PlayApp) renderCompletionTab() {
 				inst.InsertSqlAtCaret(suffix)
 			}
 		},
+	})
+}
+
+// completionVocabularyItems are the names this build declares, with the marks
+// the Vocabulary tab shows.
+//
+// The marks travel WITH the row rather than filtering it: a function this
+// endpoint is missing is still a name the buffer may use — the expansion may
+// be client-side, or the endpoint may be about to be provisioned — and hiding
+// it would hide the provisioning fact the tab exists to report (§SD8).
+func (inst *PlayApp) completionVocabularyItems() (items []sqlcomplete.Item) {
+	entries := vocabDeclared(sqlvocab.Default)
+	installed, ready := inst.vocab.demand()
+	vocabMarkInstalled(entries, installed)
+	items = make([]sqlcomplete.Item, 0, len(entries))
+	seen := make(map[string]struct{}, len(entries))
+	for _, e := range entries {
+		if _, dup := seen[e.Name]; dup {
+			continue
+		}
+		seen[e.Name] = struct{}{}
+		it := sqlcomplete.Item{
+			Text: e.Name, Kind: sqlcomplete.ItemFunction, Doc: e.Doc, Source: e.Family,
+		}
+		if mark, _ := vocabRowMark(e, e.Where, ready); mark != "" {
+			it.Marks = []string{mark}
+		}
+		items = append(items, it)
+	}
+	return
+}
+
+// sortCompletionItems orders a composed list by name, case-insensitively so a
+// mixed-case corpus does not split into two runs.
+func sortCompletionItems(items []sqlcomplete.Item) {
+	sort.Slice(items, func(i, j int) bool {
+		a, b := strings.ToLower(items[i].Text), strings.ToLower(items[j].Text)
+		if a == b {
+			return items[i].Text < items[j].Text
+		}
+		return a < b
 	})
 }

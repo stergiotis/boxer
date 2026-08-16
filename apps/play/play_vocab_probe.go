@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
@@ -36,8 +37,12 @@ import (
 // ClickHouseDocsSource takes). If a server stops filling them the extras
 // listing degrades — see vocabProbe.extras — while the declared-vs-installed
 // diff, which only looks up names we already know, is unaffected.
-const vocabProbeQuery = "SELECT name, create_query FROM system.functions " +
-	"WHERE origin != 'System' ORDER BY name"
+// It lists EVERY origin. The tab wants only the user-defined ones and filters
+// on `origin` itself (vocabExtras); the completion pane wants the built-ins
+// too, since a built-in is as valid at an expression position as anything this
+// build declares (ADR-0190 §SD12 B5). One lane, two readers — the alternative
+// was a second listing of the same table differing only in a WHERE.
+const vocabProbeQuery = "SELECT name, create_query, origin FROM system.functions ORDER BY name"
 
 // vocabProbeTimeout bounds the probe. It is a catalog listing, not a result:
 // a slow server must delay a panel, never a query.
@@ -54,6 +59,12 @@ type vocabProbe struct {
 	// "nothing installed": a panel that renders "missing" against an
 	// unanswered probe would send someone to reprovision a healthy server.
 	installed map[string]string // name -> create_query
+
+	// userDefined is the subset whose origin is not 'System' — what the
+	// Vocabulary tab means by "on this endpoint". Kept beside installed rather
+	// than replacing it, because the two readers of this lane want different
+	// halves of the same answer.
+	userDefined map[string]string
 
 	// surfaceVersion is the revision read out of LW_SURFACE_VERSION's
 	// definition, or -1 when the function is absent or its body is not an
@@ -77,14 +88,19 @@ func newVocabProbe(client *Client) (inst *vocabProbe) {
 	}
 }
 
-// demand returns the endpoint's function set, requesting it on first ask.
-// ready=false means the answer has not landed yet.
+// demand returns the endpoint's USER-DEFINED function set, requesting the
+// listing on first ask. ready=false means the answer has not landed yet.
+//
+// The user-defined half, not the whole listing: this is what the Vocabulary tab
+// means by "on this endpoint", and counting the server's own built-ins as
+// extras would bury the tab under a few thousand names it never claimed
+// anything about. [vocabProbe.demandAll] is the other half's accessor.
 func (inst *vocabProbe) demand() (installed map[string]string, ready bool) {
 	if inst == nil || inst.lane == nil {
 		return nil, false
 	}
 	if inst.installed != nil {
-		return inst.installed, true
+		return inst.userDefined, true
 	}
 	view := inst.lane.demand(compiledNode{SQL: vocabProbeQuery})
 	if view.rec == nil || view.rec.NumRows() == 0 {
@@ -96,7 +112,12 @@ func (inst *vocabProbe) demand() (installed map[string]string, ready bool) {
 	}
 	names := view.rec.Column(0)
 	defs := view.rec.Column(1)
+	var origins arrow.Array
+	if view.rec.NumCols() > 2 {
+		origins = view.rec.Column(2)
+	}
 	inst.installed = make(map[string]string, int(view.rec.NumRows()))
+	inst.userDefined = make(map[string]string, 64)
 	for row := range int(view.rec.NumRows()) {
 		name := names.ValueStr(row)
 		def := ""
@@ -104,10 +125,13 @@ func (inst *vocabProbe) demand() (installed map[string]string, ready bool) {
 			def = defs.ValueStr(row)
 		}
 		inst.installed[name] = def
+		if origins == nil || origins.ValueStr(row) != "System" {
+			inst.userDefined[name] = def
+		}
 	}
 	inst.surfaceVersion = parseMarkerVersion(inst.installed[lwsqlsurface.VersionFunctionName])
 	inst.preSurfaceVersion = parseMarkerVersion(inst.installed[lwsqlsurface.PreSurfaceVersionFunctionName])
-	return inst.installed, true
+	return inst.userDefined, true
 }
 
 func (inst *vocabProbe) close() {
@@ -134,4 +158,17 @@ func parseMarkerVersion(createQuery string) int {
 		return -1
 	}
 	return n
+}
+
+// demandAll returns every function the endpoint reports, built-ins included —
+// what a completion offering an expression position needs, since a built-in is
+// as valid there as anything this build declares (ADR-0190 §SD12 B5).
+//
+// Same lane, same listing, same cache: it demands through [vocabProbe.demand]
+// so a reader asking for either half starts the one probe.
+func (inst *vocabProbe) demandAll() (installed map[string]string, ready bool) {
+	if _, ready = inst.demand(); !ready {
+		return nil, false
+	}
+	return inst.installed, true
 }

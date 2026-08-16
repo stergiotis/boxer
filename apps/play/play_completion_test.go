@@ -187,3 +187,33 @@ func TestRefreshCompletionUsesTheEditorsSite(t *testing.T) {
 	assert.True(t, app.completion.atEnd)
 	assert.Contains(t, completionTexts(app.completion.result), "SysMem")
 }
+
+// The off-caret half of the two-way report: a literal that does not resolve
+// takes the error tone, one that does takes the resolved tone, and the caret's
+// own token takes neither from this producer.
+func TestCompletionFindingSections(t *testing.T) {
+	componentsql.Default.Reset()
+	t.Cleanup(componentsql.Default.Reset)
+	require.NoError(t, RegisterComponents(componentsql.Default))
+
+	app := tabsTestApp()
+	app.completion.engine = &sqlcomplete.Engine{
+		Vocab:     testVocabRegistry(t),
+		Providers: app.completionProviders(),
+	}
+	app.sql = `SELECT LW_COMPONENT('SysMem'), LW_COMPONENT('Nonesuch')`
+	app.completion.findings = app.completion.engine.Validate(app.sql, nil, -1)
+	require.Len(t, app.completion.findings, 2)
+
+	secs := app.completionFindingSections()
+	require.Len(t, secs, 2)
+	assert.Equal(t, sqleditor.ToneResolved, secs[0].Color)
+	assert.Equal(t, styleErrorTone, secs[1].Color)
+	assert.Equal(t, "SysMem", app.sql[secs[0].Start:secs[0].Stop])
+	assert.Equal(t, "Nonesuch", app.sql[secs[1].Start:secs[1].Stop])
+
+	// A finding whose range no longer indexes the buffer is dropped, not
+	// clamped: an underline in the wrong place is worse than none.
+	app.sql = "SELECT 1"
+	assert.Empty(t, app.completionFindingSections())
+}

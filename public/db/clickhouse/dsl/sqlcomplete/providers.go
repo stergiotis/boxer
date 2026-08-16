@@ -42,6 +42,15 @@ type Providers struct {
 	GlossKeys           ItemsOfFn
 	IdentityTags        ItemsFn
 	StatementParams     ItemsFn
+	// Expressions answers a free expression position — the columns of the
+	// statement's single source, the functions the endpoint has, the names
+	// this build's vocabulary declares. Its argument is that source, qualified,
+	// or empty when the statement has none or more than one.
+	//
+	// It exists because "any expression" is not one catalogue: a column and a
+	// function are both valid at a SELECT position, and a provider returning
+	// only one of them would be exactly as wrong as returning neither.
+	Expressions ItemsOfFn
 
 	// Catalog is the server's own vocabulary for this buffer's endpoint —
 	// every entry an ADR-0147 §SD6 probe. Empty until M2.
@@ -99,10 +108,11 @@ func (inst *Providers) resolve(d sqlvocab.Domain, of string) (items []Item, read
 
 	switch d.Kind {
 	case sqlvocab.DomainExpr:
-		// A free expression position takes a column, an alias or a call. The
-		// columns are the part a catalog can enumerate exactly; the rest is
-		// the scope tier's and the function roster's, and neither is a reason
-		// to offer nothing here.
+		if inst.Expressions != nil {
+			return callOf(inst.Expressions)
+		}
+		// Without a host answer, the columns are the part a catalogue can
+		// enumerate exactly.
 		return callOf(inst.Catalog.Columns)
 	case sqlvocab.DomainComponentKind:
 		return call(inst.ComponentKinds)

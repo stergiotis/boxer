@@ -25,7 +25,10 @@ func clauseKindFor(clause string) (k sqlvocab.DomainKindE, ok bool) {
 	case "FROM", "JOIN", "INTO":
 		return sqlvocab.DomainTable, true
 	case "SELECT", "WHERE", "PREWHERE", "HAVING", "ON", "USING", "BY", "ORDER", "GROUP":
-		return sqlvocab.DomainColumn, true
+		// An expression, not a column: a call is as valid there as a name, and
+		// a domain that said "column" would make the pane's heading a lie
+		// about half of what it offers.
+		return sqlvocab.DomainExpr, true
 	}
 	if k, hit := clauseDomains[clause]; hit {
 		return k, true
