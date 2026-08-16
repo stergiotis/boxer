@@ -89,3 +89,24 @@ rust/*/target/
 # and scripts/dev/tree-widget-scene.sh default their OUT here, and each builds a
 # private Go host and Rust client into it (>100 MB a run).
 /tmp/
+
+# The binary boxer.sh builds. It names it after `mktemp` and realpaths that
+# basename into the repo root, and removes it on exit — so one only survives a
+# run that was killed, at ~120 MB each. Anchored: repo root only.
+/tmp.*
+
+# ClickHouse server state, written into the working directory by a server
+# started from the repo root: the config it expands on start, and the access
+# lists it keeps beside it.
+/preprocessed_configs/
+/access/
+
+# A hand-run wasm compile check (a main.go and its ~7 MB out.wasm), kept
+# between probes rather than rebuilt. Scratch, not a fixture.
+/.manual-probe/
+
+# rapid's counterexample files, written under a package's testdata/rapid/ when
+# a property test fails. Each records one local run; a regression worth keeping
+# belongs in a test, not here. `**/` because the pattern would otherwise anchor
+# to the repo root, where no package lives.
+**/testdata/rapid/
