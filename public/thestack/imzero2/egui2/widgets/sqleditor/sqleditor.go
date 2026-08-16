@@ -1,6 +1,7 @@
 package sqleditor
 
 import (
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlcomplete"
 	"sync/atomic"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -119,6 +120,12 @@ type Result struct {
 	// next reader of the same walk.
 	Entity   highlight.CaretEntity
 	EntityOk bool
+	// Scope is the caret's statement resolved by the sentinel parse
+	// (ADR-0190 §SD3): the alias→expression map, the CTE names, the FROM
+	// sources and the clause. Nil until the worker answers, and nil again
+	// whenever the buffer or the caret moves — which is the state the engine
+	// treats as "the site alone is the model".
+	Scope *sqlcomplete.Scope
 	// Site is the caret's completion context: the enclosing call frames with
 	// the caret's ordinal, the string literal it is inside, the member access
 	// it follows, the token being typed, and the brackets still open
@@ -145,6 +152,10 @@ type Editor struct {
 	frame  Frame
 	result Result
 	bound  bool
+
+	// completion is the ADR-0190 §SD3 scope tier: a sentinel parse of the
+	// caret's statement, on a worker.
+	completion completionTier
 
 	// Statement-split memo, keyed by the buffer it describes.
 	stmtRanges []StatementRange
@@ -298,6 +309,17 @@ func (inst *Editor) Bind(f Frame) (res Result) {
 	// Offsets stay canonical — the slice narrows which spans are walked, not
 	// what they index.
 	site := highlight.SiteAt(spansWithin(spans, stmt, ok), caret)
+	// The scope tier reads the same statement, in that statement's own
+	// coordinates: grammar1's QueryStmt is single-statement, so the repair and
+	// the parse operate on one, and the site is rebased for them rather than
+	// every consumer having to know which coordinates it holds.
+	var scope *sqlcomplete.Scope
+	if ok && caret >= stmt.Src.Start && caret <= stmt.Src.End && stmt.Src.End <= len(canonical) {
+		scope = inst.completion.scopeFor(
+			canonical[stmt.Src.Start:stmt.Src.End],
+			site.Rebase(-stmt.Src.Start),
+			caret-stmt.Src.Start)
+	}
 
 	inst.result = Result{
 		Buffer:     canonical,
@@ -312,6 +334,7 @@ func (inst *Editor) Bind(f Frame) (res Result) {
 		Entity:     entity,
 		EntityOk:   entityOk,
 		Site:       site,
+		Scope:      scope,
 	}
 	return inst.result
 }

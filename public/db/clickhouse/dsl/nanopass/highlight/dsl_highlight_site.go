@@ -596,3 +596,48 @@ func memberAt(spans []Span, off int, partialStart int, lit *LiteralSite, closed 
 	m.Receiver = Range{Start: start, Stop: spans[prev].Stop}
 	return
 }
+
+// Rebase shifts every offset in the site by delta.
+//
+// For a consumer holding a site resolved against a whole buffer that needs one
+// in a sub-range's coordinates — the caret's own statement, which is the unit a
+// repair and a parse operate on (ADR-0190 §SD3). The text a rebased site
+// describes must be the sub-range itself; nothing here checks that.
+func (inst CaretSite) Rebase(delta int) (out CaretSite) {
+	out = inst
+	out.Partial = Range{Start: inst.Partial.Start + delta, Stop: inst.Partial.Stop + delta}
+	if len(inst.Frames) > 0 {
+		out.Frames = make([]CallFrame, len(inst.Frames))
+		for i := range inst.Frames {
+			f := inst.Frames[i]
+			f.Open += delta
+			if len(inst.Frames[i].Args) > 0 {
+				f.Args = make([]Range, len(inst.Frames[i].Args))
+				for j := range inst.Frames[i].Args {
+					f.Args[j] = Range{
+						Start: inst.Frames[i].Args[j].Start + delta,
+						Stop:  inst.Frames[i].Args[j].Stop + delta,
+					}
+				}
+			}
+			out.Frames[i] = f
+		}
+	}
+	if inst.Literal != nil {
+		lit := *inst.Literal
+		lit.Start += delta
+		if lit.Stop >= 0 {
+			lit.Stop += delta
+		}
+		out.Literal = &lit
+	}
+	if inst.Member != nil {
+		m := *inst.Member
+		m.Receiver = Range{Start: m.Receiver.Start + delta, Stop: m.Receiver.Stop + delta}
+		m.Dot += delta
+		out.Member = &m
+	}
+	out.Entity.Start += delta
+	out.Entity.Stop += delta
+	return
+}

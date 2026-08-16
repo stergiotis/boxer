@@ -71,6 +71,7 @@ func (inst *PlayApp) refreshCompletion(res sqleditor.Result) {
 	st.atEnd = res.Site.CaretAtPartialEnd()
 	st.result = st.engine.Complete(sqlcomplete.Request{
 		Site:      res.Site,
+		Scope:     res.Scope,
 		Statement: res.Buffer,
 		Caret:     res.Caret,
 	})

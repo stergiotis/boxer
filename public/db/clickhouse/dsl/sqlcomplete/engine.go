@@ -203,8 +203,17 @@ func (inst *Engine) domainFor(req Request) (d sqlvocab.Domain, of string, callee
 		callee = f.Callee
 		ordinal = f.Ordinal
 		if f.Ordinal < 0 {
-			why = "a keyword-syntax call: which argument this is needs the parse"
-			return
+			// A keyword-syntax call — `CAST(x AS T)`, `EXTRACT(HOUR FROM ts)`
+			// — has no comma to count, so the tree's ordinal is the only one
+			// there is (§SD3). It arrives a quiescence window later; until
+			// then the position is honestly unknown.
+			tf, treeOk := scopeFrame(req.Scope, f.Callee)
+			if !treeOk {
+				why = "a keyword-syntax call: which argument this is needs the parse"
+				return
+			}
+			f = tf
+			ordinal = f.Ordinal
 		}
 		sig, sigOk := inst.signature(f.Callee)
 		if !sigOk {
@@ -356,6 +365,22 @@ func (inst *Engine) match(res *Result, site highlight.CaretSite) {
 	default:
 		res.Match = MatchNone
 	}
+}
+
+// scopeFrame is the tree's view of the caret's frame, when it describes the
+// same call the site named. The callee check is what keeps a scope that landed
+// on a different frame — the caret moved between the launch and the drain —
+// from answering for this one.
+func scopeFrame(sc *Scope, callee string) (f highlight.CallFrame, ok bool) {
+	if sc == nil || sc.Frame == nil || sc.Frame.Ordinal < 0 {
+		return
+	}
+	if !strings.EqualFold(sc.Frame.Callee, callee) {
+		return
+	}
+	f = *sc.Frame
+	ok = true
+	return
 }
 
 // frameWithCallee is the innermost frame that names a call. Grouping parens and

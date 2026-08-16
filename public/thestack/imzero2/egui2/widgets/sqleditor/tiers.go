@@ -8,9 +8,11 @@ package sqleditor
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlcomplete"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -126,4 +128,94 @@ func (inst *Editor) highlightJob(src string) (job typed.RetainedFffiHolderTyped[
 		inst.lexOk = true
 	}
 	return inst.lexJob, true
+}
+
+// completionQuiescence is how long the buffer and caret must sit unchanged
+// before the scope parse launches (ADR-0190 §SD3).
+//
+// Shorter than [semanticQuiescence] because what it feeds is different. The
+// semantic tier repaints the whole buffer, so arriving late is invisible and
+// arriving often is expensive; the scope tier answers a question the user is
+// asking right now — what may go here — and a pause of nearly half a second
+// before the pane can say anything about an alias reads as the pane not
+// working. The parse it launches is a fifth of the semantic one's for the same
+// buffer (55–600 µs warm, ADR-0084), so the shorter window costs little.
+const completionQuiescence = 150 * time.Millisecond
+
+// completionTier resolves the caret's statement into a
+// [sqlcomplete.Scope] on a worker, and installs it while it still describes
+// the caret.
+//
+// Supersession is by (statement, caret), not by content alone: moving the caret
+// without editing changes which call frame and which clause the answer is
+// about, so a scope keyed only on the text would be installed for the wrong
+// position. All methods are render-thread-only; the zero value is ready.
+type completionTier struct {
+	runner bgjob.Runner[sqlcomplete.Scope]
+
+	lastKey    string
+	lastEditAt time.Time
+
+	scope    *sqlcomplete.Scope
+	scopeKey string
+
+	// now/build are injection points for tests; nil means time.Now /
+	// sqlcomplete.ParseScope.
+	now   func() time.Time
+	build func(stmt string, site highlight.CaretSite, caret int) (*sqlcomplete.Scope, error)
+}
+
+// scopeFor returns the installed scope when one describes exactly this
+// statement and caret, and nil otherwise — which is the state the engine treats
+// as "the site alone is the model".
+//
+// stmt is the caret's own statement, and site and caret are in that
+// statement's coordinates — [highlight.CaretSite.Rebase] is what gets them
+// there. The parse operates on one statement because grammar1's QueryStmt is
+// single-statement, so a whole multi-statement buffer would never parse.
+func (inst *completionTier) scopeFor(stmt string, site highlight.CaretSite, caret int) (sc *sqlcomplete.Scope) {
+	if inst.now == nil {
+		inst.now = time.Now
+	}
+	if inst.build == nil {
+		inst.build = sqlcomplete.ParseScope
+	}
+	if stmt == "" || caret < 0 || caret > len(stmt) {
+		return
+	}
+
+	key := stmt + "\x00" + strconv.Itoa(caret)
+	if key != inst.lastKey {
+		inst.lastKey = key
+		inst.lastEditAt = inst.now()
+	}
+
+	if got, tag, done := inst.runner.TakeResult(); done && tag == key {
+		inst.scope = got
+		inst.scopeKey = key
+	}
+	if inst.scope != nil && inst.scopeKey == key {
+		return inst.scope
+	}
+
+	if inst.now().Sub(inst.lastEditAt) >= completionQuiescence {
+		build := inst.build
+		local := site
+		inst.runner.Start(nil, bgjob.Spec{
+			Kind:  "sqleditor-completion-scope",
+			Title: "SQL completion scope",
+			Tag:   key,
+		}, func(_ context.Context) (*sqlcomplete.Scope, error) {
+			out, err := build(stmt, local, caret)
+			if err != nil {
+				// A statement no repair parses is the designed fallback, not
+				// a failure to report: the site alone stays the model (§SD3).
+				// An empty scope installs so the tier stops relaunching for
+				// this key.
+				return &sqlcomplete.Scope{}, nil
+			}
+			return out, nil
+		})
+	}
+	return
 }
