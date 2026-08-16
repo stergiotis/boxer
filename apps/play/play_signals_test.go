@@ -356,6 +356,11 @@ func TestMapViewportSeamEndToEnd(t *testing.T) {
 	d.lane = newNodeLane(clientExecutor{client: client}, memory.NewGoAllocator(), 0)
 	defer d.lane.close()
 
+	// The budget is generous because the wait is not the httptest round trip:
+	// each execute runs the raster template — ~1.2 KB of SQL — through the
+	// pre-execute pipeline, and nanopass re-parses the text per pass. Measured
+	// here: ~390ms plain, ~1.8s under -race, per settle. The old 2s budget sat
+	// inside that spread and made the race lane fail while the plain one passed.
 	demandSettled := func(wantHits int) {
 		require.Eventually(t, func() bool {
 			params := resolveSignalNames(d.templateReads, nil, g.signals())
@@ -367,7 +372,7 @@ func TestMapViewportSeamEndToEnd(t *testing.T) {
 				v.rec.Release()
 			}
 			return !v.loading && len(got()) == wantHits
-		}, 2*time.Second, time.Millisecond)
+		}, 30*time.Second, 5*time.Millisecond)
 	}
 
 	// First settle: London.
