@@ -107,14 +107,21 @@ LIMIT 40"
 }
 
 scene_02_table_glosses() {
-	desc="Table — glosses (ADR-0186): the gloss(…) macro and explicit \`label@gloss/…\` aliases per column, a \`-- play: gloss\` directive binding a plain column by name, a Luhn ✓/✗ tone, a masked secret, and a mistyped parameter refused out loud"
+	desc="Table — glosses (ADR-0186): the gloss(…) macro and explicit \`label@gloss/…\` aliases per column, a \`-- play: gloss\` directive binding a plain column by name, a Luhn ✓/✗ tone, a masked secret, a tagged id split into tag and counter, and a mistyped parameter refused out loud"
 	# Table-free, so it needs no fixture. The last column carries a typo in
 	# its parameter name (unti=C) on purpose: it must render plain with the
 	# refusal on the header hover, never as a temperature. The first glossed
 	# column goes through the gloss(…) macro (§SD7), the rest through aliases.
+	#
+	# Kept column-for-column in step with the catalog tour in
+	# apps/play/help/snippets.md — the two are the same query, and a reader
+	# who runs the snippet should see the frame this scene captured.
+	# gloss/taggedid also has a scene of its own (02_table_taggedid), which
+	# is where its Detail block face and its refusals are captured.
 	senv=(BOXER_PLAY_FOCUS_TABLE=1)
 	sql="-- play: gloss gloss/length;unit=m name:height
 SELECT number AS n,
+       toUInt64(12393906174523604992) + number + 1 AS \`id@gloss/taggedid\`,
        gloss(20 + number * 1.7, 'gloss/temperature', 'unit', 'C', 'label', 'temp'),
        1.5 + number * 0.31 AS height,
        ['4111111111111111', '4111111111111112', '378282246310005'][1 + number % 3] AS \`card@gloss/luhn\`,

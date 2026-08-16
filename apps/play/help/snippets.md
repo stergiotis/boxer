@@ -503,6 +503,7 @@ last column here carries a typo on purpose.
 ```sql
 -- play: gloss gloss/length;unit=m name:height
 SELECT number AS n,
+       toUInt64(12393906174523604992) + number + 1 AS `id@gloss/taggedid`,
        gloss(20 + number * 1.7, 'gloss/temperature', 'unit', 'C', 'label', 'temp'),
        1.5 + number * 0.31 AS height,
        ['4111111111111111', '4111111111111112', '378282246310005'][1 + number % 3] AS `card@gloss/luhn`,
@@ -511,7 +512,6 @@ SELECT number AS n,
        toUnixTimestamp(now()) + number * 86400 AS `when@gloss/epoch`,
        number * 90500 AS `took@gloss/duration;unit=ms`,
        'https://example.com/' || toString(number) AS `link@gloss/url`,
-       toUInt64(12393906174523604992) + number + 1 AS `id@gloss/taggedid`,
        20 + number * 1.7 AS `oops@gloss/temperature;unti=C`
 FROM numbers(12)
 ```
