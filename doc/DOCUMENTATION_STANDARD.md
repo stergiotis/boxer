@@ -30,7 +30,7 @@ Every Markdown doc must declare its type in a front-matter stanza (see §4). Thi
 - **Format:** Go doc comments (`//`) plus `doc.go`.
 - **Rules:**
     - **No Markdown files for API references.** `pkgsite` is canonical.
-    - Every exported symbol carries a doc comment that begins with the identifier's name and ends with a period.
+    - A doc comment on an exported symbol begins with the identifier's name and ends with a period. Write one wherever there is something to say that the signature does not already say (§4 *Go doc comments*); a comment that only respells the signature adds a second thing to keep true.
     - Follow [go.dev/doc/comment](https://go.dev/doc/comment). Use Go 1.19+ doc links (`[pkg.Symbol]`, `[Type.Method]`) for cross-references instead of bare URLs.
     - Deprecate with a `Deprecated:` paragraph naming the replacement. Flag known defects with `BUG(who):`.
     - Any package with more than ~3 exported symbols, or any package that warrants package-level discussion, carries a `doc.go`.
@@ -53,7 +53,7 @@ Every Markdown doc must declare its type in a front-matter stanza (see §4). Thi
 - **Format:** `EXPLANATION.md`, alongside the `.go` files.
 - **Rules:**
     - Explain *properties that would still hold if someone rewrote the code* (e.g., Hamming distance of a code, why a structure is lock-free, why an encoding is self-synchronising).
-    - Mutable choices ("we picked Zstd over LZ4 because…") belong in an ADR, not here.
+    - Mutable choices ("we picked Zstd over LZ4 because…") belong in an ADR, not here. The same test separates durable prose from perishable prose everywhere else in this standard — see §4 *Claims that decay*.
     - Split into an `EXPLANATION/` directory if the file exceeds ~400 lines or covers distinct concerns.
 
 ### Tutorials (Learning-Oriented)
@@ -63,7 +63,7 @@ Every Markdown doc must declare its type in a front-matter stanza (see §4). Thi
 - **Format:** `TUTORIAL.md`.
 - **Rules:**
     - Tutorials typically cross package boundaries. **Do not bury them in deep sub-packages.**
-    - Place them at a top-level module root (e.g., `public/imzero/TUTORIAL.md`) or at the repository root.
+    - Place them at a top-level module root (`<module>/TUTORIAL.md`) or at the repository root.
 
 ### Architecture Decision Records (Why-It-Is-This-Way)
 - **Goal:** Capture a single decision with its context, alternatives considered, and consequences. Replaces ad-hoc `DESIGN.md` and internal wiki pages.
@@ -72,9 +72,11 @@ Every Markdown doc must declare its type in a front-matter stanza (see §4). Thi
     - One decision per file, one file per decision.
     - Status lifecycle: `proposed → accepted → (deferred | deprecated | superseded by ADR-XXXX)`, or `proposed → withdrawn` when a proposal is retracted before acceptance. Supersession is the documented escape hatch when the decision itself changes (see "Editing ADRs" below).
     - If a decision affects a specific package, link to it from that package's `README.md` and, where relevant, its `EXPLANATION.md`.
+    - **Cite an ADR by number, not by filename.** `ADR-0058 §SD3` survives a retitle and resolves mechanically. A hardcoded `doc/adr/0058-<slug>.md` breaks the moment the title changes, and a citation carrying the wrong number sends the reader to a different decision entirely — the failure is silent in both directions. This applies to citations from code as much as from prose; a `.go` comment naming an ADR is subject to the same rule.
+    - **A citation of a non-`accepted` ADR names its state** — "ADR-0008 (superseded by ADR-0113)", "ADR-0112 (proposed)". Without it a reader cannot tell a decision in force from a record of one that is not, and code that cites a `proposed` ADR reads as though the decision had been taken. Where code cites a `proposed` ADR because the work has in fact shipped, that is the signal to flip the ADR (see *When to flip* below), not to annotate the citation.
     - Minimum sections: *Context*, *Decision*, *Alternatives*, *Consequences*, *Status*.
     - **Design-space analysis (QOC):** when a decision has ≥3 viable options evaluated against ≥3 explicit criteria, use the optional `Design space (QOC)` section from the ADR template — Questions, Options, Criteria (MacLean, Bellotti, Young, Moran, 1991). The prose `Alternatives` section may then cross-reference the QOC matrix instead of duplicating the rationale. Below the threshold, a prose `Alternatives` list is sufficient.
-    - **Tier-1 sections (`Surfaces`, `Migration`, `Verification plan`):** a decision that touches a core surface — the enumerated list in [CODINGSTANDARDS § What triggers an ADR](../CODINGSTANDARDS.md#what-triggers-an-adr) — carries three further sections from the template. `Surfaces` inventories which named contracts change shape and what must move with them, which `Consequences` does not do: that section records what a change costs, not what it reaches. `Migration` states what breaks and what a reader on the old shape does about it. `Verification plan` names the lane that goes red if the decision is silently regressed, and "none, because …" is a valid entry. A leaf decision may use them and usually should not. These are template obligations, not lint obligations: doclint DL010 still enforces presence of the five minimum sections only, so the 152 ADRs written before this rule stay green and are not worth retrofitting.
+    - **Tier-1 sections (`Surfaces`, `Migration`, `Verification plan`):** a decision that touches a core surface — the enumerated list in [CODINGSTANDARDS § What triggers an ADR](../CODINGSTANDARDS.md#what-triggers-an-adr) — carries three further sections from the template. `Surfaces` inventories which named contracts change shape and what must move with them, which `Consequences` does not do: that section records what a change costs, not what it reaches. `Migration` states what breaks and what a reader on the old shape does about it. `Verification plan` names the lane that goes red if the decision is silently regressed, and "none, because …" is a valid entry. A leaf decision may use them and usually should not. These are template obligations, not lint obligations: doclint DL010 still enforces presence of the five minimum sections only, so ADRs written before this rule stay green and are not worth retrofitting.
     - **Sub-items and their done-ness:** when a decision decomposes into parts — subsidiary design decisions (`SD`), milestones (`M`), phases, steps, cuts — declare each as a **marker, an em-dash, and a title**, in either shape. The em-dash is what makes it a declaration rather than prose that mentions a marker; reserve the en-dash for ranges (`Phase 0–1`). Mark one done with a `✓` immediately after its title text — the end of the heading, or just past the closing `**`. Done-ness is binary and is the one thing the reader cannot derive: a sub-item's *existence* is surveyed from the body, and code citing its `§marker` is surveyed too, but many subsidiary decisions (an IP boundary, a performance posture) will never have code to cite — and milestones are never `§`-pinned at all — so nothing but the author can say a sub-item is finished. `boxer adr` reads these into the `subtask` table — as does `keelson('subtask')`, the same rows served in-process — and play's Kanban pane shows each ADR's sub-items as declared-done / cited-but-undeclared / neither ([ADR-0092](./adr/0092-adr-overview-tool.md#updates), [ADR-0122](./adr/0122-play-kanban-panel.md)); the middle bucket is the worklist of sub-items worth a `✓`. Note that a `✓` in a heading changes that heading's anchor slug.
 
       ```markdown
@@ -190,10 +192,25 @@ Prose that *frames* the project — the repository `README`, package `README` ov
 
 **Where this does not apply.** This governs prose that *frames* the project, not prose that *documents* it. An ADR's `Decision` section is meant to be definite — state the decision plainly. Reference documentation of factual behavior (Go doc comments, API descriptions) describes what the code does and needs no hedging. Internal design notes and scratch files are exempt. Voice and tone is a judgment call, not a mechanically enforced rule (§8).
 
+### Claims that decay
+
+Documents here carry two kinds of statement in one voice. A **durable** claim — the decision, the constraint, the reason an option was rejected — stays true as the code moves. A **perishable** claim — the current shape of a package, a count, a measurement — does not. Both are worth writing, and the detail that makes a document navigable is mostly of the second kind.
+
+The failure is not that perishable claims exist. It is that a reader cannot tell which is which, so a perishable claim that has gone false still reads with the authority of the durable claim beside it. These rules make the difference legible. None of them asks for less detail: a document stripped of specifics to avoid decay is not more accurate, only less useful.
+
+- **Reference code in a form that can be contradicted.** A file path is a Markdown link (§7), not a bare backticked path — a link is checked, and a reader can follow it. Name a symbol by its exact identifier, so a search either resolves it or shows that it is gone. A reference nothing can check is one nothing will correct.
+- **A quantitative claim is dated or it is live.** A number recording evidence, a measurement, or a past state carries its date and, where a reader would need it to repeat the work, its method — "(2026-08-10, same method, 812 columns)". A number with no date is a claim about the tree as it stands and must be true there. Thresholds and estimates ("~25–30 files", "roughly 200 LOC") are neither; the tilde already says so.
+- **Never refresh a frozen number.** Evidence gathered when a decision was taken — the size of a dependency that was surveyed, the cost of the shape being replaced — is the record of why the choice was defensible. Updating it rewrites that record. A newer measurement is a new dated entry beside the old one, never an edit to it. This holds with particular force for figures attached to *rejected* alternatives, which describe a world the project deliberately did not enter.
+- **Don't transcribe what a mechanism can serve.** Field lists, signatures, enum members, and call-site inventories reproduce something that already has a single source of truth, with nothing binding the copy to the original. Link the source or the generated artifact instead. Where the shape *is* the decision — a wire format, a schema contract — reproduce it, put it under `Surfaces`, and give it a `Verification plan` entry so a silent divergence turns a lane red.
+- **An exclusivity claim names its guard or its date.** "X is the sole client of Y", "nothing else writes this table" — claims of this shape carry decisions, and they go false the moment someone adds the second case, without touching the document. Name the lint, test, or registry that keeps the claim true, or date it as an observation and let it read as one.
+- **Prefer the phrasing something can check.** Where a sentence could describe a behaviour or point at the mechanism that enforces it, point at the mechanism. Prose that no tool, test, or lane can contradict is precisely the prose that decays unobserved.
+
 ### Go doc comments
 - Follow [go.dev/doc/comment](https://go.dev/doc/comment) in full. Short summary first, begins with the identifier's name, ends with a period.
 - Use doc links (`[pkg.Symbol]`, `[Type.Method]`) for cross-references so `pkgsite` can resolve them. Avoid bare URLs when a doc link will do.
 - `BUG(who):` and `Deprecated:` paragraphs follow their established conventions — treat them as the canonical spelling.
+- **A comment earns its place by carrying what the code cannot** — a constraint on callers, the reason for this shape rather than another, a hazard, a cost, a cross-reference, or what was tried before and did not work. Where there is none of that, the signature is the documentation, and a comment restating it adds a second thing to keep true without adding a second thing to know. The bar is content, not coverage.
+- **A comment that references outside its own package is documentation** and follows *Claims that decay* above. Inside a package, proximity keeps a comment honest: whoever edits the code has the comment in front of them. That stops at the package boundary. A comment naming another package's symbols, a file elsewhere in the tree, or an ADR is prose about something its reader is not editing, and it decays like any other prose.
 
 ### Cross-linking between Go and Markdown
 - **From a doc comment to a nearby Markdown file:** reference it by name, e.g., `See EXPLANATION.md for the derivation.` `pkgsite` will not render the link, but humans reading the source find it, and it survives file moves within the package.
@@ -272,6 +289,14 @@ LLMs (Claude, GPT, Copilot) are well-suited to the administrative parts of docum
 - **Explanation.** LLMs invent invariants, cite non-existent papers, and confidently describe complexity bounds that do not hold. Every claim in an `EXPLANATION.md` draft must be verified against the code or an authoritative source.
 - **Reference.** LLMs hallucinate exported symbols, parameter orders, and doc-link targets. After any AI edit to Go doc comments, run `go build ./...` and preview with `pkgsite` or `go doc` to confirm every `[pkg.Symbol]` link resolves.
 - **Decisions the model did not witness.** An ADR drafted from thin context will invent alternatives that were never considered and consequences that do not apply. Only draft ADRs when the model has access to the actual source material.
+
+### What a model cannot supply
+
+A model reading the code can produce an accurate description of what the code does. That description is also the passage most likely to be wrong in six months, and the one a reader can recover at any time — by reading the code, or by asking a model to read it.
+
+What no model can supply is what was never in the code: the alternatives that were rejected, the constraint a caller must honour that is invisible at the definition, the failure that motivated a workaround, a measurement taken on a day that has passed. The code contains the surviving option and nothing about the others.
+
+Spend the documentation budget there. **When a passage could be regenerated from the code on demand, that is a reason to cut it, not a reason to keep it current.** The corollary is uncomfortable and intended: the documentation worth writing is the documentation a model cannot draft for you, and cannot check afterwards.
 
 ### Prompt hygiene
 
@@ -352,8 +377,17 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 | Cross-package Markdown references use fully qualified Go import paths, not bare directory names. | §7 | `DL006` |
 | Every in-repo Markdown link resolves to an existing file that git tracks. A git-ignored target counts as missing: it resolves in a working checkout and in no clean one. | §7 | `DL007` (anchor existence not yet checked) |
 | Open set of `status: draft` / `status: proposed` docs reported (informational, not a merge block). | §4 | `DL011` |
+| Markdown references a source file by link, not by bare backticked path. | §4 *Claims that decay*, §7 | `DL012 (pending)` |
+| Identifiers named in Markdown resolve to a symbol in the tree. Docs in `draft` / `proposed` are exempt: they describe symbols that do not exist yet, which is their purpose. | §4 *Claims that decay* | `DL013 (pending)` |
+| ADR citations — in Markdown and in Go comments — resolve to an existing ADR, and cite by number rather than filename. | §1 ADR | `DL014 (pending)` |
+| Quantitative claims are dated, or true against the current tree. | §4 *Claims that decay* | *manual* |
+| Exclusivity claims name a guard or a date. | §4 *Claims that decay* | *manual* |
+| A doc comment carries something the signature does not. | §1 Reference, §4 | *manual* |
+| Cross-package references inside Go comments follow the Markdown reference rules. | §4 | *manual* (doclint walks Markdown only) |
 
 Rules not in the table are either process guidance (e.g., "use AI for drafts") or judgment calls (e.g., quadrant selection) and are not mechanically enforceable.
+
+Several invariants above are marked *manual* because they turn on intent that no checker can read — whether a number is evidence or a live claim, whether a comment adds anything. That is a real limit, not a placeholder: the rules still hold, and a reviewer applies them. Where a check *is* possible, prefer wiring it, because the measurable difference between a checked reference and an unchecked one is not authorial care but whether anything ever contradicts the sentence.
 
 ---
 
@@ -361,14 +395,14 @@ Rules not in the table are either process guidance (e.g., "use AI for drafts") o
 
 Canonical skeletons live under `doc/templates/`:
 
-- `doc/templates/doc.go.tmpl`
-- `doc/templates/EXPLANATION.md.tmpl`
-- `doc/templates/TUTORIAL.md.tmpl`
-- `doc/templates/HOWTO.md.tmpl`
-- `doc/templates/adr/0000-template.md`
-- `doc/templates/trial/README.md.tmpl` (trial protocol; see
-  [doc/trials/](./trials/README.md))
-- `doc/templates/trial/logbook.md.tmpl`
+- [`doc/templates/doc.go.tmpl`](./templates/doc.go.tmpl)
+- [`doc/templates/EXPLANATION.md.tmpl`](./templates/EXPLANATION.md.tmpl)
+- [`doc/templates/TUTORIAL.md.tmpl`](./templates/TUTORIAL.md.tmpl)
+- [`doc/templates/HOWTO.md.tmpl`](./templates/HOWTO.md.tmpl)
+- [`doc/templates/adr/0000-template.md`](./templates/adr/0000-template.md)
+- [`doc/templates/trial/README.md.tmpl`](./templates/trial/README.md.tmpl) (trial
+  protocol; see [doc/trials/](./trials/README.md))
+- [`doc/templates/trial/logbook.md.tmpl`](./templates/trial/logbook.md.tmpl)
 
 For reference, the ADR skeleton is:
 
