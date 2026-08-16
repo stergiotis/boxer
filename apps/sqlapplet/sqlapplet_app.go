@@ -137,7 +137,11 @@ func (inst *appletApp) Frame(ctx app.FrameContextI) (err error) {
 			inst.inner.RequestRun()
 		}
 	}
-	err = inst.inner.Render()
+	// Frame, not the bare render pass: the engine reads the window-focus gate
+	// and the column-width store off this context, and an applet window is
+	// entitled to both. Its own manifest id keys the widths, so one applet's
+	// columns never reach another's.
+	err = inst.inner.Frame(ctx)
 	return
 }
 

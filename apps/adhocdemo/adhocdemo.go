@@ -156,7 +156,11 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		}
 		return
 	}
-	return inner.Render()
+	// This app's own frame context, which is the one it holds: the engine is
+	// hand-embedded here rather than acquired through an embed seam, so the
+	// identity the context presents is this app's — and per ADR-0155 §SD3 that
+	// identity is exactly what column-width state keys on.
+	return inner.Frame(ctx)
 }
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {

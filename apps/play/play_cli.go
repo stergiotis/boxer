@@ -152,7 +152,10 @@ func runApp(app *application.Application[*runtime.Unmarshaller], playApp *PlayAp
 				c.WidgetsGlobalThemePreferenceButtons()
 			}
 		}
-		return playApp.Render()
+		// The engine's render pass, not PlayApp.Frame: this one-shot CLI host
+		// has no keelson frame context to offer, and with a single instance
+		// and no facts store there is no capability it could carry.
+		return playApp.render()
 	}
 
 	err = app.Launch()

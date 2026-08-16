@@ -195,6 +195,11 @@ if h, ok := ctx.(colwidth.HostI); ok {
 Absence is not an error — it means the host has no facts store, so widths
 come from your defaults and nothing persists. Every affordance still works.
 
+That silence cuts both ways, so if you *re-host* an app that already resolves
+its own widths, hand it your frame context rather than calling its render pass
+— an app that never sees a context is indistinguishable from one whose host
+has no store, and the symptom is simply that nothing is ever saved.
+
 Construct with `ctx.AppId()`, never an identity you compose: ADR-0155 §SD3
 makes it the keying identity for embedded and windowed instances alike, so a
 column dragged in one follows the content to the other. A composed identity

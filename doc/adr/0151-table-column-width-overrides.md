@@ -302,6 +302,10 @@ which is part of why the single document was chosen over per-table keys.
 - **M7 — play adoption on the per-DB-row grid.** ✓ The second adopter, plus
   the per-view type discriminator the column tier needs once two grids
   render the same column (Update 2026-08-16).
+- **M8 — the acquisition seam moves to the engine.** ✓ `PlayApp.Frame(ctx)`
+  reads the capability for every host of the engine, not only the launcher
+  that happened to adopt it; the render pass is unexported so a re-host
+  cannot route around it (Update 2026-08-16).
 
 ## Update — 2026-07-30: `colw` becomes modelled facts, not a persist document
 
@@ -669,6 +673,47 @@ instance tier now has two scopes, `results` and `attr-results`, so a drag in
 one grid no longer reaches the other at all — which is the intended
 semantics here, since the two are different renderings rather than two views
 of one layout.
+
+## Update — 2026-08-16: the re-hosts that never reached the capability
+
+M4 acquired the store in `PlayLauncher.Frame` — the app-contract `Frame` of
+the one app that registers the stock playground. But `PlayApp` is not itself
+an `AppI`; it is an engine, and three in-tree keelson apps host it, each with
+a `Frame` of its own. Only the launcher acquired. The applet app and the ad-hoc
+demo both held a frame context and called the engine's render pass directly,
+so for every window they open the store was never reached. The same is what an
+out-of-tree library got by following the pluggable-detail how-to, which tells a
+re-host to mirror `PlayLauncher.Mount` and — until now — said nothing at all
+about the frame.
+
+The failure was invisible in exactly the way §SD5 intends the *absent* case to
+be: no store means defaults render and every affordance still works, so a
+re-host looked healthy and simply never persisted anything. Nothing logged,
+nothing errored. That the ADR's own how-to could still record "nobody has
+dragged a column in a running window and seen the width come back" after two
+adopters had shipped is the same fact seen from the other side.
+
+**The same omission dropped `app.WindowFocusI` too**, so one Ctrl+Enter ran a
+query in every open instance of those apps. Two unrelated capabilities lost by
+one line is what makes this a seam defect rather than an adoption gap: the
+per-frame context had exactly one reader, and it was the wrong object.
+
+**So acquisition moved to where the context is read, not to where the app
+contract is implemented.** `PlayApp.Frame(ctx)` now performs both capability
+reads and then renders; `PlayLauncher.Frame` collapses onto it and the two
+in-tree re-hosts call it. The engine's render pass is unexported, which is the
+substance of the change rather than a tidy-up — a host holding a frame context
+can no longer route around the capabilities, so the next capability added here
+reaches every host without anyone remembering to propagate it. The in-package
+CLI one-shot keeps the bare pass: it has no keelson context to offer, and with
+a single instance and no facts store there is no capability it could carry.
+
+Two consequences worth stating. This is a **breaking change** for anything
+out-of-tree that called the render pass; the mechanical fix is to call
+`Frame(ctx)` instead, and the compiler names every site. And width identity
+follows the calling context's `AppId` (ADR-0155 §SD3), so each re-host keys on
+its own app id — a hand-embedded engine stores under the embedder, which is
+the documented rule and not a special case.
 
 ## Status
 

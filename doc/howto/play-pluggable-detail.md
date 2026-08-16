@@ -44,6 +44,30 @@ inner.SetDetailContent(func(rec arrow.RecordBatch, schema *arrow.Schema, row int
 })
 ```
 
+## Delegate the frame, not just the render pass
+
+Mount-time wiring is only half of what `PlayLauncher` does. Per frame the
+engine reads *optional host capabilities* off the keelson frame context — the
+window-focus gate gating the process-global Ctrl+Enter chord, and the
+column-width store that lets a dragged column survive the run
+([ADR-0151](../adr/0151-table-column-width-overrides.md)) — so a re-host owes
+the engine that context:
+
+```go
+func (inst *yourApp) Frame(ctx app.FrameContextI) error {
+	return inst.inner.Frame(ctx)
+}
+```
+
+`PlayApp.Frame` is the only exported way to render, and that is deliberate:
+the render pass underneath is unexported so a re-host cannot drop the context
+and silently lose both capabilities at once — which is what every re-host did
+while it was exported. `ctx` carries **your** app's id, so width overrides key
+on your app and never touch the stock playground's
+([ADR-0155](../adr/0155-app-embed-seam.md) §SD3). A host that offers neither
+capability costs you nothing: widths come from defaults, the chord is
+ungated, and everything else renders unchanged.
+
 ## Pattern A — wrap the built-in (most common)
 
 Keep the leeway/ad-hoc card and append your own widgets under it. Delegating to

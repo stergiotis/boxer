@@ -1292,7 +1292,39 @@ func (inst *PlayApp) MainSQL() string {
 	return inst.graph.MainSQL()
 }
 
-func (inst *PlayApp) Render() error {
+// Frame renders one frame with the per-frame capabilities the host offers on
+// ctx. It is the entry point for every host: the launcher below, and equally
+// any library that builds a PlayApp of its own and re-hosts it.
+//
+// Two capabilities arrive this way, both in the ADR-0155 §SD1 shape — an
+// optional interface type-asserted off the context, so a host that cannot
+// offer one owes nothing and nothing errors:
+//
+//   - [app.WindowFocusI] gates the process-global Ctrl+Enter chord. The chord
+//     is drained once from egui's shared queue and is visible to every open
+//     instance alike, so without the gate one press runs a query in all of
+//     them. A host that cannot say is taken as focused: single-surface hosts
+//     and tests have only the one instance, and it is the active one.
+//   - [colwidth.HostI] carries the column-width store (ADR-0151). It is
+//     acquired here rather than at Mount because it is a frame-context
+//     capability; ensureColWidthRes does the once-only work.
+//
+// The render pass itself is unexported precisely because of this: a re-host
+// holding a frame context has no reason to skip either capability, and every
+// re-host that called the pass directly silently lost both. Making the
+// context the only way in turns that from a rule to remember into a signature.
+func (inst *PlayApp) Frame(ctx app.FrameContextI) (err error) {
+	focused := true
+	if f, ok := ctx.(app.WindowFocusI); ok {
+		focused = f.WindowFocused()
+	}
+	inst.windowUnfocused = !focused
+	inst.ensureColWidthRes(ctx)
+	err = inst.render()
+	return
+}
+
+func (inst *PlayApp) render() error {
 	ids := inst.ids
 	ids.Reset()
 
