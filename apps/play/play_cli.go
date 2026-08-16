@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -81,6 +82,13 @@ func NewCliCommand() *cli.Command {
 			// rather than a reason not to boot.
 			if compErr := RegisterComponents(componentsql.Default); compErr != nil {
 				log.Warn().Err(compErr).Msg("play: component registration failed")
+			}
+			// The one vocabulary registry both the Vocabulary tab and the
+			// completion engine read (ADR-0190 §SD4). Best-effort like the
+			// rest: an unregistered roster costs a listing and a set of
+			// completions, not a boot.
+			if vocabErr := RegisterVocabulary(sqlvocab.Default); vocabErr != nil {
+				log.Warn().Err(vocabErr).Msg("play: vocabulary registration failed")
 			}
 
 			clientCfg := ClientConfig{

@@ -3,6 +3,7 @@ package glosssql
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -149,4 +150,17 @@ func (inst freeInstance) Params() map[string]string               { return inst.
 func (inst freeInstance) Accepts(gloss.ValueKindE) (bool, string) { return true, "" }
 func (inst freeInstance) Inline(cell gloss.CellI) gloss.Inline {
 	return gloss.Inline{Text: cell.Text()}
+}
+
+// TestRosterDeclaresEveryDomain is ADR-0190 §SD4's floor for this roster: a
+// parameter whose domain is unsaid is refused at registration, so the check is
+// simply that the whole roster registers.
+func TestRosterDeclaresEveryDomain(t *testing.T) {
+	r := sqlvocab.NewRegistry()
+	for _, f := range Functions() {
+		require.NoErrorf(t, r.Register(sqlvocab.Function{
+			Name: f.Name, Params: f.Params, Doc: f.Doc, Where: sqlvocab.WhereClient,
+		}), "%s", f.Name)
+	}
+	require.NotZero(t, r.Len())
 }

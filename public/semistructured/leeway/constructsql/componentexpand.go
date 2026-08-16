@@ -9,6 +9,7 @@ package constructsql
 // artefacts read (ADR-0189 §SD6).
 
 import (
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"sort"
 	"strings"
 
@@ -383,12 +384,12 @@ func ComponentFunctions() (fns []Function) {
 	fns = []Function{
 		{
 			Name:   NameComponent,
-			Params: []string{"'Kind'"},
+			Params: []sqlvocab.Param{sqlvocab.Lit("'Kind'", sqlvocab.DomainComponentKind)},
 			Doc:    "read a whole component as a named tuple; its conformance filter is added to the statement's WHERE (ADR-0189)",
 		},
 		{
 			Name:   NameComponentFilter,
-			Params: []string{"'Kind'"},
+			Params: []sqlvocab.Param{sqlvocab.Lit("'Kind'", sqlvocab.DomainComponentKind)},
 			Doc:    "the predicate identifying rows carrying a conforming component; ClickHouse built-ins only, so it needs nothing installed (ADR-0189)",
 		},
 	}

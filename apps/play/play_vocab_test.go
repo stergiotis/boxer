@@ -7,12 +7,32 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
+	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	"github.com/stergiotis/boxer/public/identity/identsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
-func vocabByWhere(entries []vocabEntry, where vocabWhereE) (out []vocabEntry) {
+// testVocabRegistry is a fresh registry through the host's own wiring, so a
+// test sees exactly what a running play sees without touching the process
+// registry another test may have populated.
+func testVocabRegistry(t *testing.T) *sqlvocab.Registry {
+	t.Helper()
+	r := sqlvocab.NewRegistry()
+	require.NoError(t, RegisterVocabulary(r))
+	return r
+}
+
+func testVocabDeclared(t *testing.T) []vocabEntry {
+	t.Helper()
+	return vocabDeclared(testVocabRegistry(t))
+}
+
+func vocabByWhere(entries []vocabEntry, where sqlvocab.WhereE) (out []vocabEntry) {
 	for _, e := range entries {
 		if e.Where == where {
 			out = append(out, e)
@@ -33,8 +53,8 @@ func vocabNames(entries []vocabEntry) (out []string) {
 // permanently empty, which reads as "this build has none" rather than as the
 // wiring mistake it is.
 func TestVocabDeclaredCoversEveryPopulation(t *testing.T) {
-	all := vocabDeclared()
-	for _, where := range []vocabWhereE{vocabServer, vocabClient, vocabPlay} {
+	all := testVocabDeclared(t)
+	for _, where := range []sqlvocab.WhereE{vocabServer, vocabClient, vocabPlay} {
 		require.NotEmptyf(t, vocabByWhere(all, where), "%s section is empty", where)
 	}
 
@@ -61,7 +81,7 @@ func TestVocabDeclaredCoversEveryPopulation(t *testing.T) {
 // either "your endpoint lacks it" (when the client expands it anyway) or "it
 // always works" (when a listing of installed UDFs should show it missing).
 func TestVocabIdentityIsBothPopulations(t *testing.T) {
-	all := vocabDeclared()
+	all := testVocabDeclared(t)
 	server := vocabNames(vocabByWhere(all, vocabServer))
 	client := vocabNames(vocabByWhere(all, vocabClient))
 	for _, f := range identsql.Functions() {
@@ -75,7 +95,7 @@ func TestVocabIdentityIsBothPopulations(t *testing.T) {
 // LW_. A roster member outside it would still list, but the one-LIKE drift
 // question the namespace exists for would silently not cover it.
 func TestVocabServerEntriesAreNamespaced(t *testing.T) {
-	for _, e := range vocabByWhere(vocabDeclared(), vocabServer) {
+	for _, e := range vocabByWhere(testVocabDeclared(t), vocabServer) {
 		assert.Truef(t, strings.HasPrefix(e.Name, "LW_"), "%s is outside the LW_ namespace", e.Name)
 	}
 }
@@ -84,7 +104,7 @@ func TestVocabServerEntriesAreNamespaced(t *testing.T) {
 // and a doc line. An undescribed row is a name a reader has to go elsewhere
 // to understand, which is the discoverability gap the panel exists to close.
 func TestVocabEntriesAreDescribed(t *testing.T) {
-	for _, e := range vocabDeclared() {
+	for _, e := range testVocabDeclared(t) {
 		assert.NotEmptyf(t, e.Doc, "%s has no doc line", e.Name)
 		assert.NotEmptyf(t, e.Family, "%s has no family", e.Name)
 		assert.Truef(t, strings.HasPrefix(e.call(), e.Name+"("), "%s renders a bad call template", e.Name)
@@ -96,7 +116,7 @@ func TestVocabEntriesAreDescribed(t *testing.T) {
 // "missing" because the endpoint lacks a UDF of that name, which is exactly
 // the LW_ID_* case.
 func TestVocabMarkInstalledOnlyTouchesServer(t *testing.T) {
-	all := vocabDeclared()
+	all := testVocabDeclared(t)
 	vocabMarkInstalled(all, map[string]string{identsql.NameBody: "CREATE FUNCTION"})
 	for _, e := range all {
 		if e.Where == vocabServer && e.Name == identsql.NameBody {
@@ -112,7 +132,7 @@ func TestVocabMarkInstalledOnlyTouchesServer(t *testing.T) {
 // ready flag is what decides between "?" and "MISSING". Marking here would
 // make an in-flight query indistinguishable from an empty server.
 func TestVocabMarkInstalledUnansweredIsNoClaim(t *testing.T) {
-	all := vocabDeclared()
+	all := testVocabDeclared(t)
 	vocabMarkInstalled(all, nil)
 	for _, e := range all {
 		assert.Falsef(t, e.Installed, "%s marked from a nil probe", e.Name)
@@ -122,7 +142,7 @@ func TestVocabMarkInstalledUnansweredIsNoClaim(t *testing.T) {
 // TestVocabExtras covers the other half of the drift question: what the
 // endpoint has that no roster claims.
 func TestVocabExtras(t *testing.T) {
-	declared := vocabDeclared()
+	declared := testVocabDeclared(t)
 	installed := map[string]string{
 		"LW_CO_GATHER":  "CREATE FUNCTION LW_CO_GATHER AS (lane, sel) -> x", // declared
 		"CO_GATHER":     "CREATE FUNCTION CO_GATHER AS (lane, sel) -> x",    // a stale pre-rename spelling
@@ -232,7 +252,7 @@ func TestVocabRowMark(t *testing.T) {
 // it — what decides whether a call works is whether the endpoint carries
 // what the expansion emits.
 func TestVocabExtractionDependencies(t *testing.T) {
-	all := vocabDeclared()
+	all := testVocabDeclared(t)
 	client := vocabByWhere(all, vocabClient)
 	for _, f := range constructsql.ExtractFunctions() {
 		assert.Containsf(t, vocabNames(client), f.Name, "%s missing from the client section", f.Name)
@@ -259,7 +279,7 @@ func TestVocabExtractionDependencies(t *testing.T) {
 	for name := range declared {
 		installed[name] = "CREATE FUNCTION " + name
 	}
-	full := vocabDeclared()
+	full := testVocabDeclared(t)
 	vocabMarkInstalled(full, installed)
 	for _, e := range full {
 		if e.Name == constructsql.NameGet {
@@ -270,7 +290,7 @@ func TestVocabExtractionDependencies(t *testing.T) {
 	// Strip one dependency and it is named — on the client row, which no
 	// "installed?" column would ever have flagged.
 	delete(installed, "LW_VALUE_BY_TAG_EQUAL")
-	partial := vocabDeclared()
+	partial := testVocabDeclared(t)
 	vocabMarkInstalled(partial, installed)
 	for _, e := range partial {
 		if e.Name == constructsql.NameGet {
@@ -280,9 +300,98 @@ func TestVocabExtractionDependencies(t *testing.T) {
 
 	// An unanswered probe claims nothing, the same rule the rest of the
 	// panel follows.
-	unanswered := vocabDeclared()
+	unanswered := testVocabDeclared(t)
 	vocabMarkInstalled(unanswered, nil)
 	for _, e := range unanswered {
 		assert.Empty(t, e.MissingDeps, "%s: an unanswered probe must not claim a missing dependency", e.Name)
 	}
+}
+
+// TestVocabularyRegistryCoversRosters pins that RegisterVocabulary reaches
+// every roster this build declares (ADR-0190 §SD4).
+//
+// The union used to be written out in vocabDeclared; now it is the wiring
+// site's job, and the way it can go wrong is a roster silently dropped from
+// the wiring rather than from an import. So the check is by name, per
+// population, one name from each family.
+func TestVocabularyRegistryCoversRosters(t *testing.T) {
+	r := testVocabRegistry(t)
+
+	byWhere := make(map[sqlvocab.WhereE]map[string]struct{}, 3)
+	for _, w := range sqlvocab.AllWheres {
+		byWhere[w] = map[string]struct{}{}
+	}
+	for _, f := range r.All() {
+		for _, w := range sqlvocab.AllWheres {
+			if f.Where&w != 0 {
+				byWhere[w][f.Name] = struct{}{}
+			}
+		}
+	}
+
+	for _, f := range lwsqlsurface.DeclaredFunctions() {
+		assert.Containsf(t, byWhere[sqlvocab.WhereServer], f.Name, "%s missing from the server population", f.Name)
+	}
+	for _, f := range identsql.Functions() {
+		assert.Containsf(t, byWhere[sqlvocab.WhereClient], f.Name, "%s missing from the client population", f.Name)
+	}
+	for _, fns := range [][]constructsql.Function{
+		constructsql.Functions(), constructsql.ExtractFunctions(), constructsql.ComponentFunctions(),
+	} {
+		for _, f := range fns {
+			assert.Containsf(t, byWhere[sqlvocab.WhereClient], f.Name, "%s missing from the client population", f.Name)
+		}
+	}
+	for _, f := range glosssql.Functions() {
+		assert.Containsf(t, byWhere[sqlvocab.WhereClient], f.Name, "%s missing from the client population", f.Name)
+	}
+	for _, name := range []string{distsql.FuncName, docsearchsql.FuncName, keelsonsql.FuncName} {
+		assert.Containsf(t, byWhere[sqlvocab.WhereClient], name, "%s missing from the client population", name)
+	}
+	for _, f := range tsFuncs {
+		assert.Containsf(t, byWhere[sqlvocab.WhereHost], f.Name, "%s missing from the host population", f.Name)
+	}
+}
+
+// TestVocabularyDomainsAreDeclared is ADR-0190 §SD4's floor: nothing in the
+// registry says nothing about its arguments.
+//
+// Register refuses the zero Domain, so this restates what the wiring already
+// proved — deliberately, because the failure it guards is a roster author
+// reaching for a plain []Param literal and leaving the domain out. The named
+// assertions below are the positions the design leans on; if one of them
+// regresses to DomainExpr the pane goes silent where it should be exact.
+func TestVocabularyDomainsAreDeclared(t *testing.T) {
+	r := testVocabRegistry(t)
+	for _, f := range r.All() {
+		for i, p := range f.Params {
+			assert.NotEqualf(t, sqlvocab.DomainUnspecified, p.Domain.Kind,
+				"%s argument %d (%s) declares no domain", f.Name, i, p.Name)
+		}
+	}
+
+	domainAt := func(name string, ordinal int) sqlvocab.Domain {
+		t.Helper()
+		f, ok := r.Signature(name)
+		require.Truef(t, ok, "%s is not registered", name)
+		require.Greaterf(t, len(f.Params), ordinal, "%s has no argument %d", name, ordinal)
+		return f.Params[ordinal].Domain
+	}
+
+	assert.Equal(t, sqlvocab.DomainComponentKind, domainAt(constructsql.NameComponent, 0).Kind)
+	assert.Equal(t, sqlvocab.DomainComponentKind, domainAt(constructsql.NameComponentFilter, 0).Kind)
+	assert.Equal(t, sqlvocab.DomainIntrospectionTable, domainAt(keelsonsql.FuncName, 0).Kind)
+	assert.Equal(t, sqlvocab.DomainSection, domainAt(constructsql.NameGet, 0).Kind)
+	assert.Equal(t, sqlvocab.DomainMembership, domainAt(constructsql.NameGet, 1).Kind)
+	assert.Equal(t, sqlvocab.DomainExtractionToken, domainAt(constructsql.NameGet, 2).Kind)
+	assert.Equal(t, sqlvocab.DomainSection, domainAt(constructsql.NameTagged, 1).Kind)
+	assert.Equal(t, sqlvocab.DomainCanonicalType, domainAt(constructsql.NameTagged, 3).Kind)
+	assert.Equal(t, sqlvocab.DomainChannel, domainAt(constructsql.NameMembership, 2).Kind)
+	assert.Equal(t, sqlvocab.DomainSupportRole, domainAt(constructsql.NameSupport, 2).Kind)
+	assert.Equal(t, sqlvocab.DomainIdentityTag, domainAt(identsql.NameHasTag, 1).Kind)
+
+	gloss := domainAt(glosssql.FuncName, 1)
+	assert.Equal(t, sqlvocab.DomainGloss, gloss.Kind)
+	assert.Equal(t, sqlvocab.DomainGlossKey, domainAt(glosssql.FuncName, 2).Kind)
+	assert.Equal(t, 1, domainAt(glosssql.FuncName, 2).Ref, "the key's vocabulary depends on the gloss named beside it")
 }

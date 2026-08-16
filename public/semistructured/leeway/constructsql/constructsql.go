@@ -14,6 +14,7 @@
 package constructsql
 
 import (
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -409,7 +410,7 @@ func specString(arg *grammar1.ColumnArgExprContext) (s string, err error) {
 // parameters in order, and one line on what it does.
 type Function struct {
 	Name   string
-	Params []string
+	Params []sqlvocab.Param
 	Doc    string
 }
 
@@ -418,24 +419,44 @@ type Function struct {
 func Functions() (fns []Function) {
 	fns = []Function{
 		{
-			Name:   NamePlain,
-			Params: []string{"expr", "'name'", "'type'", "'item:…'", "'enc:…/sem:…'…"},
-			Doc:    "mint a plain (backbone) leeway column for expr — expands to expr AS \"<physical name>\"; item: is mandatory (ADR-0181)",
+			Name: NamePlain,
+			Params: []sqlvocab.Param{
+				sqlvocab.Expr("expr"),
+				sqlvocab.Expr("'name'"),
+				sqlvocab.Lit("'type'", sqlvocab.DomainCanonicalType),
+				sqlvocab.Lit("'item:…'", sqlvocab.DomainAspect),
+				sqlvocab.Lit("'enc:…/sem:…'…", sqlvocab.DomainAspect),
+			},
+			Doc: "mint a plain (backbone) leeway column for expr — expands to expr AS \"<physical name>\"; item: is mandatory (ADR-0181)",
 		},
 		{
-			Name:   NameTagged,
-			Params: []string{"expr", "'section'", "'name'", "'type'", "'enc:…/sem:…/use:…'…"},
-			Doc:    "mint a tagged value column in a section for expr (ADR-0181)",
+			Name: NameTagged,
+			Params: []sqlvocab.Param{
+				sqlvocab.Expr("expr"),
+				sqlvocab.Lit("'section'", sqlvocab.DomainSection),
+				sqlvocab.Expr("'name'"),
+				sqlvocab.Lit("'type'", sqlvocab.DomainCanonicalType),
+				sqlvocab.Lit("'enc:…/sem:…/use:…'…", sqlvocab.DomainAspect),
+			},
+			Doc: "mint a tagged value column in a section for expr (ADR-0181)",
 		},
 		{
-			Name:   NameMembership,
-			Params: []string{"expr", "'section'", "'channel'"},
-			Doc:    "mint a section's membership lane by channel (low-card-ref, …); role, type and hints are machine-chosen (ADR-0181)",
+			Name: NameMembership,
+			Params: []sqlvocab.Param{
+				sqlvocab.Expr("expr"),
+				sqlvocab.Lit("'section'", sqlvocab.DomainSection),
+				sqlvocab.Lit("'channel'", sqlvocab.DomainChannel),
+			},
+			Doc: "mint a section's membership lane by channel (low-card-ref, …); role, type and hints are machine-chosen (ADR-0181)",
 		},
 		{
-			Name:   NameSupport,
-			Params: []string{"expr", "'section'", "'role'"},
-			Doc:    "mint a section's support column by role (len, card, lrcard, …); properties are machine-chosen (ADR-0181)",
+			Name: NameSupport,
+			Params: []sqlvocab.Param{
+				sqlvocab.Expr("expr"),
+				sqlvocab.Lit("'section'", sqlvocab.DomainSection),
+				sqlvocab.Lit("'role'", sqlvocab.DomainSupportRole),
+			},
+			Doc: "mint a section's support column by role (len, card, lrcard, …); properties are machine-chosen (ADR-0181)",
 		},
 	}
 	return

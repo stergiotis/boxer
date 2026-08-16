@@ -19,6 +19,7 @@
 package glosssql
 
 import (
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"maps"
 	"slices"
 	"strings"
@@ -389,7 +390,7 @@ func Call(expr string, mediaType string, params map[string]string) string {
 // spelling, the parameters in order, one line on what it does.
 type Function struct {
 	Name   string
-	Params []string
+	Params []sqlvocab.Param
 	Doc    string
 }
 
@@ -397,8 +398,16 @@ type Function struct {
 // GlossExpand, never installed server-side.
 func Functions() []Function {
 	return []Function{{
-		Name:   FuncName,
-		Params: []string{"expr", "'gloss/…'", "'key', value…"},
-		Doc:    "gloss expr for the Table and Detail panes — expands to expr AS \"<label>@<media type>;key=value…\", validated against the catalog; 'label' names the alias (ADR-0186)",
+		Name: FuncName,
+		Params: []sqlvocab.Param{
+			sqlvocab.Expr("expr"),
+			sqlvocab.Lit("'gloss/…'", sqlvocab.DomainGloss),
+			// The key/value pairs repeat; only the first key sits at a
+			// declared ordinal, so completion answers there and is silent
+			// further along. deferred: a repeating-tail domain, if the
+			// spelling proves worth it.
+			sqlvocab.Of("'key', value…", sqlvocab.DomainGlossKey, 1),
+		},
+		Doc: "gloss expr for the Table and Detail panes — expands to expr AS \"<label>@<media type>;key=value…\", validated against the catalog; 'label' names the alias (ADR-0186)",
 	}}
 }

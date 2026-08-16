@@ -1,6 +1,7 @@
 package play
 
 import (
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"strconv"
 	"strings"
 
@@ -135,7 +136,7 @@ type vocabTabState struct {
 // parent — the case its auto-fit cap exists for. The tab is registered without
 // scrollTab for that reason (play_tabs.go).
 func (inst *PlayApp) renderVocabularyTab() {
-	declared := vocabDeclared()
+	declared := vocabDeclared(sqlvocab.Default)
 	installed, ready := inst.vocab.demand()
 	vocabMarkInstalled(declared, installed)
 	// Extras join the corpus BEFORE the filter is computed, so a filtered
@@ -464,7 +465,7 @@ func (inst *PlayApp) renderVocabDocCell(r tree.Row) {
 	var text string
 	switch n.Kind {
 	case vocabNodeSection:
-		text = n.Where.blurb()
+		text = vocabWhereBlurb(n.Where)
 	case vocabNodeFunc:
 		text = n.Entry.Doc
 	}
@@ -503,7 +504,7 @@ const (
 // answered: before that every server row is unmarked rather than marked
 // present, because "we have not asked yet" and "it is there" are different
 // facts and only one of them is known.
-func vocabRowMark(e vocabEntry, where vocabWhereE, ready bool) (mark string, weak bool) {
+func vocabRowMark(e vocabEntry, where sqlvocab.WhereE, ready bool) (mark string, weak bool) {
 	switch {
 	case where != vocabServer && !e.Available:
 		return vocabMarkReserved, true

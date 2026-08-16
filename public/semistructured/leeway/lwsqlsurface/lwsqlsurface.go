@@ -30,6 +30,7 @@
 package lwsqlsurface
 
 import (
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"strconv"
 	"strings"
 
@@ -112,7 +113,7 @@ func (inst FamilyE) String() (s string) {
 // contain.
 type Function struct {
 	Name   string
-	Params []string
+	Params []sqlvocab.Param
 	Doc    string
 	Family FamilyE
 }
@@ -140,7 +141,7 @@ func DeclaredFunctions() (fns []Function) {
 	}
 	fns = append(fns, Function{
 		Name:   VersionFunctionName,
-		Params: []string{},
+		Params: nil,
 		Doc:    "surface revision marker; SELECT it to detect client/server skew across all three families",
 		Family: FamilySurface,
 	})
@@ -151,7 +152,7 @@ func DeclaredFunctions() (fns []Function) {
 func MarkerStatement() (sql string) {
 	sql = chpack.Statement(chpack.Function{
 		Name:   VersionFunctionName,
-		Params: []string{},
+		Params: nil,
 		Body:   strconv.Itoa(Version),
 	})
 	return

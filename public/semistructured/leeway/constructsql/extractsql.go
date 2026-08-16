@@ -1,6 +1,7 @@
 package constructsql
 
 import (
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"strconv"
 	"strings"
 
@@ -619,29 +620,54 @@ func qualify(qualifier string, column string) (out string) {
 func ExtractFunctions() (fns []Function) {
 	fns = []Function{
 		{
-			Name:   NameGet,
-			Params: []string{"'section'", "'membership'|id", "'col:…'", "'chan:…'"},
-			Doc:    "read one attribute's scalar value from a leeway section; the type default when absent (ADR-0181)",
+			Name: NameGet,
+			Params: []sqlvocab.Param{
+				sqlvocab.Lit("'section'", sqlvocab.DomainSection),
+				sqlvocab.Lit("'membership'|id", sqlvocab.DomainMembership),
+				sqlvocab.Of("'col:…'", sqlvocab.DomainExtractionToken, 0),
+				sqlvocab.Of("'chan:…'", sqlvocab.DomainExtractionToken, 0),
+			},
+			Doc: "read one attribute's scalar value from a leeway section; the type default when absent (ADR-0181)",
 		},
 		{
-			Name:   NameGetNull,
-			Params: []string{"'section'", "'membership'|id", "'col:…'", "'chan:…'"},
-			Doc:    "as " + NameGet + ", but NULL when the membership is absent — tells absent from present-with-the-default (ADR-0181)",
+			Name: NameGetNull,
+			Params: []sqlvocab.Param{
+				sqlvocab.Lit("'section'", sqlvocab.DomainSection),
+				sqlvocab.Lit("'membership'|id", sqlvocab.DomainMembership),
+				sqlvocab.Of("'col:…'", sqlvocab.DomainExtractionToken, 0),
+				sqlvocab.Of("'chan:…'", sqlvocab.DomainExtractionToken, 0),
+			},
+			Doc: "as " + NameGet + ", but NULL when the membership is absent — tells absent from present-with-the-default (ADR-0181)",
 		},
 		{
-			Name:   NameGetList,
-			Params: []string{"'section'", "'membership'|id", "'col:…'", "'chan:…'"},
-			Doc:    "read one attribute's array or set value from a leeway section; [] when absent (ADR-0181)",
+			Name: NameGetList,
+			Params: []sqlvocab.Param{
+				sqlvocab.Lit("'section'", sqlvocab.DomainSection),
+				sqlvocab.Lit("'membership'|id", sqlvocab.DomainMembership),
+				sqlvocab.Of("'col:…'", sqlvocab.DomainExtractionToken, 0),
+				sqlvocab.Of("'chan:…'", sqlvocab.DomainExtractionToken, 0),
+			},
+			Doc: "read one attribute's array or set value from a leeway section; [] when absent (ADR-0181)",
 		},
 		{
-			Name:   NameSel,
-			Params: []string{"'section'", "'membership'|id", "'chan:…'", "'param:…'"},
-			Doc:    "select the membership-lane positions carrying a membership, to gather any lane through with LW_CO_GATHER; [] when absent (ADR-0181)",
+			Name: NameSel,
+			Params: []sqlvocab.Param{
+				sqlvocab.Lit("'section'", sqlvocab.DomainSection),
+				sqlvocab.Lit("'membership'|id", sqlvocab.DomainMembership),
+				sqlvocab.Of("'chan:…'", sqlvocab.DomainExtractionToken, 0),
+				sqlvocab.Of("'param:…'", sqlvocab.DomainExtractionToken, 0),
+			},
+			Doc: "select the membership-lane positions carrying a membership, to gather any lane through with LW_CO_GATHER; [] when absent (ADR-0181)",
 		},
 		{
-			Name:   NameSelAttrs,
-			Params: []string{"'section'", "'membership'|id", "'chan:…'", "'param:…'"},
-			Doc:    "as " + NameSel + ", but attribute indices — co-indexed with it, so both pass to one lambda (ADR-0181)",
+			Name: NameSelAttrs,
+			Params: []sqlvocab.Param{
+				sqlvocab.Lit("'section'", sqlvocab.DomainSection),
+				sqlvocab.Lit("'membership'|id", sqlvocab.DomainMembership),
+				sqlvocab.Of("'chan:…'", sqlvocab.DomainExtractionToken, 0),
+				sqlvocab.Of("'param:…'", sqlvocab.DomainExtractionToken, 0),
+			},
+			Doc: "as " + NameSel + ", but attribute indices — co-indexed with it, so both pass to one lambda (ADR-0181)",
 		},
 	}
 	return

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	"github.com/stretchr/testify/require"
 )
@@ -242,4 +243,19 @@ func TestHasAuthoringMarker(t *testing.T) {
 	require.False(t, HasAuthoringMarker("select a, b from t"))
 	// Conservative false positive: marker inside a literal costs a parse, nothing else.
 	require.True(t, HasAuthoringMarker("select 'lw_plain' from t"))
+}
+
+// TestRostersDeclareEveryDomain is ADR-0190 §SD4's floor for this package's
+// three rosters: a parameter whose domain is unsaid is refused at
+// registration, so the check is simply that all three register.
+func TestRostersDeclareEveryDomain(t *testing.T) {
+	r := sqlvocab.NewRegistry()
+	for _, fns := range [][]Function{Functions(), ExtractFunctions(), ComponentFunctions()} {
+		for _, f := range fns {
+			require.NoErrorf(t, r.Register(sqlvocab.Function{
+				Name: f.Name, Params: f.Params, Doc: f.Doc, Where: sqlvocab.WhereClient,
+			}), "%s", f.Name)
+		}
+	}
+	require.NotZero(t, r.Len())
 }

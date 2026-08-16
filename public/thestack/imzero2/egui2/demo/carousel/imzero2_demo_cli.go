@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
@@ -467,6 +468,9 @@ func NewCommand() *cli.Command {
 			// links, and stating it here is what keeps that reviewable.
 			if compErr := play.RegisterComponents(componentsql.Default); compErr != nil {
 				log.Warn().Err(compErr).Msg("componentsql: play component registration failed")
+			}
+			if vocabErr := play.RegisterVocabulary(sqlvocab.Default); vocabErr != nil {
+				log.Warn().Err(vocabErr).Msg("sqlvocab: play vocabulary registration failed")
 			}
 
 			// This module's Go package graph as keelson('go_packages') and

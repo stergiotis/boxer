@@ -12,6 +12,8 @@ package identsql
 // runs) or "does this server have it" (only where the DDL was applied). The
 // roster carries both facts about the family so a UI need not restate them.
 
+import "github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
+
 // Function is one entry of the LW_ID_* family: the name a query spells, the
 // parameters in order, and one line on what it does. Bodies are generated
 // (expandIsValid and friends) and differ between the macro expansion and the
@@ -19,7 +21,7 @@ package identsql
 // not carried here — UdfDdlStatements is the source for the SQL text.
 type Function struct {
 	Name   string
-	Params []string
+	Params []sqlvocab.Param
 	Doc    string
 }
 
@@ -31,32 +33,32 @@ func Functions() (fns []Function) {
 	fns = []Function{
 		{
 			Name:   NameIsValid,
-			Params: []string{"x"},
+			Params: sqlvocab.Exprs("x"),
 			Doc:    "1 when x is a well-formed Fibonacci-tagged identifier, 0 otherwise (a comma-less id reports 0, matching the Go decoder)",
 		},
 		{
 			Name:   NameTagWidth,
-			Params: []string{"x"},
+			Params: sqlvocab.Exprs("x"),
 			Doc:    "bit width of the identifier's tag field",
 		},
 		{
 			Name:   NameTagBits,
-			Params: []string{"x"},
+			Params: sqlvocab.Exprs("x"),
 			Doc:    "the raw tag bits, unshifted",
 		},
 		{
 			Name:   NameBody,
-			Params: []string{"x"},
+			Params: sqlvocab.Exprs("x"),
 			Doc:    "the identifier's body, with the tag stripped",
 		},
 		{
 			Name:   NameTagValue,
-			Params: []string{"x"},
+			Params: sqlvocab.Exprs("x"),
 			Doc:    "the decoded Zeckendorf tag value",
 		},
 		{
 			Name:   NameHasTag,
-			Params: []string{"x", "tag_value"},
+			Params: []sqlvocab.Param{sqlvocab.Expr("x"), sqlvocab.Lit("tag_value", sqlvocab.DomainIdentityTag)},
 			Doc:    "1 when x carries tag_value; folds to a comparison when tag_value is constant",
 		},
 	}

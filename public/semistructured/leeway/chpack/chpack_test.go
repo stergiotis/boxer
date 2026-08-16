@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
 )
 
@@ -116,7 +117,7 @@ func TestRosterInvariants(t *testing.T) {
 		// Lambda-first convention: a lambda parameter is spelled f and
 		// leads the parameter list, mirroring arrayExists(f, arr).
 		for i, p := range f.Params {
-			if p == "f" {
+			if p.Name == "f" {
 				require.Zerof(t, i, "%s: lambda parameter must come first", f.Name)
 			}
 		}
@@ -143,4 +144,17 @@ func TestRosterInvariants(t *testing.T) {
 	for _, f := range fns {
 		require.NotContainsf(t, f.Name, "VERSION", "%s: the pack declares no version marker", f.Name)
 	}
+}
+
+// TestRosterDeclaresEveryDomain is ADR-0190 §SD4's floor for this roster: a
+// parameter whose domain is unsaid is refused at registration, so the check is
+// simply that the whole roster registers.
+func TestRosterDeclaresEveryDomain(t *testing.T) {
+	r := sqlvocab.NewRegistry()
+	for _, f := range chpack.Functions() {
+		require.NoErrorf(t, r.Register(sqlvocab.Function{
+			Name: f.Name, Params: f.Params, Doc: f.Doc, Where: sqlvocab.WhereServer,
+		}), "%s", f.Name)
+	}
+	require.NotZero(t, r.Len())
 }

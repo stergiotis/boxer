@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/aspectcodec"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -93,61 +94,61 @@ func aspectFunctions() (fns []Function) {
 	fns = []Function{
 		{
 			Name:   "LW_ASPECT_SEG_ENC",
-			Params: []string{"name"},
+			Params: sqlvocab.Exprs("name"),
 			Body:   aspectSegBody(aspectTaggedEncPart, aspectPlainEncPart),
 			Doc:    "encoding-hints segment of a physical column name; '' for foreign or aspect-free names",
 		},
 		{
 			Name:   "LW_ASPECT_SEG_USE",
-			Params: []string{"name"},
+			Params: sqlvocab.Exprs("name"),
 			Body:   aspectSegBody(aspectTaggedUsePart, 0),
 			Doc:    "use-aspects segment of a physical column name; '' on plain columns, which carry none",
 		},
 		{
 			Name:   "LW_ASPECT_SEG_SEM",
-			Params: []string{"name"},
+			Params: sqlvocab.Exprs("name"),
 			Body:   aspectSegBody(aspectTaggedSemPart, aspectPlainSemPart),
 			Doc:    "value-semantics segment of a physical column name; '' for foreign or aspect-free names",
 		},
 		{
 			Name:   "LW_ASPECT_DECODE",
-			Params: []string{"seg"},
+			Params: sqlvocab.Exprs("seg"),
 			Body:   fmt.Sprintf("if(seg = '' OR seg = '0', CAST([], 'Array(UInt8)'), arrayMap(c -> %s, splitByString('', seg)))", decodeGuard),
 			Doc:    "aspect indices of a v2 segment ('' and the legacy '0' are empty); throws on chars outside the v0 range",
 		},
 		{
 			Name:   "LW_ASPECT_NAMES_ENC",
-			Params: []string{"seg"},
+			Params: sqlvocab.Exprs("seg"),
 			Body:   aspectNamesBody(encodingaspects.AllAspects),
 			Doc:    "kebab names of an encoding-hints segment; future indices render as unknown-N",
 		},
 		{
 			Name:   "LW_ASPECT_NAMES_USE",
-			Params: []string{"seg"},
+			Params: sqlvocab.Exprs("seg"),
 			Body:   aspectNamesBody(useaspects.AllAspects),
 			Doc:    "kebab names of a use-aspects segment; future indices render as unknown-N",
 		},
 		{
 			Name:   "LW_ASPECT_NAMES_SEM",
-			Params: []string{"seg"},
+			Params: sqlvocab.Exprs("seg"),
 			Body:   aspectNamesBody(valueaspects.AllAspects),
 			Doc:    "kebab names of a value-semantics segment; future indices render as unknown-N",
 		},
 		{
 			Name:   "LW_ASPECT_HAS_ENC",
-			Params: []string{"name", "aspect"},
+			Params: sqlvocab.Exprs("name", "aspect"),
 			Body:   aspectHasBody("LW_ASPECT_SEG_ENC", encodingaspects.AllAspects),
 			Doc:    "whether the column's encoding hints contain the kebab-named aspect; false for unknown names or escape-range segments",
 		},
 		{
 			Name:   "LW_ASPECT_HAS_USE",
-			Params: []string{"name", "aspect"},
+			Params: sqlvocab.Exprs("name", "aspect"),
 			Body:   aspectHasBody("LW_ASPECT_SEG_USE", useaspects.AllAspects),
 			Doc:    "whether the column's section use-aspects contain the kebab-named aspect; false for unknown names or escape-range segments",
 		},
 		{
 			Name:   "LW_ASPECT_HAS_SEM",
-			Params: []string{"name", "aspect"},
+			Params: sqlvocab.Exprs("name", "aspect"),
 			Body:   aspectHasBody("LW_ASPECT_SEG_SEM", valueaspects.AllAspects),
 			Doc:    "whether the column's value semantics contain the kebab-named aspect; false for unknown names or escape-range segments",
 		},

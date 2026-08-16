@@ -1,6 +1,7 @@
 package play
 
 import (
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
@@ -54,7 +55,7 @@ const (
 // parent; everything a cell needs beyond the label lives here.
 type vocabNode struct {
 	Kind  vocabNodeKindE
-	Where vocabWhereE
+	Where sqlvocab.WhereE
 	// Entry is the function this row shows. Meaningful for vocabNodeFunc only.
 	Entry vocabEntry
 	// Count is how many function rows sit beneath a section or family row.
@@ -101,8 +102,8 @@ func buildVocabOutline(entries []vocabEntry, accept func(vocabEntry) bool) (out 
 		return int32(len(out.Nodes) - 1)
 	}
 
-	for _, where := range []vocabWhereE{vocabServer, vocabClient, vocabPlay} {
-		sec := add(where.title(), vocabSectionKey(where), -1,
+	for _, where := range []sqlvocab.WhereE{vocabServer, vocabClient, vocabPlay} {
+		sec := add(vocabWhereTitle(where), vocabSectionKey(where), -1,
 			vocabNode{Kind: vocabNodeSection, Where: where})
 		// First-appearance order, so families follow the order the model
 		// assembles the rosters in rather than an alphabetical one that would
@@ -134,13 +135,13 @@ func buildVocabOutline(entries []vocabEntry, accept func(vocabEntry) bool) (out 
 // function named after its family — cannot collide with one, since a shared
 // key IS a shared identity to tree.State and the widget documents duplicates
 // as undetected rather than rejected.
-func vocabSectionKey(where vocabWhereE) string { return "s|" + where.String() }
+func vocabSectionKey(where sqlvocab.WhereE) string { return "s|" + where.String() }
 
-func vocabFamilyKey(where vocabWhereE, family string) string {
+func vocabFamilyKey(where sqlvocab.WhereE, family string) string {
 	return "f|" + where.String() + "|" + family
 }
 
-func vocabFuncKey(where vocabWhereE, name string) string {
+func vocabFuncKey(where sqlvocab.WhereE, name string) string {
 	return "n|" + where.String() + "|" + name
 }
 

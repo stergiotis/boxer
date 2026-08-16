@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 )
@@ -55,7 +56,7 @@ func TestRosterMatchesSQL(t *testing.T) {
 	require.Len(t, got, len(roster), "roster size differs from the statements HelperUDFsSQL emits")
 	for i, want := range roster {
 		require.Equal(t, want.Name, got[i].name, "roster entry %d", i)
-		require.Equal(t, want.Params, got[i].params, "%s parameters", want.Name)
+		require.Equal(t, sqlvocab.ParamNames(want.Params), got[i].params, "%s parameters", want.Name)
 		require.NotEmpty(t, want.Doc, "%s has no doc line", want.Name)
 	}
 }
@@ -97,4 +98,17 @@ func TestRosterNamespace(t *testing.T) {
 	for _, f := range readback.HelperFunctions() {
 		require.Truef(t, strings.HasPrefix(f.Name, "LW_"), "%s is outside the LW_ namespace", f.Name)
 	}
+}
+
+// TestRosterDeclaresEveryDomain is ADR-0190 §SD4's floor for this roster: a
+// parameter whose domain is unsaid is refused at registration, so the check is
+// simply that the whole roster registers.
+func TestRosterDeclaresEveryDomain(t *testing.T) {
+	r := sqlvocab.NewRegistry()
+	for _, f := range readback.HelperFunctions() {
+		require.NoErrorf(t, r.Register(sqlvocab.Function{
+			Name: f.Name, Params: f.Params, Doc: f.Doc, Where: sqlvocab.WhereServer,
+		}), "%s", f.Name)
+	}
+	require.NotZero(t, r.Len())
 }

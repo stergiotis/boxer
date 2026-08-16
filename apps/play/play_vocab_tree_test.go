@@ -22,7 +22,7 @@ func vocabOutlineKindsAt(o vocabOutline, kind vocabNodeKindE) (nodes []int32, la
 // refuses a broken hierarchy and draws the error in place of the outline, so a
 // builder that emits a dangling parent takes the whole panel out.
 func TestVocabOutlineIsAValidTree(t *testing.T) {
-	o := buildVocabOutline(vocabDeclared(), nil)
+	o := buildVocabOutline(testVocabDeclared(t), nil)
 	require.NoError(t, o.Tree.Validate())
 	assert.Equal(t, o.Tree.Len(), len(o.Nodes), "the metadata column shares the tree's node index")
 	assert.Len(t, o.Tree.Keys, o.Tree.Len(), "a short key column is filed half by key and half by index")
@@ -33,7 +33,7 @@ func TestVocabOutlineIsAValidTree(t *testing.T) {
 // duplicate keys as undetected rather than rejected. Two rows under one key
 // expand and select together, which reads as a widget bug.
 func TestVocabOutlineKeysAreUnique(t *testing.T) {
-	declared := vocabDeclared()
+	declared := testVocabDeclared(t)
 	installed := map[string]string{
 		"myOwnHelper": "CREATE FUNCTION myOwnHelper AS (x) -> x",
 		"CO_GATHER":   "CREATE FUNCTION CO_GATHER AS (lane, sel) -> x",
@@ -56,7 +56,7 @@ func TestVocabOutlineKeysAreUnique(t *testing.T) {
 // point of the file — a function reparented to a section would flatten the
 // grouping back to what it replaced without failing anything else.
 func TestVocabOutlineGroupsBySectionThenFamily(t *testing.T) {
-	o := buildVocabOutline(vocabDeclared(), nil)
+	o := buildVocabOutline(testVocabDeclared(t), nil)
 
 	sections, _ := vocabOutlineKindsAt(o, vocabNodeSection)
 	require.Len(t, sections, 3, "one row per population, always")
@@ -87,7 +87,7 @@ func TestVocabOutlineGroupsBySectionThenFamily(t *testing.T) {
 // number of functions actually beneath it. It is the number a reader uses to
 // decide whether to open a family, so a stale one is worse than none.
 func TestVocabOutlineCounts(t *testing.T) {
-	o := buildVocabOutline(vocabDeclared(), nil)
+	o := buildVocabOutline(testVocabDeclared(t), nil)
 
 	beneath := make(map[int32]int, o.Tree.Len())
 	total := 0
@@ -103,7 +103,7 @@ func TestVocabOutlineCounts(t *testing.T) {
 	for node, want := range beneath {
 		assert.Equalf(t, want, o.Nodes[node].Count, "%s counts wrong", o.Tree.Labels[node])
 	}
-	assert.Equal(t, total, len(vocabDeclared()), "every entry reaches a row")
+	assert.Equal(t, total, len(testVocabDeclared(t)), "every entry reaches a row")
 }
 
 // TestVocabOutlineKeepsEmptySections pins what a filter may and may not remove.
@@ -111,7 +111,7 @@ func TestVocabOutlineCounts(t *testing.T) {
 // has none of those", which is the confusion ADR-0174 exists to end; an empty
 // FAMILY is dropped, because a screen of them would bury the matches.
 func TestVocabOutlineKeepsEmptySections(t *testing.T) {
-	none := buildVocabOutline(vocabDeclared(), func(vocabEntry) bool { return false })
+	none := buildVocabOutline(testVocabDeclared(t), func(vocabEntry) bool { return false })
 
 	sections, _ := vocabOutlineKindsAt(none, vocabNodeSection)
 	assert.Len(t, sections, 3, "the three populations survive a filter that matches nothing")
@@ -126,7 +126,7 @@ func TestVocabOutlineKeepsEmptySections(t *testing.T) {
 
 	// And a filter that admits one name leaves exactly that row, under its own
 	// family, under its own population.
-	one := buildVocabOutline(vocabDeclared(), func(e vocabEntry) bool { return e.Name == "LW_CO_GATHER" })
+	one := buildVocabOutline(testVocabDeclared(t), func(e vocabEntry) bool { return e.Name == "LW_CO_GATHER" })
 	_, labels := vocabOutlineKindsAt(one, vocabNodeFunc)
 	require.Len(t, labels, 1)
 	assert.Contains(t, labels[0], "LW_CO_GATHER")
@@ -139,7 +139,7 @@ func TestVocabOutlineKeepsEmptySections(t *testing.T) {
 // by label, so a reworded family in the model would silently stop collapsing —
 // and the extras are the population whose size this build does not bound.
 func TestVocabExtraFamiliesMatchTheModel(t *testing.T) {
-	declared := vocabDeclared()
+	declared := testVocabDeclared(t)
 	installed := map[string]string{
 		"myOwnHelper": "CREATE FUNCTION myOwnHelper AS (x) -> x",
 		"CO_GATHER":   "CREATE FUNCTION CO_GATHER AS (lane, sel) -> x", // a withdrawn spelling

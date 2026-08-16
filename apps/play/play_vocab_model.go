@@ -4,12 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
-	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
-	"github.com/stergiotis/boxer/public/identity/identsql"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
@@ -19,34 +14,16 @@ import (
 // distinction that predicts how a call fails and what a user does about it
 // (§SD1).
 
-// vocabWhereE is the population a function belongs to.
-type vocabWhereE uint8
-
+// The three populations the panel sections by, spelled locally so the panel
+// code reads as it did before the registry owned the type (ADR-0174 §SD1).
 const (
-	// vocabServer is a SQL UDF: it exists only where it was installed, and
-	// its absence is a provisioning fact.
-	vocabServer vocabWhereE = iota
-	// vocabClient is a nanopass macro expanded before the statement ships,
-	// so it works against any endpoint — including one carrying no UDFs.
-	vocabClient
-	// vocabPlay is computed in play and never reaches a server.
-	vocabPlay
+	vocabServer = sqlvocab.WhereServer
+	vocabClient = sqlvocab.WhereClient
+	vocabPlay   = sqlvocab.WhereHost
 )
 
-func (inst vocabWhereE) String() string {
-	switch inst {
-	case vocabServer:
-		return "server"
-	case vocabClient:
-		return "client"
-	case vocabPlay:
-		return "play"
-	}
-	return "unknown"
-}
-
-// title is the section heading.
-func (inst vocabWhereE) title() string {
+// vocabWhereTitle is the section heading.
+func vocabWhereTitle(inst sqlvocab.WhereE) string {
 	switch inst {
 	case vocabServer:
 		return "Server — installed on this endpoint"
@@ -58,9 +35,9 @@ func (inst vocabWhereE) title() string {
 	return "Unknown"
 }
 
-// blurb is the one line under the heading saying what the section's
+// vocabWhereBlurb is the one line under the heading saying what the section's
 // membership means for a user.
-func (inst vocabWhereE) blurb() string {
+func vocabWhereBlurb(inst sqlvocab.WhereE) string {
 	switch inst {
 	case vocabServer:
 		return "SQL user-defined functions. A missing one needs provisioning, not a different query."
@@ -77,7 +54,7 @@ type vocabEntry struct {
 	Name   string
 	Params []string
 	Doc    string
-	Where  vocabWhereE
+	Where  sqlvocab.WhereE
 	// Family groups entries within a section and names their provenance.
 	Family string
 	// Declared is true when this build declares the function, which is what
@@ -158,119 +135,35 @@ func vocabFamilyLabel(fam lwsqlsurface.FamilyE) (label string) {
 	return
 }
 
-// vocabDeclared returns everything this build knows how to offer, in
-// presentation order: server rosters first (the population a user most often
-// finds absent), then the client macros, then play's own.
+// vocabDeclared returns everything this build knows how to offer, in the order
+// the wiring site registered it: server rosters first (the population a user
+// most often finds absent), then the client macros, then play's own.
+//
+// It reads the registry RegisterVocabulary populated (ADR-0190 §SD4) rather
+// than unioning the rosters itself. The union used to live here, which meant
+// the completion engine would have had to repeat it; one registry is what keeps
+// a roster from reaching one surface and not the other.
 //
 // The LW_ID_* family appears in BOTH the server and client sections, and that
 // is not a bug: it genuinely is both, installable as UDFs and expanded
 // client-side, so listing it once would make one of the two answers wrong
-// (§SD1).
-func vocabDeclared() (out []vocabEntry) {
-	out = make([]vocabEntry, 0, 48)
-
-	// The server population IS the declared set (ADR-0171 §SD2), taken from
-	// the one place that holds all three families plus the marker. Looping
-	// the three rosters separately here is what let the marker be declared
-	// in one list and probed against another; a name the surface installs
-	// and this panel does not know would show up as an "extra" on a
-	// correctly provisioned server.
-	for _, f := range lwsqlsurface.DeclaredFunctions() {
-		out = append(out, vocabEntry{
-			Name: f.Name, Params: f.Params, Doc: f.Doc,
-			Where: vocabServer, Family: vocabFamilyLabel(f.Family),
-			Declared: true, Available: true,
-		})
-	}
-
-	for _, f := range identsql.Functions() {
-		out = append(out, vocabEntry{
-			Name: f.Name, Params: f.Params, Doc: f.Doc,
-			Where: vocabClient, Family: "identity (ADR-0106)",
-			Declared: true, Available: true,
-		})
-	}
-	// The statement- and expression-level macros the pre-execute registry
-	// expands. Each names its own spelling, so this list carries no string
-	// literals that could drift from the pass that implements them.
-	out = append(out,
-		vocabEntry{
-			Name: distsql.FuncName, Params: []string{"cols…"},
-			Doc:   "expand into the distribution result contract — count, mean, quantiles per column (ADR-0161)",
-			Where: vocabClient, Family: "statistics (ADR-0161)", Declared: true, Available: true,
-		},
-		vocabEntry{
-			Name: docsearchsql.FuncName, Params: []string{"'query'"},
-			Doc:   "search this build's documentation corpus; expands into a UNION over the doc tables (ADR-0164)",
-			Where: vocabClient, Family: "documentation (ADR-0164)", Declared: true, Available: true,
-		},
-		vocabEntry{
-			Name: keelsonsql.FuncName, Params: []string{"'table'"},
-			Doc:   "table position only: introspection tables served in-process or over HTTP (ADR-0094)",
-			Where: vocabClient, Family: "introspection (ADR-0094)", Declared: true, Available: true,
-		},
-	)
-	// The leeway constructor family (ADR-0181 §SD2/§SD7): client-only by
-	// design — expansion mints identifier-position aliases no server-side
-	// function can reach.
-	for _, f := range constructsql.Functions() {
-		out = append(out, vocabEntry{
-			Name: f.Name, Params: f.Params, Doc: f.Doc,
-			Where: vocabClient, Family: "leeway authoring (ADR-0181)",
-			Declared: true, Available: true,
-		})
-	}
-	// The gloss(…) macro (ADR-0186 §SD7): client-only like the constructors,
-	// an alias declaring how a column renders.
-	for _, f := range glosssql.Functions() {
-		out = append(out, vocabEntry{
-			Name: f.Name, Params: f.Params, Doc: f.Doc,
-			Where: vocabClient, Family: "glosses (ADR-0186)",
-			Declared: true, Available: true,
-		})
-	}
-	// The extraction family is client-expanded like the constructors, but
-	// unlike them it expands INTO server-side calls — so it declares those
-	// as dependencies and is marked against the same probe (ADR-0181 §SD7,
-	// ADR-0174 §SD6). This is the entry the dependency column exists for.
-	for _, f := range constructsql.ExtractFunctions() {
-		out = append(out, vocabEntry{
-			Name: f.Name, Params: f.Params, Doc: f.Doc,
-			Where: vocabClient, Family: "leeway extraction (ADR-0181)",
-			Declared: true, Available: true,
-			Dependencies: constructsql.ExtractExpansionDependencies(),
-		})
-	}
-	// The component family (ADR-0189 §SD8). The two names differ in what they
-	// need installed, which is why only one carries dependencies:
-	// LW_COMPONENT_FILTER expands to ClickHouse built-ins and runs against any
-	// endpoint, while LW_COMPONENT expands to the named-tuple projection,
-	// which calls the read-back helpers. Availability is a further condition
-	// this column cannot show: a kind resolves only if its store was
-	// registered at the host's wiring site — which is what
-	// keelson('lw_components') answers.
-	for _, f := range constructsql.ComponentFunctions() {
-		e := vocabEntry{
-			Name: f.Name, Params: f.Params, Doc: f.Doc,
-			Where: vocabClient, Family: "leeway components (ADR-0189)",
-			Declared: true, Available: true,
+// (§SD1). The registry carries it as two declarations, and a declaration whose
+// Where names several populations fans out here for the same reason.
+func vocabDeclared(r *sqlvocab.Registry) (out []vocabEntry) {
+	fns := r.All()
+	out = make([]vocabEntry, 0, len(fns))
+	for _, f := range fns {
+		for _, where := range sqlvocab.AllWheres {
+			if f.Where&where == 0 {
+				continue
+			}
+			out = append(out, vocabEntry{
+				Name: f.Name, Params: sqlvocab.ParamNames(f.Params), Doc: f.Doc,
+				Where: where, Family: f.Family,
+				Declared: true, Available: f.Available,
+				Dependencies: f.Dependencies,
+			})
 		}
-		if f.Name == constructsql.NameComponent {
-			e.Dependencies = constructsql.ComponentExpansionDependencies()
-		}
-		out = append(out, e)
-	}
-
-	for _, f := range tsFuncs {
-		params := make([]string, 0, len(f.Args))
-		for _, a := range f.Args {
-			params = append(params, a.Name)
-		}
-		out = append(out, vocabEntry{
-			Name: f.Name, Params: params, Doc: f.Doc,
-			Where: vocabPlay, Family: "time series (ADR-0163)",
-			Declared: true, Available: f.Shipped,
-		})
 	}
 	return
 }
