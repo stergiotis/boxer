@@ -343,6 +343,10 @@ func (v *BaseClickHouseParserGrammar1Visitor) VisitColumnExprOr(ctx *ColumnExprO
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserGrammar1Visitor) VisitColumnExprTupleAccessNamed(ctx *ColumnExprTupleAccessNamedContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserGrammar1Visitor) VisitColumnExprDynamic(ctx *ColumnExprDynamicContext) interface{} {
 	return v.VisitChildren(ctx)
 }

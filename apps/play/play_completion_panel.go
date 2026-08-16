@@ -76,6 +76,11 @@ func (inst *PlayApp) refreshCompletion(res sqleditor.Result) {
 		st.engine = &sqlcomplete.Engine{
 			Vocab:     sqlvocab.Default,
 			Providers: inst.completionProviders(),
+			// grammar1 takes `expr.name` on a named tuple since ADR-0190
+			// §SD11, so the fields of a call receiver are a spelling that
+			// parses, canonicalises and runs — which is the condition §SD7
+			// gates that receiver on.
+			NamedTupleAccess: true,
 		}
 	}
 	st.typed = res.Site.PartialText

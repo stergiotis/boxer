@@ -5,6 +5,7 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -43,7 +44,7 @@ func CanonicalizeConstructors(form ConstructorFormE) nanopass.Pass {
 	case ConstructorFormFunction:
 		rules = []nodeRule{
 			tupleToFunctionRule, arrayToFunctionRule,
-			tupleAccessToFunctionRule, arrayAccessToFunctionRule,
+			tupleAccessToFunctionRule, tupleAccessNamedToFunctionRule, arrayAccessToFunctionRule,
 			settingArrayToFunctionRule, settingTupleToFunctionRule, settingEmptyArrayToFunctionRule,
 		}
 	}
@@ -169,6 +170,38 @@ func tupleAccessToFunctionRule(pr *nanopass.ParseResult, node antlr.ParserRuleCo
 		return "", false
 	}
 	return "tupleElement(" + nanopass.NodeText(pr, exprCtx) + ", " + idxTn.GetText() + ")", true
+}
+
+// tupleAccessNamedToFunctionRule canonicalises `expr.name` on a named tuple
+// into `tupleElement(expr, 'name')` (ADR-0190 §SD11).
+//
+// The sibling of tupleAccessToFunctionRule, and it has to be a separate
+// alternative in the grammar rather than a widening of that one: `a.b` and
+// `a.b.c` are qualified COLUMN references, which columnIdentifier takes
+// greedily, so the alternative only fires after a primary that is not an
+// identifier — a call's result, a parenthesised expression.
+//
+// The name is quoted with the marshalling escape rather than by hand, so an
+// element named with a quote or a backslash survives the rewrite.
+func tupleAccessNamedToFunctionRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {
+	// ColumnExprTupleAccessNamed: columnExpr . identifier
+	c, ok := node.(*grammar1.ColumnExprTupleAccessNamedContext)
+	if !ok || c.GetChildCount() < 3 {
+		return "", false
+	}
+	exprCtx, ok := c.GetChild(0).(antlr.ParserRuleContext)
+	if !ok {
+		return "", false
+	}
+	nameCtx, ok := c.GetChild(c.GetChildCount() - 1).(antlr.ParserRuleContext)
+	if !ok {
+		return "", false
+	}
+	name := nanopass.DecodeIdentifier(nanopass.NodeText(pr, nameCtx))
+	if name == "" {
+		return "", false
+	}
+	return "tupleElement(" + nanopass.NodeText(pr, exprCtx) + ", " + marshalling.EscapeString(name) + ")", true
 }
 
 func arrayAccessToFunctionRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {

@@ -121,3 +121,26 @@ func mustElement(t *testing.T, ty chtype.Type, name string) string {
 	require.NotNil(t, a.Type)
 	return a.Type.String()
 }
+
+// The dot form ADR-0190 §SD11 taught grammar1, typed here so §SD7's call
+// receiver can be offered.
+func TestTyperNamedTupleAccess(t *testing.T) {
+	ty := testTyper()
+	cases := []struct{ expr, want string }{
+		{"LW_COMPONENT('SysCPU').LoadAvg1", "Float32"},
+		{"CAST(x, 'Tuple(a Tuple(b UInt8))').a", "Tuple(b UInt8)"},
+		{"CAST(x, 'Tuple(a Tuple(b UInt8))').a.b", "UInt8"},
+		{"tuple('s').`1`", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.expr, func(t *testing.T) {
+			got, ok := ty.TypeOf(c.expr)
+			if c.want == "" {
+				assert.False(t, ok)
+				return
+			}
+			require.True(t, ok)
+			assert.Equal(t, c.want, got.String())
+		})
+	}
+}

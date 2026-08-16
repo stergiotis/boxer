@@ -259,6 +259,9 @@ type ClickHouseParserGrammar1Visitor interface {
 	// Visit a parse tree produced by ClickHouseParserGrammar1#ColumnExprOr.
 	VisitColumnExprOr(ctx *ColumnExprOrContext) interface{}
 
+	// Visit a parse tree produced by ClickHouseParserGrammar1#ColumnExprTupleAccessNamed.
+	VisitColumnExprTupleAccessNamed(ctx *ColumnExprTupleAccessNamedContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParserGrammar1#ColumnExprDynamic.
 	VisitColumnExprDynamic(ctx *ColumnExprDynamicContext) interface{}
 

@@ -94,6 +94,16 @@ func (inst *Typer) compute(expr string, depth int) (t chtype.Type, ok bool) {
 	if chain, isChain := identChain(spans); isChain {
 		return inst.typeOfChain(chain, depth)
 	}
+	// `<anything>.name` — the spelling ADR-0190 §SD11 taught grammar1. The
+	// receiver goes back through the typer, so it composes with everything
+	// else here: `LW_COMPONENT('k').a.b` is two of these.
+	if i := len(spans) - 2; i >= 1 && spans[i].Text == "." && isNameable(spans[i+1]) {
+		base, baseOk := inst.typeOf(strings.TrimSpace(expr[:spans[i].Start]), depth+1)
+		if !baseOk {
+			return
+		}
+		return elementType(base, []string{unquote(spans[i+1].Text)})
+	}
 	return
 }
 

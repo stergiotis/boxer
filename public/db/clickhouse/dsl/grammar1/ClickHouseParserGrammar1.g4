@@ -209,6 +209,7 @@ columnExpr
 
     | columnExpr LBRACKET columnExpr RBRACKET                                             # ColumnExprArrayAccess
     | columnExpr DOT DECIMAL_LITERAL                                                      # ColumnExprTupleAccess
+    | columnExpr DOT identifier                                                           # ColumnExprTupleAccessNamed
     | DASH columnExpr                                                                     # ColumnExprNegate
     | columnExpr ( ASTERISK
                  | SLASH

@@ -65,6 +65,7 @@ func exprPrecedence(ctx antlr.ParserRuleContext) int32 {
 		*grammar1.ColumnExprTupleContext,
 		*grammar1.ColumnExprArrayAccessContext,
 		*grammar1.ColumnExprTupleAccessContext,
+		*grammar1.ColumnExprTupleAccessNamedContext,
 		*grammar1.ColumnExprParamSlotContext,
 		*grammar1.ColumnExprWinFunctionContext,
 		*grammar1.ColumnExprWinFunctionTargetContext,

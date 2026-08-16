@@ -741,3 +741,83 @@ func TestCanonicalizeSettingsMultiple(t *testing.T) {
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
 }
+
+// TestCanonicalizeToFunctionNamedTupleAccess pins ADR-0190 §SD11: `expr.name`
+// on a named tuple canonicalises to tupleElement, and the qualified-column
+// spellings are untouched.
+//
+// The second half is the reason this is a separate grammar alternative rather
+// than a widening of the positional one. `a.b` and `a.b.c` are column
+// references and columnIdentifier takes them greedily, so the new alternative
+// fires only after a primary that is not an identifier — a call's result, a
+// parenthesised expression. A golden on both halves is what keeps a future
+// grammar edit from quietly rewriting every qualified column into a tuple read.
+func TestCanonicalizeToFunctionNamedTupleAccess(t *testing.T) {
+	pass := passes.CanonicalizeConstructors(passes.ConstructorFormFunction)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "call_receiver",
+			input:    "SELECT CAST(tuple(1, 'x'), 'Tuple(a UInt8, b String)').b",
+			expected: "SELECT tupleElement(CAST(tuple(1, 'x'), 'Tuple(a UInt8, b String)'), 'b')",
+		},
+		{
+			// The grouping parens survive: dropping them is RemoveParens's
+			// job, and this pass rewrites the access without reshaping what
+			// it reads.
+			name:     "paren_receiver",
+			input:    "SELECT (tuple(1, 2)).x",
+			expected: "SELECT tupleElement((tuple(1, 2)), 'x')",
+		},
+		{
+			name:     "chained",
+			input:    "SELECT f(x).a.b",
+			expected: "SELECT tupleElement(tupleElement(f(x), 'a'), 'b')",
+		},
+		{
+			name:     "a_qualified_column_is_not_a_tuple_read",
+			input:    "SELECT a.b FROM t",
+			expected: "SELECT a.b FROM t",
+		},
+		{
+			name:     "a_three_part_column_is_not_either",
+			input:    "SELECT a.b.c FROM t",
+			expected: "SELECT a.b.c FROM t",
+		},
+		{
+			name:     "quoted_element_names_survive",
+			input:    "SELECT f(x).`odd name`",
+			expected: "SELECT tupleElement(f(x), 'odd name')",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := pass.Run(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, got)
+
+			_, err = nanopass.Parse(got)
+			require.NoError(t, err, "produced invalid SQL: %s", got)
+		})
+	}
+}
+
+// The spelling ADR-0190 exists to make writable parses now, which is what
+// gates the completion engine's call-receiver member access (§SD7).
+func TestNamedTupleAccessParses(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT LW_COMPONENT('SysMem').TotalBytes",
+		"SELECT LW_COMPONENT('SysMem').__caret__",
+		"SELECT f(x).a",
+		"SELECT (a).b",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			_, err := nanopass.Parse(sql)
+			require.NoError(t, err)
+		})
+	}
+}

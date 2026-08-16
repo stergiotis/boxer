@@ -1,6 +1,7 @@
 package play
 
 import (
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"strings"
 	"testing"
 
@@ -168,5 +169,44 @@ func TestKeelsonLwComponentsPublishesWhatPlayRegistered(t *testing.T) {
 		if tables.Value(i) != sysmfacts.SysmetricsTableName {
 			t.Fatalf("%s: table = %s, want %s", kinds.Value(i), tables.Value(i), sysmfacts.SysmetricsTableName)
 		}
+	}
+}
+
+// TestNamedTupleAccessReachesTheComponentExpansion is ADR-0190 §SD11 end to
+// end through play's own pass order.
+//
+// The dot form the grammar now takes has to survive canonicalisation into
+// `tupleElement(LW_COMPONENT('SysMem'), 'TotalBytes')` and then the component
+// expansion, which runs later (CanonicalizeFull at 50, LwComponentExpand at
+// 110). The order matters in one direction only: if the component call were
+// expanded first, the dot would sit on a CAST and canonicalise the same way —
+// but the projection it names would already have been spliced, so the pass
+// order is what keeps the readable spelling readable all the way to the wire.
+func TestNamedTupleAccessReachesTheComponentExpansion(t *testing.T) {
+	canon, err := passes.CanonicalizeConstructors(passes.ConstructorFormFunction).
+		Run("SELECT LW_COMPONENT('SysMem').TotalBytes FROM boxer.facts")
+	if err != nil {
+		t.Fatalf("canonicalize: %v", err)
+	}
+	if !strings.Contains(canon, "tupleElement(LW_COMPONENT('SysMem'), 'TotalBytes')") {
+		t.Fatalf("the dot form did not canonicalise: %s", canon)
+	}
+
+	reg := componentsql.NewRegistry()
+	if err = RegisterComponents(reg); err != nil {
+		t.Fatalf("RegisterComponents: %v", err)
+	}
+	out, err := constructsql.ComponentExpandPass(reg, "").Run(canon)
+	if err != nil {
+		t.Fatalf("expand: %v", err)
+	}
+	if strings.Contains(out, "LW_COMPONENT") {
+		t.Fatalf("a component call survived expansion: %s", out)
+	}
+	if !strings.Contains(out, "tupleElement(CAST(tuple(") {
+		t.Fatalf("the field read is not over the projection: %s", out)
+	}
+	if !strings.Contains(out, " WHERE ") || !strings.Contains(out, "countEqual(") {
+		t.Fatalf("the conformance filter was not injected: %s", out)
 	}
 }
