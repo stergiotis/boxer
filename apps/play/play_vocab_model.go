@@ -275,6 +275,16 @@ func vocabDeclared() (out []vocabEntry) {
 	return
 }
 
+// The two families holding what the endpoint carries and no roster declares.
+// Named constants because the outline reads them back to decide what the panel
+// opens closed (vocabExtraFamilies): they are the one population whose size
+// this build does not bound, and a literal in two files would drift silently
+// into a family that never collapses.
+const (
+	vocabFamilyUndeclared = "not declared by this build"
+	vocabFamilyWithdrawn  = "withdrawn by this build"
+)
+
 // vocabExtras lists functions the endpoint carries that no roster in this
 // build declares — a hand-installed helper, or a spelling left behind by a
 // rename this build no longer performs. They are the other half of the drift
@@ -308,14 +318,14 @@ func vocabExtras(installed map[string]string, declared []vocabEntry) (out []voca
 		}
 		if _, wasOurs := retired[name]; wasOurs {
 			out = append(out, vocabEntry{
-				Name: name, Where: vocabServer, Family: "withdrawn by this build",
+				Name: name, Where: vocabServer, Family: vocabFamilyWithdrawn,
 				Declared: false, Available: true,
 				Doc: "a spelling this repository shipped and has since withdrawn — reinstalling the surface drops it",
 			})
 			continue
 		}
 		out = append(out, vocabEntry{
-			Name: name, Where: vocabServer, Family: "not declared by this build",
+			Name: name, Where: vocabServer, Family: vocabFamilyUndeclared,
 			Declared: false, Available: true,
 			Doc: "on this endpoint but not in any roster this build carries — see the Docs tab for its definition",
 		})

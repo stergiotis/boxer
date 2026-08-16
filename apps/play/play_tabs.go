@@ -317,7 +317,14 @@ var builtinTabDefs = []builtinTabDef{
 	// Insert seam — a snippet is a statement you want, a vocabulary entry is a
 	// name you can use. Lazy, so a session that never opens it never runs the
 	// system.functions probe (ADR-0174 §SD2).
-	{id: "vocabulary", dockID: dockTabVocabulary, title: "Vocabulary", zone: TabZoneTools, lazy: true},
+	//
+	// NoScroll: the body's outline is an etable, which scrolls itself and
+	// culls the rows outside its viewport. Under the dock's default body
+	// ScrollArea it would have two scrollbars and an unbounded parent — the
+	// case the table's own auto-fit cap exists for. The chrome above it is
+	// fixed-height and the table is sized from the pane probe, so there is
+	// nothing for the clip this costs to take.
+	{id: "vocabulary", dockID: dockTabVocabulary, title: "Vocabulary", zone: TabZoneTools, lazy: true, noScroll: true},
 	// Glosses is the result-side sibling of Vocabulary (ADR-0186 §SD6): the
 	// catalog of value renderings, the buffer's effective rules, and how each
 	// column of the current result resolved. Lazy — its body walks the
@@ -673,7 +680,10 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 		case "passes":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderPassesTab) }
 		case "vocabulary":
-			spec.Render = func(f *TabFrame) { scrollTab(inst.renderVocabularyTab) }
+			// No scrollTab: the body's outline is an etable, which brings its
+			// own scroll and culls the rows outside it. Wrapping it would give
+			// the tab two scrollbars and hand the table an unbounded parent.
+			spec.Render = func(f *TabFrame) { inst.renderVocabularyTab() }
 		case "glosses":
 			spec.Render = func(f *TabFrame) { scrollTab(func() { inst.renderGlossesTab(f.Schema) }) }
 		case "flow":

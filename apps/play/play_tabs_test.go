@@ -63,11 +63,15 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 	assert.Equal(t, TabZoneBody, seen["graph"].Zone, "Graph stays in the body against its classification")
 	assert.Equal(t, TabZoneBody, seen["schema"].Zone, "Schema is fed the result, not the buffer")
 
-	// Map is the only no-scroll leaf: it sizes its raster from the available
-	// space, so it needs a bounded one. World left this set when it moved to a
-	// probe-sized canvas (ADR-0114 Update 2026-08-01).
+	// The no-scroll leaves, and why each one is one. Map sizes its raster from
+	// the available space, so it needs a bounded one — World left this set when
+	// it moved to a probe-sized canvas (ADR-0114 Update 2026-08-01). Vocabulary
+	// draws its outline through an etable, which scrolls and culls itself, so
+	// the dock's body ScrollArea would only add a second scrollbar and an
+	// unbounded parent (ADR-0174 Update 2026-08-16).
+	noScroll := map[string]bool{"map": true, "vocabulary": true}
 	for id, s := range seen {
-		assert.Equal(t, id == "map", s.NoScroll, "NoScroll set for %q", id)
+		assert.Equal(t, noScroll[id], s.NoScroll, "NoScroll set for %q", id)
 	}
 
 	panelIDs := make([]string, 0, 6)

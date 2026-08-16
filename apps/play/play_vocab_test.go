@@ -193,24 +193,29 @@ func TestVocabSurfaceSkew(t *testing.T) {
 // TestVocabRowMark pins the four server states apart, and that the two
 // non-server populations are never marked missing — they do not depend on the
 // endpoint, so any endpoint-derived mark on them would be a lie.
+//
+// The marks lost the trailing "·" they carried while they led the row: it
+// separated the mark from the call beside it, and the mark now has a column of
+// its own.
 func TestVocabRowMark(t *testing.T) {
 	srv := vocabEntry{Name: "LW_CO_GATHER", Where: vocabServer, Declared: true, Available: true}
 
 	mark, _ := vocabRowMark(srv, vocabServer, false)
-	assert.Equal(t, "? ·", mark, "before the probe answers")
+	assert.Equal(t, vocabMarkUnknown, mark, "before the probe answers")
 
 	present := srv
 	present.Installed = true
-	mark, _ = vocabRowMark(present, vocabServer, true)
-	assert.Equal(t, "✓ ·", mark)
+	mark, weak := vocabRowMark(present, vocabServer, true)
+	assert.Equal(t, vocabMarkPresent, mark)
+	assert.True(t, weak, "the state every row is in on a provisioned endpoint recedes")
 
-	mark, weak := vocabRowMark(srv, vocabServer, true)
-	assert.Equal(t, "MISSING ·", mark, "answered and absent")
+	mark, weak = vocabRowMark(srv, vocabServer, true)
+	assert.Equal(t, vocabMarkMissing, mark, "answered and absent")
 	assert.False(t, weak, "the one state a user must act on is the one that is not recessed")
 
 	extra := vocabEntry{Name: "myOwnHelper", Where: vocabServer, Declared: false, Available: true}
 	mark, _ = vocabRowMark(extra, vocabServer, true)
-	assert.Equal(t, "extra ·", mark)
+	assert.Equal(t, vocabMarkExtra, mark)
 
 	cli := vocabEntry{Name: "docsearch", Where: vocabClient, Declared: true, Available: true}
 	mark, _ = vocabRowMark(cli, vocabClient, false)
@@ -218,7 +223,7 @@ func TestVocabRowMark(t *testing.T) {
 
 	reserved := vocabEntry{Name: "tsMotifs", Where: vocabPlay, Declared: true, Available: false}
 	mark, _ = vocabRowMark(reserved, vocabPlay, true)
-	assert.Equal(t, "reserved ·", mark)
+	assert.Equal(t, vocabMarkReserved, mark)
 }
 
 // TestVocabExtractionDependencies pins ADR-0174 §SD6's marking on the entry

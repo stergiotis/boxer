@@ -1281,6 +1281,40 @@ ORDER BY b.pings DESC
 LIMIT 100"
 }
 
+scene_15_vocabulary() {
+	desc="Vocabulary — what this buffer may call and where each name runs (ADR-0174), as an outline: population, then declaring family, then the call prototypes in a column of their own, marked against what the endpoint carries"
+	senv=(BOXER_PLAY_FOCUS_VOCABULARY=1)
+	# Any statement will do — the tab reads the build's rosters and the
+	# endpoint's system.functions, not the buffer. One is needed only because
+	# the capture arms on a result (BOXER_PLAY_SCREENSHOT's phase 0).
+	sql="SELECT count() AS pings FROM default.planes_mercator_sample100"
+	# Longer than the default: the server section is a nodeLane probe, and a
+	# capture taken before it answers shows a column of '?' — which is the
+	# panel behaving correctly and a useless picture.
+	settle=4000
+	# focus THEN type, as separate steps: `type` focuses and sends in one
+	# batch, but egui applies an injected focus request on the NEXT frame, so
+	# the text reaches whatever had focus before and is dropped silently.
+	#
+	# By role, not by name: a text input carries no accessible name, so `name`
+	# never resolves one (the Docs and regex scenes locate theirs the same
+	# way). No `nth` — the filter box is the only text_input on this scene,
+	# the editor being a widget of its own, so an index would only be a second
+	# thing to keep true. The filtered capture is the one that shows a section
+	# surviving a filter that empties it: the three populations are the panel's
+	# claim about what exists, so they stay even at zero matches.
+	#
+	# `gather` rather than a family word: it matches a handful of server rows —
+	# LW_CO_GATHER plus the ones whose doc lines name it, which is the joint
+	# name/doc haystack doing its job — and leaves the client and play sections
+	# empty and on screen. A family word like `ragged` matches every member of
+	# that family through its family label, filling the view with one section.
+	steps='{"do":"capture","text":"15_vocabulary","settleMs":800}
+{"do":"focus","role":"text_input","settleMs":400}
+{"do":"type","role":"text_input","text":"gather"}
+{"do":"capture","text":"15_vocabulary_filtered","settleMs":800}'
+}
+
 scene_16_preview_canonical() {
 	desc="Preview — the canonical form the nanopass pipeline rewrites the buffer into, before any handle resolution"
 	senv=(BOXER_PLAY_FOCUS_TABLE=1 BOXER_PLAY_FOCUS_PREVIEW=1)
