@@ -119,6 +119,16 @@ type Result struct {
 	// next reader of the same walk.
 	Entity   highlight.CaretEntity
 	EntityOk bool
+	// Site is the caret's completion context: the enclosing call frames with
+	// the caret's ordinal, the string literal it is inside, the member access
+	// it follows, the token being typed, and the brackets still open
+	// (ADR-0190 §SD2). Entity is one field of it — kept beside it because the
+	// documentation pane reads the entity and nothing else.
+	//
+	// It is computed here for the reason Entity is: it follows from buffer and
+	// caret alone, and two consumers deriving it separately would eventually
+	// disagree about which frame's caret they used.
+	Site highlight.CaretSite
 }
 
 // Editor is one SQL editing surface's cross-frame state: the caret channel,
@@ -280,7 +290,14 @@ func (inst *Editor) Bind(f Frame) (res Result) {
 	ranges, bodyOffset := inst.Statements(canonical)
 	stmt, _, total, ok := SelectStatement(ranges, caret)
 	run, number, _ := ComposeRunBuffer(canonical, ranges, bodyOffset, caret)
-	entity, entityOk := highlight.EntityAt(inst.spans(canonical), caret)
+	spans := inst.spans(canonical)
+	entity, entityOk := highlight.EntityAt(spans, caret)
+	// The site is resolved over the caret's OWN statement, not the whole
+	// buffer: a bracket a neighbouring statement left open is not one this
+	// caret is inside, and the repair the scope tier builds is per statement.
+	// Offsets stay canonical — the slice narrows which spans are walked, not
+	// what they index.
+	site := highlight.SiteAt(spansWithin(spans, stmt, ok), caret)
 
 	inst.result = Result{
 		Buffer:     canonical,
@@ -294,8 +311,31 @@ func (inst *Editor) Bind(f Frame) (res Result) {
 		BodyOffset: bodyOffset,
 		Entity:     entity,
 		EntityOk:   entityOk,
+		Site:       site,
 	}
 	return inst.result
+}
+
+// spansWithin narrows a buffer's spans to one statement's extent. The spans
+// keep their canonical offsets, so everything derived from the slice indexes
+// the whole buffer as before.
+//
+// A buffer with no resolvable statement yields all of them: there is nothing to
+// narrow to, and the caret is still somewhere.
+func spansWithin(spans []highlight.Span, stmt StatementRange, ok bool) (out []highlight.Span) {
+	if !ok {
+		out = spans
+		return
+	}
+	lo, hi := 0, len(spans)
+	for lo < hi && spans[lo].Stop <= stmt.Src.Start {
+		lo++
+	}
+	for hi > lo && spans[hi-1].Start >= stmt.Src.End {
+		hi--
+	}
+	out = spans[lo:hi]
+	return
 }
 
 // Result returns what the last [Editor.Bind] published, for a consumer that
