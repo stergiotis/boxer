@@ -229,6 +229,43 @@ referencing the leeway DQL helper UDFs. play's Vocabulary tab marks the family
 against `ExpansionDependencies` the way the extraction family already is, so
 "client-expanded" does not read as "works everywhere".
 
+### SD9 — discovery: `keelson('lw_components')`
+
+The registry is published as an introspection table, following
+`keelson('sql_passes')` — a static provider, no dependencies, reading the
+process registry at snapshot time, `FreshnessLive` so a late registration does
+not read as an absent store.
+
+Without it the only way to learn which kinds resolve is to write a call and
+read the refusal, which lists them: a diagnostic standing in for a catalogue.
+It is the gap `keelson('memberships')` closes for ref-membership ids, milder
+here because a kind is at least a name a person can guess.
+
+- **The rows are the registry's, not the link set's.** A store whose package
+  is linked but never registered resolves nothing, and a table sourced from
+  linkage would promise otherwise. "What can I query in this process" is the
+  question, and SD7's explicit wiring is what the answer reflects.
+- **It publishes the kind, the store and the bound table — plus artefact
+  sizes, not the SQL.** The projections run tens of kilobytes; thirteen of
+  them would make this a payload rather than a catalogue. A reader who wants
+  the SQL writes `LW_COMPONENT` and lets the pass expand it, which is what the
+  surface is for. The table is the one place the *bound table* is answerable,
+  and that is not a detail a reader can infer: the artefacts carry unqualified
+  columns, so §SD6 refuses a read written against anything else.
+- **`lw_components`, not `components`.** `keelson('components')` is taken by
+  ADR-0126's deployment inventory — a different sense of the word, on the same
+  server. The `lw_` prefix is the governed SQL namespace this table documents,
+  so a reader holding `LW_COMPONENT` finds it.
+
+The registration itself stays host-wired (SD7). Moving it into the static
+provider set would link every generated store into every keelson binary —
+~200 KB of generated code each — to populate a registry most of them never
+query. That is the trade the carousel already makes for `go_packages`, which
+it registers at its own site rather than in `introspecthost`'s static set
+because collecting the graph links `golang.org/x/tools`. **Deferred with the
+trigger: a headless consumer that queries components without play**, which
+today has the pass registered and an empty registry.
+
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
@@ -238,6 +275,7 @@ against `ExpansionDependencies` the way the extraction family already is, so
 | `LwComponentExpand` (named pass, `passreg`) | new — the pass and its two `LW_` functions (SD3) | play's pass set; the Vocabulary tab |
 | `LW_COMPONENT` / `LW_COMPONENT_FILTER` (SQL-visible names) | new — the `LW_` namespace gains two entries | the vocabulary panel; user-facing docs |
 | `play` wiring | +registry registration for the stores it reads (SD7) | a second host when one appears |
+| `keelson('lw_components')` (introspection table) | new — the registry as a catalogue (SD9) | the static provider set's name list |
 | `<table>Scan<Kind>Filter` constants | **unchanged** — still unexported, still what `Scan` uses | nothing |
 | `boxer.facts` schema, DDL, rows | **unchanged** — this is a read-authoring change only | nothing |
 
@@ -460,6 +498,17 @@ Proposed — awaiting review by the code owner.
   vocabulary has — scalars on array sections, the M4 per-item tables, the M6
   adjacency list — and a separate test expands all thirteen without a golden,
   so a kind whose projection failed to generate cannot pass unnoticed.
+
+- **M5 — `keelson('lw_components')`, the discovery layer (SD9).** ✓
+  A static provider reading the process registry, beside `sql_passes`. The
+  name avoids `keelson('components')`, which ADR-0126's deployment inventory
+  already holds — the collision is worth knowing about, since both senses of
+  "component" are queryable on one server.
+
+  The end-to-end check lives in `play`, where the two halves meet: the
+  provider and the registration are in packages that do not import each
+  other, so the table showing thirteen kinds over `boxer.facts` is the only
+  place they can be seen to agree.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
