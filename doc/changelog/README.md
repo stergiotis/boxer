@@ -3,7 +3,7 @@ type: how-to
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-08-07
+reviewed-date: 2026-08-16
 ---
 
 # Compiling a changelog entry
