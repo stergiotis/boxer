@@ -52,17 +52,20 @@ func newLiveCompletionRig(t *testing.T) *liveCompletionRig {
 	t.Cleanup(componentsql.Default.Reset)
 	require.NoError(t, RegisterComponents(componentsql.Default))
 
-	// The host's own pass wiring, so a spliced buffer reaches the server the
-	// way a typed one does. Best-effort registration, as at boot: the standard
-	// set may already be there from another test in this binary.
-	_ = passregdefaults.RegisterDefaults()
-	_ = RegisterPasses(passreg.Default)
+	// The host's own pass wiring, into a PRIVATE registry the client is
+	// pointed at. Not passreg.Default: this binary's other tests read that one,
+	// and installing the canonicalising pass into it would quietly re-quote
+	// every statement they build.
+	passes := passreg.NewRegistry()
+	require.NoError(t, passregdefaults.RegisterStandard(passes))
+	require.NoError(t, RegisterPasses(passes))
 
 	vocab := sqlvocab.NewRegistry()
 	require.NoError(t, RegisterVocabulary(vocab))
 
 	app := tabsTestApp()
 	app.client = NewClient(ClientConfig{URL: liveClickHouseURL(t)}, nil)
+	app.client.passes = passes
 	app.completion.catalog = newCatalogProbe(app.client)
 	return &liveCompletionRig{
 		engine: &sqlcomplete.Engine{
