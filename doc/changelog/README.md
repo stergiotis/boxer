@@ -29,6 +29,16 @@ drive `gov commitdigest` through an external LLM and keep resume state under
    select the window by date — dates drift across rebases and time zones; the
    hash is exact.
 
+   **When that hash is unreachable** — `git log <hash>..HEAD` fails with
+   "unknown revision" because history was rewritten after the entry was
+   compiled — chain from the previous entry's *own* commit instead
+   (`git log --oneline -- doc/changelog/<file>`). Its parent is at or after the
+   recorded compilation point, so nothing before it can be an uncovered
+   feature. Then sweep the stale entry's citations
+   (`grep -oE '\`[0-9a-f]{8}\`' <file>` piped through `git cat-file -t`) and
+   record the replacements in the new entry, so the old one stays usable. This
+   happened at the 2026-08-07 boundary; see that entry's chain note.
+
 2. **Extract the window.**
 
    ```sh
@@ -57,11 +67,24 @@ drive `gov commitdigest` through an external LLM and keep resume state under
 
 5. **Write the entry** with the shape of the existing ones: front-matter
    (`type: reference`, `status: draft`), the mandatory draft banner, a scope
-   paragraph, the *Coverage and continuation* table (window, covered-through
-   hash = HEAD at compilation, commit counts, pointer to the previous entry),
-   then the thematic body. Prose style per
+   paragraph, a *window in brief* section, the tag and ADR-status paragraphs,
+   the *Coverage and continuation* table (window, covered-through hash = HEAD
+   at compilation, commit counts, pointer to the previous entry, and any chain
+   note), then the thematic body. Prose style per
    [AGENTS.md](../../AGENTS.md#writing-style-for-committed-prose):
    descriptive, no self-praise, no working-context leaks.
+
+   The **window in brief** exists because the body serves a different reader
+   than the summary does. The body is a lookup surface — roughly one commit
+   hash every twenty words — which is what someone auditing a single arc needs
+   and what someone asking "what happened this fortnight" cannot read. So the
+   brief carries no hashes and no links, states the two or three through-lines
+   the window actually had, and says what the window costs a reader (breaking
+   changes, whether anything shipped under a tag). Keep it under ~250 words;
+   everything in it must be cited in the body. Entries before
+   2026-08-07 – 2026-08-16 predate this section. Keep continuation machinery —
+   chain notes, rewritten-hash mappings — down with the *Coverage and
+   continuation* table rather than above the first thing that changed.
 
 6. **Commit by explicit path** (`git add <files>; git commit -- <files>`),
    leaving `status: draft` until a human review flips it. The flip target is
