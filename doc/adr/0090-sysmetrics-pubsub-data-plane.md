@@ -157,8 +157,7 @@ visible. The SD8 sensitivity posture covers the new fields unchanged.
 
 ### 2026-08-14 — P5 is built; §SD3's codec swap is abandoned and §SD4's byte-tee is void
 
-[ADR-0184](./0184-sysmetrics-persistence-tee.md) *(proposed, awaiting
-review)* specifies the §SD9 P5 tee, and it is built: `runtime/sysmtee`
+[ADR-0184](./0184-sysmetrics-persistence-tee.md) specifies the §SD9 P5 tee, and it is built: `runtime/sysmtee`
 subscribes to the plane and writes `boxer.facts` through a generated record
 store (`runtime/sysmfacts`), behind `sysmetricsd --tee`, default off.
 Correcting three things recorded here, because the tee's shape is not the

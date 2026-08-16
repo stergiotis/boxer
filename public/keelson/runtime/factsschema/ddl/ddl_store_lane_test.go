@@ -21,7 +21,7 @@ import (
 // its columns are not this table's and comparing them would fail correctly
 // for the wrong reason.
 var storeDDLFiles = []string{
-	// ADR-0184 (proposed) M1: the sysmetrics tee.
+	// ADR-0184 M1: the sysmetrics tee.
 	"public/keelson/runtime/sysmfacts/facts_ddl_clickhouse.out.sql",
 }
 
@@ -48,7 +48,7 @@ var storeDDLFiles = []string{
 // unable to drift from it, which holds within a lane and not across two.
 //
 // Out of scope: whether either block matches the *live* table. `chstore` is
-// the sole DDL author (ADR-0184 (proposed) §SD2) and the generated
+// the sole DDL author (ADR-0184 §SD2) and the generated
 // VerifySchema is what checks a running server. This test needs no
 // ClickHouse.
 //

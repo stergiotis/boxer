@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-14
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-16
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0184: sysmetrics persistence tee — metric samples as facts on a generated record store
 
@@ -468,7 +466,34 @@ runs as a standalone sink against a remote scraper without change.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-08-16, with M0–M6 already landed under `proposed` status by the
+owner's direction, the record edited in place as implementation taught. Four
+of those edits changed the decision rather than annotating it:
+
+- **§SD3's host token is one membership per kind** (`sysmCpuHost`,
+  `sysmMemHost`, …), not the shared `sysmHost` the section described. A
+  generated store declares each membership's kind symbol once per package and
+  refuses two kinds naming the same membership; cross-kind sharing needs the
+  reflect path a store does not use (M2).
+- **§SD4's sensitivity plan diverges from ADR-0090 §SD8 for stored rows.** The
+  command line, user name and uid/gid are their own kind, off by default,
+  rather than carrying a `sensitive` tag beside the attribute — a component
+  DTO binds one membership per field, so §SD8's second tag is unreachable
+  from the generated write path, and a row in `boxer.facts` outlives the
+  process §SD8's accepted exposure was scoped to (M5).
+- **§SD3 did not anticipate an alignment contract.** Four of the domains it
+  called scalar carry a per-item table, stored column-major, so index *i* of
+  every array in a row describes the same item and nothing in leeway enforces
+  it (M4).
+- **§SD6's read-surface spelling was wrong and is corrected.** The `chan:`
+  token is mandatory on this table and the verb follows the section's arity,
+  so the `LW_GET('f32Array', '<id>')` the section gave is refused on both
+  counts. It was written down wrong three times before an expansion golden
+  was built for it — which is also why the verification plan's lane
+  statement now says where the round-trip actually landed.
+
+Post-acceptance edits follow the Tier-2 rule: a dated `## Updates` entry, not
+a silent rewrite.
 
 - **M0 — `storeexec`: `recordstore.ExecutorI` over `chclient` (ADR-0105 D1).** ✓
   Landed as [`public/keelson/data/storeexec`](../../public/keelson/data/storeexec).
@@ -491,8 +516,8 @@ Proposed — awaiting review by the code owner.
   ADR does not own.
 - **M2 — vocabulary at its own tag value, assignment golden, and the cpu/mem DTOs.** ✓
   Landed as
-  [`sysmvocab`](../../public/keelson/runtime/sysmvocab) and
-  [`sysmfacts`](../../public/keelson/runtime/sysmfacts).
+  [`keelson/runtime/sysmvocab`](../../public/keelson/runtime/sysmvocab) and
+  [`keelson/runtime/sysmfacts`](../../public/keelson/runtime/sysmfacts).
   One correction to §SD3 as written: the host token is **one membership per
   kind** (`sysmCpuHost`, `sysmMemHost`, …), not one shared `sysmHost`. A
   generated store declares each membership's kind symbol once per package and
@@ -500,7 +525,7 @@ Proposed — awaiting review by the code owner.
   reflect path, which a store does not use. The cost is linear in domains. The
   domain token was dropped: the kind already identifies it.
 - **M3 — `ExternallyProvisioned`, the generated store, the tee, and `sysmetricsd` wiring.** ✓
-  Landed as [`sysmtee`](../../public/keelson/runtime/sysmtee), the generated
+  Landed as [`keelson/runtime/sysmtee`](../../public/keelson/runtime/sysmtee), the generated
   store in `sysmfacts`, and `sysmetricsd --tee` (default off).
   `loadstudy`'s package documentation is corrected in the same milestone.
 

@@ -103,7 +103,7 @@ a second copy of all three.
 - **The DDL is emitted but never applied.** `chstore.SetupTable` is the sole
   DDL author for this table, so a facts-bound store carries no `EnsureTable`,
   no embedded DDL string and no DDL tail — not a discouraged method, an absent
-  one ([ADR-0184](../adr/0184-sysmetrics-persistence-tee.md) (proposed) §SD2).
+  one ([ADR-0184](../adr/0184-sysmetrics-persistence-tee.md) §SD2).
   The `.sql` file is still written: it is the physical schema the store decodes
   positionally, and reviewing it is how you see what the store expects.
   `VerifySchema` matters more here than elsewhere for the same reason — nothing
@@ -144,7 +144,7 @@ reconciled.
   layout, and the frame-control wall.
 - **ADR-0105** — why keelson adopts generated stores by milestone rather than by
   refactor, and why app persist state left `boxer.facts`.
-- **ADR-0184** (proposed) — the first facts-bound store, and why it cannot run
+- **ADR-0184** — the first facts-bound store, and why it cannot run
   its own DDL.
 - **ADR-0183** (proposed) — the component-authoring surface these DTOs are
   written against.

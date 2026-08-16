@@ -215,7 +215,7 @@ dependency closure) documents the intended use; detection rules that
   5) evaluates the joins this ADR makes expressible; nothing here writes facts.
 - **Persistence/history** — the ADR-0090 P5 tee covers topology domains the
   day it is built; nothing stored meanwhile, so "what was true at 03:12"
-  stays unanswerable here. *(Built 2026-08-15 as ADR-0184, opt-in — see the
+  stays unanswerable here. *(Built as ADR-0184, accepted 2026-08-16, opt-in — see the
   Updates entry for what that does and does not change.)*
 - **The appliance desired-state manifest** (R1) — which components *should*
   exist on which box is today ansible's knowledge in git; v1's declared half
@@ -359,8 +359,7 @@ entry). What landed, and where it deviates from the letter of the SDs:
 
 SD6 deferred history with "the ADR-0090 P5 tee covers topology domains the
 day it is built; nothing stored meanwhile". That tee is built:
-[ADR-0184](./0184-sysmetrics-persistence-tee.md) *(proposed, awaiting
-review — the same qualifier ADR-0090's 2026-08-14 entry carries)*
+[ADR-0184](./0184-sysmetrics-persistence-tee.md)
 subscribes to the metric plane and writes `boxer.facts` through a generated
 record store. Its M5 carries the `sockets` domain and its M6 the containment
 tree, which is the topology half SD6 was waiting on. The SD6 bullet's first
