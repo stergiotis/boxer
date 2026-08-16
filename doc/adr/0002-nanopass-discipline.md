@@ -113,6 +113,41 @@ Accepted — 2026-06-21 (reviewed by @spx). Retrospective ADR documenting decisi
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-08-16 — a server-produced AST does not reopen O2
+
+The kill-reason recorded for O2 above is about a **hand-built** AST: a
+translation layer that must track every grammar regeneration. ClickHouse has
+since grown its own AST-as-JSON export — `parseQueryToJSON` /
+`formatQueryFromJSON` and a `clickhouse_json` dialect, merged to `master`
+2026-03-23 under upstream issue #88799 — and a server-produced AST has no
+translation layer, so that specific argument does not apply to it. The premise
+changed; the decision does not.
+
+It stands on three grounds the original `Alternatives` section did not state:
+
+- **No source offsets.** The export emits no `begin`/`end` fields, because
+  `IAST` carries no source-position member at all. Offsets are what
+  `dsl/sqlcomplete`, error-position mapping, `env.BodyOffset` arithmetic,
+  parameter-slot placement and highlighting are built on; none of them has a
+  formulation over an offset-free tree.
+- **Derived practice (4) cannot hold.** Whitespace / comment / paren
+  preservation is not available over a normalised AST. The two-argument
+  `formatQueryFromJSON(json, original_query)` is a token-realignment heuristic
+  that reuses original inter-token material only where significant tokens still
+  match — so it degrades exactly where a rewriting pass changed tokens.
+- **Unreleased, and uncommitted-to.** Absent from 26.4 through 26.8, present
+  only on `master`; upstream states it "can't guarantee compatibility of the
+  AST".
+
+What does change: the export is worth adopting as a **second lane** rather than
+a replacement — a structural oracle for the server-truth harness, which can
+today check only that the server *accepts* boxer's output and not what it
+*understood*, and optionally a wire form for generated queries. Neither
+touches the invariants above. Costed in
+[ClickHouse AST-as-JSON and the nanopass CST](../adr-background-work/clickhouse-ast-json-export.md).
+
 ## References
 
 - [`public/db/clickhouse/dsl/nanopass/README.md`](../../public/db/clickhouse/dsl/nanopass/README.md) — package overview and component inventory.
