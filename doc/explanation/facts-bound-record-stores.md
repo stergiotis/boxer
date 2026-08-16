@@ -146,5 +146,5 @@ reconciled.
   refactor, and why app persist state left `boxer.facts`.
 - **ADR-0184** — the first facts-bound store, and why it cannot run
   its own DDL.
-- **ADR-0183** (proposed) — the component-authoring surface these DTOs are
+- **ADR-0183** — the component-authoring surface these DTOs are
   written against.

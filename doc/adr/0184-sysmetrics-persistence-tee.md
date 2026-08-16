@@ -613,13 +613,28 @@ a silent rewrite.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-08-16 — ADR-0183 is accepted; §SD6's mitigation is settled but still unbuilt
+
+Four statements in this ADR describe ADR-0183 as proposed. It was accepted on
+2026-08-16, and the body is not edited for it — this entry is the correction,
+per the tier this ADR now sits in.
+
+- **§SD4's dependency is discharged, and was before acceptance.** D0
+  (explicit ordinals) and D1 (assignment goldens) both landed; this
+  vocabulary joined D0's migration as the fifth VCS-managed registry. The
+  "if ADR-0183 is rejected the snapshot helper is built here" contingency
+  under Consequences is void — it was not rejected, and the helper landed
+  as `storegen.MembershipIds`.
+- **§SD6's conditional is answered, but not by delivery.** It offers the
+  `vocabclaim` publication as a mitigation "if ADR-0183 D3 is accepted". D3
+  is now accepted and **M5 remains unbuilt** — no `vocabclaim` component
+  exists — so the caveat stands unchanged in practice: an ad-hoc query
+  addresses a ref membership by registry id. What changed is that the shape
+  of the eventual fix is settled rather than proposed.
+
+Nothing about this tee's behaviour changes.
 
 ## References
 

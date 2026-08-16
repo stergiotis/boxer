@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-12
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-16
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0183: leeway component layer — consumer simplification and invariants
 
@@ -697,7 +695,23 @@ M5 and M6 are independent of each other and may swap.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-08-16, with **M0–M4 and M6 landed** under `proposed` status by
+the owner's direction, the record edited in place as implementation taught —
+including D1 and D2, which were rewritten to describe the seam that was built
+rather than the one planned (`storegen.MembershipIds` and per-vocabulary
+assignment goldens, not the `MembershipIdSnapshot` this ADR first named).
+
+**M5 — D3, the vocabulary published as facts — is not built.** No
+`vocabclaim` component exists, so registry skew and resolved-but-never-carried
+remain Go-side questions rather than SQL ones. Accepting the ADR settles that
+this is the shape D3 takes when it is built; it does not deliver it, and two
+readers already lean on the distinction:
+[ADR-0184](./0184-sysmetrics-persistence-tee.md) §SD6 names the `vocabclaim`
+publication as a *future* mitigation for its id-not-name caveat, and its §SD4
+records the dependency this ADR's D0 and D1 already discharged.
+
+Post-acceptance edits follow the Tier-2 rule: a dated `## Updates` entry, not
+a silent rewrite.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
