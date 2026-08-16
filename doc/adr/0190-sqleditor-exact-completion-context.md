@@ -566,6 +566,15 @@ exact-match outline, the field list with types for
 token, the error tint on an off-caret `'Nonesuch'` with the gutter mark beside
 it, and the FROM position answered from `system.tables`.
 
+**And repeatably** by `scripts/dev/completion-pane-scene.sh`, three scenes
+through the headless host and the ADR-0154 driver: the kind domain with its
+heading, rows and provenance column; the field domain decided by the sibling
+argument, with the element types; and a position no provider answers, showing
+its reason rather than an empty table. What the driver cannot reach is the
+highlight — the match outline is a Frame stroke and the editor's tint a styled
+section, neither of which enters the accessibility tree — so both are pinned in
+Go instead, and the scene's header says so rather than leaving the gap implied.
+
 ## References
 
 - [sql-completion-exact-context-probes.md](../adr-background-work/sql-completion-exact-context-probes.md)
