@@ -2,6 +2,7 @@ package play
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -14,18 +15,39 @@ import (
 // mockExecutor is a deterministic nodeExecutorI: it counts calls, records the SQL
 // it saw, and returns a freshly built record from build(sql). Ownership of the
 // returned record transfers to the graph.
+//
+// Locked like [gatedExecutor]: the graph runs it on the calling goroutine, but
+// a nodeLane runs it on its own, so a test that polls the count while a lane is
+// in flight reads it under the race detector.
 type mockExecutor struct {
+	mu    sync.Mutex
 	calls int
 	sqls  []string
 	build func(sql string) arrow.RecordBatch
 }
 
 func (inst *mockExecutor) execute(ctx context.Context, c compiledNode, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+	inst.mu.Lock()
 	inst.calls++
 	inst.sqls = append(inst.sqls, c.SQL)
-	rec = inst.build(c.SQL)
+	build := inst.build
+	inst.mu.Unlock()
+	rec = build(c.SQL)
 	schema = rec.Schema()
 	return
+}
+
+// callCount and seenSQLs are what a test asserts on — never the fields.
+func (inst *mockExecutor) callCount() (n int) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.calls
+}
+
+func (inst *mockExecutor) seenSQLs() (out []string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return append(out, inst.sqls...)
 }
 
 // int64Rec builds a one-column Int64 record the caller (the graph) then owns.
@@ -61,17 +83,17 @@ func TestGraphMinimalityMemoizesUnchangedInputs(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, r1.err)
 	require.NotNil(t, r1.rec)
-	require.Equal(t, 1, exec.calls)
+	require.Equal(t, 1, exec.callCount())
 
 	_, err = g.demand(context.Background(), "main")
 	require.NoError(t, err)
-	require.Equal(t, 1, exec.calls, "unchanged inputs must not re-execute")
+	require.Equal(t, 1, exec.callCount(), "unchanged inputs must not re-execute")
 
 	g.setSignal("x", env.Param{Name: "x", Raw: "2"})
 	_, err = g.demand(context.Background(), "main")
 	require.NoError(t, err)
-	require.Equal(t, 2, exec.calls, "a changed signal must re-execute")
-	require.Equal(t, []string{"SELECT 1", "SELECT 2"}, exec.sqls)
+	require.Equal(t, 2, exec.callCount(), "a changed signal must re-execute")
+	require.Equal(t, []string{"SELECT 1", "SELECT 2"}, exec.seenSQLs())
 }
 
 // demand: only an observed node executes; an undemanded node never runs.
@@ -86,10 +108,10 @@ func TestGraphDemandDrivenSkipsUnobservedNode(t *testing.T) {
 	_, err := g.demand(context.Background(), "a")
 	require.NoError(t, err)
 
-	require.Equal(t, 1, exec.calls, "only the demanded node executes")
+	require.Equal(t, 1, exec.callCount(), "only the demanded node executes")
 	require.True(t, g.isDemanded("a"))
 	require.False(t, g.isDemanded("b"), "an undemanded node must not execute (demand-driven)")
-	require.Equal(t, []string{"SELECT 1"}, exec.sqls)
+	require.Equal(t, []string{"SELECT 1"}, exec.seenSQLs())
 }
 
 // early cutoff: a re-execution yielding content-identical bytes keeps the same
@@ -109,7 +131,7 @@ func TestGraphEarlyCutoffStableFingerprintOnIdenticalResult(t *testing.T) {
 	r2, err := g.demand(context.Background(), "main")
 	require.NoError(t, err)
 
-	require.Equal(t, 2, exec.calls, "a changed signal re-executes the node")
+	require.Equal(t, 2, exec.callCount(), "a changed signal re-executes the node")
 	require.Equal(t, fp1, r2.fingerprint, "content-identical result ⇒ stable fingerprint (early cutoff)")
 
 	// Control: genuinely different content ⇒ different fingerprint.

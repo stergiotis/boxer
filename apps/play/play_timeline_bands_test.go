@@ -179,7 +179,7 @@ func TestDemandBandsLaneAndSetBandsMaps(t *testing.T) {
 	// nothing is demanded.
 	rec, _ := drv.demandBands(sigNone())
 	require.Nil(t, rec)
-	require.Equal(t, 0, exec.calls, "no extent signals ⇒ no demand")
+	require.Equal(t, 0, exec.callCount(), "no extent signals ⇒ no demand")
 
 	// The Timeline publishes the extent; the bands compile picks it up.
 	g := newQueryGraph(nil, nil)
@@ -204,14 +204,14 @@ func TestDemandBandsLaneAndSetBandsMaps(t *testing.T) {
 	assert.Equal(t, int64(2000), drv.bands[0].ToMS)
 	require.NoError(t, drv.bandsLaneErr)
 	require.NoError(t, drv.bandsMapErr)
-	require.Equal(t, 1, exec.calls)
+	require.Equal(t, 1, exec.callCount())
 
 	// An unchanged (SQL, signal values) pair is a lane memo hit.
 	rec, _ = drv.demandBands(sig)
 	if rec != nil {
 		rec.Release()
 	}
-	assert.Equal(t, 1, exec.calls, "unchanged compiled pair must be a lane memo hit")
+	assert.Equal(t, 1, exec.callCount(), "unchanged compiled pair must be a lane memo hit")
 
 	// A moved extent recompiles and re-executes (supersession by params).
 	edrv.dataMaxMS = 3000
@@ -222,7 +222,7 @@ func TestDemandBandsLaneAndSetBandsMaps(t *testing.T) {
 		if rec != nil {
 			rec.Release()
 		}
-		return exec.calls == 2
+		return exec.callCount() == 2
 	}, 2*time.Second, time.Millisecond, "a moved extent signal re-executes the bands node")
 }
 
@@ -241,7 +241,7 @@ func TestDemandBandsLegacyPlaceholderHint(t *testing.T) {
 
 	rec, _ := drv.demandBands(sigNone())
 	require.Nil(t, rec)
-	require.Equal(t, 0, exec.calls, "a legacy SQL must not reach the lane")
+	require.Equal(t, 0, exec.callCount(), "a legacy SQL must not reach the lane")
 	require.Contains(t, drv.bandsStatusLine(), "retired")
 	require.Contains(t, drv.bandsStatusLine(), "{tl_min:DateTime64(3, 'UTC')}")
 }
@@ -266,7 +266,7 @@ func TestDemandBandsExtentFreeRunsWithoutEvents(t *testing.T) {
 		}
 		return len(drv.bands) == 1
 	}, 2*time.Second, time.Millisecond, "extent-free bands run without events")
-	require.Equal(t, 1, exec.calls)
+	require.Equal(t, 1, exec.callCount())
 }
 
 // schemaOnlyExecutor mimics a query that succeeds with an EMPTY result: the
