@@ -28,6 +28,14 @@ const (
 	// DomainElementOf is a named element of the tuple-typed sibling argument
 	// at Ref. This is the one domain that needs the typer (ADR-0190 §SD5).
 	DomainElementOf
+	// DomainDatabase is a database on the buffer's endpoint.
+	DomainDatabase
+	// DomainTable is a table, view or table function of the database named at
+	// the position this domain was resolved for, or of the endpoint's default.
+	DomainTable
+	// DomainColumn is a column of the table this position names, or of the
+	// statement's own sources.
+	DomainColumn
 	// DomainIntrospectionTable is a table the introspection plane serves —
 	// the `introspect` catalog, plus the ad-hoc dataset aliases bound in the
 	// buffer's host (ADR-0094, ADR-0134 §SD4).
@@ -93,6 +101,9 @@ var AllDomainKinds = []DomainKindE{
 	DomainExpr,
 	DomainComponentKind,
 	DomainElementOf,
+	DomainDatabase,
+	DomainTable,
+	DomainColumn,
 	DomainIntrospectionTable,
 	DomainSection,
 	DomainSectionColumn,
@@ -124,6 +135,12 @@ func (inst DomainKindE) String() string {
 		return "component kind"
 	case DomainElementOf:
 		return "tuple element"
+	case DomainDatabase:
+		return "database"
+	case DomainTable:
+		return "table"
+	case DomainColumn:
+		return "column"
 	case DomainIntrospectionTable:
 		return "introspection table"
 	case DomainSection:
