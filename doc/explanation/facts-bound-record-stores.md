@@ -60,29 +60,39 @@ construction, and a container (`[]string` under one membership on a scalar
 section) is fine. That is worth knowing before you design the DTO rather than
 after.
 
-### Reach for the mixed channel only when the parameter carries something
+### Know which question the mixed channel is answering
 
-The mixed channel is what costs a kind the generated lane, so it is worth
-separating the two ways it gets used. Measured across every mixed call site on
-`boxer.facts`:
+The mixed channel is what costs a kind the generated lane, so it is worth being
+precise about what it buys. A `mixedLowCardRef` carrier is the `(Id, Params)`
+pair, so the parameter is part of the **membership's identity** for that
+occurrence — `(runtimeApp, "data.play")` and `(runtimeApp, "other.app")` are
+two memberships, not one membership seen twice. That is a real modelling
+statement, and it is never merely decorative.
 
-- **Informative** — the parameter holds what the value lane cannot. A log
-  field's *name* beside its *value* (`runtimeLogField`, seven sections), a
-  ProfileEvents counter's name, capmap's authored section heading. These need
-  the channel, and they are why the carrier deferral exists.
-- **Redundant** — the parameter repeats the value.
-  `BeginAttribute(X).AddMembershipMixedLowCardRef(memb, []byte(X))` writes the
-  same string twice. `runtimeApp`, `runtimeRun` and `runtimeLaunchCaller` are
-  written this way by all nine `chstore` kinds and by `queryrunfacts`, so the
-  parameter lane can be matched directly (it is co-indexed with the membership
-  lane) instead of locating the value by attribute position.
+What differs across `boxer.facts` is whether the attribute's **value** carries
+something else:
 
-The second form is a read-time convenience bought at the price of the whole
-component lane — and the price is now higher than when it was chosen, because
-`LW_GET('symbol', '<name>', 'chan:low-card-ref')` locates a value lane cheaply
-today. If you are adding a kind: put the identity in the value lane on the
-plain channel, and spend the mixed channel only where a parameter says
-something a value cannot.
+- **The parameter discriminates, the value carries data.** A log field's
+  *name* is the parameter and its *value* is the attribute
+  (`runtimeLogField`, across seven sections); likewise a ProfileEvents
+  counter's name against its count, and capmap's authored section heading
+  against its prose. Both lanes are load-bearing. There is no other spelling,
+  and these are why the carrier deferral exists.
+- **The parameter and the value hold the same bytes.** `runtimeApp`,
+  `runtimeRun` and `runtimeLaunchCaller` are written
+  `BeginAttribute(X).AddMembershipMixedLowCardRef(memb, []byte(X))` by all nine
+  `chstore` kinds and by `queryrunfacts`, so `X` sits in the value lane *and*
+  in `mrhp`. Nothing is lost by carrying it in one lane only — so here you have
+  a genuine choice, and it is a modelling one.
+
+If you are adding a kind, that second case is the decision to make
+deliberately: **is this identity a membership discriminator, or an attribute
+value?** Discriminator means attribution is part of the row's membership
+structure, and costs you the component lane until the carrier deferral lifts.
+Attribute value on the plain channel keeps the kind expressible today, and
+`LW_GET('symbol', '<name>', 'chan:low-card-ref')` reads it back cheaply. Decide
+it on the modelling question; do not arrive at the mixed channel by copying a
+neighbouring kind.
 
 The generated lane also cannot currently take over two things `chstore` does,
 for reasons that are properties of the facts schema rather than of the

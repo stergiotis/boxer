@@ -635,27 +635,41 @@ least one mixed-channel attribute beside them. RuntimeHeartbeat is the clean
 demonstration: it carries two attributes in total, the kind marker and the run
 stamp, and that is already enough.
 
-**For eight of the nine the mixed channel is redundant.** `MembRuntimeApp`,
-`MembRuntimeRun` and `MembLaunchCaller` are written as
-`BeginAttribute(X).AddMembershipMixedLowCardRef(memb, []byte(X))` — the same
-string in the value lane and in the parameter lane. The parameter exists for
-read convenience: `mrhp` is co-indexed with `lmr`, so a predicate matches with
-a direct co-lane lookup instead of locating the value by attribute position.
-Dropping the mixed spelling for those three makes the kinds expressible today —
-probed on the two ends of the range, Grant and the two-attribute
-RuntimeHeartbeat, both of which pass with the stamps on the plain channel and
-nothing else changed.
+**For eight of the nine, the identity is written into two lanes at once.**
+`MembRuntimeApp`, `MembRuntimeRun` and `MembLaunchCaller` are written as
+`BeginAttribute(X).AddMembershipMixedLowCardRef(memb, []byte(X))`: `X` lands in
+the section's **value** lane as the attribute's value, and again in **`mrhp`**
+as the membership's high-card parameter. Dumping the lanes for one such row
+confirms it — the value lane holds the app id at the attribute's position and
+`mrhp` holds it at the membership occurrence's.
 
-That is a different trigger from the one D5 states, with a different owner:
-not "wait for carrier-channel `ReadRow`", but "decide whether these three
-memberships still need the parameter lane". Two things bear on that and are
-recorded rather than settled here. The read-convenience argument has weakened
-since ADR-0171/ADR-0181 shipped — `LW_GET('symbol', 'runtime-app',
-'chan:low-card-ref')` now locates a value lane cheaply, which is the work the
-parameter was avoiding. And it is a wire change touching every reader that
-matches on `mrhp` (`runsessions.go`, `recentlogs.go`, `workingsets.go`,
-`columnwidths.go`), plus ADR-0191's attribution stamp, so it belongs to those
-decisions and not to this one.
+The parameter is not a copy of the value in the sense of being decorative: a
+mixed-low-card-ref's carrier is the `(Id, Params)` pair, so
+`(runtimeApp, "data.play")` is a different membership occurrence from
+`(runtimeApp, "other.app")`, and the parameter is what tells them apart. What
+is true is narrower and is the point here: because the same bytes occupy both
+lanes, **no information would be lost by carrying the identity in only one of
+them** — and which one to keep is a modelling question, not a spelling one.
+Carried in `mrhp`, the app is a membership discriminator and a row's attribution
+is part of its membership structure. Carried in the value lane on the plain
+channel, the app is an attribute value under a single `runtimeApp` membership.
+Both are coherent; only the second is expressible as a component today — probed
+at the two ends of the range, Grant and the two-attribute RuntimeHeartbeat,
+which pass with the stamps on the plain channel and nothing else changed.
+
+So the trigger for eight of the nine is not the one D5 states, and it has a
+different owner: not "wait for carrier-channel `ReadRow`", but "should
+app/run/caller attribution be a membership discriminator or an attribute
+value?". That is ADR-0191's and ADR-0026 §SD6's question. Two things bear on it
+and are recorded rather than settled here. The stated reason for the parameter
+is join shape — the vocabulary comment says the run id rides as the parameter
+"so child app-lifecycle rows can join by equality on a single symbol
+membership" — and that argument is weaker since ADR-0171/ADR-0181 shipped,
+because `LW_GET('symbol', 'runtime-app', 'chan:low-card-ref')` now locates a
+value lane cheaply. Against that, changing it is a wire change touching every
+reader matching on `mrhp` (`runsessions.go`, `recentlogs.go`, `workingsets.go`,
+`columnwidths.go`), and it gives up membership-level attribution, which may be
+the property those ADRs want.
 
 **Log is the exception, and stays where D5 put it.** Its user-field fan-out
 carries the field *name* as the parameter and the field *value* in the value
