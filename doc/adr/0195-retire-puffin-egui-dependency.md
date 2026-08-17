@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-17
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-17
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0195: retire the `puffin_egui` dependency and the `showPuffinProfiler` opcode
 
@@ -209,7 +207,8 @@ packages.
 
 ## Status
 
-Proposed 2026-08-17.
+Accepted 2026-08-17. All four milestones landed in one commit the same day
+(`599cb9dc`), which carries this ADR alongside the removal it describes.
 
 - **M0 — hand-written Go.** ✓ The `debug_tools` demo's call and its description
   claim.
@@ -224,6 +223,20 @@ Measured on execution: `go build` with the repo tags clean; `cargo build
 before and after — the orphan check ADR-0194 recorded, confirming no import or
 helper was left dangling. `Cargo.lock` 674 → 662 packages; `cargo tree -d`
 reports no duplicate egui-family crate.
+
+Two things worth recording from the execution:
+
+- **The Context's crate-count analysis is described but not cited, deliberately.**
+  It was never committed and was deleted from the working tree the same day. A
+  markdown link to it would be a dangling local link, which doclint treats as an
+  error, so its findings are restated here in prose instead. A later reader
+  should not go looking for the document.
+- **Verification ran in a throwaway `git worktree add --detach` at `HEAD`, not
+  in the working tree.** A concurrent session was editing `apps/play`, whose
+  compile errors changed between two consecutive runs, so the tree could not
+  distinguish this change's breakage from that one's. Copying only this change's
+  files into a pristine checkout gave a clean signal, and is the cheaper habit
+  whenever the tree is shared.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
