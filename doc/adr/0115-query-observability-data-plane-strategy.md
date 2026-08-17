@@ -420,6 +420,65 @@ Decision rest on. A floor that applied unconditionally would skip exactly that
 window, which is why the predicate tests the watermark for emptiness rather
 than taking the later of the two.
 
+## Update — 2026-08-17: the S2 read-back moves onto leeway's SQL read surface
+
+`queryrunfacts/readback.go` predates that surface and hand-rolled what it now
+provides: `indexOf` into the membership lane, `arrayCumSum` over the
+cardinalities to reach an attribute position, `arrayElement` there, and
+seventeen physical column names as string constants. Both queries are now
+composed from `LW_GET` / `LW_GET_LIST` / `LW_SEL` / `LW_SEL_ATTRS` over column
+handles, expanded client-side by the two passes `gov/capmapfacts` already used
+for the same job — handle resolution ([ADR-0116](./0116-play-leeway-column-handle-resolution.md))
+then extraction ([ADR-0181](./0181-leeway-dql-authoring-surface.md) §SD3). No
+physical column name is spelled out, and memberships are named rather than
+numbered ([ADR-0171](./0171-leeway-sql-read-surface.md) §SD4).
+
+Ergonomics were the smaller half. Two properties came with it:
+
+- **The single-element assumption is gone.** Indexing a flattened value lane by
+  *attribute* position is valid only while every attribute holds exactly one
+  value. That held — `EncodeEntity` writes with `BeginAttributeSingle`
+  throughout — but nothing checked it, and the failure mode was every column of
+  the row shifting rather than an error.
+  [ADR-0183](./0183-leeway-component-consumer-simplification.md) D5 made this
+  class loud on the three generated read paths; hand-written SQL is not one of
+  them, so the remedy is to stop hand-writing it. The ProfileEvents drill-down,
+  which paired the flattened value lane with the per-attribute cardinality lane
+  positionally, gathers through `LW_RAGGED_ELEM` instead.
+- **Physical names cannot go stale.**
+  [ADR-0168](./0168-capmap-business-capability-corpus.md)'s Migration section
+  records this file as one of four that broke at its M1, when re-aspecting
+  changed the names. Handles resolve against the schema `dml.CreateSchemaFacts`
+  generates, so the read and write sides cannot disagree about a name.
+
+Two seam notes. The history query is **expanded before it ships**, because
+play's History tab posts it over plain HTTP outside the pass pipeline; the
+ProfileEvents drill-down is deliberately **left authored**, because it goes into
+play's editor where the pipeline expands it — the outline's "visible, editable
+SQL" is better served by the vocabulary than by the arithmetic it stands for.
+And what both expand into is the read-back helper family, a server-side install
+that play reconciles asynchronously and best-effort, so the History fetch now
+asks `LW_SURFACE_VERSION()` first (§SD2's handshake): without it the symptom is
+`Unknown function LW_VALUE_BY_TAG_EQUAL`, which reads like a typo.
+
+**The write side is unchanged, and that is a finding rather than an omission.**
+`EncodeEntity` still drives the generated DML by hand rather than through an
+ADR-0183 component DTO, because the QueryRun shape is one the generated-store
+lane declines: `marshallgen.ReadRowSupported` refuses carrier channels and this
+kind carries three — `MembRuntimeApp` and `MembRuntimeRun` (the stamped
+identity, mixed-low-card-ref so a captured run joins its app-lifecycle row on
+one column) and `MembQueryRunProfileEvent` (the open ProfileEvents vocabulary,
+the `MembLogField` pattern). Two of the three are load-bearing modelling
+choices, not incidental spellings. ADR-0183's M6 record already names this
+encoder as a single-kind writer its D4 buffer buys nothing for, and the same
+decision closes the hybrid escape — `DeferredSectionBuffer` refuses `MarkRaw`
+beside a typed contribution in one entity frame, so a kind cannot be written
+part-typed and part-raw. The trigger for revisiting is carrier-channel
+`ReadRow` support landing (the standing
+[ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md) /
+[ADR-0103](./0103-leeway-marshall-dynamic-membership-tuples.md) deferral), not
+this ADR.
+
 ## References
 
 - [doc/explanation/query-observability.md](../explanation/query-observability.md)

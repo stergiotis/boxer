@@ -72,6 +72,17 @@ func newRunsHistoryDriver(client *Client) (d *runsHistoryDriver) {
 	d = &runsHistoryDriver{}
 	if client != nil {
 		d.fetch = func(ctx context.Context) (rows []queryrunfacts.HistoryRow, err error) {
+			// The history query expands into leeway's read-back helper family,
+			// which is a server-side install. play reconciles it at startup, but
+			// that runs async and best-effort (installSQLSurface), so this path
+			// can genuinely arrive first or arrive after a failed install — and
+			// the bare symptom is `Unknown function LW_VALUE_BY_TAG_EQUAL`, which
+			// reads like a typo. Ask the marker first so the pane can say what
+			// is actually wrong (ADR-0171 §SD2).
+			marker, mErr := client.rawTsvQuery(ctx, queryrunfacts.SurfaceVersionSql())
+			if err = queryrunfacts.CheckSurfaceVersion(marker, mErr); err != nil {
+				return
+			}
 			sql, err := queryrunfacts.ComposeHistorySql(runsHistoryFactsTable, runsHistoryLimit)
 			if err != nil {
 				return
