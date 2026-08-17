@@ -42,7 +42,17 @@ import (
 // too, since a built-in is as valid at an expression position as anything this
 // build declares (ADR-0190 §SD12 B5). One lane, two readers — the alternative
 // was a second listing of the same table differing only in a WHERE.
-const vocabProbeQuery = "SELECT name, create_query, origin FROM system.functions ORDER BY name"
+//
+// `toString(origin)` is load-bearing, for the reason defaultDocsQuery already
+// records about its own enum column: `origin` is an Enum8, and ClickHouse
+// ships an Enum8 over Arrow as the raw int8 ordinal, so the names never cross
+// the wire. Selected bare, every row reads back as "0"/"1" and the
+// origin != 'System' test below is true for every function the server has —
+// which listed the whole built-in set as user-defined, buried the tab's extras
+// families under it, and cost a quadratic sort of that population on every
+// frame ("imzero2: slow frame" for as long as the tab was open). Rendering the
+// enum server-side is the only place its dictionary exists.
+const vocabProbeQuery = "SELECT name, create_query, toString(origin) AS origin FROM system.functions ORDER BY name"
 
 // vocabProbeTimeout bounds the probe. It is a catalog listing, not a result:
 // a slow server must delay a panel, never a query.
