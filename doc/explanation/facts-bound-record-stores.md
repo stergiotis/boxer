@@ -60,6 +60,49 @@ construction, and a container (`[]string` under one membership on a scalar
 section) is fine. That is worth knowing before you design the DTO rather than
 after.
 
+### Two layers refuse, and they are not the same refusal
+
+Worth separating, because "this kind cannot be a component" and "this kind
+cannot be a generated store" are different claims and only the first is about
+expressiveness:
+
+- **`marshallreflect.PlanFor` refuses** ⇒ there is no plan, so the shape is not
+  a component on any path. The channel-uniformity rule above is here.
+- **`marshallgen.ReadRowSupported` refuses** ⇒ the plan is fine and the reflect
+  path reads it; what is unavailable is the *generated* read — `<Kind>ReadRow`,
+  and therefore a store. Carrier channels and dynamic-membership tuples are
+  here.
+
+So a flat DTO carrying a mixed channel alone on its section is a perfectly good
+component today. It just cannot be a store, and that is the ADR-0100 deferral
+rather than a modelling verdict.
+
+### Isn't there a typed shape for dynamic memberships?
+
+There is — the dynamic-membership tuple (ADR-0103, extended by ADR-0109): a
+slice-of-struct field whose elements each carry their own membership through an
+`@membership` field. It is the right reach for "one attribute per label", and
+`anchor/codecdemo/labeledtextdoc.go` is the worked example.
+
+Two properties decide whether it helps you, and both bite before the store gate
+does:
+
+- **`@membership` takes only the four simple channels.** A carrier channel is
+  refused outright — *"`@membership` cannot use a carrier / parametrized
+  channel — its identity is per-row carrier data, not an element field"*. So a
+  tuple cannot express what `AddMembershipMixedLowCardRef` writes. It is an
+  alternative *encoding* of the same intent (the label becomes a verbatim
+  membership name, or a ref id), not a way to describe existing mixed rows.
+- **A tuple monopolises its section** — *"section is mapped by a tuple field —
+  no other field may target it"*. This is the section-scoping property
+  ADR-0183 M3 recorded, showing up at plan-build time. If the section also
+  carries static memberships, they have to move or be given up: `chstore`'s log
+  fan-out shares `stringArray` with `runtimeLogMessage` and `runtimeLogError`,
+  so a tuple there is not available without re-siting those two.
+
+And the tuple is refused by `ReadRowSupported` in any case, so it buys a
+component on the reflect path, never a store.
+
 ### Know which question the mixed channel is answering
 
 The mixed channel is what costs a kind the generated lane, so it is worth being

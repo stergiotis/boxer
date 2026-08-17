@@ -638,9 +638,9 @@ Each carries a trigger rather than a date.
   [ADR-0183](./0183-leeway-component-consumer-simplification.md) reframes a
   component as the surface one is authored against, so `capmapfacts` driving
   the DML by hand is worth a reason rather than an omission. Measured against
-  the generator, the Competence encoding has no component plan at all — two
-  independent refusals, both reproduced through `marshallreflect.PlanFor` and
-  `marshallgen.ReadRowSupported`:
+  the generator, the Competence encoding has no component plan at all. Two
+  refusals, at **different layers** — the first denies the shape a plan on any
+  path, the second only denies it a *generated* one:
 
   - **The `symbol` section carries two membership channels.** The kind marker,
     slug, domain, catalog, owner and tags ride the plain low-card-ref channel;
@@ -655,10 +655,19 @@ Each carries a trigger rather than a date.
     (§SD5's heading-as-parameter), `capmapCompetenceLifecycleBy` and
     `capmapCompetenceLifecycleAt`. `ReadRowSupported` declines a carrier
     channel and `recordstore/gen` turns that into an error for the whole store
-    rather than a missing method. The dynamic-membership tuple is the other
-    shape for "one attribute per label" and the same gate declines it too; it
-    is also a different wire encoding, so it would be a data break rather than
-    a refactor.
+    rather than a missing method. This one is a *store* refusal, not a plan
+    refusal: a flat DTO carrying `capmapCompetenceSection` alone on `textArray`
+    plans fine and the reflect path reads it. What it cannot be is a store.
+
+  The dynamic-membership tuple (ADR-0103/ADR-0109) is the obvious next reach
+  for "one attribute per label", and it does not rescue this either. Its
+  `@membership` field takes only the four simple channels — a carrier channel
+  is refused outright, *"its identity is per-row carrier data, not an element
+  field"* — so a tuple cannot describe the rows this encoder already wrote; it
+  is a different encoding of the same intent (the heading would become a
+  verbatim membership name), and adopting it is a data break rather than a
+  refactor. `ReadRowSupported` declines tuples anyway, so it would buy a
+  reflect-path component and still no store.
 
   Neither refusal is incidental. §SD5 chose the parameter for section headings
   because headings are authored text and cannot be registered names, and the

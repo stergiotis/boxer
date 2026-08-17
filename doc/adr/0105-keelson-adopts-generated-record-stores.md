@@ -680,6 +680,19 @@ with the app/run stamps lifted and the fan-out kept, it is still refused:
 carrier gate applies on top. Log is genuinely blocked on carrier-channel
 support, exactly as D5 says; the other eight are not.
 
+The dynamic-membership tuple (ADR-0103/ADR-0109) does not offer Log a way
+round, for two reasons measured at the same time. Its `@membership` field
+refuses a carrier channel by construction — *"its identity is per-row carrier
+data, not an element field"* — so a tuple cannot describe the rows the log
+encoder already writes. And a tuple **monopolises its section**: *"section is
+mapped by a tuple field — no other field may target it"*, so putting the
+fan-out in a tuple would mean re-siting `runtimeLogMessage` and
+`runtimeLogError` off `stringArray` as well. It is worth stating because it is
+the first thing a reader asks, and because the two refusals sit at different
+layers: `PlanFor` denies a shape a plan at all, while `ReadRowSupported` denies
+only the generated read — a flat DTO with a carrier channel alone on its
+section is a valid component today and simply cannot be a store.
+
 **Workingset and ColumnWidth have a nearer exit anyway** — the 2026-08-15 entry
 above moves them to `boxer.persiststate`, which is where a state-shaped kind
 belongs regardless of this, since the facts table's `DateTime64` lifecycle lane
