@@ -33,6 +33,14 @@ import (
 // a quantity or as a category depending on its Arrow type, and a type that is
 // neither is IGNORED rather than rejected: colour is an enrichment, and a panel
 // that refused to draw over it would trade a picture for a pedantry.
+//
+// A numeric `color` may also DECLARE its scale — `color_min`, `color_max` and
+// `color_unit` (§SD2). Surveying the result is the right default for a measure
+// whose range is a property of this result; it is wrong for one whose range is
+// a property of the MEASURE, a ratio being the obvious case. A coverage map
+// spanning 12–68% would otherwise paint 68% at the top of the ramp, which reads
+// as fully covered. Only the query knows which kind it has, so only the query
+// can say.
 
 const (
 	// The folded contract. `stack` must be list-typed; the elements are
@@ -54,6 +62,17 @@ const (
 	hierValueCol = "value"
 	hierUnitCol  = "unit"
 	hierColorCol = "color"
+
+	// The numeric colour arm's declared scale. All three are optional and read
+	// from the first row that answers, as `unit` is: a scale labels a whole
+	// picture, so a result disagreeing with itself row to row is read by its
+	// first answer rather than rejected. Meaningless for a categorical `color`
+	// — a nominal set has no endpoints — and ignored there.
+	hierColorMinCol  = "color_min"
+	hierColorMaxCol  = "color_max"
+	hierColorUnitCol = "color_unit"
+	// hierColorUnitMaxRunes bounds the colour unit. See hierColorScaleOf.
+	hierColorUnitMaxRunes = 8
 
 	// hierMaxNodes bounds the tree. This is a cost limit, not a readability
 	// one: what each panel actually draws is bounded by its own culling (the
@@ -115,6 +134,9 @@ type hierClaim struct {
 	valueCol, unitCol          int
 	colorCol                   int
 	colorKind                  hierColorKindE
+	// The declared colour scale's columns, resolved only for a NUMERIC
+	// `color`. -1 marks absent, as the other optionals do.
+	colorMinCol, colorMaxCol, colorUnitCol int
 }
 
 // hierTree is the flat, columnar hierarchy both panels consume: one entry per
@@ -181,6 +203,30 @@ type hierStats struct {
 	colorConflicts int
 	// unit is the first non-empty `unit` cell, labelling the quantity.
 	unit string
+	// colorScale is the numeric colour arm's DECLARED scale, when the result
+	// declared one.
+	colorScale hierColorScale
+}
+
+// hierColorScale is what a query said about its numeric colour channel, as
+// opposed to what the values happen to span.
+//
+// The two are different claims. A surveyed range says "this is what is here";
+// a declared one says "this is what the measure can be", which is the only one
+// a reader can compare two results against — the whole point for a ratio, where
+// the endpoints are 0 and 100 whether or not any package reaches them.
+type hierColorScale struct {
+	// unit labels the COLOUR channel, as `unit` labels the value. Independent
+	// of the range: a query may name a unit without pinning endpoints.
+	unit string
+	// min/max are the declared endpoints, meaningful only when declared is set.
+	min, max float64
+	// declared reports a usable pair. rejected reports an unusable one —
+	// non-finite, or max <= min — which falls back to the survey. Counted
+	// rather than silent because it is an authoring error in the query, and a
+	// picture drawn on a scale other than the one asked for should say so.
+	declared bool
+	rejected bool
 }
 
 // hierNodeKey identifies a trie node by its parent and its own label — the
@@ -272,7 +318,8 @@ func hierStackAt(arr arrow.Array, row int, dst []string) (out []string, ok bool)
 // array" is a more useful thing to say than "add a stack column" to a query that
 // visibly has one.
 func resolveHierarchy(schema *arrow.Schema, form hierForm) (cl hierClaim, reason string) {
-	cl = hierClaim{stackCol: -1, idCol: -1, parentCol: -1, labelCol: -1, valueCol: -1, unitCol: -1, colorCol: -1}
+	cl = hierClaim{stackCol: -1, idCol: -1, parentCol: -1, labelCol: -1, valueCol: -1, unitCol: -1, colorCol: -1,
+		colorMinCol: -1, colorMaxCol: -1, colorUnitCol: -1}
 	stackIsPath := false
 	for ci, f := range schema.Fields() {
 		switch f.Name {
@@ -293,7 +340,20 @@ func resolveHierarchy(schema *arrow.Schema, form hierForm) (cl hierClaim, reason
 			if k := hierColorKindOf(f.Type); k != hierColorNone {
 				cl.colorCol, cl.colorKind = ci, k
 			}
+		case hierColorMinCol:
+			cl.colorMinCol = ci
+		case hierColorMaxCol:
+			cl.colorMaxCol = ci
+		case hierColorUnitCol:
+			cl.colorUnitCol = ci
 		}
+	}
+	// A declared scale describes the numeric arm and nothing else: a nominal
+	// set has no endpoints, and a category is not measured in anything. Cleared
+	// here rather than guarded at every read, so the claim itself says the
+	// columns are inert.
+	if cl.colorKind != hierColorNumeric {
+		cl.colorMinCol, cl.colorMaxCol, cl.colorUnitCol = -1, -1, -1
 	}
 	switch {
 	case cl.stackCol >= 0 && stackIsPath:
@@ -330,6 +390,59 @@ func buildHierarchy(rec arrow.RecordBatch, cl hierClaim) (t hierTree, st hierSta
 		return
 	}
 	st.unit = hierUnitOf(rec, cl)
+	st.colorScale = hierColorScaleOf(rec, cl)
+	return
+}
+
+// hierColorScaleOf reads the declared colour scale, by the same first-answer
+// rule `unit` uses.
+//
+// The two endpoints are read INDEPENDENTLY — the first row answering for each
+// — rather than requiring one row to carry both. They are constants in every
+// realistic query, and a rule that needed them on one row would fail on a
+// UNION ALL whose branches each supply what they know.
+//
+// A pair that is non-finite or not strictly ordered is REJECTED rather than
+// repaired: widening it the way a degenerate surveyed range is widened would
+// invent an endpoint the query did not ask for, and silently drawing on the
+// survey instead is what the rejected flag exists to prevent.
+func hierColorScaleOf(rec arrow.RecordBatch, cl hierClaim) (sc hierColorScale) {
+	if rec == nil {
+		return
+	}
+	if cl.colorUnitCol >= 0 {
+		for row := range rec.NumRows() {
+			if u := formatCell(rec, cl.colorUnitCol, row); u != "" {
+				// Shorter than `unit`'s bound: this one is a suffix on every
+				// LEGEND TICK, where the labels already crowd each other, so a
+				// long one costs the whole bar rather than one status line.
+				sc.unit = truncateRunes(u, hierColorUnitMaxRunes)
+				break
+			}
+		}
+	}
+	if cl.colorMinCol < 0 || cl.colorMaxCol < 0 {
+		return
+	}
+	first := func(col int) (v float64, ok bool) {
+		for row := range rec.NumRows() {
+			if v, ok = quantityCellValue(rec, col, row); ok && !math.IsNaN(v) && !math.IsInf(v, 0) {
+				return v, true
+			}
+		}
+		return 0, false
+	}
+	lo, loOK := first(cl.colorMinCol)
+	hi, hiOK := first(cl.colorMaxCol)
+	if !loOK || !hiOK {
+		sc.rejected = true
+		return
+	}
+	if hi <= lo {
+		sc.rejected = true
+		return
+	}
+	sc.min, sc.max, sc.declared = lo, hi, true
 	return
 }
 

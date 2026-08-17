@@ -568,6 +568,58 @@ WHERE bytes >= 419430400"
 	settle=2500
 }
 
+scene_08_treemap_ratio() {
+	desc="Treemap — a numeric colour on a DECLARED scale (ADR-0166 §SD2): the ramp pinned to the ratio's own 0–100 by color_min/color_max, its ticks suffixed with color_unit, and the status line saying which range is on"
+	senv=(BOXER_PLAY_FOCUS_TREEMAP=1)
+	# The case a surveyed range gets WRONG. Compression ratio is a ratio: its
+	# endpoints are 0 and 100 whether or not any table reaches them, so a ramp
+	# stretched over what this server happens to hold would paint the least
+	# compressible table as if it were incompressible, and two servers could
+	# not be compared by colour at all. Declaring the scale is what fixes it,
+	# and the status line's "(declared scale)" is the only place the picture
+	# can say so — a pinned ramp and a stretched one draw identically.
+	#
+	# It is also where the colour channel's own unit shows: `unit` labels the
+	# AREA, which is bytes here, while the tint is a percentage. Two measures,
+	# two units.
+	#
+	# system.parts needs no fixture, as 08_treemap_self's roll-up does.
+	sql="WITH p AS (
+    SELECT database,
+           table,
+           sum(data_compressed_bytes)   AS comp,
+           sum(data_uncompressed_bytes) AS raw
+    FROM system.parts
+    WHERE active AND data_uncompressed_bytes > 0
+    GROUP BY database, table
+  )
+SELECT concat(database, '/', table) AS id,
+       database                     AS parent,
+       table                        AS label,
+       toFloat64(raw)               AS value,
+       'B'                          AS unit,
+       round(100 * comp / raw, 1)   AS color,
+       toFloat64(0)                 AS color_min,
+       toFloat64(100)               AS color_max,
+       '%'                          AS color_unit
+FROM p
+UNION ALL
+SELECT database                                  AS id,
+       ''                                        AS parent,
+       database                                  AS label,
+       toFloat64(0)                              AS value,
+       'B'                                       AS unit,
+       round(100 * sum(comp) / sum(raw), 1)      AS color,
+       toFloat64(0)                              AS color_min,
+       toFloat64(100)                            AS color_max,
+       '%'                                       AS color_unit
+FROM p
+GROUP BY database
+ORDER BY id"
+	steps='{"do":"capture","text":"08_treemap_ratio","settleMs":600}'
+	settle=2500
+}
+
 scene_08_distribution() {
 	desc="Distribution — a result read as a distribution rather than a table (ADR-0161): an ECDF with its simultaneous band per series, the shift function against a chosen baseline, and the letter-value boxen ladder — three readings of the same three series"
 	senv=(BOXER_PLAY_FOCUS_DIST=1)

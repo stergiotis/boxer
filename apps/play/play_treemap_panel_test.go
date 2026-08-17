@@ -151,6 +151,90 @@ func TestTreemapNumericColorRange(t *testing.T) {
 	assert.NotNil(t, inst.dataColoring())
 }
 
+// A DECLARED scale replaces the survey outright. Without it a coverage map
+// spanning 40–70% would paint 70 at the top of the ramp, reading as fully
+// covered; with it the endpoints are the measure's, and out-of-range values
+// clamp rather than stretching the ramp.
+func TestTreemapDeclaredColorScaleOverridesTheSurvey(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "id", str: []string{"a", "b", "c"}},
+		icicleTestCol{name: "parent", str: []string{"", "a", "a"}},
+		icicleTestCol{name: "value", num: []float64{1, 1, 1}},
+		icicleTestCol{name: "color", num: []float64{40, 55, 70}},
+		icicleTestCol{name: "color_min", num: []float64{0, 0, 0}},
+		icicleTestCol{name: "color_max", num: []float64{100, 100, 100}},
+		icicleTestCol{name: "color_unit", str: []string{"%", "%", "%"}},
+	)
+	assert.Equal(t, hierColorNumeric, inst.color.kind)
+	assert.True(t, inst.color.declared)
+	assert.Equal(t, 0.0, inst.color.min)
+	assert.Equal(t, 100.0, inst.color.max)
+	assert.Equal(t, "%", inst.color.unit)
+
+	line := inst.statusLine()
+	assert.Contains(t, line, "colour 0%–100%", "the line reads in the colour channel's own unit")
+	assert.Contains(t, line, "declared scale", "which range is on is invisible in the picture")
+}
+
+// Absent the columns nothing changes: the survey is still the default, and it
+// is the right one for a measure whose range IS a property of this result.
+func TestTreemapUndeclaredColorScaleStillSurveys(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "id", str: []string{"a", "b"}},
+		icicleTestCol{name: "parent", str: []string{"", "a"}},
+		icicleTestCol{name: "value", num: []float64{1, 1}},
+		icicleTestCol{name: "color", num: []float64{40, 70}},
+	)
+	assert.False(t, inst.color.declared)
+	assert.Equal(t, 40.0, inst.color.min)
+	assert.Equal(t, 70.0, inst.color.max)
+	assert.NotContains(t, inst.statusLine(), "declared scale")
+}
+
+// An unusable pair falls back to the survey and SAYS so. Widening it the way a
+// degenerate surveyed range is widened would invent an endpoint the query did
+// not ask for, and drawing quietly on the survey is the silence to avoid: the
+// picture would be on a scale other than the one the author wrote down.
+func TestTreemapUnusableColorScaleIsRejectedAndReported(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "id", str: []string{"a", "b"}},
+		icicleTestCol{name: "parent", str: []string{"", "a"}},
+		icicleTestCol{name: "value", num: []float64{1, 1}},
+		icicleTestCol{name: "color", num: []float64{40, 70}},
+		icicleTestCol{name: "color_min", num: []float64{100, 100}},
+		icicleTestCol{name: "color_max", num: []float64{0, 0}},
+	)
+	assert.False(t, inst.color.declared)
+	assert.True(t, inst.stats.colorScale.rejected)
+	assert.Equal(t, 40.0, inst.color.min, "the survey is what it fell back to")
+	assert.Equal(t, 70.0, inst.color.max)
+	assert.Contains(t, inst.statusLine(), "declared scale ignored")
+}
+
+// A scale describes the numeric arm and nothing else: a nominal set has no
+// endpoints, so the columns are inert beside a categorical `color`.
+func TestTreemapColorScaleIgnoredForCategories(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "id", str: []string{"a", "b"}},
+		icicleTestCol{name: "parent", str: []string{"", "a"}},
+		icicleTestCol{name: "value", num: []float64{1, 1}},
+		icicleTestCol{name: "color", str: []string{"net", "fs"}},
+		icicleTestCol{name: "color_min", num: []float64{0, 0}},
+		icicleTestCol{name: "color_max", num: []float64{100, 100}},
+	)
+	assert.Equal(t, hierColorCategorical, inst.color.kind)
+	assert.False(t, inst.color.declared)
+	assert.False(t, inst.stats.colorScale.rejected, "inert, not rejected")
+}
+
+// The colour unit is a suffix on every legend tick and in the readout, and is
+// spaced off the number only when it is a word.
+func TestTreemapQtyUnitSpacing(t *testing.T) {
+	assert.Equal(t, "72.5%", treemapQty(72.5, "%"))
+	assert.Equal(t, "9.0G bytes", treemapQty(9e9, "bytes"))
+	assert.Equal(t, "72.5", treemapQty(72.5, ""))
+}
+
 // A constant column would normalise to a division by zero; widening puts every
 // cell at the same point of the ramp instead, which is the truthful picture.
 func TestTreemapColorRangeWidensDegenerateBounds(t *testing.T) {

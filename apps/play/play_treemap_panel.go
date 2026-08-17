@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/dustin/go-humanize"
@@ -150,6 +152,15 @@ type treemapColorInfo struct {
 	// min/max bound the numeric arm. Equal bounds are widened by
 	// treemapColorRange so a single-valued column does not divide by zero.
 	min, max float64
+	// declared reports that min/max came from the query's `color_min` /
+	// `color_max` rather than from surveying the result. Kept because the two
+	// are different claims and the status line says which one is on: a ramp
+	// pinned to 0–100 and one stretched over 12–68 look identical.
+	declared bool
+	// unit labels the colour channel on the legend ticks and in the readout.
+	// The value's `unit` cannot serve — area and tint are different measures,
+	// and here one is statements and the other a percentage.
+	unit string
 	// cats maps a category key to its cycle index, and catOrder keeps the
 	// first-seen order the indices were handed out in — first-seen rather than
 	// sorted so adding a row cannot recolour the rows above it.
@@ -599,10 +610,12 @@ func (inst *treemapDriver) ensureScale() {
 	inst.scale = colorscale.New(inst.ids, "play-treemap-legend", inst.cmap.Config(),
 		colorscale.WithSize(treemapLegendW, treemapLegendH),
 		colorscale.WithDesiredTicks(treemapLegendTicks),
-		// The colour column carries no unit of its own — `unit` labels the
-		// VALUE — so the ticks are bare numbers, SI-suffixed to keep a wide
-		// range from crowding the bar.
-		colorscale.WithLabelFormat(func(v float64) string { return treemapQty(v, "") }),
+		// `unit` labels the VALUE, so it cannot serve here; the colour channel
+		// has its own, `color_unit`, and reads as a bare SI-suffixed number
+		// without one. Read through inst rather than captured, so a re-resolve
+		// that keeps the same colormap cannot leave the ticks labelled for the
+		// previous result.
+		colorscale.WithLabelFormat(func(v float64) string { return treemapQty(v, inst.color.unit) }),
 	)
 }
 
@@ -678,10 +691,20 @@ func (inst *treemapDriver) renderCategoryKey() {
 // is a weighted mean of values already in the range, and an inherited category
 // is a key that already exists. Neither can widen what this finds, so surveying
 // the smaller set gives the same answer.
+//
+// A DECLARED scale short-circuits the survey entirely. The query has said what
+// the measure's endpoints are, and a value outside them clamps to the palette
+// end rather than stretching the ramp (colormap.Config.At) — which is what lets
+// two runs of the same query be compared by colour at all.
 func (inst *treemapDriver) resolveColorInfo() (info treemapColorInfo) {
 	info.kind = inst.tree.ColorKind
 	switch info.kind {
 	case hierColorNumeric:
+		info.unit = inst.stats.colorScale.unit
+		if sc := inst.stats.colorScale; sc.declared {
+			info.min, info.max, info.declared = sc.min, sc.max, true
+			return
+		}
 		info.min, info.max = math.Inf(1), math.Inf(-1)
 		for _, v := range inst.tree.ColorNum {
 			if math.IsNaN(v) {
@@ -879,7 +902,7 @@ func (inst *treemapDriver) describeNode(n *layout.Node) string {
 		switch inst.color.kind {
 		case hierColorNumeric:
 			if int(i) < len(inst.effColorNum) && !math.IsNaN(inst.effColorNum[i]) {
-				fmt.Fprintf(&b, " · colour %s%s", treemapQty(inst.effColorNum[i], ""), from)
+				fmt.Fprintf(&b, " · colour %s%s", treemapQty(inst.effColorNum[i], inst.color.unit), from)
 			}
 		case hierColorCategorical:
 			if int(i) < len(inst.effColorKey) && inst.effColorKey[i] != "" {
@@ -952,7 +975,17 @@ func (inst *treemapDriver) statusLine() string {
 	fmt.Fprintf(&b, " · %s input", inst.stats.mode)
 	switch inst.color.kind {
 	case hierColorNumeric:
-		fmt.Fprintf(&b, " · colour %s–%s", treemapQty(inst.color.min, ""), treemapQty(inst.color.max, ""))
+		fmt.Fprintf(&b, " · colour %s–%s", treemapQty(inst.color.min, inst.color.unit),
+			treemapQty(inst.color.max, inst.color.unit))
+		// Which range is on is not visible in the picture — a ramp pinned to
+		// the measure and one stretched over what happens to be here draw the
+		// same cells in different colours — so the line says it.
+		if inst.color.declared {
+			b.WriteString(" (declared scale)")
+		}
+		if inst.stats.colorScale.rejected {
+			b.WriteString(" · declared scale ignored: `color_min` and `color_max` must be finite with min < max")
+		}
 	case hierColorCategorical:
 		fmt.Fprintf(&b, " · %d categor%s", len(inst.color.catOrder), plural(len(inst.color.catOrder), "y", "ies"))
 		if inst.color.wrapped > 0 {
@@ -1004,9 +1037,14 @@ func plural(n int, one, many string) string {
 	return many
 }
 
-// treemapQty formats a quantity for the status and pointer lines, suffixing the
-// unit when the result declared one. The job is only to keep a big total from
-// crowding the line out.
+// treemapQty formats a quantity for the status, pointer and legend-tick lines,
+// suffixing the unit when the result declared one. The job is only to keep a
+// big total from crowding the line out.
+//
+// A unit starting with a LETTER is spaced off the number ("9.0G bytes"); one
+// starting with anything else is not ("72.5%"). That is the typographic
+// convention for the sign-like units — %, °, currency — and no book emits one
+// today, so it changes no existing picture.
 func treemapQty(v float64, unit string) string {
 	var s string
 	switch av := math.Abs(v); {
@@ -1020,7 +1058,10 @@ func treemapQty(v float64, unit string) string {
 		s = strconv.FormatFloat(v, 'g', 4, 64)
 	}
 	if unit != "" {
-		s += " " + unit
+		if r, _ := utf8.DecodeRuneInString(unit); unicode.IsLetter(r) {
+			s += " "
+		}
+		s += unit
 	}
 	return s
 }

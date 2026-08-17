@@ -75,7 +75,8 @@ divergence, on the first commit.
 ### SD2 — `color` is optional, dual-typed, inherited, and has a legend
 
 A numeric `color` drives a continuous colormap (the `imztop` Proc Map idiom: area
-is RSS, tint is CPU load); a string one drives the qualitative cycle of
+is RSS, tint is CPU load) over a range the result is **surveyed** for unless the
+query declares one; a string one drives the qualitative cycle of
 [ADR-0156](./0156-qualitative-palette-dark-surface.md), assigned first-seen and
 wrapping past its seven hues — with the wrap *counted*, since two categories
 sharing a hue is a claim the picture cannot otherwise retract. Absent the column,
@@ -99,6 +100,36 @@ Both are counted (`N coloured from below`, `N mixed`), making the rule
 self-diagnosing: a picture still grey says how much is genuinely heterogeneous.
 Inheritance can neither widen the range nor add a category, so the range survey
 still reads the result's own colours alone.
+
+**The numeric range may be declared, and the channel may carry a unit.**
+`color_min`, `color_max` and `color_unit` are optional, read by the same
+first-answer rule as `unit`, and inert beside a categorical `color` — a nominal
+set has no endpoints. Surveying is the right default for a measure whose range is
+a property of *this result*; it is wrong for one whose range is a property of the
+**measure**, a ratio being the obvious case. A coverage map spanning 12–68% would
+otherwise paint 68% at the top of the ramp, reading as fully covered, and no two
+runs of the query could be compared by colour. Only the query knows which kind it
+has. Out-of-range values clamp to the palette ends rather than stretching it
+(`colormap.Config.At`), which is what makes the pinned scale hold.
+
+A pair that is non-finite or not strictly ordered is **rejected** — falling back
+to the survey and saying so in the status line — rather than repaired the way a
+degenerate *surveyed* range is widened: widening would invent an endpoint the
+query did not ask for, and drawing quietly on the survey would put the picture on
+a scale other than the one its author wrote down. The status line likewise marks
+a declared scale as such, since a ramp pinned to 0–100 and one stretched over
+12–68 draw the same cells and look identical.
+
+`color_unit` is separate from `unit` because area and tint are different
+measures: the coverage map's value is statements and its colour a percentage. It
+is bounded shorter than `unit` — it suffixes every legend *tick*, where a long
+one costs the whole bar rather than one line — and is spaced off the number only
+when it begins with a letter, the convention that separates `9.0G bytes` from
+`72.5%`.
+
+A panel-side "scale: data / declared" control was rejected: the correct setting
+is a fact about the query, so a reader would have to know to flip it, and it
+would reset per pane rather than travel with the applet.
 
 **Legend, for the data mode only.** Numeric gets a `colorscale` gradient bar,
 categorical a row of swatches in cycle order capped at twelve; depth gets none,
@@ -179,7 +210,8 @@ size. "Show everything" is a control, not the default.
 | `widgets/treemap` (exported, under `public/`) | added — `SetRoot`, `SetColoring`, `SetMaxNestingDepth`, `WithSelfCellLabel`; the self rect is painted as a cell | additive; a tree with no interior `Size` renders unchanged |
 | `play` dock tabs | added — the **Treemap** tab: frozen `DockID` 24, a `ShapeContract` mark, `selection_key` in `Writes`, the derived `BOXER_PLAY_FOCUS_TREEMAP` knob | tab-registry counts in `play_tabs_test.go`, `play_tab_marks_test.go`, `play_panes_menu_test.go`; `doc/env-vars.md` regenerates |
 | `sqlapplet` result-panel roster | added — `treemap` in **both** `resultTabIDs` and `orderedResultTabIDs` | classified in neither list is what the tab-policy gate fails on (`1502e0e1`) |
-| `play` internals | the icicle resolver and its two builders move to `play_hierarchy.go` and gain `color` | package-private; the Icicle tab's accepted shapes are unchanged |
+| `play` internals | the icicle resolver and its two builders move to `play_hierarchy.go` and gain `color`, plus the optional `color_min` / `color_max` / `color_unit` | package-private; the Icicle tab's accepted shapes are unchanged, and it does not read the colour channel at all |
+| applet column contract (`sqlapplet` books) | added — three optional column names a query may emit | additive: a query emitting none is surveyed exactly as before |
 | egui2 IDL | **unchanged** | no new paint opcode |
 
 `DockID` 24 rather than 23: [ADR-0163](./0163-play-timeseries-workbench.md)
@@ -202,6 +234,10 @@ where the reasoning sits.
 - **Duplicating the icicle resolver** (SD1, on C2); **a row cursor rather than
   `selection_key`** (SD5 — a cell is a prefix, not a row); **modal-category
   inheritance** (SD2 — it would claim a category the query never stated).
+- **A panel control for the colour range**, and **inferring a percentage from a
+  column named `pct`** — both rejected in SD2: the first puts a fact about the
+  query in the reader's hands, the second is magic that breaks on the first
+  ratio spelled differently.
 
 ## Consequences
 
@@ -262,19 +298,30 @@ migrates: the additions are additive and the panel is new.
   every assertion with only their three mode constants renamed, which is the
   evidence hoisting changed nothing; plus `color` in both arms, the
   first-answer-wins and wrap counters, and an unusable `color` type ignored
-  rather than rejecting the draw.
+  rather than rejecting the draw. Plus the declared scale: overriding the
+  survey, absent leaving the survey untouched, an unordered pair rejected and
+  reported, inert beside a categorical `color`, and the unit's spacing rule.
 - **The panel** — both contracts build the tree the icicle builds; total
   conservation across the flat-to-pointer conversion including interior self
   values; the drop, truncate and cap counters; inheritance (own-wins, weighting,
   transitivity, mixed-stays-neutral); the legend sharing the cells' colormap.
-- **Visual** — three tour scenes, captured 2026-08-05. `08_treemap` (root, fully
+- **Visual** — four tour scenes. `08_treemap` (root, fully
   nested, drill-in) over `08_icicle`'s population and contract, so the two forms
   compare directly; it carries the numeric legend. `08_treemap_category` colours
   the same fleets by band, drawing the swatch key and the agree-or-neutral rule.
   `08_treemap_self` exists for SD3 alone, every path in the first scene being
   exactly three deep and emitting no self rect: it shows `default`'s box holding
   `planes_mercator — 3.3G bytes` beside `default — 429.0M bytes`, which without
-  the self rect would have read as 3.43 GiB.
+  the self rect would have read as 3.43 GiB. The first three were captured
+  2026-08-05.
+
+  `08_treemap_ratio` (2026-08-17) is the declared scale: `system.parts`
+  compression ratio, area in bytes and tint in per cent, reading
+  `colour 0%–100% (declared scale)` over ticks `0% 25% 50% 75% 100%`. Its
+  picture sits low on the ramp and largely dark, which is the evidence rather
+  than a flaw — every table here compresses well, and a *surveyed* range would
+  have spread those few points across the whole palette and drawn something
+  colourful that meant nothing.
 
   A cell has **no accessible name** (an egui `Frame` with a label inside), so a
   drill click is the anchor ladder's last rung — a coordinate
@@ -288,6 +335,13 @@ Proposed — 2026-08-05. Awaiting human review. Built and captured the same day;
 nothing in the verification plan is outstanding. Two decisions record what the
 code does rather than what was first proposed: SD3's second half, and SD2's
 inheritance and legend — all three found by a capture rather than by design.
+
+SD2's declared scale (`color_min` / `color_max` / `color_unit`) was added
+2026-08-17, driven by a consumer: ADR-0169's coverage map, whose colour is a
+ratio and whose first cut therefore bucketed it into six string brackets — the
+panel's continuous arm existed all along, and what was missing was a way to say
+that a percentage's ends are 0 and 100 rather than whatever the repository
+happens to span. That applet now declares the scale and the brackets are gone.
 
 Since 2026-08-15 the picture fills its leaf rather than following a fixed
 aspect — the rule shared with the Sankey, Icicle and Network panes
