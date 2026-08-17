@@ -4,6 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
@@ -117,16 +120,39 @@ func TestRewriteTraceDoesNotChangeWhatShips(t *testing.T) {
 	}
 }
 
+// awaitTrace drives rewriteTraceFor the way a render loop does — poll until the
+// off-thread computation lands (ADR-0192 §SD3's 2026-08-17 update). The budget
+// is sized for the -race lane, where this package runs roughly 4.6x slower;
+// a rewrite of the test buffer is milliseconds in the plain lane.
+func awaitTrace(t *testing.T, app *PlayApp) []passreg.ApplyObservation {
+	t.Helper()
+	var obs []passreg.ApplyObservation
+	require.Eventually(t, func() bool {
+		var ok bool
+		obs, ok = app.rewriteTraceFor()
+		return ok
+	}, 30*time.Second, time.Millisecond, "the trace never landed")
+	return obs
+}
+
 func TestRewriteTraceForMemoisesByRunBufferAndToggle(t *testing.T) {
 	cl := newTestClientWithStandardSet(t)
 	app := &PlayApp{client: cl, sql: `SELECT LW_ID_IS_VALID(id) FROM t`}
 
-	obs, ok := app.rewriteTraceFor()
-	if !ok || len(obs) == 0 {
-		t.Fatalf("rewriteTraceFor = %+v, %v; want a trace", obs, ok)
+	// The first call kicks the computation and reports nothing yet — a pane
+	// showing stale or absent numbers for one frame is the trade §SD3 takes for
+	// not blocking the render thread.
+	if obs, ok := app.rewriteTraceFor(); ok {
+		t.Errorf("first call answered synchronously: %+v", obs)
 	}
-	if !app.rewriteTrace.valid || app.rewriteTrace.forSQL != app.sql {
-		t.Errorf("memo not keyed to the run buffer: %+v", app.rewriteTrace)
+	if !app.rewriteTracePending() {
+		t.Error("first call did not mark the trace pending")
+	}
+	if obs := awaitTrace(t, app); len(obs) == 0 {
+		t.Fatal("want a trace once the computation lands")
+	}
+	if app.rewriteTracePending() {
+		t.Error("still pending after the trace landed")
 	}
 
 	// Unchanged buffer → memo, no recompute. Poison the cached slice to
@@ -139,16 +165,35 @@ func TestRewriteTraceForMemoisesByRunBufferAndToggle(t *testing.T) {
 
 	// The conditions toggle rewrites without an edit, so it must invalidate.
 	cl.SetExposeConditions(true)
-	fresh, _ := app.rewriteTraceFor()
-	if len(fresh) == 1 && fresh[0].Name == "sentinel" {
+	if fresh := awaitTrace(t, app); len(fresh) == 1 && fresh[0].Name == "sentinel" {
 		t.Error("conditions toggle did not invalidate the memo")
 	}
 
 	// A buffer change invalidates too.
 	app.rewriteTrace.obs = []passreg.ApplyObservation{{Name: "sentinel"}}
 	app.sql = `SELECT 2`
-	if changed, _ := app.rewriteTraceFor(); len(changed) == 1 && changed[0].Name == "sentinel" {
+	if changed := awaitTrace(t, app); len(changed) == 1 && changed[0].Name == "sentinel" {
 		t.Error("buffer change did not invalidate the memo")
+	}
+}
+
+// TestRewriteTraceForSupersedesAnInFlightBuffer is the latest-wins guard: while
+// a computation is running the buffer keeps moving, and a result landing for an
+// abandoned buffer must not be published under the current one.
+func TestRewriteTraceForSupersedesAnInFlightBuffer(t *testing.T) {
+	cl := newTestClientWithStandardSet(t)
+	app := &PlayApp{client: cl, sql: `SELECT LW_ID_IS_VALID(id) FROM t`}
+	_, _ = app.rewriteTraceFor()
+
+	app.sql = `SELECT 2`
+	_, _ = app.rewriteTraceFor()
+	_ = awaitTrace(t, app)
+
+	app.rewriteTrace.mu.Lock()
+	forSQL := app.rewriteTrace.forSQL
+	app.rewriteTrace.mu.Unlock()
+	if forSQL != `SELECT 2` {
+		t.Errorf("published trace is keyed to %q; want the current buffer", forSQL)
 	}
 }
 

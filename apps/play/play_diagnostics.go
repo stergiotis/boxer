@@ -428,6 +428,10 @@ func (inst *PlayApp) renderDiagRewrites() {
 	diagHeading("Pre-execute rewrites")
 	trace, ok := inst.rewriteTraceFor()
 	if !ok {
+		if inst.rewriteTracePending() {
+			diagWeak("Measuring this buffer's rewrite…")
+			return
+		}
 		diagWeak("Type SQL in the Editor tab.")
 		return
 	}
@@ -474,6 +478,10 @@ func (inst *PlayApp) renderDiagRewriteCost(elapsed time.Duration, summary Summar
 	diagHeading("Rewrite cost")
 	trace, ok := inst.rewriteTraceFor()
 	if !ok {
+		if inst.rewriteTracePending() {
+			diagWeak("Measuring this buffer's rewrite…")
+			return
+		}
 		diagWeak("Type SQL in the Editor tab.")
 		return
 	}

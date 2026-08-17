@@ -186,9 +186,3 @@ func barInk(b costBar, primary color.Color, weak color.Color) color.Color {
 	}
 	return primary
 }
-
-// costChartHeight is what renderCostWaterfall will paint, so a caller can
-// reserve the space before the one-frame-late canvas reports it.
-func costChartHeight(rows int) float32 {
-	return float32(rows)*costRowH + costAxisH
-}

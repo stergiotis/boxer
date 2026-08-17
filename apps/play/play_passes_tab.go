@@ -3,6 +3,7 @@ package play
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
@@ -57,25 +58,40 @@ func passStageID(name string) string { return passesStagePrefix + name }
 
 // rewriteTraceState memoises Client.RewriteTrace by what the trace depends on:
 // the statement that would run (the caret's, on a multi-statement buffer) and
-// the selection-condition toggle, which rewrites without an edit. Recomputing
-// costs a full rewrite — every pass re-parses — so it happens on a key change,
-// not per frame.
+// the selection-condition toggle, which rewrites without an edit.
+//
+// Recomputing costs a full rewrite — every pass re-parses — which is measured
+// in hundreds of milliseconds on a buffer worth profiling, so it runs OFF the
+// render thread. Guarded by mu: the goroutine writes, the render thread reads.
+// Latest-wins by gen, the armColumnDiag pattern.
 type rewriteTraceState struct {
+	mu         sync.Mutex
 	forSQL     string
 	conditions bool
-	valid      bool
+	gen        uint64
+	valid      bool // obs describes (forSQL, conditions)
+	pending    bool // a goroutine is computing (forSQL, conditions)
 	obs        []passreg.ApplyObservation
 }
 
-// rewriteTrace returns the client-side rewrite's per-unit outcomes for the
-// statement Run would ship, recomputing only when the buffer, the caret's
-// statement or the conditions toggle moved. ok=false means there is nothing to
-// describe — no client, or an empty buffer.
+// rewriteTraceFor returns the client-side rewrite's per-unit outcomes for the
+// statement Run would ship. ok=false means there is nothing to show yet —
+// no client, an empty buffer, or a computation still in flight; ask
+// rewriteTracePending which.
 //
 // Deliberately demand-driven rather than computed in updatePreview: the Passes
 // and Diagnostics tabs are the only readers and both are lazy dock tabs, so a
-// session with neither open never pays for it. The first reader in a frame
-// computes; the second gets the memo.
+// session with neither open never pays for it.
+//
+// It is also computed off the render thread (ADR-0192 §SD3's 2026-08-17
+// update). Doing it inline made every settled edit a dropped frame — the very
+// cost this pane exists to report, inflicted while reporting it. The trace is
+// safe from any goroutine: what the rewrite reads is either immutable after
+// wiring or guarded.
+//
+// A recompute CLEARS the previous trace rather than holding it as last-good.
+// Stale timings under a buffer they do not describe are the one thing a cost
+// pane must not show.
 func (inst *PlayApp) rewriteTraceFor() (obs []passreg.ApplyObservation, ok bool) {
 	if inst.client == nil {
 		return
@@ -86,11 +102,38 @@ func (inst *PlayApp) rewriteTraceFor() (obs []passreg.ApplyObservation, ok bool)
 	}
 	conds := inst.client.ExposeConditions()
 	st := &inst.rewriteTrace
-	if !st.valid || st.forSQL != runSQL || st.conditions != conds {
-		st.forSQL, st.conditions, st.valid = runSQL, conds, true
-		st.obs = inst.client.RewriteTrace(runSQL)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.forSQL == runSQL && st.conditions == conds {
+		if st.valid {
+			return st.obs, true
+		}
+		return nil, false // already in flight for this key
 	}
-	return st.obs, true
+	st.gen++
+	gen := st.gen
+	st.forSQL, st.conditions = runSQL, conds
+	st.valid, st.pending, st.obs = false, true, nil
+	client := inst.client
+	go func() {
+		computed := client.RewriteTrace(runSQL)
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		if gen != st.gen {
+			return // superseded by a newer buffer
+		}
+		st.obs, st.valid, st.pending = computed, true, false
+	}()
+	return nil, false
+}
+
+// rewriteTracePending distinguishes "still measuring" from "nothing to
+// measure", so a pane can say which. Render-thread-safe.
+func (inst *PlayApp) rewriteTracePending() bool {
+	st := &inst.rewriteTrace
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.pending
 }
 
 // skippedRewrites filters a trace to the units that did not run: a pass whose
@@ -292,7 +335,11 @@ func passChildrenLines(p nanopass.Pass) (lines []string) {
 // lines are truncated pointers.
 func (inst *PlayApp) renderPassesOutcomes(trace []passreg.ApplyObservation, traced bool) {
 	if !traced {
-		for rt := range c.RichTextLabel("Type SQL in the Editor tab to see what these passes do to it.") {
+		msg := "Type SQL in the Editor tab to see what these passes do to it."
+		if inst.rewriteTracePending() {
+			msg = "measuring this buffer's rewrite…"
+		}
+		for rt := range c.RichTextLabel(msg) {
 			rt.Small().Weak()
 		}
 		return
