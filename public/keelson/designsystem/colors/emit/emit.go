@@ -62,7 +62,11 @@ func GoConst(name string) (s string) {
 	return
 }
 
-// RustFile renders palette_generated.rs.
+// RustFile renders palette_generated.rs. Each token's block is blank-line
+// separated FROM THE NEXT, so the loop leaves a trailing blank line after the
+// last one; trimmed back to a single newline so the raw output is already
+// rustfmt-stable (rustfmt drops a trailing blank line at EOF, matching the
+// same rationale vendor.emitRust documents for its tuple padding).
 func RustFile(tokens []palette.Token) (s string) {
 	var sb strings.Builder
 	sb.WriteString(generatedHeader)
@@ -73,11 +77,15 @@ func RustFile(tokens []palette.Token) (s string) {
 		fmt.Fprintf(&sb, "pub const %s: Color32 = Color32::from_rgb(%d, %d, %d);\n\n",
 			RustConst(t.Name), t.R, t.G, t.B)
 	}
-	s = sb.String()
+	s = strings.TrimRight(sb.String(), "\n") + "\n"
 	return
 }
 
-// GoFile renders palette.out.go.
+// GoFile renders palette.out.go. Trimmed to one trailing newline for the
+// same reason as RustFile: gofmt drops a trailing blank line at EOF, so
+// leaving one here would make the raw output drift from what any (even
+// accidental — generated files are meant to be gofmt-exempt, but nothing
+// stops a blanket `gofmt -w` from reaching them anyway) gofmt pass produces.
 func GoFile(tokens []palette.Token) (s string) {
 	var sb strings.Builder
 	sb.WriteString(generatedHeader)
@@ -90,7 +98,7 @@ func GoFile(tokens []palette.Token) (s string) {
 		fmt.Fprintf(&sb, "var %s = RGBA8{R: %d, G: %d, B: %d, A: 255}\n\n",
 			GoConst(t.Name), t.R, t.G, t.B)
 	}
-	s = sb.String()
+	s = strings.TrimRight(sb.String(), "\n") + "\n"
 	return
 }
 

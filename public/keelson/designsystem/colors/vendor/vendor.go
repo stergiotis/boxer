@@ -512,7 +512,11 @@ func emitGo(l lut) (s string) {
 	fmt.Fprintf(&sb, "package data_encoding\n\n")
 	fmt.Fprintf(&sb, "var %s = [%d][3]uint8{\n", goIdent(l.Name), l.Cardinality)
 	for _, c := range l.RGB {
-		fmt.Fprintf(&sb, "\t{%3d, %3d, %3d},\n", c[0], c[1], c[2])
+		// Unpadded on purpose, matching emitRust: gofmt strips this column
+		// padding on sight (confirmed — it is not a no-op), so padding it
+		// only drifts the artefact from itself the moment anything reformats
+		// it, same as an un-rustfmt-stable tuple would on the Rust side.
+		fmt.Fprintf(&sb, "\t{%d, %d, %d},\n", c[0], c[1], c[2])
 	}
 	sb.WriteString("}\n")
 	s = sb.String()

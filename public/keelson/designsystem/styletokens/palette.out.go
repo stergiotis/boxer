@@ -90,4 +90,3 @@ var WarningDefault = RGBA8{R: 230, G: 181, B: 93, A: 255}
 
 // semantic.warning.strong (OKLCh L=0.900 C=0.130 h=80.0 post-clip C=0.130)
 var WarningStrong = RGBA8{R: 255, G: 212, B: 116, A: 255}
-
