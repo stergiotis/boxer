@@ -1,6 +1,7 @@
 package play
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -228,13 +229,28 @@ func vocabExtras(installed map[string]string, declared []vocabEntry) (out []voca
 }
 
 // sortVocabByName orders entries alphabetically, case-insensitively so a
-// server mixing spellings does not split into two runs.
+// server mixing spellings does not split into two runs — the same ordering
+// sortCompletionItems gives the completion list, over the same names.
+//
+// n·log n, where this was an insertion sort. The panel re-runs it on EVERY
+// FRAME the tab is open, over a population only the endpoint bounds, and each
+// comparison allocates twice — so a server carrying a few hundred user-defined
+// functions paid a quadratic count of those, per frame. That combination is
+// what the tab hit against every endpoint while vocabProbeQuery was reading
+// the whole built-in set as user-defined.
+//
+// Names differing only in case fall back to their own spelling rather than
+// comparing equal, so the order is total. The caller builds its slice by
+// iterating a map, so a pair the fold cannot separate would otherwise swap
+// places from frame to frame.
 func sortVocabByName(entries []vocabEntry) {
-	for i := 1; i < len(entries); i++ {
-		for j := i; j > 0 && strings.ToLower(entries[j].Name) < strings.ToLower(entries[j-1].Name); j-- {
-			entries[j], entries[j-1] = entries[j-1], entries[j]
+	slices.SortFunc(entries, func(a vocabEntry, b vocabEntry) (n int) {
+		n = strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		if n == 0 {
+			n = strings.Compare(a.Name, b.Name)
 		}
-	}
+		return
+	})
 }
 
 // vocabSurfaceSkew describes the surface revision the endpoint carries
