@@ -15,8 +15,8 @@
 //
 // Modifications applied during port (see ./NOTICE):
 //   - Dropped AddHeaders and ExtractHeaders, which converted between
-//     []kgo.RecordHeader and service.Message metadata. The pebble2impl
-//     port treats *kgo.Record as the message envelope (see
+//     []kgo.RecordHeader and service.Message metadata. This port
+//     treats *kgo.Record as the message envelope (see
 //     EXPLANATION.md §"Why concrete types"); application code reads
 //     kgo.Record.Headers directly without an intermediate metadata
 //     hop.

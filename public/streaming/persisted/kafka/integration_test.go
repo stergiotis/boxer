@@ -17,7 +17,7 @@
 // This file is not a derivative of upstream Connect's integration tests
 // — the upstream suite (~1500 lines across 4 files) is heavily coupled
 // to the Benthos service-framework, and a verbatim port would not
-// exercise any pebble2impl-specific invariant. The shape of the
+// exercise any invariant specific to this port. The shape of the
 // testcontainers + topic-creation-retry plumbing is inspired by
 // upstream's integration_test.go (the INVALID_PARTITIONS retry loop in
 // particular), but the test logic itself targets this port's exported
@@ -120,7 +120,7 @@ func TestIntegrationConnectivity(t *testing.T) {
 
 	details := kafka.DefaultFranzConnectionDetails()
 	details.SeedBrokers = []string{addr}
-	details.ClientID = "pebble2impl-conn-test"
+	details.ClientID = "boxer-conn-test"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -168,7 +168,7 @@ func runRoundTrip(t *testing.T, brokerAddr string, unordered bool) (topic, group
 
 	connDetails := kafka.DefaultFranzConnectionDetails()
 	connDetails.SeedBrokers = []string{brokerAddr}
-	connDetails.ClientID = "pebble2impl-rt"
+	connDetails.ClientID = "boxer-rt"
 
 	// ---- Producer
 	prodOpts := kafka.DefaultFranzProducerOpts()
@@ -258,7 +258,7 @@ func runConsumerLag(t *testing.T, brokerAddr, topic, group string) {
 
 	connDetails := kafka.DefaultFranzConnectionDetails()
 	connDetails.SeedBrokers = []string{brokerAddr}
-	connDetails.ClientID = "pebble2impl-lag-admin"
+	connDetails.ClientID = "boxer-lag-admin"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

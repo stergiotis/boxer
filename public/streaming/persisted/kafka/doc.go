@@ -17,7 +17,7 @@
 // the design rationale is in EXPLANATION.md alongside this file.
 
 // Package kafka exposes a franz-go-based Kafka consumer and producer for
-// pebble2impl's persisted-streaming subsystem.
+// this repository's persisted-streaming subsystem.
 //
 // The package is a derivative work of the franz-go-flavoured plugins in
 // github.com/redpanda-data/connect/internal/impl/kafka, pinned at commit

@@ -79,7 +79,7 @@ The third option is the reason `processErr` is in the signature even though the 
 Two reasons:
 
 1. The franz-reader port closes a `func(context.Context, error) error` over the per-batch checkpointer state; rewriting that to a two-method interface multiplies the closure surface and the in-flight tracking by two for no current benefit.
-2. The Connect contract empirically does not need `Nack` — the AutoRetryNacks layer above it does. Until pebble2impl grows an analogous retry layer, splitting the ack contract is premature.
+2. The Connect contract empirically does not need `Nack` — the AutoRetryNacks layer above it does. Until boxer grows an analogous retry layer, splitting the ack contract is premature.
 
 If a Nack semantics is added later, the migration is `processErr != nil` → reader-honoured offset suppression. Callers who already pass a faithful `processErr` will get the new behaviour for free.
 
@@ -87,7 +87,7 @@ If a Nack semantics is added later, the migration is `processErr != nil` → rea
 
 `Batch.Records` is `kgo.Fetches`, the franz-go type, exposed directly. Callers iterate via the methods franz-go provides:
 
-- `Records.RecordsAll()` returns `iter.Seq[*kgo.Record]` — the Go 1.23+ range-over-func form. Idiomatic in pebble2impl (FFFI2 generated code, egui Fetcher, fffi2_rt all use `iter.Seq` heavily) and the natural shape for the application's record-by-record loop.
+- `Records.RecordsAll()` returns `iter.Seq[*kgo.Record]` — the Go 1.23+ range-over-func form. Idiomatic in boxer (FFFI2 generated code, egui Fetcher, fffi2_rt all use `iter.Seq` heavily) and the natural shape for the application's record-by-record loop.
 - `Records.Records()` returns `[]*kgo.Record` — the slice form. Use when the application needs `len(records)` up front or wants index-based access.
 - `Records.EachRecord(fn)`, `Records.EachPartition(fn)`, `Records.EachTopic(fn)` — callback forms. Use when the per-partition or per-topic structure of the fetch matters (rare in practice).
 

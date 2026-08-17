@@ -20,7 +20,7 @@
 //     is preserved verbatim from upstream so the franz-reader port can
 //     keep its closure form, even though both arguments are advisory in
 //     the upstream contract (see EXPLANATION.md §"Ack contract").
-//   - Added ConsumerI / ProducerI as pebble2impl-local seams; upstream
+//   - Added ConsumerI / ProducerI as seams local to this port; upstream
 //     used service.Input / service.Output for the same role.
 
 package kafka

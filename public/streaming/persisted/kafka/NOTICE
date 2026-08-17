@@ -62,7 +62,7 @@ MODIFICATIONS APPLIED DURING PORT
   * Dropped the AWS_MSK_IAM and REDPANDA_CLOUD_SERVICE_ACCOUNT SASL
     mechanisms from sasl.go. AWS_MSK_IAM is supplied upstream via an
     indirect plug-point (AWSSASLFromConfigFn) populated when
-    components/aws is imported; pebble2impl does not import that
+    components/aws is imported; boxer does not import that
     layer. REDPANDA_CLOUD_SERVICE_ACCOUNT depends on
     github.com/redpanda-data/connect/v4/internal/serviceaccount,
     a Connect-internal package not exposed for re-use. The four
