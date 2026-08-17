@@ -681,7 +681,6 @@ func RenderDemoWindow() {
 
 	for range c.Window(ids.PrepareSeq(0xffeefe), c.WidgetText().Text("imzero2 debug tools").Keep()).KeepIter() {
 		c.ShowDebugTools()
-		c.ShowPuffinProfiler()
 	}
 
 	c.RequestRepaint()

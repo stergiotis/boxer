@@ -1654,13 +1654,6 @@ func ShowDebugTools() {
 	r.SendIntermediate()
 }
 
-func ShowPuffinProfiler() {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteUint32(uint32(FuncProcIdShowPuffinProfiler))
-
-	r.SendIntermediate()
-}
-
 func SliderF64(i WidgetIdCreatorI, val float64, rangeBeginIncl float64, rangeEndIncl float64) (inst SliderF64Fluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdSliderF64))

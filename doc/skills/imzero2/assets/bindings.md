@@ -535,7 +535,6 @@ const (
 	FuncProcIdScrollArea                          FuncProcIdE = FuncProcIdOffset + 51
 	FuncProcIdSeparator                           FuncProcIdE = FuncProcIdOffset + 52
 	FuncProcIdShowDebugTools                      FuncProcIdE = FuncProcIdOffset + 53
-	FuncProcIdShowPuffinProfiler                  FuncProcIdE = FuncProcIdOffset + 54
 	FuncProcIdSliderF64                           FuncProcIdE = FuncProcIdOffset + 55
 	FuncProcIdSliderI64                           FuncProcIdE = FuncProcIdOffset + 56
 	FuncProcIdSliderU64                           FuncProcIdE = FuncProcIdOffset + 57
@@ -1094,8 +1093,6 @@ func ScrollArea() (inst ScrollAreaFluid) { panic("stub") }
 func Separator() (inst SeparatorFluid) { panic("stub") }
 
 func ShowDebugTools() { panic("stub") }
-
-func ShowPuffinProfiler() { panic("stub") }
 
 func SliderF64(i WidgetIdCreatorI, val float64, rangeBeginIncl float64, rangeEndIncl float64) (inst SliderF64Fluid) {
 	panic("stub")

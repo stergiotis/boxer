@@ -24,12 +24,6 @@ func definitionsSpecial() (specials []ir.NodeI) {
 	specials = append(specials, idl.NewProceduralNode("requestRepaint").
 		WithApplyCodeClientRust(rustClientCode("{{EguiContext}}.request_repaint();\n")).
 		Build())
-	specials = append(specials, idl.NewProceduralNode("showPuffinProfiler").
-		WithApplyCodeClientRust(rustClientCode(`
-//#[cfg(feature = "puffin")]
-//puffin_egui::profiler_window({{EguiContext}}); // FIXME problem with egui version in puffin_egui crate
-`)).
-		Build())
 	specials = append(specials, idl.NewProceduralNode("showDebugTools").
 		WithApplyCodeClientRust(rustClientCode(`
 				if {{EguiUiOptionalOuter}}.is_some() {

@@ -205,10 +205,9 @@ func init() {
 		Stage:       [2]float32{1024, 600},
 		Flags:       registry.DemoFlagNonDeterministic, // framerate / render-pass / io counters drift per-frame
 		Kind:        registry.DemoKindDX,
-		Description: "Built-in egui debug overlays plus the Puffin frame profiler (toggleable via the egui2 debug-tools API).",
+		Description: "Built-in egui debug overlays (toggleable via the egui2 debug-tools API).",
 		Render: func(ids *c.WidgetIdStack) {
 			c.ShowDebugTools()
-			c.ShowPuffinProfiler()
 		},
 	})
 	registry.Register(registry.Demo{

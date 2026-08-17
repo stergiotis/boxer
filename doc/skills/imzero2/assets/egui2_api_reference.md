@@ -165,7 +165,6 @@ status: draft
 | SetVideoPipeline | Procedural | No | 1 | 0 | - | - |
 | SetWindowCollapsed | Procedural | Yes | 1 | 0 | - | - |
 | ShowDebugTools | Procedural | No | 0 | 0 | - | - |
-| ShowPuffinProfiler | Procedural | No | 0 | 0 | - | - |
 | SliderF64 | BuilderFactory | Yes | 3 | 0 | 19 | Immediate, Retained |
 | SliderI64 | BuilderFactory | Yes | 3 | 0 | 19 | Immediate, Retained |
 | SliderU64 | BuilderFactory | Yes | 3 | 0 | 19 | Immediate, Retained |
@@ -3102,13 +3101,6 @@ Block
 ---
 
 ### ShowDebugTools
-
-- **Type:** Procedural
-- **Identity:** No
-
----
-
-### ShowPuffinProfiler
 
 - **Type:** Procedural
 - **Identity:** No

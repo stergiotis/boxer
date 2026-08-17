@@ -139,7 +139,6 @@ puffin = {version = "0.20.0", optional = true }
 profiling = "1.0.17"
 mimalloc = "0.1.48"
 dhat = { version = "0.3.3", optional = true }
-puffin_egui = "0.30.0"
 memmap2 = "0.9.9"
 rand = "0.10.2"
 blake3 = "1.8.2"

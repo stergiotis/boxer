@@ -10718,19 +10718,6 @@ self.apply_widget(w,u,f,Some(i));
                     self.render_debug_tools(c, u.as_mut().unwrap());
                 }
             }
-            FuncProcId::ShowPuffinProfiler => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::ShowPuffinProfiler");
-                // arguments
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-
-                //#[cfg(feature = "puffin")]
-                //puffin_egui::profiler_window(c); // FIXME problem with egui version in puffin_egui crate
-            }
             FuncProcId::SliderF64 => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::SliderF64");
