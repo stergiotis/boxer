@@ -13,8 +13,8 @@
 // Pure-Go; deterministic; CI re-runs with Verify=true to byte-compare
 // against committed artefacts.
 //
-// The cli wiring lives at cmd/designsystem/ — this package only
-// exposes Run(ctx, Config) and a Result for the caller to format.
+// The cli wiring lives at public/app/commands/designsystem/ — this package
+// only exposes Run(ctx, Config) and a Result for the caller to format.
 package gen
 
 import (
@@ -371,7 +371,7 @@ func verifyFile(path, want string) (err error) {
 		return
 	}
 	if string(got) != want {
-		err = fmt.Errorf("verify: %s drift — re-run ./cmd/designsystem colors gen", path)
+		err = fmt.Errorf("verify: %s drift — re-run ./boxer.sh designsystem colors gen", path)
 		return
 	}
 	return
