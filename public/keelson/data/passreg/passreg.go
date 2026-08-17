@@ -10,6 +10,7 @@ package passreg
 import (
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -404,6 +405,23 @@ type ApplyObservation struct {
 	Changed bool
 	// Err is the error a skipped unit's Run returned; nil otherwise.
 	Err error
+	// Dur is the unit's wall-clock cost: the whole Run, so it includes the env
+	// extraction and integration Cost does not. Zero for a declined factory,
+	// which never ran. See ADR-0192 for why a rewrite's cost is worth reporting
+	// at all — the pipeline re-parses the statement once per pass, so it is
+	// routinely the dominant cost of executing a large buffer.
+	Dur time.Duration
+	// Cost is the unit's internal breakdown — the tree of pass invocations its
+	// Run performed, with a duration on each node. Its root is the unit's own
+	// pass, so Cost.Children are a composite's members. Zero-valued for a
+	// declined factory.
+	//
+	// Cost.Dur is under Dur, and not by a rounding margin: the env round trip
+	// (extracting the SET prelude, integrating the rewritten body) sits outside
+	// the pass tree, and on a 9 KB buffer it measured ~344 ms against a 1.99 s
+	// unit. A consumer presenting the tree as a breakdown of Dur has to account
+	// for the remainder rather than let it vanish.
+	Cost nanopass.StepCost
 }
 
 // ApplyBestEffortBoundObserved is ApplyBestEffortBound with a per-unit
@@ -414,6 +432,12 @@ type ApplyObservation struct {
 // this exactly ApplyBestEffortBound. Warn-level logging of a skip happens
 // either way: an observer is an additional surface, not a replacement for the
 // operational record.
+//
+// An observed apply runs each unit through nanopass.Pass.RunProfiled instead of
+// Run, so every observation carries what its unit cost (ADR-0192). The output
+// is identical either way — RunProfiled differs from Run only in what it
+// measures — and the unobserved path never profiles, so the execute path is
+// unaffected.
 func (inst *Registry) ApplyBestEffortBoundObserved(stage StageE, sql string, binding any, logger zerolog.Logger, observe func(ApplyObservation)) (out string) {
 	out = sql
 	for _, u := range inst.boundUnits(stage, binding) {
@@ -423,20 +447,30 @@ func (inst *Registry) ApplyBestEffortBoundObserved(stage StageE, sql string, bin
 			}
 			continue
 		}
-		next, runErr := u.pass.Run(out)
-		if runErr != nil {
-			logger.Warn().Err(runErr).Str("pass", u.name).Str("stage", stage.String()).Msg("passreg: pass failed; skipped")
-			if observe != nil {
-				observe(ApplyObservation{Name: u.name, Order: u.order, LateBound: u.lateBound, Outcome: ApplyOutcomeSkipped, Err: runErr})
+		if observe == nil {
+			next, runErr := u.pass.Run(out)
+			if runErr != nil {
+				logger.Warn().Err(runErr).Str("pass", u.name).Str("stage", stage.String()).Msg("passreg: pass failed; skipped")
+				continue
 			}
+			out = next
 			continue
 		}
-		if observe != nil {
+		started := time.Now()
+		next, cost, runErr := u.pass.RunProfiled(out)
+		dur := time.Since(started)
+		if runErr != nil {
+			logger.Warn().Err(runErr).Str("pass", u.name).Str("stage", stage.String()).Msg("passreg: pass failed; skipped")
 			observe(ApplyObservation{
 				Name: u.name, Order: u.order, LateBound: u.lateBound,
-				Outcome: ApplyOutcomeApplied, Changed: next != out,
+				Outcome: ApplyOutcomeSkipped, Err: runErr, Dur: dur, Cost: cost,
 			})
+			continue
 		}
+		observe(ApplyObservation{
+			Name: u.name, Order: u.order, LateBound: u.lateBound,
+			Outcome: ApplyOutcomeApplied, Changed: next != out, Dur: dur, Cost: cost,
+		})
 		out = next
 	}
 	return

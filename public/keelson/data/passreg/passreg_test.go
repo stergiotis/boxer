@@ -241,6 +241,37 @@ func TestApplyBestEffortBoundNilObserverMatchesObserved(t *testing.T) {
 	}
 }
 
+// TestApplyBestEffortBoundObservedReportsCost covers ADR-0192: an observed
+// apply carries what each unit cost and the tree of pass invocations inside it,
+// so a consumer can attribute a slow rewrite to a sub-pass rather than to the
+// composite that contains it.
+func TestApplyBestEffortBoundObservedReportsCost(t *testing.T) {
+	r := NewRegistry()
+	composite := nanopass.Sequence("Composite", noopPass("Inner1"), noopPass("Inner2"))
+	require.NoError(t, r.Register(Entry{Pass: composite, Stage: StagePreExecute, Order: 100}))
+	require.NoError(t, r.RegisterFactory(markerFactory("Late", "late", 200)))
+
+	var obs []ApplyObservation
+	r.ApplyBestEffortBoundObserved(StagePreExecute, "SELECT 1", false, zerolog.Nop(),
+		func(o ApplyObservation) { obs = append(obs, o) })
+	require.Len(t, obs, 2)
+
+	// Durations are asserted as "measured at all", never against a bound: a
+	// threshold here would be flaky under CI load and under -race.
+	require.Positive(t, obs[0].Dur, "an applied unit reports what it cost")
+	require.Equal(t, "Composite", obs[0].Cost.Name, "the cost tree is rooted at the unit's own pass")
+	require.Len(t, obs[0].Cost.Children, 2, "the tree reaches inside the composite")
+	require.Equal(t, []string{"Inner1", "Inner2"},
+		[]string{obs[0].Cost.Children[0].Name, obs[0].Cost.Children[1].Name},
+		"members appear in the order they ran")
+	require.GreaterOrEqual(t, obs[0].Dur, obs[0].Cost.Dur,
+		"the unit's duration is the whole Run, so it contains the pass tree's")
+
+	require.Equal(t, ApplyOutcomeDeclined, obs[1].Outcome)
+	require.Zero(t, obs[1].Dur, "a factory that declined never ran, so it cost nothing")
+	require.Zero(t, obs[1].Cost.Name)
+}
+
 func TestApplyOutcomeString(t *testing.T) {
 	require.Equal(t, "applied", ApplyOutcomeApplied.String())
 	require.Equal(t, "skipped", ApplyOutcomeSkipped.String())

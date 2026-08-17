@@ -222,7 +222,26 @@ func callApply(name string, fn ApplyFunc, e *env.Environment, body string) (newB
 
 // applyWithProps invokes Apply, honouring NeedsFixedPoint by wrapping in a
 // fixpoint loop with DefaultFixedPointMaxIter.
+//
+// It is also where a profiled run (ADR-0192) opens and closes one node of its
+// cost tree, because it is the single point every combinator recurses through:
+// Sequence calls it per child, Validating and Conditional call it on their
+// body. An unprofiled run finds no recorder and takes the same path it always
+// did.
 func (p Pass) applyWithProps(e *env.Environment, body string) (newBody string, err error) {
+	rec := recorderFor(e)
+	if rec == nil {
+		return p.applyUnrecorded(e, body)
+	}
+	rec.enter(p.Name)
+	newBody, err = p.applyUnrecorded(e, body)
+	rec.leave(body, newBody, err)
+	return
+}
+
+// applyUnrecorded is applyWithProps' actual work, split out so the recording
+// wrapper adds no branch to the body it measures.
+func (p Pass) applyUnrecorded(e *env.Environment, body string) (newBody string, err error) {
 	if p.Apply == nil {
 		err = eb.Build().Str("pass", p.Name).Errorf("pass has nil Apply")
 		return
@@ -245,9 +264,17 @@ func (p Pass) applyWithProps(e *env.Environment, body string) (newBody string, e
 // dropped and the current accumulator is returned. This makes analytical
 // passes safe to wrap in fixed-point — they observe once and exit instead
 // of producing a stream of marker-laced outputs.
+// A profiled run (ADR-0192) counts the iterations against the frame
+// applyWithProps opened for the looping pass — the loop calls fn directly
+// rather than recursing through applyWithProps, so iterations are a count on
+// that node, not children of it.
 func runFixedPoint(name string, fn ApplyFunc, e *env.Environment, body string, maxIter int) (result string, err error) {
 	result = body
+	rec := recorderFor(e)
 	for i := range maxIter {
+		if rec != nil {
+			rec.countIteration()
+		}
 		next, applyErr := callApply(name, fn, e, result)
 		if applyErr != nil {
 			err = eb.Build().Str("pass", name).Int("iter", i).Errorf("apply failed: %w", applyErr)
