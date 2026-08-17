@@ -1,13 +1,9 @@
 // Package designsystem is the CLI wiring for the IDS toolchain
-// (ADR-0029). It exposes the same command tree to both consumers:
-//
-//   - The standalone binary at cmd/designsystem (legacy entry
-//     used by scripts/designcolors.sh and CI workflows) — invokes
-//     [Subcommands] so the user types `designsystem colors gen` rather
-//     than `designsystem designsystem colors gen`.
-//   - The aggregated pebble.sh app (public/app/app.go) — invokes
-//     [NewCliCommand] to register `designsystem` alongside the other
-//     top-level commands (cbor, key, http, datasource, …).
+// (ADR-0029). [Subcommands] is the raw subcommand list, for a caller that
+// wants `designsystem colors gen` without the `designsystem` prefix;
+// [NewCliCommand] wraps it as the top-level `designsystem` command
+// registered in public/app/main.go, the aggregated ./boxer.sh app,
+// alongside the other top-level commands (cbor, key, http, datasource, …).
 //
 // All implementations live under public/keelson/designsystem/
 // (gen, vendor, ssim, tour); this package is purely the urfave/cli
@@ -31,8 +27,8 @@ import (
 )
 
 // NewCliCommand returns the top-level `designsystem` command for the
-// pebble.sh-aggregated app. Use [Subcommands] when wiring the
-// standalone binary so the user types the subcommands directly.
+// boxer.sh-aggregated app. Use [Subcommands] when wiring a caller that
+// wants the subcommands directly, without the `designsystem` prefix.
 func NewCliCommand() (cmd *cli.Command) {
 	cmd = &cli.Command{
 		Name:        "designsystem",

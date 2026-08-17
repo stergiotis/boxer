@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// kafka: kcat-style subcommand for the pebble CLI, layered over the
-// streaming/persisted/kafka package. Three nested commands today
-// (consume, produce, list); urfave/cli/v2 leaves room to grow.
+// kafka: kcat-style CLI subcommand layered over the streaming/persisted/kafka
+// package. [NewCliCommand] registers into a host application's own Commands
+// slice, as `<binary> kafka <subcmd>`. Three nested commands today (consume,
+// produce, list); urfave/cli/v2 leaves room to grow.
 //
-// Examples:
+// Examples (substitute the host application's own binary for <binary>):
 //
-//	./pebble.sh kafka consume -b localhost:9092 -t orders -G my-group
-//	./pebble.sh kafka consume -b localhost:9092 -t events -e -c 10
-//	echo 'hello' | ./pebble.sh kafka produce -b localhost:9092 -t events
-//	./pebble.sh kafka list -b localhost:9092
+//	<binary> kafka consume -b localhost:9092 -t orders -G my-group
+//	<binary> kafka consume -b localhost:9092 -t events -e -c 10
+//	echo 'hello' | <binary> kafka produce -b localhost:9092 -t events
+//	<binary> kafka list -b localhost:9092
 
 package cli
 
@@ -73,62 +74,62 @@ func commonFlags() []cli.Flag {
 			Aliases:  []string{"b"},
 			Required: true,
 			Usage:    "comma-separated list of broker addresses (host1:9092,host2:9092)",
-			EnvVars:  []string{"PEBBLE_KAFKA_BROKERS"},
+			EnvVars:  []string{"BOXER_KAFKA_BROKERS"},
 		},
 		&cli.StringFlag{
 			Name:    "client-id",
-			Value:   "pebble",
+			Value:   "boxer",
 			Usage:   "kafka client.id",
-			EnvVars: []string{"PEBBLE_KAFKA_CLIENT_ID"},
+			EnvVars: []string{"BOXER_KAFKA_CLIENT_ID"},
 		},
 
 		// SASL
 		&cli.StringFlag{
 			Name:    "sasl-mechanism",
 			Usage:   "SASL mechanism: none (default), PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER",
-			EnvVars: []string{"PEBBLE_KAFKA_SASL_MECHANISM"},
+			EnvVars: []string{"BOXER_KAFKA_SASL_MECHANISM"},
 		},
 		&cli.StringFlag{
 			Name:    "sasl-username",
 			Usage:   "SASL username (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512)",
-			EnvVars: []string{"PEBBLE_KAFKA_SASL_USERNAME"},
+			EnvVars: []string{"BOXER_KAFKA_SASL_USERNAME"},
 		},
 		&cli.StringFlag{
 			Name:    "sasl-password",
 			Usage:   "SASL password (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512); prefer the env var to avoid shell history",
-			EnvVars: []string{"PEBBLE_KAFKA_SASL_PASSWORD"},
+			EnvVars: []string{"BOXER_KAFKA_SASL_PASSWORD"},
 		},
 		&cli.StringFlag{
 			Name:    "sasl-token",
 			Usage:   "static OAUTHBEARER token (only for --sasl-mechanism=OAUTHBEARER)",
-			EnvVars: []string{"PEBBLE_KAFKA_SASL_TOKEN"},
+			EnvVars: []string{"BOXER_KAFKA_SASL_TOKEN"},
 		},
 
 		// TLS
 		&cli.BoolFlag{
 			Name:    "tls",
 			Usage:   "enable TLS (implicit if any --tls-* file flag is set)",
-			EnvVars: []string{"PEBBLE_KAFKA_TLS"},
+			EnvVars: []string{"BOXER_KAFKA_TLS"},
 		},
 		&cli.StringFlag{
 			Name:    "tls-ca-file",
 			Usage:   "path to a PEM-encoded CA bundle for verifying the broker certificate",
-			EnvVars: []string{"PEBBLE_KAFKA_TLS_CA_FILE"},
+			EnvVars: []string{"BOXER_KAFKA_TLS_CA_FILE"},
 		},
 		&cli.StringFlag{
 			Name:    "tls-cert-file",
 			Usage:   "path to a PEM-encoded client certificate (for mTLS); requires --tls-key-file",
-			EnvVars: []string{"PEBBLE_KAFKA_TLS_CERT_FILE"},
+			EnvVars: []string{"BOXER_KAFKA_TLS_CERT_FILE"},
 		},
 		&cli.StringFlag{
 			Name:    "tls-key-file",
 			Usage:   "path to a PEM-encoded client key (for mTLS); requires --tls-cert-file",
-			EnvVars: []string{"PEBBLE_KAFKA_TLS_KEY_FILE"},
+			EnvVars: []string{"BOXER_KAFKA_TLS_KEY_FILE"},
 		},
 		&cli.BoolFlag{
 			Name:    "tls-skip-verify",
 			Usage:   "skip broker certificate verification (insecure; useful for self-signed dev clusters)",
-			EnvVars: []string{"PEBBLE_KAFKA_TLS_SKIP_VERIFY"},
+			EnvVars: []string{"BOXER_KAFKA_TLS_SKIP_VERIFY"},
 		},
 	}
 }

@@ -160,61 +160,61 @@ behind := lag.Load("orders", 0)
 
 `ConsumerLag` does not touch the reader's poll loop; the `kadm.Client` it constructs internally only issues admin RPCs (broker offsets, committed offsets) which are read-only and don't conflict with consumption. Reusing `reader.Client` avoids opening a second TCP connection.
 
-## Recipe 5: invoke the bundled `pebble kafka` CLI
+## Recipe 5: invoke the bundled `kafka` CLI
 
-The package ships a kcat-style CLI at [`cli/`](cli), exposed as a subcommand by downstream consumers (e.g. pebble2impl wires it into `./pebble.sh`). Three nested subcommands cover the common interactive flows.
+The package ships a kcat-style CLI at [`cli/`](cli) — `cli.NewCliCommand()` registers into a host application's own Commands slice, as `<binary> kafka <subcmd>`. Three nested subcommands cover the common interactive flows; examples below substitute the host application's own binary for `<binary>`.
 
 ```bash
 # List metadata: brokers, topics, partition leader/replica/ISR.
-./pebble.sh kafka list -b 127.0.0.1:9092
+<binary> kafka list -b 127.0.0.1:9092
 
 # Produce a few records (one per stdin line; -K splits key from value):
-echo -e 'k1=v1\nk2=v2' | ./pebble.sh kafka produce -b 127.0.0.1:9092 -t demo -K '='
+echo -e 'k1=v1\nk2=v2' | <binary> kafka produce -b 127.0.0.1:9092 -t demo -K '='
 
 # Produce from netstring-framed stdin (binary-safe; bytes can contain
 # newlines, NULs, commas, anything). Round-trips with --output-mode=netstring:
-./pebble.sh kafka consume -b 127.0.0.1:9092 -t src -e --output-mode=netstring \
-  | ./pebble.sh kafka produce -b 127.0.0.1:9092 -t dst --input-mode=netstring
+<binary> kafka consume -b 127.0.0.1:9092 -t src -e --output-mode=netstring \
+  | <binary> kafka produce -b 127.0.0.1:9092 -t dst --input-mode=netstring
 
 # Consume the first 10 records and exit. Format string verbs:
 #   %t topic, %p partition, %o offset, %k key, %s value, %T timestamp-ms;
 #   \n \t \\ escapes; %% literal.
-./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -c 10 -f '%t/%p:%o key=%k value=%s\n'
+<binary> kafka consume -b 127.0.0.1:9092 -t demo -c 10 -f '%t/%p:%o key=%k value=%s\n'
 
 # Tail forever; Ctrl+C exits gracefully (commits offsets first when -G is set).
-./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -G my-group
+<binary> kafka consume -b 127.0.0.1:9092 -t demo -G my-group
 
 # Run until idle for 3s ("end of log" approximation, useful for scripts).
-./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -e
+<binary> kafka consume -b 127.0.0.1:9092 -t demo -e
 
 # CBOR output: one self-delimiting CBOR map per record with full
 # metadata (topic, partition, offset, timestamp_ms, key, value, headers).
 # Pipe to xxd / cbor2json / your processing pipeline.
-./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -c 100 --output-mode=cbor | xxd
+<binary> kafka consume -b 127.0.0.1:9092 -t demo -c 100 --output-mode=cbor | xxd
 
 # Netstring output: each record's value framed as `<len>:<bytes>,`.
 # Stream-parseable; preserves binary content; the `,` terminator
 # distinguishes empty values (`0:,`) from end-of-stream.
-./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -c 100 --output-mode=netstring
+<binary> kafka consume -b 127.0.0.1:9092 -t demo -c 100 --output-mode=netstring
 ```
 
-Environment variables `PEBBLE_KAFKA_BROKERS` and `PEBBLE_KAFKA_CLIENT_ID` set per-flag defaults so scripts can `export PEBBLE_KAFKA_BROKERS=…` once and stay terse.
+Environment variables `BOXER_KAFKA_BROKERS` and `BOXER_KAFKA_CLIENT_ID` set per-flag defaults so scripts can `export BOXER_KAFKA_BROKERS=…` once and stay terse.
 
 ### SASL authentication
 
 ```bash
 # PLAIN auth (env vars recommended for the password — keeps it out of shell history):
-PEBBLE_KAFKA_SASL_PASSWORD=s3cret \
-  ./pebble.sh kafka list -b broker:9093 \
+BOXER_KAFKA_SASL_PASSWORD=s3cret \
+  <binary> kafka list -b broker:9093 \
     --sasl-mechanism=PLAIN --sasl-username=alice
 
 # SCRAM-SHA-512:
-./pebble.sh kafka list -b broker:9093 \
+<binary> kafka list -b broker:9093 \
     --sasl-mechanism=SCRAM-SHA-512 \
     --sasl-username=alice --sasl-password=s3cret
 
 # OAUTHBEARER (static token):
-./pebble.sh kafka list -b broker:9093 \
+<binary> kafka list -b broker:9093 \
     --sasl-mechanism=OAUTHBEARER --sasl-token="${BEARER_TOKEN}"
 ```
 
@@ -224,26 +224,26 @@ Supported mechanisms: `PLAIN`, `SCRAM-SHA-256`, `SCRAM-SHA-512`, `OAUTHBEARER`. 
 
 ```bash
 # TLS-only (system CA pool):
-./pebble.sh kafka list -b broker:9093 --tls
+<binary> kafka list -b broker:9093 --tls
 
 # TLS with custom CA bundle:
-./pebble.sh kafka list -b broker:9093 \
+<binary> kafka list -b broker:9093 \
     --tls-ca-file=/etc/redpanda/ca.crt
 
 # Insecure dev-cluster (self-signed certs):
-./pebble.sh kafka list -b broker:9093 \
+<binary> kafka list -b broker:9093 \
     --tls-ca-file=/etc/redpanda/ca.crt \
     --tls-skip-verify
 
 # Mutual TLS (client cert + key):
-./pebble.sh kafka list -b broker:9093 \
+<binary> kafka list -b broker:9093 \
     --tls-ca-file=/etc/redpanda/ca.crt \
     --tls-cert-file=/etc/redpanda/client.crt \
     --tls-key-file=/etc/redpanda/client.key
 
 # SASL_SSL (SASL on top of TLS) — common for managed clusters:
-PEBBLE_KAFKA_SASL_PASSWORD=s3cret \
-  ./pebble.sh kafka list -b broker:9093 \
+BOXER_KAFKA_SASL_PASSWORD=s3cret \
+  <binary> kafka list -b broker:9093 \
     --tls --sasl-mechanism=SCRAM-SHA-512 --sasl-username=alice
 ```
 

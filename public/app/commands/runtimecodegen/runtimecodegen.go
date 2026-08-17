@@ -5,10 +5,12 @@
 // [github.com/stergiotis/boxer/public/keelson/runtime/factsschema/codegen]
 // without changing the library.
 //
-// The same command tree is exposed two ways:
+// [Subcommands] is the raw subcommand list, for a caller that wants
+// `runtimecodegen dml` without the `runtimecodegen` prefix; [NewCliCommand]
+// wraps it as the top-level `runtimecodegen` command registered in
+// public/app/main.go, the aggregated ./boxer.sh app:
 //
-//   - `./pebble.sh runtimecodegen <subcmd>` — aggregated app
-//   - `./cmd/runtimecodegen <subcmd>` — standalone CI binary
+//	./boxer.sh runtimecodegen <subcmd>
 //
 // Subcommands (each accepts `--out` to override the default path):
 //
@@ -27,8 +29,8 @@ import (
 )
 
 // NewCliCommand returns the top-level `runtimecodegen` command for the
-// pebble.sh-aggregated app. Use [Subcommands] when wiring the standalone
-// binary so the user types the subcommands directly.
+// boxer.sh-aggregated app. Use [Subcommands] when wiring a caller that
+// wants the subcommands directly, without the `runtimecodegen` prefix.
 func NewCliCommand() (cmd *cli.Command) {
 	cmd = &cli.Command{
 		Name:        "runtimecodegen",
