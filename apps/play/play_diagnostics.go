@@ -2,6 +2,7 @@ package play
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,8 +14,10 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 // play_diagnostics.go is the Diagnostics dock tab: the single owner of the
@@ -371,6 +374,8 @@ func (inst *PlayApp) renderDiagnosticsTab(numRows int64, elapsed time.Duration, 
 	c.Separator().Send()
 	inst.renderDiagRewrites()
 	c.Separator().Send()
+	inst.renderDiagRewriteCost(elapsed, summary)
+	c.Separator().Send()
 	if inst.diag != nil && inst.diag.resolveDiag != nil {
 		inst.renderDiagColumnResolution()
 		c.Separator().Send()
@@ -444,6 +449,195 @@ func (inst *PlayApp) renderDiagRewrites() {
 		}
 	}
 	diagWeak(rewriteOutcomeSummary(trace) + " · the Passes tab shows where each sits in the sequence.")
+}
+
+// diagCostVizIDSalt namespaces the Rewrite-cost canvases, composed with the
+// per-instance vizSeed so two PlayApp instances do not collide and distinct
+// from the Passes tab's salt.
+const diagCostVizIDSalt uint64 = 0xc057000000000000
+
+// renderDiagRewriteCost is the ADR-0192 section: where the time went, drawn
+// rather than described.
+//
+// Two staggered bar charts, the shape a browser's network Timing tab uses. The
+// first splits one Run into compile / server / transfer, which is usually the
+// whole answer to "why is this slow" — a statement that compiles for half a
+// second against a server answering in ninety milliseconds has a client
+// problem, and no amount of SQL tuning will touch it. The second expands the
+// compile span into the passes that make it up, with the costliest one opened.
+//
+// Deliberately almost wordless. Bar length is the duration, bar offset is when
+// it ran, and colour is whether the time bought a rewrite — so the reader finds
+// the culprit by looking. Prose is one hovered-row caption; the caveats live in
+// the heading badge's tooltip.
+func (inst *PlayApp) renderDiagRewriteCost(elapsed time.Duration, summary Summary) {
+	diagHeading("Rewrite cost")
+	trace, ok := inst.rewriteTraceFor()
+	if !ok {
+		diagWeak("Type SQL in the Editor tab.")
+		return
+	}
+	total := rewriteTotalCost(trace)
+	inst.renderDiagCostBadge(total)
+
+	// Pane-width probe, the Passes tab's recipe: a full-width separator, then a
+	// seq-keyed rect capture right after it. One frame late, so the first frame
+	// draws at a conservative width.
+	c.Separator().Horizontal().Send()
+	probeSeq := diagCostVizIDSalt ^ inst.vizSeed ^ 0x1
+	c.CaptureUiRect(probeSeq)
+	paneW := float32(560)
+	if r, okR := c.CurrentApplicationState.StateManager.GetUiRect(probeSeq); okR && r.MaxX > r.MinX {
+		paneW = r.MaxX - r.MinX
+	}
+	w := min(max(paneW-16, 320), 900)
+
+	bars, span := rewriteWaterfall(trace)
+	if len(bars) == 0 {
+		diagWeak("No step measured a millisecond.")
+		return
+	}
+
+	var caption string
+	if runBars, runSpan, okRun := inst.runPhaseBarsFor(total, elapsed, summary); okRun {
+		if h := renderCostWaterfall(diagCostVizIDSalt^inst.vizSeed^0x2, runBars, runSpan, w); h >= 0 {
+			caption = runPhaseCaption(runBars[h], runSpan)
+		}
+		// Both charts on ONE scale, so the rewrite bars sit directly under the
+		// compile span they decompose — the same relationship a network panel
+		// draws when a phase is expanded. Only valid because the run tier is
+		// shown solely when compile fits inside the run.
+		span = runSpan
+	}
+
+	if h := renderCostWaterfall(diagCostVizIDSalt^inst.vizSeed^0x3, bars, span, w); h >= 0 {
+		caption = costBarCaption(bars[h], trace)
+	}
+	if caption == "" {
+		inst.renderDiagCostLegend()
+		return
+	}
+	for rt := range c.RichTextLabel(caption) {
+		rt.Small().Monospace()
+	}
+}
+
+// renderDiagCostBadge is the section's verdict — the one number, toned by
+// whether it crossed the mark. Its tooltip is where everything the chart does
+// not show lives, so the pane itself stays wordless.
+func (inst *PlayApp) renderDiagCostBadge(total time.Duration) {
+	tone, label := badge.ToneNeutral, formatCostDur(total)+" compiling"
+	if total >= rewriteCostWarn {
+		tone, label = badge.ToneWarning, "slow · "+formatCostDur(total)+" compiling"
+	}
+	for range c.Horizontal().KeepIter() {
+		badge.New(inst.ids.PrepareStr("rewrite-cost"), label).
+			Tone(tone).Size(badge.SizeSm).
+			Tooltip("Time this process spends rewriting the statement before it is sent, measured on the buffer that would run. " +
+				"The mark is " + formatCostDur(rewriteCostWarn) + ". Each pass re-parses the statement from text, so the cost grows with " +
+				"expression complexity rather than length — CTEs are disproportionately expensive, and stripping comments does not help. " +
+				"It is computed on the render thread, so it is also how long the UI was blocked when the buffer last settled. " +
+				"Timings describe this measurement rather than the last Run, and the first one in a session pays a one-off parser warm-up (ADR-0192).").
+			Send()
+	}
+}
+
+// renderDiagCostLegend decodes the bar colours, shown when nothing is hovered.
+// It is the only standing prose in the section.
+func (inst *PlayApp) renderDiagCostLegend() {
+	for range c.Horizontal().KeepIter() {
+		for _, l := range []struct {
+			tone costToneE
+			text string
+		}{
+			{costToneRewrote, "rewrote"},
+			{costToneUnchanged, "changed nothing"},
+			{costToneFailed, "failed"},
+		} {
+			// The word carries its own bar colour — no swatch glyph. A box
+			// character here is outside the bundled font's coverage and lands
+			// as tofu (the glyph-fallback rule: a non-text glyph has to come
+			// from icons.Ph*), and the coloured word says the same thing.
+			for rt := range c.RichTextLabelColored(l.tone.color(), color.Transparent, l.text) {
+				rt.Small()
+			}
+		}
+	}
+}
+
+// runPhaseBarsFor is the run-level tier, present only when the last Run
+// describes the buffer on screen. A comparison against a Run of DIFFERENT SQL
+// would be the most misleading thing the pane could draw, so a stale run
+// simply drops the tier rather than captioning it.
+func (inst *PlayApp) runPhaseBarsFor(compile time.Duration, elapsed time.Duration, summary Summary) (bars []costBar, span time.Duration, ok bool) {
+	if elapsed <= 0 || inst.lastSentSql == "" || strings.TrimSpace(inst.sql) != inst.lastSentSql {
+		return
+	}
+	server := time.Duration(summary.ElapsedNs) * time.Nanosecond
+	// The compile figure is this measurement's own rewrite, not the one the Run
+	// performed (ADR-0192 §SD4), and the two genuinely differ — a cold parser
+	// cache alone is worth a second. When they differ enough that compile no
+	// longer FITS inside the run, the decomposition is false and the tier is
+	// dropped rather than drawn with a clamped remainder: a compile bar longer
+	// than the run it claims to be part of would be the most misleading thing
+	// on the pane. The rewrite waterfall below stands on its own.
+	if compile+server > elapsed {
+		return
+	}
+	bars, span = runPhaseBars(compile, server, elapsed)
+	return bars, span, true
+}
+
+// runPhaseCaption describes a hovered run-level bar as a share of the run —
+// the number that decides whether a slow query is the client's fault.
+func runPhaseCaption(b costBar, span time.Duration) string {
+	s := b.Label + " · " + formatCostDur(b.Dur)
+	if span > 0 {
+		s += fmt.Sprintf(" · %d%% of the run", int(100*float64(b.Dur)/float64(span)+0.5))
+	}
+	switch b.Tone {
+	case costToneClient:
+		return s + " · spent here, before the request was sent"
+	case costToneServer:
+		return s + " · the server's own elapsed"
+	case costToneTransfer:
+		return s + " · round trip and Arrow decode"
+	}
+	return s
+}
+
+// costBarCaption describes a hovered rewrite bar: when it ran, what it cost,
+// and what that bought. For a unit it also reports how many pass invocations
+// happened inside it, which is the count that explains an unexpected duration.
+func costBarCaption(b costBar, trace []passreg.ApplyObservation) string {
+	s := b.Label + " · " + formatCostDur(b.Dur)
+	if b.Tone == costToneInvalid {
+		// The collapsed remainder row: a count, not a span.
+		return s + " · not drawn individually"
+	}
+	s += " · at " + formatCostDur(b.Start)
+	if b.Note != "" {
+		s += " · " + b.Note + " fixed-point iterations"
+	}
+	switch b.Tone {
+	case costToneRewrote:
+		s += " · rewrote the statement"
+	case costToneUnchanged:
+		s += " · changed nothing, and still paid a full re-parse"
+	case costToneFailed:
+		s += " · failed; the statement shipped without it"
+	}
+	if b.Depth == 0 {
+		for _, o := range trace {
+			if o.Name == b.Label {
+				if n := costStepCount(o.Cost); n > 0 {
+					s += fmt.Sprintf(" · %d pass invocations inside", n)
+				}
+				break
+			}
+		}
+	}
+	return s
 }
 
 // renderDiagColumnResolution lists the leeway column handles the resolver could

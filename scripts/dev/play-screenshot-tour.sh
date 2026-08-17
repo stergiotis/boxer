@@ -1246,12 +1246,70 @@ WHERE hasAny(\`symbol:value\`, ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
 ORDER BY \`id:id\`"
 }
 
+# slow_rewrite_buffer sets the editor buffer the two cost scenes below share
+# (ADR-0192). Not a scene — list_scenes only picks up scene_* — so the same
+# statement reaches both, which is what makes their numbers comparable.
+#
+# Deliberately synthetic. The rewrite's cost tracks EXPRESSION COMPLEXITY, not
+# length: this is under a kilobyte, and it is expensive because it is twelve
+# chained CTEs carrying arrays, lambdas, CASE, cast and multiIf — every one of
+# which the canonicalizer walks, on a statement it re-parses once per pass.
+# Measured at ~545 ms through the pre-execute stage, comfortably over the
+# 250 ms mark the pane warns at, with enough headroom that a faster box still
+# crosses it.
+#
+# It reads numbers() rather than a fixture on purpose: a scene about the CLIENT
+# side of a Run should not also depend on demo data being loaded.
+slow_rewrite_buffer() {
+	sql="WITH a AS (SELECT number AS n FROM numbers(10)),
+b AS (SELECT n + 1 AS n FROM a WHERE n % 2 = 0),
+c AS (SELECT n * 2 AS n FROM b WHERE n > 0),
+d AS (SELECT n + if(n > 3, 1, 2) AS n FROM c),
+e AS (SELECT n, [n, n+1, n+2] AS arr FROM d),
+f AS (SELECT n, arrayMap(x -> x * 2, arr) AS arr FROM e),
+g AS (SELECT n, arrayFilter(x -> x % 3 = 0, arr) AS arr FROM f),
+h AS (SELECT n, CASE WHEN n > 5 THEN 'hi' WHEN n > 2 THEN 'mid' ELSE 'lo' END AS bucket FROM g),
+i AS (SELECT n, bucket, toString(n) || '-' || bucket AS k FROM h),
+j AS (SELECT n, k, cast(n AS Float64) AS fn FROM i),
+k AS (SELECT n, fn, if(fn > 4.0, fn * 1.5, fn / 2) AS w FROM j),
+l AS (SELECT n, w, multiIf(w > 8, 'big', w > 4, 'med', 'small') AS sz FROM k)
+SELECT n, w, sz FROM l ORDER BY n LIMIT 20"
+	# The trace is computed on the render thread when the tab draws, after the
+	# editor debounce settles — so the hold has to cover the rewrite itself,
+	# not just the query. The tour default (1800) is marginal against a
+	# half-second rewrite. Kept well under the ~5 s ceiling at which the
+	# headless client drops the connection before the first capture.
+	settle=4000
+}
+
+scene_12_passes_cost() {
+	desc="Passes — the same schematic on a buffer that is expensive to compile: the unit over 100ms tinted amber, and the wall clock the author waits through before the statement is sent"
+	senv=(BOXER_PLAY_FOCUS_PASSES=1)
+	slow_rewrite_buffer
+}
+
 scene_13_diagnostics() {
 	desc="Diagnostics — a handle that names no known section: flagged before Run, with suggestions, and the pre-execute rewrites that were skipped"
 	senv=(BOXER_PLAY_FOCUS_DIAGNOSTICS=1)
 	sql="SELECT \`id:id\`, \`symbal:value\`, \`geoPoint:lattitude\`
 FROM anchor.facts
 LIMIT 20"
+}
+
+scene_13_diagnostics_cost() {
+	desc="Diagnostics — Rewrite cost on that same buffer: the 250ms warning, and what each unit of the client-side rewrite spent"
+	senv=(BOXER_PLAY_FOCUS_DIAGNOSTICS=1)
+	slow_rewrite_buffer
+	# Two captures, because the payoff is below the fold. The section leads with
+	# the warning and the ranked units, and the line that says what to DO about
+	# it — which sub-passes inside the costliest unit spent the time, and how
+	# many of them rewrote nothing for it — sits under the ranked list, past the
+	# pane's height. The pointer is parked inside the pane body first: a wheel
+	# event goes to whatever is hovered.
+	steps='{"do":"capture","text":"13_diagnostics_cost","settleMs":600}
+{"do":"click","x":1400,"y":450,"comment":"park the pointer inside the Diagnostics body"}
+{"do":"scroll","x":0,"y":-260,"settleMs":500}
+{"do":"capture","text":"13_diagnostics_cost_inside","settleMs":600}'
 }
 
 scene_14_docs() {

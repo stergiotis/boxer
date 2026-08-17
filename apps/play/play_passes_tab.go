@@ -297,8 +297,20 @@ func (inst *PlayApp) renderPassesOutcomes(trace []passreg.ApplyObservation, trac
 		}
 		return
 	}
-	for rt := range c.RichTextLabel("on the statement that would run: " + rewriteOutcomeSummary(trace)) {
+	total := rewriteTotalCost(trace)
+	for rt := range c.RichTextLabel("on the statement that would run: " + rewriteOutcomeSummary(trace) +
+		" · " + formatCostDur(total) + " to rewrite") {
 		rt.Small().Weak()
+	}
+	if total >= rewriteCostWarn {
+		// Amber rather than weak: this is the one line that says the buffer is
+		// on the expensive part of the curve (ADR-0192).
+		for rt := range c.RichTextLabelColored(
+			color.Hex(styletokens.WarningStrong.AsHex()), color.Transparent,
+			fmt.Sprintf("slow rewrite — over the %s mark; the Diagnostics tab explains what it cost and why",
+				formatCostDur(rewriteCostWarn))) {
+			rt.Small()
+		}
 	}
 	for _, o := range skippedRewrites(trace) {
 		line := o.Name + " — " + rewriteOutcomeText(o)
@@ -407,6 +419,12 @@ func (inst *PlayApp) renderPassesTab() {
 				switch {
 				case o.Outcome == passreg.ApplyOutcomeSkipped:
 					return color.Hex(styletokens.ErrorDefault.AsHex()), true
+				case isSlowRewriteUnit(o):
+					// Cost outranks "it rewrote something" (ADR-0192): on a
+					// buffer that is slow to compile, which unit is expensive
+					// is the thing the author came here to find, and a unit can
+					// be both expensive and productive.
+					return color.Hex(styletokens.WarningDefault.AsHex()), true
 				case o.Outcome == passreg.ApplyOutcomeApplied && o.Changed:
 					// The units that actually touched this buffer, set apart
 					// from the ones that ran and found nothing to do.
@@ -422,9 +440,10 @@ func (inst *PlayApp) renderPassesTab() {
 			if id == selectedID {
 				return color.Hex(styletokens.NeutralBgExtreme.AsHex()), true
 			}
-			if o, has := outcome[id]; has && o.Outcome == passreg.ApplyOutcomeSkipped {
-				// ErrorDefault is a light tint, so its label needs dark text
-				// for the same reason the accent selection fill does.
+			if o, has := outcome[id]; has && (o.Outcome == passreg.ApplyOutcomeSkipped || isSlowRewriteUnit(o)) {
+				// ErrorDefault and WarningDefault are light tints, so their
+				// labels need dark text for the same reason the accent
+				// selection fill does.
 				return color.Hex(styletokens.NeutralBgExtreme.AsHex()), true
 			}
 			return
@@ -444,9 +463,21 @@ func (inst *PlayApp) renderPassesTab() {
 			lateCount++
 		}
 	}
+	// Counted over the drawn stages, not over the whole trace: play's own
+	// rewrite steps carry costs too but have no box on the spine, so counting
+	// them here would promise an amber node the reader cannot find.
+	slowCount := 0
+	for _, r := range st.rows {
+		if isSlowRewriteUnit(outcome[passStageID(r.Name)]) {
+			slowCount++
+		}
+	}
 	status := fmt.Sprintf("%d pass(es) at pre-execute, in apply order (ADR-0108)", len(st.rows))
 	if lateCount > 0 {
 		status += fmt.Sprintf(" · %d late-bound (recessed)", lateCount)
+	}
+	if slowCount > 0 {
+		status += fmt.Sprintf(" · %d over %s (amber)", slowCount, formatCostDur(rewriteCostStepWarn))
 	}
 	for rt := range c.RichTextLabel(status + " · click a pass for details") {
 		rt.Small().Weak()
@@ -490,25 +521,71 @@ func (inst *PlayApp) renderPassesTab() {
 				rt.Small().Monospace()
 			}
 		}
-		if o, has := outcome[passStageID(row.Name)]; has {
-			for rt := range c.RichTextLabel("on this buffer: " + rewriteOutcomeText(o)) {
+		o, has := outcome[passStageID(row.Name)]
+		if has {
+			for rt := range c.RichTextLabel("on this buffer: " + rewriteOutcomeText(o) +
+				" · " + formatCostDur(o.Dur)) {
 				rt.Small().Weak()
 			}
 			if o.Err != nil {
 				c.Label(o.Err.Error()).Wrap().Selectable(true).Send()
 			}
 		}
-		if p, ok := entryPassForRow(reg, *row); ok {
-			if lines := passChildrenLines(p); len(lines) > 0 {
-				for rt := range c.RichTextLabel(fmt.Sprintf("composed of %d sub-passes, in apply order:", len(p.Children))) {
-					rt.Small().Weak()
-				}
-				for _, ln := range lines {
-					for rt := range c.RichTextLabel(ln) {
-						rt.Small().Monospace()
-					}
-				}
+		inst.renderPassInternals(reg, *row, o, has)
+	}
+}
+
+// renderPassInternals draws what is inside the selected unit. When the buffer
+// was traced this is the MEASURED tree — every pass invocation the unit's Run
+// actually made, with what it cost, how many fixed-point iterations it took,
+// and whether it changed anything (ADR-0192). Untraced, it falls back to the
+// registry's static Pass.Children listing, which says what the unit is composed
+// of but nothing about what any of it costs.
+//
+// The measured tree is the more useful of the two and also the less complete:
+// it shows the invocations that HAPPENED, so a Conditional whose predicate was
+// false is simply absent rather than listed as inert.
+func (inst *PlayApp) renderPassInternals(reg *passreg.Registry, row passreg.CatalogRow, o passreg.ApplyObservation, traced bool) {
+	if traced && len(o.Cost.Children) > 0 {
+		lines := costTreeLines(o.Cost)
+		for rt := range c.RichTextLabel(fmt.Sprintf("%d pass invocations on this buffer, in the order they ran:", len(lines))) {
+			rt.Small().Weak()
+		}
+		for _, ln := range lines {
+			for rt := range c.RichTextLabel(ln) {
+				rt.Small().Monospace()
 			}
+		}
+		if s := costUnaccounted(o); s != "" {
+			for rt := range c.RichTextLabel(s) {
+				rt.Small().Weak()
+			}
+		}
+		if n, wasted := wastedStepCount(o.Cost); n > 0 {
+			// The standing suspicion about this pipeline, made checkable per
+			// buffer: passes hand each other TEXT, so one that rewrites nothing
+			// still pays a full re-parse to find that out.
+			for rt := range c.RichTextLabel(fmt.Sprintf(
+				"%d of them cost %s between them and rewrote nothing", n, formatCostDur(wasted))) {
+				rt.Small().Weak()
+			}
+		}
+		return
+	}
+	p, ok := entryPassForRow(reg, row)
+	if !ok {
+		return
+	}
+	lines := passChildrenLines(p)
+	if len(lines) == 0 {
+		return
+	}
+	for rt := range c.RichTextLabel(fmt.Sprintf("composed of %d sub-passes, in apply order:", len(p.Children))) {
+		rt.Small().Weak()
+	}
+	for _, ln := range lines {
+		for rt := range c.RichTextLabel(ln) {
+			rt.Small().Monospace()
 		}
 	}
 }

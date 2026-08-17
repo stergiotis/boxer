@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -237,6 +238,7 @@ func (inst *Client) BuildStatement(sql string) (body string, params map[string]s
 // a re-derivation of it.
 func (inst *Client) buildStatementObserved(sql string, observe func(passreg.ApplyObservation)) (body string, params map[string]string) {
 	residual, params := inst.buildResidualObserved(sql, observe)
+	started := stepClock(observe)
 	// ADR-0181 §SD8 M3: an INSERT wrapper takes no FORMAT clause — the
 	// appended FORMAT is exactly why DDL from play fails, and a write
 	// answers with a summary, not a stream. The step still reports itself
@@ -244,7 +246,7 @@ func (inst *Client) buildStatementObserved(sql string, observe func(passreg.Appl
 	// carrying no FORMAT rather than looking like a skipped rewrite.
 	if pr, perr := nanopass.Parse(residual); perr == nil && pr.InsertStmt() != nil {
 		body = residual
-		observeStep(observe, rewriteStepSetFormat, orderSetFormat, nil, residual, body)
+		observeStep(observe, rewriteStepSetFormat, orderSetFormat, nil, residual, body, stepDur(started))
 		return
 	}
 	body, setErr := passes.SetFormat("ArrowStream").Run(residual)
@@ -254,10 +256,10 @@ func (inst *Client) buildStatementObserved(sql string, observe func(passreg.Appl
 		if !strings.Contains(strings.ToUpper(body), "FORMAT ") {
 			body += " FORMAT ArrowStream"
 		}
-		observeStep(observe, rewriteStepSetFormat, orderSetFormat, setErr, "", "")
+		observeStep(observe, rewriteStepSetFormat, orderSetFormat, setErr, "", "", stepDur(started))
 		return
 	}
-	observeStep(observe, rewriteStepSetFormat, orderSetFormat, nil, residual, body)
+	observeStep(observe, rewriteStepSetFormat, orderSetFormat, nil, residual, body, stepDur(started))
 	return
 }
 
@@ -280,17 +282,40 @@ const (
 
 // observeStep reports one non-registry step of the client-side rewrite. A
 // non-nil err is a skip (the step's output was discarded); otherwise the step
-// applied, and before/after decide whether it changed anything. A nil observe
-// makes this a no-op, so the un-observed path pays only a nil check.
-func observeStep(observe func(passreg.ApplyObservation), name string, order int, err error, before, after string) {
+// applied, and before/after decide whether it changed anything. dur is the
+// step's wall-clock cost, so a play step is accounted for on the same footing
+// as a registered pass (ADR-0192) — extract-params and the expression splice
+// parse the buffer too, and a rewrite total that omitted them would understate
+// what the author waited for. A nil observe makes this a no-op, so the
+// un-observed path pays only a nil check.
+func observeStep(observe func(passreg.ApplyObservation), name string, order int, err error, before, after string, dur time.Duration) {
 	if observe == nil {
 		return
 	}
-	obs := passreg.ApplyObservation{Name: name, Order: order, Outcome: passreg.ApplyOutcomeApplied, Changed: before != after}
+	obs := passreg.ApplyObservation{Name: name, Order: order, Outcome: passreg.ApplyOutcomeApplied, Changed: before != after, Dur: dur}
 	if err != nil {
 		obs.Outcome, obs.Changed, obs.Err = passreg.ApplyOutcomeSkipped, false, err
 	}
 	observe(obs)
+}
+
+// stepClock times one non-registry step. It reads the clock only when the step
+// is being observed, so the execute path — which passes a nil observer — is
+// exactly as it was.
+func stepClock(observe func(passreg.ApplyObservation)) (started time.Time) {
+	if observe != nil {
+		started = time.Now()
+	}
+	return
+}
+
+// stepDur closes a stepClock. A zero start (unobserved) reports zero rather
+// than the time since the epoch.
+func stepDur(started time.Time) (d time.Duration) {
+	if !started.IsZero() {
+		d = time.Since(started)
+	}
+	return
 }
 
 // RewriteTrace runs the client-side rewrite of sql for its per-step outcomes
@@ -510,13 +535,14 @@ func (inst *Client) buildResidualObserved(sql string, observe func(passreg.Apply
 	// textual substitution over bindings the user made explicitly, with no
 	// failure mode to report.
 	sql = inst.rewriteDatasetAliases(sql)
+	started := stepClock(observe)
 	residual, params, exErr := ExtractParams(sql)
 	if exErr != nil {
 		log.Debug().Err(exErr).Msg("play: ExtractParams failed, sending sql verbatim")
 		residual = sql
 		params = nil
 	}
-	observeStep(observe, rewriteStepExtractParams, orderExtractParams, exErr, sql, residual)
+	observeStep(observe, rewriteStepExtractParams, orderExtractParams, exErr, sql, residual, stepDur(started))
 	residual = inst.applyExprSplice(residual, observe)
 	residual = inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, residual, inst.passBinding, log.Logger, observe)
 	residual = inst.applyExposeConditions(residual, observe)
@@ -540,12 +566,13 @@ func (inst *Client) buildResidualObserved(sql string, observe func(passreg.Apply
 // Degrades like every step here: an unparseable buffer reports a skip and ships
 // unchanged, and the server answers with the real error.
 func (inst *Client) applyExprSplice(sql string, observe func(passreg.ApplyObservation)) (out string) {
+	started := stepClock(observe)
 	out, _, err := spliceExprSlots(sql, inst.exprValuesFor(sql))
 	if err != nil {
 		log.Debug().Err(err).Msg("play: expression splice skipped, sending sql verbatim")
 		out = sql
 	}
-	observeStep(observe, rewriteStepSpliceExpr, orderSpliceExpr, err, sql, out)
+	observeStep(observe, rewriteStepSpliceExpr, orderSpliceExpr, err, sql, out, stepDur(started))
 	return
 }
 
@@ -679,14 +706,16 @@ func (inst *Client) applyExposeConditions(sql string, observe func(passreg.Apply
 		// report. The toggle is its own visible state.
 		return
 	}
+	started := stepClock(observe)
 	next, err := inst.conditionsPass.Run(sql)
+	dur := stepDur(started)
 	if err != nil {
 		log.Warn().Err(err).Msg("play: selection-condition rewrite declined; query sent as written")
-		observeStep(observe, rewriteStepExposeConditions, orderExposeConditions, err, "", "")
+		observeStep(observe, rewriteStepExposeConditions, orderExposeConditions, err, "", "", dur)
 		return
 	}
 	out = next
-	observeStep(observe, rewriteStepExposeConditions, orderExposeConditions, nil, sql, out)
+	observeStep(observe, rewriteStepExposeConditions, orderExposeConditions, nil, sql, out, dur)
 	return
 }
 
