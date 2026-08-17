@@ -37,7 +37,7 @@ require (
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/mattn/go-isatty v0.0.24
 	github.com/nao1215/markdown v0.13.0
-	github.com/nats-io/nats.go v1.52.0
+	github.com/nats-io/nats.go v1.53.1
 	github.com/nozzle/umap-go v0.0.0-20260301204052-79bd84384eff
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/rs/zerolog v1.35.1
