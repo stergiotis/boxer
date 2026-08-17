@@ -145,15 +145,3 @@ func structImage() ir.ConcreteType {
 	return ir.NewConcreteType("image", traitWidget())
 }
 
-func structSnarlNode() ir.ConcreteType {
-	return ir.NewConcreteType("snarlNode")
-}
-func structSnarlConnection() ir.ConcreteType {
-	return ir.NewConcreteType("snarlConnection")
-}
-func structSnarlPin() ir.ConcreteType {
-	return ir.NewConcreteType("snarlPin")
-}
-func structSnarlEditor() ir.ConcreteType {
-	return ir.NewConcreteType("snarlEditor")
-}

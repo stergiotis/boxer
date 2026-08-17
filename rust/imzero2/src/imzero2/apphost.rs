@@ -233,14 +233,13 @@ pub fn init_common<'a, R: std::io::BufRead, W: std::io::Write>(
     ctx.request_repaint();
     // Pin egui to single-pass rendering. Multipass (egui Options::max_passes)
     // re-runs the UI closure when widgets call `ctx.request_discard(...)`
-    // for first-frame fitup (egui_snarl's SnarlState / NodeState do this).
-    // That doesn't compose with the FFFI streaming protocol — the second
-    // pass would re-enter the interpreter but the per-frame opcode stream has
-    // already been consumed by the first pass, so widgets that rely on
-    // multipass quietly draw nothing on the second pass and the output
-    // ends up blank. State that snarl stores via `cx.data_mut(...)`
-    // survives the discarded pass, so subsequent FFFI frames render
-    // correctly without needing multipass at all.
+    // for first-frame fitup. That doesn't compose with the FFFI streaming
+    // protocol — the second pass would re-enter the interpreter but the
+    // per-frame opcode stream has already been consumed by the first pass,
+    // so widgets that rely on multipass quietly draw nothing on the second
+    // pass and the output ends up blank. State such a widget stashes via
+    // `cx.data_mut(...)` survives the discarded pass, so subsequent FFFI
+    // frames render correctly without needing multipass at all.
     ctx.options_mut(|o| o.max_passes = std::num::NonZeroUsize::new(1).expect("1 is non-zero"));
     let fffi = imzero2::interpreter::ImZeroFffi::new(r, w);
     // SVG export plugin — registered once at host init. Drains

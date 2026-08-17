@@ -83,7 +83,6 @@ The current cache surface (extend it when adding a new fetcher):
 |---------------------------------------|--------------------------------|-------------------|
 | `GetCanvasCursor(handle) (CanvasCursorValue, bool)` | `FetchR24CanvasPointers` | that `PaintCanvas`'s pointer row |
 | `GetWalkersCamera(handle) (WalkersCameraValue, bool)` | `FetchR15WalkersCameras` | that `WalkersMap`'s last camera |
-| `GetSnarlEvents() []SnarlEvent`         | `FetchSnarlEvents`            | drained queue from snarl editors |
 | `GetGraphEvents() []GraphEvent`         | `FetchGraphEvents`            | drained queue from egui_graphs |
 | `GetGraphSelection() []GraphSelectedItem` | `FetchGraphSelection`       | snapshot of all selections |
 | `GetGraphMetrics() []GraphMetrics`      | `FetchGraphMetrics`           | per-graph counters |

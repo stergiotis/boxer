@@ -386,10 +386,12 @@ Internal: [ADR-0021](../adr/0021-imzero2-snarl-node-editor-binding.md),
 [ADR-0149](../adr/0149-implot-core-port-painter-lane.md),
 [app-composition-survey](./app-composition-survey.md).
 
-Code touched by this analysis:
-[`egui2_definition_d_snarl.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_snarl.go),
-[`egui2_snarl.go`](../../public/thestack/imzero2/egui2/bindings/egui2_snarl.go),
-[`egui2_hl_snarl_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_snarl_demo.go),
+Code touched by this analysis (the three snarl files were removed 2026-08-17 by
+[ADR-0194](../adr/0194-retire-egui-snarl-binding.md); read them at a commit
+before that date):
+`egui2_definition_d_snarl.go`,
+`egui2_snarl.go`,
+`egui2_hl_snarl_demo.go`,
 [`layeredgraph/view`](../../public/thestack/imzero2/egui2/widgets/layeredgraph/view/view.go),
 [`pipelineview/view`](../../public/thestack/imzero2/egui2/widgets/pipelineview/view/view.go),
 [`widgets/implot`](../../public/thestack/imzero2/egui2/widgets/implot/),

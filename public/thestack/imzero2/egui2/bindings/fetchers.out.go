@@ -189,18 +189,6 @@ func (inst *Fetcher) FetchR9U64() (ids []uint64, values iter.Seq[uint64]) {
 	values = inst.iterateU64h()
 	return
 }
-func (inst *Fetcher) FetchSnarlEvents() (editorIds []uint64, kinds []uint32, nodeIds []uint64, portsA []uint32, nodeIdsB []uint64, portsB []uint32, xs []float32, ys iter.Seq[float32]) {
-	inst.invoke(FuncProcIdFetchSnarlEvents)
-	editorIds = inst.readU64h()
-	kinds = inst.readU32h()
-	nodeIds = inst.readU64h()
-	portsA = inst.readU32h()
-	nodeIdsB = inst.readU64h()
-	portsB = inst.readU32h()
-	xs = inst.readF32h()
-	ys = inst.iterateF32h()
-	return
-}
 func (inst *Fetcher) FetchVideoCapabilities() (codecIds []uint64, flags iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchVideoCapabilities)
 	codecIds = inst.readU64h()

@@ -35,9 +35,6 @@ func Definitions() []ir.NodeI {
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsImage(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsCodeView(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsDock(), nil),
-		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsSnarlRegistered(), nil),
-		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsSnarlBlock(), nil),
-		definitionsSnarlFetchers(),
 		definitionsSpecial(),
 		definitionsFetcher(),
 	)

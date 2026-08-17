@@ -175,7 +175,6 @@ if [ "$scope" = full ]; then
     ( cd "$src" && airgap_cargo_vendor "$rust_sysroot" "_airgap/cargo-config.toml.in" \
         rust/vendor rust/imzero2/Cargo.toml rust/h3bridge/Cargo.toml )
     echo "    wrote rust/vendor and _airgap/cargo-config.toml.in"
-    echo "    (config includes the egui-snarl git-source stanza; airgap-unbundle rewrites the abs path)"
 
     if [ "$verify_rust" = 1 ]; then
         airgap_step "verify Rust builds offline from rust/vendor (slow: full compile)"

@@ -1,12 +1,13 @@
 ---
 type: adr
-status: accepted
+status: superseded
 date: 2026-05-04
 reviewed-by: "p@stergiotis"
 reviewed-date: 2026-05-04
+superseded-by: ADR-0194
 ---
 
-> **Status: accepted 2026-05-04 by @spx.** M1 implementation underway in this branch.
+> **Superseded by [ADR-0194](./0194-retire-egui-snarl-binding.md) (2026-08-17).** The binding decided here was built, measured not to work (see the 2026-07-31 Update below), and gained no consumer beyond its own demo; it has been removed from the tree along with the `egui-snarl` dependency. imzero2 has no node-editor affordance. This document remains the record of why a crate binding was chosen over a port in 2026-05, and its design space — pin packing, position authority (SD6), connection reconciliation (SD7) — is the starting point if a node editor is rebuilt in Go. Do not implement from it as written.
 
 # ADR-0021: ImZero2 node-editor binding via `egui-snarl`
 
@@ -124,7 +125,9 @@ Pin identity is a packed `u64`: high 32 bits = port index, low 32 bits = node id
 
 ## Status
 
-Accepted — 2026-05-04 by @spx. M1 implementation underway in this branch: `egui-snarl 0.9` added to `rust/imzero2/Cargo.toml`, IDL definition file `egui2_definition_d_snarl.go` alongside the other `egui2_definition_d_*.go` files, Rust apply (`render_snarl_editor`, `FffiSnarlViewer`, `SnarlState`) on `ImZeroFffi`. Default `PersistPositions=false` per the SD6 revision adopted at acceptance.
+Superseded by [ADR-0194](./0194-retire-egui-snarl-binding.md) — 2026-08-17. The binding is removed from the tree; see the Update of that date below.
+
+Previously: accepted — 2026-05-04 by @spx. M1 implementation landed: `egui-snarl 0.9` added to `rust/imzero2/Cargo.toml`, IDL definition file `egui2_definition_d_snarl.go` alongside the other `egui2_definition_d_*.go` files, Rust apply (`render_snarl_editor`, `FffiSnarlViewer`, `SnarlState`) on `ImZeroFffi`. Default `PersistPositions=false` per the SD6 revision adopted at acceptance.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
@@ -201,8 +204,8 @@ independently special-cases `set_transform_layer` layers. Transform layers are
 how snarl implements zoom, and zoom is where the geometry disagreement shows.
 
 **Adoption.** `snarlEditor` and its accumulators have exactly one caller in
-the tree — the demo registered by
-[`egui2_hl_snarl_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_snarl_demo.go).
+the tree — the demo registered by `egui2_hl_snarl_demo.go` (removed 2026-08-17
+with the binding; see the Update below).
 No app, widget or panel consumes the binding, so nothing depends on its
 behaviour today.
 
@@ -214,6 +217,32 @@ one. What is recorded here is only the measurement, so that the binding is not
 read as working machinery in the meantime. Diagnosing the sublayer/transform
 interaction has value beyond this widget: it is the same question any future
 `egui::Scene` binding has to answer.
+
+## Update — 2026-08-17: the binding is removed; this ADR is superseded
+
+The question the 2026-07-31 Update left open is decided in
+[ADR-0194](./0194-retire-egui-snarl-binding.md): the binding is deleted rather
+than repaired. With no consumer beyond its own demo there was no migration to
+sequence, and the defect list spans emission, layout and input — closer to a
+rewrite of the viewer than to a bug fix.
+
+Removed: the IDL definition and its four types, the generated Go and Rust
+surfaces, the hand-written `Snarl*` builders and `GetSnarlEvents` plumbing, the
+hand-maintained Rust region (accumulator structs, `SnarlState`, `SnarlPinMeta`,
+`FffiSnarlViewer`, `render_snarl_editor`, the retained-state fields and their
+per-frame clear), the gallery demo, and the `egui-snarl` crate. Removing the
+IDL nodes renumbers every `FuncProcId` sorting after them, so both sides of the
+FFFI2 boundary were regenerated and rebuilt together.
+
+Kept deliberately: `svgexport.rs`'s non-identity `TSTransform` handling and
+`apphost.rs`'s `max_passes = 1` pin. Both are properties of egui and of the
+FFFI streaming protocol respectively — snarl was the caller that made them
+visible, not their reason — so only their comments changed.
+
+The two suspects named above were never diagnosed, and the `egui::Scene`
+question they point at is still open and still unowned by any ADR. The
+[port analysis](../adr-background-work/snarl-port-analysis.md) remains the entry
+point if a node editor is wanted again; ADR-0194 does not decide that.
 
 ## References
 

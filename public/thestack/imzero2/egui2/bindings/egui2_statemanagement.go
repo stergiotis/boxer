@@ -213,19 +213,12 @@ type UiRectValue struct {
 	MaxY float32
 }
 
-// SnarlEventsValue is the cached payload of the snarl-events drain,
-// pre-decoded into the public SnarlEvent shape. Empty on the first
-// frame after a snarl editor is shown; refilled every Sync.
-//
-// Stored as a slice on StateManager (rather than emitted to consumers
-// via callback) so multiple consumers in the same frame can read
-// independently — though in practice exactly one demo per dock tile
-// touches snarl events.
-type SnarlEventsValue []SnarlEvent
-
 // GraphEventsValue / GraphSelectionValue / GraphMetricsValue cache the
-// three egui_graphs fetcher outputs at frame-end. Same rationale as
-// SnarlEventsValue.
+// three egui_graphs fetcher outputs at frame-end.
+//
+// Stored as slices on StateManager (rather than emitted to consumers
+// via callback) so multiple consumers in the same frame can read
+// independently.
 type GraphEventsValue []GraphEvent
 type GraphSelectionValue []GraphSelectedItem
 type GraphMetricsValue []GraphMetrics
@@ -290,7 +283,6 @@ type StateManager struct {
 	// contract.
 	commandEnter      bool
 	commandEnterShift bool
-	snarlEvents       SnarlEventsValue
 	graphEvents       GraphEventsValue
 	graphSelection    GraphSelectionValue
 	graphMetrics      GraphMetricsValue
@@ -497,16 +489,10 @@ func (inst *StateManager) GetPointer() PointerValue {
 	return inst.r20Pointer
 }
 
-// GetSnarlEvents returns last frame's snarl interaction events. The
-// returned slice is owned by the StateManager and reused next frame;
-// callers that need to retain entries past this frame must copy.
-func (inst *StateManager) GetSnarlEvents() SnarlEventsValue {
-	return inst.snarlEvents
-}
-
 // GetGraphEvents / GetGraphSelection / GetGraphMetrics return last
-// frame's egui_graphs cached state. Same ownership rules as
-// GetSnarlEvents.
+// frame's egui_graphs cached state. The returned slice is owned by the
+// StateManager and reused next frame; callers that need to retain
+// entries past this frame must copy.
 func (inst *StateManager) GetGraphEvents() GraphEventsValue {
 	return inst.graphEvents
 }
@@ -1001,28 +987,6 @@ func (inst *StateManager) Sync() {
 		for id := range ids {
 			inst.r22StarvedTextures[id] = struct{}{}
 		}
-	}
-	{
-		editorIds, kinds, nodeIds, portsA, nodeIdsB, portsB, xs, ysSeq := fetcher.FetchSnarlEvents()
-		out := inst.snarlEvents[:0]
-		i := 0
-		for y := range ysSeq {
-			if i >= len(editorIds) {
-				break
-			}
-			out = append(out, SnarlEvent{
-				EditorId: editorIds[i],
-				Kind:     SnarlEventKindE(kinds[i]),
-				NodeId:   nodeIds[i],
-				PortA:    portsA[i],
-				NodeIdB:  nodeIdsB[i],
-				PortB:    portsB[i],
-				X:        xs[i],
-				Y:        y,
-			})
-			i++
-		}
-		inst.snarlEvents = out
 	}
 	{
 		graphIds, kinds, keyA, keyBSeq := fetcher.FetchGraphEvents()

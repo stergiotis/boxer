@@ -76,8 +76,12 @@ type GraphSelectedItem struct {
 // each node/edge), so stale selections don't accumulate.
 //
 // The slice is owned by the StateManager and reused next frame; copy
-// before retaining past this frame. See FetchSnarlEvents for the
-// deferred-capture deadlock rationale.
+// before retaining past this frame.
+//
+// Like every Fetch* here it reads state StateManager.Sync already
+// drained at frame-end; it must not be called from inside a widget or
+// deferred-block body, where issuing the underlying fetch opcode
+// re-enters the render loop and deadlocks.
 func FetchGraphSelection() []GraphSelectedItem {
 	return CurrentApplicationState.StateManager.GetGraphSelection()
 }
@@ -96,7 +100,7 @@ type GraphMetrics struct {
 // FetchGraphMetrics returns per-graph metrics (node/edge counts, FR
 // step counter, last avg displacement), drained at frame-end by
 // StateManager.Sync. One row per graph widget rendered last frame.
-// See FetchSnarlEvents for the deferred-capture deadlock rationale.
+// See FetchGraphSelection for the deferred-capture deadlock rationale.
 func FetchGraphMetrics() []GraphMetrics {
 	return CurrentApplicationState.StateManager.GetGraphMetrics()
 }
@@ -104,7 +108,7 @@ func FetchGraphMetrics() []GraphMetrics {
 // FetchGraphEvents returns the previous frame's egui_graphs interaction
 // events, drained and decoded at frame-end by StateManager.Sync. The
 // slice is owned by the StateManager and reused next frame; copy
-// before retaining past this frame. See FetchSnarlEvents for the
+// before retaining past this frame. See FetchGraphSelection for the
 // deferred-capture deadlock rationale.
 func FetchGraphEvents() []GraphEvent {
 	return CurrentApplicationState.StateManager.GetGraphEvents()

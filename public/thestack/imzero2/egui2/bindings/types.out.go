@@ -560,29 +560,6 @@ type SliderU64Fluid struct {
 }
 type SliderU64MethodIdE uint32
 
-type SnarlConnectionFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type SnarlConnectionMethodIdE uint32
-
-type SnarlEditorFluid struct {
-	r                *typed.RetainedFffiBuilder
-	id               uint64
-	idGen            WidgetIdCreatorI
-	deferredNodeBody *runtime.DeferredBlockScope
-}
-type SnarlEditorMethodIdE uint32
-
-type SnarlNodeFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type SnarlNodeMethodIdE uint32
-
-type SnarlPinFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type SnarlPinMethodIdE uint32
-
 type SpinnerFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -804,14 +781,6 @@ type SliderS struct{}
 func (inst SliderS) DummyInterfaceImplementationMethodWidgetI() {}
 
 var _ WidgetI = SliderS{}
-
-type SnarlConnectionS struct{}
-
-type SnarlEditorS struct{}
-
-type SnarlNodeS struct{}
-
-type SnarlPinS struct{}
 
 type SpinnerS struct{}
 

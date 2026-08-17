@@ -18,8 +18,8 @@ on the target. The decision and trade-offs are recorded in
 
 One asymmetry shapes everything below. **Go vendors to a fully self-contained
 offline build** — it is CGO-free, so it needs no C compiler and no system
-libraries. **Rust does not quite**: its ~660 crates (including one git
-dependency, `egui-snarl`) vendor cleanly, but the wgpu/winit stack leaves a thin
+libraries. **Rust does not quite**: its ~660 crates vendor cleanly (all from the
+registry — there are no git dependencies), but the wgpu/winit stack leaves a thin
 residue that no `cargo vendor` can supply — a **C compiler at build time**
 (`libmimalloc-sys` compiles bundled C) and a **Vulkan loader + ICD at runtime**
 (`ash` dlopens `libvulkan.so.1`). That residue, plus the toolchains themselves,

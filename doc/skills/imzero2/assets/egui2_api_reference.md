@@ -75,7 +75,6 @@ status: draft
 | FetchR9I64 | Fetcher | No | 0 | 0 | - | - |
 | FetchR9S | Fetcher | No | 0 | 0 | - | - |
 | FetchR9U64 | Fetcher | No | 0 | 0 | - | - |
-| FetchSnarlEvents | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoCapabilities | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoStreamInfo | Fetcher | No | 0 | 0 | - | - |
 | Frame | BuilderFactory | Yes | 0 | 0 | 23 | Immediate, Retained, BlockIterator |
@@ -170,10 +169,6 @@ status: draft
 | SliderF64 | BuilderFactory | Yes | 3 | 0 | 19 | Immediate, Retained |
 | SliderI64 | BuilderFactory | Yes | 3 | 0 | 19 | Immediate, Retained |
 | SliderU64 | BuilderFactory | Yes | 3 | 0 | 19 | Immediate, Retained |
-| SnarlConnection | BuilderFactory | No | 4 | 0 | 0 | Immediate |
-| SnarlEditor | BuilderFactory | Yes | 0 | 0 | 9 | Immediate, Retained |
-| SnarlNode | BuilderFactory | No | 5 | 0 | 2 | Immediate |
-| SnarlPin | BuilderFactory | No | 5 | 0 | 0 | Immediate |
 | Spinner | BuilderFactory | No | 0 | 0 | 1 | Immediate |
 | StyledSections | BuilderFactory | No | 0 | 0 | 1 | Retained |
 | SurrenderFocus | Procedural | No | 1 | 0 | - | - |
@@ -2352,104 +2347,6 @@ Slider
 
 ---
 
-### SnarlConnection
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| srcNodeId | plain | u64 |
-| srcPort | plain | u32 |
-| dstNodeId | plain | u64 |
-| dstPort | plain | u32 |
-
-#### Return Type
-
-SnarlConnection
-
----
-
-### SnarlEditor
-
-- **Type:** BuilderFactory
-- **Identity:** Yes
-- **Features:** Immediate, Retained
-
-#### Builder Methods
-
-- **Width**(wi: f32)
-- **Height**(he: f32)
-- **PersistPositions**(vl: b)
-- **WireStyle**(ws: u8)
-- **BgPattern**(bp: u8)
-- **MinScale**(ms: f32)
-- **MaxScale**(ms: f32)
-- **Centering**(vl: b)
-- **CrispMagnifiedText**(vl: b)
-
-#### Deferred Block Maps
-
-- **NodeBody** — keys: (u64)
-
-#### Return Type
-
-SnarlEditor
-
----
-
-### SnarlNode
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| nodeId | plain | u64 |
-| posX | plain | f32 |
-| posY | plain | f32 |
-| kind | plain | u32 |
-| title | plain | s |
-
-#### Builder Methods
-
-- **NumInputs**(ni: u32)
-- **NumOutputs**(no: u32)
-
-#### Return Type
-
-SnarlNode
-
----
-
-### SnarlPin
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| nodeId | plain | u64 |
-| side | plain | u8 |
-| pinIdx | plain | u32 |
-| label | plain | s |
-| kind | plain | u32 |
-
-#### Return Type
-
-SnarlPin
-
----
-
 ### Spinner
 
 - **Type:** BuilderFactory
@@ -3715,25 +3612,6 @@ Block
 |------|------|
 | ids | u64h |
 | values | u64h |
-
----
-
-### FetchSnarlEvents
-
-- **Type:** Fetcher
-
-#### Return Values
-
-| Name | Type |
-|------|------|
-| editorIds | u64h |
-| kinds | u32h |
-| nodeIds | u64h |
-| portsA | u32h |
-| nodeIdsB | u64h |
-| portsB | u32h |
-| xs | f32h |
-| ys | f32h |
 
 ---
 

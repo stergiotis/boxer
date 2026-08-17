@@ -113,7 +113,7 @@ This is the actionable list of Tier 3 decisions waiting on a trigger. Each row n
 | T3-010 | [ADR-0031 §Status Q4](../../adr/0031-imzero2-design-system-color.md) | OKLab implementation pinning | M0 | M0 |
 | T3-011 | [ADR-0031 §Status Q5](../../adr/0031-imzero2-design-system-color.md) | Theme-change bus subjects | If light-theme support added (deferred — dark only v1) | TBD |
 | T3-012 | [ADR-0031 §Status Q7](../../adr/0031-imzero2-design-system-color.md) | Plot legend swatch saturation | M2 plot-integration testing | M2 |
-| T3-013 | [ADR-0031 §Status Q8](../../adr/0031-imzero2-design-system-color.md) | Snarl node-class palette sourcing | First snarl + plot mixed view | TBD |
+| T3-013 | [ADR-0031 §Status Q8](../../adr/0031-imzero2-design-system-color.md) | Snarl node-class palette sourcing | ~~First snarl + plot mixed view~~ — void: the binding was removed ([ADR-0194](../../adr/0194-retire-egui-snarl-binding.md)) | n/a |
 | T3-014 | [ADR-0032 §Status Q1](../../adr/0032-imzero2-design-system-spacing-density-motion.md) | Stroke 1.5 px sub-pixel calibration | M1 testing artefact on ≥ 2 OS / DPI | M1 |
 | T3-015 | [ADR-0032 §Status Q3](../../adr/0032-imzero2-design-system-spacing-density-motion.md) | V9 grid-alignment rubric | Post-M4 calibration of V1–V8 | post-M4 |
 | T3-016 | [ADR-0032 §Status Q4](../../adr/0032-imzero2-design-system-spacing-density-motion.md) | Magnitude ladder extension (>32 / >48 px) | M2 backfill surfaces real need | M2 |
