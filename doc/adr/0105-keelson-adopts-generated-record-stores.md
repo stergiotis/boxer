@@ -618,6 +618,65 @@ workingsets on the state store; ADR-0148 Update. M3 — column widths;
 ADR-0151 Update. M4 — `FactsStoreI` verbs and `chstore` files removed;
 ADR-0185 edited in place; ADR-0026 §SD6 reading recorded.
 
+### 2026-08-17 — D5's blocker is measured, and it is not the one D5 names
+
+D5 says the log and run-anchored kinds "remain hand-rolled until carrier/tuple
+read support exists". A probe of all nine surviving `chstore` kinds — candidate
+DTOs mirroring what each encoder actually writes, run through
+`marshallreflect.PlanFor` and `marshallgen.ReadRowSupported` — corrects that in
+two ways. Nothing here changes a decision; it changes what the trigger is.
+
+**All nine are refused, not two.** Grant, Audit, Log, RuntimeRun,
+RuntimeHeartbeat, AppLifecycle, Launch, Workingset and ColumnWidth each fail at
+*plan construction*, before any read gate: *"section mixes membership channels
+— pick one channel per section"* (ADR-0008 D3's uniformity invariant). Every
+one of them writes plain low-card-ref attributes on the `symbol` section and at
+least one mixed-channel attribute beside them. RuntimeHeartbeat is the clean
+demonstration: it carries two attributes in total, the kind marker and the run
+stamp, and that is already enough.
+
+**For eight of the nine the mixed channel is redundant.** `MembRuntimeApp`,
+`MembRuntimeRun` and `MembLaunchCaller` are written as
+`BeginAttribute(X).AddMembershipMixedLowCardRef(memb, []byte(X))` — the same
+string in the value lane and in the parameter lane. The parameter exists for
+read convenience: `mrhp` is co-indexed with `lmr`, so a predicate matches with
+a direct co-lane lookup instead of locating the value by attribute position.
+Dropping the mixed spelling for those three makes the kinds expressible today —
+probed on the two ends of the range, Grant and the two-attribute
+RuntimeHeartbeat, both of which pass with the stamps on the plain channel and
+nothing else changed.
+
+That is a different trigger from the one D5 states, with a different owner:
+not "wait for carrier-channel `ReadRow`", but "decide whether these three
+memberships still need the parameter lane". Two things bear on that and are
+recorded rather than settled here. The read-convenience argument has weakened
+since ADR-0171/ADR-0181 shipped — `LW_GET('symbol', 'runtime-app',
+'chan:low-card-ref')` now locates a value lane cheaply, which is the work the
+parameter was avoiding. And it is a wire change touching every reader that
+matches on `mrhp` (`runsessions.go`, `recentlogs.go`, `workingsets.go`,
+`columnwidths.go`), plus ADR-0191's attribution stamp, so it belongs to those
+decisions and not to this one.
+
+**Log is the exception, and stays where D5 put it.** Its user-field fan-out
+carries the field *name* as the parameter and the field *value* in the value
+lane, across seven sections — information the value lane cannot hold. Probed
+with the app/run stamps lifted and the fan-out kept, it is still refused:
+`runtimeLogField` sits on `stringArray` beside the plain
+`runtimeLogMessage`/`runtimeLogError`, so it mixes channels there too, and the
+carrier gate applies on top. Log is genuinely blocked on carrier-channel
+support, exactly as D5 says; the other eight are not.
+
+**Workingset and ColumnWidth have a nearer exit anyway** — the 2026-08-15 entry
+above moves them to `boxer.persiststate`, which is where a state-shaped kind
+belongs regardless of this, since the facts table's `DateTime64` lifecycle lane
+cannot carry a generated state view.
+
+The same probe was run against the two other hand-rolled facts writers, and
+their results live with them: `queryrunfacts` (ADR-0115, 2026-08-17 update) is
+blocked by genuine carrier channels, and `capmapfacts`
+([ADR-0168](./0168-capmap-business-capability-corpus.md) §Deferrals) by both
+refusals, with `Relation` passing.
+
 ## References
 
 - [ADR-0100: recordstore — generated leeway ClickHouse store](0100-recordstore-generated-leeway-clickhouse-store.md) — the producer-side decision and its deferrals.

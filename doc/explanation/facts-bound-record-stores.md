@@ -60,6 +60,30 @@ construction, and a container (`[]string` under one membership on a scalar
 section) is fine. That is worth knowing before you design the DTO rather than
 after.
 
+### Reach for the mixed channel only when the parameter carries something
+
+The mixed channel is what costs a kind the generated lane, so it is worth
+separating the two ways it gets used. Measured across every mixed call site on
+`boxer.facts`:
+
+- **Informative** — the parameter holds what the value lane cannot. A log
+  field's *name* beside its *value* (`runtimeLogField`, seven sections), a
+  ProfileEvents counter's name, capmap's authored section heading. These need
+  the channel, and they are why the carrier deferral exists.
+- **Redundant** — the parameter repeats the value.
+  `BeginAttribute(X).AddMembershipMixedLowCardRef(memb, []byte(X))` writes the
+  same string twice. `runtimeApp`, `runtimeRun` and `runtimeLaunchCaller` are
+  written this way by all nine `chstore` kinds and by `queryrunfacts`, so the
+  parameter lane can be matched directly (it is co-indexed with the membership
+  lane) instead of locating the value by attribute position.
+
+The second form is a read-time convenience bought at the price of the whole
+component lane — and the price is now higher than when it was chosen, because
+`LW_GET('symbol', '<name>', 'chan:low-card-ref')` locates a value lane cheaply
+today. If you are adding a kind: put the identity in the value lane on the
+plain channel, and spend the mixed channel only where a parameter says
+something a value cannot.
+
 The generated lane also cannot currently take over two things `chstore` does,
 for reasons that are properties of the facts schema rather than of the
 generator:
