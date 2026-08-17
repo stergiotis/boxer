@@ -59,7 +59,7 @@ func TestIdempotent(t *testing.T) {
 }
 
 func TestThesaurusReachesTheExpansion(t *testing.T) {
-	// `lcase` is a ClickHouse alias for `lower` (chaliases_gen.go, from
+	// `lcase` is a ClickHouse alias for `lower` (chaliases.gen.go, from
 	// the pinned engine): the spliced pattern must carry the canonical
 	// spelling as an alternation branch, so a docsearch for the alias
 	// finds documentation that only writes the real name.

@@ -15,7 +15,7 @@ was scoped from the start to a single renderer: its tokens are "materialised as
 an `egui::Style` / `Visuals` overlay" (ADR-0029 §SD1), with a hand-mirrored Go
 surface in `styletokens` for code that sits Go-side of the egui boundary. The
 colour layer is generated — `palette.toml` → `colors/gen` → `colors/emit` emits
-`palette_generated.rs` + `palette_generated.go` + two markdown specs ([ADR-0033](./0033-imzero2-design-system-palette-m0.md) §SD5).
+`palette_generated.rs` + `palette.out.go` + two markdown specs ([ADR-0033](./0033-imzero2-design-system-palette-m0.md) §SD5).
 
 A need surfaced that the egui-only framing does not cover: rendering **server-side
 HTML multi-page pages** in the IDS look, with no egui runtime. The concrete first

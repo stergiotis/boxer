@@ -216,10 +216,16 @@ step_begin "gofmt"
 # reached 175 files before the tree was cleared on 2026-08-06.
 #
 # Generated files are skipped by their `Code generated ... DO NOT EDIT.` header
-# rather than by path: the two that drift match NEITHER of the `.out.go` /
-# `.gen.go` patterns the vet and staticcheck steps filter on
-# (`palette_generated.go`, `chaliases_gen.go`), and a generator owns the layout
-# of what it emits. The header is read from the first lines only, which is where
+# rather than by path: relying on the `.out.go` / `.gen.go` patterns the vet and
+# staticcheck steps filter on would have missed every generated file that isn't
+# suffixed that way — which, until the `file-naming` gate started enforcing it
+# (ADR-0048 N2/N3; `gov/filenaming`'s "generated-suffix" rule), was a real,
+# silent gap: `palette_generated.go` and `chaliases_gen.go` sat undetected for
+# a while before being renamed to close it. That gate now catches a fresh case
+# of the same shape before it can linger the same way, but this step still
+# reads the header rather than the path: a generator can still choose to emit
+# somewhere the pattern doesn't reach, and this step's job is to not choke on
+# it regardless. The header is read from the first lines only, which is where
 # Go's own convention puts it — a file merely quoting the phrase is still checked.
 #
 # FIXING A FAILURE — read the diff before running `gofmt -w`. gofmt reformats

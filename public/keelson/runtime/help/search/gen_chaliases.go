@@ -1,6 +1,6 @@
 //go:build ignore
 
-// gen_chaliases.go regenerates chaliases_gen.go from the local
+// gen_chaliases.go regenerates chaliases.gen.go from the local
 // clickhouse binary's own system.functions — run it via
 // `go generate ./public/keelson/runtime/help/search` after bumping the
 // engine pin. The alias set is a property of the engine version, which
@@ -53,11 +53,11 @@ var chFunctionAliases = map[string]string{
 	}
 	b.WriteString("}\n")
 
-	if err := os.WriteFile("chaliases_gen.go", b.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile("chaliases.gen.go", b.Bytes(), 0o644); err != nil {
 		fmt.Fprintln(os.Stderr, "gen_chaliases:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("chaliases_gen.go: %d aliases (clickhouse %s)\n", len(pairs), strings.TrimSpace(version))
+	fmt.Printf("chaliases.gen.go: %d aliases (clickhouse %s)\n", len(pairs), strings.TrimSpace(version))
 }
 
 func query(sql string) string {

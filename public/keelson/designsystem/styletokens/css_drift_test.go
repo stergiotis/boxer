@@ -12,7 +12,7 @@ import (
 )
 
 // CSS↔Go scalar drift (ADR-0076 §SD3). ids.css hand-mirrors the styletokens
-// scalar ladders at Standard density, the same way palette_generated.go mirrors
+// scalar ladders at Standard density, the same way palette.out.go mirrors
 // the Rust palette — this test is the CSS analogue of the Go↔Rust drift checks
 // above. The colour tokens are NOT checked here: they are generated
 // (ids-palette.css), so they cannot drift.

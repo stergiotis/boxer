@@ -152,6 +152,21 @@ See [DOCUMENTATION_STANDARD §1 ADR](../../doc/DOCUMENTATION_STANDARD.md#archite
   generator at all) and updating what refers to it by name, which is
   separable work.
 
+- **2026-08-17 — all 23 renamed the same day; baseline cleared.** The
+  separable work above turned out not to need separating: each of the four
+  subsystems got its own commit (rename + the emitting generator's output
+  path + every doc/comment naming the file), verified by re-running the
+  generator where one exists (`designsystem colors gen --verify` byte-compares
+  in place; `designsystem colors vendor` has no verify mode, so it was run for
+  real and the result diffed against the pre-rename commit) or, for the
+  copy-paste family, by build+test since there is no generator to re-run.
+  `naming-baseline.txt`'s `generated-suffix` block — entries and the
+  explanatory comments alike — is gone; nothing is grandfathered under N2/N3
+  any more. Vendoring the design tokens for real also surfaced an unrelated,
+  pre-existing whitespace drift between `colors/vendor`'s current emit and
+  what's committed (16 files, column-alignment padding only) — left as found
+  rather than folded into a rename commit; recorded here so it isn't lost.
+
 ## References
 
 - [ADR-0035 — keelson namespace introduction](0035-keelson-namespace-introduction.md) — motivates `apps/` top-level layout enforced by rule N7.

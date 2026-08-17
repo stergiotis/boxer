@@ -20,7 +20,7 @@
 //
 // Emits to:
 //   - rust/imzero2/imzero2_egui/src/style/data_encoding/<palette>.rs
-//   - public/keelson/designsystem/styletokens/data_encoding/<palette>.go
+//   - public/keelson/designsystem/styletokens/data_encoding/<palette>.out.go
 //
 // Each emitted file carries provenance: source name, license, upstream
 // SHA-256 (Crameri) or upstream package version (viridis family).
@@ -143,7 +143,7 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		if err != nil {
 			return
 		}
-		err = os.WriteFile(filepath.Join(goDir, l.Name+".go"), []byte(goOut), 0o644)
+		err = os.WriteFile(filepath.Join(goDir, l.Name+".out.go"), []byte(goOut), 0o644)
 		if err != nil {
 			return
 		}
@@ -157,7 +157,7 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 	if err != nil {
 		return
 	}
-	err = os.WriteFile(filepath.Join(goDir, "doc.go"), []byte(goMod), 0o644)
+	err = os.WriteFile(filepath.Join(goDir, "doc.out.go"), []byte(goMod), 0o644)
 	if err != nil {
 		return
 	}

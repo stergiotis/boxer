@@ -178,7 +178,7 @@ source — which is precisely the designed fallback, not a degraded mode.
   original entry assumed `system.functions.alias_to` needs a server
   round-trip, but the alias set is a property of the engine *version*,
   which this repository pins — so it is a generated table
-  (`chaliases_gen.go`, regenerated with the pin), joined by launcher
+  (`chaliases.gen.go`, regenerated with the pin), joined by launcher
   keywords at runtime. Alternates fold into the typed token's own
   pattern as alternation (`(?i)(?:lcase|lower)`), so RequireAll
   semantics survive, both executors inherit it through

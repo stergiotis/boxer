@@ -74,7 +74,7 @@ func newColorsGenCommand() (cmd *cli.Command) {
 			&cli.BoolFlag{
 				Name:  "verify",
 				Value: false,
-				Usage: "re-emit to memory and byte-compare against committed palette_generated.{rs,go}; non-zero exit on drift",
+				Usage: "re-emit to memory and byte-compare against committed palette_generated.rs / palette.out.go; non-zero exit on drift",
 			},
 		},
 		Action: func(ctx *cli.Context) (err error) {

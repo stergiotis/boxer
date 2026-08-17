@@ -7,7 +7,7 @@
 // Tokens are mirrored by hand for the spacing/density/motion subsystems
 // (ADR-0032 §SD8 — direct constants, no TOML pipeline). A drift test in
 // styletokens_drift_test.go reads the Rust source and asserts table
-// identity. Color tokens (palette_generated.go) and font binaries are
+// identity. Color tokens (palette.out.go) and font binaries are
 // emitted by generators (ADR-0031 §SD8, ADR-0030 §SD7) — that side lands
 // later in the IDS phasing.
 //

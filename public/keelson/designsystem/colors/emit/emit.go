@@ -1,6 +1,6 @@
 // Package emit writes the four generator artefacts:
 //   - palette_generated.rs (Rust Color32 consts)
-//   - palette_generated.go (Go egui-equivalent consts)
+//   - palette.out.go (Go egui-equivalent consts)
 //   - color.md (human-readable spec + contrast table)
 //   - ip-boundary-check.md (verbatim-search log)
 package emit
@@ -77,7 +77,7 @@ func RustFile(tokens []palette.Token) (s string) {
 	return
 }
 
-// GoFile renders palette_generated.go.
+// GoFile renders palette.out.go.
 func GoFile(tokens []palette.Token) (s string) {
 	var sb strings.Builder
 	sb.WriteString(generatedHeader)

@@ -327,7 +327,7 @@ func TestThesaurusFromManifestsCore(t *testing.T) {
 func TestThesaurusCHFunctionsGenerated(t *testing.T) {
 	th := ThesaurusCHFunctions()
 	if len(th) == 0 {
-		t.Fatal("generated alias table is empty — regenerate chaliases_gen.go")
+		t.Fatal("generated alias table is empty — regenerate chaliases.gen.go")
 	}
 	if alts := th.alternates("lcase"); len(alts) != 1 || alts[0] != "lower" {
 		t.Errorf("lcase alternates = %+v", alts)

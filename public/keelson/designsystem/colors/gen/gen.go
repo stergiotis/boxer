@@ -5,7 +5,7 @@
 // runs IP-boundary verbatim search; emits five artefacts:
 //
 //   - rust/imzero2/imzero2_egui/src/style/tokens/palette_generated.rs
-//   - public/keelson/designsystem/styletokens/palette_generated.go
+//   - public/keelson/designsystem/styletokens/palette.out.go
 //   - public/keelson/designsystem/web/ids-palette.css   (ADR-0076)
 //   - doc/design-system/foundations/color.md
 //   - doc/design-system/foundations/ip-boundary-check.md
@@ -40,7 +40,8 @@ import (
 // Config controls a generator invocation.
 type Config struct {
 	// Verify re-emits to memory and byte-compares against the committed
-	// palette_generated.{rs,go}. Returns ErrVerifyDrift if any file differs.
+	// palette_generated.rs / palette.out.go. Returns ErrVerifyDrift if any
+	// file differs.
 	Verify bool
 
 	// RepoRoot overrides the runtime.Caller-based repo-root discovery.
@@ -148,7 +149,7 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 	ipMd := emit.IPBoundaryMd(collisions, sources)
 
 	rustPath := filepath.Join(repoRoot, "rust/imzero2/imzero2_egui/src/style/tokens/palette_generated.rs")
-	goPath := filepath.Join(repoRoot, "public/keelson/designsystem/styletokens/palette_generated.go")
+	goPath := filepath.Join(repoRoot, "public/keelson/designsystem/styletokens/palette.out.go")
 	cssPath := filepath.Join(repoRoot, "public/keelson/designsystem/web/ids-palette.css")
 	colorMdPath := filepath.Join(repoRoot, "doc/design-system/foundations/color.md")
 	ipMdPath := filepath.Join(repoRoot, "doc/design-system/foundations/ip-boundary-check.md")

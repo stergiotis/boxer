@@ -10,7 +10,7 @@ package search
 // Two sources compose:
 //
 //   - ClickHouse function aliases, generated from the pinned engine's
-//     own system.functions (chaliases_gen.go). The ADR's original
+//     own system.functions (chaliases.gen.go). The ADR's original
 //     deferral assumed these need a live server round-trip; they do
 //     not — the alias set is a property of the engine VERSION, which
 //     this repository pins, so the table regenerates with the pin and
@@ -78,7 +78,7 @@ func MergeThesauri(parts ...Thesaurus) (out Thesaurus) {
 // ThesaurusCHFunctions returns the ClickHouse function-alias table
 // (alias → canonical name, one direction: documentation writes the
 // canonical spelling, searchers type either). Sourced from the
-// generated chaliases_gen.go; regenerate with the engine pin.
+// generated chaliases.gen.go; regenerate with the engine pin.
 func ThesaurusCHFunctions() (th Thesaurus) {
 	th = make(Thesaurus, len(chFunctionAliases))
 	for alias, canonical := range chFunctionAliases {
