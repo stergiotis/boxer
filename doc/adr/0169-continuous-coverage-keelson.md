@@ -189,8 +189,16 @@ gone). Nothing in M0–M4 depends on this piece.
 An applet book ([ADR-0132](0132-sqlapplet-sql-defined-applets.md)) over the
 live tables: overview percentages, a package treemap
 ([ADR-0166](0166-play-treemap-panel.md), sized by statements, coloured by
-coverage ratio — whether a continuous colour mode exists there is an open
-check), an uncovered-functions browser, and joins against the godep tables.
+coverage ratio), an uncovered-functions browser, and joins against the godep
+tables.
+
+The colour mode was an open check and is closed: ADR-0166 §SD2's numeric arm
+already drove a continuous colormap, so the map's first cut was bracketed only
+because it emitted a *string*. What it did lack was a way to say that a ratio's
+scale is 0–100 rather than whatever the repository happens to span — surveyed,
+a tree spanning 12–68% paints 68% as fully covered. §SD2 now takes
+`color_min` / `color_max` / `color_unit` from the query, and `cov-map` declares
+them; the brackets are gone.
 Growth timelines and run-vs-run diffs are history queries; they arrive with
 SD6.
 

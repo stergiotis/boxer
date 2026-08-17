@@ -28,10 +28,15 @@ silently redistributed into `a/b/c`.
 *untested* statements, which turns the map into a work list: the biggest
 rectangle is the biggest gap.
 
-**Colour is a bracket, not a scale.** The treemap's palette is qualitative,
-so the ratio is bucketed: `0%`, `<25%`, `<50%`, `<75%`, `<100%`, `100%`,
-plus `no code` for empty packages. A container's colour is its **subtree**
-bracket — a directory can read `<50%` while one child reads `100%`.
+**Colour is the ratio itself, on a fixed 0–100 scale.** The tint is the
+subtree's covered percentage, read off a sequential ramp whose ends the query
+*declares* (`color_min` / `color_max`) rather than leaving to be surveyed from
+this repository's own spread. That matters: surveyed, a tree spanning 12–68%
+would paint 68% at the top of the ramp, which reads as fully covered — and two
+runs could not be compared by colour at all. A package with no statements has
+no ratio, so it is left uncoloured and falls through to the neutral depth
+shading. A container's colour is its **subtree** ratio, so a directory can sit
+mid-ramp while one child inside it is at 100.
 
 ```sql
 SET param_size_by = 'stmts';
@@ -80,13 +85,6 @@ WITH
               toFloat64(o.own_total - o.own_cov),
               toFloat64(o.own_total)) AS value,
            '' AS unit,
-           multiIf(a.sub_total = 0, 'no code',
-                   a.sub_cov = 0, '0%',
-                   a.sub_cov * 4 < a.sub_total, '<25%',
-                   a.sub_cov * 2 < a.sub_total, '<50%',
-                   a.sub_cov * 4 < a.sub_total * 3, '<75%',
-                   a.sub_cov < a.sub_total, '<100%',
-                   '100%') AS color,
            a.sub_total AS subtree_stmts,
            a.sub_cov AS subtree_covered,
            round(100 * a.sub_cov / nullIf(a.sub_total, 0), 1) AS pct
@@ -98,19 +96,20 @@ WITH
            any(module_path) AS label,
            toFloat64(0) AS value,
            '' AS unit,
-           multiIf(sum(total_stmts) = 0, 'no code',
-                   sum(covered_stmts) = 0, '0%',
-                   sum(covered_stmts) * 4 < sum(total_stmts), '<25%',
-                   sum(covered_stmts) * 2 < sum(total_stmts), '<50%',
-                   sum(covered_stmts) * 4 < sum(total_stmts) * 3, '<75%',
-                   sum(covered_stmts) < sum(total_stmts), '<100%',
-                   '100%') AS color,
            sum(total_stmts) AS subtree_stmts,
            sum(covered_stmts) AS subtree_covered,
            round(100 * sum(covered_stmts) / nullIf(sum(total_stmts), 0), 1) AS pct
     FROM pk
   )
-SELECT id, parent, label, value, unit, color, subtree_stmts, subtree_covered, pct
+-- the colour channel: the subtree's covered ratio, on the scale a RATIO has
+-- rather than the one this repository happens to span. `color` is the binding;
+-- `pct` is the same number under the name the rest of the book calls it.
+SELECT id, parent, label, value, unit,
+       pct            AS color,
+       toFloat64(0)   AS color_min,
+       toFloat64(100) AS color_max,
+       '%'            AS color_unit,
+       subtree_stmts, subtree_covered, pct
 FROM nodes
 ORDER BY id
 ```
@@ -122,12 +121,16 @@ ORDER BY id
   Under `size_by = 'uncovered'` a fully covered package vanishes; that is
   the point of the work-list reading, and the `stmts` view is where it
   comes back.
-- **The brackets are cumulative-session facts.** A package at `<25%` five
+- **The ratios are cumulative-session facts.** A package low on the ramp five
   minutes in may only mean its windows have not been opened yet; watch the
   map after driving the feature you care about.
-- **Bracket colour is categorical on purpose** — a continuous ratio ramp is
-  a sequential-scale rendering the treemap panel does not have today
-  (recorded in ADR-0169 §SD7 as an open check). Six ordered brackets on a
-  qualitative palette is the honest encoding available now.
+- **Colour does not follow `size_by`.** Under `uncovered` the *area* becomes
+  the gap while the tint stays the covered ratio, which is what makes that
+  view read as a work list: a big rectangle still high on the ramp is a large
+  package with a small proportional hole.
+- **The scale is pinned, so the ramp ends are absolute.** Nothing here is
+  normalised to the best or worst package present; the top of the bar is 100%
+  whether or not anything reaches it. The Treemap tab's status line says
+  `declared scale` when this is in force.
 - **The Table tab carries `subtree_stmts`, `subtree_covered` and `pct`** —
   the exact numbers behind a rectangle you cannot judge by eye.

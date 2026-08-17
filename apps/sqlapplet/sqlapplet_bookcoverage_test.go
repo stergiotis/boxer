@@ -61,6 +61,13 @@ func TestCoverageBookCorpus(t *testing.T) {
 		assert.Contains(t, mapSQL, col, "cov-map: the nodes contract needs%s", col)
 	}
 	assert.NotContains(t, mapSQL, " AS stack", "cov-map: the folded arm would win over the nodes arm")
+
+	// The colour channel is a RATIO on a declared scale, not a bracket: without
+	// the endpoints the panel surveys the result and the ramp stretches to
+	// whatever this repository happens to span (ADR-0166 §SD2).
+	for _, col := range []string{" AS color_min", " AS color_max", " AS color_unit"} {
+		assert.Contains(t, mapSQL, col, "cov-map: a percentage ramp must declare%s", col)
+	}
 }
 
 // TestMintCoverageBook mints the book beside its siblings, guarding slug
@@ -223,13 +230,26 @@ func TestCoverageBookQueriesExecute(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"m"}, rows, "exactly one root, the module")
 
-	rows, err = query(overSink(mapSQL, "SELECT parent, color FROM nodes WHERE id = 'app'"))
+	rows, err = query(overSink(mapSQL, "SELECT parent, pct FROM nodes WHERE id = 'app'"))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"m\t<75%"}, rows, "a directory node parents to the module and colours by its subtree (7/11)")
+	assert.Equal(t, []string{"m\t63.6"}, rows, "a directory node parents to the module and colours by its subtree (7/11)")
 
-	rows, err = query(overSink(mapSQL, "SELECT parent, color FROM nodes WHERE id = 'app/beta'"))
+	rows, err = query(overSink(mapSQL, "SELECT parent, pct FROM nodes WHERE id = 'app/beta'"))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"app\t0%"}, rows, "an untouched package is the 0% bracket")
+	assert.Equal(t, []string{"app\t0"}, rows, "an untouched package sits at the bottom of the ramp")
+
+	// The scale is the query's, not the result's: pinned to 0–100 on every row,
+	// so the panel does not survey this fixture's 0–63.6 and paint 63.6 as
+	// fully covered. `color` carries the ratio and `pct` repeats it under the
+	// name the rest of the book uses.
+	rows, err = query(mapSQL)
+	require.NoError(t, err)
+	for _, row := range rows {
+		f := strings.Split(row, "\t")
+		require.Len(t, f, 12, "cov-map: id,parent,label,value,unit,color,color_min,color_max,color_unit,+3")
+		assert.Equal(t, []string{"0", "100", "%"}, f[6:9], "every row declares the same 0–100%% scale")
+		assert.Equal(t, f[11], f[5], "`color` is `pct` bound to the colour channel")
+	}
 
 	// size_by = 'uncovered' turns the area into the gap.
 	unc := strings.Replace(mapSQL, "SET param_size_by = 'stmts';", "SET param_size_by = 'uncovered';", 1)
