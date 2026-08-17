@@ -632,6 +632,51 @@ Each carries a trigger rather than a date.
   compression-similarity ranker recomputes exactly that at query time.
 - **Graph value-aspects on `foreignKey`.** Trigger: a reader that dispatches on
   them. `useaspects.AspectLinking` already states the linking intent.
+- **The write side moving onto a generated record store.**
+  [ADR-0105](./0105-keelson-adopts-generated-record-stores.md) §D5 makes a
+  generated store the default for a new fact kind and
+  [ADR-0183](./0183-leeway-component-consumer-simplification.md) reframes a
+  component as the surface one is authored against, so `capmapfacts` driving
+  the DML by hand is worth a reason rather than an omission. Measured against
+  the generator, the Competence encoding has no component plan at all — two
+  independent refusals, both reproduced through `marshallreflect.PlanFor` and
+  `marshallgen.ReadRowSupported`:
+
+  - **The `symbol` section carries two membership channels.** The kind marker,
+    slug, domain, catalog, owner and tags ride the plain low-card-ref channel;
+    `capmapCompetenceLifecycleBy` rides the mixed channel beside them, its
+    phase as the high-card parameter. A plan holds one channel per section
+    (ADR-0008 D3's uniformity invariant), so building one fails with *"section
+    mixes membership channels"* — the shape is not unsupported for reading, it
+    is unexpressible. The DML has always allowed it, the encoder writes it, and
+    §SD11's read path reads it back through `LW_SEL`, which is why nothing has
+    objected before.
+  - **Three memberships use carrier channels** — `capmapCompetenceSection`
+    (§SD5's heading-as-parameter), `capmapCompetenceLifecycleBy` and
+    `capmapCompetenceLifecycleAt`. `ReadRowSupported` declines a carrier
+    channel and `recordstore/gen` turns that into an error for the whole store
+    rather than a missing method. The dynamic-membership tuple is the other
+    shape for "one attribute per label" and the same gate declines it too; it
+    is also a different wire encoding, so it would be a data break rather than
+    a refactor.
+
+  Neither refusal is incidental. §SD5 chose the parameter for section headings
+  because headings are authored text and cannot be registered names, and the
+  lifecycle slots follow it.
+
+  Two things the probe did settle. `Relation` is fully supported today — its
+  five symbol slots, both `foreignKey` slots and the optional `f64Array` pass
+  the gate — and a tag container (`[]string` under one membership on a scalar
+  section) is expressible, which had been an open question. Generating a store
+  for `Relation` alone is therefore possible, and is not taken: it would split
+  one corpus's two kinds across two write lanes, where a store owns its entity
+  frame and `BuildRecords` commits both kinds into one batch.
+
+  Trigger: carrier-channel `ReadRow` support (the standing ADR-0100 deferral,
+  [ADR-0103](./0103-leeway-marshall-dynamic-membership-tuples.md)) **and** a
+  plan that admits two channels on one section — or a decision to re-model the
+  lifecycle and section slots, which is an §SD5 question rather than a
+  generator one.
 - **The triage/culling workflow.** A UI that mutates repo files is a distinct
   security posture and needs its own decision. Trigger: the read path proving
   the corpus is worth curating at that rate.
@@ -680,6 +725,12 @@ Reconciled again on 2026-08-15: M11 merged the map into the browser, and
 capmap is a structure-and-prose tool and the prototype's four scoring lenses are
 not ported. That closes the last open question in §Deferrals; there is nothing
 left for a reviewer to settle before this is accepted or rejected.
+
+Reconciled again on 2026-08-17, after §SD11's read path prompted the same
+question of the write path: §Deferrals gains the record store, which is a
+deferral with a trigger rather than a question — the Competence encoding has no
+component plan, for two reasons that are properties of §SD5's chosen shape.
+Nothing in the decision moved.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

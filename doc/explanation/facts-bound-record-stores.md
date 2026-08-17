@@ -36,12 +36,29 @@ store behind the existing `chstore.Store` facade"*. So for a **new** kind, the
 generated store is the default answer, and `chstore` is where you look only if
 the generated lane refuses your shape.
 
-It can refuse. `marshallgen.ReadRowSupported` still declines two shapes, and
-they are the ones the largest existing kinds use: **carrier channels** (the log
-kind passes the field name as a runtime membership parameter) and
-**dynamic-membership tuples** (the run-anchored lifecycle rows). A DTO built
-from plain scalar and `unit` shapes avoids both by construction. That is worth
-knowing before you design the DTO rather than after.
+It can refuse. `marshallgen.ReadRowSupported` declines two shapes, and they are
+the ones the largest existing kinds use: **carrier channels** (the log kind
+passes the field name as a runtime membership parameter) and
+**dynamic-membership tuples** (the run-anchored lifecycle rows). The refusal is
+not a missing method — `recordstore/gen` turns it into an error for the whole
+store, so one unsupported kind stops the others generating.
+
+A third refusal fires **earlier**, and is the one to check first because it is
+about a shape the hand-written DML has always allowed. A plan holds **one
+membership channel per section** (ADR-0008 D3's uniformity invariant), so a
+section carrying a mixed-channel attribute *beside* plain ones has no plan at
+all: `marshallreflect.PlanFor` fails with *"section mixes membership channels —
+pick one channel per section"* before any read gate is consulted. Nothing stops
+an encoder writing that shape, and a hand-written read reads it back, so the
+constraint only surfaces when someone tries to describe those rows as a
+component. `gov/capmapfacts` writes exactly it — its `symbol` section carries
+the kind marker, slug and tags on the plain channel and a lifecycle membership
+on the mixed one — and that is why its write side is still hand-rolled.
+
+A DTO built from plain scalar and `unit` shapes avoids all three by
+construction, and a container (`[]string` under one membership on a scalar
+section) is fine. That is worth knowing before you design the DTO rather than
+after.
 
 The generated lane also cannot currently take over two things `chstore` does,
 for reasons that are properties of the facts schema rather than of the
