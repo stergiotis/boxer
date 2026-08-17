@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-17
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-17
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0194: retire the `egui-snarl` node-editor binding
 
@@ -50,8 +48,9 @@ implements most of a read-only M1.
 
 Carrying cost as measured on the working tree at the date of this ADR: 299 lines
 of IDL plus 8 lines of type constructors, 85 lines of hand-written Go bindings
-plus ~30 lines of state-manager plumbing, a 353-line demo, ~1210 lines of
-hand-maintained Rust in `interpreter.rs` plus five retained-state fields, the
+plus ~30 lines of state-manager plumbing, a 353-line demo, ~520 lines of
+hand-maintained Rust in `interpreter.rs` (486 in two snarl-only spans, the rest
+retained-state fields, their constructor inits and a per-frame clear), the
 generated Go and Rust surfaces those produce, and one crate dependency.
 
 ## Decision
@@ -216,17 +215,35 @@ reader does not mistake this ADR for having handled it.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-08-17. All four milestones landed in one commit the same day
+(`df4fdfb6`), so the decision and its execution carry the same date.
 
-Milestones, if accepted:
+- **M0 — hand-written surfaces.** ✓ Go bindings and state-manager plumbing, the
+  demo, and the hand-maintained Rust region and its state fields.
+- **M1 — IDL and regen.** ✓ Definition file, type constructors and registration;
+  regenerated via the three `egui2gen generate` steps of `./generate.sh` rather
+  than the whole script, to leave unrelated in-flight codegen untouched; both
+  sides rebuilt.
+- **M2 — dependency.** ✓ Crate dropped; `Cargo.lock` refreshed by the build.
+- **M3 — docs.** ✓ ADR-0021 flipped to superseded with a dated Update; the
+  fetchers skill, airgap how-to and bundle script corrected; T3-013 voided;
+  comment-only edits per SD3.
 
-- **M0 — hand-written surfaces.** Remove the Go bindings and state-manager
-  plumbing, the demo, and the hand-maintained Rust region and state fields.
-- **M1 — IDL and regen.** Remove the definition file, type constructors and
-  registration; run `./generate.sh`; rebuild both sides.
-- **M2 — dependency.** Drop the crate from `Cargo.toml` and refresh the lock.
-- **M3 — docs.** Flip ADR-0021 to superseded with a pointer here; correct the
-  prose in docs that describe the binding as live; comment-only edits per SD3.
+Two things worth recording from the execution, both of which the Verification
+plan anticipated only in part:
+
+- **The `impl` block is shared.** `render_snarl_editor` sits inside an
+  `impl ImZeroFffi` block that also holds `drain_paint_cmds_to_painter` and
+  `render_new_table`. Deleting banner-to-block-close takes all three; the build
+  caught it as three `E0599`s. Delete the function's own line range instead.
+  The Context figure above is the corrected one; the first measurement read
+  ~1210 lines because it counted the whole shared block.
+- **Warning count is a usable orphan check.** `cargo build` warnings went 88 →
+  86 across the removal, confirming no import or helper was left dangling.
+
+Measured result: 27 files, 569 insertions, 2313 deletions. `go build`/`go test`
+with the repo tags, `cargo build`, and `doclint` (zero errors) all clean; no
+module drift.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
