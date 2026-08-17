@@ -530,13 +530,39 @@ a silent rewrite.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-08-17 — the Filter is spliced parenthesised
+
+`LW_COMPONENT_FILTER` emitted the `Filter` artefact bare. The artefact is an
+AND-chain — `presence AND countEqual(…) = 1 AND …` — and a call may sit
+anywhere an expression may, so an operator binding tighter than `AND` captured
+only the first conjunct:
+
+```
+authored:  … WHERE NOT LW_COMPONENT_FILTER('SysMem')
+emitted:   … WHERE NOT hasAll(…) AND countEqual(…) = 1
+parses as: … WHERE (NOT hasAll(…)) AND (countEqual(…) = 1)
+```
+
+That is a different row set, returned without an error — the presence terms are
+negated and the validator is asserted, where the author asked for the negation
+of their conjunction. §SD4's injected conjunction had the same shape: two kinds
+joined as `filterA AND filterB` rather than as parenthesised terms.
+
+Every `Filter` splice is now wrapped, at a call site and in the injection alike.
+The `Projection` is unchanged: it is a single `CAST` call, so it is
+self-delimiting wherever it lands.
+
+Found while scoping [ADR-0193](./0193-component-survey-and-cooccurrence.md),
+which puts filters into arbitrary expression contexts (`toUInt8(…)`,
+`countIf(… AND …)`) rather than only into a `WHERE`, and so meets this
+routinely. It is a defect in this ADR's surface, not that one's, and is fixed
+separately.
+
+No `LW_` name, artefact or registry changes shape. The sysmetrics expansion
+golden moves by three lines — the injected `WHERE` gains its parentheses — which
+is the whole visible extent of the change.
 
 ## References
 

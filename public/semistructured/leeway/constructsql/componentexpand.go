@@ -200,7 +200,7 @@ func (inst *componentState) expandCall(name string, spelled string, funcExpr *gr
 		nanopass.ReplaceNode(inst.rw, funcExpr, b.Projection)
 		inst.needFor(scope).projected[kind] = b
 	case nanopass.NormalizeCallName(NameComponentFilter):
-		nanopass.ReplaceNode(inst.rw, funcExpr, b.Filter)
+		nanopass.ReplaceNode(inst.rw, funcExpr, parenthesise(b.Filter))
 		// Only a filter that actually restricts the row set discharges the
 		// injection. The same call in a projection list computes a boolean per
 		// row and filters nothing, so treating it as satisfying the kind would
@@ -289,7 +289,7 @@ func (inst *componentState) injectFilters() {
 		sort.Strings(kinds)
 		terms := make([]string, 0, len(kinds))
 		for _, kind := range kinds {
-			terms = append(terms, n.projected[kind].Filter)
+			terms = append(terms, parenthesise(n.projected[kind].Filter))
 		}
 		inst.injectInto(scope, strings.Join(terms, " AND "))
 	}
@@ -356,6 +356,22 @@ func (inst *componentState) scopeOf(node antlr.ParserRuleContext) *nanopass.Sele
 func (inst *componentState) errCall(spelled string, funcExpr *grammar1.ColumnExprFunctionContext) *eb.ErrorBuilder {
 	r := inst.pr.SourceRangeOf(funcExpr)
 	return eb.Build().Str("call", spelled).Int("start", r.Start).Int("end", r.End)
+}
+
+// parenthesise wraps a Filter before it is spliced into the statement.
+//
+// The artefact is a bare AND-chain — `presence AND countEqual(…) = 1 AND …` —
+// and a call site may sit anywhere an expression may. Spliced bare, a tighter
+// operator around the call captures only the first conjunct:
+// `NOT LW_COMPONENT_FILTER('K')` becomes `NOT presence AND validator`, which
+// parses as `(NOT presence) AND validator` and answers a different question
+// without failing. Every Filter is therefore emitted parenthesised, both at a
+// call site and in the WHERE conjunction §SD4 injects.
+//
+// The Projection is left alone: it is a single CAST call, so it is
+// self-delimiting wherever it lands.
+func parenthesise(filter string) string {
+	return "(" + filter + ")"
 }
 
 func splitQualifiedTable(qualified string) (db string, table string) {

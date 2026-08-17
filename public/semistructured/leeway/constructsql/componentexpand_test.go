@@ -58,6 +58,11 @@ func expandOK(t *testing.T, sql string) (out string) {
 	return
 }
 
+// parens is how a Filter reaches the statement: the artefact is a bare
+// AND-chain, so it is spliced wrapped or a tighter operator around the call
+// captures only its first conjunct.
+func parens(filter string) string { return "(" + filter + ")" }
+
 // The ADR-0189 §SD4 property, and the reason the pass exists: a projection
 // never travels without the filter that makes it exact. ADR-0066 records that
 // Projection alone locates an attribute by indexOf and returns the first
@@ -66,7 +71,7 @@ func TestProjectionNeverTravelsWithoutItsFilter(t *testing.T) {
 	out := expandOK(t, "SELECT LW_COMPONENT('SysMem') AS m FROM boxer.facts")
 
 	assert.Contains(t, out, memProjection, "the projection should be expanded")
-	assert.Contains(t, out, "WHERE "+memFilter, "and its filter added to the WHERE it lacked")
+	assert.Contains(t, out, "WHERE "+parens(memFilter), "and its filter added to the WHERE it lacked")
 	assert.NotContains(t, out, "LW_COMPONENT", "no call may survive expansion")
 }
 
@@ -84,7 +89,7 @@ func TestFilterIsInjectedIntoWhereNotAroundTheProjection(t *testing.T) {
 func TestExistingWhereIsConjoinedAndParenthesised(t *testing.T) {
 	out := expandOK(t, "SELECT LW_COMPONENT('SysMem') FROM boxer.facts WHERE a = 1")
 
-	assert.Contains(t, out, "(a = 1) AND "+memFilter,
+	assert.Contains(t, out, "(a = 1) AND "+parens(memFilter),
 		"the author's predicate is wrapped, so a disjunction cannot absorb the conjunct")
 }
 
@@ -93,7 +98,7 @@ func TestExistingWhereIsConjoinedAndParenthesised(t *testing.T) {
 func TestDisjunctionIsParenthesisedBeforeConjunction(t *testing.T) {
 	out := expandOK(t, "SELECT LW_COMPONENT('SysMem') FROM boxer.facts WHERE a = 1 OR b = 2")
 
-	assert.Contains(t, out, "(a = 1 OR b = 2) AND "+memFilter)
+	assert.Contains(t, out, "(a = 1 OR b = 2) AND "+parens(memFilter))
 }
 
 // Two kinds in one scope conjoin: a row may carry several components, so the
@@ -104,7 +109,7 @@ func TestTwoKindsInOneScopeBothInject(t *testing.T) {
 	assert.Contains(t, out, memProjection)
 	assert.Contains(t, out, cpuProjection)
 	// Sorted, so the emitted conjunction is stable between runs.
-	assert.Contains(t, out, "WHERE "+cpuFilter+" AND "+memFilter)
+	assert.Contains(t, out, "WHERE "+parens(cpuFilter)+" AND "+parens(memFilter))
 }
 
 // One kind named twice injects one filter: the conjunct is deduplicated per
@@ -133,14 +138,36 @@ func TestAFilterInTheProjectionListDoesNotDischargeTheInjection(t *testing.T) {
 
 	assert.Equal(t, 2, strings.Count(out, memFilter),
 		"one as the author's boolean column, one injected into WHERE")
-	assert.Contains(t, out, "WHERE "+memFilter)
+	assert.Contains(t, out, "WHERE "+parens(memFilter))
+}
+
+// The Filter artefact is a bare AND-chain, so a bare splice lets a tighter
+// operator around the call bind to its first conjunct only: `NOT <filter>`
+// became `NOT hasAll(…) AND countEqual(…) = 1`, i.e. `(NOT presence) AND
+// validator` — a different row set, returned without complaint. Every splice
+// is parenthesised.
+func TestFilterSurvivesATightBindingOperator(t *testing.T) {
+	out := expandOK(t, "SELECT id FROM boxer.facts WHERE NOT LW_COMPONENT_FILTER('SysMem')")
+
+	assert.Equal(t, "SELECT id FROM boxer.facts WHERE NOT "+parens(memFilter), out)
+	assert.NotContains(t, out, "NOT hasAll(lr, [1, 2]) AND",
+		"the negation must cover the whole filter, not its first conjunct")
+}
+
+// The same hazard on the injected side: two kinds conjoin as whole terms.
+func TestInjectedConjunctionParenthesisesEachFilter(t *testing.T) {
+	out := expandOK(t,
+		"SELECT LW_COMPONENT('SysMem'), LW_COMPONENT('SysCpu') FROM boxer.facts WHERE a = 1 OR b = 2")
+
+	assert.Contains(t, out,
+		"WHERE (a = 1 OR b = 2) AND "+parens(cpuFilter)+" AND "+parens(memFilter))
 }
 
 // The filter alone is usable without a projection, and injects nothing.
 func TestFilterAloneExpandsAndInjectsNothing(t *testing.T) {
 	out := expandOK(t, "SELECT id FROM boxer.facts WHERE LW_COMPONENT_FILTER('SysMem')")
 
-	assert.Equal(t, "SELECT id FROM boxer.facts WHERE "+memFilter, out)
+	assert.Equal(t, "SELECT id FROM boxer.facts WHERE "+parens(memFilter), out)
 }
 
 // Each scope carries its own injection: an inner SELECT's component must not
@@ -153,7 +180,7 @@ func TestInjectionIsPerScope(t *testing.T) {
 	// subquery's parentheses — and the outer WHERE is left as the author
 	// wrote it.
 	assert.Equal(t,
-		"SELECT * FROM (SELECT "+memProjection+" AS m FROM boxer.facts WHERE "+memFilter+") WHERE 1",
+		"SELECT * FROM (SELECT "+memProjection+" AS m FROM boxer.facts WHERE "+parens(memFilter)+") WHERE 1",
 		out)
 }
 
@@ -251,7 +278,7 @@ func TestUnqualifiedTableBindsWhenNoDefaultDatabaseIsConfigured(t *testing.T) {
 		Run("SELECT LW_COMPONENT('SysMem') FROM facts")
 	require.NoError(t, err)
 	assert.Contains(t, out, memProjection)
-	assert.Contains(t, out, "WHERE "+memFilter)
+	assert.Contains(t, out, "WHERE "+parens(memFilter))
 }
 
 // A qualifier that is present and disagrees is still refused: "some other
