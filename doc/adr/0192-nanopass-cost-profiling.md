@@ -131,8 +131,9 @@ are not.
 The number is wall clock. It is what the author waited for, it is what makes a
 buffer feel broken, and the alternative would understate a rewrite that blocks
 on nothing but still takes four seconds. Its weakness is the usual one: a
-descheduled goroutine inflates it, and this measurement is taken on the render
-thread (§SD3), where the only other work in the frame is the rewrite itself.
+descheduled goroutine inflates it, and since §SD3 moved the measurement onto its
+own goroutine, a loaded machine can now inflate it in a way the inline version
+could not. The figure is a diagnostic, not a benchmark, and is read as one.
 
 ### SD2 — Profiling is opt-in and free when off
 
@@ -142,20 +143,31 @@ no profiler attached pays one relaxed atomic load per pass invocation — on the
 order of 34 loads against a rewrite measured in milliseconds. The execute path
 is never profiled; only `RewriteTrace`, which the panes already call, is.
 
-### SD3 — The trace stays on the render thread, and says so
+### SD3 — The trace is computed off the render thread
 
-`PlayApp.rewriteTraceFor` computes the trace synchronously in the frame that
-needs it, memoised by buffer. This ADR does not move it. The consequence is
-worth stating plainly rather than hiding: on a buffer whose rewrite costs
-seconds, the UI is blocked for those seconds when the buffer settles, and the
-number the pane then reports *is* the freeze the author just experienced. That
-sentence is in the heading badge's tooltip rather than the pane body — §SD7
-keeps the section wordless — but it is stated, not implied.
+`PlayApp.rewriteTraceFor` memoises by buffer and, since the update below,
+computes on a goroutine rather than in the frame that needs it.
+
+The original decision was to keep it synchronous and say so: on a buffer whose
+rewrite costs seconds the UI was blocked for those seconds, and the number the
+pane reported *was* the freeze the author had just experienced. That is honest
+but it is still a freeze, and one this pane causes only for people who opened it
+to investigate slowness.
 
 Moving the trace off the render thread — the `armColumnDiag` pattern of a
-goroutine, a generation counter, and a poll — is **deferred**. It is a
-responsiveness change, it adds a concurrency seam and a "measuring…" state to
-both panes, and it is better made once the numbers say which buffers need it.
+goroutine, a generation counter, and a poll — was **deferred**, on the grounds
+that it is better made once the numbers say which buffers need it.
+
+**Taken, 2026-08-17.** The numbers said so immediately. The first headless run
+of the tour's cost scenes logged three `imzero2: slow frame` warnings against a
+25 ms budget, the worst at `render_us=1.27s`, and the pane was the cause: each
+settled edit ran a full rewrite inline. Reporting a cost by inflicting it is not
+a trade worth keeping, so the trace now runs on a goroutine and both panes carry
+a "measuring…" state. The chart was never implicated — roughly 700 frames drew
+it without a warning.
+
+The measurement it reports is unchanged by the move, and so is §SD1's reasoning:
+wall clock is still what the author waited for. What changed is who waits.
 
 ### SD4 — The trace is an equivalent re-run, not the shipped one
 

@@ -544,7 +544,7 @@ func (inst *PlayApp) renderDiagCostBadge(total time.Duration) {
 			Tooltip("Time this process spends rewriting the statement before it is sent, measured on the buffer that would run. " +
 				"The mark is " + formatCostDur(rewriteCostWarn) + ". Each pass re-parses the statement from text, so the cost grows with " +
 				"expression complexity rather than length — CTEs are disproportionately expensive, and stripping comments does not help. " +
-				"It is computed on the render thread, so it is also how long the UI was blocked when the buffer last settled. " +
+				"It is measured on a background goroutine, so a loaded machine can inflate it. " +
 				"Timings describe this measurement rather than the last Run, and the first one in a session pays a one-off parser warm-up (ADR-0192).").
 			Send()
 	}
