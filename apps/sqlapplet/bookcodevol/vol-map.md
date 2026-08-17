@@ -137,8 +137,8 @@ ORDER BY id
   around its modules; its own `value` is zero and its `bytes` column carries
   the subtree total.
 - **Colour is the party, not a scale** — three qualitative values on a
-  qualitative palette, which is what the treemap panel renders honestly
-  today.
+  qualitative palette. The panel's other arm is a continuous ramp over a
+  numeric `color`; a party is nominal, so this map has no use for it.
 - **Under `size_by = 'data'` the picture inverts.** The standard library
   dominates, because one FIPS buffer is tens of megabytes of zeroes. That is
   a real fact about the binary and a bad proxy for "amount of code", which is
