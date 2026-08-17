@@ -1283,9 +1283,18 @@ SELECT n, w, sz FROM l ORDER BY n LIMIT 20"
 }
 
 scene_12_passes_cost() {
-	desc="Passes — the same schematic on a buffer that is expensive to compile: the unit over 100ms tinted amber, and the wall clock the author waits through before the statement is sent"
+	desc="Passes — Rewrite cost on a buffer that is expensive to compile: the run split (compile vs server), the per-pass waterfall under it, and which sub-passes of the costliest unit rewrote nothing"
 	senv=(BOXER_PLAY_FOCUS_PASSES=1)
 	slow_rewrite_buffer
+	# Two captures, because the payoff is below the fold. The schematic and the
+	# run split lead; the waterfall's tail — where the sub-passes that cost a
+	# re-parse and changed nothing sit — is under it, past the pane height. The
+	# pointer is parked inside the pane body first: a wheel event goes to
+	# whatever is hovered.
+	steps='{"do":"capture","text":"12_passes_cost","settleMs":600}
+{"do":"click","x":1400,"y":450,"comment":"park the pointer inside the Passes body"}
+{"do":"scroll","x":0,"y":-320,"settleMs":500}
+{"do":"capture","text":"12_passes_cost_waterfall","settleMs":600}'
 }
 
 scene_13_diagnostics() {
@@ -1294,22 +1303,6 @@ scene_13_diagnostics() {
 	sql="SELECT \`id:id\`, \`symbal:value\`, \`geoPoint:lattitude\`
 FROM anchor.facts
 LIMIT 20"
-}
-
-scene_13_diagnostics_cost() {
-	desc="Diagnostics — Rewrite cost on that same buffer: the 250ms warning, and what each unit of the client-side rewrite spent"
-	senv=(BOXER_PLAY_FOCUS_DIAGNOSTICS=1)
-	slow_rewrite_buffer
-	# Two captures, because the payoff is below the fold. The section leads with
-	# the warning and the ranked units, and the line that says what to DO about
-	# it — which sub-passes inside the costliest unit spent the time, and how
-	# many of them rewrote nothing for it — sits under the ranked list, past the
-	# pane's height. The pointer is parked inside the pane body first: a wheel
-	# event goes to whatever is hovered.
-	steps='{"do":"capture","text":"13_diagnostics_cost","settleMs":600}
-{"do":"click","x":1400,"y":450,"comment":"park the pointer inside the Diagnostics body"}
-{"do":"scroll","x":0,"y":-260,"settleMs":500}
-{"do":"capture","text":"13_diagnostics_cost_inside","settleMs":600}'
 }
 
 scene_14_docs() {

@@ -690,7 +690,9 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 				scrollTab(func() { inst.renderDiagnosticsTab(f.NumRows, f.Elapsed, f.Summary, f.Executed, f.Err) })
 			}
 		case "passes":
-			spec.Render = func(f *TabFrame) { scrollTab(inst.renderPassesTab) }
+			spec.Render = func(f *TabFrame) {
+				scrollTab(func() { inst.renderPassesTab(f.Elapsed, f.Summary) })
+			}
 		case "vocabulary":
 			// No scrollTab: the body's outline is an etable, which brings its
 			// own scroll and culls the rows outside it. Wrapping it would give

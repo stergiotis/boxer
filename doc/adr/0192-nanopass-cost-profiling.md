@@ -115,11 +115,11 @@ recursion points (`applyWithProps`, `runFixedPoint`) through a side table keyed
 by the `*env.Environment` that `Run` mints, so no `ApplyFunc` signature changes
 and no pass is aware it is being measured.
 
-`passreg.ApplyObservation` will carry that tree per unit, and `play` will render
-it in the two panes that already describe the rewrite: the **Passes** tab tints
-a slow unit on the schematic and shows the measured tree under the selection,
-and the **Diagnostics** tab owns a new *Rewrite cost* section, drawn as
-staggered bar charts (§SD7).
+`passreg.ApplyObservation` will carry that tree per unit, and the **Passes** tab
+will render it: the schematic tints a slow unit and the selection shows its
+measured tree, and below both sits a *Rewrite cost* section drawn as staggered
+bar charts (§SD7). The **Diagnostics** tab keeps the prose it already owned —
+which rewrites were skipped, and why — and carries no cost display.
 
 The warning fires at **250 ms** for the whole rewrite of one buffer. That is
 below the 525 ms the 2.8 KB corpus entry measures and above the 91 ms the 681 B
@@ -207,11 +207,25 @@ human perceives as a stall, not of a deployment, and a knob would make the
 warning mean different things in different sessions. A test pins them so a
 silent drift is a red lane rather than a quieter warning.
 
-### SD7 — The Diagnostics section is a staggered bar chart, not prose
+### SD7 — A staggered bar chart in the Passes tab, drawn for every buffer
 
 The section answers two questions and is shaped by them: *why is this slow*, for
 whoever is waiting, and *which pass is to blame*, for whoever can fix it. Both
 are read fastest from a picture, so the pane draws and does not explain.
+
+It lives in **Passes**, under the schematic. That tab is already about the pass
+pipeline; Diagnostics is where errors are explained, and a cost breakdown is not
+an error. The two now divide as they always claimed to — Passes shows what the
+pipeline is and what it cost, Diagnostics owns the prose for what went wrong.
+
+It is drawn for **every** buffer, not only ones over the mark. The measurement
+is taken regardless — the trace carries a duration per unit whatever the total —
+so gating the display bought nothing and cost a reader the baseline: someone who
+only ever sees the breakdown when something is already wrong has no idea what
+normal looks like, and cannot tell a buffer that doubled from one that was
+always like that. The threshold survives only as the badge's tone and the
+schematic's amber tint — a highlight within a display that is always present,
+rather than a gate on whether there is one.
 
 It is the form a browser's network **Timing** panel uses, and for the same
 reason: these phases are strictly sequential, so where a bar *starts* is
@@ -337,15 +351,14 @@ pane.
   negative or over-long span. The model is pure, so all of that is asserted
   without a renderer.
 - **Second lane — the screenshot tour.**
-  `scripts/dev/play-screenshot-tour.sh` gained `12_passes_cost` and
-  `13_diagnostics_cost`, both on one deliberately expensive buffer
-  (`slow_rewrite_buffer`: twelve chained CTEs over `numbers()`, no fixture,
-  measured at ~545 ms). They are what covers the WARNING path — the amber unit
-  on the schematic, the badge, and the sub-pass breakdown — none of which a
-  synthetic observation exercises end to end. The Diagnostics scene captures
-  twice, scrolling to the culprit line, because it sits below the pane fold.
-  The buffer is under a kilobyte on purpose: it is the standing demonstration
-  that this cost tracks expression complexity rather than length.
+  `scripts/dev/play-screenshot-tour.sh` gained `12_passes_cost`, on a
+  deliberately expensive buffer (`slow_rewrite_buffer`: twelve chained CTEs over
+  `numbers()`, no fixture, measured at ~545 ms). It is what covers the drawn
+  surface end to end — the amber unit on the schematic, the badge, the run split
+  and the waterfall — none of which a synthetic observation exercises. It
+  captures twice, scrolling, because the waterfall's tail sits below the pane
+  fold. The buffer is under a kilobyte on purpose: it is the standing
+  demonstration that this cost tracks expression complexity rather than length.
 - **What would fail.** A combinator added later that invokes a child by a route
   other than `applyWithProps` would silently drop that subtree from the tree; a
   shape assertion over a nested composite catches it. A threshold edited without
