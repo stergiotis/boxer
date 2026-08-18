@@ -1,14 +1,13 @@
 ---
 type: explanation
 audience: prospective consumers and integrators evaluating adoption
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-18
 ---
 
-> **Status: draft — pre-human-review.** Not verified; do not cite as
-> authoritative. Where this page and [why-boxer](./why-boxer.md) or an ADR
-> disagree, those are the record.
+> Where this page and [why-boxer](./why-boxer.md) or an ADR disagree, those
+> are the record.
 
 # Positioning statement
 
@@ -17,9 +16,8 @@ cut from. The form is Geoffrey Moore's positioning template: *for* a target
 customer *who* has a need, *the product* is a category *that* delivers a key
 benefit; *unlike* the primary alternative, *the product* differs in one
 primary way. The short form leads the README's [Why](../../README.md#why)
-section. This page carries the full six-slot form, the premise or decision
-each clause rests on, the alternative the statement positions against, and
-the words it deliberately does not use.
+section. This page carries the full six-slot form and the premise or
+decision each clause rests on.
 
 ## Short form
 
@@ -80,44 +78,6 @@ a stack a small team can read from source, end to end.
 | boxer | operable by people and by agents through machine-readable surfaces | P7 (the agentic tier over P3's surfaces); the introspection tables ([ADR-0094](../adr/0094-keelson-introspection-tables.md)); the natural-language surfaces are proposed, not shipped ([ADR-0120](../adr/0120-play-natural-language-ask-panel.md), [ADR-0139](../adr/0139-semantic-layer-text2dsl.md)) |
 | boxer | one memory-safe Go + Rust boundary, the engine beside it | the standing commitments in why-boxer |
 | boxer | trading ecosystem breadth and a stable API | P1 and P6 costs; "What this costs you" |
-
-## The alternative named
-
-The "unlike" slot names what a team with the same requirements would
-otherwise do. Three were considered:
-
-- **Vendored best-of-breed composition** — mainstream parts pinned and
-  audited in-tree, built offline, glued by hand. It is the primary
-  alternative because it meets P1 and is cheaper; why-boxer concedes that
-  vendoring is cheaper than rewriting. The statement therefore differentiates
-  on compounding — parts that share one model and one record of what they do
-  — not on sovereignty, which the alternative also delivers.
-- **A single-language sovereign stack** (for example Rust-only, with the
-  analytical engine linked in) — pulls even the engine inside the memory-safe
-  boundary at the cost of a less boring host and a larger crate closure.
-- **Buying accountability** from a vendor who carries product liability,
-  self-hostable and source-escrowed — keeps liability offload but fails
-  "outlive its vendors" without escrow. A team that would accept escrow is
-  not the statement's customer.
-
-## Words deliberately not used
-
-- Quality adjectives — *elegant*, *robust*, *performant*, *bloat*,
-  *ultimate*: the repository's writing rule is descriptive and humble.
-- *Formally verifiable* — nothing formal exists in the tree; the honest word
-  is machine-checked (fuzz and property tests, goldens, conformance suites,
-  declared pass properties).
-- *Fully columnar* — the data plane is columnar (structs of arrays in
-  memory, Arrow over the wire, ClickHouse on disk); bus control messages are
-  deliberately record-shaped
-  ([ADR-0036](../adr/0036-runtime-buscodec.md)).
-- *AI-assisted* as a customer trait — authoring assistance is the producer's
-  development model (P6), not the consumer's need; what the statement claims
-  is agentic *operation* through machine-readable surfaces (P7).
-- *Sink* for ClickHouse — it is the query-execution engine and database.
-- *Replaces* best-of-breed — for a team outside P1, why-boxer says the
-  mainstream stack is the better answer; the statement names the
-  alternative, it does not dismiss it.
 
 ## Further reading
 
