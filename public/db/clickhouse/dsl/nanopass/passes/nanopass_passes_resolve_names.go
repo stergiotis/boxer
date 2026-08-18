@@ -158,35 +158,33 @@ func resolveNamesInQueryCTEs(rw nanopass.RewriterI, pr *nanopass.ParseResult, fl
 	})
 }
 
-// scopeOfFirstSelect finds the scope of the first selectStmt under query's
-// selectUnionStmt child. Returns nil when the query has no built scope — a
-// shape BuildScopes declined to model, which is left alone rather than guessed.
-func scopeOfFirstSelect(query antlr.Tree, byNode map[*grammar1.SelectStmtContext]*nanopass.SelectScope) (scope *nanopass.SelectScope) {
-	if query == nil {
+// scopeOfFirstSelect finds the scope of the first selectStmt under the node a
+// ctes clause hangs off: the selectUnionStmt it heads, or — for a non-first
+// union arm — that arm's selectUnionStmtItem. ADR-0196 §SD5 put the clause on
+// those two nodes; before it, the caller passed the enclosing `query`.
+//
+// Returns nil when the shape has no built scope — one BuildScopes declined to
+// model, which is left alone rather than guessed at.
+func scopeOfFirstSelect(withParent antlr.Tree, byNode map[*grammar1.SelectStmtContext]*nanopass.SelectScope) (scope *nanopass.SelectScope) {
+	if withParent == nil {
 		return
 	}
-	queryCtx, ok := query.(*grammar1.QueryContext)
-	if !ok {
+	switch withParent.(type) {
+	case *grammar1.SelectUnionStmtContext, *grammar1.SelectUnionStmtItemContext:
+	default:
 		return
 	}
-	for i := 0; i < queryCtx.GetChildCount(); i++ {
-		union, ok := queryCtx.GetChild(i).(*grammar1.SelectUnionStmtContext)
-		if !ok {
-			continue
-		}
-		nanopass.WalkCST(union, func(ctx antlr.ParserRuleContext) bool {
-			if scope != nil {
-				return false
-			}
-			stmt, ok := ctx.(*grammar1.SelectStmtContext)
-			if !ok {
-				return true
-			}
-			scope = byNode[stmt]
+	nanopass.WalkCST(withParent, func(ctx antlr.ParserRuleContext) bool {
+		if scope != nil {
 			return false
-		})
-		return
-	}
+		}
+		stmt, ok := ctx.(*grammar1.SelectStmtContext)
+		if !ok {
+			return true
+		}
+		scope = byNode[stmt]
+		return false
+	})
 	return
 }
 

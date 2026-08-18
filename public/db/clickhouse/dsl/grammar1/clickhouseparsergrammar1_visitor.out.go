@@ -64,9 +64,6 @@ type ClickHouseParserGrammar1Visitor interface {
 	// Visit a parse tree produced by ClickHouseParserGrammar1#dynamicColumnSelection.
 	VisitDynamicColumnSelection(ctx *DynamicColumnSelectionContext) interface{}
 
-	// Visit a parse tree produced by ClickHouseParserGrammar1#withClause.
-	VisitWithClause(ctx *WithClauseContext) interface{}
-
 	// Visit a parse tree produced by ClickHouseParserGrammar1#topClause.
 	VisitTopClause(ctx *TopClauseContext) interface{}
 

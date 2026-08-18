@@ -79,10 +79,6 @@ func (v *BaseClickHouseParserGrammar2Visitor) VisitDynamicColumnSelection(ctx *D
 	return v.VisitChildren(ctx)
 }
 
-func (v *BaseClickHouseParserGrammar2Visitor) VisitWithClause(ctx *WithClauseContext) interface{} {
-	return v.VisitChildren(ctx)
-}
-
 func (v *BaseClickHouseParserGrammar2Visitor) VisitTopClause(ctx *TopClauseContext) interface{} {
 	return v.VisitChildren(ctx)
 }

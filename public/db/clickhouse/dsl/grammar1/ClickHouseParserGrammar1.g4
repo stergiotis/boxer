@@ -33,7 +33,7 @@ options {
 // Top-level statements
 queryStmt: query (FORMAT identifierOrNull)? (SEMICOLON)? EOF
          | insertStmt;
-query: setStmt* ctes? selectUnionStmt;
+query: setStmt* selectUnionStmt;
 multiQuery: query+ EOF;
 
 // INSERT wrapper — ADR-0181 §SD8 (Update 2026-08-15), ported from the
@@ -58,11 +58,30 @@ withItem
     | columnsExpr                                                                  # WithItemColumnsExpr
     ;
 
-// CTE statement — kept as a top-level optional in `query` (see line above) so
-// that scoping for CTE-on-union still anchors at the query level. RECURSIVE
-// applies to the whole clause (ClickHouse ≥ 24.4 recursive CTEs); ANTLR's
-// adaptive prediction keeps a CTE *named* `recursive` unambiguous (RECURSIVE
-// followed by AS is a name, followed by an identifier it is the modifier).
+// CTE statement — an optional prefix on `selectUnionStmt`, which is the node it
+// actually scopes: a leading WITH covers every arm of the union, not only the
+// first. `ctes` is the single rule in this grammar that accepts a WITH; a
+// non-first arm reaches it through `selectUnionStmtItem`, and a parenthesised
+// or subquery statement through its own `selectUnionStmt`. No decision ever has
+// to choose between two rules that could consume the same WITH.
+//
+// That last property is the point (ADR-0196 §SD5). Until then `ctes` sat on
+// `query` while a second rule, `withClause`, carried a byte-identical
+// right-hand side on `selectStmt`. Both were reachable at a leading WITH and
+// derived it identically, so ANTLR could only separate them by simulating to
+// the end of the clause under full-context LL — a prediction it never writes to
+// the DFA and therefore repeats on every parse. That one decision was 98.2% of
+// all full-context prediction work and cost ~95 ms on a 9 KB statement.
+//
+// Nothing was given up for it. The three positions a WITH may open —
+// statement head, non-first union arm, parenthesised or subquery statement —
+// all reach this one rule, and each is its own LL(1) decision because each is
+// preceded by a distinct token (nothing, a set operator, or a paren).
+//
+// RECURSIVE applies to the whole clause (ClickHouse ≥ 24.4 recursive CTEs);
+// ANTLR's adaptive prediction keeps a CTE *named* `recursive` unambiguous
+// (RECURSIVE followed by AS is a name, followed by an identifier it is the
+// modifier).
 ctes
     : WITH RECURSIVE? withItem (COMMA withItem)*
     ;
@@ -77,11 +96,18 @@ columnAliases
 
 // SELECT statement
 
-selectUnionStmt: selectStmtWithParens selectUnionStmtItem*;
-selectUnionStmtItem: (( UNION | EXCEPT | INTERSECT ) ( ALL | DISTINCT )? selectStmtWithParens);
+// The `ctes?` prefix is this grammar's only WITH — see the ctes rule.
+selectUnionStmt: ctes? selectStmtWithParens selectUnionStmtItem*;
+// A non-first arm may open its own WITH, scoped forward from that arm (which
+// is ClickHouse's live-verified behaviour). It reuses `ctes`, and it is a
+// second *position* rather than a second rule: the decision here follows the
+// UNION/EXCEPT/INTERSECT operator, so no single decision ever has to choose
+// between this clause and the one on selectUnionStmt. That distinction is the
+// whole of ADR-0196 §SD5 — the retired `withClause` rule was identical to
+// `ctes` and reachable at the *same* position as it.
+selectUnionStmtItem: (( UNION | EXCEPT | INTERSECT ) ( ALL | DISTINCT )? ctes? selectStmtWithParens);
 selectStmtWithParens: selectStmt | (LPAREN selectUnionStmt RPAREN);
 selectStmt:
-    withClause?
     projectionClause
     fromClause?
     arrayJoinClause?
@@ -104,7 +130,6 @@ staticOrDynamicColumnSelection
     | dynamicColumnSelection               # DynamicColumnList;
 dynamicColumnSelection
     : COLUMNS LPAREN STRING_LITERAL RPAREN;
-withClause: WITH RECURSIVE? withItem (COMMA withItem)*;
 topClause: TOP DECIMAL_LITERAL (WITH TIES)?;
 fromClause: FROM joinExpr;
 arrayJoinClause: (LEFT | INNER)? ARRAY JOIN columnExprList;

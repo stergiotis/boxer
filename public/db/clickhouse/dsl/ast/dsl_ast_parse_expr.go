@@ -603,7 +603,7 @@ func convertSubquery(pr *nanopass.ParseResult, ctx *grammar2.ColumnExprSubqueryC
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if sus, ok := ctx.GetChild(i).(*grammar2.SelectUnionStmtContext); ok {
 			var su SelectUnion
-			su, err = convertSelectUnion(pr, sus)
+			su, err = convertParenthesisedUnion(pr, sus)
 			if err != nil {
 				return
 			}

@@ -415,7 +415,7 @@ func clauseAround(node antlr.Tree) (clause string) {
 			return "ORDER"
 		case *grammar1.SettingsClauseContext:
 			return "SETTINGS"
-		case *grammar1.WithClauseContext:
+		case *grammar1.CtesContext:
 			return "WITH"
 		case *grammar1.ProjectionClauseContext:
 			return "SELECT"

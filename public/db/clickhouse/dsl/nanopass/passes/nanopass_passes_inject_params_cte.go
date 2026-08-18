@@ -207,7 +207,10 @@ func insertCTEDefinitions(query string, accepted []acceptedParam) (result string
 // ctes? or the given selectStmt's withClause?, whichever holds the existing
 // WITH for this query. Returns nil if neither rule produced a withItem.
 func findFirstWithItem(tree antlr.ParserRuleContext, selectStmt *grammar1.SelectStmtContext) grammar1.IWithItemContext {
-	// query-level ctes (preferred at the top level)
+	// The top-level WITH. ADR-0196 §SD5 moved `ctes` from `query` down onto its
+	// selectUnionStmt child, which is also the rule a nested or parenthesised
+	// statement reaches — so the one walk below replaces both the query-level
+	// lookup and the selectStmt-level withClause scan that used to follow it.
 	if qs, ok := tree.(*grammar1.QueryStmtContext); ok {
 		for i := 0; i < qs.GetChildCount(); i++ {
 			q, ok := qs.GetChild(i).(*grammar1.QueryContext)
@@ -215,24 +218,35 @@ func findFirstWithItem(tree antlr.ParserRuleContext, selectStmt *grammar1.Select
 				continue
 			}
 			for j := 0; j < q.GetChildCount(); j++ {
-				ctes, ok := q.GetChild(j).(*grammar1.CtesContext)
+				u, ok := q.GetChild(j).(*grammar1.SelectUnionStmtContext)
 				if !ok {
 					continue
 				}
-				if wi := firstWithItemIn(ctes); wi != nil {
+				if wi := firstWithItemUnderUnion(u); wi != nil {
 					return wi
 				}
 			}
 		}
 	}
-	// selectStmt-level withClause (used for nested SELECTs)
-	for i := 0; i < selectStmt.GetChildCount(); i++ {
-		wc, ok := selectStmt.GetChild(i).(*grammar1.WithClauseContext)
+	// A nested SELECT: walk out to the union that encloses it and take its WITH.
+	for node := antlr.Tree(selectStmt); node != nil; node = node.GetParent() {
+		u, ok := node.(*grammar1.SelectUnionStmtContext)
 		if !ok {
 			continue
 		}
-		if wi := firstWithItemIn(wc); wi != nil {
+		if wi := firstWithItemUnderUnion(u); wi != nil {
 			return wi
+		}
+	}
+	return nil
+}
+
+// firstWithItemUnderUnion returns the first withItem of a selectUnionStmt's own
+// ctes prefix, or nil when it has none.
+func firstWithItemUnderUnion(u *grammar1.SelectUnionStmtContext) grammar1.IWithItemContext {
+	for i := 0; i < u.GetChildCount(); i++ {
+		if ctes, ok := u.GetChild(i).(*grammar1.CtesContext); ok {
+			return firstWithItemIn(ctes)
 		}
 	}
 	return nil

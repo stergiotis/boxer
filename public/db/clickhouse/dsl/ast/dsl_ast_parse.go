@@ -58,18 +58,23 @@ func convertQuery(pr *nanopass.ParseResult, ctx *grammar2.QueryContext) (query Q
 				return
 			}
 			query.Settings = append(query.Settings, settings...)
-		case *grammar2.CtesContext:
-			var scalarWith []Expr
-			query.CTEs, scalarWith, query.Recursive, err = convertCTEs(pr, c)
-			if err != nil {
-				return
-			}
-			// Scalar WITH items (`expr AS name`) at the query level share
-			// the WITH clause with CTEs — Query.With is their home (ToSQL
-			// emits them in the same WITH). Dropping them, as the previous
-			// converter did, detached every reference.
-			query.With = append(query.With, scalarWith...)
 		case *grammar2.SelectUnionStmtContext:
+			// The query-level WITH. ADR-0196 §SD5 moved `ctes` off `query` and
+			// onto its selectUnionStmt child — the node a leading WITH actually
+			// scopes — so it is read from there now, and still lands on Query,
+			// which is where a query-scoped WITH belongs.
+			if ctes := ctesOf(c); ctes != nil {
+				var scalarWith []Expr
+				query.CTEs, scalarWith, query.Recursive, err = convertCTEs(pr, ctes)
+				if err != nil {
+					return
+				}
+				// Scalar WITH items (`expr AS name`) at the query level share
+				// the WITH clause with CTEs — Query.With is their home (ToSQL
+				// emits them in the same WITH). Dropping them, as an earlier
+				// converter did, detached every reference.
+				query.With = append(query.With, scalarWith...)
+			}
 			query.Body, err = convertSelectUnion(pr, c)
 			if err != nil {
 				return
@@ -225,6 +230,47 @@ func convertColumnAliases(ctx *grammar2.ColumnAliasesContext) (aliases []string)
 	return
 }
 
+// ctesOf returns a selectUnionStmt's own `ctes` prefix, or nil when it has none.
+// Since ADR-0196 §SD5 that prefix is the only WITH clause in the grammar.
+func ctesOf(union *grammar2.SelectUnionStmtContext) *grammar2.CtesContext {
+	for i := 0; i < union.GetChildCount(); i++ {
+		if c, ok := union.GetChild(i).(*grammar2.CtesContext); ok {
+			return c
+		}
+	}
+	return nil
+}
+
+// convertParenthesisedUnion converts a parenthesised selectUnionStmt: a
+// parenthesised union arm, or any of the three subquery positions.
+//
+// The union may open with its own WITH. There is no AST node for a
+// parenthesised statement, so it rides on the head Select — which is where the
+// pre-ADR-0196 grammar put it too, via selectStmt's own withClause — leaving
+// the AST shape and the round-trip unchanged. Only the top level
+// (convertQuery) lifts it further, onto Query.
+func convertParenthesisedUnion(pr *nanopass.ParseResult, ctx *grammar2.SelectUnionStmtContext) (su SelectUnion, err error) {
+	su, err = convertSelectUnion(pr, ctx)
+	if err != nil {
+		return
+	}
+	ctes := ctesOf(ctx)
+	if ctes == nil {
+		return
+	}
+	var cteList []CTE
+	var scalarWith []Expr
+	var recursive bool
+	cteList, scalarWith, recursive, err = convertCTEs(pr, ctes)
+	if err != nil {
+		return
+	}
+	su.Head.CTEs = append(cteList, su.Head.CTEs...)
+	su.Head.With = append(scalarWith, su.Head.With...)
+	su.Head.Recursive = su.Head.Recursive || recursive
+	return
+}
+
 // --- SELECT UNION ---
 
 func convertSelectUnion(pr *nanopass.ParseResult, ctx *grammar2.SelectUnionStmtContext) (su SelectUnion, err error) {
@@ -256,6 +302,7 @@ func convertSelectUnion(pr *nanopass.ParseResult, ctx *grammar2.SelectUnionStmtC
 }
 
 func convertSelectUnionItem(pr *nanopass.ParseResult, ctx *grammar2.SelectUnionStmtItemContext) (item SelectUnionItem, err error) {
+	var ownCtes *grammar2.CtesContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
@@ -278,6 +325,27 @@ func convertSelectUnionItem(pr *nanopass.ParseResult, ctx *grammar2.SelectUnionS
 				return
 			}
 		}
+		// A non-first arm may open its own WITH. ADR-0196 §SD5 moved it from the
+		// arm's selectStmt onto this item; it is collected here and applied
+		// after the loop, because `ctes` precedes `selectStmtWithParens` in
+		// child order and the Body assignment above would otherwise clobber it.
+		if c, ok := child.(*grammar2.CtesContext); ok {
+			ownCtes = c
+		}
+	}
+	if ownCtes != nil {
+		// Parked on the arm's head Select — the node this clause used to live
+		// on — so the AST shape and the round-trip are unchanged.
+		var cteList []CTE
+		var scalarWith []Expr
+		var recursive bool
+		cteList, scalarWith, recursive, err = convertCTEs(pr, ownCtes)
+		if err != nil {
+			return
+		}
+		item.Body.Head.CTEs = append(cteList, item.Body.Head.CTEs...)
+		item.Body.Head.With = append(scalarWith, item.Body.Head.With...)
+		item.Body.Head.Recursive = item.Body.Head.Recursive || recursive
 	}
 	return
 }
@@ -292,7 +360,7 @@ func convertSelectStmtWithParens(pr *nanopass.ParseResult, ctx *grammar2.SelectS
 			su.Head, err = convertSelectStmt(pr, c)
 			return
 		case *grammar2.SelectUnionStmtContext:
-			return convertSelectUnion(pr, c)
+			return convertParenthesisedUnion(pr, c)
 		}
 	}
 	err = eh.Errorf("convertSelectStmtWithParens: empty")
@@ -307,8 +375,6 @@ func convertSelectStmt(pr *nanopass.ParseResult, ctx *grammar2.SelectStmtContext
 		switch c := child.(type) {
 		case *grammar2.ProjectionClauseContext:
 			err = convertProjectionClause(pr, c, &sel)
-		case *grammar2.WithClauseContext:
-			sel.With, sel.CTEs, sel.Recursive, err = convertWithClause(pr, c)
 		case *grammar2.FromClauseContext:
 			var je JoinExpr
 			je, err = convertFromClause(pr, c)
@@ -427,41 +493,6 @@ func convertProjectionExceptClause(ctx *grammar2.ProjectionExceptClauseContext) 
 					exc.Dynamic = extractDynamicPattern(dcs)
 				}
 			}
-		}
-	}
-	return
-}
-
-func convertWithClause(pr *nanopass.ParseResult, ctx *grammar2.WithClauseContext) (exprs []Expr, ctes []CTE, recursive bool, err error) {
-	// withClause holds a sequence of withItem alternatives: scalar aliases
-	// (`expr AS name`) land in exprs; named queries (`name AS (query)`) are
-	// CTEs declared at the selectStmt level — union branches and subqueries
-	// carry their WITH here, never via the query-level ctes rule — and land
-	// in ctes. Dropping them would detach every reference in the body. The
-	// RECURSIVE modifier applies to the whole clause.
-	recursive = ctx.RECURSIVE() != nil
-	for i := 0; i < ctx.GetChildCount(); i++ {
-		switch wi := ctx.GetChild(i).(type) {
-		case *grammar2.WithItemColumnsExprContext:
-			ce := wi.ColumnsExpr()
-			if ce == nil {
-				continue
-			}
-			exprs, err = appendColumnsExpr(pr, ce, exprs)
-			if err != nil {
-				return
-			}
-		case *grammar2.WithItemNamedQueryContext:
-			nq, ok := wi.NamedQuery().(*grammar2.NamedQueryContext)
-			if !ok {
-				continue
-			}
-			var cte CTE
-			cte, err = convertNamedQuery(pr, nq)
-			if err != nil {
-				return
-			}
-			ctes = append(ctes, cte)
 		}
 	}
 	return
@@ -863,7 +894,7 @@ func convertTableExpr(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext, td 
 		for i := 0; i < c.GetChildCount(); i++ {
 			if sus, ok := c.GetChild(i).(*grammar2.SelectUnionStmtContext); ok {
 				var su SelectUnion
-				su, err = convertSelectUnion(pr, sus)
+				su, err = convertParenthesisedUnion(pr, sus)
 				if err != nil {
 					return
 				}
@@ -1085,9 +1116,9 @@ func convertRatioExpr(pr *nanopass.ParseResult, ctx *grammar2.RatioExprContext) 
 
 // appendColumnsExpr converts a single columnsExpr CST node — its column,
 // asterisk, and subquery alternatives — and appends the resulting Expr(s) to
-// exprs, returning the extended slice. convertWithClause and
-// convertColumnExprList select the node differently (a withItem's ColumnsExpr()
-// vs a columnExprList child) but convert the alternatives identically.
+// exprs, returning the extended slice. convertCTEs and convertColumnExprList
+// select the node differently (a withItem's ColumnsExpr() vs a columnExprList
+// child) but convert the alternatives identically.
 func appendColumnsExpr(pr *nanopass.ParseResult, node antlr.Tree, exprs []Expr) (out []Expr, err error) {
 	out = exprs
 	switch c := node.(type) {
@@ -1108,7 +1139,7 @@ func appendColumnsExpr(pr *nanopass.ParseResult, node antlr.Tree, exprs []Expr) 
 		for j := 0; j < c.GetChildCount(); j++ {
 			if sus, ok := c.GetChild(j).(*grammar2.SelectUnionStmtContext); ok {
 				var su SelectUnion
-				su, err = convertSelectUnion(pr, sus)
+				su, err = convertParenthesisedUnion(pr, sus)
 				if err != nil {
 					return
 				}

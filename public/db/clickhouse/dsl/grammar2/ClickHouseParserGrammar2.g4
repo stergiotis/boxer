@@ -53,7 +53,7 @@ options {
 // Top-level statements
 queryStmt: query (FORMAT IDENTIFIER)? (SEMICOLON)? EOF
          | insertStmt;
-query: setStmt* ctes? selectUnionStmt;
+query: setStmt* selectUnionStmt;
 
 // INSERT wrapper — ADR-0181 §SD8 (Update 2026-08-15), the canonical mirror
 // of grammar1's rule. The TABLE noise word is absent: canonical form keeps
@@ -70,8 +70,14 @@ withItem
     | columnsExpr                                                                  # WithItemColumnsExpr
     ;
 
-// CTE statement. RECURSIVE applies to the whole clause; canonical form keeps
-// it verbatim (it is semantics, not sugar).
+// CTE statement — an optional prefix on `selectUnionStmt`, the node it scopes,
+// and the only rule here that accepts a WITH. See grammar1's ctes comment for
+// why there is exactly one (ADR-0196 §SD5): the duplicate `withClause` rule on
+// `selectStmt` made a leading WITH ambiguous and cost ~95 ms on a 9 KB parse.
+// Grammar2 carried the identical duplication and the identical cost.
+//
+// RECURSIVE applies to the whole clause; canonical form keeps it verbatim (it
+// is semantics, not sugar).
 ctes
     : WITH RECURSIVE? withItem (COMMA withItem)*
     ;
@@ -86,11 +92,18 @@ columnAliases
 
 // SELECT statement
 
-selectUnionStmt: selectStmtWithParens selectUnionStmtItem*;
-selectUnionStmtItem: (( UNION | EXCEPT | INTERSECT ) ( ALL | DISTINCT )? selectStmtWithParens);
+// The `ctes?` prefix is this grammar's only WITH — see the ctes rule.
+selectUnionStmt: ctes? selectStmtWithParens selectUnionStmtItem*;
+// A non-first arm may open its own WITH, scoped forward from that arm (which
+// is ClickHouse's live-verified behaviour). It reuses `ctes`, and it is a
+// second *position* rather than a second rule: the decision here follows the
+// UNION/EXCEPT/INTERSECT operator, so no single decision ever has to choose
+// between this clause and the one on selectUnionStmt. That distinction is the
+// whole of ADR-0196 §SD5 — the retired `withClause` rule was identical to
+// `ctes` and reachable at the *same* position as it.
+selectUnionStmtItem: (( UNION | EXCEPT | INTERSECT ) ( ALL | DISTINCT )? ctes? selectStmtWithParens);
 selectStmtWithParens: selectStmt | (LPAREN selectUnionStmt RPAREN);
 selectStmt:
-    withClause?
     projectionClause
     fromClause?
     arrayJoinClause?
@@ -113,7 +126,6 @@ staticOrDynamicColumnSelection
     | dynamicColumnSelection               # DynamicColumnList;
 dynamicColumnSelection
     : COLUMNS LPAREN STRING_LITERAL RPAREN;
-withClause: WITH RECURSIVE? withItem (COMMA withItem)*;
 topClause: TOP DECIMAL_LITERAL (WITH TIES)?;
 fromClause: FROM joinExpr;
 arrayJoinClause: (LEFT | INNER)? ARRAY JOIN columnExprList;

@@ -287,50 +287,67 @@ func rootUnitNode(tree antlr.ParserRuleContext) *grammar1.SelectUnionStmtContext
 // pickSubquery's innermost-wins tie-break then orders all three correctly.
 func collectSubqueries(pr *nanopass.ParseResult, node antlr.Tree, chain []scopeFrame, depth int, scopes scopeIndex, root *grammar1.SelectUnionStmtContext, out *[]subqueryUnit) {
 	switch n := node.(type) {
-	case *grammar1.QueryContext:
-		// `query: setStmt* ctes? selectUnionStmt` — the clause sits ABOVE the
-		// selectUnionStmt, so even the statement's own top-level CTEs are a
-		// hoisted scope rather than part of any unit's text.
-		if ct := n.Ctes(); ct != nil {
-			chain = extendChain(chain, withItemsOf(pr, ct.AllWithItem(), ct.RECURSIVE() != nil))
-		}
 	case *grammar1.SelectStmtContext:
-		// A bare branch of a multi-branch chain is a runnable unit of its
-		// own: the caret in `SELECT 1 UNION ALL SELECT |2` narrows to
-		// `SELECT 2`, exactly as it already did for the parenthesised
-		// spelling of the same branch. The server scopes a branch's WITH
-		// clause FORWARD only (live-verified: branch 2 sees branch 1's
-		// items, never the reverse), so the frames extend with the
-		// withClauses of the EARLIER bare branches — for the unit emitted
-		// here, and for everything nested inside this branch alike.
+		// A bare branch of a multi-branch chain is a runnable unit of its own:
+		// the caret in `SELECT 1 UNION ALL SELECT |2` narrows to `SELECT 2`,
+		// exactly as it already did for the parenthesised spelling of the same
+		// branch. It never carries a WITH of its own — since ADR-0196 §SD5 only
+		// the enclosing selectUnionStmt can open one, and that clause is
+		// already in this unit's chain by the time the walk reaches here.
+		//
+		// The forward-only scoping this case used to implement (live-verified:
+		// branch 2 saw branch 1's items, never the reverse) went with it: a
+		// bare branch can no longer be written with its own WITH, so the case
+		// it handled is unreachable. The parenthesised spelling nests a unit
+		// that owns its clause, which is handled below.
 		if chainNode, index := unionBranchOf(n); index >= 0 {
-			for _, earlier := range bareBranches(chainNode)[:index] {
-				if earlier == nil {
+			// The server scopes an arm's WITH FORWARD only (live-verified: arm 2
+			// sees arm 1's items, never the reverse), so the frames extend with
+			// every earlier arm's clause. Arm 0's is the chain's own and the
+			// SelectUnionStmtContext case below already put it on the chain, so
+			// the loop starts at 1.
+			//
+			// Since ADR-0196 §SD5 an arm's clause sits outside its selectStmt —
+			// on the chain, or on the selectUnionStmtItem — so it is hoisted
+			// rather than shipped in the unit's own text, and the splice puts it
+			// back in front. That is why ownWc is nil here.
+			for i := 1; i <= index; i++ {
+				ct := armCtes(chainNode, i)
+				if ct == nil {
 					continue
 				}
-				if wc := earlier.WithClause(); wc != nil {
-					chain = extendChain(chain, withItemsOf(pr, wc.AllWithItem(), wc.RECURSIVE() != nil))
-				}
+				chain = extendChain(chain, withItemsOf(pr, ct.AllWithItem(), ct.RECURSIVE() != nil))
 			}
-			if u, ok := unitFor(pr, n, n.WithClause(), chain, depth+1, scopes, false); ok {
+			if u, ok := unitFor(pr, n, nil, chain, depth+1, scopes, false); ok {
 				*out = append(*out, u)
 			}
 		}
-		// A select's own `withClause` and FROM sources are visible to the
-		// subqueries inside it, but not to the selectUnionStmt that heads it —
-		// that unit carries the clause in its own text (see bodyAt) and its own
-		// sources with it.
-		frame := scopeFrame{binds: scopes.bindsOf(n)}
-		if wc := n.WithClause(); wc != nil {
-			items := withItemsOf(pr, wc.AllWithItem(), wc.RECURSIVE() != nil)
-			frame.items, frame.keys, frame.recursive = items.items, items.keys, items.recursive
-		}
-		if len(frame.items) > 0 || len(frame.binds) > 0 {
-			chain = extendChain(chain, frame)
+		// A select's FROM sources are visible to the subqueries inside it.
+		if binds := scopes.bindsOf(n); len(binds) > 0 {
+			chain = extendChain(chain, scopeFrame{binds: binds})
 		}
 	case *grammar1.SelectUnionStmtContext:
 		depth += 2
-		if u, ok := unitFor(pr, n, ownWithClause(n), chain, depth, scopes, n == root); ok {
+		// A chain's own WITH is its CLOSURE, not part of the runnable unit.
+		// Subquery mode ships the unit's text and splices carried items in front
+		// of it, and the whole UX rests on the clause sitting outside the query
+		// it scopes: the main query gets the background tint precisely because
+		// it is a proper subset of the statement.
+		//
+		// The grammar used to say that directly — `ctes` hung off `query`, above
+		// the selectUnionStmt — and ADR-0196 §SD5 moved it inside. So the clause
+		// is hoisted onto the chain here, and the unit's range is pulled in to
+		// start at the first arm, which reproduces the old shape exactly.
+		if own := n.Ctes(); own != nil {
+			chain = extendChain(chain, withItemsOf(pr, own.AllWithItem(), own.RECURSIVE() != nil))
+		}
+		if u, ok := unitFor(pr, n, nil, chain, depth, scopes, n == root); ok {
+			if swp := n.SelectStmtWithParens(); swp != nil {
+				if r := pr.SourceRangeOf(swp); !r.Empty() && r.Start > u.Src.Start {
+					u.Src.Start = r.Start
+					u.bodyAt = r.Start
+				}
+			}
 			*out = append(*out, u)
 		}
 	}
@@ -376,28 +393,18 @@ func unionBranchOf(sel *grammar1.SelectStmtContext) (chain *grammar1.SelectUnion
 	return chain, index
 }
 
-// bareBranches lists a chain's branches in source order, nil where a branch
-// is parenthesised (those nest a chain of their own and carry no top-level
-// withClause of the outer chain's).
-func bareBranches(chain *grammar1.SelectUnionStmtContext) (out []*grammar1.SelectStmtContext) {
-	wrap := func(p grammar1.ISelectStmtWithParensContext) *grammar1.SelectStmtContext {
-		ctx, isParens := p.(*grammar1.SelectStmtWithParensContext)
-		if !isParens {
-			return nil
-		}
-		sel, isSel := ctx.SelectStmt().(*grammar1.SelectStmtContext)
-		if !isSel {
-			return nil
-		}
-		return sel
+// armCtes returns the WITH clause that arm `index` of a chain opens, or nil.
+// The head arm's sits on the chain itself; a later arm's on its
+// selectUnionStmtItem — ADR-0196 §SD5 routes both to the one `ctes` rule.
+func armCtes(chain *grammar1.SelectUnionStmtContext, index int) grammar1.ICtesContext {
+	if index <= 0 {
+		return chain.Ctes()
 	}
 	items := chain.AllSelectUnionStmtItem()
-	out = make([]*grammar1.SelectStmtContext, 0, 1+len(items))
-	out = append(out, wrap(chain.SelectStmtWithParens()))
-	for _, it := range items {
-		out = append(out, wrap(it.SelectStmtWithParens()))
+	if index-1 >= len(items) {
+		return nil
 	}
-	return out
+	return items[index-1].Ctes()
 }
 
 // extendChain appends a frame without letting sibling subtrees share — and then
@@ -408,10 +415,10 @@ func extendChain(chain []scopeFrame, frame scopeFrame) []scopeFrame {
 
 // unitFor builds one unit — a whole selectUnionStmt chain, or a bare branch
 // of one — from the scopes open above it. ownWc is the WITH clause living
-// inside the unit's own text (a chain's first bare branch's, a branch's own),
-// nil when there is none; its items stay in the shipped text and hoisted
-// items are spliced in front of them.
-func unitFor(pr *nanopass.ParseResult, node antlr.ParserRuleContext, ownWc grammar1.IWithClauseContext, chain []scopeFrame, depth int, scopes scopeIndex, isRoot bool) (unit subqueryUnit, ok bool) {
+// inside the unit's own text (a chain's own ctes prefix), nil when there is
+// none; its items stay in the shipped text and hoisted items are spliced in
+// front of them.
+func unitFor(pr *nanopass.ParseResult, node antlr.ParserRuleContext, ownWc grammar1.ICtesContext, chain []scopeFrame, depth int, scopes scopeIndex, isRoot bool) (unit subqueryUnit, ok bool) {
 	src := pr.SourceRangeOf(node)
 	if src.Empty() {
 		return unit, false
@@ -692,29 +699,6 @@ func bareIdentifierOf(expr grammar1.IColumnExprContext) string {
 		return ""
 	}
 	return nanopass.DecodeIdentifier(ids[0].GetText())
-}
-
-// ownWithClause returns the WITH clause the unit itself heads, or nil. Only a
-// bare `selectStmt` first branch can carry one; a parenthesised branch nests
-// another unit, which owns its clause.
-func ownWithClause(node *grammar1.SelectUnionStmtContext) grammar1.IWithClauseContext {
-	parens := node.SelectStmtWithParens()
-	if parens == nil {
-		return nil
-	}
-	ctx, ok := parens.(*grammar1.SelectStmtWithParensContext)
-	if !ok {
-		return nil
-	}
-	stmt := ctx.SelectStmt()
-	if stmt == nil {
-		return nil
-	}
-	sel, ok := stmt.(*grammar1.SelectStmtContext)
-	if !ok {
-		return nil
-	}
-	return sel.WithClause()
 }
 
 // pickSubquery resolves a caret against an already-split statement: the

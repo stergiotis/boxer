@@ -244,22 +244,18 @@ func BuildScopes(pr *ParseResult, defaultDatabase string) (scopes []*SelectScope
 	return
 }
 
-// buildQueryScopes handles a grammar1 query rule: harvests its ctes (if
-// any), builds their body scopes with earlier definitions visible to later
-// ones, then builds the selectUnionStmt's scopes with all definitions plus
-// the inherited ones visible.
+// buildQueryScopes handles a grammar1 query rule by delegating to its
+// selectUnionStmt child.
+//
+// The ctes harvest used to live here, because `query` carried the clause.
+// ADR-0196 §SD5 moved it onto `selectUnionStmt` — the node a leading WITH
+// actually scopes — so buildUnionScopes does the harvesting now, and every
+// position a WITH can appear in (top level, a parenthesised arm, a subquery)
+// gets it from the one place instead of three.
 func buildQueryScopes(query *grammar1.QueryContext, parent *SelectScope, inherited []CTEDef, defaultDB string) (scopes []*SelectScope) {
-	visible := inherited
-	for i := 0; i < query.GetChildCount(); i++ {
-		if ctes, ok := query.GetChild(i).(*grammar1.CtesContext); ok {
-			own := buildCTEDefs(ctes, parent, inherited, defaultDB)
-			visible = combineCTEDefs(own, inherited)
-			break
-		}
-	}
 	for i := 0; i < query.GetChildCount(); i++ {
 		if u, ok := query.GetChild(i).(*grammar1.SelectUnionStmtContext); ok {
-			scopes = buildUnionScopes(u, parent, visible, defaultDB)
+			scopes = buildUnionScopes(u, parent, inherited, defaultDB)
 			return
 		}
 	}
@@ -287,15 +283,35 @@ func combineCTEDefs(own, inherited []CTEDef) []CTEDef {
 func buildUnionScopes(union *grammar1.SelectUnionStmtContext, parent *SelectScope, cteDefs []CTEDef, defaultDB string) (scopes []*SelectScope) {
 	scopes = make([]*SelectScope, 0, union.GetChildCount())
 
+	// Every arm may open its own WITH: the head arm's clause sits on the union,
+	// a later arm's on its selectUnionStmtItem (ADR-0196 §SD5 routes both to the
+	// one `ctes` rule). ClickHouse scopes them FORWARD — an arm sees its own
+	// items and every earlier arm's, never a later one's — so `visible`
+	// accumulates as the walk moves right. Before the repair the head clause
+	// came from `query.ctes` and reached every arm at once, and a later arm's
+	// came from its own selectStmt and reached nothing else; one accumulator
+	// covers both and gets the forward case right.
+	visible := cteDefs
+	harvest := func(node antlr.ParserRuleContext) {
+		for i := 0; i < node.GetChildCount(); i++ {
+			if ctes, ok := node.GetChild(i).(*grammar1.CtesContext); ok {
+				visible = combineCTEDefs(buildCTEDefs(ctes, parent, visible, defaultDB), visible)
+				return
+			}
+		}
+	}
+	harvest(union)
+
 	for i := 0; i < union.GetChildCount(); i++ {
 		child := union.GetChild(i)
 		switch c := child.(type) {
 		case *grammar1.SelectStmtWithParensContext:
-			scopes = append(scopes, buildSelectStmtWithParens(c, parent, cteDefs, defaultDB)...)
+			scopes = append(scopes, buildSelectStmtWithParens(c, parent, visible, defaultDB)...)
 		case *grammar1.SelectUnionStmtItemContext:
+			harvest(c)
 			for j := 0; j < c.GetChildCount(); j++ {
 				if swp, ok := c.GetChild(j).(*grammar1.SelectStmtWithParensContext); ok {
-					scopes = append(scopes, buildSelectStmtWithParens(swp, parent, cteDefs, defaultDB)...)
+					scopes = append(scopes, buildSelectStmtWithParens(swp, parent, visible, defaultDB)...)
 				}
 			}
 		}
@@ -331,15 +347,10 @@ func buildScopeFromSelectStmt(stmt *grammar1.SelectStmtContext, parent *SelectSc
 		DefaultDatabase: defaultDB,
 	}
 
-	// The select's own WITH clause (selectStmt-level — distinct from the
-	// query-level ctes rule) shadows inherited definitions.
+	// A selectStmt carries no WITH clause of its own: since ADR-0196 §SD5 the
+	// only rule that opens one is `ctes` on the enclosing selectUnionStmt, so
+	// whatever it declared arrives here already combined into inheritedDefs.
 	scope.CTEDefs = inheritedDefs
-	if wc := stmt.WithClause(); wc != nil {
-		if wcCtx, ok := wc.(*grammar1.WithClauseContext); ok {
-			own := buildCTEDefs(wcCtx, parent, inheritedDefs, defaultDB)
-			scope.CTEDefs = combineCTEDefs(own, inheritedDefs)
-		}
-	}
 
 	// Extract table sources from FROM/JOIN
 	fromClause := stmt.FromClause()
@@ -675,14 +686,11 @@ func flagDuplicateCTENames(defs []CTEDef) {
 	}
 }
 
-// withClauseIsRecursive reports whether a WITH container (the query-level
-// ctes rule or the selectStmt-level withClause rule) carries the RECURSIVE
-// modifier. The modifier applies to the whole clause.
+// withClauseIsRecursive reports whether a WITH container carries the RECURSIVE
+// modifier, which applies to the whole clause. Since ADR-0196 §SD5 there is one
+// such rule, `ctes`; before it there were two with identical right-hand sides.
 func withClauseIsRecursive(withContainer antlr.ParserRuleContext) bool {
-	switch c := withContainer.(type) {
-	case *grammar1.CtesContext:
-		return c.RECURSIVE() != nil
-	case *grammar1.WithClauseContext:
+	if c, ok := withContainer.(*grammar1.CtesContext); ok {
 		return c.RECURSIVE() != nil
 	}
 	return false
