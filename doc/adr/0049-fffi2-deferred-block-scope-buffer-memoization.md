@@ -175,10 +175,28 @@ Related decisions:
 - [ADR-0012](./0012-imzero2-collapsible-retained-bodies.md) — collapsible retained bodies. ADR-0012 introduced the deferred-block protocol and the two-protocols framing (id-keyed cache + Go-side cost suppression). This ADR sits in the second arm: it reduces Go-side cost without touching the protocol or the cache layer.
 - [ADR-0036](./0036-runtime-buscodec.md) — runtime/buscodec. Same pattern of "introduce a tiny seam, let codegen own the boilerplate, treat the seam as a future composition point." The deferred-block hint vars are the FFFI2 analogue of buscodec's `CodecI` swap-in.
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-when fold occurs. See DOCUMENTATION_STANDARD §1 ADR for the edit-policy tiers.
--->
+### 2026-08-18 — The `RetainedFffiBuilder.buf` follow-up (C5), resolved
+
+Context flagged the 41 % `WriteToFixedKey` share as growing the *consumer* `RetainedFffiBuilder.buf`, "pooled separately … with a 4 KiB cap (`largestPooledBuffer`) that excludes virtually every real-world buffer from reuse — a related issue, but out of scope here"; C5 scored the options on composing with that follow-up. It was measured again at HEAD and is now resolved.
+
+Measured on the demo carousel hosting `play` (Table tab) via `--pprofHttpListenAddress`:
+
+| Quantity | Value |
+| --- | --- |
+| `bytes.growSlice` share of all bytes allocated | 47.8 % (26.5 GB of 54 GB) |
+| mean `growSlice` allocation | 31.4 KiB over 844,904 allocations — 7.7× the 4 KiB ceiling |
+| callers of `Buffer.Write → grow` | `WriteToFixedKey` 47.5 %, `DeferredBlockScope.End` 23.4 %, `Fffi2.SendIntermediate` 15.6 %, `AppendRawToCapture` 8.4 % |
+| wire bytes per frame | ~460 KiB (the Rust side independently reports ~489 KiB of scope data per frame) |
+| pool *hit* rate | ~99.9 % |
+
+The ceiling inverted the pool's intent. It was never missing — it only ever handed back buffers ≤4 KiB, so the buffers cheap to grow were the only ones retained and every buffer expensive to grow was discarded and re-doubled from `defaultBufferSize` on the next frame. Against a small live heap (89 MB, default `GOGC=100`, no `GOMEMLIMIT`) that drove roughly 6–10 collections per second; `runtime.gcDrain` was 37.8 % cum of a render-busy CPU profile.
+
+**Decision.** `largestPooledBuffer` goes 4 KiB → 256 KiB, and `defaultBufferSize` is decoupled from it — it was `largestPooledBuffer / 8`, so raising the ceiling alone would have silently taken every fresh buffer from 512 B to 32 KiB; it is now an independent 512 B. Ceiling-only: above the working set the pool is self-tuning, because grown buffers survive `Put` and `Get` returns a right-sized buffer within a few frames, so no sizing logic is needed. Retention stays bounded by `sync.Pool`'s collector-driven clearing (victim cache, two GC cycles), which is what golang/go#23199 asks for.
+
+Rejected: **size-bucketed pools** — a bucket-selection policy and its test surface, for a win plain reuse already delivers; **extending this ADR's per-kind hint to the builder** (C5's `++`) — it sizes only the first frame, and reuse covers steady state.
+
+**Verification.** `TestPoolRetainsRealisticFrameBuffer` pins the predicate rather than the outcome: a 128 KiB buffer must still satisfy the retention test. It fails at the old ceiling (`131072 is not less than or equal to 4096`). Pool identity is deliberately not asserted — `sync.Pool` may drop entries at any GC, so a `Put`/`Get` round-trip is not a testable property.
+
+**Still open from this ADR.** Decision item 5's `/debug/pprof/custom/scopehints` handler was never wired; of the three named consumers only the slow-frame logger landed (`metrics.go`'s `RecordBytes`). `ScopeHintsSnapshot` is exported and unused elsewhere, so the endpoint remains a small follow-up.

@@ -42,8 +42,31 @@ func (inst RetainedFffiHolderTyped[T]) Untype() *RetainedFffiHolder {
 	}
 }
 
-const largestPooledBuffer = 4096
-const defaultBufferSize = largestPooledBuffer / 8
+// largestPooledBuffer is the retention ceiling for [RetainedFffiBuilder.putInPool]:
+// a builder whose buffer has grown past it is dropped instead of pooled, so one
+// outlier frame cannot pin an arbitrarily large allocation (golang/go#23199).
+//
+// It must sit *above* the working set, not below it. At 4 KiB — the value this
+// pool shipped with — it sat below: a frame's spliced deferred-block maps run to
+// a few hundred KiB (measured 2026-08-18 at ~460 KiB/frame of wire bytes, with
+// mean bytes.growSlice allocation 31.4 KiB), so every buffer that mattered was
+// discarded and re-grown by doubling from defaultBufferSize on the next frame.
+// The pool still *hit* ~99.9% of the time; it just never handed back anything
+// bigger than 4 KiB. bytes.growSlice was 47.8% of all bytes allocated.
+//
+// Above the working set the pool is self-tuning: grown buffers survive Put, so
+// after the first few frames Get returns a right-sized buffer and the doubling
+// stops without any explicit sizing logic. Retention stays bounded because
+// sync.Pool is cleared by the collector (victim cache: two GC cycles).
+// See ADR-0049 (C5) and its 2026-08-18 Update.
+const largestPooledBuffer = 256 * 1024
+
+// defaultBufferSize is the capacity of a *fresh* buffer — pool misses only,
+// which are rare (~0.06% of acquisitions in the same measurement). It is
+// deliberately small and deliberately NOT derived from largestPooledBuffer:
+// the many small widget builders would otherwise each start at a fraction of
+// the ceiling, paying the outliers' size on every miss.
+const defaultBufferSize = 512
 
 var retainedFffiBuilderPool = sync.Pool{New: func() any {
 	return newRetainedFffiBuilderFresh()

@@ -54,3 +54,39 @@ func TestWidgetHandleWithoutWidgetIdReturnsNoWidget(t *testing.T) {
 	// so GetWidgetHandle must return NoWidget.
 	require.Equal(t, widgethandle.NoWidget, h)
 }
+
+// TestPoolRetainsRealisticFrameBuffer pins the sizing contract that
+// largestPooledBuffer exists to satisfy: a builder grown to the size a real
+// frame reaches must still be *retained* by putInPool, not dropped.
+//
+// This is the regression the 4 KiB ceiling caused (ADR-0049 Update 2026-08-18):
+// a frame's spliced deferred-block maps run to a few hundred KiB, so every
+// buffer that mattered failed the retention predicate and was re-grown by
+// doubling on the next frame. Asserting the predicate rather than a
+// Put/Get round-trip keeps the test deterministic — sync.Pool is free to
+// drop entries at any GC, so pool identity is not a testable property.
+func TestPoolRetainsRealisticFrameBuffer(t *testing.T) {
+	// Representative of one frame's spliced deferred-block map; the
+	// 2026-08-18 measurement put a whole frame's wire bytes at ~460 KiB
+	// spread over several such scopes.
+	const realisticFrameBytes = 128 * 1024
+
+	inst := NewRetainedFffiBuilder()
+	inst.builder.buf.Write(make([]byte, realisticFrameBytes))
+
+	require.Greater(t, inst.builder.buf.Cap(), 4096,
+		"test is vacuous unless the buffer actually grew past the old ceiling")
+	require.LessOrEqual(t, inst.builder.buf.Cap(), largestPooledBuffer,
+		"a realistically-sized frame buffer must stay poolable, else it is "+
+			"discarded and re-grown by doubling every frame")
+}
+
+// TestDefaultBufferSizeIsIndependentOfCeiling guards the decoupling:
+// defaultBufferSize sizes a *fresh* buffer on a pool miss and must stay small,
+// so raising the retention ceiling never inflates the common small-widget
+// allocation. It was previously derived as largestPooledBuffer/8.
+func TestDefaultBufferSizeIsIndependentOfCeiling(t *testing.T) {
+	require.Equal(t, 512, defaultBufferSize)
+	require.Less(t, defaultBufferSize, largestPooledBuffer/8,
+		"defaultBufferSize must not track the ceiling")
+}
