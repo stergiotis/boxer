@@ -7,6 +7,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
@@ -68,7 +69,15 @@ type vocabProbe struct {
 	// installed is nil until the probe answers. Nil means NOTHING KNOWN, not
 	// "nothing installed": a panel that renders "missing" against an
 	// unanswered probe would send someone to reprovision a healthy server.
-	installed map[string]string // name -> create_query
+	//
+	// A sorted container rather than a map because its one iterating reader —
+	// the completion pane's expression provider — wants these names in
+	// exactly one order, and a map yields them in a different one per range.
+	// Ordering on compareFoldThenExact puts them in the order that reader
+	// sorts by, and makes the iteration itself deterministic. The two point
+	// lookups below pay for that in log N, which against two calls is
+	// nothing.
+	installed *containers.BinarySearchGrowingKV[string, string] // name -> create_query
 
 	// userDefined is the subset whose origin is not 'System' — what the
 	// Vocabulary tab means by "on this endpoint". Kept beside installed rather
@@ -126,7 +135,12 @@ func (inst *vocabProbe) demand() (installed map[string]string, ready bool) {
 	if view.rec.NumCols() > 2 {
 		origins = view.rec.Column(2)
 	}
-	inst.installed = make(map[string]string, int(view.rec.NumRows()))
+	// A builder rather than upserts: this fills once, reads nothing while it
+	// fills, and the row count is known — the shape its docstring asks for.
+	all := containers.NewBinarySearchGrowingKVBuilder[string, string](
+		int(view.rec.NumRows()), compareFoldThenExact)
+	// userDefined stays a map: nothing iterates it, and both its readers go
+	// through vocabMarkInstalled, which only ever asks whether a name is in.
 	inst.userDefined = make(map[string]string, 64)
 	for row := range int(view.rec.NumRows()) {
 		name := names.ValueStr(row)
@@ -134,13 +148,14 @@ func (inst *vocabProbe) demand() (installed map[string]string, ready bool) {
 		if defs != nil {
 			def = defs.ValueStr(row)
 		}
-		inst.installed[name] = def
+		all.Stage(name, def)
 		if origins == nil || origins.ValueStr(row) != "System" {
 			inst.userDefined[name] = def
 		}
 	}
-	inst.surfaceVersion = parseMarkerVersion(inst.installed[lwsqlsurface.VersionFunctionName])
-	inst.preSurfaceVersion = parseMarkerVersion(inst.installed[lwsqlsurface.PreSurfaceVersionFunctionName])
+	inst.installed = all.Freeze()
+	inst.surfaceVersion = parseMarkerVersion(inst.installed.GetDefault(lwsqlsurface.VersionFunctionName, ""))
+	inst.preSurfaceVersion = parseMarkerVersion(inst.installed.GetDefault(lwsqlsurface.PreSurfaceVersionFunctionName, ""))
 	return inst.userDefined, true
 }
 
@@ -176,7 +191,7 @@ func parseMarkerVersion(createQuery string) int {
 //
 // Same lane, same listing, same cache: it demands through [vocabProbe.demand]
 // so a reader asking for either half starts the one probe.
-func (inst *vocabProbe) demandAll() (installed map[string]string, ready bool) {
+func (inst *vocabProbe) demandAll() (installed *containers.BinarySearchGrowingKV[string, string], ready bool) {
 	if _, ready = inst.demand(); !ready {
 		return nil, false
 	}

@@ -242,3 +242,90 @@ func TestCompletionWantsTab(t *testing.T) {
 	st.atEnd = false
 	assert.False(t, app.completionWantsTab(), "a suffix insert needs the caret at the end")
 }
+
+// TestCompareFoldMatchesLoweringBothSides pins the claim compareFold is written
+// on: that it answers what a bytewise comparison of the two lowered strings
+// would, without building them. The oracle is that comparison, spelled out.
+func TestCompareFoldMatchesLoweringBothSides(t *testing.T) {
+	corpus := []string{
+		"", "a", "A", "aa", "aA", "Ab", "ab", "abc", "ABC", "aBc",
+		"substring", "SUBSTRING", "substr", "toString", "TOSTRING",
+		"LW_GET", "lw_get", "Lw_Get", "_x", "x_", "x0", "X0", "x1",
+		// Past ASCII, where the rune path takes over. The pairs differ in
+		// case, in length, and at the byte where they leave ASCII.
+		"é", "É", "éa", "Éb", "über", "ÜBER", "Straße", "STRASSE",
+		"日本語", "a日", "A日", "aé", "Aé", "z", "Z", "{", "[",
+	}
+	for _, a := range corpus {
+		for _, b := range corpus {
+			want := strings.Compare(strings.ToLower(a), strings.ToLower(b))
+			assert.Equalf(t, want, compareFold(a, b), "compareFold(%q, %q)", a, b)
+		}
+	}
+}
+
+// TestCompareFoldThenExactIsATotalOrder is the property vocabProbe's container
+// depends on: distinct spellings never compare equal, so keying on this
+// comparator cannot merge two functions the endpoint reports separately.
+func TestCompareFoldThenExactIsATotalOrder(t *testing.T) {
+	names := []string{"substring", "SUBSTRING", "Substring", "substr", "é", "É"}
+	for _, a := range names {
+		for _, b := range names {
+			c := compareFoldThenExact(a, b)
+			if a == b {
+				assert.Equalf(t, 0, c, "%q against itself", a)
+				continue
+			}
+			assert.NotEqualf(t, 0, c, "distinct names %q and %q must not tie", a, b)
+			assert.Equalf(t, -c, compareFoldThenExact(b, a), "antisymmetry for %q, %q", a, b)
+		}
+	}
+}
+
+// TestSortCompletionItemsKeepsOneCaseInsensitiveRun is the ordering the pane
+// shows: names group by their folded spelling rather than splitting into an
+// upper-case run and a lower-case one.
+func TestSortCompletionItemsKeepsOneCaseInsensitiveRun(t *testing.T) {
+	items := []sqlcomplete.Item{
+		{Text: "beta"}, {Text: "Alpha"}, {Text: "ALPHA"}, {Text: "gamma"}, {Text: "alpha"},
+	}
+	sortCompletionItems(items)
+	got := make([]string, 0, len(items))
+	for _, it := range items {
+		got = append(got, it.Text)
+	}
+	assert.Equal(t, []string{"ALPHA", "Alpha", "alpha", "beta", "gamma"}, got)
+}
+
+// TestRefreshCompletionMemoIsPerRequest covers the memo's two obligations: an
+// unchanged frame must not recompute, and a moved caret must not be served the
+// previous frame's answer.
+func TestRefreshCompletionMemoIsPerRequest(t *testing.T) {
+	componentsql.Default.Reset()
+	t.Cleanup(componentsql.Default.Reset)
+	require.NoError(t, RegisterComponents(componentsql.Default))
+	require.NoError(t, RegisterVocabulary(sqlvocab.Default))
+	t.Cleanup(sqlvocab.Default.Reset)
+
+	app := tabsTestApp()
+	ed := sqleditor.New()
+	buf := "SELECT LW_COMPONENT('Sys"
+	ed.SetCaretForTest(uint64(len([]rune(buf))))
+	app.refreshCompletion(ed.Bind(sqleditor.Frame{IDSlot: "t", Value: &buf}))
+	require.True(t, app.completion.resultValid)
+	first := app.completion.result
+	key := app.completion.resultKey
+
+	// Same buffer, same caret: the key is unchanged, so the answer is the one
+	// already computed rather than an equal one computed again.
+	app.refreshCompletion(ed.Bind(sqleditor.Frame{IDSlot: "t", Value: &buf}))
+	assert.Equal(t, key, app.completion.resultKey)
+	assert.Equal(t, completionTexts(first), completionTexts(app.completion.result))
+
+	// A caret one byte back is a different site — a stale hit here would be
+	// the pane describing a caret the editor has left.
+	ed.SetCaretForTest(uint64(len([]rune(buf))) - 1)
+	app.refreshCompletion(ed.Bind(sqleditor.Frame{IDSlot: "t", Value: &buf}))
+	assert.NotEqual(t, key, app.completion.resultKey)
+	assert.Equal(t, "Sy", app.completion.typed)
+}

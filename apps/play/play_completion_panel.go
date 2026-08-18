@@ -17,8 +17,10 @@ package play
 // in-process registry, and nothing on this path parses.
 
 import (
-	"sort"
+	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chtype"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlcomplete"
@@ -61,7 +63,37 @@ type completionState struct {
 	findings    []sqlcomplete.Finding
 	findingsFor string
 
+	// result is memoised by the request it answers: the engine resolves its
+	// providers on every Complete, and the editor asks once a frame whether
+	// or not the caret moved. resultValid is separate from a zero key because
+	// an empty buffer at caret 0 is a real request with a real (silent)
+	// answer.
+	resultKey   completionKey
+	resultValid bool
+
+	// exprItems is the composed expression-position answer — the source's
+	// columns, this build's declared vocabulary, and every function the
+	// endpoint carries — memoised by the table it is for. Composing it walks
+	// and sorts a few thousand names, which is not a per-frame cost.
+	exprItems []sqlcomplete.Item
+	exprTable string
+	exprGen   uint64
+	exprValid bool
+
 	paneW, paneH float32
+}
+
+// completionKey identifies the request a memoised answer belongs to.
+//
+// The site is not in here because it does not need to be: the lex-tier walk
+// derives it from the buffer and the caret alone (ADR-0147 §SD2), so those two
+// fields pin it. scope is compared by identity — a new sentinel parse
+// publishes a new one. gen catches the remaining input, a probe answering.
+type completionKey struct {
+	buffer string
+	caret  int
+	scope  *sqlcomplete.Scope
+	gen    uint64
 }
 
 // refreshCompletion recomputes this frame's answer from the editor's site.
@@ -92,12 +124,41 @@ func (inst *PlayApp) refreshCompletion(res sqleditor.Result) {
 		st.findings = st.engine.Validate(res.Buffer, res.Scope, res.Caret)
 		st.findingsFor = res.Buffer
 	}
+	key := completionKey{
+		buffer: res.Buffer,
+		caret:  res.Caret,
+		scope:  res.Scope,
+		gen:    inst.completionProbeGen(),
+	}
+	if st.resultValid && st.resultKey == key {
+		return
+	}
 	st.result = st.engine.Complete(sqlcomplete.Request{
 		Site:      res.Site,
 		Scope:     res.Scope,
 		Statement: res.Buffer,
 		Caret:     res.Caret,
 	})
+	st.resultKey = key
+	st.resultValid = true
+}
+
+// completionProbeGen counts what the completion's probes have banked.
+//
+// Every probe behind these providers is write-once per session: the catalog
+// memoises one entry per question it has asked and never evicts, and the
+// vocabulary probe fills its container once and short-circuits after. So this
+// only ever increases, and an answer stamped with it is stale exactly when a
+// probe has landed since — which is the one thing that can change a
+// provider's reply for an unchanged buffer and caret.
+func (inst *PlayApp) completionProbeGen() (gen uint64) {
+	if c := inst.completion.catalog; c != nil {
+		gen = uint64(len(c.memo)) + uint64(len(c.types))
+	}
+	if v := inst.vocab; v != nil && v.installed != nil {
+		gen++
+	}
+	return
 }
 
 // completionProviders wires the in-process registries this build can answer
@@ -175,7 +236,9 @@ func (inst *PlayApp) completionProviders() (p sqlcomplete.Providers) {
 				Text: g.MediaType(), Kind: sqlcomplete.ItemGloss, Source: "gloss catalog", Doc: g.Doc(),
 			})
 		}
-		sort.Slice(items, func(i, j int) bool { return items[i].Text < items[j].Text })
+		slices.SortFunc(items, func(a sqlcomplete.Item, b sqlcomplete.Item) int {
+			return strings.Compare(a.Text, b.Text)
+		})
 		return items, true
 	}
 	// The endpoint half (§SD12's B rows). Every one is a probe: off the frame
@@ -202,10 +265,25 @@ func (inst *PlayApp) completionProviders() (p sqlcomplete.Providers) {
 	// The vocabulary half is this build's own declared set, which needs no
 	// probe; the endpoint's function list rides the Vocabulary tab's lane
 	// (§SD12 B5) — one lane, two readers.
+	//
+	// Memoised on the table it is for, because it is the one provider here
+	// whose population is large: the endpoint's function list runs to a few
+	// thousand names, and composing plus sorting them is not something a
+	// frame should repeat for an answer that cannot have changed. The
+	// returned slice is shared with the memo — [sqlcomplete.Engine.Complete]
+	// copies before it stamps kinds and insert texts, so no caller writes to
+	// it.
 	p.Expressions = func(table string) (items []sqlcomplete.Item, ready bool) {
+		st := &inst.completion
+		gen := inst.completionProbeGen()
+		if st.exprValid && st.exprTable == table && st.exprGen == gen {
+			return st.exprItems, true
+		}
 		if table != "" {
 			cols, colsReady := inst.completion.catalog.columns(table)
 			if !colsReady {
+				// Not an answer, so nothing is memoised: the next frame asks
+				// again and the probe landing moves gen anyway.
 				return nil, false
 			}
 			items = append(items, cols...)
@@ -213,13 +291,21 @@ func (inst *PlayApp) completionProviders() (p sqlcomplete.Providers) {
 		items = append(items, inst.completionVocabularyItems()...)
 		installed, probeReady := inst.vocab.demandAll()
 		if probeReady {
-			for name := range installed {
+			// Sorted iteration, not a map range: the order a map hands these
+			// back is randomised per range, so the sort below used to get a
+			// freshly shuffled few-thousand-element input every time it ran
+			// and could never recognise one it had already ordered.
+			for name := range installed.IterateKeys() {
 				items = append(items, sqlcomplete.Item{
 					Text: name, Kind: sqlcomplete.ItemFunction, Source: "on this endpoint",
 				})
 			}
 		}
 		sortCompletionItems(items)
+		st.exprItems = items
+		st.exprTable = table
+		st.exprGen = gen
+		st.exprValid = true
 		return items, true
 	}
 	p.GlossKeys = func(mediaType string) (items []sqlcomplete.Item, ready bool) {
@@ -354,14 +440,93 @@ func (inst *PlayApp) completionVocabularyItems() (items []sqlcomplete.Item) {
 
 // sortCompletionItems orders a composed list by name, case-insensitively so a
 // mixed-case corpus does not split into two runs.
+//
+// The comparison folds in place rather than lowering both operands. This runs
+// over the endpoint's whole function list, and a comparator that allocated two
+// strings per call made strings.ToLower the largest single allocation source
+// in the process — enough garbage that collection, not rendering, was what
+// tripped the slow-frame warning.
 func sortCompletionItems(items []sqlcomplete.Item) {
-	sort.Slice(items, func(i, j int) bool {
-		a, b := strings.ToLower(items[i].Text), strings.ToLower(items[j].Text)
-		if a == b {
-			return items[i].Text < items[j].Text
-		}
-		return a < b
+	slices.SortFunc(items, func(a sqlcomplete.Item, b sqlcomplete.Item) int {
+		return compareFoldThenExact(a.Text, b.Text)
 	})
+}
+
+// compareFoldThenExact is the completion corpus's total order: case-insensitive
+// first, so a mixed-case population stays in one run, then the exact spelling.
+//
+// The second tier is what keeps it a TOTAL order rather than merely a grouping,
+// and that matters beyond sort stability: [vocabProbe] keys a container on this
+// comparator, and names that folded together without a tiebreak would be one
+// key. ClickHouse registers case-variant aliases as separate functions
+// (`substring` and `SUBSTRING` are both in system.functions), so collapsing
+// them would drop names the endpoint really carries.
+func compareFoldThenExact(a string, b string) int {
+	if c := compareFold(a, b); c != 0 {
+		return c
+	}
+	return strings.Compare(a, b)
+}
+
+// compareFold orders a against b the way a bytewise comparison of
+// strings.ToLower(a) and strings.ToLower(b) would, without building either.
+//
+// The two agree because ToLower maps rune for rune — it is Map(unicode.ToLower)
+// with no special-casing — and UTF-8 preserves code-point order, so comparing
+// lowered runes pairwise reaches the same verdict as comparing the lowered
+// encodings byte by byte.
+func compareFold(a string, b string) int {
+	// What this orders is SQL identifiers, so the ASCII path is the one that
+	// normally runs to completion; the rune path picks up from the first byte
+	// either side puts out of range, by which point the prefixes fold equal.
+	for i := 0; i < len(a) && i < len(b); i++ {
+		ca, cb := a[i], b[i]
+		if ca >= utf8.RuneSelf || cb >= utf8.RuneSelf {
+			return compareFoldRunes(a[i:], b[i:])
+		}
+		if 'A' <= ca && ca <= 'Z' {
+			ca += 'a' - 'A'
+		}
+		if 'A' <= cb && cb <= 'Z' {
+			cb += 'a' - 'A'
+		}
+		if ca != cb {
+			if ca < cb {
+				return -1
+			}
+			return 1
+		}
+	}
+	return compareLen(a, b)
+}
+
+// compareFoldRunes is compareFold's non-ASCII tail.
+func compareFoldRunes(a string, b string) int {
+	for len(a) > 0 && len(b) > 0 {
+		ra, na := utf8.DecodeRuneInString(a)
+		rb, nb := utf8.DecodeRuneInString(b)
+		ra, rb = unicode.ToLower(ra), unicode.ToLower(rb)
+		if ra != rb {
+			if ra < rb {
+				return -1
+			}
+			return 1
+		}
+		a, b = a[na:], b[nb:]
+	}
+	return compareLen(a, b)
+}
+
+// compareLen breaks the tie when one string ran out first, which under a
+// prefix-wise comparison is what makes the shorter one sort first.
+func compareLen(a string, b string) int {
+	switch {
+	case len(a) < len(b):
+		return -1
+	case len(a) > len(b):
+		return 1
+	}
+	return 0
 }
 
 // completionWantsTab reports whether the editor should take Tab this frame
