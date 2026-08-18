@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar2"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
 )
 
 // ParseResult holds the result of parsing SQL with either Grammar1 or Grammar2.
@@ -84,6 +85,83 @@ func (inst *errorListener) buildError(kind string) error {
 		Errorf("%s: %s", kind, strings.Join(shown, "; "))
 }
 
+// attempt carries one parse attempt's outcome. Both stages of a two-stage
+// parse produce one; only the surviving stage's listener is ever consulted.
+type attempt struct {
+	pr       *ParseResult
+	listener *errorListener
+}
+
+// parseGrammar1 runs one attempt at the given prediction mode. A fresh lexer,
+// token stream and parser per attempt is not an optimisation miss — an ANTLR
+// parser cannot be re-run, and the LL stage must re-lex anyway.
+func parseGrammar1(sql string, predictionMode int) (a attempt, ok bool) {
+	input := antlr.NewInputStream(sql)
+	lexer := grammar1.NewClickHouseLexer(input)
+	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	parser := grammar1.NewClickHouseParserGrammar1(stream)
+
+	// Point the parser at the shared bounded DFA cache instead of the grammar's
+	// unbounded package global (ADR-0084, ADR-0196 §SD3). release ends the parse
+	// and periodically rebuilds the cache if it has grown past MaxDFAStates.
+	sim, release := grammar1.SharedDFA.Acquire(parser)
+	sim.SetPredictionMode(predictionMode)
+	parser.Interpreter = sim
+	defer release()
+
+	// Remove default error listeners (which print to stderr), collect instead.
+	// The lexer needs its own listener: lexical errors never reach the parser
+	// — the offending characters are simply absent from the token stream.
+	a.listener = &errorListener{}
+	lexer.RemoveErrorListeners()
+	lexer.AddErrorListener(a.listener)
+	parser.RemoveErrorListeners()
+	parser.AddErrorListener(a.listener)
+
+	tree := parser.QueryStmt()
+	if len(a.listener.errors) > 0 {
+		return a, false
+	}
+	a.pr = &ParseResult{
+		Tree:        tree,
+		TokenStream: stream,
+		Parser:      parser,
+		Source:      sql,
+	}
+	return a, true
+}
+
+// parseGrammar2 is parseGrammar1 against the canonical grammar.
+func parseGrammar2(sql string, predictionMode int) (a attempt, ok bool) {
+	input := antlr.NewInputStream(sql)
+	lexer := grammar2.NewClickHouseLexer(input)
+	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	parser := grammar2.NewClickHouseParserGrammar2(stream)
+
+	sim, release := grammar2.SharedDFA.Acquire(parser)
+	sim.SetPredictionMode(predictionMode)
+	parser.Interpreter = sim
+	defer release()
+
+	a.listener = &errorListener{}
+	lexer.RemoveErrorListeners()
+	lexer.AddErrorListener(a.listener)
+	parser.RemoveErrorListeners()
+	parser.AddErrorListener(a.listener)
+
+	tree := parser.QueryStmt()
+	if len(a.listener.errors) > 0 {
+		return a, false
+	}
+	a.pr = &ParseResult{
+		Tree:        tree,
+		TokenStream: stream,
+		Parser:      parser,
+		Source:      sql,
+	}
+	return a, true
+}
+
 // Parse parses SQL using Grammar1 (full ClickHouse SELECT surface, no keywordForAlias).
 // This is the parser used by all normalization passes.
 //
@@ -91,6 +169,12 @@ func (inst *errorListener) buildError(kind string) error {
 // (stray control characters, unterminated strings) is rejected instead of
 // being silently dropped from the token stream. The error message includes
 // line:column positions for up to five diagnostics.
+//
+// Prediction is two-stage (ADR-0196): SLL first, then full-context LL if SLL
+// reports anything. The reported diagnostics are always LL's, so a genuine
+// syntax error reads exactly as it did before. See [antlr4utils.TwoStage] for
+// why the fast path is worth ~80x on a WITH-heavy statement, and why the
+// fallback is load-bearing rather than defensive.
 //
 // Input guards: [CheckInputGuards] runs first, rejecting inputs that would
 // drive the recursive-descent parser into pathological regimes (CPU blowup
@@ -100,40 +184,17 @@ func Parse(sql string) (pr *ParseResult, err error) {
 	if err = CheckInputGuards(sql); err != nil {
 		return
 	}
-	input := antlr.NewInputStream(sql)
-	lexer := grammar1.NewClickHouseLexer(input)
-	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
-	parser := grammar1.NewClickHouseParserGrammar1(stream)
+	syncDFALimits()
 
-	// Point the parser at the bounded process-local DFA cache instead of the
-	// grammar's unbounded package global (ADR-0084). release ends the parse and
-	// periodically rebuilds the cache if it has grown past MaxDFAStates.
-	sim, release := grammar1DFA.acquire(parser)
-	parser.Interpreter = sim
-	defer release()
-
-	// Remove default error listeners (which print to stderr), collect instead.
-	// The lexer needs its own listener: lexical errors never reach the parser
-	// — the offending characters are simply absent from the token stream.
-	errListener := &errorListener{}
-	lexer.RemoveErrorListeners()
-	lexer.AddErrorListener(errListener)
-	parser.RemoveErrorListeners()
-	parser.AddErrorListener(errListener)
-
-	tree := parser.QueryStmt()
-
-	if len(errListener.errors) > 0 {
-		err = errListener.buildError("syntax error")
+	a, ok, fellBack := antlr4utils.TwoStage(func(predictionMode int) (attempt, bool) {
+		return parseGrammar1(sql, predictionMode)
+	})
+	recordTwoStage(&g1Hits, &g1Fallbacks, fellBack)
+	if !ok {
+		err = a.listener.buildError("syntax error")
 		return
 	}
-
-	pr = &ParseResult{
-		Tree:        tree,
-		TokenStream: stream,
-		Parser:      parser,
-		Source:      sql,
-	}
+	pr = a.pr
 	return
 }
 
@@ -152,42 +213,27 @@ func Parse(sql string) (pr *ParseResult, err error) {
 // parse error. This serves as structural validation that the normalization
 // pipeline is complete.
 //
-// Lexer diagnostics are collected like in [Parse], and the same input
-// guards apply (see [CheckInputGuards]).
+// Lexer diagnostics are collected like in [Parse], the same input guards
+// apply (see [CheckInputGuards]), and prediction is two-stage on the same
+// terms. Note that a rejection here is the point of the call rather than a
+// failure, so this seam falls back to LL more often than [Parse] does by
+// design — a non-canonical statement is refused by both stages.
 //
 // Used by the AST converter as its input parser.
 func ParseCanonical(sql string) (pr *ParseResult, err error) {
 	if err = CheckInputGuards(sql); err != nil {
 		return
 	}
-	input := antlr.NewInputStream(sql)
-	lexer := grammar2.NewClickHouseLexer(input)
-	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
-	parser := grammar2.NewClickHouseParserGrammar2(stream)
+	syncDFALimits()
 
-	// Bounded process-local DFA cache, see Parse and ADR-0084.
-	sim, release := grammar2DFA.acquire(parser)
-	parser.Interpreter = sim
-	defer release()
-
-	errListener := &errorListener{}
-	lexer.RemoveErrorListeners()
-	lexer.AddErrorListener(errListener)
-	parser.RemoveErrorListeners()
-	parser.AddErrorListener(errListener)
-
-	tree := parser.QueryStmt()
-
-	if len(errListener.errors) > 0 {
-		err = errListener.buildError("canonical parse failed, non-canonical SQL")
+	a, ok, fellBack := antlr4utils.TwoStage(func(predictionMode int) (attempt, bool) {
+		return parseGrammar2(sql, predictionMode)
+	})
+	recordTwoStage(&g2Hits, &g2Fallbacks, fellBack)
+	if !ok {
+		err = a.listener.buildError("canonical parse failed, non-canonical SQL")
 		return
 	}
-
-	pr = &ParseResult{
-		Tree:        tree,
-		TokenStream: stream,
-		Parser:      parser,
-		Source:      sql,
-	}
+	pr = a.pr
 	return
 }

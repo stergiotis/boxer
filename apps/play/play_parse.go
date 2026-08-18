@@ -23,8 +23,8 @@ type syntaxErrorPos struct {
 // (line, column, msg) for the first error. nanopass.Parse uses a private
 // listener that drops line/col; we need them for the preview banner and for
 // the editor's error underline (ADR-0130 L3), so we reparse.
-func firstSyntaxError(sql string) (pos syntaxErrorPos) {
-	listener := antlr4utils.NewStoringErrListener(0, 0, 0, 4)
+func firstSyntaxErrorAttempt(sql string, predictionMode int) (listener *antlr4utils.StoringErrListener, clean bool) {
+	listener = antlr4utils.NewStoringErrListener(0, 0, 0, 4)
 	input := antlr.NewInputStream(sql)
 	lexer := grammar1.NewClickHouseLexer(input)
 	lexer.RemoveErrorListeners()
@@ -33,9 +33,29 @@ func firstSyntaxError(sql string) (pos syntaxErrorPos) {
 	parser := grammar1.NewClickHouseParserGrammar1(stream)
 	parser.RemoveErrorListeners()
 	parser.AddErrorListener(listener)
-	_ = parser.QueryStmt()
 
-	if len(listener.SyntaxErrorsMessage) == 0 {
+	// Shared bounded DFA cache and two-stage prediction (ADR-0084, ADR-0196
+	// §SD3). This seam is on the editor path — play_editor_styled re-runs it as
+	// the buffer changes — and until ADR-0196 it parsed under full-context LL
+	// against grammar1's unbounded package global.
+	sim, release := grammar1.SharedDFA.Acquire(parser)
+	sim.SetPredictionMode(predictionMode)
+	parser.Interpreter = sim
+	defer release()
+
+	_ = parser.QueryStmt()
+	return listener, len(listener.SyntaxErrorsMessage) == 0
+}
+
+func firstSyntaxError(sql string) (pos syntaxErrorPos) {
+	// The reported position is always the LL attempt's: SLL is weaker and can
+	// report an error where LL parses cleanly, which for an error banner would
+	// mean underlining valid SQL.
+	listener, clean, _ := antlr4utils.TwoStage(func(predictionMode int) (*antlr4utils.StoringErrListener, bool) {
+		return firstSyntaxErrorAttempt(sql, predictionMode)
+	})
+
+	if clean || len(listener.SyntaxErrorsMessage) == 0 {
 		return
 	}
 	return syntaxErrorPos{

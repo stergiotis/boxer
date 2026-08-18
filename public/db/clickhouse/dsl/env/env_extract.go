@@ -5,6 +5,7 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
 )
 
 // ParamPrefix identifies a SET-line whose key denotes a parameter (e.g.
@@ -362,7 +363,23 @@ func indexOutsideQuotes(s string, c byte) int {
 // env.StatementSettings from the inline SETTINGS clause, and env.Format
 // from the FORMAT clause. The body is not rewritten — these are read-only
 // observations that consumers may use to inform their behaviour.
-func scanBody(body string, e *Environment) {
+// cleanListener records only whether anything was reported. scanBody is
+// best-effort and never surfaces diagnostics; it needs the flag purely to
+// decide whether the SLL attempt can be trusted (ADR-0196 §SD1).
+type cleanListener struct {
+	antlr.DefaultErrorListener
+	dirty bool
+}
+
+func (inst *cleanListener) SyntaxError(_ antlr.Recognizer, _ any, _, _ int, _ string, _ antlr.RecognitionException) {
+	inst.dirty = true
+}
+
+// scanBodyAttempt parses the body once at the given prediction mode. The tree
+// is returned even when the parse was dirty: this is a best-effort scan, and a
+// partially recovered tree still carries the parameter slots and SETTINGS
+// clauses the caller is looking for.
+func scanBodyAttempt(body string, predictionMode int) (tree antlr.ParserRuleContext, clean bool) {
 	input := antlr.NewInputStream(body)
 	lexer := grammar1.NewClickHouseLexer(input)
 	// Best-effort scan: diagnostics are not surfaced, but the default
@@ -371,7 +388,32 @@ func scanBody(body string, e *Environment) {
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
 	parser := grammar1.NewClickHouseParserGrammar1(stream)
 	parser.RemoveErrorListeners()
-	tree := parser.QueryStmt()
+
+	// Until ADR-0196 §SD3 this seam built a parser without touching
+	// Interpreter, which meant it used grammar1's unbounded package-level DFA
+	// cache — the growth ADR-0084 exists to prevent — and full-context LL
+	// prediction. It runs once per registry unit, so it was ten of the
+	// twenty-eight parses a pre-execute stage pays.
+	sim, release := grammar1.SharedDFA.Acquire(parser)
+	sim.SetPredictionMode(predictionMode)
+	parser.Interpreter = sim
+	defer release()
+
+	l := &cleanListener{}
+	lexer.AddErrorListener(l)
+	parser.AddErrorListener(l)
+
+	tree = parser.QueryStmt()
+	return tree, !l.dirty
+}
+
+func scanBody(body string, e *Environment) {
+	tree, _, _ := antlr4utils.TwoStage(func(predictionMode int) (antlr.ParserRuleContext, bool) {
+		return scanBodyAttempt(body, predictionMode)
+	})
+	if tree == nil {
+		return
+	}
 
 	walkCST(tree, func(ctx antlr.ParserRuleContext) bool {
 		if slot, ok := ctx.(*grammar1.ParamSlotContext); ok {
@@ -393,7 +435,8 @@ func scanBody(body string, e *Environment) {
 		return true
 	})
 
-	if root, ok := tree.(antlr.ParserRuleContext); ok {
+	{
+		root := tree
 		hasFormatToken := false
 		for i := 0; i < root.GetChildCount(); i++ {
 			child := root.GetChild(i)
