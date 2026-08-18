@@ -3,7 +3,7 @@ type: explanation
 audience: prospective consumers and integrators evaluating adoption
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-07-05
+reviewed-date: 2026-08-18
 ---
 
 > Where this page and an ADR disagree, the ADR is the record. Regulatory
