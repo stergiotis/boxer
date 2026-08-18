@@ -1498,6 +1498,17 @@ Companion to [`widgets/lazypane`](../../../public/thestack/imzero2/egui2/widgets
 
 Go runs **every** dock-tab body every frame into a detached buffer, but the host interprets only the active tab of each dock leaf and discards the rest (§12 "Lost Sends", §13.4). The discarded body still cost: the render lambda ran, and its opcodes crossed the FFI. For heavy bodies — rasters, plots, etables, force-layout graphs — that wasted work is the dominant per-frame cost of an app whose tabs are mostly hidden (ADR-0049 traced imztop's `TabBody` scope at 405–428 KB/frame; ADR-0012 has the perf framing).
 
+**How to tell an ungated body is costing you.** Frame timings will not show it: the work is spread across the frame rather than attributed to the tab you suspect. Measure allocation instead, and measure it *twice* — once with the region in front, once with it behind a sibling:
+
+```sh
+PPROF=http://localhost:6060          # the host's --pprofHttpListenAddress
+curl -s -o a1.pprof "$PPROF/debug/pprof/allocs"; sleep 20
+curl -s -o a2.pprof "$PPROF/debug/pprof/allocs"
+go tool pprof -sample_index=alloc_space -base a1.pprof -nodefraction=0 -top a2.pprof
+```
+
+`-nodefraction=0` matters: pprof drops small nodes by default, and "absent from the listing" then reads identically to "costs nothing". **A body that allocates the same hidden as it does open is an ungated body** — that equality is itself the diagnosis, because building a buffer the host discards costs exactly what building a rendered one does. A gated body leaves the hidden profile entirely, and only its probe and placeholder remain. play's Snippets tab read 17.5 MB / 20 s hidden against 18.0 MB open before it was gated, and about a seventieth of that after.
+
 ### 18.2 Mechanism — a visibility probe
 
 `captureUiRect(seq)` is interpreted only when a live `Ui` is in scope; an inactive tab's buffer is discarded uninterpreted, and a culled block drains with `u=None`. So the probe's **presence** in last frame's r21 report (`StateManager.GetUiRect(seq)` returning `ok=true`) is a one-frame-lagged "this region reached the screen". lazypane emits the probe as the region's first opcode every frame and reads the previous frame's result:
@@ -1537,7 +1548,7 @@ for range dock.Tab(dockID, title) {
 
 ### 18.5 When *not* to use it
 
-- **Cheap bodies.** A probe + placeholder swap buys nothing over emitting a few labels; gate only bodies that measurably cost. In play, the table and snippets tabs are left eager for this reason.
+- **Cheap bodies.** A probe + placeholder swap buys nothing over emitting a few labels; gate only bodies that measurably cost — *measurably* being the load-bearing word, per §18.1. In play the Table tab is left eager for this reason. Snippets was too, on the assumption that a markdown book is cheap prose; it was not, because each of its SQL blocks splices a retained `CodeView` into the frame, and once the app's other per-frame costs were paid down it measured as the largest allocation left — hidden as much as open. It is gated now. Deciding a body is cheap without measuring it is the failure this bullet invites, not the one it prevents.
 - **Bodies that tether floating `c.Window` children** that must stay visible while the host region is hidden — skipping the body hides them (§12 "c.Window escapes collapse clip" is the related seam).
 - **One-shot delivery into a hidden tab.** Pair `DockAreaFluid.ActivateTab` with a pending-op queue instead (the play snippet-insert pattern), so the op rides an activated tab rather than a skipped one.
 
