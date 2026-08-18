@@ -843,6 +843,21 @@ process-local cache: `MaxDFAStates` (8192, ≈40–90 MB/grammar) triggers a reb
 checked every `DFACheckInterval` (256) parses. `nanopass.DFACacheStats()` returns
 per-grammar `DFACacheStat{States, Resets}` — a rising `Resets` count means the
 workload's structural diversity exceeds the cap and the cache is sawtoothing.
+The holder now lives in the `grammar1`/`grammar2` packages as `SharedDFA`, so
+every seam that parses (including `env.Extract`'s body scan and play's
+syntax-error probe) shares one cache per grammar (ADR-0196 §SD3).
+
+Prediction is **two-stage** (ADR-0196): `Parse`/`ParseCanonical` try SLL first
+and re-parse under full-context LL only if SLL reports a diagnostic. This is
+worth ~80x on a `WITH`-heavy statement, because grammar1's `ctes` and
+`withClause` rules have identical right-hand sides and the resulting ambiguity
+can only be resolved by full-context simulation — which ANTLR never caches. The
+reported diagnostics are always LL's, so error text is unchanged.
+`nanopass.PredictionStats()` returns `{Hits, Fallbacks}`; a fallback ratio that
+stays high means those parses pay both stages and the deferred grammar repair
+has become worth its cost. If you add a new parse seam, route it through
+`antlr4utils.TwoStage` and `SharedDFA` — a bare
+`NewClickHouseParserGrammar1(stream)` gets neither.
 
 ## Common Pitfalls
 
