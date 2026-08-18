@@ -127,9 +127,15 @@ to confirm *which* factors moved the number, not to reach a perfect 60.
 - **Symptom:** `p50` itself (not just `p0`) is well below the refresh rate.
   **Cause:** real work overrun (`Go + Rust` large in the overlay), or reactive
   cadence on a visible-but-idle window.
-  **Fix:** for overruns, look at the slow-frame warning and profile with puffin;
-  for cadence, note `IMZERO2_RENDER_CADENCE=reactive` drops idle windows to a
-  heartbeat by design ([ADR-0062](../adr/0062-imzero2-render-cadence.md)).
+  **Fix:** for overruns, read the slow-frame warning first — it splits the frame
+  into `render_us` (the GO-side widget build) and `interpret_us` (the Rust side),
+  which says who to profile. A large `render_us` is a Go problem: take a CPU
+  profile off `--pprofHttpListenAddress`, and a diff of two `allocs` profiles
+  over a fixed interval (`go tool pprof -sample_index=alloc_space -base`), since
+  the usual cause is allocation rate dragging the collector into the frame
+  rather than any one slow widget. For cadence, note
+  `IMZERO2_RENDER_CADENCE=reactive` drops idle windows to a heartbeat by design
+  ([ADR-0062](../adr/0062-imzero2-render-cadence.md)).
 
 - **Symptom:** the window drops to ~1 fps when it loses focus or is covered.
   **Cause:** the compositor throttles occluded windows' frame callbacks; with
