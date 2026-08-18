@@ -112,6 +112,16 @@ meta-circular runtime. Roughly a third of the repository's Go is generated
 from those descriptions; the descriptions, not the emitted code, are the
 editing surface.
 
+The size hypothesis has an older companion in the Scheme reports, whose
+introduction holds that a language should be designed "not by piling feature
+on top of feature, but by removing the weaknesses and restrictions that make
+additional features appear necessary" — a small number of forms with no
+restrictions on how they compose
+([R5RS, Introduction](https://schemers.org/Documents/Standards/R5RS/HTML/r5rs-Z-H-3.html)).
+Boxer's description languages aim for coverage the same way: a few
+primitives that compose without restriction, so a new need is met by
+combining what exists rather than by adding a part.
+
 - **Buys:** a small maintained surface; a schema change propagates by
   regeneration rather than by hand-editing call sites; checked-in generated
   sources (`.out.go`) make drift diffable.
