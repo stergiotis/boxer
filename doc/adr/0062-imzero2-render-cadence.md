@@ -131,6 +131,27 @@ A follow-up investigation into reports of uneven ("flaky") scrolling measured th
 
 No decision change: the continuous default and the real-work slow-frame gate stand. The practical upshot — under continuous + `vsync` a compositor pacing floor remains, addressable only by `-vsync off` or the compositor — is captured as a how-to: [triage janky rendering](../howto/imzero2-render-troubleshooting.md).
 
+### 2026-08-18 — SD6 reopened: the occluded window spins a core
+
+SD6 deferred a throttle-when-hidden option on the premise that "under `vsync` the compositor already throttles occluded windows, making the option largely redundant today"; the 2026-07-22 entry above reinforced that reading. A measurement of an occluded window shows the premise holds for *presentation* and not for *CPU*, so SD6 is reopened.
+
+Measured over a clean 10 s window with no profiler client attached, demo carousel hosting `play`, COSMIC/Wayland, `-vsync on`, cadence unset (so `continuous`):
+
+| | |
+| --- | --- |
+| Go host | 6.9 % of a core — render goroutine in `[IO wait]` |
+| Rust client | **96.8 % of a core**, of which 96.6 % is the main thread |
+| client frame rate | 1.0 fps, each frame ~20 ms (p50 19.7, p99 28.3) |
+| GPU busy | 5 % |
+
+Frame rate and per-frame cost were read from the client's own `puffin` frame metadata on the loopback profiler port, so they are the client's numbers, not an inference from the Go side.
+
+One frame per second at ~20 ms is a ~2 % duty cycle, so ~95 % of a core is spin, not work. The Context's original investigation of this same scenario recorded the opposite — "both processes were idle on average", "~81 % of wall-clock blocked reading the FFFI2 pipe" — and that half is still true of the Go side only. Stacks put the client in `polling::epoll::Poller::wait_deadline` ← `calloop` ← winit's Wayland `loop_dispatch` ← `eframe::run_and_return`, while `/proc/<pid>/syscall` reports `running`: the wait is returning on an already-past deadline and looping. The mechanism is decision 1 meeting the compositor — `logic()`'s unconditional `ctx.request_repaint()` keeps asking for an immediate repaint, the compositor delivers frame callbacks at ~1 Hz, and the loop spins full-tilt in between.
+
+This does not change the continuous default, and the ~1 fps itself remains expected and documented ([triage janky rendering](../howto/imzero2-render-troubleshooting.md)). What changes is SD6's cost basis: the compositor throttles what is *presented*, not what the client *burns*, so a hidden-throttle option is not redundant — it is worth roughly one core on any backgrounded window. SD6 already names the mechanism (`ViewportInfo.occluded`, set by eframe from winit's `WindowEvent::Occluded`) and the ownership question (occlusion is known only Rust-side, so the client would become the authority and the Go decorator defer to it); both stand. `IMZERO2_RENDER_CADENCE=reactive` avoids the spin today, but it is not the answer SD6 wants — it also throttles a *visible*-but-idle window, which decision 1 and the O2 rejection deliberately declined to impose.
+
+Open, not decided here: whether the fix is occlusion-aware repaint scheduling in `app.rs`, or whether the spin is better read as a winit/`calloop` deadline bug worth reproducing against the single-process control app the 2026-07-22 entry already built.
+
 ### 2026-08-15 — `interpret_us` is now net of stream-wait; the two gated slots were not disjoint
 
 A re-investigation of recurring slow-frame warnings — prompted by the suspicion that the ~1 Hz occlusion throttle from the Context was still the cause — confirmed the gate holds against that, and found a separate defect in what it sums.
