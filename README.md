@@ -6,7 +6,11 @@
 Alpha, incomplete test coverage, unstable, API may still change heavily.
 
 ## Why
-Boxer reimplements and vendors much of what mainstream practice imports or rents. The premises behind that trade — dependencies as owned liabilities with known incentives, problem-oriented description languages on a boring host, one machine-readable data model projected across memory / wire / storage, a toolkit that observes itself (runtime and code), mechanical sympathy as the efficiency posture, one machine-checked architect, and interfaces split by task complexity up to agentic operation — are stated, with their costs and failure modes, in [doc/explanation/why-boxer.md](doc/explanation/why-boxer.md).
+For a small but ambitious data team ready to bet on the compounding of a composable stack it owns — and needing air-gapped operability and auditability from source — boxer is a sovereign, data-centric data-engineering toolkit and end-to-end app stack over ClickHouse (the query engine and database), written in Go with a Rust-rendered UI.
+
+Rather than assembling best-of-breed parts with fragmented models and logs, boxer lets you generate tables, codecs, ingestion and readers directly from small, problem-oriented languages, and turns a query into a table, chart, map or board — or, in a markdown file, an app. Every query, error and app state lands in the same data model, operable by people and agents alike — trading ecosystem breadth and a stable API for a stack a small team can read from source, end to end.
+
+Boxer reimplements and vendors much of what mainstream practice imports or rents. The premises behind that trade — dependencies as owned liabilities with known incentives, problem-oriented description languages on a boring host, one machine-readable data model projected across memory / wire / storage, a toolkit that observes itself (runtime and code), mechanical sympathy as the efficiency posture, one machine-checked architect, and interfaces split by task complexity up to agentic operation — are stated, with their costs and failure modes, in [doc/explanation/why-boxer.md](doc/explanation/why-boxer.md). The full form of the statement above, and what each clause rests on, is in [doc/explanation/positioning-statement.md](doc/explanation/positioning-statement.md).
 
 ## Installation
 ```
