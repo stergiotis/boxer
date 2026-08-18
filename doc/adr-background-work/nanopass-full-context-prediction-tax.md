@@ -409,8 +409,9 @@ ambiguities, and each measured case loses **exactly one** — the WITH one.
 The estimate below was 10–30 ms for the applet; the repair beat it.
 
 **What it did not fix.** `bench_large` still reports **264** exact ambiguities,
-none of them the WITH one and none examined, which is why its LL parse is still
-~30 ms. The residual counts in the tables above are that, not measurement noise.
+none of them the WITH one, which is why its LL parse is still ~30 ms. The
+residual counts in the tables above are that, not measurement noise — and they
+are examined below.
 
 Both grammars took the same edit. Regeneration needs a hand-provisioned ANTLR
 4.13.2 jar and a JRE, per
@@ -463,6 +464,116 @@ passes need cross-fragment scope (`resolve_names`, `expand_columns`,
 `inject_params_cte`), and `ResolveColumnNames` is one of only three passes that
 actually changed the fixture; and rewritten fragments need splice bookkeeping
 back to the right offsets.
+
+## The residual `t.c` ambiguity — examined, and kept
+
+Measured 2026-08-18, after the WITH repair. Recorded in
+[ADR-0196](../adr/0196-nanopass-two-stage-sll-parsing.md) §SD6; this is the
+working.
+
+### Attribution without a profiler
+
+antlr4-go exposes no profiling API, but the `decisionToDFA` slice is ours: build
+it, and a `*DFA` handed to `ReportAmbiguity` /
+`ReportAttemptingFullContext` / `ReportContextSensitivity` maps back to its
+decision index by pointer identity, and the index to a rule through
+`ATN.DecisionToState[i].GetRuleIndex()`. That is enough to attribute every
+full-context escalation. On `bench_large`, in production LL mode:
+
+| decision | rule | escalations | ambiguities | context-sensitive | summed span | span max |
+|---|---|---|---|---|---|---|
+| 122 | `columnExpr` | 246 | 0 | **246** | 3312 (71%) | 14 |
+| 128 | `columnIdentifier` | 264 | **264** | 0 | 1320 (28%) | 5 |
+| 134 | `tableIdentifier` | 6 | 0 | 6 | 30 | 5 |
+
+**One exact ambiguity per qualified name reference**, exactly: 6 union arms × 40
+qualified projections = 240, plus 6 × 4 dotted references in the FROM/JOIN/WHERE
+tail = 24. The unqualified variant measures exactly 24.
+
+| variant of the `bench_large` shape | bytes | ambiguities | LL | SLL |
+|---|---|---|---|---|
+| `t.cN + N AS aN` (as built) | 5110 | 264 | 46.78 ms | 1.13 ms |
+| `t.cN + N` | 3490 | 264 | 25.23 ms | 0.85 ms |
+| `t.cN` | 2530 | 264 | 25.82 ms | 0.74 ms |
+| `cN + N AS aN` | 4630 | **24** | **9.27 ms** | 0.59 ms |
+| `cN` | 2050 | **24** | **3.96 ms** | 0.93 ms |
+
+(These timings carry the diagnostic listener, so they read higher than the plain
+figures elsewhere on this page; the comparison between rows is the point.)
+
+### It is a property of SQL, not a defect
+
+`t.c` genuinely means either "column `c` of table `t`" or "field `c` of a
+Nested/tuple column `t`", and only the schema decides. The WITH ambiguity was an
+accidental duplication of one rule by another; this one cannot be tidied away.
+
+It is also **three-way**. `t.c` is derivable by `columnIdentifier`'s optional
+`tableIdentifier` prefix, by `nestedIdentifier`'s optional `DOT`, and by
+`columnExpr DOT identifier` ([ADR-0190](../adr/0190-sqleditor-exact-completion-context.md)
+§SD11, whose own note that "`columnIdentifier` stays greedy for `a.b` and
+`a.b.c`" is this ambiguity being resolved by alternative order). Measured:
+
+| removed | ambiguities |
+|---|---|
+| `nestedIdentifier`'s optional `DOT` | 264 — unchanged |
+| §SD11's `columnExpr DOT identifier` | 264 — unchanged |
+| **both** | **0** |
+
+Two single-edit attempts both looked obviously right and both did nothing. The
+lesson generalises: with three overlapping derivations, removing one competitor
+just leaves the other two to keep the ambiguity alive, and only a measurement
+says so.
+
+### Removing both: measured, and rejected
+
+| | before | after |
+|---|---|---|
+| `bench_large` ambiguities | 264 | **0** |
+| `bench_large` LL parse | 29.66 ms | **8.02 ms** (~3.5×) |
+| `bench_medium` LL parse | 2.20 ms | 0.61 ms |
+| **`applet_9kb` LL parse** | **4.11 ms** | **4.14 ms** |
+| SLL fast path | — | unchanged |
+| SLL fallback rate over the corpus | 42 / 270 | **45 / 270** |
+
+Rejected, for four reasons in order of weight:
+
+1. **The real workload gains nothing** — the 9 KB applet moves by 0.03 ms. The
+   264 need a 240-column qualified projection to appear, which is a benchmark
+   shape rather than an authored one.
+2. **The hoped-for win is not there.** The SLL fallback rate does not improve.
+   Those rejections are *context-sensitivity*, not ambiguity. 36 of the corpus's
+   42 SLL-rejects (86%) carry a dotted name — but so do 82 statements SLL
+   accepts, so a dotted name is necessary and not sufficient; the reject needs it
+   in a context-sensitive position (a join `ON`, a correlated subquery).
+3. **Nothing is broken that this would retire.** `LW_COMPONENT('aaa').MyField`
+   parses, canonicalises and ships today; the full pre-execute stage emits
+   `tupleElement("LW_COMPONENT"('aaa'), 'MyField')`.
+4. **It costs four authoring forms**, one unanticipated:
+
+   | lost | kept |
+   |---|---|
+   | `db.t.c.f` (4-part) | `t.c`, `db.t.c` |
+   | `LW_COMPONENT('a').MyField` | `tupleElement(…)` |
+   | `f(x).field` | `t.1` (positional), `t.*` |
+   | `INSERT INTO t (n.a, n.b) SELECT …` | `cluster('c', db.tbl)` |
+
+   Plus ~6 consumer edits where `AllIdentifier()` becomes `Identifier()`. One of
+   them, `resolve_names`, already bails unless the nested path has exactly one
+   segment — so the dotted form was never meaningfully consumed there.
+
+### Two things worth carrying forward
+
+- **On the LL path the `AS alias` costs more than the ambiguity.** It drives 252
+  context-sensitivity escalations in `columnExpr` (18 without the alias, 252
+  with) — 71% of the summed span. If LL latency is ever the constraint again,
+  that is the bigger target, and it is not an ambiguity at all.
+- **grammar2 has no dot tuple access whatsoever.** Canonicalisation lowers both
+  spellings to `tupleElement(…)` before the validating grammar sees them, so the
+  canonical form already requires the function. Any future move to retire the
+  sugar starts from a surface that has already done it.
+
+The applet's own 6 residual ambiguities are a third case again — in
+`columnExpr`/`columnsExpr`, spans of 3–27 tokens — and were not pursued.
 
 ## Reproducing
 

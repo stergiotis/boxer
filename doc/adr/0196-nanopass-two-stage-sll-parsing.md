@@ -219,10 +219,9 @@ The end-to-end payoff lands where §SD4 said to look: `Apply/medium`, the
 SLL-rejected buffer that two-stage alone could not help, goes from 107–125 ms to
 **55–77 ms**.
 
-**What it does not fix.** Those residual counts are not noise: `bench_large`
-carries **264** exact ambiguities that have nothing to do with `WITH`, and
-nobody has looked at them. They are why its LL parse is still ~30 ms. Whether
-they matter is now a question for the §SD4 counters to answer, not a guess.
+**What it does not fix, and why that is left alone.** Those residual counts are
+not noise. On `bench_large` they are **264** exact ambiguities that have nothing
+to do with `WITH`, and they were examined (see §SD6).
 
 **grammar2 took the identical edit**, since it carried the identical
 duplication. Regeneration needs a hand-provisioned ANTLR 4.13.2 jar and a JRE
@@ -231,6 +230,76 @@ bundle — so the generated files are reviewed as part of this change and CI che
 them only as committed source. Regeneration was verified byte-reproducible
 against an unmodified tree first, so the committed diff is attributable to the
 grammar edit alone.
+
+### SD6 — The residual `t.c` ambiguity is examined and kept
+
+`bench_large`'s 264 exact ambiguities are one decision, in `columnIdentifier`,
+and there is **exactly one per qualified name reference**: 6 union arms × 40
+qualified projections = 240, plus 6 × 4 dotted references in the FROM/JOIN/WHERE
+tail = 24. Strip the projection qualifiers and it measures exactly 24.
+
+Attribution needs a trick, since antlr4-go exposes no profiling API (§SD2): the
+`decisionToDFA` slice is ours, so a reported `*DFA` maps back to its index by
+pointer identity, and the index to a rule through `ATN.DecisionToState`.
+
+| decision | rule | escalations | ambiguities | context-sensitive | summed span |
+|---|---|---|---|---|---|
+| 122 | `columnExpr` | 246 | 0 | **246** | 3312 (71%) |
+| 128 | `columnIdentifier` | 264 | **264** | 0 | 1320 (28%) |
+| 134 | `tableIdentifier` | 6 | 0 | 6 | 30 |
+
+**This one is not a defect.** `t.c` genuinely means either "column `c` of table
+`t`" or "field `c` of a Nested/tuple column `t`", and only the schema decides.
+The `WITH` ambiguity was an accidental rule duplication; this is a property of
+the SQL surface.
+
+It is also **three-way**, which is why the obvious edits do nothing. `t.c` is
+derivable by `columnIdentifier`'s optional `tableIdentifier` prefix, by
+`nestedIdentifier`'s optional `DOT`, and by `columnExpr DOT identifier`
+(ADR-0190 §SD11). Measured: removing `nestedIdentifier`'s `DOT` alone leaves
+**264**; removing §SD11's alternative alone leaves **264**; removing both gives
+**0**.
+
+Removing both was measured end to end and **rejected**:
+
+| | before | after |
+|---|---|---|
+| `bench_large` ambiguities | 264 | **0** |
+| `bench_large` LL parse | 29.66 ms | **8.02 ms** (~3.5×) |
+| `bench_medium` LL parse | 2.20 ms | 0.61 ms |
+| **`applet_9kb` LL parse** | **4.11 ms** | **4.14 ms** |
+| SLL fast path | — | unchanged |
+| SLL fallback rate (corpus) | 42 | **45** |
+
+Four reasons, in order:
+
+1. **The real workload gains nothing.** The 9 KB applet moves 4.11 → 4.14 ms.
+   The 264 only materialise on a 240-column qualified projection — a benchmark
+   shape, not an authored one.
+2. **The hoped-for win does not exist.** The SLL fallback rate does not improve.
+   Those rejections are *context-sensitivity*, not ambiguity — a different
+   mechanism, untouched by this. 86% of the corpus's SLL-rejects carry a dotted
+   name, but so do 82 statements SLL accepts, so the dotted name is necessary
+   and not sufficient.
+3. **Nothing is broken that this would retire.** `LW_COMPONENT('aaa').MyField`
+   parses, canonicalises and ships today — verified through the full pre-execute
+   stage, which emits `tupleElement("LW_COMPONENT"('aaa'), 'MyField')`. That is
+   §SD11's route working as designed.
+4. **It costs four authoring forms**, one of them unexpected: `db.t.c.f`,
+   `expr.Field` named tuple access (`LW_COMPONENT('a').MyField`, `f(x).field`),
+   and `INSERT INTO t (n.a, n.b) SELECT …` — Nested column lists. Surviving:
+   `t.c`, `db.t.c`, `t.1`, `t.*`, `tupleElement(…)`, `cluster('c', db.tbl)`.
+   Plus ~6 consumer edits where `AllIdentifier()` becomes `Identifier()`.
+
+Worth carrying forward if LL latency is ever the constraint again: on that path
+the **`AS alias` costs more than the ambiguity does**. It drives 252
+context-sensitivity escalations in `columnExpr` — 18 without the alias, 252 with
+— which is 71% of the summed span. And the applet's own 6 residual ambiguities
+are a third case again, in `columnExpr`/`columnsExpr` at spans of 3–27 tokens.
+
+Note also that **grammar2 has no dot tuple access at all**: canonicalisation
+lowers both spellings to `tupleElement(…)` before the validating grammar sees
+them, so the canonical form already requires the function.
 
 ## Surfaces — Tier 1
 
@@ -309,9 +378,11 @@ accessor. No `SelectUnionStmtContext` reference changes, which is the property
   there, never (measurably) a loss — but "never a loss" rests on a failing SLL
   attempt staying cheap, which §SD2's inability to abort early makes less certain
   than the textbook recipe would.
-- **264 exact ambiguities remain** in `bench_large`, none of them the WITH one
-  and none of them examined. Its LL parse is still ~30 ms. This ADR fixed the
-  one that dominated; it did not audit the grammar.
+- **264 exact ambiguities remain** in `bench_large`, none of them the WITH one.
+  Its LL parse is still ~30 ms. They are examined in §SD6 and deliberately kept:
+  removing them needs three grammar edits, costs four authoring forms, and moves
+  the real applet by 0.03 ms. This ADR fixed the one that dominated; it did not
+  audit the grammar.
 - **SLL can in principle resolve an ambiguous decision to a different
   alternative than LL**, which the fallback does not catch. Measured at 0
   occurrences over 270 corpus statements (§Verification), but it is a property of
