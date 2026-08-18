@@ -312,7 +312,19 @@ var builtinTabDefs = []builtinTabDef{
 	// satisfies — it is a SIBLING of the editor leaf, not the same one, and
 	// the delivery ops raise the editor leaf, so Snippets cannot hide itself
 	// with its own click.
-	{id: "snippets", dockID: dockTabSnippets, title: "Snippets", zone: TabZoneTools},
+	//
+	// Lazy, and of the panes in this leaf it is the one that most needed to
+	// be: the body is a whole markdown book whose SQL blocks each splice
+	// their retained CodeView into the frame, which measured as the largest
+	// per-frame allocation left in the app — and it measured THE SAME with
+	// the tab hidden as with it open, because that is what building a
+	// discarded tab buffer costs. Its one-shot ops travel outward (a click
+	// here inserts into the editor), so a skipped body drops no delivery:
+	// there is no click in a body that did not render, and the ops raise the
+	// editor themselves. Nothing drives this body from outside today; a
+	// caller that ever does owes it the ActivateTab-then-queue pattern the
+	// lazypane docs describe, because a skipped body runs no delivery.
+	{id: "snippets", dockID: dockTabSnippets, title: "Snippets", zone: TabZoneTools, lazy: true},
 	// Vocabulary is Snippets' sibling: same zone, same filter language, same
 	// Insert seam — a snippet is a statement you want, a vocabulary entry is a
 	// name you can use. Lazy, so a session that never opens it never runs the
