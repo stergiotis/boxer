@@ -186,10 +186,10 @@ artifacts, and provenance is queryable from the history.
 
 Resource efficiency comes from designing with the machine's grain rather
 than from after-the-fact optimization: structure-of-arrays shapes end to end
-(leeway's SoA columns, the columnar sink), padding- and cache-conscious
-layouts, render budgets in the UI stack. The target is reasonably good
-efficiency as a default property of the design — not peak performance as a
-heroic exception.
+(leeway's SoA columns, ClickHouse's columnar engine), padding- and
+cache-conscious layouts, render budgets in the UI stack. The target is
+reasonably good efficiency as a default property of the design — not peak
+performance as a heroic exception.
 
 - **Buys:** the whole stack stays operable on hardware a small operation
   actually controls, which is what makes P1's self-hosting real rather than
@@ -200,8 +200,8 @@ heroic exception.
   must carry its justification.
 - **Enacted by:** the SoA wire-format pivot
   ([ADR-0089](../adr/0089-rowdml-serialization-clickhouse-native-ingestion.md)),
-  the columnar sink commitment, the opt-in continuous-profiling build tag,
-  the `unsafeperf` package.
+  the commitment to ClickHouse as the columnar engine, the opt-in
+  continuous-profiling build tag, the `unsafeperf` package.
 
 ### P6 — One architect, machine-checked
 
@@ -263,8 +263,9 @@ the integrated stack; they are argued in their ADRs, not here.
   Regulatory trajectory — CISA memory-safety roadmaps, the CRA's
   security-by-design expectations — treats memory safety as a coming
   requirement rather than a taste.
-- **ClickHouse** as the analytical sink — an external C++ server process,
-  deliberately outside the memory-safety boundary rather than linked into it.
+- **ClickHouse** as the query-execution engine and database — an external
+  C++ server process, deliberately outside the memory-safety boundary rather
+  than linked into it.
 - **Immediate-mode UI** (egui) over a framed FFI, not a web stack.
 - **Code generation over reflection** — generated sources are checked in and
   diffed like any other source.
