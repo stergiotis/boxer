@@ -233,23 +233,21 @@ func vocabExtras(installed map[string]string, declared []vocabEntry) (out []voca
 // sortCompletionItems gives the completion list, over the same names.
 //
 // n·log n, where this was an insertion sort. The panel re-runs it on EVERY
-// FRAME the tab is open, over a population only the endpoint bounds, and each
-// comparison allocates twice — so a server carrying a few hundred user-defined
-// functions paid a quadratic count of those, per frame. That combination is
+// FRAME the tab is open, over a population only the endpoint bounds — so the
+// comparison had better not allocate. It used to lower both names per call,
+// which is a quadratic count of allocations per frame; that combination is
 // what the tab hit against every endpoint while vocabProbeQuery was reading
-// the whole built-in set as user-defined.
+// the whole built-in set as user-defined, and the same comparator shape later
+// dominated the whole process from the completion pane's copy of it.
+// compareFoldThenExact is that ordering with nothing allocated.
 //
 // Names differing only in case fall back to their own spelling rather than
 // comparing equal, so the order is total. The caller builds its slice by
 // iterating a map, so a pair the fold cannot separate would otherwise swap
 // places from frame to frame.
 func sortVocabByName(entries []vocabEntry) {
-	slices.SortFunc(entries, func(a vocabEntry, b vocabEntry) (n int) {
-		n = strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
-		if n == 0 {
-			n = strings.Compare(a.Name, b.Name)
-		}
-		return
+	slices.SortFunc(entries, func(a vocabEntry, b vocabEntry) int {
+		return compareFoldThenExact(a.Name, b.Name)
 	})
 }
 
