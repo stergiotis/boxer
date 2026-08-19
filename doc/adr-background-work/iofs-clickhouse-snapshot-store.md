@@ -14,6 +14,8 @@ status: draft
 > with `~`) unless dated; nothing here has been measured on a live server yet.
 > Revised three times the same day — many-mount stores, the hash algorithm,
 > then leeway conformance and caller-owned identity (§14).
+> The converged design without history or alternatives is in
+> [the compact page](./iofs-clickhouse-snapshot-store-compact.md).
 
 # An `io/fs` ↔ ClickHouse bridge: a snapshot store for file trees (August 2026)
 
