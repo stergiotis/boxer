@@ -10,7 +10,11 @@ description = "ImZero2 Design System (IDS) — token layer over egui::Style; no 
 path = "src/lib.rs"
 
 [dependencies]
-egui = ">=0.35.0"
+# Must track the parent crate's egui pin exactly — this crate hands egui::Style
+# values back to imzero2, so a version seam here is a type seam there. See the
+# note on `egui` in ../Cargo.toml for why the requirement is a caret and not an
+# open range.
+egui = "0.35"
 
 [lints]
 workspace = true

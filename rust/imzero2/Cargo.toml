@@ -88,8 +88,25 @@ wayland = ["eframe?/wayland"]
 x11 = ["eframe?/x11"]
 
 [dependencies]
-egui = ">=0.35.0"
-eframe = { version = ">=0.35.0", optional = true, default-features = false, features = [
+# Pinned to the 0.35 line, and pinned deliberately: every widget crate below
+# (egui_extras, egui_table, egui_dock, egui_graphs, walkers) links egui itself,
+# so the whole ring has to sit on one egui version or the same type appears
+# twice in the graph and nothing typechecks across the seam.
+#
+# These two carried an open `>=0.35.0` requirement once. A dependabot bump of
+# eframe to 0.36.1 then floated egui to 0.36 as well, in a lock-only commit with
+# no manifest diff to review: two copies each of egui/emath/epaint/ecolor plus
+# two wgpu majors, and 84 type errors reading `expected egui_dock::egui::Ui,
+# found egui::Ui`. A caret requirement makes the next such move a visible
+# manifest change instead.
+#
+# The ring can go to 0.36 once egui_graphs releases against it — egui_extras
+# 0.36.1, egui_table 0.10, egui_dock 0.21.1 and walkers 0.58 are all out
+# already, but egui_graphs 0.31.0 (its newest, and its master branch) still
+# asks for egui 0.35. Move all of them, and the wgpu/egui-wgpu pins below, in
+# one commit.
+egui = "0.35"
+eframe = { version = "0.35", optional = true, default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed trust-analyzer.cargo.featureshe default egui fonts.
     "wgpu",          # Use the wgpu rendering backend. Alternative: "glow".
