@@ -14,7 +14,8 @@ Diagnose a hung `./rust/imzero2/hmi.sh` (or any imzero2-based app — imztop,
 regex_explorer, leewaywidgets) when the Go server and the Rust client
 have both gone idle. The recipe pinpoints the offending FFFI2 opcode
 without bisecting widget code. Out of scope: render-side hangs where a
-Rust thread is still busy (use puffin or `gdb -p` for those).
+Rust thread is still busy (use puffin — see below for the env var that
+arms it — or `gdb -p` for those).
 
 ## When to use this recipe
 
@@ -196,9 +197,12 @@ a length-0 prefix for the implicated slice arg.
 - **Symptom:** Rust thread is busy (CPU profile non-zero, render or
   GL thread not in futex).
   **Cause:** This is a render-side hang, not an FFFI2 deadlock.
-  **Fix:** Out of scope for this recipe — use puffin (`puffin-server`
-  thread is already running) or `gdb -p $RUST_PID` to inspect the
-  busy thread's stack.
+  **Fix:** Out of scope for this recipe — use puffin or `gdb -p $RUST_PID`
+  to inspect the busy thread's stack. `build_rust.sh` compiles the puffin
+  feature into every build, but collection and the loopback server stay off
+  until `IMZERO2_PUFFIN=1` is set for the run (ADR-0195), so relaunch with it
+  before expecting a `puffin-server` thread or a listener on :8585. Once it is
+  up: `puffin_viewer --url 127.0.0.1:8585`.
 
 - **Symptom:** Go goroutine 1 is in `select` or a logbridge call
   rather than `Unmarshaller.readBuf`.

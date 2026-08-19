@@ -134,6 +134,28 @@ var (
 		Default:     RenderCadenceContinuous,
 	}, []string{RenderCadenceContinuous, RenderCadenceReactive})
 
+	// Puffin gates the Rust client's puffin profiler: scope collection
+	// (puffin::set_scopes_on) and the loopback puffin_http server on
+	// 127.0.0.1:8585, which a `puffin_viewer --url 127.0.0.1:8585` attaches to.
+	// Unset/falsy, the client compiles the scopes in but never turns them on,
+	// so each puffin::profile_scope! costs one relaxed atomic load and the
+	// port stays closed.
+	//
+	// This mirrors the EGUI_INSPECTION gate on the `inspection` feature: the
+	// capability ships in the default build (build_rust.sh passes
+	// --features puffin) and the runtime variable, not the compile flag, is
+	// the switch. Like that port, this one is unauthenticated — it exposes
+	// internal frame timings and scope names to any local user — so it stays
+	// closed until asked for. Read by the Rust client (main.rs), which
+	// inherits the variable as a child process; registered here so the
+	// ADR-0058 catalog stays the one place every IMZERO2_* knob is
+	// discoverable. See ADR-0195 (2026-08-18 Update).
+	Puffin = env.NewBool(env.Spec{
+		Name:        "IMZERO2_PUFFIN",
+		Description: "truthy enables the Rust client's puffin scope collection and its loopback profiler server on 127.0.0.1:8585; unset leaves the compiled-in scopes off and the port closed",
+		Category:    env.CategoryDev,
+	})
+
 	// The IMZERO2_HEADLESS_* group configures the headless remote-access
 	// host (ADR-0024): the Rust client renders offscreen, encodes H.264
 	// via ffmpeg, and serves a browser viewer over one WebSocket. These

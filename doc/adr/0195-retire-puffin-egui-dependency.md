@@ -241,6 +241,20 @@ Two things worth recording from the execution:
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-08-18 — the kept server lane is now gated by `IMZERO2_PUFFIN`
+
+The Decision keeps the puffin *server* lane "unchanged". A profiling session showed what unchanged meant in practice: [`build_rust.sh`](../../rust/imzero2/build_rust.sh) appends `--features puffin` to every build, and `main.rs`'s `start_puffin_server` called `puffin::set_scopes_on(true)` unconditionally at startup. So every `hmi.sh` run collected scopes on every frame and held a loopback port open, with no off switch short of a rebuild — measured on the demo carousel at ~15,763 scopes and ~489 KiB of scope data per frame.
+
+Serialization is *not* part of that standing cost: `puffin_http`'s server early-returns on `clients.is_empty()`, so with no viewer attached the cost is scope recording plus per-frame `FrameData` assembly. The on-versus-off delta was not measured and is not claimed here.
+
+Two things made the shape worth changing independently of its magnitude. The port is unauthenticated and host-scoped — the same blast radius `Cargo.toml` already reasons about for `inspection`, in a comment that cites puffin as the precedent for an always-compiled loopback dev port while puffin was the one of the pair with no runtime gate. And `build_rust.sh`'s own comment claimed "unset, the build is the desktop default", which the `--features puffin` on the very next line contradicted.
+
+**Change.** `start_puffin_server` returns early unless `IMZERO2_PUFFIN` is truthy (`1` / `true` / `on`); the feature still ships in every `build_rust.sh` build. Left off, `puffin::profile_scope!` expands to `if are_scopes_on() && cond { … } else { None }` — one relaxed atomic load per scope — so the compiled-in scopes cost a predicted branch and nothing else. The variable is registered in [`imzero2env`](../../public/thestack/imzero2/imzero2env/imzero2env.go) and `doc/env-vars.md` regenerated, following [ADR-0062](./0062-imzero2-render-cadence.md) SD1 for `IMZERO2_*` knobs that only the Rust client reads. The build script's comment was corrected, and `doc/skills/imzero2/howto-triage-hang.md` no longer promises a `puffin-server` thread that is now off by default.
+
+Not changed: the server lane itself, which this ADR's Decision keeps. Enabling it is one environment variable rather than a rebuild — the property the runtime gate exists to preserve. The runtime variable, not the compile flag, is the switch; that is now true of both dev capabilities in this build.
+
 ## References
 
 - [ADR-0194](./0194-retire-egui-snarl-binding.md) — the adjacent binding

@@ -40,14 +40,44 @@ fn setup_tracing() {
     }
 }
 
+/// Gate for the puffin profiler, read from `IMZERO2_PUFFIN`.
+///
+/// Accepts `1`, `true` and `on` (case-insensitively) so the spelling matches
+/// both this file's existing `IMZERO2_HEADLESS` convention (`1` / `on`) and
+/// the Go registry's `env.NewBool`, which parses via `strconv::ParseBool`
+/// (`1` / `true`). Anything else, including unset, is off.
+#[cfg(feature = "puffin")]
+fn puffin_enabled_from_env() -> bool {
+    std::env::var("IMZERO2_PUFFIN")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("on"))
+        .unwrap_or(false)
+}
+
+/// Turn on puffin scope collection and open the loopback profiler server.
+///
+/// Dormant unless `IMZERO2_PUFFIN` is truthy. The `puffin` feature ships in
+/// every `build_rust.sh` build, so without this gate an ordinary run collected
+/// scopes on every frame — measured 2026-08-18 at ~15.7k scopes and ~489 KiB
+/// of scope data per frame — and held an unauthenticated port open, with no
+/// off switch short of a rebuild.
+///
+/// Left off, `puffin::profile_scope!` expands to a single relaxed atomic load
+/// (`are_scopes_on()`) and takes the `None` arm, so the compiled-in scopes
+/// cost a predictable branch and nothing else. The runtime variable, not the
+/// compile flag, is the switch — the same shape `EGUI_INSPECTION` uses for the
+/// `inspection` feature, and for the same reason: the port is unauthenticated
+/// and host-scoped. See ADR-0195 (2026-08-18 Update).
 #[cfg(feature = "puffin")]
 fn start_puffin_server() {
+    if !puffin_enabled_from_env() {
+        return;
+    }
     puffin::set_scopes_on(true);
 
     match puffin_http::Server::new("127.0.0.1:8585") {
         Ok(puffin_server) => {
             tracing::info!(
-                "run: cargo install puffin_viewer && puffin_viewer --url 127.0.0.1:8585"
+                "puffin enabled by IMZERO2_PUFFIN; run: cargo install puffin_viewer && puffin_viewer --url 127.0.0.1:8585"
             );
             //std::process::Command::new("puffin_viewer")
             //    .arg("--url")
