@@ -314,11 +314,28 @@ func ownCapabilities(cil *cpb.CapabilityInfoList) (out map[string]map[string]str
 //     no network I/O. `package net/http CAPABILITY_NETWORK` brands the
 //     package; capslock's own database already carves out one sibling helper
 //     this way (func net/http.isSlashRune CAPABILITY_SAFE) but not this one.
+//   - "net/http.ParseCookie$1" is the same shape, and it appeared with the
+//     go1.27 bump rather than with any change here: 1.26 parsed a cookie line
+//     with strings.Split and a plain `for _, s := range parts`, 1.27 rewrote
+//     it as `for s := range strings.SplitSeq(line, ";")`. That lowers to a
+//     func(string) bool yield closure, and VTA resolves the *app's own* yield
+//     call — writingstylescope's sectionTexts returns an iter.Seq[string] —
+//     to every same-signature closure in the program, this one included. The
+//     body trims a cookie pair and calls strings.Cut. No network I/O; the
+//     NETWORK brand is the package rule again.
+//
+// Both net/http entries are the same failure, found the same way, four months
+// apart: as the standard library adopts range-over-func, each new yield
+// closure inside a branded package becomes a candidate callee for every
+// iterator an app writes. Expect more, and add them one at a time with the
+// body read — not a package-wide bypass, which is what
+// TestOwnCapabilities_KnownNoiseSinkIsExactMatch exists to prevent.
 //
 // See TestOwnCapabilities_DropsKnownNoiseSink.
 var knownNoiseSinks = map[string]struct{}{
 	"(os/signal.signalError).Error": {},
 	"net/http.containsDotDot$1":     {},
+	"net/http.ParseCookie$1":        {},
 }
 
 // The §SD10 vocabulary for capabilities capslock reports too coarsely to

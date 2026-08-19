@@ -1,8 +1,6 @@
 module github.com/stergiotis/boxer
 
-go 1.26.0
-
-toolchain go1.26.5
+go 1.27.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -67,8 +65,6 @@ require (
 	pgregory.net/rapid v1.2.0
 )
 
-require github.com/dlclark/regexp2 v1.11.5 // indirect
-
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
@@ -115,6 +111,7 @@ require (
 	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dkorunic/betteralign v0.8.0 // indirect
+	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ekzhu/minhash-lsh v0.0.0-20171225071031-5c06ee8586a1 // indirect

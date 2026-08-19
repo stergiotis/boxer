@@ -163,9 +163,20 @@ func populateJsonEntity(dec *jsontext.Decoder, ent *InEntityJson, hasher hash.Ha
 				}
 			case '0':
 				{
-					v := token.Float()
+					var v float64
+					v, err = token.Float()
+					if err != nil {
+						err = eb.Build().Str("pointer", string(ptr)).Errorf("unable to read number token as a float64")
+						return
+					}
 					if !math.IsNaN(v) && !math.IsInf(v, -1) && !math.IsInf(v, 1) && math.Floor(v) == math.Ceil(v) {
-						int64Sec.BeginAttribute(token.Int()).AddMembershipMixedLowCardVerbatim(lowCardPtr, highCardPtr).EndAttribute()
+						var i int64
+						i, err = token.Int()
+						if err != nil {
+							err = eb.Build().Str("pointer", string(ptr)).Errorf("unable to read number token as an int64")
+							return
+						}
+						int64Sec.BeginAttribute(i).AddMembershipMixedLowCardVerbatim(lowCardPtr, highCardPtr).EndAttribute()
 					} else {
 						float64Sec.BeginAttribute(v).AddMembershipMixedLowCardVerbatim(lowCardPtr, highCardPtr).EndAttribute()
 					}

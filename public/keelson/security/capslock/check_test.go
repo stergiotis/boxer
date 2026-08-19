@@ -265,6 +265,12 @@ func TestOwnCapabilities_DropsKnownNoiseSink(t *testing.T) {
 			[]string{"p", "net/http"}, []string{"p.sectionTexts", "net/http.containsDotDot$1"}),
 	))
 	assert.Empty(t, out, `the app rejected a ".." path segment, not the network`)
+
+	out = ownCapabilities(cil(
+		recNamed("NETWORK", cpb.CapabilityType_CAPABILITY_TYPE_DIRECT,
+			[]string{"p", "net/http"}, []string{"p.sectionTexts", "net/http.ParseCookie$1"}),
+	))
+	assert.Empty(t, out, "the app iterated its own sequence, not the network")
 }
 
 // The drop is keyed on the sink's own identity, not its package: a different

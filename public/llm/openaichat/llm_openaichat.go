@@ -395,7 +395,7 @@ type wireRequest struct {
 	// key duplicating an emitted member makes Marshal fail with a duplicate-
 	// name error, which is the collision guarantee CompletionRequest.Extra
 	// documents.
-	Extra map[string]any `json:",inline"`
+	Extra map[string]any `json:",embed"`
 }
 
 type wireChoice struct {

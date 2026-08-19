@@ -44,10 +44,26 @@ fi
 step_begin "staticcheck"
 # Exclude generated ANTLR parser files. Capture so we can mark warn vs pass;
 # this trades streaming for status visibility (staticcheck batches anyway).
+#
+# The panic branch below is not defensive coding, it is a live condition as of
+# go1.27 (2026-08-19). staticcheck v0.7.0's IR builder aborts with
+# "unexpected expr: *ast.KeyValueExpr" on EVERY package under go1.27 — measured
+# across all 33 subtrees of ./public — because the standard library it has to
+# analyse now uses the release's struct-literal field selectors. The only newer
+# publication, v0.8.0-rc.1, aborts too ("internal error: unhandled builtin
+# recover"), and does so under go1.26 as well, so there is nothing to move to.
+# Without the branch the stack trace lands in a warn-only step and reads like
+# findings: a check that analysed nothing must not be filed under "warnings".
+# Re-check on the next staticcheck release and delete this branch.
 sc_out=$(go tool honnef.co/go/tools/cmd/staticcheck -tags "$tags" \
     -checks "all,-ST1000,-ST1003,-ST1005,-ST1016,-ST1020,-ST1021,-ST1022,-S1023,-SA4011,-SA1019" \
     ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' || true)
-if [ -n "$sc_out" ]; then
+if printf '%s' "$sc_out" | grep -q '^panic:'; then
+    echo "DID NOT RUN — staticcheck aborted, no analysis was performed:"
+    printf '%s' "$sc_out" | grep -m1 '^panic:' | sed 's/^/  /'
+    echo "  (see the note above this step in $0)"
+    step_end warn
+elif [ -n "$sc_out" ]; then
     printf '%s\n' "$sc_out"
     step_end warn
 else
