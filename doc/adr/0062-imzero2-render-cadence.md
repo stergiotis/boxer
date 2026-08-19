@@ -198,6 +198,23 @@ A client-side fix is also blocked by SD2 as written: [`host/chrome.go`](../../pu
 
 No decision change. Continuous stays the default and SD6 stays open, now blocked on work outside this tree: filed as [emilk/egui#8434](https://github.com/emilk/egui/issues/8434), proposing that eframe re-key its existing backstop from "the window is invisible" to "a redraw has been requested but unserviced for > N ms" — observable on every platform, and free here because the frames it suppresses are frames the compositor was never going to deliver. Until that lands, `IMZERO2_RENDER_CADENCE=reactive` is the mitigation for a window left in the background, at the cost this entry measures.
 
+### 2026-08-19 — Upstream fix verified: emilk/egui#8398 removes the spin entirely
+
+The maintainer pointed at [emilk/egui#8398](https://github.com/emilk/egui/pull/8398), merged 2026-08-11, which closes [#8326](https://github.com/emilk/egui/issues/8326) — the same defect the entry above reached independently, so our [#8434](https://github.com/emilk/egui/issues/8434) is a duplicate. Its diagnosis matches: `check_redraw_requests` set `ControlFlow::Poll` beside every `request_redraw` and only restored a sleeping control flow while a *timed* repaint was still pending, so once the last scheduled repaint was consumed the `Poll` was never undone. The patch drops it — `request_redraw` already wakes the loop — and always ends with an explicit `WaitUntil`/`Wait`.
+
+Verified against the harness from the entry above, A/B'd on the **merge commit versus its first parent**, so the two binaries differ by exactly this one file:
+
+| Compositor | eframe | fps | CPU |
+| --- | --- | --- | --- |
+| 1 Hz (occluded-equivalent) | parent | ~1 | 99.6 % |
+| 1 Hz | **#8398** | ~1 | **0.1 %** |
+| 60 Hz (visible) | parent | 60 | 99.7 % |
+| 60 Hz | **#8398** | 60 | **2.4 %** |
+
+Frame delivery is byte-identical in both pairs; only the CPU moves. That confirms the entry above on both counts — the spin bought no frames, and it was never paint work even at a healthy refresh rate, since a one-label app now serves the same 60 fps for 2.4 % of a core instead of 99.7 %.
+
+**Not adoptable yet, and not for the obvious reason.** The fix is unreleased: 0.36.1 still carries the `Poll`. Taking it needs a release *after* it, and this tree pins `egui`/`eframe` to `0.35` — a pin added deliberately, because the `>=0.35.0` requirement it replaced had resolved to 0.36.1 and the imzero2 lib does not compile against 0.36. So the order of work is: port the client to the 0.36 API, then move to whatever release carries #8398. SD6 stays open until then, with `IMZERO2_RENDER_CADENCE=reactive` the mitigation — but SD6's *own* question is now settled in the negative: the throttle-when-hidden mode it contemplated is unnecessary, because the spin was never the cadence's fault.
+
 ## References
 
 - [ADR-0009](0009-environment-variable-registry.md) — environment-variable registry; `CategorialStringVar` and the default-on-unrecognised-value convention used here.
