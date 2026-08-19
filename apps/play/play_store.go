@@ -2,6 +2,7 @@ package play
 
 import (
 	"context"
+	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -191,9 +192,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 	var sigs map[string]string
 	if len(signals) > 0 {
 		sigs = make(map[string]string, len(signals))
-		for k, v := range signals {
-			sigs[k] = v
-		}
+		maps.Copy(sigs, signals)
 	}
 
 	go func() {

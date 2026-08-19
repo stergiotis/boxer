@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"iter"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -963,9 +964,7 @@ func (inst *Graggle) SeedTombstoneStamps(ledger map[t.NodeID]time.Time) {
 // retention ledger.
 func (inst *Graggle) TombstoneStamps() map[t.NodeID]time.Time {
 	out := make(map[t.NodeID]time.Time, len(inst.tombstoneAt))
-	for id, when := range inst.tombstoneAt {
-		out[id] = when
-	}
+	maps.Copy(out, inst.tombstoneAt)
 	return out
 }
 
@@ -1188,9 +1187,7 @@ func (inst *Graggle) Clone() *Graggle {
 		ng.deleters[id] = cp
 	}
 	// Copy tombstone retention bookkeeping.
-	for id, when := range inst.tombstoneAt {
-		ng.tombstoneAt[id] = when
-	}
+	maps.Copy(ng.tombstoneAt, inst.tombstoneAt)
 	for id := range inst.contentPurged {
 		ng.contentPurged[id] = struct{}{}
 	}

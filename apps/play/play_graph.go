@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"hash/fnv"
+	"maps"
 	"reflect"
 	"sort"
 	"strconv"
@@ -585,13 +586,9 @@ func (inst *queryGraph) setSignalFrom(id SignalID, p env.Param, writer string) {
 	}
 	rev := inst.sig.revision + 1
 	next := make(map[SignalID]env.Param, len(inst.sig.params)+1)
-	for k, v := range inst.sig.params {
-		next[k] = v
-	}
+	maps.Copy(next, inst.sig.params)
 	nextMeta := make(map[SignalID]signalMeta, len(inst.sig.meta)+1)
-	for k, v := range inst.sig.meta {
-		nextMeta[k] = v
-	}
+	maps.Copy(nextMeta, inst.sig.meta)
 	next[id] = p
 	nextMeta[id] = signalMeta{writer: writer, revision: rev}
 	inst.sig = &signalEnv{params: next, meta: nextMeta, revision: rev}

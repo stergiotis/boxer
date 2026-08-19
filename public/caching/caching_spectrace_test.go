@@ -20,6 +20,7 @@ package caching
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -239,9 +240,7 @@ func replaySpecTrace(t *testing.T, states []specState) {
 			c.Pin(act.key)
 			dirtyPins[act.key] = true
 		case "flushAll":
-			for k, v := range s1.written {
-				durable[k] = v
-			}
+			maps.Copy(durable, s1.written)
 			for k := range dirtyPins {
 				c.Unpin(k)
 				delete(dirtyPins, k)

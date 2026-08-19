@@ -24,6 +24,7 @@
 package componentsql
 
 import (
+	"maps"
 	"sort"
 	"sync"
 
@@ -149,9 +150,7 @@ func (inst *Registry) Register(set Set) (err error) {
 			return
 		}
 	}
-	for kind, b := range staged {
-		inst.kinds[kind] = b
-	}
+	maps.Copy(inst.kinds, staged)
 	return
 }
 
