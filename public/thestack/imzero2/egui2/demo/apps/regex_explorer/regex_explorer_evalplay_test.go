@@ -244,7 +244,7 @@ func TestBuildEvalSQLHeaderStaysCommented(t *testing.T) {
 	snap := evalSnapshot{pattern: "a\nDROP TABLE x", haystack: "b\nc", hasCH: true}
 	sql := buildEvalSQL(snap, evalHandles{goHandle: "h_go", chHandle: "h_ch"})
 
-	for _, line := range strings.Split(sql, "\n") {
+	for line := range strings.SplitSeq(sql, "\n") {
 		if strings.Contains(line, "DROP TABLE") {
 			assert.True(t, strings.HasPrefix(line, "--"),
 				"a newline in the pattern escaped the comment: %q", line)

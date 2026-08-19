@@ -293,7 +293,7 @@ func resolveLaunchSql(whereExpr string) (apps []app.AppI, err error) {
 			Errorf("launch sql: clickhouse-local is required to evaluate --launch but was not found at %s nor on $PATH", chlocalpool.DefaultBinaryPath)
 		return
 	}
-	for _, line := range strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(stdout.String(), "\n"), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

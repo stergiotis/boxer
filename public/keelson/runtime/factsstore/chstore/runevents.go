@@ -185,7 +185,7 @@ func parseRunEventRows(raw []byte) (rows []factsstore.RunEventRow, err error) {
 	if len(raw) == 0 {
 		return
 	}
-	for _, line := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(string(raw), "\n"), "\n") {
 		if line == "" {
 			continue
 		}

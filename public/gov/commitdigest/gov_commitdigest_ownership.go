@@ -74,7 +74,7 @@ func commitCoAuthors(ctx context.Context, repoDir string, hash string) (emails [
 	if err != nil {
 		return nil
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(strings.ToLower(line), "co-authored-by:") {
 			email := extractCommitEmail(line)

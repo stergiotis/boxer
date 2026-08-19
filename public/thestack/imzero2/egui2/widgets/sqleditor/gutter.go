@@ -214,7 +214,7 @@ func (m gutterModel) widthPx() float32 {
 // width, so without this the tail of a long line is clipped and unreachable.
 func editorWidthPx(buf string, charPx, atLeast float32) float32 {
 	longest := 0
-	for _, line := range strings.Split(buf, "\n") {
+	for line := range strings.SplitSeq(buf, "\n") {
 		if n := len([]rune(line)); n > longest {
 			longest = n
 		}

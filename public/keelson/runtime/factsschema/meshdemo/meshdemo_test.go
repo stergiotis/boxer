@@ -301,7 +301,7 @@ func splitStatements(t *testing.T, path string) (stmts []string) {
 	t.Helper()
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
-	for _, s := range strings.Split(string(raw), ";") {
+	for s := range strings.SplitSeq(string(raw), ";") {
 		if strings.TrimSpace(s) != "" {
 			stmts = append(stmts, s)
 		}

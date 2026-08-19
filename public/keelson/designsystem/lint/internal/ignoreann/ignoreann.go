@@ -44,7 +44,7 @@ func Build(fset *token.FileSet, file *ast.File) (idx *Index) {
 				continue
 			}
 			line := fset.PositionFor(c.Slash, false).Line
-			for _, raw := range strings.Split(m[1], ",") {
+			for raw := range strings.SplitSeq(m[1], ",") {
 				id := strings.TrimSpace(raw)
 				if id == "" {
 					continue

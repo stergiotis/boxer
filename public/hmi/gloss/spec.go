@@ -42,7 +42,7 @@ const (
 func ParseSpec(line string) (s Spec) {
 	s.Line = line
 	var cur *string // the value the next unprefixed token continues
-	for _, tok := range strings.Fields(line) {
+	for tok := range strings.FieldsSeq(line) {
 		switch {
 		case strings.HasPrefix(tok, specPrefixName):
 			s.Name = tok[len(specPrefixName):]

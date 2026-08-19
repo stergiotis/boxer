@@ -91,7 +91,7 @@ func TestJsonbenchPagesAreSelfContained(t *testing.T) {
 			ctes[m[1]] = struct{}{}
 		}
 
-		for _, line := range strings.Split(sql, "\n") {
+		for line := range strings.SplitSeq(sql, "\n") {
 			f := strings.Fields(line)
 			for i := 0; i < len(f)-1; i++ {
 				if !strings.EqualFold(f[i], "FROM") {

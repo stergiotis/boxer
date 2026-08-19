@@ -417,8 +417,8 @@ func parseLifecyclesByRunRows(raw []byte) (rows []factsstore.AppLifecycleRow, er
 	if len(raw) == 0 {
 		return
 	}
-	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(strings.TrimRight(string(raw), "\n"), "\n")
+	for line := range lines {
 		if line == "" {
 			continue
 		}

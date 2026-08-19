@@ -76,8 +76,8 @@ func (sm *SignatureModel) Node() canonicaltypes.AstNodeI { return sm.ast }
 // load.
 func (sm *SignatureModel) SetCanonical(s string) {
 	var elems []*sigElem
-	groups := strings.Split(s, canonicaltypes.SignatureSeparator)
-	for _, g := range groups {
+	groups := strings.SplitSeq(s, canonicaltypes.SignatureSeparator)
+	for g := range groups {
 		prims := strings.Split(g, canonicaltypes.GroupSeparator)
 		for pi, p := range prims {
 			m := NewModel()

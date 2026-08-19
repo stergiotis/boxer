@@ -36,7 +36,7 @@ func TestDecodeAgainstLiveToolchain(t *testing.T) {
 	require.NoError(t, err)
 
 	var oracleUnits, oracleStmts, oracleCovUnits, oracleCovStmts uint64
-	for _, line := range strings.Split(string(profileTxt), "\n") {
+	for line := range strings.SplitSeq(string(profileTxt), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "mode:") {
 			continue

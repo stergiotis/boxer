@@ -89,7 +89,7 @@ func TestSamplerInsideLiveInstrumentedBinary(t *testing.T) {
 	require.NoError(t, err, "probe run failed: %s", out)
 
 	var u1, u2 []string
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) == 0 {
 			continue

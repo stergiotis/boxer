@@ -87,7 +87,7 @@ func ComputeMetrics(commits []CommitEntry, config MetricsConfig) (metrics Digest
 		}
 
 		if c.Stat != "" {
-			for _, line := range strings.Split(c.Stat, "\n") {
+			for line := range strings.SplitSeq(c.Stat, "\n") {
 				m := statLineRe.FindStringSubmatch(line)
 				if m != nil {
 					path := m[1]

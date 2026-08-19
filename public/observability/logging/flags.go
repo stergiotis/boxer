@@ -38,8 +38,8 @@ func checkZeroLogCborBuild() {
 	}
 	tags := getBuildTags(info)
 	for _, ts := range tags {
-		u := strings.Split(ts, ",")
-		for _, t := range u {
+		u := strings.SplitSeq(ts, ",")
+		for t := range u {
 			if strings.Trim(t, " \t\n\r") == "binary_log" {
 				return
 			}

@@ -269,8 +269,8 @@ func NewDictCommand() *cli.Command {
 						underscodes += uint32(strings.Count(u, "_"))
 						hyphen += uint32(strings.Count(u, "-"))
 						dots += uint32(strings.Count(u, "."))
-						vs := strings.Split(strings.ReplaceAll(strings.ReplaceAll(u, ".", "_"), "-", "_"), "_")
-						for _, v := range vs {
+						vs := strings.SplitSeq(strings.ReplaceAll(strings.ReplaceAll(u, ".", "_"), "-", "_"), "_")
+						for v := range vs {
 							//if !numericRgx.MatchString(v) {
 							cleaned[v] = struct{}{}
 							//}

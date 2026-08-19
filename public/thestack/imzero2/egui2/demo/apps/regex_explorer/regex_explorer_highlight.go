@@ -373,7 +373,7 @@ type multiLine struct {
 // rejects it under the current flag set. Hit is always false; the
 // dispatcher fills it in after ClickHouse's response.
 func (inst *App) parseAndValidatePatternList(raw string) (lines []multiLine) {
-	for _, s := range strings.Split(raw, "\n") {
+	for s := range strings.SplitSeq(raw, "\n") {
 		if strings.TrimSpace(s) == "" {
 			continue
 		}

@@ -121,7 +121,7 @@ var bannerStates = []string{docstd.StatusDraft, docstd.StatusProposed, docstd.St
 // after stripping leading '> '/whitespace must start with the canonical
 // "**Status: <state> — pre-human-review.**" prefix.
 func DetectStatusBanner(body []byte) (found bool, state string) {
-	for _, raw := range bytes.Split(body, []byte("\n")) {
+	for raw := range bytes.SplitSeq(body, []byte("\n")) {
 		line := bytes.TrimSpace(raw)
 		if len(line) == 0 {
 			continue

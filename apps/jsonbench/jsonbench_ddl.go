@@ -68,7 +68,7 @@ func runDdl(cCtx *cli.Context) (err error) {
 			return
 		}
 	}
-	for _, stmt := range strings.Split(sql, ";") {
+	for stmt := range strings.SplitSeq(sql, ";") {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			continue

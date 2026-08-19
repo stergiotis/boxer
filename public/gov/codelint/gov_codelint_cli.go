@@ -56,7 +56,7 @@ func codelintAction(ctx *cli.Context) (err error) {
 
 	var tags []string
 	if t := ctx.String("tags"); t != "" {
-		for _, x := range strings.Split(t, ",") {
+		for x := range strings.SplitSeq(t, ",") {
 			x = strings.TrimSpace(x)
 			if x != "" {
 				tags = append(tags, x)

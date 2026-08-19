@@ -106,7 +106,7 @@ func runResolve(cCtx *cli.Context) (err error) {
 // The benchmark files hold no semicolons inside literals, so a plain split is
 // sufficient here; this is not a general SQL splitter.
 func splitStatements(src string) (out []string) {
-	for _, s := range strings.Split(stripSQLComments(src), ";") {
+	for s := range strings.SplitSeq(stripSQLComments(src), ";") {
 		if s = strings.TrimSpace(s); s != "" {
 			out = append(out, s)
 		}
@@ -118,7 +118,7 @@ func splitStatements(src string) (out []string) {
 // prose and would otherwise ride into the resolved output.
 func stripSQLComments(s string) string {
 	var b strings.Builder
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if i := strings.Index(line, "--"); i >= 0 {
 			line = line[:i]
 		}
@@ -155,7 +155,7 @@ func (inst *chSchemaProvider) GetColumns(dbName string, tableName string) (colum
 		return
 	}
 	names := make([]string, 0, 64)
-	for _, line := range strings.Split(string(raw), "\n") {
+	for line := range strings.SplitSeq(string(raw), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			names = append(names, line)
 		}

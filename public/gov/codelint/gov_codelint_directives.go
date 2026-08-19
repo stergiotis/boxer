@@ -76,7 +76,7 @@ func collectDisables(fset *token.FileSet, file *ast.File) (d *fileDisables) {
 				continue
 			}
 			line := fset.Position(c.Slash).Line
-			for _, id := range strings.Split(matches[1], ",") {
+			for id := range strings.SplitSeq(matches[1], ",") {
 				id = strings.TrimSpace(id)
 				if id == "" {
 					continue

@@ -120,7 +120,7 @@ func (inst *StoreService) loadStored() {
 		}
 		return
 	}
-	for _, slug := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+	for slug := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
 		if slug == "" {
 			continue
 		}

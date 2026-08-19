@@ -797,7 +797,7 @@ func naturalKeyForLog(row factsstore.LogRow, ts time.Time) (out []byte) {
 }
 
 func splitOnSemicolon(sql string) (out []string) {
-	for _, s := range strings.Split(sql, ";") {
+	for s := range strings.SplitSeq(sql, ";") {
 		if strings.TrimSpace(s) != "" {
 			out = append(out, s)
 		}

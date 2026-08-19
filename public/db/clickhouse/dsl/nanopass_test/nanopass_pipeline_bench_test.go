@@ -73,7 +73,7 @@ var boxerFactsColumns string
 var boxerPersiststateColumns string
 
 func splitColumns(raw string) (names []string) {
-	for _, l := range strings.Split(strings.TrimSpace(raw), "\n") {
+	for l := range strings.SplitSeq(strings.TrimSpace(raw), "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			names = append(names, l)
 		}

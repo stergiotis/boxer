@@ -46,7 +46,7 @@ func queryTSV(t *testing.T, client *chclient.Client, sql string) (rows [][]strin
 	raw, err := io.ReadAll(body)
 	require.NoError(t, err)
 
-	for _, line := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(string(raw), "\n"), "\n") {
 		if line == "" {
 			continue
 		}

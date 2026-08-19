@@ -239,8 +239,8 @@ func TestConsoleFormatErrorExtra_FullIntegration(t *testing.T) {
 func TestIndentBlock(t *testing.T) {
 	input := "line1\nline2\nline3"
 	result := indentBlock(input, "  ")
-	lines := strings.Split(result, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(result, "\n")
+	for line := range lines {
 		if !strings.HasPrefix(line, "  ") {
 			t.Fatalf("expected indentation, got: %q", line)
 		}

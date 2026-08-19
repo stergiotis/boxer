@@ -104,7 +104,7 @@ func scanEnumHints(sql string) (hints map[string][]enumOption) {
 // identically-valued choices that look different.
 func parseEnumOptions(spec string) (opts []enumOption) {
 	seen := make(map[string]struct{}, 4)
-	for _, raw := range strings.Split(spec, ",") {
+	for raw := range strings.SplitSeq(spec, ",") {
 		item := strings.TrimSpace(raw)
 		if item == "" {
 			continue

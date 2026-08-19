@@ -476,7 +476,7 @@ func earliestLLMCommitDate(commits map[string]commitInfoT) (out time.Time) {
 // match a known LLM identity. Returns the last matching tag, so the most
 // recent trailer wins when multiple are present.
 func detectLLMFromBody(body string, identities []LLMIdentity) (tag string) {
-	for _, raw := range strings.Split(body, "\n") {
+	for raw := range strings.SplitSeq(body, "\n") {
 		line := strings.TrimSpace(raw)
 		if !strings.HasPrefix(strings.ToLower(line), "co-authored-by:") {
 			continue

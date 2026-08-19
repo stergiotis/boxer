@@ -85,7 +85,7 @@ func checkOneDL010(path string, _ map[string]struct{}, yield func(Finding, error
 // is the trimmed string after `## `.
 func extractH2Titles(body []byte) (titles map[string]struct{}) {
 	titles = make(map[string]struct{})
-	for _, raw := range bytes.Split(body, []byte("\n")) {
+	for raw := range bytes.SplitSeq(body, []byte("\n")) {
 		line := bytes.TrimRight(raw, " \t\r")
 		if !bytes.HasPrefix(line, []byte("## ")) {
 			continue

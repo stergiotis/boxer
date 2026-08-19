@@ -77,7 +77,7 @@ func TestComposeCreateTableSql_AppliesToLiveClickHouse(t *testing.T) {
 // Naive — does not parse strings, comments, or nested constructs. Adequate
 // for the boxer-emitted DDL which has no embedded `;`.
 func splitStatements(sql string) (out []string) {
-	for _, s := range strings.Split(sql, ";") {
+	for s := range strings.SplitSeq(sql, ";") {
 		if strings.TrimSpace(s) != "" {
 			out = append(out, s)
 		}

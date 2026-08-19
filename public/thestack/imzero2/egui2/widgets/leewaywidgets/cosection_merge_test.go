@@ -108,7 +108,7 @@ func TestGeoCoSectionMerges(t *testing.T) {
 // dump, for readable failure messages.
 func sectionLines(out string) string {
 	var b strings.Builder
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		s := strings.TrimSpace(line)
 		if strings.Contains(s, "Section") || strings.Contains(s, "CoSection") {
 			b.WriteString(s)
