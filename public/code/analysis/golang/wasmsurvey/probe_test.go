@@ -21,7 +21,6 @@ func TestClassifyProbeOutput(t *testing.T) {
 		{"could not import", "main.go:3:8: could not import net (...)", ReasonUnsupportedStdlib},
 		{"reflect", "panic: unimplemented: (reflect.Value).Method", ReasonReflect},
 		{"unsafe", "error: unsafe.Pointer conversion not supported", ReasonUnsafe},
-		{"goexperiment", "GOEXPERIMENT=jsonv2 is not supported by this toolchain", ReasonGoexperimentJSONv2},
 		{"toolchain ceiling", "requires go version 1.19 through 1.25, got go1.26", ReasonToolchain},
 		{"linker", "wasm-ld: error: undefined symbol: foo", ReasonLinker},
 		{"linkname", "//go:linkname requires a definition", ReasonLinker},

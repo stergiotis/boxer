@@ -98,10 +98,17 @@ debuggability and individually-versioned tool pins.
 ## 3. Build-tag discipline
 
 The file [./tags](../tags) is a single-line, comma-separated set of build tags
-read by every build, test, and lint script. Its active tags are
-`boxer_enable_profiling` and `goexperiment.jsonv2`; packages that opt into one
-of these fail to type-check with misleading "undefined" errors when the tags
-are omitted.
+read by every build, test, and lint script. Its one active tag is
+`boxer_enable_profiling`, which selects a compile-out arm rather than gating
+compilation: omit it and the disabled arm builds cleanly.
+
+**Nothing is required any more.** Until 2026-08 the set also carried
+`goexperiment.jsonv2`, which gated `encoding/json/v2` across the tree and failed
+the build with misleading "undefined" errors when omitted. `encoding/json/v2`
+graduated in Go 1.27 and the tag was retired
+([ADR-0199](adr/0199-adopt-go-1-27.md)); `gov buildtags` now publishes an empty
+required set, and a consuming repository needs no tags at all — which is what
+makes `go tool` delivery of boxer's CLI work for one.
 
 Until 2026-07 the set also carried an `identifier_tag_fixed<N>` tag selecting
 a compile-time identifier tag width; that axis was retired with the switch to

@@ -37,6 +37,17 @@ func NewCliCommand() *cli.Command {
 func buildtagsAction(ctx *cli.Context) (err error) {
 	file := ctx.String("file")
 
+	// --list reads nothing: it prints the contract this binary publishes, and
+	// the caller most likely to ask is a repository that has no tags file yet.
+	// That became the normal case with ADR-0199 — the required set is empty, so
+	// a consumer needs no tags file at all, and answering "what does boxer
+	// require?" with "open tags: no such file or directory" is the wrong
+	// answer to the right question.
+	if ctx.Bool("list") {
+		printContract()
+		return
+	}
+
 	var raw []byte
 	raw, err = os.ReadFile(file)
 	if err != nil {
@@ -45,10 +56,6 @@ func buildtagsAction(ctx *cli.Context) (err error) {
 	}
 	tags := ParseTags(string(raw))
 
-	if ctx.Bool("list") {
-		printContract()
-		return
-	}
 	if ctx.Bool("print-env") {
 		fmt.Println(GoFlags(tags))
 		return
@@ -72,6 +79,9 @@ func buildtagsAction(ctx *cli.Context) (err error) {
 
 func printContract() {
 	fmt.Println("required (a consumer must set these):")
+	if len(RequiredTags) == 0 {
+		fmt.Println("  (none — boxer compiles without build tags since ADR-0199)")
+	}
 	for _, t := range RequiredTags {
 		fmt.Printf("  %s\n", t)
 	}

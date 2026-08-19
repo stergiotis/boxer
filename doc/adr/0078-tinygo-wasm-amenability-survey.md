@@ -247,6 +247,22 @@ in `both` mode rather than prune them (see open question 6).
 
 ## Updates
 
+### 2026-08-19 — SD5 is moot: there is no experiment left to carry
+
+Go 1.27 graduated `encoding/json/v2`, so the probe no longer sets
+`GOEXPERIMENT=jsonv2` on the TinyGo subprocess (which also retires two CS011
+lint exceptions — the child now inherits the environment), and the
+`goexperiment-jsonv2` reason is removed from `ReasonKind` along with the stderr
+branch that produced it. SD5's open empirical question was already answered on
+2026-06-12; this removes the machinery that existed to record a "no".
+
+The two static seeds move to `ReasonReflect` rather than disappearing:
+`encoding/json/v2` and `jsontext` sit on the same reflect subset as
+`encoding/json`, which is why that sibling is seeded the same way. That keeps
+the classification and drops only the reason that was about an experiment. It
+stays consistent with this ADR's own finding that the static Yellow band is
+over-pessimistic — these packages measured Green.
+
 ### 2026-07-31 — `gofakeit` is no longer a dependency; §Context's back-reference narrowed
 
 §Context relays [ADR-0077](./0077-keelson-browser-wasm-execution.md)'s TinyGo

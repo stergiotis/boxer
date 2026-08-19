@@ -69,7 +69,6 @@ func tinygoPreflightE(ctx context.Context, root string, target TargetID, tags []
 	args = append(args, ".")
 	out, runErr := extbin.TinyGo.CombinedOutput(cctx, extbin.Opts{
 		Dir: tmp,
-		Env: append(os.Environ(), "GOEXPERIMENT=jsonv2"), //boxer:lint disable=CS011 reason="forwards the ambient process environment into the tinygo build subprocess; not a boxer config read — the env registry cannot model inheriting the whole environment for a child process"
 	}, args...)
 	if runErr == nil {
 		return true, ""
@@ -194,10 +193,10 @@ func probePackageE(ctx context.Context, root string, importPath string, dir stri
 	start := time.Now()
 	combined, runErr := extbin.TinyGo.CombinedOutput(cctx, extbin.Opts{
 		Dir: tmp,
-		// Carry the repo's json/v2 experiment into the TinyGo build. Whether
-		// TinyGo honors it is the survey's open question (ADR-0078); a rejection
-		// is captured as the goexperiment reason rather than a tool error.
-		Env: append(os.Environ(), "GOEXPERIMENT=jsonv2"), //boxer:lint disable=CS011 reason="forwards the ambient process environment into the tinygo build subprocess; not a boxer config read — the env registry cannot model inheriting the whole environment for a child process"
+		// Env is nil, which inherits. The probe used to add
+		// GOEXPERIMENT=jsonv2 here to carry the repo's experiment into the
+		// TinyGo build; encoding/json/v2 graduated in Go 1.27 (ADR-0199), so
+		// there is no experiment left to carry.
 	}, args...)
 	millis = time.Since(start).Milliseconds()
 
@@ -258,8 +257,6 @@ func classifyProbeOutput(out string) (kind ReasonKind) {
 	switch {
 	case strings.Contains(l, "requires go version") || (strings.Contains(l, "requires go") && strings.Contains(l, "got go")) || strings.Contains(l, "unsupported go version"):
 		return ReasonToolchain
-	case strings.Contains(l, "goexperiment") || strings.Contains(l, "json/v2") || strings.Contains(l, "jsonv2") || strings.Contains(l, "encoding/json/v2"):
-		return ReasonGoexperimentJSONv2
 	case strings.Contains(l, "//go:linkname") || strings.Contains(l, "go:linkname"):
 		return ReasonLinker
 	case strings.Contains(l, "wasm-ld") || strings.Contains(l, "undefined symbol") || strings.Contains(l, "ld.lld") || strings.Contains(l, "link error"):

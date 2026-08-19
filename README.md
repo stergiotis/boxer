@@ -43,7 +43,7 @@ Boxer is a collection of packages under `public/`. The larger subsystems:
 ImZero **v1** (Dear ImGui-based) lives in [`imzero_imgui`](https://github.com/stergiotis/imzero_imgui). ImZero **v2** (egui-based) is part of this module: the Go side under `public/thestack/{imzero2,fffi2}`, its Rust egui renderer under `rust/imzero2`, and runnable demo applications under `apps/` (`play`, `imztop`, `capdemo`, `capinspector`, `taskdemo`).
 
 ## Building
-Boxer uses Go build tags to gate optional features and Go experiments (GPU backends, the `goexperiment.jsonv2` experiment, opt-in profiling). The canonical tag set lives in [`./tags`](tags); pass it to every `go build`, `go test`, and `go vet` invocation:
+Boxer requires **Go 1.27** (ADR-0199) and needs no build tags to compile. Tags gate optional features only — GPU backends, opt-in profiling — and the set boxer itself builds with lives in [`./tags`](tags). Pass it to every `go build`, `go test`, and `go vet` invocation, so that what you build matches what CI builds:
 
 ```
 go build -tags="$(cat ./tags)" ./...
@@ -51,7 +51,7 @@ go test  -tags="$(cat ./tags)" ./...
 go vet   -tags="$(cat ./tags)" ./...
 ```
 
-Without these tags, packages that opt into one of those features fail to compile with misleading *undefined identifier* errors.
+Without these tags, packages that opt into one of those features are compiled out — silently, since each has a no-op arm. Until Go 1.27 the set also carried `goexperiment.jsonv2`, without which the build failed outright with misleading *undefined identifier* errors; `encoding/json/v2` graduated and that tag is retired.
 
 ## Documentation
 Boxer follows the [Diátaxis](https://diataxis.fr/) framework (ADR-0001). Docs live next to the code they describe:

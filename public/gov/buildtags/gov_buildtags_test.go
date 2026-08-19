@@ -36,25 +36,45 @@ func TestCheckAcceptsOptional(t *testing.T) {
 	assert.Empty(t, collect(tags))
 }
 
+// RequiredTags is empty since ADR-0199, so the live set cannot exercise the
+// missing-required path. Substituting one keeps the mechanism tested: the set
+// is expected to gain a member again the next time an experiment gates a
+// package boxer imports.
 func TestCheckReportsMissingRequired(t *testing.T) {
+	defer func(prev []string) { RequiredTags = prev }(RequiredTags)
+	RequiredTags = []string{"goexperiment.somethingfuture"}
+
 	f := collect([]string{"myrepo_local_thing"})
-	require.Len(t, f, len(RequiredTags))
+	require.Len(t, f, 1)
 	assert.Equal(t, FindingKindMissing, f[0].Kind)
+	assert.Equal(t, "goexperiment.somethingfuture", f[0].Tag)
 	assert.Contains(t, f[0].Message(), "will not compile")
 }
 
-// The two retirements this package exists to catch, as the consumer
-// repositories actually carried them.
+// The live contract: nothing is required, so a consumer carrying only its own
+// tags — or none at all — passes.
+func TestCheckRequiresNothing(t *testing.T) {
+	assert.Empty(t, RequiredTags, "ADR-0199 retired the last required tag")
+	assert.Empty(t, collect(nil))
+	assert.Empty(t, collect([]string{"myrepo_local_thing"}))
+}
+
+// The retirements this package exists to catch, as the consumer repositories
+// actually carried them. goexperiment.jsonv2 joins them with ADR-0199: a
+// consumer still carrying it is not broken — the tag is inert under Go 1.27 —
+// but it is carrying a tag that means something, which is the drift this
+// reports.
 func TestCheckReportsRetiredFamilies(t *testing.T) {
 	tags := slices.Clone(RequiredTags)
 	tags = append(tags,
+		"goexperiment.jsonv2",
 		"identifier_tag_fixed16",
 		"llm_generated_gemini3pro",
 		"llm_generated_opus48",
 		"boxer_enable_profiling",
 	)
 	f := collect(tags)
-	require.Len(t, f, 3)
+	require.Len(t, f, 4)
 	for _, x := range f {
 		assert.Equal(t, FindingKindRetired, x.Kind)
 		assert.NotEmpty(t, x.Adr)
@@ -63,6 +83,8 @@ func TestCheckReportsRetiredFamilies(t *testing.T) {
 	assert.Equal(t, "ADR-0106", f[0].Adr)
 	assert.Equal(t, "ADR-0083", f[1].Adr)
 	assert.Contains(t, f[1].Message(), "remove it")
+	assert.Equal(t, "goexperiment.jsonv2", f[3].Tag)
+	assert.Equal(t, "ADR-0199", f[3].Adr)
 }
 
 func TestCheckOrderIsStableRegardlessOfInputOrder(t *testing.T) {

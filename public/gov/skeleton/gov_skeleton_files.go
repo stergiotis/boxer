@@ -84,8 +84,14 @@ fi
 app=$(mktemp)
 trap 'rm -f -- "$app"' EXIT
 
+# An empty tags file is the normal state since boxer retired its last required
+# tag: pass no -tags at all rather than an empty argument.
+tags="$(tr -d '\n' < tags)"
+tagflag=()
+[ -n "$tags" ] && tagflag=(-tags "$tags")
+
 go build "${EXTRA_BUILD_FLAGS[@]+"${EXTRA_BUILD_FLAGS[@]}"}" \
-    -tags "$(tr -d '\n' < tags)" -o "$app" {{.AppPackage}} 1>&2
+    "${tagflag[@]+"${tagflag[@]}"}" -o "$app" {{.AppPackage}} 1>&2
 exec "$app" "$@"
 `
 
@@ -163,6 +169,11 @@ set -euo pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here/../.."
 tags="$(tr -d '\n' < tags)"
+# Empty since boxer retired its last required tag; pass no flag rather than an
+# empty one. --tags is left as-is below: an empty value there means "no tags",
+# which is a meaningful answer, not a stray argument.
+tagflag=()
+[ -n "$tags" ] && tagflag=(-tags "$tags")
 
 rc=0
 
@@ -180,8 +191,8 @@ fi
 
 echo ""
 echo "=== go vet ==="
-if go vet -tags "$tags" ./... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' | grep -q .; then
-    go vet -tags "$tags" ./... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:'
+if go vet "${tagflag[@]+"${tagflag[@]}"}" ./... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' | grep -q .; then
+    go vet "${tagflag[@]+"${tagflag[@]}"}" ./... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:'
     rc=1
 else
     echo "passed"
@@ -264,12 +275,21 @@ surface there, not in review.
 
 ## Build & test
 
-Always pass the build tags, or packages fail with misleading "undefined":
+boxer requires no build tags of a consumer (its last required tag retired with
+ADR-0199). ` + "`./tags`" + ` is yours: it may be empty, and it may carry
+repo-local tags or boxer's recognised opt-ins. Pass it anyway, so that what you
+build matches what your CI builds — and when it is empty, pass no flag rather
+than an empty one:
 
 ` + "```sh" + `
-go test -tags="$(cat ./tags)" ./...
-./{{.Name}}.sh gov gate --tags "$(cat ./tags)"    # the full gate
+tags="$(tr -d '\n' < tags)"
+[ -n "$tags" ] && go test -tags="$tags" ./... || go test ./...
+./{{.Name}}.sh gov gate --tags "$tags"    # the full gate; empty means "no tags"
 ` + "```" + `
+
+` + "`./{{.Name}}.sh gov buildtags --list`" + ` prints what boxer requires,
+recognises and has retired — it reads no files, so it answers before you have a
+` + "`tags`" + ` file.
 
 ## Entry point
 

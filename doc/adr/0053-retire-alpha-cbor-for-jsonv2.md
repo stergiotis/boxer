@@ -150,6 +150,22 @@ Accepted — 2026-04-22. Migration to the attic begins; see the accompanying pla
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-08-19 — the experiment this ADR routed through is gone
+
+`encoding/json/v2` and `encoding/json/jsontext` graduated into the standard
+library in Go 1.27, and the `goexperiment.jsonv2` build tag that enabled them
+here is retired ([ADR-0199](0199-adopt-go-1-27.md)). Every mention of that tag
+in this record is historical: the packages are ordinary stdlib now, the import
+paths are unchanged, and the streaming-pull API this ADR migrated onto is
+reached without any build tag. The decision and its kill-reasons are unaffected.
+
+Graduation did change the API in ways a reader of the §Decision migration should
+know: `jsontext.Token`'s `Float`, `Int` and `Uint` accessors gained an error
+return, and `encoding/json/v2` renamed the `,inline` struct-tag option to
+`,embed` while silently ignoring the old spelling.
+
 ## References
 
 - [`0050-clickhouse-observability-pipeline.md`](0050-clickhouse-observability-pipeline.md), [`0051-query-categorization-provenance.md`](0051-query-categorization-provenance.md), [`0052-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — prior ADRs; template shape followed here.

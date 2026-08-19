@@ -34,15 +34,16 @@ import (
 )
 
 // RequiredTags must appear in every consumer's tag set. A tag belongs here only
-// when boxer's own packages fail to compile without it — goexperiment.jsonv2
-// gates encoding/json/v2, which boxer imports across the tree.
+// when boxer's own packages fail to compile without it.
 //
-// Retires when encoding/json/v2 graduates into the standard library, at which
-// point this set is expected to become empty and a consumer needs no build tags
-// at all.
-var RequiredTags = []string{
-	"goexperiment.jsonv2",
-}
+// It is empty, and has been since encoding/json/v2 graduated in Go 1.27
+// (ADR-0199): a consumer needs no build tags at all, which is what opens `go
+// tool` delivery of boxer's own CLI to one. The set is kept rather than deleted
+// because the mechanism is not retired with its last member — a future
+// experiment gate would land here again, and [Check] must keep reporting a
+// missing one. TestCheckReportsMissingRequired substitutes a set for exactly
+// that reason.
+var RequiredTags = []string{}
 
 // OptionalTags are recognised opt-ins. boxer_enable_profiling selects the
 // profiling_enabled.go arm; omitting it selects profiling_disabled.go and
@@ -75,6 +76,11 @@ var RetiredTags = []RetiredTag{
 		Pattern: "llm_generated_*",
 		Adr:     "ADR-0083",
 		Retired: "2026-06",
+	},
+	{
+		Pattern: "goexperiment.jsonv2",
+		Adr:     "ADR-0199",
+		Retired: "2026-08",
 	},
 }
 

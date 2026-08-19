@@ -120,5 +120,15 @@ Accepted — 2026-06-21 (reviewed by @spx). Implemented tree-wide: the `llm_gene
 The cross-repo consumer is no longer named, per the coding standard's
 privacy rule. Decisions are unchanged.
 
+## Update — 2026-08-19: the tag set is down to one, and it is optional
+
+This ADR's §Decision lists the tags that survived the `llm_generated_*`
+retirement: `identifier_tag_fixed<N>`, `boxer_enable_profiling`,
+`goexperiment.jsonv2`. Two are now gone — the first with ADR-0106, the last with
+[ADR-0199](0199-adopt-go-1-27.md) when `encoding/json/v2` graduated in Go 1.27.
+`gov buildtags` publishes an empty required set, so a consuming repository needs
+no build tags at all; `boxer_enable_profiling` remains as an opt-in whose
+default arm compiles cleanly. Nothing here about authorship provenance changes.
+
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See `doc/DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).

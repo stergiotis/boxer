@@ -119,7 +119,6 @@ const (
 	ReasonUnsupportedStdlib              // imports a stdlib package TinyGo does not provide on wasm (os/exec, plugin, net…)
 	ReasonReflect                        // uses reflect — TinyGo implements only a subset
 	ReasonUnsafe                         // uses unsafe — portability/ABI risk under wasm
-	ReasonGoexperimentJSONv2             // reaches encoding/json/v2 (the goexperiment.jsonv2 surface)
 	ReasonUnknownExternal                // depends on an external module not on the allow/deny list — unverified
 	ReasonUnsupportedExternal            // depends on an external module known not to build under TinyGo/wasm
 	ReasonSyscall                        // empirical: missing/again unsupported syscall surface
@@ -138,8 +137,6 @@ func (r ReasonKind) String() (s string) {
 		s = "reflect"
 	case ReasonUnsafe:
 		s = "unsafe"
-	case ReasonGoexperimentJSONv2:
-		s = "goexperiment-jsonv2"
 	case ReasonUnknownExternal:
 		s = "unknown-external"
 	case ReasonUnsupportedExternal:

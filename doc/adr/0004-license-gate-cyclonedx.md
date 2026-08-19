@@ -133,6 +133,16 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## Updates
 
+### 2026-08-19 — SD9's tag examples are now all historical
+
+`goexperiment.jsonv2` was retired with the Go 1.27 adoption
+([ADR-0199](0199-adopt-go-1-27.md)), joining `identifier_tag_fixed*` (ADR-0106)
+and `llm_generated_*` (ADR-0083). All three families SD9 names as tag-gated
+dependencies entering the gate unconditionally are gone, and the one remaining
+tag — `boxer_enable_profiling` — gates a compile-out arm, not a dependency. SD9's
+reasoning is unchanged and still correct; a reader looking for a live instance of
+it will not find one today.
+
 ### 2026-05-02 — Per-module license election (SD12)
 
 The post-cutover SBOM run surfaced one policy violation: `github.com/golang/freetype` classified as `GPL-2.0-or-later` (restricted). The upstream `LICENSE` file is dual: "Use of the Freetype-Go software is subject to your choice of exactly one of the following two licenses: \* The FreeType License \[FTL\] \[…\] or \* The GNU General Public License (GPL), version 2 or later." `cyclonedx-gomod`'s detector emits the GPL branch only; the prior `go-licenses` gate had this module in the unresolved-advisory set rather than failing on it.

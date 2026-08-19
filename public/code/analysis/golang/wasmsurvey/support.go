@@ -53,8 +53,8 @@ var partialStdlib = map[string]ReasonKind{
 	"text/template":          ReasonReflect,
 	"html/template":          ReasonReflect,
 	"unsafe":                 ReasonUnsafe,
-	"encoding/json/v2":       ReasonGoexperimentJSONv2,
-	"encoding/json/jsontext": ReasonGoexperimentJSONv2,
+	"encoding/json/v2":       ReasonReflect, // as encoding/json above: the same reflect subset
+	"encoding/json/jsontext": ReasonReflect,
 }
 
 // unsupportedExternalPrefix are external module/import prefixes known not to
