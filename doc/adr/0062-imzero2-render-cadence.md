@@ -181,11 +181,22 @@ Method: headless weston at a forced frame-callback rate (`weston --backend=headl
 
 Two readings. **Under throttling both cadences deliver the same ~1 fps, so the spin buys nothing** — continuous burns a whole core for zero additional frames, and reactive removes it 55×. **But reactive still cannot be the default**, because on a *visible* window it drops 60 fps to ~1: exactly the O2 rejection in decision 1. `IMZERO2_RENDER_CADENCE=reactive` is therefore a real workaround for a backgrounded dev window and not a fix.
 
+**Confirmed against stock eframe, with none of this tree involved.** A ~25-line `eframe` app — one `ui.label`, `ctx.request_repaint()` in `logic()`, no Go host and no FFFI2 — reproduces the same behaviour on **eframe 0.36.1**, the current release at the time of writing. This tree is on 0.35.0; the relevant code is identical in both, down to the line numbers.
+
+| Compositor | Repaint request | fps | CPU |
+| --- | --- | --- | --- |
+| 1 Hz | `request_repaint()` | ~1 | 99.7 % |
+| 1 Hz | `request_repaint_after(1 s)` | ~1 | 1.6 % |
+| 60 Hz | `request_repaint()` | 60 | 99.8 % |
+| 60 Hz | `request_repaint_after(1 s)` | ~1 | 0.0 % |
+
+That control corrects how the 60 Hz row of the table above should be read. Sixty frames per second of a *single label* cannot need 16 ms of CPU each, so most of continuous mode's cost at a healthy refresh rate is the same poll loop interleaved with frames that do arrive — not paint work. Occlusion is the extreme of a broader behaviour rather than a separate one: it is where the loop yields one frame per core-second instead of sixty.
+
 The mechanism is in eframe, not here. `about_to_wait` sets `ControlFlow::Poll` whenever a repaint is due and `is_invisible_or_minimized(window)` is false; the compositor withholds frame callbacks from a throttled surface, so `RedrawRequested` never arrives, the repaint stays due, and the loop re-Polls. eframe already carries a backstop for this exact busy-loop (`INVISIBLE_WINDOW_REPAINT_INTERVAL`, egui #7776) but keys it on `Window::is_visible()` / `is_minimized()`, which winit's Wayland backend returns `None` for unconditionally. The same gap disposes of SD6's stated mechanism: winit emits `WindowEvent::Occluded` on X11, macOS, iOS and web but **never on Wayland**, and eframe fills `ViewportInfo.occluded` only from that event — so a visibility-aware mode as SD6 describes it is inert on the platform where this was measured.
 
 A client-side fix is also blocked by SD2 as written: [`host/chrome.go`](../../public/thestack/imzero2/host/chrome.go) requests an immediate repaint every frame in continuous mode, and egui's `request_repaint_after` takes `min(existing, d)` — the Rust side cannot lengthen a deadline Go already set to zero. Making the client authoritative would need a Rust→Go signal and a decorator change, and the `RequestRepaint` dispatch arm is generated code.
 
-No decision change. Continuous stays the default and SD6 stays open; the preferred fix is now upstream — re-key eframe's existing backstop from "the window is invisible" to "a redraw has been requested but unserviced for > N ms", which is observable on every platform and costs nothing here, since the frames it suppresses are frames the compositor was never going to deliver.
+No decision change. Continuous stays the default and SD6 stays open, now blocked on work outside this tree: filed as [emilk/egui#8434](https://github.com/emilk/egui/issues/8434), proposing that eframe re-key its existing backstop from "the window is invisible" to "a redraw has been requested but unserviced for > N ms" — observable on every platform, and free here because the frames it suppresses are frames the compositor was never going to deliver. Until that lands, `IMZERO2_RENDER_CADENCE=reactive` is the mitigation for a window left in the background, at the cost this entry measures.
 
 ## References
 
@@ -197,3 +208,4 @@ No decision change. Continuous stays the default and SD6 stays open; the preferr
 - [`imzero2env.go`](../../public/thestack/imzero2/imzero2env/imzero2env.go) — `RenderCadence` registration.
 - [`app.rs`](../../rust/imzero2/src/imzero2/app.rs) — Rust `logic()` cadence and warmup.
 - [`imzero2_demo_resolve.go`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go) — Go decorator cadence.
+- [emilk/egui#8434](https://github.com/emilk/egui/issues/8434) — the upstream busy-loop this ADR's 2026-08-19 entry measured; SD6 is blocked on it.
