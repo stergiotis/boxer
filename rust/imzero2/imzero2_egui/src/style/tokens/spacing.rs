@@ -27,8 +27,19 @@ pub const PX_TABLE: [[f32; 3]; 8] = [
 /// Generic ladder accessor. Most callers should use the purpose-named helpers
 /// below; `px(density, idx)` is the escape hatch for cases the named tokens
 /// don't cover.
+///
+/// # Panics
+///
+/// If `idx` is past the end of the ladder (`>= PX_TABLE.len()`, i.e. 8). The
+/// ladder is a fixed 8-rung scale, so an out-of-range rung is a caller bug
+/// rather than a runtime condition, and every purpose-named helper below
+/// passes a constant.
 #[inline]
 pub fn px(density: Density, idx: usize) -> f32 {
+    // The column index cannot be out of range: `Density`'s discriminants are
+    // 0/1/2 and each row is `[f32; 3]`. The row index is the caller's, and
+    // panicking on it is the documented contract above.
+    #[expect(clippy::indexing_slicing)]
     PX_TABLE[idx][density as usize]
 }
 
@@ -131,12 +142,11 @@ mod tests {
 
     #[test]
     fn all_values_on_2px_grid() {
-        for row in PX_TABLE.iter() {
-            for &v in row.iter() {
+        for row in &PX_TABLE {
+            for &v in row {
                 assert!(
                     (v as i32) % 2 == 0,
-                    "spacing {} not a multiple of 2 px (ADR-0029 §SD6 grid invariant)",
-                    v
+                    "spacing {v} not a multiple of 2 px (ADR-0029 §SD6 grid invariant)"
                 );
             }
         }

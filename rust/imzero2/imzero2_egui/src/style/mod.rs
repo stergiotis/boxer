@@ -15,8 +15,8 @@ use self::tokens::density::Density;
 /// Full one-shot startup overlay: spacing + visuals + rounding + stroke +
 /// IDS-default fonts (replaces the host app's `FontDefinitions`).
 ///
-/// Apps that manage their own `FontDefinitions` (e.g. the carousel demo,
-/// which loads MAIN_FONT / MONO_FONT / NERD_FONT / FALLBACK_FONT from env)
+/// Apps that manage their own `FontDefinitions` (e.g. the carousel demo, which
+/// loads `MAIN_FONT` / `MONO_FONT` / `NERD_FONT` / `FALLBACK_FONT` from env)
 /// should call [`apply_style_only`] instead — same overlay, fonts untouched.
 pub fn apply(ctx: &Context, density: Density) {
     tokens::apply_fonts(ctx);
@@ -45,14 +45,17 @@ pub fn apply_style_only(ctx: &Context, density: Density) {
     });
 }
 
-/// Tour-mode neutralization: collapse `widgets.hovered.bg_stroke` and
-/// `widgets.active.bg_stroke` onto `widgets.inactive.bg_stroke` so that
-/// compositor-delivered focus and cursor position cannot paint an accent
-/// stroke into a deterministic capture. Without this the first 1-2 demos
-/// in a screenshot tour can drift run-to-run depending on whether the WM
-/// has granted window focus / warped the cursor before the settle phase
-/// completes. Call after [`apply`] / [`apply_style_only`] when the host
-/// has decided it is in screenshot-capture mode.
+/// Tour-mode neutralization: make hover and active look like inactive.
+///
+/// Collapses `widgets.hovered.bg_stroke` and `widgets.active.bg_stroke` onto
+/// `widgets.inactive.bg_stroke`, so that compositor-delivered focus and cursor
+/// position cannot paint an accent stroke into a deterministic capture.
+///
+/// Without this the first 1-2 demos in a screenshot tour can drift run-to-run
+/// depending on whether the WM has granted window focus / warped the cursor
+/// before the settle phase completes. Call after [`apply`] /
+/// [`apply_style_only`] when the host has decided it is in screenshot-capture
+/// mode.
 pub fn apply_tour_neutral_overrides(ctx: &Context) {
     ctx.global_style_mut(|style| {
         let inactive_stroke = style.visuals.widgets.inactive.bg_stroke;

@@ -1,4 +1,4 @@
-//! Type scale (ADR-0030 §SD3) + FontDefinitions wiring (§SD7) +
+//! Type scale (ADR-0030 §SD3) + `FontDefinitions` wiring (§SD7) +
 //! Body.Mono / Body.Numeric pairings (§SD6).
 //!
 //! Five size tokens at Standard density: Display / Heading / Body /
@@ -60,6 +60,11 @@ pub const FAMILY_ICONS_PHOSPHOR: &str = "phosphor";
 /// M0b-deferred pending a subsetting / size-budget decision (per
 /// ADR-0034 SD3 amendment — actual TTF size ~10 MB/style vs ADR-0030
 /// §SD7 estimate of ~200 KB/style).
+// ~9.9 MB, an order of magnitude past clippy's 1 MB include ceiling. Embedding
+// it is the point of the crate: the IDS guarantees a fixed set of faces without
+// depending on what fontconfig happens to resolve on the host. The doc comment
+// above tracks the size budget this trades against.
+#[expect(clippy::large_include_file)]
 pub const IOSEVKA_AILE_REGULAR: &[u8] =
     include_bytes!("../../../../assets/fonts/iosevka-aile/IosevkaAile-Regular.ttf");
 
@@ -72,6 +77,8 @@ pub const PHOSPHOR_REGULAR: &[u8] =
 /// M0a ships Regular only; Medium / Bold + italics are vendored in
 /// `assets/fonts/ids-mono/` but not yet embedded (same size-budget
 /// constraint as Aile — see [`IOSEVKA_AILE_REGULAR`]).
+// ~8.9 MB — same trade as `IOSEVKA_AILE_REGULAR` above.
+#[expect(clippy::large_include_file)]
 pub const IDS_MONO_REGULAR: &[u8] =
     include_bytes!("../../../../assets/fonts/ids-mono/IDSMono-Regular.ttf");
 
@@ -81,17 +88,17 @@ pub const IDS_MONO_REGULAR: &[u8] =
 pub fn install_fonts(defs: &mut FontDefinitions) {
     // Proportional: Iosevka Aile Regular.
     defs.font_data.insert(
-        FAMILY_PROPORTIONAL.to_string(),
+        FAMILY_PROPORTIONAL.to_owned(),
         Arc::new(FontData::from_static(IOSEVKA_AILE_REGULAR)),
     );
     // Monospace: IDS Mono Regular.
     defs.font_data.insert(
-        FAMILY_MONO.to_string(),
+        FAMILY_MONO.to_owned(),
         Arc::new(FontData::from_static(IDS_MONO_REGULAR)),
     );
     // Phosphor — icon font (ADR-0044).
     defs.font_data.insert(
-        FAMILY_ICONS_PHOSPHOR.to_string(),
+        FAMILY_ICONS_PHOSPHOR.to_owned(),
         Arc::new(FontData::from_static(PHOSPHOR_REGULAR)),
     );
 
@@ -101,15 +108,15 @@ pub fn install_fonts(defs: &mut FontDefinitions) {
     defs.families
         .entry(FontFamily::Proportional)
         .or_default()
-        .insert(0, FAMILY_PROPORTIONAL.to_string());
+        .insert(0, FAMILY_PROPORTIONAL.to_owned());
     defs.families
         .entry(FontFamily::Proportional)
         .or_default()
-        .push(FAMILY_ICONS_PHOSPHOR.to_string());
+        .push(FAMILY_ICONS_PHOSPHOR.to_owned());
     // Wire IDS Mono as the first Monospace family entry; Phosphor falls
     // through as the icon-codepoint fallback per ADR-0044 §SD5.
-    defs.families.entry(FontFamily::Monospace).or_default().insert(0, FAMILY_MONO.to_string());
-    defs.families.entry(FontFamily::Monospace).or_default().push(FAMILY_ICONS_PHOSPHOR.to_string());
+    defs.families.entry(FontFamily::Monospace).or_default().insert(0, FAMILY_MONO.to_owned());
+    defs.families.entry(FontFamily::Monospace).or_default().push(FAMILY_ICONS_PHOSPHOR.to_owned());
 }
 
 /// One-shot startup helper. Calls `install_fonts` against a fresh

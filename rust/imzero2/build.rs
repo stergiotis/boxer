@@ -8,7 +8,7 @@
 //! class of drift impossible.
 //!
 //! Pure Rust, no system `protoc`: protox parses the .proto into a
-//! FileDescriptorSet and prost-build emits the Rust from it.
+//! `FileDescriptorSet` and prost-build emits the Rust from it.
 //!
 //! Gated on the `headless` feature — only that build compiles the wire
 //! types (`inputproto.rs` is itself `#[cfg(feature = "headless")]`), so a

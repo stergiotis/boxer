@@ -17,18 +17,13 @@
 use std::env;
 
 /// Screenshot mode, resolved from `IMZERO2_SCREENSHOT_MODE`.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum ScreenshotMode {
     /// Default — IDS-default fonts; overrides ignored.
+    #[default]
     Conformance,
     /// Opt-in via env var — overrides honoured; output to branding dir.
     Branding,
-}
-
-impl Default for ScreenshotMode {
-    fn default() -> Self {
-        ScreenshotMode::Conformance
-    }
 }
 
 /// Read the mode from `IMZERO2_SCREENSHOT_MODE`. Case-insensitive;
@@ -57,22 +52,29 @@ pub fn body_mono_family() -> String {
     match (m, override_val) {
         (ScreenshotMode::Branding, Some(family)) => family,
         (ScreenshotMode::Conformance, Some(family)) => {
-            eprintln!(
-                "imzero2_egui: override IMZERO2_FONT_BODY_MONO={} ignored \
-                 in conformance mode (set IMZERO2_SCREENSHOT_MODE=branding)",
-                family
-            );
-            super::typography::FAMILY_MONO.to_string()
+            // Dropping the override silently would leave an operator wondering
+            // why their font never appears, so the one-line warning is part of
+            // the mode's contract (module docs above; ADR-0030 §SD11). This
+            // crate depends on egui alone — there is no log/tracing facade here
+            // to route it through — so stderr is the channel.
+            #[expect(clippy::print_stderr)]
+            {
+                eprintln!(
+                    "imzero2_egui: override IMZERO2_FONT_BODY_MONO={family} ignored \
+                     in conformance mode (set IMZERO2_SCREENSHOT_MODE=branding)"
+                );
+            }
+            super::typography::FAMILY_MONO.to_owned()
         }
-        (_, None) => super::typography::FAMILY_MONO.to_string(),
+        (_, None) => super::typography::FAMILY_MONO.to_owned(),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    // SAFETY: env var mutation is unsafe in Rust 2024. Tests run
-    // single-threaded by default for cargo's test binary, but this
-    // file's tests mutate IMZERO2_* — group them and avoid concurrency.
+    // Rust 2024 made env-var mutation unsafe, and these tests mutate
+    // IMZERO2_*, so this module opts back in. ENV_LOCK below is what makes
+    // that sound: it serialises the tests that touch the process-global env.
     #![allow(unsafe_code)]
     use super::*;
     use std::sync::Mutex;
@@ -80,9 +82,13 @@ mod tests {
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn with_env<F: FnOnce()>(vars: &[(&str, Option<&str>)], f: F) {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK.lock().expect("ENV_LOCK poisoned by an earlier test panic");
         let saved: Vec<(String, Option<String>)> =
             vars.iter().map(|(k, _)| (k.to_string(), env::var(*k).ok())).collect();
+        // SAFETY: setting env vars races with any concurrent reader in the
+        // process. ENV_LOCK, held for the whole of with_env, is the only thing
+        // in this crate that touches IMZERO2_*, so no other thread can observe
+        // a torn value while this runs.
         unsafe {
             for (k, v) in vars {
                 match v {
@@ -92,6 +98,7 @@ mod tests {
             }
         }
         f();
+        // SAFETY: as above — still under ENV_LOCK, restoring what was saved.
         unsafe {
             for (k, v) in saved {
                 match v {

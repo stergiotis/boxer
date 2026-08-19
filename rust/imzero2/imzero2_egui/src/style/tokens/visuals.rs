@@ -116,6 +116,9 @@ pub const QUALITATIVE_CYCLE_LEN: usize = super::super::data_encoding::OKABE_ITO.
 pub fn qualitative_cycle(idx: usize) -> Color32 {
     let lut = &super::super::data_encoding::OKABE_ITO;
     let n = lut.len();
+    // `idx % n` is in range for any `idx`, and `n` is the length of a non-empty
+    // const array, so the remainder cannot divide by zero either.
+    #[expect(clippy::indexing_slicing)]
     let (r, g, b) = lut[idx % n];
     Color32::from_rgb(r, g, b)
 }
@@ -136,6 +139,10 @@ pub fn sequential(palette: SequentialE, t: f32) -> Color32 {
     };
     let t = t.clamp(0.0, 1.0);
     let idx = (t * 255.0) as usize;
+    // `t` is clamped to [0, 1], so `idx` lands in [0, 255] against a 256-entry
+    // table. A NaN `t` survives `clamp`, but `NaN as usize` saturates to 0 in
+    // Rust, which is in range too.
+    #[expect(clippy::indexing_slicing)]
     let (r, g, b) = lut[idx];
     Color32::from_rgb(r, g, b)
 }
@@ -156,6 +163,8 @@ pub fn diverging(palette: DivergingE, t: f32) -> Color32 {
     let mapped = (t * 0.5 + 0.5) * 255.0;
     let idx = mapped as usize;
     let idx = idx.min(255);
+    // Explicitly clamped to 255 on the line above; the table has 256 entries.
+    #[expect(clippy::indexing_slicing)]
     let (r, g, b) = lut[idx];
     Color32::from_rgb(r, g, b)
 }

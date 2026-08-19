@@ -15,7 +15,7 @@ use std::time::Duration;
 
 /// State change feedback (hover, focus, button-press).
 pub const QUICK_MS: u32 = 80;
-/// Default transitions (panel open/close, menu expand, DragValue finalise).
+/// Default transitions (panel open/close, menu expand, `DragValue` finalise).
 pub const STANDARD_MS: u32 = 160;
 /// Deliberate transitions (modal entrance, drawer slide, page-level state).
 pub const SLOW_MS: u32 = 320;

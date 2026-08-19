@@ -8,17 +8,12 @@ use std::env;
 
 /// IDS density preset. Original names per ADR-0029 §SD3 (deliberately not
 /// "Compact / Regular / Spacious" or "dense / regular / comfortable").
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Density {
     Tight = 0,
+    #[default]
     Standard = 1,
     Roomy = 2,
-}
-
-impl Default for Density {
-    fn default() -> Self {
-        Density::Standard
-    }
 }
 
 /// Read the active density from `IMZERO2_DENSITY` env var.

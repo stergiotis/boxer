@@ -139,7 +139,7 @@ pub fn apply_typography(style: &mut Style, density: Density) {
 /// cancel and hovered widgets allocate +1 px per axis vs. inactive — visible
 /// as layout jitter on hover-in / hover-out. Pinning hovered to `STRONG`
 /// (2.0) keeps the math integer-clean; hover vs. active distinction now
-/// rests on the bg_stroke color (ACCENT_DEFAULT vs. ACCENT_STRONG).
+/// rests on the `bg_stroke` color (`ACCENT_DEFAULT` vs. `ACCENT_STRONG`).
 pub fn apply_stroke(visuals: &mut Visuals) {
     visuals.window_stroke.width = self::stroke::REGULAR;
     visuals.widgets.noninteractive.bg_stroke.width = self::stroke::HAIR;

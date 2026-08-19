@@ -1,0 +1,21 @@
+# Workspace clippy configuration. Cargo.toml's `[workspace.lints.clippy]` block
+# has pointed at this file since the crate was imported from the eframe
+# template — `disallowed_macros`, `disallowed_methods`, `disallowed_names`,
+# `disallowed_script_idents` and `disallowed_types` all carry a "See
+# clippy.toml" comment — but the file itself was never created, so those five
+# lints have only ever had their empty defaults. They stay empty here; the file
+# now exists so the comments are true and there is somewhere to put the first
+# real entry.
+
+# `doc_markdown` flags any word that looks like an identifier and demands
+# backticks. These four are prose, not code: two colour-space names (OKLab and
+# its cylindrical form OKLCh, per ADR-0031's semantic palette), the product
+# name, and an OpenType weight name. Backticking them would render domain
+# vocabulary as code — and OKLCh in particular appears in every doc comment of
+# the generated palette (src/style/tokens/palette_generated.rs), which no hand
+# edit may touch.
+#
+# The trailing ".." keeps clippy's own default allowlist (TypeScript, OAuth,
+# WebGL, …); without it this list REPLACES the defaults rather than extending
+# them.
+doc-valid-idents = ["OKLab", "OKLCh", "ImZero2", "SemiBold", ".."]

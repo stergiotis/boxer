@@ -41,7 +41,7 @@ pub fn linear_srgb_to_oklab(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
     let s_ = s.cbrt();
 
     let l_out = 0.210_454_26 * l_ + 0.793_617_8 * m_ - 0.004_072_047 * s_;
-    let a_out = 1.977_998_5 * l_ - 2.428_592_2 * m_ + 0.450_593_71 * s_;
+    let a_out = 1.977_998_5 * l_ - 2.428_592_2 * m_ + 0.450_593_7 * s_;
     let b_out = 0.025_904_037 * l_ + 0.782_771_77 * m_ - 0.808_675_77 * s_;
     (l_out, a_out, b_out)
 }
@@ -64,7 +64,7 @@ pub fn oklab_to_linear_srgb(l: f32, a: f32, b: f32) -> (f32, f32, f32) {
 
 /// (L, a, b) → (L, C, h°). h ∈ [0, 360).
 pub fn oklab_to_oklch(l: f32, a: f32, b: f32) -> (f32, f32, f32) {
-    let c = (a * a + b * b).sqrt();
+    let c = a.hypot(b);
     let mut h = b.atan2(a) * 180.0 / PI;
     if h < 0.0 {
         h += 360.0;
