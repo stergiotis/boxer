@@ -2,7 +2,7 @@ package h3
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -35,8 +35,8 @@ func TestPolygonToCells_Golden(t *testing.T) {
 
 		got := append([]uint64(nil), cells...)
 		want := append([]uint64(nil), r.Cells...)
-		sort.Slice(got, func(a, b int) bool { return got[a] < got[b] })
-		sort.Slice(want, func(a, b int) bool { return want[a] < want[b] })
+		slices.Sort(got)
+		slices.Sort(want)
 		require.Equal(t, want, got, "name=%s res=%d mode=%d", r.Name, r.Res, r.Mode)
 	}
 }

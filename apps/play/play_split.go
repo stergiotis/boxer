@@ -3,7 +3,6 @@ package play
 import (
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -738,7 +737,7 @@ func resolvedDeps(roots []*nanopass.SelectScope, topLevel map[antlr.ParserRuleCo
 	for _, sc := range roots {
 		visit(sc)
 	}
-	sort.Slice(deps, func(i, j int) bool { return deps[i] < deps[j] })
+	slices.Sort(deps)
 	return
 }
 
@@ -768,7 +767,7 @@ func paramSlotsOfAll(pr *nanopass.ParseResult, ctxs []antlr.ParserRuleContext) (
 			}
 		}
 	}
-	sort.Slice(reads, func(i, j int) bool { return reads[i] < reads[j] })
+	slices.Sort(reads)
 	return
 }
 

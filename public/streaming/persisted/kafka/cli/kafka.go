@@ -35,6 +35,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -649,7 +650,7 @@ func runList(c *cli.Context) (err error) {
 		for p := range t.Partitions {
 			partIDs = append(partIDs, p)
 		}
-		sort.Slice(partIDs, func(i, j int) bool { return partIDs[i] < partIDs[j] })
+		slices.Sort(partIDs)
 		for _, p := range partIDs {
 			pi := t.Partitions[p]
 			fmt.Fprintf(out, "    partition=%d leader=%d replicas=%v isr=%v\n", pi.Partition, pi.Leader, pi.Replicas, pi.ISR)

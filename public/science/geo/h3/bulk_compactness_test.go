@@ -2,7 +2,7 @@ package h3
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,8 +37,8 @@ func TestCompactCells_Golden(t *testing.T) {
 
 		got := append([]uint64(nil), compacted...)
 		want := append([]uint64(nil), r.Compacted...)
-		sort.Slice(got, func(a, b int) bool { return got[a] < got[b] })
-		sort.Slice(want, func(a, b int) bool { return want[a] < want[b] })
+		slices.Sort(got)
+		slices.Sort(want)
 		require.Equal(t, want, got, "name=%s", r.Name)
 	}
 }
@@ -99,8 +99,8 @@ func TestUncompactCells_Golden(t *testing.T) {
 		}
 		got := append([]uint64(nil), expanded...)
 		want := append([]uint64(nil), r.Expanded...)
-		sort.Slice(got, func(a, b int) bool { return got[a] < got[b] })
-		sort.Slice(want, func(a, b int) bool { return want[a] < want[b] })
+		slices.Sort(got)
+		slices.Sort(want)
 		require.Equal(t, want, got, "name=%s", r.Name)
 	}
 }
@@ -137,8 +137,8 @@ func TestCompactUncompact_RoundTrip(t *testing.T) {
 
 		got := append([]uint64(nil), expanded...)
 		want := append([]uint64(nil), children...)
-		sort.Slice(got, func(a, b int) bool { return got[a] < got[b] })
-		sort.Slice(want, func(a, b int) bool { return want[a] < want[b] })
+		slices.Sort(got)
+		slices.Sort(want)
 		require.Equal(t, want, got)
 	}
 }

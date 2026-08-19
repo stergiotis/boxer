@@ -23,7 +23,7 @@ package kafka
 import (
 	"context"
 	"math/rand/v2"
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 
@@ -272,7 +272,7 @@ func TestUnorderedPartitionTracker_ConcurrentAcks_RaceFree(t *testing.T) {
 	for c := range distinct {
 		sortedDistinct = append(sortedDistinct, c)
 	}
-	sort.Slice(sortedDistinct, func(i, j int) bool { return sortedDistinct[i] < sortedDistinct[j] })
+	slices.Sort(sortedDistinct)
 	for i := 1; i < len(sortedDistinct); i++ {
 		assert.Greater(t, sortedDistinct[i], sortedDistinct[i-1], "head advances must be strictly increasing (distinct values, sorted)")
 	}

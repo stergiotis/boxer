@@ -2,7 +2,7 @@ package h3
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,8 +42,8 @@ func TestGridDisks_Golden(t *testing.T) {
 			got := out[offsets[i]:offsets[i+1]]
 			gotSorted := append([]uint64(nil), got...)
 			wantSorted := append([]uint64(nil), r.Neighbours...)
-			sort.Slice(gotSorted, func(a, b int) bool { return gotSorted[a] < gotSorted[b] })
-			sort.Slice(wantSorted, func(a, b int) bool { return wantSorted[a] < wantSorted[b] })
+			slices.Sort(gotSorted)
+			slices.Sort(wantSorted)
 			require.Equal(t, wantSorted, gotSorted, "name=%s k=%d", r.Name, k)
 		}
 	}
