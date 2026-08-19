@@ -200,3 +200,21 @@ Rejected: **size-bucketed pools** — a bucket-selection policy and its test sur
 **Verification.** `TestPoolRetainsRealisticFrameBuffer` pins the predicate rather than the outcome: a 128 KiB buffer must still satisfy the retention test. It fails at the old ceiling (`131072 is not less than or equal to 4096`). Pool identity is deliberately not asserted — `sync.Pool` may drop entries at any GC, so a `Put`/`Get` round-trip is not a testable property.
 
 **Still open from this ADR.** Decision item 5's `/debug/pprof/custom/scopehints` handler was never wired; of the three named consumers only the slow-frame logger landed (`metrics.go`'s `RecordBytes`). `ScopeHintsSnapshot` is exported and unused elsewhere, so the endpoint remains a small follow-up.
+
+### 2026-08-19 — Verified in the app: `WriteToFixedKey` growth is down 97 %
+
+The entry above changed the ceiling on the strength of a unit test and arithmetic. Measured since, on the real render path.
+
+Method: both hosts built from one pristine detached worktree at the same commit, differing only in `largestPooledBuffer`, so nothing else in the tree moves between arms. Scene is `play`'s Table tab over a twelve-column result set (`BOXER_PLAY_SQL` + `AUTORUN` + `FOCUS_TABLE`), rendered into a headless weston at 60 Hz. Allocation is a delta of two `/debug/pprof/allocs` captures across a 30 s window; both arms rendered **3 602 frames**, counted from `wl_surface.commit`, so the comparison is normalised by work rather than by time.
+
+| Metric (30 s, 3 602 frames) | 4 KiB ceiling | 256 KiB ceiling | Change |
+| --- | --- | --- | --- |
+| Total allocated | 1 313 MB | 1 065 MB | −19 % |
+| `bytes.growSlice` | 364 MB | 144 MB | −60 % |
+| — of which `WriteToFixedKey` | 203 MB | 6.6 MB | **−97 %** |
+| `growSlice` per frame | 101 KiB | 40 KiB | −61 KiB |
+| Live heap at end of run | 60.6 MB | 49.3 MB | −19 % |
+
+The site the ceiling governs is essentially gone, and the drop in total allocation is accounted for by it. Live heap fell rather than rose, so the retention that motivated the original 4 KiB cap (golang/go#23199) did not materialise here — fewer large short-lived buffers are in flight at any instant.
+
+What remains under `growSlice` is a different buffer and outside this ADR: `Fffi2.SendIntermediate` (61 → 64 MB, untouched, as expected) and `DeferredBlockScope.End` (25 → 20 MB), the latter being the `dataBuf` this ADR's hint already governs. `SendIntermediate` is now the largest single `growSlice` caller and has had no sizing work at all — the natural next candidate, on the same evidence this entry used.
