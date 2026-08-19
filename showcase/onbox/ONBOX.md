@@ -45,7 +45,7 @@ glibc matches by construction.
    useradd --system --create-home --home-dir /opt/imzero2 --shell /usr/sbin/nologin imzero2
    install -d -o imzero2 -g imzero2 /opt/imzero2/{releases,holding,.cargo}
    ```
-2. **Toolchain + runtime deps** (names vary by distro): `git`, Rust **1.92**
+2. **Toolchain + runtime deps** (names vary by distro): `git`, Rust **1.96**
    (rustup honours the repo's `rust-toolchain`), Go **1.26**, `ffmpeg` with
    libx264, Mesa software drivers (`mesa-vulkan-drivers` + DRI), `fontconfig` +
    Noto fonts, and `caddy`. Install as the `imzero2` user where it owns caches.

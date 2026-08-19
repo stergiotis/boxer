@@ -17,9 +17,12 @@ imzero2_repo_branch: main
 # go_version is the patch to install; it only needs to be >= go.mod's floor
 # (go 1.26.0). Bump freely — the tarball is checksum-verified from go.dev's
 # sidecar, so any real version string just works. rust_version matches
-# rust/imzero2/rust-toolchain.
+# rust/imzero2/rust-toolchain, which is 1.96 — keep the two in step. A lower
+# value here is not merely cosmetic: it is rustup's --default-toolchain, so the
+# box primes a toolchain the first cargo run then replaces with a fresh 1.96
+# download, and on a host without that reach the build simply fails.
 go_version: "1.26.5"
-rust_version: "1.92"
+rust_version: "1.96"
 
 # --- H.264 encoder ---
 # Fedora's ffmpeg ships libopenh264, NOT libx264 (GPL). This overrides the

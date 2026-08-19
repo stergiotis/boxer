@@ -1,5 +1,5 @@
 ---
-# Go 1.26 (pinned upstream tarball) + rustup/Rust 1.92. Installed where the
+# Go 1.26 (pinned upstream tarball) + rustup/Rust 1.96. Installed where the
 # systemd-driven build can reach them: go on the system PATH, cargo via the
 # deploy unit's PATH drop-in (units role). rustup honours rust/imzero2/
 # rust-toolchain on first cargo, so the channel here just primes the cache.

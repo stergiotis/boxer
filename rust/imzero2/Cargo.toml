@@ -8,7 +8,14 @@ version = "0.1.0"
 authors = ["Panos Stergiotis <p@stergiotis.ch>"]
 edition = "2024"
 include = ["**/*.rs", "Cargo.toml"]
-rust-version = "1.92"
+# The real floor, and lower than the 1.96 in ./rust-toolchain on purpose: that
+# file is the toolchain the build *uses*, this is the oldest one the crate
+# graph still compiles under. 1.94 because h3o 0.10 calls f64::mul_add from a
+# const fn and rustc const-stabilised that in 1.94 — 1.93 fails to build h3o
+# (see ADR-0095, 2026-07-28). h3o declares no `rust-version` of its own, so
+# cargo's MSRV-aware resolver cannot derive this; it was measured by building
+# under each toolchain.
+rust-version = "1.94"
 
 [package.metadata.docs.rs]
 all-features = true

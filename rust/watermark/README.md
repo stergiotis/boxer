@@ -44,7 +44,9 @@ is checked byte-for-byte against the Go `Encoding` table in `tests/s2_fec.rs`.
 
 ## Build & test
 
-The crate pins Rust **1.92** via `rust-toolchain.toml` (matching `rust/imzero2`).
+The crate pins Rust **1.92** via `rust-toolchain.toml`. That is independent of
+`rust/imzero2`, which pins 1.96 for h3o's const `f64::mul_add`; nothing here
+pulls h3o, so this crate stays on the older toolchain it builds clean under.
 
 ```sh
 cd rust/watermark

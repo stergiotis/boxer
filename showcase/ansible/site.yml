@@ -17,7 +17,7 @@
   roles:
     - base       # dnf packages + firewall
     - user       # imzero2 system user + /opt/imzero2 tree
-    - toolchain  # Go 1.26 + rustup (Rust 1.92)
+    - toolchain  # Go 1.26 + rustup (Rust 1.96)
     - repo       # read-only clone (clone-if-absent) + signer trust
     - units      # systemd units + polkit + Fedora drop-ins + the pull timer
     - caddy      # TLS + password front door

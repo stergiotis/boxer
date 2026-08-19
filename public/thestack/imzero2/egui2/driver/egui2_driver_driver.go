@@ -150,7 +150,7 @@ func overwriteCodeAtMarker(candidateFiles []string, marker string, content strin
 //
 // It runs `rustfmt <file>` with the working directory set to the file's own
 // directory, so the ~/.cargo/bin/rustfmt rustup proxy resolves the crate's
-// rust-toolchain (rust/imzero2 -> 1.92 / rustfmt 1.8.0). Running it from the
+// rust-toolchain (rust/imzero2 -> 1.96 / rustfmt 1.9.0). Running it from the
 // repo root — as the previous inline code did — resolves the DEFAULT toolchain
 // instead (a newer rustfmt), which reformats generated files differently from
 // the pin and surfaces as spurious drift in the committed tree. rustfmt.toml is

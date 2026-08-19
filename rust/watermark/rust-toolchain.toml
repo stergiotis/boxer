@@ -1,7 +1,10 @@
-# Pinned to 1.92 — the only toolchain installed on the build hosts (matches
-# rust/imzero2). `stable` is intentionally NOT used: it is not installed here and
-# would force a network download. With no global rustup default configured, this
-# file is what lets a bare `cargo` invocation resolve a toolchain inside the crate.
+# Pinned to 1.92 — this crate builds and tests clean there, and it is a toolchain
+# the build hosts already have. It no longer matches rust/imzero2, which moved to
+# 1.96 for h3o's const f64::mul_add; nothing here pulls h3o, so the two pins are
+# simply independent and a checkout needs both installed. `stable` is
+# intentionally NOT used: it is not installed here and would force a network
+# download. With no global rustup default configured, this file is what lets a
+# bare `cargo` invocation resolve a toolchain inside the crate.
 [toolchain]
 channel = "1.92"
 components = ["rustfmt", "clippy"]
