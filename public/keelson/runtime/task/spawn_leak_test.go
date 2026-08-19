@@ -1,11 +1,20 @@
 package task
 
 import (
+	"bytes"
 	"context"
 	"runtime"
+	"runtime/pprof"
+	"strings"
 	"testing"
 	"time"
 )
+
+// monitorCreator is the function that starts the per-task monitor goroutine.
+// The goroutineleak profile's debug=2 rendering names it on the "created by"
+// line, which is what makes the assertion below specific to this package's
+// monitor rather than to whatever else the test binary has running.
+const monitorCreator = "github.com/stergiotis/boxer/public/keelson/runtime/task.spawnWithCancel"
 
 // TestSpawn_NoMonitorGoroutineLeak guards the fix for the per-task monitor
 // goroutine. It previously blocked on parent.Done() alone, so a task spawned
@@ -13,13 +22,18 @@ import (
 // left its monitor goroutine alive for the process lifetime — N spawns leaked
 // N goroutines. After the fix the monitor also selects on the handle's done
 // channel and exits on terminal completion.
+//
+// The assertion is the go1.27 goroutineleak profile (ADR-0199): a goroutine
+// blocked on a concurrency primitive that can no longer unblock. Until then
+// this test counted runtime.NumGoroutine() against a baseline with a slack of
+// ten, which could only see a leak that was numerous and could not say whose
+// it was. The profile names the leaked stack, so one leaked monitor fails —
+// and the count of tasks below no longer carries the assertion, it only
+// reproduces the original shape.
 func TestSpawn_NoMonitorGoroutineLeak(t *testing.T) {
 	f := newBusFixture(t)
 
 	const n = 200
-	settleGoroutines()
-	base := runtime.NumGoroutine()
-
 	for i := range n {
 		h, err := Spawn(context.Background(), f.producer, SpawnOpts{Kind: "leak.test"})
 		if err != nil {
@@ -30,21 +44,66 @@ func TestSpawn_NoMonitorGoroutineLeak(t *testing.T) {
 		}
 	}
 
-	// Monitor goroutines exit on handle.done; give the scheduler a moment to
-	// run their final select before measuring. A leak would show ~n extra
-	// goroutines; the tolerance absorbs unrelated runtime churn.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		settleGoroutines()
-		cur := runtime.NumGoroutine()
-		if cur <= base+10 {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("goroutine leak: baseline=%d, after %d spawn+done=%d (want <= baseline+10)", base, n, cur)
-		}
-		time.Sleep(20 * time.Millisecond)
+	// The monitors exit on handle.done. Give the scheduler their final select
+	// before asking: a goroutine that is *about* to exit is not leaked, but it
+	// is still blocked, and the profile would report it.
+	settleGoroutines()
+
+	leaked := leakedGoroutinesCreatedBy(t, monitorCreator)
+	if len(leaked) != 0 {
+		t.Fatalf("%d monitor goroutine(s) leaked after %d spawn+done; first stack:\n%s",
+			len(leaked), n, leaked[0])
 	}
+}
+
+// The zero above means nothing unless the instrument can report a non-zero, so
+// this leaks one goroutine on purpose and asserts it is seen. The leak is
+// permanent for the rest of the test binary — one goroutine blocked on a
+// channel nobody holds — which is the price of knowing the check works.
+// It is created by leakOneForever, so it does not match monitorCreator.
+func TestGoroutineLeakProfileReportsALeak(t *testing.T) {
+	leakOneForever()
+	settleGoroutines()
+
+	const creator = "github.com/stergiotis/boxer/public/keelson/runtime/task.leakOneForever"
+	leaked := leakedGoroutinesCreatedBy(t, creator)
+	if len(leaked) == 0 {
+		t.Fatal("the goroutineleak profile reported no leak for a goroutine deliberately blocked on an unreachable channel")
+	}
+	if !strings.Contains(leaked[0], "(leaked)") {
+		t.Errorf("expected the leaked-state annotation in the stack, got:\n%s", leaked[0])
+	}
+}
+
+func leakOneForever() {
+	ch := make(chan struct{})
+	go func() { <-ch }() // ch goes out of scope here: nobody can ever send or close
+}
+
+// leakedGoroutinesCreatedBy returns the goroutineleak profile's stack records
+// for goroutines started by createdBy.
+//
+// Two properties of the profile shape this. Its Count() is 0 — the leak set is
+// computed by a GC-assisted reachability pass at WriteTo time, not maintained
+// as the program runs — so the profile has to be written to be read. And
+// debug=2 is the rendering that carries both the "created by" attribution and
+// the "(leaked)" state; debug=1 folds stacks and drops both.
+func leakedGoroutinesCreatedBy(t *testing.T, createdBy string) (out []string) {
+	t.Helper()
+	p := pprof.Lookup("goroutineleak")
+	if p == nil {
+		t.Fatal("no goroutineleak profile: this needs go1.27 or newer (ADR-0199)")
+	}
+	var buf bytes.Buffer
+	if err := p.WriteTo(&buf, 2); err != nil {
+		t.Fatalf("write goroutineleak profile: %v", err)
+	}
+	for _, rec := range strings.Split(buf.String(), "\n\n") {
+		if strings.Contains(rec, "created by "+createdBy) {
+			out = append(out, strings.TrimSpace(rec))
+		}
+	}
+	return
 }
 
 // TestSpawn_ParentCancelIsAnnouncedAndWorkerTerminates verifies the

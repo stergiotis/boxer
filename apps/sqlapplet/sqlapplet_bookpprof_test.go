@@ -33,12 +33,12 @@ func pprofDefsBySlug(t *testing.T) map[string]*AppletDef {
 	t.Helper()
 	defs, errs := ParseBook("pprof", help.MustSub(bookpprofFS, "bookpprof"))
 	require.Empty(t, errs)
-	require.Len(t, defs, 4)
+	require.Len(t, defs, 5)
 	bySlug := make(map[string]*AppletDef, len(defs))
 	for _, d := range defs {
 		bySlug[d.Slug] = d
 	}
-	require.Len(t, bySlug, 4)
+	require.Len(t, bySlug, 5)
 	return bySlug
 }
 
@@ -58,10 +58,12 @@ func TestPprofBookCorpus(t *testing.T) {
 	assert.Equal(t, []string{"pprof_cpu"}, bySlug["profile-callgraph"].Datasets)
 	assert.Equal(t, []string{"pprof_cpu"}, bySlug["profile-flame"].Datasets)
 	assert.Equal(t, []string{"pprof_heap"}, bySlug["profile-heap"].Datasets)
+	assert.Equal(t, []string{"pprof_goroutineleak"}, bySlug["profile-leaks"].Datasets)
 
 	masterDetail := []TabSel{{ID: "table"}, {ID: "detail"}}
 	assert.Equal(t, masterDetail, bySlug["profile-top"].Tabs)
 	assert.Equal(t, masterDetail, bySlug["profile-heap"].Tabs)
+	assert.Equal(t, masterDetail, bySlug["profile-leaks"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "network"}, {ID: "table"}, {ID: "detail"}}, bySlug["profile-callgraph"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "icicle"}, {ID: "table"}, {ID: "detail"}}, bySlug["profile-flame"].Tabs)
 
@@ -77,6 +79,13 @@ func TestPprofBookCorpus(t *testing.T) {
 	assert.Contains(t, bySlug["profile-flame"].SQL, "stack,")
 	assert.Contains(t, bySlug["profile-flame"].SQL, "AS value")
 	assert.NotContains(t, bySlug["profile-flame"].SQL, "GROUP BY")
+
+	// The leak lens reports the profile's own count per stack. pprofarrow
+	// emits one row per unique stack with value = the goroutines parked on
+	// it, so a page that counted rows instead would read as one leak each —
+	// the wrong number, and the one an operator acts on.
+	assert.Contains(t, bySlug["profile-leaks"].SQL, "value AS goroutines")
+	assert.NotContains(t, bySlug["profile-leaks"].SQL, "count(")
 }
 
 // TestMintPprofBook mints the book beside its siblings, guarding slug
@@ -91,7 +100,7 @@ func TestMintPprofBook(t *testing.T) {
 		{id: "pprof", fsys: help.MustSub(bookpprofFS, "bookpprof"), topics: []app.TopicT{app.TopicObservability}},
 	})
 	require.Empty(t, errs)
-	assert.Equal(t, 21, minted)
+	assert.Equal(t, 22, minted)
 
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "profile-top"))
 	require.True(t, ok)
@@ -123,6 +132,18 @@ func burnCPU(d time.Duration) (acc int) {
 }
 
 var bookpprofSink [][]byte
+
+// leakOneGoroutineForever parks a goroutine on a channel that becomes
+// unreachable when this function returns — the shape the runtime's
+// reachability pass reports as leaked.
+//
+// It must be its own function. Inlining it into the caller keeps the channel
+// alive in that frame, and dropping the reference by assigning nil races with
+// the goroutine's read of the same captured variable (caught by -race).
+func leakOneGoroutineForever() {
+	ch := make(chan struct{})
+	go func() { <-ch }()
+}
 
 // TestPprofBookQueriesExecute is the live half of the corpus gate: it
 // captures real profiles of this test process, publishes them through the
@@ -199,14 +220,27 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 	require.NoError(t, pprof.Lookup("heap").WriteTo(&heapBuf, 0))
 	publish("heap", heapBuf.Bytes())
 
+	// The leaks page needs something leaked, and a healthy process has
+	// nothing: the goroutineleak profile of this binary is legitimately empty
+	// until one exists, and publish() requires rows. So leak one on purpose —
+	// a goroutine parked on a channel that went out of scope, which is the
+	// shape the runtime's reachability pass reports. It stays blocked for the
+	// rest of the test binary; that is the cost of executing this page rather
+	// than exempting it.
+	leakOneGoroutineForever()
+	runtime.GC()
+	var leakBuf bytes.Buffer
+	require.NoError(t, pprof.Lookup("goroutineleak").WriteTo(&leakBuf, 0))
+	publish("goroutineleak", leakBuf.Bytes())
+
 	// Resolve the aliases the way appletApp.Mount does — through the bus
 	// with exactly the capability a minted applet declares.
 	appletBus := bus.NewClient("test.bookpprof.applet", []app.SubjectFilter{
 		{Pattern: adhocdata.SubjectResolve, Direction: app.CapDirectionPub, Reason: "test"},
 		{Pattern: adhocdata.SubjectEventAll, Direction: app.CapDirectionSub, Reason: "test"},
 	})
-	bindings, unresolved := resolveDatasetAliases(appletBus, logger, []string{"pprof_cpu", "pprof_heap"})
-	require.Len(t, bindings, 2)
+	bindings, unresolved := resolveDatasetAliases(appletBus, logger, []string{"pprof_cpu", "pprof_heap", "pprof_goroutineleak"})
+	require.Len(t, bindings, 3)
 	require.Empty(t, unresolved)
 
 	query := func(sql string, format string) (out string) {
@@ -232,6 +266,18 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 		// `stack` that stopped being a list, or a `value` that came back as
 		// text, rejects with data on the wire. Pin the two types the panel
 		// keys on — the header carries them.
+		// The leaks page is read as a table, so its rows are its contract —
+		// but the Detail tab shows `stack` as a list of frames, and a
+		// `goroutines` that came back as text would sort lexically. Pin both
+		// from the header.
+		if slug == "profile-leaks" {
+			head := query(sql, "TabSeparatedWithNamesAndTypes")
+			lines := strings.SplitN(head, "\n", 3)
+			require.Len(t, lines, 3, "profile-leaks: no names+types header")
+			assert.Equal(t, "goroutines\tleaf\tpkg\tstack", lines[0])
+			assert.Equal(t, "Int64\tString\tString\tArray(String)", lines[1],
+				"profile-leaks: the count must stay numeric and the stack a list")
+		}
 		if slug == "profile-flame" {
 			head := query(sql, "TabSeparatedWithNamesAndTypes")
 			lines := strings.SplitN(head, "\n", 3)

@@ -83,7 +83,7 @@ func TestMintCoverageBook(t *testing.T) {
 		{id: "coverage", fsys: help.MustSub(bookcoverageFS, "bookcoverage"), topics: []app.TopicT{app.TopicObservability}},
 	})
 	require.Empty(t, errs)
-	assert.Equal(t, 27, minted)
+	assert.Equal(t, 28, minted)
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "cov-map"))
 	require.True(t, ok)
 	assert.Equal(t, "Coverage map", m.Display)

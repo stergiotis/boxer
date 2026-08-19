@@ -200,8 +200,17 @@ func TestAdrBookQueries(t *testing.T) {
 	// The span knob measures a different thing, not a rescaled one: activity
 	// ends on the last dated edit, which for a still-open decision is on or
 	// before today rather than today by construction.
+	//
+	// The +1 is timezone slack, not looseness. An ADR's dates are calendar
+	// dates written by hand in the author's local timezone; the corpus stores
+	// no offset. An author ahead of UTC editing after local midnight writes a
+	// date that is legitimately one day ahead of UTC, and this assertion then
+	// failed for those hours — observed 2026-08-20 01:06 CEST, with two
+	// ADRs carrying that day's dated Update while UTC was still on the 19th.
+	// The invariant is "no dated edit is in the future"; one day preserves it
+	// and removes a nightly false failure.
 	assert.Equal(t, "1", query("SET param_span = 'activity';\nSET param_status = 'all';\n"+
-		"SELECT countIf(until_on <= toDate(now('UTC'))) = count() FROM ("+body+")"))
+		"SELECT countIf(until_on <= toDate(now('UTC')) + 1) = count() FROM ("+body+")"))
 
 	// Bands are one day wide, on the days the corpus records several reviews.
 	sweeps := query("SELECT count() FROM (SELECT reviewed_date FROM keelson('adr')" +

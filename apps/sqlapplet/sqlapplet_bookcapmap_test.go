@@ -118,7 +118,7 @@ func TestMintCapmapBook(t *testing.T) {
 		{id: "capmap", fsys: help.MustSub(bookcapmapFS, "bookcapmap"), topics: []app.TopicT{app.TopicCode}},
 	})
 	require.Empty(t, errs)
-	assert.Equal(t, 24, minted)
+	assert.Equal(t, 25, minted)
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "comp-browser"))
 	require.True(t, ok)
 	assert.Equal(t, "Competence browser", m.Display)

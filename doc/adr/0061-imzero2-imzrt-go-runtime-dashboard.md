@@ -432,6 +432,41 @@ Datasets are deliberately **not retracted on Unmount** (deviating from the
 closes, one dataset per kind bounds the store cost, and process exit clears
 everything with the store.
 
+### 2026-08-20 — a fifth profile kind, and the one capture that moves the instrument
+
+The Profiles tab gained `goroutineleak` (Go 1.27,
+[ADR-0199](./0199-adopt-go-1-27.md) M4): the stacks of goroutines parked on a
+concurrency primitive nothing live can reach any more. It joins CPU / heap /
+allocs / goroutine as a fifth button, converts through `pprofarrow` unaided —
+the profile carries its own `goroutineleak/count` sample type, so no
+`WithKindHint` — and publishes under `pprof_goroutineleak`. An empty result is
+the healthy case, so `0 rows` on this kind reads differently from the others.
+
+**It needs no runtime tunable, which is why it is here rather than absent like
+block and mutex.** But it does correct the previous update, which said "what
+SD6 actually guards — no mutation of global runtime tunables (GOGC,
+GOMEMLIMIT, forced GC) — still holds". A `goroutineleak` capture **forces a
+garbage collection**: not by calling `runtime.GC`, but because the leak set is
+computed by a GC-assisted reachability pass, which from the heap's point of
+view is the same event. Measured against a 205 MB / 400k-object live heap:
+4.5–7.3 ms wall against 200–300 µs for the goroutine profile, one extra GC
+cycle, ~0.1 ms of it stop-the-world.
+
+That is SD7's observer effect, arriving through the one deliberate act this
+dashboard performs. It is accepted rather than avoided, on three grounds: the
+capture is user-initiated per click and never ambient; the latency lands off
+the render thread through `bgjob` like every other capture; and the
+perturbation is *visible* — the step it leaves shows up in this app's own heap
+and GC plots, where an operator can see what their click did. Disclosure is
+what SD7 asks for; this is the same bargain the tab already made with SD6.
+
+Also landed: `profile-leaks` in the pprof book — the leaked stacks with a
+per-stack goroutine count and a frame filter — and the task package's
+spawn-leak regression test, which counted `runtime.NumGoroutine()` against a
+baseline with a slack of ten, rewritten to assert against the profile. It now
+names the leaked stack instead of noticing that there are more goroutines than
+expected.
+
 ## References
 
 - [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) — `imztop`; the structural template this ADR mirrors.

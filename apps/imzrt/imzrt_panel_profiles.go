@@ -15,6 +15,16 @@
 // Block and mutex profiles are absent on purpose: they are empty unless
 // runtime.SetBlockProfileRate / SetMutexProfileFraction are set, and imzrt
 // does not mutate runtime tunables (ADR-0061 SD6).
+//
+// goroutineleak (go1.27, ADR-0199) is present because it needs no tunable —
+// but it is the one capture here that is not free of effect on what the
+// dashboard is showing. It is computed by a GC-assisted reachability pass, so
+// a capture forces a garbage collection: measured against a 205 MB live heap,
+// 4.5–7.3 ms against 200–300 µs for the goroutine profile, one extra GC cycle,
+// ~0.1 ms of it stop-the-world. The latency lands off the render thread like
+// every other capture here; the forced cycle does not — it puts a step in the
+// heap and GC series the other tabs are plotting. That is a caveat on
+// ADR-0061's observe-only framing, recorded there.
 
 package imzrt
 
@@ -79,7 +89,13 @@ type profileKindSpec struct {
 // profileKinds is the UI order. CPU runs a sampling window; the others
 // snapshot instantly. The units follow the converter's default sample type
 // per kind: cpu/nanoseconds, inuse_space and alloc_space in bytes,
-// goroutine/count.
+// goroutine/count, goroutineleak/count.
+//
+// goroutineleak needs no kind hint even though it renders like the goroutine
+// profile: it carries its own sample type, so inferKind returns it and the
+// alias lands on pprof_goroutineleak. Block and mutex, which do collide, are
+// the reason WithKindHint exists — this kind is not that case, and
+// TestInstantCapturesConvert pins it.
 var profileKinds = []profileKindSpec{
 	{key: "cpu", label: "CPU (10 s)", capture: captureCPU(cpuCaptureDuration),
 		unit: "ms", divisor: 1e6},
@@ -88,6 +104,8 @@ var profileKinds = []profileKindSpec{
 	{key: "allocs", label: "Allocs", capture: captureLookup("allocs"),
 		unit: "MiB", divisor: 1 << 20},
 	{key: "goroutine", label: "Goroutines", capture: captureLookup("goroutine"),
+		unit: "goroutines"},
+	{key: "goroutineleak", label: "Leaked goroutines", capture: captureLookup("goroutineleak"),
 		unit: "goroutines"},
 }
 
