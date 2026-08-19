@@ -2,6 +2,7 @@ package gloss
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -50,12 +51,7 @@ func matches(prefix string, pattern string, get func(*Spec) string) Predicate {
 
 func has(prefix string, want string, get func(*Spec) []string) Predicate {
 	return Predicate{text: prefix + "=" + want, test: func(s *Spec) bool {
-		for _, v := range get(s) {
-			if v == want {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(get(s), want)
 	}}
 }
 

@@ -2,6 +2,7 @@ package common
 
 import (
 	"errors"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -69,13 +70,7 @@ func (inst *TableValidator) validateNames(names []naming.StylableName, nameType 
 		}
 	}
 	{
-		all := false
-		for _, t := range u {
-			if t == uint32(len(names)) {
-				all = true
-				break
-			}
-		}
+		all := slices.Contains(u, uint32(len(names)))
 		if !all {
 			err = eb.Build().Str("nameType", nameType).Errorf("found names in multiple naming styles")
 			return

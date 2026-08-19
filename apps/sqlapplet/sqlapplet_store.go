@@ -1,6 +1,7 @@
 package sqlapplet
 
 import (
+	"slices"
 	"strings"
 	"sync"
 
@@ -248,10 +249,8 @@ func (inst *StoreService) updateIndex(slug string) (err error) {
 		return
 	}
 	slugs := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	for _, s := range slugs {
-		if s == slug {
-			return
-		}
+	if slices.Contains(slugs, slug) {
+		return
 	}
 	slugs = append(slugs, slug)
 	joined := strings.TrimSpace(strings.Join(slugs, "\n"))

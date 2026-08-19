@@ -13,6 +13,7 @@ package windowhost
 // plain word still means what it meant.
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -118,11 +119,9 @@ func matchesAnyTopic(p *search.PatternT, topics []app.TopicT) (ok bool) {
 // manifest's retrieval keywords (ADR-0158 §SD4) — the field that makes
 // "cpu" and "htop" reach a process monitor whose name says neither.
 func matchesAnyKeyword(p *search.PatternT, keywords []string) (ok bool) {
-	for _, kw := range keywords {
-		if p.Matches(kw) {
-			ok = true
-			return
-		}
+	if slices.ContainsFunc(keywords, p.Matches) {
+		ok = true
+		return
 	}
 	return
 }

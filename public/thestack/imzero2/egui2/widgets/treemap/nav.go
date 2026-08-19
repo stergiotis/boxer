@@ -2,6 +2,7 @@ package treemap
 
 import (
 	"errors"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
@@ -216,13 +217,7 @@ func (inst *Treemap) validPath(path []*layout.Node) bool {
 	for i := 1; i < len(path); i++ {
 		parent := path[i-1]
 		child := path[i]
-		found := false
-		for _, ch := range parent.Children {
-			if ch == child {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(parent.Children, child)
 		if !found {
 			return false
 		}

@@ -332,20 +332,14 @@ func generateImports(wh WriterHolder, tls []ir.NodeI, tracker *compiletime.State
 			if !hasColor {
 				hasColor = argSpecUsesColor(tlt.Arguments)
 				if !hasColor {
-					for _, m := range tlt.BuilderMethods {
-						if methodUsesColor(m) {
-							hasColor = true
-							break
-						}
+					if slices.ContainsFunc(tlt.BuilderMethods, methodUsesColor) {
+						hasColor = true
 					}
 				}
 			}
 			if !methodHasRuntime {
-				for _, m := range tlt.BuilderMethods {
-					if methodUsesNonScalarPlain(m) {
-						methodHasRuntime = true
-						break
-					}
+				if slices.ContainsFunc(tlt.BuilderMethods, methodUsesNonScalarPlain) {
+					methodHasRuntime = true
 				}
 			}
 		case *ir.ProceduralNode:

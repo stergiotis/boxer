@@ -1,6 +1,7 @@
 package windowhost
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -325,11 +326,9 @@ func (inst topicFilterT) showsAny(topics []app.TopicT) (ok bool) {
 		ok = true
 		return
 	}
-	for _, t := range topics {
-		if inst.shows(t) {
-			ok = true
-			return
-		}
+	if slices.ContainsFunc(topics, inst.shows) {
+		ok = true
+		return
 	}
 	return
 }
@@ -921,11 +920,9 @@ func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) {
 }
 
 func containsWindow(ws []*window, w *window) (found bool) {
-	for _, x := range ws {
-		if x == w {
-			found = true
-			return
-		}
+	if slices.Contains(ws, w) {
+		found = true
+		return
 	}
 	return
 }

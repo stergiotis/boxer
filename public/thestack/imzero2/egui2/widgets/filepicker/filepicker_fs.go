@@ -3,6 +3,7 @@ package filepicker
 import (
 	"io/fs"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -74,11 +75,9 @@ func passesExtFilter(de fs.DirEntry, filter []string) (ok bool) {
 		return
 	}
 	ext := strings.ToLower(strings.TrimPrefix(path.Ext(de.Name()), "."))
-	for _, allowed := range filter {
-		if ext == allowed {
-			ok = true
-			return
-		}
+	if slices.Contains(filter, ext) {
+		ok = true
+		return
 	}
 	return
 }

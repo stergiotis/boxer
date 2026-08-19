@@ -1,6 +1,7 @@
 package play
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -164,10 +165,8 @@ func collectSlotTypes(pr *nanopass.ParseResult) (out map[string][]string) {
 			return true
 		}
 		typ := strings.TrimSpace(nanopass.NodeText(pr, typeCtx))
-		for _, seen := range out[name] {
-			if seen == typ {
-				return true
-			}
+		if slices.Contains(out[name], typ) {
+			return true
 		}
 		out[name] = append(out[name], typ)
 		return true

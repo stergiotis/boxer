@@ -218,11 +218,9 @@ func (inst *MultiMap) Get(src NodeID) (out []Edge) {
 }
 
 func (inst *MultiMap) Has(src NodeID, e Edge) (b bool) {
-	for _, existing := range inst.m[src] {
-		if existing == e {
-			b = true
-			return
-		}
+	if slices.Contains(inst.m[src], e) {
+		b = true
+		return
 	}
 	return
 }

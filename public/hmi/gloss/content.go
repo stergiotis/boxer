@@ -2,6 +2,7 @@ package gloss
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/dustin/go-humanize"
@@ -98,10 +99,8 @@ func (inst *simpleInstance) Accepts(kind ValueKindE) (ok bool, reason string) {
 // acceptsKind is the shared refusal text: it names what the gloss wanted and
 // what it got, since the host shows it beside the plain cell.
 func acceptsKind(mediaType string, accepted []ValueKindE, kind ValueKindE) (ok bool, reason string) {
-	for _, k := range accepted {
-		if k == kind {
-			return true, ""
-		}
+	if slices.Contains(accepted, kind) {
+		return true, ""
 	}
 	names := make([]string, 0, len(accepted))
 	for _, k := range accepted {

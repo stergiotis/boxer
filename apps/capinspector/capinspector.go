@@ -15,6 +15,7 @@ package capinspector
 
 import (
 	"embed"
+	"slices"
 	"sort"
 	"sync"
 
@@ -315,11 +316,8 @@ func matchedApps(spec CapSpec) (out []app.Manifest) {
 	for _, m := range all {
 		hit := false
 		if spec.AppFilter != nil {
-			for _, f := range m.Caps {
-				if spec.AppFilter(f) {
-					hit = true
-					break
-				}
+			if slices.ContainsFunc(m.Caps, spec.AppFilter) {
+				hit = true
 			}
 		}
 		if !hit && spec.HostInjected != nil {

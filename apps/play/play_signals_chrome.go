@@ -1,6 +1,7 @@
 package play
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -336,10 +337,8 @@ func (inst *PlayApp) machineDrivenDivergence() (names []string) {
 }
 
 func appendDistinct(ss []string, s string) []string {
-	for _, have := range ss {
-		if have == s {
-			return ss
-		}
+	if slices.Contains(ss, s) {
+		return ss
 	}
 	return append(ss, s)
 }

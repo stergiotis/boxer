@@ -243,13 +243,7 @@ func TestPseudoEdge_DeleteMiddle(tt *testing.T) {
 
 	// Check that a has a child c (via pseudo-edge).
 	children := slices.Collect(g.LiveChildren(a))
-	found := false
-	for _, ch := range children {
-		if ch == c {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(children, c)
 	if !found {
 		tt.Fatal("expected pseudo-edge a -> c after deleting b")
 	}

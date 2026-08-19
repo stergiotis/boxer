@@ -2,6 +2,7 @@ package adscore
 
 import (
 	"math"
+	"slices"
 	"sort"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -303,11 +304,9 @@ func validateE(scores []float64, labels []bool) (ranges Ranges, n int32, err err
 			Errorf("score and label vectors differ in length")
 		return
 	}
-	for _, v := range scores {
-		if math.IsNaN(v) {
-			err = eb.Build().Errorf("score vector contains NaN")
-			return
-		}
+	if slices.ContainsFunc(scores, math.IsNaN) {
+		err = eb.Build().Errorf("score vector contains NaN")
+		return
 	}
 	ranges = RangesFromLabels(labels)
 	if ranges.Len() == 0 {

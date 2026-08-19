@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -306,10 +307,8 @@ func withSealedPlane(t *testing.T, endpoint string, sealed ...string) {
 	prevEndpoint := introspect.LocalQueryEndpoint()
 	introspect.SetLocalQueryEndpoint(endpoint)
 	introspect.SetLocalSealedPredicate(func(name string) (yes bool) {
-		for _, s := range sealed {
-			if s == name {
-				return true
-			}
+		if slices.Contains(sealed, name) {
+			return true
 		}
 		return
 	})

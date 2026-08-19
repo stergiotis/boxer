@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"slices"
 	"sort"
 	"strings"
 
@@ -143,13 +144,7 @@ func DetectBoundaryCrossings(ctx context.Context, repoDir string, commits []Comm
 			if len(owners) == 0 {
 				continue // new file or deleted — no ownership data
 			}
-			found := false
-			for _, owner := range owners {
-				if owner == authorEmail {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(owners, authorEmail)
 			if !found {
 				crossings = append(crossings, BoundaryCrossing{
 					File:       file,

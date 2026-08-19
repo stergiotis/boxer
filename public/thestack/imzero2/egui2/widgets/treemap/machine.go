@@ -2,6 +2,7 @@ package treemap
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
@@ -54,11 +55,9 @@ type animMachine struct {
 // state, panicking on any disallowed transition (programmer error per the
 // validation policy).
 func (inst *animMachine) transition(to AnimStateE) {
-	for _, allowed := range animTransitions[inst.state] {
-		if allowed == to {
-			inst.state = to
-			return
-		}
+	if slices.Contains(animTransitions[inst.state], to) {
+		inst.state = to
+		return
 	}
 	panic(fmt.Sprintf("treemap: invalid anim transition %v → %v", inst.state, to))
 }
