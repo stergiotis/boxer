@@ -25,6 +25,19 @@ import (
 type PublishedSnapshot struct {
 	SampledAtUnixMs int64
 
+	// HistoryEpoch identifies the continuous run of samples the History*
+	// slices belong to. It changes when the frames stop continuing the
+	// previous ones — a replay seeking to another range (ADR-0197 §SD12), or
+	// the render path switching between the live fold and a replay one — and
+	// never within a run.
+	//
+	// A consumer that accumulates across frames rather than reading the
+	// snapshot whole (the CPU heatmap's scrolling ring is the one) must
+	// compare it and rebuild when it moves. Comparing timestamps cannot serve:
+	// a seek moves them in either direction and may overlap the range already
+	// drawn.
+	HistoryEpoch uint64
+
 	HistoryTimeUnixSec []float64
 	HistoryCPUTotal    []float64
 	HistoryMemUsed     []float64
@@ -111,6 +124,15 @@ type Sampler struct {
 	lastSampledAtMs int64
 	histN           int32
 
+	// historyEpoch stamps every published snapshot, and moves on reset. Drawn
+	// from a process-wide sequence so no two folds ever share a value: the
+	// render path swaps between the live fold and a replay one without either
+	// knowing, and a consumer comparing epochs has to see that as the
+	// discontinuity it is. Atomic because it is written by newFold on the
+	// constructing goroutine and by reset on the replay transport's, and read
+	// by onBundle on whichever goroutine feeds the fold.
+	historyEpoch atomic.Uint64
+
 	timeWindow *SlidingWindow[float64]
 	cpuTotal   *SlidingWindow[float64]
 	memUsed    *SlidingWindow[float64]
@@ -182,6 +204,11 @@ func NewSampler(opts SamplerOptions, bus app.BusI) (inst *Sampler, err error) {
 	return
 }
 
+// foldEpochSeq mints [Sampler.historyEpoch] values. The first it hands out is
+// 1, so a zero epoch never names a real fold — which is what lets a consumer
+// read its own zero-valued field as "nothing drawn yet".
+var foldEpochSeq atomic.Uint64
+
 // newFold builds the windowing and smoothing state with no source attached.
 //
 // It is the half of a Sampler that is indifferent to where a bundle came from
@@ -217,7 +244,42 @@ func newFold(opts SamplerOptions) (inst *Sampler) {
 		procCPUEWMA: make(map[procEWMAKey]float32),
 	}
 	inst.intervalNs.Store(int64(opts.UpdateInterval))
+	inst.historyEpoch.Store(foldEpochSeq.Add(1))
 	return
+}
+
+// reset empties the fold: the history windows, the observed-cadence carry, the
+// per-process EWMA and the published frame all go, and the epoch moves so a
+// consumer accumulating across frames knows the run it was drawing has ended.
+//
+// It exists for a replay seek (ADR-0197 §SD12). Nothing about the previous
+// range is true of the next one — not the plotted series, not the smoothing
+// that has been converging on processes that may not exist there, not the
+// cadence — and the ranges need not even be adjacent or ordered.
+//
+// Publishing nil rather than a half-empty frame is deliberate: the panels
+// already have a state for "no snapshot", and it says the honest thing while
+// the store is being read. Callers must run it on the goroutine that owns
+// onBundle; the fold's windows are single-writer by contract.
+func (inst *Sampler) reset() {
+	inst.timeWindow.Reset()
+	inst.cpuTotal.Reset()
+	inst.memUsed.Reset()
+	inst.diskRead.Reset()
+	inst.diskWrite.Reset()
+	inst.netRx.Reset()
+	inst.netTx.Reset()
+	inst.batteryPct.Reset()
+	inst.cpuPerCore.reset()
+	inst.gpuBusy.reset()
+	inst.diskReadBy.reset()
+	inst.diskWriBy.reset()
+	inst.netRxBy.reset()
+	inst.netTxBy.reset()
+	clear(inst.procCPUEWMA)
+	inst.lastSampledAtMs = 0
+	inst.historyEpoch.Store(foldEpochSeq.Add(1))
+	inst.latest.Store(nil)
 }
 
 func (inst *Sampler) Start(_ context.Context) {
@@ -336,6 +398,7 @@ func (inst *Sampler) onBundle(bundleSnap *sysmsnap.BundleSnapshot) {
 
 	pub := &PublishedSnapshot{
 		SampledAtUnixMs:       bundleSnap.SampledAtUnixMs,
+		HistoryEpoch:          inst.historyEpoch.Load(),
 		HistoryTimeUnixSec:    copyFloats(inst.timeWindow.Values()),
 		HistoryCPUTotal:       copyFloats(inst.cpuTotal.Values()),
 		HistoryMemUsed:        copyFloats(inst.memUsed.Values()),

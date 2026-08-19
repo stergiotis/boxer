@@ -155,13 +155,13 @@ func (inst *App) renderAvailability(st ReplayStatus, snap *PublishedSnapshot) {
 	tl.SetPoints(previewEvents())
 
 	// Mirror the session's window onto the brush so the strip shows what is
-	// being replayed, including a window set by the jog buttons rather than by
-	// a gesture here.
+	// being replayed, including a window the jog buttons set rather than a
+	// gesture here, and mark where playback has got to inside it.
 	if session := ActiveReplay(); session != nil {
-		w := session.Window()
-		if !w.From.IsZero() && !w.To.IsZero() {
-			tl.SetBrush(w.From.UnixMilli(), w.To.UnixMilli())
-		}
+		inst.mirrorReplayWindow(tl, session.Window())
+		mirrorReplayPosition(tl, session)
+	} else {
+		tl.ClearPlayhead()
 	}
 
 	// No min-height floor here. A floor is a scroll-host device — it gives a
@@ -171,6 +171,88 @@ func (inst *App) renderAvailability(st ReplayStatus, snap *PublishedSnapshot) {
 	// The timeline's height is content-driven, so it needs no help.
 	tl.Render()
 	inst.renderAvailabilityLegend(st, snap)
+}
+
+// mirrorReplayWindow reflects the session's range onto this strip's brush, and
+// brings the strip to it when something else moved it.
+//
+// The brush is set on every frame rather than on change: it is idempotent, and
+// it is what puts the range back after a stray click cleared it — clearing the
+// brush does not cancel the window, so the strip must not go on claiming
+// nothing is being replayed.
+//
+// Panning the view is the opposite, and must fire only on the edge. A jog can
+// step the window clean out of the visible span, where a brush paints nothing
+// and the button reads as having done nothing at all; but a view that
+// re-centred every frame could not be panned away from at all, which is the
+// first thing a user does after picking a range.
+func (inst *App) mirrorReplayWindow(tl *timeline.Timeline, w sysmreplay.Window) {
+	if w.From.IsZero() || w.To.IsZero() {
+		return // unbounded: there is no range to brush
+	}
+	fromMS, toMS := w.From.UnixMilli(), w.To.UnixMilli()
+	tl.SetBrush(fromMS, toMS)
+	if fromMS == inst.availabilityBrushFromMS && toMS == inst.availabilityBrushToMS {
+		return
+	}
+	inst.availabilityBrushFromMS, inst.availabilityBrushToMS = fromMS, toMS
+	followBrushedWindow(tl, fromMS, toMS)
+}
+
+// mirrorReplayPosition marks where playback has got to.
+//
+// The brush says which stretch is being replayed; this says which instant
+// inside it is on screen. The transport row states the same thing as text
+// ("at 10:19:51"), which answers it only for someone already reading that
+// row — on the strip it is a position among the bands and the load rug, which
+// is where the question is actually asked.
+//
+// Cleared rather than left standing when the session has no position: that is
+// what a seek leaves behind (ADR-0197 §SD12 resets it), and a mark held over
+// from the previous range would point at a moment nothing is showing.
+func mirrorReplayPosition(tl *timeline.Timeline, session *ReplaySampler) {
+	at, ok := session.Position()
+	if !ok {
+		tl.ClearPlayhead()
+		return
+	}
+	tl.SetPlayhead(at.UnixMilli())
+}
+
+// followBrushedWindow pans the strip so a newly-picked window is visible.
+func followBrushedWindow(tl *timeline.Timeline, fromMS, toMS int64) {
+	viewFrom, viewTo, ok := tl.ViewRange()
+	if !ok {
+		return // nothing rendered yet; the constructor's range stands
+	}
+	newFromMS, newToMS, move := followRange(
+		viewFrom.UnixMilli(), viewTo.UnixMilli(), fromMS, toMS)
+	if !move {
+		return
+	}
+	tl.SetRange(time.UnixMilli(newFromMS).UTC(), time.UnixMilli(newToMS).UTC())
+}
+
+// followRange decides where a strip currently showing [viewFromMS, viewToMS]
+// should look so that [fromMS, toMS] is on it. move is false when the view
+// already contains the window, or when neither is a usable span.
+//
+// The zoom is kept: the user chose it to look at this much history at a time,
+// and a jog is a step along the axis rather than a request to reframe it. It
+// widens only when the window would not fit — and then to three times the
+// window, so the range lands with context on both sides rather than filling
+// the strip edge to edge.
+func followRange(viewFromMS, viewToMS, fromMS, toMS int64) (newFromMS, newToMS int64, move bool) {
+	if toMS <= fromMS || viewToMS <= viewFromMS {
+		return
+	}
+	if fromMS >= viewFromMS && toMS <= viewToMS {
+		return
+	}
+	spanMS := max(viewToMS-viewFromMS, 3*(toMS-fromMS))
+	midMS := fromMS + (toMS-fromMS)/2
+	newFromMS, newToMS, move = midMS-spanMS/2, midMS+spanMS/2, true
+	return
 }
 
 // renderAvailabilityLegend says what the bands mean and what the strip is for,
@@ -191,7 +273,7 @@ func (inst *App) renderAvailabilityLegend(st ReplayStatus, snap *PublishedSnapsh
 				rt.Weak()
 			}
 		default:
-			c.Label(fmt.Sprintf("shaded = stored history (%d stretch(es)) · drag the strip under the axis to pick a window", len(runs))).Send()
+			c.Label(fmt.Sprintf("shaded = stored history (%d stretch(es)) · caret = where playback is · drag the strip under the axis to pick a window", len(runs))).Send()
 		}
 		inst.renderRangeNote()
 	}

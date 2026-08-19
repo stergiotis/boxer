@@ -428,6 +428,58 @@ frames, one per occupied bin — the bins the tee was down for produce no row at
 all. The fold's cadence readout then reports 34 s, the real spacing of the
 frames it is being given, rather than pretending they are a second apart.
 
+### SD12 — Picking a range resets the fold; every range control goes through one seam
+
+Two controls set the replay range: the availability strip's brush and the jog
+buttons. Until now they behaved differently in ways nobody chose.
+
+**The fold kept its history across a seek.** `Seek` said so — *"a caller wanting
+a clean plot builds a new sampler"* — and no caller did. So brushing an
+afternoon three hours from the one on screen appended its frames to the ones
+already plotted, and the CPU line ran continuously across a gap that was not
+there. The time axis is real, so the join is drawable; it is just not a run.
+
+The reset therefore lives in the transport, not in a control: `run` empties the
+fold on every reopen, which is where both controls already meet. What goes is
+everything carried between frames — the sliding windows, the observed-cadence
+carry, the per-process EWMA converging on processes the new range may not have,
+and the published frame itself. Publishing nil rather than a stale one is the
+point: the panels have a state for "no snapshot" and it says the honest thing
+while the store is being read, where holding the previous frame would show the
+old range's plots under the new range's label.
+
+**Consumers that accumulate need to be told.** The CPU heatmap is the one panel
+that does not redraw from the snapshot — it pushes a column per sample into a
+ring — and it kept its columns across the reset. Worse, its push guard is
+`stamp > lastPushed`, so a seek *backwards* read as a duplicate frame and froze
+it for the rest of the session. Entering replay at all did that, since a
+replayed stamp is older than a live one.
+
+Timestamps cannot carry this: a seek moves them either way and the ranges may
+overlap. So the frame carries `PublishedSnapshot.HistoryEpoch`, minted per fold
+from a process-wide sequence and moved on every reset. A changed value means
+"the frames stopped continuing each other" and nothing finer — which also
+covers the render path swapping between the live fold and a replay one, a
+discontinuity neither fold can see.
+
+**The position gets a mark, not only a readout.** The transport says where
+playback has got to as text; the strip did not say it at all, so the range being
+replayed was visible and the instant inside it being drawn was not. It now
+carries the timeline's playhead ([ADR-0043](./0043-imzero2-timeline-widget.md)
+§SD18, added for this), driven from `session.Position()` each frame and cleared
+when there is none — which is exactly what a seek leaves behind, and a mark held
+over from the previous range would point at a moment nothing is showing.
+
+**The jog is a brush operation.** The strip already mirrored the session window
+onto its brush every frame, so a jog showed there. What it could not do is
+follow: jogging steps the window a whole span at a time and walks it off the
+visible axis within a few clicks, where the brush paints nothing and the button
+reads as inert. The strip now pans to a window it did not choose — on the edge
+only, keeping the current zoom, widening solely when the window would not fit.
+Per-frame re-centring was the obvious alternative and is wrong: it makes the
+strip impossible to pan away from, which is the first thing anyone does after
+picking a range.
+
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
@@ -449,6 +501,12 @@ frames it is being given, rather than pretending they are a second apart.
 | `sysmreplay.CountBundles` / `PlanDecimation` / `NeedsDecimation` | new — the envelope-only sampling plan that closes SD6 | `Window.Decimate` |
 | `sysmreplay.Window.Decimate` | new — restricts the read to the plan's instants, via the store's own Scan verbs | `Reader.All` |
 | `sysmreplay.Options.Exec` | new — the executor coverage runs on; must be the store's | `StoreSource`, which passes the one it built |
+| `imztop.PublishedSnapshot.HistoryEpoch` | new — names the continuous run of frames the `History*` slices belong to (SD12) | the CPU heatmap, the one accumulating consumer |
+| `imztop.Sampler.reset` | new (unexported) — empties the fold and moves the epoch; run on the goroutine that owns `onBundle` | `ReplaySampler.run`, on every reopen |
+| `ReplaySampler.Seek` / `SeekWindow` | behaviour change — the fold is emptied before the new range is read; the old contract said the opposite | both range controls, which now agree |
+| `slidingwindow.Window.Reset` | new — empties a window, keeping its capacity | nothing; imzrt's windows are untouched |
+| `timeline.SetPlayhead` / `ClearPlayhead` / `Playhead` | new (ADR-0043 §SD18) — one caller-set instant, drawn as a caret-headed rule | the availability strip; the widget gallery |
+| `timeline.Visuals.PlayheadColor` | new — the marker's ink, distinct from `NowLineColor` so the two read as two instants | nothing; defaulted |
 | `timeline.WithTimeZone` | new — localises the tick axis; nil stays UTC | nothing; existing callers keep UTC |
 | `timeline.ViewRange` | new — last frame's viewport, for consumers that must *query* for view-dependent data | nothing |
 | imztop replay bar | window-length combo removed; availability strip added below the transport | the jog, which stays |
@@ -608,6 +666,11 @@ Milestones, if accepted:
   and an envelope-only sampling plan that lifts the bounded-range limitation
   (SD11, as corrected). Done: a 5 h 48 m range holding 4 369 bundles replays as
   124 frames.
+- **M9 — the range controls agree.** The fold resets on every seek, the frame
+  carries an epoch so the heatmap's ring resets with it, and the jog pans the
+  strip to the window it just picked, and the strip marks where playback has got
+  to with ADR-0043 §SD18's playhead (SD12). Both controls reach the same seam,
+  so neither can behave differently from the other by accident.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

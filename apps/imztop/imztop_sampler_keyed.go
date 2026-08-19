@@ -56,6 +56,14 @@ func (inst *indexedWindowSet) push(values []float64) {
 	}
 }
 
+// reset drops the rings outright rather than emptying them. A replay seeking
+// to another range may find a different core or device count there, and a
+// zero-length ring for an index that no longer exists would keep publishing a
+// series the new range never had.
+func (inst *indexedWindowSet) reset() {
+	inst.rings = nil
+}
+
 func (inst *indexedWindowSet) snapshot() (out [][]float64) {
 	out = make([][]float64, len(inst.rings))
 	for i, r := range inst.rings {
@@ -120,6 +128,14 @@ func (inst *namedWindowSet) push(pairs []NamedValue) {
 		}
 		r.Push(0)
 	}
+}
+
+// reset drops every named ring, for the reason indexedWindowSet.reset gives:
+// the names are the previous range's, and a device or interface that has gone
+// must not survive as an all-zero series.
+func (inst *namedWindowSet) reset() {
+	clear(inst.byName)
+	inst.order = nil
 }
 
 func (inst *namedWindowSet) snapshot() (out []NamedSeries) {

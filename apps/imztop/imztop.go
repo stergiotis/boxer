@@ -219,6 +219,19 @@ type App struct {
 	// first use. Per-window because pan, zoom and the brush are view state;
 	// the coverage it draws is process-wide.
 	availability *timeline.Timeline
+
+	// availabilityBrushFromMS / ToMS are the session window this strip last
+	// mirrored onto its brush, in epoch milliseconds. They make the mirror
+	// edge-triggered where it has to be: the brush is refreshed every frame,
+	// but panning the view to a window the user picked elsewhere may only
+	// happen when that window actually moved — doing it every frame would drag
+	// the view back each time the user tried to look somewhere else.
+	//
+	// Milliseconds rather than the sysmreplay.Window itself: comparing
+	// time.Time with == also compares the monotonic reading and the location,
+	// so two values naming the same instant can differ.
+	availabilityBrushFromMS int64
+	availabilityBrushToMS   int64
 }
 
 var _ app.AppI = (*App)(nil)

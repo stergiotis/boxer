@@ -435,3 +435,78 @@ func TestReplaySampler_SatisfiesSamplerI(t *testing.T) {
 	assert.True(t, s.IsPaused())
 	assert.NotZero(t, s.Interval())
 }
+
+// The fold reset (ADR-0197 §SD12). Picking another range — by brushing the
+// availability strip or by jogging — is not a request for more history about
+// the one on screen, so the plots start again from the new range alone.
+
+// TestReplaySampler_SeekResetsTheFold pins that the history a seek leaves
+// behind is the new range's, not the old one's with the new one appended.
+func TestReplaySampler_SeekResetsTheFold(t *testing.T) {
+	src := newFakeSource(replayBundles(replayBase, 1000, 6)...)
+	r := startReplay(t, ReplayOptions{Source: src, Speed: 10000})
+
+	require.Eventually(t, func() bool {
+		snap := r.Latest()
+		return snap != nil && len(snap.HistoryCPUTotal) == 6
+	}, 5*time.Second, 5*time.Millisecond, "the first range never played through")
+	before := r.Latest().HistoryEpoch
+
+	// The fake source filters on From only, so this range holds the last two.
+	r.Seek(time.UnixMilli(replayBase + 4000).UTC())
+
+	require.Eventually(t, func() bool {
+		snap := r.Latest()
+		return snap != nil && len(snap.HistoryCPUTotal) == 2
+	}, 5*time.Second, 5*time.Millisecond,
+		"the fold kept the previous range's history")
+
+	snap := r.Latest()
+	assert.Equal(t, float64(replayBase+4000)/1000.0, snap.HistoryTimeUnixSec[0],
+		"the plots start at the new range's first bundle")
+	assert.NotEqual(t, before, snap.HistoryEpoch,
+		"a reset must move the epoch, or an accumulating consumer cannot see it")
+}
+
+// TestReplaySampler_SeekBlanksTheFrameUntilTheNewRangeArrives covers the gap
+// between the seek and the first bundle of the new range: reading the store
+// takes as long as it takes, and what is on screen meanwhile must not be the
+// previous range's frame wearing the new range's label.
+func TestReplaySampler_SeekBlanksTheFrameUntilTheNewRangeArrives(t *testing.T) {
+	src := newFakeSource(replayBundles(replayBase, 1000, 6)...)
+	r := startReplay(t, ReplayOptions{Source: src, StartPaused: true})
+
+	r.Step(3)
+	require.Eventually(t, func() bool {
+		snap := r.Latest()
+		return snap != nil && len(snap.HistoryCPUTotal) == 3
+	}, 5*time.Second, 5*time.Millisecond)
+
+	// Paused, so the transport reopens the range and then stops at its first
+	// bundle — which is the state the store read is being stood in for.
+	r.Seek(time.UnixMilli(replayBase + 4000).UTC())
+
+	require.Eventually(t, func() bool { return r.Latest() == nil },
+		5*time.Second, 5*time.Millisecond,
+		"the previous range's frame stayed published across the seek")
+	_, ok := r.Position()
+	assert.False(t, ok, "position is unknown until the new range folds a bundle")
+}
+
+// TestFoldEpochIsUniquePerFold pins the property the heatmap's reset rests on:
+// an epoch names one continuous run of frames and is never reused. The render
+// path swaps folds — live to replay and back — without either fold knowing, so
+// "the value changed" has to be the whole test a consumer applies.
+func TestFoldEpochIsUniquePerFold(t *testing.T) {
+	one, two := newFold(SamplerOptions{}), newFold(SamplerOptions{})
+	assert.NotEqual(t, one.historyEpoch.Load(), two.historyEpoch.Load(),
+		"two folds must not share an epoch")
+
+	one.onBundle(replayBundles(replayBase, 1000, 1)[0])
+	first := one.Latest().HistoryEpoch
+
+	one.reset()
+	assert.Nil(t, one.Latest(), "reset unpublishes the frame")
+	one.onBundle(replayBundles(replayBase, 1000, 1)[0])
+	assert.NotEqual(t, first, one.Latest().HistoryEpoch, "reset moves the epoch")
+}

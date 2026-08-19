@@ -215,8 +215,8 @@ func (inst *ReplaySampler) Step(n int) {
 }
 
 // Seek restarts the transport at t, which becomes the window's lower bound.
-// The fold keeps whatever history it has already accumulated; a caller wanting
-// a clean plot builds a new sampler.
+// The fold is emptied first, so the plots redraw from the new range alone
+// (ADR-0197 §SD12).
 func (inst *ReplaySampler) Seek(t time.Time) {
 	inst.mu.Lock()
 	to := inst.window.To
@@ -225,8 +225,13 @@ func (inst *ReplaySampler) Seek(t time.Time) {
 }
 
 // SeekWindow restarts the transport over a new range, moving both bounds. It is
-// what a jog control needs: stepping to the previous window changes where the
-// replay ends as well as where it starts.
+// what the range controls need: picking another stretch — by brushing the
+// availability strip or by jogging — changes where the replay ends as well as
+// where it starts.
+//
+// The fold is emptied on the transport goroutine before the new range is read,
+// so every control that lands here resets the plots the same way (§SD12).
+// Position reads as unknown until the first bundle of the new range folds.
 func (inst *ReplaySampler) SeekWindow(from, to time.Time) {
 	inst.mu.Lock()
 	inst.window.From = from
@@ -280,6 +285,14 @@ func (inst *ReplaySampler) run(ctx context.Context) {
 			return
 		}
 		inst.seekPending.Store(false)
+		// Every pass but the first opens a range the user just picked, and the
+		// plots must start from nothing there (ADR-0197 §SD12): the previous
+		// range's history is not earlier data about the new one, and the two
+		// need not be adjacent or even ordered. The first pass resets a fold
+		// that is already empty, which costs nothing and keeps "a range starts
+		// from nothing" stated once rather than conditionally.
+		inst.fold.reset()
+		inst.posMs.Store(0)
 		if !inst.stream(ctx, inst.Window()) {
 			return
 		}

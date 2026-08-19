@@ -122,6 +122,28 @@ type cpuHeatmapState struct {
 	heightSlots  uint32 // = nCores * cpuHeatmapBandHeight
 	lastPushedMs int64
 	colBuf       []float32
+	// epoch is the PublishedSnapshot.HistoryEpoch the ring currently holds
+	// columns from. The heatmap is the one panel that accumulates rather than
+	// redrawing from the snapshot, so it is the one that has to notice the
+	// frames stopped continuing each other.
+	epoch uint64
+}
+
+// blankRing fills the whole ring with NaN columns, which the colormap maps to
+// BadColor — a uniform "no data here" rectangle rather than a transparent
+// void or, worse, the previous range's picture.
+//
+// Used at construction and again whenever the epoch moves. Refilling costs one
+// pass over a ring that is already allocated; rebuilding the widget instead
+// would drop and re-acquire its GPU texture on every seek.
+func (inst *cpuHeatmapState) blankRing() {
+	for i := range inst.colBuf {
+		inst.colBuf[i] = float32(math.NaN())
+	}
+	for j := uint32(0); j < cpuHeatmapWidthSlots; j++ {
+		inst.hs.PushColumn(inst.colBuf)
+	}
+	inst.lastPushedMs = 0
 }
 
 // renderCPUHeatmap lazy-initialises the heatmap on first non-empty
@@ -163,21 +185,30 @@ func (inst *App) renderCPUHeatmap(snap *PublishedSnapshot) {
 		// tandem with imzrt's spectrogram so both dashboards scroll alike.)
 		st.hs.SetOrientation(heatmapscroll.ScrollLeft)
 		st.colBuf = make([]float32, st.heightSlots)
-		// Prefill the ring with NaN columns so the widget shows a
-		// full rectangle on first open instead of a sparse strip of
-		// "real" data on one edge with transparent void on the other.
-		// NaN maps to BadColor (set above) per colormap.Map semantics.
-		for i := range st.colBuf {
-			st.colBuf[i] = float32(math.NaN())
-		}
-		for j := uint32(0); j < cpuHeatmapWidthSlots; j++ {
-			st.hs.PushColumn(st.colBuf)
-		}
+		// Prefill the ring so the widget shows a full rectangle on first open
+		// instead of a sparse strip of "real" data on one edge with
+		// transparent void on the other.
+		st.blankRing()
+		st.epoch = snap.HistoryEpoch
 	}
 
-	// Drain new sample. The bundleSnap timestamp is the publication clock;
-	// per-tick monotonic. Guards against double-pushing the same column
-	// across many render frames between sampler ticks.
+	// A replay seek — or a switch between the live fold and a replay one —
+	// ends the run the ring was drawing (ADR-0197 §SD12), and the columns in
+	// it describe a stretch of time the panel is no longer showing. Blank it
+	// and start again from the new run's first frame.
+	//
+	// The push guard below cannot notice this on its own: a seek moves the
+	// stamps backwards as readily as forwards, and a backwards jump reads to
+	// it as a duplicate frame, which froze the heatmap for the rest of the
+	// session.
+	if snap.HistoryEpoch != st.epoch {
+		st.blankRing()
+		st.epoch = snap.HistoryEpoch
+	}
+
+	// Drain new sample. Within one run the stamps are monotonic, so this also
+	// guards against double-pushing the same column across the many render
+	// frames between sampler ticks.
 	if snap.SampledAtUnixMs > st.lastPushedMs {
 		// Replicate each core's value across its band so a 32-core
 		// box renders as a 32*bandHeight px-tall heatmap instead of
