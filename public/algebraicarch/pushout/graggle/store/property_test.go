@@ -190,7 +190,7 @@ func TestProperty_IncrementalVsBatch(tt *testing.T) {
 			c := patch.Change{
 				Kind:        patch.ChangeKindNewNode,
 				NodeID:      t.NodeID{Patch: t.PlaceholderHash, Index: uint64(i)},
-				Content:     []byte(fmt.Sprintf("ins_%d_%d\n", seed, i)),
+				Content:     fmt.Appendf(nil, "ins_%d_%d\n", seed, i),
 				UpContext:   []t.NodeID{upCtx},
 				DownContext: downCtx,
 			}
@@ -259,7 +259,7 @@ func randomChange(g *Graggle, rng *rand.Rand, label string, nodeIdx *uint64) (pa
 		return patch.Change{
 			Kind:      patch.ChangeKindNewNode,
 			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: idx},
-			Content:   []byte(fmt.Sprintf("%s_%d\n", label, idx)),
+			Content:   fmt.Appendf(nil, "%s_%d\n", label, idx),
 			UpContext: []t.NodeID{upCtx},
 		}, true
 

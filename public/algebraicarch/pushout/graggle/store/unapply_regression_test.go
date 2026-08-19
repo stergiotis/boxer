@@ -236,7 +236,7 @@ func TestProperty_UnapplySuffixEqualsReplayPrefix(tt *testing.T) {
 				changes := []patch.Change{{
 					Kind:      patch.ChangeKindNewNode,
 					NodeID:    plc(0),
-					Content:   []byte(fmt.Sprintf("seed%d_step%d\n", seed, k)),
+					Content:   fmt.Appendf(nil, "seed%d_step%d\n", seed, k),
 					UpContext: []t.NodeID{up},
 				}}
 				p := patch.NewPatch("test", fmt.Sprintf("ins%d", k), patch.ComputeDependencies(changes), changes)

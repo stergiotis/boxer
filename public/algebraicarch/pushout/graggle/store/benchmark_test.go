@@ -19,7 +19,7 @@ func benchmarkBase(b *testing.B, n int) (*Graggle, *patch.Patch) {
 		changes[i] = patch.Change{
 			Kind:      patch.ChangeKindNewNode,
 			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: uint64(i)},
-			Content:   []byte(fmt.Sprintf("line %d\n", i)),
+			Content:   fmt.Appendf(nil, "line %d\n", i),
 			UpContext: up,
 		}
 	}
@@ -41,7 +41,7 @@ func BenchmarkPatchApply_Insert100(b *testing.B) {
 			changes[j] = patch.Change{
 				Kind:      patch.ChangeKindNewNode,
 				NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: uint64(j)},
-				Content:   []byte(fmt.Sprintf("line %d\n", j)),
+				Content:   fmt.Appendf(nil, "line %d\n", j),
 				UpContext: up,
 			}
 		}
@@ -62,7 +62,7 @@ func BenchmarkPatchApply_Insert1000(b *testing.B) {
 			changes[j] = patch.Change{
 				Kind:      patch.ChangeKindNewNode,
 				NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: uint64(j)},
-				Content:   []byte(fmt.Sprintf("line %d\n", j)),
+				Content:   fmt.Appendf(nil, "line %d\n", j),
 				UpContext: up,
 			}
 		}
@@ -139,11 +139,11 @@ func BenchmarkLineDiff_100Lines(b *testing.B) {
 	newLines := make([][]byte, n)
 	for i := 0; i < n; i++ {
 		oldIDs[i] = nid("bench_diff", uint64(i))
-		oldContents[i] = []byte(fmt.Sprintf("line %d\n", i))
+		oldContents[i] = fmt.Appendf(nil, "line %d\n", i)
 		if i == n/2 {
 			newLines[i] = []byte("CHANGED\n")
 		} else {
-			newLines[i] = []byte(fmt.Sprintf("line %d\n", i))
+			newLines[i] = fmt.Appendf(nil, "line %d\n", i)
 		}
 	}
 	b.ResetTimer()
@@ -159,11 +159,11 @@ func BenchmarkLineDiff_1000Lines(b *testing.B) {
 	newLines := make([][]byte, n)
 	for i := 0; i < n; i++ {
 		oldIDs[i] = nid("bench_diff", uint64(i))
-		oldContents[i] = []byte(fmt.Sprintf("line %d\n", i))
+		oldContents[i] = fmt.Appendf(nil, "line %d\n", i)
 		if i == n/2 {
 			newLines[i] = []byte("CHANGED\n")
 		} else {
-			newLines[i] = []byte(fmt.Sprintf("line %d\n", i))
+			newLines[i] = fmt.Appendf(nil, "line %d\n", i)
 		}
 	}
 	b.ResetTimer()

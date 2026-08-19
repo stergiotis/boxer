@@ -41,7 +41,7 @@ func makeBaseGraggle(n int, seed string) (*Graggle, *patch.Patch) {
 		changes[i] = patch.Change{
 			Kind:      patch.ChangeKindNewNode,
 			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: uint64(i)},
-			Content:   []byte(fmt.Sprintf("%s_line_%d\n", seed, i)),
+			Content:   fmt.Appendf(nil, "%s_line_%d\n", seed, i),
 			UpContext: []t.NodeID{up},
 		}
 	}
@@ -65,7 +65,7 @@ func randomInsertPatch(base *patch.Patch, rng *rand.Rand, label string, lineCoun
 		{
 			Kind:        patch.ChangeKindNewNode,
 			NodeID:      t.NodeID{Patch: t.PlaceholderHash, Index: 0},
-			Content:     []byte(fmt.Sprintf("%s\n", label)),
+			Content:     fmt.Appendf(nil, "%s\n", label),
 			UpContext:   []t.NodeID{upCtx},
 			DownContext: downCtx,
 		},
