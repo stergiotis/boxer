@@ -12,8 +12,9 @@ status: draft
 > Prior-art claims (who built what, thresholds from the literature) are from
 > prior knowledge and were **not** re-verified. Numbers are estimates (marked
 > with `~`) unless dated; nothing here has been measured on a live server yet.
-> Revised three times the same day — many-mount stores, the hash algorithm,
-> then leeway conformance and caller-owned identity (§14).
+> Revised four times the same day — many-mount stores, the hash algorithm,
+> then leeway conformance and caller-owned identity, then rclone as ingress
+> and egress (§15).
 > The converged design without history or alternatives is in
 > [the compact page](./iofs-clickhouse-snapshot-store-compact.md).
 
@@ -100,7 +101,7 @@ a **live** provider that lists or serves an `fs.FS` per query (right for
 bounded trees and for content that must not be copied — the `ref` mode below
 points at it), and a **deduplicating** store with content-defined chunking
 (right for backup-like snapshot series of large mutable files; parked because
-sharing blocks between files is what forces garbage collection, and §11
+sharing blocks between files is what forces garbage collection, and §12
 records why). What follows is the third shape: the one that trades
 deduplication for having no maintenance at all.
 
@@ -165,7 +166,7 @@ columns — rendered onto separate tables by a generated record store, with
 `gen.Input.DDL` supplying the clauses the design cares about. What this note
 adds is the mapping of its logical columns onto that shape, the engine
 clauses, and a few `ALTER`s. The bespoke `CREATE TABLE`s of the earlier drafts
-remain in the history (`9420bb27`) as the fallback shape (§11).
+remain in the history (`9420bb27`) as the fallback shape (§12).
 
 **Logical schema of an entry row.**
 
@@ -188,7 +189,7 @@ remain in the history (`9420bb27`) as the fallback shape (§11).
 Every attribute is a scalar or `unit` shape, so none of the generator's three
 refusals applies, and every section already exists in the facts schema. A
 block row (if `fsdata` is facts-shaped) is the same backbone with the ordinal
-encoded per §12, and `fsData`, `fsBlockHash` (`blobArray`), `fsLine0`
+encoded per §13, and `fsData`, `fsBlockHash` (`blobArray`), `fsLine0`
 (`u32Array`) and the marker `fsKindBlock`.
 
 **Engine clauses** — the part the store owns, and the reason for separate
@@ -338,7 +339,7 @@ which are absent on every other row and cost nothing.
 | `fsmeta` `index_granularity` | 1024 | 8192 (default) — a mount's rows sit inside one granule either way |
 | `fsdata` `index_granularity` | 1 (one block = one mark) | default — many small blocks per compressed block |
 | `block_size` | 1 MiB | 1 MiB (rarely reached) |
-| `fsdata` shape | facts-shaped or bespoke — open (§12) | the same question, with the insert-cost measurement as its trigger |
+| `fsdata` shape | facts-shaped or bespoke — open (§13) | the same question, with the insert-cost measurement as its trigger |
 | hash | BLAKE3 (house standard); per-block `hash` — chaining value for aligned blocks, standalone digest otherwise | BLAKE3; no per-block `hash` — one-block files are the rule and the file hash covers them |
 | projections on `fsmeta` | none | `by_path` (`ORDER BY (naturalKey, id, ts)`), optionally `by_hash` — for store-wide questions |
 | partitioning | `toYYYYMMDD(expiresAt)` | the same; week or month for low-cadence stores |
@@ -545,7 +546,7 @@ which trees changed it this week, all the trees under one application's tag.
 The first is a lookup in `fssnap`; the others are store-wide scans under the
 store's grant, which is what the fleet profile's `by_path` projection exists
 for. A spelling for "every mount of a store" (`fs('*')` below) is an open item
-(§12).
+(§13).
 
 ```sql
 SELECT id, max(snap) AS latest FROM boxer.fssnap WHERE expiresAt > now() GROUP BY id;
@@ -635,7 +636,7 @@ What it costs:
   membership names under a registry, a store generated from a gen-test, and
   `scripts/dev/generate.sh` whenever the leeway aspect vocabulary moves.
 - **A full walk per snapshot.** Incremental ingest is excluded by the
-  no-sharing premise (§11 names the variant that would relax it).
+  no-sharing premise (§12 names the variant that would relax it).
 - **Latency in milliseconds.** Every adapter call is a round trip. The
   adapter serves batch work, templating, corpus search and exports — not a
   hot serving path, and never writes.
@@ -707,7 +708,125 @@ WHERE table = 'fsdata' AND active
 GROUP BY partition, column ORDER BY partition, column
 ```
 
-## 10. Prior art, briefly
+## 10. rclone: ingress and egress
+
+rclone has no backend plug-in mechanism, so "an rclone adapter" means our side
+speaks a protocol an existing rclone backend consumes — the lesson the
+repository already drew from rclone itself
+([rclone-architecture-lessons §5–§6](../explanation/rclone-architecture-lessons.md)):
+implement the consumer's protocol once, on your side, and let a pipe be the
+transport. Applied here it yields one native head, one dependency, and no
+networking of our own:
+
+    any rclone remote ─► rclone serve sftp --stdio remote:path ─pipe─► walker (pkg/sftp client as fs.FS) ─► store
+    store ─► boxer fs sftp-stdio --store X ─pipe─► rclone  :sftp,ssh="…"  ─► mount | serve s3/webdav/nfs/docker | hasher | union | sync …
+
+**Why SFTP over stdio, and why first.** rclone's `sftp` backend accepts an
+external command in place of ssh (`ssh = "<cmd>"`, run with `-s sftp`
+appended) and speaks SFTP over that command's stdin and stdout. So
+`rclone mount ":sftp,ssh=\"boxer fs sftp-stdio --store corpus\":/<mount>/latest" /mnt/x`
+spawns our head and needs no socket, no port and no credential: possession of
+the pipe is the authorisation, the runtime session the process runs in is the
+grant, and it is legal today under the runtime's refusal to bind non-loopback
+addresses before ADR-0082
+([introspecthttp/server.go](../../public/keelson/runtime/introspect/introspecthttp/server.go)).
+SFTP is also the most faithful protocol for what the store holds —
+`stat`/`lstat`/`readlink`, modes, symlinks — and `pkg/sftp`'s `RequestServer`
+maps onto the adapter of §6 almost one to one: `Fileread` returns an
+`io.ReaderAt` (our `ReadAt`), `Filelist` returns a `ListerAt` with offset
+paging (our `ReadDir`), `Filewrite` and `Filecmd` return permission denied.
+One detail is mandatory rather than optional: rclone reads SFTP in 32–256 KiB
+pipelined chunks, so the head keeps a per-handle cache of decoded blocks (plus
+readahead), or every chunk becomes a query.
+
+**The virtual tree.**
+
+    /<mount>/<snapshot>/<path>          mount = the tagged id in hex (a policy-record name may alias it)
+    /<mount>/latest → <newest snapshot>  a symlink
+
+Time travel is `cd ../2026-08-18T03-00-00Z/`. Snapshot directories never
+change, so rclone's caches can be told so (`--read-only --dir-cache-time 1000h
+--vfs-cache-mode full`); only `latest` moves. Entries with `content = 'none'`
+are listed — metadata is the point — and refuse `open` with a clear error;
+`'ref'` entries are served from the live source.
+
+| SFTP request | Store query |
+|---|---|
+| `readdir` | `ReadDir` (bloom on `dir`), paged by `ORDER BY name` |
+| `stat` / `lstat` | the entry row: size, mtime, mode |
+| `readlink` | `link_target` |
+| `read(offset, len)` | `ReadAt` = `seq BETWEEN`, served from the per-handle block cache |
+| list mounts, list snapshots | `fssnap` under the grant's id set or tag |
+
+**Everything else is rclone's.** Once the store is an rclone remote, rclone's
+own machinery improves it for consumers — none of it ours to build:
+
+| rclone | What a consumer of the store gets |
+|---|---|
+| VFS cache — `--vfs-cache-mode full`, `--vfs-read-chunk-size`, `--dir-cache-time` | our round trips hidden behind local chunk and listing caches; immutability makes long cache lifetimes safe |
+| `hasher` overlay | md5/sha1/sha256 computed once and persisted for a remote that has none — rclone cannot speak blake3, so `rclone check` and `sync --checksum` come from here |
+| `union` | a writable layer beside an immutable snapshot (below) |
+| `combine`, `alias` | one tree over several mounts or stores; short names |
+| `rclone serve s3 / webdav / http / ftp / sftp / nfs / dlna / docker`, `rclone nfsmount` | re-export to every protocol **with rclone's users, keys and TLS** — the authenticated, TLS-terminated front door while our head stays pipe-only; read-only Docker volumes from snapshots; NFS without FUSE |
+| `rclone rcd --rc-web-gui` | a web file browser |
+| `--metadata` | modes and mtimes travel on `rclone copy` and land back on disk |
+| filters, `--transfers` / `--checkers`, retries, bandwidth limits | selection and robustness |
+
+**S3 in two tiers.** Tier 1, zero code:
+`rclone serve s3 --auth-key K,S :sftp,ssh="boxer fs sftp-stdio --store corpus":`
+— rclone implements S3 (experimental, gofakes3-based), SigV4 keys and TLS
+over our pipe. Tier 2, when measurement says so: a native S3 head on the
+runtime's HTTP mux — recursive listing as one paged key-range walk (S3's UTF-8
+key order is our bytewise `naturalKey` order), large ranged reads, and
+non-rclone clients (DuckDB `read_text('s3://…')`, ClickHouse `s3()`,
+aws-cli); symlinks as `.rclonelink` objects, modes and mtime as `x-amz-meta-*`,
+empty directories as `dir/` markers. Loopback-only until ADR-0082; rclone can
+go anonymous against it.
+
+**Ingress: any rclone remote.** `rclone serve sftp --stdio remote:path` exists
+(rclone documents it for `authorized_keys command=`); the walker spawns it and
+wraps the `pkg/sftp` *client* as an `fs.FS` — `ReadDir`, `Lstat`, `Open`,
+`ReadLink` — keeping its single `io/fs` code path. Every rclone backend
+becomes a source, with rclone's auth, retries and bandwidth; rclone's filter
+language (`--filter-from`, `--max-age`, …) is the source-side content policy;
+a `crypt` remote ingests as plaintext (rclone decrypts) or, pointed at the
+ciphertext remote, as a sealed archive — a policy knob. Limits: SFTP mtime is
+1 s, symlinks exist only where the source has them (local trees still go
+through the fsbroker grant directly), and per-file round trips make a
+10⁶-file ingest a matter of hours — fine for snapshots.
+
+**`union`: a writable layer, and what it is not.** `union` merges upstreams
+under placement policies; it is mergerfs-shaped, not overlayfs-shaped. For a
+working copy:
+
+    [work]
+    type = union
+    upstreams = /scratch/work store:<mount>/2026-08-18T03-00-00Z:ro
+    search_policy = ff      create_policy = ff      action_policy = epff
+
+New files and directories go to scratch; scratch shadows the snapshot on read;
+the store never sees a write. What it cannot do: delete or rename a snapshot
+file (no whiteouts — deleting a scratch copy makes the snapshot's version
+reappear) or modify a snapshot-only file (no copy-up on write) — unless the
+scratch upstream carries `:writeback`, which copies a file into scratch **in
+full on first read** and from then on edits the copy; that suits small-file
+corpora and defeats cheap partial reads of large blocks. Pin the lower layer to
+a snapshot directory, never `latest`. The intended loop: working copy = union,
+commit = ingest the union as a new snapshot, history = §7's `diff`. For a true
+working copy with deletes and renames, mount the snapshot read-only and put
+overlayfs on it (Linux), or `rclone copy` the subtree; for read-only container
+inputs, `rclone serve docker`.
+
+**Rules.** The store does no networking of its own until ADR-0082 — rclone is
+the front. Hashes in rclone's vocabulary come from `hasher`, not from us.
+Writable views come from `union`; the store stays append-only. The SFTP head
+caches blocks per handle. `latest` is the only mutable name. An integration
+lane drives the real `rclone` binary — resolved through `extbin`, not invoked
+ad hoc — against a seeded store in both directions. Cost: one new direct
+dependency (`pkg/sftp`, as server and client) and a few hundred lines over the
+adapter of §6.
+
+## 11. Prior art, briefly
 
 The shape is old. Unix file systems are an inode table plus data blocks;
 NTFS's master file table, btrfs and ZFS are literally tables. Every operating
@@ -736,7 +855,7 @@ that whether to persist is decided by the source's listing cost, not by the
 store's row or column layout; and that content-in-rows is a corpus feature,
 not a blob service.
 
-## 11. Alternatives considered and parked
+## 12. Alternatives considered and parked
 
 - **Bespoke tables** (the first three drafts of this note; DDL in the history
   at `9420bb27`). Fastest and smallest — no empty sections, no extraction on
@@ -762,7 +881,7 @@ not a blob service.
   extraction, so nothing forces a migration of `boxer.facts`; and the store
   must not own identity — the tag is the application's degree of freedom.
   The block ordinal is the sole remaining reason an extension would ever be
-  considered (§12).
+  considered (§13).
 - **Partitioning by mount (the first draft).** `PARTITION BY (mount, day)`
   reads naturally for a handful of corpora and is fatal for a store of many
   trees: partitions multiply by the mount count, and ClickHouse wants them in
@@ -802,7 +921,7 @@ not a blob service.
   out-of-process host; the HTTP and FIFO seams the repository already uses
   are the ClickHouse-shaped equivalent.
 
-## 12. Open decisions — the material for the next iterations
+## 13. Open decisions — the material for the next iterations
 
 - **The block ordinal and the `fsdata` shape.** Three encodings — the
   ordinal as a suffix of `naturalKey` (`path ‖ '\0' ‖ be32(seq)`, no
@@ -830,8 +949,11 @@ not a blob service.
 - Whether the fleet profile carries the `by_path` projection by default.
 - Where the walker runs; how a store grant is expressed and how mount
   visibility inside it is declared (an id set, a tag, or a row policy).
+- A native S3 head (§10 tier 2): when — recursive-listing scale, bulk
+  throughput, non-rclone clients — decided by measuring tier 1
+  (`rclone serve s3` over the stdio head) first.
 
-## 13. To verify on a live server before the ADR
+## 14. To verify on a live server before the ADR
 
 - One block is one compressed block for `block_size` in [64 KiB, 1 MiB]
   with `index_granularity = 1` — in the `blobArray` value stream of a
@@ -861,8 +983,14 @@ not a blob service.
   throughput of `BLAKE3()` in ClickHouse for a store-wide audit.
 - Compression ratio and ingest throughput on one representative mount, per
   §9.
+- rclone (§10): the `--sftp-ssh` command contract (rclone appends `-s sftp`;
+  the head must accept it); `rclone serve sftp --stdio` with filters and over
+  a `crypt` remote (mtime and symlink fidelity); `rclone serve s3` listing
+  without delimiter over the SFTP remote at 10⁵–10⁶ entries; `hasher` over
+  the stdio remote; the `union` operation table against the real binary
+  (`:writeback`, deletes, renames).
 
-## 14. Revisions
+## 15. Revisions
 
 - 2026-08-19 — first draft: bespoke tables partitioned by `(mount, day)`,
   mounts keyed by a `LowCardinality(String)` name, snapshot index left as an
@@ -889,3 +1017,7 @@ not a blob service.
   day replaces the retention-class key; the block ordinal and the `fsdata`
   shape recorded as the open decision; bespoke / own-`TableDesc` / in-facts
   recorded as alternatives with their reasons.
+- 2026-08-19, fifth pass — rclone as ingress and egress (§10): one native
+  head (SFTP over stdio) and rclone for every other protocol, credential and
+  TLS; S3 in two tiers; `union` as the writable view with its limits; ingest
+  from any rclone remote through `rclone serve sftp --stdio`.

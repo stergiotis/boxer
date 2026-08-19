@@ -62,7 +62,7 @@ Physical schema: the `boxer.facts` `TableDesc` rendered by a generated record st
 | `text` | `bool` — `fsText` | |
 | `name`, `dir`, `depth`, `ext`, `is_dir`, `is_symlink` | `MATERIALIZED` over `naturalKey` / `fsMode`, added by `ALTER` | hidden from `SELECT *` |
 
-**Block row** (`fsdata`): same backbone, ordinal encoded per §9; attributes `fsData`, `fsBlockHash` (`blobArray`), `fsLine0` (`u32Array`), marker `fsKindBlock`.
+**Block row** (`fsdata`): same backbone, ordinal encoded per §10; attributes `fsData`, `fsBlockHash` (`blobArray`), `fsLine0` (`u32Array`), marker `fsKindBlock`.
 
 **Engine clauses and post-`EnsureTable` `ALTER`s**
 
@@ -199,7 +199,24 @@ Structured content (JSON/CSV files) is a block column: `JSONExtract*`, `splitByC
 - One row shape with `boxer.facts` (shared read access, codecs, vocabulary) while the store controls partitioning, key, retention and indexes; identity-agnostic; scale changes parameters, not shape.
 - Costs: storage = Σ retained snapshots, undeduplicated (bound it with `inline_max`, cadence, retention class); wide facts-shaped rows (~170 column streams) make insert/merge cost the number to measure at fleet scale; store-wide scans pay attribute extraction unless hot attributes are materialised; a full walk per snapshot; millisecond latency per adapter call (batch/templating/search/export, not a hot serving path); effective retention in `[R, R + 1 day]`.
 
-## 9. Open decisions
+## 9. rclone: ingress and egress
+
+One native head, one dependency (`pkg/sftp`), no networking of our own; rclone speaks every other protocol and holds the credentials and TLS.
+
+```
+any rclone remote ─► rclone serve sftp --stdio remote:path ─pipe─► walker (pkg/sftp client as fs.FS) ─► store
+store ─► boxer fs sftp-stdio --store X ─pipe─► rclone  :sftp,ssh="…"  ─► mount | serve s3/webdav/nfs/docker | hasher | union | sync …
+```
+
+- **Egress head: SFTP over stdio.** `rclone mount ":sftp,ssh=\"boxer fs sftp-stdio --store X\":/<mount>/latest" /mnt/x` — no socket, no port, no credential (possession of the pipe is the authorisation; legal under the pre-ADR-0082 non-loopback refusal). `pkg/sftp` `RequestServer` ↔ adapter: `Fileread` → `ReadAt`, `Filelist` → `ReadDir`, `Filewrite`/`Filecmd` → permission denied. Mandatory: a per-handle cache of decoded blocks (rclone reads in 32–256 KiB chunks).
+- **Virtual tree:** `/<mount>/<snapshot>/<path>`, `/<mount>/latest` a symlink to the newest snapshot; time travel = `cd` into another snapshot; caches may be long-lived (`--read-only --dir-cache-time 1000h --vfs-cache-mode full`); `content = 'none'` entries list but refuse open; `'ref'` served from the live source.
+- **rclone then adds:** VFS caching; `hasher` (md5/sha1/sha256 for `check` / `sync --checksum` — rclone cannot speak blake3); `union` (below); `combine` / `alias`; `rclone serve s3/webdav/http/ftp/sftp/nfs/dlna/docker` and `nfsmount` with rclone's users, keys and TLS — the authenticated front door; the rc web GUI; `--metadata` (modes/mtimes restored on copy); filters and robustness.
+- **S3 in two tiers:** tier 1 = `rclone serve s3 --auth-key K,S :sftp,ssh="boxer fs sftp-stdio --store X":` (zero code, experimental); tier 2 = a native S3 head on the HTTP mux when recursive-listing scale, bulk throughput or non-rclone clients (DuckDB, ClickHouse `s3()`, aws-cli) demand it — `.rclonelink` for symlinks, `x-amz-meta-*` for modes/mtime, `dir/` markers; loopback-only until ADR-0082.
+- **Ingress from any rclone remote:** the walker spawns `rclone serve sftp --stdio remote:path` and wraps the `pkg/sftp` client as an `fs.FS`; rclone's filter language is the source-side content policy; `crypt` remotes ingest as plaintext or, at the ciphertext remote, as a sealed archive. Limits: 1 s mtime, symlinks only where the source has them, per-file round trips.
+- **`union` = a writable layer, not an overlay:** `upstreams = /scratch store:<mount>/<snapshot>:ro`, `search_policy = ff`, `create_policy = ff`, `action_policy = epff` — new files to scratch, scratch shadows the snapshot, the store never sees a write; **no whiteouts** (snapshot files cannot be deleted or renamed; deleting a scratch copy reveals the snapshot's) and **no copy-up on write** unless `:writeback`, which copies a file to scratch in full on first read. Pin a snapshot, never `latest`. Loop: working copy = union, commit = ingest it as a new snapshot, history = diff. True CoW with deletes/renames: overlayfs on an rclone mount (Linux), or `rclone copy`.
+- **Rules:** no networking of our own until ADR-0082; rclone-vocabulary hashes from `hasher`; writable views from `union`; an integration lane drives the real `rclone` (via `extbin`) both ways.
+
+## 10. Open decisions
 
 - **Block ordinal and `fsdata` shape**: ordinal as a `naturalKey` suffix (`path ‖ '\0' ‖ be32(seq)`, no `TableDesc` change) vs a generic `rt:ordinal:u32` routing plain (one migration of `boxer.facts`) vs leeway value cardinality (one row per file, blocks as N values — fleet-friendly, wrong for large files); and whether `fsdata` is facts-shaped or bespoke — decided by the insert-cost measurement.
 - Corpus block size (1 MiB vs 256 KiB); partition unit per store (day vs week/month); the retention-class set; `inline_max` / text-rule defaults; the policy kind's shape.
@@ -207,5 +224,6 @@ Structured content (JSON/CSV files) is a block column: `JSONExtract*`, `splitByC
 - Macro spellings: snapshot naming, name-as-sugar, "every mount of a store" / "every mount under a tag".
 - Which hot attributes to materialise besides the tree columns; whether the fleet profile carries `by_path` by default.
 - Where the walker runs; how a store grant and mount visibility (id set / tag / row policy) are declared.
+- A native S3 head (tier 2): when, decided by measuring tier 1 first.
 
-The verification list (generator, decode, materialised views, compression, insert throughput, BLAKE3 subtree API) is in the full note, §13.
+The verification list (generator, decode, materialised views, compression, insert throughput, BLAKE3 subtree API, rclone contracts) is in the full note, §14.
