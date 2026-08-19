@@ -156,10 +156,7 @@ func (inst *ConsumerLag) refresh(parent context.Context) {
 	lags.Each(func(gl kadm.DescribedGroupLag) {
 		for _, topicLag := range gl.Lag {
 			for _, pl := range topicLag {
-				lag := pl.Lag
-				if lag < 0 {
-					lag = 0
-				}
+				lag := max(pl.Lag, 0)
 				inst.topicLagCache.Store(cacheKey(pl.Topic, pl.Partition), lag)
 				if inst.sink != nil {
 					inst.sink(pl.Topic, pl.Partition, lag)

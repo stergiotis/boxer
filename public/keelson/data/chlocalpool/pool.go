@@ -402,10 +402,7 @@ func (inst *Pool) refillSpawnOnce() {
 // forgotten Worker.Close calls (ADR-0028 §SD3).
 func (inst *Pool) watchdogLoop() {
 	defer inst.bg.Done()
-	tick := inst.cfg.WatchdogMaxLifetime / 4
-	if tick < 50*time.Millisecond {
-		tick = 50 * time.Millisecond
-	}
+	tick := max(inst.cfg.WatchdogMaxLifetime/4, 50*time.Millisecond)
 	t := time.NewTicker(tick)
 	defer t.Stop()
 	for {

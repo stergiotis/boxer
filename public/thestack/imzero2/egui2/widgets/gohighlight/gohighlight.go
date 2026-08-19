@@ -748,14 +748,8 @@ func HighlightLines(src string, firstLine int32, lastLine int32) (slice string, 
 		if s.Stop <= byteStart || s.Start >= byteEnd {
 			continue
 		}
-		start := s.Start
-		if start < byteStart {
-			start = byteStart
-		}
-		stop := s.Stop
-		if stop > byteEnd {
-			stop = byteEnd
-		}
+		start := max(s.Start, byteStart)
+		stop := min(s.Stop, byteEnd)
 		spans = append(spans, Span{
 			Start:    start - byteStart,
 			Stop:     stop - byteStart,

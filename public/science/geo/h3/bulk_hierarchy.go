@@ -99,10 +99,7 @@ func (inst *Handle) CellsToChildrenE(
 
 	// Initial guess for the output capacity. Heuristic: two levels of
 	// refinement × hexagon fan-out (49). Grown on demand via retry.
-	outCap := cap(childrenDst)
-	if outCap < n*49 {
-		outCap = n * 49
-	}
+	outCap := max(cap(childrenDst), n*49)
 
 	for attempt := 0; attempt < 2; attempt++ {
 		// Scratch layout: cells(8n) | offsets(4(n+1), pad to 8) |
@@ -170,10 +167,7 @@ func (inst *Handle) CellsToChildrenE(
 			if err != nil {
 				return
 			}
-			total := int(needed)
-			if total > outCap {
-				total = outCap
-			}
+			total := min(int(needed), outCap)
 			children = slices.Grow(childrenDst[:0], total)[:total]
 			err = inst.readU64sE(childrenOff, children)
 			return

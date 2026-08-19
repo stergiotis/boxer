@@ -167,10 +167,7 @@ func (inst *Config) IndexAt(value float64, n int) (idx int) {
 	if n <= 1 {
 		return 0
 	}
-	idx = int(inst.Normalize(value) * float64(n-1))
-	if idx < 0 {
-		idx = 0
-	}
+	idx = max(int(inst.Normalize(value)*float64(n-1)), 0)
 	if idx >= n {
 		idx = n - 1
 	}

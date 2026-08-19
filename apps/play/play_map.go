@@ -548,10 +548,7 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 	}
 	w := clampDim(screenW)
 	h := clampDim(screenH)
-	sampling := uint32(inst.sampling)
-	if sampling < 1 {
-		sampling = 1
-	}
+	sampling := max(uint32(inst.sampling), 1)
 	r := builtinRenders[inst.renderIdx]
 	colorSQL := r.colorSQL
 	if r.custom {

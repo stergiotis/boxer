@@ -513,10 +513,7 @@ func memberAt(spans []Span, off int, partialStart int, lit *LiteralSite, closed 
 		// `f('a.b` is text inside a literal, not a member access.
 		return
 	}
-	at := partialStart
-	if at > off {
-		at = off
-	}
+	at := min(partialStart, off)
 	dot := -1
 	for i := len(spans) - 1; i >= 0; i-- {
 		s := spans[i]

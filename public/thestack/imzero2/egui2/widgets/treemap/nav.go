@@ -115,10 +115,7 @@ func (inst *Treemap) DrillUp(levels int) error {
 	if levels < 0 {
 		levels = 0
 	}
-	newLen := len(inst.breadcrumb) - levels
-	if newLen < 1 {
-		newLen = 1
-	}
+	newLen := max(len(inst.breadcrumb)-levels, 1)
 	if newLen == len(inst.breadcrumb) {
 		return nil
 	}

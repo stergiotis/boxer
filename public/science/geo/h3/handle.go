@@ -84,10 +84,7 @@ func (inst *Handle) ensureScratchE(ctx context.Context, n int) (base uint32, err
 		base = inst.scratchOff
 		return
 	}
-	newCap := inst.scratchCap * 2
-	if newCap < n {
-		newCap = n
-	}
+	newCap := max(inst.scratchCap*2, n)
 	if inst.scratchOff != 0 {
 		inst.freeNoE(ctx, inst.scratchOff, inst.scratchCap)
 		inst.scratchOff = 0

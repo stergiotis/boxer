@@ -84,10 +84,7 @@ func sliceSource(src string, lo int, hi int) (out string) {
 	if lo < 0 || lo > len(src) {
 		return
 	}
-	end := hi + 1
-	if end > len(src) {
-		end = len(src)
-	}
+	end := min(hi+1, len(src))
 	if end < lo {
 		return
 	}

@@ -35,10 +35,7 @@ func (inst *Handle) GridDisksE(
 
 	// Per-cell upper bound (non-pentagon): 3k(k+1)+1.
 	perCellMax := 3*int(k)*(int(k)+1) + 1
-	outCap := n * perCellMax
-	if cap(outCellsDst) > outCap {
-		outCap = cap(outCellsDst)
-	}
+	outCap := max(cap(outCellsDst), n*perCellMax)
 
 	for attempt := 0; attempt < 2; attempt++ {
 		n32 := uint32(n)
@@ -93,10 +90,7 @@ func (inst *Handle) GridDisksE(
 			if err != nil {
 				return
 			}
-			total := int(needed)
-			if total > outCap {
-				total = outCap
-			}
+			total := min(int(needed), outCap)
 			outCells = slices.Grow(outCellsDst[:0], total)[:total]
 			err = inst.readU64sE(outOff, outCells)
 			return

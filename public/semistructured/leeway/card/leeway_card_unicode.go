@@ -575,10 +575,7 @@ func (inst *UnicodeCardEmitter) writeTopBorder(title string, colWidths []int) {
 	titleSan := sanitize(title)
 	inst.lineBuf = append(inst.lineBuf, titleSan...)
 	inst.lineBuf = append(inst.lineBuf, ' ')
-	remaining := totalInner - runeWidth(titleSan) - 3
-	if remaining < 1 {
-		remaining = 1
-	}
+	remaining := max(totalInner-runeWidth(titleSan)-3, 1)
 	for range remaining {
 		inst.lineBuf = append(inst.lineBuf, "─"...)
 	}

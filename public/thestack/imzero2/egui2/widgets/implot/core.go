@@ -206,13 +206,7 @@ func niceNum(x float64, round bool) float64 {
 func locateTicks(rng Range, sizePx float32, dst []tick) []tick {
 	dst = dst[:0]
 	rng = rng.sanitize()
-	nMajor := int(math.Round(float64(sizePx) / 90.0))
-	if nMajor < 2 {
-		nMajor = 2
-	}
-	if nMajor > 12 {
-		nMajor = 12
-	}
+	nMajor := min(max(int(math.Round(float64(sizePx)/90.0)), 2), 12)
 	const nMinor = 4 // subdivisions per major interval, ImPlot's default of 10 is dense for our label sizes
 	niceRange := niceNum(rng.Size()*0.99, false)
 	step := niceNum(niceRange/float64(nMajor-1), true)
@@ -366,10 +360,7 @@ var timeSteps = []timeStep{
 func locateTicksTime(rng Range, sizePx float32, dst []tick) []tick {
 	dst = dst[:0]
 	rng = rng.sanitize()
-	nMax := int(math.Round(float64(sizePx) / 110.0))
-	if nMax < 2 {
-		nMax = 2
-	}
+	nMax := max(int(math.Round(float64(sizePx)/110.0)), 2)
 	span := rng.Size()
 	step := timeSteps[len(timeSteps)-1]
 	for _, s := range timeSteps {

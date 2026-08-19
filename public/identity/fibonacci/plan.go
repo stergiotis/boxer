@@ -58,10 +58,9 @@ func WidthClassOf(width int) (r WidthClass, err error) {
 	// fibonaccicode shift up by one: class w is
 	// [MaxRepresentableExclByWidth(w-1)+1, MaxRepresentableExclByWidth(w)].
 	lo := fibonaccicode.MaxRepresentableExclByWidth(width-1) + 1
-	hi := fibonaccicode.MaxRepresentableExclByWidth(width)
-	if hi > math.MaxUint32 {
-		hi = math.MaxUint32 // width 47 straddles the uint32 boundary
-	}
+	hi := min(fibonaccicode.MaxRepresentableExclByWidth(width),
+		// width 47 straddles the uint32 boundary
+		math.MaxUint32)
 	nBitsPlain := bits.Len64(hi)
 	r = WidthClass{
 		Width:            width,

@@ -213,10 +213,7 @@ func demoGraphDynamic(ids *c.WidgetIdStack, st *graphsDemoState) {
 	}
 
 	// Grow the chain by one node every ~1.5s, up to 12 nodes, then pause.
-	target := int(time.Since(ds.start).Seconds()/1.5) + 1
-	if target > 12 {
-		target = 12
-	}
+	target := min(int(time.Since(ds.start).Seconds()/1.5)+1, 12)
 	if target > ds.nodes {
 		ds.nodes = target
 		ds.parent = ds.parent[:0]

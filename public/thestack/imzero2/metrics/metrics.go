@@ -341,10 +341,7 @@ func (inst *FrameMetrics) Snapshot() (s Snapshot) {
 	s.TotalNs = int64(inst.EmaTotalNs)
 	s.RawTotalNs = inst.LastTotalNs
 	s.InterpretNs = int64(inst.EmaInterpretNs)
-	s.SlackNs = s.TotalNs - s.InterpretNs
-	if s.SlackNs < 0 {
-		s.SlackNs = 0
-	}
+	s.SlackNs = max(s.TotalNs-s.InterpretNs, 0)
 	s.WrittenBytes = int64(inst.EmaWritten)
 	s.ReadBytes = int64(inst.EmaRead)
 	s.RustPassNr = inst.LastPassNr

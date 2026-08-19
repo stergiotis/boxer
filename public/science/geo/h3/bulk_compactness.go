@@ -117,10 +117,7 @@ func (inst *Handle) UncompactCellsE(
 		return
 	}
 
-	outCap := cap(expandedDst)
-	if outCap < n*49 {
-		outCap = n * 49
-	}
+	outCap := max(cap(expandedDst), n*49)
 
 	for attempt := 0; attempt < 2; attempt++ {
 		n32 := uint32(n)
@@ -169,10 +166,7 @@ func (inst *Handle) UncompactCellsE(
 			if err != nil {
 				return
 			}
-			total := int(needed)
-			if total > outCap {
-				total = outCap
-			}
+			total := min(int(needed), outCap)
 			expanded = slices.Grow(expandedDst[:0], total)[:total]
 			err = inst.readU64sE(outOff, expanded)
 			return

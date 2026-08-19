@@ -98,13 +98,7 @@ func (inst *ancestorHueColoring) Colors(info CellInfo) (CellColors, bool) {
 	if !ok {
 		return CellColors{}, false
 	}
-	d := info.Depth
-	if d < 0 {
-		d = 0
-	}
-	if d > inst.maxDepth {
-		d = inst.maxDepth
-	}
+	d := min(max(info.Depth, 0), inst.maxDepth)
 	key := ahcKey{ai: ai, depth: d}
 	if cached, hit := inst.cache[key]; hit {
 		return cached, true

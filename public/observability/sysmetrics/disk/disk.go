@@ -285,13 +285,7 @@ func (inst *Collector) sampleBlock(now time.Time, name string) (bd sysmsnap.Bloc
 				bd.WriteBytesPerSec = uint64(float64((sectorsWritten-prev.sectorsWritten)*SectorSize) / secs)
 			}
 			if ioTicksMs > prev.ioTicksMs && elapsedMs > 0 {
-				busy := int64(ioTicksMs-prev.ioTicksMs) * 100 / elapsedMs
-				if busy > 100 {
-					busy = 100
-				}
-				if busy < 0 {
-					busy = 0
-				}
+				busy := max(min(int64(ioTicksMs-prev.ioTicksMs)*100/elapsedMs, 100), 0)
 				bd.BusyPercent = uint8(busy)
 			}
 		}

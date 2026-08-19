@@ -430,10 +430,7 @@ func (inst *PlayApp) renderAttrTable(rec arrow.RecordBatch, schema *arrow.Schema
 		return
 	}
 
-	totalRows := rec.NumRows()
-	if totalRows > numRows {
-		totalRows = numRows
-	}
+	totalRows := min(rec.NumRows(), numRows)
 	pageStart, pageEnd := inst.pager.Range()
 	if pageEnd > totalRows {
 		pageEnd = totalRows

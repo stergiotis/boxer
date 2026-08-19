@@ -196,10 +196,7 @@ func (inst *Applier) Run(ctx context.Context, git *repo.GitRunner, root string) 
 		if threshold <= 0 {
 			threshold = 0.5
 		}
-		minLines := inst.MinLLMLines
-		if minLines < 0 {
-			minLines = 0
-		}
+		minLines := max(inst.MinLLMLines, 0)
 		cutoff := inst.TrailerCutoff
 		if cutoff.IsZero() {
 			cutoff = earliestLLMCommitDate(commits)

@@ -56,13 +56,7 @@ func barWidthFor(termWidth int) (w int) {
 	if termWidth <= 0 {
 		return maxBarWidth
 	}
-	w = termWidth / 3
-	if w > maxBarWidth {
-		w = maxBarWidth
-	}
-	if w < minBarWidth {
-		w = minBarWidth
-	}
+	w = max(min(termWidth/3, maxBarWidth), minBarWidth)
 	return w
 }
 
@@ -172,10 +166,7 @@ func (inst *Bar) renderDeterminateANSI(n int64, elapsed time.Duration, spinner s
 		return
 	}
 
-	filled := int(float64(barW) * pct / 100)
-	if filled > barW {
-		filled = barW
-	}
+	filled := min(int(float64(barW)*pct/100), barW)
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", barW-filled)
 
 	etaStr := "—"

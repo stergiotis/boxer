@@ -1070,10 +1070,7 @@ func rowHeight(row *table2UnifiedRow) (h float32) {
 	if row.kind != rowKindData {
 		return table2RowHeightSep
 	}
-	n := len(row.primary)
-	if len(row.secondary) > n {
-		n = len(row.secondary)
-	}
+	n := max(len(row.secondary), len(row.primary))
 	// Heuristic: ~2 packed `name=value` pairs fit per visual line in the
 	// values column at table2ValuesColW. Block-faced pairs are not packed:
 	// they stack under the inline line at their own heights.

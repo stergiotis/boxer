@@ -3156,10 +3156,7 @@ func (inst *PlayApp) renderResultsFailed() {
 
 func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, selectedRow int64, emit SignalEmitterI) {
 	ids := inst.ids
-	totalRows := rec.NumRows()
-	if totalRows > numRows {
-		totalRows = numRows
-	}
+	totalRows := min(rec.NumRows(), numRows)
 
 	// Slice to the current page. The pager was Configure()d with totalRows
 	// before this function is called.
@@ -3489,10 +3486,7 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 	}
 	ncols := schema.NumFields()
 	widths := make([]float32, ncols)
-	sampleN := pageEnd - pageStart
-	if sampleN > colSampleRows {
-		sampleN = colSampleRows
-	}
+	sampleN := min(pageEnd-pageStart, colSampleRows)
 	// Reserve the inset renderMasterTable gives each cell, on both sides
 	// (cellInset), so a padded cell doesn't truncate content that would
 	// otherwise fit.

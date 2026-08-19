@@ -834,10 +834,7 @@ func (inst *Inst) renderStatPane() {
 		}
 		c.Separator().Horizontal().Send()
 
-		size := info.Size()
-		if size < 0 {
-			size = 0
-		}
+		size := max(info.Size(), 0)
 		c.Label("Size: " + humanize.Bytes(uint64(size))).Send()
 		c.Label("Mode: " + info.Mode().String()).Send()
 

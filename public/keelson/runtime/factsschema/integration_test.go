@@ -84,10 +84,3 @@ func splitStatements(sql string) (out []string) {
 	}
 	return
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

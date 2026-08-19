@@ -413,10 +413,7 @@ func (inst *App) renderSequentialRamp(name string, lut [][3]uint8) {
 		c.Label(fmt.Sprintf("%-12s", name)).Send()
 		for i := 0; i < dataEncodingSamples; i++ {
 			t := float64(i) / float64(dataEncodingSamples-1)
-			idx := int(t*255.0 + 0.5)
-			if idx > 255 {
-				idx = 255
-			}
+			idx := min(int(t*255.0+0.5), 255)
 			rgb := lut[idx]
 			fill := encodeRGB(rgb)
 			for range c.Frame(inst.ids.PrepareStr(fmt.Sprintf("seq:%s:%d", name, i))).

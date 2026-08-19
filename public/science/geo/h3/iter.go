@@ -11,13 +11,7 @@ import (
 // yield; no allocations occur.
 func AllLatLngs(cells []uint64, latsDeg []float64, lngsDeg []float64) iter.Seq2[uint64, LatLng] {
 	return func(yield func(uint64, LatLng) bool) {
-		n := len(cells)
-		if len(latsDeg) < n {
-			n = len(latsDeg)
-		}
-		if len(lngsDeg) < n {
-			n = len(lngsDeg)
-		}
+		n := min(len(lngsDeg), min(len(latsDeg), len(cells)))
 		for i := 0; i < n; i++ {
 			if !yield(cells[i], LatLng{LatDeg: latsDeg[i], LngDeg: lngsDeg[i]}) {
 				return

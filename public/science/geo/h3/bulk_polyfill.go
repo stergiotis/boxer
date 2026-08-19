@@ -49,13 +49,7 @@ func (inst *Handle) PolygonToCellsE(
 
 	// Heuristic initial output cap: one cell per 4 exterior vertices, at
 	// least 64. Grown via one-retry on need-more.
-	outCap := cap(cellsDst)
-	if outCap < 64 {
-		outCap = 64
-	}
-	if outCap < totalVerts*8 {
-		outCap = totalVerts * 8
-	}
+	outCap := max(max(cap(cellsDst), 64), totalVerts*8)
 
 	for attempt := 0; attempt < 2; attempt++ {
 		// Scratch layout: lats(8n) | lngs(8n) | ringOffsets(4(rc+1), pad 8) |
@@ -114,10 +108,7 @@ func (inst *Handle) PolygonToCellsE(
 			if err != nil {
 				return
 			}
-			total := int(needed)
-			if total > outCap {
-				total = outCap
-			}
+			total := min(int(needed), outCap)
 			cells = slices.Grow(cellsDst[:0], total)[:total]
 			err = inst.readU64sE(cellsOff, cells)
 			return

@@ -55,10 +55,7 @@ func TestEstimator_DeceleratingTrendNegative(t *testing.T) {
 	est.Start(t0, 0)
 	count := int64(0)
 	for i := 1; i <= 12; i++ {
-		rate := 200 - 15*i
-		if rate < 10 {
-			rate = 10
-		}
+		rate := max(200-15*i, 10)
 		count += int64(rate)
 		est.Update(t0.Add(time.Duration(i)*time.Second), count)
 	}

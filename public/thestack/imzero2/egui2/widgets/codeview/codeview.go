@@ -143,14 +143,8 @@ func buildLines(spec highlighterSpec, src string, firstLine, lastLine int32) typ
 		if s.stop <= uint32(byteStart) || s.start >= uint32(byteEnd) {
 			continue
 		}
-		cs := s.start
-		if cs < uint32(byteStart) {
-			cs = uint32(byteStart)
-		}
-		ce := s.stop
-		if ce > uint32(byteEnd) {
-			ce = uint32(byteEnd)
-		}
+		cs := max(s.start, uint32(byteStart))
+		ce := min(s.stop, uint32(byteEnd))
 		winSecs = append(winSecs, section{
 			start: cs - uint32(byteStart),
 			stop:  ce - uint32(byteStart),
@@ -187,14 +181,8 @@ func buildLines(spec highlighterSpec, src string, firstLine, lastLine int32) typ
 			if s.stop <= uint32(seg.start) || s.start >= uint32(seg.end) {
 				continue
 			}
-			cs := s.start
-			if cs < uint32(seg.start) {
-				cs = uint32(seg.start)
-			}
-			ce := s.stop
-			if ce > uint32(seg.end) {
-				ce = uint32(seg.end)
-			}
+			cs := max(s.start, uint32(seg.start))
+			ce := min(s.stop, uint32(seg.end))
 			out = append(out, section{
 				start: contentStart + (cs - uint32(seg.start)),
 				stop:  contentStart + (ce - uint32(seg.start)),

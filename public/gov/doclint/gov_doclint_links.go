@@ -63,10 +63,7 @@ func extractInlineLinks(body []byte) (links []inlineLink) {
 // When the file has no front-matter (body == data byte-for-byte), the
 // offset is 0.
 func frontMatterLineOffset(data []byte, body []byte) (offset int32) {
-	offset = int32(bytes.Count(data, []byte("\n")) - bytes.Count(body, []byte("\n")))
-	if offset < 0 {
-		offset = 0
-	}
+	offset = max(int32(bytes.Count(data, []byte("\n"))-bytes.Count(body, []byte("\n"))), 0)
 	return
 }
 

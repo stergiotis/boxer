@@ -31,10 +31,7 @@ func (inst *Handle) CellsToStringsE(
 	}
 
 	// H3 strings are <= 16 bytes each.
-	outCap := n * 16
-	if cap(bufDst) > outCap {
-		outCap = cap(bufDst)
-	}
+	outCap := max(cap(bufDst), n*16)
 
 	for attempt := 0; attempt < 2; attempt++ {
 		n32 := uint32(n)
@@ -88,10 +85,7 @@ func (inst *Handle) CellsToStringsE(
 			if err != nil {
 				return
 			}
-			total := int(needed)
-			if total > outCap {
-				total = outCap
-			}
+			total := min(int(needed), outCap)
 			var raw []byte
 			raw, err = inst.readBytesE(bufOff, total)
 			if err != nil {
@@ -156,10 +150,9 @@ func (inst *Handle) StringsToCellsE(
 	n32 := uint32(n)
 	bufLen := uint32(len(buf))
 	bufRel := uint32(0)
-	offsetsRel := alignUp8(bufRel + bufLen) // i32 needs 4-byte; align to 8 for the u64 that follows
-	if offsetsRel < bufRel+bufLen {
-		offsetsRel = bufRel + bufLen
-	}
+	offsetsRel := max(
+		// i32 needs 4-byte; align to 8 for the u64 that follows
+		alignUp8(bufRel+bufLen), bufRel+bufLen)
 	cellsRel := alignUp8(offsetsRel + (n32+1)*4)
 	statusRel := cellsRel + n32*8
 	total := int(statusRel) + n

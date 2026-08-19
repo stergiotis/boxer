@@ -158,10 +158,7 @@ func lutIndexFromT(t float32) (idx int) {
 	case t >= 1:
 		idx = 255
 	default:
-		idx = int(t * 255.0)
-		if idx > 255 {
-			idx = 255
-		}
+		idx = min(int(t*255.0), 255)
 	}
 	return
 }

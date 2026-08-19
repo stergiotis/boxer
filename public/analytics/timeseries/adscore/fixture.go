@@ -390,13 +390,7 @@ func injectAnomaly(clean []float64, pristine []float64, start int32, length int3
 		}
 	}
 
-	fade := length / 8
-	if fade < 2 {
-		fade = 2
-	}
-	if fade > length/2 {
-		fade = length / 2
-	}
+	fade := min(max(length/8, 2), length/2)
 	for i := int32(0); i < length; i++ {
 		w := 1.0
 		if i < fade {

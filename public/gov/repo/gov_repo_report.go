@@ -230,10 +230,7 @@ func (inst *ReportGenerator) writeContributors(w io.Writer, bf BusFactorResult, 
 		return
 	}
 
-	n := topN
-	if n > len(bf.Contributors) {
-		n = len(bf.Contributors)
-	}
+	n := min(topN, len(bf.Contributors))
 	const barW = 30
 	for _, c := range bf.Contributors[:n] {
 		full := int(math.Round(c.Percentage / 100.0 * barW))
@@ -355,10 +352,7 @@ func (inst *ReportGenerator) writeFirefighting(w io.Writer, records []FirefightR
 		return
 	}
 
-	n := len(records)
-	if n > 5 {
-		n = 5
-	}
+	n := min(len(records), 5)
 	for _, r := range records[:n] {
 		subj := truncateMid(r.Subject, 48)
 		line = fmt.Sprintf("    %s  %-9s  %s", r.Date, r.Kind.String(), subj)
@@ -479,10 +473,9 @@ func writeSectionHeader(w io.Writer, title string) (err error) {
 		return
 	}
 	titleLen := utf8.RuneCountInString(title)
-	pad := boxW - titleLen - 6 // "  ┄┄ " + title + " ┄..."
-	if pad < 0 {
-		pad = 0
-	}
+	pad := max(
+		// "  ┄┄ " + title + " ┄..."
+		boxW-titleLen-6, 0)
 	err = wRow(w, "  "+strings.Repeat("┄", 2)+" "+title+" "+strings.Repeat("┄", pad))
 	if err != nil {
 		return

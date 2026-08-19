@@ -592,10 +592,7 @@ func EventLabels(series *Series, tolerance int32) (labels []bool) {
 		if !hit {
 			continue
 		}
-		lo := int32(i) - tolerance
-		if lo < 0 {
-			lo = 0
-		}
+		lo := max(int32(i)-tolerance, 0)
 		hi := int32(i) + tolerance
 		if hi >= n {
 			hi = n - 1

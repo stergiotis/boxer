@@ -64,13 +64,7 @@ func ensureH3() error {
 // map: world zooms hit res 2-3, continental 4-5, country 6-7, metro 8-9,
 // street 10-12. Clamped to [1, 12] to keep cell counts manageable.
 func h3ResForZoom(zoom float64) h3.ResolutionE {
-	r := int(math.Round(zoom/2.0 - 1.0))
-	if r < 1 {
-		r = 1
-	}
-	if r > 12 {
-		r = 12
-	}
+	r := min(max(int(math.Round(zoom/2.0-1.0)), 1), 12)
 	return h3.ResolutionE(r)
 }
 

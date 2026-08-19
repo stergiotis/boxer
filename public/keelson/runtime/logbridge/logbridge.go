@@ -353,10 +353,7 @@ func (inst *Sink) flushLoop() {
 func (inst *Sink) drain() {
 	for {
 		inst.mu.Lock()
-		take := inst.count
-		if take > inst.cfg.FlushN {
-			take = inst.cfg.FlushN
-		}
+		take := min(inst.count, inst.cfg.FlushN)
 		if take == 0 {
 			inst.mu.Unlock()
 			return

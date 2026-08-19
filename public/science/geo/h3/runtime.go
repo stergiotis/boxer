@@ -47,10 +47,7 @@ func NewRuntime(ctx context.Context, cfg RuntimeConfig) (inst *Runtime, err erro
 	}
 	poolSize := cfg.PoolSize
 	if poolSize <= 0 {
-		poolSize = runtime.GOMAXPROCS(0)
-		if poolSize < 1 {
-			poolSize = 1
-		}
+		poolSize = max(runtime.GOMAXPROCS(0), 1)
 	}
 	wcfg := cfg.WazeroCfg
 	if wcfg == nil {

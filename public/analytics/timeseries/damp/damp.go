@@ -312,10 +312,7 @@ func (inst *Detector) BestSoFar() (score float64, found bool) {
 
 // numWindows returns how many complete windows the retained history holds.
 func (inst *Detector) numWindows() (count int32) {
-	count = int32(len(inst.raw)) - inst.cfg.Window + 1
-	if count < 0 {
-		count = 0
-	}
+	count = max(int32(len(inst.raw))-inst.cfg.Window+1, 0)
 	return
 }
 
@@ -615,13 +612,7 @@ func (inst *Detector) scoreDAMP(query int32) (score float64, at int32, exact boo
 	}
 
 	for right >= 0 {
-		lo := query - block + 1
-		if lo < 0 {
-			lo = 0
-		}
-		if lo > right {
-			lo = right
-		}
+		lo := min(max(query-block+1, 0), right)
 		d, idx := inst.scanRange(query, lo, right+1)
 		if d < score {
 			score = d

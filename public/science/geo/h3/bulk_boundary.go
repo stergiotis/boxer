@@ -38,13 +38,7 @@ func (inst *Handle) CellsToBoundariesE(
 		return
 	}
 
-	vertexCap := cap(latsDegDst)
-	if vertexCap < cap(lngsDegDst) {
-		vertexCap = cap(lngsDegDst)
-	}
-	if vertexCap < n*6 {
-		vertexCap = n * 6
-	}
+	vertexCap := max(max(cap(latsDegDst), cap(lngsDegDst)), n*6)
 
 	for attempt := 0; attempt < 2; attempt++ {
 		n32 := uint32(n)
@@ -100,10 +94,7 @@ func (inst *Handle) CellsToBoundariesE(
 			if err != nil {
 				return
 			}
-			total := int(needed)
-			if total > vertexCap {
-				total = vertexCap
-			}
+			total := min(int(needed), vertexCap)
 			latsDeg = slices.Grow(latsDegDst[:0], total)[:total]
 			lngsDeg = slices.Grow(lngsDegDst[:0], total)[:total]
 			err = inst.readF64sE(latsOff, latsDeg)
