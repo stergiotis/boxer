@@ -109,4 +109,19 @@ func TestComponentDetectAndDecode_Light(t *testing.T) {
 		require.True(t, original[i].WindowBegin.Equal(got[i].WindowBegin), "row %d WindowBegin", i)
 		require.True(t, original[i].WindowEnd.Equal(got[i].WindowEnd), "row %d WindowEnd", i)
 	}
+
+	// The same decode as one expression. Since Go 1.27 the type-introducing
+	// terminal is a method (ADR-0199), so it closes the chain that built the
+	// readers instead of taking them back as its first argument — the shape
+	// ADR-0023 wanted and recorded as unavailable. Pinned equal to the
+	// free-function form above, which is what keeps the forwarder honest.
+	var chained []droneRow
+	require.NoError(t, marshallreflect.NewSectionReaders(idReader.Len()).
+		PlainColumn("id", idReader.ValueId).
+		PlainColumn("naturalKey", idReader.ValueNaturalKey).
+		Section("symbol", symbolReader.GetAttributes(), symbolReader.GetMemberships()).
+		Section("u64Array", u64Reader.GetAttributes(), u64Reader.GetMemberships()).
+		Section("timeRange", timeRangeReader.GetAttributes(), timeRangeReader.GetMemberships()).
+		Unmarshal(&chained, lookup))
+	require.Equal(t, got, chained, "the method and the free function must decode identically")
 }

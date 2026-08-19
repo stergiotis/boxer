@@ -152,7 +152,7 @@ Stage 2 carries this end to end: a fat `DroneEntity` is marshalled (the
 `marshallgen` codec) to Arrow, the readback presence/validator/projection run in
 `clickhouse-local`, and every row reads back — all five sections, including the
 multi-sub-column `geoPoint` and `timeRange`. The fat row is then split back into
-the four typed components via `Extract[T]`. `stage2/cross_test.go` asserts the two
+the four typed components via `FatRow.Extract[T]`. `stage2/cross_test.go` asserts the two
 stages return the *same* verdict on corresponding data, in both directions.
 
 ## Complexity — the inversion

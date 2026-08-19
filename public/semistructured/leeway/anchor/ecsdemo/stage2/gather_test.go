@@ -50,7 +50,7 @@ func TestFatRowArchetype(t *testing.T) {
 
 // TestExtractComponentsFromRow marshals fat DroneEntity rows to a single Arrow
 // batch, then extracts each typed component (Identity, Battery, Located, Tasked)
-// out of that same row via Extract[T], asserting every component recovers its
+// out of that same row via FatRow.Extract[T], asserting every component recovers its
 // fields and shares the row's entity id. This is the stage-2 mirror of stage-1's
 // World.Gather: one fat row, four typed component views.
 func TestExtractComponentsFromRow(t *testing.T) {
@@ -84,13 +84,13 @@ func TestExtractComponentsFromRow(t *testing.T) {
 	defer row.Release()
 	require.Equal(t, len(original), row.NumRows())
 
-	ids, err := Extract[Identity](row)
+	ids, err := row.Extract[Identity]()
 	require.NoError(t, err)
-	bats, err := Extract[Battery](row)
+	bats, err := row.Extract[Battery]()
 	require.NoError(t, err)
-	locs, err := Extract[Located](row)
+	locs, err := row.Extract[Located]()
 	require.NoError(t, err)
-	tasks, err := Extract[Tasked](row)
+	tasks, err := row.Extract[Tasked]()
 	require.NoError(t, err)
 
 	require.Len(t, ids, len(original))

@@ -70,9 +70,9 @@ type PathResolution struct {
     ValueAspects       valueaspects.AspectSet
 }
 
-// Plan is the type-erased operator graph. Operators on *Plan compose
-// fluently; type-introducing terminals (Collect, Reduce, Sum) are free
-// functions because Go does not allow generic methods.
+// Plan is the type-erased operator graph. Operators and the
+// type-introducing terminals (Collect, Reduce, Sum) alike are methods on
+// *Plan, so a query is one expression from source to terminal.
 type Plan struct { /* internal */ }
 
 // Binder is the per-binding accessor passed to operator closures.
@@ -673,7 +673,7 @@ Indicative scope: v0 + v1 together is on the order of a few thousand lines of ne
 
 - Verbosity vs the FLWOR text form. Go's lambda-and-builder syntax is heavier than nested `for` / `return` constructors.
 - Go-only authoring at v1; non-Go consumers must wait for v3 (text frontend).
-- The `*Plan` abstraction is type-erased at the Go API level; type-introducing terminals (`Collect`, `Reduce`, `Sum`) are free functions because Go does not allow generic methods. This is idiomatic Go but less fluent than fully-chainable APIs in other languages.
+- The `*Plan` abstraction is type-erased at the Go API level. Until Go 1.27 the type-introducing terminals (`Collect`, `Reduce`, `Sum`) would additionally have had to be free functions, since a method could not declare its own type parameter — leaving the API less fluent than fully-chainable ones elsewhere. Generic methods removed that constraint ([ADR-0199](0199-adopt-go-1-27.md)), and `marshallreflect`'s terminals were converted first, so the shape is in the tree rather than only in this design. Type erasure at the `*Plan` boundary itself remains.
 - Codegen-typed binders (v2) require an extension to the Leeway SDK; until v2 lands, paths are strings checked at runtime.
 - Two execution targets in v0 and v1 expand the surface vs a CH-only path. The split pays off when in-process Parquet queries become a real consumer; before then it is design overhead.
 - The full membership-model surface (eight `MembershipSpec` variants, parametrized matchers, `ParamMatcher` family, boolean combinators) is wider than the path-with-slots case used in tutorials. Users coming from JSON-over-Leeway will find `ForEachAt` familiar, but real-world Leeway sections often use other specs (`HighCardRef`, `LowCardRef`, parametrized variants) and require fluency with the broader matcher surface to query at full power.

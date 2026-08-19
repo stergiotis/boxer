@@ -114,8 +114,8 @@ func (inst *FatRow) readerSet() *marshallreflect.SectionReaders {
 // is the stage-2, per-component analogue of stage-1's World.Gather. An absent
 // section yields the component's zero value; pair with a presence check
 // (GetNumberOfAttributes) to distinguish absent from zero.
-func Extract[T any](inst *FatRow) (out []T, err error) {
-	if err = marshallreflect.Unmarshal(inst.readerSet(), &out, droneLookup); err != nil {
+func (inst *FatRow) Extract[T any]() (out []T, err error) {
+	if err = inst.readerSet().Unmarshal(&out, droneLookup); err != nil {
 		err = eh.Errorf("extract component from fat row: %w", err)
 	}
 	return

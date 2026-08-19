@@ -39,26 +39,34 @@ func Contract[T any]() (c mappingplan.ReadContract, err error) {
 //   - PresenceExact — the row conforms; ReadComponent will decode it.
 //
 // lookup resolves ref-channel membership names to ids, exactly as Unmarshal
-// uses it; pass nil when every membership is verbatim. readers must cover
+// uses it; pass nil when every membership is verbatim. The set must cover
 // every section T declares, checked up front as in Unmarshal.
 //
 // Detect does not read values, so it does not report whether a value decodes —
 // only whether the row's attribute layout matches T's contract.
-func Detect[T any](readers *SectionReaders, i int, lookup LookupI, opts ...ReadOption) (p mappingplan.PresenceE, err error) {
+func (inst *SectionReaders) Detect[T any](i int, lookup LookupI, opts ...ReadOption) (p mappingplan.PresenceE, err error) {
 	defer recoverContract(&err)
-	counts, c, err := slotCounts[T](readers, i, lookup, buildReadOptions(opts))
+	counts, c, err := slotCounts[T](inst, i, lookup, buildReadOptions(opts))
 	if err != nil {
 		return
 	}
 	return c.Verdict(counts), nil
 }
 
-// DetectAll runs Detect over every row the readers carry, returning one
+// Detect is the free-function form of [SectionReaders.Detect], kept for
+// callers written before the method existed (Go 1.27 generic methods,
+// ADR-0199). New code should prefer the method: it chains off the builder
+// that produced the readers.
+func Detect[T any](readers *SectionReaders, i int, lookup LookupI, opts ...ReadOption) (p mappingplan.PresenceE, err error) {
+	return readers.Detect[T](i, lookup, opts...)
+}
+
+// DetectAll runs Detect over every row the set carries, returning one
 // verdict per row. It resolves the plan, the coverage check and the membership
 // ids once for the whole batch rather than per row.
-func DetectAll[T any](readers *SectionReaders, lookup LookupI, opts ...ReadOption) (out []mappingplan.PresenceE, err error) {
+func (inst *SectionReaders) DetectAll[T any](lookup LookupI, opts ...ReadOption) (out []mappingplan.PresenceE, err error) {
 	defer recoverContract(&err)
-	if readers == nil {
+	if inst == nil {
 		err = eb.Build().Errorf("SectionReaders is nil")
 		return
 	}
@@ -70,7 +78,7 @@ func DetectAll[T any](readers *SectionReaders, lookup LookupI, opts ...ReadOptio
 	if err != nil {
 		return
 	}
-	if err = readers.checkCoverage(r.plan, r.groups); err != nil {
+	if err = inst.checkCoverage(r.plan, r.groups); err != nil {
 		return
 	}
 	c := r.contract
@@ -78,16 +86,24 @@ func DetectAll[T any](readers *SectionReaders, lookup LookupI, opts ...ReadOptio
 	if err != nil {
 		return
 	}
-	out = make([]mappingplan.PresenceE, 0, readers.numRows)
-	for i := range readers.numRows {
+	out = make([]mappingplan.PresenceE, 0, inst.numRows)
+	for i := range inst.numRows {
 		var counts map[int]int
-		counts, err = countSlotsWithIDs(readers, i, c, ids, ro)
+		counts, err = countSlotsWithIDs(inst, i, c, ids, ro)
 		if err != nil {
 			return
 		}
 		out = append(out, c.Verdict(counts))
 	}
 	return
+}
+
+// DetectAll is the free-function form of [SectionReaders.DetectAll], kept for
+// callers written before the method existed (Go 1.27 generic methods,
+// ADR-0199). New code should prefer the method: it chains off the builder
+// that produced the readers.
+func DetectAll[T any](readers *SectionReaders, lookup LookupI, opts ...ReadOption) (out []mappingplan.PresenceE, err error) {
+	return readers.DetectAll[T](lookup, opts...)
 }
 
 // slotCounts tallies, for row i, how many attributes each of T's slots carries.
@@ -230,13 +246,13 @@ func countSlotsWithIDs(readers *SectionReaders, i int, c mappingplan.ReadContrac
 // kind, render the ones that answer. It tolerates every attribute no kind
 // claims, which is what lets a stage that knows only its own components read a
 // row other stages have fused and enriched.
-func ReadComponent[T any](readers *SectionReaders, i int, lookup LookupI, opts ...ReadOption) (row T, ok bool, err error) {
+func (inst *SectionReaders) ReadComponent[T any](i int, lookup LookupI, opts ...ReadOption) (row T, ok bool, err error) {
 	defer recoverContract(&err)
 	ro := buildReadOptions(opts)
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
-	counts, c, err := slotCounts[T](readers, i, lookup, ro)
+	counts, c, err := slotCounts[T](inst, i, lookup, ro)
 	if err != nil {
 		return
 	}
@@ -257,9 +273,17 @@ func ReadComponent[T any](readers *SectionReaders, i int, lookup LookupI, opts .
 	if err != nil {
 		return
 	}
-	rowVal, err := unmarshalRow(rowType, r.plan, r.groups, readers, i, membIDs, r.contract, ro)
+	rowVal, err := unmarshalRow(rowType, r.plan, r.groups, inst, i, membIDs, r.contract, ro)
 	if err != nil {
 		return
 	}
 	return rowVal.Interface().(T), true, nil
+}
+
+// ReadComponent is the free-function form of [SectionReaders.ReadComponent], kept for
+// callers written before the method existed (Go 1.27 generic methods,
+// ADR-0199). New code should prefer the method: it chains off the builder
+// that produced the readers.
+func ReadComponent[T any](readers *SectionReaders, i int, lookup LookupI, opts ...ReadOption) (row T, ok bool, err error) {
+	return readers.ReadComponent[T](i, lookup, opts...)
 }

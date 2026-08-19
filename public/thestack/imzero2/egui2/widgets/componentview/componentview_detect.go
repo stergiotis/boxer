@@ -60,7 +60,7 @@ func Bind[T any](kind ComponentKindE, project func(T) any) (b Binding, err error
 		kind:     kind,
 		contract: contract,
 		read: func(readers *marshallreflect.SectionReaders, i int, lookup marshallreflect.LookupI) (any, bool, error) {
-			row, ok, rerr := marshallreflect.ReadComponent[T](readers, i, lookup)
+			row, ok, rerr := readers.ReadComponent[T](i, lookup)
 			if rerr != nil || !ok {
 				return nil, false, rerr
 			}

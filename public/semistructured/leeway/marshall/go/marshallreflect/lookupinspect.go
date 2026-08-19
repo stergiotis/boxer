@@ -124,15 +124,15 @@ func (r LookupReport) String() string {
 	return b.String()
 }
 
-// InspectLookup reports, for every row the readers carry, what T's slots
+// InspectLookup reports, for every row the set carries, what T's slots
 // resolved to and what their sections actually hold. It reads only membership
 // columns.
 //
 // Reach for it when a field decodes empty and you cannot tell whether the data
 // is absent or the LookupI disagrees with the writer's registry.
-func InspectLookup[T any](readers *SectionReaders, lookup LookupI, opts ...ReadOption) (rep LookupReport, err error) {
+func (inst *SectionReaders) InspectLookup[T any](lookup LookupI, opts ...ReadOption) (rep LookupReport, err error) {
 	defer recoverContract(&err)
-	if readers == nil {
+	if inst == nil {
 		err = eb.Build().Errorf("SectionReaders is nil")
 		return
 	}
@@ -144,14 +144,14 @@ func InspectLookup[T any](readers *SectionReaders, lookup LookupI, opts ...ReadO
 	if err != nil {
 		return
 	}
-	if err = readers.checkCoverage(r.plan, r.groups); err != nil {
+	if err = inst.checkCoverage(r.plan, r.groups); err != nil {
 		return
 	}
 	c := r.contract
 
 	rep = LookupReport{
 		Kind:          c.Kind,
-		NumRows:       readers.numRows,
+		NumRows:       inst.numRows,
 		SectionRefIDs: map[string][]uint64{},
 		SectionNames:  map[string][]string{},
 	}
@@ -168,8 +168,8 @@ func InspectLookup[T any](readers *SectionReaders, lookup LookupI, opts ...ReadO
 		rep.Slots = append(rep.Slots, obs)
 	}
 
-	for i := 0; i < readers.numRows; i++ {
-		counts, cerr := countSlots(readers, i, lookup, c, ro)
+	for i := 0; i < inst.numRows; i++ {
+		counts, cerr := countSlots(inst, i, lookup, c, ro)
 		if cerr != nil {
 			// countSlots resolves ids too; a lookup that cannot resolve is the
 			// very thing being diagnosed, so report what is known so far.
@@ -185,9 +185,9 @@ func InspectLookup[T any](readers *SectionReaders, lookup LookupI, opts ...ReadO
 	}
 
 	for _, section := range c.Sections() {
-		sr := readers.sections[section]
+		sr := inst.sections[section]
 		ch := sectionChannel(c, section)
-		ids, names := observeSection(reflect.ValueOf(sr.attrs), reflect.ValueOf(sr.membs), readers.numRows, ch)
+		ids, names := observeSection(reflect.ValueOf(sr.attrs), reflect.ValueOf(sr.membs), inst.numRows, ch)
 		if len(ids) > 0 {
 			rep.SectionRefIDs[section] = ids
 		}
@@ -196,6 +196,14 @@ func InspectLookup[T any](readers *SectionReaders, lookup LookupI, opts ...ReadO
 		}
 	}
 	return
+}
+
+// InspectLookup is the free-function form of [SectionReaders.InspectLookup], kept for
+// callers written before the method existed (Go 1.27 generic methods,
+// ADR-0199). New code should prefer the method: it chains off the builder
+// that produced the readers.
+func InspectLookup[T any](readers *SectionReaders, lookup LookupI, opts ...ReadOption) (rep LookupReport, err error) {
+	return readers.InspectLookup[T](lookup, opts...)
 }
 
 // sectionChannel returns the (uniform) membership channel of a contract's

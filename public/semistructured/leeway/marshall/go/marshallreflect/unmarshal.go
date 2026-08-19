@@ -68,21 +68,21 @@ func (r *SectionReaders) Section(name string, attrs, membs any) *SectionReaders 
 	return r
 }
 
-// Unmarshal appends readers' numRows entities to *out by reading the plain
+// Unmarshal appends the reader set's numRows entities to *out by reading the plain
 // columns and walking the per-section attribute / membership readers via
 // reflect. T's struct tags drive the field-by-field decode. lookup resolves
 // non-verbatim membership names to uint64 ids so the per-row dispatch can match
 // the wire's ref channels.
 //
-// Unmarshal first checks that readers covers every plain column and section T's
+// Unmarshal first checks that the set covers every plain column and section T's
 // Plan declares, reporting all gaps in one error before reading any row.
-func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI, opts ...ReadOption) (err error) {
+func (inst *SectionReaders) Unmarshal[T any](out *[]T, lookup LookupI, opts ...ReadOption) (err error) {
 	defer recoverContract(&err)
 	ro := buildReadOptions(opts)
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
-	if readers == nil {
+	if inst == nil {
 		err = eb.Build().Errorf("SectionReaders is nil")
 		return
 	}
@@ -94,7 +94,7 @@ func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI, opts ..
 	plan := r.plan
 	groups := r.groups
 
-	if err = readers.checkCoverage(plan, groups); err != nil {
+	if err = inst.checkCoverage(plan, groups); err != nil {
 		return
 	}
 
@@ -109,15 +109,23 @@ func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI, opts ..
 		return
 	}
 
-	for i := 0; i < readers.numRows; i++ {
+	for i := 0; i < inst.numRows; i++ {
 		var rowVal reflect.Value
-		rowVal, err = unmarshalRow(rowType, plan, groups, readers, i, membIDs, r.contract, ro)
+		rowVal, err = unmarshalRow(rowType, plan, groups, inst, i, membIDs, r.contract, ro)
 		if err != nil {
 			return
 		}
 		*out = append(*out, rowVal.Interface().(T))
 	}
 	return
+}
+
+// Unmarshal is the free-function form of [SectionReaders.Unmarshal], kept for
+// callers written before the method existed (Go 1.27 generic methods,
+// ADR-0199). New code should prefer the method: it chains off the builder
+// that produced the readers.
+func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI, opts ...ReadOption) (err error) {
+	return readers.Unmarshal[T](out, lookup, opts...)
 }
 
 // unmarshalRow decodes one row into a fresh value of rowType — the body Unmarshal
