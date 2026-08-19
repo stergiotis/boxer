@@ -305,11 +305,39 @@ more than half the diff and should not ride along with anything else. Note
 `gofmt -w` must **not** be used to tidy the result — it mangles doc-comment
 quotes; `go fix` applies scoped edits and does not reformat whole files.
 
-Whether `go fix -diff` then becomes a lint step (fail on non-empty diff) is a
-separate call. It is cheap (3.7 s) and it is exactly the kind of universal step
-`gov gate`'s `DefaultSteps()` exists to publish — but it also makes every new
-fixer in every future Go release an immediate hard gate, which is a policy
-choice, not a convenience.
+### What the sweep cost — run 2026-08-19
+
+**21 commits, 320 files, +901 / −1206.** Full `-race` suite green in 455 s;
+`lint.sh` clean of anything the sweep introduced. Notes a second reader needs:
+
+- **`go fix` emitted code that does not compile, twice**, both from
+  `stringscut`. One was cosmetic (`after := after`, a self-assignment of the
+  name `strings.Cut` had just bound). The other was not: a test held two
+  independent `strings.Index` results, `idIdx` and `u8Idx`, and the fixer
+  rewrote **both to a single name** `found`, leaving `if !found || !found`.
+  That is a semantic corruption. It happened to be a compile error because the
+  two statements were adjacent; further apart it would have compiled and
+  silently checked one condition twice.
+- **`go build ./...` does not catch that**, because it does not compile test
+  files. `go vet ./...` does. Vet is the gate for a sweep like this, not build.
+- **One fixer was declined**: `stringsbuilder` on
+  `helphost.renderNavSections`, where the loop runs at most four times to build
+  a twelve-byte string in a per-frame render path. A `strings.Builder` there is
+  slower and reads worse.
+- **The sweep is tag-blind.** `go fix -tags "$(cat ./tags)"` never sees files
+  behind `integration`, `binary_log`, `bootstrap` and the rest; each family
+  needs its own pass. Two integration-test packages additionally fail to
+  type-check at HEAD (`chserver` — `recordingBus` missing `RequestWithTimeout`;
+  `apps/play` — `len()` on a `*BinarySearchGrowingKV`), so the analyzer skips
+  those packages entirely and silently. `gpu_*` was not swept: it needs vendor
+  headers.
+
+That settles whether `go fix -diff` should become a `gov gate` step: **no.** A
+gate would have to be green, and one site is deliberately not taken — so it
+would be permanently red or need a suppression mechanism `go fix` does not
+have. More to the point, a fixer that can rewrite two variables into one is not
+something to run unattended on a schedule. The right cadence is a reviewed
+sweep per Go release, which is what this was.
 
 ## 5. The toolchain itself — what actually gates this
 
@@ -428,7 +456,7 @@ renumbered, because M0 measured its work away.
 | | Milestone | Gated on | Verification lane |
 | --- | --- | --- | --- |
 | **M0** | ~~Acquire 1.27; answer the tag, `go tool` and `goroutineleak` questions~~ **done 2026-08-19** — results in §1, §3, §5 | — | ran in a detached worktree at `29733c55` |
-| **M1** | `go fix` sweep on `go1.26.5`, one commit per fixer, `fmtappendf` included before it disappears | — | `gotest.sh` per commit |
+| **M1** | ~~`go fix` sweep on `go1.26.5`, one commit per fixer~~ **done 2026-08-19** — 21 commits, 320 files, `fmtappendf` taken before it disappears; see §4 | — | full `-race` suite green, `lint.sh` clean of sweep-introduced findings |
 | ~~**M2**~~ | ~~`pprofarrow` kind-hint plumbing~~ — **not needed**: the profile carries its own `goroutineleak/count` sample type and classifies correctly today (§3) | — | — |
 | **M3** | One atomic commit: `go 1.27.0` directive, `go mod tidy` (which drops the `toolchain` line), the two-line `jsontext` repair in `leeway/dml/example/cli.go`, and the `,inline` → `,embed` tag in `openaichat` — none of the three compiles or behaves correctly under 1.26, so none can precede the bump. Plus the `staticcheck` pin bump to `v0.8.0-rc.1`, without which `lint.sh` panics. Optionally drop the `go-json-experiment/json` dependency, now a pure alias | M0 | `lint.sh`, `gotest.sh`, all seven workflows |
 | **M3b** | Airgap: state the "packed on a 1.27 host" precondition where `airgap_ship_goroot` can be seen to require it; refresh the `toolchain go1.26.5` sentence in [howto/airgapped-build](../howto/airgapped-build.md); coordinate the adopter's `go` line and bundle re-cut (§5) | M3 | a bundle cut + `airgap-unbundle` smoke on a clean host |
@@ -450,8 +478,10 @@ generic-method change does not.
    consumer-shaped module with no tags.** §1.
 3. ~~Does `inferKind` collide `goroutineleak` with `goroutine`?~~ **Answered
    (M0): no — it carries its own sample type.** §3.
-4. Does `go fix -diff` become a `gov gate` step, accepting that each future Go
-   release's new fixers land as an immediate hard gate?
+4. ~~Does `go fix -diff` become a `gov gate` step?~~ **Answered by running it
+   (M1): no.** One site is deliberately declined, so a gate would be
+   permanently red; and the fixer that miscompiled two sites is not one to run
+   unattended. A reviewed sweep per Go release is the cadence. §4.
 5. One ADR or two for M4 and M6?
 6. Should M3 also drop `github.com/go-json-experiment/json`? Under 1.27 it is a
    type alias for the standard library, so the import is a dependency whose
