@@ -166,6 +166,27 @@ A re-investigation of recurring slow-frame warnings — prompted by the suspicio
 
 No decision change: the continuous default, reactive opt-in, and the real-work gate all stand. This restores the budget SD3 intended.
 
+### 2026-08-19 — Measured: the spin costs a core and buys no frames; the root cause is upstream
+
+The 2026-08-18 entry reopened SD6 on a live occluded window. An A/B on a controlled compositor now bounds the cost and locates the defect, which is **not** in this tree.
+
+Method: headless weston at a forced frame-callback rate (`weston --backend=headless --renderer=gl --idle-time=0 --refresh-rate=<mHz> --socket=wl-probe`, host run under `WAYLAND_DISPLAY=wl-probe`), the probe the 2026-07-22 entry above established. `--refresh-rate=1000` (1 Hz) reproduces the occluded-window throttle without occluding anything: it produced 99.7 % of a core against the 96.8 % measured on the real occluded window. Frame rate is counted from `wl_surface.commit` in a `WAYLAND_DEBUG=1` capture.
+
+| Compositor | Cadence | fps | Client CPU |
+| --- | --- | --- | --- |
+| 1 Hz (occluded-equivalent) | continuous | ~1 | **99.7 %** |
+| 1 Hz (occluded-equivalent) | reactive | ~1 | **1.8 %** |
+| 60 Hz (visible) | continuous | ~60 | 98.5 % |
+| 60 Hz (visible) | reactive | ~1 | 0.1 % |
+
+Two readings. **Under throttling both cadences deliver the same ~1 fps, so the spin buys nothing** — continuous burns a whole core for zero additional frames, and reactive removes it 55×. **But reactive still cannot be the default**, because on a *visible* window it drops 60 fps to ~1: exactly the O2 rejection in decision 1. `IMZERO2_RENDER_CADENCE=reactive` is therefore a real workaround for a backgrounded dev window and not a fix.
+
+The mechanism is in eframe, not here. `about_to_wait` sets `ControlFlow::Poll` whenever a repaint is due and `is_invisible_or_minimized(window)` is false; the compositor withholds frame callbacks from a throttled surface, so `RedrawRequested` never arrives, the repaint stays due, and the loop re-Polls. eframe already carries a backstop for this exact busy-loop (`INVISIBLE_WINDOW_REPAINT_INTERVAL`, egui #7776) but keys it on `Window::is_visible()` / `is_minimized()`, which winit's Wayland backend returns `None` for unconditionally. The same gap disposes of SD6's stated mechanism: winit emits `WindowEvent::Occluded` on X11, macOS, iOS and web but **never on Wayland**, and eframe fills `ViewportInfo.occluded` only from that event — so a visibility-aware mode as SD6 describes it is inert on the platform where this was measured.
+
+A client-side fix is also blocked by SD2 as written: [`host/chrome.go`](../../public/thestack/imzero2/host/chrome.go) requests an immediate repaint every frame in continuous mode, and egui's `request_repaint_after` takes `min(existing, d)` — the Rust side cannot lengthen a deadline Go already set to zero. Making the client authoritative would need a Rust→Go signal and a decorator change, and the `RequestRepaint` dispatch arm is generated code.
+
+No decision change. Continuous stays the default and SD6 stays open; the preferred fix is now upstream — re-key eframe's existing backstop from "the window is invisible" to "a redraw has been requested but unserviced for > N ms", which is observable on every platform and costs nothing here, since the frames it suppresses are frames the compositor was never going to deliver.
+
 ## References
 
 - [ADR-0009](0009-environment-variable-registry.md) — environment-variable registry; `CategorialStringVar` and the default-on-unrecognised-value convention used here.
