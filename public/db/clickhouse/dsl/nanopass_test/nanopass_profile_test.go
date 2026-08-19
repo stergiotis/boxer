@@ -172,15 +172,13 @@ func TestRunProfiledIsGoroutineSafe(t *testing.T) {
 	var wg sync.WaitGroup
 	trees := make([]nanopass.StepCost, 2)
 	for i, p := range []nanopass.Pass{slow, fast} {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 20 {
 				_, cost, err := p.RunProfiled("SELECT 1")
 				assert.NoError(t, err)
 				trees[i] = cost
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	assert.Equal(t, []string{"slow", "  s1", "  s2"}, stepNames(trees[0]))

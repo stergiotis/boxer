@@ -219,9 +219,7 @@ func TestReplaySession_ConcurrentStatusReads(t *testing.T) {
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
 	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -234,7 +232,7 @@ func TestReplaySession_ConcurrentStatusReads(t *testing.T) {
 					_, _ = s.Position()
 				}
 			}
-		}()
+		})
 	}
 	time.Sleep(100 * time.Millisecond)
 	close(stop)

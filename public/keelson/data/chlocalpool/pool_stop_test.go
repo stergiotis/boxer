@@ -87,14 +87,12 @@ func TestPool_AcquireRacingStopReturnsWorkerXorError(t *testing.T) {
 		}(i)
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		<-start
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = pool.Stop(ctx)
-	}()
+	})
 
 	close(start)
 	wg.Wait()

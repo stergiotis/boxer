@@ -189,9 +189,7 @@ func TestExecOnPool_ConcurrentRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	errCh := make(chan error, N)
 	for i := 0; i < N; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			rep, e := ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{
 				SQL:    "SELECT 1",
 				Format: "TabSeparated",
@@ -214,7 +212,7 @@ func TestExecOnPool_ConcurrentRequests(t *testing.T) {
 				errCh <- assertionErr("unexpected stdout")
 				return
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errCh)

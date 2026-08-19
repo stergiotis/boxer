@@ -89,9 +89,7 @@ func TestWriteAlignedReplacesAtomically(t *testing.T) {
 	stop := make(chan struct{})
 	var missing, partial atomic.Int64
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -106,7 +104,7 @@ func TestWriteAlignedReplacesAtomically(t *testing.T) {
 				partial.Add(1)
 			}
 		}
-	}()
+	})
 	for range 60 {
 		require.NoError(t, align.WriteAligned(path, src))
 	}

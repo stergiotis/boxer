@@ -39,11 +39,9 @@ func TestInMemoryAuditSink_ConcurrentRecords(t *testing.T) {
 	sink := NewInMemoryAuditSink()
 	var wg sync.WaitGroup
 	for i := 0; i < 32; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sink.Record(AuditRecord{Subject: "x", Ts: time.Now()})
-		}()
+		})
 	}
 	wg.Wait()
 	assert.Equal(t, 32, sink.Len())

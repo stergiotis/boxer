@@ -116,9 +116,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 	}
 
 	if inst.opts.CPU != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s, e := inst.opts.CPU.Sample(ctx)
 			if e == nil {
 				mu.Lock()
@@ -126,12 +124,10 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainCPU, e)
-		}()
+		})
 	}
 	if inst.opts.Mem != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s, e := inst.opts.Mem.Sample(ctx)
 			if e == nil {
 				mu.Lock()
@@ -139,12 +135,10 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainMem, e)
-		}()
+		})
 	}
 	if inst.opts.PSI != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s, e := inst.opts.PSI.Sample(ctx)
 			if e == nil {
 				mu.Lock()
@@ -152,12 +146,10 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainPSI, e)
-		}()
+		})
 	}
 	if inst.opts.Disk != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s, e := inst.opts.Disk.Sample(ctx)
 			if e == nil {
 				mu.Lock()
@@ -165,12 +157,10 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainDisk, e)
-		}()
+		})
 	}
 	if inst.opts.Net != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s, e := inst.opts.Net.Sample(ctx)
 			if e == nil {
 				mu.Lock()
@@ -178,12 +168,10 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainNet, e)
-		}()
+		})
 	}
 	if inst.opts.Battery != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s, e := inst.opts.Battery.Sample(ctx)
 			if e == nil {
 				mu.Lock()
@@ -191,12 +179,10 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainBattery, e)
-		}()
+		})
 	}
 	if inst.opts.Proc != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			infos, e := inst.opts.Proc.Sample(ctx)
 			if e == nil {
 				mu.Lock()
@@ -204,12 +190,10 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainProc, e)
-		}()
+		})
 	}
 	if inst.opts.Sensors != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			readings, e := inst.opts.Sensors.Sample(ctx)
 			if e == nil {
 				mu.Lock()
@@ -217,12 +201,10 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainSensors, e)
-		}()
+		})
 	}
 	if inst.opts.Container != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			info, e := inst.opts.Container.Detect(ctx)
 			if e == nil {
 				mu.Lock()
@@ -230,12 +212,10 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainContainer, e)
-		}()
+		})
 	}
 	if inst.opts.GPU != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s, e := inst.opts.GPU.Sample(ctx)
 			if e == nil {
 				mu.Lock()
@@ -243,12 +223,10 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainGPU, e)
-		}()
+		})
 	}
 	if inst.opts.Sockets != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s, e := inst.opts.Sockets.Sample(ctx)
 			if e == nil {
 				mu.Lock()
@@ -256,7 +234,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 				mu.Unlock()
 			}
 			captureErr(sysmsnap.DomainSockets, e)
-		}()
+		})
 	}
 
 	wg.Wait()

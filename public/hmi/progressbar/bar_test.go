@@ -31,22 +31,18 @@ func TestBar_TickAddAreAtomicAndAccurate(t *testing.T) {
 	const G = 8
 	var wg sync.WaitGroup
 	for i := 0; i < G; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := 0; j < N; j++ {
 				bar.Tick()
 			}
-		}()
+		})
 	}
 	for i := 0; i < G; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := 0; j < N; j++ {
 				bar.Add(1)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	want := int64(2 * G * N)

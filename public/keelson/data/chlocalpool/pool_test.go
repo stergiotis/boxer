@@ -383,9 +383,7 @@ func TestPool_ConcurrentAcquireRoundTripSafely(t *testing.T) {
 	var wg sync.WaitGroup
 	errCh := make(chan error, N)
 	for i := 0; i < N; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			w, err := pool.Acquire(ctx)
@@ -411,7 +409,7 @@ func TestPool_ConcurrentAcquireRoundTripSafely(t *testing.T) {
 				errCh <- assertionErr("unexpected stdout")
 				return
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errCh)
