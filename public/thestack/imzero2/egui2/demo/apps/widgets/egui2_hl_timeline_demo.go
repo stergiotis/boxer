@@ -57,6 +57,11 @@ func init() {
 				timeline.WithNowLine(true),
 				timeline.WithOnSelection(func(sel timeline.SelectionInfo) {
 					s.pushClick(formatSelectionClickLine(sel))
+				}),
+				// The range brush (ADR-0043 §SD16) on its own strip below the
+				// axis, so pan and click on the canvas are unchanged.
+				timeline.WithBrush(func(r timeline.BrushRange, ok bool) {
+					s.pushClick(formatBrushClickLine(r, ok))
 				}))
 			state = s
 			return
@@ -69,7 +74,11 @@ func init() {
 			c.Label("Background bands (iter.Seq, computed each frame from the view range): muted weekend shade + warm office-hours overlay 09–17. Bright vertical line = now.").Send()
 			c.Label("Click a bare stretch of a lane row (past the bars) to select the whole row: a faint hairline runs the lane's full width, painted under the bars so it never strikes through an event. Bars win over the row they sit on; the gap below a row belongs to it.").Send()
 			c.Label("Hover for tooltip · click to select (outline + card below) · Ctrl+scroll over a session zooms anchored at the cursor · drag to pan through time.").Send()
+			c.Label("Thin strip under the axis: drag it to brush a time range. It is a separate surface, so brushing never pans and panning never brushes; a click on it clears.").Send()
 			s.tl.Render()
+			c.Separator().Send()
+			renderStrongLabel("Brushed range")
+			c.Label(formatBrushCard(s.tl)).Send()
 			c.Separator().Send()
 			renderStrongLabel("Selection")
 			c.Label(formatSelectionCard(s.tl.Selection())).Send()
@@ -424,4 +433,29 @@ func makeCommitFixture() (points []*layout.PointEvent) {
 		})
 	}
 	return
+}
+
+// formatBrushCard renders the timeline's committed brush range, or says there
+// is none. Read from the widget rather than from a copy the callback kept, so
+// the card shows what the widget actually holds.
+func formatBrushCard(tl *timeline.Timeline) (s string) {
+	r, ok := tl.Brush()
+	if !ok {
+		return "no range brushed — drag the strip under the axis"
+	}
+	from := time.UnixMilli(r.FromMS).UTC()
+	to := time.UnixMilli(r.ToMS).UTC()
+	return fmt.Sprintf("%s → %s  (%s)",
+		from.Format("Mon 15:04:05"), to.Format("Mon 15:04:05"),
+		to.Sub(from).Round(time.Second))
+}
+
+// formatBrushClickLine is the brush's line in the shared click log.
+func formatBrushClickLine(r timeline.BrushRange, ok bool) (s string) {
+	if !ok {
+		return "brush cleared"
+	}
+	return fmt.Sprintf("brush %s → %s",
+		time.UnixMilli(r.FromMS).UTC().Format("15:04:05"),
+		time.UnixMilli(r.ToMS).UTC().Format("15:04:05"))
 }

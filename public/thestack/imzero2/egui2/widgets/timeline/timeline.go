@@ -93,10 +93,15 @@ type Visuals struct {
 	// rug marks and the annotation flags each carry their own (0, 0, and a
 	// chip radius respectively). It defaults to RoundingNone — see
 	// DefaultVisuals for why a data mark is not a chip.
-	CornerRadius    float32
-	BarMinPx        float32
-	RugStripH       float32
-	RugGap          float32
+	CornerRadius float32
+	BarMinPx     float32
+	RugStripH    float32
+	RugGap       float32
+	// BrushStripH is the height of the range-brush strip; BrushGap the space
+	// between it and the widget above. Both are inert unless WithBrush was
+	// given (ADR-0043 §SD16).
+	BrushStripH     float32
+	BrushGap        float32
 	AnnotationBandH float32
 	AnnotationFlagW float32
 	AnnotationFlagH float32
@@ -121,6 +126,15 @@ type Visuals struct {
 	// row needs to announce itself.
 	LaneCursorColor color.Color
 
+	// Range-brush colors (ADR-0043 §SD16). The track is the unselected
+	// strip; the fill is a committed range and the pending fill the one
+	// being dragged — distinct so the user can tell a range they are making
+	// from one they made, which matters most at the moment they overlap.
+	BrushTrackColor       color.Color
+	BrushFillColor        color.Color
+	BrushPendingFillColor color.Color
+	BrushEdgeColor        color.Color
+
 	// Flat event fills — used for interval bars and raw rug marks when
 	// intensity is NOT the encoded dimension (see WithIntensityEncoding).
 	// A sequential colormap is lightness-monotonic from its dark end, so an
@@ -141,6 +155,19 @@ type Visuals struct {
 // Color tokens resolve via styletokens; layout dimensions are tuned to
 // look reasonable at the demo's 1180×280-ish stage. Callers wanting a
 // dense / sparse / monospace look should start here and mutate via
+// WithTimeZone localises the tick axis and the rollover rows.
+//
+// It matters when the timeline sits beside other controls that name the same
+// instants: two readouts of one moment in different zones is a defect the user
+// has to decode, and the widget is usually the one that can move.
+//
+// Validation: nil clears — the axis returns to UTC.
+func WithTimeZone(loc *time.Location) Option {
+	return func(inst *Timeline) {
+		inst.loc = loc
+	}
+}
+
 // WithVisuals.
 func DefaultVisuals() (v Visuals) {
 	v = Visuals{
@@ -162,6 +189,8 @@ func DefaultVisuals() (v Visuals) {
 		BarMinPx:          1,
 		RugStripH:         24,
 		RugGap:            4,
+		BrushStripH:       14,
+		BrushGap:          4,
 		AnnotationBandH:   18,
 		AnnotationFlagW:   26,
 		AnnotationFlagH:   14,
@@ -179,6 +208,16 @@ func DefaultVisuals() (v Visuals) {
 	v.NowLineColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
 	v.AnnotationFgColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
 	v.LaneCursorColor = color.Hex(styletokens.NeutralBorderFaint.AsHex()).Keep()
+	// Brush palette. The track is the panel ground the strip sits on; the
+	// committed fill is the selection accent at low alpha so the availability
+	// and preview layers underneath it (ADR-0197 §SD9) stay readable through
+	// it, and the pending fill is brighter because a gesture in flight is the
+	// thing the eye should be following. The edges are opaque — they are the
+	// bounds the user is placing, and a fuzzy bound is not one.
+	v.BrushTrackColor = color.Hex(styletokens.NeutralBgPanel.AsHex()).Keep()
+	v.BrushFillColor = brushAlpha(styletokens.InfoDefault.AsHex(), 0x40)
+	v.BrushPendingFillColor = brushAlpha(styletokens.InfoDefault.AsHex(), 0x70)
+	v.BrushEdgeColor = color.Hex(styletokens.InfoDefault.AsHex()).Keep()
 	// Flat fills for the intensity-off path: the soft accent for the larger
 	// bar areas, the brighter info hue for the thin 1-px rug marks that need
 	// more punch to read. Both sit at IDS lightness ~0.80 — high contrast
@@ -506,6 +545,35 @@ type Timeline struct {
 	lastViewMinMS   int64
 	lastViewMaxMS   int64
 	lastViewPxWidth int32
+
+	// Range-brush state (ADR-0043 §SD16). All of it is inert unless
+	// WithBrush was given: brushEnabled gates the strip's canvas, its input
+	// and its paint, so a timeline without a brush is byte-identical on the
+	// wire to one from before the brush existed.
+	brushEnabled bool
+	onBrush      BrushListener
+	// brushing is true between the press and the release of one gesture.
+	// anchor/cur are the two ends as it is made; from/to/has are the
+	// committed result. They are separate because a gesture in flight must
+	// not overwrite the range the user last settled on until it finishes.
+	brushing      bool
+	brushAnchorX  float32
+	brushCurX     float32
+	brushAnchorMS int64
+	brushCurMS    int64
+	brushFromMS   int64
+	brushToMS     int64
+	brushHas      bool
+	// Last strip-relative pointer x, held so a drag that leaves the strip
+	// keeps tracking instead of freezing. See brushCursorX.
+	brushLastX   float32
+	brushLastXOK bool
+
+	// loc localises the tick axis and the rollover rows. nil is UTC, which is
+	// what the widget did before the option existed and stays the default: a
+	// timeline of machine data is often read across boxes, and UTC is the only
+	// zone that means the same thing on all of them.
+	loc *time.Location
 
 	laneAssn layout.LaneAssignment
 }
@@ -1097,6 +1165,27 @@ func (inst *Timeline) computeVerticalLayout(rolloverRows int, flagRows int32, la
 	return
 }
 
+// ViewRange returns the time span the most recent Render drew — a snapshot of
+// last frame's viewport, after any pan or zoom the user applied to it. ok is
+// false before the first Render.
+//
+// It exists for consumers that fetch view-dependent data: a band producer is
+// handed the range per frame, but anything that has to *query* for it needs to
+// know when the range moved, and cannot ask from inside the producer without
+// blocking a frame on it.
+//
+// Validation: snapshot at boundary — the values describe the last completed
+// Render, not a pan in progress.
+func (inst *Timeline) ViewRange() (from, to time.Time, ok bool) {
+	if inst.lastViewPxWidth == 0 {
+		return
+	}
+	from = time.UnixMilli(inst.lastViewMinMS).UTC()
+	to = time.UnixMilli(inst.lastViewMaxMS).UTC()
+	ok = true
+	return
+}
+
 // LaneCount returns the number of lanes assigned by the most recent Render
 // — i.e. a snapshot of last frame's PackLanes output, not the count of the
 // currently-attached IntervalEvents. Returns 0 before the first Render.
@@ -1162,7 +1251,7 @@ func (inst *Timeline) renderBody() {
 	viewMinMS := viewMin.UnixMilli()
 	viewMaxMS := viewMax.UnixMilli()
 
-	tm := layout.ComputeTickMap(viewMin, viewMax, float64(labelW), float64(effW), nil, timeticks.TimeStep{})
+	tm := layout.ComputeTickMap(viewMin, viewMax, float64(labelW), float64(effW), inst.loc, timeticks.TimeStep{})
 	fl := inst.computeFlagLayout(tm, labelW, effW)
 	vl := inst.computeVerticalLayout(len(tm.RolloverRows), fl.rowCount, labelW, effW)
 
@@ -1205,6 +1294,16 @@ func (inst *Timeline) renderBody() {
 		canvas = canvas.Sense(true, true, true).CaptureZoom()
 	}
 	canvas.Send()
+
+	// The brush strip is its own canvas, emitted after the main one so it
+	// lands below it in the enclosing Ui and drains its own paint ops. It
+	// shares the frame's tick map, so its x↔time mapping cannot drift from the
+	// axis above it (ADR-0043 §SD16). Absent WithBrush this returns before
+	// touching anything.
+	if inst.brushReserved() {
+		c.AddSpace(inst.visuals.BrushGap)
+		inst.renderBrushStrip(tm, vl, viewMinMS, viewMaxMS)
+	}
 
 	inst.lastViewMinMS = viewMinMS
 	inst.lastViewMaxMS = viewMaxMS

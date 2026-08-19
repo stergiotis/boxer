@@ -135,6 +135,75 @@ See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-pol
 
 ## Updates
 
+### 2026-08-18 — Range brush on a dedicated strip (adds SD16, does not touch the canvas gesture)
+
+**Built.** Written before the code per the design-before-code rule, then
+implemented and verified in the widget gallery.
+
+ADR-0197 wants the timeline as a *range selector*: pick a replay window by
+seeing where stored history is, rather than typing two timestamps. Everything
+that needs is already here except the selection gesture — `BackgroundBandProducer`
+(SD14) supplies availability shading lazily per viewport, the rug's intensity
+encoding supplies a load preview, and `LODIndex` already buckets. What is
+missing is a way to say "that stretch".
+
+- **SD16 — The range brush lives on its own strip, not on the canvas.** A thin
+  row below the tick axis senses press-drag-release and reports a
+  `[fromMS, toMS]` range; the canvas keeps pan, zoom and click exactly as they
+  are.
+
+**Why not the obvious two.** Drag on the canvas is already pan, and the
+widget's click dispatch leans on egui arbitrating click-vs-drag so a pan never
+lands a selection (`renderBody`, `Sense(true, true, true)`). Both canvas-based
+options make that arbitration three-way:
+
+- *Modifier-drag (shift+drag brushes)* is the cheapest to write and the worst
+  to find: an invisible affordance on a widget whose other callers never asked
+  for it, and a third state in a gesture path every caller shares.
+- *A pan/select mode toggle* is discoverable but is a mode — the user can be in
+  the wrong one and not know until a drag does the wrong thing.
+
+A separate strip costs vertical space (one thin row, in the vertical layout the
+widget already computes for the rug and annotation rows) and buys three things
+the others do not: existing callers are untouched by construction, the
+affordance is visible rather than remembered, and brushing while panning is
+expressible rather than exclusive.
+
+**Compatibility.** The strip is opt-in — absent the option no row is reserved
+and the widget renders as it does today, so `play-timeline`, `play-detail-timeline`
+and the widget demo are unaffected until they ask for it. The brush reports
+through its own callback rather than `SelectionInfo`, which stays what it is: a
+click-selected interval, bucket, annotation or lane. A range is not one of
+those, and widening `SelectionKindE` to pretend otherwise would break the
+"pointer non-nil iff Kind matches" contract SD9 rests on.
+
+**Deferred with a reason.** Keyboard adjustment of an existing brush, and
+snapping the brush to LOD bucket edges. Both are refinements of a gesture that
+now exists; neither changes the seam.
+
+**A gesture is not only a press held across frames.** The state machine samples
+the button-down flag once per frame, and a press and release inside one frame
+leaves it having observed nothing — so a fast click never cleared the brush.
+Found by driving the gallery, where every synthesised click is that fast; a
+hand-held click spans enough frames to work, which is what would have made this
+survive review and fail for a scripted caller. The strip now also honours
+egui's own click edge, which is set on the release of a gesture that stayed
+under the drag threshold, gated on the machine not having handled the same
+gesture so the listener cannot hear about one clear twice.
+
+**Follow-on, 2026-08-18: `WithTimeZone` (adds SD17).** The axis was UTC-only,
+with the location a widget-internal parameter on `ComputeTickMap`. That is right
+for a timeline read across machines and wrong beside controls naming the same
+instants in local time: imztop's first replay strip put the axis two hours off
+the transport row's readout of one moment, which reads as a bug long before it
+reads as a zone. `WithTimeZone(loc)` localises the ticks and rollover rows; nil
+stays UTC, so no existing caller moves.
+
+**Verified in the gallery, all three claims of this SD:** a drag on the strip
+commits a range whose bounds agree with the axis above it; a click clears it,
+once; and a drag on the canvas still pans, leaves the committed range untouched,
+and carries the painted band with the data rather than with the screen.
+
 ### 2026-05-19 — Annotation selection outline: stroke → back-fill emulation
 
 User-reported: when an annotation is selected, the selection border is
