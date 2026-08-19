@@ -218,3 +218,24 @@ Method: both hosts built from one pristine detached worktree at the same commit,
 The site the ceiling governs is essentially gone, and the drop in total allocation is accounted for by it. Live heap fell rather than rose, so the retention that motivated the original 4 KiB cap (golang/go#23199) did not materialise here — fewer large short-lived buffers are in flight at any instant.
 
 What remains under `growSlice` is a different buffer and outside this ADR: `Fffi2.SendIntermediate` (61 → 64 MB, untouched, as expected) and `DeferredBlockScope.End` (25 → 20 MB), the latter being the `dataBuf` this ADR's hint already governs. `SendIntermediate` is now the largest single `growSlice` caller and has had no sizing work at all — the natural next candidate, on the same evidence this entry used.
+
+### 2026-08-19 — Scopes are pooled; the C1 gap this ADR left open is closed
+
+Consequences recorded the cost this design accepted: "the base `make([]byte, 0, hint)` cost is not amortised across frames… if `sum(hints) × scopes_per_frame × fps` ever climbs above the GC trigger threshold meaningfully, the pool-as-Tier-2-update path is open." Measured on the scene above it had reached **158 MB per 30 s**, larger than all remaining `growSlice` traffic combined and the biggest single FFFI2 allocation site. Taking the path.
+
+Each `ScopeHint` now carries a `sync.Pool` beside its atomic. `ReleaseWithHint` — already the deterministic release point every generated `Send()` calls — empties and recycles the scope rather than nil'ing it. The two halves are complementary rather than redundant: the hint sizes a *cold* buffer (start-up, or after a collection has drained the pool), the pool removes the per-frame allocation for every scope after that.
+
+Same protocol as the entry above — both arms from one pristine worktree at one commit, 3 602 identical frames:
+
+| Metric (30 s) | Per-frame alloc | Pooled | Change |
+| --- | --- | --- | --- |
+| Scope construction | 158 MB | 7 MB | **−95 %** |
+| `bytes.growSlice` | 142 MB | 90 MB | −36 % |
+| — of which `DeferredBlockScope.End` | 20 MB | 0.5 MB | −97 % |
+| Total allocated | 1 065 MB | 855 MB | −20 % |
+
+`RegisterScopeHint` returns `*ScopeHint` instead of `*atomic.Uint64`, and `NewDeferredBlockScopeHinted` takes the same type — the generated bindings pass one straight to the other, so they compile unchanged and no regeneration is needed.
+
+**Two things this entry deliberately did *not* ship.** Pooling turns use-after-release from a nil-pointer panic into silent cross-frame corruption, so `Begin` and `End` now check a `released` flag and panic loudly; that is a real hazard the previous nil-out shape handled for free. And the M1 note on `deferredTempBufInitialCap` said to "promote to a hint in a follow-up if profiling shows it's worth it" — a `tempHint` was built, tested and measured, moved nothing, and was reverted. Profiling answered the ADR's own question in the negative.
+
+**Where the remaining `growSlice` actually lives.** The previous entry named `Fffi2.SendIntermediate` as the next candidate and assumed it grew a scope's `tempBuf`. It does not. `DockAreaFluid.Tab` ([`egui2_methods.go`](../../public/thestack/imzero2/egui2/bindings/egui2_methods.go), hand-written) captures each tab body into its own `&bytes.Buffer{}` — zero capacity, one per tab per frame — which never touches a scope at all. That is 73 MB per 30 s over ~22 doublings per frame, and it is why neither pooling nor a `tempHint` moved it. It is also not a hint's job: one shared hint would size every tab to the largest tab, allocating more than the doubling it saves. Pooling those buffers is the shape that fits, and it needs a release point after `Send` consumes `inst.bodies`, which alias them.
