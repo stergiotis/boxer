@@ -165,7 +165,7 @@ ttf-parser = "0.25"
 # in a given frame, embed as base64 @font-face for self-contained pixel-
 # perfect rendering. `subsetter` is Typst's pure-Rust subsetter.
 subsetter = "0.2"
-base64 = "0.22"
+base64 = "0.23"
 h3o = { version = "0.10", features = ["geo"] }
 # Concave-polygon fill for the painter (paintPolygonFilled.Concave()):
 # ear-clip triangulation → egui::Shape::Mesh, since epaint itself fills
