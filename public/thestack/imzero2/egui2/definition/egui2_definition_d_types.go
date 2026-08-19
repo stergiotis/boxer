@@ -144,4 +144,3 @@ func structMapRaster() ir.ConcreteType {
 func structImage() ir.ConcreteType {
 	return ir.NewConcreteType("image", traitWidget())
 }
-
