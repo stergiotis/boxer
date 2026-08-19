@@ -187,9 +187,21 @@ go build -tags "$(tr -d '\n' < tags)" -o /dev/null ./public/app   # rebuilds off
 
 ## Notes and limits
 
-- **`GOTOOLCHAIN=local` is load-bearing.** `go.mod` pins `toolchain go1.26.5`;
-  without `GOTOOLCHAIN=local` the `go` command tries to *download* that
-  toolchain when the running one differs. The env file sets it.
+- **`GOTOOLCHAIN=local` is load-bearing.** `go.mod` declares `go 1.27.0`;
+  without `GOTOOLCHAIN=local` the `go` command tries to *download* a matching
+  toolchain when the running one differs. The env file sets it. (Until
+  2026-08-19 `go.mod` also carried an explicit `toolchain` line; `go mod tidy`
+  drops it once it equals the `go` directive, which changes nothing here —
+  the `go` line drives selection either way.)
+- **The bundle ships the packing operator's toolchain, unpinned.**
+  `airgap_ship_goroot` copies `$(go env GOROOT)` verbatim and checks no
+  version. Since the module requires 1.27, a bundle packed on a host whose
+  default `go` is older produces a tarball that cannot build its own contents,
+  and `GOTOOLCHAIN=local` makes that a hard stop on the target rather than a
+  download: `go.mod requires go >= 1.27.0 (running go1.26.x; GOTOOLCHAIN=local)`.
+  Pack on a host whose default `go` is 1.27 or newer. Running the bundler under
+  a `GOTOOLCHAIN=` override is *not* enough — the override does not move
+  `GOROOT`, which is what gets copied.
 - **Vendoring here is a packaging carve-out.** The repo's standing policy is no
   vendoring ([ENGINEERING_PRACTICES §6](../ENGINEERING_PRACTICES.md)); the
   `vendor/` and `rust/vendor/` trees live only inside the bundle and are not
