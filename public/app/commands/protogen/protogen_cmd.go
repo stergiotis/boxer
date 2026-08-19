@@ -103,7 +103,7 @@ func Generate(ctx context.Context, o Opts) (err error) {
 	}
 	req := &pluginpb.CodeGeneratorRequest{
 		FileToGenerate: []string{o.ProtoFile},
-		Parameter:      proto.String("paths=source_relative,M" + o.ProtoFile + "=" + o.GoPackage),
+		Parameter:      new("paths=source_relative,M" + o.ProtoFile + "=" + o.GoPackage),
 	}
 	for _, f := range files {
 		req.ProtoFile = append(req.ProtoFile, protoutil.ProtoFromFileDescriptor(f))

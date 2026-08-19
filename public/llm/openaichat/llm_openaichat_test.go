@@ -15,7 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func f32(v float32) *float32 { return &v }
+//go:fix inline
+func f32(v float32) *float32 { return new(v) }
 
 // newServerClient starts an httptest server with handler and returns a Client
 // pointed at it. The server is torn down on test cleanup.
