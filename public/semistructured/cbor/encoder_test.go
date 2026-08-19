@@ -26,7 +26,7 @@ func TestEncoderSmoke(t *testing.T) {
 	err = tagSet.Add(cbor.TagOptions{
 		DecTag: cbor.DecTagRequired,
 		EncTag: cbor.EncTagRequired,
-	}, reflect.TypeOf(netip.Addr{}), uint64(TagIPv4))
+	}, reflect.TypeFor[netip.Addr](), uint64(TagIPv4))
 	require.NoError(t, err)
 	var decMode cbor.DecMode
 	decMode, err = cbor.DecOptions{}.DecModeWithTags(tagSet)

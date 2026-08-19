@@ -32,7 +32,7 @@ func Marshal[T any](dml any, rows []T, lookup LookupI) (err error) {
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
-	r, err := resolveForType(reflect.TypeOf((*T)(nil)).Elem())
+	r, err := resolveForType(reflect.TypeFor[T]())
 	if err != nil {
 		return
 	}
@@ -318,7 +318,7 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 	return
 }
 
-var uint64Type = reflect.TypeOf(uint64(0))
+var uint64Type = reflect.TypeFor[uint64]()
 
 // tupleMembArg converts a tuple element's membership value to the argument the
 // AddMembership<Channel>P method takes: a []byte name for a verbatim channel

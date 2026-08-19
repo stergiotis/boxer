@@ -15,7 +15,7 @@ import (
 // Cached per reflect.Type via sync.Map — call once per type per
 // process is the same cost as building the plan once at codegen time.
 func PlanFor[T any]() (plan *mappingplan.Plan, err error) {
-	rt := reflect.TypeOf((*T)(nil)).Elem()
+	rt := reflect.TypeFor[T]()
 	plan, err = planForType(rt)
 	return
 }

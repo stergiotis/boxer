@@ -1123,37 +1123,37 @@ func readCarrierValue(attrs reflect.Value, f *mappingplan.TaggedField, i int, at
 // types Unmarshal needs to instantiate accumulators for.
 func goTypeReflect(name string) reflect.Type {
 	if n, ok := goplan.FixedByteArrayLen(name); ok {
-		return reflect.ArrayOf(n, reflect.TypeOf(byte(0)))
+		return reflect.ArrayOf(n, reflect.TypeFor[byte]())
 	}
 	switch name {
 	case "uint8":
-		return reflect.TypeOf(uint8(0))
+		return reflect.TypeFor[uint8]()
 	case "uint16":
-		return reflect.TypeOf(uint16(0))
+		return reflect.TypeFor[uint16]()
 	case "uint32":
-		return reflect.TypeOf(uint32(0))
+		return reflect.TypeFor[uint32]()
 	case "uint64":
-		return reflect.TypeOf(uint64(0))
+		return reflect.TypeFor[uint64]()
 	case "int8":
-		return reflect.TypeOf(int8(0))
+		return reflect.TypeFor[int8]()
 	case "int16":
-		return reflect.TypeOf(int16(0))
+		return reflect.TypeFor[int16]()
 	case "int32":
-		return reflect.TypeOf(int32(0))
+		return reflect.TypeFor[int32]()
 	case "int64":
-		return reflect.TypeOf(int64(0))
+		return reflect.TypeFor[int64]()
 	case "float32":
-		return reflect.TypeOf(float32(0))
+		return reflect.TypeFor[float32]()
 	case "float64":
-		return reflect.TypeOf(float64(0))
+		return reflect.TypeFor[float64]()
 	case "bool":
-		return reflect.TypeOf(false)
+		return reflect.TypeFor[bool]()
 	case "string":
-		return reflect.TypeOf("")
+		return reflect.TypeFor[string]()
 	case "time.Time":
-		return reflect.TypeOf(time.Time{})
+		return reflect.TypeFor[time.Time]()
 	case "[]byte":
-		return reflect.TypeOf([]byte(nil))
+		return reflect.TypeFor[[]byte]()
 	}
 	return nil
 }
