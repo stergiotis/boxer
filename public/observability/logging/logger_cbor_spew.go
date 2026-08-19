@@ -19,7 +19,7 @@ func (inst *CborSpewLogger) Write(p []byte) (n int, err error) {
 		err = eh.Errorf("unable to convert to cbor: %w", err)
 		return
 	}
-	var v interface{}
+	var v any
 	err = cbor2.Unmarshal(p, &v)
 	if err != nil {
 		err = eh.Errorf("unable to unmarshall cbor: %w", err)

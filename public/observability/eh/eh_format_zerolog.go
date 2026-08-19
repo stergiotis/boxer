@@ -27,14 +27,14 @@ import (
 
 // ErrorMarshalFuncHuman is a drop-in replacement for zerolog.ErrorMarshalFunc
 // that produces the human-readable plain-text format (no ANSI) in the "error" field.
-func ErrorMarshalFuncHuman(err error) interface{} {
+func ErrorMarshalFuncHuman(err error) any {
 	return FormatErrorPlainS(err)
 }
 
 // ErrorMarshalFuncStructured preserves the original structured marshaling from
 // MarshalError for JSON logs, but you can use both: structured for machine logs,
 // human for console.
-func ErrorMarshalFuncStructured(err error) interface{} {
+func ErrorMarshalFuncStructured(err error) any {
 	return MarshalError(err)
 }
 
@@ -69,7 +69,7 @@ func ErrorMarshalFuncStructured(err error) interface{} {
 // unchanged. When it's a complex error object, it renders the full
 // formatted output with indentation.
 func ConsoleFormatError(useColor bool) zerolog.Formatter {
-	return func(i interface{}) string {
+	return func(i any) string {
 		switch v := i.(type) {
 		case string:
 			// Simple string error — try to parse it as something we produced,
@@ -81,7 +81,7 @@ func ConsoleFormatError(useColor bool) zerolog.Formatter {
 			return v
 		case error:
 			return formatForConsole(v, useColor)
-		case map[string]interface{}:
+		case map[string]any:
 			// This is what zerolog produces when ErrorMarshalFunc returns
 			// a LogObjectMarshaler (like our MarshalError). The ConsoleWriter
 			// receives the JSON-decoded map. We could try to reconstruct,
@@ -146,8 +146,8 @@ func indentBlock(s string, indent string) string {
 // ConsoleFormatErrorExtra returns a FormatExtra function that appends the
 // formatted error below the log line. It reads the "error" field from the
 // event map and renders it.
-func ConsoleFormatErrorExtra(useColor bool) func(map[string]interface{}, *bytes.Buffer) error {
-	return func(evt map[string]interface{}, buf *bytes.Buffer) error {
+func ConsoleFormatErrorExtra(useColor bool) func(map[string]any, *bytes.Buffer) error {
+	return func(evt map[string]any, buf *bytes.Buffer) error {
 		errField, ok := evt[zerolog.ErrorFieldName]
 		if !ok {
 			return nil

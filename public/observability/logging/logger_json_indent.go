@@ -18,7 +18,7 @@ type JsonIndentLogger struct {
 }
 
 func (inst *JsonIndentLogger) Write(p []byte) (n int, err error) {
-	var v interface{}
+	var v any
 	v, err = UnmarshallZerologMsg(p)
 	if err != nil {
 		err = eh.Errorf("unable to unmarshall zerolog msg: %w", err)

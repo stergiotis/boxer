@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-func NewByteBlockReaderDiscardReader(reader interface{}) (ByteBlockDiscardReaderI, error) {
+func NewByteBlockReaderDiscardReader(reader any) (ByteBlockDiscardReaderI, error) {
 	{
 		probe, ok := reader.(*bufio.Reader)
 		if ok {

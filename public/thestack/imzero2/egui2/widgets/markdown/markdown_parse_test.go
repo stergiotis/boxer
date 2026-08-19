@@ -21,7 +21,7 @@ import (
 func TestStringifyFrontmatterValue_Scalars(t *testing.T) {
 	cases := []struct {
 		name string
-		in   interface{}
+		in   any
 		want string
 	}{
 		{"string", "hello", "hello"},
@@ -42,7 +42,7 @@ func TestStringifyFrontmatterValue_Scalars(t *testing.T) {
 }
 
 func TestStringifyFrontmatterValue_Slice(t *testing.T) {
-	in := []interface{}{"a", 2, true}
+	in := []any{"a", 2, true}
 	got := stringifyFrontmatterValue(in)
 	want := "[a, 2, true]"
 	if got != want {
@@ -51,7 +51,7 @@ func TestStringifyFrontmatterValue_Slice(t *testing.T) {
 }
 
 func TestStringifyFrontmatterValue_EmptySlice(t *testing.T) {
-	in := []interface{}{}
+	in := []any{}
 	got := stringifyFrontmatterValue(in)
 	if got != "[]" {
 		t.Errorf("empty slice: got %q want %q", got, "[]")
@@ -59,7 +59,7 @@ func TestStringifyFrontmatterValue_EmptySlice(t *testing.T) {
 }
 
 func TestStringifyFrontmatterValue_NestedKV(t *testing.T) {
-	kv := containers.NewBinarySearchGrowingKVFromAnyMap(map[string]interface{}{
+	kv := containers.NewBinarySearchGrowingKVFromAnyMap(map[string]any{
 		"k1": "v1",
 		"k2": 7,
 	})
@@ -77,8 +77,8 @@ func TestStringifyFrontmatterValue_NestedEmptyKV(t *testing.T) {
 	// matches the nested-KV type-switch case. Reads on the nil receiver
 	// are the empty container (containers review 2026-07-05, D3) — this
 	// path used to panic.
-	kv := containers.NewBinarySearchGrowingKVFromAnyMap(map[string]interface{}{
-		"meta": map[string]interface{}{},
+	kv := containers.NewBinarySearchGrowingKVFromAnyMap(map[string]any{
+		"meta": map[string]any{},
 	})
 	got := stringifyFrontmatterValue(kv)
 	want := "{meta: {}}"
@@ -107,9 +107,9 @@ func TestParse_FrontmatterNestedEmptyMap_StringifiesSafely(t *testing.T) {
 }
 
 func TestStringifyFrontmatterValue_RecursesIntoSliceOfSlices(t *testing.T) {
-	in := []interface{}{
-		[]interface{}{"a", "b"},
-		[]interface{}{1, 2},
+	in := []any{
+		[]any{"a", "b"},
+		[]any{1, 2},
 	}
 	got := stringifyFrontmatterValue(in)
 	want := "[[a, b], [1, 2]]"

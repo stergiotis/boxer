@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-func UnmarshallZerologMsg(msg []byte) (v interface{}, err error) {
+func UnmarshallZerologMsg(msg []byte) (v any, err error) {
 	err = json.UnmarshalDecode(jsontext.NewDecoder(bytes.NewReader(msg)),
 		&v,
 		json.DefaultOptionsV2())
@@ -24,7 +24,7 @@ func UnmarshallZerologMsg(msg []byte) (v interface{}, err error) {
 }
 func convertToCBOR(msg []byte) (retr []byte, err error) {
 	// FIXME use zerolog's streaming implementation
-	var v interface{}
+	var v any
 	v, err = UnmarshallZerologMsg(msg)
 	if err != nil {
 		err = eh.Errorf("unable to convert zerolog message to cbor: %w", err)

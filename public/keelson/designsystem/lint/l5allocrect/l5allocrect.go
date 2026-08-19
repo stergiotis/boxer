@@ -49,7 +49,7 @@ var Analyzer = &analysis.Analyzer{
 	Run:      run,
 }
 
-func run(pass *analysis.Pass) (result interface{}, err error) {
+func run(pass *analysis.Pass) (result any, err error) {
 	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	ignoreByFile := make(map[*ast.File]*ignoreann.Index)
 

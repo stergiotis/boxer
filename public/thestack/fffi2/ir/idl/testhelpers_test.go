@@ -14,7 +14,7 @@ func mustParseType(s string) canonicaltypes.PrimitiveAstNodeI {
 
 // expectPanic asserts that fn panics. Returns the recovered value so the
 // caller can inspect it if desired.
-func expectPanic(fn func()) (recovered interface{}) {
+func expectPanic(fn func()) (recovered any) {
 	defer func() {
 		recovered = recover()
 	}()

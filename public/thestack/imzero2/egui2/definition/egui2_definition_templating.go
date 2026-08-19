@@ -53,7 +53,7 @@ func toMap(in any) (out map[string]any) {
 	}
 
 	typ := v.Type()
-	out = make(map[string]interface{}, v.NumField())
+	out = make(map[string]any, v.NumField())
 	for i := 0; i < v.NumField(); i++ {
 		fi := typ.Field(i)
 		out[fi.Name] = v.Field(i).Interface()

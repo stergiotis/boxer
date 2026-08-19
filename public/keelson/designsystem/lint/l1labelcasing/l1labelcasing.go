@@ -53,7 +53,7 @@ var Analyzer = &analysis.Analyzer{
 	Run:      run,
 }
 
-func run(pass *analysis.Pass) (result interface{}, err error) {
+func run(pass *analysis.Pass) (result any, err error) {
 	if pkgIsAllowlisted(pass.Pkg.Path()) {
 		return
 	}

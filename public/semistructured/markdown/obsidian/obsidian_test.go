@@ -648,7 +648,7 @@ func TestFrontmatter_Parsed(t *testing.T) {
 	meta := GetFrontmatter(pc)
 	require.NotNil(t, meta)
 	require.Equal(t, "My Note", meta["title"])
-	tags, ok := meta["tags"].([]interface{})
+	tags, ok := meta["tags"].([]any)
 	require.True(t, ok)
 	require.Len(t, tags, 2)
 	require.Equal(t, "foo", tags[0])
@@ -661,7 +661,7 @@ func TestFrontmatter_Aliases(t *testing.T) {
 
 	meta := GetFrontmatter(pc)
 	require.NotNil(t, meta)
-	aliases, ok := meta["aliases"].([]interface{})
+	aliases, ok := meta["aliases"].([]any)
 	require.True(t, ok)
 	require.Len(t, aliases, 2)
 }
@@ -715,7 +715,7 @@ func TestFrontmatter_TryGet_Malformed(t *testing.T) {
 // Frontmatter HTML rendering
 // =============================================================================
 
-func renderFM(t *testing.T, metadata map[string]interface{}, open bool) string {
+func renderFM(t *testing.T, metadata map[string]any, open bool) string {
 	t.Helper()
 	var buf bytes.Buffer
 	err := RenderFrontmatterHTML(&buf, metadata, open)
@@ -724,7 +724,7 @@ func renderFM(t *testing.T, metadata map[string]interface{}, open bool) string {
 }
 
 func TestRenderFrontmatter_Simple(t *testing.T) {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"title":  "My Note",
 		"author": "Alice",
 	}
@@ -737,15 +737,15 @@ func TestRenderFrontmatter_Simple(t *testing.T) {
 }
 
 func TestRenderFrontmatter_Closed(t *testing.T) {
-	m := map[string]interface{}{"key": "val"}
+	m := map[string]any{"key": "val"}
 	out := renderFM(t, m, false)
 	require.Contains(t, out, `<details class="frontmatter">`)
 	require.NotContains(t, out, "open")
 }
 
 func TestRenderFrontmatter_Array(t *testing.T) {
-	m := map[string]interface{}{
-		"tags": []interface{}{"foo", "bar", "baz"},
+	m := map[string]any{
+		"tags": []any{"foo", "bar", "baz"},
 	}
 	out := renderFM(t, m, true)
 	require.Contains(t, out, "<ul>")
@@ -756,8 +756,8 @@ func TestRenderFrontmatter_Array(t *testing.T) {
 }
 
 func TestRenderFrontmatter_NestedMap(t *testing.T) {
-	m := map[string]interface{}{
-		"author": map[string]interface{}{
+	m := map[string]any{
+		"author": map[string]any{
 			"name":  "Alice",
 			"email": "a@b.c",
 		},
@@ -771,10 +771,10 @@ func TestRenderFrontmatter_NestedMap(t *testing.T) {
 }
 
 func TestRenderFrontmatter_ArrayOfMaps(t *testing.T) {
-	m := map[string]interface{}{
-		"people": []interface{}{
-			map[string]interface{}{"name": "Alice"},
-			map[string]interface{}{"name": "Bob"},
+	m := map[string]any{
+		"people": []any{
+			map[string]any{"name": "Alice"},
+			map[string]any{"name": "Bob"},
 		},
 	}
 	out := renderFM(t, m, true)
@@ -785,7 +785,7 @@ func TestRenderFrontmatter_ArrayOfMaps(t *testing.T) {
 }
 
 func TestRenderFrontmatter_NilValue(t *testing.T) {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"draft": nil,
 	}
 	out := renderFM(t, m, true)
@@ -793,7 +793,7 @@ func TestRenderFrontmatter_NilValue(t *testing.T) {
 }
 
 func TestRenderFrontmatter_Numeric(t *testing.T) {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"version": 42,
 		"ratio":   3.14,
 	}
@@ -803,7 +803,7 @@ func TestRenderFrontmatter_Numeric(t *testing.T) {
 }
 
 func TestRenderFrontmatter_Bool(t *testing.T) {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"publish": true,
 	}
 	out := renderFM(t, m, true)
@@ -811,7 +811,7 @@ func TestRenderFrontmatter_Bool(t *testing.T) {
 }
 
 func TestRenderFrontmatter_HTMLEscape(t *testing.T) {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"title": `<script>alert("xss")</script>`,
 	}
 	out := renderFM(t, m, true)
@@ -823,12 +823,12 @@ func TestRenderFrontmatter_Empty(t *testing.T) {
 	out := renderFM(t, nil, true)
 	require.Empty(t, out)
 
-	out = renderFM(t, map[string]interface{}{}, true)
+	out = renderFM(t, map[string]any{}, true)
 	require.Empty(t, out)
 }
 
 func TestRenderFrontmatter_SortedKeys(t *testing.T) {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"zebra": "z",
 		"alpha": "a",
 		"mid":   "m",

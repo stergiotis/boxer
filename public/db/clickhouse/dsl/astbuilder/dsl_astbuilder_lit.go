@@ -27,7 +27,7 @@ func preprocessLiteralValue(v any) any {
 
 // Lit creates a literal expression from a Go value. Uses marshalling.MarshalGoValueToSQL.
 // If the value type is unsupported, the error is deferred to Build().
-func Lit(v interface{}) E {
+func Lit(v any) E {
 	v = preprocessLiteralValue(v)
 	sql, err := marshalling.MarshalGoValueToSQLWithOptions(v, marshallingOptions)
 	if err != nil {
@@ -35,7 +35,7 @@ func Lit(v interface{}) E {
 	}
 	return E{Expr: ast.Expr{Kind: ast.KindLiteral, Literal: &ast.LiteralData{SQL: sql}}}
 }
-func LitCast(v interface{}) E {
+func LitCast(v any) E {
 	v = preprocessLiteralValue(v)
 	sql, typeName, err := marshalling.MarshalGoValueToSQLWithOptionsCast(v, marshallingOptionsCast)
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 )
 
 func TestEncoderSmoke(t *testing.T) {
-	var val interface{}
+	var val any
 	var dec *cbor.Decoder
 	buf := &bytes.Buffer{}
 	const samples = 128
@@ -31,7 +31,7 @@ func TestEncoderSmoke(t *testing.T) {
 	var decMode cbor.DecMode
 	decMode, err = cbor.DecOptions{}.DecModeWithTags(tagSet)
 	require.NoError(t, err)
-	check := func(refValu interface{}, handler func(enc *Encoder) (int, error)) {
+	check := func(refValu any, handler func(enc *Encoder) (int, error)) {
 		enc.Reset()
 		var n int
 		n, err = handler(enc)
@@ -78,7 +78,7 @@ func TestEncoderSmoke(t *testing.T) {
 	check(-1, func(enc *Encoder) (int, error) { return enc.EncodeInt(-1) })
 	check(-1000, func(enc *Encoder) (int, error) { return enc.EncodeInt(-1000) })
 	check(int64(math.MinInt64), func(enc *Encoder) (int, error) { return enc.EncodeInt(math.MinInt64) })
-	check([]interface{}{uint64(1), uint64(2), uint64(3), true}, func(enc *Encoder) (n int, err error) {
+	check([]any{uint64(1), uint64(2), uint64(3), true}, func(enc *Encoder) (n int, err error) {
 		var u int
 		u, err = enc.EncodeArrayIndefinite()
 		if err != nil {
@@ -112,7 +112,7 @@ func TestEncoderSmoke(t *testing.T) {
 		n += u
 		return
 	})
-	check([]interface{}{uint64(1), uint64(2), uint64(3), true}, func(enc *Encoder) (n int, err error) {
+	check([]any{uint64(1), uint64(2), uint64(3), true}, func(enc *Encoder) (n int, err error) {
 		var u int
 		u, err = enc.EncodeArrayDefinite(4)
 		if err != nil {

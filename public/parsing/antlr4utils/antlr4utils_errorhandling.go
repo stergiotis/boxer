@@ -83,7 +83,7 @@ func (inst *StoringErrListener) Reset() {
 	inst.SyntaxErrorsRecovered = inst.SyntaxErrorsRecovered[:0]
 }
 
-func (inst *StoringErrListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e antlr.RecognitionException) {
+func (inst *StoringErrListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol any, line, column int, msg string, e antlr.RecognitionException) {
 	if len(inst.SyntaxErrorsMessage) < inst.MaxErrorsToRecord {
 		inst.SyntaxErrorsLine = append(inst.SyntaxErrorsLine, line)
 		inst.SyntaxErrorsColumn = append(inst.SyntaxErrorsColumn, column)

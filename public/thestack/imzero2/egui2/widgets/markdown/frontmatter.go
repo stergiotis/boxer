@@ -53,17 +53,17 @@ func (inst *Doc) RenderFrontmatter() {
 // Decoded YAML produced by goldmark-meta + the recursive converter in
 // [containers.NewBinarySearchGrowingKVFromAnyMap] is fully covered by
 // these cases.
-func stringifyFrontmatterValue(v interface{}) (s string) {
+func stringifyFrontmatterValue(v any) (s string) {
 	switch t := v.(type) {
 	case string:
 		s = t
-	case []interface{}:
+	case []any:
 		parts := make([]string, len(t))
 		for i, item := range t {
 			parts[i] = stringifyFrontmatterValue(item)
 		}
 		s = "[" + strings.Join(parts, ", ") + "]"
-	case *containers.BinarySearchGrowingKV[string, interface{}]:
+	case *containers.BinarySearchGrowingKV[string, any]:
 		var parts []string
 		for k, val := range t.IteratePairs() {
 			parts = append(parts, k+": "+stringifyFrontmatterValue(val))

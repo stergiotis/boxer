@@ -30,7 +30,7 @@ import (
 // scopes.
 type Doc struct {
 	segments    []segment
-	frontmatter *containers.BinarySearchGrowingKV[string, interface{}]
+	frontmatter *containers.BinarySearchGrowingKV[string, any]
 	headings    []HeadingInfo
 	dropped     map[string]int
 	imageMaxW   uint32
@@ -115,7 +115,7 @@ type HeadingInfo struct {
 //
 // Returns nil when frontmatter is disabled (see [WithFeatures]) or
 // when the source contains none.
-func (inst *Doc) Frontmatter() (fm *containers.BinarySearchGrowingKV[string, interface{}]) {
+func (inst *Doc) Frontmatter() (fm *containers.BinarySearchGrowingKV[string, any]) {
 	fm = inst.frontmatter
 	return
 }

@@ -415,7 +415,7 @@ func TestIteratorTypeInference(t *testing.T) {
 	tests := []struct {
 		name         string
 		value        string
-		expectedType interface{}
+		expectedType any
 	}{
 		{"string", "'hello'", ctabb.S},
 		{"unsigned_int", "42", ctabb.U64},
@@ -450,7 +450,7 @@ func TestIteratorCastTypeReconstruction(t *testing.T) {
 	tests := []struct {
 		name          string
 		castCanonical string
-		expectedCast  interface{}
+		expectedCast  any
 	}{
 		{"u8", "u8", ctabb.U8},
 		{"u16", "u16", ctabb.U16},

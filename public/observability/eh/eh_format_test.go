@@ -100,7 +100,7 @@ func TestFormatError_LinearChain_Dedup(t *testing.T) {
 }
 
 func TestFormatError_WithCBOR(t *testing.T) {
-	data, _ := cbor.Marshal(map[string]interface{}{
+	data, _ := cbor.Marshal(map[string]any{
 		"host":       "db-primary.internal",
 		"port":       5432,
 		"timeout_ms": 3000,
@@ -277,7 +277,7 @@ func TestFormatError_VisualDemo(t *testing.T) {
 	buf.WriteString("\n" + divider + "\n")
 	buf.WriteString("CASE 3: With structured data\n")
 	buf.WriteString(divider + "\n")
-	data, _ := cbor.Marshal(map[string]interface{}{
+	data, _ := cbor.Marshal(map[string]any{
 		"host": "db-primary.internal",
 		"port": 5432,
 	})

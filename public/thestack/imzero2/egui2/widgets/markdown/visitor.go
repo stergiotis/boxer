@@ -59,7 +59,7 @@ func (inst *lowerCtx) countDropped(n ast.Node) {
 // for help/TOC consumers; callers that don't need it ignore the
 // third return value. The fourth is the per-kind tally of AST nodes the
 // lowering could not represent — see [Doc.Dropped].
-func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *containers.BinarySearchGrowingKV[string, interface{}], headings []HeadingInfo, dropped map[string]int) {
+func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *containers.BinarySearchGrowingKV[string, any], headings []HeadingInfo, dropped map[string]int) {
 	gm := obsidian.New(obsidian.Options{
 		Features: cfg.features,
 		Resolver: cfg.resolver,

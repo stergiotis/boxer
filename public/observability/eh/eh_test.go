@@ -455,11 +455,11 @@ func TestFrameContainer_MarshalZerologObject(t *testing.T) {
 	}
 	logger.Log().Object("frame", fc).Send()
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	frame, ok := result["frame"].(map[string]interface{})
+	frame, ok := result["frame"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected frame object, got %v", result)
 	}
@@ -481,11 +481,11 @@ func TestFrameContainer_MarshalZerologObject_EmptyFields(t *testing.T) {
 	fc := &frameContainer{}
 	logger.Log().Object("frame", fc).Send()
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	frame, ok := result["frame"].(map[string]interface{})
+	frame, ok := result["frame"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected frame object, got %v", result)
 	}
@@ -586,11 +586,11 @@ func TestErrorFact_MarshalZerologObject(t *testing.T) {
 	}
 	logger.Log().Object("fact", fact).Send()
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	f := result["fact"].(map[string]interface{})
+	f := result["fact"].(map[string]any)
 	if f["msg"] != "something broke" {
 		t.Fatal("wrong msg")
 	}
@@ -613,11 +613,11 @@ func TestErrorFact_MarshalZerologObject_SameIdParent(t *testing.T) {
 	}
 	logger.Log().Object("fact", fact).Send()
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	f := result["fact"].(map[string]interface{})
+	f := result["fact"].(map[string]any)
 	// When Id == ParentId, parentId should be omitted
 	if _, exists := f["parentId"]; exists {
 		t.Fatal("parentId should be omitted when equal to id")
@@ -636,11 +636,11 @@ func TestErrorFact_WithCBORData(t *testing.T) {
 	}
 	logger.Log().Object("fact", fact).Send()
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	f := result["fact"].(map[string]interface{})
+	f := result["fact"].(map[string]any)
 	if _, exists := f["dataDiag"]; !exists {
 		t.Fatal("expected dataDiag field for valid CBOR")
 	}
@@ -1046,7 +1046,7 @@ func TestFullRoundTrip_ComplexErrorTree(t *testing.T) {
 	// mid1 wraps inner1 (with CBOR data)
 	// mid2 is a plain stdlib error
 
-	cborData, _ := cbor.Marshal(map[string]interface{}{
+	cborData, _ := cbor.Marshal(map[string]any{
 		"table":  "users",
 		"column": "email",
 	})
@@ -1068,7 +1068,7 @@ func TestFullRoundTrip_ComplexErrorTree(t *testing.T) {
 	output := buf.String()
 
 	// Validate JSON parseable
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
 		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, output)
 	}

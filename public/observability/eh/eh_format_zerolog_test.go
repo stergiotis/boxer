@@ -148,7 +148,7 @@ func TestConsoleFormatError_WithConsoleWriter(t *testing.T) {
 func TestConsoleFormatErrorExtra_NoError(t *testing.T) {
 	fn := ConsoleFormatErrorExtra(false)
 	var buf bytes.Buffer
-	evt := map[string]interface{}{
+	evt := map[string]any{
 		"message": "hello",
 	}
 	err := fn(evt, &buf)
@@ -163,7 +163,7 @@ func TestConsoleFormatErrorExtra_NoError(t *testing.T) {
 func TestConsoleFormatErrorExtra_SimpleString(t *testing.T) {
 	fn := ConsoleFormatErrorExtra(false)
 	var buf bytes.Buffer
-	evt := map[string]interface{}{
+	evt := map[string]any{
 		zerolog.ErrorFieldName: "simple error",
 	}
 	err := fn(evt, &buf)
@@ -181,7 +181,7 @@ func TestConsoleFormatErrorExtra_FormattedString(t *testing.T) {
 	var buf bytes.Buffer
 
 	formatted := "Error: query failed\n└── cause: connection refused\n    at Connect (db.go:15)"
-	evt := map[string]interface{}{
+	evt := map[string]any{
 		zerolog.ErrorFieldName: formatted,
 	}
 	err := fn(evt, &buf)

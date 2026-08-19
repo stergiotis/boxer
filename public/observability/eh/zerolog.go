@@ -434,7 +434,7 @@ func (inst *gatherFactsAndStacks) findStack(st StackTrace) (stackIndex uint32, i
 	return
 }
 
-func MarshalError(err error) interface{} {
+func MarshalError(err error) any {
 	if err == nil {
 		return nil
 	}

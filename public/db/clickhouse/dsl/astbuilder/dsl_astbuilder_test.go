@@ -48,7 +48,7 @@ func TestSelectDistinct(t *testing.T) {
 
 func TestLiterals(t *testing.T) {
 	tests := []struct {
-		val      interface{}
+		val      any
 		contains string
 	}{
 		{42, "42"},

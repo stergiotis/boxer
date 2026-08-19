@@ -183,14 +183,14 @@ func TestD3_NilKV_ReadsAreSafe(t *testing.T) {
 // shape: a nested empty map converts to a typed-nil KV stored in an
 // interface value, and reads on it must behave as an empty container.
 func TestD3_FromAnyMap_NestedEmptyMap_ReadsSafely(t *testing.T) {
-	kv := NewBinarySearchGrowingKVFromAnyMap(map[string]interface{}{
-		"nested": map[string]interface{}{},
+	kv := NewBinarySearchGrowingKVFromAnyMap(map[string]any{
+		"nested": map[string]any{},
 		"flat":   1,
 	})
 	require.NotNil(t, kv)
 	nestedRaw, has := kv.Get("nested")
 	require.True(t, has)
-	nested, ok := nestedRaw.(*BinarySearchGrowingKV[string, interface{}])
+	nested, ok := nestedRaw.(*BinarySearchGrowingKV[string, any])
 	require.True(t, ok, "nested empty map converts to a (typed-nil) KV")
 	require.Nil(t, nested)
 	require.True(t, nested.IsEmpty())

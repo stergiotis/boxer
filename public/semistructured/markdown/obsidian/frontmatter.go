@@ -11,13 +11,13 @@ import (
 
 // GetFrontmatter extracts YAML frontmatter metadata from a parser.Context
 // after rendering. Returns nil if no frontmatter was present.
-func GetFrontmatter(pc parser.Context) map[string]interface{} {
+func GetFrontmatter(pc parser.Context) map[string]any {
 	return meta.Get(pc)
 }
 
 // TryGetFrontmatter extracts YAML frontmatter metadata from a parser.Context
 // after rendering. Returns an error if the YAML was malformed.
-func TryGetFrontmatter(pc parser.Context) (metadata map[string]interface{}, err error) {
+func TryGetFrontmatter(pc parser.Context) (metadata map[string]any, err error) {
 	metadata, err = meta.TryGet(pc)
 	return
 }
@@ -27,7 +27,7 @@ func TryGetFrontmatter(pc parser.Context) (metadata map[string]interface{}, err 
 // arrays are rendered recursively.
 //
 // If metadata is nil or empty, nothing is written.
-func RenderFrontmatterHTML(w io.Writer, metadata map[string]interface{}, open bool) (err error) {
+func RenderFrontmatterHTML(w io.Writer, metadata map[string]any, open bool) (err error) {
 	if len(metadata) == 0 {
 		return
 	}
@@ -52,7 +52,7 @@ func RenderFrontmatterHTML(w io.Writer, metadata map[string]interface{}, open bo
 	return
 }
 
-func renderDL(w io.Writer, m map[string]interface{}) (err error) {
+func renderDL(w io.Writer, m map[string]any) (err error) {
 	_, err = fmt.Fprint(w, "<dl>\n")
 	if err != nil {
 		return
@@ -83,9 +83,9 @@ func renderDL(w io.Writer, m map[string]interface{}) (err error) {
 	return
 }
 
-func renderDD(w io.Writer, val interface{}) (err error) {
+func renderDD(w io.Writer, val any) (err error) {
 	switch v := val.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		_, err = fmt.Fprint(w, "<dd>")
 		if err != nil {
 			return
@@ -95,9 +95,9 @@ func renderDD(w io.Writer, val interface{}) (err error) {
 			return
 		}
 		_, err = fmt.Fprint(w, "</dd>")
-	case map[interface{}]interface{}:
+	case map[any]any:
 		// yaml.v2 sometimes produces map[interface{}]interface{}
-		normalized := make(map[string]interface{}, len(v))
+		normalized := make(map[string]any, len(v))
 		for mk, mv := range v {
 			normalized[fmt.Sprintf("%v", mk)] = mv
 		}
@@ -110,7 +110,7 @@ func renderDD(w io.Writer, val interface{}) (err error) {
 			return
 		}
 		_, err = fmt.Fprint(w, "</dd>")
-	case []interface{}:
+	case []any:
 		_, err = fmt.Fprint(w, "<dd>")
 		if err != nil {
 			return
@@ -128,14 +128,14 @@ func renderDD(w io.Writer, val interface{}) (err error) {
 	return
 }
 
-func renderUL(w io.Writer, items []interface{}) (err error) {
+func renderUL(w io.Writer, items []any) (err error) {
 	_, err = fmt.Fprint(w, "<ul>\n")
 	if err != nil {
 		return
 	}
 	for _, item := range items {
 		switch v := item.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			_, err = fmt.Fprint(w, "<li>")
 			if err != nil {
 				return
@@ -145,8 +145,8 @@ func renderUL(w io.Writer, items []interface{}) (err error) {
 				return
 			}
 			_, err = fmt.Fprint(w, "</li>\n")
-		case map[interface{}]interface{}:
-			normalized := make(map[string]interface{}, len(v))
+		case map[any]any:
+			normalized := make(map[string]any, len(v))
 			for mk, mv := range v {
 				normalized[fmt.Sprintf("%v", mk)] = mv
 			}

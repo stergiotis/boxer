@@ -29,11 +29,11 @@ import (
 // Distinct keys can stringify to the same string (42 and "42" both
 // become "42"); exactly one entry survives such a collision, and which
 // one is unspecified — it follows Go's randomised map iteration order.
-func NewBinarySearchGrowingKVFromAnyMap(m map[string]interface{}) (kv *BinarySearchGrowingKV[string, interface{}]) {
+func NewBinarySearchGrowingKVFromAnyMap(m map[string]any) (kv *BinarySearchGrowingKV[string, any]) {
 	if len(m) == 0 {
 		return
 	}
-	kv = NewBinarySearchGrowingKVOrdered[string, interface{}](len(m))
+	kv = NewBinarySearchGrowingKVOrdered[string, any](len(m))
 	for k, v := range m {
 		kv.UpsertBatch(k, convertAnyMapValue(v))
 	}
@@ -45,18 +45,18 @@ func NewBinarySearchGrowingKVFromAnyMap(m map[string]interface{}) (kv *BinarySea
 // returns the same value with maps replaced by their KV equivalent.
 // Cycles cannot occur in YAML/JSON-decoded data, so no cycle guard is
 // needed.
-func convertAnyMapValue(v interface{}) (out interface{}) {
+func convertAnyMapValue(v any) (out any) {
 	switch t := v.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		out = NewBinarySearchGrowingKVFromAnyMap(t)
-	case map[interface{}]interface{}:
-		normalized := make(map[string]interface{}, len(t))
+	case map[any]any:
+		normalized := make(map[string]any, len(t))
 		for mk, mv := range t {
 			normalized[fmt.Sprintf("%v", mk)] = mv
 		}
 		out = NewBinarySearchGrowingKVFromAnyMap(normalized)
-	case []interface{}:
-		converted := make([]interface{}, len(t))
+	case []any:
+		converted := make([]any, len(t))
 		for i, item := range t {
 			converted[i] = convertAnyMapValue(item)
 		}

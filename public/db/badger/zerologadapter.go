@@ -10,7 +10,7 @@ import (
 type ZerologLoggerAdapter struct {
 }
 
-func (inst *ZerologLoggerAdapter) Errorf(s string, i ...interface{}) {
+func (inst *ZerologLoggerAdapter) Errorf(s string, i ...any) {
 	if i != nil {
 		log.Error().Interface("arguments", i).Msgf(s, i...)
 	} else {
@@ -18,7 +18,7 @@ func (inst *ZerologLoggerAdapter) Errorf(s string, i ...interface{}) {
 	}
 }
 
-func (inst *ZerologLoggerAdapter) Warningf(s string, i ...interface{}) {
+func (inst *ZerologLoggerAdapter) Warningf(s string, i ...any) {
 	if i != nil {
 		log.Warn().Interface("arguments", i).Msgf(s, i...)
 	} else {
@@ -26,7 +26,7 @@ func (inst *ZerologLoggerAdapter) Warningf(s string, i ...interface{}) {
 	}
 }
 
-func (inst *ZerologLoggerAdapter) Infof(s string, i ...interface{}) {
+func (inst *ZerologLoggerAdapter) Infof(s string, i ...any) {
 	if i != nil {
 		log.Info().Interface("arguments", i).Msgf(s, i...)
 	} else {
@@ -34,7 +34,7 @@ func (inst *ZerologLoggerAdapter) Infof(s string, i ...interface{}) {
 	}
 }
 
-func (inst *ZerologLoggerAdapter) Debugf(s string, i ...interface{}) {
+func (inst *ZerologLoggerAdapter) Debugf(s string, i ...any) {
 	if i != nil {
 		log.Debug().Interface("arguments", i).Msgf(s, i...)
 	} else {
