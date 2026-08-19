@@ -306,8 +306,8 @@ func (inst *PlayApp) renderSystemGraph() {
 	})
 	// Clicking a query node observes it — the drawing doubles as the observe
 	// gesture (the per-node buttons below remain for bindings).
-	if strings.HasPrefix(res.Clicked, "node/") {
-		id := NodeID(strings.TrimPrefix(res.Clicked, "node/"))
+	if after, ok := strings.CutPrefix(res.Clicked, "node/"); ok {
+		id := NodeID(after)
 		if _, ok := findSplitNode(inst.currentSplit, id); ok {
 			inst.observedNode = id
 		}

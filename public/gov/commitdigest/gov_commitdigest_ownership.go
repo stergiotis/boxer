@@ -33,8 +33,8 @@ func BlameOwners(ctx context.Context, repoDir string, filePath string, coAuthorC
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "author-mail ") {
-			email := strings.TrimPrefix(line, "author-mail ")
+		if after, ok := strings.CutPrefix(line, "author-mail "); ok {
+			email := after
 			email = strings.Trim(email, "<>")
 			email = strings.ToLower(strings.TrimSpace(email))
 			if email != "" && email != "not.committed.yet" {

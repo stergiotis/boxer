@@ -26,8 +26,8 @@ func (tp *TreeProcessor) ProcessTree(ctx context.Context, srcFS fs.FS, pattern s
 
 	if pattern == "./..." {
 		recursive = true
-	} else if strings.HasSuffix(pattern, "/...") {
-		basePath = strings.TrimSuffix(pattern, "/...")
+	} else if before, ok := strings.CutSuffix(pattern, "/..."); ok {
+		basePath = before
 		recursive = true
 	} else {
 		basePath = pattern
