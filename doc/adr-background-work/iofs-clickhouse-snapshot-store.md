@@ -12,7 +12,7 @@ status: draft
 > Prior-art claims (who built what, thresholds from the literature) are from
 > prior knowledge and were **not** re-verified. Numbers are estimates (marked
 > with `~`) unless dated; nothing here has been measured on a live server yet.
-> Revised the same day for stores with very many mounts (§14).
+> Revised twice the same day — many-mount stores, then the hash algorithm (§14).
 
 # An `io/fs` ↔ ClickHouse bridge: a snapshot store for file trees (August 2026)
 
@@ -188,6 +188,7 @@ CREATE TABLE fs_data                        -- one per store
     ttl_class  LowCardinality(String),
     line0      UInt32,                      -- text files: 1-based number of the first line in this block
     data       String CODEC(ZSTD(1)),       -- ≤ block_size bytes, immutable
+    hash       FixedString(32),             -- digest of this block: standalone by default, a BLAKE3 subtree value for aligned blocks
     expires_at DateTime                     -- identical to the snapshot's entries
     -- text mounts, optional: INDEX ix_tok data TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 1
 )
@@ -262,6 +263,33 @@ last newline before `block_size`, and `line0` records the first line number of
 each block. That is what makes `grep`-shaped queries safe across block
 boundaries and lets them report line numbers (§7).
 
+**Hashes.** `content_hash` plays two roles that pull in different directions:
+*identity* — joining a mount against anything else by digest, inside or
+outside the store — and *integrity* — knowing that the bytes read back are the
+bytes written. The algorithm is a store parameter (`hash_algo`); the columns
+are bytes either way. The default is sha256: standard library, the digest the
+rest of the world uses (OCI images, Nix store paths, Go module sums, package
+checksums), checkable in SQL with `SHA256()`. The corpus profile adds a
+per-block `hash`, a standalone digest of the block's bytes, so a single block
+can be verified on read and the whole store audited in SQL (§7).
+
+BLAKE3 is the documented alternative, and what it adds is structural rather
+than fast. Its internal Merkle tree has 1 KiB leaves combined left-complete,
+so a block that is a power-of-two multiple of 1 KiB and aligned to its own
+size is a complete subtree with its own chaining value, and the file hash is
+the combination of the block values. With BLAKE3, `hash` holds that value for
+aligned blocks; a file's integrity can then be audited from its block values
+without reading data, a rewritten block is caught by the root in `fs_meta`,
+and verified streaming (Bao) at block granularity becomes possible on the
+content route. Two things keep it an option rather than the default: it is a
+dependency with assembly against the standard library, and text blocks — cut
+at newlines, hence not 1 KiB-aligned — cannot be subtrees, so for exactly the
+files the design most wants to query BLAKE3 degrades to a standalone digest,
+which sha256 provides equally. Speed (~2–3× per core over hardware sha256, and
+parallel within a file) is real but not decisive here: hashing is a small
+share of ingest beside reading the source and inserting. The switch earns its
+place when a store needs verified streaming or data-free audits.
+
 **Registry and snapshot index.** `fs_mount` maps a name to a `mount_id`, a
 store, a retention class and a content policy; it is tiny and read at
 snapshot time and at macro expansion. `fs_snap` is never written directly: the
@@ -281,6 +309,8 @@ are zero on every other row and compress to nothing.
 | `content_hash` | `FixedString(32)` | `FixedString(16)` — 128 bits are enough for 10¹⁰ objects; 64 are not |
 | projections on `fs_meta` | none | `by_path` (`ORDER BY (path, mount_id, snap)`), optionally `by_hash` — for store-wide questions |
 | partitioning | `(ttl_class, day)` | the same; week or month for low-cadence stores |
+| `hash_algo` | sha256 (default); BLAKE3 when block-level audits or verified streaming are wanted | the same |
+| per-block `hash` in `fs_data` | yes — standalone digest, or the BLAKE3 subtree value for aligned blocks | none — one-block files are the rule and the file hash covers them |
 
 ## 4. Reaching the tables from SQL: `fs()` and `fsdata()`
 
@@ -334,7 +364,8 @@ The walker is generic over `fs.FS`. One snapshot, in order:
    the snapshot records what it could not read instead of failing.
 3. For files that the content policy says to store (regular file, size ≤
    `inline_max`), stream blocks into `fs_data` while hashing the same bytes
-   into `content_hash`: text files cut at newlines with `line0` maintained,
+   into `content_hash` — and, where the profile has it, each block into
+   `hash`: text files cut at newlines with `line0` maintained,
    everything else at fixed `block_size`. Files above the threshold get
    `content = 'ref'`; metadata-only mounts get `'none'`.
 4. Only after every other insert has been acknowledged, insert the root row
@@ -377,7 +408,7 @@ the queries below, and its `File` gets `io.ReaderAt` and `io.Seeker` from
 | `Glob` | `SELECT path FROM fs('m') WHERE match(path, '^usr/[^/]*/bin/ed$')` — the adapter compiles `path.Match` syntax to RE2 (`*` → `[^/]*`, `?` → `[^/]`) |
 | `ReadLink` | `SELECT link_target FROM fs('m') WHERE path = 'a/l' AND is_symlink` — following a link is `path.Join(dir, link_target)` in Go, then `Stat` again |
 | `Sub` | best a second mount; ad hoc, `substring(path, 3)` over `startsWith(path, 'a/')` |
-| `Read` (stream) | `SELECT data FROM fsdata('m') WHERE path = 'a/b.txt' ORDER BY seq` — one key range, already in file order |
+| `Read` (stream) | `SELECT data, hash FROM fsdata('m') WHERE path = 'a/b.txt' ORDER BY seq` — one key range, already in file order; with `hash` present the adapter verifies each block as it arrives |
 | `ReadAt(o, n)` | `… AND seq BETWEEN intDiv(o, bs) AND intDiv(o + n - 1, bs) ORDER BY seq` — `bs` from the `Open` row; the adapter trims the first and last block |
 | `ReadFile` | the stream, or in one cell: `SELECT arrayStringConcat(arrayMap(t -> t.2, arraySort(t -> t.1, groupArray((seq, data))))) FROM fsdata('m') WHERE path = 'a/b.txt'` |
 | `Close` | nothing server-side; cancel the row stream |
@@ -460,6 +491,15 @@ FROM fs('m') WHERE content != 'none'
 GROUP BY content_hash HAVING count() > 1
 ```
 
+**audit** — the store checking itself: every stored block against its digest,
+in SQL. With BLAKE3 this covers standalone digests (text blocks, one-block
+files); aligned subtree values are checked by the adapter, or by recomputing
+file roots from `hash` alone without touching `data`.
+
+```sql
+SELECT count() AS bad FROM fsdata('m') WHERE SHA256(data) != hash
+```
+
 **across mounts** — in a store of many trees the interesting questions run
 across them: every mount's latest snapshot, which trees carry a given path,
 which trees changed it this week. The first is a lookup in `fs_snap`; the
@@ -508,6 +548,9 @@ What the shape gives:
 - **Content is queryable, not opaque.** Regex and token search, line tables,
   JSON functions and skip indexes apply to blocks — the materialised lane that
   [ADR-0164 §SD7](../adr/0164-documentation-regex-search.md) deferred.
+- **Integrity is auditable.** Per-block digests verify on read and in SQL;
+  with BLAKE3 and aligned blocks, a file audits from its block values without
+  reading data.
 - **Metadata is cheap.** A sorted `path` column compresses well (~10–20×
   is typical for sorted path sets), so metadata-only snapshots of large trees
   cost tens of megabytes; `content_hash` gives deduplication as analytics
@@ -659,6 +702,13 @@ not a blob service.
   different engine altogether). Right for microsecond point lookups; wrong
   for the scans that are the point of the bridge. If `Stat` latency ever
   matters, a dictionary in front of `fs_meta` is the ClickHouse-native answer.
+- **BLAKE3 as the store hash.** Assessed and recorded as a store option
+  rather than the default: the tree property that makes it attractive —
+  per-block chaining values that compose into the file hash — holds only for
+  aligned blocks, not for newline-cut text blocks; it is a dependency with
+  assembly against the standard library; and sha256 is the digest external
+  tables speak. Adopt per store when verified streaming or data-free audits
+  are wanted (§3 *Hashes*).
 - **An in-engine VFS plug point, DuckDB-style.** Not available to an
   out-of-process host; the HTTP and FIFO seams the repository already uses
   are the ClickHouse-shaped equivalent.
@@ -680,6 +730,8 @@ not a blob service.
 - Where the walker runs; how a store grant is expressed and how mount
   visibility inside it is declared (registry predicate or row policy).
 - Whether the fleet profile carries the `by_path` projection by default.
+- Hash algorithm per store (sha256 default, BLAKE3 option), and whether the
+  fleet profile carries per-block digests.
 - Whether `fs_snap` should share the `(ttl_class, day)` partitioning for
   whole-part expiry, or stay row-TTL'd as the small table it is.
 
@@ -700,6 +752,9 @@ not a blob service.
 - `LowCardinality(String)` as a partition-key column.
 - Compression ratio and ingest throughput on one representative mount, per
   §9; and an insert-rate test with many small mounts per batch.
+- For a BLAKE3 store: that a Go port exposes subtree chaining values at block
+  offsets (or Bao with 1 MiB chunk groups); and the throughput of `SHA256()` /
+  `BLAKE3()` in ClickHouse for a store-wide audit.
 
 ## 14. Revisions
 
@@ -711,3 +766,7 @@ not a blob service.
   materialised view; corpus and fleet profiles; the fleet-scale estimates in
   §8. Trigger: the question "what if there are 10⁸ small trees?", which the
   first draft answered with 10¹⁰ partitions.
+- 2026-08-19, third pass — the hash algorithm as a store parameter with
+  sha256 as the default; per-block digests in the corpus profile; BLAKE3
+  assessed (§3 *Hashes*, §11): its tree mode composes only over aligned
+  blocks, which newline-cut text blocks are not.
