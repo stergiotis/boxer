@@ -301,9 +301,11 @@ func (st *cpuHeatmapState) renderCPUHeatmapCursor(inst *App, w float32) {
 	_, col, hovered := st.hs.HoveredCell()
 	slots := cpuHeatmapWidthSlots
 
+	// The frame's own sampler, not the live singleton: during replay the two
+	// report different cadences, and this label is "N ago" against this frame.
 	tickInterval := 1 * time.Second
-	if sampler != nil {
-		tickInterval = sampler.Interval()
+	if inst.frameSampler != nil {
+		tickInterval = inst.frameSampler.Interval()
 	}
 
 	label := "—"

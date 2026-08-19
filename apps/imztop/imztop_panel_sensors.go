@@ -8,6 +8,14 @@ import (
 
 func (inst *App) renderSensorsPanel(snap *PublishedSnapshot) {
 	if len(snap.Sensors) == 0 {
+		// Empty and unrecorded look identical, and only one of them is about
+		// the machine. The tee stores no sensors kind (ADR-0197 §SD8), so in
+		// replay this pane is always empty and has to say why — otherwise it
+		// reads as "this host reports no temperatures".
+		if inst.frameReplay.State == ReplayOn {
+			inst.sectionHeader("Sensors")
+			inst.notRecordedNote("Temperatures are")
+		}
 		return
 	}
 	inst.sectionHeader("Sensors")

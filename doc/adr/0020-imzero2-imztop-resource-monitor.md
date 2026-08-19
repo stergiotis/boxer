@@ -254,6 +254,52 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-08-19 — Replay lands (ADR-0197): which scrubbing deferral this closes, and which it does not
+
+This ADR deferred timeline scrubbing twice, and the two deferrals are not the
+same thing. [ADR-0197](./0197-imztop-replay-mode.md) closes one of them and
+leaves the other exactly where it was.
+
+**Closed: "scrubbing back through the history" — but through *stored* history,
+not through the ring.** The non-goals list says *"scrubbing back through the
+10-minute history is a follow-on if users ask"*. What shipped is better than
+what that sentence asked for and arrives by a different route: imztop can now
+replay history out of `boxer.facts`, so the reachable past is however long
+[ADR-0184](./0184-sysmetrics-persistence-tee.md)'s tee has been running rather
+than the ten minutes the sliding window holds. A range is picked by brushing an
+availability strip that shows where the tee actually recorded and how busy the
+box was, and the transport plays, pauses, steps, jogs and re-speeds it.
+
+**Still open: scrubbing the in-memory window itself.** §SD14's *"No timeline
+scrubbing; that is post-M5 if at all"* is about the live `Sampler` — dragging
+backwards through the ring while data keeps arriving, without leaving live mode.
+Nothing in ADR-0197 touches it: replay is a *second source* that substitutes for
+the live one (§SD1), so entering it stops following live data rather than
+scrolling within it. A user who wants the last ninety seconds back still
+freezes, and freeze remains what §SD14 described.
+
+Whether that gap is worth closing is now a smaller question than it was. The
+ring holds ten minutes; the tee holds everything; and the seam between them is a
+mode switch a user has to make deliberately. If in-window scrubbing is ever
+built, the honest framing is continuity — making the switch invisible — not
+reach.
+
+**Two other statements in this ADR aged, and ADR-0197 corrects them by
+implication rather than by editing them here:**
+
+- The **"pure-local"** non-goal (*"Remote sysmetrics over network … needs a
+  transport package and is a separate ADR"*) was overtaken by ADR-0090, which
+  made imztop a bus subscriber, and now again by ADR-0197, which dials
+  ClickHouse. imztop is no longer a pure-local app and no longer a
+  capability-free one; ADR-0197 §SD7 carries that decision and its cost.
+- The **Sensors panel** now has a state this ADR never contemplated: in replay
+  it is empty because the tee stores no sensors kind, which is a fact about the
+  recording rather than about the machine. It says so rather than rendering a
+  blank pane (ADR-0197 §SD8), and the screenshot tour captures that state
+  deliberately as `imztop-replay-notrecorded`.
+
+`status` and `reviewed-date` are deliberately not re-stamped.
+
 ### 2026-07-31 — trend smoothing on the history plots (ADR-0152)
 
 The history plots — RAM %, per-GPU busy %, and the disk/net rate plots

@@ -76,12 +76,23 @@ type SamplerOptions struct {
 	HistoryWindow  time.Duration
 }
 
-// SamplerI is the public surface a Sampler implements.
+// SamplerI is the type the render path takes: a source of PublishedSnapshot
+// frames, the freeze control, and the observed cadence the top bar and the CPU
+// heatmap read.
+//
+// [Sampler] is the live implementation, fed by a subscription to the metric
+// plane. The render path takes the interface rather than the concrete type
+// because ADR-0197 adds a second implementation that replays stored history
+// from the ADR-0184 record store; everything downstream of Latest is
+// indifferent to which one it is holding.
 type SamplerI interface {
 	Start(ctx context.Context)
 	Latest() (snap *PublishedSnapshot)
 	Pause(p bool)
 	IsPaused() (p bool)
+	// Interval reports the most recent observed sample cadence. Formatting is
+	// the caller's — the top bar renders it with String.
+	Interval() (d time.Duration)
 	Close() (err error)
 }
 
@@ -91,9 +102,9 @@ type Sampler struct {
 	// intervalNs holds the most recent OBSERVED sample cadence — the delta
 	// between consecutive bundles' SampledAtUnixMs, set by onBundle and
 	// initialised to SamplerOptions.UpdateInterval until the first delta is
-	// known. Read by Interval()/IntervalLabel() (topbar, heatmap) and by the
-	// per-process EWMA as its time-constant input, so the smoothing tracks the
-	// scraper's real rate (imztop does not set it — ADR-0090 SD5).
+	// known. Read by Interval() (topbar, heatmap) and by the per-process EWMA
+	// as its time-constant input, so the smoothing tracks the scraper's real
+	// rate (imztop does not set it — ADR-0090 SD5).
 	intervalNs atomic.Int64
 	// lastSampledAtMs is the previous bundle's SampledAtUnixMs, for the
 	// observed-cadence delta. Owned by onBundle (single writer).
@@ -151,14 +162,38 @@ var _ SamplerI = (*Sampler)(nil)
 // capability. bus is MountCtx.Bus() in the app; tests and the tour pass an
 // inprocbus client fed by StartScraper. A nil bus degrades to NoopBus.
 func NewSampler(opts SamplerOptions, bus app.BusI) (inst *Sampler, err error) {
+	if bus == nil {
+		bus = &app.NoopBus{}
+	}
+	inst = newFold(opts)
+
+	consumer, cErr := sysmetricsbus.NewConsumer(sysmetricsbus.ConsumerOptions{
+		Bus:     bus,
+		Subject: sysmetricsbus.BundleSubjectWildcard(),
+		Codec:   sysmetricsbus.NewCBORCodec(),
+		Handler: inst.onBundle,
+		Log:     log.Logger,
+	})
+	if cErr != nil {
+		err = eh.Errorf("imztop: build sysmetrics consumer: %w", cErr)
+		return
+	}
+	inst.consumer = consumer
+	return
+}
+
+// newFold builds the windowing and smoothing state with no source attached.
+//
+// It is the half of a Sampler that is indifferent to where a bundle came from
+// (ADR-0197 §SD1): NewSampler bolts a bus consumer onto it, and ReplaySampler
+// drives the same onBundle from a store cursor. A fold on its own has a nil
+// consumer, so Start and Close are written to tolerate one.
+func newFold(opts SamplerOptions) (inst *Sampler) {
 	if opts.UpdateInterval <= 0 {
 		opts.UpdateInterval = 1 * time.Second
 	}
 	if opts.HistoryWindow <= 0 {
 		opts.HistoryWindow = 10 * time.Minute
-	}
-	if bus == nil {
-		bus = &app.NoopBus{}
 	}
 
 	histN := max(int32(opts.HistoryWindow/opts.UpdateInterval), 2)
@@ -182,23 +217,13 @@ func NewSampler(opts SamplerOptions, bus app.BusI) (inst *Sampler, err error) {
 		procCPUEWMA: make(map[procEWMAKey]float32),
 	}
 	inst.intervalNs.Store(int64(opts.UpdateInterval))
-
-	consumer, cErr := sysmetricsbus.NewConsumer(sysmetricsbus.ConsumerOptions{
-		Bus:     bus,
-		Subject: sysmetricsbus.BundleSubjectWildcard(),
-		Codec:   sysmetricsbus.NewCBORCodec(),
-		Handler: inst.onBundle,
-		Log:     log.Logger,
-	})
-	if cErr != nil {
-		err = eh.Errorf("imztop: build sysmetrics consumer: %w", cErr)
-		return
-	}
-	inst.consumer = consumer
 	return
 }
 
 func (inst *Sampler) Start(_ context.Context) {
+	if inst.consumer == nil {
+		return // a bare fold has no source of its own to start
+	}
 	// Pure consumer: subscribe to the metric plane. The scraper that feeds it
 	// runs elsewhere (the carousel host, the tour, or an external sysmetricsd).
 	if err := inst.consumer.Start(); err != nil {
@@ -217,13 +242,6 @@ func (inst *Sampler) Pause(p bool) {
 
 func (inst *Sampler) IsPaused() (p bool) {
 	return inst.localPaused.Load()
-}
-
-// IntervalLabel returns the observed sample cadence as a short human-readable
-// label for the top-bar status row (the scraper's real rate; see intervalNs).
-func (inst *Sampler) IntervalLabel() (out string) {
-	out = time.Duration(inst.intervalNs.Load()).String()
-	return
 }
 
 // Interval returns the most recent observed sample cadence (the scraper's real

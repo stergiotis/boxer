@@ -43,17 +43,22 @@ var imztopScenes = []struct {
 	title    string
 	desc     string
 	activate uint64 // dock tab this scene forces active for its capture (every scene sets one)
+	replay   bool   // scene captures replay mode rather than live (ADR-0197 M5)
 }{
 	// Each scene forces its own tab active (activateTab), never relying on capture
 	// order: the TestDriver renders all scenes through one shared id-stack → one
 	// shared dock state, and captures them sorted by Name, so without an explicit
 	// activate a scene would inherit whatever tab a prior capture left active.
 	{"imztop-running", "", icons.PhGauge + " imztop — processes",
-		"imztop's live system monitor — a docked layout of CPU/memory/network/disk/GPU/sensors panels plus the process table, unfiltered.", dockTabCPU},
+		"imztop's live system monitor — a docked layout of CPU/memory/network/disk/GPU/sensors panels plus the process table, unfiltered.", dockTabCPU, false},
 	{"imztop-filtered", "imzero2", icons.PhGauge + " imztop — filtered",
-		"The same monitor with the process table filtered to \"imzero2\".", dockTabCPU},
+		"The same monitor with the process table filtered to \"imzero2\".", dockTabCPU, false},
 	{"imztop-procmap", "", icons.PhGauge + " imztop — process map",
-		"The process tree as a treemap: processes nested parent → child, each box sized by resident memory and tinted by CPU load.", dockTabProcMap},
+		"The process tree as a treemap: processes nested parent → child, each box sized by resident memory and tinted by CPU load.", dockTabProcMap, false},
+	{"imztop-replay", "", icons.PhClockCounterClockwise + " imztop — replay",
+		"The same monitor replaying stored history instead of live data (ADR-0197): a transport above, an availability strip showing where the tee recorded and how busy the box was, and the panels drawing frames that carry the times they were recorded at.", dockTabCPU, true},
+	{"imztop-replay-notrecorded", "", icons.PhClockCounterClockwise + " imztop — replay, not recorded",
+		"What replay cannot show (ADR-0197 §SD8). The persistence tee stores no sensors kind, so the Sensors tab is empty in replay for a reason that is about the recording rather than about the machine — and says so, rather than reading as a host with no temperatures.", dockTabSensors, true},
 }
 
 func init() {
@@ -66,7 +71,7 @@ func init() {
 			Flags:          registry.DemoFlagNonDeterministic | registry.DemoFlagNeedsLargeArea,
 			Kind:           registry.DemoKindUX,
 			Description:    sc.desc,
-			Init:           makeTourInit(sc.filter, sc.activate),
+			Init:           makeTourInit(sc.filter, sc.activate, sc.replay),
 			RenderStateful: tourRenderStateful,
 			SourceFunc:     (*App).renderApp,
 		})
@@ -79,6 +84,11 @@ func init() {
 type imztopDemoState struct {
 	app    *App
 	filter string
+	// replay makes this scene capture the replay surface. Asserted per frame
+	// rather than at Init because the session is process-wide and the driver
+	// captures scenes in name order, so a scene must not inherit the mode a
+	// previous one left behind.
+	replay bool
 }
 
 var tourFeedOnce sync.Once
@@ -118,7 +128,7 @@ func ensureTourFeed() {
 
 // makeTourInit returns an Init that builds an imztop App bound to the host id
 // stack, wires the tour-local synthetic feed, and starts the consumer.
-func makeTourInit(filter string, activate uint64) func(ids *c.WidgetIdStack) (state any) {
+func makeTourInit(filter string, activate uint64, replay bool) func(ids *c.WidgetIdStack) (state any) {
 	return func(ids *c.WidgetIdStack) (state any) {
 		inst := newApp()
 		inst.ids = ids
@@ -128,7 +138,7 @@ func makeTourInit(filter string, activate uint64) func(ids *c.WidgetIdStack) (st
 		inst.activateTab = activate // 0 for most scenes; the Proc Map scene targets its tab
 		ensureTourFeed()            // the tour has no host bus; feed the consumer locally
 		_, _ = ensureSampler()      // start the singleton consumer; the feed sets the cadence
-		state = &imztopDemoState{app: inst, filter: filter}
+		state = &imztopDemoState{app: inst, filter: filter, replay: replay}
 		return
 	}
 }
@@ -144,6 +154,16 @@ func tourRenderStateful(ids *c.WidgetIdStack, state any) {
 	// the snapshot is still nil.
 	st.app.setProcFilter(st.filter)
 	st.app.ids = ids
+	if st.replay {
+		// Replay scene: install the synthetic session (idempotent) and draw it.
+		if s := ensureTourReplay(); s != nil {
+			st.app.renderApp(s.Latest(), s)
+			return
+		}
+	}
+	// Live scene — or a replay scene whose session could not be built. Either
+	// way, assert live rather than inherit whatever ran before.
+	ensureTourLive()
 	s, err := ensureSampler()
 	if err != nil {
 		renderInitErrorPanel(err)

@@ -13,6 +13,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/trendsmooth"
@@ -24,8 +25,13 @@ import (
 // back from each Open().
 var (
 	samplerOnce sync.Once
-	sampler     *Sampler
-	samplerErr  error
+	// sampler is typed as SamplerI so the render path can be handed a replay
+	// source as well as the live one (ADR-0197). Assign only a non-nil
+	// implementation: storing a nil *Sampler in an interface makes the
+	// `sampler != nil` guards (imztop_cpu_heatmap.go) true against a nil
+	// receiver, which the concrete-typed variable could not do.
+	sampler    SamplerI
+	samplerErr error
 
 	samplerBusMu sync.Mutex
 	samplerBus   app.BusI
@@ -200,6 +206,19 @@ type App struct {
 	// (the production default) leaves tab focus entirely to the user; only the
 	// screenshot tour sets it, so a capture can target an otherwise-hidden tab.
 	activateTab uint64
+
+	// frameSampler is the sampler the current frame is drawing, set at the top
+	// of renderApp. Render-thread only, rewritten every frame.
+	frameSampler SamplerI
+
+	// frameReplay is the replay session's status for this frame, read once in
+	// renderApp. Render-thread only.
+	frameReplay ReplayStatus
+
+	// availability is this window's coverage strip (ADR-0197 §SD9), built on
+	// first use. Per-window because pan, zoom and the brush are view state;
+	// the coverage it draws is process-wide.
+	availability *timeline.Timeline
 }
 
 var _ app.AppI = (*App)(nil)
@@ -236,7 +255,9 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 // are scoped under that salt — no further package-level coordination
 // is needed (every render helper is a method on *App).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
-	s, sErr := ensureSampler()
+	// activeSampler hands back the replay session while one is on and the live
+	// singleton otherwise (ADR-0197 §SD5); the panels cannot tell which.
+	s, sErr := activeSampler()
 	if sErr != nil {
 		renderInitErrorPanel(sErr)
 		return
@@ -246,7 +267,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	return
 }
 
-func ensureSampler() (s *Sampler, err error) {
+func ensureSampler() (s SamplerI, err error) {
 	samplerOnce.Do(func() {
 		samplerBusMu.Lock()
 		bus := samplerBus
@@ -309,19 +330,57 @@ func (inst *App) lazyBody(dockID uint64, title string) (skip bool) {
 // PROC spans the bottom. Once the user drags a pane, the persistent
 // dock_state on the Rust side wins and the initial layout is no
 // longer consulted (ADR-0020 follow-on: DockArea pre-split bindings).
-func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
+func (inst *App) renderApp(snap *PublishedSnapshot, s SamplerI) {
+	// Record which sampler this frame is drawing, so a panel reached without
+	// the value threaded to it (the CPU heatmap's cursor) reads the active one
+	// rather than the live singleton — they differ during replay.
+	inst.frameSampler = s
+	// One status read per frame, shared by the top bar and the panels that
+	// have to say "not recorded" rather than draw an empty pane (§SD8).
+	inst.frameReplay = CurrentReplayStatus()
 	inst.smooth.BeginFrame()
-	if snap == nil {
-		for range c.PanelCentralInside().KeepIter() {
-			c.Label("Imztop: waiting for first sample…").Send()
-		}
-		return
-	}
 
+	// The top bar draws in every state, including the one with no snapshot.
+	// It carries the only way out of a replay session, so a session with
+	// nothing to show must not be able to strand the user inside it — an
+	// early return here removed the "Go live" button along with everything
+	// else, which is how a host with no stored history looked like a hung app.
 	for range c.PanelTopInside(inst.ids.PrepareStr("imztop-topbar")).Resizable(false).KeepIter() {
 		inst.renderTopBar(snap, s)
+		// The transport is a second row, present only while a session exists.
+		// Scoped so its appearing and disappearing cannot shift the ids of
+		// anything drawn after it.
+		if inst.frameReplay.State != ReplayOff {
+			for range c.IdScope(inst.ids.PrepareStr("imztop-replaybar")) {
+				inst.renderReplayBar(inst.frameReplay)
+			}
+		}
 	}
 	for range c.PanelCentralInside().KeepIter() {
+		// The availability strip is the range control (ADR-0197 §SD9), so it
+		// only exists while a session does. It lives here rather than in the
+		// top panel with the transport: a timeline is tall, and a tall top
+		// panel stretches that row's vertical separators down the whole
+		// window — egui gives a separator the available height, which in a
+		// panel is whatever the panel grew to.
+		//
+		// It draws whether or not there is a snapshot, and that is the point.
+		// A window with nothing stored in it is exactly when the user needs to
+		// see where something IS stored; hiding the strip then would repeat
+		// the mistake the empty state itself was fixed for, and its own advice
+		// to "jog to an earlier window" would have nothing to aim at.
+		if inst.frameReplay.State == ReplayOn {
+			for range c.IdScope(inst.ids.PrepareStr("imztop-availability-scope")) {
+				inst.renderAvailability(inst.frameReplay, snap)
+			}
+			c.Separator().Send()
+		}
+		if snap == nil {
+			for range c.IdScope(inst.ids.PrepareStr("imztop-nodata")) {
+				inst.renderNoDataPanel()
+			}
+			continue
+		}
 		for dock := range c.DockArea(inst.ids.PrepareStr("imztop-dock")) {
 			// Left column groups CPU + slower-changing stats as a single
 			// 4-tab leaf with CPU active (first). Right column groups Net
