@@ -187,7 +187,6 @@ func competenceTable(rows []capmapcorpus.Competence) *introspect.Table {
 		StringList("lifecycle_at", func(i int) []string {
 			out := make([]string, 0, len(rows[i].Lifecycle))
 			for _, ev := range rows[i].Lifecycle {
-				ev := ev
 				out = append(out, isoOrEmpty(ev.At, func() string { return ev.At.UTC().Format("2006-01-02 15:04:05") }))
 			}
 			return out
