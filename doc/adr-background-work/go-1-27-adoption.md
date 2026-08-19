@@ -7,12 +7,13 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** Written 2026-08-19 against the tree at
-> `a7966f04`. The `go fix` census in §4 was **measured** on this tree with
-> `go1.26.5`, one developer machine. Everything attributed to Go 1.27 is **read
-> from the release notes, not verified locally** — no 1.27 toolchain is
-> installed here (§5), so every 1.27 claim below is a claim to re-check, not a
-> measurement. Feeds a not-yet-written ADR; once that exists it is
-> authoritative and this is a snapshot.
+> `a7966f04`, one developer machine. The `go fix` census in §4 was measured on
+> `go1.26.5`; **§M0 was then run against a real `go1.27.0`** — the tag matrix,
+> the `go tool` delivery probe, the `goroutineleak` shape and cost, the
+> `stdversion` fallout and the `go mod tidy` churn are all measured, in a
+> detached worktree at `29733c55`. Claims still taken from the release notes
+> rather than measured are marked as such. Feeds a not-yet-written ADR; once
+> that exists it is authoritative and this is a snapshot.
 
 # Go 1.27 — what it retires, what it unlocks, and what the adoption costs
 
@@ -69,29 +70,94 @@ different decision with a security surface, not a tidy-up. **boxer goes 2 tags
 | [`.github/workflows/codeql.yaml`](../../.github/workflows/codeql.yaml) | Reads `./tags` into `GOFLAGS`; no edit needed, but re-verify it still resolves |
 | [downstream-adoption-skeleton](./downstream-adoption-skeleton.md) | §The tag endgame becomes history rather than forecast |
 
-### Two questions the release notes do not answer
+### The questions, answered — M0, 2026-08-19 on `go1.27.0`
 
-1. **Is `-tags=goexperiment.jsonv2` inert or fatal under 1.27?** The repo has
-   never set `GOEXPERIMENT=jsonv2`; it passes the *build tag* the experiment
-   implies, and the stdlib's `//go:build goexperiment.jsonv2` constraints made
-   that work. In 1.27 those constraints flip to the `nojsonv2` sense. The
-   likely outcome is an inert unknown tag, but "likely" is not good enough for
-   a file every consumer copies — a 1.27 build with and without the tag decides
-   it, and decides whether the tag is merely *no longer required* or genuinely
-   *retired* (`RetiredTags` means "must not be present at all", and a finding
-   naming an ADR).
-2. **Does `go tool` delivery unblock?** The skeleton measured, on `go1.26.5`,
-   that `go tool github.com/stergiotis/boxer/public/app` fails with
-   `encoding/json/v2: build constraints exclude all Go files`, because `go tool`
-   accepts no `-tags` and ignores it in `GOFLAGS`. That measurement is dated
-   with an explicit "re-run it rather than cite it". With required tags empty,
-   it should pass for a consumer. This is the adoption payoff and should be
-   re-measured, not assumed.
+**The tag is inert.** A full-repo `go build ./...` under `go1.27.0`, with
+`GOFLAGS` cleared so the tag set is actually what the flag says, gives an
+identical result in all three configurations — today's set, the target set, and
+no tags at all: one failing package, and it fails for an unrelated reason
+(below). Under `go1.26.5` the same build without the tag fails as expected, with
+`imports encoding/json/v2: build constraints exclude all Go files`. So the tag
+neither helps nor harms under 1.27, and the repo builds with no tags at all.
 
-A third, softer question: `RetiredTags` fires on consumers who may still be on
-Go 1.26, for whom the tag is *required*. Bumping the `go` directive to `1.27.0`
-(§5) forces those consumers to 1.27 anyway, which makes "retired" coherent —
-but the ordering matters, and the ADR should say it.
+The mechanism is worth recording, because it is not what the release note
+implies: the 1.27 standard library **still carries `//go:build goexperiment.jsonv2`**
+on the `encoding/json/v2` and `jsontext` files (99 files reference the tag).
+What changed is the baseline — `internal/buildcfg` now sets `JSONv2: true`, so
+the toolchain supplies the tag itself. Nothing was un-gated; the default moved.
+That also means `goexperiment.jsonv2` is a *recognised* tag, not an unknown one,
+which supports classifying it as **retired** rather than merely not-required.
+
+**`go tool` delivery unblocks.** A throwaway consumer module — `go 1.27.0`, a
+`tool github.com/stergiotis/boxer/public/app` directive, a `replace` to the
+worktree, no tags anywhere — runs the full boxer CLI:
+`go tool github.com/stergiotis/boxer/public/app --help` prints the command tree.
+This is the payoff [downstream-adoption-skeleton](./downstream-adoption-skeleton.md)
+predicted and asked to be re-measured rather than cited; it now measures.
+
+**But graduation changed the API.** This is the finding that was not in the
+release notes, and it is the only thing in the repo that 1.27 actually breaks.
+Diffing the exported surface of both packages between `go1.26.5` and `go1.27.0`:
+
+| Package | 1.26.5 | 1.27.0 |
+| --- | --- | --- |
+| `jsontext` | `func (t Token) Float() float64` | `(float64, error)` |
+| `jsontext` | `func (t Token) Int() int64` | `(int64, error)` |
+| `jsontext` | `func (t Token) Uint() uint64` | `(uint64, error)` |
+| `jsontext` | `func AppendFormat(dst, src []byte, …)` | `AppendFormat[Bytes ~[]byte \| ~string](dst []byte, src Bytes, …)` — source-compatible for `[]byte` callers |
+| `jsontext` | — | new: `AppendFloat`, `Float32(float32) Token`, `Token.Float32()` |
+| `json/v2` | `func DiscardUnknownMembers(v bool) Options` | **removed** |
+| `json/v2` | struct-tag options `case format ignore **inline** omitempty omitzero strict string **unknown**` | `inline` and `unknown` replaced by **`embed`** — and an unrecognised option is **silently ignored** |
+
+Blast radius across 26 files importing either `jsontext`: **one file, two
+lines** — `public/semistructured/leeway/dml/example/cli.go:166,168`, which reads
+a number token as a float and then as an int. `DiscardUnknownMembers` is unused
+here. The fix is mechanical (take the error, wrap it with `eb.Build()`), and a
+verified patch exists.
+
+**The struct-tag rename is the dangerous one, because it is silent.** The last
+row of that table costs no compile error and no runtime error — a field tagged
+`json:",inline"` simply stops being inlined and starts emitting as an ordinary
+nested member under its Go field name. Measured on both toolchains with the
+same four-line program:
+
+| | `go1.26.5` | `go1.27.0` |
+| --- | --- | --- |
+| `Extra map[string]any` tagged `,inline`, key colliding with an emitted member | `{"model":"a"` + error `jsontext: duplicate object member name "model"` | `{"model":"a","Extra":{"model":"b"}}`, **no error** |
+| same, tagged `,embed` | — | `{"model":"a"` + the same duplicate-member error |
+
+One site in the tree carries the old spelling —
+`public/llm/openaichat/llm_openaichat.go:398`, where `Extra` exists precisely to
+flatten provider-specific request members into the request object, with the
+duplicate-name error as its documented collision guarantee. Under 1.27 that
+guarantee silently disappears and the wire shape changes. Changing the tag to
+`,embed` restores both, verified.
+
+Nothing in the toolchain would have caught this: `go build` is clean, `go vet`
+is clean, and the wrong output is valid JSON. What caught it was the package's
+own `TestEncodeRequestExtraCollisionFails`, which pins the guarantee rather than
+the happy path. That is the argument for M0 running the whole test suite and not
+just building.
+
+**The fix is not backward-compatible**, which fixes the sequencing: under
+`go1.26.5` `Token.Float()` returns one value, so the repaired file will not
+compile there. It has to land in the same commit as the toolchain bump, not
+before it.
+
+Note also that the breakage arrives through a *dependency*, not only the
+stdlib. `github.com/go-json-experiment/json` gates its own `jsontext` on
+`//go:build !goexperiment.jsonv2 || !go1.25` and type-aliases to the standard
+library otherwise — so the ten files importing the external module get the new
+stdlib API the moment the default flips. Migrating those imports to
+`encoding/json/jsontext` changes nothing semantically, but it removes a
+dependency whose only remaining job is to be an alias.
+
+**One softer point stands.** `RetiredTags` would fire on a consumer still on Go
+1.26, for whom the tag is *required*. The `go` directive bump (§5) forces those
+consumers to 1.27 anyway, and boxer's retired-set only reaches a consumer
+through its module pin — so a consumer that has not bumped the pin does not see
+the finding either. The ordering is self-consistent; the ADR should still say
+it.
 
 ## 2. Generic methods — where they actually pay
 
@@ -155,24 +221,28 @@ goroutine's locals.
 `--pprofHttpListenAddress` serves it the moment the toolchain provides it. The
 data path needs work:
 
-- `public/observability/profiling/pprofarrow` — `inferKind` classifies by
-  sample-type signature and will almost certainly see the same
-  `goroutine`/`count` signature as the existing goroutine profile, i.e. return
-  `"goroutine"`. That is the case `WithKindHint` already exists for (block and
-  mutex collide the same way and come back as `"contention"`). Confirm the
-  signature, then pass a hint. **This must be checked, not assumed** — the
-  alias `pprof_goroutineleak` and the kind hint have to agree, or the ad-hoc
-  dataset lands on the wrong handle.
+- `public/observability/profiling/pprofarrow` — **no change needed.** The
+  predicted hazard was that the profile would carry the goroutine profile's
+  `goroutine/count` signature and be misclassified, needing a `WithKindHint`
+  like block and mutex do. Measured (M0): it carries its **own** sample type,
+  `goroutineleak/count`, so `inferKind`'s single-count-type branch already
+  returns `"goroutineleak"` and `Convert` lands on the `pprof_goroutineleak`
+  alias unaided. This is why it was worth probing rather than assuming.
 - `apps/imzrt/imzrt_panel_profiles.go` — one entry in `profileKinds`
   (`{key: "goroutineleak", label: "Leaked goroutines", capture: captureLookup("goroutineleak"), unit: "goroutines"}`).
   The package comment explains why block and mutex are deliberately absent —
   they are empty unless `SetBlockProfileRate` / `SetMutexProfileFraction` are
   set, and imzrt does not mutate runtime tunables ([ADR-0061](../adr/0061-imzero2-imzrt-go-runtime-dashboard.md) §SD6).
   `goroutineleak` needs no tunable, so it does not hit that rule — but it is
-  not free either: it drives a GC-based analysis, which on the render thread of
-  a live dashboard is a visible hitch. The existing capture path already runs
-  through `bgjob` off the render thread, which is the right place for it; the
-  cost belongs in an ADR-0061 update, since "observe-only" acquires a caveat.
+  not free, and the cost is a sharper one than "slow". Measured against a
+  205 MB / 400k-object live heap: the capture **forces exactly one GC cycle**
+  (the `goroutine` profile forces none), costs 4.5–7.3 ms wall against
+  200–300 µs, and adds ~0.1 ms of stop-the-world pause. The latency is
+  irrelevant — the existing path already captures through `bgjob`, off the
+  render thread. The forced GC is not: it perturbs the very heap and GC series
+  the dashboard is plotting, so a capture leaves a step in imzrt's own charts.
+  That belongs in an ADR-0061 dated Update, because "observe-only" acquires a
+  real caveat: this button changes what the instrument reads.
 - `apps/imzrt/imzrt_tour.go` and `apps/sqlapplet/bookpprof` — the Profiles
   demo and the pprof book are rosters that go stale silently.
 
@@ -243,46 +313,127 @@ choice, not a convenience.
 
 ## 5. The toolchain itself — what actually gates this
 
-No Go 1.27 is installed. The system toolchain is `go1.26.5` (built with
-`GOEXPERIMENT=nodwarf5`), with a `go1.26.1` under `/usr/local/go` and an older
-per-user SDK. `GOTOOLCHAIN=local`, so `go.mod`'s `toolchain` line will not
-fetch one — deliberately, and [ADR-0095](../adr/0095-airgapped-build-bundle.md)
-and [howto/airgapped-build](../howto/airgapped-build.md) both call that
-load-bearing. Acquiring 1.27 is therefore step zero, and it is a host change,
-not a repo change.
+Go 1.27 was not installed when this page was first written; M0 fetched
+`go1.27.0` per-invocation (`GOTOOLCHAIN=go1.27.0`, which resolves through the
+module cache and leaves the machine's `go env` config untouched). The system
+toolchain remains `go1.26.5`, built with `GOEXPERIMENT=nodwarf5`; the upstream
+1.27 carries no such baseline, so DWARF5 debug info returns — harmless for
+correctness, visible in binary size and in whatever consumes debug info.
+`GOTOOLCHAIN=local` is set in the machine's `go env`, deliberately, and
+[ADR-0095](../adr/0095-airgapped-build-bundle.md) and
+[howto/airgapped-build](../howto/airgapped-build.md) both call that
+load-bearing.
 
-Consequences of the `go.mod` bump itself, none of them optional:
+Consequences of the `go.mod` bump, measured unless marked:
 
-- **`go 1.27.0` is required for generic methods.** The language version comes
-  from the module directive; a per-file `//go:build go1.27` does not raise it.
-  So §2 cannot land before the bump, and the bump forces every consumer to
-  1.27 — which is what makes retiring the tag (§1) coherent.
-- **`go mod tidy` will rewrite `go.mod`** for `go 1.27+`, merging require
-  blocks into at most two. That is a large one-time diff with no semantic
-  content; land it alone. Check it with `go mod tidy --diff`, never `tidy`
-  followed by `git diff`.
-- **`go test` starts running the `stdversion` vet check by default**, reporting
-  standard-library symbols newer than the configured Go version. Expect
-  findings on the first run.
+- **The `go` directive bump is not optional and not deferrable.** Building the
+  tree with the 1.27 *toolchain* while `go.mod` still says `go 1.26.0` produces
+  **310 `stdversion` findings across 31 files** — every `encoding/json/v2` and
+  `jsontext` symbol is "requires go1.27 or later (file is go1.26)", because the
+  graduated package declares those symbols as new in 1.27. Bumping the
+  directive to `go 1.27.0` takes that to **zero**, with no code change. Since
+  1.27's `go test` runs `stdversion` by default, the toolchain and the
+  directive have to move together or the test lane is red.
+- **`go 1.27.0` is also what enables generic methods.** The language version
+  comes from the module directive; a per-file `//go:build go1.27` does not
+  raise it. So §2 cannot land before the bump, and the bump forces every
+  consumer to 1.27 — which is what makes retiring the tag (§1) coherent.
+- **`go mod tidy` churn is negligible, not large.** The earlier estimate of a
+  big one-time require-block merge was wrong: measured, `go mod tidy --diff`
+  under the 1.27 directive is **2 insertions, 5 deletions** — it folds one
+  stray single-line `require … // indirect` into the indirect block, and
+  **deletes the `toolchain` line** (redundant once it equals the `go`
+  directive). Worth knowing that last part, because
+  [howto/airgapped-build](../howto/airgapped-build.md) currently explains the
+  offline env in terms of "`go.mod` pins `toolchain go1.26.5`" — that sentence
+  goes stale.
+- **Skew is a hard failure, by design.** With the directive at `1.27.0`, the
+  1.26.5 toolchain refuses: `go: go.mod requires go >= 1.27.0 (running
+  go 1.26.5; GOTOOLCHAIN=local)`. That is the correct behaviour and the whole
+  airgap risk below in one line.
 - **CI needs no edit** — all seven workflows use `go-version-file: 'go.mod'`.
-- The local `nodwarf5` experiment is a property of the *distribution's* build.
-  An upstream 1.27 will not carry it, so DWARF5 debug info returns; harmless
-  for correctness, visible in binary size and in whatever consumes debug info.
-- The airgap bundle pins a toolchain version in its generated env; re-cut it
-  after the bump.
+- `go vet ./...` under 1.27 in the target state is clean apart from 236
+  pre-existing `unreachable code` findings in generated ANTLR `.out.go`
+  parsers, which `lint.sh` already filters.
+- **The pinned `staticcheck` does not survive the bump.** `honnef.co/go/tools
+  v0.7.0` panics under `go1.27.0` — `panic: unexpected expr: *ast.KeyValueExpr`
+  out of its own IR builder — on a package it analyses cleanly under
+  `go1.26.5`. That is `lint.sh`'s second step, so M3 must bump the pin;
+  `v0.8.0-rc.1` is the only newer version published, which means the lint lane
+  would depend on a release candidate until a final ships. `errcheck`,
+  `nilaway` and `govulncheck` (which reports `Go: go1.27.0`) all run fine.
+
+### What the lanes said
+
+`scripts/ci/gotest.sh` (`-race -short -cover`) under `go1.27.0`, `go 1.27.0`
+directive, target tag set: **248 s, two failing packages, both explained.**
+
+- `public/llm/openaichat` — the `,inline` → `,embed` rename above. Real, fixed,
+  re-verified green.
+- `public/gov/buildtags` — `TestRequiredAndOptionalMatchTagsFile` failing
+  because the probe had dropped `goexperiment.jsonv2` from `./tags` while
+  `RequiredTags` still declared it. Not a 1.27 problem: the gate catching a
+  half-done migration is the gate working. Restoring either half turns it
+  green. Read it as a verification result for M4 — the `./tags` edit and the
+  `RequiredTags` edit have to be one commit.
+
+### Airgap bundles — this repository and the adopter
+
+Two repositories build airgap bundles, and they share the core by reference:
+[`scripts/dev/airgap-lib.sh`](../../scripts/dev/airgap-lib.sh) here, sourced
+directly by the adopter's own bundler rather than copied (ADR-0005). A fix in
+the shared lib therefore reaches both at once — but three properties of that
+lib turn a toolchain bump into a coordination problem:
+
+1. **The bundle ships the packing operator's toolchain.** `airgap_ship_goroot`
+   copies `$(go env GOROOT)` verbatim. Nothing pins or checks a version. So the
+   first bundle cut after the bump must be packed on a host whose *default* go
+   is 1.27 — running the bundler under a `GOTOOLCHAIN=go1.27.0` override is not
+   enough, because the override does not move `GOROOT`.
+2. **The generated workspace carries a `go` line taken from the module.** The
+   adopter's bundler computes it as `grep -m1 '^go ' <its own go.mod>` and
+   passes it to `airgap_go_workspace_vendor`, which writes it into the shipped
+   `go.work`. Its bundle ships **both** source trees. So once this repository
+   declares `go 1.27.0` while the adopter's module still declares 1.26.x, the
+   generated workspace under-declares the version its own contents require, and
+   `go work vendor` fails at pack time.
+3. **`GOTOOLCHAIN=local` is exported into the bundle env** (both in
+   `airgap_set_go_offline_env` and in the generated env file), together with
+   `GOPROXY=off`. That is deliberate and should stay — but it means version
+   skew on the target is a hard stop with no download escape hatch, exactly the
+   `requires go >= 1.27.0` error above.
+
+Ordering that falls out, for the adopter (which consumes this repository by
+module pin, with no `replace`, so nothing reaches it until the pin moves):
+
+1. Its own `go.mod` `go` line reaches `1.27.0` **before or with** the pin bump.
+2. Its `./tags` file — which today carries `goexperiment.jsonv2` alongside its
+   own repo-local tags — drops that entry **only after** it is on 1.27. Dropping
+   it earlier breaks its build; keeping it afterwards is inert (§1) until the
+   pin bump brings the retired-set finding.
+3. The next bundle is cut on a 1.27 packing host, and its dated predecessor
+   tarballs stay buildable only under 1.26 — they are snapshots, and that is
+   fine, but nobody should expect a mixed-toolchain rebuild from one.
+
+None of this needs new machinery. It needs the bump to be one ordered
+operation across two repositories rather than two independent ones, and it
+needs the "packed on a 1.27 host" precondition written down where the bundler
+can see it.
 
 ## Plan
 
-Ordered by dependency. M1 and M2 need no new toolchain and can land now.
+Ordered by dependency. Milestone ids are stable — M2 is struck rather than
+renumbered, because M0 measured its work away.
 
 | | Milestone | Gated on | Verification lane |
 | --- | --- | --- | --- |
-| **M0** | Install Go 1.27 beside the current toolchain; build and `scripts/ci/gotest.sh` under it, still carrying both tags. Answer §1's two questions (tag inert or fatal; `go tool` delivery) and §3's one (goroutineleak sample-type signature) | host | `gotest.sh`, `lint.sh` under both toolchains |
+| **M0** | ~~Acquire 1.27; answer the tag, `go tool` and `goroutineleak` questions~~ **done 2026-08-19** — results in §1, §3, §5 | — | ran in a detached worktree at `29733c55` |
 | **M1** | `go fix` sweep on `go1.26.5`, one commit per fixer, `fmtappendf` included before it disappears | — | `gotest.sh` per commit |
-| **M2** | `goroutineleak` groundwork that does not need 1.27: `pprofarrow` kind hint plumbing, roster shape | — | `pprofarrow` unit tests |
-| **M3** | Toolchain bump: `go 1.27.0` + `toolchain`, `go mod tidy` (own commit), `stdversion` fallout | M0 | all CI lanes |
-| **M4** | Tag retirement: ADR first (Tier 1 — Surfaces / Migration / Verification), then `./tags`, `gov/buildtags` required→empty + retired entry, README, ENGINEERING_PRACTICES, dated Updates on ADR-0053/0078/0004/0083, `wasmsurvey` reason removal | M3, M0's answers | `gov gate` (its own `buildtags` step), `lint.sh`, a consumer-shaped `go tool` probe |
-| **M5** | `goroutineleak` surfaces: imzrt `profileKinds` + tour + `bookpprof`, ADR-0061 dated Update for the GC-cost caveat; replace the goroutine-counting slack in `task/spawn_leak_test.go` | M3, M2 | live gate on the Profiles tab (returning rows is not evidence it draws — assert the Arrow header), `gotest.sh` |
+| ~~**M2**~~ | ~~`pprofarrow` kind-hint plumbing~~ — **not needed**: the profile carries its own `goroutineleak/count` sample type and classifies correctly today (§3) | — | — |
+| **M3** | One atomic commit: `go 1.27.0` directive, `go mod tidy` (which drops the `toolchain` line), the two-line `jsontext` repair in `leeway/dml/example/cli.go`, and the `,inline` → `,embed` tag in `openaichat` — none of the three compiles or behaves correctly under 1.26, so none can precede the bump. Plus the `staticcheck` pin bump to `v0.8.0-rc.1`, without which `lint.sh` panics. Optionally drop the `go-json-experiment/json` dependency, now a pure alias | M0 | `lint.sh`, `gotest.sh`, all seven workflows |
+| **M3b** | Airgap: state the "packed on a 1.27 host" precondition where `airgap_ship_goroot` can be seen to require it; refresh the `toolchain go1.26.5` sentence in [howto/airgapped-build](../howto/airgapped-build.md); coordinate the adopter's `go` line and bundle re-cut (§5) | M3 | a bundle cut + `airgap-unbundle` smoke on a clean host |
+| **M4** | Tag retirement: ADR first (Tier 1 — Surfaces / Migration / Verification), then `./tags`, `gov/buildtags` required→empty + retired entry, README, ENGINEERING_PRACTICES, dated Updates on ADR-0053/0078/0004/0083, `wasmsurvey` reason removal; then adopter pin bump + its `./tags` edit | M3 | `gov gate` (its `buildtags` step), `lint.sh`, the `go tool` probe from M0 |
+| **M5** | `goroutineleak` surfaces: one `profileKinds` entry, imzrt tour + `bookpprof` rosters, ADR-0061 dated Update for the forced-GC caveat; replace the goroutine-counting slack in `task/spawn_leak_test.go` | M3 | live gate on the Profiles tab (returning rows is not evidence it draws — assert the Arrow header), `gotest.sh` |
 | **M6** | Generic methods where they pay: `marshallreflect` terminals as methods on `*SectionReaders` with the free functions kept as forwarders; ADR-0023 design edit (it is `proposed`, so edit in place); `FatRow.Extract`. `recordstore`'s cache constructor only if a generator change is happening anyway | M3 | `gotest.sh`, leeway golden lanes |
 
 M4 and M6 both change `public/` surfaces and both want an ADR. Whether that is
@@ -292,14 +443,19 @@ generic-method change does not.
 
 ## Open questions
 
-1. Is `-tags=goexperiment.jsonv2` inert under 1.27, and does the tag become
-   *retired* or merely *not required*? (M0)
-2. Does `go tool <consumer binary>` delivery unblock once required tags are
-   empty? (M0) — the payoff the skeleton page predicted.
-3. What sample-type signature does the `goroutineleak` profile carry, and does
-   `inferKind` collide it with `goroutine`? (M0)
+1. ~~Is the tag inert under 1.27; retired or merely not-required?~~ **Answered
+   (M0): inert, and *recognised* rather than unknown — which argues for
+   retired.** §1.
+2. ~~Does `go tool` delivery unblock?~~ **Answered (M0): yes, measured on a
+   consumer-shaped module with no tags.** §1.
+3. ~~Does `inferKind` collide `goroutineleak` with `goroutine`?~~ **Answered
+   (M0): no — it carries its own sample type.** §3.
 4. Does `go fix -diff` become a `gov gate` step, accepting that each future Go
    release's new fixers land as an immediate hard gate?
 5. One ADR or two for M4 and M6?
-6. Does anything want `GOEXPERIMENT=simd`? Out of scope here — named only so
+6. Should M3 also drop `github.com/go-json-experiment/json`? Under 1.27 it is a
+   type alias for the standard library, so the import is a dependency whose
+   only job is indirection — but it is ten files of churn for no behaviour
+   change, which may be better folded into M1's sweep or left alone.
+7. Does anything want `GOEXPERIMENT=simd`? Out of scope here — named only so
    the next reader does not assume it was missed.
