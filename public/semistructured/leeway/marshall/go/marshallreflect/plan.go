@@ -84,8 +84,7 @@ func buildPlan(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 
 	b := goplan.NewPlanBuilder(rt.PkgPath()+"/"+rt.Name(), pkgLastSegment(rt.PkgPath()), rt.Name())
 
-	for i := 0; i < rt.NumField(); i++ {
-		f := rt.Field(i)
+	for f := range rt.Fields() {
 		st := f.Tag
 
 		// `_` blank-identifier — entity-level metadata + optional const
@@ -192,8 +191,7 @@ func addReflectTupleField(b *goplan.PlanBuilder, dto reflect.Type, goFieldName, 
 		return
 	}
 	elems := make([]goplan.TupleElem, 0, elemType.NumField())
-	for j := 0; j < elemType.NumField(); j++ {
-		ef := elemType.Field(j)
+	for ef := range elemType.Fields() {
 		if ef.Name == "_" {
 			err = eb.Build().Str("field", goFieldName).Errorf("`_` fields are not supported inside a tuple element struct — entity metadata belongs on the DTO")
 			return
@@ -240,8 +238,8 @@ func isAttrStructType(t reflect.Type) bool {
 // nested tuple. elemHasAtMembership is the sibling for the original
 // `@membership`-tag spelling (ADR-0103); the two route to different builders.
 func elemHasLwMembershipMarker(elemType reflect.Type) bool {
-	for j := 0; j < elemType.NumField(); j++ {
-		if isLwMembershipType(elemType.Field(j).Type) {
+	for field := range elemType.Fields() {
+		if isLwMembershipType(field.Type) {
 			return true
 		}
 	}
@@ -249,8 +247,8 @@ func elemHasLwMembershipMarker(elemType reflect.Type) bool {
 }
 
 func elemHasAtMembership(elemType reflect.Type) bool {
-	for j := 0; j < elemType.NumField(); j++ {
-		if strings.HasPrefix(strings.TrimSpace(elemType.Field(j).Tag.Get("lw")), "@") {
+	for field := range elemType.Fields() {
+		if strings.HasPrefix(strings.TrimSpace(field.Tag.Get("lw")), "@") {
 			return true
 		}
 	}
@@ -299,8 +297,7 @@ func addNestedSectionField(b *goplan.PlanBuilder, dto reflect.Type, goFieldName,
 		return
 	}
 	elems := make([]goplan.TupleElem, 0, elemType.NumField())
-	for j := 0; j < elemType.NumField(); j++ {
-		ef := elemType.Field(j)
+	for ef := range elemType.Fields() {
 		if ef.Name == "_" {
 			err = eb.Build().Str("field", goFieldName).Errorf("`_` fields are not supported inside a nested section struct — entity metadata belongs on the DTO")
 			return
