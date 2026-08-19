@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,18 +44,19 @@ func (f *fakeFffiCapture) IsCapturing() bool {
 	return f.captureBuf != nil
 }
 
-// freshHint returns an *atomic.Uint64 the test owns. Avoids the
-// process-wide RegisterScopeHint registry so tests stay isolated
-// from each other and from any binding-package init that may have
-// already registered the same name.
-func freshHint() *atomic.Uint64 {
-	return &atomic.Uint64{}
+// freshHint returns a *ScopeHint the test owns — including its own pool,
+// so recycling in one test cannot hand a scope to another. Avoids the
+// process-wide RegisterScopeHint registry so tests stay isolated from
+// each other and from any binding-package init that may have already
+// registered the same name.
+func freshHint() *ScopeHint {
+	return &ScopeHint{}
 }
 
 func TestRegisterScopeHint_DedupsByName(t *testing.T) {
 	a := RegisterScopeHint("TestRegisterScopeHintDedup")
 	b := RegisterScopeHint("TestRegisterScopeHintDedup")
-	assert.Same(t, a, b, "second call with the same kind must return the same *atomic.Uint64")
+	assert.Same(t, a, b, "second call with the same kind must return the same *ScopeHint")
 }
 
 func TestRegisterScopeHint_DistinctNamesAreDistinct(t *testing.T) {
@@ -70,7 +70,7 @@ func TestRegisterScopeHint_ConcurrentSameNameStillDedups(t *testing.T) {
 	const kind = "TestRegisterScopeHintConcurrent"
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-	got := make([]*atomic.Uint64, goroutines)
+	got := make([]*ScopeHint, goroutines)
 	for i := range goroutines {
 		go func(idx int) {
 			defer wg.Done()
@@ -85,7 +85,7 @@ func TestRegisterScopeHint_ConcurrentSameNameStillDedups(t *testing.T) {
 
 func TestScopeHintsSnapshot_ContainsRegisteredKinds(t *testing.T) {
 	h := RegisterScopeHint("TestScopeHintsSnapshotKind")
-	h.Store(12345)
+	h.hint.Store(12345)
 	snap := ScopeHintsSnapshot()
 	var found bool
 	for _, s := range snap {
@@ -126,7 +126,7 @@ func TestNewDeferredBlockScopeHinted_NilHintFallsBackToFloor(t *testing.T) {
 
 func TestNewDeferredBlockScopeHinted_SmallHintRoundsUpToFloor(t *testing.T) {
 	hint := freshHint()
-	hint.Store(64) // below the 4 KiB floor
+	hint.hint.Store(64) // below the 4 KiB floor
 	s := NewDeferredBlockScopeHinted(
 		func() FffiCaptureI { return &fakeFffiCapture{} },
 		binary.LittleEndian,
@@ -139,7 +139,7 @@ func TestNewDeferredBlockScopeHinted_SmallHintRoundsUpToFloor(t *testing.T) {
 func TestNewDeferredBlockScopeHinted_LargeHintPresizesAccordingly(t *testing.T) {
 	const want = 128 * 1024
 	hint := freshHint()
-	hint.Store(want)
+	hint.hint.Store(want)
 	s := NewDeferredBlockScopeHinted(
 		func() FffiCaptureI { return &fakeFffiCapture{} },
 		binary.LittleEndian,
@@ -151,7 +151,7 @@ func TestNewDeferredBlockScopeHinted_LargeHintPresizesAccordingly(t *testing.T) 
 
 func TestReleaseWithHint_RatchetsUpOnOvershoot(t *testing.T) {
 	hint := freshHint()
-	hint.Store(1000)
+	hint.hint.Store(1000)
 	s := NewDeferredBlockScopeHinted(
 		func() FffiCaptureI { return &fakeFffiCapture{} },
 		binary.LittleEndian,
@@ -160,13 +160,13 @@ func TestReleaseWithHint_RatchetsUpOnOvershoot(t *testing.T) {
 	// Simulate a frame that wrote 5000 bytes into the slab.
 	s.dataBuf.Write(make([]byte, 5000))
 	s.ReleaseWithHint()
-	assert.Equal(t, uint64(5000), hint.Load(),
+	assert.Equal(t, uint64(5000), hint.hint.Load(),
 		"observed > old must ratchet the hint up to the observed high-water immediately")
 }
 
 func TestReleaseWithHint_DecaysSlowlyOnUndershoot(t *testing.T) {
 	hint := freshHint()
-	hint.Store(32000)
+	hint.hint.Store(32000)
 	s := NewDeferredBlockScopeHinted(
 		func() FffiCaptureI { return &fakeFffiCapture{} },
 		binary.LittleEndian,
@@ -176,13 +176,13 @@ func TestReleaseWithHint_DecaysSlowlyOnUndershoot(t *testing.T) {
 	// With deferredHintDecayShift=5: next = 32000 - ((32000-0) >> 5) = 32000 - 1000 = 31000.
 	s.dataBuf.Write(make([]byte, 0))
 	s.ReleaseWithHint()
-	assert.Equal(t, uint64(31000), hint.Load(),
+	assert.Equal(t, uint64(31000), hint.hint.Load(),
 		"observed < old must decay by (old-observed)>>decayShift, not snap down")
 }
 
 func TestReleaseWithHint_ConvergesAcrossManyFrames(t *testing.T) {
 	hint := freshHint()
-	hint.Store(100000)
+	hint.hint.Store(100000)
 	// 200 frames each observing 1000 bytes: hint should drift from
 	// 100000 toward 1000. Half-life at shift=5 is ~22 frames, so 200
 	// frames is plenty of headroom.
@@ -195,12 +195,56 @@ func TestReleaseWithHint_ConvergesAcrossManyFrames(t *testing.T) {
 		s.dataBuf.Write(make([]byte, 1000))
 		s.ReleaseWithHint()
 	}
-	got := hint.Load()
+	got := hint.hint.Load()
 	assert.Less(t, got, uint64(1500),
 		"after 200 frames of observed=1000 the hint should converge near 1000, got %d", got)
 }
 
-func TestReleaseWithHint_ClearsScopeReferences(t *testing.T) {
+func TestReleaseWithHint_RecyclesWithinCeiling(t *testing.T) {
+	hint := freshHint()
+	s := NewDeferredBlockScopeHinted(
+		func() FffiCaptureI { return &fakeFffiCapture{} },
+		binary.LittleEndian,
+		hint,
+	)
+	s.dataBuf.Write(make([]byte, 8*1024))
+	grown := s.dataBuf.Cap()
+	s.ReleaseWithHint()
+
+	// Recycled, not dropped: the buffers survive so the next scope of this
+	// kind does not re-allocate. Emptied, so it cannot leak one frame's
+	// bytes into the next.
+	require.NotNil(t, s.dataBuf, "a scope within the ceiling must keep its buffers for reuse")
+	require.NotNil(t, s.tempBuf)
+	assert.Zero(t, s.dataBuf.Len(), "a recycled scope must be emptied")
+	assert.Zero(t, s.tempBuf.Len())
+	assert.Zero(t, len(s.entries))
+	assert.Equal(t, grown, s.dataBuf.Cap(), "the grown capacity is what makes recycling worth it")
+	assert.Nil(t, s.getFffi, "Release must drop the getFffi closure reference")
+	assert.Nil(t, s.scope, "Release must drop the hint pointer (prevents accidental re-fold)")
+	assert.True(t, s.released, "a recycled scope must be marked released so use-after-release is loud")
+}
+
+// TestReleaseWithHint_DropsOverCeiling pins the golang/go#23199 guard: one
+// outlier frame must not pin an outsized buffer in the pool for the process
+// lifetime. Asserting the drop predicate rather than a Put/Get round-trip
+// keeps this deterministic — sync.Pool may discard entries at any GC.
+func TestReleaseWithHint_DropsOverCeiling(t *testing.T) {
+	hint := freshHint()
+	s := NewDeferredBlockScopeHinted(
+		func() FffiCaptureI { return &fakeFffiCapture{} },
+		binary.LittleEndian,
+		hint,
+	)
+	s.dataBuf.Grow(deferredPooledBufferCeiling + 1)
+	require.Greater(t, s.dataBuf.Cap(), deferredPooledBufferCeiling)
+	s.ReleaseWithHint()
+	assert.Nil(t, s.dataBuf, "a buffer past the ceiling must be dropped for the collector, not pooled")
+	assert.Nil(t, s.tempBuf)
+	assert.True(t, s.released)
+}
+
+func TestUseAfterRelease_Panics(t *testing.T) {
 	hint := freshHint()
 	s := NewDeferredBlockScopeHinted(
 		func() FffiCaptureI { return &fakeFffiCapture{} },
@@ -208,11 +252,10 @@ func TestReleaseWithHint_ClearsScopeReferences(t *testing.T) {
 		hint,
 	)
 	s.ReleaseWithHint()
-	assert.Nil(t, s.dataBuf, "Release must drop dataBuf reference for GC")
-	assert.Nil(t, s.tempBuf, "Release must drop tempBuf reference for GC")
-	assert.Nil(t, s.entries, "Release must drop entries reference for GC")
-	assert.Nil(t, s.getFffi, "Release must drop getFffi closure reference")
-	assert.Nil(t, s.dataHint, "Release must drop the hint pointer (defensive — prevents accidental re-fold)")
+	assert.Panics(t, func() { s.Begin(uint64(1)) },
+		"Begin after release must panic — the scope may already belong to another frame")
+	assert.Panics(t, func() { s.End() },
+		"End after release must panic for the same reason")
 }
 
 func TestReleaseWithHint_RestoresCaptureIfEndForgotten(t *testing.T) {
@@ -236,11 +279,12 @@ func TestReleaseWithHint_RestoresCaptureIfEndForgotten(t *testing.T) {
 }
 
 func TestReleaseWithHint_NoHintIsSafe(t *testing.T) {
-	// A scope built via the legacy NewDeferredBlockScope has dataHint == nil;
-	// Release must collapse to a clean teardown with no panic.
+	// A scope built via the legacy NewDeferredBlockScope has scope == nil, so
+	// there is no pool to recycle into; Release must collapse to a clean
+	// teardown with no panic.
 	s := NewDeferredBlockScope(func() FffiCaptureI { return &fakeFffiCapture{} }, binary.LittleEndian)
 	s.dataBuf.Write(make([]byte, 256))
 	require.NotPanics(t, func() { s.ReleaseWithHint() })
 	assert.Nil(t, s.dataBuf)
-	assert.Nil(t, s.dataHint)
+	assert.Nil(t, s.scope)
 }

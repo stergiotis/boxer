@@ -24,14 +24,31 @@ const (
 	// that the cold-start allocation cost is bounded.
 	deferredDataBufFloor = 4 * 1024
 
-	// deferredTempBufInitialCap is the fixed initial capacity of the
-	// per-cycle capture buffer. Not hinted in M1 because its
-	// allocation contribution (~10 % of growSlice traffic) is smaller
-	// than dataBuf's, and a single Begin/End cycle's payload is
-	// bounded by one block's worth of opcodes rather than the sum
-	// across all blocks. Promote to a hint in a follow-up if profiling
-	// shows it's worth it.
+	// deferredTempBufInitialCap is the initial capacity of the per-cycle
+	// capture buffer. ADR-0049 left it un-hinted in M1 and said to
+	// "promote to a hint in a follow-up if profiling shows it's worth
+	// it". Profiling says it isn't: a hint was built and measured on
+	// 2026-08-19 and moved nothing, because the large capture buffers
+	// are not this one — DockAreaFluid.Tab captures each tab body into
+	// its own detached bytes.Buffer, which never touches a scope. Once
+	// scopes are pooled this buffer also keeps whatever capacity it
+	// grew to, which covers the cold path well enough. See the
+	// 2026-08-19 Update to ADR-0049.
 	deferredTempBufInitialCap = 4 * 1024
+
+	// deferredPooledBufferCeiling bounds what a scope may carry back
+	// into its pool. A scope whose dataBuf or tempBuf grew past it is
+	// dropped for the collector instead, so one pathological frame
+	// cannot pin an outsized allocation for the pool's lifetime
+	// (golang/go#23199).
+	//
+	// It sits far above the working set deliberately. The same pool in
+	// fffi2/typed shipped with a ceiling *below* its working set and
+	// therefore discarded every buffer that mattered — measured at 47.8 %
+	// of all bytes allocated before it was raised. A ceiling is insurance
+	// against an outlier, not a sizing mechanism; put it under the
+	// steady state and it becomes the bug it was meant to prevent.
+	deferredPooledBufferCeiling = 4 * 1024 * 1024
 
 	// deferredHintDecayShift drives the slow exponential decay of the
 	// hint when the observed high-water mark is below the current
@@ -43,38 +60,54 @@ const (
 	deferredHintDecayShift = 5
 )
 
-// scopeHintEntry stores one (kind, hint) pair in the process-wide
-// registry. Kept as a flat slice rather than a map because the working
-// set is small (one entry per IDL deferred-block kind, ≤16 in practice)
-// and the snapshot path wants a stable iteration order keyed by kind.
-type scopeHintEntry struct {
-	Kind string
-	Hint *atomic.Uint64
+// ScopeHint is the per-kind handle a deferred-block scope is constructed
+// against: the size hint that pre-sizes its buffers, and the pool that
+// recycles them between frames. One instance per IDL deferred-block kind,
+// obtained from [RegisterScopeHint].
+//
+// The two halves work together. The hint sizes a *cold* buffer — the first
+// scope of a kind after start-up, or after the pool has been drained by a
+// collection — and the pool removes the per-frame allocation entirely for
+// every scope after that. Neither subsumes the other: without the hint a
+// cold scope re-grows from the floor, and without the pool every frame pays
+// a fresh `make` at the hinted size, which ADR-0049 recorded as the cost it
+// was leaving on the table.
+type ScopeHint struct {
+	// kind is the IDL deferred-block name (e.g. "cells", "tabBody").
+	kind string
+	// hint is the smoothed high-water mark of dataBuf in wire bytes; see
+	// [DeferredBlockScope.ReleaseWithHint] for the update rule.
+	hint atomic.Uint64
+	// pool holds released *DeferredBlockScope values of this kind.
+	// Per-kind rather than global so a scope built for one kind's
+	// working size is never handed to a kind with a different one.
+	pool sync.Pool
 }
 
+// registry of ScopeHints. Kept as a flat slice rather than a map because
+// the working set is small (one entry per IDL deferred-block kind, ≤16 in
+// practice) and the snapshot path wants a stable iteration order keyed by
+// kind.
 var (
 	scopeHintsMu sync.RWMutex
-	scopeHints   []scopeHintEntry
+	scopeHints   []*ScopeHint
 )
 
-// RegisterScopeHint returns the singleton *atomic.Uint64 hint for the
-// given scope-kind name, allocating it on first call. Idempotent: a
-// second call with the same name returns the same pointer, so the
-// codegen can wire `var hintCells = runtime.RegisterScopeHint("cells")`
-// once per package and every scope instance of that kind reads/writes
-// the shared atomic.
+// RegisterScopeHint returns the singleton [ScopeHint] for the given
+// scope-kind name, allocating it on first call. Idempotent: a second call
+// with the same name returns the same pointer, so the codegen can wire
+// `runtime.RegisterScopeHint("cells")` once per kind and every scope
+// instance of that kind shares one hint and one pool.
 //
-// Concurrency: safe to call from any goroutine. Registration uses a
-// short writer-lock; subsequent hint reads/writes from a scope's
-// hot path go through the returned *atomic.Uint64 with no further
-// synchronisation.
-func RegisterScopeHint(kind string) *atomic.Uint64 {
+// Concurrency: safe to call from any goroutine. Registration uses a short
+// writer-lock; subsequent hint reads/writes and pool traffic from a scope's
+// hot path go through the returned handle with no further synchronisation.
+func RegisterScopeHint(kind string) *ScopeHint {
 	scopeHintsMu.RLock()
-	for i := range scopeHints {
-		if scopeHints[i].Kind == kind {
-			h := scopeHints[i].Hint
+	for _, sh := range scopeHints {
+		if sh.kind == kind {
 			scopeHintsMu.RUnlock()
-			return h
+			return sh
 		}
 	}
 	scopeHintsMu.RUnlock()
@@ -83,14 +116,14 @@ func RegisterScopeHint(kind string) *atomic.Uint64 {
 	defer scopeHintsMu.Unlock()
 	// Re-check under the writer-lock to avoid a duplicate entry under
 	// the racing-registration window between the RUnlock and Lock above.
-	for i := range scopeHints {
-		if scopeHints[i].Kind == kind {
-			return scopeHints[i].Hint
+	for _, sh := range scopeHints {
+		if sh.kind == kind {
+			return sh
 		}
 	}
-	h := &atomic.Uint64{}
-	scopeHints = append(scopeHints, scopeHintEntry{Kind: kind, Hint: h})
-	return h
+	sh := &ScopeHint{kind: kind}
+	scopeHints = append(scopeHints, sh)
+	return sh
 }
 
 // ScopeHintSnapshot is one entry from [ScopeHintsSnapshot].
@@ -115,10 +148,10 @@ type ScopeHintSnapshot struct {
 func ScopeHintsSnapshot() []ScopeHintSnapshot {
 	scopeHintsMu.RLock()
 	out := make([]ScopeHintSnapshot, 0, len(scopeHints))
-	for i := range scopeHints {
+	for _, sh := range scopeHints {
 		out = append(out, ScopeHintSnapshot{
-			Kind:  scopeHints[i].Kind,
-			Bytes: scopeHints[i].Hint.Load(),
+			Kind:  sh.kind,
+			Bytes: sh.hint.Load(),
 		})
 	}
 	scopeHintsMu.RUnlock()
@@ -161,11 +194,18 @@ type DeferredBlockScope struct {
 	// Fffi2 accessor — the typed package provides this
 	getFffi func() FffiCaptureI
 
-	// dataHint, when non-nil, is the per-kind size hint that pre-sized
-	// dataBuf at construction. [DeferredBlockScope.ReleaseWithHint]
-	// folds dataBuf's observed high-water mark back into this hint
-	// via a peak-and-slow-decay CAS loop. See ADR-0049.
-	dataHint *atomic.Uint64
+	// scope, when non-nil, is the per-kind hint+pool this scope was
+	// built against. [DeferredBlockScope.ReleaseWithHint] folds dataBuf's
+	// observed high-water mark into its hint and returns the scope to its
+	// pool. See ADR-0049.
+	scope *ScopeHint
+
+	// released marks a scope that has been handed back to its pool. It
+	// exists to keep use-after-release loud: before pooling, Release
+	// nil'd the buffers and a stray Begin panicked on a nil map/pointer,
+	// whereas a pooled scope would quietly accept the write and corrupt
+	// whichever frame owns it next. Checked in Begin and End.
+	released bool
 }
 
 // FffiCaptureI is the subset of Fffi2 needed for capture mode.
@@ -212,11 +252,24 @@ func NewDeferredBlockScope(
 func NewDeferredBlockScopeHinted(
 	getFffi func() FffiCaptureI,
 	endianness binary.ByteOrder,
-	dataHint *atomic.Uint64,
+	sh *ScopeHint,
 ) *DeferredBlockScope {
+	if sh != nil {
+		if v := sh.pool.Get(); v != nil {
+			inst := v.(*DeferredBlockScope)
+			// Buffers and entries were already emptied on release; they
+			// keep the capacity they grew to, which is the whole point.
+			inst.getFffi = getFffi
+			inst.endianess = endianness
+			inst.scope = sh
+			inst.capturing = false
+			inst.released = false
+			return inst
+		}
+	}
 	cap := deferredDataBufFloor
-	if dataHint != nil {
-		if v := int(dataHint.Load()); v > cap {
+	if sh != nil {
+		if v := int(sh.hint.Load()); v > cap {
 			cap = v
 		}
 	}
@@ -226,7 +279,7 @@ func NewDeferredBlockScopeHinted(
 		tempBuf:   bytes.NewBuffer(make([]byte, 0, deferredTempBufInitialCap)),
 		getFffi:   getFffi,
 		endianess: endianness,
-		dataHint:  dataHint,
+		scope:     sh,
 	}
 }
 
@@ -238,6 +291,9 @@ func NewDeferredBlockScopeHinted(
 //   - uint32 -> 4 bytes LE
 //   - string -> 4 bytes LE length + UTF-8 bytes
 func (inst *DeferredBlockScope) Begin(keyParts ...any) {
+	if inst.released {
+		panic("DeferredBlockScope.Begin called after ReleaseWithHint — the scope has been returned to its pool and may already belong to another frame")
+	}
 	if inst.capturing {
 		panic("DeferredBlockScope.Begin called while already capturing — missing End() call")
 	}
@@ -279,6 +335,9 @@ func (inst *DeferredBlockScope) Begin(keyParts ...any) {
 
 // End stops capturing and stores the block.
 func (inst *DeferredBlockScope) End() {
+	if inst.released {
+		panic("DeferredBlockScope.End called after ReleaseWithHint — the scope has been returned to its pool and may already belong to another frame")
+	}
 	if !inst.capturing {
 		return
 	}
@@ -348,6 +407,28 @@ func (inst *DeferredBlockScope) Reset() {
 	inst.capturing = false
 }
 
+// foldHint applies the peak-ratchet + slow-decay update rule to one hint:
+//
+//	observed >= old : next = observed                          (ratchet up)
+//	observed <  old : next = old - ((old - observed) >> N)     (decay)
+//
+// Shared by the dataBuf and tempBuf hints so the two cannot drift apart in
+// their smoothing behaviour. See [DeferredBlockScope.ReleaseWithHint].
+func foldHint(h *atomic.Uint64, observed uint64) {
+	for {
+		old := h.Load()
+		var next uint64
+		if observed >= old {
+			next = observed
+		} else {
+			next = old - ((old - observed) >> deferredHintDecayShift)
+		}
+		if next == old || h.CompareAndSwap(old, next) {
+			return
+		}
+	}
+}
+
 // ReleaseWithHint finalises the scope and folds its observed dataBuf
 // high-water mark back into the per-kind hint via a peak-ratchet +
 // slow-decay CAS loop:
@@ -363,30 +444,38 @@ func (inst *DeferredBlockScope) Reset() {
 // been handed to GC.
 //
 // Idempotent in the sense that calling on a scope without a hint
-// (dataHint == nil) collapses to a no-op cleanup. See ADR-0049.
+// (scope == nil) collapses to a no-op cleanup. See ADR-0049.
 func (inst *DeferredBlockScope) ReleaseWithHint() {
 	if inst.capturing {
 		inst.getFffi().EndCapture()
 		inst.capturing = false
 	}
-	if inst.dataHint != nil && inst.dataBuf != nil {
-		observed := uint64(inst.dataBuf.Len())
-		for {
-			old := inst.dataHint.Load()
-			var next uint64
-			if observed >= old {
-				next = observed
-			} else {
-				next = old - ((old - observed) >> deferredHintDecayShift)
-			}
-			if next == old || inst.dataHint.CompareAndSwap(old, next) {
-				break
-			}
-		}
+	sh := inst.scope
+	if sh != nil && inst.dataBuf != nil {
+		foldHint(&sh.hint, uint64(inst.dataBuf.Len()))
 	}
+
+	// Recycle, unless an outlier frame grew a buffer past the ceiling.
+	// Emptying rather than dropping is what removes the per-frame
+	// allocation: both buffers and the entries slice keep their capacity
+	// for the next scope of this kind.
+	if sh != nil && inst.dataBuf != nil && inst.tempBuf != nil &&
+		inst.dataBuf.Cap() <= deferredPooledBufferCeiling &&
+		inst.tempBuf.Cap() <= deferredPooledBufferCeiling {
+		inst.entries = inst.entries[:0]
+		inst.dataBuf.Reset()
+		inst.tempBuf.Reset()
+		inst.getFffi = nil
+		inst.scope = nil
+		inst.released = true
+		sh.pool.Put(inst)
+		return
+	}
+
 	inst.entries = nil
 	inst.dataBuf = nil
 	inst.tempBuf = nil
 	inst.getFffi = nil
-	inst.dataHint = nil
+	inst.scope = nil
+	inst.released = true
 }
