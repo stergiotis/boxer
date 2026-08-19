@@ -111,7 +111,7 @@ eframe = { version = ">=0.35.0", optional = true, default-features = false, feat
 # `egui`/`eframe` deps).
 wgpu = { version = "29.0.1", optional = true }
 egui-wgpu = { version = "0.35.0", optional = true }
-pollster = { version = "0.4", optional = true }
+pollster = { version = "1.0", optional = true }
 # ADR-0024 SD4/SD6/SD7: WebSocket carrier + protobuf wire. The proto
 # contract lives at proto/boxer/imzero2/v1/input.proto; inputproto.rs
 # mirrors it with hand-tagged prost derives until protoc-based codegen
