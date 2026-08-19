@@ -143,7 +143,6 @@ func TestLogWriter_LogLineOnOwnRowAfterRender(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected clear-line + log + \\n sequence in %q", out)
 	}
-	after := after
 	if !strings.HasPrefix(after, "\r") {
 		t.Fatalf("expected next render frame to start with \\r after log line, got %q", after)
 	}
