@@ -111,7 +111,7 @@ eframe = { version = ">=0.35.0", optional = true, default-features = false, feat
 # `egui`/`eframe` deps).
 wgpu = { version = "29.0.1", optional = true }
 egui-wgpu = { version = "0.35.0", optional = true }
-pollster = { version = "0.4", optional = true }
+pollster = { version = "1.0", optional = true }
 # ADR-0024 SD4/SD6/SD7: WebSocket carrier + protobuf wire. The proto
 # contract lives at proto/boxer/imzero2/v1/input.proto; inputproto.rs
 # mirrors it with hand-tagged prost derives until protoc-based codegen
@@ -165,7 +165,7 @@ ttf-parser = "0.25"
 # in a given frame, embed as base64 @font-face for self-contained pixel-
 # perfect rendering. `subsetter` is Typst's pure-Rust subsetter.
 subsetter = "0.2"
-base64 = "0.22"
+base64 = "0.23"
 h3o = { version = "0.10", features = ["geo"] }
 # Concave-polygon fill for the painter (paintPolygonFilled.Concave()):
 # ear-clip triangulation → egui::Shape::Mesh, since epaint itself fills
