@@ -196,7 +196,7 @@ type ollamaRequest struct {
 	Model    string          `json:"model"`
 	Messages []ollamaMessage `json:"messages"`
 	Stream   bool            `json:"stream"`
-	Options  ollamaOptions   `json:"options,omitempty"`
+	Options  ollamaOptions   `json:"options"`
 }
 
 type ollamaResponse struct {
