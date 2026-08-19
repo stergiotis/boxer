@@ -228,9 +228,9 @@ func callerOrigin(skip int32) (out Origin) {
 func packageFromFuncName(name string) (pkg string) {
 	slash := strings.LastIndex(name, "/")
 	if slash < 0 {
-		dot := strings.Index(name, ".")
-		if dot >= 0 {
-			return name[:dot]
+		before, _, ok := strings.Cut(name, ".")
+		if ok {
+			return before
 		}
 		return name
 	}

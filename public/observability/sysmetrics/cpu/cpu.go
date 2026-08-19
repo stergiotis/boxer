@@ -465,8 +465,8 @@ func parseCPUSet(s string) (cpus []int32) {
 		if part == "" {
 			continue
 		}
-		dash := strings.IndexByte(part, '-')
-		if dash < 0 {
+		before, after, ok := strings.Cut(part, "-")
+		if !ok {
 			v, err := strconv.ParseInt(part, 10, 32)
 			if err != nil {
 				continue
@@ -474,8 +474,8 @@ func parseCPUSet(s string) (cpus []int32) {
 			cpus = append(cpus, int32(v))
 			continue
 		}
-		lo, errLo := strconv.ParseInt(part[:dash], 10, 32)
-		hi, errHi := strconv.ParseInt(part[dash+1:], 10, 32)
+		lo, errLo := strconv.ParseInt(before, 10, 32)
+		hi, errHi := strconv.ParseInt(after, 10, 32)
 		if errLo != nil || errHi != nil || lo > hi {
 			continue
 		}

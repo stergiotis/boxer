@@ -44,9 +44,9 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 	out.Membership = strings.TrimSpace(parts[0])
 	if len(parts) >= 2 {
 		s := strings.TrimSpace(parts[1])
-		if colonIdx := strings.IndexByte(s, ':'); colonIdx >= 0 {
-			out.Section = s[:colonIdx]
-			out.Column = s[colonIdx+1:]
+		if before, after, ok := strings.Cut(s, ":"); ok {
+			out.Section = before
+			out.Column = after
 		} else {
 			out.Section = s
 		}
@@ -279,9 +279,9 @@ func SplitTupleElemLW(tag string) (out ParsedTupleElemTag, err error) {
 		err = eb.Build().Str("tag", tag).Errorf("tuple element tag must start with `%s` or `<section>:<column>`", TupleMembershipMarker)
 		return
 	default:
-		if colonIdx := strings.IndexByte(head, ':'); colonIdx >= 0 {
-			out.Section = head[:colonIdx]
-			out.Column = head[colonIdx+1:]
+		if before, after, ok := strings.Cut(head, ":"); ok {
+			out.Section = before
+			out.Column = after
 		} else {
 			out.Section = head
 		}

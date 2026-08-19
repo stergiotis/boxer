@@ -87,11 +87,11 @@ func parsePxTable(t *testing.T, src string) (rows [][]float32) {
 		t.Fatal("PX_TABLE definition not found in spacing.rs")
 	}
 	tail := src[idx+len(startMark):]
-	end := strings.Index(tail, "];")
-	if end < 0 {
+	before, _, ok := strings.Cut(tail, "];")
+	if !ok {
 		t.Fatal("PX_TABLE close `];` not found")
 	}
-	body := tail[:end]
+	body := before
 	rowRe := regexp.MustCompile(`\[\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,?\s*\]`)
 	for _, m := range rowRe.FindAllStringSubmatch(body, -1) {
 		row := make([]float32, 3)

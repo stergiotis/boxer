@@ -96,8 +96,8 @@ func (inst *PlayApp) glossCatalog() *gloss.Catalog {
 // mediaTypeOnly strips a compact token's parameters: the block-face binding
 // keys on the type alone.
 func mediaTypeOnly(token string) string {
-	if i := strings.IndexByte(token, ';'); i >= 0 {
-		return token[:i]
+	if before, _, ok := strings.Cut(token, ";"); ok {
+		return before
 	}
 	return token
 }

@@ -1204,12 +1204,12 @@ func InjectParamsWithCasts(sets []string, query string, prefix string, mapCanoni
 	for _, set := range sets {
 		line := strings.TrimPrefix(set, "SET ")
 		line = strings.TrimSpace(line)
-		eqIdx := strings.Index(line, " = ")
-		if eqIdx < 0 {
+		before, after, ok := strings.Cut(line, " = ")
+		if !ok {
 			continue
 		}
-		name := line[:eqIdx]
-		value := line[eqIdx+3:]
+		name := before
+		value := after
 		castCanonical := ""
 		_, meta, parseErr := ParseParamName(name, prefix)
 		if parseErr == nil {

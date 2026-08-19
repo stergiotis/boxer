@@ -86,11 +86,11 @@ func columnBlock(t *testing.T, rel, sql string) (block string) {
 		t.Fatalf("%s: no %q — the store's table reference changed, or it no longer binds this table", rel, strings.TrimSuffix(open, " (\n"))
 	}
 	rest := sql[i+len(open):]
-	j := strings.Index(rest, "\n)")
-	if j < 0 {
+	before, _, ok := strings.Cut(rest, "\n)")
+	if !ok {
 		t.Fatalf("%s: column block is not closed by a line-leading ')'", rel)
 	}
-	return strings.TrimSpace(rest[:j])
+	return strings.TrimSpace(before)
 }
 
 // describeDrift names the first differing line and the count, rather than

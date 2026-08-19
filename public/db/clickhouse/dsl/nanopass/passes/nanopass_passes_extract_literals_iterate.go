@@ -139,14 +139,14 @@ func parseSetStatementToInfo(set string, prefix string) (info ExtractedParamInfo
 	line = strings.TrimPrefix(line, "SET ")
 	line = strings.TrimSpace(line)
 
-	eqIdx := strings.Index(line, " = ")
-	if eqIdx < 0 {
+	before, after, ok := strings.Cut(line, " = ")
+	if !ok {
 		err = eh.Errorf("invalid SET statement: no ' = ' found")
 		return
 	}
 
-	name := line[:eqIdx]
-	value := line[eqIdx+3:]
+	name := before
+	value := after
 
 	info.FullName = name
 	info.LiteralSQL = value

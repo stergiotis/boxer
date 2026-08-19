@@ -205,11 +205,11 @@ func (inst *JsonCardEmitter) chooseRef(mv membership.MembershipValue) (s string)
 }
 
 func substituteParam(path string, param string) (out string) {
-	idx := strings.Index(path, "_")
-	if idx < 0 {
+	before, after, ok := strings.Cut(path, "_")
+	if !ok {
 		return path + "/" + param
 	}
-	return path[:idx] + param + path[idx+1:]
+	return before + param + after
 }
 
 // labelObject serializes a secondary membership as a label object.

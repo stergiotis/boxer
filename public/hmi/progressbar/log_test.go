@@ -139,11 +139,11 @@ func TestLogWriter_LogLineOnOwnRowAfterRender(t *testing.T) {
 	out := buf.String()
 	// After the first render (ending in \x1b[K) we must see \r\x1b[2K,
 	// then the log, then \n, then another \r render-frame prefix.
-	idx := strings.Index(out, "\r\x1b[2Klog line 1\n")
-	if idx < 0 {
+	_, after, ok := strings.Cut(out, "\r\x1b[2Klog line 1\n")
+	if !ok {
 		t.Fatalf("expected clear-line + log + \\n sequence in %q", out)
 	}
-	after := out[idx+len("\r\x1b[2Klog line 1\n"):]
+	after := after
 	if !strings.HasPrefix(after, "\r") {
 		t.Fatalf("expected next render frame to start with \\r after log line, got %q", after)
 	}

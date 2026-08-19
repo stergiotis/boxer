@@ -238,11 +238,11 @@ func TestPruneUnreferencedParams_Idempotent(t *testing.T) {
 
 func setName(setLine string) string {
 	line := strings.TrimPrefix(setLine, "SET ")
-	eq := strings.Index(line, " = ")
-	if eq < 0 {
+	before, _, ok := strings.Cut(line, " = ")
+	if !ok {
 		return ""
 	}
-	return strings.TrimSpace(line[:eq])
+	return strings.TrimSpace(before)
 }
 
 // replaceSlot rewrites every `{name: Type}` slot occurrence in body with the

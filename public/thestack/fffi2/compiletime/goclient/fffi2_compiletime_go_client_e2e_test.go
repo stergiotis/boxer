@@ -599,9 +599,9 @@ func TestE2E_GoserverGoclientCodeConsistency(t *testing.T) {
 	t.Run("procedure_read_order_matches_write_order", func(t *testing.T) {
 		// goserver writes: FuncProcId, identity, r, g, b, a
 		// goclient should read in same order: identity, r, g, b, a (FuncProcId already consumed)
-		idIdx := strings.Index(gcDispatch, "u.ReadUInt64()")
-		u8Idx := strings.Index(gcDispatch, "u.ReadUInt8()")
-		if idIdx < 0 || u8Idx < 0 {
+		found := strings.Contains(gcDispatch, "u.ReadUInt64()")
+		found := strings.Contains(gcDispatch, "u.ReadUInt8()")
+		if !found || !found {
 			t.Fatalf("missing reads in dispatch")
 		}
 		// Identity must be read before the uint8 args

@@ -525,11 +525,11 @@ func splitParamSlotText(s string) (name, typ string) {
 		return
 	}
 	inner := s[1 : len(s)-1]
-	colon := strings.IndexByte(inner, ':')
-	if colon < 0 {
+	before, after, ok := strings.Cut(inner, ":")
+	if !ok {
 		return
 	}
-	name = strings.TrimSpace(inner[:colon])
-	typ = strings.TrimSpace(inner[colon+1:])
+	name = strings.TrimSpace(before)
+	typ = strings.TrimSpace(after)
 	return
 }
