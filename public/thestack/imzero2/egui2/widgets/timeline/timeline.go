@@ -116,7 +116,12 @@ type Visuals struct {
 	TooltipFgColor       color.Color
 	SelectionStrokeColor color.Color
 	NowLineColor         color.Color
-	AnnotationFgColor    color.Color
+	// PlayheadColor tints the caller-set instant marker. Deliberately not
+	// NowLineColor: the two can be on screen together, and a replay parked
+	// three hours back with both drawn in the same ink would read as one
+	// event twice rather than as two different instants.
+	PlayheadColor     color.Color
+	AnnotationFgColor color.Color
 	// LaneCursorColor tints the horizontal lane cursor — the rule marking
 	// the click-selected lane. Defaults to the same faint border token the
 	// vertical hover crosshair uses, because the cursor is a locator, not
@@ -206,6 +211,10 @@ func DefaultVisuals() (v Visuals) {
 	v.TooltipFgColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
 	v.SelectionStrokeColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
 	v.NowLineColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
+	// Warning, for the same reason a replayed view is banner-warned: the
+	// playhead marks a moment that is not now, and the palette should say so
+	// before the axis has to be read.
+	v.PlayheadColor = color.Hex(styletokens.WarningDefault.AsHex()).Keep()
 	v.AnnotationFgColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
 	v.LaneCursorColor = color.Hex(styletokens.NeutralBorderFaint.AsHex()).Keep()
 	// Brush palette. The track is the panel ground the strip sits on; the
@@ -289,7 +298,13 @@ const (
 	// a caller needs to tune.
 	annotationMaxFlagRows int32   = 3
 	nowLineWidthPx        float32 = 1.5
-	emptyFallback                 = 1 * time.Hour
+	// The playhead's rule is heavier than the now line's and carries a caret,
+	// because it is the mark the user is steering: it has to be findable on a
+	// strip already carrying bands, a rug and a brush.
+	playheadWidthPx float32 = 2
+	playheadCaretW  float32 = 9
+	playheadCaretH  float32 = 6
+	emptyFallback           = 1 * time.Hour
 	// canvasIdKey names the PaintCanvas this widget drains into. It is a
 	// const because the id is derived twice per frame: once at the top of
 	// renderBody to read last frame's response flags (the pan gate), and
@@ -524,8 +539,13 @@ type Timeline struct {
 
 	onSelection SelectionListener
 
-	backgroundBands  BackgroundBandProducer
-	nowLineEnabled   bool
+	backgroundBands BackgroundBandProducer
+	nowLineEnabled  bool
+	// playheadMS is the caller-set instant, valid only while playheadHas.
+	// Zero is a real epoch millisecond, so presence needs its own flag rather
+	// than a sentinel.
+	playheadMS       int64
+	playheadHas      bool
 	intensityEncoded bool
 	intervalColors   []color.Color // categorical interval palette (KindID-indexed); overrides intensity when non-empty
 
@@ -879,6 +899,48 @@ func (inst *Timeline) SetPoints(points []*layout.PointEvent) {
 // Validation: none — both true and false are valid.
 func (inst *Timeline) SetNowLine(enabled bool) {
 	inst.nowLineEnabled = enabled
+}
+
+// SetPlayhead marks one instant on the canvas: a vertical rule with a caret
+// at its head, at tMS (epoch milliseconds, UTC).
+//
+// It is for a caller that is *moving through* the timeline rather than looking
+// at it — a replay transport marking where playback has got to, a scrubber,
+// a step-debugger's current frame. The now line answers "where is the
+// present"; this answers "where am I", and the two are different questions
+// whenever the view is historical.
+//
+// There is no WithPlayhead: an instant that never moves is an annotation, and
+// annotations already carry the flag, the number and the selection a fixed
+// marker wants. Set it per frame from whatever the caller is tracking.
+//
+// Like the now line, it paints only while tMS falls inside the view and
+// vanishes silently otherwise — a mark clamped to the edge would claim a
+// position it does not have.
+//
+// Validation: any int64 is accepted; an off-view value simply does not paint.
+func (inst *Timeline) SetPlayhead(tMS int64) {
+	inst.playheadMS, inst.playheadHas = tMS, true
+}
+
+// ClearPlayhead drops the instant marker. Call it when the caller has no
+// position to report — before playback reaches its first frame, or after a
+// seek has invalidated the last one — rather than leaving the previous mark
+// standing, which would point at a moment nothing is showing.
+func (inst *Timeline) ClearPlayhead() {
+	inst.playheadMS, inst.playheadHas = 0, false
+}
+
+// Playhead returns the marked instant. ok is false when none is set.
+//
+// Validation: snapshot at boundary — the value is whatever the last
+// SetPlayhead/ClearPlayhead left, not something the widget derives.
+func (inst *Timeline) Playhead() (tMS int64, ok bool) {
+	if !inst.playheadHas {
+		return
+	}
+	tMS, ok = inst.playheadMS, true
+	return
 }
 
 // SetIntensityEncoding toggles intensity-driven fills at runtime — runtime
@@ -1266,6 +1328,10 @@ func (inst *Timeline) renderBody() {
 	inst.paintRolloverRows(tm, vl)
 	inst.paintAnnotations(fl, vl)
 	inst.paintNowLine(tm, vl, viewMinMS, viewMaxMS)
+	// After the now line: when a replay is parked at the present the two
+	// coincide, and the mark the user is steering is the one that must stay
+	// legible.
+	inst.paintPlayhead(tm, vl, viewMinMS, viewMaxMS)
 
 	if inst.interactionEnabled && cursorInsideCanvas(cp, effW, vl.totalH) && cp.HoverX >= vl.axisStartPx {
 		inst.cursorTimeMS = tm.MapXToMS(float64(cp.HoverX))
@@ -1797,6 +1863,41 @@ func (inst *Timeline) paintNowLine(tm layout.TickMap, vl verticalLayout, viewMin
 		return
 	}
 	c.PaintLine(x, vl.topReserved, x, vl.axisBaselineY, inst.visuals.NowLineColor, nowLineWidthPx).Send()
+}
+
+// paintPlayhead renders the caller-set instant marker: a rule down the data
+// area with a downward caret at its head.
+//
+// The caret is what separates it from every other vertical line on the canvas
+// — the now line, the hover crosshair, an annotation's dash. A rule alone
+// would be a fourth one to tell apart by colour, and colour is already
+// carrying the availability bands and the rug underneath it.
+func (inst *Timeline) paintPlayhead(tm layout.TickMap, vl verticalLayout, viewMinMS, viewMaxMS int64) {
+	if !inst.playheadHas {
+		return
+	}
+	if inst.playheadMS < viewMinMS || inst.playheadMS > viewMaxMS {
+		return
+	}
+	x := float32(tm.MapMSToX(inst.playheadMS))
+	if x < vl.axisStartPx || x > vl.axisEndPx {
+		return
+	}
+	col := inst.visuals.PlayheadColor
+	c.PaintLine(x, vl.topReserved, x, vl.axisBaselineY, col, playheadWidthPx).Send()
+	// The caret is clipped to the axis rather than centred blindly: at either
+	// end of the view half of it would otherwise be drawn over the lane labels
+	// or past the canvas edge, which reads as a different glyph.
+	half := playheadCaretW / 2
+	x0, x1, ok := vl.clipToAxis(x-half, x+half)
+	if !ok {
+		return
+	}
+	y := vl.topReserved
+	c.PaintPolygonFilled(
+		[]float32{x0, x1, x},
+		[]float32{y, y, y + playheadCaretH},
+		col).Send()
 }
 
 // paintAnnotations renders the Grafana-style annotation markers: one

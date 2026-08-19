@@ -63,6 +63,11 @@ func init() {
 				timeline.WithBrush(func(r timeline.BrushRange, ok bool) {
 					s.pushClick(formatBrushClickLine(r, ok))
 				}))
+			// The playhead: one instant a caller is stepping through, marked
+			// with a caret. Pinned into the fixture rather than at time.Now(),
+			// which is months past the fixture's three days and would put the
+			// mark off-view — the same reason the now line never appears here.
+			s.tl.SetPlayhead(timelineDemoPlayheadMS())
 			state = s
 			return
 		},
@@ -71,7 +76,8 @@ func init() {
 			c.Label("Timeline visualization — LifeLines-style mixed point + interval events on a calendar axis (ADR-0043).").Send()
 			c.Label("Top rug strip: ~150 PCG-seeded synthetic git commits over 3 days. Lane bars: 20 LLM sessions in three provider rows (claude / gpt / gemini).").Send()
 			c.Label("Annotation flags at the very top mark deploys/alerts/releases (6 sample markers); click a flag or its dashed line to select. The alert + hotfix pair sits too close for one row, so those flags stagger into a second row instead of overlapping.").Send()
-			c.Label("Background bands (iter.Seq, computed each frame from the view range): muted weekend shade + warm office-hours overlay 09–17. Bright vertical line = now.").Send()
+			c.Label("Background bands (iter.Seq, computed each frame from the view range): muted weekend shade + warm office-hours overlay 09–17. A bright vertical line marks now — the fixture is a fixed three days in the past, so it is off-view here and the widget draws nothing rather than clamping it to an edge.").Send()
+			c.Label("Amber rule with a caret at its head = the playhead: one instant a caller is stepping through, set per frame via SetPlayhead. Pinned into the fixture here; imztop's replay strip drives it from where playback has got to.").Send()
 			c.Label("Click a bare stretch of a lane row (past the bars) to select the whole row: a faint hairline runs the lane's full width, painted under the bars so it never strikes through an event. Bars win over the row they sit on; the gap below a row belongs to it.").Send()
 			c.Label("Hover for tooltip · click to select (outline + card below) · Ctrl+scroll over a session zooms anchored at the cursor · drag to pan through time.").Send()
 			c.Label("Thin strip under the axis: drag it to brush a time range. It is a separate surface, so brushing never pans and panning never brushes; a click on it clears.").Send()
@@ -237,8 +243,23 @@ func renderSiblingAnnotationPanel(ids *c.WidgetIdStack, s *timelineDemoState) {
 // the timeline demo. Three LaneHint categories ("claude", "gpt", "gemini")
 // keep one row per provider; intentional within-row overlap exercises the
 // hint-pin "caller-asserted invariant" rule (vs. greedy-auto packing).
+// timelineDemoPlayheadMS is where the demo parks its playhead: mid-way through
+// the fifth session, so the caret lands on data rather than in a gap and the
+// rule visibly crosses a bar.
+func timelineDemoPlayheadMS() (tMS int64) {
+	tMS = timelineFixtureBaseMS() + int64(5*time.Hour/time.Millisecond) + int64(30*time.Minute/time.Millisecond)
+	return
+}
+
+// timelineFixtureBaseMS is the fixture's anchor. Fixed rather than relative to
+// now so the demo's captures are reproducible.
+func timelineFixtureBaseMS() (ms int64) {
+	ms = time.Date(2026, 5, 15, 9, 0, 0, 0, time.UTC).UnixMilli()
+	return
+}
+
 func makeTimelineFixture() (events []*layout.IntervalEvent) {
-	base := time.Date(2026, 5, 15, 9, 0, 0, 0, time.UTC).UnixMilli()
+	base := timelineFixtureBaseMS()
 	day := int64(24 * time.Hour / time.Millisecond)
 	hour := int64(time.Hour / time.Millisecond)
 	minute := int64(time.Minute / time.Millisecond)

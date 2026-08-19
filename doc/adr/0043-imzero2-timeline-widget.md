@@ -135,6 +135,53 @@ See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-pol
 
 ## Updates
 
+### 2026-08-19 — The playhead: a caller-set instant marker (adds SD18)
+
+**Built.** Verified in the widget gallery before imztop drove it, as SD16 was.
+
+SD14 gave the widget a now line: a rule at `time.Now()`, painted only while the
+present falls inside the view. That answers *where is the present*. A caller
+stepping **through** a timeline — ADR-0197's replay transport, a scrubber, a
+step debugger — is asking a different question, *where am I*, and on a
+historical view the two answers are never the same instant. imztop had the
+position and could only state it as text in the transport row ("at 10:19:51"),
+which answers it for someone already reading that row; on the strip it is a
+position among the availability bands and the load rug, which is where the
+question is actually asked.
+
+- **SD18 — One caller-set instant, marked with a caret.** `SetPlayhead(tMS)` /
+  `ClearPlayhead()` / `Playhead()`, painted after the now line as a rule down
+  the data area with a downward caret at its head, in `Visuals.PlayheadColor`.
+
+**Why a caret and its own colour.** The canvas already carries three vertical
+lines — the now line, the hover crosshair, an annotation's dash — and a fourth
+plain rule would be one more to tell apart by colour alone, on a surface where
+colour is already carrying the bands and the rug. The caret makes it a
+different glyph rather than a different shade. The colour is warning-toned for
+the same reason a replayed view is banner-warned: the mark is a moment that is
+not now, and the palette should say so before the axis has to be read.
+
+**Why no `WithPlayhead`.** An instant that never moves is an annotation, and
+annotations already carry the flag, the number and the selection a fixed marker
+wants. The playhead is set per frame from whatever the caller is tracking, so
+there is nothing for a constructor option to hold.
+
+**Off-view stays silent**, matching the now line: a mark clamped to the edge
+would claim a position it does not have. Pinning it to the edge with a
+direction indicator was considered and left out — it changes behaviour for all
+three callers to serve one, and the caller that wants it can compare
+`Playhead()` against `ViewRange()` itself.
+
+**Found while adding it: the gallery's now-line claim was false.** The demo
+said "Bright vertical line = now" while its fixture is a fixed three days in
+May 2026, so `time.Now()` has been outside the view since the demo was written
+and the line has never rendered there. The text now says so, and the playhead —
+pinned into the fixture — gives the pair of marks their first visual coverage.
+
+**Compatibility.** Additive: no marker unless a caller sets one, so
+`play-timeline`, `play-detail-timeline` and every existing gallery scene render
+exactly as before.
+
 ### 2026-08-18 — Range brush on a dedicated strip (adds SD16, does not touch the canvas gesture)
 
 **Built.** Written before the code per the design-before-code rule, then
