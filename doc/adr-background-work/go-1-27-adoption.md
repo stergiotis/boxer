@@ -12,8 +12,10 @@ status: draft
 > the `go tool` delivery probe, the `goroutineleak` shape and cost, the
 > `stdversion` fallout and the `go mod tidy` churn are all measured, in a
 > detached worktree at `29733c55`. Claims still taken from the release notes
-> rather than measured are marked as such. Feeds a not-yet-written ADR; once
-> that exists it is authoritative and this is a snapshot.
+> rather than measured are marked as such. Feeds
+> [ADR-0199](../adr/0199-adopt-go-1-27.md), which is authoritative once
+> accepted; this page is the reasoning behind it, not a description of current
+> behaviour. Its milestone numbering predates the ADR's and differs.
 
 # Go 1.27 — what it retires, what it unlocks, and what the adoption costs
 
