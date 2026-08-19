@@ -53,7 +53,7 @@ func (inst *AntlrTreeToCbor[E]) convert(parser antlr.Recognizer, tree antlr.Tree
 		tmpC := make([]int, 0, n)
 		l := uint64(0)
 		// gather children by name (rule name or alternative label)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			child := tree.GetChild(i)
 			//var tn string
 			var t int

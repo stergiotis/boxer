@@ -9,7 +9,7 @@ const MagicByteAnchor = 0b10101010
 
 func MakeAnchor(nBytes int) []byte {
 	v := make([]byte, 0, nBytes)
-	for i := 0; i < nBytes; i++ {
+	for range nBytes {
 		v = append(v, MagicByteAnchor)
 	}
 	return v

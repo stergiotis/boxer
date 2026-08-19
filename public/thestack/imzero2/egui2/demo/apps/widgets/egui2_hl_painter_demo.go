@@ -85,11 +85,11 @@ func demoPainterShapes(ids *c.WidgetIdStack) {
 	}
 
 	// Background grid lines
-	for ix := 0; ix < 10; ix++ {
+	for ix := range 10 {
 		x := float32(ix) * 40.0
 		c.PaintLine(x, 0.0, x, 300.0, color.Hex(0x33333344), 0.5).Send()
 	}
-	for iy := 0; iy < 8; iy++ {
+	for iy := range 8 {
 		y := float32(iy) * 40.0
 		c.PaintLine(0.0, y, 400.0, y, color.Hex(0x33333344), 0.5).Send()
 	}
@@ -118,7 +118,7 @@ func demoPainterShapes(ids *c.WidgetIdStack) {
 	// Polyline (zigzag)
 	zigzagXs := make([]float32, 10)
 	zigzagYs := make([]float32, 10)
-	for ip := 0; ip < 10; ip++ {
+	for ip := range 10 {
 		zigzagXs[ip] = 40.0 + float32(ip)*35.0
 		if ip%2 == 0 {
 			zigzagYs[ip] = 220.0
@@ -334,7 +334,7 @@ func demoPainterClock(ids *c.WidgetIdStack, st *painterDemoState) {
 	c.PaintCircleStroke(cx, cy, radius, color.Hex(0x8888aaff), styletokens.StrokeStrong).Send()
 
 	// Hour marks
-	for ih := 0; ih < 12; ih++ {
+	for ih := range 12 {
 		angle := float64(ih) * math.Pi / 6.0
 		innerR := float64(radius) * 0.85
 		outerR := float64(radius) * 0.95

@@ -39,7 +39,7 @@ import (
 func drainNFromChan(t *testing.T, ch <-chan batchWithAckFn, n int) (out []batchWithAckFn) {
 	t.Helper()
 	out = make([]batchWithAckFn, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		select {
 		case b := <-ch:
 			out = append(out, b)

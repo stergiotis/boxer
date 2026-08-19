@@ -303,8 +303,8 @@ func TestRowComposer_TupleCardinalityRoundTrip(t *testing.T) {
 	require.Equal(t, int64(2), textReader.GetAttributes().GetNumberOfAttributes(raruntime.EntityIdx(0)))
 	require.Equal(t, int64(2), textReader.GetAttributes().GetNumberOfAttributes(raruntime.EntityIdx(1)))
 	var labels []string
-	for entity := 0; entity < 2; entity++ {
-		for attrJ := int64(0); attrJ < 2; attrJ++ {
+	for entity := range 2 {
+		for attrJ := range int64(2) {
 			for mv := range textReader.GetMemberships().GetMembValueLowCardVerbatim(raruntime.EntityIdx(entity), raruntime.AttributeIdx(attrJ)) {
 				labels = append(labels, string(mv))
 			}

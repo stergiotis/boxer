@@ -115,7 +115,7 @@ func TestReflect_TupleRefSlice_DMLByteIdentityAndRoundTrip(t *testing.T) {
 
 	// The wire really carries 3 / 1 / 0 ref memberships on entity 0's attrs.
 	var counts []int
-	for attrJ := int64(0); attrJ < 3; attrJ++ {
+	for attrJ := range int64(3) {
 		c := 0
 		for range symReader.GetMemberships().GetMembValueLowCardRef(raruntime.EntityIdx(0), raruntime.AttributeIdx(attrJ)) {
 			c++

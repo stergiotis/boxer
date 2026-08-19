@@ -85,10 +85,10 @@ func TestRuntime_ConcurrentAcquire(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(workers)
-	for i := 0; i < workers; i++ {
+	for range workers {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < opsPerWorker; j++ {
+			for range opsPerWorker {
 				h, err := rt.AcquireE(ctx)
 				if err != nil {
 					t.Errorf("AcquireE: %v", err)

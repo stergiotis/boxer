@@ -580,7 +580,7 @@ func TestItemMarker_PadsToTheWidestMarker(t *testing.T) {
 		t.Errorf("tenth of ten: got %q want %q", got, want)
 	}
 	// Every marker in one list is the same width, whatever the digits.
-	for i := uint32(0); i < 10; i++ {
+	for i := range uint32(10) {
 		if got := itemMarker(s, i); len(got) != 4 {
 			t.Errorf("item %d: marker %q is %d bytes, want a uniform 4", i, got, len(got))
 		}

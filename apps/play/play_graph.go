@@ -758,7 +758,7 @@ func fingerprintRecord(rec arrow.RecordBatch) (fp uint64) {
 	binary.LittleEndian.PutUint64(scratch[:], uint64(rec.NumRows()))
 	_, _ = h.Write(scratch[:])
 	ncols := int(rec.NumCols())
-	for c := 0; c < ncols; c++ {
+	for c := range ncols {
 		for _, buf := range rec.Column(c).Data().Buffers() {
 			if buf != nil {
 				_, _ = h.Write(buf.Bytes())

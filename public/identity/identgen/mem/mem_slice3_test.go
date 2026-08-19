@@ -26,7 +26,7 @@ func TestAppendIds_ExactCapacityCheck(t *testing.T) {
 	keys.Data = make([]byte, 0, capacity*8)
 	keys.Ends = make([]uint32, 0, capacity)
 	buf := make([]byte, 8)
-	for i := 0; i < capacity; i++ {
+	for i := range capacity {
 		for j := range buf {
 			buf[j] = byte(i >> (8 * j))
 		}
@@ -66,7 +66,7 @@ func TestAppendIds_DuplicatesChargedOnce(t *testing.T) {
 	const capacity = 1<<17 - 1
 
 	var keys identgen.KeysColumn
-	for i := 0; i < capacity+50; i++ { // 50 more entries than the space holds
+	for i := range capacity + 50 { // 50 more entries than the space holds
 		keys = keys.AppendKey([]byte{byte(i % 200)}) // but only 200 distinct keys
 	}
 	ids, fresh, err := gen.AppendIds(context.Background(), nil, keys, make([]bool, 0))

@@ -30,16 +30,16 @@ func TestBar_TickAddAreAtomicAndAccurate(t *testing.T) {
 	const N = 1000
 	const G = 8
 	var wg sync.WaitGroup
-	for i := 0; i < G; i++ {
+	for range G {
 		wg.Go(func() {
-			for j := 0; j < N; j++ {
+			for range N {
 				bar.Tick()
 			}
 		})
 	}
-	for i := 0; i < G; i++ {
+	for range G {
 		wg.Go(func() {
-			for j := 0; j < N; j++ {
+			for range N {
 				bar.Add(1)
 			}
 		})

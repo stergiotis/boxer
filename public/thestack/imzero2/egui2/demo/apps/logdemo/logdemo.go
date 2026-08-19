@@ -226,7 +226,7 @@ func (inst *App) render() {
 		c.Separator().Vertical().Send()
 		if c.Button(inst.ids.PrepareStr("emit-burst"), c.Atoms().Text("Burst (5×info)").Keep()).
 			SendResp().HasPrimaryClicked() {
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				inst.emit(zerolog.InfoLevel, fmt.Sprintf("burst %d/5", i+1))
 			}
 		}

@@ -99,10 +99,10 @@ func viridisRGBA(v float64) uint32 {
 func buildScrollingTextureBuffer(buf []uint32) {
 	w := int(scrollingTextureDemoWidth)
 	h := int(scrollingTextureDemoHeight)
-	for col := 0; col < w; col++ {
+	for col := range w {
 		tPhase := float64(col) / float64(w)
 		freq := 3.0 + tPhase*8.0
-		for row := 0; row < h; row++ {
+		for row := range h {
 			norm := float64(row) / float64(h)
 			intensity := math.Sin(norm*freq*math.Pi*2+tPhase*4)*0.5 + 0.5
 			buf[col*h+row] = viridisRGBA(intensity)

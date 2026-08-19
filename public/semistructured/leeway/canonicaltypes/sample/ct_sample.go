@@ -112,7 +112,7 @@ func GenerateSampleGroup(nMembers int, rnd *rand.Rand, accept func(ct canonicalt
 		return
 	}
 	members := make([]canonicaltypes2.PrimitiveAstNodeI, 0, nMembers)
-	for i := 0; i < nMembers; i++ {
+	for range nMembers {
 		var ct canonicaltypes2.PrimitiveAstNodeI
 		for {
 			ct = GenerateSampleType(rnd.Uint64())

@@ -279,7 +279,7 @@ func TestClient_AllocateInbox_UniquePerCall(t *testing.T) {
 	inst := newInst(t)
 	c := &Client{inst: inst, appId: "x"}
 	seen := make(map[string]struct{}, 64)
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		inbox := c.allocateInbox()
 		_, dup := seen[inbox]
 		require.False(t, dup, "duplicate inbox %s", inbox)

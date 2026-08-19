@@ -217,7 +217,7 @@ func demoLargeTable(ids *c.WidgetIdStack) {
 	c.TableHeaderText("Description").Send()
 	c.TableHeaderText("Value").Send()
 
-	for i := 0; i < numRows; i++ {
+	for i := range numRows {
 		c.TableCellText(fmt.Sprintf("%d", i)).Send()
 		c.TableCellText(fmt.Sprintf("Item number %d", i)).Send()
 		c.TableCellText(fmt.Sprintf("%.2f", float64(i)*3.14)).Send()

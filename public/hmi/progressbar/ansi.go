@@ -126,7 +126,7 @@ func (inst *Bar) renderIndeterminateANSI(n int64, elapsed time.Duration, spinner
 		pos = barW*2 - pos - 1
 	}
 	var bar strings.Builder
-	for i := 0; i < barW; i++ {
+	for i := range barW {
 		dist := pos - i
 		if dist < 0 {
 			dist = -dist

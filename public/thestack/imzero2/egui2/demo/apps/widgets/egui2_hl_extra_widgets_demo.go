@@ -178,7 +178,7 @@ func demoExtraWidgets(ids *c.WidgetIdStack, st *extraWidgetsDemoState) {
 			}
 			for range dock.Tab(3, "log") {
 				for range c.ScrollArea().Vscroll(true).KeepIter() {
-					for i := 0; i < 40; i++ {
+					for i := range 40 {
 						c.Label(fmt.Sprintf("log line %d", i)).Send()
 					}
 				}

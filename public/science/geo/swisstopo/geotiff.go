@@ -78,8 +78,8 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 
 	// decode each internal tile
 	var tileIdx int32
-	for ty := int32(0); ty < tilesDown; ty++ {
-		for tx := int32(0); tx < tilesAcross; tx++ {
+	for ty := range tilesDown {
+		for tx := range tilesAcross {
 			var tilePixels []float32
 			tilePixels, err = decodeLZWTile(data, tileOffsets[tileIdx], tileByteCounts[tileIdx], tiffTileWidth, tiffTileLength)
 			if err != nil {
@@ -91,12 +91,12 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 			{ // blit tile into pixel buffer
 				srcRowStart := ty * tiffTileLength
 				srcColStart := tx * tiffTileWidth
-				for row := int32(0); row < tiffTileLength; row++ {
+				for row := range tiffTileLength {
 					dstRow := srcRowStart + row
 					if dstRow >= pixelHeight {
 						break
 					}
-					for col := int32(0); col < tiffTileWidth; col++ {
+					for col := range tiffTileWidth {
 						dstCol := srcColStart + col
 						if dstCol >= pixelWidth {
 							break
@@ -123,7 +123,7 @@ func parseTIFFIFD(data []byte, ifdOffset uint32) (tileOffsets []uint32, tileByte
 	numEntries := binary.LittleEndian.Uint16(data[ifdOffset : ifdOffset+2])
 	pos := ifdOffset + 2
 
-	for i := uint16(0); i < numEntries; i++ {
+	for i := range numEntries {
 		if int(pos)+12 > len(data) {
 			err = eh.Errorf("IFD entry %d out of range: %w", i, fmt.Errorf("truncated"))
 			return
@@ -176,13 +176,13 @@ func readUint32Array(data []byte, fieldType uint16, count uint32, valueOffset ui
 			// inline: values packed into the 4-byte value/offset field
 			var buf [4]byte
 			binary.LittleEndian.PutUint32(buf[:], valueOffset)
-			for i := uint32(0); i < count; i++ {
+			for i := range count {
 				values[i] = uint32(binary.LittleEndian.Uint16(buf[i*2 : i*2+2]))
 			}
 		} else {
 			// stored at file offset
 			off := valueOffset
-			for i := uint32(0); i < count; i++ {
+			for i := range count {
 				if int(off)+2 > len(data) {
 					err = eh.Errorf("SHORT array out of range at index %d: %w", i, fmt.Errorf("truncated"))
 					return
@@ -198,7 +198,7 @@ func readUint32Array(data []byte, fieldType uint16, count uint32, valueOffset ui
 		} else {
 			// stored at file offset
 			off := valueOffset
-			for i := uint32(0); i < count; i++ {
+			for i := range count {
 				if int(off)+4 > len(data) {
 					err = eh.Errorf("LONG array out of range at index %d: %w", i, fmt.Errorf("truncated"))
 					return
@@ -247,7 +247,7 @@ func decodeLZWTile(data []byte, offset uint32, byteCount uint32, tileW int32, ti
 	// interpret as little-endian float32
 	pixelCount := tileW * tileH
 	pixels = make([]float32, pixelCount)
-	for i := int32(0); i < pixelCount; i++ {
+	for i := range pixelCount {
 		off := i * bytesPerSample
 		bits := binary.LittleEndian.Uint32(decoded[off : off+bytesPerSample])
 		pixels[i] = math.Float32frombits(bits)

@@ -50,7 +50,7 @@ func makeAbsent() M1Sample {
 func makeBitmapLarge() M1Sample {
 	s := makeDense()
 	bm := roaring.New()
-	for i := uint32(0); i < 10_000; i++ {
+	for i := range uint32(10_000) {
 		bm.Add(i * 13)
 	}
 	s.CapBits = bm
@@ -78,7 +78,7 @@ func BenchmarkM1Sample_MarshalSingleRow(b *testing.B) {
 func BenchmarkM1Sample_MarshalBatch_1000(b *testing.B) {
 	row := makeDense()
 	cols := &M1SampleColumns{}
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		cols.Append(row)
 	}
 	b.ReportAllocs()

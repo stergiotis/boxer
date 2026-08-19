@@ -14,7 +14,7 @@ func makeLatLngCorpus(n int) (lats, lngs []float64) {
 	lats = make([]float64, n)
 	lngs = make([]float64, n)
 	r := rand.New(rand.NewPCG(1, 2))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		lats[i] = r.Float64()*180.0 - 90.0
 		lngs[i] = r.Float64()*360.0 - 180.0
 	}
@@ -104,7 +104,7 @@ func BenchmarkLatLngsToCells_PerElement(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		for j := 0; j < n; j++ {
+		for j := range n {
 			var err error
 			cellsDst, statusDst, err = h.LatLngsToCellsE(
 				context.Background(), ResolutionR9,

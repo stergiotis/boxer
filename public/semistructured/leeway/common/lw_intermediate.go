@@ -91,7 +91,7 @@ func (inst *IntermediateColumnProps) Length() int {
 func (inst *IntermediateColumnProps) IterateColumnIndex() iter.Seq[int] {
 	return func(yield func(int) bool) {
 		l := inst.Length()
-		for i := 0; i < l; i++ {
+		for i := range l {
 			if !yield(i) {
 				return
 			}

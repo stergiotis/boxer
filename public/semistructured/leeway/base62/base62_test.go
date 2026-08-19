@@ -9,7 +9,7 @@ import (
 
 func TestRoundtrip(t *testing.T) {
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		n := rnd.Uint64()
 		n2, valid := Encode(n).Decode()
 		require.True(t, valid)

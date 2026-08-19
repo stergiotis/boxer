@@ -154,7 +154,7 @@ func TestRegressionR6_FailedFetchDoesNotGrowL1(t *testing.T) {
 		WithStash[string, int, int](NewSliceStash[string, int](2)))
 
 	for range c.WorkItem(1) {
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			c.Get(fmt.Sprintf("k-%d", i))
 		}
 	}
@@ -260,7 +260,7 @@ func TestRegressionR10_NegativeCachingQuiescesAbsentKeys(t *testing.T) {
 	}
 
 	quiesced := false
-	for round := 0; round < 5; round++ {
+	for range 5 {
 		n := 0
 		for range c.IterateRestWorkItems(context.Background()) {
 			n++
@@ -293,7 +293,7 @@ func TestRegressionR10_DefaultKeepsReprobingAbsentKeys(t *testing.T) {
 	for range c.WorkItem(1) {
 		step()
 	}
-	for round := 0; round < 3; round++ {
+	for range 3 {
 		n := 0
 		for range c.IterateRestWorkItems(context.Background()) {
 			n++

@@ -81,7 +81,7 @@ func TestIterateSortedUniqueOrderedUnique(t *testing.T) {
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	var l1, l2 int
 	var s1, s2, s3 []uint32
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		l1 = rnd.IntN(7)
 		l2 = rnd.IntN(7)
 		s1 = slices.Grow(s1, l1)

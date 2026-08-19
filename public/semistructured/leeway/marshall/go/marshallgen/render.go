@@ -48,7 +48,7 @@ func linef(sb *strings.Builder, depth int, format string, a ...any) {
 func blank(sb *strings.Builder) { sb.WriteByte('\n') }
 
 func writeIndent(sb *strings.Builder, depth int) {
-	for i := 0; i < depth; i++ {
+	for range depth {
 		sb.WriteByte('\t')
 	}
 }

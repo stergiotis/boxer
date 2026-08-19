@@ -3492,7 +3492,7 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 	// otherwise fit.
 	cellPadX := styletokens.PaddingTight(inst.density)
 	glossCols := inst.glossColumns(schema)
-	for col := 0; col < ncols; col++ {
+	for col := range ncols {
 		// The header shows the friendly label when there is one, so size to it
 		// rather than the (longer) physical name — plus the short type tag it
 		// renders beside the label, which is part of the header's width. A
@@ -3512,7 +3512,7 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 		if gc.mediaType != "" {
 			maxChars += 1 + utf8.RuneCountInString(gc.mediaType)
 		}
-		for r := int64(0); r < sampleN; r++ {
+		for r := range sampleN {
 			text, _ := inst.glossCell(gc, rec.Column(col), pageStart+r, false)
 			if n := utf8.RuneCountInString(text); n > maxChars {
 				maxChars = n

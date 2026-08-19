@@ -123,10 +123,10 @@ func PreprocessFeatureMatrix(m *mat.Dense) (err error) {
 
 	col := make([]float64, nRows)
 
-	for fi := int32(0); fi < int32(NumFeatures); fi++ {
+	for fi := range int32(NumFeatures) {
 		doLog := LogTransformFeature[fi]
 
-		for ri := 0; ri < nRows; ri++ {
+		for ri := range nRows {
 			v := data[ri*stride+int(fi)]
 			if math.IsNaN(v) || math.IsInf(v, 0) {
 				err = eh.Errorf("feature %d has NaN/Inf at row %d", fi, ri)
@@ -155,13 +155,13 @@ func PreprocessFeatureMatrix(m *mat.Dense) (err error) {
 		std := math.Sqrt(variance / float64(nRows))
 
 		if std < 1e-12 {
-			for ri := 0; ri < nRows; ri++ {
+			for ri := range nRows {
 				data[ri*stride+int(fi)] = 0
 			}
 			continue
 		}
 		invStd := 1.0 / std
-		for ri := 0; ri < nRows; ri++ {
+		for ri := range nRows {
 			data[ri*stride+int(fi)] = (col[ri] - mean) * invStd
 		}
 	}
@@ -234,7 +234,7 @@ func RunUMAP(m *mat.Dense, opts UMAPOptions) (coords [][2]float64, err error) {
 
 	dims := uopts.NComponents
 	coords = make([][2]float64, nRows)
-	for i := 0; i < nRows; i++ {
+	for i := range nRows {
 		row := emb[i]
 		if len(row) < 2 || dims < 2 {
 			coords[i] = [2]float64{row[0], 0}
@@ -268,7 +268,7 @@ func selectUMAPInitMethod(nRows int, requested string) string {
 func denseToRows(m *mat.Dense) (rows [][]float64) {
 	nRows, _ := m.Dims()
 	rows = make([][]float64, nRows)
-	for i := 0; i < nRows; i++ {
+	for i := range nRows {
 		rows[i] = m.RawRowView(i)
 	}
 	return

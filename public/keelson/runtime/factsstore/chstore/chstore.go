@@ -592,7 +592,7 @@ func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) 
 	id = inst.nextId.Add(1)
 	ts := defaultTs(row.Ts)
 	var tk [8]byte
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		tk[i] = byte(row.TileKey >> (8 * (7 - i)))
 	}
 	nk := naturalKeyFor("launch", row.TargetAppId, []byte(row.RunId), tk[:])
@@ -741,7 +741,7 @@ func naturalKeyForLifecycle(runId string, appId app.AppIdT, tileKey uint64, phas
 	_, _ = h.Write([]byte(appId))
 	_, _ = h.Write([]byte{0})
 	var tk [8]byte
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		tk[i] = byte(tileKey >> (8 * (7 - i)))
 	}
 	_, _ = h.Write(tk[:])
@@ -764,7 +764,7 @@ func naturalKeyForHeartbeat(runId string, ts time.Time) (out []byte) {
 	_, _ = h.Write([]byte{0})
 	var tsBuf [8]byte
 	nanos := uint64(ts.UnixNano())
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		tsBuf[i] = byte(nanos >> (8 * (7 - i)))
 	}
 	_, _ = h.Write(tsBuf[:])
@@ -788,7 +788,7 @@ func naturalKeyForLog(row factsstore.LogRow, ts time.Time) (out []byte) {
 	_, _ = h.Write([]byte{0})
 	var tsBuf [8]byte
 	nanos := uint64(ts.UnixNano())
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		tsBuf[i] = byte(nanos >> (8 * (7 - i)))
 	}
 	_, _ = h.Write(tsBuf[:])

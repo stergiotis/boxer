@@ -166,7 +166,7 @@ func TestHandle_ReportEmitsOnHumanizedChange(t *testing.T) {
 
 	// Same humanized form (47%) reported repeatedly → only one emission
 	// (plus the implicit "starting" → 47% transition).
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		h.Report(ProgressReport{Current: 470 + uint64(i), Total: 1_000, Unit: UnitItems})
 	}
 

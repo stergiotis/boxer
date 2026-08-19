@@ -162,7 +162,7 @@ func TestInst_HistoryCappedByMaxHistory(t *testing.T) {
 	f := newBusFixture(t)
 	m := newMonitor(t, f, Opts{MaxHistory: 3})
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		opts := task.SpawnOpts{
 			Id:   task.TaskIdT("t-cap-" + string(rune('a'+i))),
 			Kind: "k", OwnerAppId: "test.producer",

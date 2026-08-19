@@ -188,7 +188,7 @@ func TestExecOnPool_ConcurrentRequests(t *testing.T) {
 	const N = 5
 	var wg sync.WaitGroup
 	errCh := make(chan error, N)
-	for i := 0; i < N; i++ {
+	for range N {
 		wg.Go(func() {
 			rep, e := ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{
 				SQL:    "SELECT 1",

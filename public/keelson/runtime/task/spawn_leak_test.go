@@ -20,7 +20,7 @@ func TestSpawn_NoMonitorGoroutineLeak(t *testing.T) {
 	settleGoroutines()
 	base := runtime.NumGoroutine()
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		h, err := Spawn(context.Background(), f.producer, SpawnOpts{Kind: "leak.test"})
 		if err != nil {
 			t.Fatalf("spawn %d: %v", i, err)
@@ -101,7 +101,7 @@ func TestSpawn_ParentCancelIsAnnouncedAndWorkerTerminates(t *testing.T) {
 }
 
 func settleGoroutines() {
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		runtime.GC()
 		time.Sleep(5 * time.Millisecond)
 	}

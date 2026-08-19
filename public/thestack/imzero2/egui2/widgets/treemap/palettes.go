@@ -27,7 +27,7 @@ const treemapAlpha uint8 = 0xee
 // materialise the per-palette constants below.
 func sample8(p styletokens.SequentialE) (out []uint32) {
 	out = make([]uint32, 8)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		t := float32(i) / 7.0
 		rgb := styletokens.Sequential(p, t)
 		out[i] = uint32(rgb.R)<<24 | uint32(rgb.G)<<16 | uint32(rgb.B)<<8 | uint32(treemapAlpha)

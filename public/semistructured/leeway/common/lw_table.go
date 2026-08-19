@@ -59,7 +59,7 @@ func (inst *TableDesc) AddPlainColumns(itemType PlainItemTypeE, names []naming.S
 		return
 	}
 	inst.PlainValuesItemTypes = slices.Grow(inst.PlainValuesItemTypes, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		inst.PlainValuesItemTypes = append(inst.PlainValuesItemTypes, itemType)
 	}
 	inst.PlainValuesValueSemantics = append(inst.PlainValuesValueSemantics, valueSemantics...)

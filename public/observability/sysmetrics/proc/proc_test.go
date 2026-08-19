@@ -110,7 +110,7 @@ func TestSample_50PIDs(t *testing.T) {
 	writeGlobalStat(t, root, "cpu  0 0 0 0 0 0 0 0 0 0\n")
 	writeUptime(t, root, "100.00 100.00\n")
 
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		pid := uint32(1000 + i)
 		writeFakeProc(t, root, fakeProc{
 			pid: pid, ppid: 1, name: fmt.Sprintf("p%d", i), state: 'S',
@@ -293,7 +293,7 @@ func TestAll_BreakEarly_DoesNotCorruptState(t *testing.T) {
 	root := newProcTree(t)
 	writeGlobalStat(t, root, "cpu  0 0 0 0 0 0 0 0 0 0\n")
 	writeUptime(t, root, "1.00 1.00\n")
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		writeFakeProc(t, root, fakeProc{
 			pid: uint32(1000 + i), ppid: 1, name: fmt.Sprintf("p%d", i),
 			utime: uint64(i * 10), stime: uint64(i * 5), threads: 1,
@@ -334,7 +334,7 @@ func TestSample_MaxProcs_CapsByCPUDescThenRSS(t *testing.T) {
 	// 10 PIDs. Half (1000..1004) accumulate CPU ticks; the other half
 	// (1005..1009) stay idle but get progressively larger RSS so the RSS
 	// tiebreak is exercised on the zero-CPU tail.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		pid := uint32(1000 + i)
 		writeFakeProc(t, root, fakeProc{
 			pid: pid, ppid: 1, name: fmt.Sprintf("p%d", i), state: 'S',
@@ -358,7 +358,7 @@ func TestSample_MaxProcs_CapsByCPUDescThenRSS(t *testing.T) {
 	// Bump utime on 1000..1004 and advance global stat so deltas are
 	// non-zero on the next sample.
 	writeGlobalStat(t, root, "cpu  1000 0 0 0 0 0 0 0 0 0\n")
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		pid := uint32(1000 + i)
 		writeFakeProc(t, root, fakeProc{
 			pid: pid, ppid: 1, name: fmt.Sprintf("p%d", i), state: 'S',
@@ -389,7 +389,7 @@ func TestSample_MaxProcs_Unlimited(t *testing.T) {
 	root := newProcTree(t)
 	writeGlobalStat(t, root, "cpu  0 0 0 0 0 0 0 0 0 0\n")
 	writeUptime(t, root, "100.00 100.00\n")
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		writeFakeProc(t, root, fakeProc{
 			pid: uint32(2000 + i), ppid: 1, name: fmt.Sprintf("u%d", i), state: 'S',
 			threads: 1, rssPages: 200, vsize: 1 << 20,

@@ -13,7 +13,7 @@ func TestPartitionNumber(t *testing.T) {
 		require.EqualValues(t, should, ToDigits(radixii, offset+n))
 		require.EqualValues(t, (offset+n)%prod, FromDigits(radixii, should))
 	}
-	for i := uint64(0); i < 2; i++ {
+	for i := range uint64(2) {
 		f1([]uint64{0, 0, 0}, i*60, 0)
 		f1([]uint64{1, 0, 0}, i*60, 1)
 		f1([]uint64{2, 0, 0}, i*60, 2)

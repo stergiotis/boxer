@@ -893,7 +893,7 @@ func TestMarshalError_StdlibError(t *testing.T) {
 
 func TestMarshalError_DeeplyNested(t *testing.T) {
 	err := New("leaf")
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		err = Errorf("wrap-%d: %w", i, err)
 	}
 

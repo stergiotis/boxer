@@ -62,7 +62,7 @@ func TestEncoderSmoke(t *testing.T) {
 	check(false, func(enc *Encoder) (int, error) { return enc.EncodeBool(false) })
 	check(uint64(math.MaxUint64), func(enc *Encoder) (int, error) { return enc.EncodeUint(math.MaxUint64) })
 	check(0, func(enc *Encoder) (int, error) { return enc.EncodeUint(0) })
-	for i := 0; i < samples; i++ {
+	for range samples {
 		v := rand.Uint64()
 		check(v, func(enc *Encoder) (int, error) { return enc.EncodeUint(v) })
 	}
@@ -155,13 +155,13 @@ func TestEncoderSmoke(t *testing.T) {
 		n += u
 		return
 	})
-	for i := 0; i < 100000; i++ {
+	for range 100000 {
 		n := rand.Uint64()
 		check(n, func(enc *Encoder) (int, error) {
 			return enc.EncodeUint(n)
 		})
 	}
-	for i := 0; i < 100000; i++ {
+	for range 100000 {
 		n := rand.Float64()
 		check(n, func(enc *Encoder) (int, error) {
 			return enc.EncodeFloat64(n)

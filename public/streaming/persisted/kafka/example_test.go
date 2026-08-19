@@ -41,7 +41,7 @@ func ExampleParseTopics() {
 	fmt.Println("topics:", topics)
 	fmt.Println("partitions:")
 	for _, t := range []string{"bar", "baz"} {
-		for p := int32(0); p < 4; p++ {
+		for p := range int32(4) {
 			off, ok := partitions[t][p]
 			if !ok {
 				continue
@@ -130,7 +130,7 @@ func ExampleDefaultFranzConsumerDetails() {
 	}
 	fmt.Println("topics:", d.Topics)
 	fmt.Println("partitions for orders:")
-	for p := int32(0); p < 4; p++ {
+	for p := range int32(4) {
 		off, ok := d.TopicPartitions["orders"][p]
 		if !ok {
 			continue

@@ -130,7 +130,7 @@ func requireCSRInvariants(t *testing.T, offsets []int32, n int, total int) {
 	require.Len(t, offsets, n+1)
 	require.Equal(t, int32(0), offsets[0])
 	require.Equal(t, int32(total), offsets[n])
-	for i := 0; i < n; i++ {
+	for i := range n {
 		require.LessOrEqual(t, offsets[i], offsets[i+1], "offsets not monotone at %d", i)
 	}
 }

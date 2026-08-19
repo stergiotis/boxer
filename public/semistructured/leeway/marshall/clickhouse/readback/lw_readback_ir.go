@@ -68,7 +68,7 @@ func (inst *InformationRetrieval) LoadTable(ir *common.IntermediateTableRepresen
 			err = eb.Build().Int("idx", i).Int("physicalColumns", len(phys)).Int("cpLength", cp.Length()).Errorf("invariance violation: expecting one physical column per column: %w", ErrInvariantViolation)
 			return
 		}
-		for j := 0; j < l; j++ {
+		for j := range l {
 			r.Index = i
 			r.Name = cp.Names[j]
 			r.Role = cp.Roles[j]

@@ -29,7 +29,7 @@ func TestMeasureNcdInstanceReuse(t *testing.T) {
 
 	makeTexts := func(base string, n int) func(yield func(string) bool) {
 		return func(yield func(string) bool) {
-			for i := 0; i < n; i++ {
+			for range n {
 				if !yield(base) {
 					return
 				}
@@ -68,7 +68,7 @@ func (inst *syntheticAuthor) generateComments(count int) (out []string) {
 	for i := range out {
 		var sb strings.Builder
 		n := 3 + inst.rng.Intn(4)
-		for j := 0; j < n; j++ {
+		for range n {
 			sb.WriteString(inst.phrases[inst.rng.Intn(len(inst.phrases))])
 			sb.WriteString(" ")
 		}
@@ -148,7 +148,7 @@ func TestEndToEndNcdProfile(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 	generate := func(phrases []string, n int) (text string) {
 		var sb strings.Builder
-		for i := 0; i < n; i++ {
+		for range n {
 			sb.WriteString(phrases[rng.Intn(len(phrases))])
 			sb.WriteString(". ")
 		}
@@ -186,7 +186,7 @@ func TestConvergenceDetectorResetBetweenAuthors(t *testing.T) {
 	a := newTestAnalyzer(t, refText)
 
 	rng := rand.New(rand.NewSource(99))
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		phrases := make([]string, 8)
 		for j := range phrases {
 			phrases[j] = fmt.Sprintf("author%d-phrase%d-%d", i, j, rng.Int())
@@ -194,7 +194,7 @@ func TestConvergenceDetectorResetBetweenAuthors(t *testing.T) {
 		comments := make([]string, 50)
 		for k := range comments {
 			var sb strings.Builder
-			for p := 0; p < 5; p++ {
+			for range 5 {
 				sb.WriteString(phrases[rng.Intn(len(phrases))])
 				sb.WriteString(" ")
 			}

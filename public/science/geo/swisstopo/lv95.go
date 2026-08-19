@@ -85,7 +85,7 @@ func LV95ToWGS84(lv LV95Coord) (wgs WGS84Coord) {
 // This is the SoA (struct-of-arrays) variant for bulk conversion.
 func WGS84ToLV95Batch(wgsLat []float64, wgsLon []float64, lvE []float64, lvN []float64) {
 	n := len(wgsLat)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		phiPrime := (wgsLat[i]*3600 - bernLatArcSec) / 10_000
 		lambdaPrime := (wgsLon[i]*3600 - bernLonArcSec) / 10_000
 
@@ -113,7 +113,7 @@ func WGS84ToLV95Batch(wgsLat []float64, wgsLon []float64, lvE []float64, lvN []f
 // All four slices must have equal length.
 func LV95ToWGS84Batch(lvE []float64, lvN []float64, wgsLat []float64, wgsLon []float64) {
 	n := len(lvE)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		yPrime := (lvE[i] - lv95FalseE) / 1_000_000
 		xPrime := (lvN[i] - lv95FalseN) / 1_000_000
 

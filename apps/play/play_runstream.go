@@ -53,7 +53,7 @@ func readResultRowCap(sql string) (cap queryengine.RowCap) {
 		return
 	}
 	n := queryCtx.GetChildCount()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		setStmt, ok := queryCtx.GetChild(i).(*grammar1.SetStmtContext)
 		if !ok {
 			continue

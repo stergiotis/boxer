@@ -94,7 +94,7 @@ func renderImzero2Demo(ids *c.WidgetIdStack, st *imzero2DemoState) {
 		c.DragValueF64(ids.PrepareStr("dragvalue"), st.myDragFloat).SendRespVal(&st.myDragFloat)
 	}
 	for range c.ComboBox(ids.PrepareStr("combobox"), c.WidgetText().Text("combobox").Keep(), c.WidgetText().Text(fmt.Sprintf("option %d", st.dropDownSelected)).Keep()).KeepIter() {
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			selected := i == st.dropDownSelected
 			if c.Button(ids.PrepareSeq(uint64(0x1111+i)), c.Atoms().Text(fmt.Sprintf("option %d", i)).Keep()).Selected(selected).FrameWhenInactive(!selected).Frame(true).SendResp().HasPrimaryClicked() {
 				st.dropDownSelected = i

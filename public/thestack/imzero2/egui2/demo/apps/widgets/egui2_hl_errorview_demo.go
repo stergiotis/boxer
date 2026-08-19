@@ -222,7 +222,7 @@ func errorContextFromErrkind(e errkind.Error) (out errorview.Context) {
 		current *errorview.Stream
 		prev    string
 	)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if current == nil || e.StreamNames[i] != prev {
 			out.Streams = append(out.Streams, errorview.Stream{Name: e.StreamNames[i]})
 			current = &out.Streams[len(out.Streams)-1]

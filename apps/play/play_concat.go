@@ -25,7 +25,7 @@ func concatBatches(batches []arrow.RecordBatch, alloc memory.Allocator) (out arr
 	for _, b := range batches {
 		totalRows += b.NumRows()
 	}
-	for c := 0; c < ncols; c++ {
+	for c := range ncols {
 		arrs := make([]arrow.Array, 0, len(batches))
 		for _, b := range batches {
 			arrs = append(arrs, b.Column(c))

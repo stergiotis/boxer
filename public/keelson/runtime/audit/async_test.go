@@ -30,7 +30,7 @@ func TestAsyncSink_ForwardsAllThenClose(t *testing.T) {
 	inner := &recordingSink{}
 	s := NewAsyncSink(inner, 0)
 	const n = 500
-	for i := 0; i < n; i++ {
+	for range n {
 		s.Record(AuditRecord{Subject: "x"})
 	}
 	s.Close()
@@ -53,7 +53,7 @@ func TestAsyncSink_DropsOnOverflow(t *testing.T) {
 	inner := &blockingSink{gate: gate}
 	s := NewAsyncSink(inner, 1)
 	const n = 100
-	for i := 0; i < n; i++ {
+	for range n {
 		s.Record(AuditRecord{Subject: "x"}) // must never block
 	}
 	if s.Dropped() == 0 {

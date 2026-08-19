@@ -47,7 +47,7 @@ func TestReBeginIsIdempotent(t *testing.T) {
 	reg.MustBegin("filler", 0).End() // grow the lookup so a re-mint would differ
 
 	ids := make([]identifier.TaggedId, 0, 3)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		ids = append(ids, reg.MustBegin("repeated", 1).End().GetId()) // same source line => same origin
 	}
 	require.Equal(t, ids[0], ids[1], "re-Begin must return the same id")

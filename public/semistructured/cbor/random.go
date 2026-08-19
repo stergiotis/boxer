@@ -82,7 +82,7 @@ func (inst *Generator) SetMaxStringLength(n int) {
 	if inst.stringGenerators == nil {
 		sg := make([]func() string, 0, 12)
 		add := func(weight int, f func() string) {
-			for i := 0; i < weight; i++ {
+			for range weight {
 				sg = append(sg, f)
 			}
 		}
@@ -120,7 +120,7 @@ func (inst *Generator) generateWord() string {
 func (inst *Generator) generateSentence() string {
 	var b strings.Builder
 	n := 1 + inst.rand.IntN(12)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i > 0 {
 			b.WriteByte(' ')
 		}
@@ -250,7 +250,7 @@ func (inst *Generator) generateRandomCbor(level int) (n int, err error) {
 		if err != nil {
 			return
 		}
-		for i := 0; i < l; i++ {
+		for range l {
 			u, err = inst.generateRandomCbor(level + 1)
 			n += u
 			if err != nil {
@@ -265,7 +265,7 @@ func (inst *Generator) generateRandomCbor(level int) (n int, err error) {
 		if err != nil {
 			return
 		}
-		for i := 0; i < l; i++ {
+		for range l {
 			u, err = inst.generateRandomCbor(level + 1)
 			n += u
 			if err != nil {

@@ -204,7 +204,7 @@ func canonicalObservableState(g *Graggle) string {
 // order must leave exactly the state produced by replaying the prefix on
 // a fresh graggle. This is the property the Unrecord workflow depends on.
 func TestProperty_UnapplySuffixEqualsReplayPrefix(tt *testing.T) {
-	for seed := int64(0); seed < 25; seed++ {
+	for seed := range int64(25) {
 		rng := rand.New(rand.NewSource(seed))
 		g := New()
 		base := patch.NewPatch("test", "base", nil, []patch.Change{
@@ -226,7 +226,7 @@ func TestProperty_UnapplySuffixEqualsReplayPrefix(tt *testing.T) {
 			return
 		}
 		steps := 4 + rng.Intn(5)
-		for k := 0; k < steps; k++ {
+		for k := range steps {
 			live := liveNonRoot()
 			if rng.Float64() < 0.65 || len(live) == 0 {
 				up := t.RootNodeID
@@ -265,7 +265,7 @@ func TestProperty_UnapplySuffixEqualsReplayPrefix(tt *testing.T) {
 		}
 
 		g2 := New()
-		for i := 0; i < cut; i++ {
+		for i := range cut {
 			if err := applied[i].Apply(g2); err != nil {
 				tt.Fatalf("seed %d: replay #%d: %v", seed, i, err)
 			}

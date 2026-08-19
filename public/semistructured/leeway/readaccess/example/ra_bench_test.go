@@ -20,7 +20,7 @@ func benchRecord(b *testing.B, nEntities int) arrow.RecordBatch {
 	tsProc := []time.Time{ts0.Add(time.Second), ts0.Add(2 * time.Second)}
 	secText := dml.GetSectionText()
 	secGeo := dml.GetSectionGeo()
-	for i := 0; i < nEntities; i++ {
+	for i := range nEntities {
 		ent := dml.BeginEntity()
 		ent.SetId(uint64(i))
 		ent.SetTimestamp(ts0, tsProc)

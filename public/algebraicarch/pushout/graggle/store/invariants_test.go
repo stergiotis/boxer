@@ -183,7 +183,7 @@ func TestInvariants_ConflictResolution(tt *testing.T) {
 // --- Property: Invariants hold under random patch sequences ---
 
 func TestInvariants_RandomPatchSequence(tt *testing.T) {
-	for seed := int64(0); seed < 50; seed++ {
+	for seed := range int64(50) {
 		rng := rand.New(rand.NewSource(seed))
 		g, base := makeBaseGraggle(3+rng.Intn(5), fmt.Sprintf("rand_inv_%d", seed))
 		assertNoInvariantViolations(tt, g)
@@ -207,7 +207,7 @@ func TestInvariants_RandomPatchSequence(tt *testing.T) {
 }
 
 func TestInvariants_RandomDeleteSequence(tt *testing.T) {
-	for seed := int64(0); seed < 30; seed++ {
+	for seed := range int64(30) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 4 + rng.Intn(4)
 		g, base := makeBaseGraggle(lineCount, fmt.Sprintf("rand_del_%d", seed))
@@ -216,7 +216,7 @@ func TestInvariants_RandomDeleteSequence(tt *testing.T) {
 		// Delete 1-3 random non-root nodes.
 		nDel := 1 + rng.Intn(min(3, lineCount-1))
 		deleted := make(map[int]struct{})
-		for d := 0; d < nDel; d++ {
+		for range nDel {
 			for {
 				idx := rng.Intn(lineCount)
 				if _, ok := deleted[idx]; !ok {
@@ -240,7 +240,7 @@ func TestInvariants_RandomDeleteSequence(tt *testing.T) {
 
 func TestInvariants_MergeCommutativity(tt *testing.T) {
 	// Check invariants hold in both patch application orders.
-	for seed := int64(0); seed < 30; seed++ {
+	for seed := range int64(30) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 3 + rng.Intn(4)
 		baseSeed := fmt.Sprintf("comm_inv_%d", seed)

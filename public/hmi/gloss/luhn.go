@@ -28,7 +28,7 @@ func luhnFace(cell CellI) Inline {
 	var b strings.Builder
 	b.Grow(len(digits) + len(digits)/4 + 3)
 	groups := (len(digits) + 3) / 4
-	for g := 0; g < groups; g++ {
+	for g := range groups {
 		if g > 0 {
 			b.WriteByte(' ')
 		}

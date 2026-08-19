@@ -328,7 +328,7 @@ func TestTarjan_DeepChainNoStackOverflow(tt *testing.T) {
 	const n = 100_000
 	g := store.New()
 	prev := t.RootNodeID
-	for i := 0; i < n; i++ {
+	for i := range n {
 		id := nid("deep", uint64(i))
 		if err := g.AddNode(id, []byte("x\n"), ph("deep"), []t.NodeID{prev}, nil); err != nil {
 			tt.Fatalf("AddNode %d: %v", i, err)

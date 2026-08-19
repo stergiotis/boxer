@@ -356,7 +356,7 @@ func TestExtractStabilityAcrossRuns(t *testing.T) {
 	for i, sql := range queries {
 		t.Run(fmt.Sprintf("stability_%d", i), func(t *testing.T) {
 			results := make([]string, 5)
-			for j := 0; j < 5; j++ {
+			for j := range 5 {
 				got, err := pass.Run(sql)
 				require.NoError(t, err)
 				results[j] = got

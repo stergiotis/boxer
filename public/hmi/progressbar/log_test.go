@@ -98,7 +98,7 @@ func TestLogWriter_AtomicUnderConcurrentRender(t *testing.T) {
 	const N = 200
 	lw := bar.LogWriter()
 	var wg sync.WaitGroup
-	for i := 0; i < N; i++ {
+	for i := range N {
 		wg.Add(2)
 		go func(i int) {
 			defer wg.Done()
@@ -113,7 +113,7 @@ func TestLogWriter_AtomicUnderConcurrentRender(t *testing.T) {
 	wg.Wait()
 
 	out := buf.String()
-	for i := 0; i < N; i++ {
+	for i := range N {
 		needle := fmt.Sprintf("\r\x1b[2Klog-%04d\n", i)
 		if !strings.Contains(out, needle) {
 			t.Fatalf("log-%04d was not emitted atomically with its clear-line prefix", i)

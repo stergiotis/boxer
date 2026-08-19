@@ -386,7 +386,7 @@ func findRepoRoot() (root string, err error) {
 		return
 	}
 	d := filepath.Dir(here)
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		_, statErr := os.Stat(filepath.Join(d, "go.mod"))
 		if statErr == nil {
 			root = d

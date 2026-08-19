@@ -297,7 +297,7 @@ func (inst *App) renderDataEncodingPlot() {
 	p := implot.Begin(inst.ids, "##de-plot", 720, 240)
 	p.SetupAxes("x", "sin(x + phase)", implot.AxisFlagsNone, implot.AxisFlagsNone)
 	p.NoInputs()
-	for s := 0; s < dataEncodingPlotSeries; s++ {
+	for s := range dataEncodingPlotSeries {
 		ys := make([]float64, dataEncodingPlotSamples)
 		phase := float64(s) * 2.0 * math.Pi / float64(dataEncodingPlotSeries)
 		for i := range ys {
@@ -315,7 +315,7 @@ func (inst *App) renderDataEncodingPlot() {
 func (inst *App) renderDensitySpec() {
 	c.Label("Density spec — PX_TABLE column for active preset (ADR-0032 §SD2)").Send()
 	for range c.Horizontal().KeepIter() {
-		for i := uint8(0); i < 8; i++ {
+		for i := range uint8(8) {
 			c.Label(fmt.Sprintf("Px[%d]=%-3.0f", i, styletokens.Px(inst.density, i))).Send()
 			c.AddSpace(styletokens.GapInline(inst.density))
 		}
@@ -411,7 +411,7 @@ func (inst *App) renderQualitative() {
 func (inst *App) renderSequentialRamp(name string, lut [][3]uint8) {
 	for range c.Horizontal().KeepIter() {
 		c.Label(fmt.Sprintf("%-12s", name)).Send()
-		for i := 0; i < dataEncodingSamples; i++ {
+		for i := range dataEncodingSamples {
 			t := float64(i) / float64(dataEncodingSamples-1)
 			idx := min(int(t*255.0+0.5), 255)
 			rgb := lut[idx]
@@ -437,7 +437,7 @@ func (inst *App) renderSequentialRamp(name string, lut [][3]uint8) {
 func (inst *App) renderDivergingRamp(name string, lut [][3]uint8) {
 	for range c.Horizontal().KeepIter() {
 		c.Label(fmt.Sprintf("%-12s", name)).Send()
-		for i := 0; i < dataEncodingSamples; i++ {
+		for i := range dataEncodingSamples {
 			t := -1.0 + 2.0*float64(i)/float64(dataEncodingSamples-1)
 			idx := int((t*0.5+0.5)*255.0 + 0.5)
 			if idx < 0 {

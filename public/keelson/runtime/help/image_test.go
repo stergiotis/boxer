@@ -17,8 +17,8 @@ func tinyPNG(t *testing.T) (data []byte, widthPx, heightPx uint32) {
 	const w, h = 2, 2
 	img := image.NewNRGBA(image.Rect(0, 0, w, h))
 	red := color.NRGBA{R: 255, G: 0, B: 0, A: 255}
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.Set(x, y, red)
 		}
 	}

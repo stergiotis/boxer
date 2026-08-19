@@ -115,7 +115,7 @@ func GetBoolSliceRetr[D UnmarshallReaderI, T ~bool](unmarshaller D) (r []T) {
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadBool()))
 	}
 	return
@@ -127,7 +127,7 @@ func GetFloat32SliceRetr[D UnmarshallReaderI, T ~float32](unmarshaller D) (r []T
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadFloat32()))
 	}
 	return
@@ -139,7 +139,7 @@ func GetFloat64SliceRetr[D UnmarshallReaderI, T ~float64](unmarshaller D) (r []T
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadFloat64()))
 	}
 	return
@@ -151,7 +151,7 @@ func GetUint8SliceRetr[D UnmarshallReaderI, T ~uint8](unmarshaller D) (r []T) {
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadUInt8()))
 	}
 	return
@@ -163,7 +163,7 @@ func GetUint16SliceRetr[D UnmarshallReaderI, T ~uint16](unmarshaller D) (r []T) 
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadUInt16()))
 	}
 	return
@@ -175,7 +175,7 @@ func GetUint32SliceRetr[D UnmarshallReaderI, T ~uint32](unmarshaller D) (r []T) 
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadUInt32()))
 	}
 	return
@@ -187,7 +187,7 @@ func GetUint64SliceRetr[D UnmarshallReaderI, T ~uint64](unmarshaller D) (r []T) 
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadUInt64()))
 	}
 	return
@@ -326,7 +326,7 @@ func GetInt8SliceRetr[D UnmarshallReaderI, T ~int8](unmarshaller D) (r []T) {
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadInt8()))
 	}
 	return
@@ -338,7 +338,7 @@ func GetInt16SliceRetr[D UnmarshallReaderI, T ~int16](unmarshaller D) (r []T) {
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadInt16()))
 	}
 	return
@@ -350,7 +350,7 @@ func GetInt32SliceRetr[D UnmarshallReaderI, T ~int32](unmarshaller D) (r []T) {
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadInt32()))
 	}
 	return
@@ -362,7 +362,7 @@ func GetInt64SliceRetr[D UnmarshallReaderI, T ~int64](unmarshaller D) (r []T) {
 		return nil
 	}
 	r = make([]T, 0, l)
-	for i := 0; i < l; i++ {
+	for range l {
 		r = append(r, T(unmarshaller.ReadInt64()))
 	}
 	return

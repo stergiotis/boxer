@@ -37,7 +37,7 @@ func TestPreprocess_LogTransformAndStandardise(t *testing.T) {
 	data := m.RawMatrix().Data
 	stride := m.RawMatrix().Stride
 	sum := 0.0
-	for ri := 0; ri < nRows; ri++ {
+	for ri := range nRows {
 		sum += data[ri*stride+0]
 	}
 	if math.Abs(sum/float64(nRows)) > 1e-10 {
@@ -95,7 +95,7 @@ func TestPreprocess_ZeroVariance(t *testing.T) {
 
 	data := m.RawMatrix().Data
 	stride := m.RawMatrix().Stride
-	for ri := 0; ri < nRows; ri++ {
+	for ri := range nRows {
 		v := data[ri*stride+2]
 		if v != 0 {
 			t.Errorf("row %d: expected 0 for zero-variance feature, got %v", ri, v)
@@ -162,7 +162,7 @@ func TestPreprocess_NegativeClampedBeforeLog(t *testing.T) {
 	// Verify no NaN crept in.
 	data := m.RawMatrix().Data
 	stride := m.RawMatrix().Stride
-	for ri := 0; ri < nRows; ri++ {
+	for ri := range nRows {
 		v := data[ri*stride+0]
 		if math.IsNaN(v) {
 			t.Errorf("row %d: got NaN — negative input was not clamped before log1p", ri)
@@ -225,7 +225,7 @@ func TestPreprocess_MixedFeatures(t *testing.T) {
 	for _, fi := range []int{0, 8} {
 		sum := 0.0
 		sumSq := 0.0
-		for ri := 0; ri < nRows; ri++ {
+		for ri := range nRows {
 			v := data[ri*stride+fi]
 			sum += v
 			sumSq += v * v

@@ -51,7 +51,7 @@ func (inst *Handle) PolygonToCellsE(
 	// least 64. Grown via one-retry on need-more.
 	outCap := max(max(cap(cellsDst), 64), totalVerts*8)
 
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		// Scratch layout: lats(8n) | lngs(8n) | ringOffsets(4(rc+1), pad 8) |
 		// cells(8*outCap) | needed(4, pad 8).
 		nV := uint32(totalVerts)

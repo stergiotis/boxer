@@ -263,7 +263,7 @@ func BenchmarkWGS84ToLV95Batch_10000(b *testing.B) {
 	lvE := make([]float64, n)
 	lvN := make([]float64, n)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wgsLat[i] = 45.8 + float64(i)/float64(n)*2.1
 		wgsLon[i] = 5.9 + float64(i)/float64(n)*4.6
 	}
@@ -281,7 +281,7 @@ func BenchmarkLV95ToWGS84Batch_10000(b *testing.B) {
 	wgsLat := make([]float64, n)
 	wgsLon := make([]float64, n)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		lvE[i] = 2_480_000 + float64(i)/float64(n)*300_000
 		lvN[i] = 1_070_000 + float64(i)/float64(n)*280_000
 	}

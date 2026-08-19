@@ -110,7 +110,7 @@ func Run(t *testing.T, mk Factory, opts Opts) {
 	t.Run("EvictionHonesty", func(t *testing.T) {
 		const capacity = 3
 		s := mk(t, capacity)
-		for i := 0; i < capacity; i++ {
+		for i := range capacity {
 			if evicted := s.Add(fmt.Sprintf("k%d", i), entry(i)); evicted {
 				t.Fatalf("filling to capacity must not report evictions (i=%d)", i)
 			}
@@ -126,7 +126,7 @@ func Run(t *testing.T, mk Factory, opts Opts) {
 			t.Fatalf("the newly added key must be resident after eviction")
 		}
 		survivors := 0
-		for i := 0; i < capacity; i++ {
+		for i := range capacity {
 			if _, found := s.GetAndRemove(fmt.Sprintf("k%d", i)); found {
 				survivors++
 			}
@@ -160,7 +160,7 @@ func Run(t *testing.T, mk Factory, opts Opts) {
 			if got := s.Cap(); got != 0 {
 				t.Fatalf("Cap = %d, want 0 (unbounded)", got)
 			}
-			for i := 0; i < 16; i++ {
+			for i := range 16 {
 				if evicted := s.Add(fmt.Sprintf("k%d", i), entry(i)); evicted {
 					t.Fatalf("unbounded stash must never evict (i=%d)", i)
 				}

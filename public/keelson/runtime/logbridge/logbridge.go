@@ -359,7 +359,7 @@ func (inst *Sink) drain() {
 			return
 		}
 		batch := make([]factsstore.LogRow, take)
-		for i := 0; i < take; i++ {
+		for i := range take {
 			batch[i] = inst.ring[(inst.head+i)%inst.cfg.Capacity]
 			inst.ring[(inst.head+i)%inst.cfg.Capacity] = factsstore.LogRow{}
 		}

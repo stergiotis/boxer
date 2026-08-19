@@ -37,7 +37,7 @@ func (inst *Handle) GridDisksE(
 	perCellMax := 3*int(k)*(int(k)+1) + 1
 	outCap := max(cap(outCellsDst), n*perCellMax)
 
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		n32 := uint32(n)
 		cellsRel := uint32(0)
 		offsetsRel := cellsRel + n32*8

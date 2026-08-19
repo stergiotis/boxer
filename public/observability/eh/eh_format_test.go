@@ -169,7 +169,7 @@ func TestFormatError_ErrorTree(t *testing.T) {
 
 func TestFormatError_DeepChain(t *testing.T) {
 	err := New("root cause")
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		err = Errorf("layer-%d: %w", i, err)
 	}
 

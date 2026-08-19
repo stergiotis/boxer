@@ -297,7 +297,7 @@ func TestSteckMonotoneInBandWidth(t *testing.T) {
 	}
 	pBase, err := crossingProbabilitySteck(a, b)
 	require.NoError(t, err)
-	for k := 0; k < 20; k++ {
+	for range 20 {
 		bWider := make([]float64, n)
 		copy(bWider, b)
 		for i := range bWider {

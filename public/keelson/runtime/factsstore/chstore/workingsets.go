@@ -395,7 +395,7 @@ func naturalKeyForWorkingset(runId string, appId app.AppIdT, name string, tileKe
 	_, _ = h.Write([]byte(name))
 	_, _ = h.Write([]byte{0})
 	var tk [8]byte
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		tk[i] = byte(tileKey >> (8 * (7 - i)))
 	}
 	_, _ = h.Write(tk[:])

@@ -89,7 +89,7 @@ func FindFibonacciCodeCommaMsb(f uint64) (nBits int) {
 // Zeckendorf representation z. It does not validate the no-consecutive-ones
 // property.
 func DecodeZeckendorfV(z uint64) (n uint64) {
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		n += fibNumbers[i] * ((z >> i) & 0b1)
 	}
 	return n
@@ -153,7 +153,7 @@ func DecodeFibonacciCode(f uint64) (n uint64, ok bool) {
 		return 0, false
 	}
 	f >>= 64 - nBits
-	for i := 0; i < nBits; i++ {
+	for i := range nBits {
 		n += fibNumbers[nBits-i-1] * (f & 0b1)
 		f >>= 1
 	}

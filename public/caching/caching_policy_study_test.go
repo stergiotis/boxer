@@ -59,7 +59,7 @@ func runStashStudy(t *testing.T, name string, epochEvery int, stash StashBackend
 	ctx := context.Background()
 	next := zipfTrace(42)
 
-	for i := 0; i < studyOps; i++ {
+	for i := range studyOps {
 		if i%epochEvery == 0 {
 			c.AdvanceEpoch()
 		}
@@ -268,7 +268,7 @@ func TestEvictionPolicyStudy_L1Simulators(t *testing.T) {
 		for _, sim := range sims {
 			next := zipfTrace(42) // identical trace for every policy
 			hits := 0
-			for i := 0; i < studyOps; i++ {
+			for range studyOps {
 				if sim.access(next()) {
 					hits++
 				}

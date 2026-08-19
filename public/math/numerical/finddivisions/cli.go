@@ -314,7 +314,7 @@ func drawAxisVisual(dc *gg.Context, x, y, width float64, tc TestCase, res AxisLa
 	// Add some random data points to visualize density
 	rng := rand.New(rand.NewSource(99))
 	dc.SetRGBA(0, 0.5, 0, 0.5) // Green dots
-	for k := 0; k < 20; k++ {
+	for range 20 {
 		val := tc.Min + rng.Float64()*(tc.Max-tc.Min)
 		px := mapX(val)
 		// Jitter Y slightly
@@ -385,7 +385,7 @@ func drawLogAxis(dc *gg.Context, x, y, width float64, tc TestCase, res LogResult
 	minLog := math.Log10(tc.Min)
 	maxLog := math.Log10(tc.Max)
 
-	for k := 0; k < 30; k++ {
+	for range 30 {
 		// Generate random point in LOG space, then convert to linear
 		// This creates a uniform visual distribution on a log scale
 		rLog := minLog + rng.Float64()*(maxLog-minLog)

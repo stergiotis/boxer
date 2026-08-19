@@ -33,7 +33,7 @@ func assertNoInvariantViolations(tt *testing.T, g *Graggle) {
 func makeBaseGraggle(n int, seed string) (*Graggle, *patch.Patch) {
 	g := New()
 	changes := make([]patch.Change, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		up := t.RootNodeID
 		if i > 0 {
 			up = t.NodeID{Patch: t.PlaceholderHash, Index: uint64(i - 1)}

@@ -15,7 +15,7 @@ import (
 // so the measured path is the tested path.
 func buildBatch(pool memory.Allocator, nEntities int, ts time.Time) ([]arrow.RecordBatch, error) {
 	e := NewInEntityTesttable(pool, nEntities)
-	for i := 0; i < nEntities; i++ {
+	for i := range nEntities {
 		e.BeginEntity().SetId(uint64(i + 1)).SetTimestamp(ts)
 		e.GetSectionSpecial().BeginAttribute("spc").AddToCoContainers(uint32(i), uint32(i+1)).EndAttribute()
 		e.GetSectionMulti().BeginAttribute("name").AddToCoContainers(uint32(i), uint64(i%7)).EndAttribute()

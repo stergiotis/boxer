@@ -38,7 +38,7 @@ func TestGeneratorStringLengthBound(t *testing.T) {
 	for _, maxLen := range []int{0, 1, 23, 512, 4096} {
 		gen := NewGenerator(&bytes.Buffer{}, 5)
 		gen.SetMaxStringLength(maxLen)
-		for i := 0; i < 2000; i++ {
+		for range 2000 {
 			s := gen.generateString()
 			require.LessOrEqual(t, len(s), maxLen)
 			require.True(t, utf8.ValidString(s), "invalid utf-8 at max %d", maxLen)
@@ -52,7 +52,7 @@ func TestGeneratorStringLengthBound(t *testing.T) {
 func TestGeneratorReachesWideHeads(t *testing.T) {
 	gen := NewGenerator(&bytes.Buffer{}, 11)
 	longest := 0
-	for i := 0; i < 2000; i++ {
+	for range 2000 {
 		longest = max(longest, len(gen.generateString()))
 	}
 	require.Greater(t, longest, 255)

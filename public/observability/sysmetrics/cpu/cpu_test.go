@@ -265,7 +265,7 @@ func newFixtureTree(t *testing.T) (root string) {
 	require.NoError(t, os.WriteFile(filepath.Join(procPath, "loadavg"), []byte(loadavgFixture), 0o644))
 
 	sysPath := filepath.Join(root, "sys")
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		dir := filepath.Join(sysPath, "devices/system/cpu/cpufreq", fmt.Sprintf("policy%d", i))
 		require.NoError(t, os.MkdirAll(dir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "scaling_cur_freq"), []byte("2400000\n"), 0o644))

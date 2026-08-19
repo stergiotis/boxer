@@ -118,8 +118,8 @@ func toLuminance(img image.Image) (lum []float64) {
 	w := b.Dx()
 	h := b.Dy()
 	lum = make([]float64, w*h)
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			c := img.At(b.Min.X+x, b.Min.Y+y)
 			r, g, bl := luminanceComponents(c)
 			lum[y*w+x] = 0.2126*r + 0.7152*g + 0.0722*bl
@@ -143,9 +143,9 @@ func windowSSIM(a, b []float64, stride, x0, y0, k int, c1, c2 float64) (s float6
 	n := float64(k * k)
 
 	var sumA, sumB float64
-	for dy := 0; dy < k; dy++ {
+	for dy := range k {
 		row := (y0 + dy) * stride
-		for dx := 0; dx < k; dx++ {
+		for dx := range k {
 			sumA += a[row+x0+dx]
 			sumB += b[row+x0+dx]
 		}
@@ -154,9 +154,9 @@ func windowSSIM(a, b []float64, stride, x0, y0, k int, c1, c2 float64) (s float6
 	muB := sumB / n
 
 	var sigmaA2, sigmaB2, sigmaAB float64
-	for dy := 0; dy < k; dy++ {
+	for dy := range k {
 		row := (y0 + dy) * stride
-		for dx := 0; dx < k; dx++ {
+		for dx := range k {
 			da := a[row+x0+dx] - muA
 			db := b[row+x0+dx] - muB
 			sigmaA2 += da * da

@@ -254,7 +254,7 @@ func DecodeSnapshot(data []byte) (g *Graggle, err error) {
 		err = eh.Errorf("live count %d: %w", nLive, ErrBadSnapshot)
 		return
 	}
-	for i := uint64(0); i < nLive; i++ {
+	for range nLive {
 		id, e := r.nodeID()
 		if e != nil {
 			err = e
@@ -278,7 +278,7 @@ func DecodeSnapshot(data []byte) (g *Graggle, err error) {
 		err = eh.Errorf("deleted count %d: %w", nDeleted, ErrBadSnapshot)
 		return
 	}
-	for i := uint64(0); i < nDeleted; i++ {
+	for range nDeleted {
 		id, e := r.nodeID()
 		if e != nil {
 			err = e
@@ -331,7 +331,7 @@ func DecodeSnapshot(data []byte) (g *Graggle, err error) {
 			err = eh.Errorf("deleter count %d: %w", nDel, ErrBadSnapshot)
 			return
 		}
-		for j := uint64(0); j < nDel; j++ {
+		for range nDel {
 			h, e := r.hash()
 			if e != nil {
 				err = e
@@ -349,7 +349,7 @@ func DecodeSnapshot(data []byte) (g *Graggle, err error) {
 		err = eh.Errorf("source count %d: %w", nSources, ErrBadSnapshot)
 		return
 	}
-	for i := uint64(0); i < nSources; i++ {
+	for range nSources {
 		src, e := r.nodeID()
 		if e != nil {
 			err = e
@@ -364,7 +364,7 @@ func DecodeSnapshot(data []byte) (g *Graggle, err error) {
 			err = eh.Errorf("edge count %d: %w", nEdges, ErrBadSnapshot)
 			return
 		}
-		for j := uint64(0); j < nEdges; j++ {
+		for range nEdges {
 			dest, e := r.nodeID()
 			if e != nil {
 				err = e

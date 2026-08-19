@@ -59,7 +59,7 @@ func TestPushColumnAccumulates(t *testing.T) {
 	hs := newFixture(t, w, h)
 	col := []float32{0.0, 0.25, 0.5, 1.0}
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		stats := hs.PushColumn(col)
 		if stats != (colormap.ColumnStats{}) {
 			t.Errorf("in-range column should have empty stats, got %+v", stats)
@@ -72,7 +72,7 @@ func TestPushColumnAccumulates(t *testing.T) {
 		t.Errorf("pending length: want %d, got %d", want, got)
 	}
 	// Verify each column's mapping is placed at the expected offset.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if hs.pending[i*int(h)+0] != colormap.Viridis8[0] {
 			t.Errorf("col %d row 0: want %08x, got %08x",
 				i, colormap.Viridis8[0], hs.pending[i*int(h)+0])

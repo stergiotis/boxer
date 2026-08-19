@@ -455,7 +455,7 @@ func TestE2E_MultipleMessages(t *testing.T) {
 
 	u := newTestUnmarshaller(&buf)
 	interp := &testInterpreter{}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		interp.interpret(u)
 	}
 
@@ -529,7 +529,7 @@ func TestE2E_FramedMessages(t *testing.T) {
 	u := runtime.NewUnmarshaller(&stream, endianness, func(err error) { t.Fatal(err) }, nil)
 	interp := &testInterpreter{}
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		// Read frame length (what InlineIoChannel does before yielding to interpreter)
 		frameLen := u.ReadUInt32()
 		if frameLen == 0 {
@@ -712,7 +712,7 @@ func TestE2E_LargeMethodChain(t *testing.T) {
 	m.WriteUint64(42)
 	m.WriteString("stress")
 
-	for i := 0; i < numMethods; i++ {
+	for i := range numMethods {
 		if i%3 == 0 {
 			m.WriteUint32(testMyWidgetMethodIdSetWidth)
 			m.WriteFloat32(float32(i))

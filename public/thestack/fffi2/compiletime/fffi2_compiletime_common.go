@@ -84,7 +84,7 @@ func iterateHighBits(v uint64, offset uint8) iter.Seq2[uint8, uint64] {
 			return
 		}
 		n := bits.OnesCount64(v)
-		for i := uint8(0); i < 64; i++ {
+		for i := range uint8(64) {
 			m := uint64(1) << i
 			if (m & v) != 0 {
 				n--

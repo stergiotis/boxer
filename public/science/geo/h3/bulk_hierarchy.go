@@ -101,7 +101,7 @@ func (inst *Handle) CellsToChildrenE(
 	// refinement × hexagon fan-out (49). Grown on demand via retry.
 	outCap := max(cap(childrenDst), n*49)
 
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		// Scratch layout: cells(8n) | offsets(4(n+1), pad to 8) |
 		// children(8*outCap) | needed(4, pad to 8) | status(n).
 		n32 := uint32(n)

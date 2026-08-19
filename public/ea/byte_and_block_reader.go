@@ -62,7 +62,7 @@ func (inst *BytesBlockByteReadReader) Discard(n int) (nBytesRead int, err error)
 	l := n / blockSize
 	r := inst.r
 	var u int
-	for i := 0; i < l; i++ {
+	for range l {
 		u, err = io.ReadFull(r, buf)
 		nBytesRead += u
 		if err != nil {

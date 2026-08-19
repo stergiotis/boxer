@@ -61,7 +61,7 @@ func TestSimpleRoundtrip(t *testing.T) {
 	validator := common2.NewTableValidator()
 	var tblDesc1, tblDesc2 common2.TableDesc
 	var dto1, dto2 common2.TableDescDto
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		switch i {
 		case 0:
 			tblDesc1, err = mapping.NewJsonMapping()
@@ -220,7 +220,7 @@ func TestTableOpsRoundtrip(t *testing.T) {
 	validator := common2.NewTableValidator()
 	require.NoError(t, err)
 	var tblDesc1, tblDesc2 common2.TableDesc
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		switch i {
 		case 0:
 			tblDesc1, err = mapping.NewJsonMapping()
@@ -260,7 +260,7 @@ func TestIntermediateRoundtrip(t *testing.T) {
 	var tblDesc1, tblDesc2 common2.TableDesc
 	manip, err := common2.NewTableManipulator()
 	require.NoError(t, err)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		switch i {
 		case 0:
 			tblDesc1, err = mapping.NewJsonMapping()
@@ -317,7 +317,7 @@ func TestNamingConventionRoundtrip(t *testing.T) {
 	ss := make([]string, 0, 128)
 	names := make([]string, 0, len(phys))
 	m := make(map[string]string, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		switch i {
 		case 0:
 			tblDesc1, err = mapping.NewJsonMapping()

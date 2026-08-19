@@ -398,7 +398,7 @@ func TestOverstretchedCache_Livelock(t *testing.T) {
 	requiredItems := 15
 
 	// Setup Fetcher with data
-	for i := 0; i < requiredItems; i++ {
+	for i := range requiredItems {
 		key := fmt.Sprintf("key-%d", i)
 		f.data[key] = i
 	}
@@ -423,7 +423,7 @@ func TestOverstretchedCache_Livelock(t *testing.T) {
 			missing := false
 
 			// Request all 15 items
-			for i := 0; i < requiredItems; i++ {
+			for i := range requiredItems {
 				key := fmt.Sprintf("key-%d", i)
 
 				// Accessing the key PINS it to the current Epoch.
@@ -1000,7 +1000,7 @@ func BenchmarkReadThrough_Hit_L1(b *testing.B) {
 		WithStash[string, int, int](NewSliceStash[string, int](100)))
 
 	// Pre-warm
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		c.AddItem(fmt.Sprintf("key-%d", i), i)
 	}
 
@@ -1027,7 +1027,7 @@ func BenchmarkReadThrough_Cold_Fetch(b *testing.B) {
 	chunkSize := 100
 	for i := 0; i < b.N; i += chunkSize {
 		// 1. Queue Work
-		for j := 0; j < chunkSize; j++ {
+		for j := range chunkSize {
 			id := i + j
 			key := fmt.Sprintf("key-%d", id)
 			for range c.WorkItem(id) {
@@ -1054,7 +1054,7 @@ func BenchmarkReadThrough_Stash_Thrash(b *testing.B) {
 	ctx := context.Background()
 
 	// Pre-fill partially to avoid initial cold start noise
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		c.AddItem(fmt.Sprintf("key-%d", i), 1)
 	}
 
@@ -1069,7 +1069,7 @@ func BenchmarkReadThrough_Stash_Thrash(b *testing.B) {
 	batchSize := 10
 	for i := 0; i < b.N; i += batchSize {
 		// Queue
-		for j := 0; j < batchSize; j++ {
+		for j := range batchSize {
 			id := i + j
 			key := fmt.Sprintf("key-%d", id%1000) // Wrap around 1000 keys
 			for range c.WorkItem(id) {
@@ -1102,7 +1102,7 @@ func BenchmarkReadThrough_SmallWorkItems(b *testing.B) {
 		c.AdvanceEpoch()
 
 		// Register 100 tiny work items
-		for j := 0; j < batchSize; j++ {
+		for j := range batchSize {
 			id := i + j
 			key := fmt.Sprintf("key-%d", id)
 			for range c.WorkItem(id) {

@@ -77,7 +77,7 @@ func LineDiff(oldIDs []t.NodeID, oldContents [][]byte, newLines [][]byte) (resul
 	var changes []Change
 
 	// Delete old lines not in LCS.
-	for idx := 0; idx < m; idx++ {
+	for idx := range m {
 		if !kept[idx] {
 			changes = append(changes, Change{
 				Kind:   ChangeKindDeleteNode,
@@ -90,7 +90,7 @@ func LineDiff(oldIDs []t.NodeID, oldContents [][]byte, newLines [][]byte) (resul
 	// map so we don't do an O(m) linear scan per kept line.
 	var keptIDs []t.NodeID
 	idToContent := make(map[t.NodeID][]byte, m)
-	for idx := 0; idx < m; idx++ {
+	for idx := range m {
 		idToContent[oldIDs[idx]] = oldContents[idx]
 		if kept[idx] {
 			keptIDs = append(keptIDs, oldIDs[idx])

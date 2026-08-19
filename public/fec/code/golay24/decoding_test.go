@@ -35,7 +35,7 @@ func BenchmarkDecodeSingle(b *testing.B) {
 	const n = 40 * 1024 * 1024 / 4
 	randomEncoded = make([]uint32, 0, n)
 	m := uint32(1<<12 - 1)
-	for i := 0; i < n; i++ {
+	for range n {
 		p := rand.Uint32() & m
 		randomDecoded = append(randomDecoded, uint16(p))
 		randomEncoded = append(randomEncoded, Encoding[p])

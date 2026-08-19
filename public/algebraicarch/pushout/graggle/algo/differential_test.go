@@ -150,7 +150,7 @@ func buildRandomGraggle(rt *rapid.T) *store.Graggle {
 	g := store.New()
 	n := rapid.IntRange(1, 10).Draw(rt, "nodes")
 	ids := []t.NodeID{t.RootNodeID}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		id := t.NodeID{Patch: ph("diff"), Index: uint64(i)}
 		up := ids[rapid.IntRange(0, len(ids)-1).Draw(rt, "up")]
 		if err := g.AddNode(id, []byte{byte('a' + i%26), '\n'}, ph("diff"), []t.NodeID{up}, nil); err != nil {
@@ -159,7 +159,7 @@ func buildRandomGraggle(rt *rapid.T) *store.Graggle {
 		ids = append(ids, id)
 	}
 	extra := rapid.IntRange(0, 4).Draw(rt, "extraEdges")
-	for i := 0; i < extra; i++ {
+	for range extra {
 		src := ids[rapid.IntRange(0, len(ids)-1).Draw(rt, "src")]
 		dest := ids[rapid.IntRange(1, len(ids)-1).Draw(rt, "dest")] // never into root
 		// src == dest is allowed: self-edges are representable engine
@@ -169,7 +169,7 @@ func buildRandomGraggle(rt *rapid.T) *store.Graggle {
 		}
 	}
 	dels := rapid.IntRange(0, n/2).Draw(rt, "dels")
-	for i := 0; i < dels; i++ {
+	for range dels {
 		victim := ids[rapid.IntRange(1, len(ids)-1).Draw(rt, "victim")]
 		if g.IsLive(victim) {
 			if err := g.DeleteNode(victim, ph("del")); err != nil {
@@ -249,7 +249,7 @@ func TestDifferential_AlgorithmsAgainstClosureReference(tt *testing.T) {
 		wantOrder := make(map[string]struct{})
 		for _, p := range v.nodes {
 			children := v.succ[p]
-			for i := 0; i < len(children); i++ {
+			for i := range children {
 				for j := i + 1; j < len(children); j++ {
 					a, b := children[i], children[j]
 					if a == b || v.comparable_(a, b) {

@@ -327,7 +327,7 @@ func TestProgressTrackerRepeatedTick(t *testing.T) {
 	last := runstream.Progress{ReadRows: 1_000_000, TotalRowsToRead: 10_000_000,
 		ElapsedNs: uint64(time.Second)}
 	now := time.Unix(1700000001, 0)
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		now = now.Add(16 * time.Millisecond)
 		v = tr.observe(now, "main", last, true)
 	}
@@ -394,7 +394,7 @@ func TestProgressTrackerNoElapsed(t *testing.T) {
 	require.InDelta(t, 1_000_000, v.rate, 50_000)
 
 	rate := v.rate
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		now = now.Add(250 * time.Millisecond)
 		v = tr.observe(now, "main", runstream.Progress{
 			ReadRows: 1_000_000, TotalRowsToRead: 10_000_000}, true)

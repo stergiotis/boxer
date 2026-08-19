@@ -33,7 +33,7 @@ func sameNodeSets(a, b map[t.NodeID]struct{}) bool {
 }
 
 func TestProperty_Commutativity(tt *testing.T) {
-	for seed := int64(0); seed < 50; seed++ {
+	for seed := range int64(50) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 3 + rng.Intn(5)
 
@@ -60,7 +60,7 @@ func TestProperty_Commutativity(tt *testing.T) {
 }
 
 func TestProperty_Associativity(tt *testing.T) {
-	for seed := int64(0); seed < 30; seed++ {
+	for seed := range int64(30) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 3 + rng.Intn(5)
 
@@ -93,7 +93,7 @@ func TestProperty_Associativity(tt *testing.T) {
 }
 
 func TestProperty_ApplyUnapplyIdentity(tt *testing.T) {
-	for seed := int64(0); seed < 50; seed++ {
+	for seed := range int64(50) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 2 + rng.Intn(6)
 
@@ -116,7 +116,7 @@ func TestProperty_ApplyUnapplyIdentity(tt *testing.T) {
 }
 
 func TestProperty_PseudoEdgeIdempotent(tt *testing.T) {
-	for seed := int64(0); seed < 30; seed++ {
+	for seed := range int64(30) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 4 + rng.Intn(4)
 
@@ -142,7 +142,7 @@ func TestProperty_PseudoEdgeIdempotent(tt *testing.T) {
 }
 
 func TestProperty_CloneEquivalence(tt *testing.T) {
-	for seed := int64(0); seed < 30; seed++ {
+	for seed := range int64(30) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 2 + rng.Intn(6)
 
@@ -168,7 +168,7 @@ func TestProperty_CloneEquivalence(tt *testing.T) {
 func TestProperty_IncrementalVsBatch(tt *testing.T) {
 	// Applying N changes as N separate single-change patches must produce
 	// the same graggle as applying them all at once in a single patch.
-	for seed := int64(0); seed < 40; seed++ {
+	for seed := range int64(40) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 3 + rng.Intn(5)
 		baseSeed := fmt.Sprintf("incr_batch_%d", seed)
@@ -180,7 +180,7 @@ func TestProperty_IncrementalVsBatch(tt *testing.T) {
 		// Generate a batch of insert changes.
 		nInserts := 2 + rng.Intn(4)
 		var allChanges []patch.Change
-		for i := 0; i < nInserts; i++ {
+		for i := range nInserts {
 			pos := rng.Intn(lineCount)
 			upCtx := t.NodeID{Patch: base.Hash, Index: uint64(pos)}
 			var downCtx []t.NodeID
@@ -285,7 +285,7 @@ func randomChange(g *Graggle, rng *rand.Rand, label string, nodeIdx *uint64) (pa
 		if len(liveNodes) < 2 {
 			return patch.Change{}, false
 		}
-		for attempt := 0; attempt < 10; attempt++ {
+		for range 10 {
 			i := rng.Intn(len(liveNodes))
 			j := rng.Intn(len(liveNodes))
 			if i == j {
@@ -307,7 +307,7 @@ func randomChange(g *Graggle, rng *rand.Rand, label string, nodeIdx *uint64) (pa
 func TestProperty_RandomMixedSequence(tt *testing.T) {
 	// Generate random sequences of inserts, deletes, and edge additions.
 	// After each operation, check invariants.
-	for seed := int64(0); seed < 50; seed++ {
+	for seed := range int64(50) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 3 + rng.Intn(4)
 		g, _ := makeBaseGraggle(lineCount, fmt.Sprintf("mixed_%d", seed))
@@ -315,7 +315,7 @@ func TestProperty_RandomMixedSequence(tt *testing.T) {
 		var nodeIdx uint64 = uint64(lineCount)
 		nOps := 5 + rng.Intn(10)
 
-		for op := 0; op < nOps; op++ {
+		for op := range nOps {
 			c, ok := randomChange(g, rng, fmt.Sprintf("m%d", seed), &nodeIdx)
 			if !ok {
 				continue
@@ -349,7 +349,7 @@ func TestProperty_RandomMixedSequence(tt *testing.T) {
 func TestProperty_RandomMixedSequenceCommutativity(tt *testing.T) {
 	// Generate two independent patches from a random base, apply in both orders,
 	// verify same live node set. Uses mixed operations (not just inserts).
-	for seed := int64(0); seed < 30; seed++ {
+	for seed := range int64(30) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 3 + rng.Intn(4)
 		baseSeed := fmt.Sprintf("mixed_comm_%d", seed)
@@ -383,7 +383,7 @@ func TestProperty_RandomMixedSequenceCommutativity(tt *testing.T) {
 func TestProperty_ApplyUnapplyReapply(tt *testing.T) {
 	// Apply, unapply, reapply — the ojo triple roundtrip pattern.
 	// State after apply(1) should equal state after apply(1), unapply(1), apply(1).
-	for seed := int64(0); seed < 40; seed++ {
+	for seed := range int64(40) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 3 + rng.Intn(5)
 
@@ -415,7 +415,7 @@ func TestProperty_ApplyUnapplyReapply(tt *testing.T) {
 
 func TestProperty_GhostMonotonicity(tt *testing.T) {
 	// Once deleted, a node stays deleted unless explicitly undeleted.
-	for seed := int64(0); seed < 30; seed++ {
+	for seed := range int64(30) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 4 + rng.Intn(4)
 

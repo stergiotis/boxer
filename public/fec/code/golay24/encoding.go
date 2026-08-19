@@ -4,7 +4,7 @@ var EncodingUint8Triples = encodeTableToUint8Triples(Encoding)
 
 func encodeTableToUint8Triples(enc [4096]uint32) [12288]uint8 {
 	r := [12288]uint8{}
-	for i := 0; i < len(enc); i++ {
+	for i := range len(enc) {
 		r[3*i+0] = uint8(enc[i] >> 16)
 		r[3*i+1] = uint8(enc[i] >> 8)
 		r[3*i+2] = uint8(enc[i])

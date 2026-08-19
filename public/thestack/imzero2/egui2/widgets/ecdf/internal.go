@@ -11,7 +11,7 @@ func buildEcdfPolyline(sorted []float64) (xs, ys []float64) {
 	xs = make([]float64, 0, 2*n)
 	ys = make([]float64, 0, 2*n)
 	inv := 1.0 / float64(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		// Pre-jump: (X_(i+1), i/n).
 		xs = append(xs, sorted[i])
 		ys = append(ys, float64(i)*inv)

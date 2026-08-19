@@ -134,7 +134,7 @@ func TestRender_DeepConflictNoStackOverflow(tt *testing.T) {
 	const n = 5_000
 	g := New()
 	prev := t.RootNodeID
-	for i := 0; i < n; i++ {
+	for i := range n {
 		left := nid("deep_conf", uint64(3*i))
 		right := nid("deep_conf", uint64(3*i+1))
 		next := nid("deep_conf", uint64(3*i+2))
@@ -164,7 +164,7 @@ func TestRender_DeepLinearNoStackOverflow(tt *testing.T) {
 	const n = 100_000
 	g := New()
 	prev := t.RootNodeID
-	for i := 0; i < n; i++ {
+	for i := range n {
 		id := nid("deep_lin", uint64(i))
 		if err := g.AddNode(id, []byte("x\n"), ph("deep_lin"), []t.NodeID{prev}, nil); err != nil {
 			tt.Fatal(err)

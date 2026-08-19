@@ -1153,7 +1153,7 @@ func appendColumnsExpr(pr *nanopass.ParseResult, node antlr.Tree, exprs []Expr) 
 func convertColumnExprList(pr *nanopass.ParseResult, ctx *grammar2.ColumnExprListContext) (exprs []Expr, err error) {
 	n := ctx.GetChildCount()
 	exprs = make([]Expr, 0, (n+1)/2)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		exprs, err = appendColumnsExpr(pr, ctx.GetChild(i), exprs)
 		if err != nil {
 			return

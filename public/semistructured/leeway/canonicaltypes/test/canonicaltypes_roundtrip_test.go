@@ -12,14 +12,14 @@ import (
 func TestCanonicalTypes_Roundtrip(t *testing.T) {
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	p := canonicaltypes.NewParser()
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		ct := sample.GenerateSamplePrimitiveType(rnd, nil)
 		ct2, err := p.ParsePrimitiveTypeAst(ct.String())
 		require.NoError(t, err)
 		require.Equal(t, ct.String(), ct2.String())
 	}
 
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		ct := sample.GenerateSampleGroup(rnd.IntN(8)+1, rnd, nil)
 		ct2, err := p.ParsePrimitiveTypeOrGroupAst(ct.String())
 		require.NoError(t, err)

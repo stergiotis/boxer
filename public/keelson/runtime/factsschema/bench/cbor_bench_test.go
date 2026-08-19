@@ -150,7 +150,7 @@ func BenchmarkCBORBuild(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					ent := cbordml.NewInEntityFacts(alloc, n)
-					for j := 0; j < n; j++ {
+					for j := range n {
 						if err := uc.fill(ent, j); err != nil {
 							b.Fatal(err)
 						}
@@ -180,7 +180,7 @@ func BenchmarkCBORBuildAndRow(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					ent := cbordml.NewInEntityFacts(alloc, n)
-					for j := 0; j < n; j++ {
+					for j := range n {
 						if err := uc.fill(ent, j); err != nil {
 							b.Fatal(err)
 						}
@@ -206,7 +206,7 @@ func TestCBORWireSize(t *testing.T) {
 	for _, uc := range cborUseCases {
 		for _, n := range []int{1, 10, 100, 1000} {
 			ent := cbordml.NewInEntityFacts(alloc, n)
-			for j := 0; j < n; j++ {
+			for j := range n {
 				if err := uc.fill(ent, j); err != nil {
 					t.Fatalf("%s N=%d fill: %v", uc.name, n, err)
 				}

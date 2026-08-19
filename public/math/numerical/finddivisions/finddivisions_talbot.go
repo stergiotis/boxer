@@ -239,7 +239,7 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 
 				// Inner loop: z (Coverage / Zoom level)
 				// Safety cap.
-				for zLoop := 0; zLoop < maxZ; zLoop++ {
+				for range maxZ {
 					step := niceStep(float64(j)*q, z)
 
 					// Calculate span for k ticks

@@ -64,7 +64,7 @@ func goldenCorpus() (rows []goldenRow) {
 	}
 	tagValues = append(tagValues, 2971215072, 2971215073, 2971215074, // width 46/47 boundary
 		math.MaxUint32-1, math.MaxUint32)
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		tagValues = append(tagValues, 1+rnd.Uint64N(math.MaxUint32))
 	}
 
@@ -86,7 +86,7 @@ func goldenCorpus() (rows []goldenRow) {
 		rows = append(rows, goTruth(raw))
 	}
 	// Raw random uint64s: the Go methods define the truth for anything.
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		rows = append(rows, goTruth(rnd.Uint64()))
 	}
 	return

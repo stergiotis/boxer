@@ -60,7 +60,7 @@ func (inst *ElevationSampler) LineOfSight(from LV95Coord, fromHeight float64, to
 	toLOSElev := float64(result.ToElev) + toHeight
 
 	result.LOSElev = make([]float32, numPoints)
-	for i := int64(0); i < numPoints; i++ {
+	for i := range numPoints {
 		t := distances[i] / totalDist
 		losElev := fromLOSElev*(1.0-t) + toLOSElev*t
 		result.LOSElev[i] = float32(losElev)

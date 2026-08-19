@@ -10046,7 +10046,7 @@ func TestEncodeZeckendorf(t *testing.T) {
 		b014417Check(n, z)
 	}
 
-	for i := 0; i < 100000; i++ {
+	for range 100000 {
 		u := rand.Uint32()
 		z, _ := EncodeZeckendorf(uint64(u))
 		checkNonConsequitive(z)
@@ -10080,7 +10080,7 @@ func TestEncodeFibonacciCode(t *testing.T) {
 	check(9, "0b010011", 6)
 	check(11, "0b101011", 6)
 	check(13, "0b1000011", 7)
-	for i := 0; i < 100000; i++ {
+	for range 100000 {
 		u := uint64(rand.Uint64N(MaxRepresentableExcl))
 		f, nBits := EncodeFibonacciCode(u)
 		require.Equal(t, nBits-1, FindFibonacciCodeCommaMsb(f))

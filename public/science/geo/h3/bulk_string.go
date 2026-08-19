@@ -33,7 +33,7 @@ func (inst *Handle) CellsToStringsE(
 	// H3 strings are <= 16 bytes each.
 	outCap := max(cap(bufDst), n*16)
 
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		n32 := uint32(n)
 		cellsRel := uint32(0)
 		offsetsRel := cellsRel + n32*8

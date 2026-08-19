@@ -366,7 +366,7 @@ func demoWalkersChoropleth(ids *c.WidgetIdStack, st *walkersDemoState) {
 	}
 	n := len(cells)
 	rgbas := make([]uint32, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		// Synthetic radial value with a small per-frame wiggle.
 		t := float64(i) / float64(n-1)
 		t += 0.1 * math.Sin(float64(st.frame)*0.04+float64(i)*0.3)
@@ -599,8 +599,8 @@ var (
 func getDemoRasterPixels() (w int, h int, pixels []uint32) {
 	rasterDemoPixelsOnce.Do(func() {
 		rasterDemoPixels = make([]uint32, rasterDemoW*rasterDemoH)
-		for y := 0; y < rasterDemoH; y++ {
-			for x := 0; x < rasterDemoW; x++ {
+		for y := range rasterDemoH {
+			for x := range rasterDemoW {
 				r := uint32(x * 255 / (rasterDemoW - 1)) // west → east
 				g := uint32(0)
 				b := uint32(y * 255 / (rasterDemoH - 1)) // north → south (row 0 = north)

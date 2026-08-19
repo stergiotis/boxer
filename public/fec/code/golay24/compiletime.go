@@ -14,7 +14,7 @@ func ApplyErrorGF2(code uint32, errorBits uint32) uint32 {
 
 func Generate24BitNumberWithFixedPopcount(popcount uint8, handler func(combination uint32)) {
 	const u = uint32(1) << 24
-	for i := uint32(0); i < u; i++ {
+	for i := range u {
 		p := bits.OnesCount32(i)
 		if uint8(p) == popcount {
 			handler(i)

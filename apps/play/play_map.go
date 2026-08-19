@@ -685,7 +685,7 @@ func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error)
 	n := int(w) * int(h)
 	rows := int(rec.NumRows())
 	pixels = make([]uint32, 0, n)
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		pixels = append(pixels, (uint32(ra.Value(i))<<24)|
 			(uint32(ga.Value(i))<<16)|(uint32(ba.Value(i))<<8)|uint32(aa.Value(i)))
 	}

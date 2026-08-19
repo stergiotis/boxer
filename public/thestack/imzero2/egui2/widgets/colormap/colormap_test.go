@@ -67,7 +67,7 @@ func TestMapUnderOverBad(t *testing.T) {
 	badWant := nrgbaToRGBAu32(cfg.BadColor)
 	underWant := nrgbaToRGBAu32(cfg.UnderflowColor)
 	overWant := nrgbaToRGBAu32(cfg.OverflowColor)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if dst[i] != badWant {
 			t.Errorf("src[%d] bad: expected %08x, got %08x", i, badWant, dst[i])
 		}

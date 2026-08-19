@@ -318,7 +318,7 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 	// accumulator — is still counted.
 	tally := make(map[string]int, len(fields))
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
-	for attrJ := int64(0); attrJ < n; attrJ++ {
+	for attrJ := range n {
 		// Every membership on the attribute dispatches to its field, mirroring
 		// the codegen switch — a multi-membership attribute feeds each matching
 		// field. dispatchMemberships filters consts, which have no accumulator.
@@ -385,7 +385,7 @@ func forEachMembershipValue(attrs, membs reflect.Value, i int, ch mappingplan.Me
 	}
 	method := "GetMembValue" + ch.AddMethodSuffix()
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
-	for attrJ := int64(0); attrJ < n; attrJ++ {
+	for attrJ := range n {
 		seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		for _, v := range collectIterSeq(seq) {
 			fn(v)
@@ -678,7 +678,7 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 	embedsName := ch.EmbedsLiteralName()
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	count := 0
-	for attrJ := int64(0); attrJ < n; attrJ++ {
+	for attrJ := range n {
 		locals := make([]reflect.Value, len(subs))
 		for k, s := range subs {
 			locals[k] = mustCall(attrs, "GetAttrValue"+mappingplan.UpperFirst(s.ColName), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
@@ -764,7 +764,7 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	elems := make([]reflect.Value, 0, n)
 	locals := make([]reflect.Value, len(g.SubColumns))
-	for attrJ := int64(0); attrJ < n; attrJ++ {
+	for attrJ := range n {
 		// One element per attribute (ADR-0109 D2). Read every sub-column value…
 		for k := range g.SubColumns {
 			sc := &g.SubColumns[k]
@@ -1002,7 +1002,7 @@ func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, me
 		// Container: one attribute carrying N values (a Seq) + one carrier.
 		valSlice := reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType())), 0, 0)
 		carrierVal := reflect.New(carrierType).Elem()
-		for attrJ := int64(0); attrJ < n; attrJ++ {
+		for attrJ := range n {
 			if cv, ok := readCarrierStruct(membs, f, carrierType, readMethod, i, attrJ); ok {
 				carrierVal = cv
 			}
@@ -1024,7 +1024,7 @@ func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, me
 		valAcc := reflect.New(goTypeReflect(f.GoType())).Elem()
 		carrierVal := reflect.New(carrierType).Elem()
 		count := 0
-		for attrJ := int64(0); attrJ < n; attrJ++ {
+		for attrJ := range n {
 			cv, ok := readCarrierStruct(membs, f, carrierType, readMethod, i, attrJ)
 			if !ok {
 				continue

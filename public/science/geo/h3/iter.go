@@ -12,7 +12,7 @@ import (
 func AllLatLngs(cells []uint64, latsDeg []float64, lngsDeg []float64) iter.Seq2[uint64, LatLng] {
 	return func(yield func(uint64, LatLng) bool) {
 		n := min(len(lngsDeg), min(len(latsDeg), len(cells)))
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if !yield(cells[i], LatLng{LatDeg: latsDeg[i], LngDeg: lngsDeg[i]}) {
 				return
 			}

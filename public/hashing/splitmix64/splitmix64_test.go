@@ -13,7 +13,7 @@ func TestBijectivity(t *testing.T) {
 	const iterations = 1_000_000
 	rng := rand.New(rand.NewPCG(1, 2))
 
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		original := rng.Uint64()
 		hashed := Forward(original)
 		reversed := Reverse(hashed)

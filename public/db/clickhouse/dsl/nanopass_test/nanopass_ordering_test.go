@@ -52,7 +52,7 @@ func permute(n int, fn func([]int)) {
 			fn(cp)
 			return
 		}
-		for i := 0; i < k; i++ {
+		for i := range k {
 			generate(k - 1)
 			if k%2 == 0 {
 				perm[i], perm[k-1] = perm[k-1], perm[i]

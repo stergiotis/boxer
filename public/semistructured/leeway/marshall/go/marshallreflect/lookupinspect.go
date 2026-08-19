@@ -214,7 +214,7 @@ func sectionChannel(c mappingplan.ReadContract, section string) mappingplan.Memb
 // per-row identity with no schema-side name, so they yield nothing.
 func observeSection(attrs, membs reflect.Value, numRows int, ch mappingplan.MembershipChannel) (ids []uint64, names []string) {
 	embedsName := ch.EmbedsLiteralName()
-	for i := 0; i < numRows; i++ {
+	for i := range numRows {
 		forEachMembershipValue(attrs, membs, i, ch, func(v reflect.Value) {
 			if embedsName {
 				if name := string(v.Bytes()); !slices.Contains(names, name) {

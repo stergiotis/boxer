@@ -40,7 +40,7 @@ func (inst *Handle) CellsToBoundariesE(
 
 	vertexCap := max(max(cap(latsDegDst), cap(lngsDegDst)), n*6)
 
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		n32 := uint32(n)
 		cellsRel := uint32(0)
 		latsRel := cellsRel + n32*8

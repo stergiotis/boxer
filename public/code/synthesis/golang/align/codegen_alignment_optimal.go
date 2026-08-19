@@ -29,7 +29,7 @@ func optimalOrder(str *types.Struct, sizes *gcSizes) (*types.Struct, []int) {
 	}
 
 	elems := make([]elem, nf)
-	for i := 0; i < nf; i++ {
+	for i := range nf {
 		ft := str.Field(i).Type()
 		elems[i] = elem{
 			i,
@@ -136,7 +136,7 @@ func (s *gcSizes) Sizeof(T types.Type) int64 {
 		}
 		var o int64
 		m := int64(1)
-		for i := 0; i < nf; i++ {
+		for i := range nf {
 			ft := t.Field(i).Type()
 			a, sz := s.Alignof(ft), s.Sizeof(ft)
 			if a > m {
@@ -183,7 +183,7 @@ func (s *gcSizes) ptrdata(T types.Type) int64 {
 			return 0
 		}
 		var o, p int64
-		for i := 0; i < nf; i++ {
+		for i := range nf {
 			ft := t.Field(i).Type()
 			a, sz := s.Alignof(ft), s.Sizeof(ft)
 			fp := s.ptrdata(ft)

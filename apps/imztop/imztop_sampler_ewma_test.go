@@ -113,7 +113,7 @@ func TestSampler_EWMA_CadenceInvariant(t *testing.T) {
 		})
 		ticks := int(wallClock / interval)
 		var out []float32
-		for i := 0; i < ticks; i++ {
+		for range ticks {
 			out = inst.updateProcCPUEWMA([]sysmsnap.ProcInfo{
 				{PID: 1, StartedAtUnixMs: 1, CPUPercent: stepValue},
 			})

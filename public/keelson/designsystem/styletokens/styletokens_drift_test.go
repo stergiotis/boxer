@@ -95,7 +95,7 @@ func parsePxTable(t *testing.T, src string) (rows [][]float32) {
 	rowRe := regexp.MustCompile(`\[\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,?\s*\]`)
 	for _, m := range rowRe.FindAllStringSubmatch(body, -1) {
 		row := make([]float32, 3)
-		for k := 0; k < 3; k++ {
+		for k := range 3 {
 			v, err := strconv.ParseFloat(m[k+1], 32)
 			if err != nil {
 				t.Fatalf("parse PX_TABLE float %q: %v", m[k+1], err)

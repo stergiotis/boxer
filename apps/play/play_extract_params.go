@@ -73,7 +73,7 @@ func collectParamSettings(pr *nanopass.ParseResult) (params map[string]string, p
 		return
 	}
 	n := queryCtx.GetChildCount()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		setStmt, ok := queryCtx.GetChild(i).(*grammar1.SetStmtContext)
 		if !ok {
 			continue
@@ -125,13 +125,13 @@ func findFirstQuery(pr *nanopass.ParseResult) (out *grammar1.QueryContext) {
 
 func iterateSettingExprs(setStmt *grammar1.SetStmtContext, visit func(expr *grammar1.SettingExprContext) error) (err error) {
 	n := setStmt.GetChildCount()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		list, ok := setStmt.GetChild(i).(*grammar1.SettingExprListContext)
 		if !ok {
 			continue
 		}
 		m := list.GetChildCount()
-		for j := 0; j < m; j++ {
+		for j := range m {
 			expr, ok := list.GetChild(j).(*grammar1.SettingExprContext)
 			if !ok {
 				continue

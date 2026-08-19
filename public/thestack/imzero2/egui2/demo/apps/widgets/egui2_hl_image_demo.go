@@ -57,8 +57,8 @@ func buildImageEmbedded() {
 	const teal = uint32(0x21918cff)
 	const yellow = uint32(0xfde725ff)
 	const red = uint32(0xff0000ff)
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			var px uint32
 			if x == 0 || y == 0 || x == w-1 || y == h-1 {
 				px = red
@@ -79,8 +79,8 @@ func rebuildImageDynamic() {
 	w := int(imageDynamicW)
 	h := int(imageDynamicH)
 	phase := imageDynamicFrame
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			r := uint32((x*255/w + int(phase)) & 0xff)
 			g := uint32((y * 255 / h) & 0xff)
 			b := uint32((255 - x*255/w + int(phase)*2) & 0xff)

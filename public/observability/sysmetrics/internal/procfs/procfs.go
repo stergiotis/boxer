@@ -100,7 +100,7 @@ func (inst *Reader) ReadFileInto(rel string, dst []byte) (out []byte, err error)
 func IterLines(content []byte) (seq iter.Seq[[]byte]) {
 	return func(yield func([]byte) bool) {
 		i := 0
-		for j := 0; j < len(content); j++ {
+		for j := range content {
 			if content[j] == '\n' {
 				if !yield(content[i:j]) {
 					return
@@ -154,7 +154,7 @@ func IterKV(content []byte) (seq iter.Seq2[[]byte, []byte]) {
 				continue
 			}
 			colon := -1
-			for j := 0; j < len(line); j++ {
+			for j := range line {
 				if line[j] == ':' {
 					colon = j
 					break

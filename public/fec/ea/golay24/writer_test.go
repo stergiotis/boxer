@@ -73,7 +73,7 @@ func TestPebbleWriter24Regular(t *testing.T) {
 			require.EqualValues(t, anchor.MagicByteAnchor, b)
 		}
 		nibbles := make([]byte, 0, 3*m)
-		for i := uint16(0); i < m; i++ {
+		for i := range m {
 			nibbles = append(nibbles, byte(i>>8))
 			nibbles = append(nibbles, byte(i>>4&0x0f))
 			nibbles = append(nibbles, byte(i&0x0f))
@@ -118,7 +118,7 @@ func TestPebbleWriter24Regular(t *testing.T) {
 		check(4095, 1, split)
 	}
 	driver(false)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		driver(true)
 	}
 }

@@ -165,7 +165,7 @@ func TestStore_LastHeartbeatForRun_RoundTrip_LiveCH(t *testing.T) {
 	t0 := time.Now().UTC().Truncate(time.Second)
 	// Three ticks two seconds apart; the latest (t0+4s) must be the one
 	// LastHeartbeatForRun returns.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := s.WriteRuntimeHeartbeat(factsstore.HeartbeatRow{
 			RunId: runId,
 			Ts:    t0.Add(time.Duration(i*2) * time.Second),

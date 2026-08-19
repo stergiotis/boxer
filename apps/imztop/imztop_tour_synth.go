@@ -97,7 +97,7 @@ func synthBundle(n int64) (snap sysmsnap.BundleSnapshot) {
 	perCore := make([]uint8, synthCores)
 	freq := make([]uint32, synthCores)
 	var sum int
-	for i := 0; i < synthCores; i++ {
+	for i := range synthCores {
 		busy := clampPct(45 + 38*math.Sin(float64(n)/7+float64(i)*0.8))
 		perCore[i] = uint8(busy)
 		sum += int(busy)

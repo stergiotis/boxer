@@ -140,7 +140,7 @@ func (inst *cpuHeatmapState) blankRing() {
 	for i := range inst.colBuf {
 		inst.colBuf[i] = float32(math.NaN())
 	}
-	for j := uint32(0); j < cpuHeatmapWidthSlots; j++ {
+	for range cpuHeatmapWidthSlots {
 		inst.hs.PushColumn(inst.colBuf)
 	}
 	inst.lastPushedMs = 0
@@ -219,7 +219,7 @@ func (inst *App) renderCPUHeatmap(snap *PublishedSnapshot) {
 				v = float32(snap.LatestCPU.PerCorePercent[i])
 			}
 			base := i * cpuHeatmapBandHeight
-			for k := uint32(0); k < cpuHeatmapBandHeight; k++ {
+			for k := range cpuHeatmapBandHeight {
 				st.colBuf[base+k] = v
 			}
 		}

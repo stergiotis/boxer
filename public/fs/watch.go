@@ -68,7 +68,7 @@ func (inst *BoundedFsWatcher) GetAndClearEvents(eventsIn []fsnotify.Event) (even
 	for i := cur; i < l; i++ {
 		eventsOut = append(eventsOut, events[i])
 	}
-	for i := 0; i < cur; i++ {
+	for i := range cur {
 		eventsOut = append(eventsOut, events[i])
 	}
 	inst.cur = 0

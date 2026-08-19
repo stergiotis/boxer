@@ -80,7 +80,7 @@ func (inst *Golay24Reader) Read(p []byte) (n int, err error) {
 
 func (inst *Golay24Reader) readSlow(p []byte) (n int, err error) {
 	nBytes := len(p)
-	for i := 0; i < nBytes; i++ {
+	for i := range nBytes {
 		var b byte
 		b, err = inst.ReadByte()
 		if err != nil {
@@ -97,7 +97,7 @@ func (inst *Golay24Reader) Discard(nBytes int) (n int, err error) {
 }
 
 func (inst *Golay24Reader) discardSlow(nBytes int) (n int, err error) {
-	for i := 0; i < nBytes; i++ {
+	for range nBytes {
 		_, err = inst.ReadByte()
 		if err != nil {
 			return

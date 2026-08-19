@@ -284,7 +284,7 @@ func runConsumerLag(t *testing.T, brokerAddr, topic, group string) {
 	require.GreaterOrEqual(t, callCount.Load(), int32(1), "sink invoked at least once during refresh window")
 
 	// Load should never return a negative value (max-clamped).
-	for partition := int32(0); partition < 4; partition++ {
+	for partition := range int32(4) {
 		v := lag.Load(topic, partition)
 		assert.GreaterOrEqual(t, v, int64(0), "Load returns non-negative for partition %d", partition)
 	}

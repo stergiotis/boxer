@@ -99,7 +99,7 @@ func TestDFACacheTemplatedNoReset(t *testing.T) {
 	withDFALimits(t, 1<<20, 128) // threshold high enough to never trigger
 	g1Before, _ := nanopass.DFACacheStats()
 
-	for i := 0; i < 5000; i++ {
+	for i := range 5000 {
 		pr, err := nanopass.Parse(fmt.Sprintf("SELECT c0, c1 FROM t WHERE x = %d AND y = 'v%d'", i, i))
 		if err != nil {
 			t.Fatalf("templated parse %d failed: %v", i, err)
@@ -126,7 +126,7 @@ func TestDFACacheConcurrent(t *testing.T) {
 		perWorker = 150 // enough to force resets under -race without the wall-clock
 	}
 	var wg sync.WaitGroup
-	for w := 0; w < workers; w++ {
+	for w := range workers {
 		wg.Add(1)
 		go func(seed int64) {
 			defer wg.Done()

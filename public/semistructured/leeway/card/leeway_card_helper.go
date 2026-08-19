@@ -18,7 +18,7 @@ func InferDriverFromRecordBatch(recordBatch arrow.RecordBatch, lastColNames []st
 	n := recordBatch.NumCols()
 	if n == int64(len(lastColNames)) {
 		same = true
-		for i := int64(0); i < n; i++ {
+		for i := range n {
 			same = same && lastColNames[i] == recordBatch.ColumnName(int(i))
 		}
 		if same {
@@ -33,7 +33,7 @@ func InferDriverFromRecordBatch(recordBatch arrow.RecordBatch, lastColNames []st
 	}
 
 	colNames = slices.Grow(lastColNames[:0], int(n))
-	for i := int64(0); i < n; i++ {
+	for i := range n {
 		f := recordBatch.ColumnName(int(i))
 		_, err = conv.ParseColumn(f)
 		if err != nil {

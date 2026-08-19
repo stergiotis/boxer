@@ -295,7 +295,7 @@ func TestEveryDeclaredOrdinalReaches(t *testing.T) {
 			}
 			t.Run(f.Name+"/"+p.Name, func(t *testing.T) {
 				args := make([]string, i+1)
-				for j := 0; j < i; j++ {
+				for j := range i {
 					args[j] = fixtureArg(f.Params[j])
 				}
 				args[i] = "'"

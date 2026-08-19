@@ -190,7 +190,7 @@ func BenchmarkBuild(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					ent := dml.NewInEntityFacts(alloc, n)
-					for j := 0; j < n; j++ {
+					for j := range n {
 						if err := uc.fill(ent, j); err != nil {
 							b.Fatal(err)
 						}
@@ -225,7 +225,7 @@ func BenchmarkBuildAndIPCEncode(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					ent := dml.NewInEntityFacts(alloc, n)
-					for j := 0; j < n; j++ {
+					for j := range n {
 						if err := uc.fill(ent, j); err != nil {
 							b.Fatal(err)
 						}
@@ -275,7 +275,7 @@ func BenchmarkRoundTrip(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					// --- encode ---
 					ent := dml.NewInEntityFacts(alloc, n)
-					for j := 0; j < n; j++ {
+					for j := range n {
 						if err := uc.fill(ent, j); err != nil {
 							b.Fatal(err)
 						}

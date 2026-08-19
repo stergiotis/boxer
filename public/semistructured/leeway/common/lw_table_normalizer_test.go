@@ -53,7 +53,7 @@ func TestNormalizer(t *testing.T) {
 	ops, err := NewTableOperations()
 	require.NoError(t, err)
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		var tblDesc1, tblDesc2 TableDesc
 		tblDesc1, err = GenerateSampleTableDesc(rnd, nil, nil)
 		require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestNormalizer(t *testing.T) {
 		require.NoError(t, err)
 		_, _, _, err = normalizer.Normalize(&tblDesc2)
 		require.NoError(t, err)
-		for j := 0; j < 5; j++ {
+		for range 5 {
 			normalizer.Scramble(&tblDesc1, rnd)
 			_, _, _, err = normalizer.Normalize(&tblDesc1)
 			require.NoError(t, err)

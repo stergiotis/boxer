@@ -30,7 +30,7 @@ func TestPebbleReader24Fuzzing(t *testing.T) {
 		var err error
 		{ // garbage
 			nBytes := ra.IntN(4096)
-			for i := 0; i < nBytes; i++ {
+			for range nBytes {
 				buf.WriteByte(byte(ra.IntN(0xff + 1)))
 			}
 		}
@@ -39,7 +39,7 @@ func TestPebbleReader24Fuzzing(t *testing.T) {
 
 		nBytes := ra.IntN(4 * 4096)
 		data.Grow(nBytes)
-		for i := 0; i < nBytes; i++ {
+		for range nBytes {
 			err = data.WriteByte(byte(ra.IntN(0xff + 1)))
 			require.NoError(t, err)
 		}
@@ -70,7 +70,7 @@ func TestPebbleReader24(t *testing.T) {
 
 		nBytes := ra.IntN(4096)
 		data := make([]byte, 0, nBytes)
-		for i := 0; i < nBytes; i++ {
+		for range nBytes {
 			data = append(data, byte(ra.IntN(0xff+1)))
 		}
 		_, err = w.Write(data)
@@ -96,7 +96,7 @@ func TestPebbleReader24(t *testing.T) {
 	v.WriteRune(0)
 	v.Reset()
 	ra := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		check(ra)
 	}
 }

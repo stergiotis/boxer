@@ -425,7 +425,7 @@ func marshalHomogeneousArrayToSQL(a *HomogeneousArray) (sql string, err error) {
 	var sb strings.Builder
 	sb.WriteString("array(")
 	n := a.Len()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
@@ -841,7 +841,7 @@ func marshalGoTuple(tup *Tuple, opts MarshalOptions) (sql string, err error) {
 	}
 	var sb strings.Builder
 	sb.WriteString("tuple(")
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i > 0 {
 			sb.WriteString(", ")
 		}

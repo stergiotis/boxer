@@ -391,7 +391,7 @@ func injectAnomaly(clean []float64, pristine []float64, start int32, length int3
 	}
 
 	fade := min(max(length/8, 2), length/2)
-	for i := int32(0); i < length; i++ {
+	for i := range length {
 		w := 1.0
 		if i < fade {
 			w = smoothstep(float64(i) / float64(fade))

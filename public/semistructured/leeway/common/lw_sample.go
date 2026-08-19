@@ -16,7 +16,7 @@ import (
 
 func generateExampleAspects(rnd *rand.Rand, nAspectsMax int) (r useaspects2.AspectSet) {
 	asps := make([]useaspects2.AspectE, 0, nAspectsMax)
-	for i := 0; i < nAspectsMax; i++ {
+	for range nAspectsMax {
 		asps = append(asps, useaspects2.AspectE(rnd.IntN(int(useaspects2.MaxAspectExcl))))
 	}
 	// the validator rejects exclusive-family violations
@@ -74,7 +74,7 @@ func GenerateSampleEncodingAspectEx(nMembers int, r *rand.Rand, accept func(aspe
 		return
 	}
 	members := make([]encodingaspects2.AspectE, 0, nMembers)
-	for i := 0; i < nMembers; i++ {
+	for range nMembers {
 		var m encodingaspects2.AspectE
 		for {
 			m = encodingaspects2.AllAspects[r.IntN(len(encodingaspects2.AllAspects))]
@@ -98,7 +98,7 @@ func GenerateSampleValueSemantics(nMembers int, rnd *rand.Rand) (valueSemantics 
 		return
 	}
 	members := make([]valueaspects.AspectE, 0, nMembers)
-	for i := 0; i < nMembers; i++ {
+	for range nMembers {
 		members = append(members, valueaspects.AllAspects[rnd.IntN(len(valueaspects.AllAspects))])
 	}
 	members = valueaspects.SanitizeFamilyExclusivity(members)
@@ -111,7 +111,7 @@ func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCa
 		}
 		n := rnd.IntN(8)
 		pfx := t.String()
-		for i := 0; i < n; i++ {
+		for i := range n {
 			hints := GenerateSampleEncodingAspectEx(rnd.IntN(3)+1, rnd, acceptEncodingAspect)
 			valueSemantics := GenerateSampleValueSemantics(rnd.IntN(3)+1, rnd)
 			manipulator.AddPlainValueItem(t, naming.StylableName(fmt.Sprintf("%s%d", pfx, i)), sample.GenerateSamplePrimitiveType(rnd, acceptCanonicalType), hints, valueSemantics)
@@ -119,12 +119,12 @@ func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCa
 	}
 
 	sectionCount := rnd.IntN(4) + 1
-	for i := 0; i < sectionCount; i++ {
+	for i := range sectionCount {
 		columnCount := rnd.IntN(8)
 		// use-aspects are section-level; sampling them per column would union
 		// contradictory pairs across columns of the same section
 		asp := generateExampleAspects(rnd, 4)
-		for j := 0; j < columnCount; j++ {
+		for j := range columnCount {
 			mem := generateExampleMembershipSpec(rnd)
 			hints := GenerateSampleEncodingAspectEx(rnd.IntN(2)+1, rnd, acceptEncodingAspect)
 			valueSemantics := GenerateSampleValueSemantics(rnd.IntN(2)+1, rnd)

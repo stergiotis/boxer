@@ -119,7 +119,7 @@ func (inst *Handle) UncompactCellsE(
 
 	outCap := max(cap(expandedDst), n*49)
 
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		n32 := uint32(n)
 		cellsRel := uint32(0)
 		outRel := cellsRel + n32*8

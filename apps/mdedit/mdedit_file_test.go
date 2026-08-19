@@ -385,7 +385,7 @@ func TestSuggestedFileName_NeverCarriesADirectory(t *testing.T) {
 
 func TestSuggestedFileName_IsBounded(t *testing.T) {
 	var long strings.Builder
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		long.WriteString("verylongword ")
 	}
 	got := suggestedFileName([]markdown.HeadingInfo{{Text: long.String()}})

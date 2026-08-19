@@ -41,7 +41,7 @@ func TestRoundtrip(t *testing.T) {
 	{ // dml write
 		secText := dml.GetSectionText()
 		secGeo := dml.GetSectionGeo()
-		for i := 0; i < nEntities; i++ {
+		for i := range nEntities {
 			ent := dml.BeginEntity()
 			ent.SetId(uint64(i))
 			ent.SetTimestamp(ts[0], ts[1:3])
@@ -88,7 +88,7 @@ func TestRoundtrip(t *testing.T) {
 	{ // read access
 		secText := ra.Text
 		secGeo := ra.Geo
-		for entityIdx := runtime.EntityIdx(0); entityIdx < nEntities; entityIdx++ {
+		for entityIdx := range runtime.EntityIdx(nEntities) {
 			{
 				require.EqualValues(t, entityIdx, ra.EntityId.GetAttrValueId(entityIdx))
 				require.EqualValues(t, ts[0], ra.EntityTimestamp.GetAttrValueTs(entityIdx))

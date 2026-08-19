@@ -176,14 +176,14 @@ func TestKahanValidation(t *testing.T) {
 	count := 1_000_000
 	inc := 1.0
 
-	for i := 0; i < count; i++ {
+	for range count {
 		stats.Push(base + inc)
 	}
 
 	// Generate the exact data slice to compare
 	data := make([]float64, 0, count+1)
 	data = append(data, base)
-	for i := 0; i < count; i++ {
+	for range count {
 		data = append(data, base+inc)
 	}
 
@@ -257,7 +257,7 @@ func FuzzStreamStats(f *testing.F) {
 		}
 
 		floats := make([]float64, inputCount)
-		for i := 0; i < inputCount; i++ {
+		for i := range inputCount {
 			bits := uint64(data[i*8]) | uint64(data[i*8+1])<<8 |
 				uint64(data[i*8+2])<<16 | uint64(data[i*8+3])<<24 |
 				uint64(data[i*8+4])<<32 | uint64(data[i*8+5])<<40 |
@@ -466,7 +466,7 @@ func TestMergeHigherMoments(t *testing.T) {
 	// Generate a dataset with distinct features (skewed, etc.)
 	// We use 0..99.
 	data := make([]float64, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		data[i] = float64(i)
 	}
 

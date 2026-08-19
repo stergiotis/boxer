@@ -169,7 +169,7 @@ func newEvaluatorE(scores []float64, ranges Ranges, n int32) (inst *evaluator, e
 	})
 
 	inst.groupLast = make([]int32, 0, n)
-	for i := int32(0); i < n; i++ {
+	for i := range n {
 		if i+1 == n || scores[inst.order[i]] != scores[inst.order[i+1]] {
 			inst.groupLast = append(inst.groupLast, i)
 		}

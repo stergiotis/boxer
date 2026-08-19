@@ -11,7 +11,7 @@ import (
 
 func benchmarkBase(b *testing.B, n int) (*Graggle, *patch.Patch) {
 	changes := make([]patch.Change, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		up := []t.NodeID{t.RootNodeID}
 		if i > 0 {
 			up = []t.NodeID{{Patch: t.PlaceholderHash, Index: uint64(i - 1)}}
@@ -33,7 +33,7 @@ func BenchmarkPatchApply_Insert100(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		g := New()
 		changes := make([]patch.Change, 100)
-		for j := 0; j < 100; j++ {
+		for j := range 100 {
 			up := []t.NodeID{t.RootNodeID}
 			if j > 0 {
 				up = []t.NodeID{{Patch: t.PlaceholderHash, Index: uint64(j - 1)}}
@@ -54,7 +54,7 @@ func BenchmarkPatchApply_Insert1000(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		g := New()
 		changes := make([]patch.Change, 1000)
-		for j := 0; j < 1000; j++ {
+		for j := range 1000 {
 			up := []t.NodeID{t.RootNodeID}
 			if j > 0 {
 				up = []t.NodeID{{Patch: t.PlaceholderHash, Index: uint64(j - 1)}}
@@ -137,7 +137,7 @@ func BenchmarkLineDiff_100Lines(b *testing.B) {
 	oldIDs := make([]t.NodeID, n)
 	oldContents := make([][]byte, n)
 	newLines := make([][]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		oldIDs[i] = nid("bench_diff", uint64(i))
 		oldContents[i] = fmt.Appendf(nil, "line %d\n", i)
 		if i == n/2 {
@@ -157,7 +157,7 @@ func BenchmarkLineDiff_1000Lines(b *testing.B) {
 	oldIDs := make([]t.NodeID, n)
 	oldContents := make([][]byte, n)
 	newLines := make([][]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		oldIDs[i] = nid("bench_diff", uint64(i))
 		oldContents[i] = fmt.Appendf(nil, "line %d\n", i)
 		if i == n/2 {

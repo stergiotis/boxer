@@ -71,7 +71,7 @@ func TestDocsCacheServesWithoutTheLane(t *testing.T) {
 // run of one-off lookups.
 func TestDocsCacheEvictsLeastRecentlyUsed(t *testing.T) {
 	d, _ := testDocsDriver()
-	for i := 0; i < docsCacheMax; i++ {
+	for i := range docsCacheMax {
 		d.store(string(rune('a'+i)), &docsResult{})
 	}
 	require.Len(t, d.cache, docsCacheMax)

@@ -124,7 +124,7 @@ func TestSemanticTierEditResetsQuiescence(t *testing.T) {
 		parse: spansFor,
 	}
 	src := "SELECT"
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		s.jobFor(src)
 		clock.advance(semanticQuiescence - time.Millisecond)
 		src += "x" // keystroke just before the window elapses

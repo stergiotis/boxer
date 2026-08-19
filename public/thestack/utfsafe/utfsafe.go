@@ -59,7 +59,7 @@ func EnsureUTF8(s string) (r string) {
 	src := unsafeperf.UnsafeStringToBytes(s)
 	n := len(src)
 	dst := make([]byte, n*2)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		b := src[i]
 		dst[i*2] = hexAlphabet[b>>4]
 		dst[i*2+1] = hexAlphabet[b&0x0f]
@@ -87,7 +87,7 @@ func AppendEnsureUTF8(dst []byte, s string) (r []byte) {
 		copy(grown, dst)
 		dst = grown
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		b := src[i]
 		dst = append(dst, hexAlphabet[b>>4], hexAlphabet[b&0x0f])
 	}

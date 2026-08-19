@@ -175,7 +175,7 @@ func TestUnmarshal_RoundTrip_OptionAbsent(t *testing.T) {
 func TestUnmarshal_RoundTrip_Batch(t *testing.T) {
 	const n = 5
 	cols := &M1SampleColumns{}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s := sampleM1Sample()
 		s.Id = uint64(i + 1)
 		s.Sequence = uint32(i + 100)
@@ -209,7 +209,7 @@ func TestUnmarshal_RoundTrip_Batch(t *testing.T) {
 	if got.Len() != n {
 		t.Fatalf("decoded Len = %d, want %d", got.Len(), n)
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if got.Id[i] != uint64(i+1) {
 			t.Errorf("row %d Id: got %d, want %d", i, got.Id[i], i+1)
 		}

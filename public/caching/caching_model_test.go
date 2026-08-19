@@ -509,7 +509,7 @@ func runCacheModel(t testing.TB, src opSource) {
 }
 
 func TestCacheModel_SeededInvariants(t *testing.T) {
-	for seed := int64(0); seed < 48; seed++ {
+	for seed := range int64(48) {
 		t.Run(fmt.Sprintf("seed%02d", seed), func(t *testing.T) {
 			src := &randOpSource{r: rand.New(rand.NewSource(seed)), remaining: 4000}
 			runCacheModel(t, src)

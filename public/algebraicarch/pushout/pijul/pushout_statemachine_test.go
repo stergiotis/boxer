@@ -405,7 +405,7 @@ func (m *repoMachine) observable(repo *PushoutRepo) string {
 // converge pairwise-pulls until a fixpoint (bounded), then demands all
 // repos agree on the observable state.
 func (m *repoMachine) converge(rt *rapid.T) {
-	for round := 0; round < 6; round++ {
+	for range 6 {
 		changed := false
 		for _, dst := range m.repos {
 			for _, src := range m.repos {

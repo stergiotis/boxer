@@ -281,7 +281,7 @@ func (t TypedLiteral) ToHeterogeneous() (result TypedLiteral, err error) {
 	}
 	n := t.HomArray.Len()
 	elems := make([]TypedLiteral, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		elems[i], err = t.HomArray.GetScalar(i)
 		if err != nil {
 			err = eb.Build().Int("element", i).Errorf("ToHeterogeneous: %w", err)

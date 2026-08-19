@@ -147,7 +147,7 @@ func mirrorAction(c *cli.Context) (err error) {
 	var wg sync.WaitGroup
 
 	{ // spawn workers
-		for i := 0; i < workers; i++ {
+		for range workers {
 			wg.Go(func() {
 				downloadWorker(ctx, dest, verifyExisting, tileCh, &stats, mp)
 			})
@@ -270,7 +270,7 @@ func downloadWorker(ctx context.Context, dest string, verifyExisting bool, tiles
 		{ // download with retries
 			var dlErr error
 			var nbytes int64
-			for attempt := 0; attempt < maxRetries; attempt++ {
+			for attempt := range maxRetries {
 				select {
 				case <-ctx.Done():
 					return
@@ -467,7 +467,7 @@ func enumerateTiles(ctx context.Context, pb *progressbar.Bar) (tiles []tileDesc,
 }
 
 func fetchStacPage(ctx context.Context, client *http.Client, url string) (data stacResponse, err error) {
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		select {
 		case <-ctx.Done():
 			err = ctx.Err()

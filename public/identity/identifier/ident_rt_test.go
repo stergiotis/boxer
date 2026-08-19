@@ -86,7 +86,7 @@ func TestRoundtrip(t *testing.T) {
 // distinct tags can never compose the same id, whatever the bodies.
 func TestPrefixFreedomNoCrossTagCollision(t *testing.T) {
 	rnd := rand.New(rand.NewPCG(7, 11))
-	for i := 0; i < 20000; i++ {
+	for range 20000 {
 		tvA := TagValue(1 + rnd.Uint64N(1<<20))
 		tvB := TagValue(1 + rnd.Uint64N(1<<20))
 		if tvA == tvB {

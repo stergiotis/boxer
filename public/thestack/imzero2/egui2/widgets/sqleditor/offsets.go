@@ -26,7 +26,7 @@ func ByteOffsetOfChar(s string, chars int) int {
 		return 0
 	}
 	off := 0
-	for n := 0; n < chars; n++ {
+	for range chars {
 		if off >= len(s) {
 			return len(s)
 		}

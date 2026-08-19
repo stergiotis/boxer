@@ -41,18 +41,18 @@ LIMIT 100 SETTINGS max_threads = 4`
 var benchLargeSQL = func() string {
 	var b strings.Builder
 	b.WriteString("WITH ")
-	for c := 0; c < 5; c++ {
+	for c := range 5 {
 		if c > 0 {
 			b.WriteString(", ")
 		}
 		fmt.Fprintf(&b, "cte%d AS (SELECT id, v%d FROM src%d WHERE v%d > %d)", c, c, c, c, c)
 	}
-	for u := 0; u < 6; u++ {
+	for u := range 6 {
 		if u > 0 {
 			b.WriteString(" UNION ALL ")
 		}
 		b.WriteString("SELECT ")
-		for col := 0; col < 40; col++ {
+		for col := range 40 {
 			if col > 0 {
 				b.WriteString(", ")
 			}

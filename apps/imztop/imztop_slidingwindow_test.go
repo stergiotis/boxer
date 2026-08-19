@@ -53,7 +53,7 @@ func TestSlidingWindowBackingArrayStable(t *testing.T) {
 	r.Push(3)
 	firstAddr := &r.Values()[0]
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		r.Push(i)
 	}
 	secondAddr := &r.Values()[0]

@@ -99,7 +99,7 @@ func UnmarshalInflightSnapshotReply(b []byte) (r InflightSnapshotReply, err erro
 	r.AtMs = wire.At.UnixMilli()
 	n := len(wire.Ids)
 	r.Entries = make([]InflightSnapshotEntry, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		r.Entries[i] = InflightSnapshotEntry{
 			Id:          TaskIdT(wire.Ids[i]),
 			Kind:        sliceAt(wire.Kinds, i),

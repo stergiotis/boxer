@@ -135,7 +135,7 @@ func TestSnapshot_RoundTripProperty(tt *testing.T) {
 		g.SetClock(func() time.Time { tick = tick.Add(time.Minute); return tick })
 
 		steps := rapid.IntRange(1, 8).Draw(rt, "steps")
-		for i := 0; i < steps; i++ {
+		for i := range steps {
 			liveIDs := []t.NodeID{}
 			for id := range g.AllLiveNodes() {
 				if id != t.RootNodeID {

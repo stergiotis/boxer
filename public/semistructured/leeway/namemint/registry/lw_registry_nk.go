@@ -259,7 +259,7 @@ func (inst RegisteredNaturalKey) GetNumberOfRestrictions() (n int) {
 func (inst RegisteredNaturalKey) IterateRestrictionIndices() iter.Seq[int] {
 	return func(yield func(int) bool) {
 		n := len(inst.allowedCardinality)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if !yield(i) {
 				return
 			}

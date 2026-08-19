@@ -951,7 +951,7 @@ func (inst *Table2CardEmitter) renderSectionHeaderRow(
 	// natural egui_extras column dividers sit in the same place, so the
 	// effect reads as an outlined row rather than as visible seams.
 	clicked := false
-	for col := uint32(0); col < nCols; col++ {
+	for col := range nCols {
 		for range r.Col() {
 			cellId := inst.ids.PrepareSeq(0x60000 + uint64(row.sectionAccentIdx)*16 + uint64(col))
 			ts := c.TintedScope(cellId, transparentFill).

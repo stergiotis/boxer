@@ -133,11 +133,11 @@ func demoGraphBasic(ids *c.WidgetIdStack, st *graphsDemoState) {
 	// encoding anyway — an edge here carries no category, only topology,
 	// and ADR-0031 §SD7 scopes the qualitative cycle to categorical data.
 	edgeCol := color.Hex(styletokens.NeutralBorderDefault.AsHex())
-	for i := uint64(0); i < n; i++ {
+	for i := range uint64(n) {
 		c.GraphNode(i+1, fmt.Sprintf("n%d", i+1)).
 			Color(color.Hex(styletokens.QualitativeCycle(int(i)).AsHex())).Send()
 	}
-	for i := uint64(0); i < n; i++ {
+	for i := range uint64(n) {
 		from := i + 1
 		to := (i+1)%n + 1
 		c.GraphEdge(from, to).

@@ -368,12 +368,12 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}) {
 // feature smear the whole scale into a single bucket.
 func buildFeatureColumns(features []card.EntityFeatures) (cols [card.NumFeatures][]float64) {
 	n := len(features)
-	for fi := 0; fi < card.NumFeatures; fi++ {
+	for fi := range card.NumFeatures {
 		cols[fi] = make([]float64, n)
 	}
-	for ri := 0; ri < n; ri++ {
+	for ri := range n {
 		s := features[ri].AsSlice()
-		for fi := 0; fi < card.NumFeatures; fi++ {
+		for fi := range card.NumFeatures {
 			v := s[fi]
 			if card.LogTransformFeature[fi] {
 				if v < 0 {
@@ -404,7 +404,7 @@ func subsampleFeatures(features []card.EntityFeatures, maxRows int) (sampled []c
 	}
 	sampled = make([]card.EntityFeatures, maxRows)
 	coordRow = make([]int64, maxRows)
-	for i := 0; i < maxRows; i++ {
+	for i := range maxRows {
 		idx := int64(i) * int64(n-1) / int64(maxRows-1)
 		coordRow[i] = idx
 		sampled[i] = features[idx]
@@ -822,7 +822,7 @@ func emitBucketedScatters(p *implot.Plot, coords [][2]float64, values []float64,
 		bucketXs[idx] = append(bucketXs[idx], coords[i][0])
 		bucketYs[idx] = append(bucketYs[idx], coords[i][1])
 	}
-	for b := 0; b < nBuckets; b++ {
+	for b := range nBuckets {
 		if len(bucketXs[b]) == 0 {
 			continue
 		}

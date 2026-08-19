@@ -46,7 +46,7 @@ func TestExhaustion_MaxWidthTag(t *testing.T) {
 	defer func() { _ = gen.Release() }()
 
 	var last identifier.UntaggedId
-	for i := 0; i < capacity; i++ {
+	for range capacity {
 		u, _, err := gen.GetUntaggedId(context.Background(), nil)
 		require.NoError(t, err)
 		last = u

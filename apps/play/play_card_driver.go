@@ -83,7 +83,7 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 
 	nFields := schema.NumFields()
 	colNames := make([]string, 0, nFields)
-	for i := 0; i < nFields; i++ {
+	for i := range nFields {
 		colNames = append(colNames, schema.Field(i).Name)
 	}
 	// Probe the schema with the shared classifier (ADR-0170 §SD1): sniff the

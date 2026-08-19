@@ -40,7 +40,7 @@ func TestStringStabilityRoundtrip(t *testing.T) {
 	seed := uint64(100)
 	rnd := rand.New(rand.NewPCG(seed, seed))
 
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		// Use the generator that filters for .IsValid() nodes
 		node := sample.GenerateSamplePrimitiveType(rnd, nil)
 
@@ -63,7 +63,7 @@ func TestGoCodeGenerationRoundtrip(t *testing.T) {
 	seed := uint64(200)
 	rnd := rand.New(rand.NewPCG(seed, seed))
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		node := sample.GenerateSamplePrimitiveType(rnd, nil)
 
 		var buf bytes.Buffer

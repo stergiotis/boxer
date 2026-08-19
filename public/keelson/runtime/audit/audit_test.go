@@ -38,7 +38,7 @@ func TestInMemoryAuditSink_RecordsInOrder(t *testing.T) {
 func TestInMemoryAuditSink_ConcurrentRecords(t *testing.T) {
 	sink := NewInMemoryAuditSink()
 	var wg sync.WaitGroup
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		wg.Go(func() {
 			sink.Record(AuditRecord{Subject: "x", Ts: time.Now()})
 		})

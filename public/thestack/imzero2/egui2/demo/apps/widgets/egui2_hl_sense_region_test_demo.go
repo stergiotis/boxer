@@ -90,8 +90,8 @@ func demoSenseRegionTest(ids *c.WidgetIdStack, st *senseRegionTestDemoState) {
 
 	// Phase 1: emit cells + sense regions. Previous-frame responses drive
 	// the hover border so it renders into this frame's canvas.
-	for row := 0; row < srTestRows; row++ {
-		for col := 0; col < srTestCols; col++ {
+	for row := range srTestRows {
+		for col := range srTestCols {
 			idx := row*srTestCols + col
 			x := float32(col) * (srTestCellW + srTestGap)
 			y := srTestHeaderH + float32(row)*(srTestCellH+srTestGap)
@@ -118,8 +118,8 @@ func demoSenseRegionTest(ids *c.WidgetIdStack, st *senseRegionTestDemoState) {
 
 	// Phase 3: read previous-frame r7 flags and build status / counters.
 	var statusParts []string
-	for row := 0; row < srTestRows; row++ {
-		for col := 0; col < srTestCols; col++ {
+	for row := range srTestRows {
+		for col := range srTestCols {
 			idx := row*srTestCols + col
 			senseAbsId := c.MakeAbsoluteIdHighEntropy(srTestIdBase + uint64(idx))
 			resp := sm.GetResponse(widgethandle.Make(senseAbsId.Derive()))

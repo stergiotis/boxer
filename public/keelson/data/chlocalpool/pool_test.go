@@ -382,7 +382,7 @@ func TestPool_ConcurrentAcquireRoundTripSafely(t *testing.T) {
 	const N = 6
 	var wg sync.WaitGroup
 	errCh := make(chan error, N)
-	for i := 0; i < N; i++ {
+	for range N {
 		wg.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()

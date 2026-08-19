@@ -637,7 +637,7 @@ func permutations(n int) [][]int {
 			result = append(result, tmp)
 			return
 		}
-		for i := 0; i < k; i++ {
+		for i := range k {
 			gen(arr, k-1)
 			if k%2 == 0 {
 				arr[i], arr[k-1] = arr[k-1], arr[i]

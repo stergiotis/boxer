@@ -157,7 +157,7 @@ func demoETableLarge(ids *c.WidgetIdStack) {
 		numRows, 18.0, 1, 0,
 	)
 
-	for row := uint64(0); row < numRows; row++ {
+	for row := range uint64(numRows) {
 		et.BeginCells(row, 0)
 		c.Label(fmt.Sprintf("%d", row)).Send()
 		et.EndCells()
@@ -201,7 +201,7 @@ func demoETableDense10k(ids *c.WidgetIdStack) {
 		numRows, 18.0, 1, 0,
 	)
 
-	for row := uint64(0); row < numRows; row++ {
+	for row := range uint64(numRows) {
 		et.BeginCells(row, 0)
 		c.Label(fmt.Sprintf("%d", row)).Send()
 		et.EndCells()
@@ -257,7 +257,7 @@ func demoETableSparse10k(ids *c.WidgetIdStack) {
 		numRows, 18.0, 1, 0,
 	)
 
-	for row := uint64(0); row < numRows; row++ {
+	for row := range uint64(numRows) {
 		// Column 0: always present
 		et.BeginCells(row, 0)
 		c.Label(fmt.Sprintf("%d", row)).Send()
@@ -394,7 +394,7 @@ func demoETableVariableHeights(ids *c.WidgetIdStack) {
 	c.EtHeaderText("Content").Send()
 
 	// Send per-row heights: alternating 20px and 40px
-	for row := 0; row < numRows; row++ {
+	for row := range numRows {
 		if row%3 == 0 {
 			c.EtRowHeight(40.0).Send()
 		} else {
@@ -406,7 +406,7 @@ func demoETableVariableHeights(ids *c.WidgetIdStack) {
 		numRows, 20.0, 1, 0,
 	)
 
-	for row := uint64(0); row < numRows; row++ {
+	for row := range uint64(numRows) {
 		et.BeginCells(row, 0)
 		c.Label(fmt.Sprintf("%d", row)).Send()
 		et.EndCells()

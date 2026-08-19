@@ -148,7 +148,7 @@ func (inst *ParseTreeSerializer) serialize(out io.StringWriter, tree antlr.Tree)
 	}
 
 	if c > 0 {
-		for i := 0; i < c; i++ {
+		for i := range c {
 			err = inst.serialize(out, tree.GetChild(i))
 			if err != nil {
 				return

@@ -11,8 +11,8 @@ import (
 
 func solid(w, h int, c color.Color) (img *image.RGBA) {
 	img = image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.Set(x, y, c)
 		}
 	}
@@ -84,8 +84,8 @@ func TestSinglePixelShiftStaysAboveThreshold(t *testing.T) {
 	base := solid(64, 64, color.NRGBA{R: 128, G: 128, B: 128, A: 255})
 	// Copy and tweak one pixel by +1 in each channel.
 	tweaked := image.NewRGBA(base.Bounds())
-	for y := 0; y < 64; y++ {
-		for x := 0; x < 64; x++ {
+	for y := range 64 {
+		for x := range 64 {
 			tweaked.Set(x, y, base.At(x, y))
 		}
 	}
@@ -126,8 +126,8 @@ func TestWindowSizeAffectsResult(t *testing.T) {
 	a := solid(64, 64, color.NRGBA{R: 100, G: 100, B: 100, A: 255})
 	b := image.NewRGBA(a.Bounds())
 	// Stripe pattern for some texture.
-	for y := 0; y < 64; y++ {
-		for x := 0; x < 64; x++ {
+	for y := range 64 {
+		for x := range 64 {
 			v := uint8(100)
 			if (x+y)%4 == 0 {
 				v = 150

@@ -48,7 +48,7 @@ func TestNewBinarySearchGrowingKVFromAnyMap_DeterministicOrder(t *testing.T) {
 		"zeta": 1, "alpha": 2, "mu": 3, "beta": 4, "kappa": 5,
 	}
 	expected := []string{"alpha", "beta", "kappa", "mu", "zeta"}
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		kv := NewBinarySearchGrowingKVFromAnyMap(in)
 		require.Equal(t, expected, slices.Collect(kv.IterateKeys()))
 	}

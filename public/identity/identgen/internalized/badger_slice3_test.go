@@ -41,7 +41,7 @@ func TestCreate_SecondGeneratorForTagErrors(t *testing.T) {
 func keysColumnN(prefix string, n int) (keys identgen.KeysColumn) {
 	keys.Data = make([]byte, 0, n*(len(prefix)+7))
 	keys.Ends = make([]uint32, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		keys = keys.AppendKey(fmt.Appendf(nil, "%s%06d", prefix, i))
 	}
 	return

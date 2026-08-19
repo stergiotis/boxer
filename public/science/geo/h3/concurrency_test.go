@@ -20,12 +20,12 @@ func TestConcurrentMixedBulkCalls(t *testing.T) {
 	wg.Add(workers)
 	errCh := make(chan error, workers)
 
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		go func(id int) {
 			defer wg.Done()
 			lats := []float64{float64(id), float64(-id), 37.7749, 48.8566}
 			lngs := []float64{float64(id), float64(id * 2), -122.4194, 2.3522}
-			for j := 0; j < opsPerWorker; j++ {
+			for range opsPerWorker {
 				h, err := rt.AcquireE(ctx)
 				if err != nil {
 					errCh <- err
