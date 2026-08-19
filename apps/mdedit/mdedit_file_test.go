@@ -13,6 +13,7 @@ package mdedit
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -383,11 +384,11 @@ func TestSuggestedFileName_NeverCarriesADirectory(t *testing.T) {
 }
 
 func TestSuggestedFileName_IsBounded(t *testing.T) {
-	long := ""
+	var long strings.Builder
 	for i := 0; i < 40; i++ {
-		long += "verylongword "
+		long.WriteString("verylongword ")
 	}
-	got := suggestedFileName([]markdown.HeadingInfo{{Text: long}})
+	got := suggestedFileName([]markdown.HeadingInfo{{Text: long.String()}})
 	assert.LessOrEqual(t, len(got), maxSuggestedNameLen+len(".md"))
 }
 

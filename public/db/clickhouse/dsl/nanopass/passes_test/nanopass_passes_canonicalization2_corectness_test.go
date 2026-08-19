@@ -604,11 +604,11 @@ func TestPipelineOrderIndependence(t *testing.T) {
 	// All 24 permutations of 4 passes
 	perms := permutations(len(reorderablePasses))
 	for _, perm := range perms {
-		name := ""
+		var name strings.Builder
 		for _, idx := range perm {
-			name += reorderablePasses[idx].name + "_"
+			name.WriteString(reorderablePasses[idx].name + "_")
 		}
-		t.Run(name, func(t *testing.T) {
+		t.Run(name.String(), func(t *testing.T) {
 			result := sql
 			for _, idx := range perm {
 				result, err = reorderablePasses[idx].pass.Run(result)
@@ -618,7 +618,7 @@ func TestPipelineOrderIndependence(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, canonical, result,
-				"ordering %s produced different result", name)
+				"ordering %s produced different result", name.String())
 		})
 	}
 }

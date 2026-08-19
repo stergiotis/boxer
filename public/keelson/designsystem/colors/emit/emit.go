@@ -39,7 +39,7 @@ func GoConst(name string) (s string) {
 			continue
 		}
 		// snake_case → PascalCase
-		camel := ""
+		var camel strings.Builder
 		upNext := true
 		for _, ch := range p {
 			if ch == '_' {
@@ -47,13 +47,13 @@ func GoConst(name string) (s string) {
 				continue
 			}
 			if upNext {
-				camel += strings.ToUpper(string(ch))
+				camel.WriteString(strings.ToUpper(string(ch)))
 				upNext = false
 			} else {
-				camel += string(ch)
+				camel.WriteString(string(ch))
 			}
 		}
-		out = append(out, camel)
+		out = append(out, camel.String())
 	}
 	if len(out) > 0 && out[0] == "Neutral" {
 		// Avoid "NeutralBgPanel" → "BgPanel" feels cleaner with explicit role.

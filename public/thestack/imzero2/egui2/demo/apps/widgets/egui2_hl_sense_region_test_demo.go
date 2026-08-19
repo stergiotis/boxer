@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -137,14 +138,14 @@ func demoSenseRegionTest(ids *c.WidgetIdStack, st *senseRegionTestDemoState) {
 	}
 
 	if len(statusParts) > 0 {
-		status := ""
+		var status strings.Builder
 		for i, p := range statusParts {
 			if i > 0 {
-				status += "  |  "
+				status.WriteString("  |  ")
 			}
-			status += p
+			status.WriteString(p)
 		}
-		c.Label(status).Send()
+		c.Label(status.String()).Send()
 	} else {
 		c.Label("Hover or click any cell").Send()
 	}

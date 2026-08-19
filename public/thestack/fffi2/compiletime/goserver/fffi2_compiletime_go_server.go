@@ -5,6 +5,7 @@ import (
 	"io"
 	"iter"
 	"slices"
+	"strings"
 
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/containers/ragged"
@@ -656,19 +657,19 @@ func generateMethodCodeBuildMethods(w io.Writer, factory *ir.BuilderFactoryNode,
 			// has copied the captured bytes out of the scope. Releasing
 			// before Splice would race the scope's buffers into GC while
 			// the Splice still aliases them.
-			var spliceCalls string
-			var releaseCalls string
+			var spliceCalls strings.Builder
+			var releaseCalls strings.Builder
 			for _, dbm := range factory.DeferredBlockMaps {
 				dbmName := naming.MustBeValidStylableName(dbm.Name).Convert(naming.UpperCamelCase)
-				spliceCalls += fmt.Sprintf("\tr.SpliceDeferredBlockMap(inst.deferred%s)\n", dbmName)
-				releaseCalls += fmt.Sprintf("\tinst.deferred%s.ReleaseWithHint()\n", dbmName)
+				spliceCalls.WriteString(fmt.Sprintf("\tr.SpliceDeferredBlockMap(inst.deferred%s)\n", dbmName))
+				releaseCalls.WriteString(fmt.Sprintf("\tinst.deferred%s.ReleaseWithHint()\n", dbmName))
 			}
 			_, err := fmt.Fprintf(w, `func (inst %sFluid) Send() {
 	r := inst.r
 	%s
 %s%s	r.SendIntermediate()
 }
-`, b, buildMethodInvoke, spliceCalls, releaseCalls)
+`, b, buildMethodInvoke, spliceCalls.String(), releaseCalls.String())
 			tracker.MergeError(err)
 		} else {
 			_, err := fmt.Fprintf(w, `func (inst %sFluid) Send() {

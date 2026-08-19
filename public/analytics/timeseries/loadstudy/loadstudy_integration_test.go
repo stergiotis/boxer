@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,7 +155,8 @@ func TestWindowSweep(t *testing.T) {
 				}
 
 				_, best := baselines(t, values, labels)
-				line := fmt.Sprintf("  %-14s baseline=%.4f |", name, best)
+				var line strings.Builder
+				line.WriteString(fmt.Sprintf("  %-14s baseline=%.4f |", name, best))
 				for _, window := range g.windows {
 					if int32(len(values)) < window*12 {
 						continue
@@ -175,9 +177,9 @@ func TestWindowSweep(t *testing.T) {
 					if m.VUSPR > best {
 						mark = "*"
 					}
-					line += fmt.Sprintf(" w%d=%.4f%s", window, m.VUSPR, mark)
+					line.WriteString(fmt.Sprintf(" w%d=%.4f%s", window, m.VUSPR, mark))
 				}
-				t.Log(line)
+				t.Log(line.String())
 			}
 		}
 	}

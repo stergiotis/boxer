@@ -1199,19 +1199,20 @@ func (inst *Graggle) Clone() *Graggle {
 
 // Debug returns a human-readable dump of the graggle.
 func (inst *Graggle) Debug() string {
-	s := fmt.Sprintf("Live nodes (%d):\n", inst.nodes.Len())
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("Live nodes (%d):\n", inst.nodes.Len()))
 	for _, id := range inst.nodes.Items() {
-		s += fmt.Sprintf("  %v: %q\n", id, string(inst.contents[id]))
+		s.WriteString(fmt.Sprintf("  %v: %q\n", id, string(inst.contents[id])))
 	}
-	s += fmt.Sprintf("Deleted nodes (%d):\n", inst.deletedNodes.Len())
+	s.WriteString(fmt.Sprintf("Deleted nodes (%d):\n", inst.deletedNodes.Len()))
 	for _, id := range inst.deletedNodes.Items() {
-		s += fmt.Sprintf("  %v: %q\n", id, string(inst.contents[id]))
+		s.WriteString(fmt.Sprintf("  %v: %q\n", id, string(inst.contents[id])))
 	}
-	s += "Edges:\n"
+	s.WriteString("Edges:\n")
 	for _, src := range inst.edges.Sources() {
 		for _, e := range inst.edges.Get(src) {
-			s += fmt.Sprintf("  %v --%s--> %v\n", src, e.Kind, e.Dest)
+			s.WriteString(fmt.Sprintf("  %v --%s--> %v\n", src, e.Kind, e.Dest))
 		}
 	}
-	return s
+	return s.String()
 }

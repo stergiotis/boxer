@@ -3,6 +3,7 @@ package passes_test
 import (
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
@@ -54,11 +55,11 @@ func newTestEvaluator() *passes.FunctionEvaluator {
 
 	// myConcat(a, b, ...) → concatenated string
 	eval.Register("myConcat", func(args []any) (any, error) {
-		var sb string
+		var sb strings.Builder
 		for _, arg := range args {
-			sb += fmt.Sprintf("%v", arg)
+			sb.WriteString(fmt.Sprintf("%v", arg))
 		}
-		return sb, nil
+		return sb.String(), nil
 	}, true)
 
 	// myConst(v) → v (identity, for testing)
