@@ -383,13 +383,42 @@ Consequences of the `go.mod` bump, measured unless marked:
 - `go vet ./...` under 1.27 in the target state is clean apart from 236
   pre-existing `unreachable code` findings in generated ANTLR `.out.go`
   parsers, which `lint.sh` already filters.
-- **The pinned `staticcheck` does not survive the bump.** `honnef.co/go/tools
-  v0.7.0` panics under `go1.27.0` — `panic: unexpected expr: *ast.KeyValueExpr`
-  out of its own IR builder — on a package it analyses cleanly under
-  `go1.26.5`. That is `lint.sh`'s second step, so M3 must bump the pin;
-  `v0.8.0-rc.1` is the only newer version published, which means the lint lane
-  would depend on a release candidate until a final ships. `errcheck`,
-  `nilaway` and `govulncheck` (which reports `Go: go1.27.0`) all run fine.
+- **`staticcheck` does not survive the bump, and there is nowhere to move to.**
+  `honnef.co/go/tools v0.7.0` panics under `go1.27.0` — `unexpected expr:
+  *ast.KeyValueExpr` out of its own IR builder — on **every** package: measured
+  across all 33 subtrees of `./public`, not one completes. It is not narrowable
+  to an exclusion, because what it chokes on is in the standard library every
+  package links. The obvious remedy fails too: `v0.8.0-rc.1`, the only newer
+  publication, panics on its own bug (`internal error: unhandled builtin
+  recover`) — and does so **under `go1.26.5` as well**, so it is not a 1.27
+  problem and not a version we could adopt early either. `@master` resolves to
+  an older pseudo-version. So the step is parked: `lint.sh` now prints
+  `DID NOT RUN` and the one-line panic instead of letting a stack trace land in
+  a warn-only step and read like findings. `errcheck`, `nilaway` and
+  `govulncheck` (which reports `Go: go1.27.0`) all run fine.
+- **capslock drifts, and the reason is worth reading.** The capability gate
+  (ADR-0026 §SD10) went red on `apps/writingstylescope :: CAPABILITY_NETWORK`.
+  Isolated to the toolchain: identical code passes under 1.26 and fails under
+  1.27. The path is two frames — the app's own closure "calling" a closure
+  inside `net/http.ParseCookie`. Mechanism: 1.27 rewrote `ParseCookie` from
+  `strings.Split` plus a plain loop to `for s := range strings.SplitSeq(line,
+  ";")`, which lowers to a `func(string) bool` yield closure; the app's
+  `sectionTexts` returns an `iter.Seq[string]`, and capslock's VTA call graph
+  resolves *its* `yield` call to every same-signature closure in the program.
+  A false positive, and the same one already recorded beside it as
+  `net/http.containsDotDot$1` — found four months earlier, in the same app, by
+  the same mechanism. It belongs in `knownNoiseSinks`, not in the baseline:
+  that file's own doc says an accepted finding no app could honestly act on is
+  a defect in the table, not debt in the app. **Expect more of these** as the
+  standard library adopts range-over-func inside capability-branded packages.
+- **A `go.work` outside the repo gates the bump locally.** The developer
+  workspace at the parent directory spans nine sibling repositories and
+  declares `go 1.26.1`; a workspace's `go` line must be at least each member's,
+  so it refuses the module until it is raised. It is git-ignored here and
+  therefore not something this repository can fix — but it is the first thing
+  that breaks after the commit, for every one of those nine repositories, and
+  it is not mentioned anywhere. `GOWORK=off` is the escape hatch for a single
+  command.
 
 ### What the lanes said
 
@@ -458,8 +487,8 @@ renumbered, because M0 measured its work away.
 | **M0** | ~~Acquire 1.27; answer the tag, `go tool` and `goroutineleak` questions~~ **done 2026-08-19** — results in §1, §3, §5 | — | ran in a detached worktree at `29733c55` |
 | **M1** | ~~`go fix` sweep on `go1.26.5`, one commit per fixer~~ **done 2026-08-19** — 21 commits, 320 files, `fmtappendf` taken before it disappears; see §4 | — | full `-race` suite green, `lint.sh` clean of sweep-introduced findings |
 | ~~**M2**~~ | ~~`pprofarrow` kind-hint plumbing~~ — **not needed**: the profile carries its own `goroutineleak/count` sample type and classifies correctly today (§3) | — | — |
-| **M3** | One atomic commit: `go 1.27.0` directive, `go mod tidy` (which drops the `toolchain` line), the two-line `jsontext` repair in `leeway/dml/example/cli.go`, and the `,inline` → `,embed` tag in `openaichat` — none of the three compiles or behaves correctly under 1.26, so none can precede the bump. Plus the `staticcheck` pin bump to `v0.8.0-rc.1`, without which `lint.sh` panics. Optionally drop the `go-json-experiment/json` dependency, now a pure alias | M0 | `lint.sh`, `gotest.sh`, all seven workflows |
-| **M3b** | Airgap: state the "packed on a 1.27 host" precondition where `airgap_ship_goroot` can be seen to require it; refresh the `toolchain go1.26.5` sentence in [howto/airgapped-build](../howto/airgapped-build.md); coordinate the adopter's `go` line and bundle re-cut (§5) | M3 | a bundle cut + `airgap-unbundle` smoke on a clean host |
+| **M3** | ~~One atomic commit: `go 1.27.0`, `go mod tidy`, the `jsontext` repair, the `,inline` → `,embed` tag~~ **done 2026-08-19** as `42f1dc4b` — plus two things the plan did not predict: `net/http.ParseCookie$1` into capslock's `knownNoiseSinks`, and a `DID NOT RUN` branch for the staticcheck step, since the planned pin bump to `v0.8.0-rc.1` turned out to be unusable (§5). The `go-json-experiment/json` dependency was left in place | M0 | full `-race` suite green (386 s), `go vet` clean, `go mod tidy` clean, capslock green |
+| **M3b** | Airgap: ~~refresh the `toolchain go1.26.5` sentence and state the "packed on a 1.27 host" precondition in [howto/airgapped-build](../howto/airgapped-build.md)~~ **done 2026-08-19** as `849b9b64`. Still open: coordinate the adopter's `go` line and its bundle re-cut, and raise the local `go.work` (§5) | M3 | a bundle cut + `airgap-unbundle` smoke on a clean host |
 | **M4** | Tag retirement: ADR first (Tier 1 — Surfaces / Migration / Verification), then `./tags`, `gov/buildtags` required→empty + retired entry, README, ENGINEERING_PRACTICES, dated Updates on ADR-0053/0078/0004/0083, `wasmsurvey` reason removal; then adopter pin bump + its `./tags` edit | M3 | `gov gate` (its `buildtags` step), `lint.sh`, the `go tool` probe from M0 |
 | **M5** | `goroutineleak` surfaces: one `profileKinds` entry, imzrt tour + `bookpprof` rosters, ADR-0061 dated Update for the forced-GC caveat; replace the goroutine-counting slack in `task/spawn_leak_test.go` | M3 | live gate on the Profiles tab (returning rows is not evidence it draws — assert the Arrow header), `gotest.sh` |
 | **M6** | Generic methods where they pay: `marshallreflect` terminals as methods on `*SectionReaders` with the free functions kept as forwarders; ADR-0023 design edit (it is `proposed`, so edit in place); `FatRow.Extract`. `recordstore`'s cache constructor only if a generator change is happening anyway | M3 | `gotest.sh`, leeway golden lanes |
