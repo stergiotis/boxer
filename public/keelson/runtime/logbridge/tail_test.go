@@ -31,7 +31,7 @@ func TestSink_Tail_RetainsAfterFlush(t *testing.T) {
 	defer sink.Close()
 
 	logger := zerolog.New(sink)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		logger.Info().Int("i", i).Msg(fmt.Sprintf("ev%d", i))
 	}
 
@@ -62,7 +62,7 @@ func TestSink_Tail_DropOldestOnOverflow(t *testing.T) {
 	defer sink.Close()
 
 	logger := zerolog.New(sink)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		logger.Info().Msg(fmt.Sprintf("ev%d", i))
 	}
 
@@ -86,7 +86,7 @@ func TestSink_Tail_MaxClampsResult(t *testing.T) {
 	defer sink.Close()
 
 	logger := zerolog.New(sink)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		logger.Info().Msg(fmt.Sprintf("ev%d", i))
 	}
 

@@ -170,7 +170,7 @@ func TestSink_RingOverflow_DropsOldest(t *testing.T) {
 	// 4 fit; 6 more are over capacity. The flusher *may* wake when
 	// FlushN=4 is reached and consume one before the burst completes,
 	// but it cannot drain past 1 because gate is unbuffered.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		logger.Info().Int("i", i).Msg("burst")
 	}
 
@@ -257,7 +257,7 @@ func TestSink_Close_DrainsPending(t *testing.T) {
 	require.NoError(t, err)
 
 	logger := zerolog.New(sink)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		logger.Info().Int("i", i).Msg("pending")
 	}
 	require.NoError(t, sink.Close())

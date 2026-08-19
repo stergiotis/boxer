@@ -2,5 +2,4 @@
 
 package application
 
-type ApplicationI interface {
-}
+type ApplicationI any

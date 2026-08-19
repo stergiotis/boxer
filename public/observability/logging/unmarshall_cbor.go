@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-func UnmarshallZerologMsg(msg []byte) (v interface{}, err error) {
+func UnmarshallZerologMsg(msg []byte) (v any, err error) {
 	err = cbor2.Unmarshal(msg, &v)
 	if err != nil {
 		err = eb.Build().Bytes("msg", msg).Errorf("unable to unmarshall cbor zerolog msg: %w", err)

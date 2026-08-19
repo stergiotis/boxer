@@ -96,7 +96,7 @@ func TestNopCloser_NoPanic(t *testing.T) {
 // — Go forbids `==` on function values directly. Used by the
 // marshaler-restoration test to confirm zerolog.ErrorMarshalFunc was
 // reset to the prior global pointer.
-func sameFunc(a, b func(error) interface{}) (eq bool) {
+func sameFunc(a, b func(error) any) (eq bool) {
 	eq = reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
 	return
 }

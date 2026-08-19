@@ -65,7 +65,7 @@ func fieldsByName(t *testing.T, row factsstore.LogRow) (m map[string]factsstore.
 // switched type (Int → Uint, etc.) or where the level rule drifts.
 func TestEmitScenarioHTTP_TypedFields(t *testing.T) {
 	a, sink := scenarioHarness(t)
-	for i := 0; i < len(httpFixtures); i++ {
+	for range httpFixtures {
 		a.emitScenarioHTTP()
 	}
 	rows := sink.Tail(0)
@@ -111,7 +111,7 @@ func TestEmitScenarioHTTP_TypedFields(t *testing.T) {
 func TestEmitScenarioDB_TypedFields(t *testing.T) {
 	a, sink := scenarioHarness(t)
 	const n = 4 // exercise the wantErr arm at least once
-	for i := 0; i < n; i++ {
+	for range n {
 		a.emitScenarioDB()
 	}
 	rows := sink.Tail(0)
@@ -144,7 +144,7 @@ func TestEmitScenarioDB_TypedFields(t *testing.T) {
 // denied requests emit warn while granted requests emit info.
 func TestEmitScenarioAuth_TypedFields(t *testing.T) {
 	a, sink := scenarioHarness(t)
-	for i := 0; i < len(authFixtures); i++ {
+	for range authFixtures {
 		a.emitScenarioAuth()
 	}
 	rows := sink.Tail(0)
@@ -185,7 +185,7 @@ func TestEmitScenarioAuth_TypedFields(t *testing.T) {
 // is "error" (the scenario's only emit level).
 func TestEmitScenarioBoxerErr_ChainSurvives(t *testing.T) {
 	a, sink := scenarioHarness(t)
-	for i := 0; i < len(boxerErrFixtures); i++ {
+	for range boxerErrFixtures {
 		a.emitScenarioBoxerErr()
 	}
 	rows := sink.Tail(0)
@@ -244,7 +244,7 @@ func TestBuildBoxerErr_Variants(t *testing.T) {
 func TestScenarioCounter_PerInstance(t *testing.T) {
 	a1, _ := scenarioHarness(t)
 	a2, _ := scenarioHarness(t)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		a1.emitScenarioHTTP()
 	}
 	assert.Equal(t, uint64(0), a2.scenarioCounter.Load(),
