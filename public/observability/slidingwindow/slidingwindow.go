@@ -59,6 +59,17 @@ func (inst *Window[T]) Push(v T) {
 	inst.data[len(inst.data)-1] = v
 }
 
+// Reset drops every held value, keeping the capacity. The window is empty
+// afterwards, exactly as a freshly built one is.
+//
+// The backing array is cleared before the truncation: a Window over a
+// pointer-carrying T would otherwise keep the dropped values reachable behind
+// a slice that no longer names them.
+func (inst *Window[T]) Reset() {
+	clear(inst.data)
+	inst.data = inst.data[:0]
+}
+
 // Values returns the held values in chronological order (oldest first). The
 // returned slice aliases the backing array.
 func (inst *Window[T]) Values() (out []T) {
