@@ -10,6 +10,8 @@ status: draft
 > The design only — no history, motivation or alternatives. Those live in
 > [the full note](./iofs-clickhouse-snapshot-store.md), together with the
 > verification list; this page is what that note converged on (2026-08-19).
+> The decision record is [ADR-0198](../adr/0198-fs-snapshot-store.md); the
+> implementation plan is [the plan page](./iofs-clickhouse-snapshot-store-plan.md).
 
 # Snapshot store for file trees — compact design (August 2026)
 

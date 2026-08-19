@@ -17,6 +17,8 @@ status: draft
 > and egress (§15).
 > The converged design without history or alternatives is in
 > [the compact page](./iofs-clickhouse-snapshot-store-compact.md).
+> The decision record is [ADR-0198](../adr/0198-fs-snapshot-store.md); the
+> implementation plan is [the plan page](./iofs-clickhouse-snapshot-store-plan.md).
 
 # An `io/fs` ↔ ClickHouse bridge: a snapshot store for file trees (August 2026)
 
