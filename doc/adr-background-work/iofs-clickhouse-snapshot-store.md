@@ -12,7 +12,8 @@ status: draft
 > Prior-art claims (who built what, thresholds from the literature) are from
 > prior knowledge and were **not** re-verified. Numbers are estimates (marked
 > with `~`) unless dated; nothing here has been measured on a live server yet.
-> Revised twice the same day — many-mount stores, then the hash algorithm (§14).
+> Revised three times the same day — many-mount stores, the hash algorithm,
+> then leeway conformance and caller-owned identity (§14).
 
 # An `io/fs` ↔ ClickHouse bridge: a snapshot store for file trees (August 2026)
 
@@ -25,18 +26,21 @@ questions that `find` answers slowly. What should that bridge look like, and
 what does it give up?
 
 The short form: the bridge is a **snapshot store**. A walk of an `fs.FS` — a
-*mount* — is written, once, as one snapshot into the tables of a *store*:
-every entry's `Stat` into a metadata table, and for files under a per-mount
-size threshold the bytes into a block table. Nothing is ever updated or
-shared: blocks belong to exactly one file in exactly one snapshot. That single
-restriction is what lets ClickHouse do the rest with features it already has —
-append-only inserts, partitions, `TTL`, sorted keys, block compression — and
-it is why there is no garbage collector, no reference counting and no mutation
-anywhere in the design. The same tables hold one mount or a hundred million of
-them: partitioning is by retention class and day, never by mount, so scale
-changes a handful of profile parameters and not the shape. The price is that
-storage grows with the number of retained snapshots, undeduplicated; the scope
-section keeps that bounded by being explicit about what the store is *not*.
+*mount*, identified by a tagged id the application owns — is written, once, as
+one snapshot into **facts-shaped tables**: the `boxer.facts` leeway row shape
+on separate physical tables whose partitioning, key, retention and indexes the
+store controls. Every entry's `Stat` goes into a metadata table, and for files
+under a per-mount size threshold the bytes go into a block table. Nothing is
+ever updated or shared: blocks belong to exactly one file in exactly one
+snapshot. That single restriction is what lets ClickHouse do the rest with
+features it already has — append-only inserts, partitions, `TTL`, sorted keys,
+block compression — and it is why there is no garbage collector, no reference
+counting and no mutation anywhere in the design. The same tables hold one mount
+or a hundred million of them: partitioning is by expiry day, never by mount, so
+scale changes a handful of profile parameters and not the shape. The price is
+that storage grows with the number of retained snapshots, undeduplicated; the
+scope section keeps that bounded by being explicit about what the store is
+*not*.
 
 ## 1. Why a bridge, and why this shape
 
@@ -48,7 +52,8 @@ versus a query that runs to completion (solved by fixed-size blocks, which
 make `ReadAt` a key range). What remains — `io/fs` tolerating that a listing
 and a later `Open` disagree — is no mismatch at all; `io/fs` already allows it.
 
-The repository also owns most of the transport already:
+The repository also owns most of the transport, the row shape and the identity
+scheme already:
 
 - `keelson('x')` is rewritten to `url('<base>/table/x', 'ArrowStream')` by
   [keelsonsql.go](../../public/keelson/runtime/introspect/keelsonsql/keelsonsql.go)
@@ -68,11 +73,25 @@ The repository also owns most of the transport already:
 - A file system is the capability object of the runtime: the picker produces
   an `fs.handle.{uuid}` grant and the app never sees a path
   ([ADR-0026](../adr/0026-app-runtime-and-capability-subjects.md)).
+- `boxer.facts` is a leeway table with a generated `TableDesc`
+  ([runtime_facts_ddl.out.go](../../public/keelson/runtime/factsschema/ddl/runtime_facts_ddl.out.go)),
+  and the standing policy for a new kind is a generated record store
+  ([facts-bound record stores](../explanation/facts-bound-record-stores.md),
+  [ADR-0105 §D5](../adr/0105-keelson-adopts-generated-record-stores.md));
+  `boxer.persiststate` shows a generated store that owns its own table and
+  engine clause ([persiststore/schema.go](../../public/keelson/runtime/persist/persiststore/schema.go)),
+  and the store generator exposes the table clauses as a seam
+  ([gen.go](../../public/storage/recordstore/gen/gen.go), [ADR-0102](../adr/0102-leeway-clickhouse-table-clause-seam.md)).
+- Identity is a prefix-free tagged 64-bit id — a Fibonacci-coded tag over a
+  body ([ident_fib.go](../../public/identity/identifier/ident_fib.go),
+  [ADR-0106](../adr/0106-identity-fibonacci-tags-build-tag-retirement.md)),
+  with tags claimed through [tagmint](../../public/identity/tagmint/tagmint.go)
+  and SQL helpers in [identsql](../../public/identity/identsql/identsql.go).
 
 So the design below is a generalisation, not a new transport: a mount is a
-granted `fs.FS` — or one of many trees inside a granted store; ingest rides the
-existing ArrowStream path; the table functions are macros classified like
-`keelson()`.
+tree the application identifies with an id it already owns; rows are facts
+rows on tables the store controls; ingest rides the existing ArrowStream path;
+the table functions are macros classified like `keelson()`.
 
 Two shapes were considered and kept for other occasions rather than rejected:
 a **live** provider that lists or serves an `fs.FS` per query (right for
@@ -85,178 +104,177 @@ deduplication for having no maintenance at all.
 
 ## 2. The model on one page
 
-- A **store** is one set of tables created from a profile (§3), and the unit
-  of capability: a grant covers a store. Two profiles are described — one for
-  a few mounts with large files, one for very many small trees — and they
-  differ in parameters, not in schema.
+- A **store** is one set of facts-shaped tables — the `boxer.facts`
+  `TableDesc` on separate physical tables — created and owned by a generated
+  record store whose engine clause (partitioning, key, `TTL`, settings, skip
+  indexes) the design chooses. A grant covers a store. Two profiles are
+  described — one for a few mounts with large files, one for very many small
+  trees — and they differ in parameters, not in schema.
 - A **mount** is one tree inside a store: an `fs.FS` the runtime may read — a
   capability handle, an embedded corpus, a zip, a directory a user picked, or
-  one of a hundred million per-tenant trees. It is the unit of snapshotting and
-  the key prefix of every row. A registry assigns it a dense numeric
-  `mount_id`; the name is only used at the SQL surface. In multi-tenancy
-  terms a mount is the tenant of its store.
+  one of a hundred million per-tenant trees. It is identified by a
+  **tagged id the application supplies** — its own tag, its own body, minted
+  however it mints identity — and the store carries that id verbatim in
+  `id:id:u64` on every row of the mount. The store never mints, never claims a
+  tag, never reads the body: the tag stays the application's degree of
+  freedom, and the prefix-free code is what lets many applications share one
+  store without their ids colliding. A mount is the unit of snapshotting and
+  the key prefix of every row.
 - A **snapshot** is one complete walk of a mount, identified by its start
   time `snap`. Rows of a snapshot are written once and never touched again.
   A snapshot is *complete* exactly when its root entry — the row for path
-  `.` — exists; that row is inserted last, so it acts as the commit record,
-  and a materialised view derives the store's snapshot index from it.
-- An **entry** is one row of `fs_meta`: the `Stat` of a file, directory or
-  symlink in `io/fs` terms (mode bits verbatim, size, mtime, link target),
-  plus derived columns for the tree (`name`, `dir`, `depth`, `ext`) and three
-  things `io/fs` does not have: a content hash, a note of whether the content
-  was stored, and any error the walker hit at that entry.
-- A **block** is one row of `fs_data`: `block_size` bytes of one file, in
-  order, keyed by the same `(mount_id, snap, path)` as its entry plus a
-  sequence number. Blocks are unshared: no two entries ever point at the same
-  block.
+  `.` — exists; that row is inserted last, carries the snapshot's totals and
+  the policy that was applied, and acts as the commit record; a materialised
+  view derives the store's snapshot index from it.
+- An **entry** is one row of `fsmeta`: a facts row whose backbone is the key
+  (`id` = mount, `ts` = snapshot, `naturalKey` = path, `expiresAt`) and whose
+  tagged-value sections carry the `Stat` in `io/fs` terms (mode bits verbatim,
+  size, mtime, link target) plus three things `io/fs` does not have: a content
+  hash, a note of whether the content was stored, and any error the walker hit
+  at that entry. Tree columns (`name`, `dir`, `depth`, `ext`) are materialised
+  beside the row.
+- A **block** is one row of `fsdata`: `block_size` bytes of one file, in
+  order, keyed by the same `(id, ts, naturalKey)` as its entry plus an ordinal.
+  Blocks are unshared: no two entries ever point at the same block.
 - **Retention** is a small set of classes (`'7d'`, `'30d'`, `'90d'`, …); each
-  mount has one. Every row carries `expires_at`, derived from its class;
-  ClickHouse's `TTL` reclaims the space and the table functions hide the rows
-  the moment the instant passes, whichever happens first. The class is part of
-  the partition key, which is what keeps partitions few and expiry whole-part.
-- **Content policy** is per mount, held in the registry: store no content
-  (metadata only), store blocks for files up to a size threshold, or mark
-  larger files `ref` so a reader fetches them from the live source through the
-  existing content route.
+  mount has one, from its policy. Every row carries `expiresAt` — the day's
+  end plus the class duration — and the tables are partitioned by the expiry
+  day, so a partition expires all at once; ClickHouse's `TTL` reclaims the
+  space and the table functions hide the rows the moment the instant passes,
+  whichever happens first.
+- **Content policy** is per mount — store no content (metadata only), store
+  blocks for files up to a size threshold, or mark larger files `ref` so a
+  reader fetches them from the live source through the existing content
+  route — and lives in a **policy record**: a modelled kind in `boxer.facts`
+  keyed by the mount's id, carrying the name the application calls the mount,
+  the store, the retention class, the inline threshold and the text rule. The
+  record is for discovery and defaults; every snapshot's root row records the
+  policy actually applied, so the store is correct without it.
 
 Names are `io/fs` names: unrooted, slash-separated, no `.` or `..` elements,
 root is `.`. The table refuses anything else.
 
 ## 3. The tables
 
-One registry for all stores, and per store three tables plus one materialised
-view. All are append-only. The DDL comes first — shown for the corpus profile,
-with unprefixed names — and the choices are explained underneath.
+The physical schema is not written by hand: it is leeway's `TableDesc` for
+`boxer.facts` — four plains and twenty-one typed sections, ~170 physical
+columns — rendered onto separate tables by a generated record store, with
+`SharedRA` binding the read-access scaffolding `boxer.facts` already has and
+`gen.Input.DDL` supplying the clauses the design cares about. What this note
+adds is the mapping of its logical columns onto that shape, the engine
+clauses, and a few `ALTER`s. The bespoke `CREATE TABLE`s of the earlier drafts
+remain in the history (`9420bb27`) as the fallback shape (§11).
+
+**Logical schema of an entry row.**
+
+| Logical column | Leeway slot | Physical |
+|---|---|---|
+| `mount` | `id:id:u64` — the application's tagged id | `UInt64` |
+| `snap` | `ts:ts:z64` | `DateTime64(9)` |
+| `path` | `id:naturalKey:y` | `String` |
+| `expires_at` | `lc:expiresAt:z64` | `DateTime64(9)` |
+| `mode`, `block_size`, `blocks` | `u32Array` — `fsMode`, `fsBlockSize`, `fsBlocks` | |
+| `size`, `snap_entries`, `snap_bytes` | `u64Array` — `fsSize`, `fsSnapEntries`, `fsSnapBytes` (the latter two on the root row only) | |
+| `mtime` | `timeArray` — `fsMtime` | |
+| `link_target`, `err` | `stringArray` — `fsLinkTarget`, `fsErr` | |
+| `content_hash` | `blobArray` — `fsContentHash` | |
+| `content`, `kind`, the kind marker, applied policy | `symbol` — `fsContent` (`none` / `blocks` / `ref`), `fsKind`, `fsKindEntry`; `fsTtlClass`, `fsTextRule` on the root row | |
+| `inline_max` (applied) | `u64Array` — `fsInlineMax`, root row only | |
+| `text` | `bool` — `fsText` | |
+| `name`, `dir`, `depth`, `ext`, `is_dir`, `is_symlink` | `MATERIALIZED` over `naturalKey` and the mode attribute, added by `ALTER` after `EnsureTable` | hidden from `SELECT *` |
+
+Every attribute is a scalar or `unit` shape, so none of the generator's three
+refusals applies, and every section already exists in the facts schema. A
+block row (if `fsdata` is facts-shaped) is the same backbone with the ordinal
+encoded per §12, and `fsData`, `fsBlockHash` (`blobArray`), `fsLine0`
+(`u32Array`) and the marker `fsKindBlock`.
+
+**Engine clauses** — the part the store owns, and the reason for separate
+tables:
 
 ```sql
-CREATE TABLE fs_mount                       -- one, global: the registry of mounts
-(
-    mount_id    UInt64,                     -- registry-assigned, dense, never reused
-    store       LowCardinality(String),     -- which store holds its snapshots
-    name        String,                     -- what fs('…') is called with: a grant id or a path-like label
-    ttl_class   LowCardinality(String),     -- retention class of its snapshots: '7d', '30d', '90d', '365d', …
-    inline_max  UInt64,                     -- files ≤ inline_max bytes are stored as blocks; 0 = metadata only
-    text_rule   LowCardinality(String),     -- how text files are recognised: 'sniff' | 'ext' | 'none'
-    created_at  DateTime
-)
-ENGINE = ReplacingMergeTree
-ORDER BY mount_id;
+-- boxer.fsmeta
+PARTITION BY toYYYYMMDD("lc:expiresAt:z64:4::0:")                    -- every row of a partition expires that day
+ORDER BY ("id:id:u64:47::0:", "ts:ts:z64:47::0:", "id:naturalKey:y:4::0:")   -- (mount, snapshot, path): facts plains only
+TTL "lc:expiresAt:z64:4::0:"
+SETTINGS index_granularity = 1024, ttl_only_drop_parts = 1, allow_suspicious_low_cardinality_types = 1
+-- after EnsureTable:
+ALTER TABLE boxer.fsmeta
+    ADD COLUMN name   String MATERIALIZED splitByChar('/', "id:naturalKey:y:4::0:")[-1],
+    ADD COLUMN dir    String MATERIALIZED multiIf("id:naturalKey:y:4::0:" = '.', '', position("id:naturalKey:y:4::0:", '/') = 0, '.',
+                                              substring("id:naturalKey:y:4::0:", 1, length("id:naturalKey:y:4::0:") - length(name) - 1)),
+    ADD COLUMN depth  UInt16 MATERIALIZED if("id:naturalKey:y:4::0:" = '.', 0, length(splitByChar('/', "id:naturalKey:y:4::0:"))),
+    ADD COLUMN ext    LowCardinality(String) MATERIALIZED if(position(name, '.') = 0, '', concat('.', splitByChar('.', name)[-1])),
+    ADD CONSTRAINT valid_path CHECK "id:naturalKey:y:4::0:" = '.' OR NOT hasAny(splitByChar('/', "id:naturalKey:y:4::0:"), ['', '.', '..']),
+    ADD INDEX ix_dir dir TYPE bloom_filter GRANULARITY 4;
 
-CREATE TABLE fs_meta                        -- one per store
-(
-    mount_id     UInt64,
-    snap         DateTime64(3),             -- snapshot id = walk start; complete iff its '.' row exists
-    path         String,                    -- fs.ValidPath form, root '.'
-    ttl_class    LowCardinality(String),    -- copied from the registry at snapshot time; in the partition key
-    mode         UInt32,                    -- fs.FileMode bits, verbatim
-    size         UInt64,
-    mtime        DateTime64(9),
-    link_target  String DEFAULT '',
-    content_hash FixedString(32),           -- sha256 of the content; zero unless the content was read
-    content      Enum8('none' = 0, 'blocks' = 1, 'ref' = 2),   -- stat only | in fs_data | fetch from the live source
-    block_size   UInt32,                    -- this file's block size; 0 unless content = 'blocks'
-    blocks       UInt32,
-    text         Bool,                      -- blocks were cut at '\n' (line-wise queryable)
-    kind         LowCardinality(String),    -- sniffed media type, '' if not sniffed
-    err          String DEFAULT '',         -- walk / open error for this entry, recorded rather than swallowed
-    snap_entries UInt64 DEFAULT 0,          -- root row only: entries in the snapshot (feeds fs_snap)
-    snap_bytes   UInt64 DEFAULT 0,          -- root row only: file bytes in the snapshot
-    expires_at   DateTime,                  -- toStartOfDay(snap) + 1 DAY + duration(ttl_class): one value per partition
-    name         String  MATERIALIZED splitByChar('/', path)[-1],
-    dir          String  MATERIALIZED multiIf(path = '.', '', position(path, '/') = 0, '.',
-                                              substring(path, 1, length(path) - length(name) - 1)),
-    depth        UInt16  MATERIALIZED if(path = '.', 0, length(splitByChar('/', path))),
-    is_dir       Bool    MATERIALIZED bitTest(mode, 31),    -- fs.ModeDir
-    is_symlink   Bool    MATERIALIZED bitTest(mode, 27),    -- fs.ModeSymlink
-    ext          LowCardinality(String) MATERIALIZED if(is_dir OR position(name, '.') = 0, '',
-                                              concat('.', splitByChar('.', name)[-1])),
-    CONSTRAINT valid_path CHECK path = '.' OR NOT hasAny(splitByChar('/', path), ['', '.', '..']),
-    INDEX ix_dir dir TYPE bloom_filter GRANULARITY 4
-)
-ENGINE = MergeTree
-PARTITION BY (ttl_class, toYYYYMMDD(snap))
-ORDER BY (mount_id, snap, path)
-TTL expires_at
-SETTINGS index_granularity = 1024, ttl_only_drop_parts = 1;
-
-CREATE TABLE fs_data                        -- one per store
-(
-    mount_id   UInt64,
-    snap       DateTime64(3),
-    path       String,                      -- same key as the entry: a file's blocks are one contiguous key range
-    seq        UInt32,                      -- byte offset = seq * block_size
-    ttl_class  LowCardinality(String),
-    line0      UInt32,                      -- text files: 1-based number of the first line in this block
-    data       String CODEC(ZSTD(1)),       -- ≤ block_size bytes, immutable
-    hash       FixedString(32),             -- digest of this block: standalone by default, a BLAKE3 subtree value for aligned blocks
-    expires_at DateTime                     -- identical to the snapshot's entries
-    -- text mounts, optional: INDEX ix_tok data TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 1
-)
-ENGINE = MergeTree
-PARTITION BY (ttl_class, toYYYYMMDD(snap))
-ORDER BY (mount_id, snap, path, seq)
-TTL expires_at
-SETTINGS index_granularity = 1, ttl_only_drop_parts = 1;
-
-CREATE TABLE fs_snap                        -- one per store: the snapshot index, derived from root rows
-(
-    mount_id   UInt64,
-    snap       DateTime64(3),
-    expires_at DateTime,
-    entries    UInt64,
-    bytes      UInt64
-)
-ENGINE = MergeTree
-ORDER BY (mount_id, snap)
-TTL expires_at;
-
-CREATE MATERIALIZED VIEW fs_snap_mv TO fs_snap AS
-SELECT mount_id, snap, expires_at, snap_entries AS entries, snap_bytes AS bytes
-FROM fs_meta WHERE path = '.';
+-- boxer.fsdata (if facts-shaped): ORDER BY (id, ts, naturalKey[, ordinal]), same PARTITION BY / TTL,
+--   SETTINGS index_granularity = 1 (corpus) | default (fleet)
+-- boxer.fssnap: ORDER BY (id, ts); filled by
+CREATE MATERIALIZED VIEW boxer.fssnap_mv TO boxer.fssnap AS
+SELECT * FROM boxer.fsmeta WHERE "id:naturalKey:y:4::0:" = '.';
 ```
 
-**The key.** `(mount_id, snap, path)` makes every `io/fs` operation a point or
-a range inside one snapshot: `Stat` is a point, a subtree is the range
-`startsWith(path, 'a/')`, and a file's blocks are the range
-`(mount_id, snap, path)` in `fs_data`, already in file order. `ReadDir` is the
-one operation not on the key; the bloom filter on `dir` keeps it a granule
-skip rather than a scan. If listings ever dominate, the key `(mount_id, snap,
-dir, name)` flips that trade without changing any query text. The mount is a
-dense integer rather than a name because it leads a key that may hold 10¹⁰
-rows: a `LowCardinality(String)` degrades past ~10 k distinct values, and a
-plain string is the wrong width for the first key column.
+`is_dir` / `is_symlink` are derived from the mode attribute the same way, by
+`bitTest` on the extracted value.
+
+**The key.** `(id, ts, naturalKey)` *is* `(mount, snapshot, path)` with no
+extraction and no added column: all rows of one mount share one id, so
+ordering by the full tagged id groups by mount; ids of different
+applications — different tags — interleave harmlessly and can never collide,
+because the tag code is prefix-free. Every `io/fs` operation is then a point
+or a range inside one snapshot: `Stat` is a point, a subtree is the range
+`startsWith(naturalKey, 'a/')`, and a file's blocks are the range
+`(id, ts, naturalKey)` in `fsdata`, already in file order. `ReadDir` is the
+one operation not on the key; the bloom filter on the materialised `dir`
+keeps it a granule skip rather than a scan. If listings ever dominate, an
+`ORDER BY (id, ts, dir, name)` flips that trade without changing any query
+text. This is the convention `sysmfacts` already follows — `Id` the container
+(the series), `NaturalKey` the member, `Ts` the time
+([sysmfacts/doc.go](../../public/keelson/runtime/sysmfacts/doc.go)) — with
+the mount as the container and the path as the member.
 
 **No indirection.** Because blocks are unshared, the block key simply *is*
-the entry key plus `seq`. There is no inode table, no recipe, no join on the
-read path — that is the immediate dividend of the no-sharing rule.
+the entry key plus an ordinal. There is no inode table, no recipe, no join on
+the read path — that is the immediate dividend of the no-sharing rule.
 
-**Derived columns.** The walker writes `path` and `mode`; `name`, `dir`,
-`depth`, `is_dir`, `is_symlink` and `ext` are materialised at insert, so
-listing, walking and globbing never touch `fs_data`. The root's `dir` is `''`
-rather than `path.Dir(".") == "."` so that the root does not list itself. The
-`CHECK` constraint is `fs.ValidPath` in SQL: every element must be non-empty
-and neither `.` nor `..`, except the root itself.
+**Derived columns.** The walker writes `naturalKey` and the mode attribute;
+`name`, `dir`, `depth`, `ext`, `is_dir`, `is_symlink` are materialised at
+insert, so listing, walking and globbing never touch `fsdata` and never pay
+attribute extraction. They are added by `ALTER` because the generator does not
+emit them (the known gap of the
+[SQL read surface](../explanation/leeway-sql-read-surface.md)), and ClickHouse
+hides `MATERIALIZED` columns from `SELECT *`, so the store's positional decode
+is untouched. The root's `dir` is `''` rather than `path.Dir(".") == "."` so
+that the root does not list itself. The `CHECK` constraint is `fs.ValidPath`
+in SQL: every element must be non-empty and neither `.` nor `..`, except the
+root itself.
 
-**Partitions and `TTL`.** A partition is one retention class on one day; a
-snapshot's rows live in exactly one partition, and `expires_at` — the day's
-end plus the class duration — is the same for every row in it. So a partition
+**Partitions and `TTL`.** A partition is one expiry day; a snapshot's rows
+live in exactly one partition, because `expiresAt` — the day's end plus the
+mount's class duration — is the same for every row in it. So a partition
 expires all at once, `ttl_only_drop_parts = 1` drops whole parts instead of
-rewriting them, and merges never cross snapshots. The partition count is
-classes × retention days — a few thousand at most — and is independent of how
-many mounts the store holds; that independence is the whole reason the mount
-is *not* in the partition key. What a per-mount partition would have bought is
-"drop this mount now", which becomes a rare lightweight `DELETE … WHERE
-mount_id = …` (a purge request) rather than a schema feature.
+rewriting them, and merges never cross snapshots. The partition count is the
+number of distinct expiry days — retention classes × ingest days, a few
+thousand at most — and is independent of how many mounts the store holds; that
+independence is the whole reason the mount is *not* in the partition key. It is
+also derived from a plain the facts backbone already has, which is why the
+retention class itself lives in the policy, not in the table. What a per-mount
+partition would have bought is "drop this mount now", which becomes a rare
+lightweight `DELETE … WHERE id = …` (a purge request) rather than a schema
+feature.
 
 **Block size and granularity.** With `index_granularity = 1` and a block size
 between ClickHouse's minimum and maximum compressed-block sizes (64 KiB and
 1 MiB by default), one block is one mark and one compressed block: `ReadAt`
-reads exactly the block it needs, and nothing else. The default is 1 MiB;
-256 KiB is the alternative when `ReadAt` granularity matters more than marks.
-In a store of small trees most files are one block far below the 64 KiB
-minimum; ClickHouse then packs many blocks into one compressed block, which
-compresses *better* (similar small files sit adjacent) and makes the one-mark-
-per-block setting pure overhead — hence the fleet profile below.
+reads exactly the block it needs, and nothing else. In the facts shape the
+bytes sit in the `blobArray` value stream — an `Array(String)` element — and
+the per-granule argument is unchanged. The default is 1 MiB; 256 KiB is the
+alternative when `ReadAt` granularity matters more than marks. In a store of
+small trees most files are one block far below the 64 KiB minimum; ClickHouse
+then packs many blocks into one compressed block, which compresses *better*
+(similar small files sit adjacent) and makes the one-mark-per-block setting
+pure overhead — hence the fleet profile below.
 
 **Text files.** For files the walker classifies as text, blocks are cut at the
 last newline before `block_size`, and `line0` records the first line number of
@@ -266,151 +284,170 @@ boundaries and lets them report line numbers (§7).
 **Hashes.** `content_hash` plays two roles that pull in different directions:
 *identity* — joining a mount against anything else by digest, inside or
 outside the store — and *integrity* — knowing that the bytes read back are the
-bytes written. The algorithm is a store parameter (`hash_algo`); the columns
-are bytes either way. The default is sha256: standard library, the digest the
-rest of the world uses (OCI images, Nix store paths, Go module sums, package
-checksums), checkable in SQL with `SHA256()`. The corpus profile adds a
-per-block `hash`, a standalone digest of the block's bytes, so a single block
-can be verified on read and the whole store audited in SQL (§7).
+bytes written. The algorithm is **BLAKE3**, and that is not a choice this
+note makes: [CODINGSTANDARDS § Packages to Use](../../CODINGSTANDARDS.md)
+names `lukechampine.com/blake3` as the cryptographic hash, codelint CS009 bans
+`crypto/sha256` ([gov_codelint_rule_cs009.go](../../public/gov/codelint/gov_codelint_rule_cs009.go)),
+the dependency is already in the tree, and leeway's natural-key convention is
+a domain-separated BLAKE3 digest. ClickHouse has `BLAKE3()` beside `SHA256()`,
+so digests are checkable in SQL. The corpus profile adds a per-block `hash`,
+a standalone digest of the block's bytes, so a single block can be verified on
+read and the whole store audited in SQL (§7).
 
-BLAKE3 is the documented alternative, and what it adds is structural rather
-than fast. Its internal Merkle tree has 1 KiB leaves combined left-complete,
-so a block that is a power-of-two multiple of 1 KiB and aligned to its own
-size is a complete subtree with its own chaining value, and the file hash is
-the combination of the block values. With BLAKE3, `hash` holds that value for
-aligned blocks; a file's integrity can then be audited from its block values
-without reading data, a rewritten block is caught by the root in `fs_meta`,
-and verified streaming (Bao) at block granularity becomes possible on the
-content route. Two things keep it an option rather than the default: it is a
-dependency with assembly against the standard library, and text blocks — cut
-at newlines, hence not 1 KiB-aligned — cannot be subtrees, so for exactly the
-files the design most wants to query BLAKE3 degrades to a standalone digest,
-which sha256 provides equally. Speed (~2–3× per core over hardware sha256, and
-parallel within a file) is real but not decisive here: hashing is a small
-share of ingest beside reading the source and inserting. The switch earns its
-place when a store needs verified streaming or data-free audits.
+What BLAKE3's tree mode adds on top is structural rather than fast. Its
+internal Merkle tree has 1 KiB leaves combined left-complete, so a block that
+is a power-of-two multiple of 1 KiB and aligned to its own size is a complete
+subtree with its own chaining value, and the file hash is the combination of
+the block values. For such blocks `hash` can hold the chaining value; a file's
+integrity can then be audited from its block values without reading data, a
+rewritten block is caught by the root in `fsmeta`, and verified streaming
+(Bao) at block granularity becomes possible on the content route. The caveat:
+text blocks — cut at newlines, hence not 1 KiB-aligned — cannot be subtrees,
+so for exactly the files the design most wants to query the tree property is
+unavailable and `hash` is a standalone digest. Speed (~2–3× per core over
+hardware sha256, and parallel within a file) is real but not decisive here:
+hashing is a small share of ingest beside reading the source and inserting.
+If a join against external sha256 digests (OCI images, Nix store paths, Go
+module sums) is ever needed, compute it server-side with `SHA256()`; a Go
+walker may not import sha256.
 
-**Registry and snapshot index.** `fs_mount` maps a name to a `mount_id`, a
-store, a retention class and a content policy; it is tiny and read at
-snapshot time and at macro expansion. `fs_snap` is never written directly: the
-materialised view copies every root row into it, so "latest complete snapshot
-of mount *m*" and "latest snapshot of *every* mount" are lookups in a table
-with one row per snapshot rather than scans of `fs_meta`. The walker puts the
-snapshot's totals into the root row's `snap_entries` / `snap_bytes`, which
-are zero on every other row and compress to nothing.
+**Identity — what the store must not do.** Claim a tag value; mint ids;
+inspect or depend on the body layout; hard-code a tag width. `id` is an
+opaque, caller-owned, prefix-free 64-bit identity, and those four refusals are
+what keep the store usable by any application with any identity scheme —
+including one not yet written. `LW_ID_BODY(id)` and `LW_ID_TAG_VALUE(id)` are
+for display and for the application's own grouping ("all my mounts" is "all
+ids under my tag"); the store's SQL never names a tag.
+
+**Policy record and snapshot index.** The policy record is a kind in
+`boxer.facts`, keyed by the mount's id, written by whoever registers the mount
+(the application, or the runtime component acting for it, such as the picker
+grant). `fssnap` is never written directly: the materialised view copies every
+root row into it — a facts-shaped row like any other, so "latest complete
+snapshot of mount *m*" and "latest snapshot of *every* mount" are lookups in a
+table with one row per snapshot rather than scans of `fsmeta`. The walker
+puts the snapshot's totals and applied policy into the root row's attributes,
+which are absent on every other row and cost nothing.
 
 **Profiles.** The schema is one; a store chooses its parameters.
 
 | Parameter | Corpus profile (few mounts, large files) | Fleet profile (very many small trees) |
 |---|---|---|
-| `fs_meta` `index_granularity` | 1024 | 8192 (default) — a mount's rows sit inside one granule either way |
-| `fs_data` `index_granularity` | 1 (one block = one mark) | default — many small blocks per compressed block |
+| `fsmeta` `index_granularity` | 1024 | 8192 (default) — a mount's rows sit inside one granule either way |
+| `fsdata` `index_granularity` | 1 (one block = one mark) | default — many small blocks per compressed block |
 | `block_size` | 1 MiB | 1 MiB (rarely reached) |
-| `content_hash` | `FixedString(32)` | `FixedString(16)` — 128 bits are enough for 10¹⁰ objects; 64 are not |
-| projections on `fs_meta` | none | `by_path` (`ORDER BY (path, mount_id, snap)`), optionally `by_hash` — for store-wide questions |
-| partitioning | `(ttl_class, day)` | the same; week or month for low-cadence stores |
-| `hash_algo` | sha256 (default); BLAKE3 when block-level audits or verified streaming are wanted | the same |
-| per-block `hash` in `fs_data` | yes — standalone digest, or the BLAKE3 subtree value for aligned blocks | none — one-block files are the rule and the file hash covers them |
+| `fsdata` shape | facts-shaped or bespoke — open (§12) | the same question, with the insert-cost measurement as its trigger |
+| hash | BLAKE3 (house standard); per-block `hash` — chaining value for aligned blocks, standalone digest otherwise | BLAKE3; no per-block `hash` — one-block files are the rule and the file hash covers them |
+| projections on `fsmeta` | none | `by_path` (`ORDER BY (naturalKey, id, ts)`), optionally `by_hash` — for store-wide questions |
+| partitioning | `toYYYYMMDD(expiresAt)` | the same; week or month for low-cadence stores |
 
 ## 4. Reaching the tables from SQL: `fs()` and `fsdata()`
 
-Queries never name `fs_meta` or `fs_data`. Two table functions — macros in the
-nanopass sense, expanded to parenthesised subqueries the way `keelson()` is —
-bind a mount and a snapshot:
+Queries never name `boxer.fsmeta` or `boxer.fsdata`. Two table functions —
+macros in the nanopass sense, expanded to parenthesised subqueries the way
+`keelson()` is — bind a mount and a snapshot. The primary spelling takes the
+mount's tagged id; a name is sugar, resolved through the policy record.
 
 ```
-fs('docs')              → (SELECT * FROM fs_meta WHERE mount_id = <id> AND expires_at > now() AND snap = <latest>)
-fs('docs', snap)        → … AND snap = snap
-fs('docs', '*')         → … AND snap IN (SELECT snap FROM fs_snap WHERE mount_id = <id> AND expires_at > now())
-fsdata('docs'[, snap])  → the same over fs_data
-<id>                    = the registry's mount_id for 'docs' — resolved once by the runtime, or
-                          (SELECT mount_id FROM fs_mount WHERE name = 'docs')
-<latest>                = (SELECT max(snap) FROM fs_snap WHERE mount_id = <id> AND expires_at > now())
+fs(<id>)              → (SELECT <projection> FROM boxer.fsmeta WHERE id = <id> AND expiresAt > now() AND ts = <latest>)
+fs(<id>, snap)        → … AND ts = snap
+fs(<id>, '*')         → … AND ts IN (SELECT ts FROM boxer.fssnap WHERE id = <id> AND expiresAt > now())   -- history
+fsdata(<id>[, snap])  → the same over boxer.fsdata
+<projection>          = the generated Projection of the entry kind — one plain column per attribute, under the
+                        logical names of §3 (path, snap, size, mtime, …), plus naturalKey AS path, ts AS snap
+<latest>              = (SELECT max(ts) FROM boxer.fssnap WHERE id = <id> AND expiresAt > now())
 ```
 
-Three things live in that expansion on purpose:
+Because the projection exposes the logical names, every operation in §6 and
+§7 is written against `path`, `size`, `mtime`, `data`, `seq` — and keeps its
+text whatever the physical encoding of the ordinal turns out to be. Three
+things live in the expansion on purpose:
 
 - **The completeness rule.** "Latest" means the newest snapshot whose root
-  row exists — which is exactly the set of rows in `fs_snap`. A walk that is
+  row exists — which is exactly the set of rows in `fssnap`. A walk that is
   still running, or one that crashed, is invisible.
 - **The logical cutoff.** ClickHouse `TTL` reclaims space during merges; rows
   past their expiry stay visible until a merge runs — with whole-part drops,
   until the part's last row expires plus the scheduling delay. The predicate
-  `expires_at > now()` uses the same column as the `TTL`, so what a query can
+  `expiresAt > now()` uses the same column as the `TTL`, so what a query can
   see and what the disk still holds diverge only in disk usage, never in
   results, and entries, blocks and index rows disappear at the same instant
   regardless of which table's merge runs first. A `ROW POLICY … USING
-  expires_at > now() TO ALL` is the server-side belt-and-braces for anyone
+  expiresAt > now() TO ALL` is the server-side belt-and-braces for anyone
   reading the tables directly.
 - **The capability check.** A grant covers a store; which mounts a caller may
-  name is a predicate on the registry (or a row policy on `mount_id`), checked
-  at expansion time, not at query time. The macro is classified as read, like
-  `keelson()`.
+  name is a predicate over ids — a set, or "every id under this tag"
+  (`LW_ID_HAS_TAG`) — checked at expansion time, not at query time. The
+  identity model and the capability model are the same thing seen twice. The
+  macro is classified as read, like `keelson()`.
 
-A plain-ClickHouse fallback without any pass exists — parameterised views,
-`fs(mount = 'docs')` — which is the honest measure of how thin the macro is: it
-adds positional sugar, the latest-complete rule, the cutoff and the capability
-check, nothing the engine could not express.
+A plain-ClickHouse fallback without any pass exists — the kind's generated
+Presence / Projection / Validator SQL, or `LW_GET` over the raw table — which
+is the honest measure of how thin the macro is: it adds positional sugar, the
+latest-complete rule, the cutoff and the capability check, nothing the engine
+could not express.
 
 ## 5. Writing a snapshot
 
-The walker is generic over `fs.FS`. One snapshot, in order:
+The walker is generic over `fs.FS` and identity-agnostic: the caller hands it
+the mount's tagged id and the policy to apply. One snapshot, in order:
 
-1. Look the mount up in the registry (or register it): `mount_id`,
-   `ttl_class`, content policy. Fix `snap := now()` and
-   `expires_at := toStartOfDay(snap) + 1 DAY + duration(ttl_class)`.
-2. `fs.WalkDir` the mount. For every entry, emit an `fs_meta` row; if
-   `WalkDir` or `Open` reports an error, record it in `err` and keep walking —
-   the snapshot records what it could not read instead of failing.
-3. For files that the content policy says to store (regular file, size ≤
-   `inline_max`), stream blocks into `fs_data` while hashing the same bytes
+1. Fix `snap := now()` and `expires_at := toStartOfDay(snap) + 1 DAY +
+   duration(ttl_class)`.
+2. `fs.WalkDir` the mount. For every entry, write an entry row through the
+   generated store's `Ingest` — a DTO per row, the DML emitting Arrow, which
+   is the ArrowStream transport already in use; if `WalkDir` or `Open`
+   reports an error, record it in `fsErr` and keep walking — the snapshot
+   records what it could not read instead of failing.
+3. For files that the policy says to store (regular file, size ≤
+   `inline_max`), stream blocks into `fsdata` while hashing the same bytes
    into `content_hash` — and, where the profile has it, each block into
-   `hash`: text files cut at newlines with `line0` maintained,
-   everything else at fixed `block_size`. Files above the threshold get
-   `content = 'ref'`; metadata-only mounts get `'none'`.
+   `hash`: text files cut at newlines with `line0` maintained, everything else
+   at fixed `block_size`. Files above the threshold get `content = 'ref'`;
+   metadata-only mounts get `'none'`.
 4. Only after every other insert has been acknowledged, insert the root row
-   `path = '.'` with the snapshot's totals. The materialised view copies it to
-   `fs_snap`; the snapshot is now visible.
+   `path = '.'` with the snapshot's totals and the applied policy. The
+   materialised view copies it to `fssnap`; the snapshot is now visible.
 
 Inserts are batched, and in a store of many small mounts they are batched
 *across* mounts: ClickHouse wants thousands of rows per insert, and one insert
 per tree is the classic way to exhaust its part budget. A batch touches at most
-(classes present × two days) partitions, and the root rows of a batch go in a
-later insert than the batch's other rows, so the commit rule holds per batch
-exactly as it holds per mount.
+as many partitions as it has distinct expiry days, and the root rows of a
+batch go in a later insert than the batch's other rows, so the commit rule
+holds per batch exactly as it holds per mount.
 
 Failure at any step leaves rows without a root row: invisible to every query
 and removed by `TTL`. A retry is a fresh `snap`; nothing is cleaned up by hand.
-Two walkers on the same mount at the same time produce two snapshots. Ingest
-uses the existing ArrowStream transport ([ADR-0094](../adr/0094-keelson-introspection-tables.md),
-[ADR-0134](../adr/0134-adhoc-datasets.md)); the walker itself is the natural
-tenant of the capability side, next to the existing
-[fsbroker](../../public/keelson/runtime/fsbroker/watcher.go), since it is the
-component that holds the `fs.FS`.
+Two walkers on the same mount at the same time produce two snapshots. The
+walker itself is the natural tenant of the capability side, next to the
+existing [fsbroker](../../public/keelson/runtime/fsbroker/watcher.go), since
+it is the component that holds the `fs.FS`; the id it is handed is whatever
+the granting side already uses to name the tree.
 
 ## 6. Reading: the `io/fs` adapter
 
-A Go adapter turns one `(store, mount, snap)` back into an `fs.FS`. Opening
-the adapter pins the snapshot, so the returned file system is immutable and
+A Go adapter turns one `(store, id, snap)` back into an `fs.FS`. Opening the
+adapter pins the snapshot, so the returned file system is immutable and
 consistent across every call — stronger than `io/fs` requires — and
-`(mount_id, snap)` is a ready-made ETag. It implements the optional interfaces
+`(id, snap)` is a ready-made ETag. It implements the optional interfaces
 (`StatFS`, `ReadDirFS`, `ReadFileFS`, `GlobFS`, `ReadLinkFS`, `SubFS`) with
-the queries below, and its `File` gets `io.ReaderAt` and `io.Seeker` from
+the queries below — through the macro's projection, or through the generated
+`Scan` and decode — and its `File` gets `io.ReaderAt` and `io.Seeker` from
 `ReadAt`, so `http.FS` and anything else that seeks works unchanged.
 `testing/fstest.TestFS` is the conformance test, run per snapshot.
 
-| `io/fs` operation | SQL (inside one pinned snapshot) |
+| `io/fs` operation | SQL (inside one pinned snapshot; `m` stands for the mount's id) |
 |---|---|
 | `ValidPath` | not a query — checked in the adapter; the `CHECK` constraint rejects bad rows at ingest |
-| `Open`, `Stat`, `Lstat` | `SELECT mode, size, mtime, content, block_size, blocks, text FROM fs('m') WHERE path = 'a/b.txt'` — zero rows is `ErrNotExist`; rows are what the walker `Lstat`-ed |
-| `ReadDir` | `SELECT name, mode, size, mtime FROM fs('m') WHERE dir = 'a' ORDER BY name` — bytewise order, as `io/fs` sorts; paged `ReadDir(n)` adds `AND name > :last … LIMIT n` |
-| `WalkDir` | `SELECT path, mode FROM fs('m') WHERE path = 'a' OR startsWith(path, 'a/') ORDER BY splitByChar('/', path)` — array order is pre-order depth-first, which is `WalkDir`'s order; `SkipDir` becomes `AND NOT startsWith(path, 'a/skip/')` |
-| `Glob` | `SELECT path FROM fs('m') WHERE match(path, '^usr/[^/]*/bin/ed$')` — the adapter compiles `path.Match` syntax to RE2 (`*` → `[^/]*`, `?` → `[^/]`) |
-| `ReadLink` | `SELECT link_target FROM fs('m') WHERE path = 'a/l' AND is_symlink` — following a link is `path.Join(dir, link_target)` in Go, then `Stat` again |
+| `Open`, `Stat`, `Lstat` | `SELECT mode, size, mtime, content, block_size, blocks, text FROM fs(m) WHERE path = 'a/b.txt'` — zero rows is `ErrNotExist`; rows are what the walker `Lstat`-ed |
+| `ReadDir` | `SELECT name, mode, size, mtime FROM fs(m) WHERE dir = 'a' ORDER BY name` — bytewise order, as `io/fs` sorts; paged `ReadDir(n)` adds `AND name > :last … LIMIT n` |
+| `WalkDir` | `SELECT path, mode FROM fs(m) WHERE path = 'a' OR startsWith(path, 'a/') ORDER BY splitByChar('/', path)` — array order is pre-order depth-first, which is `WalkDir`'s order; `SkipDir` becomes `AND NOT startsWith(path, 'a/skip/')` |
+| `Glob` | `SELECT path FROM fs(m) WHERE match(path, '^usr/[^/]*/bin/ed$')` — the adapter compiles `path.Match` syntax to RE2 (`*` → `[^/]*`, `?` → `[^/]`) |
+| `ReadLink` | `SELECT link_target FROM fs(m) WHERE path = 'a/l' AND is_symlink` — following a link is `path.Join(dir, link_target)` in Go, then `Stat` again |
 | `Sub` | best a second mount; ad hoc, `substring(path, 3)` over `startsWith(path, 'a/')` |
-| `Read` (stream) | `SELECT data, hash FROM fsdata('m') WHERE path = 'a/b.txt' ORDER BY seq` — one key range, already in file order; with `hash` present the adapter verifies each block as it arrives |
+| `Read` (stream) | `SELECT data, hash FROM fsdata(m) WHERE path = 'a/b.txt' ORDER BY seq` — one key range, already in file order; with `hash` present the adapter verifies each block as it arrives |
 | `ReadAt(o, n)` | `… AND seq BETWEEN intDiv(o, bs) AND intDiv(o + n - 1, bs) ORDER BY seq` — `bs` from the `Open` row; the adapter trims the first and last block |
-| `ReadFile` | the stream, or in one cell: `SELECT arrayStringConcat(arrayMap(t -> t.2, arraySort(t -> t.1, groupArray((seq, data))))) FROM fsdata('m') WHERE path = 'a/b.txt'` |
+| `ReadFile` | the stream, or in one cell: `SELECT arrayStringConcat(arrayMap(t -> t.2, arraySort(t -> t.1, groupArray((seq, data))))) FROM fsdata(m) WHERE path = 'a/b.txt'` |
 | `Close` | nothing server-side; cancel the row stream |
 | mutation | none; the store is read-only through the adapter by construction |
 | errors | zero rows → `ErrNotExist`; invalid name → `ErrInvalid`; ungranted mount → `ErrPermission` at expansion; `content = 'none'` → `Stat` works, `Read` fails with a typed error; `content = 'ref'` → the adapter fetches from the live source |
@@ -418,8 +455,8 @@ the queries below, and its `File` gets `io.ReaderAt` and `io.Seeker` from
 ## 7. Operations beyond `io/fs`
 
 These are the reason to bridge at all. Each is ordinary SQL over `fs()` and
-`fsdata()`; none needs a join to a second store. `s1`, `s2` stand for snapshot
-ids (`fs('m', '2026-08-18 03:00:00')`).
+`fsdata()`; none needs a join to a second store. `m` is a mount's id; `s1`,
+`s2` stand for snapshot ids (`fs(m, '2026-08-18 03:00:00')`).
 
 **grep** — a pattern over every text file of a snapshot, with line numbers.
 The `PREWHERE` prefilters whole blocks (and uses the token index, if
@@ -429,7 +466,7 @@ can never straddle two blocks.
 
 ```sql
 SELECT path, line0 + i - 1 AS lineno, line
-FROM fsdata('m')
+FROM fsdata(m)
 ARRAY JOIN splitByChar('\n', data) AS line, arrayEnumerate(splitByChar('\n', data)) AS i
 PREWHERE match(data, 'TODO')
 WHERE match(line, 'TODO')
@@ -440,9 +477,9 @@ ORDER BY path, lineno
 path's versions.
 
 ```sql
-SELECT snap, entries, bytes FROM fs_snap WHERE mount_id = <id> AND expires_at > now() ORDER BY snap;
+SELECT snap, snap_entries, snap_bytes FROM fs(m, '*') WHERE path = '.' ORDER BY snap;
 
-SELECT snap, size, mtime, hex(content_hash) FROM fs('m', '*') WHERE path = 'a/b.txt' ORDER BY snap;
+SELECT snap, size, mtime, hex(content_hash) FROM fs(m, '*') WHERE path = 'a/b.txt' ORDER BY snap;
 ```
 
 **diff** — added, removed and modified entries between two snapshots. The
@@ -453,8 +490,8 @@ this side" under ClickHouse's default-filling outer join.
 SELECT if(n.path != '', n.path, o.path) AS path,
        multiIf(o.path = '', 'added', n.path = '', 'removed',
                n.content_hash != o.content_hash OR n.mtime != o.mtime, 'modified', 'same') AS change
-FROM fs('m', s2) AS n
-FULL OUTER JOIN fs('m', s1) AS o ON n.path = o.path
+FROM fs(m, s2) AS n
+FULL OUTER JOIN fs(m, s1) AS o ON n.path = o.path
 WHERE change != 'same'
 ORDER BY path
 ```
@@ -464,7 +501,7 @@ to each of its ancestors.
 
 ```sql
 SELECT anc, sum(size) AS bytes, count() AS files
-FROM fs('m')
+FROM fs(m)
 ARRAY JOIN arrayMap(k -> arrayStringConcat(arraySlice(splitByChar('/', path), 1, k), '/'), range(1, depth)) AS anc
 WHERE NOT is_dir
 GROUP BY anc ORDER BY bytes DESC
@@ -475,10 +512,10 @@ scans over a compressed, sorted column: largest files, newest files, files by
 extension, and the entries the walker could not read.
 
 ```sql
-SELECT path, size FROM fs('m') WHERE NOT is_dir ORDER BY size DESC LIMIT 20;
-SELECT path, mtime FROM fs('m') WHERE mtime > now() - INTERVAL 1 DAY ORDER BY mtime DESC;
-SELECT ext, count(), sum(size) FROM fs('m') WHERE NOT is_dir GROUP BY ext ORDER BY 3 DESC;
-SELECT path, err FROM fs('m') WHERE err != '';
+SELECT path, size FROM fs(m) WHERE NOT is_dir ORDER BY size DESC LIMIT 20;
+SELECT path, mtime FROM fs(m) WHERE mtime > now() - INTERVAL 1 DAY ORDER BY mtime DESC;
+SELECT ext, count(), sum(size) FROM fs(m) WHERE NOT is_dir GROUP BY ext ORDER BY 3 DESC;
+SELECT path, err FROM fs(m) WHERE err != '';
 ```
 
 **identical content** — deduplication as a *question* rather than as storage:
@@ -487,32 +524,33 @@ bytes.
 
 ```sql
 SELECT hex(content_hash), groupArray(path)
-FROM fs('m') WHERE content != 'none'
+FROM fs(m) WHERE content != 'none'
 GROUP BY content_hash HAVING count() > 1
 ```
 
 **audit** — the store checking itself: every stored block against its digest,
-in SQL. With BLAKE3 this covers standalone digests (text blocks, one-block
-files); aligned subtree values are checked by the adapter, or by recomputing
-file roots from `hash` alone without touching `data`.
+in SQL. For standalone digests (text blocks, one-block files) this is the
+whole check; aligned subtree values are checked by the adapter, or by
+recomputing file roots from `hash` alone without touching `data`.
 
 ```sql
-SELECT count() AS bad FROM fsdata('m') WHERE SHA256(data) != hash
+SELECT count() AS bad FROM fsdata(m) WHERE BLAKE3(data) != hash
 ```
 
 **across mounts** — in a store of many trees the interesting questions run
 across them: every mount's latest snapshot, which trees carry a given path,
-which trees changed it this week. The first is a lookup in `fs_snap`; the
-others are store-wide scans of `fs_meta` under the store's grant, which is
-what the fleet profile's `by_path` projection exists for. A macro spelling for
-"every mount of a store" is an open item (§12); until then these address the
-store's tables.
+which trees changed it this week, all the trees under one application's tag.
+The first is a lookup in `fssnap`; the others are store-wide scans under the
+store's grant, which is what the fleet profile's `by_path` projection exists
+for. A spelling for "every mount of a store" (`fs('*')` below) is an open item
+(§12).
 
 ```sql
-SELECT mount_id, max(snap) AS latest FROM fs_snap WHERE expires_at > now() GROUP BY mount_id;
+SELECT id, max(snap) AS latest FROM boxer.fssnap WHERE expiresAt > now() GROUP BY id;
 
-SELECT mount_id, snap, size, mtime
-FROM fs_meta WHERE path = 'etc/config.yaml' AND expires_at > now() AND snap > now() - INTERVAL 7 DAY;
+SELECT id, snap, size, mtime FROM fs('*') WHERE path = 'etc/config.yaml' AND snap > now() - INTERVAL 7 DAY;
+
+SELECT LW_ID_TAG_VALUE(id) AS tag, count() AS mounts FROM boxer.fssnap WHERE expiresAt > now() GROUP BY tag;
 ```
 
 **structured content** — a JSON or CSV file is a block column like any other,
@@ -520,26 +558,29 @@ so `JSONExtract*`, `splitByChar`, `extractAll` and friends apply to it
 directly, and a whole mount of small JSON files is one query away from being
 a table.
 
-**joins** — entries carry `path`, `mtime`, `size`, `content_hash` and
-`kind`, which is enough to join a mount against any other table in the
-database by path or by hash: which source files a profile names, which
-documents an ADR cites, which artefacts changed since the last run.
+**joins** — entries are facts rows: they carry the application's own id, a
+path, `mtime`, `size`, `content_hash` and `kind`, which is enough to join a
+mount against any other table in the database by id, by path or by hash —
+which source files a profile names, which documents an ADR cites, which
+artefacts changed since the last run — and for another domain to formulate a
+component over them later, since the memberships come from the shared
+vocabulary registry.
 
 ## 8. Properties
 
 What the shape gives:
 
-- **No mutations, ever.** Inserts only; merges are confined to one
-  class-day; there is no `ALTER … DELETE` in the life cycle (a per-mount purge
-  is the one exception, and it is a request, not a schedule), no mutation
-  queue, and nothing that would complicate replication later.
+- **No mutations, ever.** Inserts only; merges are confined to one expiry
+  day; there is no `ALTER … DELETE` in the life cycle (a per-mount purge is
+  the one exception, and it is a request, not a schedule), no mutation queue,
+  and nothing that would complicate replication later.
 - **Retention is declarative and exact.** `TTL` drops whole parts; the same
-  `expires_at` hides rows at the instant they expire. No garbage collection,
+  `expiresAt` hides rows at the instant they expire. No garbage collection,
   reference counts or sweeps — the direct consequence of unshared rows.
 - **Crash-safe ingest with no cleanup.** An incomplete snapshot is invisible
   and expires by itself; a retry is a new snapshot.
 - **Snapshot isolation for readers.** An adapter instance is one immutable
-  tree; `(mount_id, snap)` is its ETag.
+  tree; `(id, snap)` is its ETag.
 - **Time travel and diff for free.** Every retained snapshot is queryable;
   history, churn and diffs are joins and group-bys over the same rows, and the
   snapshot index is derived, not maintained.
@@ -549,8 +590,16 @@ What the shape gives:
   JSON functions and skip indexes apply to blocks — the materialised lane that
   [ADR-0164 §SD7](../adr/0164-documentation-regex-search.md) deferred.
 - **Integrity is auditable.** Per-block digests verify on read and in SQL;
-  with BLAKE3 and aligned blocks, a file audits from its block values without
-  reading data.
+  for aligned blocks, a file audits from its block values without reading
+  data.
+- **One row shape with `boxer.facts`.** Shared read access, shared bus
+  codecs, rows that can travel as facts or be copied between tables, and
+  components formulated later over one vocabulary — while the store, not the
+  shared table, controls partitioning, key, retention and indexes: the
+  combination ADR-0184's consequences said was missing.
+- **Identity-agnostic.** A mount is whatever tagged id the application hands
+  over; the tag is the application's free dimension for grouping and for
+  access; prefix-free codes make one store safe for many owners.
 - **Metadata is cheap.** A sorted `path` column compresses well (~10–20×
   is typical for sorted path sets), so metadata-only snapshots of large trees
   cost tens of megabytes; `content_hash` gives deduplication as analytics
@@ -558,7 +607,8 @@ What the shape gives:
 - **Scale changes parameters, not shape.** One mount or 10⁸ mounts: the same
   tables, the same queries, a different profile row.
 - **It fits the house.** Existing transport, existing security class,
-  existing capability model.
+  existing capability model, the house hash, the generated-store lane, the
+  identity scheme.
 
 What it costs:
 
@@ -567,7 +617,21 @@ What it costs:
   ~3.5× text ratio, ~2.6 GB stored — fine. A ~50 GB source tree on the same
   schedule is ~4.5 TB — not fine, and that mount is metadata-only with `ref`
   content. The inline threshold, the cadence and the retention class are the
-  knobs, and they are per-mount registry rows rather than schema.
+  knobs, and they are policy rather than schema.
+- **Wide rows.** A facts-shaped row carries ~170 physical columns, ~150 of
+  them empty arrays on an fs row. Storage is unaffected (empty arrays
+  compress to nothing) and reads touch only the columns they name, but
+  insert and merge cost scales with the number of column streams — at fleet
+  scale the number to measure before committing, and the trigger for the
+  `fsdata` shape decision.
+- **Store-wide scans pay attribute extraction.** Reading an attribute out of
+  a section is array work per row; the read-surface trial measured ~3×
+  against plain columns and 7–14× against a `MATERIALIZED` column, which is
+  why the tree columns are materialised and why hot attributes (`size`,
+  `mtime`, `mode`) may be too. Per-mount reads do not notice.
+- **A vocabulary and a gen-test enter the regeneration lanes.** ~20
+  membership names under a registry, a store generated from a gen-test, and
+  `scripts/dev/generate.sh` whenever the leeway aspect vocabulary moves.
 - **A full walk per snapshot.** Incremental ingest is excluded by the
   no-sharing premise (§11 names the variant that would relax it).
 - **Latency in milliseconds.** Every adapter call is a round trip. The
@@ -590,22 +654,24 @@ Where it breaks under pressure:
   falls back to a raw cut.
 - One path's history across many snapshots is less index-friendly than any
   query inside a snapshot, because the key is snapshot-first; a bloom filter
-  on `path` is the cheap fix if that query matters.
-- Store-wide questions are scans: ~10–30 s per 10¹⁰ rows on one node,
-  acceptable for analytics and not for interaction, which is what the
-  `by_path` projection is for.
+  on `naturalKey` is the cheap fix if that query matters.
+- Store-wide questions are scans: ~10–30 s per 10¹⁰ rows on one node before
+  extraction cost, acceptable for analytics and not for interaction, which is
+  what the `by_path` projection and the materialised hot attributes are for.
 - An expired day lingers physically for up to `merge_with_ttl_timeout`
   (4 h by default); only disk usage notices.
 
 **At fleet scale** — ~10⁸ mounts of ~100 entries each, ~10¹⁰ entries in one
 store; all estimates, to be replaced by measurements: metadata ≈ 100–200 GB
-on disk (paths and hashes dominate; zero hashes compress away), the primary
-index ≈ 60 MB in RAM at granularity 8192, a weekly re-walk of everything ≈
-1.4 × 10⁹ rows/day ≈ 16 k rows/s sustained — within one node, given batching;
-any per-mount operation reads one or two granules and stays in the
-millisecond range; a store-wide scan is seconds to tens of seconds. What makes
-this ordinary is that it *is* the ordinary ClickHouse workload — a key-prefixed,
-time-partitioned, append-only log — once the mount is out of the partition key.
+on disk before the facts-shape overhead (paths and hashes dominate; zero
+hashes and empty sections compress away), the primary index ≈ 60 MB in RAM at
+granularity 8192, a weekly re-walk of everything ≈ 1.4 × 10⁹ rows/day ≈
+16 k rows/s sustained across ~170 column streams — within one node, given
+batching, and the figure to measure first; any per-mount operation reads one
+or two granules and stays in the millisecond range; a store-wide scan is
+seconds to tens of seconds. What makes this ordinary is that it *is* the
+ordinary ClickHouse workload — a key-prefixed, time-partitioned, append-only
+log — once the mount is out of the partition key.
 
 ## 9. Compression and the storage estimate
 
@@ -635,7 +701,7 @@ SELECT partition, column,
        formatReadableSize(sum(column_data_compressed_bytes))   AS stored,
        round(sum(column_data_uncompressed_bytes) / sum(column_data_compressed_bytes), 2) AS ratio
 FROM system.parts_columns
-WHERE table = 'fs_data' AND active
+WHERE table = 'fsdata' AND active
 GROUP BY partition, column ORDER BY partition, column
 ```
 
@@ -670,13 +736,41 @@ not a blob service.
 
 ## 11. Alternatives considered and parked
 
-- **Partitioning by mount (the first draft of this note).** `PARTITION BY
-  (mount, day)` reads naturally for a handful of corpora and is fatal for a
-  store of many trees: partitions multiply by the mount count, and ClickHouse
-  wants them in the low thousands. What it bought — merges confined per mount,
-  "drop this mount now" — is not worth a second partitioning rule; the
-  retention class recovers whole-part expiry, and a purge is a lightweight
-  delete. Rejected in favour of one rule for every store.
+- **Bespoke tables** (the first three drafts of this note; DDL in the history
+  at `9420bb27`). Fastest and smallest — no empty sections, no extraction on
+  scans — and nothing leeway sees: no generated ingest or decode, no shared
+  codec, no vocabulary, no components formulated later. Kept as the fallback
+  shape, and as the comparison arm for the insert-cost measurement.
+- **A generated store with its own `TableDesc`** (the `boxer.persiststate`
+  precedent). Plains are real columns, SQL stays plain, the store carries its
+  own RA/DML scaffolding; it loses the shared read access and bus codec of the
+  facts shape. The right choice only if fs rows should never travel as facts.
+- **Rows in `boxer.facts` itself.** The components skill's main scenario, and
+  wrong for this store for reasons the repository already recorded: the
+  shared table's engine is `ORDER BY ts` with retention left to the operator,
+  ADR-0184's consequences say the writer "cannot control the indexes or
+  retention of the table it writes" and that volume becomes whoever writes
+  most — at ~86 k rows/day/host, with 22 M/day/host rejected as not worth it
+  — and ADR-0105 D3a moved persist state out for less. A fleet store is
+  10⁹–10¹⁰ rows per cycle with its own key and lifecycle. Kept for what *is*
+  runtime state: the policy record.
+- **Extending the facts `TableDesc` with routing plains** (`mount`,
+  `ordinal`), or a store-owned tag with an id generator as the mount
+  registry. Rejected: the caller's tagged id already leads the key with no
+  extraction, so nothing forces a migration of `boxer.facts`; and the store
+  must not own identity — the tag is the application's degree of freedom.
+  The block ordinal is the sole remaining reason an extension would ever be
+  considered (§12).
+- **Partitioning by mount (the first draft).** `PARTITION BY (mount, day)`
+  reads naturally for a handful of corpora and is fatal for a store of many
+  trees: partitions multiply by the mount count, and ClickHouse wants them in
+  the low thousands. What it bought — merges confined per mount, "drop this
+  mount now" — is not worth a second partitioning rule; partitioning by expiry
+  day recovers whole-part expiry from a backbone plain, and a purge is a
+  lightweight delete.
+- **sha256 as the file hash.** Considered for interoperability with external
+  digests; not available — the house standard is BLAKE3 and CS009 bans the
+  import. Interop joins, if ever needed, use `SHA256()` server-side.
 - **Deduplicated blocks, content-defined chunking (FastCDC).** Buys
   cross-snapshot deduplication and chunk-set analytics (snapshot deltas as
   array algebra); costs a recipe per file, a hash-keyed block store with no
@@ -686,7 +780,7 @@ not a blob service.
   lease renewal on reference, or bounding deduplication to the retention
   window. All workable; none free. Parked until a mount is a snapshot series
   of large mutable files, which is the only case where it pays.
-- **Whole-file content addressing (`ino = sha256`) with an inode table.**
+- **Whole-file content addressing (`ino = hash`) with an inode table.**
   Simpler than CDC but has the same sharing problem one level up: two paths
   with the same content share rows, and `TTL` on shared rows is wrong in the
   same way. That observation is what moved the design to "unshared".
@@ -701,72 +795,95 @@ not a blob service.
 - **A row store for the metadata** (`EmbeddedRocksDB`, a dictionary, or a
   different engine altogether). Right for microsecond point lookups; wrong
   for the scans that are the point of the bridge. If `Stat` latency ever
-  matters, a dictionary in front of `fs_meta` is the ClickHouse-native answer.
-- **BLAKE3 as the store hash.** Assessed and recorded as a store option
-  rather than the default: the tree property that makes it attractive —
-  per-block chaining values that compose into the file hash — holds only for
-  aligned blocks, not for newline-cut text blocks; it is a dependency with
-  assembly against the standard library; and sha256 is the digest external
-  tables speak. Adopt per store when verified streaming or data-free audits
-  are wanted (§3 *Hashes*).
+  matters, a dictionary in front of `fsmeta` is the ClickHouse-native answer.
 - **An in-engine VFS plug point, DuckDB-style.** Not available to an
   out-of-process host; the HTTP and FIFO seams the repository already uses
   are the ClickHouse-shaped equivalent.
 
 ## 12. Open decisions — the material for the next iterations
 
+- **The block ordinal and the `fsdata` shape.** Three encodings — the
+  ordinal as a suffix of `naturalKey` (`path ‖ '\0' ‖ be32(seq)`, no
+  extension, `ReadAt` a `BETWEEN` on bounds the adapter builds, `seq` and
+  `path` recovered by `MATERIALIZED` columns); a generic `rt:ordinal:u32`
+  routing plain (cleaner SQL, one migration of `boxer.facts`); or leeway's
+  value cardinality — one row per file, the blocks as the N values of one
+  `blobArray` attribute (the most leeway-native shape, right for the fleet
+  profile's small files, wrong for the corpus profile's large ones). And
+  whether `fsdata` is facts-shaped at all, or stays bespoke on the biggest
+  table — decided by the insert-cost measurement.
 - Block size for the corpus profile: 1 MiB (fewer marks) or 256 KiB (finer
   `ReadAt`).
 - Partition unit per store: day, or week / month for low-cadence stores.
 - The set of retention classes, and the defaults for `inline_max` and
-  `text_rule` in the registry.
+  `text_rule` in the policy record; the shape of the policy kind itself.
 - The text classification rule (media-type sniff, extension list, or both)
   and the fallback for lines longer than `block_size`.
-- Whether `fs_data` carries a token/ngram skip index by default or per mount.
-- Macro names and shape — `fs`/`fsdata` with optional snapshot; whether a
-  store is named in the call (`fs('corpus/docs')`) or resolved from the mount;
-  how a snapshot is named in SQL; a spelling for "every mount of a store".
-- `path` versus a 64-bit hash as the third key column of `fs_data`.
-- Where the walker runs; how a store grant is expressed and how mount
-  visibility inside it is declared (registry predicate or row policy).
+- Whether `fsdata` carries a token/ngram skip index by default or per mount.
+- Macro shape — `fs`/`fsdata` taking an id, a name resolved through the
+  policy record as sugar, how a snapshot is named in SQL, and a spelling for
+  "every mount of a store" / "every mount under a tag".
+- Which hot attributes to materialise beside the tree columns (`size`,
+  `mtime`, `mode`), given the extraction cost on store-wide scans.
 - Whether the fleet profile carries the `by_path` projection by default.
-- Hash algorithm per store (sha256 default, BLAKE3 option), and whether the
-  fleet profile carries per-block digests.
-- Whether `fs_snap` should share the `(ttl_class, day)` partitioning for
-  whole-part expiry, or stay row-TTL'd as the small table it is.
+- Where the walker runs; how a store grant is expressed and how mount
+  visibility inside it is declared (an id set, a tag, or a row policy).
 
 ## 13. To verify on a live server before the ADR
 
 - One block is one compressed block for `block_size` in [64 KiB, 1 MiB]
-  with `index_granularity = 1` (the flush-at-mark rule this design leans on).
+  with `index_granularity = 1` — in the `blobArray` value stream of a
+  facts-shaped table as well as in a plain `String` column.
 - Whether regular merges still remove expired rows under
   `ttl_only_drop_parts = 1`, and the drop latency after a partition expires.
 - `now()` accepted in a `ROW POLICY` condition.
 - A `MATERIALIZED` column may depend on another `MATERIALIZED` column
   (`dir` uses `name`); if not, inline the expression.
 - `FULL OUTER JOIN` default-filling semantics behind the diff idiom.
-- The materialised view into `fs_snap` under batched, multi-mount inserts
+- A generated store with `SharedRA` over a non-facts table name *and*
+  `EnsureTable` with `gen.Input.DDL` (the facts-bound precedent is externally
+  provisioned); `VerifySchema` with the `ALTER`-added `MATERIALIZED` columns,
+  constraint and skip index present.
+- Many rows per `(id, ts)` — one per path — through the generated store's
+  `Scan` and decode (no uniqueness or latest-wins assumption; `sysmfacts` has
+  one row per `(id, ts)` with items as arrays).
+- `PARTITION BY toYYYYMMDD(<DateTime64 plain>)` and `TTL` on the same plain.
+- The materialised view into `fssnap` under batched, multi-mount inserts
   (one insert block, many root rows).
 - Projections together with `TTL`, and with the lightweight `DELETE` used
   for a purge (`lightweight_mutation_projection_mode`).
-- `LowCardinality(String)` as a partition-key column.
+- Insert throughput of a facts-shaped `fsdata` against a bespoke one at
+  1 MiB blocks, and of facts-shaped `fsmeta` at many small mounts per batch.
+- For the per-block hash: that `lukechampine.com/blake3` exposes subtree
+  chaining values at block offsets (or Bao with 1 MiB chunk groups); and the
+  throughput of `BLAKE3()` in ClickHouse for a store-wide audit.
 - Compression ratio and ingest throughput on one representative mount, per
-  §9; and an insert-rate test with many small mounts per batch.
-- For a BLAKE3 store: that a Go port exposes subtree chaining values at block
-  offsets (or Bao with 1 MiB chunk groups); and the throughput of `SHA256()` /
-  `BLAKE3()` in ClickHouse for a store-wide audit.
+  §9.
 
 ## 14. Revisions
 
-- 2026-08-19 — first draft: partitioned by `(mount, day)`, mounts keyed by a
-  `LowCardinality(String)` name, snapshot index left as an open question.
+- 2026-08-19 — first draft: bespoke tables partitioned by `(mount, day)`,
+  mounts keyed by a `LowCardinality(String)` name, snapshot index left as an
+  open question.
 - 2026-08-19, later the same day — revised for stores with very many mounts:
   store / mount split with a registry and numeric `mount_id`; partitioning by
   `(ttl_class, day)` for every store; `fs_snap` derived from root rows by a
   materialised view; corpus and fleet profiles; the fleet-scale estimates in
   §8. Trigger: the question "what if there are 10⁸ small trees?", which the
   first draft answered with 10¹⁰ partitions.
-- 2026-08-19, third pass — the hash algorithm as a store parameter with
-  sha256 as the default; per-block digests in the corpus profile; BLAKE3
-  assessed (§3 *Hashes*, §11): its tree mode composes only over aligned
-  blocks, which newline-cut text blocks are not.
+- 2026-08-19, third pass — the hash algorithm as a store parameter; per-block
+  digests in the corpus profile; BLAKE3 assessed: its tree mode composes only
+  over aligned blocks, which newline-cut text blocks are not. (The sha256
+  default this pass chose was wrong for the repository — corrected in the
+  fourth pass.)
+- 2026-08-19, fourth pass — leeway conformance and caller-owned identity:
+  the tables become facts-shaped (the `boxer.facts` `TableDesc` on separate
+  tables owned by a generated store, engine clauses through the ADR-0102
+  seam); a mount is the application's tagged id in `id:id:u64`, so the facts
+  backbone `(id, ts, naturalKey)` *is* `(mount, snapshot, path)` and no
+  `TableDesc` extension is needed; the registry becomes a policy kind in
+  `boxer.facts`; the hash default corrected to BLAKE3 (house standard, CS009
+  bans `crypto/sha256`, dependency already present); partitioning by expiry
+  day replaces the retention-class key; the block ordinal and the `fsdata`
+  shape recorded as the open decision; bespoke / own-`TableDesc` / in-facts
+  recorded as alternatives with their reasons.
