@@ -1,5 +1,4 @@
 //go:build binary_log
-// +build binary_log
 
 package logging
 
