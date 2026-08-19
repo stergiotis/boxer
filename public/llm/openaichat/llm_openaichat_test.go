@@ -15,9 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:fix inline
-func f32(v float32) *float32 { return new(v) }
-
 // newServerClient starts an httptest server with handler and returns a Client
 // pointed at it. The server is torn down on test cleanup.
 func newServerClient(t *testing.T, handler http.HandlerFunc) *Client {
@@ -61,7 +58,7 @@ func TestEncodeRequestEmitsPositiveNumerics(t *testing.T) {
 	body, err := inst.encodeRequest(CompletionRequest{
 		ModelId:     "test-model",
 		Messages:    []Message{{Role: ChatRoleUser, Content: "hi"}},
-		Temperature: f32(0.5),
+		Temperature: new(float32(0.5)),
 		MaxTokens:   2048,
 		NumCtx:      8192,
 	})
@@ -81,7 +78,7 @@ func TestEncodeRequestEmitsExplicitZeroTemperature(t *testing.T) {
 	body, err := inst.encodeRequest(CompletionRequest{
 		ModelId:     "test-model",
 		Messages:    []Message{{Role: ChatRoleUser, Content: "hi"}},
-		Temperature: f32(0),
+		Temperature: new(float32(0)),
 	})
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"temperature":0`)
@@ -225,7 +222,7 @@ func TestCompleteSendsExplicitZeroTemperature(t *testing.T) {
 		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}`)
 	})
 	req := userReq("m")
-	req.Temperature = f32(0)
+	req.Temperature = new(float32(0))
 	_, err := c.Complete(context.Background(), req)
 	require.NoError(t, err)
 	assert.Contains(t, string(gotBody), `"temperature":0`)

@@ -201,7 +201,7 @@ func (c *RowComposer) CommitRow() (err error) {
 // Plan + section grouping for its type.
 func resolvePlan(row any) (rowVal reflect.Value, plan *mappingplan.Plan, groups []goplan.SectionGroup, err error) {
 	rowVal = reflect.ValueOf(row)
-	if rowVal.Kind() == reflect.Ptr {
+	if rowVal.Kind() == reflect.Pointer {
 		rowVal = rowVal.Elem()
 	}
 	if rowVal.Kind() != reflect.Struct {

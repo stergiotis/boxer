@@ -206,7 +206,7 @@ func tupleRowElements(row reflect.Value, ts goplan.TupleSpec) []reflect.Value {
 		return []reflect.Value{fld}
 	case mappingplan.AttrCardinalityOptional:
 		// *S (nil ⇒ absent) or option.Option[S] (Has=false ⇒ absent).
-		if fld.Kind() == reflect.Ptr {
+		if fld.Kind() == reflect.Pointer {
 			if fld.IsNil() {
 				return nil
 			}

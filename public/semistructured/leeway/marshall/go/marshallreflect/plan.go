@@ -276,7 +276,7 @@ func nestedSectionCardinality(ft reflect.Type) (elemType reflect.Type, card mapp
 		if isAttrStructType(ft) {
 			return ft, mappingplan.AttrCardinalityOne, true
 		}
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if isAttrStructType(ft.Elem()) {
 			return ft.Elem(), mappingplan.AttrCardinalityOptional, true
 		}

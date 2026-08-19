@@ -44,7 +44,7 @@ func (inst *templatedRustClientCode) GetVerbatimCode() string {
 }
 func toMap(in any) (out map[string]any) {
 	v := reflect.ValueOf(in)
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 

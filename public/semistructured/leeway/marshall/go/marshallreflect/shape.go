@@ -148,7 +148,7 @@ func classifyReflectType(rt reflect.Type) (s goplan.FieldShape, err error) {
 	}
 	switch rt.Kind() {
 
-	case reflect.Ptr:
+	case reflect.Pointer:
 		elem := rt.Elem()
 		if elem.PkgPath() == roaringPkgPath && elem.Name() == "Bitmap" {
 			// A roaring bitmap is a Set of uint32 in the canonical model.

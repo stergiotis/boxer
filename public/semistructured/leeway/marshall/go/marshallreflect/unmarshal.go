@@ -750,7 +750,7 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 	case mappingplan.AttrCardinalityOne:
 		elemType = outFld.Type()
 	case mappingplan.AttrCardinalityOptional:
-		if outFld.Kind() == reflect.Ptr {
+		if outFld.Kind() == reflect.Pointer {
 			elemType = outFld.Type().Elem()
 		} else { // option.Option[S]
 			vf, _ := outFld.Type().FieldByName("Val")
@@ -820,7 +820,7 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 			return
 		}
 		if len(elems) == 1 {
-			if outFld.Kind() == reflect.Ptr {
+			if outFld.Kind() == reflect.Pointer {
 				p := reflect.New(outFld.Type().Elem())
 				p.Elem().Set(elems[0])
 				outFld.Set(p)
