@@ -2575,7 +2575,7 @@ dependencies = [
  "byteorder-lite",
  "moxcms",
  "num-traits",
- "png 0.18.0",
+ "png 0.18.1",
  "tiff",
  "zune-core 0.5.1",
  "zune-jpeg 0.5.15",
@@ -2599,7 +2599,7 @@ dependencies = [
  "dhat",
  "earcutr",
  "eframe",
- "egui 0.35.0",
+ "egui 0.36.1",
  "egui-wgpu 0.35.0",
  "egui_dock",
  "egui_extras",
@@ -2614,7 +2614,7 @@ dependencies = [
  "memmap2 0.9.11",
  "mimalloc",
  "petgraph",
- "png 0.18.0",
+ "png 0.18.1",
  "pollster 0.4.0",
  "profiling",
  "prost",
@@ -2642,7 +2642,7 @@ dependencies = [
 name = "imzero2_egui"
 version = "0.1.0"
 dependencies = [
- "egui 0.35.0",
+ "egui 0.36.1",
 ]
 
 [[package]]
@@ -3878,9 +3878,9 @@ dependencies = [
 
 [[package]]
 name = "png"
-version = "0.18.0"
+version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97baced388464909d42d89643fe4361939af9b7ce7a31ee32a168f832a70f2a0"
+checksum = "60769b8b31b2a9f263dae2776c37b1b28ae246943cf719eb6946a1db05128a61"
 dependencies = [
  "bitflags 2.13.1",
  "crc32fast",
