@@ -22,6 +22,48 @@ never updated or shared; retention is `TTL`; a mount is identified by a tagged
 id the application owns. Every `io/fs` operation is a key-range query; grep,
 history, diff and du are SQL over the same rows.
 
+```text
+┌──────────────────────┐      ┌─────────────────────────────┐
+│ fs.FS                │      │ any rclone remote           │
+│ grant · embed · zip  │      │ rclone serve sftp --stdio   │
+└──────────┬───────────┘      └───────────────┬─────────────┘
+           │ io/fs                            │ pipe — pkg/sftp client as fs.FS
+           ▼                                  ▼
+┌──────────────────────────────────────────────────────────┐
+│ walker (ingest): WalkDir · cut blocks · BLAKE3           │
+│ DTO rows · batches across mounts · root row LAST         │
+└────────────────────────────┬─────────────────────────────┘
+                             │ Ingest → Arrow batches → InsertArrow
+                             ▼
+┌──────────────────────────────────────────────────────────┐
+│ generated record stores (facts TableDesc · SharedRA)     │
+│ entry store → fsmeta · block store → fsdata              │
+│ policy kind → boxer.facts                                │
+└────────────────────────────┬─────────────────────────────┘
+                             ▼
+┌──────────────────────────────────────────────────────────┐
+│ ClickHouse      fsmeta ──MV──▶ fssnap          fsdata    │
+│ ORDER BY (id, ts, naturalKey) · PARTITION BY expiry day  │
+│ TTL expiresAt · MATERIALIZED name / dir / depth / ext    │
+└──────────┬───────────────────────────────┬───────────────┘
+           │ Scan<Kind>(ExtraPredicate)    │ fs() / fsdata() macros
+           ▼                               ▼
+┌──────────────────────┐      ┌───────────────────────────────┐
+│ io/fs adapter        │      │ SQL: play · applets · any     │
+│ snapshot-pinned      │      │ client — grep, history, diff, │
+│ Go consumers, fstest │      │ du, audit, across mounts      │
+└──────────┬───────────┘      └───────────────────────────────┘
+           │
+┌──────────▼───────────┐ pipe ┌───────────────────────────────┐
+│ SFTP head (stdio)    │◀────▶│ rclone: mount · serve s3 /    │
+│ boxer fs sftp-stdio  │      │ webdav / nfs / docker · union │
+└──────────────────────┘      │ · hasher · sync · web GUI     │
+                              └───────────────────────────────┘
+```
+
+The application's tagged id rides every row (`id:id:u64`); the store mints
+nothing. Left column: the pipe both ways; right column: SQL.
+
 ## 1. Concepts
 
 | Term | Meaning |
