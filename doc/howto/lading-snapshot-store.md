@@ -159,11 +159,19 @@ handed to `toDateTime64` is read as *seconds* whatever the scale says, so
 nanoseconds saturate to the year 2262 and match nothing. The expansion uses
 `fromUnixTimestamp64Nano`; if you build such a literal by hand, do the same.
 
-Run a statement through the expansion:
+In `play` the macros expand through the standard pre-execute pass registry, so
+typing one into the SQL editor works with nothing to wire. Elsewhere, run a
+statement through the expansion directly:
 
 ```go
 sql, err := ladingsql.Expand(ladingsql.Config{Visibility: vis}, userSQL)
 ```
+
+A host that applies the registry instead binds a `MountVisibilityI` into the
+value it hands `ApplyBestEffortBound`; without one the factory declines, the
+macro is left alone, and the server answers "unknown table function `fs`". That
+is deliberate — an expansion is an authorisation decision, so a host that
+states no policy gets no expansion rather than a default one.
 
 `Visibility` decides which mounts the statement may read, and **nil refuses
 every mount** — a capability check that defaults to open is not one. Use
@@ -284,7 +292,17 @@ somebody else's limit rather than the store's.
   maximum over its references, which `TTL` cannot express.
 - **This is not a hot serving path.** Every adapter call is a query —
   millisecond latency, batch and templating shaped. The SFTP head serialises
-  against the store, because the generated stores are single-goroutine.
+  against the store, because the generated stores are single-goroutine. One
+  open `*File` is safe for the parallel `ReadAt` calls `io.ReaderAt` promises;
+  an `FS`, and two handles on one, are not.
+- **A snapshot is addressable only once it is complete.** `ladingingest.
+  Snapshot` returns its `Result` even when the walk failed, so a caller can
+  hold the instant of a walk that never committed — but neither the adapter nor
+  the head will open it, and no macro will select it. A walk whose root could
+  not be stat'd writes no snapshot at all rather than one nothing can list.
+- **A profile only applies at creation.** `Provision` renders the granularity
+  into the `CREATE TABLE`, and `IF NOT EXISTS` means an existing table keeps
+  the profile it was made under. Changing one is a migration.
 
 Related: [ADR-0198](../adr/0198-fs-snapshot-store.md) for the decisions and the
 dated record of what each milestone corrected;

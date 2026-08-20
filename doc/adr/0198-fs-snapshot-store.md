@@ -6,8 +6,11 @@ date: 2026-08-19
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
+> **Status: proposed — pre-human-review.** Not reviewed by a second reader.
+> M0–M6 are built and committed ahead of that review (see the dated `## Updates`
+> below), so this is a decision whose consequences can be inspected rather than
+> only argued; what has not happened is the review that would flip it to
+> accepted.
 
 # ADR-0198: the fs snapshot store — `io/fs` trees as facts-shaped ClickHouse tables
 
@@ -1021,6 +1024,149 @@ whole-second mtimes over SFTP, symlinks needing `--links` on ingress, `text`
 as a guarantee a very long line forfeits, block-ordinal arithmetic only for
 non-text files, no deduplication, and not a hot serving path. Collected there
 so a reader meets them before they cost an afternoon.
+
+### 2026-08-20 — a review pass over M0–M6, and the seventeen things it found
+
+A multi-agent review of the whole range, at the recall end of the effort scale.
+Nothing it found was visible to `go build`, `go vet`, `go test`, `-race` or
+`go mod tidy --diff`, which is itself the finding about the test suite: every
+defect below sat behind a lane that was green.
+
+**Two read paths disagreed about expiry, and the wrong one was the one rclone
+sees.** §SD4's cutoff is a logical one — `ttl_only_drop_parts = 1` leaves a
+partly expired part on disk until an explicit OPTIMIZE FINAL, so every read has
+to carry `expiresAt > now()`. The macros did; the `io/fs` adapter's entry and
+block scans did not. An expired snapshot was therefore gone from `fs()` and
+from `Snapshots()` while `rclone ls` still walked it and read its bytes — which
+this ADR's own acceptance list names as a failure ("a row visible after its
+`expiresAt`"). The cutoff now has one spelling, `ladingschema.NotExpired`,
+which every read path ANDs.
+
+**A snapshot was addressable before it was complete.** `ladingingest.Snapshot`
+returns its `Result` even when the walk failed, so the instant of a walk that
+never committed is a real address. `listSnapshots` hid it and nothing stopped a
+client naming it directly. §SD6 makes "has a root row" the rule; the head now
+applies it at `view`, from the same snapshot list the listing uses. The
+converse hole closed with it: a walk whose root could not be stat'd used to
+commit a root row anyway — `latest` moved onto a snapshot the adapter then
+refused to list, superseding a good one — and now writes no snapshot at all.
+
+**`is_dir` could answer differently in SQL and in Go for the same row.** The
+SQL surface derives it from the stored `NodeKind`, the adapter from `Mode`. The
+root row hard-coded `NodeKind` to `dir` while filling `Mode` only when the stat
+had succeeded, so the two diverged exactly when something had gone wrong. The
+root row is now derived from its stat like every other row, and carries a size.
+
+**A directory whose ReadDir failed got two rows.** `fs.WalkDir` reports that
+failure by calling back a *second* time for the same directory, immediately
+after the first; the walker wrote a full second row rather than amending the
+first. The tables are plain MergeTree, so both rows read back — one of them a
+mode-0 stub — and `LIMIT 1` picked between them by tie-break. One directory row
+is now held back exactly one callback, which is the window in which the
+amendment can arrive.
+
+**Every text file over 8 KiB with non-ASCII in it had a coin-flip chance of
+being called binary.** `isText` trims a rune the sniff window cut in half, and
+bounded the trimming against `len(content)` — the whole file — instead of
+against the window. For anything past 8192 bytes the guard fired on the first
+trimmed byte. With it went the newline cutting that the entire line-oriented
+SQL surface rests on: `Text = false`, `Line0 = 0`, fixed-offset blocks. Every
+`isText` fixture was pure ASCII, where byte 8192 is always a rune boundary.
+
+**A damaged snapshot could read as a short file with no error.** `content`
+checked that the block ordinals it found were contiguous from zero, never that
+it found as many as the row claims — so a snapshot missing its *trailing*
+blocks reassembled truncated and returned a clean EOF. `readFixed` failed
+loudly on the same damage, which meant the two paths disagreed about whether a
+damaged snapshot was readable, and the silent one was the default under
+`TextRuleSniff`.
+
+**`FS.Sub` was not a boundary.** Symlink resolution walks full snapshot paths,
+and re-applied neither the prefix nor a containment check, so a link inside a
+subtree could name anything in the snapshot and be followed there. The escape
+*above* the snapshot was already refused; this was the same refusal one level
+in, and `Sub` is the natural primitive for handing a subtree to a consumer that
+should not have the rest.
+
+**`*File` promised `io.ReaderAt` and could not keep it.** Parallel `ReadAt` —
+which the interface explicitly allows, and which `archive/zip`,
+`io.NewSectionReader` and an SFTP request server all do — raced the handle's
+block cache. The head had noticed and wrapped every handle in a
+`lockedReaderAt`; the fix belonged at the type that made the promise, so the
+handle now carries its own lock and the head's wrapper keeps only the job that
+is genuinely the head's, serialising against the shared store.
+
+**The SQL surface was declared everywhere and wired nowhere.** The three macros
+were on the security classifier's local-read allowlist and routed server-side
+by play's dispatch, but `ExpandPass` was registered in no pass pipeline — so a
+statement following the how-to was classified as a local read, sent to the
+server, and answered with *"unknown table function `fs`"*. It is now a
+`passreg` **Factory**, not an Entry: expanding a macro is an authorisation
+decision (which mounts may be read), and a factory declines when no visibility
+is bound rather than inventing a default. play binds `VisibleAll{}` and says
+why in one comment — it already routes `boxer.fsmeta` to the same server as an
+ordinary table, so gating the macro more tightly than the table it reads would
+refuse the convenient spelling of a query the inconvenient spelling answers.
+
+**`Provision`'s `Profile` argument reached one of the three tables.** The
+generated `EnsureTable` runs DDL rendered at code-generation time, so `fsmeta`
+and `fsdata` were frozen at whatever profile the gen-test passed —
+`ProfileFleet` silently produced a store at the corpus granularities, one mark
+per block row, which is exactly the cost that profile exists to avoid.
+Provisioning now composes all three `CREATE TABLE`s through the path `fssnap`
+already used, from the same `TableDesc` the store decodes.
+
+**`Verify` passed on a half-provisioned store**, and the M1 update's
+`VerifySchema` change is what removed the accidental guard: it checks the
+columns of the decode, which is the half `Provision` does *not* add. A store
+with no tree columns, no `fssnap` and no view decoded every row correctly and
+died on the first ReadDir — over a pipe rclone had already mounted, since
+`sftp-stdio` runs `Verify` precisely so that it creates nothing. `Verify` now
+also checks the materialised columns, `fssnap` and the view.
+
+**And `VerifySchema` itself got a better fix than the one M1 gave it.** Skipping
+`MATERIALIZED` and `ALIAS` rows of `DESCRIBE TABLE` missed `EPHEMERAL`, and
+rested on an assumption nothing pinned: `asterisk_include_materialized_columns`
+and its alias twin decide what `SELECT *` returns, and under them a derived
+column *is* in the decode — where the skip-switch would have blessed the
+mis-decode, because it reasoned about column kinds rather than about the
+projection. It now describes the projection itself, `DESCRIBE (SELECT * FROM
+t)`, which is what the positional decode consumes by construction: no kind
+vocabulary to keep current, and it tracks the settings. Verified against
+`clickhouse-local` in both directions.
+
+**Smaller, and worth the line each:** synthetic tree levels reported an mtime
+of 2042 (pkg/sftp marshals `uint32(ModTime().Unix())`, and the zero
+`time.Time`'s low 32 bits land there) — they now report the epoch, the
+conventional "not known"; `Readlink` handed absolute targets back verbatim,
+which the adapter roots at the snapshot and a client roots at the SFTP tree, so
+`rclone copy --links` wrote a dangling link where the adapter would have copied
+the file; `Glob` turned every `Stat` error into "no matches", including a dead
+server; the commit record's byte total counted the pre-read stat rather than
+the restated size, disagreeing with `SUM(size)` for exactly the files the
+restatement exists for; the walker's flush bounded rows and not bytes, so two
+shipped profiles at 1 MiB blocks could hold ~4 GiB before the first flush;
+`quoteLiteral` and `unquoteLiteral` had drifted apart in two private copies and
+are now one pair; a dispatcher's refusal named `fs(…)` for statements that
+wrote `fsdata(…)`; and 65 error messages carried `"lading…: "` prefixes that
+CODINGSTANDARDS bans, because `eh` already records the call site.
+
+**Two test defects, both of the kind that keeps a lane green.** A table test
+over four cases shared one mount with no snapshot pin and relied on a `DELETE`
+between iterations, so a case could read another's row depending on Go's map
+ordering. And an assertion checked `err.Error()` for a phrase no code path
+emits — it would have passed with the diagnostic it exists to protect deleted.
+The second one, rewritten to assert what it meant, immediately failed: the
+remote's name and rclone's stderr ride the error as *structured fields*, which
+`Error()` does not render. That is correct house style, so the test now reads
+the CBOR payload — but it is worth knowing that the string a caller prints does
+not carry the reason.
+
+**Not fixed, and deliberately.** M7 (the native S3 head) stays deferred, and
+`MountVisibilityI` still has no binding to the capability broker — that needs a
+capability subject, which is a decision rather than a detail. The factory
+registration above is what makes the absence honest: no subject, no binding, no
+expansion.
 
 ## References
 
