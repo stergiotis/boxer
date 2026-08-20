@@ -5,7 +5,6 @@ package patch
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -83,7 +82,7 @@ func (inst *Patch) ComputeHash() (h t.PatchHash) {
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		panic(fmt.Errorf("patch.ComputeHash: marshal payload: %w", err))
+		panic(eh.Errorf("marshal payload: %w", err))
 	}
 	h = t.HashBytes(data)
 	return

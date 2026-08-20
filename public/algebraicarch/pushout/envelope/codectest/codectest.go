@@ -14,7 +14,6 @@ package codectest
 
 import (
 	"bytes"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -22,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // CanonicalEnvelope builds the conformance fixture: a patch exercising
@@ -67,23 +67,23 @@ func CheckRoundTrip(c envelope.CodecI) (err error) {
 	env := CanonicalEnvelope()
 	payload, err := c.Encode(env)
 	if err != nil {
-		return fmt.Errorf("encode: %w", err)
+		return eh.Errorf("encode: %w", err)
 	}
 	got, err := c.Decode(payload)
 	if err != nil {
-		return fmt.Errorf("decode: %w", err)
+		return eh.Errorf("decode: %w", err)
 	}
 	if got.Patch == nil {
-		return fmt.Errorf("decoded envelope lost its patch")
+		return eh.Errorf("decoded envelope lost its patch")
 	}
 	if got.Patch.Hash != env.Patch.Hash {
-		return fmt.Errorf("identity changed: %s -> %s", env.Patch.Hash, got.Patch.Hash)
+		return eh.Errorf("identity changed: %s -> %s", env.Patch.Hash, got.Patch.Hash)
 	}
 	if err = envelope.Validate(got); err != nil {
-		return fmt.Errorf("decoded envelope fails validation: %w", err)
+		return eh.Errorf("decoded envelope fails validation: %w", err)
 	}
 	if !reflect.DeepEqual(normalize(env), normalize(got)) {
-		return fmt.Errorf("logical round-trip mismatch:\n in: %#v\nout: %#v", env, got)
+		return eh.Errorf("logical round-trip mismatch:\n in: %#v\nout: %#v", env, got)
 	}
 	return
 }
@@ -116,14 +116,14 @@ func normalize(env envelope.EnvelopeV1) envelope.EnvelopeV1 {
 func CheckDeterminism(c envelope.CodecI) (err error) {
 	a, err := c.Encode(CanonicalEnvelope())
 	if err != nil {
-		return fmt.Errorf("encode #1: %w", err)
+		return eh.Errorf("encode #1: %w", err)
 	}
 	b, err := c.Encode(CanonicalEnvelope())
 	if err != nil {
-		return fmt.Errorf("encode #2: %w", err)
+		return eh.Errorf("encode #2: %w", err)
 	}
 	if !bytes.Equal(a, b) {
-		return fmt.Errorf("encoding is not deterministic (%d vs %d bytes)", len(a), len(b))
+		return eh.Errorf("encoding is not deterministic (%d vs %d bytes)", len(a), len(b))
 	}
 	return
 }
@@ -133,22 +133,22 @@ func CheckDeterminism(c envelope.CodecI) (err error) {
 func CheckRegistry(c envelope.CodecI) (err error) {
 	reg, err := envelope.NewRegistry(c)
 	if err != nil {
-		return fmt.Errorf("registry rejects codec: %w", err)
+		return eh.Errorf("registry rejects codec: %w", err)
 	}
 	env := CanonicalEnvelope()
 	framed, err := reg.Encode(c.Name(), env)
 	if err != nil {
-		return fmt.Errorf("registry encode: %w", err)
+		return eh.Errorf("registry encode: %w", err)
 	}
 	got, name, err := reg.Decode(framed)
 	if err != nil {
-		return fmt.Errorf("registry decode: %w", err)
+		return eh.Errorf("registry decode: %w", err)
 	}
 	if name != c.Name() {
-		return fmt.Errorf("frame carried name %q, codec says %q", name, c.Name())
+		return eh.Errorf("frame carried name %q, codec says %q", name, c.Name())
 	}
 	if got.Patch.Hash != env.Patch.Hash {
-		return fmt.Errorf("identity changed through registry: %s -> %s", env.Patch.Hash, got.Patch.Hash)
+		return eh.Errorf("identity changed through registry: %s -> %s", env.Patch.Hash, got.Patch.Hash)
 	}
 	return
 }

@@ -15,7 +15,6 @@ package exchangetest
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo/filestore"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // MakeFunc exposes a repo through the transport under test. The
@@ -107,18 +107,18 @@ func CheckPullConvergence(tt *testing.T, mk MakeFunc) (err error) {
 	peer, _ := mk(tt, src)
 	stats, err := exchange.Pull(ctx, dst, peer)
 	if err != nil {
-		return fmt.Errorf("pull: %w", err)
+		return eh.Errorf("pull: %w", err)
 	}
 	if stats.Missing != 3 || stats.Applied != 3 || stats.Duplicates != 0 {
-		return fmt.Errorf("pull stats: %+v", stats)
+		return eh.Errorf("pull stats: %+v", stats)
 	}
 	if !sameApplied(appliedOf(tt, src), appliedOf(tt, dst)) {
-		return fmt.Errorf("applied logs diverged after pull")
+		return eh.Errorf("applied logs diverged after pull")
 	}
 	// Re-pull: nothing missing.
 	stats, err = exchange.Pull(ctx, dst, peer)
 	if err != nil || stats.Missing != 0 || stats.Shipped != 0 {
-		return fmt.Errorf("re-pull: %+v, %v", stats, err)
+		return eh.Errorf("re-pull: %+v, %v", stats, err)
 	}
 	return
 }
@@ -134,13 +134,13 @@ func CheckPushConvergence(tt *testing.T, mk MakeFunc) (err error) {
 	peer, acc := mk(tt, dst)
 	stats, err := exchange.Push(ctx, src, peer, acc)
 	if err != nil {
-		return fmt.Errorf("push: %w", err)
+		return eh.Errorf("push: %w", err)
 	}
 	if stats.Missing != 2 || stats.Applied != 2 {
-		return fmt.Errorf("push stats: %+v", stats)
+		return eh.Errorf("push stats: %+v", stats)
 	}
 	if !sameApplied(appliedOf(tt, src), appliedOf(tt, dst)) {
-		return fmt.Errorf("applied logs diverged after push")
+		return eh.Errorf("applied logs diverged after push")
 	}
 	return
 }
@@ -159,10 +159,10 @@ func CheckDuplicateIdempotence(tt *testing.T, mk MakeFunc) (err error) {
 	}
 	_, acc := mk(tt, dst)
 	if _, applied, aerr := acc.ApplyEnvelope(ctx, framed); aerr != nil || !applied {
-		return fmt.Errorf("first apply: applied=%v err=%v", applied, aerr)
+		return eh.Errorf("first apply: applied=%v err=%v", applied, aerr)
 	}
 	if _, applied, aerr := acc.ApplyEnvelope(ctx, framed); aerr != nil || applied {
-		return fmt.Errorf("duplicate apply must be (false, nil): applied=%v err=%v", applied, aerr)
+		return eh.Errorf("duplicate apply must be (false, nil): applied=%v err=%v", applied, aerr)
 	}
 	return
 }
@@ -183,7 +183,7 @@ func CheckDependencyRejectionPassthrough(tt *testing.T, mk MakeFunc) (err error)
 	_, acc := mk(tt, dst)
 	_, _, aerr := acc.ApplyEnvelope(ctx, framed)
 	if !errors.Is(aerr, repo.ErrMissingDependency) {
-		return fmt.Errorf("dependency rejection lost its classification across the transport: %v", aerr)
+		return eh.Errorf("dependency rejection lost its classification across the transport: %v", aerr)
 	}
 	return
 }
@@ -221,15 +221,15 @@ func CheckPartialFailureStats(tt *testing.T, mk MakeFunc) (err error) {
 	peer, _ := mk(tt, src)
 	stats, perr := exchange.Pull(ctx, dst, reorderedPeer{PeerI: peer})
 	if !errors.Is(perr, repo.ErrMissingDependency) {
-		return fmt.Errorf("expected dependency rejection, got %v", perr)
+		return eh.Errorf("expected dependency rejection, got %v", perr)
 	}
 	if stats.Missing != 2 || stats.Shipped != 1 || stats.Applied != 0 {
-		return fmt.Errorf("partial-failure stats: %+v", stats)
+		return eh.Errorf("partial-failure stats: %+v", stats)
 	}
 	// The destination is not wedged: a well-ordered pull completes.
 	stats, perr = exchange.Pull(ctx, dst, peer)
 	if perr != nil || stats.Applied != 2 {
-		return fmt.Errorf("recovery pull: %+v, %v", stats, perr)
+		return eh.Errorf("recovery pull: %+v, %v", stats, perr)
 	}
 	return
 }

@@ -14,11 +14,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // OpenFunc opens (creating on first use) a store at location.
@@ -56,43 +56,43 @@ func retentionSetEqual(got, want []repo.RetentionEntry) bool {
 func CheckEnvelopes(ctx context.Context, open OpenFunc, location string) (err error) {
 	st, err := open(location)
 	if err != nil {
-		return fmt.Errorf("open: %w", err)
+		return eh.Errorf("open: %w", err)
 	}
 	defer st.Close()
 
 	data := []byte("PXE1\x05json1{\"x\":1}")
 	if err = st.PutEnvelope(ctx, h(1), data); err != nil {
-		return fmt.Errorf("put: %w", err)
+		return eh.Errorf("put: %w", err)
 	}
 	if err = st.PutEnvelope(ctx, h(1), data); err != nil {
-		return fmt.Errorf("idempotent re-put: %w", err)
+		return eh.Errorf("idempotent re-put: %w", err)
 	}
 	got, err := st.GetEnvelope(ctx, h(1))
 	if err != nil {
-		return fmt.Errorf("get: %w", err)
+		return eh.Errorf("get: %w", err)
 	}
 	if !bytes.Equal(got, data) {
-		return fmt.Errorf("get returned %q, want %q", got, data)
+		return eh.Errorf("get returned %q, want %q", got, data)
 	}
 	ok, err := st.HasEnvelope(ctx, h(1))
 	if err != nil || !ok {
-		return fmt.Errorf("has(present) = %v, %v", ok, err)
+		return eh.Errorf("has(present) = %v, %v", ok, err)
 	}
 	ok, err = st.HasEnvelope(ctx, h(2))
 	if err != nil || ok {
-		return fmt.Errorf("has(absent) = %v, %v", ok, err)
+		return eh.Errorf("has(absent) = %v, %v", ok, err)
 	}
 	if _, err2 := st.GetEnvelope(ctx, h(2)); !errors.Is(err2, repo.ErrEnvelopeNotFound) {
-		return fmt.Errorf("get(absent): want ErrEnvelopeNotFound, got %v", err2)
+		return eh.Errorf("get(absent): want ErrEnvelopeNotFound, got %v", err2)
 	}
 	// First write wins: a different payload for the same hash must not
 	// replace the original (envelopes are immutable).
 	if err = st.PutEnvelope(ctx, h(1), []byte("OTHER")); err != nil {
-		return fmt.Errorf("re-put different bytes: %w", err)
+		return eh.Errorf("re-put different bytes: %w", err)
 	}
 	got, err = st.GetEnvelope(ctx, h(1))
 	if err != nil || !bytes.Equal(got, data) {
-		return fmt.Errorf("envelope mutated by re-put: %q, %v", got, err)
+		return eh.Errorf("envelope mutated by re-put: %q, %v", got, err)
 	}
 	return
 }
@@ -101,41 +101,41 @@ func CheckEnvelopes(ctx context.Context, open OpenFunc, location string) (err er
 func CheckAppliedLog(ctx context.Context, open OpenFunc, location string) (err error) {
 	st, err := open(location)
 	if err != nil {
-		return fmt.Errorf("open: %w", err)
+		return eh.Errorf("open: %w", err)
 	}
 	defer st.Close()
 
 	got, err := st.LoadApplied(ctx)
 	if err != nil || len(got) != 0 {
-		return fmt.Errorf("fresh load = %v, %v (want empty, nil)", got, err)
+		return eh.Errorf("fresh load = %v, %v (want empty, nil)", got, err)
 	}
 	want := []t.PatchHash{h(1), h(2), h(3)}
 	for _, x := range want {
 		if err = st.AppendApplied(ctx, x); err != nil {
-			return fmt.Errorf("append: %w", err)
+			return eh.Errorf("append: %w", err)
 		}
 	}
 	got, err = st.LoadApplied(ctx)
 	if err != nil {
-		return fmt.Errorf("load: %w", err)
+		return eh.Errorf("load: %w", err)
 	}
 	if len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
-		return fmt.Errorf("load order mismatch: %v", got)
+		return eh.Errorf("load order mismatch: %v", got)
 	}
 	replaced := []t.PatchHash{h(1), h(3)}
 	if err = st.ReplaceApplied(ctx, replaced); err != nil {
-		return fmt.Errorf("replace: %w", err)
+		return eh.Errorf("replace: %w", err)
 	}
 	got, err = st.LoadApplied(ctx)
 	if err != nil || len(got) != 2 || got[0] != h(1) || got[1] != h(3) {
-		return fmt.Errorf("post-replace load = %v, %v", got, err)
+		return eh.Errorf("post-replace load = %v, %v", got, err)
 	}
 	if err = st.ReplaceApplied(ctx, nil); err != nil {
-		return fmt.Errorf("replace-to-empty: %w", err)
+		return eh.Errorf("replace-to-empty: %w", err)
 	}
 	got, err = st.LoadApplied(ctx)
 	if err != nil || len(got) != 0 {
-		return fmt.Errorf("post-empty load = %v, %v", got, err)
+		return eh.Errorf("post-empty load = %v, %v", got, err)
 	}
 	return
 }
@@ -144,31 +144,31 @@ func CheckAppliedLog(ctx context.Context, open OpenFunc, location string) (err e
 func CheckSnapshot(ctx context.Context, open OpenFunc, location string) (err error) {
 	st, err := open(location)
 	if err != nil {
-		return fmt.Errorf("open: %w", err)
+		return eh.Errorf("open: %w", err)
 	}
 	defer st.Close()
 
 	if _, ok, err2 := st.LoadSnapshot(ctx); err2 != nil || ok {
-		return fmt.Errorf("fresh snapshot = ok:%v err:%v (want absent)", ok, err2)
+		return eh.Errorf("fresh snapshot = ok:%v err:%v (want absent)", ok, err2)
 	}
 	snapA := repo.Snapshot{Applied: []t.PatchHash{h(1), h(2)}, PushoutGraph: []byte("GRG1-bytes-A")}
 	if err = st.SaveSnapshot(ctx, snapA); err != nil {
-		return fmt.Errorf("save: %w", err)
+		return eh.Errorf("save: %w", err)
 	}
 	got, ok, err := st.LoadSnapshot(ctx)
 	if err != nil || !ok {
-		return fmt.Errorf("load: ok:%v err:%v", ok, err)
+		return eh.Errorf("load: ok:%v err:%v", ok, err)
 	}
 	if len(got.Applied) != 2 || got.Applied[0] != h(1) || got.Applied[1] != h(2) || !bytes.Equal(got.PushoutGraph, snapA.PushoutGraph) {
-		return fmt.Errorf("snapshot round-trip mismatch: %+v", got)
+		return eh.Errorf("snapshot round-trip mismatch: %+v", got)
 	}
 	snapB := repo.Snapshot{Applied: nil, PushoutGraph: []byte("GRG1-bytes-B")}
 	if err = st.SaveSnapshot(ctx, snapB); err != nil {
-		return fmt.Errorf("re-save: %w", err)
+		return eh.Errorf("re-save: %w", err)
 	}
 	got, ok, err = st.LoadSnapshot(ctx)
 	if err != nil || !ok || len(got.Applied) != 0 || !bytes.Equal(got.PushoutGraph, snapB.PushoutGraph) {
-		return fmt.Errorf("snapshot replace mismatch: %+v ok:%v err:%v", got, ok, err)
+		return eh.Errorf("snapshot replace mismatch: %+v ok:%v err:%v", got, ok, err)
 	}
 	return
 }
@@ -178,41 +178,41 @@ func CheckSnapshot(ctx context.Context, open OpenFunc, location string) (err err
 func CheckRetention(ctx context.Context, open OpenFunc, location string) (err error) {
 	st, err := open(location)
 	if err != nil {
-		return fmt.Errorf("open: %w", err)
+		return eh.Errorf("open: %w", err)
 	}
 	defer st.Close()
 
 	got, err := st.LoadRetention(ctx)
 	if err != nil || len(got) != 0 {
-		return fmt.Errorf("fresh load = %v, %v (want empty, nil)", got, err)
+		return eh.Errorf("fresh load = %v, %v (want empty, nil)", got, err)
 	}
 	want := []repo.RetentionEntry{{Node: nid(1, 0), UnixNano: 100}, {Node: nid(2, 7), UnixNano: 200}}
 	if err = st.SaveRetention(ctx, want); err != nil {
-		return fmt.Errorf("save: %w", err)
+		return eh.Errorf("save: %w", err)
 	}
 	got, err = st.LoadRetention(ctx)
 	if err != nil {
-		return fmt.Errorf("load: %w", err)
+		return eh.Errorf("load: %w", err)
 	}
 	if !retentionSetEqual(got, want) {
-		return fmt.Errorf("round-trip mismatch: got %v want %v", got, want)
+		return eh.Errorf("round-trip mismatch: got %v want %v", got, want)
 	}
 	// Whole-ledger replace, not append: a second save with one entry
 	// leaves only that entry.
 	replaced := []repo.RetentionEntry{{Node: nid(3, 0), UnixNano: 300}}
 	if err = st.SaveRetention(ctx, replaced); err != nil {
-		return fmt.Errorf("replace: %w", err)
+		return eh.Errorf("replace: %w", err)
 	}
 	got, err = st.LoadRetention(ctx)
 	if err != nil || !retentionSetEqual(got, replaced) {
-		return fmt.Errorf("post-replace load = %v, %v", got, err)
+		return eh.Errorf("post-replace load = %v, %v", got, err)
 	}
 	if err = st.SaveRetention(ctx, nil); err != nil {
-		return fmt.Errorf("replace-to-empty: %w", err)
+		return eh.Errorf("replace-to-empty: %w", err)
 	}
 	got, err = st.LoadRetention(ctx)
 	if err != nil || len(got) != 0 {
-		return fmt.Errorf("post-empty load = %v, %v", got, err)
+		return eh.Errorf("post-empty load = %v, %v", got, err)
 	}
 	return
 }
@@ -223,7 +223,7 @@ func CheckRetention(ctx context.Context, open OpenFunc, location string) (err er
 func CheckReopenDurability(ctx context.Context, open OpenFunc, location string) (err error) {
 	st, err := open(location)
 	if err != nil {
-		return fmt.Errorf("open #1: %w", err)
+		return eh.Errorf("open #1: %w", err)
 	}
 	data := []byte("ENVELOPE-BYTES")
 	if err = st.PutEnvelope(ctx, h(7), data); err != nil {
@@ -239,29 +239,29 @@ func CheckReopenDurability(ctx context.Context, open OpenFunc, location string) 
 		return err
 	}
 	if err = st.Close(); err != nil {
-		return fmt.Errorf("close: %w", err)
+		return eh.Errorf("close: %w", err)
 	}
 
 	st2, err := open(location)
 	if err != nil {
-		return fmt.Errorf("open #2: %w", err)
+		return eh.Errorf("open #2: %w", err)
 	}
 	defer st2.Close()
 	got, err := st2.GetEnvelope(ctx, h(7))
 	if err != nil || !bytes.Equal(got, data) {
-		return fmt.Errorf("envelope did not survive reopen: %q, %v", got, err)
+		return eh.Errorf("envelope did not survive reopen: %q, %v", got, err)
 	}
 	applied, err := st2.LoadApplied(ctx)
 	if err != nil || len(applied) != 1 || applied[0] != h(7) {
-		return fmt.Errorf("applied log did not survive reopen: %v, %v", applied, err)
+		return eh.Errorf("applied log did not survive reopen: %v, %v", applied, err)
 	}
 	snap, ok, err := st2.LoadSnapshot(ctx)
 	if err != nil || !ok || len(snap.Applied) != 1 {
-		return fmt.Errorf("snapshot did not survive reopen: %+v ok:%v err:%v", snap, ok, err)
+		return eh.Errorf("snapshot did not survive reopen: %+v ok:%v err:%v", snap, ok, err)
 	}
 	ret, err := st2.LoadRetention(ctx)
 	if err != nil || len(ret) != 1 || ret[0].Node != nid(7, 3) || ret[0].UnixNano != 999 {
-		return fmt.Errorf("retention ledger did not survive reopen: %v, %v", ret, err)
+		return eh.Errorf("retention ledger did not survive reopen: %v, %v", ret, err)
 	}
 	return
 }
