@@ -1,0 +1,20 @@
+# The per-mount purge (SD1) and what a projection does to it
+
+   ┌─count()─┐
+1. │       0 │
+   └─────────┘
+Received exception from server (version 26.7.3):
+Code: 344. DB::Exception: Received from localhost:9000. DB::Exception: DELETE query is not allowed for table boxerm0.fsmeta because as it has projections and setting lightweight_mutation_projection_mode is set to THROW. User should change lightweight_mutation_projection_mode OR drop all the projections manually before running the query. (SUPPORT_IS_DISABLED)
+(query: -- Throws: DELETE is not allowed while a projection exists and
+-- lightweight_mutation_projection_mode is THROW. Passing the setting on the
+-- statement does not help — getSetting() reads back 'rebuild' and the guard
+-- still fires. The TABLE-level setting is what it reads.
+DELETE FROM boxerm0.fsmeta WHERE "id:id:u64:47::0:" = 1000006;)
+
+## the exception above is the finding; the table-level setting clears it
+  ALTER TABLE ... MODIFY SETTING: accepted
+  DELETE with a projection present: OK
+  rows left for that mount: 0
+
+## the query-level setting reads back 'rebuild' and the guard still fires
+  getSetting under SETTINGS ...='rebuild': rebuild

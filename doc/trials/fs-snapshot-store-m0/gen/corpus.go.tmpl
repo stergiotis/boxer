@@ -1,0 +1,123 @@
+package main
+
+import (
+	"context"
+	"encoding/binary"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"m0gen/fsdata"
+
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"lukechampine.com/blake3"
+)
+
+// Check 9: compression ratio of one representative mount, facts-shaped, at
+// two block sizes and two ZSTD levels. The mount is this repository's own
+// tree — mixed prose, Go, generated SQL and a few binaries.
+func main() {
+	root := os.Getenv("M0_CORPUS_ROOT")
+	if root == "" {
+		root = "."
+	}
+	blockKiB, _ := strconv.Atoi(os.Getenv("M0_BLOCK_KIB"))
+	if blockKiB == 0 {
+		blockKiB = 1024
+	}
+	blockSize := blockKiB << 10
+	level := os.Getenv("M0_ZSTD")
+	if level == "" {
+		level = "3"
+	}
+	table := "boxerm0.fsdata_corpus"
+
+	ctx := context.Background()
+	client := chclient.New(chclient.ConfigFromEnv(), nil)
+	if err := client.Ping(ctx); err != nil {
+		fail("ping", err)
+	}
+	exec, err := storeexec.New(client, nil)
+	if err != nil {
+		fail("storeexec", err)
+	}
+	if err = exec.Exec(ctx, "DROP TABLE IF EXISTS "+table); err != nil {
+		fail("drop", err)
+	}
+	st := fsdata.NewFsDataStore(exec, nil, fsdata.FsDataStoreConfig{Table: table})
+	defer st.Close()
+	if err = st.EnsureTable(ctx); err != nil {
+		fail("EnsureTable", err)
+	}
+	if level != "3" {
+		if err = exec.Exec(ctx, fmt.Sprintf(
+			`ALTER TABLE %s MODIFY COLUMN "tv:blobArray:value:val:yh:4:::0::data" Array(String) CODEC(ZSTD(%s))`,
+			table, level)); err != nil {
+			fail("modify codec", err)
+		}
+	}
+
+	snap := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
+	exp := time.Date(2026, 8, 27, 0, 0, 0, 0, time.UTC)
+	var files, blocks int
+	var raw int64
+	t0 := time.Now()
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			if d != nil && d.IsDir() && (d.Name() == ".git" || d.Name() == ".m0probe") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		b, rerr := os.ReadFile(p)
+		if rerr != nil {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, p)
+		files++
+		raw += int64(len(b))
+		h := blake3.Sum256(b)
+		for seq := 0; seq*blockSize < len(b) || (seq == 0 && len(b) == 0); seq++ {
+			hi := min((seq+1)*blockSize, len(b))
+			chunk := b[seq*blockSize : hi]
+			ch := blake3.Sum256(chunk)
+			key := append([]byte(rel), 0)
+			key = binary.BigEndian.AppendUint32(key, uint32(seq))
+			if cerr := st.Begin(11, snap, fsdata.FsDataEnvelope{NaturalKey: key, ExpiresAt: exp}).
+				AddFsBlock(fsdata.FsBlock{Kind: "block", Data: chunk, Hash: ch[:], Line0: 0}).
+				Commit(); cerr != nil {
+				fail("commit", cerr)
+			}
+			blocks++
+			if st.Buffered() >= 512 {
+				if _, ferr := st.Flush(ctx); ferr != nil {
+					fail("flush", ferr)
+				}
+			}
+		}
+		_ = h
+		return nil
+	})
+	if err != nil {
+		fail("walk", err)
+	}
+	if _, err = st.Flush(ctx); err != nil {
+		fail("final flush", err)
+	}
+	d := time.Since(t0)
+	fmt.Printf("corpus: %d files, %d blocks, %.1f MiB raw, block=%d KiB, ZSTD(%s), ingest %s (%.1f MiB/s, %.0f blocks/s)\n",
+		files, blocks, float64(raw)/(1<<20), blockKiB, level, d.Round(time.Millisecond),
+		float64(raw)/(1<<20)/d.Seconds(), float64(blocks)/d.Seconds())
+}
+
+func fail(what string, err error) {
+	fmt.Printf("FAIL %s: %v\n", what, err)
+	os.Exit(1)
+}

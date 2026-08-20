@@ -1,0 +1,196 @@
+package main
+
+import (
+	"context"
+	"encoding/binary"
+	"fmt"
+	"math/rand/v2"
+	"os"
+	"strconv"
+	"time"
+
+	"m0gen/fsdata"
+	"m0gen/fsmeta"
+
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+)
+
+var blockSize = 1 << 20
+var nBlocks = 256 // 256 MiB per arm
+
+const (
+	nMounts    = 2000
+	perMount   = 25 // entries per mount -> 50k rows
+	bespokeDDL = `CREATE TABLE IF NOT EXISTS boxerm0.fsdata_bespoke (
+  mount UInt64 CODEC(Delta,ZSTD(3)),
+  snap DateTime64(9,'UTC') CODEC(Delta,ZSTD(3)),
+  path String CODEC(ZSTD(3)),
+  seq UInt32 CODEC(T64,ZSTD(3)),
+  expires_at DateTime64(9,'UTC') CODEC(ZSTD(3)),
+  data String CODEC(ZSTD(3)),
+  hash String CODEC(ZSTD(3)),
+  line0 UInt32 CODEC(T64,ZSTD(3))
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMMDD(expires_at)
+ORDER BY (mount, snap, path, seq)
+TTL expires_at
+SETTINGS index_granularity = 1, ttl_only_drop_parts = 1`
+)
+
+var (
+	snap = time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
+	exp  = time.Date(2026, 8, 27, 0, 0, 0, 0, time.UTC)
+)
+
+func blockKey(path string, seq uint32) []byte {
+	k := make([]byte, 0, len(path)+5)
+	k = append(k, path...)
+	k = append(k, 0)
+	return binary.BigEndian.AppendUint32(k, seq)
+}
+
+func main() {
+	if v := os.Getenv("M0_BLOCK_KIB"); v != "" {
+		kib, _ := strconv.Atoi(v)
+		blockSize = kib << 10
+		nBlocks = (256 << 20) / blockSize
+	}
+	ctx := context.Background()
+	client := chclient.New(chclient.ConfigFromEnv(), nil)
+	if err := client.Ping(ctx); err != nil {
+		fail("ping", err)
+	}
+	exec, err := storeexec.New(client, nil)
+	if err != nil {
+		fail("storeexec", err)
+	}
+
+	// one payload, reused by both arms: incompressible, so the arms differ
+	// only in row shape, never in what ZSTD gets to do.
+	payload := make([]byte, blockSize)
+	r := rand.NewChaCha8([32]byte{7})
+	_, _ = r.Read(payload)
+	hash := payload[:32]
+
+	// ---- arm A: facts-shaped fsdata through the generated store.
+	for _, s := range []string{"DROP TABLE IF EXISTS boxerm0.fsdata", "DROP TABLE IF EXISTS boxerm0.fsdata_bespoke"} {
+		if err = exec.Exec(ctx, s); err != nil {
+			fail("drop", err)
+		}
+	}
+	bs := fsdata.NewFsDataStore(exec, nil, fsdata.FsDataStoreConfig{})
+	defer bs.Close()
+	if err = bs.EnsureTable(ctx); err != nil {
+		fail("EnsureTable fsdata", err)
+	}
+	t0 := time.Now()
+	for i := range nBlocks {
+		row := fsdata.FsBlock{Kind: "block", Data: payload, Hash: hash, Line0: uint32(i)}
+		if err = bs.Begin(9, snap, fsdata.FsDataEnvelope{
+			NaturalKey: blockKey("big.bin", uint32(i)), ExpiresAt: exp,
+		}).AddFsBlock(row).Commit(); err != nil {
+			fail("block Commit", err)
+		}
+	}
+	n, err := bs.Flush(ctx)
+	if err != nil {
+		fail("block Flush", err)
+	}
+	dFacts := time.Since(t0)
+	report("fsdata facts-shaped", n, int64(n)*int64(blockSize), dFacts)
+
+	// ---- arm B: bespoke table, same bytes, same transport (Arrow IPC).
+	if err = exec.Exec(ctx, bespokeDDL); err != nil {
+		fail("bespoke ddl", err)
+	}
+	t0 = time.Now()
+	rec := bespokeRecord(payload, hash, nBlocks)
+	if err = exec.InsertArrow(ctx, "boxerm0.fsdata_bespoke", []arrow.RecordBatch{rec}); err != nil {
+		fail("bespoke insert", err)
+	}
+	rec.Release()
+	dBespoke := time.Since(t0)
+	report("fsdata bespoke", nBlocks, int64(nBlocks)*int64(blockSize), dBespoke)
+	fmt.Printf("  facts/bespoke wall-clock ratio: %.2fx\n", dFacts.Seconds()/dBespoke.Seconds())
+
+	// ---- arm C: facts-shaped fsmeta, many small mounts per batch.
+	if err = exec.Exec(ctx, "DROP TABLE IF EXISTS boxerm0.fsmeta_bench"); err != nil {
+		fail("drop", err)
+	}
+	ms := fsmeta.NewFsMetaStore(exec, nil, fsmeta.FsMetaStoreConfig{Table: "boxerm0.fsmeta_bench"})
+	defer ms.Close()
+	if err = ms.EnsureTable(ctx); err != nil {
+		fail("EnsureTable fsmeta_bench", err)
+	}
+	t0 = time.Now()
+	for m := range nMounts {
+		for i := range perMount {
+			path := "."
+			if i > 0 {
+				path = fmt.Sprintf("d%02d/f%03d.txt", i%8, i)
+			}
+			row := fsmeta.FsEntry{
+				Kind: "entry", Content: "blocks", Mode: 0o644, BlockSize: uint32(blockSize),
+				Blocks: 1, Size: uint64(1000 + i), Mtime: snap, ContentHash: hash, Text: true,
+			}
+			if err = ms.Begin(uint64(1_000_000+m), snap, fsmeta.FsMetaEnvelope{
+				NaturalKey: []byte(path), ExpiresAt: exp,
+			}).AddFsEntry(row).Commit(); err != nil {
+				fail("entry Commit", err)
+			}
+		}
+	}
+	buffered := ms.Buffered()
+	tFlush := time.Now()
+	n, err = ms.Flush(ctx)
+	if err != nil {
+		fail("entry Flush", err)
+	}
+	dMeta := time.Since(t0)
+	fmt.Printf("fsmeta facts-shaped: %d rows across %d mounts in one batch, %s total (%.0f rows/s); build %s, flush %s\n",
+		n, nMounts, dMeta.Round(time.Millisecond), float64(n)/dMeta.Seconds(),
+		tFlush.Sub(t0).Round(time.Millisecond), time.Since(tFlush).Round(time.Millisecond))
+	_ = buffered
+}
+
+func report(what string, rows int, payload int64, d time.Duration) {
+	fmt.Printf("%-22s %4d rows, %d MiB payload in %-8s  %.1f MiB/s  %.0f rows/s\n",
+		what, rows, payload>>20, d.Round(time.Millisecond),
+		float64(payload>>20)/d.Seconds(), float64(rows)/d.Seconds())
+}
+
+func bespokeRecord(payload, hash []byte, n int) arrow.RecordBatch {
+	pool := memory.NewGoAllocator()
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "mount", Type: arrow.PrimitiveTypes.Uint64},
+		{Name: "snap", Type: &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: "UTC"}},
+		{Name: "path", Type: arrow.BinaryTypes.String},
+		{Name: "seq", Type: arrow.PrimitiveTypes.Uint32},
+		{Name: "expires_at", Type: &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: "UTC"}},
+		{Name: "data", Type: arrow.BinaryTypes.String},
+		{Name: "hash", Type: arrow.BinaryTypes.String},
+		{Name: "line0", Type: arrow.PrimitiveTypes.Uint32},
+	}, nil)
+	b := array.NewRecordBuilder(pool, schema)
+	defer b.Release()
+	for i := range n {
+		b.Field(0).(*array.Uint64Builder).Append(9)
+		b.Field(1).(*array.TimestampBuilder).Append(arrow.Timestamp(snap.UnixNano()))
+		b.Field(2).(*array.StringBuilder).Append("big.bin")
+		b.Field(3).(*array.Uint32Builder).Append(uint32(i))
+		b.Field(4).(*array.TimestampBuilder).Append(arrow.Timestamp(exp.UnixNano()))
+		b.Field(5).(*array.StringBuilder).Append(string(payload))
+		b.Field(6).(*array.StringBuilder).Append(string(hash))
+		b.Field(7).(*array.Uint32Builder).Append(uint32(i))
+	}
+	return b.NewRecord()
+}
+
+func fail(what string, err error) {
+	fmt.Printf("FAIL %s: %v\n", what, err)
+	os.Exit(1)
+}

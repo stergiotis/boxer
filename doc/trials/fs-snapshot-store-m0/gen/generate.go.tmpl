@@ -1,0 +1,90 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
+	"github.com/stergiotis/boxer/public/storage/recordstore/gen"
+)
+
+// m0 check 5: recordstore/gen with the facts TableDesc under a NON-facts
+// table name, SharedRA bound to factsschema/ra, ExternallyProvisioned=false
+// and Input.DDL carrying the store's own clauses.
+func main() {
+	manip, err := factsschema.GetSchemaInManipulator()
+	must(err)
+	td, err := manip.BuildTableDesc()
+	must(err)
+
+	td.DictionaryEntry.Name = "fsmeta"
+
+	ids := map[string]uint64{
+		"fsKindEntry": 0x9001, "fsContent": 0x9002, "fsMode": 0x9003,
+		"fsBlockSize": 0x9004, "fsBlocks": 0x9005, "fsSize": 0x9006,
+		"fsMtime": 0x9007, "fsLinkTarget": 0x9008, "fsErr": 0x9009,
+		"fsContentHash": 0x900a, "fsText": 0x900b,
+	}
+
+	genOne(td, "fsmeta", "FsMeta", "fsEntry", ids)
+
+	ids2 := map[string]uint64{"fsKindBlock": 0x9101, "fsData": 0x9102, "fsBlockHash": 0x9103, "fsLine0": 0x9104}
+	td2, err := manip.BuildTableDesc()
+	must(err)
+	td2.DictionaryEntry.Name = "fsdata"
+	genOne(td2, "fsdata", "FsData", "fsBlock", ids2)
+}
+
+func genOne(td common.TableDesc, table string, store string, kind string, ids map[string]uint64) {
+	dto := "./" + table + "/" + map[string]string{"fsEntry": "fsentry_dto.go", "fsBlock": "fsblock_dto.go"}[kind]
+	granularity := "index_granularity = 1024"
+	if table == "fsdata" {
+		granularity = "index_granularity = 1"
+	}
+	err := gen.Input{
+		PackageName:    table,
+		StoreName:      store,
+		TableName:      table,
+		Database:       "boxerm0",
+		Table:          td,
+		RowConfig:      factsschema.TableRowConfig,
+		ComponentPaths: []string{dto},
+		OutDir:         "./" + table,
+		ImportPath:     "m0gen/" + table,
+		Wrapper:        marshallgen.FixedIdsWrapper{Ids: ids},
+		SharedRA: &gen.Scaffold{
+			ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra",
+			Package:    "ra",
+			Stylable:   factsschema.TableName,
+		},
+		ExternallyProvisioned: false,
+		DDL: &clickhouse.TableOptions{
+			Mode:   clickhouse.CreateModeIfNotExists,
+			Engine: "MergeTree()",
+			OrderBy: []clickhouse.ColumnRef{
+				{Plain: "id"}, {Plain: "ts"}, {Plain: "naturalKey"},
+			},
+			PartitionBy: `toYYYYMMDD("lc:expiresAt:z64:4::0:")`,
+			TTL:         `"lc:expiresAt:z64:4::0:"`,
+			Settings: []string{
+				granularity,
+				"ttl_only_drop_parts = 1",
+				"allow_suspicious_low_cardinality_types = 1",
+			},
+		},
+	}.Generate()
+	if err != nil {
+		fmt.Printf("GENERATE REFUSED %s: %v\n", table, err)
+		os.Exit(1)
+	}
+	fmt.Printf("GENERATE OK %s\n", table)
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
+}

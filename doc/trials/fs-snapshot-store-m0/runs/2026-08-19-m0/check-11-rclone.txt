@@ -1,0 +1,30 @@
+== 11a: what rclone's sftp backend runs in place of ssh ==
+          -1 2026-08-19 22:20:16        -1 a
+-- invocations without shell_type --
+INVOCATION: [-s] [sftp]
+INVOCATION: [echo ${ShellId}%ComSpec%]
+        3 top.md
+       12 a/b/f.txt
+-- invocations with shell_type=unix --
+INVOCATION: [-s] [sftp]
+== 11b: serve sftp --stdio honours filters; cat returns the bytes ==
+-- unfiltered --
+        3 top.md
+       12 a/b/f.txt
+-- served with --exclude '*.md' --
+       12 a/b/f.txt
+-- served with --links (symlinks as .rclonelink) --
+        9 link.txt
+        3 top.md
+       12 a/b/f.txt
+-- cat --
+hello
+world
+== 11c: rclone serve s3 over the stdio sftp remote ==
+-- buckets (the remote's top-level directories) --
+          -1 2026-08-19 22:20:16        -1 a
+-- recursive listing of one bucket, no delimiter --
+       12 b/f.txt
+-- cat through S3 --
+hello
+world

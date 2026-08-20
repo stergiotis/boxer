@@ -1,0 +1,22 @@
+package fsdata
+
+import "time"
+
+// FsBlock is one block of one file of one snapshot, as a facts-shaped row.
+// The block ordinal rides the natural key as a suffix (SD11 option A):
+// path ‖ 0x00 ‖ be32(seq).
+type FsBlock struct {
+	_ struct{} `kind:"fsBlock"`
+
+	Id         uint64    `lw:",id"`
+	NaturalKey []byte    `lw:",naturalKey"`
+	Ts         time.Time `lw:",ts"`
+	ExpiresAt  time.Time `lw:",expiresAt"`
+
+	Kind string `lw:"fsKindBlock,symbol"`
+
+	Data []byte `lw:"fsData,blobArray,unit"`
+	Hash []byte `lw:"fsBlockHash,blobArray,unit"`
+
+	Line0 uint32 `lw:"fsLine0,u32Array,unit"`
+}

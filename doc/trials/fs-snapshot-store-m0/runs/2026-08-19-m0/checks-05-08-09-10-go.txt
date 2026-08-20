@@ -1,0 +1,49 @@
+scratch module: <scratch>
+== check 5a: does recordstore/gen accept the combination? ==
+GENERATE OK fsmeta
+GENERATE OK fsdata
+== check 5b: does the emitted store compile? ==
+  compiles; 18046 lines emitted
+== check 5c: EnsureTable / ALTERs / VerifySchema / many rows per (id,ts) / Scan ==
+PASS EnsureTable — table created with the store's own clauses
+PASS ALTER set (4 MATERIALIZED, 1 CONSTRAINT, 1 INDEX)
+FAIL VerifySchema after ALTERs: schema drift on boxerm0.fsmeta: table has 189 columns, the generated schema expects 185 — regenerated code against an old table (or vice versa); migrate or regenerate
+IngestFsEntry with two rows per key -> ingest fsEntry row 1: duplicate key within one ingest batch: key 7
+PASS wrote 2000 rows under one (id, ts) in 108ms
+PASS Scan(ExtraPredicate dir prefix) -> 32 entities, 0 mis-decoded, 20ms
+PASS Scan(all) -> 2000 entities in 27ms
+== check 8: insert throughput, facts-shaped against bespoke ==
+fsdata facts-shaped     256 rows, 256 MiB payload in 1.15s     222.7 MiB/s  223 rows/s
+fsdata bespoke          256 rows, 256 MiB payload in 648ms     394.9 MiB/s  395 rows/s
+  facts/bespoke wall-clock ratio: 1.77x
+fsmeta facts-shaped: 50000 rows across 2000 mounts in one batch, 622ms total (80391 rows/s); build 342ms, flush 280ms
+fsdata facts-shaped    1024 rows, 256 MiB payload in 1.661s    154.2 MiB/s  617 rows/s
+fsdata bespoke         1024 rows, 256 MiB payload in 564ms     453.9 MiB/s  1816 rows/s
+  facts/bespoke wall-clock ratio: 2.94x
+fsmeta facts-shaped: 50000 rows across 2000 mounts in one batch, 438ms total (114082 rows/s); build 241ms, flush 197ms
+== check 9: compression on one representative mount ==
+corpus: 3712 files, 3715 blocks, 31.1 MiB raw, block=1024 KiB, ZSTD(3), ingest 2.648s (11.7 MiB/s, 1403 blocks/s)
+the other 184	6.09 MiB	39.36 KiB	158.45
+data column	31.28 MiB	7.74 MiB	4.04
+8.45 MiB	648.42 KiB	178.7
+corpus: 3712 files, 3715 blocks, 31.1 MiB raw, block=1024 KiB, ZSTD(1), ingest 1.746s (17.8 MiB/s, 2128 blocks/s)
+the other 184	6.09 MiB	39.36 KiB	158.45
+data column	31.28 MiB	8.32 MiB	3.76
+9.03 MiB	648.42 KiB	178.7
+corpus: 3712 files, 3736 blocks, 31.1 MiB raw, block=256 KiB, ZSTD(3), ingest 1.905s (16.3 MiB/s, 1962 blocks/s)
+the other 184	6.12 MiB	39.47 KiB	158.87
+data column	31.28 MiB	7.94 MiB	3.94
+8.65 MiB	651.74 KiB	178.6
+corpus: 3712 files, 3736 blocks, 31.1 MiB raw, block=256 KiB, ZSTD(1), ingest 1.856s (16.7 MiB/s, 2013 blocks/s)
+data column	31.28 MiB	8.35 MiB	3.75
+the other 184	6.12 MiB	39.47 KiB	158.87
+9.06 MiB	651.76 KiB	178.6
+== check 10: BLAKE3 subtree chaining values and Bao chunk groups ==
+go   blake3.Sum256("hello world") = d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24
+guts subtree CV of block 2 (counter=2048) = 9b8032d1…
+bao group=10 outboard size = 200 B for 4194304 B of data; root = 33c1b6276b4cbd66
+bao root == blake3.Sum256(data): true
+bao.VerifyChunk(block 2) = true
+bao.VerifyChunk(corrupted block 2) = false
+go blake3.Sum256 over 64 MiB: 3ms (19732 MiB/s)
+D74981EFA70A0C880B8D8C1985D075DBCBF679B99A5F9914E5AAF96B831A9E24

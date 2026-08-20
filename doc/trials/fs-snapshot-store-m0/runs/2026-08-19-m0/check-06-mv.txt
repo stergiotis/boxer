@@ -1,0 +1,5 @@
+# Check 6 — the materialised view under one batched multi-mount insert
+
+   ┌─snap_rows─┬─mounts─┐
+1. │       500 │    500 │
+   └───────────┴────────┘

@@ -1,0 +1,31 @@
+package fsmeta
+
+import "time"
+
+// FsEntry is one node of one snapshot of one mount, as a facts-shaped row.
+type FsEntry struct {
+	_ struct{} `kind:"fsEntry"`
+
+	Id         uint64    `lw:",id"`
+	NaturalKey []byte    `lw:",naturalKey"`
+	Ts         time.Time `lw:",ts"`
+	ExpiresAt  time.Time `lw:",expiresAt"`
+
+	Kind    string `lw:"fsKindEntry,symbol"`
+	Content string `lw:"fsContent,symbol"`
+
+	Mode      uint32 `lw:"fsMode,u32Array,unit"`
+	BlockSize uint32 `lw:"fsBlockSize,u32Array,unit"`
+	Blocks    uint32 `lw:"fsBlocks,u32Array,unit"`
+
+	Size uint64 `lw:"fsSize,u64Array,unit"`
+
+	Mtime time.Time `lw:"fsMtime,timeArray,unit"`
+
+	LinkTarget string `lw:"fsLinkTarget,stringArray,unit"`
+	Err        string `lw:"fsErr,stringArray,unit"`
+
+	ContentHash []byte `lw:"fsContentHash,blobArray,unit"`
+
+	Text bool `lw:"fsText,bool"`
+}

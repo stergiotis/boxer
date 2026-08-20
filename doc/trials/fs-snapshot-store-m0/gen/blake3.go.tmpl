@@ -1,0 +1,84 @@
+package main
+
+import (
+	"bytes"
+	"math/bits"
+	"encoding/hex"
+	"fmt"
+	"time"
+
+	"lukechampine.com/blake3"
+	"lukechampine.com/blake3/bao"
+	"lukechampine.com/blake3/guts"
+)
+
+func main() {
+	// 1. agreement with ClickHouse BLAKE3()
+	h := blake3.Sum256([]byte("hello world"))
+	fmt.Printf("go   blake3.Sum256(\"hello world\") = %s\n", hex.EncodeToString(h[:]))
+
+	// 2. subtree chaining value at a 1 MiB-aligned offset, via guts.
+	const blockSize = 1 << 20
+	data := bytes.Repeat([]byte("boxer-m0-"), 4*blockSize/9+1)[:4*blockSize]
+	blk := data[2*blockSize : 3*blockSize] // the third 1 MiB block
+	// chunk counter of the block's first chunk
+	counter := uint64(2*blockSize) / guts.ChunkSize
+	cv := guts.ChainingValue(compressGroup(blk, counter))
+	fmt.Printf("guts subtree CV of block 2 (counter=%d) = %08x…\n", counter, cv[0])
+
+	// 3. Bao with 1 MiB chunk groups: outboard tree + per-block verification.
+	const group = 10 // 1024 chunks * 1024 B = 1 MiB
+	outboard, root := bao.EncodeBuf(data, group, true)
+	fmt.Printf("bao group=%d outboard size = %d B for %d B of data; root = %s\n",
+		group, len(outboard), len(data), hex.EncodeToString(root[:8]))
+	whole := blake3.Sum256(data)
+	fmt.Printf("bao root == blake3.Sum256(data): %v\n", root == whole)
+	ok := bao.VerifyChunk(blk, outboard, group, 2*blockSize, root)
+	fmt.Printf("bao.VerifyChunk(block 2) = %v\n", ok)
+	bad := append([]byte(nil), blk...)
+	bad[0] ^= 1
+	fmt.Printf("bao.VerifyChunk(corrupted block 2) = %v\n", bao.VerifyChunk(bad, outboard, group, 2*blockSize, root))
+
+	// 4. hashing throughput, Go side.
+	buf := make([]byte, 64<<20)
+	t0 := time.Now()
+	_ = blake3.Sum256(buf)
+	d := time.Since(t0)
+	fmt.Printf("go blake3.Sum256 over 64 MiB: %s (%.0f MiB/s)\n", d.Round(time.Millisecond), 64/d.Seconds())
+}
+
+// compressGroup is bao.compressGroup, which the package keeps unexported:
+// the subtree node over an aligned run of chunks starting at counter.
+// Reimplemented here from the exported guts primitives — the measurement is
+// exactly how much code a per-block chaining value costs outside the library.
+func compressGroup(p []byte, counter uint64) guts.Node {
+	var stack [54 - guts.MaxSIMD][8]uint32
+	var sc uint64
+	pushSubtree := func(cv [8]uint32) {
+		i := 0
+		for sc&(1<<i) != 0 {
+			cv = guts.ChainingValue(guts.ParentNode(stack[i], cv, &guts.IV, 0))
+			i++
+		}
+		stack[i] = cv
+		sc++
+	}
+	var buf [guts.MaxSIMD * guts.ChunkSize]byte
+	var buflen int
+	for len(p) > 0 {
+		if buflen == len(buf) {
+			pushSubtree(guts.ChainingValue(guts.CompressBuffer(&buf, buflen, &guts.IV, counter+(sc*guts.MaxSIMD), 0)))
+			buflen = 0
+		}
+		n := copy(buf[buflen:], p)
+		buflen += n
+		p = p[n:]
+	}
+	n := guts.CompressBuffer(&buf, buflen, &guts.IV, counter+(sc*guts.MaxSIMD), 0)
+	for i := bits.TrailingZeros64(sc); i < bits.Len64(sc); i++ {
+		if sc&(1<<i) != 0 {
+			n = guts.ParentNode(stack[i], guts.ChainingValue(n), &guts.IV, 0)
+		}
+	}
+	return n
+}

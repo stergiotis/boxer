@@ -1,0 +1,129 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"m0gen/fsmeta"
+
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
+)
+
+const nEntries = 2000
+
+var alters = []string{
+	`ALTER TABLE boxerm0.fsmeta ADD COLUMN IF NOT EXISTS name String MATERIALIZED splitByChar('/', "id:naturalKey:y:4::0:")[-1]`,
+	`ALTER TABLE boxerm0.fsmeta ADD COLUMN IF NOT EXISTS dir String MATERIALIZED multiIf("id:naturalKey:y:4::0:" = '.', '', position("id:naturalKey:y:4::0:", '/') = 0, '.', substring("id:naturalKey:y:4::0:", 1, length("id:naturalKey:y:4::0:") - length(name) - 1))`,
+	`ALTER TABLE boxerm0.fsmeta ADD COLUMN IF NOT EXISTS depth UInt16 MATERIALIZED if("id:naturalKey:y:4::0:" = '.', 0, length(splitByChar('/', "id:naturalKey:y:4::0:")))`,
+	`ALTER TABLE boxerm0.fsmeta ADD COLUMN IF NOT EXISTS ext LowCardinality(String) MATERIALIZED multiIf("id:naturalKey:y:4::0:" = '.', '', position(name, '.') IN (0, 1), '', concat('.', splitByChar('.', name)[-1]))`,
+	`ALTER TABLE boxerm0.fsmeta ADD CONSTRAINT IF NOT EXISTS valid_path CHECK "id:naturalKey:y:4::0:" = '.' OR NOT hasAny(splitByChar('/', "id:naturalKey:y:4::0:"), ['', '.', '..'])`,
+	`ALTER TABLE boxerm0.fsmeta ADD INDEX IF NOT EXISTS ix_dir dir TYPE bloom_filter GRANULARITY 4`,
+}
+
+func main() {
+	ctx := context.Background()
+	client := chclient.New(chclient.ConfigFromEnv(), nil)
+	if err := client.Ping(ctx); err != nil {
+		fail("ping", err)
+	}
+	exec, err := storeexec.New(client, nil)
+	if err != nil {
+		fail("storeexec", err)
+	}
+	if err = exec.Exec(ctx, "DROP TABLE IF EXISTS boxerm0.fsmeta"); err != nil {
+		fail("drop", err)
+	}
+	st := fsmeta.NewFsMetaStore(exec, nil, fsmeta.FsMetaStoreConfig{})
+	defer st.Close()
+
+	// --- EnsureTable with our own clauses.
+	if err = st.EnsureTable(ctx); err != nil {
+		fail("EnsureTable", err)
+	}
+	fmt.Println("PASS EnsureTable — table created with the store's own clauses")
+
+	// --- the post-EnsureTable ALTER set.
+	for _, sql := range alters {
+		if err = exec.Exec(ctx, sql); err != nil {
+			fail("ALTER", err)
+		}
+	}
+	fmt.Println("PASS ALTER set (4 MATERIALIZED, 1 CONSTRAINT, 1 INDEX)")
+
+	// --- VerifySchema must still pass with the ALTER-added columns present.
+	if err = st.VerifySchema(ctx); err != nil {
+		fmt.Printf("FAIL VerifySchema after ALTERs: %v\n", err)
+	} else {
+		fmt.Println("PASS VerifySchema after the ALTERs")
+	}
+
+	// --- Ingest<Kind> with many rows per key: does it refuse?
+	snap := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
+	exp := time.Date(2026, 8, 27, 0, 0, 0, 0, time.UTC)
+	err = st.IngestFsEntry(snap, []fsmeta.FsEntry{
+		{Id: 7, NaturalKey: []byte("a/b.txt")},
+		{Id: 7, NaturalKey: []byte("a/c.txt")},
+	})
+	fmt.Printf("IngestFsEntry with two rows per key -> %v\n", err)
+	st.DiscardPending()
+
+	// --- the walker's actual shape: Begin/Add/Commit, one row per path.
+	t0 := time.Now()
+	for i := range nEntries {
+		path := fmt.Sprintf("d%02d/f%05d.txt", i%64, i)
+		row := fsmeta.FsEntry{
+			Kind: "entry", Content: "blocks",
+			Mode: 0o644, BlockSize: 1 << 20, Blocks: 1,
+			Size: uint64(1000 + i), Mtime: snap.Add(-time.Duration(i) * time.Second),
+			LinkTarget: "", Err: "", ContentHash: []byte("0123456789abcdef0123456789abcdef"),
+			Text: true,
+		}
+		err = st.Begin(7, snap, fsmeta.FsMetaEnvelope{NaturalKey: []byte(path), ExpiresAt: exp}).
+			AddFsEntry(row).Commit()
+		if err != nil {
+			fail("Commit", err)
+		}
+	}
+	n, err := st.Flush(ctx)
+	if err != nil {
+		fail("Flush", err)
+	}
+	fmt.Printf("PASS wrote %d rows under one (id, ts) in %s\n", n, time.Since(t0).Round(time.Millisecond))
+
+	// --- Scan with an ExtraPredicate over the physical columns.
+	t0 = time.Now()
+	got, bad := 0, 0
+	for ent, serr := range st.ScanFsEntry(ctx, recordstore.ScanOpts{
+		ExtraPredicate: `"id:id:u64:47::0:" = 7 AND startsWith("id:naturalKey:y:4::0:", 'd07/')`,
+	}) {
+		if serr != nil {
+			fail("Scan", serr)
+		}
+		got++
+		e := ent.FsEntry
+		if !e.Has || e.Val.Size == 0 || e.Val.Mode != 0o644 || !e.Val.Text || len(e.Val.ContentHash) != 32 {
+			bad++
+		}
+	}
+	fmt.Printf("PASS Scan(ExtraPredicate dir prefix) -> %d entities, %d mis-decoded, %s\n", got, bad, time.Since(t0).Round(time.Millisecond))
+
+	// --- full scan cost (the Filter artefact over 2000 rows).
+	t0 = time.Now()
+	all := 0
+	for _, serr := range st.ScanFsEntry(ctx, recordstore.ScanOpts{}) {
+		if serr != nil {
+			fail("Scan all", serr)
+		}
+		all++
+	}
+	fmt.Printf("PASS Scan(all) -> %d entities in %s\n", all, time.Since(t0).Round(time.Millisecond))
+}
+
+func fail(what string, err error) {
+	fmt.Printf("FAIL %s: %v\n", what, err)
+	os.Exit(1)
+}

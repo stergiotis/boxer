@@ -1,0 +1,37 @@
+# Check 8 — insert throughput, three repeats per block size
+# (facts arm: N x Begin/Add/Commit then one Flush; bespoke arm: one
+#  hand-built Arrow record through the same executor and transport)
+
+## block = 1024 KiB
+fsdata facts-shaped     256 rows, 256 MiB payload in 3.173s    80.7 MiB/s  81 rows/s
+fsdata bespoke          256 rows, 256 MiB payload in 587ms     435.8 MiB/s  436 rows/s
+  facts/bespoke wall-clock ratio: 5.40x
+fsmeta facts-shaped: 50000 rows across 2000 mounts in one batch, 917ms total (54549 rows/s); build 500ms, flush 417ms
+fsdata facts-shaped     256 rows, 256 MiB payload in 2.317s    110.5 MiB/s  110 rows/s
+fsdata bespoke          256 rows, 256 MiB payload in 1.751s    146.2 MiB/s  146 rows/s
+  facts/bespoke wall-clock ratio: 1.32x
+fsmeta facts-shaped: 50000 rows across 2000 mounts in one batch, 1.456s total (34339 rows/s); build 819ms, flush 637ms
+fsdata facts-shaped     256 rows, 256 MiB payload in 2.316s    110.5 MiB/s  111 rows/s
+fsdata bespoke          256 rows, 256 MiB payload in 1.206s    212.2 MiB/s  212 rows/s
+  facts/bespoke wall-clock ratio: 1.92x
+fsmeta facts-shaped: 50000 rows across 2000 mounts in one batch, 954ms total (52431 rows/s); build 525ms, flush 429ms
+
+## block = 256 KiB
+fsdata facts-shaped    1024 rows, 256 MiB payload in 1.738s    147.3 MiB/s  589 rows/s
+fsdata bespoke         1024 rows, 256 MiB payload in 1.097s    233.3 MiB/s  933 rows/s
+  facts/bespoke wall-clock ratio: 1.58x
+fsmeta facts-shaped: 50000 rows across 2000 mounts in one batch, 941ms total (53160 rows/s); build 519ms, flush 422ms
+fsdata facts-shaped    1024 rows, 256 MiB payload in 3.691s    69.4 MiB/s  277 rows/s
+fsdata bespoke         1024 rows, 256 MiB payload in 1.192s    214.8 MiB/s  859 rows/s
+  facts/bespoke wall-clock ratio: 3.10x
+fsmeta facts-shaped: 50000 rows across 2000 mounts in one batch, 908ms total (55050 rows/s); build 504ms, flush 404ms
+fsdata facts-shaped    1024 rows, 256 MiB payload in 3.774s    67.8 MiB/s  271 rows/s
+fsdata bespoke         1024 rows, 256 MiB payload in 1.172s    218.5 MiB/s  874 rows/s
+  facts/bespoke wall-clock ratio: 3.22x
+fsmeta facts-shaped: 50000 rows across 2000 mounts in one batch, 943ms total (53007 rows/s); build 520ms, flush 424ms
+
+# Host load during these repeats: load average 21.90, 23.74, 14.81 on 32 cores.
+# The bespoke arm alone ranges 146-436 MiB/s across the six runs, so the
+# spread is the host, not the arms. The direction is stable in every run and
+# in the two earlier full-probe runs (1.70x / 2.19x and 1.77x / 2.94x); the
+# factor is not pinned closer than "roughly 2x, not 10x".

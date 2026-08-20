@@ -1,0 +1,9 @@
+# Check 7 — FULL OUTER JOIN default filling behind the diff idiom
+
+   ┌─value─┐
+1. │ 0     │
+   └───────┘
+   ┌─path─────────┬─change──┐
+1. │ a/c/d.tar.gz │ removed │
+2. │ a/new.txt    │ added   │
+   └──────────────┴─────────┘

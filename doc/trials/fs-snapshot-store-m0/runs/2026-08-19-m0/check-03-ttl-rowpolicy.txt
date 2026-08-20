@@ -1,0 +1,5 @@
+# Check 3 — TTL on a bare DateTime64 plain; now() in a ROW POLICY
+
+   ┌─id─┬─v──────┐
+1. │  1 │ future │
+   └────┴────────┘
