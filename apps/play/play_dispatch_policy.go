@@ -1,8 +1,11 @@
 package play
 
 import (
+	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
@@ -73,7 +76,13 @@ func (inst keelsonResolver) resolve(residual string, base string, _ string) (dec
 	}
 
 	macros := keelsonsql.References(residual)
-	plain := plainTables(residual)
+	// The server side: ordinary tables, plus the lading store's mounts. A
+	// lading macro is a table *function*, so plainTables skips it — but it
+	// reads MergeTree tables in the server's own database, which is the
+	// server side by every meaning that matters here (ADR-0198 §SD7). Without
+	// this, a statement joining keelson('env') to fs(m) would be routed to the
+	// introspection plane, where those tables do not exist.
+	plain := append(plainTables(residual), ladingMounts(residual)...)
 
 	switch {
 	case len(macros) > 0 && len(plain) > 0:
@@ -155,6 +164,23 @@ func plainTables(sql string) (names []string) {
 			seen[name] = struct{}{}
 			names = append(names, name)
 		}
+	}
+	return
+}
+
+// ladingMounts returns the lading mounts a statement names, spelled the way a
+// human would read them back in a refusal.
+//
+// Best-effort like everything else on this path: a malformed macro call is not
+// a reference, and the same statement surfaces a precise error when it expands.
+func ladingMounts(sql string) (names []string) {
+	mounts := ladingsql.References(sql)
+	if len(mounts) == 0 {
+		return
+	}
+	names = make([]string, 0, len(mounts))
+	for _, m := range mounts {
+		names = append(names, fmt.Sprintf("%s(%d)", ladingsql.FuncEntries, m.Value()))
 	}
 	return
 }

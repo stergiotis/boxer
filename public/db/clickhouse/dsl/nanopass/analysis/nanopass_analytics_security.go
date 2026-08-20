@@ -126,6 +126,16 @@ var localTableFunctions = map[string]struct{}{
 	// and system.documentation — local reads throughout, no authored
 	// egress can hide inside a quoted query string.
 	"docsearch": {},
+	// The lading store's two macros (ADR-0198 §SD7), classified
+	// pre-expansion for the same reason as keelson's: both expand to a
+	// SELECT over a local MergeTree table in the server's own database,
+	// and their arguments are a mount id and a snapshot — neither can
+	// name a remote. Which mounts a caller may read is a separate
+	// question, answered by a capability check at expansion rather than
+	// by this classifier.
+	"fs":     {},
+	"fsdata": {},
+	"fssnap": {},
 }
 
 // egressScalarFunctions is the denylist of scalar calls that reach outside
