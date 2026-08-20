@@ -1,6 +1,10 @@
 package defaults
 
 import (
+	"fmt"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
+	"strconv"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -92,14 +96,15 @@ func TestStandardSetRegistersResolveColumnNamesFactory(t *testing.T) {
 
 	// Concrete entries are the expansions that need no per-consumer binding
 	// (descriptiveStatistics, docsearch, LW_ID_*, LW_COMPONENT, LW_
-	// constructors, gloss); the three schema-bound passes — handle
-	// resolution, LW_GET extraction, and the target-adopting constructor
-	// variant (ADR-0181 §SD8 M2) — are factories. LW_COMPONENT is an entry
-	// despite needing a registry: that registry is a host-wired global, not
-	// a per-consumer binding (ADR-0189 §SD7).
+	// constructors, gloss); the four bound passes — handle resolution, LW_GET
+	// extraction, the target-adopting constructor variant (ADR-0181 §SD8 M2)
+	// and the lading macros (ADR-0198 §SD7, bound to a mount visibility) — are
+	// factories. LW_COMPONENT is an entry despite needing a registry: that
+	// registry is a host-wired global, not a per-consumer binding
+	// (ADR-0189 §SD7).
 	require.Len(t, r.Entries(passreg.StagePreExecute), 6)
 	fs := r.Factories(passreg.StagePreExecute)
-	require.Len(t, fs, 3)
+	require.Len(t, fs, 4)
 	var f passreg.Factory
 	for _, cand := range fs {
 		if cand.Name == "ResolveColumnNames" {
@@ -213,4 +218,32 @@ func TestStandardSetRegistersExtractFactory(t *testing.T) {
 	require.False(t, ok, "a binding that cannot answer for a section must be declined")
 	_, ok = f.Build(nil)
 	require.False(t, ok, "a nil binding must be declined")
+}
+
+// TestStandardSetExpandsLadingMacrosWhenBound pins the wiring the macros were
+// missing: they are declared to the security classifier and routed server-side
+// by play's dispatch, so a statement naming one must actually expand somewhere
+// — otherwise `SELECT path FROM fs(…)` is classified as a local read, sent to
+// the server, and answered with "unknown table function fs".
+//
+// Bound, it expands; unbound, the factory declines and the statement is
+// untouched, which is what makes the visibility an explicit decision rather
+// than a default (ADR-0198 §SD7).
+func TestStandardSetExpandsLadingMacrosWhenBound(t *testing.T) {
+	r := passreg.NewRegistry()
+	require.NoError(t, RegisterStandard(r))
+
+	const mount = uint64(0xF5F5_0198_0000_0001)
+	src := fmt.Sprintf("SELECT path FROM fs(%d)", mount)
+
+	bound := r.ApplyBestEffortBound(passreg.StagePreExecute, src,
+		ladingsql.VisibleAll{}, zerolog.Nop())
+	require.NotContains(t, bound, "fs("+strconv.FormatUint(mount, 10)+")",
+		"a bound visibility must expand the macro before the statement ships")
+	require.Contains(t, bound, ladingschema.TableNameMeta,
+		"the expansion reads the store's entry table")
+
+	unbound := r.ApplyBestEffortBound(passreg.StagePreExecute, src, nil, zerolog.Nop())
+	require.Contains(t, unbound, "fs("+strconv.FormatUint(mount, 10)+")",
+		"with no visibility bound the factory declines and nothing expands")
 }

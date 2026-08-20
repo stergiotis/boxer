@@ -203,10 +203,22 @@ func TestVisibilityIsCheckedAtExpansion(t *testing.T) {
 
 // TestReferences states a fact about the SQL and nothing more — it is what a
 // dispatcher routes on, and it must never error.
+//
+// A reference carries the macro it came through as well as the mount: a
+// dispatcher reporting a refusal names the relation the author wrote, and
+// renaming fsdata(…) to fs(…) would name one they never used.
 func TestReferences(t *testing.T) {
 	got := ladingsql.References(
 		`SELECT * FROM fs(4322952322827452417) JOIN fsdata(4322952322827452417) USING path`)
-	assert.Equal(t, []identifier.TaggedId{testMount}, got, "deduplicated, in first-appearance order")
+	assert.Equal(t, []ladingsql.Reference{
+		{Mount: testMount, Func: ladingsql.FuncEntries},
+		{Mount: testMount, Func: ladingsql.FuncBlocks},
+	}, got, "one per (mount, macro), in first-appearance order")
+	assert.Equal(t, "fsdata(4322952322827452417)", got[1].String())
+
+	assert.Len(t, ladingsql.References(
+		`SELECT * FROM fs(4322952322827452417) JOIN fs(4322952322827452417) USING path`), 1,
+		"the same mount through the same macro twice is one reference")
 
 	assert.Nil(t, ladingsql.References("SELECT 1"))
 	assert.Nil(t, ladingsql.References("this is not sql"))

@@ -8,6 +8,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
@@ -58,12 +59,15 @@ func (inst *chSchemaProvider) GetColumns(dbName string, tableName string) (colum
 //     collision check needs even for a non-leeway table (ADR-0121 §SD4)
 //   - providers.MembershipLookup → constructsql.MembershipIdsI (ADR-0171 §SD4),
 //     so LW_GET names a membership on a ref channel instead of carrying its id
+//   - ladingsql.MountVisibilityI → which mounts fs()/fsdata()/fssnap() may
+//     read (ADR-0198 §SD7)
 //
-// The three contribute disjoint methods, so the embedding is unambiguous.
+// They contribute disjoint methods, so the embedding is unambiguous.
 type clientPassBinding struct {
 	*lwsql.Resolver
 	passes.SchemaProviderI
 	providers.MembershipLookup
+	ladingsql.MountVisibilityI
 }
 
 // installLeewayNameResolution builds this client's leeway column-handle
@@ -93,7 +97,18 @@ func installLeewayNameResolution(client *Client) *lwsql.Resolver {
 		fetch: client.fetchColumnNames,
 	}, schemaCacheMaxTables)
 	resolver := lwsql.NewResolver(provider)
-	client.passBinding = &clientPassBinding{Resolver: resolver, SchemaProviderI: provider}
+	client.passBinding = &clientPassBinding{
+		Resolver:        resolver,
+		SchemaProviderI: provider,
+		// Every mount, and that is a position rather than a default nobody
+		// took: play already routes `boxer.fsmeta` and `boxer.fsdata` to the
+		// pinned server as ordinary tables, so a user can read any mount's
+		// rows by typing the table name. Gating the macro more tightly than
+		// the tables it reads would refuse the convenient spelling of a query
+		// the inconvenient spelling still answers. A host that does have a
+		// mount-level policy — the SFTP head has one — states it there.
+		MountVisibilityI: ladingsql.VisibleAll{},
+	}
 	client.conditionsPass = passes.ExposeSelectionConditions(passes.ExposeSelectionConditionsConfig{
 		Schema: provider,
 		Namer:  resolver,

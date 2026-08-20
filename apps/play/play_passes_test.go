@@ -39,7 +39,10 @@ func TestRegisterPassesOrdering(t *testing.T) {
 	// LwComponentExpand (110) sits between the identity macros (100) and the
 	// extraction family (120), so one statement may mix a component read with
 	// LW_GET and with an LW_ID_* macro around either (ADR-0189 §SD3).
-	want := []string{"CanonicalizeFull", "ExpandDescriptiveStatistics", "DocsearchExpand", "ExpandLwIdMacros", "LwComponentExpand", "LwExtractExpand", "LwConstructExpandTarget", "LwConstructExpand", "GlossExpand", "ResolveColumnNames"}
+	// LadingExpand (145) follows the display macros and precedes handle
+	// resolution (200), so an fs(…) expansion's physical column names are
+	// already what they will be when the resolver runs (ADR-0198 §SD7).
+	want := []string{"CanonicalizeFull", "ExpandDescriptiveStatistics", "DocsearchExpand", "ExpandLwIdMacros", "LwComponentExpand", "LwExtractExpand", "LwConstructExpandTarget", "LwConstructExpand", "GlossExpand", "LadingExpand", "ResolveColumnNames"}
 	if len(got) != len(want) {
 		t.Fatalf("pre-execute catalog = %v, want %v", got, want)
 	}

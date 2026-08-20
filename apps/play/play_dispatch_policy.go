@@ -1,7 +1,6 @@
 package play
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
@@ -174,13 +173,15 @@ func plainTables(sql string) (names []string) {
 // Best-effort like everything else on this path: a malformed macro call is not
 // a reference, and the same statement surfaces a precise error when it expands.
 func ladingMounts(sql string) (names []string) {
-	mounts := ladingsql.References(sql)
-	if len(mounts) == 0 {
+	refs := ladingsql.References(sql)
+	if len(refs) == 0 {
 		return
 	}
-	names = make([]string, 0, len(mounts))
-	for _, m := range mounts {
-		names = append(names, fmt.Sprintf("%s(%d)", ladingsql.FuncEntries, m.Value()))
+	names = make([]string, 0, len(refs))
+	for _, r := range refs {
+		// The reference's own macro, not always fs(): a refusal that renamed
+		// fsdata(…) to fs(…) would name a relation the author never wrote.
+		names = append(names, r.String())
 	}
 	return
 }

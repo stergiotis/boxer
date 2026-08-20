@@ -41,6 +41,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -162,15 +163,29 @@ func Expand(cfg Config, sql string) (result string, err error) {
 	return ExpandPass(cfg).Run(sql)
 }
 
-// References reports the mounts sql addresses through either macro, in
-// first-appearance order and deduplicated.
+// Reference is one mount a statement addresses, and the macro it addressed it
+// through. The macro name matters to a caller that reports the reference back
+// to a human: a refusal naming `fs(…)` for a statement that wrote `fsdata(…)`
+// names a relation the author never used.
+type Reference struct {
+	Mount identifier.TaggedId
+	Func  string
+}
+
+// String is the reference as the author wrote it.
+func (inst Reference) String() string {
+	return inst.Func + "(" + strconv.FormatUint(inst.Mount.Value(), 10) + ")"
+}
+
+// References reports the mounts sql addresses through any of the macros, in
+// first-appearance order and deduplicated per (mount, macro).
 //
 // It states a fact about the SQL and attaches no meaning to it: a non-empty
 // result says the statement reads a lading store, not that it may. Total and
 // best-effort — unparseable SQL, macro-free SQL and a malformed call all yield
 // nothing rather than an error, because the same statement surfaces a precise
 // error when it expands. It is what a dispatcher routes on.
-func References(sql string) (mounts []identifier.TaggedId) {
+func References(sql string) (refs []Reference) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		return nil
@@ -179,20 +194,26 @@ func References(sql string) (mounts []identifier.TaggedId) {
 	if len(calls) == 0 {
 		return nil
 	}
-	seen := make(map[identifier.TaggedId]struct{}, len(calls))
-	mounts = make([]identifier.TaggedId, 0, len(calls))
+	type key struct {
+		mount identifier.TaggedId
+		fn    string
+	}
+	seen := make(map[key]struct{}, len(calls))
+	refs = make([]Reference, 0, len(calls))
 	for _, c := range calls {
 		mount, _, argErr := callArgs(c.node)
 		if argErr != nil {
 			continue
 		}
-		if _, dup := seen[mount]; dup {
+		name := nanopass.DecodeIdentifier(c.node.Identifier().GetText())
+		k := key{mount: mount, fn: strings.ToLower(name)}
+		if _, dup := seen[k]; dup {
 			continue
 		}
-		seen[mount] = struct{}{}
-		mounts = append(mounts, mount)
+		seen[k] = struct{}{}
+		refs = append(refs, Reference{Mount: mount, Func: k.fn})
 	}
-	if len(mounts) == 0 {
+	if len(refs) == 0 {
 		return nil
 	}
 	return
@@ -230,7 +251,7 @@ type call struct {
 func expand(cfg Config, sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eh.Errorf("ladingsql: parse: %w", err)
+		err = eh.Errorf("parse: %w", err)
 		return
 	}
 	calls := findCalls(pr)
@@ -247,7 +268,7 @@ func expand(cfg Config, sql string) (result string, err error) {
 		}
 		if cfg.Visibility == nil || !cfg.Visibility.VisibleMount(mount) {
 			err = eb.Build().Uint64("mount", mount.Value()).
-				Errorf("ladingsql: mount %d is not visible to this caller", mount.Value())
+				Errorf("mount %d is not visible to this caller", mount.Value())
 			return "", err
 		}
 		var sub string
@@ -339,30 +360,30 @@ type snapshotArg struct {
 func callArgs(fn *grammar1.TableFunctionExprContext) (mount identifier.TaggedId, snap snapshotArg, err error) {
 	al := fn.TableArgList()
 	if al == nil {
-		err = eh.Errorf("ladingsql: %s() needs a mount id", callName(fn))
+		err = eh.Errorf("%s() needs a mount id", callName(fn))
 		return
 	}
 	args := al.AllTableArgExpr()
 	if len(args) < 1 || len(args) > 2 {
 		err = eb.Build().Int("args", len(args)).
-			Errorf("ladingsql: %s() takes a mount id and an optional snapshot, got %d arguments", callName(fn), len(args))
+			Errorf("%s() takes a mount id and an optional snapshot, got %d arguments", callName(fn), len(args))
 		return
 	}
 
 	raw, isString, ok := literalOf(args[0])
 	if !ok {
-		err = eh.Errorf("ladingsql: %s() mount must be a literal id, not an expression", callName(fn))
+		err = eh.Errorf("%s() mount must be a literal id, not an expression", callName(fn))
 		return
 	}
 	value, perr := parseMountID(raw, isString)
 	if perr != nil {
-		err = eh.Errorf("ladingsql: %s(): %w", callName(fn), perr)
+		err = eh.Errorf("%s(): %w", callName(fn), perr)
 		return
 	}
 	mount = value
 	if !mount.IsValid() {
 		err = eb.Build().Uint64("mount", mount.Value()).
-			Errorf("ladingsql: %s() mount id is not a valid tagged id", callName(fn))
+			Errorf("%s() mount id is not a valid tagged id", callName(fn))
 		return
 	}
 
@@ -372,20 +393,20 @@ func callArgs(fn *grammar1.TableFunctionExprContext) (mount identifier.TaggedId,
 	}
 	raw, isString, ok = literalOf(args[1])
 	if !ok {
-		err = eh.Errorf("ladingsql: %s() snapshot must be a literal, not an expression", callName(fn))
+		err = eh.Errorf("%s() snapshot must be a literal, not an expression", callName(fn))
 		return
 	}
 	switch {
 	case isString && raw == AllSnapshots:
 		snap.all = true
 	case isString:
-		snap.expr = "toDateTime64(" + quoteLiteral(raw) + ", 9, 'UTC')"
+		snap.expr = "toDateTime64(" + ladingschema.QuoteLiteral(raw) + ", 9, 'UTC')"
 	default:
 		var nanos uint64
 		nanos, err = strconv.ParseUint(raw, 10, 64)
 		if err != nil {
 			err = eb.Build().Str("arg", raw).
-				Errorf("ladingsql: %s() snapshot must be '*', a datetime literal or Unix nanoseconds", callName(fn))
+				Errorf("%s() snapshot must be '*', a datetime literal or Unix nanoseconds", callName(fn))
 			return
 		}
 		snap.expr = fmt.Sprintf("fromUnixTimestamp64Nano(toInt64(%d), 'UTC')", nanos)
@@ -422,22 +443,11 @@ func literalOf(arg grammar1.ITableArgExprContext) (raw string, isString bool, ok
 	}
 	text := lit.GetText()
 	if len(text) >= 2 && text[0] == '\'' && text[len(text)-1] == '\'' {
-		return unquoteLiteral(text[1 : len(text)-1]), true, true
+		return ladingschema.UnquoteLiteral(text[1 : len(text)-1]), true, true
 	}
 	return text, false, true
 }
 
 func callName(fn *grammar1.TableFunctionExprContext) string {
 	return nanopass.DecodeIdentifier(fn.Identifier().GetText())
-}
-
-// unquoteLiteral undoes the escaping a ClickHouse single-quoted literal
-// carries, so an argument is compared as the value the author wrote.
-func unquoteLiteral(s string) string {
-	return strings.NewReplacer(`\\`, `\`, `\'`, `'`).Replace(s)
-}
-
-// quoteLiteral renders a ClickHouse string literal.
-func quoteLiteral(s string) string {
-	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`, "\x00", `\0`).Replace(s) + "'"
 }

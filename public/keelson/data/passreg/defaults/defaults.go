@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
@@ -111,6 +112,39 @@ func RegisterStandard(r *passreg.Registry) (err error) {
 		if err != nil {
 			return
 		}
+	}
+
+	// The lading store's three table-function macros (ADR-0198 §SD7):
+	// fs(mount), fsdata(mount) and fssnap(mount) → a subquery over the store's
+	// tables. A Factory and not an Entry, unlike the gloss and constructor
+	// macros, because expanding one is an authorisation decision: which mounts
+	// a caller may read is a MountVisibilityI, and a nil one refuses every
+	// mount. Registered here rather than per host so it shows in
+	// keelson('sql_passes') and behaves identically wherever it is bound; a
+	// host that binds no visibility declines it, and the call reaches the
+	// server as an unknown table function — which is the honest outcome, and
+	// what "no policy was stated" should look like.
+	//
+	// The probe pass (empty Config, never Run) sources Name and Properties
+	// from the real pass so they cannot drift from Build's output.
+	ladingProbe := ladingsql.ExpandPass(ladingsql.Config{})
+	err = r.RegisterFactory(passreg.Factory{
+		Name:        ladingProbe.Name,
+		Stage:       passreg.StagePreExecute,
+		Order:       145,
+		Description: "expand fs(mount) / fsdata(mount) / fssnap(mount) into a subquery over the lading snapshot store",
+		Provenance:  "github.com/stergiotis/boxer/public/fs/lading/ladingsql",
+		Properties:  ladingProbe.Properties,
+		Build: func(binding any) (nanopass.Pass, bool) {
+			vis, ok := binding.(ladingsql.MountVisibilityI)
+			if !ok {
+				return nanopass.Pass{}, false
+			}
+			return ladingsql.ExpandPass(ladingsql.Config{Visibility: vis}), true
+		},
+	})
+	if err != nil {
+		return
 	}
 
 	// Friendly leeway column-handle resolution (`geoPoint:pointLat`,

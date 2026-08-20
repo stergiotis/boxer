@@ -126,7 +126,7 @@ var localTableFunctions = map[string]struct{}{
 	// and system.documentation — local reads throughout, no authored
 	// egress can hide inside a quoted query string.
 	"docsearch": {},
-	// The lading store's two macros (ADR-0198 §SD7), classified
+	// The lading store's three macros (ADR-0198 §SD7), classified
 	// pre-expansion for the same reason as keelson's: both expand to a
 	// SELECT over a local MergeTree table in the server's own database,
 	// and their arguments are a mount id and a snapshot — neither can

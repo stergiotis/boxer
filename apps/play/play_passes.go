@@ -4,6 +4,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
@@ -114,6 +115,24 @@ func RegisterVocabulary(r *sqlvocab.Registry) (err error) {
 			Name: docsearchsql.FuncName, Params: sqlvocab.Exprs("'query'"),
 			Doc:   "search this build's documentation corpus; expands into a UNION over the doc tables (ADR-0164)",
 			Where: sqlvocab.WhereClient, Family: "documentation (ADR-0164)", Available: true,
+		},
+		sqlvocab.Function{
+			Name:   ladingsql.FuncEntries,
+			Params: []sqlvocab.Param{sqlvocab.Expr("mount"), sqlvocab.Expr("snapshot")},
+			Doc:    "table position only: one row per node of a mount's snapshot — the newest complete one unless a snapshot is given (ADR-0198)",
+			Where:  sqlvocab.WhereClient, Family: "snapshot store (ADR-0198)", Available: true,
+		},
+		sqlvocab.Function{
+			Name:   ladingsql.FuncBlocks,
+			Params: []sqlvocab.Param{sqlvocab.Expr("mount"), sqlvocab.Expr("snapshot")},
+			Doc:    "table position only: one row per stored block of a mount's snapshot, with its line numbering (ADR-0198)",
+			Where:  sqlvocab.WhereClient, Family: "snapshot store (ADR-0198)", Available: true,
+		},
+		sqlvocab.Function{
+			Name:   ladingsql.FuncSnapshots,
+			Params: []sqlvocab.Param{sqlvocab.Expr("mount")},
+			Doc:    "table position only: one row per complete snapshot of a mount, with its totals (ADR-0198)",
+			Where:  sqlvocab.WhereClient, Family: "snapshot store (ADR-0198)", Available: true,
 		},
 		sqlvocab.Function{
 			Name:   keelsonsql.FuncName,
