@@ -247,6 +247,28 @@ in `both` mode rather than prune them (see open question 6).
 
 ## Updates
 
+### 2026-08-20 — TinyGo 0.41.1 does not accept Go 1.27
+
+The survey cannot run at all against the toolchain this repository now
+requires. TinyGo 0.41.1 refuses it outright:
+
+```
+requires go version 1.19 through 1.26, got go1.27
+```
+
+Found where it bites hardest rather than in the survey: the airgap bundler
+verifies its staged TinyGo by compiling a wasm smoke module with the very Go
+SDK the bundle ships, and on a 1.27 packing host that check fails, so the
+bundler **drops TinyGo from the bundle** ([ADR-0199](./0199-adopt-go-1-27.md)
+M3). A bundle cut today carries no TinyGo and the offline wasm path is gone
+with it.
+
+This is `ReasonToolchain` — the bucket §SD-probe already models as "tinygo
+cannot use the active Go toolchain (version ceiling)". It was written for
+exactly this and had not fired before. Nothing about the survey's design
+changes; it is unrunnable until upstream ships 1.27 support, and a probe run
+before then measures the ceiling rather than the tree.
+
 ### 2026-08-19 — SD5 is moot: there is no experiment left to carry
 
 Go 1.27 graduated `encoding/json/v2`, so the probe no longer sets

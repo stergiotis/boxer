@@ -205,10 +205,19 @@ go build -tags "$(tr -d '\n' < tags)" -o /dev/null ./public/app   # rebuilds off
   on `PATH` does move it, and is the fix when the system `go` is older:
 
   ```sh
-  # the SDK a GOTOOLCHAIN fetch already left in the module cache
-  sdk="$(go env GOMODCACHE)/golang.org/toolchain@v0.0.1-go1.27.0.$(go env GOOS)-$(go env GOARCH)"
-  PATH="$sdk/bin:$PATH" go env GOROOT GOVERSION   # confirm before packing
+  # A GOTOOLCHAIN fetch leaves a complete SDK in the module cache — but that
+  # tree is read-only (dr-xr-xr-x), and airgap_ship_goroot copies with `cp -a`,
+  # so pointing PATH straight at it ships a GOROOT the target cannot delete
+  # without chmod. Copy it out and make it writable first.
+  cache="$(go env GOMODCACHE)/golang.org/toolchain@v0.0.1-go1.27.0.$(go env GOOS)-$(go env GOARCH)"
+  cp -a "$cache" ~/sdk/go1.27.0 && chmod -R u+w ~/sdk/go1.27.0
+  PATH="$HOME/sdk/go1.27.0/bin:$PATH" go env GOROOT GOVERSION   # confirm before packing
   ```
+
+  The usual route to a second SDK — `go install golang.org/dl/go1.27@latest`
+  then `go1.27 download` — was not available as of 2026-08-20: the `dl` module
+  had no `go1.27` wrapper yet. An unpacked release tarball from the downloads
+  page works equally well and needs no chmod.
 
   There is a second version in play, and it is not the same one: the bundler
   writes the workspace's `go` line from the *module's* `go.mod`, not from the
