@@ -201,7 +201,21 @@ go build -tags "$(tr -d '\n' < tags)" -o /dev/null ./public/app   # rebuilds off
   download: `go.mod requires go >= 1.27.0 (running go1.26.x; GOTOOLCHAIN=local)`.
   Pack on a host whose default `go` is 1.27 or newer. Running the bundler under
   a `GOTOOLCHAIN=` override is *not* enough — the override does not move
-  `GOROOT`, which is what gets copied.
+  `GOROOT`, which is what gets copied. Putting the toolchain's own `bin` first
+  on `PATH` does move it, and is the fix when the system `go` is older:
+
+  ```sh
+  # the SDK a GOTOOLCHAIN fetch already left in the module cache
+  sdk="$(go env GOMODCACHE)/golang.org/toolchain@v0.0.1-go1.27.0.$(go env GOOS)-$(go env GOARCH)"
+  PATH="$sdk/bin:$PATH" go env GOROOT GOVERSION   # confirm before packing
+  ```
+
+  There is a second version in play, and it is not the same one: the bundler
+  writes the workspace's `go` line from the *module's* `go.mod`, not from the
+  toolchain. With a workspace line below what a member requires, `go work
+  vendor` fails at pack time before anything is shipped —
+  `cannot load module …: go.mod requires go >= 1.27.0 (running go 1.26.5;
+  GOTOOLCHAIN=local)`. Both have to move.
 - **Vendoring here is a packaging carve-out.** The repo's standing policy is no
   vendoring ([ENGINEERING_PRACTICES §6](../ENGINEERING_PRACTICES.md)); the
   `vendor/` and `rust/vendor/` trees live only inside the bundle and are not
