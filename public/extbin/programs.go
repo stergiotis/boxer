@@ -63,12 +63,12 @@ var (
 
 // Storage transports.
 var (
-	// Rclone is the counterpart of the lading store's SFTP-over-stdio head
+	// Rclone is both halves of the lading store's SFTP-over-stdio seam
 	// (ADR-0198 §SD9): it runs the head in place of ssh to reach the store,
-	// and `rclone serve sftp --stdio` runs on the other side when a remote is
-	// snapshotted. Nothing in the tree invokes it in production — it is the
-	// integration lane's peer, and the reason the head has to meet a real
-	// client's expectations rather than only its own tests'.
+	// and ladingremote.Serve spawns `rclone serve sftp --stdio` on the other
+	// side to snapshot a remote. That second half is shipped code, not a test
+	// fixture — this declaration is the resolution chokepoint for it, which is
+	// what makes the spawn auditable from here rather than from a call site.
 	Rclone = Declare(Program{
 		Name:        "rclone",
 		Kind:        Host,

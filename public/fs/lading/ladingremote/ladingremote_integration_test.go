@@ -9,6 +9,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/fxamacker/cbor/v2"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -349,6 +353,45 @@ func TestAMissingRemoteFailsAtServe(t *testing.T) {
 		_ = src.Close()
 	}
 	require.Error(t, err, "a remote rclone cannot open must fail at Serve")
-	assert.NotContains(t, err.Error(), "EOF only",
-		"the error must carry what rclone said: %v", err)
+
+	// The property this test exists for: Serve folds rclone's bounded stderr
+	// and the remote's name into the error, so a failure says why rather than
+	// only that NewClientPipe saw the far end close.
+	//
+	// The check is against the structured payload, not against Error(): the
+	// house style puts context in Str/Int fields and keeps the message bare,
+	// so a string assertion would be asserting the wrong half. The previous
+	// form checked Error() for the literal "EOF only", which nothing emits —
+	// it would have stayed green with the stderr dropped entirely.
+	esd, ok := err.(eh.ErrorWithStructuredDataI)
+	require.Truef(t, ok, "Serve's failure must carry structured data: %v", err)
+	fields := decodeFields(t, esd.GetCBORStructuredData())
+	assert.Equal(t, "nosuchremote:definitely/not/here", fields["remote"],
+		"the error must name the remote rclone could not open")
+	stderr, _ := fields["stderr"].(string)
+	assert.NotEmpty(t, stderr,
+		"the error must carry what rclone said on stderr, not just an EOF")
+	assert.Contains(t, strings.ToLower(stderr), "config",
+		"rclone's complaint about an unknown remote mentions its config: %q", stderr)
+}
+
+// decodeFields reads an eb-built error's structured payload.
+//
+// An independent CBOR implementation on purpose, the same oracle eb's own
+// tests use: a payload is right when a decoder that shares no code with the
+// encoder accepts it.
+func decodeFields(t *testing.T, data []byte) map[string]any {
+	t.Helper()
+	require.NotEmpty(t, data, "structured payload is empty")
+	var v any
+	require.NoError(t, cbor.Unmarshal(data, &v))
+	raw, ok := v.(map[any]any)
+	require.Truef(t, ok, "payload decoded to %T, want a map", v)
+	out := make(map[string]any, len(raw))
+	for k, val := range raw {
+		if s, isStr := k.(string); isStr {
+			out[s] = val
+		}
+	}
+	return out
 }
