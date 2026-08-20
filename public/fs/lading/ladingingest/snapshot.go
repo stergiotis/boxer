@@ -56,10 +56,17 @@ const (
 	kindOther   = "other"
 )
 
-// flushEvery bounds how many rows a walk holds before shipping them. It is not
-// a correctness knob — the commit rule makes any prefix of a walk invisible —
-// only a memory one.
-const flushEvery = 4096
+// flushEvery bounds how many rows a walk holds before shipping them, and
+// flushBytes bounds how many bytes those rows carry. Neither is a correctness
+// knob — the commit rule makes any prefix of a walk invisible — both are
+// memory ones, and the row count alone is not: a block row holds up to the
+// profile's BlockSize, which is 1 MiB in both shipped profiles, so 4096
+// buffered block rows are ~4 GiB before the first flush and the Arrow records
+// Flush builds from them roughly double that at the peak.
+const (
+	flushEvery = 4096
+	flushBytes = 128 << 20
+)
 
 // Snapshot walks fsys once and writes it as one snapshot of mount.
 //
@@ -94,16 +101,16 @@ func Snapshot(ctx context.Context, fsys fs.FS, mount identifier.TaggedId, policy
 		return
 	}
 	if st.Meta == nil {
-		err = eh.Errorf("ladingingest: no meta store")
+		err = eh.Errorf("no meta store")
 		return
 	}
 	if st.Data == nil && !policy.MetaOnly {
-		err = eh.Errorf("ladingingest: policy stores content but no block store was given")
+		err = eh.Errorf("policy stores content but no block store was given")
 		return
 	}
 	if !mount.IsValid() {
 		err = eb.Build().Uint64("mount", mount.Value()).
-			Errorf("ladingingest: mount id is not a valid tagged id — the application mints it under its own tag (ADR-0198 §SD3)")
+			Errorf("mount id is not a valid tagged id — the application mints it under its own tag (ADR-0198 §SD3)")
 		return
 	}
 
@@ -115,6 +122,11 @@ func Snapshot(ctx context.Context, fsys fs.FS, mount identifier.TaggedId, policy
 	w.res.ExpiresAt = policy.Ttl.expiryOf(w.res.Snap)
 
 	err = fs.WalkDir(fsys, ".", w.visit)
+	if err != nil {
+		return w.res, err
+	}
+	// The last directory of the walk has no successor to push its row out.
+	err = w.flushPending()
 	if err != nil {
 		return w.res, err
 	}
@@ -141,6 +153,27 @@ type walk struct {
 	root     fs.FileInfo
 	rootErr  string
 	rootSeen bool
+
+	// buffered is how many block bytes are held, which is what actually
+	// bounds a walk's memory; the stores count rows.
+	buffered uint64
+
+	// pending is the directory row most recently built but not yet written.
+	//
+	// fs.WalkDir reports a ReadDir failure by calling back a *second* time for
+	// the same directory, immediately after the first call and before any
+	// child. Holding one row back is what lets that second call amend the row
+	// rather than write another under the same (mount, snapshot, path): the
+	// tables are plain MergeTree, nothing dedupes, and both rows would read
+	// back — one of them a mode-0 stub that makes ReadDir and Stat answer
+	// differently depending on which the LIMIT 1 happened to return.
+	pending *pendingEntry
+}
+
+// pendingEntry is a row built and not yet written; see [walk.pending].
+type pendingEntry struct {
+	path string
+	row  ladingmeta.LadingEntry
 }
 
 // visit is fs.WalkDir's callback. It never returns an error except to abort on
@@ -167,13 +200,22 @@ func (inst *walk) visit(path string, d fs.DirEntry, walkErr error) error {
 		return nil
 	}
 	if walkErr != nil {
-		// A ReadDir failure arrives after the directory's own row; record it
-		// against the directory and skip its contents.
 		inst.res.Errors++
+		// The second call for a directory whose ReadDir failed. Amend the row
+		// that is still in hand rather than writing a second one under the
+		// same key, and keep the node kind the stat reported: a directory that
+		// cannot be listed is still a directory.
+		if inst.pending != nil && inst.pending.path == path {
+			inst.pending.row.Err = walkErr.Error()
+			return inst.flushPending()
+		}
 		return inst.writeEntry(path, ladingmeta.LadingEntry{
 			Kind: "entry", NodeKind: kindOther, Content: contentNone,
 			Err: walkErr.Error(),
 		})
+	}
+	if err := inst.flushPending(); err != nil {
+		return err
 	}
 	return inst.node(path, d)
 }
@@ -196,8 +238,6 @@ func (inst *walk) node(path string, d fs.DirEntry) error {
 		Size:     uint64(max(info.Size(), 0)),
 		Mtime:    info.ModTime().UTC(),
 	}
-	inst.res.Bytes += row.Size
-
 	switch {
 	case row.NodeKind == kindSymlink:
 		target, lerr := inst.readLink(path)
@@ -215,7 +255,29 @@ func (inst *walk) node(path string, d fs.DirEntry) error {
 			return err
 		}
 	}
+	// After the switch, not before it: content() restates row.Size from the
+	// bytes that actually arrived, which is the whole point of the
+	// restatement. Counting the pre-read stat here would make the commit
+	// record disagree with SUM(size) over the rows for exactly the files the
+	// restatement exists for.
+	inst.res.Bytes += row.Size
+	if row.NodeKind == kindDir {
+		// Held back exactly one callback, so a ReadDir failure can amend this
+		// row instead of adding a second one. See [walk.pending].
+		inst.pending = &pendingEntry{path: path, row: row}
+		return nil
+	}
 	return inst.writeEntry(path, row)
+}
+
+// flushPending writes the held-back directory row, if there is one.
+func (inst *walk) flushPending() (err error) {
+	p := inst.pending
+	if p == nil {
+		return
+	}
+	inst.pending = nil
+	return inst.writeEntry(p.path, p.row)
 }
 
 // content stores or references one regular file's bytes and fills the fields
@@ -279,9 +341,10 @@ func (inst *walk) content(path string, row *ladingmeta.LadingEntry) (err error) 
 		}).AddLadingBlock(br).Commit()
 		if err != nil {
 			return eb.Build().Str("path", path).Int("seq", seq).
-				Errorf("ladingingest: buffer block: %w", err)
+				Errorf("buffer block: %w", err)
 		}
 		inst.res.Blocks++
+		inst.buffered += uint64(len(b.data))
 	}
 	return inst.maybeFlush()
 }
@@ -308,16 +371,18 @@ func (inst *walk) writeEntry(path string, row ladingmeta.LadingEntry) (err error
 		ExpiresAt:  inst.res.ExpiresAt,
 	}).AddLadingEntry(row).Commit()
 	if err != nil {
-		return eb.Build().Str("path", path).Errorf("ladingingest: buffer entry: %w", err)
+		return eb.Build().Str("path", path).Errorf("buffer entry: %w", err)
 	}
 	inst.res.Entries++
 	return inst.maybeFlush()
 }
 
-// maybeFlush ships what is buffered once either store has enough. Both are
-// flushed together so a block never outlives the walk's memory of its entry.
+// maybeFlush ships what is buffered once either store has enough, by rows or
+// by bytes. Both are flushed together so a block never outlives the walk's
+// memory of its entry.
 func (inst *walk) maybeFlush() (err error) {
-	if inst.st.Meta.Buffered() < flushEvery &&
+	if inst.buffered < flushBytes &&
+		inst.st.Meta.Buffered() < flushEvery &&
 		(inst.st.Data == nil || inst.st.Data.Buffered() < flushEvery) {
 		return
 	}
@@ -328,15 +393,16 @@ func (inst *walk) maybeFlush() (err error) {
 // more when its blocks are already there than the other way round, and the
 // root row (which flush never carries) is what makes either visible.
 func (inst *walk) flush() (err error) {
+	inst.buffered = 0
 	if inst.st.Data != nil {
 		_, err = inst.st.Data.Flush(inst.ctx)
 		if err != nil {
-			return eh.Errorf("ladingingest: flush blocks: %w", err)
+			return eh.Errorf("flush blocks: %w", err)
 		}
 	}
 	_, err = inst.st.Meta.Flush(inst.ctx)
 	if err != nil {
-		return eh.Errorf("ladingingest: flush entries: %w", err)
+		return eh.Errorf("flush entries: %w", err)
 	}
 	return
 }
@@ -347,14 +413,27 @@ func (inst *walk) flush() (err error) {
 // promise about the writer.
 func (inst *walk) commit() (err error) {
 	if !inst.rootSeen {
-		return eh.Errorf("ladingingest: the walk never reached the root; no snapshot was written")
+		return eh.Errorf("the walk never reached the root; no snapshot was written")
+	}
+	if inst.root == nil {
+		// The root row IS the commit, so signing one for a root that could not
+		// be stat'd would publish a snapshot the adapter then refuses to list:
+		// `latest` would move onto it and supersede a good earlier snapshot,
+		// and the SQL surface — which reads is_dir off NodeKind — would
+		// disagree with the adapter, which reads it off Mode. Better no
+		// snapshot: the rows already written expire unread, which is exactly
+		// what the commit rule is for.
+		return eb.Build().Str("error", inst.rootErr).
+			Errorf("the root of the tree could not be stat'd; no snapshot was written")
 	}
 	entry := ladingmeta.LadingEntry{
-		Kind: "entry", NodeKind: kindDir, Content: contentNone, Err: inst.rootErr,
-	}
-	if inst.root != nil {
-		entry.Mode = uint32(inst.root.Mode())
-		entry.Mtime = inst.root.ModTime().UTC()
+		Kind:     "entry",
+		NodeKind: nodeKindOf(inst.root.Mode()),
+		Content:  contentNone,
+		Err:      inst.rootErr,
+		Mode:     uint32(inst.root.Mode()),
+		Size:     uint64(max(inst.root.Size(), 0)),
+		Mtime:    inst.root.ModTime().UTC(),
 	}
 	inst.res.Entries++
 	err = inst.st.Meta.Begin(inst.mount, inst.res.Snap, ladingmeta.MetaEnvelope{
@@ -369,11 +448,11 @@ func (inst *walk) commit() (err error) {
 		InlineMax: inst.policy.InlineMax,
 	}).Commit()
 	if err != nil {
-		return eh.Errorf("ladingingest: buffer root row: %w", err)
+		return eh.Errorf("buffer root row: %w", err)
 	}
 	_, err = inst.st.Meta.Flush(inst.ctx)
 	if err != nil {
-		return eh.Errorf("ladingingest: flush root row: %w", err)
+		return eh.Errorf("flush root row: %w", err)
 	}
 	return
 }

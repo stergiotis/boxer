@@ -114,12 +114,18 @@ func (inst *harness) stores() lading.Stores {
 	return lading.Stores{Meta: inst.meta, Data: inst.data}
 }
 
-// entries reads every entry row of one snapshot back, keyed by path.
+// entries reads every entry row of ONE snapshot back, keyed by path.
+//
+// Pinned to res.Snap, not just to the mount: several tests write more than one
+// snapshot of the same mount, and a helper that read them all would resolve a
+// path to whichever snapshot's row the scan returned — a pass or a fail that
+// moves with Go's map ordering rather than with the code.
 func (inst *harness) entries(t *testing.T, res ladingingest.Result) map[string]ladingmeta.LadingEntry {
 	t.Helper()
 	out := map[string]ladingmeta.LadingEntry{}
 	for ent, err := range inst.meta.ScanLadingEntry(context.Background(), recordstore.ScanOpts{
-		ExtraPredicate: fmt.Sprintf("%s = %d", plain(t, "id"), testMount.Value()),
+		ExtraPredicate: fmt.Sprintf("%s = %d AND %s = %s",
+			plain(t, "id"), testMount.Value(), plain(t, "ts"), tsLiteral(res.Snap)),
 	}) {
 		require.NoError(t, err)
 		require.True(t, ent.LadingEntry.Has)
@@ -128,8 +134,9 @@ func (inst *harness) entries(t *testing.T, res ladingingest.Result) map[string]l
 	return out
 }
 
-// blocksOf reads one file's blocks back, in ordinal order.
-func (inst *harness) blocksOf(t *testing.T, path string) []ladingdata.LadingBlock {
+// blocksOf reads one file's blocks back, in ordinal order, from one snapshot.
+// Pinned to snap for the same reason [harness.entries] is.
+func (inst *harness) blocksOf(t *testing.T, snap time.Time, path string) []ladingdata.LadingBlock {
 	t.Helper()
 	type keyed struct {
 		seq uint32
@@ -137,8 +144,9 @@ func (inst *harness) blocksOf(t *testing.T, path string) []ladingdata.LadingBloc
 	}
 	var got []keyed
 	for ent, err := range inst.data.ScanLadingBlock(context.Background(), recordstore.ScanOpts{
-		ExtraPredicate: fmt.Sprintf("%s = %d AND startsWith(%s, '%s\\0')",
-			plain(t, "id"), testMount.Value(), plain(t, "naturalKey"), path),
+		ExtraPredicate: fmt.Sprintf("%s = %d AND %s = %s AND startsWith(%s, '%s\\0')",
+			plain(t, "id"), testMount.Value(), plain(t, "ts"), tsLiteral(snap),
+			plain(t, "naturalKey"), path),
 	}) {
 		require.NoError(t, err)
 		require.True(t, ent.LadingBlock.Has)
@@ -224,10 +232,10 @@ func TestSnapshotWritesTheExpectedRows(t *testing.T) {
 func TestTextBlocksEndAtNewlinesAndCarryLineNumbers(t *testing.T) {
 	h := newHarness(t)
 	fsys := tree()
-	_, err := ladingingest.Snapshot(context.Background(), fsys, testMount, testPolicy(), h.stores())
+	res, err := ladingingest.Snapshot(context.Background(), fsys, testMount, testPolicy(), h.stores())
 	require.NoError(t, err)
 
-	blocks := h.blocksOf(t, "a/b.txt")
+	blocks := h.blocksOf(t, res.Snap, "a/b.txt")
 	require.NotEmpty(t, blocks)
 
 	var rebuilt []byte
@@ -248,7 +256,7 @@ func TestTextBlocksEndAtNewlinesAndCarryLineNumbers(t *testing.T) {
 	assert.EqualValues(t, 41, wantLine, "40 lines, so the line after the last is 41")
 
 	// A non-text file is cut at exact offsets and claims no line numbers.
-	bin := h.blocksOf(t, "a/c/d.bin")
+	bin := h.blocksOf(t, res.Snap, "a/c/d.bin")
 	require.Len(t, bin, (200+blockSize-1)/blockSize)
 	for i, b := range bin {
 		assert.Zerof(t, b.Line0, "block %d of a binary file must not claim a line number", i)
@@ -412,7 +420,7 @@ func TestBlockCuttingIsExact(t *testing.T) {
 		assert.EqualValuesf(t, tc.wantCount, got["f"].Blocks, "%s: block count", name)
 		assert.Equalf(t, tc.wantText, got["f"].Text, "%s: text", name)
 		if tc.wantCount > 0 {
-			assert.Equalf(t, tc.data, bytes.Join(dataOf(h.blocksOf(t, "f")), nil), "%s: round trip", name)
+			assert.Equalf(t, tc.data, bytes.Join(dataOf(h.blocksOf(t, res.Snap, "f")), nil), "%s: round trip", name)
 		}
 		// Each case is its own snapshot; drop the rows so the next one reads
 		// only its own.
@@ -470,3 +478,13 @@ func (inst failingFS) err(name string) error {
 
 var _ fs.ReadLinkFS = failingFS{}
 var _ = strings.TrimSpace
+
+// tsLiteral renders an instant the way the store's key column holds it.
+//
+// fromUnixTimestamp64Nano, never toDateTime64: a plain number handed to
+// toDateTime64 is read as seconds whatever the scale says, so a nanosecond
+// value saturates to the year 2262 and the predicate matches nothing, with no
+// error anywhere.
+func tsLiteral(t time.Time) string {
+	return fmt.Sprintf("fromUnixTimestamp64Nano(%d, 'UTC')", t.UTC().UnixNano())
+}

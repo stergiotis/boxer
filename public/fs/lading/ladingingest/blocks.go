@@ -110,14 +110,20 @@ func isText(content []byte) bool {
 	}
 	if truncated {
 		// Drop a trailing partial rune rather than judging it invalid.
-		for len(head) > 0 && !utf8.Valid(head) {
+		//
+		// The bound is how far into the *window* the trimming has gone, not
+		// how far from the end of the file: a rune is at most UTFMax bytes, so
+		// anything past that is genuinely invalid UTF-8 rather than a rune the
+		// window cut in half. Measuring it against len(content) made the guard
+		// fire on the first trimmed byte of any file over sniffLen, so every
+		// text file above 8 KiB whose window happened to end mid-rune was
+		// judged binary — and with it went the newline cutting the whole
+		// line-oriented SQL surface rests on.
+		for len(head) > 0 && sniffLen-len(head) <= utf8.UTFMax && !utf8.Valid(head) {
 			if r, sz := utf8.DecodeLastRune(head); r != utf8.RuneError || sz != 1 {
 				break
 			}
 			head = head[:len(head)-1]
-			if len(content)-len(head) > utf8.UTFMax {
-				return false
-			}
 		}
 	}
 	return utf8.Valid(head)
