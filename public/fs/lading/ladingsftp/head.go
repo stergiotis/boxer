@@ -6,7 +6,10 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,6 +48,11 @@ type Head struct {
 	vis    ladingsql.MountVisibilityI
 	ctx    context.Context
 	views  map[viewKey]*ladingadapter.FS
+	// snaps caches each mount's complete, unexpired snapshots. It is what
+	// makes a snapshot addressable by name only if it is one — a walk that
+	// died before its root row still has an addressable instant, and the
+	// caller who holds the failed Result knows it.
+	snaps map[identifier.TaggedId][]ladingadapter.Snapshot
 }
 
 type viewKey struct {
@@ -71,11 +79,11 @@ type Config struct {
 // New builds a head.
 func New(cfg Config) (inst *Head, err error) {
 	if cfg.Exec == nil {
-		err = eh.Errorf("ladingsftp: no executor")
+		err = eh.Errorf("no executor")
 		return
 	}
 	if cfg.Stores.Meta == nil {
-		err = eh.Errorf("ladingsftp: no entry store")
+		err = eh.Errorf("no entry store")
 		return
 	}
 	ctx := cfg.Ctx
@@ -85,6 +93,7 @@ func New(cfg Config) (inst *Head, err error) {
 	inst = &Head{
 		exec: cfg.Exec, stores: cfg.Stores, vis: cfg.Visibility, ctx: ctx,
 		views: map[viewKey]*ladingadapter.FS{},
+		snaps: map[identifier.TaggedId][]ladingadapter.Snapshot{},
 	}
 	return
 }
@@ -242,9 +251,43 @@ func (inst *Head) Readlink(p string) (target string, err error) {
 		if verr != nil {
 			return "", verr
 		}
-		return view.ReadLink(loc.name)
+		t, verr := view.ReadLink(loc.name)
+		if verr != nil {
+			return "", verr
+		}
+		return relativeTarget(loc.name, t), nil
 	}
 	return "", fs.ErrInvalid
+}
+
+// relativeTarget rewrites an absolute link target into one the client will
+// resolve where the adapter resolves it.
+//
+// A snapshot's absolute target is rooted at the *snapshot*, which is the only
+// root a snapshot has; a client resolves it against the root of the SFTP tree,
+// which is the mount list. So `/a/b.txt` would take the adapter to the
+// snapshot's a/b.txt and take rclone to a mount named "a" — ENOENT, and a
+// dangling link written by `rclone copy --links` where the adapter would have
+// copied the file. Handing back the equivalent relative path makes the two
+// agree without the client having to know where the snapshot begins.
+//
+// A relative target already means the same thing to both and is passed
+// through.
+func relativeTarget(from, target string) string {
+	if !strings.HasPrefix(target, "/") {
+		return target
+	}
+	dst := path.Clean(strings.TrimPrefix(target, "/"))
+	if dst == "" || dst == "." {
+		dst = "."
+	}
+	rel, err := filepath.Rel(path.Dir(from), dst)
+	if err != nil {
+		// Cannot happen for two cleaned, unrooted io/fs paths; if it ever
+		// does, the verbatim target is no worse than a wrong relative one.
+		return target
+	}
+	return filepath.ToSlash(rel)
 }
 
 // list serves a directory at any level of the tree.
@@ -340,7 +383,7 @@ func (inst *Head) listMounts() (sftp.ListerAt, error) {
 	}
 	out := make([]os.FileInfo, 0, len(mounts))
 	for _, m := range mounts {
-		if inst.vis == nil || !inst.vis.VisibleMount(m) {
+		if inst.checkMount(m) != nil {
 			continue
 		}
 		out = append(out, dirInfo{name: mountName(m)})
@@ -355,7 +398,7 @@ func (inst *Head) listSnapshots(mount identifier.TaggedId) (sftp.ListerAt, error
 	if err := inst.checkMount(mount); err != nil {
 		return nil, err
 	}
-	snaps, err := ladingadapter.Snapshots(inst.ctx, inst.exec, mount)
+	snaps, err := inst.snapshotsOf(mount)
 	if err != nil {
 		return nil, err
 	}
@@ -372,16 +415,38 @@ func (inst *Head) listSnapshots(mount identifier.TaggedId) (sftp.ListerAt, error
 	return listerAt(out), nil
 }
 
+// snapshotsOf is a mount's complete, unexpired snapshots, newest first,
+// cached for the life of the head.
+//
+// Caching is safe for the same reason the views are: a snapshot is immutable
+// and a session is short. It can go stale in one direction — a snapshot taken
+// or expired during a session — which is the same staleness a client already
+// has from its own directory cache.
+func (inst *Head) snapshotsOf(mount identifier.TaggedId) ([]ladingadapter.Snapshot, error) {
+	if err := inst.checkMount(mount); err != nil {
+		return nil, err
+	}
+	if s, hit := inst.snaps[mount]; hit {
+		return s, nil
+	}
+	s, err := ladingadapter.Snapshots(inst.ctx, inst.exec, mount)
+	if err != nil {
+		return nil, err
+	}
+	inst.snaps[mount] = s
+	return s, nil
+}
+
 // latest is a mount's newest complete snapshot.
 func (inst *Head) latest(mount identifier.TaggedId) (snap time.Time, found bool, err error) {
 	if err = inst.checkMount(mount); err != nil {
 		return
 	}
-	s, found, err := ladingadapter.Latest(inst.ctx, inst.exec, mount)
-	if err != nil || !found {
+	snaps, err := inst.snapshotsOf(mount)
+	if err != nil || len(snaps) == 0 {
 		return
 	}
-	return s.Snap, true, nil
+	return snaps[0].Snap, true, nil
 }
 
 // checkMount refuses a mount this head may not serve — as absent rather than
@@ -414,8 +479,25 @@ func (inst *Head) viewAt(l loc) (*ladingadapter.FS, error) {
 
 // view is the cached adapter for one snapshot.
 func (inst *Head) view(mount identifier.TaggedId, snap time.Time) (*ladingadapter.FS, error) {
-	if err := inst.checkMount(mount); err != nil {
+	// Completeness, not just visibility. ladingingest.Snapshot returns its
+	// Result even when the walk failed, so a half-written instant is a real
+	// address; listSnapshots hides it, but nothing stopped a client from
+	// naming it directly and reading a tree with no root row. §SD6 makes "has
+	// a root row" the rule, and this is where the head applies it.
+	snaps, err := inst.snapshotsOf(mount)
+	if err != nil {
 		return nil, err
+	}
+	want := snap.UTC()
+	complete := false
+	for _, s := range snaps {
+		if s.Snap.Equal(want) {
+			complete = true
+			break
+		}
+	}
+	if !complete {
+		return nil, fs.ErrNotExist
 	}
 	k := viewKey{mount: mount, snap: snap.UTC().UnixNano()}
 	if v, hit := inst.views[k]; hit {

@@ -194,7 +194,7 @@ type dirInfo struct {
 func (inst dirInfo) Name() string       { return inst.name }
 func (inst dirInfo) Size() int64        { return 0 }
 func (inst dirInfo) Mode() fs.FileMode  { return fs.ModeDir | 0o555 }
-func (inst dirInfo) ModTime() time.Time { return inst.mtime }
+func (inst dirInfo) ModTime() time.Time { return unknownTimeAsEpoch(inst.mtime) }
 func (inst dirInfo) IsDir() bool        { return true }
 func (inst dirInfo) Sys() any           { return nil }
 
@@ -208,6 +208,22 @@ type linkInfo struct {
 func (inst linkInfo) Name() string       { return inst.name }
 func (inst linkInfo) Size() int64        { return int64(len(inst.target)) }
 func (inst linkInfo) Mode() fs.FileMode  { return fs.ModeSymlink | 0o777 }
-func (inst linkInfo) ModTime() time.Time { return inst.mtime }
-func (inst linkInfo) IsDir() bool        { return false }
-func (inst linkInfo) Sys() any           { return nil }
+func (inst linkInfo) ModTime() time.Time { return unknownTimeAsEpoch(inst.mtime) }
+
+// unknownTimeAsEpoch keeps a level with no time of its own — the tree root,
+// and a mount, neither of which the store dates — from reporting one twenty
+// years in the future.
+//
+// pkg/sftp marshals mtime as uint32(fi.ModTime().Unix()), and the zero
+// time.Time is -62135596800, whose low 32 bits are 2042-07-14. Anything
+// comparing directory times over SFTP (rclone --update, lsl, a VFS dir cache)
+// then acts on that date. The epoch is the honest answer — the conventional
+// "not known" — and it does not wrap.
+func unknownTimeAsEpoch(t time.Time) time.Time {
+	if t.IsZero() {
+		return time.Unix(0, 0).UTC()
+	}
+	return t
+}
+func (inst linkInfo) IsDir() bool { return false }
+func (inst linkInfo) Sys() any    { return nil }
