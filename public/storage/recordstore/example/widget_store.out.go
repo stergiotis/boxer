@@ -252,6 +252,13 @@ func (inst *WidgetStore) EnsureTable(ctx context.Context) (err error) {
 // nothing — every component decodes absent, with no error. Compare
 // WidgetMembershipIds against the writer's assignment when pointing this
 // store at rows it did not write.
+//
+// MATERIALIZED and ALIAS columns are skipped. They are not in SELECT *,
+// so the positional decode never sees them, and a table may legitimately
+// carry them beside the generated shape — derived tree or routing columns
+// added by ALTER after EnsureTable, which is how a store gets skip indexes
+// over values its leeway attributes only encode. Counting them would fail
+// every such table while the contract this verb guards still held.
 func (inst *WidgetStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
 	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+inst.tableName()+widgetArrowOutputSettings) {
@@ -265,7 +272,17 @@ func (inst *WidgetStore) VerifySchema(ctx context.Context) (err error) {
 			rec.Release()
 			return
 		}
+		kinds, ok := rec.Column(2).(*array.String)
+		if !ok {
+			err = eh.Errorf("describe table %s: default_type column is %s, not a string", inst.tableName(), rec.Column(2).DataType())
+			rec.Release()
+			return
+		}
 		for i := range int(rec.NumRows()) {
+			switch kinds.Value(i) {
+			case "MATERIALIZED", "ALIAS":
+				continue
+			}
 			live = append(live, names.Value(i))
 		}
 		rec.Release()
