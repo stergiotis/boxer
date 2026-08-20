@@ -36,6 +36,7 @@ package ladingschema
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -124,12 +125,12 @@ var ProfileFleet = Profile{
 func TableDesc(tableName string) (td common.TableDesc, err error) {
 	manip, err := factsschema.GetSchemaInManipulator()
 	if err != nil {
-		err = eh.Errorf("ladingschema: facts schema: %w", err)
+		err = eh.Errorf("facts schema: %w", err)
 		return
 	}
 	td, err = manip.BuildTableDesc()
 	if err != nil {
-		err = eh.Errorf("ladingschema: build facts table desc: %w", err)
+		err = eh.Errorf("build facts table desc: %w", err)
 		return
 	}
 	td.DictionaryEntry.Name = naming.StylableName(tableName)
@@ -212,17 +213,17 @@ func composeCreateTable(qualifiedName string, td common.TableDesc, opts *clickho
 	ir := common.NewIntermediateTableRepresentation()
 	err = ir.LoadFromTable(&td, tech)
 	if err != nil {
-		err = eh.Errorf("ladingschema: load table ir: %w", err)
+		err = eh.Errorf("load table ir: %w", err)
 		return
 	}
 	conv, err := ddl.NewHumanReadableNamingConvention(":")
 	if err != nil {
-		err = eh.Errorf("ladingschema: naming convention: %w", err)
+		err = eh.Errorf("naming convention: %w", err)
 		return
 	}
 	sql, err = clickhouse.ComposeCreateTable(qualifiedName, ir, TableRowConfig, conv, *opts)
 	if err != nil {
-		err = eh.Errorf("ladingschema: compose create table: %w", err)
+		err = eh.Errorf("compose create table: %w", err)
 	}
 	return
 }
@@ -237,6 +238,24 @@ func composeCreateTable(qualifiedName string, td common.TableDesc, opts *clickho
 // several is an error, because a clause over the wrong column would create
 // cleanly and be wrong at read time.
 func PhysicalPlainName(plain string) (quoted string, err error) {
+	if hit, ok := plainNameCache.Load(plain); ok {
+		return hit.(string), nil
+	}
+	quoted, err = resolvePhysicalPlainName(plain)
+	if err != nil {
+		return
+	}
+	plainNameCache.Store(plain, quoted)
+	return
+}
+
+// plainNameCache memoises the derivation, which is not cheap: it rebuilds the
+// whole 185-column descriptor and re-runs the naming convention over it, and
+// the read paths call it per query. The answer is a pure function of a
+// descriptor that cannot change while the process runs.
+var plainNameCache sync.Map
+
+func resolvePhysicalPlainName(plain string) (quoted string, err error) {
 	td, err := TableDesc(TableNameMeta)
 	if err != nil {
 		return
@@ -245,12 +264,12 @@ func PhysicalPlainName(plain string) (quoted string, err error) {
 	ir := common.NewIntermediateTableRepresentation()
 	err = ir.LoadFromTable(&td, tech)
 	if err != nil {
-		err = eh.Errorf("ladingschema: load table ir: %w", err)
+		err = eh.Errorf("load table ir: %w", err)
 		return
 	}
 	conv, err := ddl.NewHumanReadableNamingConvention(":")
 	if err != nil {
-		err = eh.Errorf("ladingschema: naming convention: %w", err)
+		err = eh.Errorf("naming convention: %w", err)
 		return
 	}
 	var matches []string
@@ -264,7 +283,7 @@ func PhysicalPlainName(plain string) (quoted string, err error) {
 		var phys []common.PhysicalColumnDesc
 		phys, err = conv.MapIntermediateToPhysicalColumns(cc, *cp, nil, TableRowConfig)
 		if err != nil {
-			err = eh.Errorf("ladingschema: render physical columns: %w", err)
+			err = eh.Errorf("render physical columns: %w", err)
 			return
 		}
 		for i, name := range cp.Names {
@@ -279,10 +298,10 @@ func PhysicalPlainName(plain string) (quoted string, err error) {
 		quoted = matches[0]
 	case 0:
 		err = eb.Build().Str("plain", plain).
-			Errorf("ladingschema: no plain column named %q in the facts shape", plain)
+			Errorf("no plain column named %q in the facts shape", plain)
 	default:
 		err = eb.Build().Str("plain", plain).Str("matches", strings.Join(matches, ", ")).
-			Errorf("ladingschema: plain %q resolves to %d physical columns", plain, len(matches))
+			Errorf("plain %q resolves to %d physical columns", plain, len(matches))
 	}
 	return
 }
@@ -299,3 +318,70 @@ func mustPhysicalPlainName(plain string) string {
 	}
 	return quoted
 }
+
+// The backbone columns raw SQL has to name, resolved once rather than per
+// call. Every read path in the subsystem spells them from here, so the SQL
+// surface and the `io/fs` adapter cannot drift on which physical column a
+// predicate is over.
+var (
+	ColID         = mustPhysicalPlainName("id")
+	ColNaturalKey = mustPhysicalPlainName("naturalKey")
+	ColTs         = mustPhysicalPlainName("ts")
+	ColExpiresAt  = mustPhysicalPlainName("expiresAt")
+)
+
+// NotExpired is the logical expiry cutoff of §SD4, on the same column the TTL
+// names.
+//
+// It is not belt-and-braces over the TTL: `TTL` reclaims space only at merge
+// time and `ttl_only_drop_parts = 1` leaves a partly expired part alone until
+// an explicit OPTIMIZE FINAL, so a row routinely outlives its expiry on disk.
+// A read path that omits this returns rows whose siblings a merge has already
+// taken — and, worse, keeps serving a snapshot the rest of the store has
+// stopped offering. Every read path ANDs it: the macros, the adapter, and
+// therefore the SFTP head.
+var NotExpired = ColExpiresAt + " > now64(9, 'UTC')"
+
+// QuoteLiteral renders a ClickHouse single-quoted string literal, and
+// UnquoteLiteral undoes it.
+//
+// They live here, in the leaf both the SQL surface and the `io/fs` adapter
+// already import, because they are a pair: a private copy in each package let
+// the two drift, and an unquote that did not undo everything the quote escapes
+// turned a round-trip into a different value. A block's natural key carries a
+// literal NUL, so the NUL escape is not decorative.
+//
+// The doubled-quote form is accepted on the way back because ClickHouse emits
+// and accepts it too, and an argument this package did not write may use it.
+func QuoteLiteral(s string) string {
+	return "'" + literalEscaper.Replace(s) + "'"
+}
+
+func UnquoteLiteral(s string) string {
+	return literalUnescaper.Replace(s)
+}
+
+var literalEscaper = strings.NewReplacer(
+	`\`, `\\`,
+	`'`, `\'`,
+	"\x00", `\0`,
+	"\b", `\b`,
+	"\f", `\f`,
+	"\n", `\n`,
+	"\r", `\r`,
+	"\t", `\t`,
+)
+
+// The inverse, longest-escape-first so `\\'` reads as a backslash then a
+// quote rather than as an escaped quote.
+var literalUnescaper = strings.NewReplacer(
+	`\\`, `\`,
+	`\'`, `'`,
+	`\0`, "\x00",
+	`\b`, "\b",
+	`\f`, "\f",
+	`\n`, "\n",
+	`\r`, "\r",
+	`\t`, "\t",
+	`''`, `'`,
+)

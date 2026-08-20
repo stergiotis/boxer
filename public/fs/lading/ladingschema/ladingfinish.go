@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 )
 
 // FinishStatements is everything a CREATE TABLE cannot express, as one
@@ -95,6 +97,50 @@ func FinishStatements(p Profile) (stmts []string, err error) {
 	return
 }
 
+// CreateTableStatements renders the CREATE TABLE for `fsmeta` and `fsdata`,
+// under the given profile.
+//
+// Provisioning composes these rather than calling the generated stores'
+// EnsureTable, and the reason is the profile: EnsureTable runs the DDL that
+// was rendered at code-generation time, so its `index_granularity` is frozen
+// to whatever profile the gen-test passed and no argument can move it. A
+// store asking for [ProfileFleet] would have got fsmeta at 1024 and fsdata at
+// 1 — the corpus profile's granularities, one mark per block row — with no
+// error to say so.
+//
+// The columns are identical either way: both paths render from [TableDesc],
+// which is the same descriptor the store decodes, and this is the same
+// composition `fssnap` has always used, and lading.Verify is what checks the
+// result against the decode.
+func CreateTableStatements(p Profile) (stmts []string, err error) {
+	// The database prelude the generated EnsureTable emits for a qualified
+	// table reference. Dropping it with EnsureTable would have left the first
+	// provisioning of a fresh server creating a table in a database that is
+	// not there.
+	stmts = []string{"CREATE DATABASE IF NOT EXISTS " + DatabaseName}
+	for _, t := range []struct {
+		name string
+		opts *clickhouse.TableOptions
+	}{
+		{TableNameMeta, MetaTableOptions(p)},
+		{TableNameData, DataTableOptions(p)},
+	} {
+		var td common.TableDesc
+		td, err = TableDesc(t.name)
+		if err != nil {
+			return
+		}
+		var sql string
+		sql, err = composeCreateTable(DatabaseName+"."+t.name, td, t.opts)
+		if err != nil {
+			err = eh.Errorf("compose %s: %w", t.name, err)
+			return
+		}
+		stmts = append(stmts, sql)
+	}
+	return
+}
+
 // composeSnapTable renders `fssnap`'s CREATE TABLE.
 //
 // It cannot come from a generated store's EnsureTable: nothing writes to
@@ -109,7 +155,7 @@ func composeSnapTable(p Profile) (sql string, err error) {
 	}
 	sql, err = composeCreateTable(DatabaseName+"."+TableNameSnap, td, SnapTableOptions(p))
 	if err != nil {
-		err = eh.Errorf("ladingschema: compose %s: %w", TableNameSnap, err)
+		err = eh.Errorf("compose %s: %w", TableNameSnap, err)
 	}
 	return
 }
