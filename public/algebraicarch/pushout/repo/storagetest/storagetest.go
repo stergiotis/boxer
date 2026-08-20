@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"testing"
 
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 )
 
@@ -151,7 +151,7 @@ func CheckSnapshot(ctx context.Context, open OpenFunc, location string) (err err
 	if _, ok, err2 := st.LoadSnapshot(ctx); err2 != nil || ok {
 		return fmt.Errorf("fresh snapshot = ok:%v err:%v (want absent)", ok, err2)
 	}
-	snapA := repo.Snapshot{Applied: []t.PatchHash{h(1), h(2)}, Graggle: []byte("GRG1-bytes-A")}
+	snapA := repo.Snapshot{Applied: []t.PatchHash{h(1), h(2)}, PushoutGraph: []byte("GRG1-bytes-A")}
 	if err = st.SaveSnapshot(ctx, snapA); err != nil {
 		return fmt.Errorf("save: %w", err)
 	}
@@ -159,15 +159,15 @@ func CheckSnapshot(ctx context.Context, open OpenFunc, location string) (err err
 	if err != nil || !ok {
 		return fmt.Errorf("load: ok:%v err:%v", ok, err)
 	}
-	if len(got.Applied) != 2 || got.Applied[0] != h(1) || got.Applied[1] != h(2) || !bytes.Equal(got.Graggle, snapA.Graggle) {
+	if len(got.Applied) != 2 || got.Applied[0] != h(1) || got.Applied[1] != h(2) || !bytes.Equal(got.PushoutGraph, snapA.PushoutGraph) {
 		return fmt.Errorf("snapshot round-trip mismatch: %+v", got)
 	}
-	snapB := repo.Snapshot{Applied: nil, Graggle: []byte("GRG1-bytes-B")}
+	snapB := repo.Snapshot{Applied: nil, PushoutGraph: []byte("GRG1-bytes-B")}
 	if err = st.SaveSnapshot(ctx, snapB); err != nil {
 		return fmt.Errorf("re-save: %w", err)
 	}
 	got, ok, err = st.LoadSnapshot(ctx)
-	if err != nil || !ok || len(got.Applied) != 0 || !bytes.Equal(got.Graggle, snapB.Graggle) {
+	if err != nil || !ok || len(got.Applied) != 0 || !bytes.Equal(got.PushoutGraph, snapB.PushoutGraph) {
 		return fmt.Errorf("snapshot replace mismatch: %+v ok:%v err:%v", got, ok, err)
 	}
 	return
@@ -232,7 +232,7 @@ func CheckReopenDurability(ctx context.Context, open OpenFunc, location string) 
 	if err = st.AppendApplied(ctx, h(7)); err != nil {
 		return err
 	}
-	if err = st.SaveSnapshot(ctx, repo.Snapshot{Applied: []t.PatchHash{h(7)}, Graggle: []byte("G")}); err != nil {
+	if err = st.SaveSnapshot(ctx, repo.Snapshot{Applied: []t.PatchHash{h(7)}, PushoutGraph: []byte("G")}); err != nil {
 		return err
 	}
 	if err = st.SaveRetention(ctx, []repo.RetentionEntry{{Node: nid(7, 3), UnixNano: 999}}); err != nil {

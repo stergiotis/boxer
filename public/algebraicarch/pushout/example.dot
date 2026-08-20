@@ -1,4 +1,4 @@
-digraph graggle {
+digraph pushoutgraph {
   rankdir=TB;
   node [fontname="monospace", fontsize=10];
   edge [fontname="monospace", fontsize=8];

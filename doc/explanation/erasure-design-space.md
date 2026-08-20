@@ -28,7 +28,7 @@ event logs).
 Every architecture in this space splits state into:
 
 - **Store 1 — the propagated corpus.** Content-addressed, immutable,
-  identity-bearing (here: patch envelopes and the graggle state derived
+  identity-bearing (here: patch envelopes and the pushoutgraph state derived
   from them). Mutating a record in place breaks the identity of the
   record and of everything downstream that hashed it. After propagation,
   copies exist on systems the controller does not control; no operation

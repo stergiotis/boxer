@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo/storagetest"
 )

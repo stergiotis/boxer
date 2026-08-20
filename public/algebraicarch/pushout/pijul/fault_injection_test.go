@@ -4,7 +4,7 @@
 // changes/ directory fails envelope creation; a read-only applied.txt
 // fails the log append AFTER the envelope write — exercising both halves
 // of the write sequence. In each case the verb must return an error,
-// the observable state, applied log, and graggle invariants must be
+// the observable state, applied log, and pushoutgraph invariants must be
 // unchanged, and the verb must succeed once the fault is lifted.
 package pijul
 

@@ -25,7 +25,7 @@ var allowedIterMethodNames = map[string]struct{}{
 //
 // The standard's quartet (All/Values/Keys/Backward) describes the
 // single-collection-per-receiver case. Types that legitimately expose
-// multiple distinct iterations (e.g. graggle's LiveChildren,
+// multiple distinct iterations (e.g. pushoutgraph's LiveChildren,
 // ForwardEdges, DeletedPartitionMembers) use domain-describing names
 // and are out of scope — this rule only fires when a receiver has
 // exactly one iter-returning method whose name isn't in the quartet.

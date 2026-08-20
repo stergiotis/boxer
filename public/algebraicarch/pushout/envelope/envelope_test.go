@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/store"
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/store"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
 
 func testRegistry(tt *testing.T) *Registry {
@@ -79,7 +79,7 @@ func TestEnvelope_RoundTripByteIdentical(tt *testing.T) {
 	}
 }
 
-// The decoded patch, applied to a fresh graggle, must reproduce the same
+// The decoded patch, applied to a fresh pushoutgraph, must reproduce the same
 // rendered output as the original — semantic round-trip on top of the
 // byte-level one.
 func TestEnvelope_DecodedPatchAppliesEquivalently(tt *testing.T) {

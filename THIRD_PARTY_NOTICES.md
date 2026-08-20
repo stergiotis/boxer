@@ -338,7 +338,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ### 1.5 Joe Neeman -- ojo / graggle patch-theory design (MIT)
 
-- Files: `public/algebraicarch/pushout/graggle/` (entire subtree).
+- Files: `public/algebraicarch/pushout/pushoutgraph/` (entire subtree).
 - Origin (source): <https://github.com/jneem/ojo>.
 - Pinned upstream (source): `d24088016cff43ab2d03166d27539a06e96081a6`
   (HEAD as of 2026-05-04). Wayback snapshot:
@@ -358,9 +358,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   posts have no declared licence — they are cited, not redistributed;
   the upstream repo SHA and the Wayback snapshots above provide
   archival pointers without re-hosting.
-- Per-package NOTICE: [`public/algebraicarch/pushout/graggle/NOTICE`](public/algebraicarch/pushout/graggle/NOTICE).
-- Scope: the `graggle` subtree borrows ojo's conceptual model — the
-  *graggle* (graph-of-lines) data structure, pseudo-edge bookkeeping
+- Per-package NOTICE: [`public/algebraicarch/pushout/pushoutgraph/NOTICE`](public/algebraicarch/pushout/pushoutgraph/NOTICE).
+- Scope: the `pushoutgraph` subtree borrows ojo's conceptual model — the
+  *graggle* (graph-of-lines) data structure, which boxer names
+  `PushoutGraph`; pseudo-edge bookkeeping
   over deleted regions, the patch-with-placeholder-hashes construction
   scheme, and the apply / unapply / reapply round-trip test pattern.
   The Go code is an independent re-implementation guided by Joe

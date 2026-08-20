@@ -63,11 +63,11 @@ func loadPushoutSchema(manip common.TableManipulatorFluidI) {
 
 	u64Arr := canonicaltypes.PromoteScalarPrim(ctabb.U64, canonicaltypes.ScalarModifierHomogenousArray)
 	i64Arr := canonicaltypes.PromoteScalarPrim(ctabb.I64, canonicaltypes.ScalarModifierHomogenousArray)
-	section("envBlob", ctabb.Y)      // Envelope.Framed (PXE1 bytes)
-	section("logHash", ctabb.S)      // LogEntry.Hash (hex, high-card)
-	section("snapGraggle", ctabb.Y)  // Snapshot.Graggle (opaque)
-	section("snapApplied", ctabb.Sh) // Snapshot.Applied (hex list, ordered)
-	section("retHash", ctabb.Sh)     // Retention node patch hashes
-	section("retIndex", u64Arr)      // Retention node indices
-	section("retTime", i64Arr)       // Retention first-observed-deleted nanos
+	section("envBlob", ctabb.Y)          // Envelope.Framed (PXE1 bytes)
+	section("logHash", ctabb.S)          // LogEntry.Hash (hex, high-card)
+	section("snapPushoutGraph", ctabb.Y) // Snapshot.PushoutGraph (opaque)
+	section("snapApplied", ctabb.Sh)     // Snapshot.Applied (hex list, ordered)
+	section("retHash", ctabb.Sh)         // Retention node patch hashes
+	section("retIndex", u64Arr)          // Retention node indices
+	section("retTime", i64Arr)           // Retention first-observed-deleted nanos
 }

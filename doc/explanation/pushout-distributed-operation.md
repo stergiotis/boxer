@@ -59,7 +59,7 @@ after what it actually reads.
 
 Patches with no dependency path between them are causally independent
 by construction, and the pushout property makes them commute: applying
-them in either order yields the identical graggle. Commutation is not
+them in either order yields the identical pushoutgraph. Commutation is not
 a threat to causality; it is what the *absence* of a causal constraint
 looks like, made explicit. Consequently peers never need to agree on
 an order. The applied log is each repo's local linearization of the
@@ -111,7 +111,7 @@ skew:
 
 A **version** is a set of patch hashes that is downward-closed under
 dependencies. Every applied log is one, by the dependency gate. Since
-the graggle state is a function of the set (order-free, by
+the pushoutgraph state is a function of the set (order-free, by
 commutation), a version identifies a state.
 
 "More advanced" is set inclusion — a partial order with four outcomes,

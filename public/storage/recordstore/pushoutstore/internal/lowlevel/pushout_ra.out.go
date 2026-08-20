@@ -151,7 +151,7 @@ func NewMembershipPackPushoutTableShared1LogHash() (inst *MembershipPackPushoutT
 	return
 }
 
-func NewMembershipPackPushoutTableShared1SnapGraggle() (inst *MembershipPackPushoutTableShared1) {
+func NewMembershipPackPushoutTableShared1SnapPushoutGraph() (inst *MembershipPackPushoutTableShared1) {
 	inst = &MembershipPackPushoutTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
@@ -539,7 +539,7 @@ type ReadAccessPushoutTableTaggedSnapAppliedAttributes struct {
 	ColumnIndexHomogenousArray uint32
 }
 
-type ReadAccessPushoutTableTaggedSnapGraggleAttributes struct {
+type ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
 	ValueValueElements *array.Binary
@@ -826,34 +826,34 @@ func (inst *ReadAccessPushoutTableTaggedSnapAppliedAttributes) SetColumnIndices(
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedSnapAppliedAttributes)(nil)
 
-func NewReadAccessPushoutTableTaggedSnapGraggleAttributes() (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) {
-	inst = &ReadAccessPushoutTableTaggedSnapGraggleAttributes{}
+func NewReadAccessPushoutTableTaggedSnapPushoutGraphAttributes() (inst *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes) {
+	inst = &ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes{}
 	inst.ColumnIndexValue = 23
 	return
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
 	}
 	return
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessPushoutTableTaggedSnapGraggleAttributes.ColumnIndexValue",
+		"ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes.ColumnIndexValue",
 	}
 	return
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
 
 	rest = indices[1:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedSnapGraggleAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes)(nil)
 
 ///////////////////////////////////////////////////////////////////
 // code generator
@@ -914,7 +914,7 @@ func (inst *ReadAccessPushoutTableTaggedSnapAppliedAttributes) Reset() {
 	}
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) Reset() {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
 }
@@ -988,9 +988,9 @@ func (inst *ReadAccessPushoutTableTaggedSnapAppliedAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessPushoutTableTaggedSnapGraggleAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes)(nil)
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) Release() {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
 }
@@ -1063,7 +1063,7 @@ func (inst *ReadAccessPushoutTableTaggedSnapAppliedAttributes) Len() (nEntities 
 	return
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) Len() (nEntities int) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
@@ -1163,7 +1163,7 @@ func (inst *ReadAccessPushoutTableTaggedSnapAppliedAttributes) LoadFromRecord(re
 	return
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.BINARY, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewBinaryData)
 	if err != nil {
 		return
@@ -1187,7 +1187,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHashAttributes) GetAttrValueValue(ent
 	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
 	return
 }
-func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue []byte) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue []byte) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
@@ -1355,7 +1355,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHashAttributes) GetNumberOfAttributes
 	nAttributes = e - b
 	return
 }
-func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
 	nAttributes = e - b
 	return
@@ -1396,12 +1396,12 @@ type ReadAccessPushoutTableTaggedLogHash struct {
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedLogHash)(nil)
 
-type ReadAccessPushoutTableTaggedSnapGraggle struct {
-	Attributes  *ReadAccessPushoutTableTaggedSnapGraggleAttributes
+type ReadAccessPushoutTableTaggedSnapPushoutGraph struct {
+	Attributes  *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes
 	Memberships *MembershipPackPushoutTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedSnapGraggle)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedSnapPushoutGraph)(nil)
 
 type ReadAccessPushoutTableTaggedSnapApplied struct {
 	Attributes  *ReadAccessPushoutTableTaggedSnapAppliedAttributes
@@ -1445,10 +1445,10 @@ func NewReadAccessPushoutTableTaggedLogHash() (inst *ReadAccessPushoutTableTagge
 	return
 }
 
-func NewReadAccessPushoutTableTaggedSnapGraggle() (inst *ReadAccessPushoutTableTaggedSnapGraggle) {
-	inst = &ReadAccessPushoutTableTaggedSnapGraggle{}
-	inst.Attributes = NewReadAccessPushoutTableTaggedSnapGraggleAttributes()
-	inst.Memberships = NewMembershipPackPushoutTableShared1SnapGraggle()
+func NewReadAccessPushoutTableTaggedSnapPushoutGraph() (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) {
+	inst = &ReadAccessPushoutTableTaggedSnapPushoutGraph{}
+	inst.Attributes = NewReadAccessPushoutTableTaggedSnapPushoutGraphAttributes()
+	inst.Memberships = NewMembershipPackPushoutTableShared1SnapPushoutGraph()
 	return
 }
 
@@ -1494,7 +1494,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) SetColumnIndices(indices []uint
 	return
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
@@ -1541,7 +1541,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) GetColumnIndices() (columnIndic
 	return
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
@@ -1583,7 +1583,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) GetColumnIndexFieldNames() (fie
 	return
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
@@ -1623,7 +1623,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) Release() {
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) Release() {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
@@ -1676,7 +1676,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) LoadFromRecord(rec runtime.Reco
 	return
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -1756,7 +1756,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) Len() (nEntities int) {
 	return
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) Len() (nEntities int) {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
@@ -1789,7 +1789,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) GetAttributes() *ReadAccessPush
 	return inst.Attributes
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) GetAttributes() *ReadAccessPushoutTableTaggedSnapGraggleAttributes {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) GetAttributes() *ReadAccessPushoutTableTaggedSnapPushoutGraphAttributes {
 	return inst.Attributes
 }
 
@@ -1817,7 +1817,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) GetMemberships() *MembershipPac
 	return inst.Memberships
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) GetMemberships() *MembershipPackPushoutTableShared1 {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) GetMemberships() *MembershipPackPushoutTableShared1 {
 	return inst.Memberships
 }
 
@@ -1849,11 +1849,11 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) GetSectionName() naming.Stylabl
 
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessPushoutTableTaggedLogHash)(nil)
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) GetSectionName() naming.StylableName {
-	return "snap-graggle"
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) GetSectionName() naming.StylableName {
+	return "snap-pushout-graph"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessPushoutTableTaggedSnapGraggle)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessPushoutTableTaggedSnapPushoutGraph)(nil)
 
 func (inst *ReadAccessPushoutTableTaggedSnapApplied) GetSectionName() naming.StylableName {
 	return "snap-applied"
@@ -1887,7 +1887,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) GetSectionUseAspects() useaspec
 	return ""
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
@@ -1915,7 +1915,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) GetSectionStreamingGroup() nami
 	return "data"
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
@@ -1943,7 +1943,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) GetSectionCoSectionGroup() nami
 	return ""
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
@@ -1971,7 +1971,7 @@ func (inst *ReadAccessPushoutTableTaggedLogHash) GetSectionMembershipSpec() comm
 	return 0b111001
 }
 
-func (inst *ReadAccessPushoutTableTaggedSnapGraggle) GetSectionMembershipSpec() common.MembershipSpecE {
+func (inst *ReadAccessPushoutTableTaggedSnapPushoutGraph) GetSectionMembershipSpec() common.MembershipSpecE {
 	return 0b111001
 }
 
@@ -1997,16 +1997,16 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) GetSectionMembershipSpec() comm
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2424
 
 type ReadAccessPushoutTable struct {
-	EntityId        *ReadAccessPushoutTablePlainEntityIdAttributes
-	EntityTimestamp *ReadAccessPushoutTablePlainEntityTimestampAttributes
-	EntityLifecycle *ReadAccessPushoutTablePlainEntityLifecycleAttributes
-	EnvBlob         *ReadAccessPushoutTableTaggedEnvBlob
-	LogHash         *ReadAccessPushoutTableTaggedLogHash
-	SnapGraggle     *ReadAccessPushoutTableTaggedSnapGraggle
-	SnapApplied     *ReadAccessPushoutTableTaggedSnapApplied
-	RetHash         *ReadAccessPushoutTableTaggedRetHash
-	RetIndex        *ReadAccessPushoutTableTaggedRetIndex
-	RetTime         *ReadAccessPushoutTableTaggedRetTime
+	EntityId         *ReadAccessPushoutTablePlainEntityIdAttributes
+	EntityTimestamp  *ReadAccessPushoutTablePlainEntityTimestampAttributes
+	EntityLifecycle  *ReadAccessPushoutTablePlainEntityLifecycleAttributes
+	EnvBlob          *ReadAccessPushoutTableTaggedEnvBlob
+	LogHash          *ReadAccessPushoutTableTaggedLogHash
+	SnapPushoutGraph *ReadAccessPushoutTableTaggedSnapPushoutGraph
+	SnapApplied      *ReadAccessPushoutTableTaggedSnapApplied
+	RetHash          *ReadAccessPushoutTableTaggedRetHash
+	RetIndex         *ReadAccessPushoutTableTaggedRetIndex
+	RetTime          *ReadAccessPushoutTableTaggedRetTime
 }
 
 func NewReadAccessPushoutTable() (inst *ReadAccessPushoutTable) {
@@ -2016,7 +2016,7 @@ func NewReadAccessPushoutTable() (inst *ReadAccessPushoutTable) {
 	inst.EntityLifecycle = NewReadAccessPushoutTablePlainEntityLifecycleAttributes()
 	inst.EnvBlob = NewReadAccessPushoutTableTaggedEnvBlob()
 	inst.LogHash = NewReadAccessPushoutTableTaggedLogHash()
-	inst.SnapGraggle = NewReadAccessPushoutTableTaggedSnapGraggle()
+	inst.SnapPushoutGraph = NewReadAccessPushoutTableTaggedSnapPushoutGraph()
 	inst.SnapApplied = NewReadAccessPushoutTableTaggedSnapApplied()
 	inst.RetHash = NewReadAccessPushoutTableTaggedRetHash()
 	inst.RetIndex = NewReadAccessPushoutTableTaggedRetIndex()
@@ -2030,7 +2030,7 @@ func (inst *ReadAccessPushoutTable) Release() {
 	runtime.ReleaseIfNotNil(inst.EntityLifecycle)
 	runtime.ReleaseIfNotNil(inst.EnvBlob)
 	runtime.ReleaseIfNotNil(inst.LogHash)
-	runtime.ReleaseIfNotNil(inst.SnapGraggle)
+	runtime.ReleaseIfNotNil(inst.SnapPushoutGraph)
 	runtime.ReleaseIfNotNil(inst.SnapApplied)
 	runtime.ReleaseIfNotNil(inst.RetHash)
 	runtime.ReleaseIfNotNil(inst.RetIndex)
@@ -2073,10 +2073,10 @@ func (inst *ReadAccessPushoutTable) LoadFromRecord(rec runtime.RecordI) (err err
 			return
 		}
 	}
-	if inst.SnapGraggle != nil {
-		err = inst.SnapGraggle.LoadFromRecord(rec)
+	if inst.SnapPushoutGraph != nil {
+		err = inst.SnapPushoutGraph.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "pushout-table").Str("fieldName", "SnapGraggle").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "pushout-table").Str("fieldName", "SnapPushoutGraph").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
@@ -2128,8 +2128,8 @@ func (inst *ReadAccessPushoutTable) SetColumnIndices(indices []uint32) (rest []u
 	if inst.LogHash != nil {
 		rest = inst.LogHash.SetColumnIndices(rest)
 	}
-	if inst.SnapGraggle != nil {
-		rest = inst.SnapGraggle.SetColumnIndices(rest)
+	if inst.SnapPushoutGraph != nil {
+		rest = inst.SnapPushoutGraph.SetColumnIndices(rest)
 	}
 	if inst.SnapApplied != nil {
 		rest = inst.SnapApplied.SetColumnIndices(rest)
@@ -2162,8 +2162,8 @@ func (inst *ReadAccessPushoutTable) GetColumnIndices() (columnIndices []uint32) 
 	if inst.LogHash != nil {
 		columnIndices = slices.Concat(columnIndices, inst.LogHash.GetColumnIndices())
 	}
-	if inst.SnapGraggle != nil {
-		columnIndices = slices.Concat(columnIndices, inst.SnapGraggle.GetColumnIndices())
+	if inst.SnapPushoutGraph != nil {
+		columnIndices = slices.Concat(columnIndices, inst.SnapPushoutGraph.GetColumnIndices())
 	}
 	if inst.SnapApplied != nil {
 		columnIndices = slices.Concat(columnIndices, inst.SnapApplied.GetColumnIndices())
@@ -2196,8 +2196,8 @@ func (inst *ReadAccessPushoutTable) GetColumnIndexFieldNames() (fieldNames []str
 	if inst.LogHash != nil {
 		fieldNames = slices.Concat(fieldNames, inst.LogHash.GetColumnIndexFieldNames())
 	}
-	if inst.SnapGraggle != nil {
-		fieldNames = slices.Concat(fieldNames, inst.SnapGraggle.GetColumnIndexFieldNames())
+	if inst.SnapPushoutGraph != nil {
+		fieldNames = slices.Concat(fieldNames, inst.SnapPushoutGraph.GetColumnIndexFieldNames())
 	}
 	if inst.SnapApplied != nil {
 		fieldNames = slices.Concat(fieldNames, inst.SnapApplied.GetColumnIndexFieldNames())

@@ -14,7 +14,7 @@ import (
 
 const (
 	kindPushoutApplied uint64 = 1
-	kindPushoutGraggle uint64 = 2
+	kindPushoutGraph   uint64 = 2
 )
 
 // snapshotSnapAppliedAttrI is the InAttr-side view of the snapApplied section. P-variants only —
@@ -33,17 +33,17 @@ type snapshotSnapAppliedSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// snapshotSnapGraggleAttrI is the InAttr-side view of the snapGraggle section. P-variants only —
+// snapshotSnapPushoutGraphAttrI is the InAttr-side view of the snapPushoutGraph section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type snapshotSnapGraggleAttrI interface {
+type snapshotSnapPushoutGraphAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// snapshotSnapGraggleSecI is the Section-side view: opens an attribute and closes
+// snapshotSnapPushoutGraphSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type snapshotSnapGraggleSecI[Attr any, Ent any] interface {
+type snapshotSnapPushoutGraphSecI[Attr any, Ent any] interface {
 	BeginAttribute(value []byte) Attr
 	EndSection() Ent
 }
@@ -58,12 +58,12 @@ type snapshotSnapGraggleSecI[Attr any, Ent any] interface {
 type snapshotEntityI[
 	SnapAppliedAttr snapshotSnapAppliedAttrI,
 	SnapAppliedSec snapshotSnapAppliedSecI[SnapAppliedAttr, Ent],
-	SnapGraggleAttr snapshotSnapGraggleAttrI,
-	SnapGraggleSec snapshotSnapGraggleSecI[SnapGraggleAttr, Ent],
+	SnapPushoutGraphAttr snapshotSnapPushoutGraphAttrI,
+	SnapPushoutGraphSec snapshotSnapPushoutGraphSecI[SnapPushoutGraphAttr, Ent],
 	Ent any,
 ] interface {
 	GetSectionSnapApplied() SnapAppliedSec
-	GetSectionSnapGraggle() SnapGraggleSec
+	GetSectionSnapPushoutGraph() SnapPushoutGraphSec
 }
 
 // snapshotEmitSectionSnapApplied writes this kind's snapApplied attributes into an
@@ -86,18 +86,18 @@ func snapshotEmitSectionSnapApplied[
 	return
 }
 
-// snapshotEmitSectionSnapGraggle writes this kind's snapGraggle attributes into an
+// snapshotEmitSectionSnapPushoutGraph writes this kind's snapPushoutGraph attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func snapshotEmitSectionSnapGraggle[
-	SnapGraggleAttr snapshotSnapGraggleAttrI,
-	SnapGraggleSec snapshotSnapGraggleSecI[SnapGraggleAttr, Ent],
+func snapshotEmitSectionSnapPushoutGraph[
+	SnapPushoutGraphAttr snapshotSnapPushoutGraphAttrI,
+	SnapPushoutGraphSec snapshotSnapPushoutGraphSecI[SnapPushoutGraphAttr, Ent],
 	Ent any,
-](snapGraggleSec SnapGraggleSec, row Snapshot) (err error) {
-	snapGraggleSecAttr_Graggle := snapGraggleSec.BeginAttribute(row.Graggle)
-	snapGraggleSecAttr_Graggle.AddMembershipLowCardRefP(kindPushoutGraggle)
-	snapGraggleSecAttr_Graggle.EndAttributeP()
+](snapPushoutGraphSec SnapPushoutGraphSec, row Snapshot) (err error) {
+	snapPushoutGraphSecAttr_PushoutGraph := snapPushoutGraphSec.BeginAttribute(row.PushoutGraph)
+	snapPushoutGraphSecAttr_PushoutGraph.AddMembershipLowCardRefP(kindPushoutGraph)
+	snapPushoutGraphSecAttr_PushoutGraph.EndAttributeP()
 	return
 }
 
@@ -107,12 +107,12 @@ func snapshotEmitSectionSnapGraggle[
 func snapshotAddSections[
 	SnapAppliedAttr snapshotSnapAppliedAttrI,
 	SnapAppliedSec snapshotSnapAppliedSecI[SnapAppliedAttr, Ent],
-	SnapGraggleAttr snapshotSnapGraggleAttrI,
-	SnapGraggleSec snapshotSnapGraggleSecI[SnapGraggleAttr, Ent],
+	SnapPushoutGraphAttr snapshotSnapPushoutGraphAttrI,
+	SnapPushoutGraphSec snapshotSnapPushoutGraphSecI[SnapPushoutGraphAttr, Ent],
 	Ent any,
 	DML snapshotEntityI[
 		SnapAppliedAttr, SnapAppliedSec,
-		SnapGraggleAttr, SnapGraggleSec,
+		SnapPushoutGraphAttr, SnapPushoutGraphSec,
 		Ent,
 	],
 ](dml DML, row Snapshot) (err error) {
@@ -123,13 +123,13 @@ func snapshotAddSections[
 		return
 	}
 	snapAppliedSec.EndSection()
-	// --- snapGraggle. ---
-	snapGraggleSec := dml.GetSectionSnapGraggle()
-	err = snapshotEmitSectionSnapGraggle(snapGraggleSec, row)
+	// --- snapPushoutGraph. ---
+	snapPushoutGraphSec := dml.GetSectionSnapPushoutGraph()
+	err = snapshotEmitSectionSnapPushoutGraph(snapPushoutGraphSec, row)
 	if err != nil {
 		return
 	}
-	snapGraggleSec.EndSection()
+	snapPushoutGraphSec.EndSection()
 	return
 }
 
@@ -144,14 +144,14 @@ type snapshotSnapAppliedMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// snapshotSnapGraggleAttrsReadI is the Attributes-side view of the snapGraggle section.
-type snapshotSnapGraggleAttrsReadI interface {
+// snapshotSnapPushoutGraphAttrsReadI is the Attributes-side view of the snapPushoutGraph section.
+type snapshotSnapPushoutGraphAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) []byte
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// snapshotSnapGraggleMembsReadI is the Memberships-side view of the snapGraggle section.
-type snapshotSnapGraggleMembsReadI interface {
+// snapshotSnapPushoutGraphMembsReadI is the Memberships-side view of the snapPushoutGraph section.
+type snapshotSnapPushoutGraphMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
@@ -166,14 +166,14 @@ type snapshotSnapGraggleMembsReadI interface {
 func snapshotReadRow[
 	SnapAppliedAttrs snapshotSnapAppliedAttrsReadI,
 	SnapAppliedMembs snapshotSnapAppliedMembsReadI,
-	SnapGraggleAttrs snapshotSnapGraggleAttrsReadI,
-	SnapGraggleMembs snapshotSnapGraggleMembsReadI,
+	SnapPushoutGraphAttrs snapshotSnapPushoutGraphAttrsReadI,
+	SnapPushoutGraphMembs snapshotSnapPushoutGraphMembsReadI,
 ](
 	i int,
 	snapAppliedAttrs SnapAppliedAttrs,
 	snapAppliedMembs SnapAppliedMembs,
-	snapGraggleAttrs SnapGraggleAttrs,
-	snapGraggleMembs SnapGraggleMembs,
+	snapPushoutGraphAttrs SnapPushoutGraphAttrs,
+	snapPushoutGraphMembs SnapPushoutGraphMembs,
 ) (row Snapshot, present bool, err error) {
 	// --- snapApplied. ---
 	var snapAppliedAppliedSlice []string
@@ -202,32 +202,32 @@ func snapshotReadRow[
 		row.Applied = snapAppliedAppliedSlice
 		present = true
 	}
-	// --- snapGraggle. ---
-	var snapGraggleGraggleVal []byte
-	var snapGraggleGraggleCount int
-	var snapGraggleGraggleLastAttr int64
-	nsnapGraggle := snapGraggleAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nsnapGraggle; attrJ++ {
-		for membID := range snapGraggleMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+	// --- snapPushoutGraph. ---
+	var snapPushoutGraphPushoutGraphVal []byte
+	var snapPushoutGraphPushoutGraphCount int
+	var snapPushoutGraphPushoutGraphLastAttr int64
+	nsnapPushoutGraph := snapPushoutGraphAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsnapPushoutGraph; attrJ++ {
+		for membID := range snapPushoutGraphMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindPushoutGraggle:
-				if snapGraggleGraggleLastAttr != attrJ+1 {
-					snapGraggleGraggleLastAttr = attrJ + 1
-					snapGraggleGraggleCount++
+			case kindPushoutGraph:
+				if snapPushoutGraphPushoutGraphLastAttr != attrJ+1 {
+					snapPushoutGraphPushoutGraphLastAttr = attrJ + 1
+					snapPushoutGraphPushoutGraphCount++
 				}
-				val := snapGraggleAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				val := snapPushoutGraphAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				cp := make([]byte, len(val))
 				copy(cp, val)
-				snapGraggleGraggleVal = cp
+				snapPushoutGraphPushoutGraphVal = cp
 			}
 		}
 	}
-	if snapGraggleGraggleCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "snapGraggle").Str("membership", "pushoutGraggle").Int("got", snapGraggleGraggleCount).Errorf("slot snapGraggle@pushoutGraggle (field Graggle) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", snapGraggleGraggleCount)
+	if snapPushoutGraphPushoutGraphCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "snapPushoutGraph").Str("membership", "pushoutGraph").Int("got", snapPushoutGraphPushoutGraphCount).Errorf("slot snapPushoutGraph@pushoutGraph (field PushoutGraph) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", snapPushoutGraphPushoutGraphCount)
 		return
 	}
-	if snapGraggleGraggleCount == 1 {
-		row.Graggle = snapGraggleGraggleVal
+	if snapPushoutGraphPushoutGraphCount == 1 {
+		row.PushoutGraph = snapPushoutGraphPushoutGraphVal
 		present = true
 	}
 	return

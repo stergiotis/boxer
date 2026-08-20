@@ -76,7 +76,7 @@ module crash_recovery {
   var envStore: Set[Patch]      // PutEnvelope'd, content-addressed; KEPT across unrecord
   var appliedLog: List[Patch]   // AppendApplied / ReplaceApplied, apply order
   var snapApplied: List[Patch]  // snapshot's Applied list
-  var snapState: Set[Patch]     // snapshot's graggle state (abstracted to its applied set)
+  var snapState: Set[Patch]     // snapshot's pushoutgraph state (abstracted to its applied set)
   var hasSnap: bool             // a snapshot exists
 
   // ---- Volatile in-memory (lost on crash) --------------------------

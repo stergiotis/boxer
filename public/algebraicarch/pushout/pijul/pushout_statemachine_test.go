@@ -2,7 +2,7 @@
 // state machine drives random verb sequences (record / resolve / push /
 // pull / email-apply / unrecord / sweep / clone) over a fleet of repos
 // and checks, after every action, the structural invariants of every
-// graggle, content conservation (every live node's bytes are traceable
+// pushoutgraph, content conservation (every live node's bytes are traceable
 // to an applied patch), no-live-purge, and dependency closure of the
 // applied set. After the sequence, pairwise syncing to a fixpoint must
 // converge all repos to the same observable state — the system-level
@@ -25,8 +25,8 @@ import (
 
 	"pgregory.net/rapid"
 
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/qc"
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/qc"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 )
 

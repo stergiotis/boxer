@@ -18,17 +18,17 @@ oracle battery — see the package EXPLANATION.md), but three demo-era
 shortcuts remain load-bearing and block production use:
 
 - **Persistence is theater.** `applied.txt` is written but never read;
-  the graggle exists only in memory; a restart loses everything.
+  the pushoutgraph exists only in memory; a restart loses everything.
   Retention markers (`tombstoneAt`, `contentPurged`) are session-local,
   so a purge performed for storage-limitation compliance silently
   un-happens on restart — a compliance hole, not an inconvenience
-  (verified: no code path reads `applied.txt`; `store.Graggle` has no
+  (verified: no code path reads `applied.txt`; `store.PushoutGraph` has no
   serialization).
 - **The engine is welded to the demo.** The reusable patch-log /
   dependency-gating / identity-disambiguation / sync logic lives inside
   `pijul/pijul_pushout_backend.go`, typed in terms of KV cells. The
   demo's GUI consumer (an external repository) locks
-  the exported `PushoutRepo.Mu` and walks `PushoutRepo.Graggle`
+  the exported `PushoutRepo.Mu` and walks `PushoutRepo.PushoutGraph`
   directly — exported-internals coupling that taxes every backend
   change.
 - **Single wire format, single transport, errors as strings.** The
@@ -95,7 +95,7 @@ makes "the bytes I received" unreproducible for audit. Identity codec
 (the canonical form fed to BLAKE3 inside `ComputeHash`) is explicitly
 NOT the wire codec and does not change here.
 
-**Q3: What does a graggle snapshot contain?**
+**Q3: What does a pushoutgraph snapshot contain?**
 
 - O3a: full state including derived structures (union-find partition,
   pseudo-edges, reason maps, dirty set).
@@ -151,7 +151,7 @@ protocol is full-applied-list exchange; smarter reconciliation is OQ-1.
 Adopt the layered seam architecture:
 
 ```
-graggle/*            engine core (semantics unchanged; + sentinels, snapshot codec)
+pushoutgraph/*       engine core (semantics unchanged; + sentinels, snapshot codec)
 envelope             logical EnvelopeV1, codec-independent Validate,
                      CodecI + frame + Registry, jsonv1; codectest suite
 repo                 domain-neutral engine: StorageI contract, Open/recovery,
@@ -163,7 +163,7 @@ exchange             PeerI/AcceptorI + Pull/Push; exchange/inproc; exchangetest
 pijul                demo KV adapter over repo + exchange/inproc (text backend untouched)
 ```
 
-Layering: `repo` → graggle+envelope; `exchange` → repo; storage and
+Layering: `repo` → pushoutgraph+envelope; `exchange` → repo; storage and
 transport implementations import only their seam package. The NATS
 transport and the custom codec are implemented consumer-side
 against `exchangetest`/`codectest`.
@@ -181,7 +181,7 @@ against `exchangetest`/`codectest`.
   envelope, repo, demo), wrapped with `eh.Errorf("…: %w", Err…)`;
   callers use `errors.Is`. The test harness drops string matching.
 - **SD4 — reads are lock-shared and mutation-free.** Verbs leave the
-  graggle resolved; `repo.View` runs under RLock with a documented
+  pushoutgraph resolved; `repo.View` runs under RLock with a documented
   no-escape rule and asserts `DirtyRepCount()==0` instead of resolving
   defensively. `store.Render` keeps its documented mutating behavior
   for direct store users.
@@ -197,7 +197,7 @@ against `exchangetest`/`codectest`.
   persisted envelope files (none exist outside tests/demo state). The
   envelope golden regenerates once and pins the framed format.
 - **SD8 — clock injection.** `repo.Options.Clock` feeds both envelope
-  timestamps and the graggle tombstone clock; deterministic tests and
+  timestamps and the pushoutgraph tombstone clock; deterministic tests and
   the rapid harness depend on never reading wall time inside engine
   paths.
 
@@ -290,7 +290,7 @@ for swept content but left open for the *un-swept horizon*: it resets to
 **Decision.** Introduce a **replica-local, replay-stable retention
 ledger**: a durable `NodeID → first-observed-deleted (unix-nanos)` map
 owned by `StorageI`, written when a committing verb creates a tombstone
-(and on sweep/unrecord), and *seeded into the graggle at `Open` instead of
+(and on sweep/unrecord), and *seeded into the pushoutgraph at `Open` instead of
 re-stamping*. Because it persists independently of the snapshot and is
 never reconstructed from envelopes, it survives full replay on the same
 store, closing the same-store case. `StorageI` delta:
@@ -301,7 +301,7 @@ fakes embed `StorageI` and inherit the pair (the fault store overrides
 `SaveRetention` to inject failures). `Open` reconciles: adopt the ledger's
 stamp for each current tombstone where present, keep the decode/replay
 stamp otherwise, drop entries for nodes no longer tombstoned, and write
-back only when the set changed. The graggle's `tombstoneAt` is a working
+back only when the set changed. The pushoutgraph's `tombstoneAt` is a working
 copy of the ledger, re-seeded via `SeedTombstoneStamps`.
 
 **Rejected.** *Salvaging stamps from a discarded (non-prefix) snapshot* —
@@ -315,7 +315,7 @@ The fresh-clone case is explicitly **not** closed by the ledger.
 Fleet-wide erasure that survives re-cloning is **OQ-7**, owned by
 ADR-0025's cooperative-purge layer (compensating patches / erasure
 propagation), with the durable ledger as the per-replica primitive it
-builds on. Code comments (`graggle.tombstoneAt`, `SweepTombstones`) and
+builds on. Code comments (`pushoutgraph.tombstoneAt`, `SweepTombstones`) and
 `doc/explanation/pushout-distributed-operation.md` §2 are corrected to
 state this durability boundary rather than implying session-local
 retention is wholly benign. This refines, but does not contradict, SD8:
@@ -368,7 +368,7 @@ only carrier that exists today is the reliable in-process
 `exchange/inproc`, so the loss / reorder / duplication the specs admit
 describe the *future* NATS/gRPC wire, not the shipped one. The model
 abstracts a repo to its applied *set* of patch ids — licensed by the
-merge algebra's order-independence, already property-tested in graggle —
+merge algebra's order-independence, already property-tested in pushoutgraph —
 and machine-checks the protocol against this ADR's decisions:
 
 - **Exchange safety** (`pushout_exchange.qnt`, Apalache) — every repo
@@ -404,6 +404,33 @@ part of this model. `README.md` in that tree is the index.
 Consumer-identifying details (repository and application names, file
 paths) are replaced with generic descriptions per the coding standard's
 privacy rule. Decisions and the evidence they rest on are unchanged.
+
+## Update — 2026-08-20: `graggle` renamed to `pushoutgraph`
+
+The engine subtree `public/algebraicarch/pushout/graggle/` is now
+`public/algebraicarch/pushout/pushoutgraph/`, and the central type
+`store.Graggle` is `store.PushoutGraph`. This is a naming change only —
+no semantics, no seam, and no decision above it moves.
+
+Two details are worth recording because a mechanical substitution would
+have got them wrong:
+
+- **The persisted schema moved with the code.** The leeway section
+  `snapGraggle` is now `snapPushoutGraph` and the membership kind
+  `pushoutGraggle` is now `pushoutGraph` — dropping the duplicated
+  `pushout` the kind prefix already carries, rather than the
+  `pushoutPushoutGraph` a blind rename produces. The ClickHouse columns
+  are therefore `tv:snapPushoutGraph:*`. No migration is supplied: an
+  existing `pushout` table must be dropped and recreated.
+- **The snapshot magic `GRG1` is unchanged.** It is a frozen format
+  tag, not a spelling of the concept; the byte-golden in
+  `store/snapshot_test.go` still pins it, and renaming it would strand
+  persisted snapshots for no gain.
+
+Attribution keeps the upstream word. `pushoutgraph/NOTICE` and
+THIRD_PARTY_NOTICES §1.5 still call the borrowed construct a *graggle*,
+because that is what ojo and Joe Neeman's blog series introduced; the
+NOTICE gained a NAMING section stating what boxer calls it instead.
 
 ## Open questions
 

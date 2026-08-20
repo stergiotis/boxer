@@ -33,7 +33,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 )
 
@@ -226,17 +226,17 @@ func (inst *Store) LoadApplied(ctx context.Context) (hs []t.PatchHash, err error
 }
 
 // Snapshot file framing: "PSNP" | uvarint(count) | count×hash32 |
-// graggle bytes (rest of file).
+// pushoutgraph bytes (rest of file).
 const snapshotMagic = "PSNP"
 
 func (inst *Store) SaveSnapshot(ctx context.Context, snap repo.Snapshot) (err error) {
-	buf := make([]byte, 0, 4+10+len(snap.Applied)*32+len(snap.Graggle))
+	buf := make([]byte, 0, 4+10+len(snap.Applied)*32+len(snap.PushoutGraph))
 	buf = append(buf, snapshotMagic...)
 	buf = binary.AppendUvarint(buf, uint64(len(snap.Applied)))
 	for _, h := range snap.Applied {
 		buf = append(buf, h[:]...)
 	}
-	buf = append(buf, snap.Graggle...)
+	buf = append(buf, snap.PushoutGraph...)
 	err = writeAtomic(inst.snapshotPath(), buf)
 	return
 }
@@ -265,7 +265,7 @@ func (inst *Store) LoadSnapshot(ctx context.Context) (snap repo.Snapshot, ok boo
 	for i := range snap.Applied {
 		copy(snap.Applied[i][:], rest[i*32:(i+1)*32])
 	}
-	snap.Graggle = rest[n*32:]
+	snap.PushoutGraph = rest[n*32:]
 	ok = true
 	return
 }

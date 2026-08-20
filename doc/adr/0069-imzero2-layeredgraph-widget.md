@@ -24,7 +24,7 @@ The class of layout `yFiles` (yWorks) is optimal for is the **layered layout** �
 ### What we already have to build on
 
 - **A full immediate-mode painter.** [`egui2_definition_d_painter.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_painter.go) → the Rust `PaintCmd` enum exposes filled/stroked rounded rects, circles, lines, polylines, `CubicBezier`, `Arrow{ox,oy,dx,dy}`, `Text{px,py,anchor,font_size,monospace}`, and `SenseRegion` (hit-testing). This is the rendering substrate.
-- **A DOT emitter.** [`graggle/dot/dot.go`](../../public/algebraicarch/pushout/graggle/dot/dot.go) already writes `digraph { … }`, and `doc/leeway-map/` already shells out to `fdp` — Graphviz is an accepted tool in the toolchain, just not yet in-process.
+- **A DOT emitter.** [`pushoutgraph/dot/dot.go`](../../public/algebraicarch/pushout/pushoutgraph/dot/dot.go) already writes `digraph { … }`, and `doc/leeway-map/` already shells out to `fdp` — Graphviz is an accepted tool in the toolchain, just not yet in-process.
 - **A cgo-free constraint.** The host builds with `CGO_ENABLED=0` ([`rust/imzero2/build_go.sh`](../../rust/imzero2/build_go.sh)). Any layout engine that runs in the Go host must be pure Go.
 - **The register-drain + retained-state widget contract** ([ADR-0013](0013-imzero2-stateful-widget-contract.md)) and the demo-registry capture path ([ADR-0057](0057-demo-registry-and-drivers.md)).
 
@@ -149,7 +149,7 @@ Also recorded (append-only, non-reversing): the view gained a per-node `NodeText
 
 ## References
 
-- Existing widget: [`egui2_definition_d_graphs.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_graphs.go); painter: [`egui2_definition_d_painter.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_painter.go); DOT emitter: [`graggle/dot/dot.go`](../../public/algebraicarch/pushout/graggle/dot/dot.go).
+- Existing widget: [`egui2_definition_d_graphs.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_graphs.go); painter: [`egui2_definition_d_painter.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_painter.go); DOT emitter: [`pushoutgraph/dot/dot.go`](../../public/algebraicarch/pushout/pushoutgraph/dot/dot.go).
 - [ADR-0045 fsmview](0045-imzero2-fsmview-widget.md), [ADR-0013 stateful-widget contract](0013-imzero2-stateful-widget-contract.md), [ADR-0057 demo registry & capture](0057-demo-registry-and-drivers.md), [ADR-0021 snarl node editor](0021-imzero2-snarl-node-editor-binding.md).
 - `goccy/go-graphviz` (WASM/`wazero`, cgo-free): <https://github.com/goccy/go-graphviz>; `wazero`: <https://wazero.io/>; Graphviz JSON output (coordinates): <https://graphviz.org/docs/outputs/json/>.
 - Layered layout background: yWorks "Layered Graph Layout" <https://www.yworks.com/pages/layered-graph-layout>; Sugiyama / layered graph drawing <https://en.wikipedia.org/wiki/Layered_graph_drawing>.

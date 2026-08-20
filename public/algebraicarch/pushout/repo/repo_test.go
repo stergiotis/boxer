@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/qc"
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/qc"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo/filestore"
 )
@@ -218,7 +218,7 @@ func TestRepo_NonPrefixSnapshotDiscarded(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	bogus := repo.Snapshot{Applied: []t.PatchHash{{0xde, 0xad}}, Graggle: []byte("GRG1garbage")}
+	bogus := repo.Snapshot{Applied: []t.PatchHash{{0xde, 0xad}}, PushoutGraph: []byte("GRG1garbage")}
 	if err := st.SaveSnapshot(ctx, bogus); err != nil {
 		tt.Fatal(err)
 	}

@@ -22,8 +22,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
 
 // EnvelopeV1 is the v1 logical envelope. Producer and Timestamp are

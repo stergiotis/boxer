@@ -8,8 +8,8 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/exchange"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/exchange/inproc"
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 )
 

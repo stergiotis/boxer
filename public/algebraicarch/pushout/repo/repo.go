@@ -1,5 +1,5 @@
 // Package repo is the domain-neutral pushout engine: a patch log plus a
-// graggle, persisted through a pluggable [StorageI], serialized through
+// pushoutgraph, persisted through a pluggable [StorageI], serialized through
 // a pluggable wire-codec [envelope.Registry], and synchronized through
 // the transport-agnostic exchange package. It speaks patches and hashes
 // only — domain adapters (e.g. the pijul KV demo) translate their nouns
@@ -21,10 +21,10 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/algo"
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/store"
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/algo"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/store"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
 
 // PatchInfo is the logical view of a stored envelope.
@@ -89,7 +89,7 @@ type Repo struct {
 	clock    func() time.Time
 	hooks    Hooks
 
-	g          *store.Graggle
+	g          *store.PushoutGraph
 	applied    []t.PatchHash
 	appliedSet map[t.PatchHash]struct{}
 
@@ -102,7 +102,7 @@ type Repo struct {
 // Open recovers (or freshly initialises) a repo from storage: load the
 // applied log; if a snapshot exists whose Applied list is a prefix of
 // the log, restore it and replay only the suffix envelopes, otherwise
-// replay everything from an empty graggle. Replay enforces the engine's
+// replay everything from an empty pushoutgraph. Replay enforces the engine's
 // own guarantees (envelope present and decodable, identity matches the
 // log entry, dependencies precede dependents) and refuses to open a
 // store that violates them (ErrCorruptStore).
@@ -145,7 +145,7 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 	replayFrom := 0
 	fromSnapshot := false
 	if haveSnap && isPrefix(snap.Applied, applied) {
-		g, derr := store.DecodeSnapshot(snap.Graggle)
+		g, derr := store.DecodeSnapshot(snap.PushoutGraph)
 		if derr != nil {
 			err = eh.Errorf("snapshot: %w", errors.Join(ErrCorruptStore, derr))
 			return
@@ -485,25 +485,25 @@ func (inst *Repo) Checkpoint(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	err = inst.st.SaveSnapshot(ctx, Snapshot{Applied: applied, Graggle: data})
+	err = inst.st.SaveSnapshot(ctx, Snapshot{Applied: applied, PushoutGraph: data})
 	return
 }
 
 // saveSnapshotLocked snapshots the GIVEN state (typically the
 // about-to-be-committed clone) under the already-held write lock.
-func (inst *Repo) saveSnapshotLocked(ctx context.Context, g *store.Graggle, applied []t.PatchHash) (err error) {
+func (inst *Repo) saveSnapshotLocked(ctx context.Context, g *store.PushoutGraph, applied []t.PatchHash) (err error) {
 	data, err := g.EncodeSnapshot()
 	if err != nil {
 		return
 	}
-	err = inst.st.SaveSnapshot(ctx, Snapshot{Applied: slices.Clone(applied), Graggle: data})
+	err = inst.st.SaveSnapshot(ctx, Snapshot{Applied: slices.Clone(applied), PushoutGraph: data})
 	return
 }
 
 // saveRetentionLocked persists the durable retention ledger from the
-// GIVEN graggle's tombstone stamps. Called on tombstone-changing commits
+// GIVEN pushoutgraph's tombstone stamps. Called on tombstone-changing commits
 // and at Open so a full replay cannot reset retention horizons (ADR-0079).
-func (inst *Repo) saveRetentionLocked(ctx context.Context, g *store.Graggle) (err error) {
+func (inst *Repo) saveRetentionLocked(ctx context.Context, g *store.PushoutGraph) (err error) {
 	stamps := g.TombstoneStamps()
 	entries := make([]RetentionEntry, 0, len(stamps))
 	for id, when := range stamps {
@@ -528,7 +528,7 @@ func patchTombstones(p *patch.Patch) bool {
 // retentionChanged reports whether g's current tombstone stamps differ
 // from the loaded ledger (a node added, dropped, or re-stamped), so Open
 // rewrites the ledger only when the reconcile actually changed it.
-func retentionChanged(g *store.Graggle, ledger map[t.NodeID]time.Time) bool {
+func retentionChanged(g *store.PushoutGraph, ledger map[t.NodeID]time.Time) bool {
 	current := g.TombstoneStamps()
 	if len(current) != len(ledger) {
 		return true
@@ -551,7 +551,7 @@ func (inst *Repo) Close(ctx context.Context) (err error) {
 	}
 	data, eerr := inst.g.EncodeSnapshot()
 	if eerr == nil {
-		eerr = inst.st.SaveSnapshot(ctx, Snapshot{Applied: slices.Clone(inst.applied), Graggle: data})
+		eerr = inst.st.SaveSnapshot(ctx, Snapshot{Applied: slices.Clone(inst.applied), PushoutGraph: data})
 	}
 	cerr := inst.st.Close()
 	inst.closed = true
@@ -659,8 +659,8 @@ type ViewI interface {
 	Conflicts() []algo.ConflictInfo
 }
 
-// View runs fn under a shared lock against a resolved-at-rest graggle.
-// Reads never mutate: every verb leaves the graggle resolved, which
+// View runs fn under a shared lock against a resolved-at-rest pushoutgraph.
+// Reads never mutate: every verb leaves the pushoutgraph resolved, which
 // View asserts instead of defensively re-resolving.
 func (inst *Repo) View(ctx context.Context, fn func(v ViewI) error) (err error) {
 	inst.mu.RLock()
@@ -669,7 +669,7 @@ func (inst *Repo) View(ctx context.Context, fn func(v ViewI) error) (err error) 
 		return
 	}
 	if n := inst.g.DirtyRepCount(); n != 0 {
-		err = eh.Errorf("graggle at rest has %d dirty pseudo-edge components — engine bug", n)
+		err = eh.Errorf("pushoutgraph at rest has %d dirty pseudo-edge components — engine bug", n)
 		return
 	}
 	err = fn(&view{r: inst, ctx: ctx})

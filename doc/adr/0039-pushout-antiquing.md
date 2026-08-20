@@ -41,13 +41,13 @@ across diverged history work.
 ### Current state of the code
 
 - `patch.NewPatch` in
-  [`public/algebraicarch/pushout/graggle/patch/patch.go`](../../public/algebraicarch/pushout/graggle/patch/patch.go)
+  [`public/algebraicarch/pushout/pushoutgraph/patch/patch.go`](../../public/algebraicarch/pushout/pushoutgraph/patch/patch.go)
   records whatever the caller hands it.
 - `ComputeDependencies` in the same file extracts dependencies as literally
   referenced in change context fields.
 - No pass rewrites changes to reduce the dependency set.
 - `LineDiff` in
-  [`public/algebraicarch/pushout/graggle/patch/diff.go`](../../public/algebraicarch/pushout/graggle/patch/diff.go)
+  [`public/algebraicarch/pushout/pushoutgraph/patch/diff.go`](../../public/algebraicarch/pushout/pushoutgraph/patch/diff.go)
   anchors new insertions at the LCS-immediate neighbours. In the linearly
   ordered case the LCS-immediate anchors *are* the minimal anchors, so
   `LineDiff`'s output is incidentally near-antique. This is an accidental
@@ -96,7 +96,7 @@ jneem's post is sufficient to recognise antiquing in hindsight. It is not
 sufficient to write the algorithm on our data structures. Specifically:
 
 - **Equivalence semantics.** The post says the merge "involves `q`". Three
-  readings are coherent: (a) the resulting graggle state is identical (nodes,
+  readings are coherent: (a) the resulting pushoutgraph state is identical (nodes,
   edges, tombstones, `IntroducedBy` provenance); (b) the rendered output
   matches; (c) the partial order on live content matches. Each admits
   different rewrites.
@@ -129,7 +129,7 @@ sufficient to write the algorithm on our data structures. Specifically:
 ### Canonicity, properly scoped
 
 "Canonical" in this ADR means **record-time canonicity given a fixed input**:
-when patch `q` is recorded against graggle state `G`, `most-antique(q, G)`
+when patch `q` is recorded against pushoutgraph state `G`, `most-antique(q, G)`
 must return a single deterministic answer. Two implementations of antiquing
 agree iff they return the same `[]Change` given the same `(q, G)` pair. This
 is the property the rest of the ADR optimises for, and SD9 names it
@@ -161,8 +161,8 @@ What this ADR explicitly does *not* try to guarantee:
   conceptual lineage (Mimram & Di Giusto 2013; jneem's blog series; reading
   Pijul's code to understand its choices) is fine; verbatim porting is not.
   This matches the existing constraint recorded in
-  [`public/algebraicarch/pushout/graggle/NOTICE`](../../public/algebraicarch/pushout/graggle/NOTICE).
-- **The graggle representation is fixed.** Antiquing must work on the data
+  [`public/algebraicarch/pushout/pushoutgraph/NOTICE`](../../public/algebraicarch/pushout/pushoutgraph/NOTICE).
+- **The pushoutgraph representation is fixed.** Antiquing must work on the data
   structures we have (NodeID, Edge, EdgeKindE, pseudo-edge bookkeeping,
   tombstone retention). Changes to the graph representation are out of scope.
 - **The current near-antique behaviour of `LineDiff` is approximately fine in
@@ -186,7 +186,7 @@ given the gaps above and the cooperative-purge prerequisite?
   candidates. No change to `LineDiff` or `NewPatch`. No new exported
   types. Scope: conflict resolution only.
 
-- **C — Full `Antique(changes, graggle) []Change` pass post-`LineDiff`.** A
+- **C — Full `Antique(changes, pushoutgraph) []Change` pass post-`LineDiff`.** A
   new function in the `patch` package that takes a tentative change-list
   and rewrites each `NewNode` change's `UpContext` / `DownContext` to the
   minimal-dependency-set anchors (SD3 scope), with SD10's deterministic
@@ -200,8 +200,8 @@ given the gaps above and the cooperative-purge prerequisite?
 
 - **E — Antiquing inside `NewPatch`.** Hide the rewrite behind patch
   construction. Matches jneem's framing ("pijul automatically records the
-  most antique form"), but `NewPatch` would need a graggle parameter and the
-  result of patch construction would be a function of graggle state rather
+  most antique form"), but `NewPatch` would need a pushoutgraph parameter and the
+  result of patch construction would be a function of pushoutgraph state rather
   than of the inputs alone.
 
 **Criteria.**
@@ -249,13 +249,13 @@ Staged **B → C**:
   the right questions (minimal-dep-anchor selection, SD10's tie-breaker
   rule, dependency-closure comparison) on a contained problem.
 - **C second.** Once the rewrite rules and equivalence choice are pinned down
-  on B, generalise to a full `Antique(changes, graggle)` pass between
+  on B, generalise to a full `Antique(changes, pushoutgraph)` pass between
   `LineDiff` and `NewPatch`. At that point `commonAnchors` becomes a
   special-case caller of `Antique`.
 
 D and E are not recommended: D's `LineDiff`-only scope is the wrong axis (it
 misses conflict resolution); E rewires `NewPatch`'s contract in a way that
-ties patch construction to graggle state, which the current API treats as
+ties patch construction to pushoutgraph state, which the current API treats as
 orthogonal.
 
 The recommendation is provisional. SD1–SD10 below must be resolved before B
@@ -287,7 +287,7 @@ selected, a follow-up ADR supersedes this one.
 - **Lazy antiquing on `Apply`.** Keep recorded patches as-is; antique them at
   `Apply` time when checking whether dependencies are satisfied. Rejected:
   this hides the rewrite from inspection and audit, and the dependency check
-  in `Apply` becomes graggle-state-dependent rather than a pure function of
+  in `Apply` becomes pushoutgraph-state-dependent rather than a pure function of
   the envelope.
 
 ## Subsidiary design decisions
@@ -297,7 +297,7 @@ so the chosen architecture can be filled in without re-opening structural
 questions.
 
 - **SD1 — Equivalence semantics.** Three readings of "reproduces `q`": (a)
-  graggle-state equality including `IntroducedBy` provenance, (b)
+  pushoutgraph-state equality including `IntroducedBy` provenance, (b)
   rendered-output equality, (c) partial-order-on-live-content equality.
   Recommendation: (c). (a) is too strict to admit any rewrite (changing
   `UpContext` changes provenance); (b) is too weak (it admits rewrites that
@@ -307,10 +307,10 @@ questions.
 
 - **SD2 — NodeID identity under rewrite.** Antiquing must complete before
   `Patch.Hash` is computed. Two viable shapes: (i) `NewPatch` calls a private
-  `antique(changes, graggle)` before `ComputeHash`, with a graggle parameter
+  `antique(changes, pushoutgraph)` before `ComputeHash`, with a pushoutgraph parameter
   added to `NewPatch`'s signature; (ii) a parallel constructor
-  `NewAntiquePatch(graggle, ...)` co-exists with the current `NewPatch`,
-  preserving call sites that don't have a graggle (e.g. envelope decoding).
+  `NewAntiquePatch(pushoutgraph, ...)` co-exists with the current `NewPatch`,
+  preserving call sites that don't have a pushoutgraph (e.g. envelope decoding).
   Recommendation: (ii). It preserves existing call sites and keeps the
   "patch is a function of its inputs" contract for the loader path.
 
@@ -338,7 +338,7 @@ questions.
   selection and SD10's tie-breaker rule on a contained problem; C
   generalises the same routines.
 
-- **SD7 — Test corpus.** Property tests over random graggle + patch
+- **SD7 — Test corpus.** Property tests over random pushoutgraph + patch
   sequences, asserting `Apply(antiqued) ≡_(c) Apply(original)` under SD1(c)
   and `Dependencies(antiqued) ⊆ Dependencies(original)` with equality only
   when no reduction was possible. A Pijul-comparison corpus (apply the same
@@ -353,9 +353,9 @@ questions.
 
 - **SD9 — Scope of canonicity.** This ADR targets *record-time canonicity
   given a fixed input* (see "Canonicity, properly scoped" in Context).
-  `Antique(changes, graggle)` is a pure function: same `(changes, graggle)`
+  `Antique(changes, pushoutgraph)` is a pure function: same `(changes, pushoutgraph)`
   always returns the same `[]Change`. Cross-peer canonicity is not a goal —
-  Alice and Bob recording against different graggle states produce
+  Alice and Bob recording against different pushoutgraph states produce
   different patches by design. This stance is consistent with pijul's own
   semantics and with the rest of the pushout package, where patch identity
   is content-addressed on the recorder's inputs.
@@ -438,7 +438,7 @@ questions.
 
 ### Negative
 
-- A parallel constructor `NewAntiquePatch(graggle, ...)` adds API surface
+- A parallel constructor `NewAntiquePatch(pushoutgraph, ...)` adds API surface
   and a maintenance obligation to keep its semantics aligned with `NewPatch`.
 - Property tests for antiquing are non-trivial. The equivalence under SD1(c)
   is subtle; naive tests may pass under "rendered output equality" (SD1(b))
@@ -456,9 +456,9 @@ questions.
   identity remains content-addressed.
 - The on-disk envelope format does not change. Tombstone GC is unaffected.
 - The qc invariants in
-  [`public/algebraicarch/pushout/graggle/qc/invariants.go`](../../public/algebraicarch/pushout/graggle/qc/invariants.go)
+  [`public/algebraicarch/pushout/pushoutgraph/qc/invariants.go`](../../public/algebraicarch/pushout/pushoutgraph/qc/invariants.go)
   are unaffected. Antiquing operates pre-`Apply`; qc operates on the
-  resulting graggle.
+  resulting pushoutgraph.
 
 ## Status
 
@@ -501,10 +501,10 @@ This ADR was originally drafted in boxer as `0008-pushout-antiquing.md`, then mo
 Primary sources:
 
 - Joe Neeman, *Pijul* — introduces antiquing. [Live](https://jneem.github.io/pijul/) / [Wayback (20260220064237)](https://web.archive.org/web/20260220064237/https://jneem.github.io/pijul/)
-- Joe Neeman, *Merging* — introduces the graggle model. [Live](https://jneem.github.io/merging/) / [Wayback (20260208054945)](https://web.archive.org/web/20260208054945/https://jneem.github.io/merging/)
+- Joe Neeman, *Merging* — introduces the pushoutgraph model. [Live](https://jneem.github.io/merging/) / [Wayback (20260208054945)](https://web.archive.org/web/20260208054945/https://jneem.github.io/merging/)
 - Joe Neeman, *Pseudo-edges across deletions* — bookkeeping for tombstoned regions. [Live](https://jneem.github.io/pseudo/) / [Wayback (20260221144337)](https://web.archive.org/web/20260221144337/https://jneem.github.io/pseudo/)
 - Joe Neeman, *Line identifiers for patches*. [Live](https://jneem.github.io/ids/) / [Wayback (20260512103933)](https://web.archive.org/web/20260512103933/https://jneem.github.io/ids/)
-- Joe Neeman, *Cycles in merged graggles*. [Live](https://jneem.github.io/cycles/) / [Wayback (20260512104117)](https://web.archive.org/web/20260512104117/https://jneem.github.io/cycles/)
+- Joe Neeman, *Cycles in merged pushoutgraphs*. [Live](https://jneem.github.io/cycles/) / [Wayback (20260512104117)](https://web.archive.org/web/20260512104117/https://jneem.github.io/cycles/)
 - [Samuel Mimram & Cinzia Di Giusto, *A Categorical Theory of Patches* (2013)](https://arxiv.org/abs/1311.3903) — categorical-pushout grounding for the perfect-merge primitive.
 
 Related ADRs:
@@ -515,7 +515,7 @@ Related ADRs:
 In-repo siblings:
 
 - [`public/algebraicarch/pushout/pijul/EXPLANATION.md`](../../public/algebraicarch/pushout/pijul/EXPLANATION.md) — package overview; the "Open design questions / Antiquing" section is the user-facing explanation that this ADR formalises.
-- [`public/algebraicarch/pushout/graggle/patch/patch.go`](../../public/algebraicarch/pushout/graggle/patch/patch.go) — patch construction; `NewPatch` and `ComputeDependencies` live here.
-- [`public/algebraicarch/pushout/graggle/patch/diff.go`](../../public/algebraicarch/pushout/graggle/patch/diff.go) — `LineDiff`.
+- [`public/algebraicarch/pushout/pushoutgraph/patch/patch.go`](../../public/algebraicarch/pushout/pushoutgraph/patch/patch.go) — patch construction; `NewPatch` and `ComputeDependencies` live here.
+- [`public/algebraicarch/pushout/pushoutgraph/patch/diff.go`](../../public/algebraicarch/pushout/pushoutgraph/patch/diff.go) — `LineDiff`.
 - [`public/algebraicarch/pushout/pijul/pijul_pushout_backend.go`](../../public/algebraicarch/pushout/pijul/pijul_pushout_backend.go) — `commonAnchors` (the B-stage target).
-- [`public/algebraicarch/pushout/graggle/NOTICE`](../../public/algebraicarch/pushout/graggle/NOTICE) — Pijul/ojo provenance and the GPL-2.0 read-for-understanding constraint.
+- [`public/algebraicarch/pushout/pushoutgraph/NOTICE`](../../public/algebraicarch/pushout/pushoutgraph/NOTICE) — Pijul/ojo provenance and the GPL-2.0 read-for-understanding constraint.

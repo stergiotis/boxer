@@ -485,7 +485,7 @@ func (inst *Inst) IsOpen() (open bool) {
 }
 
 // SetFilename overwrites the save-mode filename buffer. Useful for
-// per-invocation suggestions ("alice_graggle.dot" vs "bob_graggle.dot")
+// per-invocation suggestions ("alice_pushoutgraph.dot" vs "bob_pushoutgraph.dot")
 // where [WithDefaultFilename] — fixed at construction — is too coarse.
 // No-op in open mode (the field is unused there). Safe to call at any
 // time; takes effect on the next Render frame.

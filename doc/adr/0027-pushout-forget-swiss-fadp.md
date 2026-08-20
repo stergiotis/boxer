@@ -147,6 +147,6 @@ Related ADRs and code:
 
 - [ADR-0025 — Right-to-Erasure Architecture for the Pushout VCS (GDPR + FADP dual-scope)](0025-pushout-forget-architecture.md). This ADR is the (now-superseded) FADP-only-scope variant.
 - `public/algebraicarch/pushout/pijul/pijul_pushout_backend.go` — current `Unrecord` implementation.
-- `public/algebraicarch/pushout/graggle/store/graggle.go` — graggle data structure, `SweepTombstones`.
-- `public/algebraicarch/pushout/graggle/patch/patch.go` — patch construction, `ComputeHash`.
+- `public/algebraicarch/pushout/pushoutgraph/store/pushoutgraph.go` — pushoutgraph data structure, `SweepTombstones`.
+- `public/algebraicarch/pushout/pushoutgraph/patch/patch.go` — patch construction, `ComputeHash`.
 - `public/algebraicarch/pushout/envelope/envelope.go` — envelope codec.

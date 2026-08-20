@@ -27,8 +27,9 @@ model files as objects in a category and merges as **pushouts**: the
 unique "smallest" merge that preserves both inputs. The original paper
 ([Mimram & Di Giusto 2013](https://arxiv.org/abs/1311.3903)) defined
 patches over plain files; Pijul generalises to *graggles* (graph +
-file) so that pushouts always exist — at the cost of admitting
-non-linear intermediate states that re-emerge as conflicts.
+file — boxer's `pushoutgraph`) so that pushouts always exist — at the
+cost of admitting non-linear intermediate states that re-emerge as
+conflicts.
 
 External references:
 
@@ -44,7 +45,7 @@ External references:
 ## How it works
 
 This repo holds the *domain* half of the demo — backends, parsers, and
-the graggle engine — and is the canonical implementation. The
+the pushoutgraph engine — and is the canonical implementation. The
 GUI/orchestration half (the demo store, the task worker, egui2 windows
 and playbooks) lives in the external GUI consumer, which depends on
 this repo.
@@ -122,7 +123,7 @@ than surfacing a fatal-error block in the UI.
 ### Pitfall: `Unrecord` is local rollback, not erasure
 
 An operator invokes `PushoutRepo.Unrecord(hash)` on a patch carrying
-personal data, expecting the data to be gone. The graggle's live
+personal data, expecting the data to be gone. The pushoutgraph's live
 subgraph no longer shows the patch's effect — but the envelope file under
 `.pushout/changes/` and the engine's patch-store entry are
 still present, and a future `Pull` from any peer that still has the
@@ -149,7 +150,7 @@ content-addressed patch, comparable to a git commit. `Unrecord` is
 therefore *not* "unstage + checkout" (those discard uncommitted work).
 It is closer to **a `git rebase -i` drop that never gets
 garbage-collected**: the patch leaves the applied history
-(`appliedHash` / `applied.txt`), the graggle rewinds to its pre-patch
+(`appliedHash` / `applied.txt`), the pushoutgraph rewinds to its pre-patch
 state, but the envelope persists in `.pushout/changes/` indefinitely
 and can be re-introduced by `Pull` from any peer that still has it —
 analogous to recovering a dropped commit by its hash from git's object
@@ -181,7 +182,7 @@ the Swiss relative approach peers hold non-personal data throughout,
 since they never see vault rows or nonces.
 
 The earlier architecture-design discussion considered a *compensating
-patch* mechanism (a new patch added to the graggle to overwrite affected
+patch* mechanism (a new patch added to the pushoutgraph to overwrite affected
 node content with a redaction marker). That mechanism belonged to the
 rejected Architectures B and C in ADR-0025 and the superseded ADR-0027.
 It is not used under Architecture A.
@@ -211,7 +212,7 @@ Demo-level invariants (visible to anyone using `BackendI`/`RepoI`):
 - Cell paths are validated up front (non-empty, no spaces, quotes, or
   newlines); values are unrestricted — the quoted line format
   round-trips any byte sequence.
-- While the graggle is conflicted, `SetAndRecord` records conflict
+- While the pushoutgraph is conflicted, `SetAndRecord` records conflict
   resolutions *and* edits/deletions of clean cells in one patch;
   creating a brand-new cell is rejected with a clear error (no linear
   order means no reliable anchor for a new row).
@@ -254,7 +255,7 @@ Pushout-native backend internal invariants:
   hash check at `envelope.Validate` (run on every Registry
   encode/decode). Changing either the hash function
   or its scope invalidates previously persisted envelope files.
-- Tombstones track their deleters: `store.Graggle.DeleteNode` records
+- Tombstones track their deleters: `store.PushoutGraph.DeleteNode` records
   the deleting patch and tolerates further deleters (two actors
   editing the same line is the normal convergent case); a node is
   resurrected only when its *last* deleter is unapplied. `Apply` gates
@@ -266,7 +267,7 @@ Pushout-native backend internal invariants:
   `SetAndRecord` deterministically shifts the new nodes' identity
   space so the patch stays applicable while concurrent identical
   re-creations still converge.
-- Conflict cells are derived in `cellsFromConflictedGraggle` by
+- Conflict cells are derived in `cellsFromConflictedPushoutGraph` by
   grouping live nodes by their cell path. Every live node for a given
   path becomes one side of the resulting `ConflictData`: the first
   two as `AliceValue` / `BobValue` and any extras as `OtherValues`,
@@ -287,7 +288,7 @@ Pushout-native backend internal invariants:
 
 These properties are exercised continuously by a rapid state machine
 (`pushout_statemachine_test.go`) that drives random verb sequences over
-three repos and checks graggle invariants, content conservation, and
+three repos and checks pushoutgraph invariants, content conservation, and
 post-sync convergence after every action;
 `scripts/dev/cover_pushout.sh` enforces a per-package coverage floor
 over the tree.
@@ -317,10 +318,10 @@ applicable in either order — which is the property that lets cherry-pick work
 across diverged history.
 
 **Current state of the code.** `patch.NewPatch` records whatever the caller
-hands it; `ComputeDependencies` (`graggle/patch/patch.go`) extracts
+hands it; `ComputeDependencies` (`pushoutgraph/patch/patch.go`) extracts
 dependencies as literally referenced in change context fields. There is no
 pass that rewrites changes to reduce the dependency set. `LineDiff`
-(`graggle/patch/diff.go`) anchors new insertions at the LCS-immediate
+(`pushoutgraph/patch/diff.go`) anchors new insertions at the LCS-immediate
 neighbours, so it tends to produce near-antique patches when the diff is
 localised — but that is an accidental property of the LCS choice, not a
 guarantee. `changesForResolution`'s `commonAnchors`
@@ -355,7 +356,7 @@ minimise the patch's dependency set while still pinning the same
 partial-order position relative to surrounding kept content, with a
 deterministic tie-breaker among equally-minimal candidates — is sketched
 but not committed to. "Canonical" here means *record-time canonicity given a
-fixed input*: Alice and Bob recording against different graggle states
+fixed input*: Alice and Bob recording against different pushoutgraph states
 produce different patches by design, which is consistent with pijul's own
 semantics. Placement (inside `LineDiff`, between `LineDiff` and `NewPatch`,
 inside `NewPatch`, or as an independent post-record pass) is open. Conflict

@@ -3,22 +3,22 @@ package repo
 import (
 	"context"
 
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
 
-// Snapshot is a persisted acceleration point: the graggle state (via
+// Snapshot is a persisted acceleration point: the pushoutgraph state (via
 // store.EncodeSnapshot) after applying exactly the patches in Applied,
 // in that order. Recovery uses it only when Applied is a PREFIX of the
 // current applied log; otherwise the snapshot is discarded and the log
 // is replayed from empty — correctness never depends on snapshot
 // freshness, only on the log and the envelopes.
 type Snapshot struct {
-	Applied []t.PatchHash
-	Graggle []byte
+	Applied      []t.PatchHash
+	PushoutGraph []byte
 }
 
 // RetentionEntry is one node's replica-local first-observed-deleted time
-// (unix nanoseconds), the durable form of the graggle's tombstoneAt
+// (unix nanoseconds), the durable form of the pushoutgraph's tombstoneAt
 // stamp. The retention ledger exists because envelopes carry no trusted
 // time, so a full replay would otherwise re-stamp every tombstone to
 // replay time and reset its retention horizon (see ADR-0079). Unlike the

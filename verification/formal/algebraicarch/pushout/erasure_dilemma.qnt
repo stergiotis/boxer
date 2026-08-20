@@ -4,7 +4,7 @@
 // retention sweep creates ONCE THE SYSTEM IS ACTUALLY DISTRIBUTED.
 //
 // The current Sweep (modelled in pushout_exchange.qnt) destroys the
-// in-graggle tombstone content but KEEPS the wire envelope, so it does
+// in-pushoutgraph tombstone content but KEEPS the wire envelope, so it does
 // not actually erase the data (envelope still carries the bytes) — but
 // convergence is safe, because any gap can be re-shipped.
 //

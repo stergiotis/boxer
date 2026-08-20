@@ -13,8 +13,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/qc"
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/qc"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 )
 

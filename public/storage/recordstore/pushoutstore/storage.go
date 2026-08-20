@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -333,7 +333,7 @@ func (inst *Storage) SaveSnapshot(ctx context.Context, snap repo.Snapshot) (err 
 		applied = append(applied, hexOfHash(h))
 	}
 	b := inst.st.Begin(snapshotKey, ts)
-	b.AddSnapshot(Snapshot{ID: snapshotKey, Applied: applied, Graggle: snap.Graggle})
+	b.AddSnapshot(Snapshot{ID: snapshotKey, Applied: applied, PushoutGraph: snap.PushoutGraph})
 	err = b.Commit()
 	if err != nil {
 		err = eh.Errorf("save snapshot commit: %w", err)
@@ -354,7 +354,7 @@ func (inst *Storage) LoadSnapshot(ctx context.Context) (snap repo.Snapshot, ok b
 		err = eh.Errorf("load snapshot: %w", err)
 		return
 	}
-	// Graggle is a scalar blob and writes unconditionally (even empty),
+	// PushoutGraph is a scalar blob and writes unconditionally (even empty),
 	// so a saved snapshot always reads back component-present; only the
 	// Applied container is elided when empty (nil round-trips as nil).
 	// The Has check stays as a defensive guard.
@@ -370,7 +370,7 @@ func (inst *Storage) LoadSnapshot(ctx context.Context) (snap repo.Snapshot, ok b
 		}
 		snap.Applied = append(snap.Applied, h)
 	}
-	snap.Graggle = ent.Snapshot.Val.Graggle
+	snap.PushoutGraph = ent.Snapshot.Val.PushoutGraph
 	ok = true
 	return
 }

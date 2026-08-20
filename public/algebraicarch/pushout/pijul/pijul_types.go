@@ -9,7 +9,7 @@
 //   - [BackendI]/[RepoI] — pure-domain interfaces taking [KVLine] cells.
 //     Two realisations exist: [pijulTextBackend] serialises cells into
 //     pijul's textual flat-KV format and shells out to the `pijul`
-//     binary; [NewPushoutBackend] operates natively on graggle patch
+//     binary; [NewPushoutBackend] operates natively on pushoutgraph patch
 //     operations (in-memory store + on-disk envelopes) without ever
 //     materialising text.
 //

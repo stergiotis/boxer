@@ -46,16 +46,16 @@ func CreateSchemaPushoutTable() (schema *arrow.Schema) {
 		/* 020 */ arrow.Field{Name: "tv:logHash:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 021 */ arrow.Field{Name: "tv:logHash:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 022 */ arrow.Field{Name: "tv:logHash:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 023 */ arrow.Field{Name: "tv:snapGraggle:value:val:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 024 */ arrow.Field{Name: "tv:snapGraggle:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 025 */ arrow.Field{Name: "tv:snapGraggle:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 026 */ arrow.Field{Name: "tv:snapGraggle:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 027 */ arrow.Field{Name: "tv:snapGraggle:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 028 */ arrow.Field{Name: "tv:snapGraggle:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 029 */ arrow.Field{Name: "tv:snapGraggle:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 030 */ arrow.Field{Name: "tv:snapGraggle:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 031 */ arrow.Field{Name: "tv:snapGraggle:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 032 */ arrow.Field{Name: "tv:snapGraggle:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 023 */ arrow.Field{Name: "tv:snapPushoutGraph:value:val:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 024 */ arrow.Field{Name: "tv:snapPushoutGraph:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 025 */ arrow.Field{Name: "tv:snapPushoutGraph:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 026 */ arrow.Field{Name: "tv:snapPushoutGraph:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 027 */ arrow.Field{Name: "tv:snapPushoutGraph:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 028 */ arrow.Field{Name: "tv:snapPushoutGraph:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 029 */ arrow.Field{Name: "tv:snapPushoutGraph:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 030 */ arrow.Field{Name: "tv:snapPushoutGraph:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 031 */ arrow.Field{Name: "tv:snapPushoutGraph:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 032 */ arrow.Field{Name: "tv:snapPushoutGraph:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 033 */ arrow.Field{Name: "tv:snapApplied:value:val:sh:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
 		/* 034 */ arrow.Field{Name: "tv:snapApplied:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 035 */ arrow.Field{Name: "tv:snapApplied:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
@@ -127,7 +127,7 @@ type InEntityPushoutTable struct {
 	section04State     runtime.EntityStateE
 	section05Inst      *InEntityPushoutTableSectionSnapApplied
 	section05State     runtime.EntityStateE
-	section06Inst      *InEntityPushoutTableSectionSnapGraggle
+	section06Inst      *InEntityPushoutTableSectionSnapPushoutGraph
 	section06State     runtime.EntityStateE
 	activeSections     *[7]bool
 	ambientHighCardRef []uint64
@@ -183,13 +183,13 @@ func (inst *InEntityPushoutTable) setActiveSections(idxs []int) {
 // SetActiveSections inputs from section names — for example, the
 // marshallgen-driven keelson codec wrappers.
 var InEntityPushoutTableSectionIndices = map[string]int{
-	"envBlob":     0,
-	"logHash":     1,
-	"retHash":     2,
-	"retIndex":    3,
-	"retTime":     4,
-	"snapApplied": 5,
-	"snapGraggle": 6,
+	"envBlob":          0,
+	"logHash":          1,
+	"retHash":          2,
+	"retIndex":         3,
+	"retTime":          4,
+	"snapApplied":      5,
+	"snapPushoutGraph": 6,
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -285,7 +285,7 @@ func (inst *InEntityPushoutTable) initSections(builder *array.RecordBuilder) {
 	inst.section03Inst = NewInEntityPushoutTableSectionRetIndex(builder, inst)
 	inst.section04Inst = NewInEntityPushoutTableSectionRetTime(builder, inst)
 	inst.section05Inst = NewInEntityPushoutTableSectionSnapApplied(builder, inst)
-	inst.section06Inst = NewInEntityPushoutTableSectionSnapGraggle(builder, inst)
+	inst.section06Inst = NewInEntityPushoutTableSectionSnapPushoutGraph(builder, inst)
 }
 func (inst *InEntityPushoutTable) beginSections() {
 	if mask := inst.activeSections; mask != nil {
@@ -359,7 +359,7 @@ func (inst *InEntityPushoutTable) GetSectionRetTime() *InEntityPushoutTableSecti
 func (inst *InEntityPushoutTable) GetSectionSnapApplied() *InEntityPushoutTableSectionSnapApplied {
 	return inst.section05Inst
 }
-func (inst *InEntityPushoutTable) GetSectionSnapGraggle() *InEntityPushoutTableSectionSnapGraggle {
+func (inst *InEntityPushoutTable) GetSectionSnapPushoutGraph() *InEntityPushoutTableSectionSnapPushoutGraph {
 	return inst.section06Inst
 }
 func (inst *InEntityPushoutTable) beginEntity() *InEntityPushoutTable {
@@ -428,7 +428,7 @@ func (inst *InEntityPushoutTable) validateEntity() {
 		state := inst.section06Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "snapGraggle").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "snapPushoutGraph").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -2597,9 +2597,9 @@ func (inst *InEntityPushoutTableSectionSnapAppliedInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityPushoutTableSectionSnapGraggle struct {
+type InEntityPushoutTableSectionSnapPushoutGraph struct {
 	errs                  []error
-	inAttr                *InEntityPushoutTableSectionSnapGraggleInAttr
+	inAttr                *InEntityPushoutTableSectionSnapPushoutGraphInAttr
 	state                 runtime.EntityStateE
 	attributeCount        int
 	parent                *InEntityPushoutTable
@@ -2607,9 +2607,9 @@ type InEntityPushoutTableSectionSnapGraggle struct {
 	scalarListBuilder023  *array.ListBuilder
 }
 
-func NewInEntityPushoutTableSectionSnapGraggle(builder *array.RecordBuilder, parent *InEntityPushoutTable) (inst *InEntityPushoutTableSectionSnapGraggle) {
-	inst = &InEntityPushoutTableSectionSnapGraggle{}
-	inAttr := NewInEntityPushoutTableSectionSnapGraggleInAttr(builder, inst)
+func NewInEntityPushoutTableSectionSnapPushoutGraph(builder *array.RecordBuilder, parent *InEntityPushoutTable) (inst *InEntityPushoutTableSectionSnapPushoutGraph) {
+	inst = &InEntityPushoutTableSectionSnapPushoutGraph{}
+	inAttr := NewInEntityPushoutTableSectionSnapPushoutGraphInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
@@ -2619,7 +2619,7 @@ func NewInEntityPushoutTableSectionSnapGraggle(builder *array.RecordBuilder, par
 
 	return inst
 }
-func (inst *InEntityPushoutTableSectionSnapGraggle) endAttribute() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraph) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -2629,7 +2629,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggle) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityPushoutTableSectionSnapGraggle) BeginAttribute(value23 []byte) *InEntityPushoutTableSectionSnapGraggleInAttr {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraph) BeginAttribute(value23 []byte) *InEntityPushoutTableSectionSnapPushoutGraphInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -2645,19 +2645,19 @@ func (inst *InEntityPushoutTableSectionSnapGraggle) BeginAttribute(value23 []byt
 	return inst.inAttr
 }
 
-type InEntityPushoutTableSectionSnapGraggleAttr struct {
+type InEntityPushoutTableSectionSnapPushoutGraphAttr struct {
 	Value []byte
 }
 
-func (inst *InEntityPushoutTableSectionSnapGraggle) Add(attr InEntityPushoutTableSectionSnapGraggleAttr) *InEntityPushoutTableSectionSnapGraggleInAttr {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraph) Add(attr InEntityPushoutTableSectionSnapPushoutGraphAttr) *InEntityPushoutTableSectionSnapPushoutGraphInAttr {
 	a := inst.BeginAttribute(attr.Value)
 	return a
 }
-func (inst *InEntityPushoutTableSectionSnapGraggle) CheckErrors() (err error) {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraph) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityPushoutTableSectionSnapGraggle) EndSection() *InEntityPushoutTable {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraph) EndSection() *InEntityPushoutTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -2670,30 +2670,30 @@ func (inst *InEntityPushoutTableSectionSnapGraggle) EndSection() *InEntityPushou
 	return inst.parent
 }
 
-func (inst *InEntityPushoutTableSectionSnapGraggle) beginSection() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraph) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityPushoutTableSectionSnapGraggle) resetSection() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraph) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityPushoutTableSectionSnapGraggle) AppendError(err error) {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraph) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityPushoutTableSectionSnapGraggle) clearErrors() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraph) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityPushoutTableSectionSnapGraggleInAttr struct {
+type InEntityPushoutTableSectionSnapPushoutGraphInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
-	parent                           *InEntityPushoutTableSectionSnapGraggle
+	parent                           *InEntityPushoutTableSectionSnapPushoutGraph
 	scalarFieldBuilder023            *array.BinaryBuilder
 	scalarListBuilder023             *array.ListBuilder
 	membershipFieldBuilder024        *array.Uint64Builder
@@ -2726,8 +2726,8 @@ type InEntityPushoutTableSectionSnapGraggleInAttr struct {
 	membershipContainerLength028 int
 }
 
-func NewInEntityPushoutTableSectionSnapGraggleInAttr(builder *array.RecordBuilder, parent *InEntityPushoutTableSectionSnapGraggle) (inst *InEntityPushoutTableSectionSnapGraggleInAttr) {
-	inst = &InEntityPushoutTableSectionSnapGraggleInAttr{}
+func NewInEntityPushoutTableSectionSnapPushoutGraphInAttr(builder *array.RecordBuilder, parent *InEntityPushoutTableSectionSnapPushoutGraph) (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) {
+	inst = &InEntityPushoutTableSectionSnapPushoutGraphInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
@@ -2754,7 +2754,7 @@ func NewInEntityPushoutTableSectionSnapGraggleInAttr(builder *array.RecordBuilde
 
 	return inst
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) beginAttribute() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) beginAttribute() {
 	inst.membershipListBuilder024.Append(true)
 	inst.membershipListBuilder025.Append(true)
 	inst.membershipListBuilder026.Append(true)
@@ -2773,7 +2773,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) beginAttribute() {
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipHighCardRef(hr24 uint64) *InEntityPushoutTableSectionSnapGraggleInAttr {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) AddMembershipHighCardRef(hr24 uint64) *InEntityPushoutTableSectionSnapPushoutGraphInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -2782,7 +2782,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipHighCardR
 	inst.membershipContainerLength024++
 	return inst
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipHighCardRefP(hr24 uint64) {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) AddMembershipHighCardRefP(hr24 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
@@ -2791,7 +2791,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipHighCardR
 	inst.membershipContainerLength024++
 	return
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipLowCardRef(lr25 uint64) *InEntityPushoutTableSectionSnapGraggleInAttr {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) AddMembershipLowCardRef(lr25 uint64) *InEntityPushoutTableSectionSnapPushoutGraphInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -2800,7 +2800,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipLowCardRe
 	inst.membershipContainerLength025++
 	return inst
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipLowCardRefP(lr25 uint64) {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) AddMembershipLowCardRefP(lr25 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
@@ -2809,7 +2809,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipLowCardRe
 	inst.membershipContainerLength025++
 	return
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipLowCardVerbatim(lv26 []byte) *InEntityPushoutTableSectionSnapGraggleInAttr {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) AddMembershipLowCardVerbatim(lv26 []byte) *InEntityPushoutTableSectionSnapPushoutGraphInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -2818,7 +2818,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipLowCardVe
 	inst.membershipContainerLength026++
 	return inst
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipLowCardVerbatimP(lv26 []byte) {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) AddMembershipLowCardVerbatimP(lv26 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
@@ -2827,7 +2827,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipLowCardVe
 	inst.membershipContainerLength026++
 	return
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipMixedLowCardRef(lmr27 uint64, mrhp28 []byte) *InEntityPushoutTableSectionSnapGraggleInAttr {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) AddMembershipMixedLowCardRef(lmr27 uint64, mrhp28 []byte) *InEntityPushoutTableSectionSnapPushoutGraphInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -2838,7 +2838,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipMixedLowC
 	inst.membershipContainerLength028++
 	return inst
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipMixedLowCardRefP(lmr27 uint64, mrhp28 []byte) {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) AddMembershipMixedLowCardRefP(lmr27 uint64, mrhp28 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
@@ -2849,7 +2849,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AddMembershipMixedLowC
 	inst.membershipContainerLength028++
 	return
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
 	l = inst.membershipContainerLength024
@@ -2865,11 +2865,11 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) handleMembershipSuppor
 	inst.membershipContainerLength027 = 0
 	inst.membershipSupportFieldBuilder032.Append(uint64(l))
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) applyAmbientMemberships() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -2877,11 +2877,11 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) applyAmbientMembership
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) completeAttribute() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) EndSection() *InEntityPushoutTable {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) EndSection() *InEntityPushoutTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -2896,7 +2896,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) EndSection() *InEntity
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) EndAttribute() *InEntityPushoutTableSectionSnapGraggle {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) EndAttribute() *InEntityPushoutTableSectionSnapPushoutGraph {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -2911,13 +2911,13 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) EndAttribute() *InEnti
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) EndAttributeP() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) AppendError(err error) {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) clearErrors() {
+func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }

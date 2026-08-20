@@ -9,7 +9,7 @@
 package exchange
 
 import (
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
 
 // RelationE classifies how version a relates to version b under set

@@ -63,7 +63,7 @@ type PatchEnvelope struct {
 // interface deals in [KVLine] cells and [PatchEnvelope] blobs, never
 // in raw text bytes or pijul-specific format details. The text
 // backend serialises cells to pijul's flat-KV format internally; the
-// native backend translates cells directly into pushout/graggle patch
+// native backend translates cells directly into pushout/pushoutgraph patch
 // operations without ever materialising text.
 //
 // Every method returns a single audit string — a one-shot human

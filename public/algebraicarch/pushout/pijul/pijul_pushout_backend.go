@@ -17,16 +17,16 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/exchange"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/exchange/inproc"
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo/filestore"
 )
 
 // ErrCellCreateWhileConflicted: creating a brand-new cell while the
-// graggle is conflicted has no reliable anchor (no linear order) and is
+// pushoutgraph is conflicted has no reliable anchor (no linear order) and is
 // rejected; resolve the conflicts first.
-var ErrCellCreateWhileConflicted = errors.New("cannot create a cell while the graggle is conflicted")
+var ErrCellCreateWhileConflicted = errors.New("cannot create a cell while the pushoutgraph is conflicted")
 
 // pushoutBackend is the native realisation of [BackendI]: a thin
 // KV-cell adapter over the domain-neutral engine (pushout/repo) with a
@@ -179,7 +179,7 @@ func (inst *PushoutRepo) State(ctx context.Context) (cells []KVLine, log []Patch
 		if order := v.LinearOrder(); order != nil {
 			cells = cellsFromLinearOrder(v, order)
 		} else {
-			cells = cellsFromConflictedGraggle(v)
+			cells = cellsFromConflictedPushoutGraph(v)
 		}
 		applied := v.Applied()
 		log = make([]PatchMetadata, 0, len(applied))
@@ -215,10 +215,10 @@ func cellsFromLinearOrder(v repo.ViewI, order []t.NodeID) (cells []KVLine) {
 	return
 }
 
-// cellsFromConflictedGraggle handles the conflict case by grouping live
+// cellsFromConflictedPushoutGraph handles the conflict case by grouping live
 // nodes by cell path; every live node for a path becomes one side of
 // the ConflictData. Ordering is alphabetical (no linear order exists).
-func cellsFromConflictedGraggle(v repo.ViewI) (cells []KVLine) {
+func cellsFromConflictedPushoutGraph(v repo.ViewI) (cells []KVLine) {
 	g := v.Graph()
 	byPath := make(map[string][]t.NodeID)
 	var paths []string
@@ -365,7 +365,7 @@ func changesForLineDiff(v repo.ViewI, cells []KVLine) (changes []patch.Change, e
 }
 
 // changesForResolution turns the user's cell list into graph operations
-// while the graggle is conflicted. Paths are classified by the conflict
+// while the pushoutgraph is conflicted. Paths are classified by the conflict
 // detector — a node is "conflicted" when it participates in an order,
 // cycle, or orphan conflict; bare path multiplicity is NOT enough (two
 // linearly ordered duplicate-key rows are clean and must not be
@@ -585,7 +585,7 @@ func (inst *PushoutRepo) Push(ctx context.Context, dest RepoI) (audit string, er
 }
 
 // Pull fetches everything src has that this repo lacks. hadConflict
-// reports whether the merged graggle lost its linear order.
+// reports whether the merged pushoutgraph lost its linear order.
 func (inst *PushoutRepo) Pull(ctx context.Context, src RepoI) (audit string, hadConflict bool, err error) {
 	other, ok := src.(*PushoutRepo)
 	if !ok {

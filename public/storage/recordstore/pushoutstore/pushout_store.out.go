@@ -76,7 +76,7 @@ var PushoutMembershipIds = map[string]map[string]uint64{
 	},
 	"Snapshot": {
 		"pushoutApplied": 1,
-		"pushoutGraggle": 2,
+		"pushoutGraph": 2,
 	},
 	"Retention": {
 		"pushoutRetHash": 1,
@@ -349,8 +349,8 @@ func (inst *PushoutEntityBuilder) endSection(section string) error {
 		inst.store.dml.GetSectionLogHash().EndSection()
 	case "snapApplied":
 		inst.store.dml.GetSectionSnapApplied().EndSection()
-	case "snapGraggle":
-		inst.store.dml.GetSectionSnapGraggle().EndSection()
+	case "snapPushoutGraph":
+		inst.store.dml.GetSectionSnapPushoutGraph().EndSection()
 	case "retHash":
 		inst.store.dml.GetSectionRetHash().EndSection()
 	case "retIndex":
@@ -438,8 +438,8 @@ func (inst *PushoutEntityBuilder) AddSnapshot(row Snapshot) *PushoutEntityBuilde
 	inst.buf.Enqueue("snapApplied", "Snapshot", func() error {
 		return snapshotEmitSectionSnapApplied(inst.store.dml.GetSectionSnapApplied(), row)
 	})
-	inst.buf.Enqueue("snapGraggle", "Snapshot", func() error {
-		return snapshotEmitSectionSnapGraggle(inst.store.dml.GetSectionSnapGraggle(), row)
+	inst.buf.Enqueue("snapPushoutGraph", "Snapshot", func() error {
+		return snapshotEmitSectionSnapPushoutGraph(inst.store.dml.GetSectionSnapPushoutGraph(), row)
 	})
 	inst.ent.Snapshot = option.Some(row)
 	return inst
@@ -982,7 +982,7 @@ func (inst *pushoutFetcher) FetchItemSinglePartition(ctx context.Context, partit
 const (
 	pushoutScanEnvelopeFilter  = "has(\"tv:envBlob:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:envBlob:lr:lr:u64:1247:::0::data\", 1) = 1"
 	pushoutScanLogEntryFilter  = "has(\"tv:logHash:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:logHash:lr:lr:u64:1247:::0::data\", 1) = 1"
-	pushoutScanSnapshotFilter  = "has(\"tv:snapGraggle:lr:lr:u64:1247:::0::data\", 2) AND countEqual(\"tv:snapApplied:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:snapGraggle:lr:lr:u64:1247:::0::data\", 2) = 1"
+	pushoutScanSnapshotFilter  = "has(\"tv:snapPushoutGraph:lr:lr:u64:1247:::0::data\", 2) AND countEqual(\"tv:snapApplied:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:snapPushoutGraph:lr:lr:u64:1247:::0::data\", 2) = 1"
 	pushoutScanRetentionFilter = "(has(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) OR has(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) OR has(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3)) AND countEqual(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) <= 1 AND countEqual(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3) <= 1"
 )
 
@@ -1214,10 +1214,10 @@ var PushoutComponentSQL = componentsql.Set{
 			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:logHash:value:val:s:4:::0::data\", \"tv:logHash:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:logHash:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Hash String)')",
 		},
 		"Snapshot": {
-			Presence:   "has(\"tv:snapGraggle:lr:lr:u64:1247:::0::data\", 2)",
-			Validator:  "countEqual(\"tv:snapApplied:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:snapGraggle:lr:lr:u64:1247:::0::data\", 2) = 1",
+			Presence:   "has(\"tv:snapPushoutGraph:lr:lr:u64:1247:::0::data\", 2)",
+			Validator:  "countEqual(\"tv:snapApplied:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:snapPushoutGraph:lr:lr:u64:1247:::0::data\", 2) = 1",
 			Filter:     pushoutScanSnapshotFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:snapApplied:value:val:sh:4:::0::data\", \"tv:snapApplied:len:len:u64:4D:::0::data\", \"tv:snapApplied:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:snapApplied:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:snapGraggle:value:val:y:4:::0::data\", \"tv:snapGraggle:lr:lr:u64:1247:::0::data\", 2, LW_RAGGED_PARENT_IDS(\"tv:snapGraggle:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Applied Array(String), Graggle String)')",
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:snapApplied:value:val:sh:4:::0::data\", \"tv:snapApplied:len:len:u64:4D:::0::data\", \"tv:snapApplied:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:snapApplied:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:snapPushoutGraph:value:val:y:4:::0::data\", \"tv:snapPushoutGraph:lr:lr:u64:1247:::0::data\", 2, LW_RAGGED_PARENT_IDS(\"tv:snapPushoutGraph:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Applied Array(String), PushoutGraph String)')",
 		},
 		"Retention": {
 			Presence:   "(has(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) OR has(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) OR has(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3))",
@@ -1285,11 +1285,11 @@ func decodePushoutRecord(rec arrow.RecordBatch) (ents []*PushoutEntity, err erro
 	envBlobR := lowlevel.NewReadAccessPushoutTableTaggedEnvBlob()
 	logHashR := lowlevel.NewReadAccessPushoutTableTaggedLogHash()
 	snapAppliedR := lowlevel.NewReadAccessPushoutTableTaggedSnapApplied()
-	snapGraggleR := lowlevel.NewReadAccessPushoutTableTaggedSnapGraggle()
+	snapPushoutGraphR := lowlevel.NewReadAccessPushoutTableTaggedSnapPushoutGraph()
 	retHashR := lowlevel.NewReadAccessPushoutTableTaggedRetHash()
 	retIndexR := lowlevel.NewReadAccessPushoutTableTaggedRetIndex()
 	retTimeR := lowlevel.NewReadAccessPushoutTableTaggedRetTime()
-	readers := []pushoutSectionReaderI{idR, tsR, lcR, envBlobR, logHashR, snapAppliedR, snapGraggleR, retHashR, retIndexR, retTimeR}
+	readers := []pushoutSectionReaderI{idR, tsR, lcR, envBlobR, logHashR, snapAppliedR, snapPushoutGraphR, retHashR, retIndexR, retTimeR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1339,7 +1339,7 @@ func decodePushoutRecord(rec arrow.RecordBatch) (ents []*PushoutEntity, err erro
 			}
 		}
 		{
-			row, ok, e := snapshotReadRow(i, snapAppliedR.GetAttributes(), snapAppliedR.GetMemberships(), snapGraggleR.GetAttributes(), snapGraggleR.GetMemberships())
+			row, ok, e := snapshotReadRow(i, snapAppliedR.GetAttributes(), snapAppliedR.GetMemberships(), snapPushoutGraphR.GetAttributes(), snapPushoutGraphR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read snapshot component: %w", e)
 				return

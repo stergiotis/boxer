@@ -29,12 +29,12 @@ validation, not verification of the demo as it runs now.
 
 ## Why model the protocol and not the merge algebra
 
-The merge algebra — graggle pushout, commutativity, associativity,
+The merge algebra — pushoutgraph pushout, commutativity, associativity,
 apply/unapply inverse — is the part *least* likely to be wrong: it rests on
 pijul's published patch theory and is already guarded by
 
-- `graggle/store/property_test.go` — commutativity / associativity / inverse;
-- `graggle/qc/invariants.go` — 14 structural + conflict invariants.
+- `pushoutgraph/store/property_test.go` — commutativity / associativity / inverse;
+- `pushoutgraph/qc/invariants.go` — 14 structural + conflict invariants.
 
 That correctness is exactly what lets this model abstract a repo's state to its
 **applied set of patch ids**: if order does not matter, convergence is just set
@@ -101,7 +101,7 @@ Two invariants that **cannot both hold**, surfaced mechanically:
 1. **`pushout_exchange.qnt` — `ErasureComplete` is false.**
    `quint run --invariant=ErasureComplete` produces: a node records a patch,
    `sweep`s it (`purged={p}`) — yet `seen={p}` still. The current Sweep purges
-   the in-graggle tombstone but **keeps the wire envelope**, so it does not
+   the in-pushoutgraph tombstone but **keeps the wire envelope**, so it does not
    actually erase the data. Convergence is safe; GDPR/FADP erasure is not.
 
 2. **`erasure_dilemma.qnt` — `EnvelopeAvailable` is false under real erasure.**

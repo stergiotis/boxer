@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
 
 // goldenPatch exercises every change kind, both context slices, byte

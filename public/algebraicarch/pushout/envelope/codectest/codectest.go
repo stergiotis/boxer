@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
-	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
-	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
 
 // CanonicalEnvelope builds the conformance fixture: a patch exercising

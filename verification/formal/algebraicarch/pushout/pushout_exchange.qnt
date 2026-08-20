@@ -11,10 +11,10 @@
 // (NATS / gRPC behind PeerI/AcceptorI), so this is forward-looking design
 // validation of the protocol, not verification of the shipped transport.
 //
-// The merge ALGEBRA (graggle pushout: commutativity, associativity,
+// The merge ALGEBRA (pushoutgraph pushout: commutativity, associativity,
 // apply/unapply inverse) is ASSUMED correct — it is property-tested in
-// graggle/store/property_test.go and guarded by the 14 invariants in
-// graggle/qc/invariants.go. That assumption is exactly what lets us
+// pushoutgraph/store/property_test.go and guarded by the 14 invariants in
+// pushoutgraph/qc/invariants.go. That assumption is exactly what lets us
 // abstract a repo's state to its applied *set* of patch ids: order does
 // not matter, so convergence reduces to set equality.
 //
