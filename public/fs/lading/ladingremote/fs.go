@@ -67,7 +67,7 @@ var (
 // one.
 func NewFS(client *sftp.Client, root string) (inst *FS, err error) {
 	if client == nil {
-		err = eh.Errorf("ladingremote: nil sftp client")
+		err = eh.Errorf("nil sftp client")
 		return
 	}
 	if root == "" {

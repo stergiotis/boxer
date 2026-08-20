@@ -78,7 +78,7 @@ func WithSubdir(dir string) Option {
 // the pipe — the same shape as the egress head, in the other direction.
 func Serve(ctx context.Context, remote string, opts ...Option) (inst *Remote, err error) {
 	if strings.TrimSpace(remote) == "" {
-		err = eh.Errorf("ladingremote: no remote given")
+		err = eh.Errorf("no remote given")
 		return
 	}
 	cfg := serveConfig{}
@@ -90,18 +90,18 @@ func Serve(ctx context.Context, remote string, opts ...Option) (inst *Remote, er
 	args = append(args, remote)
 	cmd, err := extbin.Rclone.Command(ctx, cfg.opts, args...)
 	if err != nil {
-		err = eh.Errorf("ladingremote: resolve rclone: %w", err)
+		err = eh.Errorf("resolve rclone: %w", err)
 		return
 	}
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		err = eh.Errorf("ladingremote: stdin pipe: %w", err)
+		err = eh.Errorf("stdin pipe: %w", err)
 		return
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		err = eh.Errorf("ladingremote: stdout pipe: %w", err)
+		err = eh.Errorf("stdout pipe: %w", err)
 		return
 	}
 	// rclone logs to stderr, and a failed spawn says why there. Kept bounded
@@ -112,7 +112,7 @@ func Serve(ctx context.Context, remote string, opts ...Option) (inst *Remote, er
 
 	err = cmd.Start()
 	if err != nil {
-		err = eh.Errorf("ladingremote: start rclone: %w", err)
+		err = eh.Errorf("start rclone: %w", err)
 		return
 	}
 
@@ -122,7 +122,7 @@ func Serve(ctx context.Context, remote string, opts ...Option) (inst *Remote, er
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		err = eb.Build().Str("remote", remote).Str("stderr", ring.String()).
-			Errorf("ladingremote: rclone did not speak SFTP: %w", err)
+			Errorf("rclone did not speak SFTP: %w", err)
 		return
 	}
 
@@ -152,12 +152,12 @@ func (inst *Remote) Close() error {
 		werr := inst.cmd.Wait()
 		switch {
 		case cerr != nil:
-			inst.closed = eh.Errorf("ladingremote: close sftp client: %w", cerr)
+			inst.closed = eh.Errorf("close sftp client: %w", cerr)
 		case werr != nil:
 			// An rclone that exits non-zero after a clean close is worth
 			// reporting with what it said, not swallowing.
 			inst.closed = eb.Build().Str("stderr", inst.stderr.String()).
-				Errorf("ladingremote: rclone exited: %w", werr)
+				Errorf("rclone exited: %w", werr)
 		}
 	})
 	return inst.closed

@@ -129,12 +129,12 @@ func DefaultPolicy() Policy {
 func (inst Policy) check() (err error) {
 	switch {
 	case inst.Ttl == 0:
-		err = eb.Build().Errorf("ladingingest: policy has no retention class; a zero class would expire every row at the end of the day after the walk")
+		err = eb.Build().Errorf("policy has no retention class; a zero class would expire every row at the end of the day after the walk")
 	case inst.Profile.BlockSize == 0:
 		err = eb.Build().Str("profile", inst.Profile.Name).
-			Errorf("ladingingest: policy profile has no block size")
+			Errorf("policy profile has no block size")
 	case !inst.MetaOnly && inst.InlineMax == 0:
-		err = eb.Build().Errorf("ladingingest: policy stores content but InlineMax is 0; set MetaOnly to take a stat-only snapshot")
+		err = eb.Build().Errorf("policy stores content but InlineMax is 0; set MetaOnly to take a stat-only snapshot")
 	}
 	return
 }

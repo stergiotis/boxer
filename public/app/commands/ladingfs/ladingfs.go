@@ -75,11 +75,11 @@ func runSftpStdio(c *cli.Context) (err error) {
 	client := chclient.New(chclient.ConfigFromEnv(), nil)
 	err = client.Ping(c.Context)
 	if err != nil {
-		return eh.Errorf("ladingfs: ClickHouse not reachable: %w", err)
+		return eh.Errorf("ClickHouse not reachable: %w", err)
 	}
 	exec, err := storeexec.New(client, nil)
 	if err != nil {
-		return eh.Errorf("ladingfs: executor: %w", err)
+		return eh.Errorf("executor: %w", err)
 	}
 
 	meta := ladingmeta.NewMetaStore(exec, nil, ladingmeta.MetaStoreConfig{})
@@ -91,7 +91,7 @@ func runSftpStdio(c *cli.Context) (err error) {
 	// provisioned: this command must not be the thing that creates a store.
 	err = lading.Verify(c.Context, exec)
 	if err != nil {
-		return eh.Errorf("ladingfs: %w", err)
+		return eh.Errorf("%w", err)
 	}
 
 	head, err := ladingsftp.New(ladingsftp.Config{
@@ -114,14 +114,14 @@ func runSftpStdio(c *cli.Context) (err error) {
 func visibilityOf(c *cli.Context) (vis ladingsql.MountVisibilityI, err error) {
 	if c.Bool("all-mounts") {
 		if len(c.StringSlice("mount")) > 0 {
-			err = eh.Errorf("ladingfs: --all-mounts and --mount are exclusive")
+			err = eh.Errorf("--all-mounts and --mount are exclusive")
 			return
 		}
 		return ladingsql.VisibleAll{}, nil
 	}
 	raw := c.StringSlice("mount")
 	if len(raw) == 0 {
-		err = eh.Errorf("ladingfs: no mounts named; pass --mount <id> (repeatable) or --all-mounts")
+		err = eh.Errorf("no mounts named; pass --mount <id> (repeatable) or --all-mounts")
 		return
 	}
 	set := make(ladingsql.VisibleSet, len(raw))
@@ -147,12 +147,12 @@ func parseMount(s string) (mount identifier.TaggedId, err error) {
 	var v uint64
 	v, err = parseUint(text, base)
 	if err != nil {
-		err = eb.Build().Str("mount", s).Errorf("ladingfs: mount id must be a number, decimal or 0x-prefixed")
+		err = eb.Build().Str("mount", s).Errorf("mount id must be a number, decimal or 0x-prefixed")
 		return
 	}
 	mount = identifier.TaggedId(v)
 	if !mount.IsValid() {
-		err = eb.Build().Str("mount", s).Errorf("ladingfs: %q is not a valid tagged id", s)
+		err = eb.Build().Str("mount", s).Errorf("%q is not a valid tagged id", s)
 	}
 	return
 }

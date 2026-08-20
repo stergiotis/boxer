@@ -31,10 +31,10 @@ func RecordPolicy(ctx context.Context, st *ladingpolicy.PolicyStore, mount ident
 		return
 	}
 	if st == nil {
-		return eh.Errorf("ladingingest: no policy store")
+		return eh.Errorf("no policy store")
 	}
 	if !mount.IsValid() {
-		return eh.Errorf("ladingingest: mount id is not a valid tagged id")
+		return eh.Errorf("mount id is not a valid tagged id")
 	}
 	err = st.Begin(mount.Value(), time.Now().UTC(), ladingpolicy.PolicyEnvelope{
 		NaturalKey: []byte(name),
@@ -47,11 +47,11 @@ func RecordPolicy(ctx context.Context, st *ladingpolicy.PolicyStore, mount ident
 		InlineMax: policy.InlineMax,
 	}).Commit()
 	if err != nil {
-		return eh.Errorf("ladingingest: buffer policy record: %w", err)
+		return eh.Errorf("buffer policy record: %w", err)
 	}
 	_, err = st.Flush(ctx)
 	if err != nil {
-		return eh.Errorf("ladingingest: flush policy record: %w", err)
+		return eh.Errorf("flush policy record: %w", err)
 	}
 	return
 }
