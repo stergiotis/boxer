@@ -37,6 +37,7 @@ require (
 	github.com/nao1215/markdown v0.13.0
 	github.com/nats-io/nats.go v1.53.1
 	github.com/nozzle/umap-go v0.0.0-20260301204052-79bd84384eff
+	github.com/pkg/sftp v1.13.11
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/rs/zerolog v1.35.1
 	github.com/sirkon/dst v0.26.4
@@ -145,6 +146,7 @@ require (
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/kisielk/errcheck v1.10.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
