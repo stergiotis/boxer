@@ -11,6 +11,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
@@ -604,12 +605,12 @@ func viewportFromParams(params map[string]string) (b mercBox, w, h uint32, err e
 	get := func(name SignalID) (v uint32, gErr error) {
 		raw, found := params["param_"+string(name)]
 		if !found {
-			gErr = fmt.Errorf("served raster result lacks the %s param", name)
+			gErr = eh.Errorf("served raster result lacks the %s param", name)
 			return
 		}
 		u, pErr := strconv.ParseUint(raw, 10, 32)
 		if pErr != nil {
-			gErr = fmt.Errorf("served %s = %q is not a UInt32: %w", name, raw, pErr)
+			gErr = eh.Errorf("served %s = %q is not a UInt32: %w", name, raw, pErr)
 			return
 		}
 		v = uint32(u)
@@ -669,7 +670,7 @@ func (inst *MapDriver) repack(rec arrow.RecordBatch, served map[string]string, f
 // padded/truncated defensively so the texture upload always matches.
 func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error) {
 	if rec.NumCols() < 4 {
-		err = fmt.Errorf("raster query must SELECT 4 columns (r,g,b,a); got %d", rec.NumCols())
+		err = eh.Errorf("raster query must SELECT 4 columns (r,g,b,a); got %d", rec.NumCols())
 		return
 	}
 	ra, ok1 := rec.Column(0).(*array.Uint8)
@@ -677,7 +678,7 @@ func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error)
 	ba, ok3 := rec.Column(2).(*array.Uint8)
 	aa, ok4 := rec.Column(3).(*array.Uint8)
 	if !ok1 || !ok2 || !ok3 || !ok4 {
-		err = fmt.Errorf("raster columns must be UInt8 (got %s, %s, %s, %s)",
+		err = eh.Errorf("raster columns must be UInt8 (got %s, %s, %s, %s)",
 			rec.Column(0).DataType(), rec.Column(1).DataType(),
 			rec.Column(2).DataType(), rec.Column(3).DataType())
 		return

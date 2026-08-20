@@ -99,7 +99,7 @@ func ValidateColumnNames(pattern string) nanopass.Pass {
 
 			pr, err := nanopass.Parse(sql)
 			if err != nil {
-				err = eh.Errorf("ValidateColumnNames: %w", err)
+				err = eh.Errorf("parse: %w", err)
 				return
 			}
 
@@ -126,7 +126,7 @@ func ValidateColumnNames(pattern string) nanopass.Pass {
 func ValidatorFromRegexp(pattern *regexp.Regexp) ColumnNameValidator {
 	return func(unquotedColName string, isAlias bool) (err error) {
 		if !pattern.MatchString(unquotedColName) {
-			err = fmt.Errorf("invalid column name: %q (alias=%v)", unquotedColName, isAlias)
+			err = eh.Errorf("invalid column name: %q (alias=%v)", unquotedColName, isAlias)
 		}
 		return
 	}

@@ -4,11 +4,12 @@ package nvml
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // NVML return codes (subset; see nvml.h NVML_SUCCESS, NVML_ERROR_*).
@@ -91,7 +92,7 @@ func DefaultLoader() (nvml NVMLI, err error) {
 		lastErr = derr
 	}
 	if handle == 0 {
-		err = fmt.Errorf("dlopen %v: %w", candidateLibs, lastErr)
+		err = eh.Errorf("dlopen %v: %w", candidateLibs, lastErr)
 		return
 	}
 
@@ -110,14 +111,14 @@ func DefaultLoader() (nvml NVMLI, err error) {
 
 	if rc := r.nvmlInit(); rc != nvmlSuccess {
 		_ = purego.Dlclose(handle)
-		err = fmt.Errorf("nvmlInit_v2: rc=%d", rc)
+		err = eh.Errorf("nvmlInit_v2: rc=%d", rc)
 		return
 	}
 
 	if rc := r.nvmlDeviceGetCount(&r.deviceCount); rc != nvmlSuccess {
 		_ = r.nvmlShutdown()
 		_ = purego.Dlclose(handle)
-		err = fmt.Errorf("nvmlDeviceGetCount: rc=%d", rc)
+		err = eh.Errorf("nvmlDeviceGetCount: rc=%d", rc)
 		return
 	}
 	r.handles = make([]uintptr, r.deviceCount)
@@ -125,7 +126,7 @@ func DefaultLoader() (nvml NVMLI, err error) {
 		if rc := r.nvmlDeviceGetHandleByIdx(i, &r.handles[i]); rc != nvmlSuccess {
 			_ = r.nvmlShutdown()
 			_ = purego.Dlclose(handle)
-			err = fmt.Errorf("nvmlDeviceGetHandleByIndex(%d): rc=%d", i, rc)
+			err = eh.Errorf("nvmlDeviceGetHandleByIndex(%d): rc=%d", i, rc)
 			return
 		}
 	}
@@ -150,7 +151,7 @@ func (r *realNVML) handleFor(idx uint32) (h uintptr, err error) {
 		return
 	}
 	if idx >= r.deviceCount {
-		err = fmt.Errorf("nvml: device index %d out of range (count=%d)", idx, r.deviceCount)
+		err = eh.Errorf("device index %d out of range (count=%d)", idx, r.deviceCount)
 		return
 	}
 	return r.handles[idx], nil
@@ -166,7 +167,7 @@ func (r *realNVML) DeviceName(idx uint32) (name string, err error) {
 	}
 	var buf [nvmlNameBufferSize]byte
 	if rc := r.nvmlDeviceGetName(h, &buf[0], nvmlNameBufferSize); rc != nvmlSuccess {
-		err = fmt.Errorf("nvmlDeviceGetName: rc=%d", rc)
+		err = eh.Errorf("nvmlDeviceGetName: rc=%d", rc)
 		return
 	}
 	// NUL-terminate.
@@ -188,7 +189,7 @@ func (r *realNVML) DevicePCIID(idx uint32) (pciID string, err error) {
 	}
 	var info nvmlPciInfo
 	if rc := r.nvmlDeviceGetPciInfo(h, &info); rc != nvmlSuccess {
-		err = fmt.Errorf("nvmlDeviceGetPciInfo_v3: rc=%d", rc)
+		err = eh.Errorf("nvmlDeviceGetPciInfo_v3: rc=%d", rc)
 		return
 	}
 	pciID = formatPCIDevice(info.PciDeviceID)
@@ -206,7 +207,7 @@ func (r *realNVML) DeviceUtilization(idx uint32) (gpuPct, memPct uint32, err err
 	}
 	var u nvmlUtilization
 	if rc := r.nvmlDeviceGetUtilization(h, &u); rc != nvmlSuccess {
-		err = fmt.Errorf("nvmlDeviceGetUtilizationRates: rc=%d", rc)
+		err = eh.Errorf("nvmlDeviceGetUtilizationRates: rc=%d", rc)
 		return
 	}
 	gpuPct = u.GPU
@@ -224,7 +225,7 @@ func (r *realNVML) DeviceMemory(idx uint32) (total, free, used uint64, err error
 	}
 	var m nvmlMemory
 	if rc := r.nvmlDeviceGetMemoryInfo(h, &m); rc != nvmlSuccess {
-		err = fmt.Errorf("nvmlDeviceGetMemoryInfo: rc=%d", rc)
+		err = eh.Errorf("nvmlDeviceGetMemoryInfo: rc=%d", rc)
 		return
 	}
 	total = m.Total
@@ -242,7 +243,7 @@ func (r *realNVML) DevicePowerMilliWatts(idx uint32) (mw uint32, err error) {
 		return
 	}
 	if rc := r.nvmlDeviceGetPowerUsage(h, &mw); rc != nvmlSuccess {
-		err = fmt.Errorf("nvmlDeviceGetPowerUsage: rc=%d", rc)
+		err = eh.Errorf("nvmlDeviceGetPowerUsage: rc=%d", rc)
 		return
 	}
 	return
@@ -257,7 +258,7 @@ func (r *realNVML) DeviceTempC(idx uint32) (c uint32, err error) {
 		return
 	}
 	if rc := r.nvmlDeviceGetTemperature(h, nvmlTemperatureGPU, &c); rc != nvmlSuccess {
-		err = fmt.Errorf("nvmlDeviceGetTemperature: rc=%d", rc)
+		err = eh.Errorf("nvmlDeviceGetTemperature: rc=%d", rc)
 		return
 	}
 	return
@@ -272,7 +273,7 @@ func (r *realNVML) DeviceGraphicsClockMHz(idx uint32) (mhz uint32, err error) {
 		return
 	}
 	if rc := r.nvmlDeviceGetClockInfo(h, nvmlClockGraphics, &mhz); rc != nvmlSuccess {
-		err = fmt.Errorf("nvmlDeviceGetClockInfo: rc=%d", rc)
+		err = eh.Errorf("nvmlDeviceGetClockInfo: rc=%d", rc)
 		return
 	}
 	return
@@ -289,12 +290,12 @@ func (r *realNVML) Close() (err error) {
 	var errs []error
 	if r.nvmlShutdown != nil {
 		if rc := r.nvmlShutdown(); rc != nvmlSuccess {
-			errs = append(errs, fmt.Errorf("nvmlShutdown: rc=%d", rc))
+			errs = append(errs, eh.Errorf("nvmlShutdown: rc=%d", rc))
 		}
 	}
 	if r.handle != 0 {
 		if cerr := purego.Dlclose(r.handle); cerr != nil {
-			errs = append(errs, fmt.Errorf("dlclose: %w", cerr))
+			errs = append(errs, eh.Errorf("dlclose: %w", cerr))
 		}
 		r.handle = 0
 	}

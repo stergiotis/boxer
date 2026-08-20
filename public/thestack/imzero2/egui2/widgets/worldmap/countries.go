@@ -5,11 +5,12 @@ import (
 	_ "embed"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
-	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/klauspost/compress/zstd"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Country geometry + identity, parsed once from the vendored Natural Earth
@@ -115,12 +116,12 @@ func loadAtlas() (*Atlas, error) {
 	// uncompressed buffer.
 	zr, err := zstd.NewReader(bytes.NewReader(neCountriesZst), zstd.WithDecoderConcurrency(1))
 	if err != nil {
-		return nil, fmt.Errorf("worldmap: asset zstd: %w", err)
+		return nil, eh.Errorf("asset zstd: %w", err)
 	}
 	defer zr.Close()
 	var fc neFeatureCollection
 	if err = json.UnmarshalRead(zr, &fc); err != nil {
-		return nil, fmt.Errorf("worldmap: asset parse: %w", err)
+		return nil, eh.Errorf("asset parse: %w", err)
 	}
 	a := &Atlas{
 		Countries: make([]Country, 0, len(fc.Features)),
@@ -129,7 +130,7 @@ func loadAtlas() (*Atlas, error) {
 	for _, f := range fc.Features {
 		rings, holes, rerr := decodeRings(f.Geometry)
 		if rerr != nil {
-			return nil, fmt.Errorf("worldmap: %s: %w", f.Properties.Admin, rerr)
+			return nil, eh.Errorf("%s: %w", f.Properties.Admin, rerr)
 		}
 		if len(rings) == 0 {
 			continue
@@ -217,7 +218,7 @@ func decodeRings(g neGeometry) ([][]projPt, []bool, error) {
 		}
 		return rings, holes, nil
 	default:
-		return nil, nil, fmt.Errorf("unsupported geometry type %q", g.Type)
+		return nil, nil, eh.Errorf("unsupported geometry type %q", g.Type)
 	}
 }
 

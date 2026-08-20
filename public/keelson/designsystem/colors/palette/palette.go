@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/gma"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // EmphasisLevel names the three emphasis levels per ADR-0033 §SD3.
@@ -115,11 +116,11 @@ func Resolve(file *File) (tokens []Token, err error) {
 
 func makeToken(name string, l, c, h float64) (t Token, err error) {
 	if l < 0.0 || l > 1.0 {
-		err = fmt.Errorf("token %s: L=%v out of [0, 1]", name, l)
+		err = eh.Errorf("token %s: L=%v out of [0, 1]", name, l)
 		return
 	}
 	if c < 0.0 {
-		err = fmt.Errorf("token %s: C=%v negative", name, c)
+		err = eh.Errorf("token %s: C=%v negative", name, c)
 		return
 	}
 	// CSS Color 4 §13 gamut mapping (was: naive chroma stepping per

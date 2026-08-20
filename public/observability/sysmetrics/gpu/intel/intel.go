@@ -5,7 +5,6 @@ package intel
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"path/filepath"
 	"slices"
@@ -180,7 +179,7 @@ func New(opts Options) (inst *Collector, err error) {
 
 	pmuTypeStr, terr := opts.Sys.ReadString(SysDevicesI915Type)
 	if terr != nil {
-		err = fmt.Errorf("%w: read %s: %w", ErrPMUUnavailable, SysDevicesI915Type, terr)
+		err = eh.Errorf("%w: read %s: %w", ErrPMUUnavailable, SysDevicesI915Type, terr)
 		return
 	}
 	pmuType, perr := strconv.ParseUint(strings.TrimSpace(pmuTypeStr), 10, 32)
@@ -195,7 +194,7 @@ func New(opts Options) (inst *Collector, err error) {
 		return
 	}
 	if len(devices) == 0 {
-		err = fmt.Errorf("%w: no Intel DRM cards under %s", ErrPMUUnavailable, SysClassDRM)
+		err = eh.Errorf("%w: no Intel DRM cards under %s", ErrPMUUnavailable, SysClassDRM)
 		return
 	}
 
@@ -244,7 +243,7 @@ func New(opts Options) (inst *Collector, err error) {
 		// Every counter open failed — strongly suggests perf_event_paranoid > 1.
 		closeAll(inst)
 		inst = nil
-		err = fmt.Errorf("%w: every perf_event_open failed (check kernel.perf_event_paranoid)", ErrPMUUnavailable)
+		err = eh.Errorf("%w: every perf_event_open failed (check kernel.perf_event_paranoid)", ErrPMUUnavailable)
 		return
 	}
 	return

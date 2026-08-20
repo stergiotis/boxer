@@ -1,8 +1,9 @@
 package icicle
 
 import (
-	"fmt"
 	"sort"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Node is one laid-out rectangle. X is in the tree's own value units and Y in
@@ -62,7 +63,7 @@ func Compute(t Tree, o Options) (*Layout, error) {
 		}
 	}
 	if !(grand > 0) {
-		return nil, fmt.Errorf("icicle: tree has a total value of %v; there is nothing to lay out", grand)
+		return nil, eh.Errorf("tree has a total value of %v; there is nothing to lay out", grand)
 	}
 
 	childStart, childList := buildChildIndex(t.Parents)

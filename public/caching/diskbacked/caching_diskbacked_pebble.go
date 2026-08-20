@@ -1,13 +1,13 @@
 package diskbacked
 
 import (
-	"fmt"
 	"os"
 	"sync/atomic"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/caching"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Compile-time assertion that PebbleStash satisfies caching.StashBackendI.
@@ -54,7 +54,7 @@ func NewPebbleStash[K comparable, V any](path string, softCap int, cleanStart bo
 
 	db, err := pebble.Open(path, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open pebble db: %w", err)
+		return nil, eh.Errorf("failed to open pebble db: %w", err)
 	}
 
 	s := &PebbleStash[K, V]{
@@ -68,7 +68,7 @@ func NewPebbleStash[K comparable, V any](path string, softCap int, cleanStart bo
 		it, err := db.NewIter(nil)
 		if err != nil {
 			_ = db.Close()
-			return nil, fmt.Errorf("failed to open pebble iterator: %w", err)
+			return nil, eh.Errorf("failed to open pebble iterator: %w", err)
 		}
 		var n int64
 		for valid := it.First(); valid; valid = it.Next() {

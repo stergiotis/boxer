@@ -1,12 +1,12 @@
 package diskbacked
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/akrylysov/pogreb"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/caching"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Compile-time assertion that PogrebStash satisfies caching.StashBackendI.
@@ -39,7 +39,7 @@ func NewPogrebStash[K comparable, V any](path string, softCap int, cleanStart bo
 
 	db, err := pogreb.Open(path, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open pogreb db at %s: %w", path, err)
+		return nil, eh.Errorf("failed to open pogreb db at %s: %w", path, err)
 	}
 
 	return &PogrebStash[K, V]{

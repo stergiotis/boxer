@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"fmt"
 	"golang.org/x/image/tiff/lzw"
 	"io"
 	"math"
@@ -44,11 +43,11 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 
 	// validate byte order (must be little-endian "II")
 	if len(data) < 8 {
-		err = eh.Errorf("file too small: %w", fmt.Errorf("expected at least 8 bytes"))
+		err = eh.Errorf("file too small: %w", eh.Errorf("expected at least 8 bytes"))
 		return
 	}
 	if data[0] != 'I' || data[1] != 'I' {
-		err = eh.Errorf("unsupported byte order %c%c, expected little-endian II: %w", data[0], data[1], fmt.Errorf("bad byte order"))
+		err = eh.Errorf("unsupported byte order %c%c, expected little-endian II: %w", data[0], data[1], eh.Errorf("bad byte order"))
 		return
 	}
 
@@ -70,7 +69,7 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 	expectedTiles := tilesAcross * tilesDown
 
 	if int32(len(tileOffsets)) != expectedTiles {
-		err = eh.Errorf("expected %d tiles, got %d offsets: %w", expectedTiles, len(tileOffsets), fmt.Errorf("tile count mismatch"))
+		err = eh.Errorf("expected %d tiles, got %d offsets: %w", expectedTiles, len(tileOffsets), eh.Errorf("tile count mismatch"))
 		return
 	}
 
@@ -116,7 +115,7 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 // parseTIFFIFD reads the first IFD and extracts tile offsets and byte counts.
 func parseTIFFIFD(data []byte, ifdOffset uint32) (tileOffsets []uint32, tileByteCounts []uint32, err error) {
 	if int(ifdOffset)+2 > len(data) {
-		err = eh.Errorf("IFD offset out of range: %w", fmt.Errorf("offset %d exceeds file size %d", ifdOffset, len(data)))
+		err = eh.Errorf("IFD offset out of range: %w", eh.Errorf("offset %d exceeds file size %d", ifdOffset, len(data)))
 		return
 	}
 
@@ -125,7 +124,7 @@ func parseTIFFIFD(data []byte, ifdOffset uint32) (tileOffsets []uint32, tileByte
 
 	for i := range numEntries {
 		if int(pos)+12 > len(data) {
-			err = eh.Errorf("IFD entry %d out of range: %w", i, fmt.Errorf("truncated"))
+			err = eh.Errorf("IFD entry %d out of range: %w", i, eh.Errorf("truncated"))
 			return
 		}
 
@@ -153,11 +152,11 @@ func parseTIFFIFD(data []byte, ifdOffset uint32) (tileOffsets []uint32, tileByte
 	}
 
 	if len(tileOffsets) == 0 {
-		err = eh.Errorf("no tile/strip offsets found in IFD: %w", fmt.Errorf("missing tag"))
+		err = eh.Errorf("no tile/strip offsets found in IFD: %w", eh.Errorf("missing tag"))
 		return
 	}
 	if len(tileByteCounts) == 0 {
-		err = eh.Errorf("no tile/strip byte counts found in IFD: %w", fmt.Errorf("missing tag"))
+		err = eh.Errorf("no tile/strip byte counts found in IFD: %w", eh.Errorf("missing tag"))
 		return
 	}
 	return
@@ -184,7 +183,7 @@ func readUint32Array(data []byte, fieldType uint16, count uint32, valueOffset ui
 			off := valueOffset
 			for i := range count {
 				if int(off)+2 > len(data) {
-					err = eh.Errorf("SHORT array out of range at index %d: %w", i, fmt.Errorf("truncated"))
+					err = eh.Errorf("SHORT array out of range at index %d: %w", i, eh.Errorf("truncated"))
 					return
 				}
 				values[i] = uint32(binary.LittleEndian.Uint16(data[off : off+2]))
@@ -200,7 +199,7 @@ func readUint32Array(data []byte, fieldType uint16, count uint32, valueOffset ui
 			off := valueOffset
 			for i := range count {
 				if int(off)+4 > len(data) {
-					err = eh.Errorf("LONG array out of range at index %d: %w", i, fmt.Errorf("truncated"))
+					err = eh.Errorf("LONG array out of range at index %d: %w", i, eh.Errorf("truncated"))
 					return
 				}
 				values[i] = binary.LittleEndian.Uint32(data[off : off+4])
@@ -208,7 +207,7 @@ func readUint32Array(data []byte, fieldType uint16, count uint32, valueOffset ui
 			}
 		}
 	default:
-		err = eh.Errorf("unsupported field type %d for uint32 array: %w", fieldType, fmt.Errorf("bad type"))
+		err = eh.Errorf("unsupported field type %d for uint32 array: %w", fieldType, eh.Errorf("bad type"))
 		return
 	}
 	return
@@ -218,7 +217,7 @@ func readUint32Array(data []byte, fieldType uint16, count uint32, valueOffset ui
 // differencing predictor for float32 data.
 func decodeLZWTile(data []byte, offset uint32, byteCount uint32, tileW int32, tileH int32) (pixels []float32, err error) {
 	if int(offset)+int(byteCount) > len(data) {
-		err = eh.Errorf("tile data out of range: offset=%d count=%d filesize=%d: %w", offset, byteCount, len(data), fmt.Errorf("truncated"))
+		err = eh.Errorf("tile data out of range: offset=%d count=%d filesize=%d: %w", offset, byteCount, len(data), eh.Errorf("truncated"))
 		return
 	}
 
@@ -237,7 +236,7 @@ func decodeLZWTile(data []byte, offset uint32, byteCount uint32, tileW int32, ti
 	}
 
 	if int32(len(decoded)) < expectedBytes {
-		err = eh.Errorf("decoded size %d < expected %d bytes: %w", len(decoded), expectedBytes, fmt.Errorf("short read"))
+		err = eh.Errorf("decoded size %d < expected %d bytes: %w", len(decoded), expectedBytes, eh.Errorf("short read"))
 		return
 	}
 

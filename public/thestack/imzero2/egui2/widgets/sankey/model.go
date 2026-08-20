@@ -17,8 +17,9 @@
 package sankey
 
 import (
-	"fmt"
 	"math"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Mode selects how a diagram's stage index and within-stage order are
@@ -212,40 +213,40 @@ func (d Diagram) Validate() error {
 // adjacency rule already rules a cycle out, so nothing needs a traversal.
 func (d Diagram) validate() (index map[string]int, order []int, err error) {
 	if len(d.Nodes) == 0 {
-		return nil, nil, fmt.Errorf("sankey: diagram has no nodes")
+		return nil, nil, eh.Errorf("diagram has no nodes")
 	}
 	index = make(map[string]int, len(d.Nodes))
 	for i, n := range d.Nodes {
 		if n.ID == "" {
-			return nil, nil, fmt.Errorf("sankey: node %d has an empty id", i)
+			return nil, nil, eh.Errorf("node %d has an empty id", i)
 		}
 		if _, dup := index[n.ID]; dup {
-			return nil, nil, fmt.Errorf("sankey: duplicate node id %q", n.ID)
+			return nil, nil, eh.Errorf("duplicate node id %q", n.ID)
 		}
 		if d.Mode == ModeAlluvial && n.Stage < 0 {
-			return nil, nil, fmt.Errorf("sankey: node %q has stage %d; alluvial stages must be >= 0", n.ID, n.Stage)
+			return nil, nil, eh.Errorf("node %q has stage %d; alluvial stages must be >= 0", n.ID, n.Stage)
 		}
 		index[n.ID] = i
 	}
 	for i, l := range d.Links {
 		si, okS := index[l.Source]
 		if !okS {
-			return nil, nil, fmt.Errorf("sankey: link %d references unknown source %q", i, l.Source)
+			return nil, nil, eh.Errorf("link %d references unknown source %q", i, l.Source)
 		}
 		ti, okT := index[l.Target]
 		if !okT {
-			return nil, nil, fmt.Errorf("sankey: link %d references unknown target %q", i, l.Target)
+			return nil, nil, eh.Errorf("link %d references unknown target %q", i, l.Target)
 		}
 		if si == ti {
-			return nil, nil, fmt.Errorf("sankey: link %d is a self-link on %q", i, l.Source)
+			return nil, nil, eh.Errorf("link %d is a self-link on %q", i, l.Source)
 		}
 		if math.IsNaN(l.Value) || math.IsInf(l.Value, 0) || l.Value <= 0 {
-			return nil, nil, fmt.Errorf("sankey: link %d (%s->%s) has value %v; values must be finite and > 0",
+			return nil, nil, eh.Errorf("link %d (%s->%s) has value %v; values must be finite and > 0",
 				i, l.Source, l.Target, l.Value)
 		}
 		if d.Mode == ModeAlluvial {
 			if got := d.Nodes[ti].Stage - d.Nodes[si].Stage; got != 1 {
-				return nil, nil, fmt.Errorf("sankey: link %d (%s->%s) spans %d stages; alluvial links must join adjacent stages",
+				return nil, nil, eh.Errorf("link %d (%s->%s) spans %d stages; alluvial links must join adjacent stages",
 					i, l.Source, l.Target, got)
 			}
 		}
@@ -292,9 +293,9 @@ func (d Diagram) topoOrder(index map[string]int) ([]int, error) {
 	// Name a concrete edge inside the cycle: both ends are unsettled.
 	for i, l := range d.Links {
 		if indeg[index[l.Source]] > 0 && indeg[index[l.Target]] > 0 {
-			return nil, fmt.Errorf("sankey: link %d (%s->%s) lies on a cycle; flow diagrams are acyclic (ADR-0159 SD6)",
+			return nil, eh.Errorf("link %d (%s->%s) lies on a cycle; flow diagrams are acyclic (ADR-0159 SD6)",
 				i, l.Source, l.Target)
 		}
 	}
-	return nil, fmt.Errorf("sankey: the graph contains a cycle")
+	return nil, eh.Errorf("the graph contains a cycle")
 }

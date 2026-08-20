@@ -366,7 +366,7 @@ func downloadFile(ctx context.Context, client *http.Client, href string, destPat
 		if expectedSha256 != "" {
 			actual := hex.EncodeToString(h.Sum(nil))
 			if actual != expectedSha256 {
-				err = eh.Errorf("sha256 mismatch: expected %s got %s: %w", expectedSha256, actual, fmt.Errorf("integrity check failed"))
+				err = eh.Errorf("sha256 mismatch: expected %s got %s: %w", expectedSha256, actual, eh.Errorf("integrity check failed"))
 				return
 			}
 		}
@@ -521,7 +521,7 @@ func fetchStacPage(ctx context.Context, client *http.Client, url string) (data s
 				}
 				continue
 			}
-			err = eh.Errorf("STAC returned status %d: %w", resp.StatusCode, fmt.Errorf("unexpected status"))
+			err = eh.Errorf("STAC returned status %d: %w", resp.StatusCode, eh.Errorf("unexpected status"))
 			return
 		}
 

@@ -1,6 +1,10 @@
 package ast
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
+)
 
 type ExprKind uint8
 
@@ -245,7 +249,7 @@ func ParseIntervalUnit(s string) (unit IntervalUnitE, err error) {
 	case "YEAR":
 		unit = IntervalYear
 	default:
-		err = fmt.Errorf("unknown interval unit %q", s)
+		err = eh.Errorf("unknown interval unit %q", s)
 	}
 	return
 }

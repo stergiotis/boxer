@@ -11,6 +11,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
 )
@@ -114,25 +115,25 @@ func mapBandsRecord(rec arrow.RecordBatch) (bands []layout.BackgroundBand, skipp
 	colColor := schema.FieldIndices(timelineSlotBandColor)
 	colLabel := schema.FieldIndices(timelineSlotBandLabel)
 	if len(colFrom) == 0 || len(colTo) == 0 || len(colColor) == 0 {
-		err = fmt.Errorf("bands SQL must return %q, %q, %q (and optionally %q); got %v",
+		err = eh.Errorf("bands SQL must return %q, %q, %q (and optionally %q); got %v",
 			timelineSlotBandFrom, timelineSlotBandTo, timelineSlotBandColor,
 			timelineSlotBandLabel, fieldNames(schema))
 		return
 	}
 	fromArr, ok := rec.Column(colFrom[0]).(*array.Timestamp)
 	if !ok {
-		err = fmt.Errorf("%q must be a Timestamp column (got %s)",
+		err = eh.Errorf("%q must be a Timestamp column (got %s)",
 			timelineSlotBandFrom, rec.Column(colFrom[0]).DataType())
 		return
 	}
 	toArr, ok := rec.Column(colTo[0]).(*array.Timestamp)
 	if !ok {
-		err = fmt.Errorf("%q must be a Timestamp column (got %s)",
+		err = eh.Errorf("%q must be a Timestamp column (got %s)",
 			timelineSlotBandTo, rec.Column(colTo[0]).DataType())
 		return
 	}
 	if !isStringLikeType(rec.Column(colColor[0]).DataType()) {
-		err = fmt.Errorf("%q must be a String / Binary column (got %s)",
+		err = eh.Errorf("%q must be a String / Binary column (got %s)",
 			timelineSlotBandColor, rec.Column(colColor[0]).DataType())
 		return
 	}
@@ -140,7 +141,7 @@ func mapBandsRecord(rec arrow.RecordBatch) (bands []layout.BackgroundBand, skipp
 	var labelArr arrow.Array
 	if len(colLabel) > 0 {
 		if !isStringLikeType(rec.Column(colLabel[0]).DataType()) {
-			err = fmt.Errorf("%q must be a String / Binary column (got %s)",
+			err = eh.Errorf("%q must be a String / Binary column (got %s)",
 				timelineSlotBandLabel, rec.Column(colLabel[0]).DataType())
 			return
 		}

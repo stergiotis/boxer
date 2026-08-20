@@ -35,6 +35,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/emit"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/ipboundary"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/palette"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Config controls a generator invocation.
@@ -101,13 +102,13 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 	var pf palette.File
 	_, err = toml.DecodeFile(paletteTomlPath, &pf)
 	if err != nil {
-		err = fmt.Errorf("decode palette.toml: %w", err)
+		err = eh.Errorf("decode palette.toml: %w", err)
 		return
 	}
 
 	tokens, err := palette.Resolve(&pf)
 	if err != nil {
-		err = fmt.Errorf("resolve tokens: %w", err)
+		err = eh.Errorf("resolve tokens: %w", err)
 		return
 	}
 
@@ -120,7 +121,7 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 	var pf2 pairsFile
 	_, err = toml.DecodeFile(pairsTomlPath, &pf2)
 	if err != nil {
-		err = fmt.Errorf("decode pairs.toml: %w", err)
+		err = eh.Errorf("decode pairs.toml: %w", err)
 		return
 	}
 
@@ -132,7 +133,7 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 	// ---- IP boundary search ----
 	sources, err := ipboundary.LoadAll(ipRefsDir)
 	if err != nil {
-		err = fmt.Errorf("load IP-refs: %w", err)
+		err = eh.Errorf("load IP-refs: %w", err)
 		return
 	}
 	idsHexes := make(map[string]string, len(tokens))
@@ -188,7 +189,7 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		} {
 			err = os.WriteFile(w.path, []byte(w.content), 0o644)
 			if err != nil {
-				err = fmt.Errorf("write %s: %w", w.path, err)
+				err = eh.Errorf("write %s: %w", w.path, err)
 				return
 			}
 			res.Wrote = append(res.Wrote, w.path)
@@ -367,11 +368,11 @@ func runCVD(tokens []palette.Token) (failures []string) {
 func verifyFile(path, want string) (err error) {
 	got, err := os.ReadFile(path)
 	if err != nil {
-		err = fmt.Errorf("verify: read %s: %w", path, err)
+		err = eh.Errorf("verify: read %s: %w", path, err)
 		return
 	}
 	if string(got) != want {
-		err = fmt.Errorf("verify: %s drift — re-run ./boxer.sh designsystem colors gen", path)
+		err = eh.Errorf("verify: %s drift — re-run ./boxer.sh designsystem colors gen", path)
 		return
 	}
 	return
@@ -382,7 +383,7 @@ func verifyFile(path, want string) (err error) {
 func findRepoRoot() (root string, err error) {
 	_, here, _, ok := runtime.Caller(0)
 	if !ok {
-		err = fmt.Errorf("runtime.Caller failed")
+		err = eh.Errorf("runtime.Caller failed")
 		return
 	}
 	d := filepath.Dir(here)
@@ -398,6 +399,6 @@ func findRepoRoot() (root string, err error) {
 		}
 		d = parent
 	}
-	err = fmt.Errorf("could not locate repo root (go.mod not found above %s)", here)
+	err = eh.Errorf("could not locate repo root (go.mod not found above %s)", here)
 	return
 }

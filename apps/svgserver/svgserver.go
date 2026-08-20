@@ -30,6 +30,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
@@ -137,7 +138,7 @@ func (s *server) renderLoop() func() error {
 			} else {
 				pollFrames++
 				if pollFrames > maxPollFrames {
-					active.resultCh <- renderResult{err: fmt.Errorf("svg export produced no file at %s within %d frames", tmpPath, maxPollFrames)}
+					active.resultCh <- renderResult{err: eh.Errorf("svg export produced no file at %s within %d frames", tmpPath, maxPollFrames)}
 					active = nil
 				}
 			}
@@ -327,7 +328,7 @@ func main() {
 func runServer(ctx *cli.Context) (err error) {
 	tmpDir, err := os.MkdirTemp("", "imzero2-svgserver-")
 	if err != nil {
-		return fmt.Errorf("unable to create temp dir: %w", err)
+		return eh.Errorf("unable to create temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
@@ -351,7 +352,7 @@ func runServer(ctx *cli.Context) (err error) {
 	unm := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 	app, err := application.NewApplication(appCfg, unm)
 	if err != nil {
-		return fmt.Errorf("unable to create application: %w", err)
+		return eh.Errorf("unable to create application: %w", err)
 	}
 
 	app.FffiEstablishedHandler = func(fffi *runtime.Fffi2[*runtime.Unmarshaller]) error {
@@ -375,10 +376,10 @@ func runServer(ctx *cli.Context) (err error) {
 	}()
 
 	if err = app.Launch(); err != nil {
-		return fmt.Errorf("unable to launch imzero2 client: %w", err)
+		return eh.Errorf("unable to launch imzero2 client: %w", err)
 	}
 	if err = app.Run(); err != nil {
-		return fmt.Errorf("render loop exited with error: %w", err)
+		return eh.Errorf("render loop exited with error: %w", err)
 	}
 	return
 }

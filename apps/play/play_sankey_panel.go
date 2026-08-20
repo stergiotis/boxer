@@ -396,13 +396,14 @@ func computeSankeyLayout(d sankey.Diagram) (lay *sankey.Layout, used sankey.Mode
 	return lay, sankey.ModeSankey, sankeyReason(alluvialErr), nil
 }
 
-// sankeyReason trims the widget's package prefix off an error for the status
-// line: the pane already says which panel this is.
+// sankeyReason reduces an error to a status line: the first line, clipped.
+// The widget's messages carry no package prefix to strip — the pane already
+// says which panel this is (CODINGSTANDARDS "Message Text").
 func sankeyReason(err error) string {
 	if err == nil {
 		return ""
 	}
-	return truncateRunes(strings.TrimPrefix(firstLineOf(err.Error()), "sankey: "), 140)
+	return truncateRunes(firstLineOf(err.Error()), 140)
 }
 
 // sankeyDiagramKey fingerprints the diagram — the layout cache key. Everything

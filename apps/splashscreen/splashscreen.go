@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
@@ -66,19 +67,19 @@ func loadAssets() {
 
 		data, err := assetsFS.ReadFile(splashAssetPath)
 		if err != nil {
-			splashErr = fmt.Errorf("read splash asset: %w", err)
+			splashErr = eh.Errorf("read splash asset: %w", err)
 			return
 		}
 		img, _, decErr := image.Decode(bytes.NewReader(data))
 		if decErr != nil {
-			splashErr = fmt.Errorf("decode splash png: %w", decErr)
+			splashErr = eh.Errorf("decode splash png: %w", decErr)
 			return
 		}
 		b := img.Bounds()
 		w := b.Dx()
 		h := b.Dy()
 		if w <= 0 || h <= 0 {
-			splashErr = fmt.Errorf("splash png has empty bounds %dx%d", w, h)
+			splashErr = eh.Errorf("splash png has empty bounds %dx%d", w, h)
 			return
 		}
 		// Map luminance through an IDS sequential palette via a 256-entry LUT.

@@ -528,13 +528,14 @@ func (inst *IcicleDriver) statusLine() string {
 	return b.String()
 }
 
-// icicleReason trims the widget's package prefix off an error for the status
-// line: the pane already says which panel this is.
+// icicleReason reduces an error to a status line: the first line, clipped.
+// The widget's messages carry no package prefix to strip — the pane already
+// says which panel this is (CODINGSTANDARDS "Message Text").
 func icicleReason(err error) string {
 	if err == nil {
 		return ""
 	}
-	return truncateRunes(strings.TrimPrefix(firstLineOf(err.Error()), "icicle: "), 140)
+	return truncateRunes(firstLineOf(err.Error()), 140)
 }
 
 // icicleQty formats a quantity for the status and pointer lines, suffixing the

@@ -14,8 +14,7 @@
 package pipelineview
 
 import (
-	"fmt"
-
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 )
 
@@ -218,7 +217,7 @@ func impliedSpineEdges(el Element) (pairs [][2]string) {
 // endpoint. Endpoint-to-endpoint edges are rejected.
 func (p Pipeline) Validate() error {
 	if p.Root == nil {
-		return fmt.Errorf("pipelineview: nil Root")
+		return eh.Errorf("nil Root")
 	}
 	stages := make(map[string]Stage, 16)
 	var walkErr error
@@ -229,7 +228,7 @@ func (p Pipeline) Validate() error {
 			return
 		}
 		if len(g.Children) == 0 && walkErr == nil {
-			walkErr = fmt.Errorf("pipelineview: empty group")
+			walkErr = eh.Errorf("empty group")
 		}
 		for _, ch := range g.Children {
 			walkGroups(ch)
@@ -245,11 +244,11 @@ func (p Pipeline) Validate() error {
 			return
 		}
 		if st.ID == "" {
-			dupErr = fmt.Errorf("pipelineview: stage with empty ID")
+			dupErr = eh.Errorf("stage with empty ID")
 			return
 		}
 		if _, dup := stages[st.ID]; dup {
-			dupErr = fmt.Errorf("pipelineview: duplicate stage id %q", st.ID)
+			dupErr = eh.Errorf("duplicate stage id %q", st.ID)
 			return
 		}
 		stages[st.ID] = st
@@ -258,18 +257,18 @@ func (p Pipeline) Validate() error {
 		return dupErr
 	}
 	if len(stages) == 0 {
-		return fmt.Errorf("pipelineview: no stages")
+		return eh.Errorf("no stages")
 	}
 	endpoints := make(map[string]Endpoint, len(p.Endpoints))
 	for _, ep := range p.Endpoints {
 		if ep.ID == "" {
-			return fmt.Errorf("pipelineview: endpoint with empty ID")
+			return eh.Errorf("endpoint with empty ID")
 		}
 		if _, dup := stages[ep.ID]; dup {
-			return fmt.Errorf("pipelineview: endpoint id collides with stage id %q", ep.ID)
+			return eh.Errorf("endpoint id collides with stage id %q", ep.ID)
 		}
 		if _, dup := endpoints[ep.ID]; dup {
-			return fmt.Errorf("pipelineview: duplicate endpoint id %q", ep.ID)
+			return eh.Errorf("duplicate endpoint id %q", ep.ID)
 		}
 		endpoints[ep.ID] = ep
 	}
@@ -284,34 +283,34 @@ func (p Pipeline) Validate() error {
 	checkRef := func(r Ref, source bool) error {
 		switch {
 		case r.Stage != "" && r.Endpoint != "":
-			return fmt.Errorf("pipelineview: ref names both stage %q and endpoint %q", r.Stage, r.Endpoint)
+			return eh.Errorf("ref names both stage %q and endpoint %q", r.Stage, r.Endpoint)
 		case r.Endpoint != "":
 			if r.Port != "" {
-				return fmt.Errorf("pipelineview: endpoint ref %q carries a port", r.Endpoint)
+				return eh.Errorf("endpoint ref %q carries a port", r.Endpoint)
 			}
 			if _, ok := endpoints[r.Endpoint]; !ok {
-				return fmt.Errorf("pipelineview: unknown endpoint %q", r.Endpoint)
+				return eh.Errorf("unknown endpoint %q", r.Endpoint)
 			}
 		case r.Stage != "":
 			st, ok := stages[r.Stage]
 			if !ok {
-				return fmt.Errorf("pipelineview: unknown stage %q", r.Stage)
+				return eh.Errorf("unknown stage %q", r.Stage)
 			}
 			if r.Port == "" {
 				return nil // implicit primary anchor
 			}
 			cl, ok := portClass(st, r.Port)
 			if !ok {
-				return fmt.Errorf("pipelineview: stage %q has no port %q", r.Stage, r.Port)
+				return eh.Errorf("stage %q has no port %q", r.Stage, r.Port)
 			}
 			if source && cl != PortDiagnostic && cl != PortArtifact {
-				return fmt.Errorf("pipelineview: port %q.%q is not an output class", r.Stage, r.Port)
+				return eh.Errorf("port %q.%q is not an output class", r.Stage, r.Port)
 			}
 			if !source && cl != PortConfig {
-				return fmt.Errorf("pipelineview: port %q.%q is not an input class", r.Stage, r.Port)
+				return eh.Errorf("port %q.%q is not an input class", r.Stage, r.Port)
 			}
 		default:
-			return fmt.Errorf("pipelineview: empty ref")
+			return eh.Errorf("empty ref")
 		}
 		return nil
 	}
@@ -323,10 +322,10 @@ func (p Pipeline) Validate() error {
 			return err
 		}
 		if e.From.IsEndpoint() && e.To.IsEndpoint() {
-			return fmt.Errorf("pipelineview: endpoint-to-endpoint edge %q -> %q", e.From.Endpoint, e.To.Endpoint)
+			return eh.Errorf("endpoint-to-endpoint edge %q -> %q", e.From.Endpoint, e.To.Endpoint)
 		}
 		if !e.From.IsEndpoint() && !e.To.IsEndpoint() && (e.From.Port != "" || e.To.Port != "") {
-			return fmt.Errorf("pipelineview: stage-to-stage edge on named ports (%q.%q -> %q.%q) is not supported; route it through an endpoint",
+			return eh.Errorf("stage-to-stage edge on named ports (%q.%q -> %q.%q) is not supported; route it through an endpoint",
 				e.From.Stage, e.From.Port, e.To.Stage, e.To.Port)
 		}
 	}

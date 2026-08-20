@@ -48,6 +48,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/contrast"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/cvd"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Config controls a vendor invocation.
@@ -131,7 +132,7 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		gateFindings = append(gateFindings, gateQualitative(l)...)
 	}
 	if len(gateFindings) > 0 {
-		err = fmt.Errorf("qualitative palette gate: %d finding(s) (ADR-0156 §SD3):\n  %s",
+		err = eh.Errorf("qualitative palette gate: %d finding(s) (ADR-0156 §SD3):\n  %s",
 			len(gateFindings), strings.Join(gateFindings, "\n  "))
 		return
 	}
@@ -282,7 +283,7 @@ func assemble(upstreamDir string) (out []lut, err error) {
 func readCrameriTxt(path, name string, expected int) (l lut, err error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		err = fmt.Errorf("read %s: %w", path, err)
+		err = eh.Errorf("read %s: %w", path, err)
 		return
 	}
 	sum := sha256.Sum256(b)
@@ -301,34 +302,34 @@ func readCrameriTxt(path, name string, expected int) (l lut, err error) {
 		}
 		fields := strings.Fields(line)
 		if len(fields) < 3 {
-			err = fmt.Errorf("%s line %d: expected ≥3 floats, got %q", path, lineNo, line)
+			err = eh.Errorf("%s line %d: expected ≥3 floats, got %q", path, lineNo, line)
 			return
 		}
 		var r, g, bl float64
 		r, err = strconv.ParseFloat(fields[0], 64)
 		if err != nil {
-			err = fmt.Errorf("%s line %d: parse r: %w", path, lineNo, err)
+			err = eh.Errorf("%s line %d: parse r: %w", path, lineNo, err)
 			return
 		}
 		g, err = strconv.ParseFloat(fields[1], 64)
 		if err != nil {
-			err = fmt.Errorf("%s line %d: parse g: %w", path, lineNo, err)
+			err = eh.Errorf("%s line %d: parse g: %w", path, lineNo, err)
 			return
 		}
 		bl, err = strconv.ParseFloat(fields[2], 64)
 		if err != nil {
-			err = fmt.Errorf("%s line %d: parse b: %w", path, lineNo, err)
+			err = eh.Errorf("%s line %d: parse b: %w", path, lineNo, err)
 			return
 		}
 		rgbs = append(rgbs, [3]uint8{toU8(r), toU8(g), toU8(bl)})
 	}
 	err = scanner.Err()
 	if err != nil {
-		err = fmt.Errorf("%s scan: %w", path, err)
+		err = eh.Errorf("%s scan: %w", path, err)
 		return
 	}
 	if len(rgbs) != expected {
-		err = fmt.Errorf("%s: got %d entries, want %d", path, len(rgbs), expected)
+		err = eh.Errorf("%s: got %d entries, want %d", path, len(rgbs), expected)
 		return
 	}
 	l.Cardinality = expected
@@ -402,7 +403,7 @@ func gateQualitative(l lut) (findings []string) {
 func readHexPalette(path, name string, expected int) (l lut, err error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		err = fmt.Errorf("read %s: %w", path, err)
+		err = eh.Errorf("read %s: %w", path, err)
 		return
 	}
 	sum := sha256.Sum256(b)
@@ -421,24 +422,24 @@ func readHexPalette(path, name string, expected int) (l lut, err error) {
 		}
 		field := strings.Fields(line)[0]
 		if len(field) != 6 {
-			err = fmt.Errorf("%s line %d: expected 6 hex digits, got %q", path, lineNo, field)
+			err = eh.Errorf("%s line %d: expected 6 hex digits, got %q", path, lineNo, field)
 			return
 		}
 		var v uint64
 		v, err = strconv.ParseUint(field, 16, 32)
 		if err != nil {
-			err = fmt.Errorf("%s line %d: parse hex: %w", path, lineNo, err)
+			err = eh.Errorf("%s line %d: parse hex: %w", path, lineNo, err)
 			return
 		}
 		rgbs = append(rgbs, [3]uint8{uint8(v >> 16), uint8(v >> 8), uint8(v)})
 	}
 	err = scanner.Err()
 	if err != nil {
-		err = fmt.Errorf("%s scan: %w", path, err)
+		err = eh.Errorf("%s scan: %w", path, err)
 		return
 	}
 	if len(rgbs) != expected {
-		err = fmt.Errorf("%s: got %d entries, want %d", path, len(rgbs), expected)
+		err = eh.Errorf("%s: got %d entries, want %d", path, len(rgbs), expected)
 		return
 	}
 	l.Cardinality = expected
@@ -565,7 +566,7 @@ func emitGoMod(luts []lut) (s string) {
 func findRepoRoot() (root string, err error) {
 	_, here, _, ok := runtime.Caller(0)
 	if !ok {
-		err = fmt.Errorf("runtime.Caller failed")
+		err = eh.Errorf("runtime.Caller failed")
 		return
 	}
 	d := filepath.Dir(here)
@@ -581,6 +582,6 @@ func findRepoRoot() (root string, err error) {
 		}
 		d = parent
 	}
-	err = fmt.Errorf("could not locate repo root above %s", here)
+	err = eh.Errorf("could not locate repo root above %s", here)
 	return
 }

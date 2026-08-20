@@ -27,7 +27,6 @@ package tour
 import (
 	"context"
 	"errors"
-	"fmt"
 	"image"
 	_ "image/png"
 	"os"
@@ -35,6 +34,7 @@ import (
 	"sort"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/review/ssim"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // StatusE classifies the per-scene outcome of a tour comparison.
@@ -129,12 +129,12 @@ func Compare(ctx context.Context, baselineDir, candidateDir string, cfg Config) 
 
 	baselines, err := listPngs(baselineDir)
 	if err != nil {
-		err = fmt.Errorf("scan baseline dir %s: %w", baselineDir, err)
+		err = eh.Errorf("scan baseline dir %s: %w", baselineDir, err)
 		return
 	}
 	candidates, err := listPngs(candidateDir)
 	if err != nil {
-		err = fmt.Errorf("scan candidate dir %s: %w", candidateDir, err)
+		err = eh.Errorf("scan candidate dir %s: %w", candidateDir, err)
 		return
 	}
 
@@ -172,13 +172,13 @@ func compareOne(scene, baselinePath, candidatePath string, window int) (o Outcom
 	a, decodeErr := decodePng(baselinePath)
 	if decodeErr != nil {
 		o.Status = StatusDecodeError
-		o.Err = fmt.Errorf("baseline: %w", decodeErr)
+		o.Err = eh.Errorf("baseline: %w", decodeErr)
 		return
 	}
 	b, decodeErr := decodePng(candidatePath)
 	if decodeErr != nil {
 		o.Status = StatusDecodeError
-		o.Err = fmt.Errorf("candidate: %w", decodeErr)
+		o.Err = eh.Errorf("candidate: %w", decodeErr)
 		return
 	}
 	s, computeErr := ssim.Compute(a, b, window)
@@ -186,7 +186,7 @@ func compareOne(scene, baselinePath, candidatePath string, window int) (o Outcom
 		switch {
 		case errors.Is(computeErr, ssim.ErrSizeMismatch):
 			o.Status = StatusDimMismatch
-			o.Err = fmt.Errorf("baseline %dx%d vs candidate %dx%d",
+			o.Err = eh.Errorf("baseline %dx%d vs candidate %dx%d",
 				a.Bounds().Dx(), a.Bounds().Dy(),
 				b.Bounds().Dx(), b.Bounds().Dy())
 		default:

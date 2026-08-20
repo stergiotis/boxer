@@ -1,7 +1,6 @@
 package marshalling
 
 import (
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -19,7 +18,7 @@ import (
 // UnescapeString removes surrounding single quotes and resolves escape sequences.
 func UnescapeString(raw string) (result string, err error) {
 	if len(raw) < 2 || raw[0] != '\'' || raw[len(raw)-1] != '\'' {
-		err = fmt.Errorf("UnescapeString: input must be a single-quoted string, got %q", raw)
+		err = eh.Errorf("input must be a single-quoted string, got %q", raw)
 		return
 	}
 	inner := raw[1 : len(raw)-1]
@@ -65,40 +64,40 @@ func UnescapeString(raw string) (result string, err error) {
 				i += 2
 			case 'x':
 				if i+3 >= len(inner) {
-					err = fmt.Errorf("UnescapeString: truncated \\x escape at position %d", i)
+					err = eh.Errorf("truncated \\x escape at position %d", i)
 					return
 				}
 				val, parseErr := strconv.ParseUint(inner[i+2:i+4], 16, 8)
 				if parseErr != nil {
-					err = fmt.Errorf("UnescapeString: invalid \\x escape at position %d: %w", i, parseErr)
+					err = eh.Errorf("invalid \\x escape at position %d: %w", i, parseErr)
 					return
 				}
 				buf.WriteByte(byte(val))
 				i += 4
 			case 'u':
 				if i+5 >= len(inner) {
-					err = fmt.Errorf("UnescapeString: truncated \\u escape at position %d", i)
+					err = eh.Errorf("truncated \\u escape at position %d", i)
 					return
 				}
 				val, parseErr := strconv.ParseUint(inner[i+2:i+6], 16, 32)
 				if parseErr != nil {
-					err = fmt.Errorf("UnescapeString: invalid \\u escape at position %d: %w", i, parseErr)
+					err = eh.Errorf("invalid \\u escape at position %d: %w", i, parseErr)
 					return
 				}
 				buf.WriteRune(rune(val))
 				i += 6
 			case 'U':
 				if i+9 >= len(inner) {
-					err = fmt.Errorf("UnescapeString: truncated \\U escape at position %d", i)
+					err = eh.Errorf("truncated \\U escape at position %d", i)
 					return
 				}
 				val, parseErr := strconv.ParseUint(inner[i+2:i+10], 16, 32)
 				if parseErr != nil {
-					err = fmt.Errorf("UnescapeString: invalid \\U escape at position %d: %w", i, parseErr)
+					err = eh.Errorf("invalid \\U escape at position %d: %w", i, parseErr)
 					return
 				}
 				if !utf8.ValidRune(rune(val)) {
-					err = fmt.Errorf("UnescapeString: invalid Unicode code point U+%04X at position %d", val, i)
+					err = eh.Errorf("invalid Unicode code point U+%04X at position %d", val, i)
 					return
 				}
 				buf.WriteRune(rune(val))
@@ -201,7 +200,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 	result.Kind = KindScalar
 	token = strings.TrimSpace(token)
 	if len(token) == 0 {
-		err = fmt.Errorf("UnmarshalScalarLiteral: empty input")
+		err = eh.Errorf("empty input")
 		return
 	}
 
@@ -223,7 +222,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		result.ScalarType = ctabb.S
 		result.StringVal, err = UnescapeString(token)
 		if err != nil {
-			err = fmt.Errorf("UnmarshalScalarLiteral: %w", err)
+			err = eh.Errorf("unescape string literal: %w", err)
 		}
 		return
 	}
@@ -238,7 +237,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		}
 		numPart = token[1:]
 		if len(numPart) == 0 {
-			err = fmt.Errorf("UnmarshalScalarLiteral: bare sign %q", token)
+			err = eh.Errorf("bare sign %q", token)
 			return
 		}
 	}
@@ -260,7 +259,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 			result.ScalarType = ctabb.F64
 			result.FloatVal, err = strconv.ParseFloat(numPart, 64)
 			if err != nil {
-				err = fmt.Errorf("UnmarshalScalarLiteral: invalid hex float %q: %w", token, err)
+				err = eh.Errorf("invalid hex float %q: %w", token, err)
 				return
 			}
 			result.FloatVal *= signF
@@ -269,7 +268,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		var val uint64
 		val, err = strconv.ParseUint(numPart[2:], 16, 64)
 		if err != nil {
-			err = fmt.Errorf("UnmarshalScalarLiteral: invalid hex literal %q: %w", token, err)
+			err = eh.Errorf("invalid hex literal %q: %w", token, err)
 			return
 		}
 		if sign >= 0 || val == 0 {
@@ -293,7 +292,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		result.ScalarType = ctabb.F64
 		result.FloatVal, err = strconv.ParseFloat(numPart, 64)
 		if err != nil {
-			err = fmt.Errorf("UnmarshalScalarLiteral: invalid float literal %q: %w", token, err)
+			err = eh.Errorf("invalid float literal %q: %w", token, err)
 			return
 		}
 		result.FloatVal *= signF
@@ -304,7 +303,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		var val uint64
 		val, err = strconv.ParseUint(numPart, 10, 64)
 		if err != nil {
-			err = fmt.Errorf("UnmarshalScalarLiteral: unrecognised literal %q: %w", token, err)
+			err = eh.Errorf("unrecognised literal %q: %w", token, err)
 			result.Unknown = true
 			return
 		}
@@ -334,7 +333,7 @@ func MarshalScalarToSQL(lit TypedLiteral) (result string, err error) {
 		return
 	}
 	if lit.ScalarType == nil {
-		err = eh.Errorf("MarshalScalarToSQL: nil ScalarType on non-null literal")
+		err = eh.Errorf("nil ScalarType on non-null literal")
 		return
 	}
 	switch lit.ScalarType.String() {
@@ -368,7 +367,7 @@ func MarshalScalarToSQL(lit TypedLiteral) (result string, err error) {
 			}
 		}
 	default:
-		err = eb.Build().Stringer("type", lit.ScalarType).Errorf("MarshalScalarToSQL: unknown scalar type")
+		err = eb.Build().Stringer("type", lit.ScalarType).Errorf("unknown scalar type")
 	}
 	return
 }
@@ -559,13 +558,13 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 		if opts.PreserveCasts && opts.MapCanonicalToClickHouse != nil && v.CastTypeCanonical != "" {
 			castType, err = opts.MapCanonicalToClickHouse(v.CastTypeCanonical)
 			if err != nil {
-				err = eh.Errorf("MarshalGoValueToSQLWithOptions: unable to map cast type%w", err)
+				err = eh.Errorf("unable to map cast type: %w", err)
 				return
 			}
 		}
 		sql, err = MarshalTypedLiteralToSQLEx(v, opts.MapCanonicalToClickHouse)
 		if err != nil {
-			err = eh.Errorf("MarshalGoValueToSQLWithOptions: %w", err)
+			err = eh.Errorf("marshal typed literal: %w", err)
 		}
 		return
 	case *TypedLiteral:
@@ -576,13 +575,13 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 		if opts.PreserveCasts && opts.MapCanonicalToClickHouse != nil && v.CastTypeCanonical != "" {
 			castType, err = opts.MapCanonicalToClickHouse(v.CastTypeCanonical)
 			if err != nil {
-				err = eh.Errorf("MarshalGoValueToSQLWithOptions: unable to map cast type%w", err)
+				err = eh.Errorf("unable to map cast type: %w", err)
 				return
 			}
 		}
 		sql, err = MarshalTypedLiteralToSQLEx(*v, opts.MapCanonicalToClickHouse)
 		if err != nil {
-			err = eh.Errorf("MarshalGoValueToSQLWithOptions: %w", err)
+			err = eh.Errorf("marshal typed literal: %w", err)
 		}
 		return
 
@@ -711,7 +710,7 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 		lit := NewHeterogeneousArray(v...)
 		sql, err = MarshalTypedLiteralToSQLEx(lit, opts.MapCanonicalToClickHouse)
 		if err != nil {
-			err = eh.Errorf("MarshalGoValueToSQLWithOptions: %w", err)
+			err = eh.Errorf("marshal typed literal: %w", err)
 		}
 		return
 
@@ -805,7 +804,7 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 		return
 
 	default:
-		err = eb.Build().Type("type", val).Errorf("MarshalGoValueToSQLWithOptions: unsupported type")
+		err = eb.Build().Type("type", val).Errorf("unsupported type")
 		return
 	}
 }

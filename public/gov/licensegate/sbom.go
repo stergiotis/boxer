@@ -2,8 +2,9 @@ package licensegate
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Minimal subset of the CycloneDX 1.6 schema needed for license-policy
@@ -43,14 +44,14 @@ type licenseObjT struct {
 func loadSBOM(path string) (b sbomT, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		err = fmt.Errorf("open SBOM %q: %w", path, err)
+		err = eh.Errorf("open SBOM %q: %w", path, err)
 		return
 	}
 	defer func() { _ = f.Close() }()
 	dec := json.NewDecoder(f)
 	err = dec.Decode(&b)
 	if err != nil {
-		err = fmt.Errorf("decode SBOM %q: %w", path, err)
+		err = eh.Errorf("decode SBOM %q: %w", path, err)
 		return
 	}
 	return

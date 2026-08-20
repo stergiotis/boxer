@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/gpu"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
@@ -96,7 +97,7 @@ func New(opts Options) (inst *Collector, err error) {
 	}
 	nvml, lerr := loader()
 	if lerr != nil {
-		err = fmt.Errorf("%w: %w", ErrNVMLUnavailable, lerr)
+		err = eh.Errorf("%w: %w", ErrNVMLUnavailable, lerr)
 		return
 	}
 	inst = &Collector{nvml: nvml, nowFn: opts.NowFunc}
@@ -120,7 +121,7 @@ func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
 
 	count, cerr := inst.nvml.DeviceCount()
 	if cerr != nil {
-		err = fmt.Errorf("nvml device count: %w", cerr)
+		err = eh.Errorf("nvml device count: %w", cerr)
 		return
 	}
 	snap.Devices = make([]Device, 0, count)

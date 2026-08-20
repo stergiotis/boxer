@@ -143,7 +143,12 @@ func (inst *CategorialStringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 					// env-supplied invalid: silent fallback to Default
 					effective = inst.spec.Default
 				} else {
-					return fmt.Errorf("env: %q is not in allowed values for --%s: %v",
+					// eh is unavailable here: public/observability/eh
+					// imports this package to read its own formatting
+					// switches, so eh.Errorf would close an import cycle.
+					// The message carries the prefix the stack would
+					// otherwise have supplied.
+					return fmt.Errorf("env: %q is not in allowed values for --%s: %v", //boxer:lint disable=CS001 reason="eh imports config/env; eh.Errorf would close an import cycle"
 						parsed, fo.cliFlagName, inst.allowed)
 				}
 			}

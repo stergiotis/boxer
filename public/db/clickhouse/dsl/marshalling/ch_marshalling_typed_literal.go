@@ -117,7 +117,7 @@ func (a *HomogeneousArray) Len() int {
 
 func (a *HomogeneousArray) GetScalar(i int) (result TypedLiteral, err error) {
 	if a == nil {
-		err = eh.Errorf("HomogeneousArray.GetScalar: nil array")
+		err = eh.Errorf("nil array")
 		return
 	}
 	n := a.Len()
@@ -359,7 +359,7 @@ func (t TypedLiteral) ToAny() (val any, err error) {
 		return tupleToAny(t.Elements)
 
 	default:
-		err = fmt.Errorf("TypedLiteral.ToAny: unknown kind %s", t.Kind)
+		err = eh.Errorf("unknown kind %s", t.Kind)
 		return
 	}
 }
@@ -369,7 +369,7 @@ func scalarToAny(t TypedLiteral) (val any, err error) {
 		return nil, nil
 	}
 	if t.ScalarType == nil {
-		err = fmt.Errorf("TypedLiteral.ToAny: nil ScalarType on non-null scalar")
+		err = eh.Errorf("nil ScalarType on non-null scalar")
 		return
 	}
 	switch t.ScalarType.String() {
@@ -384,7 +384,7 @@ func scalarToAny(t TypedLiteral) (val any, err error) {
 	case "b":
 		return t.BoolVal, nil
 	default:
-		err = fmt.Errorf("TypedLiteral.ToAny: unsupported scalar type %s", t.ScalarType)
+		err = eh.Errorf("unsupported scalar type %s", t.ScalarType)
 		return
 	}
 }
@@ -416,7 +416,7 @@ func homogeneousArrayToAny(a *HomogeneousArray) (val any, err error) {
 		copy(out, a.BoolVals)
 		return out, nil
 	default:
-		err = fmt.Errorf("TypedLiteral.ToAny: unsupported homogeneous array element type %s", a.ElementType)
+		err = eh.Errorf("unsupported homogeneous array element type %s", a.ElementType)
 		return
 	}
 }
@@ -426,7 +426,7 @@ func heterogeneousArrayToAny(elems []TypedLiteral) (val any, err error) {
 	for i, elem := range elems {
 		out[i], err = elem.ToAny()
 		if err != nil {
-			err = fmt.Errorf("TypedLiteral.ToAny: array element %d: %w", i, err)
+			err = eh.Errorf("array element %d: %w", i, err)
 			return
 		}
 	}
@@ -438,7 +438,7 @@ func tupleToAny(elems []TypedLiteral) (val any, err error) {
 	for i, elem := range elems {
 		values[i], err = elem.ToAny()
 		if err != nil {
-			err = fmt.Errorf("TypedLiteral.ToAny: tuple element %d: %w", i, err)
+			err = eh.Errorf("tuple element %d: %w", i, err)
 			return
 		}
 	}

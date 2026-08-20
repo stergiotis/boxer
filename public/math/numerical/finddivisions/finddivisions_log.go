@@ -3,6 +3,8 @@ package finddivisions
 import (
 	"fmt"
 	"math"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type LogResult struct {
@@ -12,7 +14,7 @@ type LogResult struct {
 
 func TalbotLogarithmic(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScorerI) (LogResult, error) {
 	if dmin <= 0 || dmax <= 0 {
-		return LogResult{}, fmt.Errorf("logarithmic axis requires positive data > 0")
+		return LogResult{}, eh.Errorf("logarithmic axis requires positive data > 0")
 	}
 
 	// 1. Transform to Log Space

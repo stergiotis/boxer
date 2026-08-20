@@ -48,6 +48,7 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl"
 	cli "github.com/urfave/cli/v2"
 
+	"github.com/stergiotis/boxer/public/observability/eh"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 )
 
@@ -169,7 +170,7 @@ func parseSASLMechanism(s string) (m pkafka.SASLMechanismE, err error) {
 	case "OAUTHBEARER":
 		m = pkafka.SASLMechanismOAuthBearer
 	default:
-		err = fmt.Errorf("unsupported --sasl-mechanism %q (try PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or none)", s)
+		err = eh.Errorf("unsupported --sasl-mechanism %q (try PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or none)", s)
 	}
 	return
 }
@@ -213,12 +214,12 @@ func buildTLS(c *cli.Context) (enabled bool, cfg *tls.Config, err error) {
 		var caPEM []byte
 		caPEM, err = os.ReadFile(caFile)
 		if err != nil {
-			err = fmt.Errorf("read --tls-ca-file %q: %w", caFile, err)
+			err = eh.Errorf("read --tls-ca-file %q: %w", caFile, err)
 			return
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(caPEM) {
-			err = fmt.Errorf("--tls-ca-file %q contains no PEM certificates", caFile)
+			err = eh.Errorf("--tls-ca-file %q contains no PEM certificates", caFile)
 			return
 		}
 		cfg.RootCAs = pool
@@ -226,13 +227,13 @@ func buildTLS(c *cli.Context) (enabled bool, cfg *tls.Config, err error) {
 
 	if certFile != "" || keyFile != "" {
 		if certFile == "" || keyFile == "" {
-			err = fmt.Errorf("--tls-cert-file and --tls-key-file must be set together")
+			err = eh.Errorf("--tls-cert-file and --tls-key-file must be set together")
 			return
 		}
 		var pair tls.Certificate
 		pair, err = tls.LoadX509KeyPair(certFile, keyFile)
 		if err != nil {
-			err = fmt.Errorf("load TLS keypair: %w", err)
+			err = eh.Errorf("load TLS keypair: %w", err)
 			return
 		}
 		cfg.Certificates = []tls.Certificate{pair}
@@ -297,13 +298,13 @@ func consumeCmd() *cli.Command {
 func runConsume(c *cli.Context) (err error) {
 	connDetails, err := makeConnectionDetails(c)
 	if err != nil {
-		err = fmt.Errorf("connection: %w", err)
+		err = eh.Errorf("connection: %w", err)
 		return
 	}
 
 	consDetails := pkafka.DefaultFranzConsumerDetails()
 	if err = consDetails.SetTopicSpec([]string{c.String("topic")}, true); err != nil {
-		err = fmt.Errorf("topic spec: %w", err)
+		err = eh.Errorf("topic spec: %w", err)
 		return
 	}
 	consDetails.StartOffset, err = parseOffset(c.String("offset"))
@@ -323,12 +324,12 @@ func runConsume(c *cli.Context) (err error) {
 
 	reader, err := pkafka.NewFranzReaderOrdered(readerOpts, clientOptsFn)
 	if err != nil {
-		err = fmt.Errorf("reader: %w", err)
+		err = eh.Errorf("reader: %w", err)
 		return
 	}
 
 	if err = reader.Connect(c.Context); err != nil {
-		err = fmt.Errorf("connect: %w", err)
+		err = eh.Errorf("connect: %w", err)
 		return
 	}
 	defer func() {
@@ -366,13 +367,13 @@ func runConsume(c *cli.Context) (err error) {
 			if errors.Is(readErr, context.DeadlineExceeded) && exitOnEOF {
 				return
 			}
-			err = fmt.Errorf("read: %w", readErr)
+			err = eh.Errorf("read: %w", readErr)
 			return
 		}
 
 		for r := range batch.Records.RecordsAll() {
 			if err = fmtFn(out, r); err != nil {
-				err = fmt.Errorf("format: %w", err)
+				err = eh.Errorf("format: %w", err)
 				return
 			}
 			seen++
@@ -382,7 +383,7 @@ func runConsume(c *cli.Context) (err error) {
 			}
 		}
 		if err = batch.Ack(c.Context, nil); err != nil {
-			err = fmt.Errorf("ack: %w", err)
+			err = eh.Errorf("ack: %w", err)
 			return
 		}
 		_ = out.Flush()
@@ -423,7 +424,7 @@ func produceCmd() *cli.Command {
 func runProduce(c *cli.Context) (err error) {
 	connDetails, err := makeConnectionDetails(c)
 	if err != nil {
-		err = fmt.Errorf("connection: %w", err)
+		err = eh.Errorf("connection: %w", err)
 		return
 	}
 	prodOpts := pkafka.DefaultFranzProducerOpts()
@@ -433,18 +434,18 @@ func runProduce(c *cli.Context) (err error) {
 
 	client, err := pkafka.NewFranzClient(c.Context, kgoOpts...)
 	if err != nil {
-		err = fmt.Errorf("connect: %w", err)
+		err = eh.Errorf("connect: %w", err)
 		return
 	}
 	defer client.Close()
 
 	writer, err := pkafka.NewFranzWriter(client, &log.Logger)
 	if err != nil {
-		err = fmt.Errorf("writer: %w", err)
+		err = eh.Errorf("writer: %w", err)
 		return
 	}
 	if err = writer.Connect(c.Context); err != nil {
-		err = fmt.Errorf("writer connect: %w", err)
+		err = eh.Errorf("writer connect: %w", err)
 		return
 	}
 	defer func() {
@@ -463,7 +464,7 @@ func runProduce(c *cli.Context) (err error) {
 	case "netstring":
 		err = produceNetstrings(c, writer, topic, keyDelim)
 	default:
-		err = fmt.Errorf("invalid --input-mode %q (try lines, netstring)", mode)
+		err = eh.Errorf("invalid --input-mode %q (try lines, netstring)", mode)
 	}
 	return
 }
@@ -478,7 +479,7 @@ func produceLines(c *cli.Context, writer *pkafka.FranzWriter, topic, keyDelim st
 	for scanner.Scan() {
 		rec := buildRecord(topic, scanner.Bytes(), keyDelim)
 		if err = writer.Write(c.Context, rec); err != nil {
-			err = fmt.Errorf("write: %w", err)
+			err = eh.Errorf("write: %w", err)
 			return
 		}
 		if c.Context.Err() != nil {
@@ -486,7 +487,7 @@ func produceLines(c *cli.Context, writer *pkafka.FranzWriter, topic, keyDelim st
 		}
 	}
 	if scanErr := scanner.Err(); scanErr != nil {
-		err = fmt.Errorf("read stdin: %w", scanErr)
+		err = eh.Errorf("read stdin: %w", scanErr)
 	}
 	return
 }
@@ -505,7 +506,7 @@ func produceNetstrings(c *cli.Context, writer *pkafka.FranzWriter, topic, keyDel
 		)
 		payload, ok, err = readNetstring(reader)
 		if err != nil {
-			err = fmt.Errorf("netstring parse: %w", err)
+			err = eh.Errorf("netstring parse: %w", err)
 			return
 		}
 		if !ok {
@@ -513,7 +514,7 @@ func produceNetstrings(c *cli.Context, writer *pkafka.FranzWriter, topic, keyDel
 		}
 		rec := buildRecord(topic, payload, keyDelim)
 		if err = writer.Write(c.Context, rec); err != nil {
-			err = fmt.Errorf("write: %w", err)
+			err = eh.Errorf("write: %w", err)
 			return
 		}
 		if c.Context.Err() != nil {
@@ -548,7 +549,7 @@ func readNetstring(r *bufio.Reader) (value []byte, ok bool, err error) {
 	if readErr != nil {
 		if errors.Is(readErr, io.EOF) {
 			if len(lenStr) > 0 {
-				err = fmt.Errorf("unexpected EOF after %q (missing ':')", lenStr)
+				err = eh.Errorf("unexpected EOF after %q (missing ':')", lenStr)
 				return
 			}
 			// clean EOF — no more frames
@@ -561,26 +562,26 @@ func readNetstring(r *bufio.Reader) (value []byte, ok bool, err error) {
 	var n int
 	n, err = strconv.Atoi(lenStr)
 	if err != nil {
-		err = fmt.Errorf("invalid netstring length %q: %w", lenStr, err)
+		err = eh.Errorf("invalid netstring length %q: %w", lenStr, err)
 		return
 	}
 	if n < 0 {
-		err = fmt.Errorf("invalid netstring length %d (must be non-negative)", n)
+		err = eh.Errorf("invalid netstring length %d (must be non-negative)", n)
 		return
 	}
 	value = make([]byte, n)
 	if _, err = io.ReadFull(r, value); err != nil {
-		err = fmt.Errorf("read netstring value (%d bytes): %w", n, err)
+		err = eh.Errorf("read netstring value (%d bytes): %w", n, err)
 		return
 	}
 	var term byte
 	term, err = r.ReadByte()
 	if err != nil {
-		err = fmt.Errorf("read netstring terminator: %w", err)
+		err = eh.Errorf("read netstring terminator: %w", err)
 		return
 	}
 	if term != ',' {
-		err = fmt.Errorf("invalid netstring terminator: expected ',', got %q", term)
+		err = eh.Errorf("invalid netstring terminator: expected ',', got %q", term)
 		return
 	}
 	ok = true
@@ -603,13 +604,13 @@ func listCmd() *cli.Command {
 func runList(c *cli.Context) (err error) {
 	connDetails, err := makeConnectionDetails(c)
 	if err != nil {
-		err = fmt.Errorf("connection: %w", err)
+		err = eh.Errorf("connection: %w", err)
 		return
 	}
 
 	client, err := pkafka.NewFranzClient(c.Context, connDetails.FranzOpts()...)
 	if err != nil {
-		err = fmt.Errorf("connect: %w", err)
+		err = eh.Errorf("connect: %w", err)
 		return
 	}
 	defer client.Close()
@@ -617,7 +618,7 @@ func runList(c *cli.Context) (err error) {
 	adm := kadm.NewClient(client)
 	md, err := adm.Metadata(c.Context)
 	if err != nil {
-		err = fmt.Errorf("metadata: %w", err)
+		err = eh.Errorf("metadata: %w", err)
 		return
 	}
 
@@ -675,7 +676,7 @@ func parseOffset(s string) (off kgo.Offset, err error) {
 		var n int64
 		n, err = strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			err = fmt.Errorf("invalid offset %q: %w", s, err)
+			err = eh.Errorf("invalid offset %q: %w", s, err)
 			return
 		}
 		off = kgo.NewOffset().At(n)
@@ -701,7 +702,7 @@ func makeRecordWriter(c *cli.Context) (fn formatter, err error) {
 	case "netstring":
 		fn = netstringWriter
 	default:
-		err = fmt.Errorf("invalid --output-mode %q (try format, cbor, netstring)", mode)
+		err = eh.Errorf("invalid --output-mode %q (try format, cbor, netstring)", mode)
 	}
 	return
 }
