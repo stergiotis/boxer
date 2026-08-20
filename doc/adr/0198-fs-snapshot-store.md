@@ -149,7 +149,9 @@ physical columns, the read-access scaffolding and the bus codecs are those of
 the store's. Tree columns (`name`, `dir`, `depth`, `ext`, `is_dir`,
 `is_symlink`) are `MATERIALIZED` columns added by `ALTER` after `EnsureTable`,
 which ClickHouse hides from `SELECT *`, so the stores' positional decode is
-untouched; `fssnap` is filled by a materialised view copying every root row.
+untouched — but *not* from `DESCRIBE TABLE`, which is what the emitted
+`VerifySchema` compares, so that verb fails on the provisioned table until it
+is taught to skip them (`## Updates`, 2026-08-19); `fssnap` is filled by a materialised view copying every root row.
 The `boxer.facts` `TableDesc` is **not** extended. The mount *policy record*
 (name, store, retention class, inline threshold, text rule) is a kind in
 `boxer.facts`, written through a facts-bound store — it is runtime state and
@@ -158,12 +160,14 @@ says so (SD11).
 
 The logical schema — which design column lands in which leeway slot and
 section — is the table in the compact page §3; the vocabulary is one registry
-(`fsMode`, `fsSize`, `fsMtime`, `fsLinkTarget`, `fsContentHash`, `fsContent`,
-`fsBlockSize`, `fsBlocks`, `fsText`, `fsKind`, `fsErr`, `fsSnapEntries`,
-`fsSnapBytes`, `fsTtlClass`, `fsTextRule`, `fsInlineMax`, `fsData`,
-`fsBlockHash`, `fsLine0`, the kind markers, the policy kind's memberships),
-every attribute a scalar or `unit` shape so none of the generator's three
-refusals applies.
+(`ladingMode`, `ladingSize`, `ladingMtime`, `ladingLinkTarget`,
+`ladingContentHash`, `ladingContent`, `ladingBlockSize`, `ladingBlocks`,
+`ladingText`, `ladingNodeKind`, `ladingErr`, `ladingSnapEntries`,
+`ladingSnapBytes`, `ladingTtlClass`, `ladingTextRule`, `ladingInlineMax`,
+`ladingData`, `ladingBlockHash`, `ladingLine0`, the four kind markers, the
+policy kind's memberships), every attribute a scalar or `unit` shape so none
+of the generator's three refusals applies — except `ladingText`, which is
+plain `bool`: that section has no `unit` cardinality (M1).
 
 ### SD3 — Caller-owned identity
 
@@ -284,6 +288,9 @@ store-wide scans in seconds to tens of seconds.
 
 ### SD11 — Deferred to M0, by measurement
 
+*Answered 2026-08-19 — see the `## Updates` entry for the decisions and
+the evidence. The list below is what was deferred, and why.*
+
 - *The block ordinal and the `fsdata` shape.* Three encodings — a suffix of
   `naturalKey` (`path ‖ '\0' ‖ be32(seq)`, no `TableDesc` change), a generic
   `rt:ordinal:u32` routing plain (one migration of `boxer.facts`), or leeway's
@@ -303,15 +310,17 @@ store-wide scans in seconds to tens of seconds.
 | --- | --- | --- |
 | `boxer.fsmeta`, `boxer.fsdata`, `boxer.fssnap` + `fssnap_mv` | new tables (facts `TableDesc`, own clauses), one MV | the provisioning step (`EnsureTable` + `ALTER`s + MV); `VerifySchema` at start |
 | `boxer.facts` `TableDesc` | **unchanged** | nothing |
-| `boxer.facts` rows | gains one kind: the mount policy record | the fs vocabulary; the facts-bound store that writes it |
-| fs vocabulary (new package) | new registry: ~20 memberships and the kind markers, ids via `tagmint`/`namemint` like every vocabulary | the repo-wide disjointness check; `scripts/dev/generate.sh` |
-| generated stores (new package) | new: entry store over `fsmeta`, block store over `fsdata`, policy kind facts-bound | gen-tests; the regeneration lanes |
-| ingest library (new package) | new: walker, block cutting, hashing, commit protocol, batching, rclone-stdio source | the policy record; the integration lane |
-| `io/fs` adapter (new package) | new | `fstest.TestFS` lane |
+| `boxer.facts` rows | gains one kind: the mount policy record | `ladingvocab`; `ladingpolicy`, the facts-bound store that writes it |
+| `public/fs/lading/ladingvocab` | new registry: 28 memberships and four kind markers under tag value 2178315, ids via `tagmint`/`namemint` like every vocabulary | the repo-wide disjointness check; `scripts/dev/generate.sh` |
+| `public/fs/lading{,/ladingschema,/ladingmeta,/ladingdata,/ladingpolicy}` | new: the schema, the entry store over `fsmeta`, the block store over `fsdata`, the policy kind facts-bound, and `Provision` / `Verify` | gen-tests; the regeneration lanes; `props harvest` |
+| `public/fs/lading/ladingingest` | new: walker, block cutting, hashing, commit protocol, batching | the policy record; the integration lane |
+| `public/fs/lading/ladingremote` | new: an `fs.FS` over SFTP, and the `rclone serve sftp --stdio` source — its own package so the walker stays source-agnostic (M6) | the rclone lane |
+| `public/fs/lading/ladingadapter` | new | `fstest.TestFS` lane |
 | `fs()` / `fsdata()` macros | new nanopass rewrites | `nanopass_analytics_security.go` allowlist, `play_dispatch_policy.go`, play's vocabulary tab |
-| `boxer fs sftp-stdio` (CLI) | new subcommand; capability manifest entry for the store read (`ch.` family, ADR-0026) | the capslock baseline |
-| dependencies | `pkg/sftp` (server and client) — new direct | govulncheck / osv-scanner posture |
-| `extbin` | `rclone` registered as a resolvable program for the integration lane | nothing else |
+| `boxer fs sftp-stdio` (CLI) | new subcommand (`public/app/commands/ladingfs`); the capability subject is still undecided, so visibility comes from `--mount` / `--all-mounts` | the capslock baseline (unchanged — the check passes as is) |
+| dependencies | `pkg/sftp` v1.13.11 — new direct (M5); links `x/crypto/ssh` for a constructor nothing calls | govulncheck / osv-scanner posture |
+| `extbin` | `rclone` declared (`extbin.Rclone`, `BOXER_RCLONE`) for the integration lane | nothing else |
+| `recordstore/gen`'s emitted `VerifySchema` | skips `MATERIALIZED` / `ALIAS` columns, so a store may own derived columns its decode never sees | every generated store in the tree regenerates |
 | `keelson()` rewrite, `/table` endpoint, `sysmfacts`, `persiststate` | **unchanged** | nothing |
 
 ## Alternatives
@@ -385,7 +394,7 @@ store-wide scans in seconds to tens of seconds.
 - **Path.** Provisioning is idempotent — `EnsureTable`, then `ALTER TABLE …
   ADD COLUMN IF NOT EXISTS` / `ADD CONSTRAINT` / `ADD INDEX`, then the MV —
   and `VerifySchema` runs at start.
-- **Regeneration.** The fs vocabulary's committed `(ordinal, name, id)` table
+- **Regeneration.** `ladingvocab`'s committed `(ordinal, name, id)` table
   and the generated stores regenerate from gen-tests; `scripts/dev/generate.sh`
   when the leeway aspect vocabulary moves.
 - **Old shape.** None.
@@ -430,7 +439,7 @@ Milestones, if accepted:
 
 - **M0 — verify and decide.** The live-server checks of the note §14 and the
   SD11 decisions, as a dated trial; no production code.
-- **M1 — vocabulary, stores, provisioning.** The fs vocabulary; the entry and
+- **M1 — vocabulary, stores, provisioning.** `ladingvocab`; the entry and
   block stores over facts-shaped tables; the policy kind facts-bound;
   `EnsureTable` + `ALTER`s + MV; `VerifySchema`.
 - **M2 — ingest.** The walker: rows, blocks, hashing, commit protocol,
@@ -443,6 +452,575 @@ Milestones, if accepted:
 - **M6 — rclone ingress.** The walker over `rclone serve sftp --stdio`.
 - **M7 — deferred.** A native S3 head and `fsmeta` projections, by
   measurement against tier 1.
+
+## Updates
+
+### 2026-08-19 — M0 ran: the eleven checks, and what they corrected
+
+The [M0 trial](../trials/fs-snapshot-store-m0/) ran every check of the plan
+page against ClickHouse 26.7.3.19, rclone v1.74.3 and boxer `deb4be09`. Its
+[logbook](../trials/fs-snapshot-store-m0/logbook.md) carries the per-check
+verdicts and the evidence; this entry records only what the ADR got wrong
+and what SD11 now decides. No production code exists yet.
+
+**What held.** One block is one compressed block at `index_granularity = 1`,
+in the facts `blobArray` value stream as much as in a plain `String`, at
+1 MiB and at 256 KiB — a point read of a 1 MiB block costs exactly 1.00 MiB
+of compressed reads. `TTL` takes the `DateTime64` lifecycle plain bare,
+beside `PARTITION BY toYYYYMMDD(…)` on the same plain. `now()` is legal in a
+`ROW POLICY`. The materialised view copies exactly the root rows of a
+5 000-row, 500-mount batch. `FULL OUTER JOIN` fills the missing side with
+`''`. `MATERIALIZED` tree columns may be added by `ALTER`, may depend on one
+another, are hidden from `SELECT *`, and a bloom filter over `dir` pruned 197
+granules to 12. `recordstore/gen` produced a store over the facts `TableDesc`
+on `boxer.fsmeta` with `SharedRA`, our clauses and a working `EnsureTable`;
+it took 2 000 rows under one `(id, ts)` and read them back through `Scan`
+with a key-range `ExtraPredicate`, none mis-decoded.
+
+**Corrections.**
+
+- **SD2 overstated the `MATERIALIZED` claim.** The columns are indeed hidden
+  from `SELECT *`, so the positional *decode* is untouched — but the emitted
+  `VerifySchema` compares `DESCRIBE TABLE`, which lists them, and therefore
+  fails on the provisioned table ("189 columns, expects 185"). Provisioning
+  as designed and verifying as generated cannot both hold. `DESCRIBE
+  TABLE`'s `default_type` marks exactly the materialised columns, so
+  teaching `VerifySchema` to skip `MATERIALIZED` and `ALIAS` would align the
+  two — a change to a shared generator, and therefore a decision to take
+  before M1 rather than inside it.
+- **SD2's "every attribute a scalar or `unit` shape" is not reachable for
+  `fsText`.** The `bool` section has no `Single` cardinality: a DTO tagged
+  `lw:"fsText,bool,unit"` generates code calling `BeginAttributeSingle` and
+  `GetAttrValueSingle`, which that section does not have, and the package
+  does not compile. `lw:"fsText,bool"` does — the field is `ladingText` since
+  M1. The `unit` shape exists on the
+  `*Array` and `*Set` sections only — not on `bool`, `symbol`, `foreignKey`,
+  `u32Range` or `indices`.
+- **The walker cannot use the generated `Ingest<Kind>` verb.** It refuses two
+  rows sharing a key (`ErrDuplicateIngestKey`), and every row of a mount
+  shares the mount's id; it also opens each entity with an empty envelope, so
+  a DTO's `naturalKey` and `expiresAt` never reach the row. `Begin(id, ts,
+  Envelope{NaturalKey, ExpiresAt}).Add<Kind>(row).Commit()` carries both.
+  The plan page's M1 and M2 wording is wrong on this point.
+- **`recordstore/gen` refuses the facts `TableDesc` under a foreign table
+  name** unless the caller copies it and sets `DictionaryEntry.Name`. One
+  line, no effect on the physical columns — but it is the first thing M1
+  will hit. `gen.Input.Database` also refuses anything outside
+  `[a-z][a-z0-9]*`; `boxer` passes.
+- **The compact page's `ext` expression is wrong at both edges** — the root
+  row gets `.`, and `.gitignore` is read as all extension. The M1 spelling is
+  `if(position(substring(name, 2), '.') = 0, '', concat('.',
+  splitByChar('.', name)[-1]))`.
+- **`ttl_only_drop_parts = 1` binds a constraint SD4 left implicit:
+  retention classes must be whole days.** A partially expired part keeps its
+  expired rows through every background merge — only `OPTIMIZE … FINAL`
+  removes them. Because `expiresAt = toStartOfDay(snap) + 1 DAY +
+  duration(class)`, a whole-day class puts every row of a partition at the
+  same instant and the part expires as a unit; a sub-day class would not, and
+  the rows would sit on disk until a manual merge. The macros' logical cutoff
+  already keeps them out of results; this is about disk. Drop latency is
+  bounded by `merge_with_ttl_timeout`, 14 400 s by default.
+- **SD1's purge and SD10's fleet projection are mutually exclusive at the
+  server's defaults.** With a projection present, the lightweight `DELETE`
+  throws under `lightweight_mutation_projection_mode = THROW`, and the
+  setting must be set on the *table* — passing it on the statement leaves
+  `getSetting()` reporting `rebuild` while the guard still fires. Without a
+  projection the purge took 58 ms.
+- **The diff idiom depends on `join_use_nulls = 0`.** True by default and
+  true here, but it is a setting a caller can change, and under `1` the idiom
+  stops classifying rather than failing. M4 pins it in the expansion.
+
+**SD11, decided.**
+
+- *Block ordinal:* the `naturalKey` suffix, `path ‖ 0x00 ‖ be32(seq)`. It was
+  the only encoding measured, and it needs no `boxer.facts` migration; the
+  key range over a file's blocks stays contiguous and `Scan` reads it with an
+  ordinary prefix predicate. The routing-plain and value-cardinality shapes
+  stay rejected on the grounds already recorded, now with no cost argument
+  left to prefer them.
+- *`fsdata` stays facts-shaped.* The facts shape costs roughly 2× on insert
+  wall-clock at 1 MiB blocks (the host was too loaded to pin the factor
+  closer — see the trial's finding T1), and essentially nothing on storage:
+  the 184 columns beside the block data are 6.1 MiB uncompressed and 39 KiB
+  compressed against 31.3 MiB → 7.7 MiB of block data, a ratio of 159, and
+  marks cost 178 B per block row against 12 B bespoke. A 2× insert cost on a
+  once-per-snapshot write buys the shared read access, codecs and vocabulary
+  that were O3's whole point; an order of magnitude would not have.
+- *Hot attributes to materialise:* the tree columns (`name`, `dir`, `depth`,
+  `ext`) and nothing else yet. `size`, `mtime` and `mode` were not measured
+  under extraction pressure — a 2 000-row scan is not that measurement — so
+  materialising them stays a later decision with a named trigger: a
+  store-wide query whose cost is dominated by attribute extraction.
+- *The fleet profile's `by_path` projection is not default.* It blocks the
+  per-mount purge unless the table carries
+  `lightweight_mutation_projection_mode = 'rebuild'`, which is a trade a
+  store should make deliberately.
+- *Macro spellings* stay open. No check touched them.
+
+**Per-block hashes (SD5), with a second route.** `lukechampine.com/blake3`
+exposes no subtree chaining value: the primitives are in `guts`, and the
+function that composes them over an aligned block group is unexported in
+`bao`. Reimplementing it is ~25 lines. The supported alternative is
+`bao`'s chunk-group encoding — `group = 10` is 1 MiB groups, and a 4 MiB file
+gets a 200-byte outboard tree whose root *is* `blake3.Sum256` of the file,
+against which `VerifyChunk` accepts a block and rejects a corrupted one. That
+chains every block to `content_hash`, which a per-block digest column does
+not; it costs about 2× a digest column's bytes at 1 MiB groups. Both are
+open to M2; the digest column remains the default because SQL can audit it
+(`BLAKE3(data) != hash`), and `BLAKE3()` in ClickHouse agrees with Go and
+runs at 2.5–2.8 GiB/s including the read.
+
+**rclone.** All three contracts hold. One wrinkle for M5: rclone's `sftp`
+backend runs the `ssh=` command twice — once with `-s sftp`, once with `echo
+${ShellId}%ComSpec%` to probe the shell — and `shell_type=unix` on the remote
+suppresses the probe. `rclone serve s3` over the stdio head lists buckets,
+lists a bucket recursively without a delimiter and reads bytes back
+unchanged, with each of the remote's top-level directories becoming a bucket
+— so under the `/<mount>/<snapshot>/<path>` tree a mount is a bucket and the
+snapshot is the first key segment.
+
+**Still open after M0.** Whether `VerifySchema` learns to ignore
+`MATERIALIZED` columns (a shared-generator change); the insert ratio to
+better than a factor of two; macro spellings; and everything the checks did
+not touch — the text-cutting rule, the retention-class set, `inline_max`
+defaults, where the walker runs, and how a store grant is declared.
+
+### 2026-08-19 — M1 shipped: the vocabulary, the four kinds, provisioning
+
+What exists now, under `public/fs/lading/`:
+
+- **`ladingvocab`** — 28 memberships and four kind markers under tag value
+  2178315, the seventh of the width-32 class; the committed assignment table
+  and the id-landing, round-trip and cross-vocabulary disjointness guards.
+- **`ladingschema`** — what the three tables are: the renamed facts
+  `TableDesc`, the engine clauses, the two profiles, and the ALTERs,
+  constraint, skip index and view that a CREATE TABLE cannot express.
+- **`ladingmeta`** — the entry store over `boxer.fsmeta`, two kinds;
+  **`ladingdata`** — the block store over `boxer.fsdata`; **`ladingpolicy`** —
+  the mount policy, facts-bound through `storegen`. 27 000 lines of generated
+  code, reproducible byte for byte.
+- **`lading`** — `Provision` and `Verify`.
+
+**Where it lives, and what it is called.** Not under `public/keelson/`: the
+store's only tie to keelson is the row shape it borrows (`factsschema`) and
+the executor it writes through, which `public/gov/capmapfacts` and
+`public/gov/datacatalog` already reach the same way. It sits under
+`public/fs/` beside the tree watcher, as **`lading`** — a bill of lading is
+issued once for one voyage, lists exactly what was loaded, and is never
+amended, only superseded by the next one, which is this store's snapshot
+contract verbatim. The packages and the memberships carry that name
+(`ladingMode`, not `fsMode`), because a membership named `fsMode` beside a
+field named `Mode` reads as something `io/fs` defines and it is not. §SD2
+above carries the settled spellings; the M0 entry below still quotes the `fs*`
+ones, which is what that probe actually ran under.
+
+**The ClickHouse tables keep their `fs` names** — `boxer.fsmeta`,
+`boxer.fsdata`, `boxer.fssnap` — and so do the macros, `fs()` and `fsdata()`.
+The two names answer different questions: `lading` is which subsystem owns
+them, `fs` is what they hold, and it is the table names a query author sees.
+
+**The root row is two components, not one.** §SD6 said the root row carries
+the totals and the applied policy; it is modelled as a `ladingEntry` *and* a
+`ladingSnapshot` on one row, rather than as an entry with extra optional
+fields. The root is a node like any other and has to `Stat`; the commit record
+is a separate thing that happens to ride it. That is what leeway components
+are for, and it makes "complete" a property of the row's archetype rather than
+of which fields happen to be set. It also means the two kinds share the
+`symbol` and `u64Array` sections, which the registry-resolved id snapshot
+(`FixedIdsWrapper`) is what permits.
+
+**`VerifySchema` learned to skip `MATERIALIZED` and `ALIAS` columns**, which
+is the open decision M0 left. The change is in `recordstore/gen`'s emitter, so
+every generated store in the tree regenerated; the emitted diff is the filter
+and its comment, and nothing else moved. Under it, provisioning as designed
+and verifying as generated both hold — the M0 contradiction is closed. A
+`DEFAULT` column is deliberately still caught: it is stored, it is in
+`SELECT *`, and it would shift the positional decode.
+
+**The snapshot index is a table with a view into it**, not a view over
+`fsmeta`. "The newest complete snapshot of this mount" is a query the `fs()`
+expansion will run on every read, and answering it from the entry table means
+scanning every path of every snapshot to find root rows.
+
+**Verified on a live server** (integration lane): provisioning is idempotent
+and `Verify` passes after the ALTERs; the tree columns are present and hidden
+from `SELECT *`; the bloom index on `dir` is there; a five-node tree writes as
+five rows under one `(id, ts)` and reads back through `Scan` with a
+`startsWith` predicate; the snapshot is invisible until the root row lands and
+appears exactly once after, carrying its commit record; a file's blocks are
+one contiguous key range under the `path ‖ 0x00 ‖ be32(seq)` suffix and a
+sibling path with a longer name does not fall inside it. The per-mount purge
+runs as the test's own cleanup.
+
+**Not done here, and deliberately.** No walker, no adapter, no macros — M2 to
+M4. The mount policy store is generated but nothing writes to it yet; the
+profile a store runs under reaches only `index_granularity`, so changing it on
+a live table is a migration rather than a restart, which no milestone yet
+handles.
+
+### 2026-08-20 — M2 shipped: the walker
+
+`public/fs/lading/ladingingest`: `Snapshot(ctx, fsys, mount, policy, stores)`
+walks an `fs.FS` once and writes it as one snapshot; `RecordPolicy` writes a
+mount's declared policy to `boxer.facts`. Both lanes green — the default one
+through `clickhouse-local` over the fixture tree §SD6 asks for (files,
+directories, symlinks, an unreadable entry, a text file spanning blocks, a
+binary file, an empty directory, a file over the threshold), the integration
+one against a live server.
+
+**The commit rule is the whole protocol, and it removed work rather than
+adding it.** The walker holds the root row back, flushes everything else,
+then writes it alone. There is no rollback path, no cleanup path and no
+partial-snapshot detector anywhere in the package, because an interrupted walk
+leaves rows that no query can reach and `TTL` removes unaided. A cancelled
+context is tested for exactly that: rows written, no root row, no snapshot.
+
+**Corrections.**
+
+- **§SD5's per-block hash is a standalone digest, not a subtree chaining
+  value.** The two cannot both hold: the column exists so `BLAKE3(data) !=
+  hash` audits the store in SQL, and a subtree chaining value is not
+  `BLAKE3(block)` — the audit would report every block bad. M0 established
+  that Go's `blake3.Sum256` and ClickHouse's `BLAKE3()` agree, which is what
+  makes the standalone digest auditable; the chaining-value variant is dropped
+  for text and aligned blocks alike. Bao's chunk-group tree stays available as
+  the other route (M0), and it is a different feature: it chains to
+  `content_hash`, where a digest column does not.
+- **Retention classes are whole days, enforced rather than documented.**
+  `TtlClass` is a count of days and `Policy` refuses a zero class, so the
+  expiry a walk computes always lands on midnight UTC and a partition expires
+  as a unit. §SD4's formula is unchanged; what M0 found is that a sub-day
+  class would silently keep expired rows on disk, so the type no longer
+  expresses one.
+- **`text` on an entry row is a guarantee, not a hint.** A file whose rule
+  says text but which carries a line longer than one block is stored
+  `text = false`, cut at fixed offsets. The alternative — cutting that line
+  mid-way and leaving the flag set — makes the flag mean "usually" and loses
+  exactly the matches that span the cut, silently. So where `text` is set,
+  every boundary between two blocks falls immediately after a newline, and the
+  §7 grep idiom is exact rather than nearly exact. An empty file is
+  `text = false`: there are no blocks to describe.
+- **`content = 'ref'` rows carry a content hash.** §SD5 left it implicit and
+  §7's *identical content* query assumed it. The walker streams a file over
+  the threshold through BLAKE3 without holding it, so change detection and
+  the identical-content question cover the whole mount rather than its small
+  half; only the bytes are absent.
+
+**Two knobs that were open (compact page §10) are now decided in code, not in
+prose.** The text rule is content-based, not extension-based — `TextSniff`
+calls a file text when its first 8 KiB decode as UTF-8 and carry no NUL,
+because an extension says what a file is meant to be and the cut has to follow
+what its bytes are. And the fallback for an over-long line is the
+`text = false` downgrade above, rather than a mid-line cut.
+
+**`InlineMax` is also the walker's memory bound per file.** A stored file is
+held whole while it is cut, because whether it is text is a property of the
+whole file and re-cutting a stream is not free; a `ref` file is streamed one
+block at a time. That makes the threshold one number rather than two.
+
+**Found on the way, and relevant to M4.** `toDateTime64(n, 9)` reads a plain
+number as *seconds* whatever the scale says, so a nanosecond timestamp
+saturates to the year 2262 and every predicate over it matches nothing,
+silently. The conversion is `fromUnixTimestamp64Nano`. The `fs()` expansion
+will pin a snapshot by exactly such a literal.
+
+**Not done here.** Nothing reads the blocks back as a file yet — that is M3's
+adapter. The rclone-stdio source is M6, not M2 as the plan sketched it: it
+needs the `pkg/sftp` client, which is a dependency decision still to take.
+
+### 2026-08-20 — M3 shipped: the `io/fs` adapter
+
+`public/fs/lading/ladingadapter`: `Open(stores, mount, snap)` is one snapshot
+as an `fs.FS` — `StatFS`, `ReadDirFS`, `ReadFileFS`, `GlobFS`, `ReadLinkFS`,
+`SubFS`, with a `File` that is also an `io.ReaderAt`, an `io.Seeker` and an
+`fs.ReadDirFile`. `Snapshots` / `Latest` / `OpenLatest` read the index.
+`fstest.TestFS` passes in both lanes against a snapshot the M2 walker wrote.
+
+**Immutability is what makes the caches free.** The view is pinned at Open and
+every query carries `id = mount AND ts = snap`, so nothing it has read can
+change: entry lookups, negative lookups and directory listings are cached with
+no invalidation, no TTL and no size bound, because there is no event that could
+make a hit wrong. `TestAPinnedViewDoesNotShift` writes a whole second snapshot
+underneath an open view — a file added, one removed, one rewritten — and reads
+the same bytes and the same listing before and after.
+
+**Byte offsets map to block ordinals only for fixed-cut files, and that falls
+out of M2's text guarantee.** A text file's blocks end where its newlines were,
+which is exactly what makes a line-oriented query over them exact — and exactly
+what makes their lengths unknowable without reading them. So `ReadAt` on a
+non-text file fetches only the blocks its range touches, and a text file is
+materialised whole on first read. Materialising is bounded by the mount's
+inline threshold, because a file has blocks at all only if it was under it: the
+same number bounds the walker's memory per file and the reader's. A caller
+cannot tell the two paths apart, which is what the tests check.
+
+**A chunked read is one query per block range, not per chunk.** Counted rather
+than reasoned about — a per-chunk implementation returns identical bytes, so
+nothing but a counter distinguishes them. This is the property §SD9's head
+depends on, and it is checked now rather than at M5.
+
+**Symlinks: the store records, the adapter resolves.** The walker never follows
+a link, and `Lstat` / `ReadLink` serve exactly what it recorded. But `io/fs`
+says an FS implementing `ReadLinkFS` resolves links on `Open` and `Stat`, so
+this one does — inside the snapshot, against the link's own directory for a
+relative target, with a depth limit. The snapshot holds the graph; the adapter
+interprets it the way `io/fs` callers expect. An absolute target is taken as
+rooted at the snapshot, which is the only root a snapshot has.
+
+**`Glob` matches in Go, not in SQL.** §SD8 sketched `match(path, …)`; pushing a
+glob down means re-implementing `path.Match` in RE2 and having every edge case
+agree, and a divergence there is invisible to a caller and unlikely to be
+caught by a test. A pattern with no meta characters is one point lookup; the
+rest walks. Callers who want a regular expression get one directly from the SQL
+surface (M4), where it is the caller's own regexp rather than a translation of
+their glob.
+
+**Two things `fstest.TestFS` cannot judge, and why the conformance fixture
+drops them.** It opens and reads everything it can reach, so a `ref` entry
+(size, mtime and hash, no bytes) and a broken symlink both make it report an
+error — correctly, by its own contract. Both are ordinary in a real snapshot,
+so they keep their own tests: reading a `ref` entry without a fetcher fails
+with a typed `ErrReferenced` rather than returning zero bytes, and a broken
+link `Lstat`s and `ReadLink`s but fails to resolve like any missing path.
+
+**Found on the way.** A block's natural key carries a literal NUL between the
+path and the ordinal, and an executor that hands SQL to a process as an
+argument cannot carry one at all — `exec` fails with EINVAL before ClickHouse
+sees anything. String literals are escaped for it (`\0`), which is two ordinary
+characters on the wire and the byte on arrival. This is a property of the
+ordinal encoding SD11 chose, so it belongs to anything that builds a predicate
+over `fsdata`: the M4 macros will need the same care.
+
+**Not done here.** The `ref` fetch hook is an interface with no implementation
+— nothing in the tree yet knows how to reach a mount's live source, and
+inventing one before there is a caller would be guessing. `Snapshots` reads
+every complete snapshot of a mount rather than paging; a mount with a long
+retention and a daily cadence is hundreds of rows, which is fine, and a mount
+with an hourly cadence over 90 days is thousands, which is the point at which
+it wants a bound.
+
+### 2026-08-20 — M4 shipped: the SQL surface
+
+`public/fs/lading/ladingsql`: the nanopass rewrites, the security
+classification, play's dispatch entry, expansion goldens, and §7's operations
+catalogue run as SQL against a live server. 22 tests green.
+
+**Three relations, not two.** §SD7 named `fs()` and `fsdata()`; `fssnap()`
+joins them, and it is not a convenience. §7's history query asks a snapshot for
+its totals, and those are the *commit record's* — a different component on a
+different row grain. Every entry row has a path; only the root row has totals;
+a projection carrying both would report a default for every ordinary node. So
+the snapshot index gets its own relation, reading the index rather than every
+path of every snapshot.
+
+**What rides in every expansion**, none of it visible in the query an author
+writes: the completeness rule (the newest snapshot is resolved from `fssnap`,
+which holds only committed root rows), the logical cutoff on the same column
+the `TTL` names, and the capability check.
+
+**The mount id is spelled three ways** — bare, quoted decimal, quoted hex — and
+all three expand identically. Name-as-sugar is still not implemented; a name
+argument is refused with a message that says so rather than being read as an id.
+
+**A snapshot argument is a string or a number, and the two take different
+conversions.** A string is a datetime literal; a number is Unix nanoseconds and
+goes through `fromUnixTimestamp64Nano`, never `toDateTime64` — that reads a
+plain number as *seconds* whatever the scale says, so nanoseconds saturate to
+the year 2262 and the predicate matches nothing with no error anywhere.
+
+**Corrections to §7's catalogue, both found by running it.**
+
+- **`PREWHERE` does not survive the macro.** The expansion is a parenthesised
+  subquery, and ClickHouse allows `PREWHERE` only against a table or a table
+  function — the grep query in §7 fails outright with it. `WHERE` alone is
+  correct; what is lost is the pre-filter, and a caller who needs it reads the
+  physical table. This is the price of the subquery shape §SD7 chose, and it is
+  the first thing that shape has actually cost.
+- **The history query needs `fssnap()`**, per the relation above.
+
+**`is_dir` and `is_symlink` come off the stored node kind**, not off the mode
+bits. The mode is Go's own `fs.FileMode` encoding, and reading it in SQL would
+put that encoding in every query; the node kind is a LowCardinality symbol a
+query groups by directly. Which is what §SD2's `ladingNodeKind` is for — M1
+recorded it as redundant with the mode, and this is where it pays.
+
+**The capability check is a seam, not a wiring.** `MountVisibilityI` is
+consulted once per macro call at expansion, and a nil visibility refuses every
+mount — a capability check that defaults to open is not one. Three
+implementations ship: `VisibleAll` (a caller that has already decided, named so
+the call site says it out loud), `VisibleSet`, and `VisibleUnderTag` — the
+"every id under a tag" shape §SD3 names, which is what lets one store serve many
+owners without an id set to maintain. **What is NOT done is binding it to the
+capability broker**: that needs a capability subject, which the plan lists as a
+stop point, so it is a decision rather than an implementation gap.
+
+**Classification and routing.** `fs`, `fsdata` and `fssnap` join the
+table-position local-read allowlist beside `keelson` and `docsearch` — they
+expand to a SELECT over a local MergeTree table and their arguments cannot name
+a remote. Play's resolver counts a lading reference as *server-side*: the macro
+is a table function, so the plain-table walk skips it, and without the addition
+a statement joining `keelson('env')` to `fs(m)` would be routed to the
+introspection plane where those tables do not exist.
+
+**Also corrected:** an expired row is invisible through the macros while still
+on disk, which is what the cutoff is for — and demonstrating it needs
+`SYSTEM STOP TTL MERGES`, because a wholly expired partition is dropped by the
+engine as soon as it is written. That is M0's finding seen from the other side.
+
+### 2026-08-20 — M5 shipped: the rclone head
+
+`public/fs/lading/ladingsftp` and `boxer fs sftp-stdio`. 13 tests green: nine
+against `pkg/sftp` over an in-memory socket pair, four driving the real rclone
+binary — resolved through `extbin`, which now declares it — against the real
+head, over a real pipe, against a real server.
+
+`github.com/pkg/sftp` v1.13.11 is a new direct dependency, audited before
+adding: BSD-2-Clause (the licence gate's `CategoryNotice`), clean on
+`govulncheck` and `osv-scanner`, four releases since 2021 with the last five
+weeks old. The one cost is that importing it links `golang.org/x/crypto/ssh` —
+`client.go` imports it for a single convenience constructor this package never
+calls, and Go links per package. ~1.55 MB, and nothing in the tree linked the
+SSH stack before. The transport itself carries no SSH: it is a pipe.
+
+**What rclone actually does, against what §SD9 expected.**
+
+- **`--metadata` restores mtimes, not modes.** rclone's `sftp` backend
+  documents *no* system metadata at all — modification times ride
+  `--sftp-set-modtime` (on by default) and there is no `mode` key for
+  `--metadata` to carry. The head reports the mode correctly over the wire, as
+  the `pkg/sftp` tests show; nothing on the rclone path asks for it. So a copy
+  out of the store restores content and mtime, and the destination takes the
+  local backend's default permissions. Worth knowing before treating an rclone
+  copy as a faithful restore.
+- **`latest` presents to rclone as a directory, not as a link.** M0 check 11b
+  pinned the `.rclonelink` mechanism, but that is the *local* backend's;
+  reading a remote's symlinks over `sftp`, rclone follows them. Which is the
+  better outcome — `rclone mount …/latest` works with no flag — and an SFTP
+  client that `Lstat`s still sees the link, so both readings are available.
+- **A server must resolve its own symlinks for path operations.** The head
+  first refused everything under `/mount/latest/`, on the theory that a client
+  reads the link and re-issues against the target. That is not how path
+  resolution works anywhere: rclone lists `latest` and then addresses its
+  children through that name. Paths through the link now resolve, and listing
+  the link lists what it points at — while `Lstat` and `Readlink` still report
+  a link, which is where a client learns it is one.
+
+**One store, one goroutine.** The SFTP request server answers packets
+concurrently and a generated record store is single-goroutine (ADR-0100), so
+every path into the store takes the head's lock — including the reads a client
+makes through a handle *after* the handler that opened it returned, which is
+why the returned reader is wrapped rather than handed over bare. The head is
+therefore serial against the store, which is the right trade for a surface the
+ADR already calls batch-shaped.
+
+**Views are cached and never invalidated**, one adapter per (mount, snapshot),
+for the same reason the adapter's own caches are: a pinned snapshot cannot
+change. The per-handle block cache M3 built is what makes rclone's 32 KiB
+chunked reads cost one block query per block rather than one per chunk.
+
+**An invisible mount is absent, not forbidden.** A tree that answered
+"permission denied" for one name and "no such file" for another would let a
+client enumerate what it cannot read. The CLI requires `--mount <id>`
+(repeatable) or an explicit `--all-mounts`: possession of the pipe is the
+authorisation for the *store* (§SD9), but which mounts inside it are visible is
+still a decision, and defaulting it to all would make it one nobody took.
+
+**House-style corrections applied across M2–M5.** The gov gate could not run
+for most of this session — a concurrent Go 1.27 bump left the tree unbuildable
+by the gate's own launcher — so six violations accumulated and were fixed in
+one pass once it ran: `Stores` was a type alias (CS008, an error: it is now
+[lading.Stores] at the call sites), two `fmt.Errorf` calls became `eb.Build()`
+(CS001), `SourceFetcher` became `SourceFetcherI` (CS005), `TtlClass` and
+`TextRule` became `TtlClassE` / `TextRuleE` (CS006), and their values took the
+type prefix — `TtlClass7d`, `TextRuleSniff` (CS007). Worth recording because
+the cause is procedural rather than technical: a gate that cannot run does not
+stop anything.
+
+**Not done.** The capability check remains the seam M4 built — a
+`MountVisibilityI` the caller supplies — with no binding to the capability
+broker, because that needs a capability subject and the subject is a decision
+rather than an implementation gap. The head is also read-only in the strong
+sense: every `Filewrite` and every `Filecmd` returns permission denied, which
+is checked from rclone's side too (`rclone copy` *into* the store fails and
+leaves nothing behind).
+
+### 2026-08-20 — M6 shipped: rclone ingress
+
+`public/fs/lading/ladingremote`: an `fs.FS` over an SFTP connection, and
+`Serve(ctx, remote, …)` which spawns `rclone serve sftp --stdio <remote>` and
+returns its tree as one. Seven integration tests green against the real binary.
+
+	src, err := ladingremote.Serve(ctx, "s3:bucket/prefix")
+	defer src.Close()
+	res, err := ladingingest.Snapshot(ctx, src, mount, policy, stores)
+
+Anything rclone can reach is now snapshottable, and the walker learned nothing
+about any of it.
+
+**Its own package, not the walker's.** The plan put this inside
+`ladingingest`. The walker's input is an `fs.FS` and nothing else — that is
+what makes one walker serve a grant, an embed, a zip and a remote alike — and
+folding a transport into it would make every consumer link `pkg/sftp` and,
+through it, `x/crypto/ssh`: the 1.55 MB M5 measured, for a dependency most of
+them have no use for.
+
+**Filters run at the source.** `WithFilters("--exclude", "*.bin")` passes
+rclone's own filter language to the serving side, so what is excluded never
+reaches this process — the difference between filtering and not storing. A
+mount's content policy for a remote is rclone's language rather than anything
+this store invents.
+
+**What a remote costs, measured against the same directory walked directly.**
+
+- **Modification times arrive at whole seconds.** SFTP's attribute width. A
+  snapshot of a remote records seconds where a local walk records nanoseconds.
+- **Modes do not survive: `rclone serve sftp` reports 0644 for every regular
+  file**, whatever the source's permissions are. This is the ingress mirror of
+  M5's finding that `--metadata` carries no mode on egress — rclone does not
+  carry modes in either direction. The test asserts the normalisation rather
+  than skipping the field, so a future rclone that starts carrying them is a
+  failure someone reads.
+- **A directory's size is not carried**, which is correct: it is the local
+  filesystem's own bookkeeping. `Result.Bytes` therefore differs between the
+  two paths while every file's size, content and block count agree.
+
+**Symlinks survive, which §SD9 assumed they would not.** Without `--links`,
+`rclone serve sftp` does not show a symlink at all — it is absent from the
+listing and simply not in the snapshot. *With* `--links`, the node arrives over
+the wire **as a symlink**, target and all, and the walker records it as one;
+the adapter then resolves it inside the snapshot like any other. rclone's own
+`ls` renders such a node as a small regular file whose bytes are the target,
+but that is its client-side `.rclonelink` convention showing through, a
+different layer from what SFTP carries. So symlink fidelity through rclone
+ingress is a flag away rather than unavailable — the M0 check 11b note about
+`.rclonelink` described the client side, not this one.
+
+**Round-trip acceptance.** The same directory snapshotted twice — once through
+`os.DirFS`, once through rclone — agrees node for node on kind, file size,
+content and mtime-to-the-second, and `fstest.TestFS` passes over the snapshot
+that came in through rclone. The two divergences above are asserted, not
+tolerated.
+
+**Process hygiene.** `Serve` returns a `Remote` whose `Close` shuts the pipe
+and waits: a dropped one leaves an rclone running until its stdin closes.
+rclone's stderr is captured into a bounded ring and folded into the error, so a
+spawn that fails — a bad remote, a missing credential, a filter that hid
+everything — says why instead of surfacing as an EOF.
+
+### 2026-08-20 — the how-to
+
+[How to snapshot a file tree and query it](../howto/lading-snapshot-store.md),
+linked from the AGENTS.md router. It covers all three ways in — Go, SQL and
+rclone — which is why it waited until M5 and M6 existed rather than shipping
+with M4's SQL surface and needing a rewrite one milestone later.
+
+Its last section is the collected limits, each of them measured during a
+milestone and most of them somebody else's rather than the store's: no
+`PREWHERE` through a macro, no file modes through rclone in either direction,
+whole-second mtimes over SFTP, symlinks needing `--links` on ingress, `text`
+as a guarantee a very long line forfeits, block-ordinal arithmetic only for
+non-text files, no deduplication, and not a hot serving path. Collected there
+so a reader meets them before they cost an afternoon.
 
 ## References
 

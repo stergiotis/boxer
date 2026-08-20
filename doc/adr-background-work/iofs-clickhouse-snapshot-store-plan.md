@@ -55,15 +55,27 @@ status: draft
   files; grep the diff before committing.
 - Docs you touch must pass `go run -tags="$(cat ./tags)" ./public/app gov doclint <path>`.
 - Lint: `scripts/ci/lint.sh` green before declaring a milestone done.
+- `recordstore/gen` refuses the facts `TableDesc` under a foreign table name:
+  copy it and set `DictionaryEntry.Name` to the store's table (M0, G1). The
+  `Database` must match `[a-z][a-z0-9]*` (M0, G2).
 - **Stop points** (ask the user, do not guess): adding a dependency
   (`pkg/sftp` is expected, anything else is not); any change to the
   `boxer.facts` `TableDesc`; any new capability subject or env var; package
   and macro names if the proposals below collide with existing conventions;
   any SD11 decision that M0's evidence does not settle.
 
-Names below are proposals under `public/keelson/runtime/` (beside `sysmfacts`,
-`sysmvocab`, `sysmtee`); follow `gov/filename` and the package-naming
-conventions, and confirm them at the start of M1.
+Names below were proposals under `public/keelson/runtime/`. They were settled
+during M1: the store does not belong under keelson — its only tie there is the
+row shape it borrows (`factsschema`) and the executor it writes through — so
+it lives at **`public/fs/lading/`**, beside the tree watcher, as `ladingvocab`,
+`ladingschema`, `ladingmeta`, `ladingdata`, `ladingpolicy` and the `lading`
+package itself, with `ladingingest`, `ladingadapter` and `ladingsftp` to come.
+`lading` because a bill of lading is issued once for one voyage, lists exactly
+what was loaded, and is never amended — only superseded by the next one. The
+memberships carry the same prefix. Read `fsvocab` / `fsstore` / `fsingest` /
+`fsadapter` / `fssftp` below as the older spelling; the *tables* keep their
+`fs` names (`boxer.fsmeta`, `boxer.fsdata`, `boxer.fssnap`), because they say
+what they hold rather than who owns them.
 
 ## 2. Milestones
 
@@ -72,7 +84,11 @@ commands green, a short note in the ADR's `## Updates` (dated) of what shipped
 and what was corrected, and — if the user asked for commits — one or a few
 commits by explicit path.
 
-### M0 — verify and decide (no production code)
+### M0 — verify and decide (no production code) — **done 2026-08-19**
+
+Ran as [the M0 trial](../trials/fs-snapshot-store-m0/); the decisions and the
+corrections are ADR-0198's `## Updates` entry for that date. Read both before
+starting M1 — four of the eleven checks corrected something below.
 
 **Goal.** Replace the note's assumptions with measured facts on a live
 ClickHouse, and settle ADR-0198 SD11, before any generated code exists.
@@ -124,21 +140,35 @@ spellings; whether the fleet profile's `by_path` projection is default.
 date; every SD11 item has a decision or an explicit "still open" with what
 evidence would settle it.
 
-### M1 — vocabulary, generated stores, provisioning
+### M1 — vocabulary, generated stores, provisioning — **done 2026-08-19**
+
+Shipped as `public/fs/lading{,/ladingvocab,/ladingschema,/ladingmeta,/ladingdata,/ladingpolicy}`;
+what changed against the sketch below is ADR-0198's `## Updates` entry for
+that date. Three things to carry into M2: the packages and memberships are
+spelled `lading*` and live under `public/fs/`, not under keelson; the root row
+is two components (`ladingEntry` + `ladingSnapshot`) on one row; and
+`recordstore/gen`'s emitted `VerifySchema` now skips `MATERIALIZED` and
+`ALIAS` columns, which is the decision M0 left open.
 
 **Deliverables.**
 
-- `fsvocab` (proposal): the membership registry — `fsMode`, `fsSize`,
-  `fsMtime`, `fsLinkTarget`, `fsContentHash`, `fsContent`, `fsBlockSize`,
-  `fsBlocks`, `fsText`, `fsKind`, `fsErr`, `fsSnapEntries`, `fsSnapBytes`,
-  `fsTtlClass`, `fsTextRule`, `fsInlineMax`, `fsData`, `fsBlockHash`,
-  `fsLine0`, the kind markers `fsKindEntry` / `fsKindBlock` / `fsKindMount`,
-  the policy kind's memberships (name, store, retention class, inline
-  threshold, text rule) — claimed and registered exactly as `sysmvocab`
-  does, with the committed `(ordinal, name, id)` table and the id-landing test.
-- `fsstore` (proposal): DTO files for the entry kind, the block kind and the
+- `ladingvocab`: the membership registry — `ladingMode`, `ladingSize`,
+  `ladingMtime`, `ladingLinkTarget`, `ladingContentHash`, `ladingContent`,
+  `ladingBlockSize`, `ladingBlocks`, `ladingText`, `ladingNodeKind`,
+  `ladingErr`, `ladingSnapEntries`, `ladingSnapBytes`, `ladingTtlClass`,
+  `ladingTextRule`, `ladingInlineMax`, `ladingData`, `ladingBlockHash`,
+  `ladingLine0`, the kind markers `ladingKindEntry` / `ladingKindSnapshot` /
+  `ladingKindBlock` / `ladingKindMount`, the policy kind's memberships
+  (`ladingMountName`, `ladingMountStore`, `ladingMountTtlClass`,
+  `ladingMountTextRule`, `ladingMountInlineMax`) — claimed and registered
+  exactly as `sysmvocab` does, with the committed `(ordinal, name, id)` table
+  and the id-landing test.
+- `ladingmeta` / `ladingdata` / `ladingpolicy`: DTO files for the entry kind, the block kind and the
   policy kind (`lw:` tags; plains `id`/`naturalKey`/`ts`/`expiresAt`; every
-  attribute scalar or `unit`); gen-tests generating (a) the entry store over
+  attribute scalar or `unit` — except `ladingText`, which is
+  `lw:"ladingText,bool"`:
+  the `bool` section has no `unit` cardinality and the `,unit` spelling emits
+  code that does not compile, M0); gen-tests generating (a) the entry store over
   `boxer.fsmeta` and (b) the block store over `boxer.fsdata` through
   `recordstore/gen` with the facts `TableDesc`, `SharedRA`, `Input.DDL` from
   the compact page §3 and the M0 decisions; (c) the policy kind as a
@@ -152,15 +182,27 @@ evidence would settle it.
 **Acceptance.** `go generate`/gen-tests are reproducible (re-running changes
 nothing); `scripts/dev/generate.sh` runs clean; the repo-wide id-disjointness
 check passes; on a live server (integration lane) provisioning is idempotent
-and `VerifySchema` passes after the `ALTER`s; an insert of one entry row
-through the generated `Ingest` round-trips through `Scan`.
+and an insert of one entry row through
+`Begin(id, ts, Envelope{NaturalKey, ExpiresAt}).Add<Kind>(row).Commit()`
+round-trips through `Scan` — **not** through the generated `Ingest<Kind>`,
+which refuses two rows sharing a key and drops the envelope (M0, G3).
+`VerifySchema` after the `ALTER`s is the open decision of M0's finding G4,
+not an acceptance criterion this milestone can meet as things stand.
 
-### M2 — the ingest library (the walker)
+### M2 — the ingest library (the walker) — **done 2026-08-20**
 
-**Deliverables.** `fsingest` (proposal): `Snapshot(ctx, fsys fs.FS, mountID
+Shipped as `public/fs/lading/ladingingest`; the corrections are ADR-0198's
+`## Updates` entry for that date. Two to carry into M3 and M4: a per-block
+hash is a **standalone** BLAKE3 digest (a subtree chaining value would fail
+the SQL audit the column exists for), and `text = true` on an entry row is a
+guarantee that no line straddles a block boundary — a file with an over-long
+line is stored `text = false`. The rclone-stdio source moved to M6 with the
+rest of the `pkg/sftp` work.
+
+**Deliverables.** `ladingingest`: `Snapshot(ctx, fsys fs.FS, mountID
 identifier.TaggedId, policy Policy, stores…) (Result, error)` — fixes `snap`
-and `expiresAt`; `fs.WalkDir`; an entry row per node via `Ingest` (errors into
-`fsErr`, walk continues); blocks for files under the inline threshold via the
+and `expiresAt`; `fs.WalkDir`; an entry row per node via `Begin`/`Add<Kind>`/`Commit`
+(errors into `fsErr`, walk continues); blocks for files under the inline threshold via the
 block store (`content` mode, `block_size`, text rule with newline cuts and
 `line0`; BLAKE3 file hash streamed in the same pass; per-block `hash` where
 the profile has it); `Flush` through `ExecutorI.InsertArrow`; the root row
@@ -178,9 +220,16 @@ before the root row leaves no complete snapshot. Integration lane: the same
 tree through a live server; `fssnap` shows the snapshot once the root row
 lands and not before.
 
-### M3 — the `io/fs` adapter
+### M3 — the `io/fs` adapter — **done 2026-08-20**
 
-**Deliverables.** `fsadapter` (proposal): `Open(store, mountID, snap)` →
+Shipped as `public/fs/lading/ladingadapter`; the corrections are ADR-0198's
+`## Updates` entry for that date. For M4: a predicate over `fsdata` must
+escape the NUL in a block's natural key (`\0`), or an executor that passes
+SQL as a process argument fails before ClickHouse sees it; and `Glob` stayed
+in Go rather than becoming `match()`, so the SQL surface offers a regular
+expression directly instead of translating a glob.
+
+**Deliverables.** `ladingadapter`: `Open(store, mountID, snap)` →
 `fs.FS` implementing `StatFS`, `ReadDirFS`, `ReadFileFS`, `GlobFS`,
 `ReadLinkFS`, `SubFS`; `File` with `Read`, `ReadAt`, `Seek`, `Stat`,
 `ReadDir`; `Latest(store, mountID)` and `Snapshots(store, mountID)` over
@@ -196,9 +245,19 @@ bytes; `ReadDir` order is bytewise by name; a symlink `Lstat`s as a link and
 `ReadLink` returns the target; `Sub` works; a snapshot written while another
 is read does not change the pinned view.
 
-### M4 — the SQL surface
+### M4 — the SQL surface — **done 2026-08-20**
 
-**Deliverables.** The `fs()` / `fsdata()` nanopass rewrites — parenthesised
+Shipped as `public/fs/lading/ladingsql`; the corrections are ADR-0198's
+`## Updates` entry for that date. Two for M5: `PREWHERE` does not survive a
+macro (the expansion is a subquery, and ClickHouse allows PREWHERE only
+against a table), and a third relation `fssnap()` carries the commit
+record's totals. The capability check is a seam (`MountVisibilityI`,
+default-deny) and binding it to the capability broker is still the stop
+point the rules section names.
+
+**Deliverables.** (The how-to this section made conditional was written after
+M6, as [doc/howto/lading-snapshot-store.md](../howto/lading-snapshot-store.md),
+so it could cover Go, SQL and rclone at once.) The `fs()` / `fsdata()` nanopass rewrites — parenthesised
 subqueries per the compact page §4, projection from the entry kind's generated
 Projection, the completeness rule, the logical cutoff, the capability check
 at expansion; entries in the security classifier allowlist and play's dispatch
@@ -212,9 +271,15 @@ introspection-read; each §7 query returns the expected rows on the seeded
 store; an expired row is invisible through `fs()` while still present in the
 table (the cutoff).
 
-### M5 — the rclone head (SFTP over stdio)
+### M5 — the rclone head (SFTP over stdio) — **done 2026-08-20**
 
-**Deliverables.** `fssftp` (proposal) + a CLI subcommand (`boxer fs
+Shipped as `public/fs/lading/ladingsftp` plus `boxer fs sftp-stdio`; the
+corrections are ADR-0198's `## Updates` entry for that date. `pkg/sftp` was
+audited before adding (the stop point) and is now a direct dependency.
+For M6: the same library's client is what wraps an `rclone serve sftp
+--stdio` remote as an `fs.FS`, so the dependency question is settled.
+
+**Deliverables.** `ladingsftp` + a CLI subcommand (`boxer fs
 sftp-stdio --store <name> …`, name per the CLI conventions): `pkg/sftp`
 `RequestServer` over stdin/stdout; handlers over the adapter — `Fileread` →
 `ReadAt` with a per-handle cache of decoded blocks and readahead, `Filelist`
@@ -230,9 +295,14 @@ adapter; `rclone cat` bytes equal the source; `rclone copy --metadata`
 restores mtimes and modes; a 32 KiB chunked read of a 10 MiB file issues one
 block query per block, not per chunk (assert on an executor counter).
 
-### M6 — rclone ingress
+### M6 — rclone ingress — **done 2026-08-20**
 
-**Deliverables.** In `fsingest`: an `fs.FS` over the `pkg/sftp` client
+Shipped as `public/fs/lading/ladingremote` — its own package rather than
+inside `ladingingest`, so the walker keeps `fs.FS` as its only input; the
+reasoning and the measured transport limits are ADR-0198's `## Updates`
+entry for that date.
+
+**Deliverables.** In `ladingingest`: an `fs.FS` over the `pkg/sftp` client
 (`ReadDir`, `Lstat`, `Open`, `ReadLink`) and a source that spawns `rclone serve
 sftp --stdio <remote>` and snapshots it; filters passed through. Integration
 test: a local directory served by `rclone serve sftp --stdio`, snapshotted,
@@ -252,7 +322,7 @@ user's go-ahead.
 
 ```sh
 go build -tags="$(cat ./tags)" ./...
-go test  -tags="$(cat ./tags)" ./public/keelson/runtime/fs... ./public/db/clickhouse/dsl/nanopass/...
+go test  -tags="$(cat ./tags)" ./public/fs/lading/... ./public/db/clickhouse/dsl/nanopass/...
 go mod tidy --diff
 scripts/ci/lint.sh
 scripts/ci/gotest-integration.sh          # live ClickHouse (+ rclone for M5/M6)

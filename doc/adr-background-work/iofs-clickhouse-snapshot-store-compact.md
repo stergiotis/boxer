@@ -96,17 +96,18 @@ Physical schema: the `boxer.facts` `TableDesc` rendered by a generated record st
 | `snap` | `ts:ts:z64` | `DateTime64(9)` |
 | `path` | `id:naturalKey:y` | `String` |
 | `expires_at` | `lc:expiresAt:z64` | `DateTime64(9)` |
-| `mode`, `block_size`, `blocks` | `u32Array` — `fsMode`, `fsBlockSize`, `fsBlocks` | |
-| `size`; `snap_entries`, `snap_bytes` (root row) | `u64Array` — `fsSize`, `fsSnapEntries`, `fsSnapBytes` | |
-| `mtime` | `timeArray` — `fsMtime` | |
-| `link_target`, `err` | `stringArray` — `fsLinkTarget`, `fsErr` | |
-| `content_hash` | `blobArray` — `fsContentHash` (BLAKE3) | |
-| `content`, `kind`, marker; applied policy (root row) | `symbol` — `fsContent`, `fsKind`, `fsKindEntry`; `fsTtlClass`, `fsTextRule` | |
-| `inline_max` (root row) | `u64Array` — `fsInlineMax` | |
-| `text` | `bool` — `fsText` | |
-| `name`, `dir`, `depth`, `ext`, `is_dir`, `is_symlink` | `MATERIALIZED` over `naturalKey` / `fsMode`, added by `ALTER` | hidden from `SELECT *` |
+| `mode`, `block_size`, `blocks` | `u32Array` — `ladingMode`, `ladingBlockSize`, `ladingBlocks` | |
+| `size`; `snap_entries`, `snap_bytes` (root row) | `u64Array` — `ladingSize`, `ladingSnapEntries`, `ladingSnapBytes` | |
+| `mtime` | `timeArray` — `ladingMtime` | |
+| `link_target`, `err` | `stringArray` — `ladingLinkTarget`, `ladingErr` | |
+| `content_hash` | `blobArray` — `ladingContentHash` (BLAKE3) | |
+| `content`, `kind`, marker; applied policy (root row) | `symbol` — `ladingContent`, `ladingNodeKind`, `ladingKindEntry`; `ladingTtlClass`, `ladingTextRule` | |
+| `inline_max` (root row) | `u64Array` — `ladingInlineMax` | |
+| `text` | `bool` — `ladingText` | |
+| `name`, `dir`, `depth`, `ext`, `is_dir`, `is_symlink` | `MATERIALIZED` over `naturalKey` / `ladingMode`, added by `ALTER` | hidden from `SELECT *` |
 
-**Block row** (`fsdata`): same backbone, ordinal encoded per §10; attributes `fsData`, `fsBlockHash` (`blobArray`), `fsLine0` (`u32Array`), marker `fsKindBlock`.
+**Block row** (`fsdata`): same backbone, ordinal as a `naturalKey` suffix
+(`path ‖ 0x00 ‖ be32(seq)`, decided at M0); attributes `ladingData`, `ladingBlockHash` (`blobArray`), `ladingLine0` (`u32Array`), marker `ladingKindBlock`.
 
 **Engine clauses and post-`EnsureTable` `ALTER`s**
 
@@ -122,7 +123,7 @@ ALTER TABLE boxer.fsmeta
     ADD COLUMN dir   String MATERIALIZED multiIf("id:naturalKey:y:4::0:" = '.', '', position("id:naturalKey:y:4::0:", '/') = 0, '.',
                                              substring("id:naturalKey:y:4::0:", 1, length("id:naturalKey:y:4::0:") - length(name) - 1)),
     ADD COLUMN depth UInt16 MATERIALIZED if("id:naturalKey:y:4::0:" = '.', 0, length(splitByChar('/', "id:naturalKey:y:4::0:"))),
-    ADD COLUMN ext   LowCardinality(String) MATERIALIZED if(position(name, '.') = 0, '', concat('.', splitByChar('.', name)[-1])),
+    ADD COLUMN ext   LowCardinality(String) MATERIALIZED if(position(substring(name, 2), '.') = 0, '', concat('.', splitByChar('.', name)[-1])),   -- from position 2: a leading dot is part of the name
     ADD CONSTRAINT valid_path CHECK "id:naturalKey:y:4::0:" = '.' OR NOT hasAny(splitByChar('/', "id:naturalKey:y:4::0:"), ['', '.', '..']),
     ADD INDEX ix_dir dir TYPE bloom_filter GRANULARITY 4;
 -- is_dir / is_symlink: bitTest on the extracted mode attribute, same way
@@ -261,6 +262,11 @@ store ─► boxer fs sftp-stdio --store X ─pipe─► rclone  :sftp,ssh="…"
 - **Rules:** no networking of our own until ADR-0082; rclone-vocabulary hashes from `hasher`; writable views from `union`; an integration lane drives the real `rclone` (via `extbin`) both ways.
 
 ## 10. Open decisions
+
+*The first two were closed by the M0 trial on 2026-08-19 (ADR-0198
+`## Updates`): the ordinal is a `naturalKey` suffix and `fsdata` stays
+facts-shaped; the fleet profile's `by_path` projection is not default,
+because it blocks the per-mount purge. The rest stand.*
 
 - **Block ordinal and `fsdata` shape**: ordinal as a `naturalKey` suffix (`path ‖ '\0' ‖ be32(seq)`, no `TableDesc` change) vs a generic `rt:ordinal:u32` routing plain (one migration of `boxer.facts`) vs leeway value cardinality (one row per file, blocks as N values — fleet-friendly, wrong for large files); and whether `fsdata` is facts-shaped or bespoke — decided by the insert-cost measurement.
 - Corpus block size (1 MiB vs 256 KiB); partition unit per store (day vs week/month); the retention-class set; `inline_max` / text-rule defaults; the policy kind's shape.
