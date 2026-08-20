@@ -46,23 +46,14 @@ type Snapshot struct {
 // that would hand back a snapshot whose entries may already be gone.
 func Snapshots(ctx context.Context, exec recordstore.ExecutorI, mount identifier.TaggedId) (out []Snapshot, err error) {
 	if exec == nil {
-		return nil, eh.Errorf("ladingadapter: no executor")
+		return nil, eh.Errorf("no executor")
 	}
 	if !mount.IsValid() {
-		return nil, eh.Errorf("ladingadapter: mount id is not a valid tagged id")
+		return nil, eh.Errorf("mount id is not a valid tagged id")
 	}
-	idCol, err := ladingschema.PhysicalPlainName("id")
-	if err != nil {
-		return nil, err
-	}
-	expCol, err := ladingschema.PhysicalPlainName("expiresAt")
-	if err != nil {
-		return nil, err
-	}
-
 	st := lading.SnapshotIndex(exec)
 	defer st.Close()
-	pred := fmt.Sprintf("%s = %d AND %s > now64(9, 'UTC')", idCol, mount.Value(), expCol)
+	pred := fmt.Sprintf("%s = %d AND %s", ladingschema.ColID, mount.Value(), ladingschema.NotExpired)
 	for ent, serr := range st.ScanLadingSnapshot(ctx, recordstore.ScanOpts{ExtraPredicate: pred}) {
 		if serr != nil {
 			return nil, serr
@@ -97,18 +88,14 @@ func Snapshots(ctx context.Context, exec recordstore.ExecutorI, mount identifier
 // path of every snapshot.
 func Mounts(ctx context.Context, exec recordstore.ExecutorI) (mounts []identifier.TaggedId, err error) {
 	if exec == nil {
-		return nil, eh.Errorf("ladingadapter: no executor")
-	}
-	expCol, err := ladingschema.PhysicalPlainName("expiresAt")
-	if err != nil {
-		return nil, err
+		return nil, eh.Errorf("no executor")
 	}
 	st := lading.SnapshotIndex(exec)
 	defer st.Close()
 
 	seen := map[identifier.TaggedId]struct{}{}
 	for ent, serr := range st.ScanLadingSnapshot(ctx, recordstore.ScanOpts{
-		ExtraPredicate: expCol + " > now64(9, 'UTC')",
+		ExtraPredicate: ladingschema.NotExpired,
 	}) {
 		if serr != nil {
 			return nil, serr

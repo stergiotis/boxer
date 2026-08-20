@@ -7,8 +7,10 @@ import (
 	"io/fs"
 	"path"
 	"sort"
+	"sync"
 	"time"
 
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -74,6 +76,13 @@ func modeOf(e *entry) fs.FileMode { return fs.FileMode(e.row.Mode) }
 // all if it was under the mount's inline threshold, so the threshold is the
 // bound. It is the same number that bounds the walker's memory per file.
 type File struct {
+	// mu makes one handle safe for the parallel ReadAt calls io.ReaderAt
+	// promises its clients — archive/zip, io.NewSectionReader, an SFTP
+	// request server. It guards this handle's own state and, through it,
+	// serialises that handle's reads into the FS below, which is
+	// single-goroutine like every generated store. It does NOT make two
+	// handles on one FS safe against each other; see [FS].
+	mu   sync.Mutex
 	fsys *FS
 	// name is the name the caller opened, which is what an error must say —
 	// not the path the entry resolved to.
@@ -109,6 +118,8 @@ func (inst *FS) openEntry(name string, e *entry) (fs.File, error) {
 
 // Stat describes the open file.
 func (inst *File) Stat() (fs.FileInfo, error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
 	if inst.closed {
 		return nil, pathErr("stat", inst.name, fs.ErrClosed)
 	}
@@ -119,6 +130,8 @@ func (inst *File) Stat() (fs.FileInfo, error) {
 // release but the handle's own caches; a second Close is an error, as it is
 // for every other fs.File.
 func (inst *File) Close() error {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
 	if inst.closed {
 		return pathErr("close", inst.name, fs.ErrClosed)
 	}
@@ -129,10 +142,12 @@ func (inst *File) Close() error {
 
 // Read reads from the current offset.
 func (inst *File) Read(p []byte) (n int, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
 	if inst.closed {
 		return 0, pathErr("read", inst.name, fs.ErrClosed)
 	}
-	n, err = inst.ReadAt(p, inst.off)
+	n, err = inst.readAt(p, inst.off)
 	inst.off += int64(n)
 	if errors.Is(err, io.EOF) && n > 0 {
 		err = nil
@@ -140,11 +155,20 @@ func (inst *File) Read(p []byte) (n int, err error) {
 	return
 }
 
-// ReadAt reads a byte range, without moving the offset.
+// ReadAt reads a byte range, without moving the offset. Safe to call in
+// parallel on one handle, as [io.ReaderAt] requires.
 //
 // A range that crosses block boundaries is one query for the blocks it
 // touches, not one per block and not one per chunk.
 func (inst *File) ReadAt(p []byte, off int64) (n int, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.readAt(p, off)
+}
+
+// readAt is ReadAt with the lock already held, so Read can reuse it without
+// taking the lock twice.
+func (inst *File) readAt(p []byte, off int64) (n int, err error) {
 	if inst.closed {
 		return 0, pathErr("readat", inst.name, fs.ErrClosed)
 	}
@@ -193,6 +217,8 @@ func (inst *File) ReadAt(p []byte, off int64) (n int, err error) {
 // Seek moves the read offset. Seeking past the end is legal, as it is on a
 // real file; the next Read reports EOF.
 func (inst *File) Seek(offset int64, whence int) (int64, error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
 	if inst.closed {
 		return 0, pathErr("seek", inst.name, fs.ErrClosed)
 	}
@@ -222,6 +248,8 @@ func (inst *File) Seek(offset int64, whence int) (int64, error) {
 // specifies: n <= 0 returns everything, n > 0 returns at most n and reports
 // io.EOF once exhausted.
 func (inst *File) ReadDir(n int) ([]fs.DirEntry, error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
 	if inst.closed {
 		return nil, pathErr("readdir", inst.name, fs.ErrClosed)
 	}
@@ -284,7 +312,7 @@ func (inst *File) readFixed(p []byte, off, end int64) (n int, err error) {
 		b, ok := inst.blocks[seq]
 		if !ok {
 			return n, eb.Build().Uint32("seq", seq).Uint32("blocks", inst.e.row.Blocks).
-				Errorf("lading: a block of %s is missing from the snapshot", inst.name)
+				Errorf("a block of %s is missing from the snapshot", inst.name)
 		}
 		start := int64(seq) * bs
 		lo := max(off-start, 0)
@@ -339,11 +367,22 @@ func (inst *FS) content(e *entry) ([]byte, error) {
 		seqs = append(seqs, seq)
 	}
 	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
+	// Contiguity from 0 is only half the check: a snapshot missing its
+	// *trailing* blocks is contiguous over what it has, so without the count
+	// this returns a short file and a nil error, and the caller — rclone,
+	// through the head — sees a clean EOF at the truncation. readFixed already
+	// fails loudly on the same damage; these two must not disagree about
+	// whether a damaged snapshot is readable.
+	if uint32(len(seqs)) != e.row.Blocks {
+		return nil, eb.Build().Str("path", e.name).
+			Uint32("want", e.row.Blocks).Int("got", len(seqs)).
+			Errorf("%s has %d of %d blocks in the snapshot", e.name, len(seqs), e.row.Blocks)
+	}
 	out := make([]byte, 0, e.row.Size)
 	for i, seq := range seqs {
 		if uint32(i) != seq {
 			return nil, eb.Build().Int("seq", i).Str("path", e.name).
-				Errorf("lading: a block of %s is missing from the snapshot", e.name)
+				Errorf("a block of %s is missing from the snapshot", e.name)
 		}
 		out = append(out, rows[seq]...)
 	}
@@ -361,10 +400,15 @@ func (inst *FS) blocks(name string, first, last uint32) (map[uint32][]byte, erro
 	if inst.st.Data == nil {
 		return nil, errors.New("lading: no block store bound; this view can stat but not read")
 	}
-	pred := fmt.Sprintf("%s = %d AND %s = %s AND %s BETWEEN %s AND %s",
-		inst.col("id"), inst.mount.Value(),
-		inst.col("ts"), tsLiteral(inst.snap),
-		inst.col("naturalKey"), quote(blockKey(name, first)), quote(blockKey(name, last)))
+	// The expiry cutoff rides here too: a block table row outlives its expiry
+	// on disk exactly as an entry row does, and a read that omitted it would
+	// serve the bytes of a snapshot the entry side has already stopped
+	// listing.
+	pred := fmt.Sprintf("%s = %d AND %s = %s AND %s AND %s BETWEEN %s AND %s",
+		ladingschema.ColID, inst.mount.Value(),
+		ladingschema.ColTs, tsLiteral(inst.snap),
+		ladingschema.NotExpired,
+		ladingschema.ColNaturalKey, ladingschema.QuoteLiteral(blockKey(name, first)), ladingschema.QuoteLiteral(blockKey(name, last)))
 
 	out := map[uint32][]byte{}
 	for ent, err := range inst.st.Data.ScanLadingBlock(inst.ctx, recordstore.ScanOpts{ExtraPredicate: pred}) {

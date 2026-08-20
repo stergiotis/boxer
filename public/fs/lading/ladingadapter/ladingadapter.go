@@ -140,11 +140,11 @@ type entry struct {
 // call on the result.
 func Open(st lading.Stores, mount identifier.TaggedId, snap time.Time, opts ...Option) (inst *FS, err error) {
 	if st.Meta == nil {
-		err = eh.Errorf("ladingadapter: no entry store")
+		err = eh.Errorf("no entry store")
 		return
 	}
 	if !mount.IsValid() {
-		err = eh.Errorf("ladingadapter: mount id is not a valid tagged id")
+		err = eh.Errorf("mount id is not a valid tagged id")
 		return
 	}
 	inst = &FS{
@@ -257,8 +257,14 @@ func (inst *FS) Glob(pattern string) ([]string, error) {
 		return nil, err
 	}
 	if !strings.ContainsAny(pattern, "*?[\\") {
+		// A pattern that matches nothing is an empty result, per path/filepath
+		// — but a query that failed is not "nothing", and returning nil for it
+		// would report a dead server or a cancelled context as an empty tree.
 		if _, err := inst.Stat(pattern); err != nil {
-			return nil, nil
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil, nil
+			}
+			return nil, err
 		}
 		return []string{pattern}, nil
 	}
@@ -287,6 +293,16 @@ func (inst *FS) Sub(dir string) (fs.FS, error) {
 }
 
 // --- resolution.
+
+// contains reports whether a full snapshot path is inside this FS's subtree.
+// The whole snapshot contains everything; a Sub contains its own root and what
+// is under it.
+func (inst *FS) contains(full string) bool {
+	if inst.prefix == "" {
+		return true
+	}
+	return full == inst.prefix || strings.HasPrefix(full, inst.prefix+"/")
+}
 
 // full maps a name in this FS's namespace to the snapshot's.
 func (inst *FS) full(name string) string {
@@ -333,6 +349,14 @@ func (inst *FS) resolve(name string) (*entry, error) {
 		if next == "" || !fs.ValidPath(next) {
 			return nil, fs.ErrInvalid
 		}
+		if !inst.contains(next) {
+			// A Sub is a boundary, not a relabelling: resolution walks full
+			// snapshot paths, so without this a link inside the subtree could
+			// name anything in the snapshot and be followed there. `..` above
+			// the snapshot root is already refused by fs.ValidPath; this is
+			// the same refusal one level in.
+			return nil, fs.ErrNotExist
+		}
 		e, err = inst.byPath(next)
 		if err != nil {
 			return nil, err
@@ -349,7 +373,7 @@ func (inst *FS) byPath(full string) (*entry, error) {
 		}
 		return e, nil
 	}
-	rows, err := inst.scan(fmt.Sprintf("%s = %s", inst.col("naturalKey"), quote(full)), 1)
+	rows, err := inst.scan(fmt.Sprintf("%s = %s", ladingschema.ColNaturalKey, ladingschema.QuoteLiteral(full)), 1)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +394,7 @@ func (inst *FS) children(full string) ([]*entry, error) {
 	}
 	// The root's children carry dir = '.', every other directory's carry the
 	// directory's own path — which is what the materialised column computes.
-	rows, err := inst.scan(fmt.Sprintf("dir = %s", quote(full)), 0)
+	rows, err := inst.scan(fmt.Sprintf("dir = %s", ladingschema.QuoteLiteral(full)), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -386,13 +410,21 @@ func (inst *FS) children(full string) ([]*entry, error) {
 
 // scan runs one query over this snapshot's entry rows.
 //
-// Every predicate is ANDed onto the pinning — mount and snapshot — so a
-// caller of this package cannot reach another mount's rows or another
-// snapshot's, whatever it asks for.
+// Every predicate is ANDed onto the pinning — mount, snapshot and the expiry
+// cutoff — so a caller of this package cannot reach another mount's rows,
+// another snapshot's, or a snapshot the rest of the store has stopped
+// offering, whatever it asks for.
+//
+// The cutoff is [ladingschema.NotExpired], the same spelling the macros use.
+// Without it this adapter — and therefore the SFTP head above it — would keep
+// serving a snapshot that `fs()` and Snapshots() already report as gone,
+// because `ttl_only_drop_parts = 1` leaves a partly expired part on disk until
+// an explicit OPTIMIZE FINAL.
 func (inst *FS) scan(pred string, limit int) (out []*entry, err error) {
-	where := fmt.Sprintf("%s = %d AND %s = %s AND (%s)",
-		inst.col("id"), inst.mount.Value(),
-		inst.col("ts"), tsLiteral(inst.snap),
+	where := fmt.Sprintf("%s = %d AND %s = %s AND %s AND (%s)",
+		ladingschema.ColID, inst.mount.Value(),
+		ladingschema.ColTs, tsLiteral(inst.snap),
+		ladingschema.NotExpired,
 		pred)
 	for ent, serr := range inst.st.Meta.ScanLadingEntry(inst.ctx, recordstore.ScanOpts{
 		ExtraPredicate: where, Limit: limit,
@@ -406,18 +438,6 @@ func (inst *FS) scan(pred string, limit int) (out []*entry, err error) {
 		out = append(out, &entry{name: string(ent.NaturalKey), row: ent.LadingEntry.Val})
 	}
 	return
-}
-
-// col is a backbone plain's physical column name, resolved once per call from
-// the descriptor rather than written out.
-func (inst *FS) col(plain string) string {
-	q, err := ladingschema.PhysicalPlainName(plain)
-	if err != nil {
-		// Only reachable for a facts schema that has lost a backbone plain,
-		// which every store in the tree would already have failed on.
-		panic(err)
-	}
-	return q
 }
 
 // --- small helpers.
@@ -441,9 +461,6 @@ func tsLiteral(t time.Time) string {
 // statement to a process as an argument cannot carry a raw NUL at all — the
 // exec fails with EINVAL before ClickHouse sees anything. `\0` in the literal
 // travels as two ordinary characters and arrives as the byte.
-func quote(s string) string {
-	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`, "\x00", `\0`).Replace(s) + "'"
-}
 
 func isSymlink(e *entry) bool { return modeOf(e)&fs.ModeSymlink != 0 }
 
