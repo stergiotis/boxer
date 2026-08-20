@@ -61,6 +61,22 @@ var (
 	})
 )
 
+// Storage transports.
+var (
+	// Rclone is the counterpart of the lading store's SFTP-over-stdio head
+	// (ADR-0198 §SD9): it runs the head in place of ssh to reach the store,
+	// and `rclone serve sftp --stdio` runs on the other side when a remote is
+	// snapshotted. Nothing in the tree invokes it in production — it is the
+	// integration lane's peer, and the reason the head has to meet a real
+	// client's expectations rather than only its own tests'.
+	Rclone = Declare(Program{
+		Name:        "rclone",
+		Kind:        Host,
+		OverrideEnv: "BOXER_RCLONE",
+		InstallHint: "https://rclone.org/install/",
+	})
+)
+
 // Language toolchains for code synthesis / analysis.
 var (
 	// TinyGo compiles the WASM survey probes. The airgap bundle ships a pinned
