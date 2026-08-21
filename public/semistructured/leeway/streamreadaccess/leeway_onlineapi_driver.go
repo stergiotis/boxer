@@ -76,6 +76,16 @@ type memberColLayout struct {
 	arrowIdx int
 	role     common.ColumnRoleE
 	name     naming.StylableName
+
+	// Mixed channels split one membership across two columns — the identity
+	// half (lmr / lmv) and the params half (mrhp / mvhp), co-indexed 1:1 and
+	// counted by the same cardinality column. linkMixedPartners pairs them:
+	// the identity half carries paramsArrowIdx (-1 when the params column is
+	// absent) and emits the pair in one call; the params half is marked
+	// paramsOnly and skipped, unless its identity half is missing, in which
+	// case it is emitted alone as before.
+	paramsArrowIdx int
+	paramsOnly     bool
 }
 
 type coGroupLayout struct {
@@ -225,7 +235,34 @@ func (inst *Driver) prepare() (err error) {
 	return
 }
 
+// linkMixedPartners pairs the identity and params halves of the mixed
+// membership channels within each section (see memberColLayout). Runs after
+// either preparation path, so a params column whose identity half was
+// dropped by schema-resolved subsetting keeps emitting on its own.
+func (inst *Driver) linkMixedPartners() {
+	for i := range inst.sections {
+		sec := &inst.sections[i]
+		idxByRole := make(map[common.ColumnRoleE]int, len(sec.memberCols))
+		for j := range sec.memberCols {
+			sec.memberCols[j].paramsArrowIdx = -1
+			sec.memberCols[j].paramsOnly = false
+			idxByRole[sec.memberCols[j].role] = j
+		}
+		link := func(identRole, paramsRole common.ColumnRoleE) {
+			ij, okI := idxByRole[identRole]
+			pj, okP := idxByRole[paramsRole]
+			if okI && okP {
+				sec.memberCols[ij].paramsArrowIdx = sec.memberCols[pj].arrowIdx
+				sec.memberCols[pj].paramsOnly = true
+			}
+		}
+		link(common.ColumnRoleMixedLowCardRef, common.ColumnRoleMixedRefHighCardParameters)
+		link(common.ColumnRoleMixedLowCardVerbatim, common.ColumnRoleMixedVerbatimHighCardParameters)
+	}
+}
+
 func (inst *Driver) precomputeNamesTypes() {
+	inst.linkMixedPartners()
 	for i := range inst.plainSections {
 		ps := &inst.plainSections[i]
 		ps.valueNames = make([]naming.StylableName, len(ps.valueCols))
@@ -288,9 +325,20 @@ func appendValueCols(out *[]valueColLayout, cp *common.IntermediateColumnProps, 
 	}
 }
 
+// isPerAttributeCountRole reports whether a support column holds the
+// per-attribute element count a cardCursor walks: the IR emits it as
+// ColumnRoleCardinality for sets and ColumnRoleLength for homogenous arrays
+// (common.addHomogenousArraySupportColumn; the generated read access loads
+// its array accelerator from that same column). Until 2026-08-21 only the
+// set role was registered, so every homogenous array was driven with card=1
+// and silently truncated to its first element.
+func isPerAttributeCountRole(role common.ColumnRoleE) bool {
+	return role == common.ColumnRoleCardinality || role == common.ColumnRoleLength
+}
+
 func appendCardCols(out *[]int, cp *common.IntermediateColumnProps, baseOffset uint32) {
 	for j := range cp.Names {
-		if cp.Roles[j] == common.ColumnRoleCardinality {
+		if isPerAttributeCountRole(cp.Roles[j]) {
 			*out = append(*out, int(baseOffset)+j)
 		}
 	}
@@ -451,7 +499,7 @@ func appendValueColsResolved(out *[]valueColLayout, cp *common.IntermediateColum
 
 func appendCardColsResolved(out *[]int, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int) {
 	for j := range cp.Names {
-		if cp.Roles[j] != common.ColumnRoleCardinality {
+		if !isPerAttributeCountRole(cp.Roles[j]) {
 			continue
 		}
 		arrowIdx := resolve(phys[j])
@@ -546,6 +594,16 @@ func (inst *Driver) DriveRecordBatch(sink SinkI, rec arrow.RecordBatch) (err err
 }
 
 func (inst *Driver) driveEntity(sink SinkI, rec arrow.RecordBatch, entityIdx int) {
+	// Optional capabilities (ADR-0072 pattern): resolved once per entity, not
+	// per value, and cleared on exit so a later drive with another sink
+	// cannot inherit them.
+	inst.arrowSink, _ = sink.(ArrowValueSinkI)
+	inst.coTagSink, _ = sink.(CoSectionTagSinkI)
+	defer func() {
+		inst.arrowSink = nil
+		inst.coTagSink = nil
+	}()
+
 	sink.BeginEntity()
 
 	{ // Plain sections
@@ -607,6 +665,7 @@ func (inst *Driver) drivePlainSection(sink SinkI, rec arrow.RecordBatch, entityI
 
 	sink.BeginPlainValue()
 	valueFmt := inst.fmts.ValueFormatter
+	av := inst.arrowSink // typed lane (ArrowValueSinkI), nil for text sinks
 
 	for _, col := range ps.valueCols {
 		addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
@@ -615,22 +674,30 @@ func (inst *Driver) drivePlainSection(sink SinkI, rec arrow.RecordBatch, entityI
 		switch col.kind {
 		case plainColScalar:
 			sink.BeginScalarValue()
-			text := inst.readPlainScalar(rec, col.arrowIdx, entityIdx)
-			_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
-			inst.handleError(err)
-			err = sink.EndScalarValue()
+			if av != nil {
+				av.WriteArrowScalar(rec.Column(col.arrowIdx), entityIdx)
+			} else {
+				text := inst.readPlainScalar(rec, col.arrowIdx, entityIdx)
+				_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
+				inst.handleError(err)
+			}
+			err := sink.EndScalarValue()
 			inst.handleError(err)
 
 		case plainColArray:
 			elemStart, elemEnd := inst.listOffsets(rec, col.arrowIdx, entityIdx)
 			card := elemEnd - elemStart
 			sink.BeginHomogenousArrayValue(card)
-			for elemIdx := range card {
-				sink.BeginValueItem(elemIdx)
-				text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
-				_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
-				inst.handleError(err)
-				sink.EndValueItem()
+			if av != nil {
+				av.WriteArrowRange(inst.listInnerArray(rec, col.arrowIdx), elemStart, elemEnd)
+			} else {
+				for elemIdx := range card {
+					sink.BeginValueItem(elemIdx)
+					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
+					_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
+					inst.handleError(err)
+					sink.EndValueItem()
+				}
 			}
 			sink.EndHomogenousArrayValue()
 
@@ -638,12 +705,16 @@ func (inst *Driver) drivePlainSection(sink SinkI, rec arrow.RecordBatch, entityI
 			elemStart, elemEnd := inst.listOffsets(rec, col.arrowIdx, entityIdx)
 			card := elemEnd - elemStart
 			sink.BeginSetValue(card)
-			for elemIdx := range card {
-				sink.BeginValueItem(elemIdx)
-				text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
-				_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
-				inst.handleError(err)
-				sink.EndValueItem()
+			if av != nil {
+				av.WriteArrowRange(inst.listInnerArray(rec, col.arrowIdx), elemStart, elemEnd)
+			} else {
+				for elemIdx := range card {
+					sink.BeginValueItem(elemIdx)
+					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
+					_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
+					inst.handleError(err)
+					sink.EndValueItem()
+				}
 			}
 			sink.EndSetValue()
 		}
@@ -823,7 +894,11 @@ func (inst *Driver) driveCoGroup(sink SinkI, rec arrow.RecordBatch, entityIdx in
 		}
 		sink.BeginTags(nTags)
 		for i, sIdx := range group.sectionIds {
-			inst.emitSectionTags(ms, rec, entityIdx, attrIdx, &inst.sections[sIdx], perSec[i].memberSlots)
+			sec := &inst.sections[sIdx]
+			if inst.coTagSink != nil {
+				inst.coTagSink.BeginCoSectionTags(sec.name, sec.useAspects)
+			}
+			inst.emitSectionTags(ms, rec, entityIdx, attrIdx, sec, perSec[i].memberSlots)
 		}
 		sink.EndTags()
 		err := sink.EndTaggedValue()
@@ -844,16 +919,22 @@ func (inst *Driver) driveCoGroup(sink SinkI, rec arrow.RecordBatch, entityIdx in
 func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityIdx int, attrIdx int, sec *sectionLayout, arraySlot, setSlot attrCardSlot) {
 	valueFmt := inst.fmts.ValueFormatter
 
+	av := inst.arrowSink // typed lane (ArrowValueSinkI), nil for text sinks
+
 	{ // Scalar columns
 		for _, col := range sec.scalarCols {
 			flatIdx := inst.listFlatIndex(rec, col.arrowIdx, entityIdx, attrIdx)
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
 			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginScalarValue()
-			text := inst.readListInnerValue(rec, col.arrowIdx, flatIdx)
-			_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
-			inst.handleError(err)
-			err = sink.EndScalarValue()
+			if av != nil {
+				av.WriteArrowScalar(inst.listInnerArray(rec, col.arrowIdx), flatIdx)
+			} else {
+				text := inst.readListInnerValue(rec, col.arrowIdx, flatIdx)
+				_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
+				inst.handleError(err)
+			}
+			err := sink.EndScalarValue()
 			inst.handleError(err)
 			sink.EndColumn()
 		}
@@ -867,12 +948,16 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
 			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginHomogenousArrayValue(card)
-			for elemIdx := range card {
-				sink.BeginValueItem(elemIdx)
-				text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
-				_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
-				inst.handleError(err)
-				sink.EndValueItem()
+			if av != nil {
+				av.WriteArrowRange(inst.listInnerArray(rec, col.arrowIdx), elemStart, elemStart+card)
+			} else {
+				for elemIdx := range card {
+					sink.BeginValueItem(elemIdx)
+					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
+					_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
+					inst.handleError(err)
+					sink.EndValueItem()
+				}
 			}
 			sink.EndHomogenousArrayValue()
 			sink.EndColumn()
@@ -887,12 +972,16 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
 			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginSetValue(card)
-			for elemIdx := range card {
-				sink.BeginValueItem(elemIdx)
-				text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
-				_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
-				inst.handleError(err)
-				sink.EndValueItem()
+			if av != nil {
+				av.WriteArrowRange(inst.listInnerArray(rec, col.arrowIdx), elemStart, elemStart+card)
+			} else {
+				for elemIdx := range card {
+					sink.BeginValueItem(elemIdx)
+					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
+					_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
+					inst.handleError(err)
+					sink.EndValueItem()
+				}
 			}
 			sink.EndSetValue()
 			sink.EndColumn()
@@ -944,7 +1033,12 @@ func (inst *Driver) sectionTagCount(sec *sectionLayout, memberSlots []attrCardSl
 		return
 	}
 	if len(sec.memberCardDetails) == 0 {
-		n = len(sec.memberCols)
+		// One tag per membership column, a mixed pair counting once.
+		for _, mc := range sec.memberCols {
+			if !mc.paramsOnly {
+				n++
+			}
+		}
 		return
 	}
 	for _, s := range memberSlots {
@@ -1023,19 +1117,39 @@ func (inst *Driver) emitOneMembership(ms MembershipSinkI, rec arrow.RecordBatch,
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
 		ms.AddMembershipRefParametrized(true, 0, unsafeperf.UnsafeBytesToString(raw))
 
+	// The mixed channels: one membership = (identity, params) across two
+	// co-indexed columns. The identity half emits the PAIR, reading the params
+	// half at the same flat index (linkMixedPartners); the params half is
+	// skipped unless it is on its own. Until 2026-08-21 the two halves were
+	// emitted as two half-populated calls — (ref, "") then (0, params) — which
+	// the streamreadaccess EXPLANATION recorded as a known issue.
 	case common.ColumnRoleMixedLowCardRef:
 		ref := inst.readListInnerUint64(rec, mc.arrowIdx, flatIdx)
-		ms.AddMembershipMixedLowCardRefHighCardParam(ref, "")
+		var params []byte
+		if mc.paramsArrowIdx >= 0 {
+			params = inst.readListInnerBytes(rec, mc.paramsArrowIdx, flatIdx)
+		}
+		ms.AddMembershipMixedLowCardRefHighCardParam(ref, unsafeperf.UnsafeBytesToString(params))
 
 	case common.ColumnRoleMixedLowCardVerbatim:
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
-		ms.AddMembershipMixedLowCardVerbatimHighCardParam(unsafeperf.UnsafeBytesToString(raw), "")
+		var params []byte
+		if mc.paramsArrowIdx >= 0 {
+			params = inst.readListInnerBytes(rec, mc.paramsArrowIdx, flatIdx)
+		}
+		ms.AddMembershipMixedLowCardVerbatimHighCardParam(unsafeperf.UnsafeBytesToString(raw), unsafeperf.UnsafeBytesToString(params))
 
 	case common.ColumnRoleMixedVerbatimHighCardParameters:
+		if mc.paramsOnly {
+			return // emitted with its identity half
+		}
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
 		ms.AddMembershipMixedLowCardVerbatimHighCardParam("", unsafeperf.UnsafeBytesToString(raw))
 
 	case common.ColumnRoleMixedRefHighCardParameters:
+		if mc.paramsOnly {
+			return // emitted with its identity half
+		}
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
 		ms.AddMembershipMixedLowCardRefHighCardParam(0, unsafeperf.UnsafeBytesToString(raw))
 

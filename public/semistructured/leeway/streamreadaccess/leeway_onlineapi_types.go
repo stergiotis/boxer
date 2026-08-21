@@ -3,6 +3,7 @@ package streamreadaccess
 import (
 	"io"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -27,6 +28,11 @@ type Driver struct {
 	sections         []sectionLayout
 	coGroups         []coGroupLayout
 	sectionInCoGroup map[int]int // sectionIdx → coGroupIdx; -1 = standalone
+
+	// Optional sink capabilities, resolved once per entity in driveEntity;
+	// nil when the sink does not implement them.
+	arrowSink ArrowValueSinkI
+	coTagSink CoSectionTagSinkI
 
 	errs []error
 }
@@ -108,6 +114,45 @@ type MembershipSinkI interface {
 	AddMembershipRefParametrized(lowCard bool, ref uint64, params string)
 	AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string)
 	AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string)
+}
+
+// ArrowValueSinkI is the optional typed-value capability of a SinkI — the
+// MembershipSinkI pattern (ADR-0072) applied to values. A sink that
+// implements it receives, inside the same BeginColumn / BeginScalarValue /
+// BeginHomogenousArrayValue / BeginSetValue frames, a VIEW of the Arrow data
+// in place of the formatted-text lane: the inner array and the flat index
+// of a scalar, or the index range of a container. The text writes and the
+// per-item BeginValueItem / EndValueItem frames are NOT driven for such a
+// sink; it reads the elements itself, in whatever order it needs, while the
+// RecordBatch is retained. Views cost no copy and no allocation.
+//
+// The text lane formats through arrow.Array.ValueStr, which renders a
+// Float32 with 'g'/-1/32 — a consumer that reparses that as float64 gets a
+// different number than the column holds. Consumers that need the exact
+// value (ADR-0201 (proposed): the canonical record form) implement this;
+// rendering sinks keep the text lane.
+type ArrowValueSinkI interface {
+	// WriteArrowScalar delivers the scalar of the current column: element
+	// flatIdx of arr — the inner array of a List column for tagged and
+	// non-scalar plain columns, the column itself for a scalar plain column.
+	WriteArrowScalar(arr arrow.Array, flatIdx int)
+	// WriteArrowRange delivers the elements of the current homogenous-array or
+	// set value: arr[start:end] of the inner array, card = end-start.
+	WriteArrowRange(arr arrow.Array, start int, end int)
+}
+
+// CoSectionTagSinkI is the optional capability that tells a membership-
+// rendering sink which section of a co-section group the following tags
+// belong to. driveCoGroup merges a group into one tagged value whose single
+// tag frame carries the tags of every section (the merged BeginSection
+// names the first section only); before driving each section's tags it
+// calls BeginCoSectionTags with that section's name and use-aspects, so a
+// consumer that classifies memberships per section (membershiprole, which
+// honours the section-level uniformity hints) can do so for an annotation
+// overlay as well as for the primary section. Standalone sections do not
+// receive the call — BeginSection already carries their context.
+type CoSectionTagSinkI interface {
+	BeginCoSectionTags(sectionName naming.StylableName, useAspects useaspects.AspectSet)
 }
 
 // --- Value formatter. The membership formatters (ref / verbatim / params)

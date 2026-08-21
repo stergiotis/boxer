@@ -128,10 +128,12 @@
           "values": {
             "text": "Leave quietly at the back door.",
             "wordBag": [
-              "leave"
+              "leave",
+              "quietly"
             ],
             "wordLength": [
-              5
+              5,
+              7
             ]
           }
         },
@@ -426,10 +428,12 @@
           "values": {
             "text": "Leave quietly at the back door.",
             "wordBag": [
-              "leave"
+              "leave",
+              "quietly"
             ],
             "wordLength": [
-              5
+              5,
+              7
             ]
           }
         },
@@ -730,10 +734,14 @@
               ]
             },
             "polyLat": [
-              47.38
+              47.38,
+              47.39,
+              47.37
             ],
             "polyLng": [
-              8.55
+              8.55,
+              8.56,
+              8.57
             ]
           }
         },
@@ -742,10 +750,12 @@
           "values": {
             "text": "Leave quietly at the back door.",
             "wordBag": [
-              "leave"
+              "leave",
+              "quietly"
             ],
             "wordLength": [
-              5
+              5,
+              7
             ]
           }
         },
@@ -1040,10 +1050,12 @@
           "values": {
             "text": "Leave quietly at the back door.",
             "wordBag": [
-              "leave"
+              "leave",
+              "quietly"
             ],
             "wordLength": [
-              5
+              5,
+              7
             ]
           }
         },
@@ -1338,10 +1350,12 @@
           "values": {
             "text": "Leave quietly at the back door.",
             "wordBag": [
-              "leave"
+              "leave",
+              "quietly"
             ],
             "wordLength": [
-              5
+              5,
+              7
             ]
           }
         },
@@ -1499,10 +1513,14 @@
               ]
             },
             "polyLat": [
-              47.38
+              47.38,
+              47.39,
+              47.37
             ],
             "polyLng": [
-              8.55
+              8.55,
+              8.56,
+              8.57
             ]
           }
         },
@@ -1654,10 +1672,12 @@
           "values": {
             "text": "Leave quietly at the back door.",
             "wordBag": [
-              "leave"
+              "leave",
+              "quietly"
             ],
             "wordLength": [
-              5
+              5,
+              7
             ]
           }
         },
@@ -1952,10 +1972,12 @@
           "values": {
             "text": "Leave quietly at the back door.",
             "wordBag": [
-              "leave"
+              "leave",
+              "quietly"
             ],
             "wordLength": [
-              5
+              5,
+              7
             ]
           }
         },
@@ -2256,10 +2278,14 @@
               ]
             },
             "polyLat": [
-              47.38
+              47.38,
+              47.39,
+              47.37
             ],
             "polyLng": [
-              8.55
+              8.55,
+              8.56,
+              8.57
             ]
           }
         },
@@ -2268,10 +2294,12 @@
           "values": {
             "text": "Leave quietly at the back door.",
             "wordBag": [
-              "leave"
+              "leave",
+              "quietly"
             ],
             "wordLength": [
-              5
+              5,
+              7
             ]
           }
         },
@@ -2566,10 +2594,12 @@
           "values": {
             "text": "Leave quietly at the back door.",
             "wordBag": [
-              "leave"
+              "leave",
+              "quietly"
             ],
             "wordLength": [
-              5
+              5,
+              7
             ]
           }
         },
@@ -2864,10 +2894,12 @@
           "values": {
             "text": "Leave quietly at the back door.",
             "wordBag": [
-              "leave"
+              "leave",
+              "quietly"
             ],
             "wordLength": [
-              5
+              5,
+              7
             ]
           }
         },
@@ -3025,10 +3057,14 @@
               ]
             },
             "polyLat": [
-              47.38
+              47.38,
+              47.39,
+              47.37
             ],
             "polyLng": [
-              8.55
+              8.55,
+              8.56,
+              8.57
             ]
           }
         },

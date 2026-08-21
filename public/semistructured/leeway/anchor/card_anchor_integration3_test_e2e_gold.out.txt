@@ -402,16 +402,28 @@ Of668jGlOKAiyoor3NMM+OuXG31UwGYdlxLKr2Gj1/8=
 				BeginSection(name="geoArea",valueNames=["polyLat" "polyLng" "h3"],valueCanonicalTypes=["f32h" "f32h" "u64m"],useAspects="",nAttrs=1)
 					BeginTaggedValue()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLat:val:f32h:4:::0::geo",name="polyLat",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
+45.997
+							EndValueItem()
+							BeginValueItem(index=1)
+45.987
+							EndValueItem()
+							BeginValueItem(index=2)
 45.997
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLng:val:f32h:4:::0::geo",name="polyLng",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
 7.7229996
+							EndValueItem()
+							BeginValueItem(index=1)
+7.733
+							EndValueItem()
+							BeginValueItem(index=2)
+7.743
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
@@ -850,16 +862,28 @@ SNOW_SHIFT
 				BeginSection(name="geoArea",valueNames=["polyLat" "polyLng" "h3"],valueCanonicalTypes=["f32h" "f32h" "u64m"],useAspects="",nAttrs=1)
 					BeginTaggedValue()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLat:val:f32h:4:::0::geo",name="polyLat",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
+46.012
+							EndValueItem()
+							BeginValueItem(index=1)
+46.002
+							EndValueItem()
+							BeginValueItem(index=2)
 46.012
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLng:val:f32h:4:::0::geo",name="polyLng",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
 7.7169995
+							EndValueItem()
+							BeginValueItem(index=1)
+7.7269998
+							EndValueItem()
+							BeginValueItem(index=2)
+7.737
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
@@ -1043,16 +1067,28 @@ avalanche
 				BeginSection(name="geoArea",valueNames=["polyLat" "polyLng" "h3"],valueCanonicalTypes=["f32h" "f32h" "u64m"],useAspects="",nAttrs=1)
 					BeginTaggedValue()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLat:val:f32h:4:::0::geo",name="polyLat",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
+46.017002
+							EndValueItem()
+							BeginValueItem(index=1)
+46.007
+							EndValueItem()
+							BeginValueItem(index=2)
 46.017002
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLng:val:f32h:4:::0::geo",name="polyLng",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
 7.7149997
+							EndValueItem()
+							BeginValueItem(index=1)
+7.725
+							EndValueItem()
+							BeginValueItem(index=2)
+7.735
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
@@ -1352,16 +1388,28 @@ SNOW_SHIFT
 				BeginSection(name="geoArea",valueNames=["polyLat" "polyLng" "h3"],valueCanonicalTypes=["f32h" "f32h" "u64m"],useAspects="",nAttrs=1)
 					BeginTaggedValue()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLat:val:f32h:4:::0::geo",name="polyLat",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
+46.027
+							EndValueItem()
+							BeginValueItem(index=1)
+46.017
+							EndValueItem()
+							BeginValueItem(index=2)
 46.027
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLng:val:f32h:4:::0::geo",name="polyLng",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
 7.7109995
+							EndValueItem()
+							BeginValueItem(index=1)
+7.7209997
+							EndValueItem()
+							BeginValueItem(index=2)
+7.731
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
@@ -1800,16 +1848,28 @@ SNOW_SHIFT
 				BeginSection(name="geoArea",valueNames=["polyLat" "polyLng" "h3"],valueCanonicalTypes=["f32h" "f32h" "u64m"],useAspects="",nAttrs=1)
 					BeginTaggedValue()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLat:val:f32h:4:::0::geo",name="polyLat",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
+46.042004
+							EndValueItem()
+							BeginValueItem(index=1)
+46.032
+							EndValueItem()
+							BeginValueItem(index=2)
 46.042004
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLng:val:f32h:4:::0::geo",name="polyLng",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
 7.7049994
+							EndValueItem()
+							BeginValueItem(index=1)
+7.7149997
+							EndValueItem()
+							BeginValueItem(index=2)
+7.725
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
@@ -2132,16 +2192,28 @@ avalanche
 				BeginSection(name="geoArea",valueNames=["polyLat" "polyLng" "h3"],valueCanonicalTypes=["f32h" "f32h" "u64m"],useAspects="",nAttrs=1)
 					BeginTaggedValue()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLat:val:f32h:4:::0::geo",name="polyLat",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
+46.052002
+							EndValueItem()
+							BeginValueItem(index=1)
+46.042
+							EndValueItem()
+							BeginValueItem(index=2)
 46.052002
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLng:val:f32h:4:::0::geo",name="polyLng",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
 7.7009997
+							EndValueItem()
+							BeginValueItem(index=1)
+7.711
+							EndValueItem()
+							BeginValueItem(index=2)
+7.721
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
@@ -2302,16 +2374,28 @@ Vek16udnQT+zB/8bdhx42onCQgUIhqEGSgMv7HC9IGU=
 				BeginSection(name="geoArea",valueNames=["polyLat" "polyLng" "h3"],valueCanonicalTypes=["f32h" "f32h" "u64m"],useAspects="",nAttrs=1)
 					BeginTaggedValue()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLat:val:f32h:4:::0::geo",name="polyLat",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
+46.057003
+							EndValueItem()
+							BeginValueItem(index=1)
+46.047
+							EndValueItem()
+							BeginValueItem(index=2)
 46.057003
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLng:val:f32h:4:::0::geo",name="polyLng",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
 7.6989994
+							EndValueItem()
+							BeginValueItem(index=1)
+7.7089996
+							EndValueItem()
+							BeginValueItem(index=2)
+7.719
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
@@ -2750,16 +2834,28 @@ lpzRLp+2Iwn6gx9VaqTHh4/yItUqKGP+Mh1mQOqPamM=
 				BeginSection(name="geoArea",valueNames=["polyLat" "polyLng" "h3"],valueCanonicalTypes=["f32h" "f32h" "u64m"],useAspects="",nAttrs=1)
 					BeginTaggedValue()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLat:val:f32h:4:::0::geo",name="polyLat",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
+46.072002
+							EndValueItem()
+							BeginValueItem(index=1)
+46.062
+							EndValueItem()
+							BeginValueItem(index=2)
 46.072002
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()
 						BeginColumn(colAddr.FullColumnName="tv:geoArea:polyLng:val:f32h:4:::0::geo",name="polyLng",canonicalType="f32h",valueSemantics="")
-							BeginHomogenousArrayValue(card=1)
+							BeginHomogenousArrayValue(card=3)
 							BeginValueItem(index=0)
 7.693
+							EndValueItem()
+							BeginValueItem(index=1)
+7.703
+							EndValueItem()
+							BeginValueItem(index=2)
+7.7130003
 							EndValueItem()
 							EndHomogenousArrayValue()
 						EndColumn()

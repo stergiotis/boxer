@@ -271,10 +271,12 @@
           "values": {
             "text": "UNION SELECT username, password FROM users--",
             "wordBag": [
-              "union"
+              "union",
+              "select"
             ],
             "wordLength": [
-              5
+              5,
+              6
             ]
           }
         },
@@ -569,10 +571,12 @@
           "values": {
             "text": "UNION SELECT username, password FROM users--",
             "wordBag": [
-              "union"
+              "union",
+              "select"
             ],
             "wordLength": [
-              5
+              5,
+              6
             ]
           }
         },
@@ -730,10 +734,14 @@
               ]
             },
             "polyLat": [
-              47.38
+              47.38,
+              47.39,
+              47.37
             ],
             "polyLng": [
-              8.51
+              8.51,
+              8.52,
+              8.53
             ]
           }
         },
@@ -885,10 +893,12 @@
           "values": {
             "text": "UNION SELECT username, password FROM users--",
             "wordBag": [
-              "union"
+              "union",
+              "select"
             ],
             "wordLength": [
-              5
+              5,
+              6
             ]
           }
         },
@@ -1183,10 +1193,12 @@
           "values": {
             "text": "UNION SELECT username, password FROM users--",
             "wordBag": [
-              "union"
+              "union",
+              "select"
             ],
             "wordLength": [
-              5
+              5,
+              6
             ]
           }
         },
@@ -1481,10 +1493,12 @@
           "values": {
             "text": "UNION SELECT username, password FROM users--",
             "wordBag": [
-              "union"
+              "union",
+              "select"
             ],
             "wordLength": [
-              5
+              5,
+              6
             ]
           }
         },
@@ -1779,10 +1793,12 @@
           "values": {
             "text": "UNION SELECT username, password FROM users--",
             "wordBag": [
-              "union"
+              "union",
+              "select"
             ],
             "wordLength": [
-              5
+              5,
+              6
             ]
           }
         },
@@ -2077,10 +2093,12 @@
           "values": {
             "text": "UNION SELECT username, password FROM users--",
             "wordBag": [
-              "union"
+              "union",
+              "select"
             ],
             "wordLength": [
-              5
+              5,
+              6
             ]
           }
         },
@@ -2238,10 +2256,14 @@
               ]
             },
             "polyLat": [
-              47.38
+              47.38,
+              47.39,
+              47.37
             ],
             "polyLng": [
-              8.51
+              8.51,
+              8.52,
+              8.53
             ]
           }
         },
@@ -2393,10 +2415,12 @@
           "values": {
             "text": "UNION SELECT username, password FROM users--",
             "wordBag": [
-              "union"
+              "union",
+              "select"
             ],
             "wordLength": [
-              5
+              5,
+              6
             ]
           }
         },
@@ -2691,10 +2715,12 @@
           "values": {
             "text": "UNION SELECT username, password FROM users--",
             "wordBag": [
-              "union"
+              "union",
+              "select"
             ],
             "wordLength": [
-              5
+              5,
+              6
             ]
           }
         },
@@ -2989,10 +3015,12 @@
           "values": {
             "text": "UNION SELECT username, password FROM users--",
             "wordBag": [
-              "union"
+              "union",
+              "select"
             ],
             "wordLength": [
-              5
+              5,
+              6
             ]
           }
         },

@@ -82,9 +82,13 @@ The attribute count for a tagged section is determined by reading list offsets f
 
 The membership cardinality column for a given role is found by appending `"card"` to the role string (e.g. `"lr"` → `"lrcard"`). This relies on the convention that cardinality role strings are always `<membershipRole> + "card"`. If the `ColumnRoleE` constants change this pattern, the matching breaks silently.
 
-### The `emitOneMembership` switch does not handle all mixed membership parameter pairing
+### Fixed 2026-08-21 — three driving defects found while building the canonical record form (ADR-0201, proposed)
 
-For `ColumnRoleMixedLowCardRef` and `ColumnRoleMixedLowCardVerbatim`, the driver emits the low-card part with empty parameter strings. The corresponding high-card parameter columns (`ColumnRoleMixedRefHighCardParameters`, `ColumnRoleMixedVerbatimHighCardParameters`) are emitted separately, also with empty counterparts. The sink receives two half-populated calls rather than one unified call. Whether the sink correctly pairs them depends on its implementation.
+- **Mixed membership pairing.** For `ColumnRoleMixedLowCardRef` / `ColumnRoleMixedLowCardVerbatim` the driver used to emit the identity half with empty params and the params half (`…HighCardParameters`) separately with an empty identity — two half-populated calls per membership. `linkMixedPartners` now pairs the two columns per section (they are co-indexed and counted by one cardinality column) and `emitOneMembership` emits one `(identity, params)` call from the identity half; the params half is skipped unless it is on its own.
+- **Homogenous-array cardinality.** The IR names the array support column `len` (`ColumnRoleLength`); the driver registered only `card` (`ColumnRoleCardinality`, the set role), so every homogenous array was driven with card=1 — silently truncated to its first element. Both preparation paths now accept either role (`isPerAttributeCountRole`). The anchor goldens moved accordingly: 3-point polygons had been emitted as 1-point.
+- **Co-section group memberships.** `driveCoGroup` drove only the first section's membership columns; a membership-only co-section (the annotation-overlay pattern) lost its tags. Every group section now contributes to the one tag frame, and the optional `CoSectionTagSinkI` capability tells the sink which section a tag run belongs to.
+
+Two optional sink capabilities arrived with these: `ArrowValueSinkI` (Arrow views in place of the text lane; the per-item frames and `WriteString` are not driven for such a sink) and `CoSectionTagSinkI` (above). Each is pinned by a test in this package.
 
 ### Per-entity allocations remain in `sectionColumnNamesTypes`-adjacent code
 
