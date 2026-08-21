@@ -478,6 +478,20 @@ documented, has never passed for this trace: a dry run resolves anchors without
 actuating, and most of these waits are on state a gesture produces. The wrapper
 says so rather than repeating the claim.
 
+### 2026-08-21 — the row paddings, and the floor mismatch above
+
+The browser's rows were tuned in the tree widget, where the defects were —
+ADR-0176's update of the same date has the measurements. Two of them are this
+page's: the name column sat 4 points below the size and modified columns
+because `nameCell` opened a `c.Horizontal()` inside the one the outline cell
+already opened, and the selection outline was a point taller than the row
+pitch on both modes' `rowChrome`.
+
+The third closes what the M7 update above recorded. `MinColumnWidth` now counts
+the widget's new cell inset, which is the `PaddingTight` play's resolver
+already used, so the two floors are the same expression and a column dragged to
+the widget's floor no longer comes back a couple of points wider.
+
 ## References
 
 - [ADR-0198](./0198-fs-snapshot-store.md) and

@@ -879,6 +879,51 @@ adopter is `widgets/fsbrowser`'s outline mode (ADR-0200); nothing changes for
 a host that sets none of them. The row-keyed widget ids and the keyed State
 are untouched: widths are a property of the table, not of a node.
 
+### 2026-08-21 — the outline column was four points below every other column
+
+A capture of `fsbrowser`'s outline mode showed the name column sitting low in
+its rows, with the descenders of the directory names cut off. Measured on the
+scene's own capture at a point per pixel, 22-point rows: the size and modified
+columns put their ink 1 point above the row's midline; the outline column put
+it 4 below, and the disclosure control, the glyph and the label each landed on
+a different line (+2.5, +5.5, +5.0). The cell rect is what egui_table clips to
+(`cell_ui.shrink_clip_rect`), so the overhang was not merely low — it was gone.
+
+**`c.Horizontal()` was the cause, and it was never needed.** egui_table builds
+every cell `Ui` as `left_to_right(Align::Center)` and a `Frame`'s content `Ui`
+inherits its parent's layout, so `outlineCell` already had the layout it was
+opening. `ui.horizontal()` allocates its child with `spacing.interact_size.y`
+for a cross-axis extent rather than the cell's, and what centres in that band
+is not what centres in the row — about 3 points per nesting, and `fsbrowser`'s
+`nameCell` opened a second one inside it. Both are gone; all three parts of the
+row now measure 0.0 against the midline, and "scripts" keeps its descender.
+This reaches every adopter, since the wrapper was in the widget.
+
+**The selection outline was 23 points on a 22-point pitch.** `Frame` paints
+`content_rect + inner_margin + stroke.width`, so a stroked row Frame is a point
+larger than its content on each side. The 2026-08-16 constant took one point
+off the content to close the bottom edge the M4 report was about; the top edge
+was still landing in the row above, across whatever that row had below its
+baseline. The content is now asked for `rowH - 2*strokeWidth`, which makes the
+painted rect the row rect on either branch — measured 22 in the same capture,
+all four edges present — and, on the unstroked branch, closes the point of
+backdrop that had been showing between adjacent stripes.
+
+**Two paddings, tuned rather than fixed.** The cell inset moves from `Px[1]` to
+`Px[2]`: four points read as text hugging the column gridline, and a gridline
+is a harder edge than the widget interiors `Px[1]` is scaled for.
+`fsbrowser.MinColumnWidth` counts the new number, which as a side effect closes
+the floor mismatch ADR-0200 recorded against play's resolver — the two are now
+the same expression. And `discloseWidth` moves 20 → 16: `UiSetWidth` pins the
+max as well as the min, so the slack showed up as a 19-point gap between the
+disclosure control and the label, on top of the row's own item spacing. The
+caret's ink is unchanged at 16, so the trim is gap rather than glyph.
+
+Found by reading a screenshot, like the 2026-08-16 defect above, and pinned the
+same way: `scripts/dev/play-screenshot-tour.sh 34_fsbrowser` and
+`scripts/dev/tree-widget-scene.sh`, whose capture is the four-sided-outline
+check.
+
 ## References
 
 - [ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md) — the keyboard capture primitive SD8 defers to; SD2's cursor is its hook in this widget.
