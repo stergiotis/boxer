@@ -10,7 +10,6 @@ import (
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
-	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 )
@@ -156,21 +155,26 @@ func TestKeelsonLwComponentsPublishesWhatPlayRegistered(t *testing.T) {
 	}
 	defer batch.Release()
 
-	// Thirteen kinds, the same count the store publishes — the table must not
-	// quietly show a subset of what a query can actually reach.
-	if got := int(batch.NumRows()); got != len(sysmfacts.SysmetricsComponentSQL.Kinds) {
-		t.Fatalf("lw_components has %d rows, the store publishes %d kinds",
-			got, len(sysmfacts.SysmetricsComponentSQL.Kinds))
+	// Every kind the registry holds, from every store RegisterComponents
+	// names — the table must not quietly show a subset of what a query can
+	// actually reach. Read off the registry rather than off one store's
+	// artefacts: play publishes sysmetrics AND the lading mount policy
+	// (ADR-0200 §SD6), and an expectation written against one of them goes
+	// red the day a second is wired.
+	want := componentsql.Default.Kinds()
+	if got := int(batch.NumRows()); got != len(want) {
+		t.Fatalf("lw_components has %d rows, play registered %d kinds", got, len(want))
 	}
 
 	kinds := batch.Column(0).(*array.String)
 	tables := batch.Column(2).(*array.String)
 	for i := range int(batch.NumRows()) {
-		if _, known := sysmfacts.SysmetricsComponentSQL.Kinds[kinds.Value(i)]; !known {
-			t.Fatalf("lw_components names a kind the store does not publish: %s", kinds.Value(i))
+		b, known := componentsql.Default.Lookup(kinds.Value(i))
+		if !known {
+			t.Fatalf("lw_components names a kind play did not register: %s", kinds.Value(i))
 		}
-		if tables.Value(i) != sysmfacts.SysmetricsTableName {
-			t.Fatalf("%s: table = %s, want %s", kinds.Value(i), tables.Value(i), sysmfacts.SysmetricsTableName)
+		if tables.Value(i) != b.Table {
+			t.Fatalf("%s: table = %s, want %s", kinds.Value(i), tables.Value(i), b.Table)
 		}
 	}
 }
