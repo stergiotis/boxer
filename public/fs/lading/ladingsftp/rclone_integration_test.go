@@ -104,10 +104,15 @@ func setupRclone(t *testing.T) *rcloneRig {
 	// arguments rclone passes: `-s sftp` for the session, and the shell probe
 	// `echo ${ShellId}%ComSpec%` — unless shell_type is pinned, which the
 	// remote below does. Recorded at M0 (check 11a).
+	//
+	// It forwards them with "$@" rather than dropping them, because dropping
+	// them is what hid the fact that the command itself refused `-s sftp`:
+	// the lane passed while the invocation the howto documents could not
+	// start. A wrapper that swallows the contract does not test the contract.
 	head := filepath.Join(t.TempDir(), "head.sh")
 	repo := repoRoot(t)
 	script := fmt.Sprintf(`#!/bin/sh
-exec go run -tags=%q %s/public/app fs sftp-stdio --mount %d
+exec go run -tags=%q %s/public/app fs sftp-stdio --mount %d "$@"
 `, buildTags(t), repo, testMount.Value())
 	require.NoError(t, os.WriteFile(head, []byte(script), 0o755))
 

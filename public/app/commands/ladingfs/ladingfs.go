@@ -62,6 +62,18 @@ func newSftpStdioCommand() *cli.Command {
 				Usage: "serve every mount of the store, taking possession of the pipe " +
 					"as the grant. Say it out loud rather than defaulting to it",
 			},
+			// rclone runs this command in place of ssh and appends ssh's
+			// subsystem request, `-s sftp` (ADR-0198 §SD9). There is only one
+			// subsystem here, so the flag is accepted and discarded. Without
+			// it the invocation is refused for an undefined flag and the usage
+			// message goes to stdout, which is the peer's stream: rclone reads
+			// it as a version packet and reports `packet too long`, naming
+			// neither the flag nor this command.
+			&cli.StringFlag{
+				Name:   "s",
+				Hidden: true,
+				Usage:  "ignored; ssh's subsystem request, which rclone passes as `-s sftp`",
+			},
 		},
 		Action: runSftpStdio,
 	}
