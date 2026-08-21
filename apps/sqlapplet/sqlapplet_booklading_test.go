@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 )
 
-const ladingBookChapters = 9
+const ladingBookChapters = 10
 
 func ladingDefsBySlug(t *testing.T) map[string]*AppletDef {
 	t.Helper()
@@ -72,6 +72,8 @@ func TestLadingBookCorpus(t *testing.T) {
 
 	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "timeline"}}, bySlug["lad-ledger"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "detail", Zone: "side"}}, bySlug["lad-browse"].Tabs)
+	// The Files panel's first applet — the trigger ADR-0200 recorded for it.
+	assert.Equal(t, []TabSel{{ID: "files"}, {ID: "detail", Zone: "side"}}, bySlug["lad-tree"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "detail", Zone: "side"}}, bySlug["lad-find"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "table"}}, bySlug["lad-grep"].Tabs)
 	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "timeline"}}, bySlug["lad-history"].Tabs)
