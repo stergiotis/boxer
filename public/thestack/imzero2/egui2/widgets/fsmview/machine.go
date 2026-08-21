@@ -205,6 +205,42 @@ func (inst *Machine[T]) CanTransition(target T) bool {
 	return inst.fsm.CanTransition(target)
 }
 
+// CanReach reports whether to is reachable from from over one or more
+// DECLARED rules — the transitive closure of what [Machine.AddRule] drew, as
+// against the single step [Machine.CanTransition] asks about. Edges taught by
+// [Machine.Mirror] are deliberately excluded: the question is what the
+// domain's own graph permits, not what it has been forced to accept.
+//
+// This is the question a per-frame mirror needs. A frame SAMPLES an
+// asynchronous lifecycle, so between two samples the source can walk a whole
+// path: an observed edge that no rule declares is an intermediate state the
+// sampler missed as long as some declared path leads there, and a genuine
+// contradiction of the model only when none does. CanReach(s, s) is true
+// only when s sits on a cycle.
+//
+// Breadth-first over the local rule mirror, allocating its visited set per
+// call — the machines here hold a handful of states and callers ask once per
+// observed transition, not once per frame.
+func (inst *Machine[T]) CanReach(from T, to T) (reachable bool) {
+	seen := make(map[T]struct{}, len(inst.rules))
+	queue := make([]T, 0, len(inst.rules))
+	queue = append(queue, inst.rules[from]...)
+	for len(queue) > 0 {
+		s := queue[0]
+		queue = queue[1:]
+		if s == to {
+			reachable = true
+			return
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		queue = append(queue, inst.rules[s]...)
+	}
+	return
+}
+
 // Label returns the configured display label for a state.
 func (inst *Machine[T]) Label(state T) string {
 	return inst.labelFn(state)

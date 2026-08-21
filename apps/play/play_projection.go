@@ -498,18 +498,12 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 	// Mirror the projector's status (mutated under its internal mutex
 	// from worker goroutines) into the render-thread-only fsmview.Machine.
 	// Rules are pre-declared in newProjectorFSM and drive the drawn graph;
-	// Mirror follows an undeclared path (logging it) instead of rejecting,
-	// since a memoryless per-frame mirror would otherwise wedge a state
-	// behind. The mirror falls one frame behind the projector but that's
-	// imperceptible at 60 fps.
-	if cur := inst.projFSM.Current(); cur != snap.status {
-		if declared := inst.projFSM.Mirror(snap.status); !declared {
-			log.Warn().
-				Stringer("from", cur).
-				Stringer("to", snap.status).
-				Msg("play: projector FSM observed an undeclared edge (mirrored)")
-		}
-	}
+	// mirrorObservedFSM (play_querystate.go) follows an undeclared path
+	// instead of rejecting, since a memoryless per-frame mirror would
+	// otherwise wedge a state behind, and grades it for the log — a stage
+	// that finished inside one frame is a skip, not a surprise. The mirror
+	// falls one frame behind the projector but that's imperceptible at 60 fps.
+	mirrorObservedFSM(inst.projFSM, snap.status, "projector")
 
 	// Toolbar row: Compute / Cancel + status text. While cancelling, the
 	// Cancel button is replaced by a muted "Cancelling…" label so the user

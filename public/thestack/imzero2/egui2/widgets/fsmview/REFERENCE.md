@@ -51,6 +51,8 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 | `AddRule(from T, to ...T) *Machine[T]` | Forwards to [`statetrooper.FSM.AddRule`] **and** mirrors the rule locally. statetrooper's `ruleset` field is unexported, so the widget cannot enumerate transitions from the FSM alone. Returns the receiver for chaining. |
 | `EdgeLabel(from, to T, label string) *Machine[T]` | Attach a display label to one transition. Surfaces in the table column and as a `c.GraphEdge.Label(...)` on the graph view. Empty string clears. |
 | `Transition(target T) error` | Delegates to [`statetrooper.FSM.Transition`]. Records timestamped history when `maxHistory > 0`. The widget reads the new state on the next frame via [`Current`]; no event fires. |
+| `Mirror(target T) (declared bool)` | Never-failing variant of `Transition`, for a machine that MIRRORS state owned elsewhere (a per-frame projection of async data). Follows an undeclared edge instead of rejecting it — a rejection would wedge a memoryless producer, which re-proposes the same target every frame — and reports `declared=false` so the caller can log it. The forced edge is taught to the underlying FSM (once) and its target becomes a known node, but it stays out of the drawn graph (`Edges`) and out of `CanReach`. Same-state calls are no-ops. |
+| `MirrorWithMetadata(target T, md map[string]string) (declared bool)` | `Mirror` plus metadata on the recorded transition — the History view's "why did this fire" column. `md` may be nil. |
 
 ### Read accessors (frame-safe; the widget calls these per frame)
 
@@ -58,6 +60,7 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 |---|---|
 | `Current() T` | The current FSM state. |
 | `CanTransition(target T) bool` | Whether `target` is reachable in one step from the current state. |
+| `CanReach(from, to T) bool` | Whether `to` is reachable from `from` over one or more DECLARED rules — the transitive closure, where `CanTransition` is the single step. Excludes edges taught by `Mirror`. Lets a per-frame mirror separate "the sampler missed the states in between" from "the model says this cannot happen". `CanReach(s, s)` holds only when `s` sits on a cycle. |
 | `Label(state T) string` | The display label, via `WithLabel` (or `fmt.Sprint` default). |
 | `Color(state T) styletokens.RGBA8` | The IDS palette colour, via `WithStateColor` (or the default scheme). |
 | `States() iter.Seq[T]` | Display-ordered states (pinned via `WithStateOrder`, then `AddRule` insertion order). |

@@ -162,31 +162,62 @@ func (inst *PlayApp) divergedSignalNames() (names []string) {
 	return
 }
 
+// mirroredStateI is what a state has to be to ride a per-frame FSM mirror:
+// comparable (fsmview's own constraint) and able to name itself in the
+// diagnostic below.
+type mirroredStateI interface {
+	comparable
+	fmt.Stringer
+}
+
+// mirrorObservedFSM drives a render-thread-only fsmview.Machine to the state
+// this frame observed, and grades what it saw. Mirror follows any edge and
+// reports whether a rule declared it; a rejecting Transition would instead
+// wedge the mirror, since a memoryless observer re-proposes the same refused
+// target every frame and the machine never catches up.
+//
+// An undeclared edge is not by itself a defect, and warning about one made
+// noise of an ordinary event. A frame SAMPLES an asynchronous lifecycle: a
+// query that starts and finishes between two repaints — a couple of
+// milliseconds against a ~16 ms frame — presents its result with no `running`
+// frame in between, so the observer hands us idle→rows and the declared path
+// idle→running→rows is exactly the one it took unwatched. Those log at debug.
+// What stays a warning is a target the declared graph cannot reach at all:
+// there the observation contradicts the model rather than outrunning it,
+// which is how the torn (loading, executed) read surfaced when it
+// manufactured a spurious idle.
+func mirrorObservedFSM[T mirroredStateI](m *fsmview.Machine[T], obs T, subject string) {
+	cur := m.Current()
+	if cur == obs {
+		return
+	}
+	if declared := m.Mirror(obs); declared {
+		return
+	}
+	ev := log.Warn()
+	msg := "play: " + subject + " FSM observed an edge the declared graph cannot reach (mirrored)"
+	if m.CanReach(cur, obs) {
+		ev = log.Debug()
+		msg = "play: " + subject + " FSM skipped states no frame sampled (mirrored)"
+	}
+	ev.Stringer("from", cur).Stringer("to", obs).Msg(msg)
+}
+
 // syncQueryFSM mirrors the observed state into the render-thread-only
 // fsmview.Machine once per frame, mirroring the projector-FSM pattern in
 // play_projection.go (renderProjection). observeQueryState is a memoryless
 // projection of the snapshot, so it can legitimately hand us an edge
 // newQueryFSM never drew — e.g. a first query that finishes within a single
-// repaint skips the running observation, landing idle→rows(stale). We use
-// Mirror, which follows the edge regardless and reports declared=false so we
-// can log it as a diagnostic. A rejecting Transition would instead wedge the
-// mirror: the observer re-proposes the same unreachable target every frame,
-// so one refusal freezes the FSM a state behind for good.
+// repaint skips the running observation, landing idle→rows(stale).
+// mirrorObservedFSM follows it either way and grades it for the log.
 //
 // loading comes from the same store Snapshot as numRows/executed/err (not a
 // fresh IsLoading()), so the observer never sees "not loading" against a
 // pre-finish snapshot — the torn read that used to manufacture a spurious
-// idle and trigger exactly this wedge.
+// idle, an edge no declared path reaches and so still a warning.
 func (inst *PlayApp) syncQueryFSM(loading bool, numRows int64, executed time.Time, err error) {
-	obs := inst.observeQueryState(loading, numRows, executed, err)
-	if cur := inst.queryFSM.Current(); cur != obs {
-		if declared := inst.queryFSM.Mirror(obs); !declared {
-			log.Warn().
-				Stringer("from", cur).
-				Stringer("to", obs).
-				Msg("play: query result FSM observed an undeclared edge (mirrored)")
-		}
-	}
+	mirrorObservedFSM(inst.queryFSM,
+		inst.observeQueryState(loading, numRows, executed, err), "query result")
 }
 
 // newQueryFSM declares the query result lifecycle graph: Idle→Running→
@@ -195,8 +226,11 @@ func (inst *PlayApp) syncQueryFSM(loading bool, numRows int64, executed time.Tim
 // and every settled state can re-Run. These rules
 // drive the drawn graph (the popup's arrows) and label the happy path;
 // they need not be exhaustive, because syncQueryFSM mirrors observed state
-// with [fsmview.Machine.Mirror] — an edge not declared here is followed and
-// logged, not rejected. There is deliberately no Running→Idle edge: a cancel
+// with [fsmview.Machine.Mirror] — an edge not declared here is followed, not
+// rejected, and warned about only when no declared path reaches its target
+// (mirrorObservedFSM). A sub-frame-fast run, whose result the observer hands
+// over with no `running` frame in between, is a skip of this graph, not a
+// contradiction of it — so it earns no arrow. There is deliberately no Running→Idle edge: a cancel
 // sets err+executed in the store, so it settles as Failed, not Idle.
 func newQueryFSM() *fsmview.Machine[queryStateE] {
 	m := fsmview.NewMachine(queryStateIdle, 64,

@@ -196,6 +196,24 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-08-21 — a mirrored edge is graded against reachability, not one step
+
+`Mirror` reports `declared=false` for any edge no rule drew, and both play
+call sites logged that at warn. But a mirror driven per frame **samples** an
+asynchronous lifecycle: between two samples the source may walk a whole path.
+play's query FSM warned `from=idle to=rows` whenever a run started and
+finished inside one repaint — a local ClickHouse answers a small query in ~2 ms
+against a ~16 ms frame — even though `idle→running→rows` is exactly the
+declared path it walked unwatched.
+
+`Machine.CanReach(from, to)` is the missing question: reachability over the
+transitive closure of the DECLARED rules, where `CanTransition` asks about one
+step. Edges `Mirror` forced are excluded, so the first surprise cannot license
+the next. Callers grade with it — a reachable target is a skip the sampler
+missed (debug), an unreachable one contradicts the model and keeps the warning.
+The rule graph is unchanged: the sampling artifact is not a transition, and
+drawing it as an arrow would say the domain permits something it does not.
+
 ### 2026-07-28 — History tab is a table, and grows a footer seam
 
 The M1 History view rendered the transition log as a flow of `c.Horizontal`

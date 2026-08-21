@@ -260,3 +260,36 @@ func TestColor_currentVsRest(t *testing.T) {
 	assert.NotEqual(t, currentColor, otherColor,
 		"default scheme must distinguish active state from rest")
 }
+
+// TestCanReach_multiStep is the distinction the mirror diagnostic rests on:
+// CanTransition asks about one step, CanReach about the whole declared
+// closure, so a consumer sampling an async lifecycle can tell "the sampler
+// missed the states in between" from "the model says this cannot happen".
+func TestCanReach_multiStep(t *testing.T) {
+	m := NewMachine("red", 4).AddRule("red", "green").AddRule("green", "yellow")
+	assert.True(t, m.CanReach("red", "green"), "one declared hop")
+	assert.True(t, m.CanReach("red", "yellow"), "two declared hops are still reachable")
+	assert.False(t, m.CanReach("yellow", "red"), "this graph has no way back")
+	assert.False(t, m.CanReach("red", "blue"), "an unknown state is reachable from nowhere")
+}
+
+// TestCanReach_selfNeedsCycle pins the "one or more steps" reading — a state
+// reaches itself only over a real cycle — and, with it, that the walk
+// terminates on a cyclic graph.
+func TestCanReach_selfNeedsCycle(t *testing.T) {
+	m := NewMachine("red", 4).AddRule("red", "green")
+	assert.False(t, m.CanReach("red", "red"), "no cycle: red does not reach itself")
+	m.AddRule("green", "red")
+	assert.True(t, m.CanReach("red", "red"), "red→green→red closes the cycle")
+}
+
+// TestCanReach_ignoresForcedEdges keeps the closure the domain's own: an edge
+// Mirror was forced along is taught to the underlying FSM, but it must not
+// silently widen what counts as a declared path — otherwise the first
+// surprise would license every later one.
+func TestCanReach_ignoresForcedEdges(t *testing.T) {
+	m := NewMachine("red", 4).AddRule("red", "green")
+	m.Mirror("yellow") // forces the undeclared red→yellow
+	assert.False(t, m.CanReach("red", "yellow"),
+		"a forced edge must stay out of the declared closure")
+}
