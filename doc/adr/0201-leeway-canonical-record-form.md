@@ -38,6 +38,18 @@ does not change content:
 - **representation order** — attribute order within an entity, membership
   order within an attribute, element order within a set.
 
+Two further requirements bound the design:
+
+- **Only primary memberships are content.** A membership either *defines* an
+  attribute or *annotates* one ([ADR-0073](./0073-leeway-membership-role.md):
+  primary vs. secondary, decided per instance by an application-supplied
+  `membershiprole.ClassifierI`; the protocol does not carry the role). Labels,
+  governance tags and other secondary memberships must not move the hash.
+- **The bytes are written straight into a hashing `io.Writer`.** The canonical
+  encoding is never materialized as a whole; whatever the form needs to hold
+  back (for ordering) has to be small and bounded, and the value bytes
+  themselves must stream.
+
 The output is never stored. Hashes derived from it may be (as identities, as
 change detectors, as dedup keys), which makes the form a durable contract even
 though the bytes are transient.
@@ -79,11 +91,14 @@ Three facts from the survey shaped the design:
 
 We define **the leeway canonical record form** — a mapping from one leeway
 entity into the CBOR data model, encoded under RFC 8949 §4.2 core deterministic
-rules plus dCBOR §2.5 numeric reduction — and implement it as a
-`streamreadaccess` sink (`canonform.Encoder`) fed by a new *typed* value
-capability of the existing driver. The digest is BLAKE3 over those bytes.
+rules plus dCBOR §2.5 numeric reduction, over **primary memberships only** —
+and implement it as a `streamreadaccess` sink (`canonform.Encoder`) fed by a
+new Arrow-typed value capability of the existing driver. Each attribute is
+hashed as a standalone leaf as it streams past; the entity digest is BLAKE3
+over a small item that holds the plains and the sorted leaf digests. Nothing
+larger than a 32-byte digest per attribute is ever held back.
 
-### SD1 — The unit is one entity; plains are opt-in by item type
+### SD1 — The unit is one entity; attributes are leaves; plains are opt-in
 
 A record is one entity as the driver delivers it (one Arrow row; the only
 `TableRowConfig` in existence is multi-attributes-per-row). Its form is a CBOR
@@ -94,8 +109,14 @@ map with two integer keys, both always present:
   normally wants neither the entity id (circular when the hash *becomes* the
   id), nor timestamps, lifecycle or transaction plains. Item type and name
   style are erased; the nominal name is the key.
-- `1` → tagged attributes: an array of attribute items, **sorted bytewise by
-  their encoding**, duplicates kept (a multiset).
+- `1` → tagged attributes: an array of **32-byte byte strings — the leaf
+  digests (SD7) of the entity's attribute items (SD6) — sorted bytewise**,
+  duplicates kept (a multiset).
+
+Order-invariance therefore costs one digest per attribute instead of the
+attribute's bytes: the entity item is tiny, and the attribute items stream
+into their own hasher as the driver produces them. The digests double as a
+per-attribute change signal for a consumer that wants one.
 
 ### SD2 — What the form erases
 
@@ -161,11 +182,30 @@ finite set") wrapping an array of the element forms **sorted bytewise and
 deduplicated on canonical bytes**. `h` and `m` of equal elements differ; the
 modifier is structure, not precision.
 
-### SD5 — Memberships: the identity minus its cardinality
+### SD5 — Memberships: primary identities only, minus their cardinality
 
-An attribute's memberships form a CBOR array sorted bytewise by element
-encoding, duplicates kept. The element is the read-side identity shape
-(`membership.IdentityEncoding`, "the channel minus cardinality"):
+An attribute's **primary** memberships form a CBOR array sorted bytewise by
+element encoding, duplicates kept. Role is decided per instance by a
+`membershiprole.ClassifierI` supplied in `Options` — the same seam card-JSON
+uses — after driver placeholders (`membership.IsPlaceholder`) are dropped; a
+nil classifier means every membership is primary. Secondary memberships are
+not encoded at all, and **an attribute that carried memberships but no
+primary one is omitted from the entity** (it is an annotation overlay, not
+content). An attribute from a section that declares no memberships keeps its
+empty membership array. The classifier's *param treatment* verdict is not
+consulted: Identity vs. Index is a presentation rule for keys, and the form
+keeps `(identity, params)` as one element either way.
+
+Two consequences are stated rather than hidden: the digest is a function of
+`(record, classifier, plains mask)`, so two parties must agree on the
+classifier as they must on the mask; and a classifier that honours the
+section uniformity hints (`AspectSectionMembershipsAllPrimary` /
+`AllSecondary`, as `PathPrefixClassifier` does) makes the hash depend on those
+two use-aspects — they are role declarations, a semantic change, and the one
+carve-out from SD2.
+
+The element is the read-side identity shape (`membership.IdentityEncoding`,
+"the channel minus cardinality"):
 
 | Identity | Form |
 | --- | --- |
@@ -183,7 +223,8 @@ no-op anywhere else either.
 
 ### SD6 — Attributes: memberships plus a value, section erased
 
-An attribute item is the 2-element array `[memberships, value]`. The value
+An attribute item is the 2-element array `[memberships, value]` — a standalone
+CBOR item, hashed on its own (SD7); the entity sees its digest only. The value
 shape is the smallest that disambiguates:
 
 - one value column → the bare value form (the column name carries no
@@ -203,27 +244,41 @@ Multi-membership aliasing is **content**, not representation: one value tagged
 `[/price/current, /stats/min]` and two attributes each tagged once hash
 differently. The alternative is recorded under Alternatives.
 
-### SD7 — Digest
+### SD7 — Digests: two keyed hashers, nothing materialized
 
-`Digest = BLAKE3-256, keyed` over the canonical bytes, the key derived once
-(`blake3.DeriveKey`) from a pinned context string that names the form and its
-version; key bytes are declared in source and pinned by a golden. Keyed mode is
-BLAKE3's own domain-separation mechanism; it lets a later form version change
-every digest without colliding with this one, while the canonical bytes stay a
-pure RFC 8949 item a second implementation can reproduce. The bytes are
-exposed for tests and debugging; consumers store digests, not bytes.
+Two BLAKE3-256 keyed hashers, with keys derived once (`blake3.DeriveKey`) from
+two pinned context strings that name the form, the level (`attribute` /
+`entity`) and the version; key bytes are declared in source and pinned by a
+golden. Keyed mode is BLAKE3's own domain-separation mechanism: an attribute
+item can never be mistaken for an entity item, and a later form version
+changes every digest without colliding with this one.
+
+- **Leaf digest** = attribute hasher over the attribute item's bytes (SD6),
+  written straight into the hasher as the encoder walks the value.
+- **Record digest** = entity hasher over the entity item's bytes (SD1), written
+  straight into the hasher once the leaf digests are sorted.
+
+No canonical byte sequence is ever assembled in memory: the encoder writes
+CBOR heads and value bytes into an `io.Writer` that *is* the hasher. The only
+state held back per entity is the list of leaf digests (32 B × attributes) and
+the Arrow views of the plain values (a handful of handles), because the
+entity item's map and array must be emitted in sorted order. Tests obtain the
+bytes by substituting a buffer for the writer; consumers store digests, never
+bytes.
 
 ### SD8 — Implementation seam: a typed capability on the existing driver
 
 The form is implemented once, at the protocol level, as a sink:
 
 - `streamreadaccess` gains an **optional capability interface**
-  `TypedValueSinkI` (the `MembershipSinkI` pattern from
-  [ADR-0072](./0072-leeway-membership-carriage.md)): typed writes for the
-  Arrow scalar families (`uint8`…`uint64`, `int8`…`int64`, `float16/32/64`,
-  bool, utf8, binary, fixed-size binary, timestamp with unit). The driver
-  type-asserts once; sinks that implement it receive typed values in place of
-  the `WriteString` lane, everything else is unchanged. The four existing
+  `ArrowValueSinkI` (the `MembershipSinkI` pattern from
+  [ADR-0072](./0072-leeway-membership-carriage.md)): instead of a formatted
+  string, the driver hands the sink a *view* — the inner `arrow.Array` plus a
+  flat index for a scalar, or an index range for an `h`/`m` container. The
+  driver type-asserts once; sinks that implement it get views in place of the
+  `WriteString` lane and the per-item frames, everything else is unchanged.
+  Views cost no copy and no allocation, and they let the sink read elements in
+  *its* order (sorted for sets) while the batch is retained. The four existing
   sinks keep the text lane.
 - The driver's **mixed-channel membership emission is fixed** to one paired
   call per membership (`(ref, params)` / `(name, params)`), closing the
@@ -231,27 +286,40 @@ The form is implemented once, at the protocol level, as a sink:
   `MembershipSinkI` implementers, which already declare the paired signature;
   no committed golden contains a mixed membership.
 - `public/semistructured/leeway/canonform` — `Encoder` implements `SinkI`,
-  `MembershipSinkI`, `TypedValueSinkI`; buffers one entity, encodes each
-  attribute into a scratch buffer, sorts, concatenates, digests. CBOR heads are
-  written directly (integers, strings, arrays, maps, tags); floats go through
-  the fxamacker encoder in `CoreDetEncOptions` mode after numeric reduction,
-  so the shortest-float logic stays in a library the repo already pins.
+  `MembershipSinkI`, `ArrowValueSinkI`. Per attribute it holds the column
+  views and the typed memberships the driver pushes (values arrive before
+  memberships); at `EndTaggedValue` it classifies the memberships (SD5) —
+  folded in here rather than as a preprocessing pass, since this is the one
+  point where the attribute is complete and the verdict costs a call per
+  membership either way — skips the attribute if no primary remains, and
+  otherwise streams `[memberships, value]` into a fresh attribute hasher,
+  keeping the leaf digest. At `EndEntity` it sorts the digests and streams
+  the entity item. CBOR heads are written directly (integers, strings,
+  arrays, maps, tags); floats go through the fxamacker encoder in
+  `CoreDetEncOptions` mode after numeric reduction, so the shortest-float
+  logic stays in a library the repo already pins. The owning section of a
+  co-group column is resolved from the IR the encoder is constructed with,
+  by position, the same way the driver merges it.
 - Input is whatever the driver reads: any Arrow batch carrying leeway's
   self-describing column names — a generated DML's output, a ClickHouse
   Arrow result, a `marshallreflect` one-row batch.
 
 ### Milestones
 
-- **M0 — form and encoder.** `TypedValueSinkI` + driver typed emission; mixed
-  pairing fix; `canonform.Encoder`; goldens (hex bytes and digests) over the
-  `anchor` fixtures and a `boxer.facts` sample; SD3's refusals.
+- **M0 — form and encoder.** `ArrowValueSinkI` + driver view emission; mixed
+  pairing fix; `canonform.Encoder` with `Options{Classifier, PlainItemTypes}`;
+  goldens (attribute items, entity items, digests) over the `anchor` fixtures
+  and a `boxer.facts` sample; SD3's refusals.
 - **M1 — the invariance suite.** `pgregory.net/rapid` properties: random
   entities, then width widening (`u8`→`u64`, `i32`→`i64`, `f32`→`f64`,
   `z32`→`z64`, `y`→`yx`), aspect toggles, section renames and moves, attribute
-  / membership / set permutations, channel cardinality flips — equal bytes;
-  value edits, aliasing vs. separate attributes, `h` vs. `m` — distinct bytes.
-  Plus the self-check: decode every emitted item with fxamacker in strict mode
-  and re-encode under `CoreDetEncOptions`; bytes must match.
+  / membership / set permutations, channel cardinality flips, adding /
+  removing / editing secondary memberships under a fixed classifier — equal
+  digests; value edits, primary membership edits, aliasing vs. separate
+  attributes, `h` vs. `m` — distinct digests; an attribute whose memberships
+  are all secondary contributes nothing. Plus the self-check: decode every
+  emitted attribute and entity item with fxamacker in strict mode and
+  re-encode under `CoreDetEncOptions`; bytes must match.
 - **M2 — first consumer.** Not chosen here (see Status). The candidates seen in
   the survey are content-addressed ids and dedup on a facts-shaped table; the
   plains mask (SD1) exists so that either can be expressed without a second
@@ -265,9 +333,10 @@ The form is implemented once, at the protocol level, as a sink:
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `streamreadaccess.SinkI` family (exported Go API under `public/`) | added: optional `TypedValueSinkI` capability; driver emits typed values to sinks that implement it | none — additive; text lane unchanged for existing sinks |
+| `streamreadaccess.SinkI` family (exported Go API under `public/`) | added: optional `ArrowValueSinkI` capability; driver hands Arrow views to sinks that implement it | none — additive; text lane unchanged for existing sinks |
 | `streamreadaccess.Driver` mixed-channel membership emission | reshaped: two half-populated calls → one paired call per membership | the four `MembershipSinkI` implementers (card-JSON, Unicode card, `DebugSink`, `Table2CardEmitter`) receive pairs they already declare; their tests |
-| `public/semistructured/leeway/canonform` (new exported Go API) | added: `Encoder`, `Options` (plain-item mask), `Digest`, context string and derived key | goldens under `testdata/`; the M1 property suite |
+| `public/semistructured/leeway/canonform` (new exported Go API) | added: `Encoder`, `Options` (classifier, plain-item mask), leaf and record digests, context strings and derived keys | goldens under `testdata/`; the M1 property suite |
+| `membershiprole.ClassifierI` (exported Go API) | unchanged; gains a consumer whose output depends on it | none |
 | The canonical record form itself (a hash preimage contract) | added: SD1–SD7 are the contract; any byte change is a new version under SD7 | whatever stores digests — none at M0 |
 
 ## Alternatives
@@ -294,6 +363,24 @@ The form is implemented once, at the protocol level, as a sink:
 - **RFC 8949 core deterministic without numeric reduction** (`3` ≠ `3.0`).
   Simpler, but an `int` → `float` column change is a precision widening in
   every practical sense, and JCS makes the same call for JSON.
+- **Materialize each entity's bytes, sort attributes, then hash** (the first
+  draft of this ADR; ADR-0018 SD10's trade-off). Holds back every value byte
+  of the entity until `EndEntity`, which is what the streaming requirement
+  rules out; the leaf-digest tree keeps the same order-invariance for 32 B
+  per attribute.
+- **A commutative multiset hash over attribute digests** (XOR, modular
+  addition, LtHash, ECMH) — fully streaming, no sort. XOR cancels duplicate
+  attributes; 256-bit additive combination falls to Wagner's generalized
+  birthday attack; LtHash needs a 2 KiB-class state and ECMH an elliptic-curve
+  operation per attribute, neither of which is the house hash. Sorting
+  32-byte digests per entity is cheaper than any of them and keeps BLAKE3's
+  guarantees intact.
+- **Strip secondary memberships in a preprocessing pass** (a filtering sink or
+  driver wrapper ahead of the encoder). The classifier needs the section
+  context and the complete attribute either way; a wrapper adds an
+  indirection per membership and a second place that knows the rule, and the
+  form definition is already stated over primary memberships independently of
+  where they are decided.
 
 ## Consequences
 
@@ -304,6 +391,10 @@ The form is implemented once, at the protocol level, as a sink:
 - Width, aspect and section-placement changes stop being identity changes.
 - The driver gains a typed lane that any future sink can use; the mixed
   membership known issue closes.
+- Leaf digests come for free and give a consumer attribute-level change
+  detection without a second pass.
+- Annotation memberships (labels, governance tags) can be added to data
+  without changing its identity.
 
 ### Negative
 
@@ -313,15 +404,22 @@ The form is implemented once, at the protocol level, as a sink:
   first section's memberships for a group — a pre-existing driver limitation
   the form inherits; no committed schema declares a membership-bearing
   secondary co-section today. Recorded, not fixed here.
-- Per-entity buffering and sorting cost memory proportional to entity size
-  (the ADR-0018 SD10 trade-off).
+- The digest is a function of the classifier as well as the record; a
+  consumer that stores digests must pin its classifier the way it pins the
+  form version, and a classifier that honours the uniformity hints makes two
+  use-aspects hash-relevant (SD5).
+- An entity's canonical form is no longer one flat item a reader can eyeball
+  for values; the values are in attribute items that exist only on the way
+  into a hasher (tests substitute a buffer).
 - `u128`/`u256`, `f16` on non-Arrow lanes, `d`/`t`, bit strings: refused at
   M0.
 
 ### Neutral
 
 - The plains mask is a domain selection, not a form knob; the form of selected
-  content is unique.
+  content is unique. The classifier is the same kind of input.
+- Memory per entity is 32 B × attributes plus a few Arrow view handles,
+  independent of value sizes; no canonical bytes are ever assembled.
 - Nothing is stored; the blast radius of a version bump is whatever has
   stored digests, which at M0 is nothing.
 
@@ -338,14 +436,16 @@ The form is implemented once, at the protocol level, as a sink:
 
 ## Verification plan — Tier 1
 
-- **Lane.** Default `go test`: goldens of canonical bytes and digests for the
-  `anchor` fixtures and a facts sample (M0); the `rapid` invariance /
-  distinctness properties and the strict-decode → `CoreDetEncOptions`
-  re-encode pin (M1).
+- **Lane.** Default `go test`: goldens of attribute items, entity items and
+  both digest levels for the `anchor` fixtures and a facts sample, under a nil
+  classifier and under `PathPrefixClassifier` (M0); the `rapid` invariance /
+  distinctness properties, including the secondary-membership ones, and the
+  strict-decode → `CoreDetEncOptions` re-encode pin on both item kinds (M1).
 - **What would fail.** A byte change in any golden (the form drifted), an
-  invariance property (a representation leaked into the bytes), a
-  distinctness property (content collapsed), the re-encode pin (the output
-  stopped being RFC 8949 §4.2 deterministic).
+  invariance property (a representation or a secondary membership leaked into
+  the digest), a distinctness property (content collapsed), the re-encode pin
+  (the output stopped being RFC 8949 §4.2 deterministic), a test that
+  captures the writer and finds a materialized buffer on the hot path.
 - **Gap.** No SQL-side implementation exists to cross-check against, and the
   co-group membership gap is documented rather than tested.
 
@@ -364,6 +464,11 @@ human call before M0 starts, each with the default the text above takes:
    SD7) — default yes on both.
 7. **Value-less attributes carry the section name** (SD6) — default yes.
 8. **First consumer** (M2): not decided here.
+9. **An attribute with memberships but no primary one is omitted entirely**
+   (SD5), rather than kept with an empty membership array — default omit.
+10. **The classifier is an `Options` input, nil = all primary, applied inside
+    the encoder at `EndTaggedValue`** (SD5, SD8) — default yes; the
+    preprocessing-pass alternative is recorded and rejected.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
