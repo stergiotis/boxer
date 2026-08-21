@@ -34,9 +34,10 @@ import (
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "fs",
-		Usage: "serve a lading snapshot store as a file system",
+		Usage: "the lading snapshot store: take snapshots, serve them as a file system",
 		Subcommands: []*cli.Command{
 			newSftpStdioCommand(),
+			newSnapshotCommand(),
 		},
 	}
 }

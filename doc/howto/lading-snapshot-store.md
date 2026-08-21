@@ -84,6 +84,19 @@ its expiry, and the walk's totals. Any `fs.FS` works: `os.DirFS`, an
 `embed.FS`, a `zip.Reader`, an `fstest.MapFS`, a capability grant, or the
 rclone source of §7.
 
+The same walk from the command line, for a tree the process can read:
+
+```sh
+boxer fs snapshot --mount 0x3BFE363BCF148002 --name my-tree --ttl-days 7 /some/tree
+boxer fs snapshot --mount 0x3BFE363BCF148002 --remote s3:bucket/prefix   # any rclone remote (§7)
+```
+
+`--name` also writes the policy record, so the `lading` sqlapplet book and the
+browser show the mount by that name; `--meta-only`, `--inline-max`,
+`--text-rule` and `--profile` mirror the policy fields above, and the tables are
+provisioned idempotently first unless `--no-provision` is given. The command
+prints the snapshot's instant and the walk's totals.
+
 What the policy decides:
 
 | Field | Effect |
