@@ -746,6 +746,34 @@ at the floor and is not mistaken for a fresh drag.
 
 Both are adopter-side; the resolver is untouched. The how-to carries the rule.
 
+## Update — 2026-08-21: a widget seam, and two more adopters
+
+`widgets/fsbrowser` (ADR-0200) takes a `*colwidth.Resolver` as an input
+(`Widths`, with `WidthTag` for the instance tier) and runs the protocol
+itself — resolve before the columns are emitted, `ApplyWidths` with the
+table's epoch, observe the report after, `MarkReseed` when its column set
+changes, the reset gesture as a header context menu — so a host supplies a
+resolver and flushes it once per frame, nothing more. Two details worth
+recording. The column tier is discriminated per *view* (`;view=list`,
+`;view=outline`): the outline's name column carries an indent and a
+disclosure control, so a width fitted to the list is wrong there, which is
+the same collision the 2026-08-16 update found between play's two grids.
+And the drag floor is the widget's — content plus both cell insets,
+exported as `fsbrowser.MinColumnWidth(density)` beside `MaxColumnWidth` —
+so a host's `Opts.MinPoints` can equal the `RangeMinMax` floor the widget
+emits, which the floor update above asks for.
+
+`widgets/tree` gained the three additive fields the outline needed
+(`WidthEpoch`, the drag bounds, `Result.Widths`; ADR-0176's update of the
+same date), and `apps/tally` adopts on every table it owns: both browser
+panes and the five result tables, each under its own tag with its table's
+view as the discriminator, one resolver acquired from the frame context on
+the first frame. What the headless lane cannot do is drag, so the rendered
+round trip is — as the how-to still says of play — covered by tests rather
+than by use: the widget's test runs the real resolver over an in-memory
+store through resolve, settle, capture, flush and a fresh load, and the
+scenes only prove the protocol runs every frame without complaint.
+
 ## Status
 
 Accepted 2026-07-30. The fact kind and M1–M6 are all implemented (Updates

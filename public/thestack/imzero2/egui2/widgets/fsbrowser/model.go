@@ -12,6 +12,7 @@ import (
 	"time"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
@@ -68,6 +69,9 @@ type Column struct {
 	// click sense sits behind its cells, and a selectable label would take
 	// the click.
 	Cell func(e Entry)
+	// WidthType discriminates this column for width persistence (ADR-0151
+	// keys the column tier on name and render type); empty means "host".
+	WidthType string
 }
 
 // Input is one frame's rendering request.
@@ -95,6 +99,13 @@ type Input struct {
 	// own location and filter chrome.
 	HideBreadcrumb bool
 	HideFilter     bool
+	// Widths persists the columns' widths (ADR-0151): the widget resolves
+	// them through the resolver before the table is emitted and reports the
+	// table's settled widths back after, under WidthTag (ScopeKey when
+	// empty). The host flushes the resolver once per frame. nil keeps the
+	// defaults and persists nothing.
+	Widths   *colwidth.Resolver
+	WidthTag string
 }
 
 // Result is what one Render reports.
@@ -145,6 +156,13 @@ type State struct {
 	tree     tree.State
 	nodes    []Entry
 	outlineT tree.Tree
+
+	// width persistence (ADR-0151): per view, whether a report was seen and
+	// the column signature the resolver last saw
+	widthsSeenList    bool
+	widthsSeenOutline bool
+	widthSigList      string
+	widthSigOutline   string
 }
 
 func (st *State) ensure() {

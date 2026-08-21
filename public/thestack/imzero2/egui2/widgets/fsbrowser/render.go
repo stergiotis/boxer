@@ -2,7 +2,6 @@ package fsbrowser
 
 import (
 	"errors"
-	"math"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -201,13 +200,20 @@ func (in Input) renderList(st *State, density styletokens.DensityE, res *Result)
 	mode := clickMode()
 	kf := c.Frame(in.Ids.PrepareStr("keys")).CaptureKeys(uint64(listKeyMask))
 	st.keyFrameID = kf.Id()
+	plan := in.planWidths(st, widthViewList)
 	for range kf.KeepIter() {
-		in.pushColumns()
+		in.pushColumns(plan, density)
 		et := c.EndETable(in.Ids.PrepareStr("t"), uint64(len(rows)), rowH, 1, 0)
 		if in.MaxHeight > 0 {
 			et = et.MaxHeight(in.MaxHeight)
 		}
-		in.renderHeaders(et, st, density)
+		if plan.on {
+			et = et.ApplyWidths(plan.epoch)
+			if fetched, ok := et.ColumnWidths(); ok {
+				in.observeWidths(st, plan, fetched, widthViewList)
+			}
+		}
+		in.renderHeaders(et, st, density, plan)
 		rowBegin, rowEnd := 0, len(rows)
 		if rb, re, _, _, _, ok := et.VisibleRange(); ok {
 			rowBegin = min(int(rb), len(rows))
@@ -268,49 +274,74 @@ func (in Input) activate(st *State, rows []Entry, row int, res *Result) (navigat
 	return false
 }
 
-func (in Input) pushColumns() {
-	push := func(w, deflt float32, resizable bool) {
-		if w <= 0 {
-			w = deflt
+// pushColumns emits the columns at the plan's widths, bounded by the drag
+// floor and ceiling the resolver stores against, so a dragged width and a
+// stored one agree (ADR-0151).
+func (in Input) pushColumns(plan widthPlan, density styletokens.DensityE) {
+	floor := MinColumnWidth(density)
+	for i, w := range plan.widths {
+		width := float32(w)
+		if width < floor {
+			width = floor
 		}
-		c.EtColumn(w).RangeMinMax(w, float32(math.Inf(1))).Resizable(resizable).Send()
-	}
-	push(0, defaultNameWidth, true)
-	push(0, defaultSizeWidth, true)
-	push(0, defaultTimeWidth, true)
-	for i := range in.Columns {
-		push(in.Columns[i].Width, defaultColumnWidth, in.Columns[i].Resizable)
+		resizable := true
+		if hi := i - builtinColumns; hi >= 0 && hi < len(in.Columns) {
+			resizable = in.Columns[hi].Resizable || in.Widths != nil
+		}
+		c.EtColumn(width).RangeMinMax(floor, MaxColumnWidth).Resizable(resizable).Send()
 	}
 }
 
 // renderHeaders draws the three sortable headers and the host's. A header is
 // a frameless button; its glyph says which column orders the listing, and
 // which way.
-func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletokens.DensityE) {
+func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletokens.DensityE, plan widthPlan) {
+	// withWidthMenu wraps a header in the reset gesture when widths persist:
+	// a context menu that returns this column, or every column, to its
+	// default (ADR-0151's clear affordance). ContextMenu senses hover only,
+	// so the sort click underneath keeps working.
+	withWidthMenu := func(col uint32, body func()) {
+		if !plan.on || int(col) >= len(plan.cols) {
+			body()
+			return
+		}
+		c.ContextMenu().Render(func() {
+			if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x200+uint64(col)), c.Atoms().Text("Reset column width").Keep()).
+				SendResp().HasPrimaryClicked() {
+				_ = in.Widths.Clear(plan.tag, plan.cols[col])
+			}
+			if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x300+uint64(col)), c.Atoms().Text("Reset all column widths").Keep()).
+				SendResp().HasPrimaryClicked() {
+				_ = in.Widths.ClearAll(plan.tag, plan.cols)
+			}
+		}, body)
+	}
 	sortable := func(col uint32, text string, by SortByE) {
 		for range et.Headers(0, col) {
-			for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase + uint64(col))).
-				OuterMargin(0).
-				InnerMargin(styletokens.PaddingInner(density)).
-				KeepIter() {
-				label := text
-				if st.sortBy == by {
-					if st.sortDesc {
-						label += " " + icons.PhCaretDown
-					} else {
-						label += " " + icons.PhCaretUp
-					}
-				}
-				if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x100+uint64(col)),
-					c.Atoms().BeginRichText(label).Strong().End().Keep()).
-					Frame(false).Small().SendResp().HasPrimaryClicked() {
+			withWidthMenu(col, func() {
+				for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase + uint64(col))).
+					OuterMargin(0).
+					InnerMargin(styletokens.PaddingInner(density)).
+					KeepIter() {
+					label := text
 					if st.sortBy == by {
-						st.sortDesc = !st.sortDesc
-					} else {
-						st.sortBy, st.sortDesc = by, false
+						if st.sortDesc {
+							label += " " + icons.PhCaretDown
+						} else {
+							label += " " + icons.PhCaretUp
+						}
+					}
+					if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x100+uint64(col)),
+						c.Atoms().BeginRichText(label).Strong().End().Keep()).
+						Frame(false).Small().SendResp().HasPrimaryClicked() {
+						if st.sortBy == by {
+							st.sortDesc = !st.sortDesc
+						} else {
+							st.sortBy, st.sortDesc = by, false
+						}
 					}
 				}
-			}
+			})
 		}
 	}
 	sortable(0, "name", SortByName)
@@ -320,12 +351,14 @@ func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletoken
 		col := uint32(builtinColumns + i)
 		text := in.Columns[i].Header
 		for range et.Headers(0, col) {
-			for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase + uint64(col))).
-				OuterMargin(0).
-				InnerMargin(styletokens.PaddingInner(density)).
-				KeepIter() {
-				c.LabelAtoms(c.Atoms().BeginRichText(text).Strong().End().Keep()).Selectable(false).Send()
-			}
+			withWidthMenu(col, func() {
+				for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase + uint64(col))).
+					OuterMargin(0).
+					InnerMargin(styletokens.PaddingInner(density)).
+					KeepIter() {
+					c.LabelAtoms(c.Atoms().BeginRichText(text).Strong().End().Keep()).Selectable(false).Send()
+				}
+			})
 		}
 	}
 }
@@ -398,32 +431,42 @@ func (in Input) renderOutline(st *State, density styletokens.DensityE, res *Resu
 	if t.Len() == 0 {
 		return
 	}
+	// The outline's columns are the list's; the resolver keys them under the
+	// outline view, and a host column keeps its place even with no Cell.
+	plan := in.planWidths(st, widthViewOutline)
+	widthAt := func(i int, deflt float32) float32 {
+		if i < len(plan.widths) && plan.widths[i] > 0 {
+			return float32(plan.widths[i])
+		}
+		return deflt
+	}
 	cols := make([]tree.Column, 0, 2+len(in.Columns))
 	cols = append(cols,
-		tree.Column{Header: "size", Width: defaultSizeWidth, Resizable: true,
+		tree.Column{Header: "size", Width: widthAt(1, defaultSizeWidth), Resizable: true,
 			Cell: func(r tree.Row) { sizeCell(nodes[r.Node]) }},
-		tree.Column{Header: "modified", Width: defaultTimeWidth, Resizable: true,
+		tree.Column{Header: "modified", Width: widthAt(2, defaultTimeWidth), Resizable: true,
 			Cell: func(r tree.Row) { timeCell(nodes[r.Node]) }},
 	)
 	for i := range in.Columns {
 		col := in.Columns[i]
-		if col.Cell == nil {
-			continue
-		}
 		cell := col.Cell
-		cols = append(cols, tree.Column{Header: col.Header, Width: col.Width, Resizable: col.Resizable,
+		if cell == nil {
+			cell = func(Entry) {}
+		}
+		cols = append(cols, tree.Column{Header: col.Header, Width: widthAt(builtinColumns+i, col.Width),
+			Resizable: col.Resizable || plan.on,
 			Cell: func(r tree.Row) {
 				if e := nodes[r.Node]; e.Ord >= 0 {
 					cell(e)
 				}
 			}})
 	}
-	tr := tree.Render(tree.Input{
+	treeIn := tree.Input{
 		Ids:      in.Ids,
 		ScopeKey: "outline",
 		Tree:     t,
 		State:    &st.tree,
-		Outline: tree.Column{Header: "name", Width: defaultNameWidth, Resizable: true,
+		Outline: tree.Column{Header: "name", Width: widthAt(0, defaultNameWidth), Resizable: true,
 			Cell: func(r tree.Row) {
 				e := nodes[r.Node]
 				if e.Ord < 0 {
@@ -436,10 +479,19 @@ func (in Input) renderOutline(st *State, density styletokens.DensityE, res *Resu
 		RowHeight: in.RowHeight,
 		MaxHeight: in.MaxHeight,
 		Striped:   in.Striped,
-	})
+	}
+	if plan.on {
+		treeIn.WidthEpoch = plan.epoch
+		treeIn.MinColumnWidth = MinColumnWidth(density)
+		treeIn.MaxColumnWidth = MaxColumnWidth
+	}
+	tr := tree.Render(treeIn)
 	if tr.Err != nil {
 		res.Err = tr.Err
 		return
+	}
+	if plan.on && tr.Widths != nil {
+		in.observeWidths(st, plan, tr.Widths, widthViewOutline)
 	}
 	// Mirror the tree's selection and cursor onto the path-keyed State, so
 	// State.Selection reads the same in both modes.

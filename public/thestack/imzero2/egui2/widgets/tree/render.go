@@ -239,6 +239,19 @@ type Input struct {
 	// Striped — etable paints its zebra in cell_ui, which runs after the row
 	// block and would cover it.
 	Striped bool
+
+	// WidthEpoch, when non-zero, is handed to the table as its apply
+	// generation (ADR-0151): the binding writes the column widths into the
+	// crate's state only when it changes, so a host that resolves widths from
+	// stored overrides bumps it when they change and leaves the reader's live
+	// drag alone in between. Zero keeps the crate's own state, as before.
+	WidthEpoch uint32
+	// MinColumnWidth, when positive, is the drag floor for every column in
+	// place of each column's seed width; MaxColumnWidth, when positive, the
+	// ceiling. A host persisting widths passes the bounds it stores, so a
+	// column cannot be dragged below what will come back on the next load.
+	MinColumnWidth float32
+	MaxColumnWidth float32
 }
 
 // Result reports what this frame's pointer interaction did. Every node field
@@ -267,6 +280,10 @@ type Result struct {
 	// programming errors in the host and silence makes them look like an empty
 	// result set.
 	Err error
+	// Widths is what the table reported its columns to be, outline column
+	// first, when last frame's report was available; nil otherwise. A host
+	// persisting widths feeds it to its resolver (ADR-0151).
+	Widths []float32
 }
 
 // Render draws the tree and applies this frame's pointer interaction to
@@ -361,6 +378,12 @@ func Render(in Input) (res Result) {
 				in.numStickyHeaders(), 0)
 			if in.MaxHeight > 0 {
 				et = et.MaxHeight(in.MaxHeight)
+			}
+			if in.WidthEpoch != 0 {
+				et = et.ApplyWidths(in.WidthEpoch)
+			}
+			if ws, ok := et.ColumnWidths(); ok {
+				res.Widths = ws
 			}
 			if reveal >= 0 {
 				if ri := RowOf(rows, reveal); ri >= 0 {
@@ -461,8 +484,15 @@ func (in Input) pushColumns() {
 		if w <= 0 {
 			w = deflt
 		}
+		lo, hi := w, float32(math.Inf(1))
+		if in.MinColumnWidth > 0 {
+			lo = in.MinColumnWidth
+		}
+		if in.MaxColumnWidth > 0 {
+			hi = in.MaxColumnWidth
+		}
 		c.EtColumn(w).
-			RangeMinMax(w, float32(math.Inf(1))).
+			RangeMinMax(lo, hi).
 			Resizable(col.Resizable).
 			Send()
 	}

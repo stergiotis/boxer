@@ -865,6 +865,20 @@ test would have caught it: the widget's own scene asserts SELECTION precisely
 because a capture can look correct while read-back is broken, and this is the
 mirror case — every assertion passed while the picture was wrong.
 
+### 2026-08-21 — the width protocol, for a host that persists column widths
+
+Three additive fields, so a host can run the tree under ADR-0151's resolver
+the way play runs its grids: `Input.WidthEpoch` (handed to the table as its
+apply generation; zero keeps the crate's own state, as before),
+`Input.MinColumnWidth` / `Input.MaxColumnWidth` (the drag bounds in place of
+each column's seed width as the floor — a host persisting widths passes the
+bounds it stores, so a column cannot be dragged below what comes back on the
+next load), and `Result.Widths` (what the table reported its columns to be,
+outline column first, when last frame's report was available). The first
+adopter is `widgets/fsbrowser`'s outline mode (ADR-0200); nothing changes for
+a host that sets none of them. The row-keyed widget ids and the keyed State
+are untouched: widths are a property of the table, not of a node.
+
 ## References
 
 - [ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md) — the keyboard capture primitive SD8 defers to; SD2's cursor is its hook in this widget.
