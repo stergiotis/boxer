@@ -114,6 +114,12 @@ not a structural difference.
 
 ## 5 (a) The hardware floor
 
+> **Superseded by §10.6 (2026-08-22).** The ordering below was measured on
+> synthetic content and does **not** survive contact with a real imzero2
+> frame: measured inside the host, the CPU rasterizer is ~2.4× *slower* than
+> either wgpu path, not faster. Keep reading for how the synthetic case
+> behaves; take §10.6 for what the host actually does.
+
 ### 5.1 The headline A/B
 
 Identical synthetic content (a full-viewport grid of ~2,300–5,100 triangles of
@@ -431,15 +437,83 @@ Chasing it produced a false positive on the way. Turning off the crate's
 `with_convert_tris_to_rects` and `with_allow_raster_opt` — the two whose docs
 say things "*should*" look the same — appeared to halve that scene's
 difference. It was a luckier draw from the same distribution, and the change
-was reverted. **Those two flags remain unevaluated**: settling whether they
-cost fidelity needs a reproducible scene, and this gallery's most mesh-heavy
-scenes are exactly the ones that are not reproducible.
+was reverted. §10.6 later settled the flags properly, on a reproducible scene
+with a real timer: reverting was right, by a factor of eighteen.
 
 ### 10.5 What is still not measured
 
-- Per-frame cost inside the real host. The tour's per-scene wall clock is
-  dominated by process launch, ClickHouse and settle time, and the runs
-  contended for the machine, so nothing in §5.1 is confirmed or refuted by it.
 - `pixels_per_point ≠ 1.0`, which is what a carrier viewer reports. The whole
-  gallery runs at 1.0.
-- The two raster-optimisation flags (§10.4).
+  gallery runs at 1.0, and §3 found that non-integer scaling is exactly where
+  the rounding disagreements concentrate.
+- Anything about a machine that is not this one. §10.6's ordering could plainly
+  differ on a host with a weak CPU and a competent GPU, or with fewer cores
+  for llvmpipe to spread over.
+
+*(Per-frame cost in the real host was on this list until §10.6 measured it,
+and the two raster-optimisation flags until §10.6 settled them.)*
+
+## 11 Per-frame cost in the real host (added 2026-08-22)
+
+§5's numbers came from a synthetic benchmark. `IMZERO2_HEADLESS_RASTER_STATS`
+now samples the real thing at the one point both pixel hosts share, so §5.1's
+central claim can be checked instead of assumed. It does not hold.
+
+### 11.1 The measurement
+
+Play launched headless per
+[the non-interactive launch how-to](../howto/launch-apps-non-interactively.md),
+continuous cadence, 1920×1200, 600 frames per arm, one arm at a time on an
+otherwise idle machine. A frame is ~8,840 triangles across ~31 clipped
+primitives. Figures are the rasterize step only — tessellation is reported
+separately because it is identical work under either host, and it costs
+0.07–0.10 ms in all arms.
+
+| arm | p50 | p90 | p99 |
+| --- | --- | --- | --- |
+| wgpu on the integrated GPU | **1.34 ms** | 1.71 | 3.00 |
+| wgpu on lavapipe (Mesa software Vulkan) | **1.33 ms** | 1.60 | 2.14 |
+| **CPU rasterizer (`headless_soft`)** | **3.17 ms** | 3.93 | 4.57 |
+| CPU, `with_caching(true)` | 3.56 ms | 5.81 | 14.56 |
+| CPU, both raster optimisations off | 56.18 ms | 61.68 | 75.72 |
+
+### 11.2 What that overturns
+
+**§5.1 is wrong about real content, in both directions.** It reported the CPU
+path at 0.30 ms and lavapipe at 2.17 ms on synthetic content at a similar size;
+the real frame costs the CPU path **10× more** and lavapipe **1.6× less**. The
+ordering inverts: on this machine the CPU rasterizer is **~2.4× slower** than
+either wgpu arm, and lavapipe is indistinguishable from the real GPU.
+
+The synthetic case underestimated a real frame in the way a CPU rasterizer
+cares about most. It drew ~2,500 triangles of text over one panel background;
+a play frame draws ~8,840 across a dock of nested panels, each painting its own
+full-area background, so covered pixels and overdraw are both far higher. A GPU
+absorbs overdraw; a scanline rasterizer pays for it. That is the whole gap, and
+it is a reason to distrust *any* synthetic figure for this class of work rather
+than a reason to distrust this crate.
+
+**The `bytes` intuition from §5.1 — that the CPU wins because it skips the
+readback — also fails.** It skips it, and is still slower, because rasterizing
+the frame costs more than the readback saves.
+
+### 11.3 What it does not overturn
+
+- **`with_caching(false)` was the right call** (§5.2), now on real content: the
+  cache costs 12 % at p50 and 3.2× at p99, exactly the "re-composite a whole
+  second canvas" shape §5.2 predicted.
+- **The two raster optimisations are load-bearing**, which §10.4 left open.
+  Turning them off costs **18×** and buys nothing — the pixel diff against
+  wgpu is unchanged to within a few hundred sub-threshold pixels, and the
+  visible-delta count is identical. Their doc comments hedge ("things *should*
+  look the same"); on this gallery they do.
+- **The absolute cost is not a problem.** 3.17 ms/frame is a ~315 fps ceiling;
+  at the headless host's default 60 Hz it is ~19 % of one core, and the ADR-0062
+  reactive cadence means most frames are not drawn at all.
+
+### 11.4 So what is `headless_soft` actually for
+
+Not speed. On this machine it costs about 1.8 ms per rendered frame against
+lavapipe, and buys: no Vulkan loader, no ICD, no Mesa in the runtime image
+(§10.1 — three crates, 6.8 MB of binary, and a dependency the airgap tooling
+currently warns about when it is missing). That is a deployment-surface trade,
+and it should be argued on those terms rather than on throughput.
