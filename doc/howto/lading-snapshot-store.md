@@ -234,6 +234,20 @@ why a VFS cache of a snapshot path can be kept for a very long time
 that answered "permission denied" for one name and "no such file" for another
 would let a client enumerate what it cannot read.
 
+When the head cannot start, rclone reports it as a broken SFTP handshake —
+`couldn't initialise SFTP: error receiving version packet from server` — and
+what follows names the symptom, not the cause:
+
+- **`unexpected EOF`** — the command exited without writing anything. A
+  `boxer` binary built before this subcommand existed answers `No help topic
+  for 'fs'` and exits; that is the usual cause, and it looks identical to a
+  store that is genuinely unreachable.
+- **`packet too long`** — the command wrote something that is not SFTP to
+  stdout. Anything on stdout corrupts the stream, a usage message included.
+
+rclone discards the head's stderr, which is where the diagnosis goes, so run
+the `ssh=` command by hand to read it.
+
 Everything else is rclone's: `rclone serve s3/webdav/nfs/docker` in front of
 the pipe with rclone's own users, keys and TLS; `hasher` for checksums in
 rclone's vocabulary; `union` for a writable scratch layer over a read-only
