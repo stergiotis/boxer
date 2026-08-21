@@ -11,6 +11,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 )
 
 // play_pathrows.go is the PATH contract and the read-only file system a result
@@ -90,7 +91,7 @@ func resolvePathRows(schema *arrow.Schema) (k pathClaim, reason string) {
 		return
 	}
 	for ci, f := range schema.Fields() {
-		switch f.Name {
+		switch pathColumnLabel(f.Name) {
 		case pathPathCol:
 			k.pathCol = ci
 		case pathIsDirCol:
@@ -111,6 +112,25 @@ func resolvePathRows(schema *arrow.Schema) (k pathClaim, reason string) {
 		reason = pathContractHint
 	}
 	return
+}
+
+// pathColumnLabel is the name the contract matches on. A column that declares
+// a gloss carries the declaration in its NAME — `size@gloss/bytes` (ADR-0186
+// §SD7) — and the contract is a question about what a column IS, not about how
+// it renders, so a listing that glosses its sizes and mount ids (the lading
+// book's browse chapter does both) still resolves.
+//
+// The '@' test is what keeps this off the hot path: acceptance runs once per
+// registered tab per frame, and a name without an '@' — nearly all of them —
+// costs one byte scan rather than a media-type parse.
+func pathColumnLabel(name string) string {
+	if !strings.ContainsRune(name, '@') {
+		return name
+	}
+	if d, declared := gloss.Default().ParseColumn(name); declared && d.Label != "" {
+		return d.Label
+	}
+	return name
 }
 
 // pathContractHint is the empty state, and it names the shortest query that

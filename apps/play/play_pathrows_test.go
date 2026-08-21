@@ -105,6 +105,25 @@ func TestResolvePathRowsRejectsWithoutPath(t *testing.T) {
 	assert.NotEmpty(t, reason, "no schema is the same empty state")
 }
 
+// A glossed column still answers the contract: the declaration rides in the
+// NAME (ADR-0186), and a file listing that glosses its sizes and mount ids —
+// the lading book's browse chapter does both — is exactly the query this panel
+// is for.
+func TestResolvePathRowsReadsGlossedNames(t *testing.T) {
+	k, reason := resolvePathRows(schemaWith(
+		strField("path"),
+		arrow.Field{Name: "size@gloss/bytes", Type: arrow.PrimitiveTypes.Int64},
+		strField("mount@gloss/taggedid"),
+		strField("dot_done@success"),
+	))
+	require.Empty(t, reason)
+	assert.Equal(t, 1, k.sizeCol, "the contract matches the label, not the declaration")
+	assert.Equal(t, []int{2, 3}, k.hostCols)
+	assert.Equal(t, "mount", pathColumnLabel("mount@gloss/taggedid"), "a header is the label")
+	assert.Equal(t, "dot_done@success", pathColumnLabel("dot_done@success"),
+		"an '@' without a media type is part of the name, not a gloss")
+}
+
 // Rows are the leaves; the directories between them are synthesised, carry no
 // row, and list in name order.
 func TestBuildPathFSSynthesisesDirectories(t *testing.T) {

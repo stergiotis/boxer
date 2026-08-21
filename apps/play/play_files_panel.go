@@ -213,7 +213,9 @@ func (inst *filesDriver) columns(rec arrow.RecordBatch, k pathClaim) (cols []fsb
 	for _, ci := range k.hostCols {
 		col := ci
 		cols = append(cols, fsbrowser.Column{
-			Header: fields[ci].Name,
+			// The gloss declaration is not a header: `hash@gloss/hex` is a
+			// rendering rule, and what the column is called is `hash`.
+			Header: pathColumnLabel(fields[ci].Name),
 			// The Arrow type discriminates the stored width, as it does for
 			// play's own grids: a width fitted to a hash column should not
 			// reach the column that replaces it in the next query.
