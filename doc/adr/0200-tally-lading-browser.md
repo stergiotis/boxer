@@ -425,6 +425,19 @@ inset either side (`PaddingTight` against the widget's `PaddingInner`): one
 resolver per app is ADR-0151's shape, so such a column comes back a couple of
 points wider once and is stable after.
 
+**A second SD6 defect, and this one is not fixed.** A `{name:Type}` slot
+resolves from the environment's bound params — and play harvests the `SET
+param_… ` prelude away (`ExtractParams`) *before* the pre-execute registry
+runs, so `env.Extract` finds no params and `fs({m:String})` is refused with
+"parameter slot is not bound in the prelude". Every chapter of the lading book
+is written that way, so every one of them fails in a running applet while
+passing its tests, which call `Expand` on the text WITH its prelude. Found by
+driving the book's new `lad-tree` chapter; the same chapter with a literal
+mount renders the pane over 937 files. The fix is a decision rather than a
+patch — how a harvested param reaches an env-aware pass, which is a contract
+between play and `passreg` — so it is recorded here and left. play's own
+snippet for the panel takes a literal mount meanwhile, and says why.
+
 Verification gained a lane the other scenes do not have — one that needs a
 server, because a result panel has nothing to draw without a result.
 `scripts/dev/files-pane-scene.sh` runs two: `synthetic`, whose rows are
@@ -432,6 +445,13 @@ literals, asserts the synthesised directories, Enter, the outline, and that a
 click on a row-backed entry moves the Detail pane to the right row; `lading`
 browses whatever the store holds and asserts the pane's own chrome. Both skip
 rather than fail without a server.
+
+The panel is documented where a reader meets it: two snippet sections in play's
+own corpus — a result read as a tree, and a snapshot browsed — and a book
+chapter, `lad-tree`, which is the applet the O2 follow-up named its trigger
+for. The contract resolves against a column's GLOSS LABEL rather than its raw
+name, because a file listing is exactly the query that glosses its sizes and
+mount ids and `size@gloss/bytes` would otherwise miss the contract entirely.
 
 ### 2026-08-21 — the widget scene moved into the play tour
 
