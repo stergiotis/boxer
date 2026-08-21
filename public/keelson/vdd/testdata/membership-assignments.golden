@@ -143,3 +143,11 @@
 138	play-launch-endpoint	12884902026
 139	applet-create-sql	12884902027
 140	applet-create-endpoint	12884902028
+141	tally-launch-mount-a	12884902029
+142	tally-launch-snap-a	12884902030
+143	tally-launch-dir-a	12884902031
+144	tally-launch-mount-b	12884902032
+145	tally-launch-snap-b	12884902033
+146	tally-launch-dir-b	12884902034
+147	tally-launch-sync	12884902035
+148	tally-launch-target	12884902036

@@ -96,3 +96,27 @@ var (
 	MembAppletCreateEndpoint = KeelsonHrNkRegistry.MustBegin("appletCreateEndpoint", 140).
 					MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )
+
+// The tally launch config (ADR-0200 §SD9): a window's two pane locations —
+// mount, pinned snapshot ("" follows latest) and directory for A and B — the
+// synchronized-browsing flag and which pane the Mounts clicks address. It is
+// what a workingset restores (ADR-0148) and what a launch request may carry
+// (ADR-0135); the browser reads it at Mount and composes it at close.
+var (
+	MembTallyLaunchMountA = KeelsonHrNkRegistry.MustBegin("tallyLaunchMountA", 141).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchSnapA = KeelsonHrNkRegistry.MustBegin("tallyLaunchSnapA", 142).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchDirA = KeelsonHrNkRegistry.MustBegin("tallyLaunchDirA", 143).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchMountB = KeelsonHrNkRegistry.MustBegin("tallyLaunchMountB", 144).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchSnapB = KeelsonHrNkRegistry.MustBegin("tallyLaunchSnapB", 145).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchDirB = KeelsonHrNkRegistry.MustBegin("tallyLaunchDirB", 146).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchSync = KeelsonHrNkRegistry.MustBegin("tallyLaunchSync", 147).
+				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchTarget = KeelsonHrNkRegistry.MustBegin("tallyLaunchTarget", 148).
+				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+)
