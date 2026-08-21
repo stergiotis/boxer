@@ -12,8 +12,8 @@ status: draft
 
 # fs snapshot store — M0 verification trial
 
-[ADR-0198](../../adr/0198-fs-snapshot-store.md) proposes writing a walk of an
-`fs.FS` into facts-shaped ClickHouse tables. Its M0 milestone
+[ADR-0198](../../adr/0198-fs-snapshot-store.md) records the decision to write a
+walk of an `fs.FS` into facts-shaped ClickHouse tables. Its M0 milestone
 ([plan page](../../adr-background-work/iofs-clickhouse-snapshot-store-plan.md))
 asks eleven questions the design assumed the answers to, and defers five
 sub-decisions (SD11) until they are answered. This directory is the protocol

@@ -1,16 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-19
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-21
 ---
-
-> **Status: proposed — pre-human-review.** Not reviewed by a second reader.
-> M0–M6 are built and committed ahead of that review (see the dated `## Updates`
-> below), so this is a decision whose consequences can be inspected rather than
-> only argued; what has not happened is the review that would flip it to
-> accepted.
 
 # ADR-0198: the fs snapshot store — `io/fs` trees as facts-shaped ClickHouse tables
 
@@ -433,26 +427,29 @@ the evidence. The list below is what was deferred, and why.*
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-08-21.
 
 The implementation plan for an implementing agent, with per-milestone
 deliverables, acceptance criteria and stop points, is
 [the plan page](../adr-background-work/iofs-clickhouse-snapshot-store-plan.md).
-Milestones, if accepted:
+Milestones; what each shipped, and what it corrected, is the dated `## Updates`
+entry named for it:
 
-- **M0 — verify and decide.** The live-server checks of the note §14 and the
-  SD11 decisions, as a dated trial; no production code.
-- **M1 — vocabulary, stores, provisioning.** `ladingvocab`; the entry and
+- **M0 — verify and decide.** ✓ The live-server checks of the note §14 and the
+  SD11 decisions, as a dated trial; no production code (2026-08-19).
+- **M1 — vocabulary, stores, provisioning.** ✓ `ladingvocab`; the entry and
   block stores over facts-shaped tables; the policy kind facts-bound;
-  `EnsureTable` + `ALTER`s + MV; `VerifySchema`.
-- **M2 — ingest.** The walker: rows, blocks, hashing, commit protocol,
-  batching, policy record; default and integration lanes.
-- **M3 — the `io/fs` adapter.** Over the generated `Scan`s; `fstest.TestFS`.
-- **M4 — the SQL surface.** `fs()` / `fsdata()` macros, security class,
-  dispatch policy, the operations catalogue as executed tests.
-- **M5 — the rclone head.** `boxer fs sftp-stdio`, virtual tree, block
-  cache; the rclone lane over the real binary.
-- **M6 — rclone ingress.** The walker over `rclone serve sftp --stdio`.
+  `EnsureTable` + `ALTER`s + MV; `VerifySchema` (2026-08-19).
+- **M2 — ingest.** ✓ The walker: rows, blocks, hashing, commit protocol,
+  batching, policy record; default and integration lanes (2026-08-20).
+- **M3 — the `io/fs` adapter.** ✓ Over the generated `Scan`s; `fstest.TestFS`
+  (2026-08-20).
+- **M4 — the SQL surface.** ✓ `fs()` / `fsdata()` macros, security class,
+  dispatch policy, the operations catalogue as executed tests (2026-08-20).
+- **M5 — the rclone head.** ✓ `boxer fs sftp-stdio`, virtual tree, block
+  cache; the rclone lane over the real binary (2026-08-20).
+- **M6 — rclone ingress.** ✓ The walker over `rclone serve sftp --stdio`
+  (2026-08-20).
 - **M7 — deferred.** A native S3 head and `fsmeta` projections, by
   measurement against tier 1.
 
@@ -1171,7 +1168,7 @@ expansion.
 ### 2026-08-20 — macro spellings, decided by ADR-0200 M0
 
 §SD11 left the macro spellings open; [ADR-0200](./0200-tally-lading-browser.md)
-(proposed) §SD6 decides three of them, implemented in `ladingsql` with tests
+§SD6 decides three of them, implemented in `ladingsql` with tests
 and goldens: a macro argument may be a prelude-bound `{name:Type}` slot
 (resolved from `env.Params` at expansion; unbound is refused, because the
 visibility check needs the value); `'*'` as the *mount* names every visible

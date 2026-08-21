@@ -21,13 +21,13 @@ status: draft
 > pointers, not verified fact.
 
 > **Decision record.** The forks in §10 were answered on 2026-08-20 and the
-> resulting decision is [ADR-0200](../adr/0200-tally-lading-browser.md)
-> (proposed); this page stays the analysis behind it.
+> resulting decision is [ADR-0200](../adr/0200-tally-lading-browser.md);
+> this page stays the analysis behind it.
 
 ## 1 Question and scope
 
-The lading store ([ADR-0198](../adr/0198-fs-snapshot-store.md), proposed;
-M0–M6 shipped) writes a walk of an `io/fs` tree as one immutable snapshot
+The lading store ([ADR-0198](../adr/0198-fs-snapshot-store.md), M0–M6 shipped)
+writes a walk of an `io/fs` tree as one immutable snapshot
 into facts-shaped ClickHouse tables and reads it back three ways — as a Go
 `fs.FS`, as SQL through the `fs()` / `fsdata()` / `fssnap()` macros, and as
 SFTP over a pipe for rclone. None of the three is a GUI. The question this
@@ -543,7 +543,7 @@ and capabilities, so it goes late; M7 is durability through shipped seams.
 
 ## References
 
-- Repository: [ADR-0198](../adr/0198-fs-snapshot-store.md) (proposed) and
+- Repository: [ADR-0198](../adr/0198-fs-snapshot-store.md) and
   its [how-to](../howto/lading-snapshot-store.md), [compact
   design](./iofs-clickhouse-snapshot-store-compact.md) and [plan
   page](./iofs-clickhouse-snapshot-store-plan.md); ADR-0026 (app runtime,
