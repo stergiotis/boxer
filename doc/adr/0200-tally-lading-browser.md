@@ -1,21 +1,18 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-20
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0200: tally — a browser for the lading store, and an `fs.FS` browser widget
 
 ## Context
 
-The lading store ([ADR-0198](./0198-fs-snapshot-store.md), proposed; M0–M6
-shipped) reads back three ways — Go `fs.FS`, SQL macros, SFTP for rclone — and
-none of them is a GUI. A power user of WinSCP, Cyberduck or FileZilla should
+The lading store ([ADR-0198](./0198-fs-snapshot-store.md), M0–M6 shipped)
+reads back three ways — Go `fs.FS`, SQL macros, SFTP for rclone — and none of
+them is a GUI. A power user of WinSCP, Cyberduck or FileZilla should
 recognise a lading browser on first sight, and the browser should use what
 the leeway shape gives every entry row: components formulated after the fact,
 glosses, the snapshot instant as a key column, cross-mount SQL. The design
@@ -244,7 +241,7 @@ kind (`tallyLaunch`, ADR-0135) so a window restores as a workingset
 
 ## Status
 
-Proposed — awaiting review. Milestones:
+Accepted 2026-08-21. Milestones:
 
 - **M0 — the lading book.** ✓ SD6 in `ladingsql`; `booklading` with nine
   chapters — ledger, browse, find, content search, history, diff, du,
@@ -281,7 +278,13 @@ Proposed — awaiting review. Milestones:
   workingset and opens from a launch request; dirty means a choice made
   after the mounts were known (2026-08-21). Column widths persist through
   ADR-0151's resolver on every table — both panes in both modes, and the
-  five result tables (2026-08-21). The acceptance flip remains.
+  five result tables (2026-08-21).
+- **M7 — the play panel.** ✓ The widget's second host (§Design space O4): a
+  `Files` result tab in play, over a `path` column contract; the result is
+  interned into a read-only `fs.FS` and browsed with `fsbrowser` in list or
+  outline mode, the query's remaining columns riding as the browser's own, and
+  a click published as both a path and a row. It reaches every applet with the
+  rest of play's tab registry (2026-08-21).
 
 ## Updates
 
@@ -365,9 +368,74 @@ first frame and hands it to every table. ADR-0151's update of the date has
 the detail and the honest limit — the headless lane cannot drag, so the
 round trip is proven by the widget's resolver test, not by a captured drag.
 
+### 2026-08-21 — M7: the widget's second host
+
+The play panel §Design space recorded as a follow-up is built. Four things
+were decided before it was: it is recorded **here** rather than in an ADR of
+its own, being O4 of this decision rather than a new one; the rows-to-file-
+system interning is **app-local** in `apps/play`, beside `play_hierarchy.go`,
+which is the same shape — a column contract read by a panel — and follows
+§SD4's rule that extraction waits for a third consumer; the contract is **one
+required column**, `path`, with `is_dir`, `size`, `mtime`, `link_target` and
+`is_symlink` read by name when present; and a directory's size stays **blank**,
+which is the widget's own rule, rather than a rolled-up total the query did not
+claim.
+
+Every column the contract does not claim becomes a browser column, so the
+panel is the first user of §SD2's host-column seam — tally passes none (M5:
+"columns come with the first writer"). `SELECT * FROM fs('<mount>')` is
+therefore a browser with hash, text guarantee and expiry beside name, size and
+modified.
+
+**A result is not a file system**, and three rules fell out of interning one.
+A node other rows nest under is a directory whatever its `is_dir` said. A
+repeated path keeps the FIRST row, so which snapshot an entry describes does
+not depend on the ORDER BY — `fs('*')` merges the mounts into one tree, which
+is what a reader asked for by not projecting `mount`. And a cell io/fs will
+not accept is counted as skipped rather than clamped into the root, because a
+clamped `..` would list as an entry the query never returned. The store's own
+root row (`.` is the commit) lands on the root and lists nowhere. What the
+interning dropped — at the row cap, or for want of a usable path — is in the
+status line. `testing/fstest.TestFS` is the oracle for the type, the browser
+reaching it only through `fs.ReadDir` and `fs.Stat`; it is what asked for the
+`ReadDirFile` paging the widget itself never calls.
+
+**The panel publishes twice**, and the split is what the tree makes honest:
+`selection_key` is the path of whatever was clicked, `selection` the result row
+behind it — which a synthesised directory does not have. It is the only panel
+that writes both. It does not preview: a row is metadata rather than bytes, and
+the Detail tab beside it already shows the row an entry names. A preview arm
+waits for a result column carrying content; a rolled-up directory size and a
+folded-`stack` arm (a `splitByChar` from a path) wait for someone to want them.
+
+**§SD6's wildcard did not work in play at all**, and only a live drive found
+it: enumerability was decided by the visibility's CONCRETE type, and play
+bundles four pass seams in one struct by embedding, so `fs('*')` was refused
+there as a yes/no oracle while every test — each passing a `VisibleAll{}`
+directly — stayed green. `MountVisibilityI` now carries `EnumerateMounts`
+(`MountScopeAll` / `MountScopeSet` / `MountScopeOpaque`) and the expansion asks
+instead of switching, so a bundle forwards the capability with the rest of the
+interface. That is a Tier-1 change to an exported interface with three
+implementers; `VisibleUnderTag` still refuses a wildcard, now by saying so.
+
+Two more, smaller. The tab is `NoScroll` for the Vocabulary tab's reason —
+both browser modes are etables that scroll and cull themselves. And a column
+dragged to the widget's own floor is stored at play's, which is wider by an
+inset either side (`PaddingTight` against the widget's `PaddingInner`): one
+resolver per app is ADR-0151's shape, so such a column comes back a couple of
+points wider once and is stable after.
+
+Verification gained a lane the other scenes do not have — one that needs a
+server, because a result panel has nothing to draw without a result.
+`scripts/dev/files-pane-scene.sh` runs two: `synthetic`, whose rows are
+literals, asserts the synthesised directories, Enter, the outline, and that a
+click on a row-backed entry moves the Detail pane to the right row; `lading`
+browses whatever the store holds and asserts the pane's own chrome. Both skip
+rather than fail without a server.
+
 ## References
 
-- [ADR-0198](./0198-fs-snapshot-store.md) (proposed) and
+- [ADR-0198](./0198-fs-snapshot-store.md) and
   [the survey page](../adr-background-work/lading-browser-survey.md).
 - ADR-0026 (capabilities, Powerbox), ADR-0097 (play panels), ADR-0123,
   ADR-0132 (sqlapplet), ADR-0135 / ADR-0148 (launch kinds, workingsets),
