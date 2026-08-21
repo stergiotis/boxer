@@ -13,8 +13,9 @@ status: draft
 > laptop-class CPU with an integrated GPU), one build each, synthetic content,
 > so read them as observations, not proofs; (c) upstream facts come from the
 > `egui_software_backend` repository at commit-date 2026-04-15 and from
-> crates.io metadata read on the compile date. Integration effort is an
-> estimate — no integration was built.
+> crates.io metadata read on the compile date. Integration effort in §8 was an
+> estimate when written; §10, added 2026-08-22, replaces it with what building
+> it actually cost and measured.
 
 # A software-only pixel host for imzero2's Rust side
 
@@ -347,3 +348,98 @@ the H.264 file sink, and any viewer that cannot execute the mesh lane.
   [ADR-0024](../adr/0024-imzero2-remote-access-browser-viewer.md) targets?
 - Would vendoring (§7) be preferable to a crates.io dependency from day one,
   given the version-ring coupling?
+
+## 10 What building it actually cost (added 2026-08-22)
+
+§8's O1 was built and committed as the `headless_soft` feature. This section
+records what that changed about the estimates above; §§1–9 are left as they
+were written on 2026-08-21.
+
+### 10.1 The estimates that held
+
+- **The seam was one function.** `render_and_readback` kept its signature; the
+  CPU body is tessellate → clear → rasterize. The wgpu state, the padded
+  staging buffer, the async map, the poll and the unpad loop all disappeared,
+  and no downstream consumer changed.
+- **The dependency cost was three crates**, exactly the ones §6.1 predicted:
+  `egui_software_backend`, `constify`, `strength_reduce`. `headless` 318 →
+  `headless_soft` **321**, with **no wgpu-family crate in the graph**. Binary
+  45.6 MB → 38.9 MB.
+- **Nothing imzero2 paints was unrenderable** (§4). No paint callback ever
+  reached the backend's error path across the whole gallery.
+
+### 10.2 Two things the survey did not anticipate
+
+Both are cargo behaviours rather than rendering ones, and both bite any
+vendored Rust source in this tree:
+
+- **`exclude` does not spare vendored code from the lint gates.** `cargo fmt
+  --all` reaches path dependencies, and `cargo clippy --workspace -- -D
+  warnings` lints them. `check.sh` now names first-party packages instead of
+  `--all`, and both vendored crate roots carry `#![allow(clippy::all)]`.
+- **A nested `[workspace]` inside the imzero2 workspace directory is rejected
+  outright**, even for an excluded path. The vendored manifest's `[workspace]`
+  (and its inert `[workspace.lints.*]`) had to go, with both packages named in
+  imzero2's `exclude` instead.
+
+### 10.3 Fidelity, measured on the real gallery
+
+`scripts/dev/play-screenshot-tour.sh` run end to end on each host: 66 scenes,
+92 PNGs, and **the same single failure on both** — `03_detail_glosses`, a
+driver-trace locator miss, so pre-existing and host-independent.
+
+A second wgpu tour gives a per-scene reproducibility floor, which turns out to
+be necessary: several play panels render time-dependent content (a "ran N s
+ago" line, per-pass timings), and one scene is outright nondeterministic. All
+figures below mask the bottom 120 px, where the two live status lines sit.
+
+| over all 92 images | pixels | share |
+| --- | --- | --- |
+| identical | 184,545,441 | **98.2796 %** |
+| Δ = 1 (rounding) | 2,335,484 | 1.2438 % |
+| Δ 2..31 | 394,221 | 0.2099 % |
+| **Δ ≥ 32 (plausibly visible)** | **500,854** | **0.2667 %** |
+| *the same measure, wgpu vs wgpu* | *418,959* | *0.2231 %* |
+
+The last row is the point: the visible-difference budget between the two
+renderers is barely above what two runs of the **same** renderer already
+produce. Per scene, 79 of 92 images have a renderer delta more than twice
+their own noise floor; the other 13 are the timing-dependent panels, where the
+two cannot be separated at all.
+
+**The dominant signature is one line, repeated.** For **65 of 92** images every
+visible difference sits on **six scanlines or fewer**, and in the common case
+on exactly three — the dock tab-bar separators. wgpu paints that row
+`(29,32,33)`, the CPU rasterizer `(91,94,96)`: a 62/255 gap on a single
+one-pixel row, with the rows above and below differing by a handful of pixels
+each. So it is a hairline drawn at a different effective opacity, not coverage
+spread across two rows. At 1920×1200 that is 2,123 pixels — 0.1 % of the
+frame, and the entire "visible" budget for most scenes.
+
+At the other end, `34_fsbrowser_list` has 4.73 % of pixels differing and
+**one** pixel at Δ ≥ 32: a broad flat region off by exactly 1/255.
+
+### 10.4 A trap worth recording
+
+`08_sankey` first looked like a real rasterizer defect — 11.9 % of pixels
+differing, 208 k of them visible, large flat areas in different palette
+colours. It is not: **six wgpu renders of that scene disagree with each other
+by up to 14.8 %**, more than wgpu disagrees with the CPU renderer. The same
+palette lands on different regions from run to run.
+
+Chasing it produced a false positive on the way. Turning off the crate's
+`with_convert_tris_to_rects` and `with_allow_raster_opt` — the two whose docs
+say things "*should*" look the same — appeared to halve that scene's
+difference. It was a luckier draw from the same distribution, and the change
+was reverted. **Those two flags remain unevaluated**: settling whether they
+cost fidelity needs a reproducible scene, and this gallery's most mesh-heavy
+scenes are exactly the ones that are not reproducible.
+
+### 10.5 What is still not measured
+
+- Per-frame cost inside the real host. The tour's per-scene wall clock is
+  dominated by process launch, ClickHouse and settle time, and the runs
+  contended for the machine, so nothing in §5.1 is confirmed or refuted by it.
+- `pixels_per_point ≠ 1.0`, which is what a carrier viewer reports. The whole
+  gallery runs at 1.0.
+- The two raster-optimisation flags (§10.4).
