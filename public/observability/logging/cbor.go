@@ -3,11 +3,11 @@ package logging
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"strings"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/go-json-experiment/json"
-	"github.com/go-json-experiment/json/jsontext"
 )
 
 const embeddedCborPrfixStr = "\"data:application/cbor;base64,"

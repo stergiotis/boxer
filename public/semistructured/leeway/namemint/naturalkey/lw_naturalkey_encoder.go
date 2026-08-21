@@ -3,6 +3,8 @@ package naturalkey
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"slices"
 	"strconv"
@@ -10,8 +12,6 @@ import (
 	"time"
 
 	cbor2 "github.com/fxamacker/cbor/v2"
-	"github.com/go-json-experiment/json"
-	"github.com/go-json-experiment/json/jsontext"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"

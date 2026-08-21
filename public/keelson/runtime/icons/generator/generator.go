@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -8,7 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-json-experiment/json"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"

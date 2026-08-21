@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 
-	"github.com/go-json-experiment/json/jsontext"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"

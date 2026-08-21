@@ -1,10 +1,10 @@
 package logging
 
 import (
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io"
 
-	"github.com/go-json-experiment/json"
-	"github.com/go-json-experiment/json/jsontext"
 	"github.com/stergiotis/boxer/public/ea"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )

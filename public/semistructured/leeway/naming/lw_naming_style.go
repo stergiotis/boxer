@@ -2,13 +2,13 @@ package naming
 
 import (
 	"bytes"
+	"encoding/json/v2"
 	"errors"
 	"iter"
 	"strings"
 	"unicode"
 
 	"github.com/ettle/strcase"
-	"github.com/go-json-experiment/json"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"

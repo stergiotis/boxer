@@ -1,14 +1,13 @@
 package stats
 
 import (
+	"encoding/json"
 	"math"
 	"math/big"
 	"math/rand"
 	"slices"
 	"testing"
 	"time"
-
-	"github.com/go-json-experiment/json/v1"
 )
 
 // --- Helper: Arbitrary Precision "Source of Truth" ---

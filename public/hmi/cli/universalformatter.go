@@ -2,13 +2,13 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/go-json-experiment/json"
-	"github.com/go-json-experiment/json/jsontext"
 	md "github.com/nao1215/markdown"
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/observability/eh"

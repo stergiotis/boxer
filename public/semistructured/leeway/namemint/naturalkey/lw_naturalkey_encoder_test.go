@@ -1,11 +1,11 @@
 package naturalkey
 
 import (
+	"encoding/json/v2"
 	"testing"
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/go-json-experiment/json"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	cbor2 "github.com/stergiotis/boxer/public/semistructured/cbor"
 	"github.com/stergiotis/boxer/public/unittest"

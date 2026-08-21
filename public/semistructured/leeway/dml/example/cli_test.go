@@ -2,10 +2,10 @@ package example
 
 import (
 	"bytes"
+	"encoding/json/jsontext"
 	"strings"
 	"testing"
 
-	"github.com/go-json-experiment/json/jsontext"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"

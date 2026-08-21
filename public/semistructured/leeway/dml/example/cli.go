@@ -3,6 +3,7 @@ package example
 import (
 	"bufio"
 	"bytes"
+	"encoding/json/jsontext"
 	"errors"
 	"hash"
 	"io"
@@ -18,7 +19,6 @@ import (
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
 	"github.com/apache/arrow-go/v18/parquet/pqarrow"
-	"github.com/go-json-experiment/json/jsontext"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"

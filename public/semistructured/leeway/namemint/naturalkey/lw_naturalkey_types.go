@@ -9,8 +9,8 @@ package naturalkey
 
 import (
 	"bytes"
+	"encoding/json/jsontext"
 
-	"github.com/go-json-experiment/json/jsontext"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
