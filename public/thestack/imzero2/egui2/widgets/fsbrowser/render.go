@@ -160,6 +160,33 @@ func (st *State) filterSummary() string {
 // renderList is list mode: the current directory as an etable inside a key
 // capture Frame (the tree widget's shape, ADR-0176 / ADR-0177).
 func (in Input) renderList(st *State, density styletokens.DensityE, res *Result) {
+	rowH := in.RowHeight
+	if rowH <= 0 {
+		rowH = defaultRowHeight
+	}
+
+	// Last frame's keys, applied to the view the reader saw (st.rows is the
+	// previous frame's listing) BEFORE this frame's directory is read — so a
+	// Backspace or an Enter on a directory renders the new directory in this
+	// frame rather than a blank one.
+	if st.keyFrameID != 0 {
+		prev := st.rows
+		ki := applyKeys(st, prev, st.keyFrameID, st.lastVisibleRows)
+		switch {
+		case ki.up:
+			if st.Up() {
+				res.Navigated, res.SelectionChanged = true, true
+			}
+		case ki.activate:
+			if r := rowOfPath(prev, st.cursor); r >= 0 {
+				in.activate(st, prev, r, res)
+			}
+		case ki.moved && ki.row >= 0 && ki.row < len(prev):
+			st.SelectOnly(prev[ki.row].Path)
+			res.SelectionChanged = true
+		}
+	}
+
 	l := st.read(in.FS, st.Dir())
 	rows := st.view(l, in.ShowHidden, st.rows[:0])
 	st.rows = rows
@@ -167,31 +194,6 @@ func (in Input) renderList(st *State, density styletokens.DensityE, res *Result)
 	if l.err != nil {
 		c.Label("Cannot read " + st.Dir() + ": " + l.err.Error()).Selectable(false).Send()
 		res.Err = l.err
-	}
-	rowH := in.RowHeight
-	if rowH <= 0 {
-		rowH = defaultRowHeight
-	}
-
-	// Last frame's keys, applied to the view the reader saw.
-	if st.keyFrameID != 0 {
-		ki := applyKeys(st, rows, st.keyFrameID, st.lastVisibleRows)
-		switch {
-		case ki.up:
-			if st.Up() {
-				res.Navigated, res.SelectionChanged = true, true
-				return
-			}
-		case ki.activate:
-			if r := rowOfPath(rows, st.cursor); r >= 0 {
-				if in.activate(st, rows, r, res) {
-					return
-				}
-			}
-		case ki.moved && ki.row >= 0:
-			st.SelectOnly(rows[ki.row].Path)
-			res.SelectionChanged = true
-		}
 	}
 
 	clickedRow, activatedRow := -1, -1
@@ -467,29 +469,29 @@ func (in Input) renderOutline(st *State, density styletokens.DensityE, res *Resu
 type selectModeE uint8
 
 const (
-	selectReplace selectModeE = iota
-	selectToggle
-	selectExtend
+	selectModeReplace selectModeE = iota
+	selectModeToggle
+	selectModeExtend
 )
 
 func clickMode() selectModeE {
 	mods := c.CurrentApplicationState.StateManager.GetModifiers()
 	switch {
 	case mods.Command || mods.Ctrl:
-		return selectToggle
+		return selectModeToggle
 	case mods.Shift:
-		return selectExtend
+		return selectModeExtend
 	}
-	return selectReplace
+	return selectModeReplace
 }
 
 func applySelection(st *State, rows []Entry, rowIdx int, mode selectModeE) {
 	p := rows[rowIdx].Path
 	switch mode {
-	case selectToggle:
+	case selectModeToggle:
 		st.Select(p, !st.IsSelected(p))
 		st.cursor = p
-	case selectExtend:
+	case selectModeExtend:
 		anchor := rowOfPath(rows, st.cursor)
 		if anchor < 0 {
 			st.SelectOnly(p)

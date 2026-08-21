@@ -192,13 +192,13 @@ func TestHumanBytesAndTime(t *testing.T) {
 func TestApplySelectionModes(t *testing.T) {
 	var st State
 	rows := []Entry{{Path: "a", Ord: 0}, {Path: "b", Ord: 1}, {Path: "c", Ord: 2}, {Path: "d", Ord: 3}}
-	applySelection(&st, rows, 1, selectReplace)
+	applySelection(&st, rows, 1, selectModeReplace)
 	assert.Equal(t, []string{"b"}, st.Selection())
-	applySelection(&st, rows, 3, selectToggle)
+	applySelection(&st, rows, 3, selectModeToggle)
 	assert.Equal(t, []string{"b", "d"}, st.Selection())
 	assert.Equal(t, "d", st.Cursor())
-	applySelection(&st, rows, 0, selectExtend)
+	applySelection(&st, rows, 0, selectModeExtend)
 	assert.Equal(t, []string{"a", "b", "c", "d"}, st.Selection(), "shift extends from the cursor")
-	applySelection(&st, rows, 2, selectReplace)
+	applySelection(&st, rows, 2, selectModeReplace)
 	assert.Equal(t, []string{"c"}, st.Selection())
 }

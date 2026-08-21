@@ -1,10 +1,12 @@
 package fsbrowser
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -98,7 +100,9 @@ type Input struct {
 // Result is what one Render reports.
 type Result struct {
 	// Rows is what was shown: the filtered, sorted listing in list mode, one
-	// entry per outline node in outline mode. Indices below refer to it.
+	// entry per outline node in outline mode. Indices below refer to it. The
+	// slice is the State's scratch and is valid until the next Render; a host
+	// that keeps entries copies them.
 	Rows []Entry
 	// Clicked is the row clicked this frame, -1 for none.
 	Clicked int
@@ -348,33 +352,31 @@ func (st *State) view(l *listing, showHidden bool, dst []Entry) []Entry {
 }
 
 func sortEntries(es []Entry, by SortByE, desc bool) {
-	sort.SliceStable(es, func(i, j int) bool {
-		a, b := es[i], es[j]
+	slices.SortStableFunc(es, func(a, b Entry) int {
+		// Directories first, whatever the column and the direction.
 		if a.IsDir != b.IsDir {
-			return a.IsDir
+			if a.IsDir {
+				return -1
+			}
+			return 1
 		}
-		var less bool
+		var c int
 		switch by {
 		case SortBySize:
-			if a.Size != b.Size {
-				less = a.Size < b.Size
-			} else {
-				less = a.Name < b.Name
-			}
+			c = cmp.Compare(a.Size, b.Size)
 		case SortByModTime:
-			if !a.ModTime.Equal(b.ModTime) {
-				less = a.ModTime.Before(b.ModTime)
-			} else {
-				less = a.Name < b.Name
+			c = a.ModTime.Compare(b.ModTime)
+		}
+		if c == 0 {
+			c = cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+			if c == 0 {
+				c = cmp.Compare(a.Name, b.Name)
 			}
-		default:
-			less = strings.ToLower(a.Name) < strings.ToLower(b.Name) ||
-				(strings.EqualFold(a.Name, b.Name) && a.Name < b.Name)
 		}
 		if desc {
-			return !less && !(a.Name == b.Name && a.Size == b.Size && a.ModTime.Equal(b.ModTime))
+			c = -c
 		}
-		return less
+		return c
 	})
 }
 
