@@ -1,5 +1,6 @@
 #!/bin/bash
-# play-screenshot-tour.sh — capture a gallery of the play app's feature surface.
+# play-screenshot-tour.sh — capture a gallery of the play app's feature surface,
+# and of the widgets play is built from.
 #
 # One play launch per scene, through the HEADLESS host (ADR-0024): it links no
 # window system, so there is no compositor anywhere in this script. The render
@@ -25,7 +26,8 @@
 #   PLAYSHOT_DRY=1  scripts/dev/play-screenshot-tour.sh # resolve anchors, capture nothing
 #
 # Prerequisites:
-#   - a ClickHouse on $CLICKHOUSE_URL (default http://localhost:8123/)
+#   - a ClickHouse on $CLICKHOUSE_URL (default http://localhost:8123/) — needed
+#     only by the play scenes, and checked only when the selection holds one
 #   - the demo fixtures the scenes read — see fixtures() below, and
 #     `PLAYSHOT_CHECK_FIXTURES=0` to run anyway with the misses rendering as
 #     error states (which are themselves worth a screenshot)
@@ -82,6 +84,13 @@ export CLICKHOUSE_USER="${CLICKHOUSE_USER:-default}"
 #           a scene that sets it must capture for itself
 #   settle— optional milliseconds to hold before the scene's steps, for a panel
 #           whose data arrives asynchronously
+#   launch— optional `--launch` target (default `play`). A scene naming another
+#           app gets none of play's seeding, and the ClickHouse precondition is
+#           skipped when no selected scene launches play
+#   prelude optional trace lines replacing the default wait for play's Run
+#           button, for a launch target whose mount anchor is something else
+#   size  — optional WxH viewport for this scene alone, for an app whose window
+#           is a fixed size the tour's default viewport would swim in
 #
 # Scene order is the function name's sort order. Add a scene by adding a
 # function; nothing else needs touching.
@@ -1679,6 +1688,56 @@ SELECT * FROM anchor.facts ORDER BY \`id:id\` LIMIT 1"
 {"do":"capture","text":"33_experiments_result_card","settleMs":800}'
 }
 
+# --- widget-gallery scenes ---------------------------------------------------
+# A second launch target: the widget gallery (`--launch widgets`), which reads
+# no ClickHouse and takes none of the BOXER_PLAY_* seeding. Its mount anchor is
+# the filter box rather than play's Run button, so these scenes set `prelude`,
+# and its window is the 900x640 archetype whatever the viewport (the gallery
+# manifest declares no SurfaceHints), so they set `size` to hug it rather than
+# capture a small window in a large empty frame.
+gallery_prelude='{"do":"wait","role":"text_input","comment":"the gallery has mounted"}'
+gallery_open() { # gallery_open <substring of the demo title>
+	cat <<-EOF
+	{"do":"focus","role":"text_input"}
+	{"do":"type","role":"text_input","text":"$1","comment":"narrow the gallery to the one demo"}
+	{"do":"wait","contains":"$1","settleMs":400}
+	{"do":"click","contains":"$1","comment":"expand the demo's section"}
+	EOF
+}
+
+scene_34_fsbrowser() {
+	desc="File browser widget (ADR-0200 §SD2) — the gallery demo over an in-memory io/fs tree: a row click selects, Enter enters the selected directory, Backspace goes up, and the outline mode renders the same tree. What this scene asserts is the demo's READOUT lines, not the picture — a wrong read-back would still look right — so the two captures are a by-product and the exit status is the assertion"
+	launch=widgets
+	prelude="$gallery_prelude"
+	# The gallery mounts with its tree already built; there is no query to wait
+	# for, so the tour's 1.8 s panel settle is dead time here.
+	settle=200
+	size=960x720
+	steps="$(gallery_open 'file browser')
+{\"do\":\"wait\",\"name\":\"clear selection\",\"settleMs\":400,\"comment\":\"the demo body is up\"}
+{\"do\":\"scroll_into_view\",\"name\":\"clear selection\",\"settleMs\":600}
+{\"do\":\"note\",\"text\":\"--- baseline: the root directory, nothing selected ---\"}
+{\"do\":\"wait\",\"value\":\"dir: .\",\"role\":\"label\"}
+{\"do\":\"wait\",\"value\":\"selected: (nothing)\",\"role\":\"label\"}
+{\"do\":\"note\",\"text\":\"--- click-to-select: the row, past its label, by pointer ---\"}
+{\"do\":\"click\",\"value\":\"internal\",\"role\":\"label\",\"pointer\":true}
+{\"do\":\"wait\",\"value\":\"selected: internal\",\"role\":\"label\",\"comment\":\"the click reached the row's sense region behind the label\"}
+{\"do\":\"capture\",\"text\":\"34_fsbrowser_list\",\"comment\":\"list mode with one directory row selected\"}
+{\"do\":\"note\",\"text\":\"--- Enter enters the selected directory; the breadcrumb and the readout follow ---\"}
+{\"do\":\"key\",\"text\":\"Enter\"}
+{\"do\":\"wait\",\"value\":\"dir: internal\",\"role\":\"label\",\"settleMs\":300}
+{\"do\":\"wait\",\"value\":\"selected: (nothing)\",\"role\":\"label\",\"comment\":\"selection is per directory\"}
+{\"do\":\"note\",\"text\":\"--- Backspace goes up ---\"}
+{\"do\":\"click\",\"value\":\"store\",\"role\":\"label\",\"pointer\":true,\"comment\":\"take focus in the new listing first: focus is what the key capture keys on\"}
+{\"do\":\"wait\",\"value\":\"selected: internal/store\",\"role\":\"label\"}
+{\"do\":\"key\",\"text\":\"Backspace\"}
+{\"do\":\"wait\",\"value\":\"dir: .\",\"role\":\"label\",\"settleMs\":300}
+{\"do\":\"note\",\"text\":\"--- the outline mode renders the same tree as an outline ---\"}
+{\"do\":\"click\",\"contains\":\"outline\",\"role\":\"button\"}
+{\"do\":\"wait\",\"value\":\"last action: mode outline\",\"role\":\"label\",\"settleMs\":400}
+{\"do\":\"capture\",\"text\":\"34_fsbrowser_outline\",\"comment\":\"outline mode: unread directories carry a disclosure control\"}"
+}
+
 # =============================================================================
 # Fixtures the scenes read. Checked once, up front, so a missing one is a line
 # of output rather than twenty screenshots of an error state.
@@ -1705,7 +1764,7 @@ list_scenes() {
 
 if [[ -n "${PLAYSHOT_LIST:-}" ]]; then
 	for fn in $(list_scenes); do
-		desc=""; sql=""; senv=(); steps=""; settle=""
+		desc=""; sql=""; senv=(); steps=""; settle=""; launch=""; prelude=""; size=""
 		"$fn"
 		printf '%-28s %s\n' "${fn#scene_}" "$desc"
 	done
@@ -1729,7 +1788,21 @@ mkdir -p "$OUT/logs" || die "cannot create $OUT"
 
 # --- ClickHouse + fixtures ---------------------------------------------------
 ch() { curl -sS --max-time 10 --get --data-urlencode "query=$1" "$CLICKHOUSE_URL" 2>&1; }
-ch "SELECT 1" >/dev/null 2>&1 || die "no ClickHouse at $CLICKHOUSE_URL (set CLICKHOUSE_URL)"
+# Only the play scenes read a server. Decide the precondition over the
+# SELECTION, not the whole scene table, so a run of widget-gallery scenes alone
+# does not die on a ClickHouse it never touches.
+needs_ch=0
+for fn in "${selected[@]}"; do
+	desc=""; sql=""; senv=(); steps=""; settle=""; launch=""; prelude=""; size=""
+	"$fn"
+	if [[ "${launch:-play}" == play ]]; then needs_ch=1; break; fi
+done
+if ((needs_ch)); then
+	ch "SELECT 1" >/dev/null 2>&1 || die "no ClickHouse at $CLICKHOUSE_URL (set CLICKHOUSE_URL)"
+else
+	log "no selected scene launches play — skipping the ClickHouse and fixture checks"
+	CHECK_FIXTURES=0
+fi
 if [[ "$CHECK_FIXTURES" == 1 ]]; then
 	missing=0
 	while IFS='|' read -r tbl how; do
@@ -1800,28 +1873,39 @@ FALLBACK_FONT="${FALLBACK_FONT:-$(resolve_font 'Noto Sans Mono CJK JP' 'CJK')}"
 PHOSPHOR_FONT="${PHOSPHOR_FONT:-$root/rust/imzero2/assets/fonts/phosphor/Phosphor.ttf}"
 
 # --- geometry ----------------------------------------------------------------
-W=${SIZE%%[xX]*}; H=${SIZE##*[xX]}
-# The app opens as a window inside the host viewport. Size it to the viewport
-# minus the host's own chrome so the capture is the app and almost nothing
-# else; without the hint it falls back to a generic archetype narrow enough
-# that play's tab strip truncates.
-WIN_W=$((W - 2 * 16))
-WIN_H=$((H - 100))
+# Resolved per scene, so a scene whose app opens a FIXED-size window can set
+# `size` to hug it instead of capturing it adrift in the default viewport.
+geometry() { # geometry <WxH>
+	W=${1%%[xX]*}; H=${1##*[xX]}
+	# The app opens as a window inside the host viewport. Size it to the
+	# viewport minus the host's own chrome so the capture is the app and almost
+	# nothing else; without the hint it falls back to a generic archetype narrow
+	# enough that play's tab strip truncates. An app that declares no
+	# SurfaceHints ignores this and takes the archetype anyway.
+	WIN_W=$((W - 2 * 16))
+	WIN_H=$((H - 100))
+}
+geometry "$SIZE"
+
+# The default trace prelude: wait until play has mounted. A scene with another
+# launch target replaces it with its own `prelude`.
+play_prelude='{"do":"wait","name":"Run","comment":"the app has mounted"}'
 
 # --- capture -----------------------------------------------------------------
 ok=0; failed=0
 index="$OUT/index.md"
 {
-	printf '# play — feature tour\n\n'
+	printf '# play — feature tour, and the widgets it is built from\n\n'
 	printf 'Captured by `scripts/dev/play-screenshot-tour.sh` at %s.\n' "$(date -Is)"
 	printf 'One headless launch per scene (ADR-0024), gestures replayed by\n'
 	printf '`imzero2 drive` against the accessibility tree (ADR-0154). No compositor.\n\n'
 } >"$index"
 
 for fn in "${selected[@]}"; do
-	desc=""; sql=""; senv=(); steps=""; settle=""
+	desc=""; sql=""; senv=(); steps=""; settle=""; launch=""; prelude=""; size=""
 	"$fn"
 	name="${fn#scene_}"
+	geometry "${size:-$SIZE}"
 	png="$OUT/$name.png"
 	trace="$OUT/logs/$name.jsonl"
 	rm -f "$png"
@@ -1838,7 +1922,7 @@ for fn in "${selected[@]}"; do
 	# nothing else knows when a result has landed — without this the driver
 	# captures a half-mounted window, which is what it did the first time.
 	{
-		printf '{"do":"wait","name":"Run","comment":"the app has mounted"}\n'
+		printf '%s\n' "${prelude:-$play_prelude}"
 		printf '{"do":"sleep","settleMs":%s}\n' "${settle:-$SCENE_SETTLE_MS}"
 		printf '%s\n' "$steps"
 	} >"$trace"
@@ -1854,7 +1938,7 @@ for fn in "${selected[@]}"; do
 		IMZERO2_HEADLESS_DUMP_DIR="$OUT" \
 		IMZERO2_HEADLESS_DUMP_EVERY=1000000 \
 		IMZERO2_HEADLESS_FPS=30 \
-		IMZERO2_SCREENSHOT_SIZE="$SIZE" \
+		IMZERO2_SCREENSHOT_SIZE="${size:-$SIZE}" \
 		BOXER_COMPONENT=play-screenshot-tour \
 		BOXER_PLAY_WINDOW_SIZE="${WIN_W}x${WIN_H}" \
 		BOXER_PLAY_SQL="$sql" \
@@ -1869,7 +1953,7 @@ for fn in "${selected[@]}"; do
 			${MONO_FONT:+--monoFontTTF "$MONO_FONT"} \
 			${PHOSPHOR_FONT:+--phosphorFontTTF "$PHOSPHOR_FONT"} \
 			${FALLBACK_FONT:+--fallbackFontTTF "$FALLBACK_FONT"} \
-			--launch play \
+			--launch "${launch:-play}" \
 		>"$OUT/logs/$name.log" 2>&1 &
 	app_pid=$!
 
@@ -1929,9 +2013,10 @@ for fn in "${selected[@]}"; do
 		for f in "$OUT/$name"*.png; do
 			[[ -s "$f" ]] && printf '![%s](%s)\n\n' "$name" "$(basename "$f")"
 		done
+		[[ -n "$launch" ]] && printf 'Launch: `%s`\n\n' "$launch"
 		printf 'Knobs: `%s`\n\n' "${senv[*]:-—}"
 		[[ -n "$steps" ]] && printf 'Trace:\n```json\n%s\n```\n\n' "$steps"
-		printf '```sql\n%s\n```\n\n' "$sql"
+		[[ -n "$sql" ]] && printf '```sql\n%s\n```\n\n' "$sql"
 	} >>"$index"
 done
 

@@ -10,7 +10,8 @@
 # taken from the repository root. Override the anchors with TALLYSCENE_MOUNT,
 # TALLYSCENE_DIR and TALLYSCENE_FILE.
 #
-# Built on scripts/dev/fsbrowser-widget-scene.sh: same host, same driver.
+# Built on the file browser scene, which is scripts/dev/play-screenshot-tour.sh's
+# `34_fsbrowser`: same host, same driver.
 set -uo pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 root=$(cd "$here/../.." && pwd)

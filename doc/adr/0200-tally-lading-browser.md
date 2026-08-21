@@ -433,6 +433,31 @@ click on a row-backed entry moves the Detail pane to the right row; `lading`
 browses whatever the store holds and asserts the pane's own chrome. Both skip
 rather than fail without a server.
 
+### 2026-08-21 — the widget scene moved into the play tour
+
+§M1's headless scene now lives in `scripts/dev/play-screenshot-tour.sh` as
+`34_fsbrowser`, and `scripts/dev/fsbrowser-widget-scene.sh` — the path this ADR
+names — is a wrapper that selects it. One runner owns the private-binary build,
+the FFFI staleness guard, the port-teardown wait and the capture index for
+every headless scene; a second copy of that machinery per scene is what the
+move removes, not the scene.
+
+The tour learned three per-scene knobs to take it: a `--launch` target (the
+scene launches `widgets`, not `play`), a trace prelude (the gallery's filter
+box is its mount anchor, not play's Run button), and a viewport size. The
+ClickHouse and fixture preconditions are now decided over the *selection*
+rather than the scene table, so a run of gallery scenes alone no longer dies on
+a server it never reads.
+
+Two things the move made visible. The widget gallery declares no
+`SurfaceHints`, so its window is the 900×640 `SurfaceApp` archetype whatever
+the viewport — the scene therefore pins a 960×720 viewport and captures a full
+frame instead of a window adrift in one, which is also a tighter picture than
+the standalone script took. And `FSSCENE_DRY=1`, which that script's header
+documented, has never passed for this trace: a dry run resolves anchors without
+actuating, and most of these waits are on state a gesture produces. The wrapper
+says so rather than repeating the claim.
+
 ## References
 
 - [ADR-0198](./0198-fs-snapshot-store.md) and
