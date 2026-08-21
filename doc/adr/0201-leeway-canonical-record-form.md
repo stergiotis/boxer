@@ -285,6 +285,15 @@ The form is implemented once, at the protocol level, as a sink:
   recorded known issue. This is a behavioural change for the four
   `MembershipSinkI` implementers, which already declare the paired signature;
   no committed golden contains a mixed membership.
+- The driver's **co-section group driving emits the memberships of every
+  section in the group** into the one tag frame of the merged tagged value
+  (landed 2026-08-21 alongside this ADR; it drove the first section's
+  membership columns only, so a membership-only co-section — the
+  annotation-overlay pattern — lost its tags). `sectionTagCount` /
+  `emitSectionTags` are shared with the standalone path, whose output is
+  unchanged; a driver test with such an overlay pins it. The committed
+  fixtures' co-sections carry no second-section memberships, so no golden
+  moves.
 - `public/semistructured/leeway/canonform` — `Encoder` implements `SinkI`,
   `MembershipSinkI`, `ArrowValueSinkI`. Per attribute it holds the column
   views and the typed memberships the driver pushes (values arrive before
@@ -335,6 +344,7 @@ The form is implemented once, at the protocol level, as a sink:
 | --- | --- | --- |
 | `streamreadaccess.SinkI` family (exported Go API under `public/`) | added: optional `ArrowValueSinkI` capability; driver hands Arrow views to sinks that implement it | none — additive; text lane unchanged for existing sinks |
 | `streamreadaccess.Driver` mixed-channel membership emission | reshaped: two half-populated calls → one paired call per membership | the four `MembershipSinkI` implementers (card-JSON, Unicode card, `DebugSink`, `Table2CardEmitter`) receive pairs they already declare; their tests |
+| `streamreadaccess.Driver` co-section group membership emission (landed 2026-08-21) | reshaped: tags of every group section in the merged tagged value's frame, not the first section's only | the same four implementers see additional tags only for membership-bearing second co-sections; no committed fixture has one, so no golden moves; `leeway_onlineapi_cogroup_members_test.go` pins it |
 | `public/semistructured/leeway/canonform` (new exported Go API) | added: `Encoder`, `Options` (classifier, plain-item mask), leaf and record digests, context strings and derived keys | goldens under `testdata/`; the M1 property suite |
 | `membershiprole.ClassifierI` (exported Go API) | unchanged; gains a consumer whose output depends on it | none |
 | The canonical record form itself (a hash preimage contract) | added: SD1–SD7 are the contract; any byte change is a new version under SD7 | whatever stores digests — none at M0 |
@@ -400,10 +410,11 @@ The form is implemented once, at the protocol level, as a sink:
 
 - The form is lossy on purpose: it cannot be decoded back into a record, and
   it is one more leeway concept to keep consistent with the protocol.
-- Co-section groups keep section names (SD6) and the driver emits only the
-  first section's memberships for a group — a pre-existing driver limitation
-  the form inherits; no committed schema declares a membership-bearing
-  secondary co-section today. Recorded, not fixed here.
+- Co-section groups keep section names (SD6). (The driver used to emit only
+  the first section's memberships for a group, which the form would have
+  inherited; that was fixed on 2026-08-21 — see SD8 — so an annotation
+  overlay in a membership-only co-section is now visible to the classifier
+  like any other membership.)
 - The digest is a function of the classifier as well as the record; a
   consumer that stores digests must pin its classifier the way it pins the
   form version, and a classifier that honours the uniformity hints makes two
@@ -446,8 +457,9 @@ The form is implemented once, at the protocol level, as a sink:
   the digest), a distinctness property (content collapsed), the re-encode pin
   (the output stopped being RFC 8949 §4.2 deterministic), a test that
   captures the writer and finds a materialized buffer on the hot path.
-- **Gap.** No SQL-side implementation exists to cross-check against, and the
-  co-group membership gap is documented rather than tested.
+- **Gap.** No SQL-side implementation exists to cross-check against. The
+  co-group membership fix (SD8) is pinned by a driver test with a
+  membership-only co-section (`streamreadaccess`), independent of this form.
 
 ## Status
 

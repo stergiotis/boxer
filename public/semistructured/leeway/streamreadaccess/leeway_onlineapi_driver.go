@@ -783,8 +783,10 @@ func (inst *Driver) driveCoGroup(sink SinkI, rec arrow.RecordBatch, entityIdx in
 	sink.BeginSection(firstSec.name, group.mergedNames, group.mergedTypes, firstSec.useAspects, nAttrs)
 
 	type secCursors struct {
-		arrayCur cardCursor
-		setCur   cardCursor
+		arrayCur    cardCursor
+		setCur      cardCursor
+		memberCurs  []cardCursor
+		memberSlots []attrCardSlot
 	}
 	perSec := make([]secCursors, len(group.sectionIds))
 	for i, sIdx := range group.sectionIds {
@@ -793,8 +795,9 @@ func (inst *Driver) driveCoGroup(sink SinkI, rec arrow.RecordBatch, entityIdx in
 			arrayCur: inst.newCardCursor(rec, cardArrowIdxOrSentinel(sec.arrayCardCols), entityIdx),
 			setCur:   inst.newCardCursor(rec, cardArrowIdxOrSentinel(sec.setCardCols), entityIdx),
 		}
+		perSec[i].memberCurs, perSec[i].memberSlots = inst.buildMemberCursors(rec, sec, entityIdx)
 	}
-	memberCurs, memberSlots := inst.buildMemberCursors(rec, firstSec, entityIdx)
+	ms, _ := sink.(MembershipSinkI)
 
 	for attrIdx := range nAttrs {
 		sink.BeginTaggedValue()
@@ -804,10 +807,25 @@ func (inst *Driver) driveCoGroup(sink SinkI, rec arrow.RecordBatch, entityIdx in
 			setRel, setCard := perSec[i].setCur.step(attrIdx)
 			inst.emitValueColumns(sink, rec, entityIdx, attrIdx, sec, attrCardSlot{arrayRel, arrayCard}, attrCardSlot{setRel, setCard})
 		}
-		for i := range memberCurs {
-			memberSlots[i].relOff, memberSlots[i].card = memberCurs[i].step(attrIdx)
+		// One tag frame for the merged tagged value, fed by EVERY section of
+		// the group: co-sections share topology, not membership columns, so a
+		// membership-only co-section (the annotation-overlay pattern) carries
+		// tags the first section does not. Until 2026-08-21 only the first
+		// section's membership columns were driven here and those tags were
+		// silently dropped.
+		nTags := 0
+		for i, sIdx := range group.sectionIds {
+			ps := &perSec[i]
+			for j := range ps.memberCurs {
+				ps.memberSlots[j].relOff, ps.memberSlots[j].card = ps.memberCurs[j].step(attrIdx)
+			}
+			nTags += inst.sectionTagCount(&inst.sections[sIdx], ps.memberSlots)
 		}
-		inst.emitMemberships(sink, rec, entityIdx, attrIdx, firstSec, memberSlots)
+		sink.BeginTags(nTags)
+		for i, sIdx := range group.sectionIds {
+			inst.emitSectionTags(ms, rec, entityIdx, attrIdx, &inst.sections[sIdx], perSec[i].memberSlots)
+		}
+		sink.EndTags()
 		err := sink.EndTaggedValue()
 		if err != nil {
 			inst.handleError(err)
@@ -900,41 +918,56 @@ func memberSlotForRole(sec *sectionLayout, memberSlots []attrCardSlot, memberRol
 	return
 }
 
+// emitMemberships drives the tag frame of one attribute of a standalone
+// section: BeginTags(n), one AddMembership* call per membership, EndTags.
+// Co-section groups share one tag frame across their sections and are
+// driven by driveCoGroup through the same two helpers.
 func (inst *Driver) emitMemberships(sink SinkI, rec arrow.RecordBatch, entityIdx int, attrIdx int, sec *sectionLayout, memberSlots []attrCardSlot) {
-	if len(sec.memberCols) == 0 {
-		sink.BeginTags(0)
-		sink.EndTags()
-		return
-	}
-
 	// Membership rendering is an optional sink capability (ADR-0072): the tag
 	// frame (BeginTags/EndTags) is always driven so structural sinks see the
 	// tag count, but per-tag identities are emitted only when the sink
 	// implements MembershipSinkI. Non-rendering sinks leave ms nil and
-	// emitOneMembership early-returns.
+	// emitSectionTags skips the identities.
 	ms, _ := sink.(MembershipSinkI)
+	sink.BeginTags(inst.sectionTagCount(sec, memberSlots))
+	inst.emitSectionTags(ms, rec, entityIdx, attrIdx, sec, memberSlots)
+	sink.EndTags()
+}
 
-	hasMemberCards := len(sec.memberCardDetails) > 0
+// sectionTagCount is the number of tags one section contributes to the tag
+// frame of one attribute — what BeginTags announces: no membership columns →
+// 0; membership columns without cardinality support → one tag per column;
+// otherwise the sum of the attribute's per-role cardinalities, read from the
+// precomputed slots rather than the Uint64 inner array.
+func (inst *Driver) sectionTagCount(sec *sectionLayout, memberSlots []attrCardSlot) (n int) {
+	if len(sec.memberCols) == 0 {
+		return
+	}
+	if len(sec.memberCardDetails) == 0 {
+		n = len(sec.memberCols)
+		return
+	}
+	for _, s := range memberSlots {
+		n += s.card
+	}
+	return
+}
 
-	if !hasMemberCards {
-		nTags := len(sec.memberCols)
-		sink.BeginTags(nTags)
+// emitSectionTags emits the per-tag identities of one section's membership
+// columns for one attribute, inside a tag frame the caller has already opened.
+// ms is nil when the sink does not render memberships; the frame is still
+// driven by the caller, the identities are skipped here.
+func (inst *Driver) emitSectionTags(ms MembershipSinkI, rec arrow.RecordBatch, entityIdx int, attrIdx int, sec *sectionLayout, memberSlots []attrCardSlot) {
+	if ms == nil || len(sec.memberCols) == 0 {
+		return
+	}
+	if len(sec.memberCardDetails) == 0 {
 		for _, mc := range sec.memberCols {
 			flatIdx := inst.listFlatIndex(rec, mc.arrowIdx, entityIdx, attrIdx)
 			inst.emitOneMembership(ms, rec, mc, flatIdx)
 		}
-		sink.EndTags()
 		return
 	}
-
-	// Total tags across all membership role cardinalities — use precomputed
-	// slot cards (avoids re-reading the Uint64 inner array).
-	totalTags := 0
-	for _, s := range memberSlots {
-		totalTags += s.card
-	}
-	sink.BeginTags(totalTags)
-
 	for _, mc := range sec.memberCols {
 		entityStart := inst.listStart(rec, mc.arrowIdx, entityIdx)
 		slot, found := memberSlotForRole(sec, memberSlots, mc.role)
@@ -950,8 +983,6 @@ func (inst *Driver) emitMemberships(sink SinkI, rec arrow.RecordBatch, entityIdx
 			inst.emitOneMembership(ms, rec, mc, flatIdx)
 		}
 	}
-
-	sink.EndTags()
 }
 
 func (inst *Driver) emitOneMembership(ms MembershipSinkI, rec arrow.RecordBatch, mc memberColLayout, flatIdx int) {
