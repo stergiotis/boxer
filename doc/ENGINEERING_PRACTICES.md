@@ -59,20 +59,31 @@ emits a pass/warn/fail summary trailer.
 |---|---|---|
 | `gofmt` | `-l` over the tree, generated files skipped by their header | error on drift |
 | `go vet` | direct, with build tags | error on findings |
-| [honnef.co/go/tools/cmd/staticcheck](https://pkg.go.dev/honnef.co/go/tools/cmd/staticcheck) | `-checks "all,-ST1000,-ST1003,..."` (style checks suppressed) | warn — **not running under Go 1.27**, see below |
+| [honnef.co/go/tools/cmd/staticcheck](https://pkg.go.dev/honnef.co/go/tools/cmd/staticcheck) | `-checks "all,-ST1000,-ST1003,..."` (style checks suppressed), one package withheld | warn — see below |
 | [github.com/kisielk/errcheck](https://pkg.go.dev/github.com/kisielk/errcheck) | exclusions for `fmt.Fprintf` / `strings.Builder` writers | warn |
 | [go.uber.org/nilaway](https://pkg.go.dev/go.uber.org/nilaway) | available, currently disabled in CI; runnable via [scripts/dev/nilaway.sh](../scripts/dev/nilaway.sh) | (disabled) |
 | [github.com/dkorunic/betteralign](https://pkg.go.dev/github.com/dkorunic/betteralign) | dev-only via [scripts/dev/betteralign.sh](../scripts/dev/betteralign.sh) | dev |
 | [github.com/incu6us/goimports-reviser/v3](https://pkg.go.dev/github.com/incu6us/goimports-reviser/v3) | dev-only via [scripts/dev/goimports.sh](../scripts/dev/goimports.sh) | dev |
 
-**staticcheck analyses nothing as of Go 1.27 (2026-08-19).** v0.7.0's IR
-builder aborts with `unexpected expr: *ast.KeyValueExpr` on every package under
-1.27, and the only newer publication, v0.8.0-rc.1, aborts on its own bug
-(`unhandled builtin recover`) under 1.26 too — so there is no version to move
-to. [lint.sh](../scripts/ci/lint.sh) prints `DID NOT RUN` for the step rather
-than letting the stack trace be filed under "warnings", and the step stays
-`warn` rather than `fail` because a third-party bug should not block the build.
-Re-check on the next staticcheck release.
+**staticcheck withholds one package under Go 1.27 (2026-08-21).** The pin is
+`v0.8.0`; `v0.7.0` cannot read 1.27 export data at all, failing every package
+with `export data version 4 is greater than maximum supported version 2` before
+an analyzer sees it. `v0.8.0` analyses 538 of the 539 packages under
+`./public/...`. The exception is `egui2/widgets/componentview`, where Go 1.27
+generic methods meet an upstream bug: staticcheck keys cross-package facts by
+ordinal method paths, source order and export-data order number a type's methods
+differently once generic and non-generic ones mix, and `SA4023` then indexes
+past the end of a fact belonging to another method — taking the process, and
+every other package's analysis, with it. `-checks` cannot dodge it, since
+staticcheck runs every analyzer and filters diagnostics afterwards.
+[lint.sh](../scripts/ci/lint.sh) therefore carries a named skip list, prints what
+it withheld, and stays `warn` while the list is non-empty; the `DID NOT RUN`
+branch remains as the backstop for a package the list does not name yet. The
+mis-attribution is silent elsewhere, so treat a fact-carrying finding (`U1000`)
+naming a method of `marshallreflect.SectionReaders` or `ecsdemo/stage2.FatRow`
+with suspicion. The measurements are in
+[ADR-0199](./adr/0199-adopt-go-1-27.md) §Updates. Re-check on the next
+staticcheck release.
 
 Generated files (`*.gen.go`, `*.out.go`) are filtered post-hoc by grep since
 `go vet` has no native exclude flag. The `gofmt` step filters on the
