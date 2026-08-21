@@ -110,3 +110,8 @@ rust/*/target/
 # belongs in a test, not here. `**/` because the pattern would otherwise anchor
 # to the repo root, where no package lives.
 **/testdata/rapid/
+
+# the lading snapshot mountpoint (doc/howto/lading-snapshot-store.md §6):
+# ignored so doclint and the gov gate do not walk a mounted snapshot as if it
+# were repo source.
+/tally/
