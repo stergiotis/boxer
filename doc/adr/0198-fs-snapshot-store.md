@@ -1168,6 +1168,21 @@ capability subject, which is a decision rather than a detail. The factory
 registration above is what makes the absence honest: no subject, no binding, no
 expansion.
 
+### 2026-08-20 — macro spellings, decided by ADR-0200 M0
+
+§SD11 left the macro spellings open; [ADR-0200](./0200-tally-lading-browser.md)
+(proposed) §SD6 decides three of them, implemented in `ladingsql` with tests
+and goldens: a macro argument may be a prelude-bound `{name:Type}` slot
+(resolved from `env.Params` at expansion; unbound is refused, because the
+visibility check needs the value); `'*'` as the *mount* names every visible
+mount, resolved per mount as `(mount, snapshot)` pairs and admitted only under
+an enumerable visibility (`VisibleAll`, `VisibleSet`); `'latest'` as the
+snapshot spells what omission means. Name-as-sugar stays unimplemented; the
+policy kind is reachable from SQL as `LW_COMPONENT('LadingMount')` where a
+host registers `ladingpolicy.PolicyComponentSQL` (play does). The first
+consumer is the sqlapplet book `lading`, whose nine chapters run the §7
+catalogue.
+
 ## References
 
 - [The snapshot-store note](../adr-background-work/iofs-clickhouse-snapshot-store.md)

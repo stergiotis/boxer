@@ -276,10 +276,12 @@ func TestCorpusStaysValid(t *testing.T) {
 // Regenerate with BOXER_LADINGSQL_GOLDEN_REGEN=1.
 func TestExpansionGoldens(t *testing.T) {
 	cases := map[string]string{
-		"entries-latest": "SELECT path, size FROM fs(4322952322827452417) WHERE NOT is_dir ORDER BY size DESC LIMIT 20",
-		"entries-all":    "SELECT snap, path FROM fs(4322952322827452417, '*') ORDER BY snap",
-		"entries-pinned": "SELECT path FROM fs(4322952322827452417, '2026-08-20 01:02:03')",
-		"blocks-latest":  "SELECT path, line0, data FROM fsdata(4322952322827452417)",
+		"entries-latest":        "SELECT path, size FROM fs(4322952322827452417) WHERE NOT is_dir ORDER BY size DESC LIMIT 20",
+		"entries-all":           "SELECT snap, path FROM fs(4322952322827452417, '*') ORDER BY snap",
+		"entries-pinned":        "SELECT path FROM fs(4322952322827452417, '2026-08-20 01:02:03')",
+		"blocks-latest":         "SELECT path, line0, data FROM fsdata(4322952322827452417)",
+		"entries-every-mount":   "SELECT mount, path, size FROM fs('*') WHERE NOT is_dir",
+		"snapshots-every-mount": "SELECT mount, snap, snap_entries FROM fssnap('*') ORDER BY snap DESC",
 	}
 	for name, sql := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -299,4 +301,100 @@ func TestExpansionGoldens(t *testing.T) {
 			assert.Equal(t, strings.TrimRight(string(want), "\n"), got)
 		})
 	}
+}
+
+// TestSlotArgumentsResolveFromThePrelude — ADR-0200 §SD6: a macro argument may
+// be a `{name:Type}` slot the prelude binds, so a book chapter or a play buffer
+// takes the mount as a knob rather than a literal. The expansion must be the
+// literal expansion, because the visibility check and the snapshot resolution
+// need the value at expansion time.
+func TestSlotArgumentsResolveFromThePrelude(t *testing.T) {
+	literal := expandOK(t, "SELECT path FROM fs(4322952322827452417)")
+	bound := expandOK(t, "SET param_m = 4322952322827452417;\nSELECT path FROM fs({m:UInt64})")
+	assert.True(t, strings.HasSuffix(bound, literal), "a bound slot expands exactly as the literal would\n%s", bound)
+
+	hex := expandOK(t, "SET param_m = '0x3BFE363BCF148001';\nSELECT path FROM fs({m:String})")
+	assert.True(t, strings.HasSuffix(hex, literal), "a string-bound hex id is the same mount")
+
+	allLiteral := expandOK(t, "SELECT snap FROM fs(4322952322827452417, '*')")
+	allBound := expandOK(t, "SET param_s = '*';\nSELECT snap FROM fs(4322952322827452417, {s:String})")
+	assert.True(t, strings.HasSuffix(allBound, allLiteral), "the snapshot argument takes a slot too")
+
+	both := expandOK(t, "SET param_m = 4322952322827452417;\nSET param_s = '*';\nSELECT snap FROM fssnap({m:UInt64})")
+	assert.Contains(t, both, "4322952322827452417")
+}
+
+// TestUnboundSlotIsRefused. A signal cannot feed a macro argument: without a
+// value there is nothing to check visibility against, and a refusal that
+// names the slot beats a statement that silently reads nothing.
+func TestUnboundSlotIsRefused(t *testing.T) {
+	_, err := ladingsql.Expand(openCfg(), "SELECT path FROM fs({m:UInt64})")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ladingsql.ErrUnboundSlot)
+	assert.Contains(t, err.Error(), "param_m")
+
+	_, err = ladingsql.Expand(openCfg(), "SET param_m = 4322952322827452417;\nSELECT path FROM fs({m:UInt64} + 1)")
+	assert.Error(t, err, "an expression around a slot is still an expression")
+
+	// A bound slot is checked against visibility like a literal.
+	_, err = ladingsql.Expand(ladingsql.Config{Visibility: ladingsql.VisibleSet{}},
+		"SET param_m = 4322952322827452417;\nSELECT path FROM fs({m:UInt64})")
+	assert.Error(t, err, "the bound mount is subject to the visibility check")
+}
+
+// TestReferencesThroughSlots. A dispatcher sees the mount when the prelude
+// binds it, and still sees *a* lading read when it does not.
+func TestReferencesThroughSlots(t *testing.T) {
+	got := ladingsql.References("SET param_m = 4322952322827452417;\nSELECT * FROM fs({m:UInt64})")
+	assert.Equal(t, []ladingsql.Reference{{Mount: testMount, Func: ladingsql.FuncEntries}}, got)
+
+	unbound := ladingsql.References("SELECT * FROM fs({m:UInt64}) JOIN fsdata({m:UInt64}) USING path")
+	require.Len(t, unbound, 2, "an unbound slot is still a reference, per macro")
+	assert.Equal(t, identifier.TaggedId(0), unbound[0].Mount)
+	assert.Equal(t, "fs({…})", unbound[0].String())
+	assert.Equal(t, "fsdata({…})", unbound[1].String())
+}
+
+// TestEveryMount — `'*'` as the mount: every mount the caller may see. The
+// scope is a predicate the expansion derives from the visibility, so only an
+// enumerable visibility admits it (ADR-0200 §SD6).
+func TestEveryMount(t *testing.T) {
+	out := expandOK(t, "SELECT mount, snap, snap_entries FROM fssnap('*')")
+	assert.NotContains(t, out, `"id:id:u64:47::0:" =`, "VisibleAll: no id predicate at all")
+	assert.Contains(t, out, `"lc:expiresAt:z64:4::0:" > now64(9, 'UTC')`, "the cutoff still rides")
+
+	latest := expandOK(t, "SELECT mount, path FROM fs('*')")
+	assert.Contains(t, latest, "GROUP BY", "the newest snapshot is resolved per mount")
+	assert.Contains(t, latest, ") IN (SELECT", "as a set of (mount, snapshot) pairs, not a correlated scalar")
+
+	all := expandOK(t, "SELECT mount, path FROM fs('*', '*')")
+	assert.Contains(t, all, ") IN (SELECT", "every complete snapshot of every mount: the pairs")
+	assert.NotContains(t, all, "GROUP BY")
+
+	set := ladingsql.VisibleSet{testMount: {}, testMount + 1: {}}
+	narrowed, err := ladingsql.Expand(ladingsql.Config{Visibility: set}, "SELECT mount FROM fssnap('*')")
+	require.NoError(t, err)
+	assert.Contains(t, narrowed, `IN (4322952322827452417, 4322952322827452418)`, "a set enumerates, sorted")
+
+	_, err = ladingsql.Expand(ladingsql.Config{Visibility: ladingsql.VisibleSet{}}, "SELECT mount FROM fssnap('*')")
+	assert.Error(t, err, "an empty set sees no mount")
+	_, err = ladingsql.Expand(ladingsql.Config{Visibility: ladingsql.VisibleUnderTag{testMount.GetTag()}}, "SELECT mount FROM fssnap('*')")
+	assert.Error(t, err, "a yes/no oracle cannot scope a wildcard")
+	_, err = ladingsql.Expand(ladingsql.Config{}, "SELECT mount FROM fssnap('*')")
+	assert.Error(t, err, "nil visibility refuses the wildcard too")
+
+	refs := ladingsql.References("SELECT mount FROM fssnap('*')")
+	assert.Equal(t, []ladingsql.Reference{{Func: ladingsql.FuncSnapshots, All: true}}, refs)
+	assert.Equal(t, "fssnap('*')", refs[0].String())
+}
+
+// TestLatestIsANameToo. A bound snapshot knob cannot be omitted, so 'latest'
+// spells what omission means — and it is the SFTP head's name for the same
+// snapshot.
+func TestLatestIsANameToo(t *testing.T) {
+	omitted := expandOK(t, "SELECT path FROM fs(4322952322827452417)")
+	named := expandOK(t, "SELECT path FROM fs(4322952322827452417, 'latest')")
+	assert.Equal(t, omitted, named)
+	bound := expandOK(t, "SET param_s = 'latest';\nSELECT path FROM fs(4322952322827452417, {s:String})")
+	assert.True(t, strings.HasSuffix(bound, omitted))
 }

@@ -33,12 +33,15 @@
 package ladingsql
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
@@ -68,6 +71,21 @@ const (
 // every complete one of the mount — `fs(m, '*')`. It is what makes history and
 // diff ordinary queries rather than a separate surface.
 const AllSnapshots = "*"
+
+// AllMounts is the first argument that widens a call from one mount to every
+// mount the caller may see — `fssnap('*')` is the store's snapshot ledger,
+// `fs('*')` every visible mount's newest complete snapshot. It needs a
+// visibility the expansion can enumerate: [VisibleAll] (no predicate) or a
+// [VisibleSet] (an `IN` list); any other [MountVisibilityI] refuses it, because
+// a predicate cannot be derived from a yes/no oracle (ADR-0200 §SD6).
+const AllMounts = "*"
+
+// LatestSnapshot is the second argument that names the newest complete
+// snapshot explicitly — `fs(m, 'latest')` is `fs(m)`. It exists so a
+// prelude-bound snapshot knob has a value that means "newest" (a bound slot
+// cannot be omitted), and it is the name the SFTP head gives the same
+// snapshot, so the two surfaces agree on the word.
+const LatestSnapshot = "latest"
 
 // MountVisibilityI decides which mounts a statement may read.
 //
@@ -147,15 +165,20 @@ type Config struct {
 // same way `keelson()` and `docsearch()` refuse.
 func ExpandPass(cfg Config) nanopass.Pass {
 	cfg = cfg.withDefaults()
-	return nanopass.LiftBodyPass(
-		"LadingExpand",
-		func(sql string) (string, error) { return expand(cfg, sql) },
-		nanopass.PassProperties{
+	return nanopass.Pass{
+		Name: "LadingExpand",
+		// Env-aware rather than a lifted body pass: a macro argument may be a
+		// `{name:Type}` slot the prelude binds (ADR-0200 §SD6), and the
+		// bound value lives in the environment, not the body.
+		Apply: func(e *env.Environment, body string) (string, error) {
+			return expand(cfg, e, body)
+		},
+		Properties: nanopass.PassProperties{
 			Idempotent: true,
-			Reads:      nanopass.RegionBody,
+			Reads:      nanopass.RegionBody | nanopass.RegionParams,
 			Writes:     nanopass.RegionBody,
 		},
-	)
+	}
 }
 
 // Expand runs [ExpandPass] over one statement.
@@ -170,11 +193,24 @@ func Expand(cfg Config, sql string) (result string, err error) {
 type Reference struct {
 	Mount identifier.TaggedId
 	Func  string
+	// All is a wildcard call, `fs('*')`: every visible mount, Mount unset.
+	All bool
+	// Unbound is a call whose mount is a parameter slot the prelude did not
+	// bind: the statement reads a lading store, which is the fact a dispatcher
+	// needs, but which mount is not knowable until the slot is bound.
+	Unbound bool
 }
 
 // String is the reference as the author wrote it.
 func (inst Reference) String() string {
-	return inst.Func + "(" + strconv.FormatUint(inst.Mount.Value(), 10) + ")"
+	switch {
+	case inst.All:
+		return inst.Func + "('*')"
+	case inst.Unbound:
+		return inst.Func + "({…})"
+	default:
+		return inst.Func + "(" + strconv.FormatUint(inst.Mount.Value(), 10) + ")"
+	}
 }
 
 // References reports the mounts sql addresses through any of the macros, in
@@ -186,7 +222,13 @@ func (inst Reference) String() string {
 // nothing rather than an error, because the same statement surfaces a precise
 // error when it expands. It is what a dispatcher routes on.
 func References(sql string) (refs []Reference) {
-	pr, err := nanopass.Parse(sql)
+	// The prelude may bind a slot the call names (§SD6); Extract is
+	// best-effort and yields the body alone when there is no prelude.
+	e, body, err := env.Extract(sql)
+	if err != nil {
+		e, body = nil, sql
+	}
+	pr, err := nanopass.Parse(body)
 	if err != nil {
 		return nil
 	}
@@ -194,24 +236,27 @@ func References(sql string) (refs []Reference) {
 	if len(calls) == 0 {
 		return nil
 	}
-	type key struct {
-		mount identifier.TaggedId
-		fn    string
-	}
-	seen := make(map[key]struct{}, len(calls))
+	seen := make(map[Reference]struct{}, len(calls))
 	refs = make([]Reference, 0, len(calls))
 	for _, c := range calls {
-		mount, _, argErr := callArgs(c.node)
-		if argErr != nil {
+		mount, _, argErr := callArgs(e, c.node)
+		ref := Reference{Func: strings.ToLower(nanopass.DecodeIdentifier(c.node.Identifier().GetText()))}
+		switch {
+		case argErr != nil && errors.Is(argErr, ErrUnboundSlot):
+			// Still a lading read; which mount is not knowable until bound.
+			ref.Unbound = true
+		case argErr != nil:
+			continue
+		case mount.all:
+			ref.All = true
+		default:
+			ref.Mount = mount.id
+		}
+		if _, dup := seen[ref]; dup {
 			continue
 		}
-		name := nanopass.DecodeIdentifier(c.node.Identifier().GetText())
-		k := key{mount: mount, fn: strings.ToLower(name)}
-		if _, dup := seen[k]; dup {
-			continue
-		}
-		seen[k] = struct{}{}
-		refs = append(refs, Reference{Mount: mount, Func: k.fn})
+		seen[ref] = struct{}{}
+		refs = append(refs, ref)
 	}
 	if len(refs) == 0 {
 		return nil
@@ -248,7 +293,7 @@ type call struct {
 }
 
 // expand replaces every macro call in sql.
-func expand(cfg Config, sql string) (result string, err error) {
+func expand(cfg Config, e *env.Environment, sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("parse: %w", err)
@@ -260,15 +305,14 @@ func expand(cfg Config, sql string) (result string, err error) {
 	}
 	rw := nanopass.NewRewriter(pr)
 	for _, c := range calls {
-		var mount identifier.TaggedId
+		var mount mountArg
 		var snap snapshotArg
-		mount, snap, err = callArgs(c.node)
+		mount, snap, err = callArgs(e, c.node)
 		if err != nil {
 			return "", err
 		}
-		if cfg.Visibility == nil || !cfg.Visibility.VisibleMount(mount) {
-			err = eb.Build().Uint64("mount", mount.Value()).
-				Errorf("mount %d is not visible to this caller", mount.Value())
+		mount, err = cfg.scopeMount(mount)
+		if err != nil {
 			return "", err
 		}
 		var sub string
@@ -291,6 +335,38 @@ func expand(cfg Config, sql string) (result string, err error) {
 // The predicate lives here alone so the fact extraction ([References]) and the
 // rewrite can never drift about what counts as a call — a scalar `fs(1)` in a
 // SELECT list is not a TableFunctionExpr and so is invisible to both.
+// scopeMount applies the visibility: a single mount is checked, a wildcard
+// is enumerated from a VisibleSet or left open under VisibleAll, and refused
+// under anything else — a yes/no oracle cannot yield a predicate.
+func (inst Config) scopeMount(mount mountArg) (out mountArg, err error) {
+	out = mount
+	if !mount.all {
+		if inst.Visibility == nil || !inst.Visibility.VisibleMount(mount.id) {
+			err = eb.Build().Uint64("mount", mount.id.Value()).
+				Errorf("mount %d is not visible to this caller", mount.id.Value())
+		}
+		return
+	}
+	switch vis := inst.Visibility.(type) {
+	case VisibleAll:
+		return
+	case VisibleSet:
+		if len(vis) == 0 {
+			err = eh.New("'*' names every visible mount, and none is visible to this caller")
+			return
+		}
+		out.ids = make([]identifier.TaggedId, 0, len(vis))
+		for id := range vis {
+			out.ids = append(out.ids, id)
+		}
+		slices.Sort(out.ids)
+		return
+	default:
+		err = eh.New("'*' names every visible mount, which needs a visibility the expansion can enumerate (VisibleAll or a VisibleSet)")
+		return
+	}
+}
+
 func findCalls(pr *nanopass.ParseResult) (calls []call) {
 	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		fn, ok := ctx.(*grammar1.TableFunctionExprContext)
@@ -336,6 +412,35 @@ func relationOf(name string) relationE {
 }
 
 // snapshotArg is which snapshot (or snapshots) a call names.
+// mountArg is the resolved first argument of a call: one mount, or every
+// visible mount with the enumeration the visibility allows.
+type mountArg struct {
+	// all is fs('*'): every visible mount.
+	all bool
+	// id is the one mount, when !all.
+	id identifier.TaggedId
+	// ids narrows a wildcard to an enumerated set (a VisibleSet); empty with
+	// all set means every mount, no predicate.
+	ids []identifier.TaggedId
+}
+
+// predicate renders the mount scope as a predicate on the id plain; ok is
+// false for "every mount", which needs none.
+func (inst mountArg) predicate() (pred string, ok bool) {
+	switch {
+	case !inst.all:
+		return fmt.Sprintf("%s = %d", colID, inst.id.Value()), true
+	case len(inst.ids) > 0:
+		parts := make([]string, len(inst.ids))
+		for i, id := range inst.ids {
+			parts[i] = strconv.FormatUint(id.Value(), 10)
+		}
+		return fmt.Sprintf("%s IN (%s)", colID, strings.Join(parts, ", ")), true
+	default:
+		return "", false
+	}
+}
+
 type snapshotArg struct {
 	// all is fs(m, '*'): every complete snapshot of the mount.
 	all bool
@@ -357,7 +462,7 @@ type snapshotArg struct {
 // conversions, which is not a stylistic choice: `toDateTime64(n, 9)` reads a
 // plain number as *seconds* whatever the scale says, so nanoseconds handed to
 // it saturate to the year 2262 and the predicate silently matches nothing.
-func callArgs(fn *grammar1.TableFunctionExprContext) (mount identifier.TaggedId, snap snapshotArg, err error) {
+func callArgs(e *env.Environment, fn *grammar1.TableFunctionExprContext) (mount mountArg, snap snapshotArg, err error) {
 	al := fn.TableArgList()
 	if al == nil {
 		err = eh.Errorf("%s() needs a mount id", callName(fn))
@@ -370,35 +475,49 @@ func callArgs(fn *grammar1.TableFunctionExprContext) (mount identifier.TaggedId,
 		return
 	}
 
-	raw, isString, ok := literalOf(args[0])
+	raw, isString, ok, aerr := argValue(e, args[0])
+	if aerr != nil {
+		err = eh.Errorf("%s() mount: %w", callName(fn), aerr)
+		return
+	}
 	if !ok {
-		err = eh.Errorf("%s() mount must be a literal id, not an expression", callName(fn))
+		err = eh.Errorf("%s() mount must be a literal id or a bound {name:Type} slot, not an expression", callName(fn))
 		return
 	}
-	value, perr := parseMountID(raw, isString)
-	if perr != nil {
-		err = eh.Errorf("%s(): %w", callName(fn), perr)
-		return
-	}
-	mount = value
-	if !mount.IsValid() {
-		err = eb.Build().Uint64("mount", mount.Value()).
-			Errorf("%s() mount id is not a valid tagged id", callName(fn))
-		return
+	if isString && raw == AllMounts {
+		mount.all = true
+	} else {
+		value, perr := parseMountID(raw, isString)
+		if perr != nil {
+			err = eh.Errorf("%s(): %w", callName(fn), perr)
+			return
+		}
+		mount.id = value
+		if !mount.id.IsValid() {
+			err = eb.Build().Uint64("mount", mount.id.Value()).
+				Errorf("%s() mount id is not a valid tagged id", callName(fn))
+			return
+		}
 	}
 
 	if len(args) == 1 {
 		snap.latest = true
 		return
 	}
-	raw, isString, ok = literalOf(args[1])
+	raw, isString, ok, aerr = argValue(e, args[1])
+	if aerr != nil {
+		err = eh.Errorf("%s() snapshot: %w", callName(fn), aerr)
+		return
+	}
 	if !ok {
-		err = eh.Errorf("%s() snapshot must be a literal, not an expression", callName(fn))
+		err = eh.Errorf("%s() snapshot must be a literal or a bound {name:Type} slot, not an expression", callName(fn))
 		return
 	}
 	switch {
 	case isString && raw == AllSnapshots:
 		snap.all = true
+	case isString && strings.EqualFold(raw, LatestSnapshot):
+		snap.latest = true
 	case isString:
 		snap.expr = "toDateTime64(" + ladingschema.QuoteLiteral(raw) + ", 9, 'UTC')"
 	default:
@@ -436,6 +555,58 @@ func parseMountID(raw string, isString bool) (mount identifier.TaggedId, err err
 
 // literalOf reads one table argument as a literal, reporting whether it was
 // quoted.
+// ErrUnboundSlot is returned when a macro argument is a `{name:Type}` slot
+// the prelude does not bind. The value is needed at expansion — the
+// visibility check and the snapshot resolution both depend on it — so a
+// signal cannot feed a macro argument; a `SET param_name = …` line can.
+var ErrUnboundSlot = errors.New("lading: parameter slot is not bound in the prelude")
+
+// argValue reads one macro argument as the text of its value: a literal as
+// written, or the prelude-bound value of a `{name:Type}` slot (ADR-0200
+// §SD6). ok is false for anything else — an expression, a nested call — and
+// err carries [ErrUnboundSlot] for a slot with no binding.
+func argValue(e *env.Environment, arg grammar1.ITableArgExprContext) (raw string, isString bool, ok bool, err error) {
+	if raw, isString, ok = literalOf(arg); ok {
+		return
+	}
+	name, isSlot := slotOf(arg)
+	if !isSlot {
+		return "", false, false, nil
+	}
+	// env.Extract files a `SET param_m = …` line under its full key and the
+	// body's `{m:Type}` slot under the bare name; the binding is wherever Raw
+	// is, so both are consulted.
+	var bound env.Param
+	if e != nil {
+		bound = e.Params[name]
+		if bound.Raw == "" {
+			bound = e.Params[env.ParamPrefix+name]
+		}
+	}
+	if bound.Raw == "" {
+		err = eb.Build().Str("slot", name).Errorf("%w: {%s} — SET param_%s = … in the prelude, or write the value", ErrUnboundSlot, name, name)
+		return
+	}
+	text := bound.Raw
+	if len(text) >= 2 && text[0] == '\'' && text[len(text)-1] == '\'' {
+		return ladingschema.UnquoteLiteral(text[1 : len(text)-1]), true, true, nil
+	}
+	return text, false, true, nil
+}
+
+// slotOf reports the slot name when arg is a bare `{name:Type}` parameter.
+func slotOf(arg grammar1.ITableArgExprContext) (name string, ok bool) {
+	ce := arg.ColumnExpr()
+	if ce == nil {
+		return
+	}
+	ps, isSlot := ce.(*grammar1.ColumnExprParamSlotContext)
+	if !isSlot || ps.ParamSlot() == nil || ps.ParamSlot().Identifier() == nil {
+		return
+	}
+	return nanopass.DecodeIdentifier(ps.ParamSlot().Identifier().GetText()), true
+}
+
 func literalOf(arg grammar1.ITableArgExprContext) (raw string, isString bool, ok bool) {
 	lit := arg.Literal()
 	if lit == nil {

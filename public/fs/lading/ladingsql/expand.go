@@ -7,7 +7,6 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingmeta"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
-	"github.com/stergiotis/boxer/public/identity/identifier"
 )
 
 // The store's own coordinates, as the defaults a Config leaves empty take.
@@ -55,7 +54,7 @@ var notExpired = colExpiresAt + " > now64(9, 'UTC')"
 // Two levels, and the inner one earns its keep: the generated Projection is a
 // single named-tuple expression, so evaluating it once and naming its elements
 // above costs one pass over the leeway lanes rather than one per column.
-func (inst Config) entriesSubquery(mount identifier.TaggedId, snap snapshotArg) string {
+func (inst Config) entriesSubquery(mount mountArg, snap snapshotArg) string {
 	art := ladingmeta.MetaComponentSQL.Kinds[kindEntry]
 	inner := fmt.Sprintf("SELECT %s AS e, name, dir, depth, ext, %s AS expires_at FROM %s WHERE %s",
 		art.Projection, colExpiresAt, inst.qualified(inst.MetaTable),
@@ -98,7 +97,7 @@ func (inst Config) entriesSubquery(mount identifier.TaggedId, snap snapshotArg) 
 // file's blocks one contiguous range. The suffix is always five bytes, so the
 // split is arithmetic rather than a search — and big-endian, so `reverse`
 // before reinterpreting on a little-endian engine.
-func (inst Config) blocksSubquery(mount identifier.TaggedId, snap snapshotArg) string {
+func (inst Config) blocksSubquery(mount mountArg, snap snapshotArg) string {
 	art := ladingdata.DataComponentSQL.Kinds[kindBlock]
 	inner := fmt.Sprintf("SELECT %s AS b, %s AS nk, %s AS expires_at FROM %s WHERE %s",
 		art.Projection, colNaturalKey, colExpiresAt, inst.qualified(inst.DataTable),
@@ -124,7 +123,7 @@ func (inst Config) blocksSubquery(mount identifier.TaggedId, snap snapshotArg) s
 // because the materialised view copied a root row, and a root row exists only
 // because a walk finished. There is no `path` column: the grain is a snapshot,
 // not a node.
-func (inst Config) snapshotsSubquery(mount identifier.TaggedId, snap snapshotArg) string {
+func (inst Config) snapshotsSubquery(mount mountArg, snap snapshotArg) string {
 	art := ladingmeta.MetaComponentSQL.Kinds[kindSnapshot]
 	// A pinned or '*' call still means "of these snapshots", so the same
 	// pinning applies — but the index IS the set of complete snapshots, so a
@@ -158,25 +157,51 @@ func (inst Config) snapshotsSubquery(mount identifier.TaggedId, snap snapshotArg
 // value. Presence is the cheap half and it is the half that matters, because
 // `has` over a membership lane prunes granules through a skip index where
 // `countEqual` never does.
-func (inst Config) where(mount identifier.TaggedId, snap snapshotArg, presence string) string {
-	parts := []string{
-		fmt.Sprintf("%s = %d", colID, mount.Value()),
-		notExpired,
+func (inst Config) where(mount mountArg, snap snapshotArg, presence string) string {
+	parts := make([]string, 0, 4)
+	if pred, ok := mount.predicate(); ok {
+		parts = append(parts, pred)
 	}
+	parts = append(parts, notExpired)
 	switch {
+	case snap.all && mount.all:
+		// Every visible mount, every complete snapshot: the pair is the key.
+		parts = append(parts, fmt.Sprintf("(%s, %s) IN (%s)", colID, colTs, inst.completeSnapshotsOfEvery(mount)))
 	case snap.all:
 		parts = append(parts, fmt.Sprintf("%s IN (%s)", colTs, inst.completeSnapshots(mount)))
+	case snap.latest && mount.all:
+		// The newest complete snapshot *per mount*, as a set of pairs rather
+		// than a correlated scalar: one index read, no per-row subquery.
+		parts = append(parts, fmt.Sprintf("(%s, %s) IN (SELECT %s, max(%s) FROM %s WHERE %s GROUP BY %s)",
+			colID, colTs, colID, colTs, inst.qualified(inst.SnapTable), inst.scopeWhere(mount), colID))
 	case snap.latest:
 		// max() over an empty set is the type's default rather than NULL, so a
 		// mount with no complete snapshot resolves to the epoch and matches no
 		// row — which is the answer, not an error.
 		parts = append(parts, fmt.Sprintf("%s = (SELECT max(%s) FROM %s WHERE %s = %d AND %s)",
-			colTs, colTs, inst.qualified(inst.SnapTable), colID, mount.Value(), notExpired))
+			colTs, colTs, inst.qualified(inst.SnapTable), colID, mount.id.Value(), notExpired))
 	default:
 		parts = append(parts, colTs+" = "+snap.expr)
 	}
 	parts = append(parts, "("+presence+")")
 	return strings.Join(parts, " AND ")
+}
+
+// scopeWhere is the mount scope as a predicate over the index: the cutoff,
+// narrowed to one mount or to an enumerated set, or the cutoff alone for every
+// mount.
+func (inst Config) scopeWhere(mount mountArg) string {
+	if pred, ok := mount.predicate(); ok {
+		return pred + " AND " + notExpired
+	}
+	return notExpired
+}
+
+// completeSnapshotsOfEvery is completeSnapshots for a wildcard mount: the
+// `(id, ts)` pairs of every complete, unexpired snapshot in scope.
+func (inst Config) completeSnapshotsOfEvery(mount mountArg) string {
+	return fmt.Sprintf("SELECT %s, %s FROM %s WHERE %s",
+		colID, colTs, inst.qualified(inst.SnapTable), inst.scopeWhere(mount))
 }
 
 // completeSnapshots is the set of a mount's complete snapshots.
@@ -186,7 +211,7 @@ func (inst Config) where(mount identifier.TaggedId, snap snapshotArg, presence s
 // copied a root row there, and a root row exists only because a walk finished
 // (§SD6). A walk that died half way cannot be selected here however many rows
 // it left behind.
-func (inst Config) completeSnapshots(mount identifier.TaggedId) string {
+func (inst Config) completeSnapshots(mount mountArg) string {
 	return fmt.Sprintf("SELECT %s FROM %s WHERE %s = %d AND %s",
-		colTs, inst.qualified(inst.SnapTable), colID, mount.Value(), notExpired)
+		colTs, inst.qualified(inst.SnapTable), colID, mount.id.Value(), notExpired)
 }
