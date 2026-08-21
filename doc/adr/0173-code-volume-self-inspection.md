@@ -499,10 +499,21 @@ what ships. Recorded so the granularity argument is not re-derived.
 
 **What it does buy** is two readings the package grain cannot express.
 
-- **Owners nobody chose.** Direct requirements name 74 owners here against a
-  build containing 235, so 161 (69%) arrive transitively; the second tree
-  chose 211 of 399, leaving 47%. A bigger dependency set is not automatically
-  a bigger unexamined one, and the split is the part a review can act on.
+- **Owners nobody chose.** Every manifest a maintainer edits — one `go.mod`
+  and four `Cargo.toml` here, 34 and 26 `package.json` there — names 76 of the
+  235 owners in this build, leaving 159 (68%) arriving transitively; the second
+  tree names 212 of 399, leaving 47%. A bigger dependency set is not
+  automatically a bigger unexamined one, and the split is the part a review can
+  act on.
+
+  Split by half, it localises to one artifact rather than to the repository:
+  the Go closure names 47 of its 75 owners and takes 15.0% of its branch points
+  from the rest, while the Rust client names 32 of 163 and takes **54.8%**. 51
+  crate names in the workspace manifests resolve to 433 crates from 163 owners.
+  That is the native-UI decision showing up as a trust structure rather than as
+  a line count, and it is the strongest argument for this column: no volume
+  lens separates those two halves, because the volume ratio is dominated by the
+  binding tables §SD13 discounts.
 - **Own code arriving as a dependency.** Grouping third-party rows by owner
   puts the vendor's own name in the third-party column wherever a program's
   code lives in more than one repository. It does not happen here — no
