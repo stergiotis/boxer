@@ -79,9 +79,9 @@ impl Soft {
     /// wants pixels (no viewer, no dump): deltas are incremental, so dropping
     /// them would permanently corrupt the renderer's texture state for a
     /// viewer that connects later. Mirrors `Gpu::apply_textures_only`.
-    pub fn apply_textures_only(&mut self, out: egui::FullOutput) {
-        self.render.set_textures(&out.textures_delta);
-        self.render.free_textures(&out.textures_delta);
+    pub fn apply_textures_only(&mut self, textures_delta: &egui::TexturesDelta) {
+        self.render.set_textures(textures_delta);
+        self.render.free_textures(textures_delta);
     }
 
     /// Adopt a new physical size and scale (viewport resize). Nothing to
@@ -95,17 +95,16 @@ impl Soft {
         self.pixels_per_point = pixels_per_point;
     }
 
-    /// Tessellate + rasterize one egui pass into `frame` as tightly-packed
+    /// Rasterize one already-tessellated pass into `frame` as tightly-packed
     /// BGRA. Same signature and same output as `Gpu::render_and_readback`,
     /// minus the readback — there is nothing to read back from.
     pub fn render_and_readback(
         &mut self,
-        ctx: &egui::Context,
-        out: egui::FullOutput,
+        clipped: &[egui::ClippedPrimitive],
+        textures_delta: &egui::TexturesDelta,
         frame: &mut Vec<u8>,
     ) -> Result<(), HeadlessError> {
         let (w, h) = (self.width_px as usize, self.height_px as usize);
-        let clipped = ctx.tessellate(out.shapes, out.pixels_per_point);
 
         frame.resize(w * h * 4, 0);
         // `[u8; 4]` is align-1 and `w * h * 4` divides by 4, so this cast can
@@ -120,12 +119,11 @@ impl Soft {
         pixels.fill([0, 0, 0, 255]);
 
         let mut buffer = BufferMutRef::new(pixels, w, h);
-        self.render.render(
-            &mut buffer,
-            &clipped,
-            &out.textures_delta,
-            out.pixels_per_point,
-        );
+        // `self.pixels_per_point`, not the pass's: it is the same value —
+        // `run_main_loop` feeds one scale into both `RawInput` and `resize` —
+        // and taking it from state is what keeps this symmetric with the wgpu
+        // host, which reads its own `ScreenDescriptor`.
+        self.render.render(&mut buffer, clipped, textures_delta, self.pixels_per_point);
         Ok(())
     }
 }

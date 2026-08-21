@@ -277,6 +277,20 @@ var (
 		Default:     "60",
 	})
 
+	// HeadlessRasterStats turns on the headless host's per-frame raster
+	// timer: microseconds spent turning one egui pass into a BGRA frame in
+	// host memory (tessellation, plus the render pass + readback on the wgpu
+	// host or the raster on the CPU host). A percentile summary is logged
+	// when the host exits. Sampled at the same point in both pixel hosts, so
+	// the two are directly comparable; off by default and costing one branch
+	// per frame when off. Not the FFFI dispatch cost — that is already
+	// reported to the Go side per frame (ADR-0062).
+	HeadlessRasterStats = env.NewBool(env.Spec{
+		Name:        "IMZERO2_HEADLESS_RASTER_STATS",
+		Description: "log a per-frame raster-cost percentile summary (tessellate + frame into host memory) when the headless host exits; comparable across the wgpu and CPU pixel hosts",
+		Category:    env.CategoryDev,
+	})
+
 	// HeadlessH264Out appends the raw Annex-B H.264 elementary stream to
 	// this file for verification. Empty disables.
 	HeadlessH264Out = env.NewPath(env.Spec{

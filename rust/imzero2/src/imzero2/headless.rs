@@ -316,8 +316,11 @@ struct Gpu {
 /// - `new(width_px, height_px, pixels_per_point) -> Result<Self, HeadlessError>`
 /// - `max_texture_side: usize` — the ceiling `clamp_resize` applies
 /// - `resize(width_px, height_px, pixels_per_point)`
-/// - `render_and_readback(&ctx, out, &mut frame)` — tightly-packed sRGB BGRA
-/// - `apply_textures_only(out)` — deltas only, for frames nobody consumes
+/// - `render_and_readback(&clipped, &textures_delta, &mut frame)` — tightly-
+///   packed sRGB BGRA. Takes an already-tessellated pass, so tessellation is
+///   the caller's cost and stays out of the host-to-host comparison.
+/// - `apply_textures_only(&textures_delta)` — deltas only, for frames nobody
+///   consumes
 ///
 /// Deliberately an alias rather than a trait: the choice is made at compile
 /// time by a feature, so a trait would buy dynamic dispatch nobody uses and
@@ -334,6 +337,146 @@ struct Gpu {
 type Raster = Gpu;
 #[cfg(all(feature = "headless_soft", not(feature = "headless_wgpu")))]
 type Raster = crate::imzero2::softraster::Soft;
+
+/// Per-frame cost of producing one BGRA frame in host memory, sampled at the
+/// one point both rasterizers share. What it spans is deliberately the whole
+/// comparable unit: tessellation plus whatever each host does to turn the
+/// result into bytes a sink can take — for wgpu that includes the render pass,
+/// the readback and the row unpad; for the CPU host, the clear and the raster.
+/// It is *not* the FFFI dispatch cost, which `ImZeroFffi::last_interpret_us`
+/// already reports to the Go side (ADR-0062).
+///
+/// Off unless `IMZERO2_HEADLESS_RASTER_STATS` is truthy, and when off it costs
+/// one branch per frame and never reads the clock.
+#[cfg(feature = "headless_raster")]
+struct RasterStats {
+    /// Per-frame microseconds. Capped so a long-lived served host cannot grow
+    /// this without bound; once full it reports what it has and stops sampling.
+    us: Vec<u32>,
+    /// The tessellation half, sampled on the same frames. Identical work under
+    /// either host, so reporting it separately is what lets a reader tell a
+    /// rasterizer difference from a scene that is simply expensive to
+    /// tessellate.
+    tess_us: Vec<u32>,
+    /// Shape of the most recent sampled frame: clipped primitives and the
+    /// triangles they carry. A CPU rasterizer's cost tracks covered pixels and
+    /// overdraw, so "how much was on screen" is the first thing to check when
+    /// two measurements of the same host disagree.
+    last_prims: usize,
+    last_tris: usize,
+    enabled: bool,
+    full_logged: bool,
+}
+
+#[cfg(feature = "headless_raster")]
+impl RasterStats {
+    const CAP: usize = 100_000;
+    /// Report cadence, in sampled frames. There is a report at exit too, but
+    /// a host is not always allowed to reach it — a scripted driver tears the
+    /// client down once it has its capture, and `play-screenshot-tour.sh`
+    /// does exactly that — so the periodic one is what usually carries the
+    /// numbers. Each report is cumulative, not per-window.
+    const EVERY: usize = 60;
+
+    fn from_env() -> Self {
+        let enabled = std::env::var("IMZERO2_HEADLESS_RASTER_STATS")
+            .map(|v| {
+                matches!(
+                    v.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false);
+        Self {
+            us: Vec::new(),
+            tess_us: Vec::new(),
+            last_prims: 0,
+            last_tris: 0,
+            enabled,
+            full_logged: false,
+        }
+    }
+
+    /// `None` when disabled, so the caller pays no clock read.
+    fn start(&self) -> Option<std::time::Instant> {
+        if self.enabled && self.us.len() < Self::CAP {
+            Some(std::time::Instant::now())
+        } else {
+            None
+        }
+    }
+
+    fn record_tessellate(
+        &mut self,
+        t: Option<std::time::Instant>,
+        clipped: &[egui::ClippedPrimitive],
+    ) {
+        if let Some(t) = t {
+            self.tess_us.push(t.elapsed().as_micros().min(u32::MAX as u128) as u32);
+            self.last_prims = clipped.len();
+            self.last_tris = clipped
+                .iter()
+                .map(|p| match &p.primitive {
+                    egui::epaint::Primitive::Mesh(m) => m.indices.len() / 3,
+                    egui::epaint::Primitive::Callback(_) => 0,
+                })
+                .sum();
+        }
+    }
+
+    fn record(&mut self, t: Option<std::time::Instant>, width_px: u32, height_px: u32) {
+        if let Some(t) = t {
+            self.us.push(t.elapsed().as_micros().min(u32::MAX as u128) as u32);
+            if self.us.len() % Self::EVERY == 0 {
+                self.report(width_px, height_px);
+            }
+            if self.us.len() == Self::CAP && !self.full_logged {
+                self.full_logged = true;
+                tracing::info!(
+                    cap = Self::CAP,
+                    "raster-stats sample buffer full — no longer sampling"
+                );
+            }
+        }
+    }
+
+    /// Percentiles rather than a mean: frame cost is bounded below by the work
+    /// and unbounded above by scheduling, so the tail is the interesting half.
+    fn report(&mut self, width_px: u32, height_px: u32) {
+        if !self.enabled || self.us.is_empty() {
+            return;
+        }
+        self.us.sort_unstable();
+        self.tess_us.sort_unstable();
+        let n = self.us.len();
+        let at = |q: f64| self.us[(((n - 1) as f64) * q).round() as usize];
+        let mean = self.us.iter().map(|&v| v as u64).sum::<u64>() as f64 / n as f64;
+        let tn = self.tess_us.len().max(1);
+        let tess_p50 = *self.tess_us.get(tn / 2).unwrap_or(&0);
+        let tess_mean = self.tess_us.iter().map(|&v| v as u64).sum::<u64>() as f64 / tn as f64;
+        tracing::info!(
+            backend = if cfg!(feature = "headless_wgpu") {
+                "wgpu"
+            } else {
+                "cpu"
+            },
+            frames = n,
+            width_px,
+            height_px,
+            mean_us = mean.round() as u64,
+            p50_us = at(0.50),
+            p90_us = at(0.90),
+            p99_us = at(0.99),
+            min_us = self.us[0],
+            max_us = self.us[n - 1],
+            tess_mean_us = tess_mean.round() as u64,
+            tess_p50_us = tess_p50,
+            prims = self.last_prims,
+            tris = self.last_tris,
+            "raster stats (per frame: rasterize, then tessellate separately)"
+        );
+    }
+}
 
 /// Render target format. `Bgra8Unorm` matches the common native surface
 /// format (egui_wgpu selects its gamma-aware shader path from it), so the
@@ -436,11 +579,11 @@ impl Gpu {
     /// dropping them would permanently corrupt the renderer's texture
     /// state for a viewer that connects later; the render pass and the
     /// readback are the only parts that can be skipped.
-    fn apply_textures_only(&mut self, out: egui::FullOutput) {
-        for (id, delta) in &out.textures_delta.set {
+    fn apply_textures_only(&mut self, textures_delta: &egui::TexturesDelta) {
+        for (id, delta) in &textures_delta.set {
             self.renderer.update_texture(&self.device, &self.queue, *id, delta);
         }
-        for id in &out.textures_delta.free {
+        for id in &textures_delta.free {
             self.renderer.free_texture(id);
         }
     }
@@ -484,19 +627,20 @@ impl Gpu {
         });
     }
 
-    /// Tessellate + render one egui pass into the offscreen target, copy it
+    /// Render one already-tessellated pass into the offscreen target, copy it
     /// to the staging buffer, and read it back as tightly-packed BGRA into
-    /// `frame` (reused across calls).
+    /// `frame` (reused across calls). Tessellation happens in the caller: it
+    /// is identical work under either host, and keeping it out of here is what
+    /// makes the two directly comparable (`IMZERO2_HEADLESS_RASTER_STATS`).
     fn render_and_readback(
         &mut self,
-        ctx: &egui::Context,
-        out: egui::FullOutput,
+        clipped: &[egui::ClippedPrimitive],
+        textures_delta: &egui::TexturesDelta,
         frame: &mut Vec<u8>,
     ) -> Result<(), HeadlessError> {
-        for (id, delta) in &out.textures_delta.set {
+        for (id, delta) in &textures_delta.set {
             self.renderer.update_texture(&self.device, &self.queue, *id, delta);
         }
-        let clipped = ctx.tessellate(out.shapes, out.pixels_per_point);
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("imzero2_headless_encoder"),
         });
@@ -504,7 +648,7 @@ impl Gpu {
             &self.device,
             &self.queue,
             &mut encoder,
-            &clipped,
+            clipped,
             &self.screen,
         );
         {
@@ -526,7 +670,7 @@ impl Gpu {
                     multiview_mask: None,
                 })
                 .forget_lifetime();
-            self.renderer.render(&mut pass, &clipped, &self.screen);
+            self.renderer.render(&mut pass, clipped, &self.screen);
         }
         encoder.copy_texture_to_buffer(
             self.texture.as_image_copy(),
@@ -540,7 +684,7 @@ impl Gpu {
             },
             self.extent,
         );
-        for id in &out.textures_delta.free {
+        for id in &textures_delta.free {
             self.renderer.free_texture(id);
         }
         self.queue.submit(user_cmds.into_iter().chain([encoder.finish()]));
@@ -805,6 +949,8 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     let mut accesskit_on = false;
     #[cfg(feature = "headless_raster")]
     let mut bgra_frame: Vec<u8> = Vec::new();
+    #[cfg(feature = "headless_raster")]
+    let mut raster_stats = RasterStats::from_env();
     let mut translator = InputTranslator::default();
     let mut wire_events: Vec<crate::imzero2::inputproto::input_event::Event> = Vec::new();
     let mut egui_events: Vec<egui::Event> = Vec::new();
@@ -1100,7 +1246,12 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 || capture.is_some()
                 || carrier.as_ref().map(|c| c.connected() && c.wants_pixels()).unwrap_or(false);
             if need_pixels {
-                raster.render_and_readback(&ctx, out, &mut bgra_frame)?;
+                let t_tess = raster_stats.start();
+                let clipped = ctx.tessellate(out.shapes, out.pixels_per_point);
+                raster_stats.record_tessellate(t_tess, &clipped);
+                let t_raster = raster_stats.start();
+                raster.render_and_readback(&clipped, &out.textures_delta, &mut bgra_frame)?;
+                raster_stats.record(t_raster, width_px, height_px);
                 for sink in &mut sinks {
                     sink.on_frame(&bgra_frame, width_px, height_px, frame_idx);
                 }
@@ -1148,7 +1299,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 // just-disconnected session's encoder promptly (a race to
                 // connected here only feeds a zero-length frame, which the
                 // encoder ignores).
-                raster.apply_textures_only(out);
+                raster.apply_textures_only(&out.textures_delta);
                 if let Some(c) = &mut carrier {
                     c.on_frame(&[], width_px, height_px, frame_idx);
                 }
@@ -1167,6 +1318,8 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             break;
         }
     }
+    #[cfg(feature = "headless_raster")]
+    raster_stats.report(width_px, height_px);
     tracing::info!(
         frames = frame_idx,
         elapsed_s = start.elapsed().as_secs_f64(),
