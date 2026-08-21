@@ -279,8 +279,9 @@ Proposed — awaiting review. Milestones:
   target) as a leeway-declared launch kind with a generated codec, declared
   on the manifest with `Workingset: true`; the window restores as a
   workingset and opens from a launch request; dirty means a choice made
-  after the mounts were known (2026-08-21). Column widths and the
-  acceptance flip remain.
+  after the mounts were known (2026-08-21). Column widths persist through
+  ADR-0151's resolver on every table — both panes in both modes, and the
+  five result tables (2026-08-21). The acceptance flip remains.
 
 ## Updates
 
@@ -356,9 +357,13 @@ records no snapshot, so a restore follows latest too rather than pinning
 what happened to be newest at close. Dirty tracking is play's: a baseline of
 the composed config, compared per frame; the baseline is taken only once
 the mount list has arrived, because the list filling an empty pane is the
-app's doing, not the reader's. Column-width persistence (ADR-0151) is not
-wired — the browser's columns are the widget's, and the widget has no
-resolver seam yet; it is the one M6 item left open, with the acceptance flip.
+app's doing, not the reader's. Column-width persistence (ADR-0151) landed the
+same day: the widget took a resolver as an input and runs the protocol itself
+(per view, with the widget's own drag floor), the tree widget gained the
+three fields the outline needed, and the app acquires one resolver on its
+first frame and hands it to every table. ADR-0151's update of the date has
+the detail and the honest limit — the headless lane cannot drag, so the
+round trip is proven by the widget's resolver test, not by a captured drag.
 
 ## References
 

@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
 
@@ -315,4 +316,22 @@ func TestParseMountText(t *testing.T) {
 	assert.False(t, ok)
 	_, ok = parseMountText("zz")
 	assert.False(t, ok)
+}
+
+func TestStringTableWidthColumns(t *testing.T) {
+	tb := stringTable{scopeKey: "diff-table", headers: []string{"path", "change"}, widths: []float32{360}}
+	cols := tb.widthColumns()
+	assert.Equal(t, []colwidth.Column{{Name: "path", Type: "text;view=diff-table"}, {Name: "change", Type: "text;view=diff-table"}}, cols)
+	assert.Equal(t, []float64{360, float64(tableDefaultWidth)}, tb.widthDefaults())
+	other := stringTable{scopeKey: "find-table", headers: []string{"path"}}
+	assert.NotEqual(t, cols[0], other.widthColumns()[0], "the same header in another table is another column")
+	assert.NotEqual(t, widthSignature(cols), widthSignature(cols[:1]))
+}
+
+func TestTablesAreWiredToTheResolver(t *testing.T) {
+	inst := newApp()
+	assert.Len(t, inst.tables(), 5)
+	for _, tb := range inst.tables() {
+		assert.Nil(t, tb.res, "no host store: no resolver")
+	}
 }

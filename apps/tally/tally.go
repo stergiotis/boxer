@@ -26,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
@@ -109,6 +110,12 @@ type App struct {
 	workingsetSeen      launchcfg.TallyLaunch
 	workingsetSeenTaken bool
 	workingsetDirty     bool
+
+	// column-width persistence (ADR-0151): acquired on the first frame from
+	// the host, nil when the host has no store — every table then renders
+	// its defaults and nothing persists.
+	colWidths     *colwidth.Resolver
+	colWidthsInit bool
 }
 
 var _ app.WorkingsetComposerI = (*App)(nil)
@@ -192,8 +199,62 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.ensureColWidths(ctx)
 	inst.renderBody()
+	inst.flushColWidths()
 	return
+}
+
+// ensureColWidths acquires the column-width store once, on a frame — it is a
+// frame-context capability (ADR-0155 §SD1), not a mount-time one — and
+// builds the resolver with the bounds the widget drags against, so a stored
+// width and a dragged one agree (ADR-0151, its 2026-08-16 updates).
+func (inst *App) ensureColWidths(ctx app.FrameContextI) {
+	if inst.colWidthsInit {
+		return
+	}
+	inst.colWidthsInit = true
+	h, ok := ctx.(colwidth.HostI)
+	if !ok {
+		return
+	}
+	store := h.ColumnWidthStore()
+	if store == nil {
+		return
+	}
+	res, err := colwidth.New(store, colwidth.Opts{
+		AppId:       ctx.AppId(),
+		InstanceKey: ctx.InstanceKey(),
+		MinPoints:   float64(fsbrowser.MinColumnWidth(inst.density)),
+		MaxPoints:   float64(fsbrowser.MaxColumnWidth),
+	})
+	if err != nil {
+		inst.log.Warn().Err(err).Msg("tally: column-width resolver unavailable")
+		return
+	}
+	if lerr := res.Load(); lerr != nil {
+		inst.log.Warn().Err(lerr).Msg("tally: stored column widths could not be loaded")
+	}
+	inst.colWidths = res
+	for _, t := range inst.tables() {
+		t.res = res
+	}
+}
+
+// tables is every result table the app owns, for wiring the resolver.
+func (inst *App) tables() []*stringTable {
+	return []*stringTable{&inst.historyTable, &inst.diffTable, &inst.find.table, &inst.duTable, &inst.problemsTable}
+}
+
+// flushColWidths writes captured widths once their debounce has passed; a
+// failed write stays dirty and retries next frame.
+func (inst *App) flushColWidths() {
+	if inst.colWidths == nil {
+		return
+	}
+	if _, err := inst.colWidths.Flush(time.Now()); err != nil {
+		inst.log.Warn().Err(err).Msg("tally: storing column widths failed; will retry")
+	}
 }
 
 // store is the connection once it is there; nil while connecting or failed.
@@ -612,6 +673,8 @@ func (inst *App) renderPane(sc *storeConn, id paneIDE) {
 		Mode:       p.mode,
 		ShowHidden: p.showHidden,
 		Striped:    true,
+		Widths:     inst.colWidths,
+		WidthTag:   "pane-" + id.String(),
 	})
 	if res.Err != nil {
 		inst.status = res.Err.Error()
