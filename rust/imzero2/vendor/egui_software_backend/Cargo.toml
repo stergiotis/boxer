@@ -1,0 +1,37 @@
+# VENDORED — see VENDORING.md in this directory for the upstream commit, the
+# exact deltas applied, and how to re-sync. Do not edit casually: every change
+# here widens the diff against upstream.
+
+[package]
+name = "egui_software_backend"
+description = "A CPU software render backend for egui."
+version = "0.0.3"
+edition = "2024"
+homepage = "https://github.com/DGriffin91/egui_software_backend"
+repository = "https://github.com/DGriffin91/egui_software_backend"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+keywords = ["egui", "raster", "software", "render", "softbuffer"]
+
+[dependencies]
+egui = { version = "0.35", default-features = false }
+strength_reduce = "0.2.4"
+constify = { path = "constify", version = "0.0.1" }
+ahash = { version = "0.8", default-features = false, features = ["no-rng"] }
+
+rayon = { version = "1.11.0", optional = true }
+log = { version = "0.4", optional = true }
+
+[features]
+default = ["std"]
+
+std = ["ahash/std"]
+
+## Turn on the `log` feature, that makes egui_software_backend log some errors using the [`log`](https://docs.rs/log) crate.
+log = ["dep:log"]
+
+## Enable parallel rasterization and compositing using [`rayon`](https://docs.rs/rayon).
+rayon = ["dep:rayon"]
+
+raster_stats = ["std"]
+

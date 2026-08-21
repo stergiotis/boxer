@@ -1,5 +1,10 @@
 [workspace]
 members = [".", "imzero2_egui"]
+# Vendored third-party source (vendor/egui_software_backend, see its
+# VENDORING.md) is a path dependency but NOT a member: `check.sh` runs
+# `cargo fmt --all` and `cargo clippy --workspace -- -D warnings`, and neither
+# should reformat or gate on code we did not write.
+exclude = ["vendor/egui_software_backend", "vendor/egui_software_backend/constify"]
 resolver = "2"
 
 [package]
@@ -59,7 +64,23 @@ headless = [
     "dep:prost",
     "dep:futures-util",
 ]
-headless_wgpu = ["headless", "dep:wgpu", "dep:egui-wgpu", "dep:pollster"]
+#
+# `headless_raster` is the capability both pixel hosts share: "this build can
+# rasterize a frame into host memory". Everything downstream of a frame — the
+# PNG dump, the ADR-0154 capture request, the ffmpeg encoder lane, the
+# carrier's video path — keys off it and does not care which rasterizer
+# produced the bytes. It is not meant to be selected on its own; pick one of
+# the two hosts below.
+headless_raster = ["headless"]
+headless_wgpu = ["headless_raster", "dep:wgpu", "dep:egui-wgpu", "dep:pollster"]
+# GPU-less pixel host: the same frames, rasterized on the CPU by the vendored
+# `egui_software_backend`. No wgpu, no Vulkan loader, no ICD — `cargo tree
+# --features headless_soft` carries none of it, and neither does the runtime
+# image. Mutually exclusive with `headless_wgpu` (headless.rs refuses to
+# compile with both); ffmpeg is still reachable, since the encoder takes BGRA
+# from host memory either way. See
+# doc/adr-background-work/egui-software-backend-survey.md.
+headless_soft = ["headless_raster", "dep:egui_software_backend", "dep:bytemuck"]
 # GPU-less, SVG-only host (headless_svg.rs). Drives the shared FFFI2
 # interpreter with `ctx.run_ui` and lets the always-registered SVG-export
 # plugin (apphost::init_common) write files on ExportSvg / ExportSvgWindow.
@@ -198,6 +219,23 @@ earcutr = "0.5"
 
 # IDS token layer (ADR-0029). Per-app-startup egui::Style overlay; no widgets.
 imzero2_egui = { path = "imzero2_egui" }
+
+# CPU rasterizer for the `headless_soft` host. Vendored rather than pulled from
+# crates.io — vendor/egui_software_backend/VENDORING.md carries the upstream
+# commit, the deltas and the reasoning. `std` buys runtime SIMD dispatch;
+# `log` routes the backend's own errors (e.g. an unsupported paint callback)
+# into the tracing subscriber. `rayon` stays off: it only parallelises the
+# caching path, which this host does not use.
+egui_software_backend = { path = "vendor/egui_software_backend", optional = true, default-features = false, features = [
+    "std",
+    "log",
+] }
+# One safe cast, in softraster.rs: the frame buffer is a `Vec<u8>` (what every
+# sink takes) and the rasterizer wants `&mut [[u8; 4]]`. `unsafe_code = "deny"`
+# rules out doing it by hand, and copying instead would cost a full-frame
+# memcpy per frame — more than the rasterization itself. Same crate epaint
+# uses, so it is one crate in the graph and no new supply-chain surface.
+bytemuck = { version = "1.25", optional = true, default-features = false }
 
 [profile.release]
 opt-level = 2

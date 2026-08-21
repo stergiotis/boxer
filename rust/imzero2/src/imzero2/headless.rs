@@ -69,9 +69,9 @@
 use crate::imzero2::appconfig::AppConfig;
 use crate::imzero2::apphost;
 use crate::imzero2::codeclane::{CodecLane, LaneProbe, VideoCodec};
-#[cfg(feature = "headless_wgpu")]
+#[cfg(feature = "headless_raster")]
 use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
-#[cfg(feature = "headless_wgpu")]
+#[cfg(feature = "headless_raster")]
 use crate::imzero2::framesink::{self, FrameSink, NullSink, PngDumpSink};
 use crate::imzero2::inputmap::{self, InputTranslator};
 use crate::imzero2::interpreter::InterpretError;
@@ -104,13 +104,13 @@ struct HeadlessOpts {
     fps: f32,
     max_frames: u64,
     /// PNG-dump directory — raster only, so `headless_wgpu`.
-    #[cfg(feature = "headless_wgpu")]
+    #[cfg(feature = "headless_raster")]
     dump_dir: Option<std::path::PathBuf>,
-    #[cfg(feature = "headless_wgpu")]
+    #[cfg(feature = "headless_raster")]
     dump_every: u64,
     pixels_per_point: f32,
     /// H.264 file-sink target — raster + encoder, so `headless_wgpu`.
-    #[cfg(feature = "headless_wgpu")]
+    #[cfg(feature = "headless_raster")]
     h264_out: Option<std::path::PathBuf>,
     lane: CodecLane,
     /// WebSocket carrier bind address (e.g. "127.0.0.1:8089"); the viewer
@@ -128,7 +128,7 @@ impl HeadlessOpts {
         fn parse<T: std::str::FromStr>(name: &str, default: T) -> T {
             std::env::var(name).ok().and_then(|v| v.parse::<T>().ok()).unwrap_or(default)
         }
-        #[cfg(feature = "headless_wgpu")]
+        #[cfg(feature = "headless_raster")]
         fn path_var(name: &str) -> Option<std::path::PathBuf> {
             std::env::var(name).ok().filter(|v| !v.is_empty()).map(std::path::PathBuf::from)
         }
@@ -151,25 +151,25 @@ impl HeadlessOpts {
         // VAAPI lane (CodecLane::best) would be pure startup cost (L2). The lean
         // (no-wgpu) build has no encoder at all, so it forces the mesh
         // draw-stream lane (ADR-0128 SD6) — the only lane it can serve.
-        #[cfg(feature = "headless_wgpu")]
+        #[cfg(feature = "headless_raster")]
         let h264_out = path_var("IMZERO2_HEADLESS_H264_OUT");
-        #[cfg(feature = "headless_wgpu")]
+        #[cfg(feature = "headless_raster")]
         let lane = if listen.is_some() || h264_out.is_some() {
             build_codec_lane()
         } else {
             CodecLane::software(VideoCodec::H264)
         };
-        #[cfg(not(feature = "headless_wgpu"))]
+        #[cfg(not(feature = "headless_raster"))]
         let lane = CodecLane::mesh();
         Self {
             fps: parse("IMZERO2_HEADLESS_FPS", 60.0f32).clamp(1.0, 240.0),
             max_frames: parse("IMZERO2_HEADLESS_MAX_FRAMES", 0u64),
-            #[cfg(feature = "headless_wgpu")]
+            #[cfg(feature = "headless_raster")]
             dump_dir: path_var("IMZERO2_HEADLESS_DUMP_DIR"),
-            #[cfg(feature = "headless_wgpu")]
+            #[cfg(feature = "headless_raster")]
             dump_every: parse("IMZERO2_HEADLESS_DUMP_EVERY", 60u64).max(1),
             pixels_per_point: parse("IMZERO2_HEADLESS_PIXELS_PER_POINT", 1.0f32).clamp(0.25, 4.0),
-            #[cfg(feature = "headless_wgpu")]
+            #[cfg(feature = "headless_raster")]
             h264_out,
             lane,
             listen,
@@ -191,7 +191,7 @@ impl HeadlessOpts {
 ///
 /// Under `headless_wgpu` only — the lean build has no encoder and forces the
 /// mesh lane (see [`HeadlessOpts::from_env`]).
-#[cfg(feature = "headless_wgpu")]
+#[cfg(feature = "headless_raster")]
 fn build_codec_lane() -> CodecLane {
     let codec = std::env::var("IMZERO2_HEADLESS_CODEC")
         .ok()
@@ -304,7 +304,36 @@ struct Gpu {
     unpadded_bytes_per_row: u32,
     padded_bytes_per_row: u32,
     max_texture_side: usize,
+    /// Physical size + scale handed to `egui_wgpu` each frame. Held here
+    /// rather than beside the loop so that both rasterizers present the same
+    /// surface behind [`Raster`] — the CPU one has no equivalent type.
+    screen: egui_wgpu::ScreenDescriptor,
 }
+
+/// The rasterizer this build uses. Both alternatives expose the same inherent
+/// surface, and `run_main_loop` is written against exactly that:
+///
+/// - `new(width_px, height_px, pixels_per_point) -> Result<Self, HeadlessError>`
+/// - `max_texture_side: usize` — the ceiling `clamp_resize` applies
+/// - `resize(width_px, height_px, pixels_per_point)`
+/// - `render_and_readback(&ctx, out, &mut frame)` — tightly-packed sRGB BGRA
+/// - `apply_textures_only(out)` — deltas only, for frames nobody consumes
+///
+/// Deliberately an alias rather than a trait: the choice is made at compile
+/// time by a feature, so a trait would buy dynamic dispatch nobody uses and
+/// force both hosts into the graph to name it.
+///
+/// The two are alternatives, and the build scripts each pass exactly one. A
+/// build carrying both (`--all-features`, or docs.rs) resolves to the GPU one
+/// — a precedence, not an error, mirroring how `main.rs` resolves
+/// desktop/headless/headless_svg when several are compiled in. There is no
+/// runtime switch to go with it: unlike those three, the choice here is what
+/// is in the dependency graph, and the point of `headless_soft` is a build
+/// where wgpu is absent.
+#[cfg(feature = "headless_wgpu")]
+type Raster = Gpu;
+#[cfg(all(feature = "headless_soft", not(feature = "headless_wgpu")))]
+type Raster = crate::imzero2::softraster::Soft;
 
 /// Render target format. `Bgra8Unorm` matches the common native surface
 /// format (egui_wgpu selects its gamma-aware shader path from it), so the
@@ -315,7 +344,7 @@ struct Gpu {
 const TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
 #[cfg(feature = "headless_wgpu")]
-fn init_gpu(width_px: u32, height_px: u32) -> Result<Gpu, HeadlessError> {
+fn init_gpu(width_px: u32, height_px: u32, pixels_per_point: f32) -> Result<Gpu, HeadlessError> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::from_env()
             .unwrap_or(wgpu::Backends::PRIMARY | wgpu::Backends::GL),
@@ -388,11 +417,20 @@ fn init_gpu(width_px: u32, height_px: u32) -> Result<Gpu, HeadlessError> {
         unpadded_bytes_per_row,
         padded_bytes_per_row,
         max_texture_side,
+        screen: egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [width_px, height_px],
+            pixels_per_point,
+        },
     })
 }
 
 #[cfg(feature = "headless_wgpu")]
 impl Gpu {
+    /// Mirrors `Soft::new` so the call site reads the same under either host.
+    fn new(width_px: u32, height_px: u32, pixels_per_point: f32) -> Result<Self, HeadlessError> {
+        init_gpu(width_px, height_px, pixels_per_point)
+    }
+
     /// Consume a pass's texture deltas without rendering. Used when no
     /// sink wants pixels (no viewer, no dump): deltas are incremental, so
     /// dropping them would permanently corrupt the renderer's texture
@@ -412,7 +450,11 @@ impl Gpu {
     /// over — the renderer is size-agnostic (the per-frame
     /// `ScreenDescriptor` carries dimensions) and its texture cache
     /// survives, so only the attachments are rebuilt.
-    fn resize(&mut self, width_px: u32, height_px: u32) {
+    fn resize(&mut self, width_px: u32, height_px: u32, pixels_per_point: f32) {
+        self.screen = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [width_px, height_px],
+            pixels_per_point,
+        };
         self.extent = wgpu::Extent3d {
             width: width_px,
             height: height_px,
@@ -449,7 +491,6 @@ impl Gpu {
         &mut self,
         ctx: &egui::Context,
         out: egui::FullOutput,
-        screen: &egui_wgpu::ScreenDescriptor,
         frame: &mut Vec<u8>,
     ) -> Result<(), HeadlessError> {
         for (id, delta) in &out.textures_delta.set {
@@ -459,8 +500,13 @@ impl Gpu {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("imzero2_headless_encoder"),
         });
-        let user_cmds =
-            self.renderer.update_buffers(&self.device, &self.queue, &mut encoder, &clipped, screen);
+        let user_cmds = self.renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &clipped,
+            &self.screen,
+        );
         {
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -480,7 +526,7 @@ impl Gpu {
                     multiview_mask: None,
                 })
                 .forget_lifetime();
-            self.renderer.render(&mut pass, &clipped, screen);
+            self.renderer.render(&mut pass, &clipped, &self.screen);
         }
         encoder.copy_texture_to_buffer(
             self.texture.as_image_copy(),
@@ -640,25 +686,21 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         "headless host up and running (ADR-0024 Phase 1)"
     );
 
-    // wgpu offscreen renderer — full build only. The lean (ADR-0128 SD6) build
-    // carries no GPU: it tessellates and serializes the mesh lane instead.
-    #[cfg(feature = "headless_wgpu")]
-    let mut gpu = init_gpu(width_px, height_px)?;
-    #[cfg(feature = "headless_wgpu")]
-    let mut screen = egui_wgpu::ScreenDescriptor {
-        size_in_pixels: [width_px, height_px],
-        pixels_per_point: ppp,
-    };
-    #[cfg(not(feature = "headless_wgpu"))]
+    // The rasterizer — pixel builds only (`headless_wgpu` offscreen on the GPU,
+    // or `headless_soft` on the CPU). The lean (ADR-0128 SD6) build has
+    // neither: it tessellates and serializes the mesh lane instead.
+    #[cfg(feature = "headless_raster")]
+    let mut raster = Raster::new(width_px, height_px, ppp)?;
+    #[cfg(not(feature = "headless_raster"))]
     tracing::info!(
-        "mesh-only appliance host (no-wgpu build, ADR-0128 SD6): the draw-stream lane is the only \
+        "mesh-only appliance host (no-raster build, ADR-0128 SD6): the draw-stream lane is the only \
          codec; video codecs, PNG dump (IMZERO2_HEADLESS_DUMP_DIR), and H264_OUT are unavailable here"
     );
-    // The GPU device reports a max texture side; without one (lean build) clamp
-    // resizes to a conservative WebGL2 MAX_TEXTURE_SIZE floor instead.
-    #[cfg(feature = "headless_wgpu")]
-    let max_texture_side = gpu.max_texture_side;
-    #[cfg(not(feature = "headless_wgpu"))]
+    // A wgpu device reports a max texture side; the CPU host and the lean build
+    // clamp resizes to a conservative WebGL2 MAX_TEXTURE_SIZE floor instead.
+    #[cfg(feature = "headless_raster")]
+    let max_texture_side = raster.max_texture_side;
+    #[cfg(not(feature = "headless_raster"))]
     let max_texture_side: usize = 8192;
 
     let ctx = egui::Context::default();
@@ -679,13 +721,13 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     );
 
     // Pixel sinks (PNG dump, H.264 file) — raster, so full build only.
-    #[cfg(feature = "headless_wgpu")]
+    #[cfg(feature = "headless_raster")]
     let mut sinks: Vec<Box<dyn FrameSink>> = Vec::new();
-    #[cfg(feature = "headless_wgpu")]
+    #[cfg(feature = "headless_raster")]
     if let Some(dir) = &opts.dump_dir {
         sinks.push(Box::new(PngDumpSink::new(dir.clone(), opts.dump_every)?));
     }
-    #[cfg(feature = "headless_wgpu")]
+    #[cfg(feature = "headless_raster")]
     if let Some(out) = &opts.h264_out {
         sinks.push(Box::new(EncoderSink::new(
             width_px,
@@ -724,7 +766,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     // carrier path below, so with no carrier it is pure startup cost (L2). The
     // lean build has no encoder at all — the probe is compiled out and the caps
     // stay empty, so `build_video_caps` offers only the mesh lane (ADR-0128).
-    #[cfg(feature = "headless_wgpu")]
+    #[cfg(feature = "headless_raster")]
     let host_encode_caps = if carrier.is_some() {
         let caps = crate::imzero2::codeclane::probe_host_encode();
         tracing::info!(
@@ -735,14 +777,14 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     } else {
         Vec::new()
     };
-    #[cfg(not(feature = "headless_wgpu"))]
+    #[cfg(not(feature = "headless_raster"))]
     let host_encode_caps: Vec<(VideoCodec, LaneProbe, LaneProbe)> = Vec::new();
     // Wire-bitrate EMA state (ADR-0088 telemetry), updated ~4×/s from the
     // carrier's cumulative byte counter.
     let mut bitrate_prev_bytes = 0u64;
     let mut bitrate_prev_inst = std::time::Instant::now();
     let mut bitrate_kbps = 0u64;
-    #[cfg(feature = "headless_wgpu")]
+    #[cfg(feature = "headless_raster")]
     if sinks.is_empty() && carrier.is_none() {
         sinks.push(Box::new(NullSink));
     }
@@ -761,7 +803,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     // ADR-0154 SD1: mirrors egui's own AccessKit flag so the toggle is only
     // written when it actually changes.
     let mut accesskit_on = false;
-    #[cfg(feature = "headless_wgpu")]
+    #[cfg(feature = "headless_raster")]
     let mut bgra_frame: Vec<u8> = Vec::new();
     let mut translator = InputTranslator::default();
     let mut wire_events: Vec<crate::imzero2::inputproto::input_event::Event> = Vec::new();
@@ -831,20 +873,13 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 if let Some((nw, nh, nppp)) =
                     clamp_resize(&req, max_texture_side, width_px, height_px, ppp)
                 {
-                    // Full build rebuilds the offscreen target; the lean build
-                    // only tracks geometry (mesh coords cross in points).
-                    #[cfg(feature = "headless_wgpu")]
-                    gpu.resize(nw, nh);
+                    // A pixel build re-sizes its target; the lean build only
+                    // tracks geometry (mesh coords cross in points).
+                    #[cfg(feature = "headless_raster")]
+                    raster.resize(nw, nh, nppp);
                     width_px = nw;
                     height_px = nh;
                     ppp = nppp;
-                    #[cfg(feature = "headless_wgpu")]
-                    {
-                        screen = egui_wgpu::ScreenDescriptor {
-                            size_in_pixels: [nw, nh],
-                            pixels_per_point: nppp,
-                        };
-                    }
                     screen_rect = egui::Rect::from_min_size(
                         egui::Pos2::ZERO,
                         egui::vec2(nw as f32 / nppp, nh as f32 / nppp),
@@ -1055,7 +1090,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         // Pixel path — full build only. The lean build already emitted this
         // frame on the mesh lane above (or has no viewer), and has no GPU to
         // rasterize with, so it does nothing here.
-        #[cfg(feature = "headless_wgpu")]
+        #[cfg(feature = "headless_raster")]
         {
             // ADR-0154 SD4: a capture request forces the pixel path for this
             // frame even when nothing else consumes pixels — an idle host with
@@ -1065,7 +1100,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 || capture.is_some()
                 || carrier.as_ref().map(|c| c.connected() && c.wants_pixels()).unwrap_or(false);
             if need_pixels {
-                gpu.render_and_readback(&ctx, out, &screen, &mut bgra_frame)?;
+                raster.render_and_readback(&ctx, out, &mut bgra_frame)?;
                 for sink in &mut sinks {
                     sink.on_frame(&bgra_frame, width_px, height_px, frame_idx);
                 }
@@ -1113,7 +1148,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 // just-disconnected session's encoder promptly (a race to
                 // connected here only feeds a zero-length frame, which the
                 // encoder ignores).
-                gpu.apply_textures_only(out);
+                raster.apply_textures_only(out);
                 if let Some(c) = &mut carrier {
                     c.on_frame(&[], width_px, height_px, frame_idx);
                 }

@@ -17,7 +17,10 @@ The categories below correspond to distinct redistribution mechanics:
 
 - **Inline ports** are third-party source files committed directly into
   this repository's tree. Their original license text is reproduced
-  verbatim both in the file header and in this document.
+  verbatim both in the file header and in this document. A whole vendored
+  crate (section 1.8) is the same mechanic at a larger grain: its upstream
+  licence files travel with it rather than being repeated per file, and a
+  `VENDORING.md` beside it records the upstream commit and every local delta.
 - **Vendored binary artifacts** are pre-built binaries committed to the
   repository whose source lives elsewhere (or in a sibling directory).
 - **Module-level Go dependencies** are pulled by `go.mod` at build time
@@ -420,6 +423,27 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 - Use: case-boundary tokenization of corpus words for compression-dictionary
   building. The ~30-line `Split` algorithm was inlined verbatim (with in-file
   attribution) to avoid a single-function third-party module dependency.
+
+### 1.8 DGriffin91 -- egui_software_backend (MIT OR Apache-2.0)
+
+- Directory: `rust/imzero2/vendor/egui_software_backend/` (the crate and its
+  `constify` proc-macro), consumed as a path dependency by the imzero2
+  `headless_soft` feature.
+- Origin: <https://github.com/DGriffin91/egui_software_backend>, commit
+  `1ab06af49887d7c4137570dd885cddc3fa30b4aa` (release 0.0.3, 2026-04-14).
+- Use: CPU rasterization of egui frames for the GPU-less headless pixel host,
+  replacing `wgpu` + `egui-wgpu`.
+- Licence: dual MIT OR Apache-2.0; both texts travel with the directory
+  (`LICENSE-MIT`, `LICENSE-APACHE`). boxer elects **MIT**, matching the root
+  [LICENSE](LICENSE); the Apache-2.0 text is retained because upstream offers
+  it and removing an offered licence is not ours to do.
+- Local deltas: the egui pin, four removed optional surfaces, and two methods
+  widened to `pub`. Each is listed with its reason in
+  [`.../vendor/egui_software_backend/VENDORING.md`](rust/imzero2/vendor/egui_software_backend/VENDORING.md),
+  which is also the re-sync procedure.
+- Not covered by `scripts/ci/license_gate.sh`: that gate reads a
+  `cyclonedx-gomod` SBOM and so sees Go modules only (ADR-0004). Rust
+  dependencies are governed by this document.
 
 ## 2. Vendored binary artifacts
 
