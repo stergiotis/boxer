@@ -152,10 +152,9 @@ func (sc *storeConn) listMounts(ctx context.Context) (rows []mountRow, err error
 		}
 		pm := ent.LadingMount.Val
 		id := identifier.TaggedId(pm.Id)
-		prev, had := names[id]
-		if !had || !ent.Ts.Before(prev.snapshotsTs()) {
-			names[id] = mountRow{id: id, name: pm.Name, store: pm.Store}
-		}
+		// The policy log is append-only and the scan runs in write order, so
+		// the last record per mount is its current declaration.
+		names[id] = mountRow{id: id, name: pm.Name, store: pm.Store}
 	}
 	rows = make([]mountRow, 0, len(ids))
 	for _, id := range ids {
@@ -171,8 +170,3 @@ func (sc *storeConn) listMounts(ctx context.Context) (rows []mountRow, err error
 	}
 	return
 }
-
-// snapshotsTs is a placeholder for ordering policy records by time; the scan
-// is in write order, so the last record per id wins and this returns the zero
-// time to keep "not before" true.
-func (m mountRow) snapshotsTs() time.Time { return time.Time{} }

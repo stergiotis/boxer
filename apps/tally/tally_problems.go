@@ -76,6 +76,7 @@ func (inst *App) renderProblems(sc *storeConn) {
 		return
 	}
 	inst.problemsTable.scopeKey = "problems-table"
+	inst.problemsTable.resetFor(loc.key())
 	inst.problemsTable.headers = res.headers
 	inst.problemsTable.rows = res.rows
 	inst.problemsTable.widths = []float32{420, 90, 90, 500}

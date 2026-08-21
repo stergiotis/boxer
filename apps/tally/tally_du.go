@@ -82,14 +82,39 @@ func buildDuTree(rootName string, res tableResult) (root *layout.Node, files int
 	return
 }
 
+// The Du tab shares its pane: the table keeps a fixed width at the left, the
+// treemap takes what is left, both as tall as the pane minus the header line.
+const (
+	duTableWidth  float32 = 520
+	duHeaderSpace float32 = 40
+	duGap         float32 = 12
+	duMinTreemapW float32 = 200
+	duMinTreemapH float32 = 160
+	duFallbackW   float32 = 900
+	duFallbackH   float32 = 360
+	duProbeSalt   uint64  = 0x0200_d000_0000_0001
+)
+
 // renderDu is the Du tab: directory totals as a table, the files as a
-// treemap, both for the target pane's directory.
+// treemap, both for the target pane's directory and both sized to the pane.
 func (inst *App) renderDu(sc *storeConn) {
 	p := inst.focusPane()
 	loc, ok := inst.locationOf(p)
 	if !ok {
 		c.Label("Pick a mount on the left.").Send()
 		return
+	}
+	// Probe first, before anything is placed, and keep the last good answer:
+	// the probe is a frame late and absent on the frame a tab comes back.
+	if w, h, okp := c.CapturePaneSize(c.ProbeSeq("tally", "du-pane") ^ duProbeSalt); okp && w > 0 && h > 0 {
+		inst.duPaneW, inst.duPaneH = w, h
+	}
+	paneW, paneH := inst.duPaneW, inst.duPaneH
+	if paneW <= 0 {
+		paneW = duFallbackW
+	}
+	if paneH <= 0 {
+		paneH = duFallbackH
 	}
 	dir := p.st.Dir()
 	key := loc.key() + "|" + dir
@@ -119,10 +144,15 @@ func (inst *App) renderDu(sc *storeConn) {
 		return
 	}
 	c.LabelAtoms(c.Atoms().BeginRichText(fmt.Sprintf("Disk usage%s — %d directories, %d files drawn", scopeNote(dir), len(res.rows), len(files.rows))).Strong().End().Keep()).Selectable(false).Send()
+	bodyH := max(paneH-duHeaderSpace, duMinTreemapH)
+	treemapW := max(paneW-duTableWidth-duGap, duMinTreemapW)
 	for range c.HorizontalTop().KeepIter() {
 		for range c.Vertical().KeepIter() {
-			c.UiSetMaxWidth(520)
+			c.UiSetMinWidth(duTableWidth)
+			c.UiSetMaxWidth(duTableWidth)
 			inst.duTable.scopeKey = "du-table"
+			inst.duTable.resetFor(key)
+			inst.duTable.maxHeight = bodyH
 			inst.duTable.headers = res.headers
 			inst.duTable.rows = res.rows
 			inst.duTable.widths = []float32{320, 110, 70}
@@ -133,6 +163,7 @@ func (inst *App) renderDu(sc *storeConn) {
 				}
 			}
 		}
+		c.AddSpace(duGap)
 		for range c.Vertical().KeepIter() {
 			if inst.duTreeKey != key {
 				inst.duTreeKey = key
@@ -145,7 +176,7 @@ func (inst *App) renderDu(sc *storeConn) {
 				}
 			}
 			if inst.duTree != nil {
-				inst.duTree.SetContainerSize(340, 300)
+				inst.duTree.SetContainerSize(treemapW, bodyH)
 				inst.duTree.Render()
 			}
 		}

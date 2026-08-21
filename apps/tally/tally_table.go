@@ -22,6 +22,17 @@ type stringTable struct {
 	// leaves it as it is.
 	tone     []color.Color
 	selected int
+	// maxHeight bounds the table (0 = let the pane decide); key remembers
+	// which result the selection belongs to, so a new result drops it.
+	maxHeight float32
+	key       string
+}
+
+// resetFor drops the selection when the table shows a new result.
+func (t *stringTable) resetFor(key string) {
+	if t.key != key {
+		t.key, t.selected = key, -1
+	}
 }
 
 const (
@@ -48,6 +59,9 @@ func (t *stringTable) render(ids *c.WidgetIdStack, density styletokens.DensityE)
 			c.EtColumn(w).RangeMinMax(w, float32(math.Inf(1))).Resizable(true).Send()
 		}
 		et := c.EndETable(ids.PrepareStr("t"), uint64(len(t.rows)), tableRowHeight, 1, 0)
+		if t.maxHeight > 0 {
+			et = et.MaxHeight(t.maxHeight)
+		}
 		pad := styletokens.PaddingInner(density)
 		for i, h := range t.headers {
 			for range et.Headers(0, uint32(i)) {

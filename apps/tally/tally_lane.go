@@ -28,6 +28,12 @@ func (l *lane[T]) demand(key string, run func(ctx context.Context) (T, error)) (
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if key != l.key || (!l.done && !l.running) {
+		if run == nil {
+			// A poll for a key nobody started yet: report "nothing", start
+			// nothing — a nil run is a question, not an order.
+			var zero T
+			return zero, false, nil, false
+		}
 		l.start(key, run)
 	}
 	return l.val, l.done, l.err, l.running

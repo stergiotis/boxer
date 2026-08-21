@@ -90,6 +90,8 @@ type App struct {
 	duTable       stringTable
 	duTree        *treemap.Treemap
 	duTreeKey     string
+	duPaneW       float32
+	duPaneH       float32
 	problemsLane  lane[tableResult]
 	problemsTable stringTable
 	auditLane     lane[tableResult]
@@ -827,6 +829,7 @@ func (inst *App) renderHistory(sc *storeConn) {
 		return
 	}
 	inst.renderHistoryTimeline(laneKey, res)
+	inst.historyTable.resetFor(laneKey)
 	inst.historyTable.headers = res.headers
 	inst.historyTable.rows = res.rows
 	inst.historyTable.widths = []float32{200, 80, 110, 170, 300, 90, 170}
@@ -968,6 +971,7 @@ func (inst *App) renderDiff(sc *storeConn) {
 		}
 	}
 	c.Label(fmt.Sprintf("%d added · %d removed · %d modified%s", added, removed, modified, scopeNote(dir))).Selectable(false).Send()
+	inst.diffTable.resetFor(laneKey)
 	inst.diffTable.headers = res.headers
 	inst.diffTable.rows = res.rows
 	inst.diffTable.tone = tone

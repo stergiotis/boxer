@@ -65,6 +65,11 @@ cat >"$trace" <<EOF
 {"do":"wait","contains":"$MOUNT  ·","role":"button","settleMs":400,"comment":"the mount list arrived (the count suffix tells the mount button from the breadcrumb root)"}
 {"do":"click","contains":"$MOUNT  ·","role":"button"}
 {"do":"wait","name":"Follow latest","settleMs":600,"comment":"the mount is selected: its snapshots and the follow toggle are up"}
+{"do":"note","text":"--- a known starting point: the app restores the last workingset on a plain open (ADR-0148), so pane A may be anywhere; target A, switch its mount away and back, which resets it to the root following latest ---"}
+{"do":"click","name":"A","role":"button","settleMs":200}
+{"do":"click","contains":"$MOUNT2  ·","role":"button","settleMs":400}
+{"do":"click","contains":"$MOUNT  ·","role":"button","settleMs":600}
+{"do":"wait","name":"Follow latest","settleMs":400}
 {"do":"note","text":"--- enter a directory: select by pointer, then Enter ---"}
 {"do":"click","value":"$DIR","role":"label","pointer":true,"nth":0,"settleMs":300,"comment":"nth 0: pane A comes first in the tree; pane B shows the same directory"}
 {"do":"key","text":"Enter"}

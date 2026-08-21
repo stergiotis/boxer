@@ -122,7 +122,6 @@ func (inst *App) renderFind(sc *storeConn) {
 		c.AddSpace(styletokens.GapInline(inst.density))
 		if c.Button(inst.ids.PrepareStr("find-go"), c.Atoms().Text("Search").Keep()).SendResp().HasPrimaryClicked() {
 			f.armed = inst.findKey(loc, p.st.Dir())
-			f.table.selected = -1
 		}
 	}
 	if f.armed == "" {
@@ -153,6 +152,7 @@ func (inst *App) renderFind(sc *storeConn) {
 		return
 	}
 	f.table.scopeKey = "find-table"
+	f.table.resetFor(f.armed)
 	f.table.headers = res.headers
 	f.table.rows = res.rows
 	f.table.tone = nil

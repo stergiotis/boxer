@@ -45,6 +45,8 @@ const (
 	previewSniffBytes = 8192
 	previewImageMaxW  = 900
 	previewImageMaxH  = 600
+	// previewImageMaxBytes bounds the encoded image read for a preview.
+	previewImageMaxBytes = 32 << 20
 )
 
 // previewContent is what the preview lane produces for one file.
@@ -68,7 +70,9 @@ func loadPreview(ctx context.Context, fsys fs.FS, p string) (out previewContent,
 	kind := classifyByName(p)
 	budget := int64(previewMaxBytes)
 	if kind == previewKindImage {
-		budget = int64(imagedecode.DefaultMaxPixels) // bytes, generously; the decoder bounds pixels
+		// An encoded image is read whole up to previewImageMaxBytes; the
+		// decoder then bounds the pixels it will allocate for it.
+		budget = previewImageMaxBytes
 	}
 	head, err := ladingview.ReadHead(fsys, p, budget, previewHexBytes)
 	if err != nil {
