@@ -96,6 +96,14 @@ var bookcatalogFS embed.FS
 //go:embed bookadr
 var bookadrFS embed.FS
 
+// booklading is the lading store's book (ADR-0200 §SD8, M0): the snapshot
+// ledger, a directory, find, content search, history, diff, du, problems and
+// the block audit — the ADR-0198 §7 operations as pasteable chapters, every
+// knob prelude-bound and `'*'` (every visible mount) the default mount.
+//
+//go:embed booklading
+var bookladingFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -144,6 +152,9 @@ func init() {
 	// (TopicCode) and not the process (TopicRuntime).
 	if err := RegisterBook("adr", help.MustSub(bookadrFS, "bookadr"), []app.TopicT{app.TopicAbout}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register adr book")
+	}
+	if err := RegisterBook("lading", help.MustSub(bookladingFS, "booklading"), []app.TopicT{app.TopicData}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register lading book")
 	}
 }
 
