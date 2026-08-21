@@ -104,11 +104,12 @@ A record is one entity as the driver delivers it (one Arrow row; the only
 `TableRowConfig` in existence is multi-attributes-per-row). Its form is a CBOR
 map with two integer keys, both always present:
 
-- `0` → plain values: a map `name → value` over the plain item types the
-  caller selected (`PlainItemType*` mask; **default: none**). A content hash
-  normally wants neither the entity id (circular when the hash *becomes* the
-  id), nor timestamps, lifecycle or transaction plains. Item type and name
-  style are erased; the nominal name is the key.
+- `0` → plain values: a map `name → value` over **every plain item type
+  except the entity id**; `Options.IncludeEntityId` opts the id in (decided
+  2026-08-21, fork 6). A content hash that *becomes* the id cannot contain
+  it; timestamps, routing, lifecycle, transaction and opaque plains are
+  content unless a consumer says otherwise. Item type and name style are
+  erased; the nominal name is the key.
 - `1` → tagged attributes: an array of **32-byte byte strings — the leaf
   digests (SD7) of the entity's attribute items (SD6) — sorted bytewise**,
   duplicates kept (a multiset).
@@ -120,7 +121,7 @@ per-attribute change signal for a consumer that wants one.
 
 ### SD2 — What the form erases
 
-Section names (two exceptions in SD6), section use-aspects, column value
+Section names (one exception in SD6: co-section groups), section use-aspects, column value
 aspects and encoding hints, membership *spec* and cardinality channel
 (low-card vs. high-card is carriage), co-section and streaming groups,
 physical column names and roles, `TableRowConfig`, attribute order, membership
@@ -236,9 +237,9 @@ shape is the smallest that disambiguates:
   group the section is the disambiguator; the section name therefore survives
   erasure only here;
 - a value-less section (`null`, `emptyObject`, `emptyArray`, a membership-only
-  overlay) → the **section name as a text string**: it is the only content
-  such an attribute has, and without it JSON `null` and an empty object would
-  collide.
+  overlay) → CBOR `null`: the section name is erased here too (decided
+  2026-08-21, fork 7), so JSON `null` and an empty object hash alike —
+  "present with no value" is the content.
 
 Multi-membership aliasing is **content**, not representation: one value tagged
 `[/price/current, /stats/min]` and two attributes each tagged once hash
@@ -257,6 +258,13 @@ changes every digest without colliding with this one.
   written straight into the hasher as the encoder walks the value.
 - **Record digest** = entity hasher over the entity item's bytes (SD1), written
   straight into the hasher once the leaf digests are sorted.
+
+The hash function is a parameter of the encoder (`Options.Digester`, the
+`DigesterI` seam: leaf hasher, record hasher, digest size), keyed BLAKE3 being
+the default. The first consumers — content-addressable linking, data
+integrity, electronic signatures (decided 2026-08-21, fork 8) — may revise
+that choice without touching the form; the digest size is part of the
+entity item, so a different digester is a different form version.
 
 No canonical byte sequence is ever assembled in memory: the encoder writes
 CBOR heads and value bytes into an `io.Writer` that *is* the hasher. The only
@@ -294,6 +302,12 @@ The form is implemented once, at the protocol level, as a sink:
   unchanged; a driver test with such an overlay pins it. The committed
   fixtures' co-sections carry no second-section memberships, so no golden
   moves.
+- The driver's **homogenous-array cardinality** is read from the `len`
+  support column the IR actually emits (it registered only the set role
+  `card`, so every array was driven as one element). Found by M0's typed-lane
+  test; the anchor goldens moved — 3-point polygons had been rendered as
+  1-point — which is the honest measure of how long the text lane went
+  unchecked.
 - `public/semistructured/leeway/canonform` — `Encoder` implements `SinkI`,
   `MembershipSinkI`, `ArrowValueSinkI`. Per attribute it holds the column
   views and the typed memberships the driver pushes (values arrive before
@@ -315,10 +329,17 @@ The form is implemented once, at the protocol level, as a sink:
 
 ### Milestones
 
-- **M0 — form and encoder.** `ArrowValueSinkI` + driver view emission; mixed
-  pairing fix; `canonform.Encoder` with `Options{Classifier, PlainItemTypes}`;
-  goldens (attribute items, entity items, digests) over the `anchor` fixtures
-  and a `boxer.facts` sample; SD3's refusals.
+- **M0 — form and encoder.** ✓ (2026-08-21) `ArrowValueSinkI` +
+  `CoSectionTagSinkI` + driver view emission; the mixed pairing, array
+  cardinality and co-group membership fixes; `canonform.Encoder` with
+  `Options{Classifier, IncludeEntityId, Digester, OnRecord}`; goldens over the
+  three `anchor` fixture batches (every record digest; the first entity's
+  attribute and entity items, which also pass the strict-decode →
+  `CoreDetEncOptions` re-encode pin), the derived BLAKE3 keys, CBOR number
+  vectors, network and temporal scalar vectors; SD3's refusals. Width, float,
+  temporal, set, attribute/membership order, aliasing, plains and
+  secondary-membership behaviour each have a direct test. Not done: a
+  `boxer.facts` sample golden — moved to M1 with the property suite.
 - **M1 — the invariance suite.** `pgregory.net/rapid` properties: random
   entities, then width widening (`u8`→`u64`, `i32`→`i64`, `f32`→`f64`,
   `z32`→`z64`, `y`→`yx`), aspect toggles, section renames and moves, attribute
@@ -329,10 +350,10 @@ The form is implemented once, at the protocol level, as a sink:
   are all secondary contributes nothing. Plus the self-check: decode every
   emitted attribute and entity item with fxamacker in strict mode and
   re-encode under `CoreDetEncOptions`; bytes must match.
-- **M2 — first consumer.** Not chosen here (see Status). The candidates seen in
-  the survey are content-addressed ids and dedup on a facts-shaped table; the
-  plains mask (SD1) exists so that either can be expressed without a second
-  form.
+- **M2 — first consumers.** Content-addressable linking, data integrity and
+  electronic signatures (decided 2026-08-21). The id opt-in (SD1) serves the
+  first; the replaceable digester (SD7) the last two, which may also want
+  a different hash function — that is the revision SD7 leaves open.
 - **M3 — deferred.** A DTO-direct producer path (no Arrow in the loop) with a
   byte-parity test against the driver path; a SQL-side reimplementation as a
   ClickHouse UDF (no native CBOR there). Both only when a consumer pays for
@@ -345,6 +366,8 @@ The form is implemented once, at the protocol level, as a sink:
 | `streamreadaccess.SinkI` family (exported Go API under `public/`) | added: optional `ArrowValueSinkI` capability; driver hands Arrow views to sinks that implement it | none — additive; text lane unchanged for existing sinks |
 | `streamreadaccess.Driver` mixed-channel membership emission | reshaped: two half-populated calls → one paired call per membership | the four `MembershipSinkI` implementers (card-JSON, Unicode card, `DebugSink`, `Table2CardEmitter`) receive pairs they already declare; their tests |
 | `streamreadaccess.Driver` co-section group membership emission (landed 2026-08-21) | reshaped: tags of every group section in the merged tagged value's frame, not the first section's only | the same four implementers see additional tags only for membership-bearing second co-sections; no committed fixture has one, so no golden moves; `leeway_onlineapi_cogroup_members_test.go` pins it |
+| `streamreadaccess.Driver` homogenous-array cardinality (landed 2026-08-21) | fixed: the `len` support column drives array attributes (they were driven as one element) | every sink sees full arrays; the anchor card goldens (text, JSON, Unicode, topo spark) regenerated — 3-point polygons were 1-point; `leeway_onlineapi_typedlane_test.go` pins it |
+| `streamreadaccess` optional `CoSectionTagSinkI` capability (exported Go API under `public/`) | added: per-section context before each co-section's tags | none — additive |
 | `public/semistructured/leeway/canonform` (new exported Go API) | added: `Encoder`, `Options` (classifier, plain-item mask), leaf and record digests, context strings and derived keys | goldens under `testdata/`; the M1 property suite |
 | `membershiprole.ClassifierI` (exported Go API) | unchanged; gains a consumer whose output depends on it | none |
 | The canonical record form itself (a hash preimage contract) | added: SD1–SD7 are the contract; any byte change is a new version under SD7 | whatever stores digests — none at M0 |
@@ -463,24 +486,28 @@ The form is implemented once, at the protocol level, as a sink:
 
 ## Status
 
-Proposed — awaiting review by the leeway code owner. Decisions that want a
-human call before M0 starts, each with the default the text above takes:
+Proposed — awaiting review by the leeway code owner. The ten design forks were
+put to the code owner and resolved on 2026-08-21 (M0 was built on the
+resolutions; the body above reflects them):
 
-1. **Numeric reduction** (SD3): `3.0` ≡ `3` and `-0.0` ≡ `0` — default yes.
+1. **Numeric reduction** (SD3): `3.0` ≡ `3` and `-0.0` ≡ `0` — yes.
 2. **Aliasing is content** (SD6): one value with two tags ≠ two attributes —
-   default yes.
-3. **IPv4-mapped IPv6 reduces to IPv4** (SD3) — default yes.
-4. **Fixed-width padding is kept** (SD3) — default yes (keep).
-5. **Refs are not resolved to names** (SD5) — default yes (not resolved).
-6. **Plains excluded by default; keyed BLAKE3 for domain separation** (SD1,
-   SD7) — default yes on both.
-7. **Value-less attributes carry the section name** (SD6) — default yes.
-8. **First consumer** (M2): not decided here.
+   yes.
+3. **IPv4-mapped IPv6 reduces to IPv4** (SD3) — yes.
+4. **Fixed-width padding is kept** (SD3) — yes (keep).
+5. **Refs are not resolved to names** (SD5) — yes (not resolved).
+6. **Plains** (SD1): every plain item type except the entity id is hashed by
+   default; `IncludeEntityId` opts the id in. **Keyed BLAKE3** for domain
+   separation (SD7) — yes, as the default digester.
+7. **Value-less attributes** (SD6): the section name is erased; the value is
+   CBOR `null`.
+8. **First consumers** (M2): content-addressable linking, data integrity,
+   electronic signatures; the hash function stays replaceable (SD7).
 9. **An attribute with memberships but no primary one is omitted entirely**
-   (SD5), rather than kept with an empty membership array — default omit.
+   (SD5) — yes (omit).
 10. **The classifier is an `Options` input, nil = all primary, applied inside
-    the encoder at `EndTaggedValue`** (SD5, SD8) — default yes; the
-    preprocessing-pass alternative is recorded and rejected.
+    the encoder at `EndTaggedValue`** (SD5, SD8) — yes; the preprocessing-pass
+    alternative is recorded and rejected.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
