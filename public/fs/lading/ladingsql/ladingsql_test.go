@@ -388,6 +388,31 @@ func TestEveryMount(t *testing.T) {
 	assert.Equal(t, "fssnap('*')", refs[0].String())
 }
 
+// bundledVisibility is the shape a host that carries several seams in one
+// binding takes — play's pass binding embeds four interfaces in one struct so
+// a single value reaches every pass factory.
+type bundledVisibility struct {
+	ladingsql.MountVisibilityI
+	somethingElse int
+}
+
+// A wildcard resolves through such a bundle. It did not while enumerability
+// was decided by the visibility's CONCRETE type: the wrapper is neither
+// VisibleAll nor VisibleSet, so `fs('*')` was refused as a yes/no oracle
+// inside play while working everywhere the concrete value was passed
+// directly — which is where the tests were (ADR-0200 Update 2026-08-21).
+func TestWildcardThroughAnEmbeddingBundle(t *testing.T) {
+	open := &bundledVisibility{MountVisibilityI: ladingsql.VisibleAll{}}
+	out, err := ladingsql.Expand(ladingsql.Config{Visibility: open}, "SELECT mount, path FROM fs('*')")
+	require.NoError(t, err)
+	assert.Contains(t, out, ") IN (SELECT", "every visible mount's newest snapshot, as pairs")
+
+	set := &bundledVisibility{MountVisibilityI: ladingsql.VisibleSet{testMount: {}}}
+	narrowed, err := ladingsql.Expand(ladingsql.Config{Visibility: set}, "SELECT mount FROM fssnap('*')")
+	require.NoError(t, err)
+	assert.Contains(t, narrowed, "IN (4322952322827452417)", "and a set still enumerates through one")
+}
+
 // TestLatestIsANameToo. A bound snapshot knob cannot be omitted, so 'latest'
 // spells what omission means — and it is the SFTP head's name for the same
 // snapshot.

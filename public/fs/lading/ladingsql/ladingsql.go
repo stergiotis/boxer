@@ -102,7 +102,37 @@ type MountVisibilityI interface {
 	// consulted once per macro call, so it may be as expensive as a lookup but
 	// not as expensive as a query.
 	VisibleMount(mount identifier.TaggedId) (visible bool)
+	// EnumerateMounts reports what a `'*'` call widens to (§SD6). It is a
+	// different question from VisibleMount's: an oracle that answers "may this
+	// caller read mount X" can be unable to LIST what X ranges over —
+	// [VisibleUnderTag] is exactly that — and a wildcard needs the list.
+	//
+	// It sits in THIS interface rather than in an optional second one because
+	// a caller that bundles seams by EMBEDDING them — play's pass binding is
+	// one struct embedding four — forwards only the methods of the interface
+	// it embedded. An optional interface would be dropped by every such
+	// wrapper and the wildcard refused with a message about a yes/no oracle,
+	// which is not what the caller wired (ADR-0200 Update 2026-08-21).
+	//
+	// ids is read only for [MountScopeSet] and the expansion sorts it; an
+	// implementation need not.
+	EnumerateMounts() (scope MountScopeE, ids []identifier.TaggedId)
 }
+
+// MountScopeE is what a visibility can say about the set of mounts a `'*'`
+// call names.
+type MountScopeE uint8
+
+const (
+	// MountScopeOpaque cannot enumerate. `'*'` is refused: a yes/no oracle
+	// cannot yield a predicate.
+	MountScopeOpaque MountScopeE = iota
+	// MountScopeAll is every mount the store holds — the expansion reads the
+	// snapshot index with no id filter at all.
+	MountScopeAll
+	// MountScopeSet is exactly the ids reported, rendered as an IN list.
+	MountScopeSet
+)
 
 // VisibleAll grants every mount.
 //
@@ -116,6 +146,11 @@ type VisibleAll struct{}
 // VisibleMount implements [MountVisibilityI].
 func (VisibleAll) VisibleMount(identifier.TaggedId) bool { return true }
 
+// EnumerateMounts implements [MountVisibilityI]: every mount, no id filter.
+func (VisibleAll) EnumerateMounts() (MountScopeE, []identifier.TaggedId) {
+	return MountScopeAll, nil
+}
+
 // VisibleSet grants exactly the mounts it lists.
 type VisibleSet map[identifier.TaggedId]struct{}
 
@@ -123,6 +158,16 @@ type VisibleSet map[identifier.TaggedId]struct{}
 func (inst VisibleSet) VisibleMount(mount identifier.TaggedId) (visible bool) {
 	_, visible = inst[mount]
 	return
+}
+
+// EnumerateMounts implements [MountVisibilityI]: the listed ids, in map order
+// — the expansion sorts them, so the statement is stable across runs.
+func (inst VisibleSet) EnumerateMounts() (scope MountScopeE, ids []identifier.TaggedId) {
+	ids = make([]identifier.TaggedId, 0, len(inst))
+	for id := range inst {
+		ids = append(ids, id)
+	}
+	return MountScopeSet, ids
 }
 
 // VisibleUnderTag grants every mount whose id carries one of the listed tags —
@@ -139,6 +184,13 @@ func (inst VisibleUnderTag) VisibleMount(mount identifier.TaggedId) (visible boo
 		}
 	}
 	return false
+}
+
+// EnumerateMounts implements [MountVisibilityI]: a tag names a space of ids
+// rather than a list of them, so this shape cannot answer what `'*'` widens to
+// without reading the store — which the expansion does not do.
+func (inst VisibleUnderTag) EnumerateMounts() (MountScopeE, []identifier.TaggedId) {
+	return MountScopeOpaque, nil
 }
 
 // Config parameterises the expansion.
@@ -347,18 +399,23 @@ func (inst Config) scopeMount(mount mountArg) (out mountArg, err error) {
 		}
 		return
 	}
-	switch vis := inst.Visibility.(type) {
-	case VisibleAll:
+	if inst.Visibility == nil {
+		err = eh.New("'*' names every visible mount, and no visibility was stated")
 		return
-	case VisibleSet:
-		if len(vis) == 0 {
+	}
+	// Asked of the visibility rather than switched on its type: a bundle that
+	// embeds the interface is a legitimate implementation, and a type switch
+	// reads it as an oracle (ADR-0200 Update 2026-08-21).
+	scope, ids := inst.Visibility.EnumerateMounts()
+	switch scope {
+	case MountScopeAll:
+		return
+	case MountScopeSet:
+		if len(ids) == 0 {
 			err = eh.New("'*' names every visible mount, and none is visible to this caller")
 			return
 		}
-		out.ids = make([]identifier.TaggedId, 0, len(vis))
-		for id := range vis {
-			out.ids = append(out.ids, id)
-		}
+		out.ids = slices.Clone(ids)
 		slices.Sort(out.ids)
 		return
 	default:
