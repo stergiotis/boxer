@@ -152,7 +152,10 @@ stdlib. `github.com/go-json-experiment/json` gates its own `jsontext` on
 library otherwise — so the ten files importing the external module get the new
 stdlib API the moment the default flips. Migrating those imports to
 `encoding/json/jsontext` changes nothing semantically, but it removes a
-dependency whose only remaining job is to be an alias.
+dependency whose only remaining job is to be an alias. Done in M3c; the
+alias-only claim was checked rather than assumed — under `go1.27.0` each of the
+module's three packages compiles down to a single generated `alias.go` that
+forwards to the stdlib.
 
 **One softer point stands.** `RetiredTags` would fire on a consumer still on Go
 1.26, for whom the tag is *required*. The `go` directive bump (§5) forces those
@@ -491,6 +494,7 @@ renumbered, because M0 measured its work away.
 | ~~**M2**~~ | ~~`pprofarrow` kind-hint plumbing~~ — **not needed**: the profile carries its own `goroutineleak/count` sample type and classifies correctly today (§3) | — | — |
 | **M3** | ~~One atomic commit: `go 1.27.0`, `go mod tidy`, the `jsontext` repair, the `,inline` → `,embed` tag~~ **done 2026-08-19** as `42f1dc4b` — plus two things the plan did not predict: `net/http.ParseCookie$1` into capslock's `knownNoiseSinks`, and a `DID NOT RUN` branch for the staticcheck step, since the planned pin bump to `v0.8.0-rc.1` turned out to be unusable (§5). The `go-json-experiment/json` dependency was left in place | M0 | full `-race` suite green (386 s), `go vet` clean, `go mod tidy` clean, capslock green |
 | **M3b** | Airgap: ~~refresh the `toolchain go1.26.5` sentence and state the "packed on a 1.27 host" precondition in [howto/airgapped-build](../howto/airgapped-build.md)~~ **done 2026-08-19** as `849b9b64`. Still open: coordinate the adopter's `go` line and its bundle re-cut, and raise the local `go.work` (§5) | M3 | a bundle cut + `airgap-unbundle` smoke on a clean host |
+| **M3c** | ~~Drop `github.com/go-json-experiment/json`: 20 import lines across 14 files onto `encoding/json/v2` / `encoding/json/jsontext` / `encoding/json`, then `go mod tidy`~~ **done 2026-08-21** — answers open question 6 | M3 | `go mod tidy --diff` clean, `go build`/`go vet` clean, full `-race` suite green |
 | **M4** | Tag retirement: ADR first (Tier 1 — Surfaces / Migration / Verification), then `./tags`, `gov/buildtags` required→empty + retired entry, README, ENGINEERING_PRACTICES, dated Updates on ADR-0053/0078/0004/0083, `wasmsurvey` reason removal; then adopter pin bump + its `./tags` edit | M3 | `gov gate` (its `buildtags` step), `lint.sh`, the `go tool` probe from M0 |
 | **M5** | `goroutineleak` surfaces: one `profileKinds` entry, imzrt tour + `bookpprof` rosters, ADR-0061 dated Update for the forced-GC caveat; replace the goroutine-counting slack in `task/spawn_leak_test.go` | M3 | live gate on the Profiles tab (returning rows is not evidence it draws — assert the Arrow header), `gotest.sh` |
 | **M6** | Generic methods where they pay: `marshallreflect` terminals as methods on `*SectionReaders` with the free functions kept as forwarders; ADR-0023 design edit (it is `proposed`, so edit in place); `FatRow.Extract`. `recordstore`'s cache constructor only if a generator change is happening anyway | M3 | `gotest.sh`, leeway golden lanes |
@@ -514,9 +518,17 @@ generic-method change does not.
    permanently red; and the fixer that miscompiled two sites is not one to run
    unattended. A reviewed sweep per Go release is the cadence. §4.
 5. One ADR or two for M4 and M6?
-6. Should M3 also drop `github.com/go-json-experiment/json`? Under 1.27 it is a
-   type alias for the standard library, so the import is a dependency whose
-   only job is indirection — but it is ten files of churn for no behaviour
-   change, which may be better folded into M1's sweep or left alone.
+6. ~~Should M3 also drop `github.com/go-json-experiment/json`?~~ **Answered by
+   doing it (M3c, 2026-08-21): yes, and it is cheaper than the estimate.** The
+   churn is import lines only — 20 of them across 14 files, no call-site edits,
+   because each package of the module is a single generated `alias.go`
+   forwarding to the stdlib. `go mod tidy --diff` reported the module and its
+   two `go.sum` lines as the only drift, so nothing else in the tree reached it
+   even indirectly. Two details the question did not anticipate: the count was
+   fourteen files rather than ten, since it includes the `/v1` sub-package; and
+   `/v1` maps to `encoding/json`, not to `encoding/json/v2`. Its one call site,
+   `public/analytics/stats/stats_test.go`, was left on `encoding/json` to match
+   `stats.go` in the same package — which means the CS009 ban on that path still
+   has a live counterexample there, pre-dating this work and untouched by it.
 7. Does anything want `GOEXPERIMENT=simd`? Out of scope here — named only so
    the next reader does not assume it was missed.
