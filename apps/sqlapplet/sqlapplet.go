@@ -175,6 +175,7 @@ var resultTabIDs = map[string]struct{}{
 	"series":     {},
 	"treemap":    {},
 	"chart":      {},
+	"files":      {},
 	"schema":     {},
 	"detail":     {},
 }

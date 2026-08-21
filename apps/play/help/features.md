@@ -19,7 +19,7 @@ into three groups: the **editor** (Editor, History), the **tool panes** beside
 it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Experiments — each reads
 the buffer, or something derived from it, while you type), and the **result
 panes** below (Table, Projection, Timeline, Map, World, Kanban, Network, Sankey,
-Distribution, Icicle, Graph, Schema, and Detail alongside them). Drag a tab to
+Distribution, Icicle, Files, Graph, Schema, and Detail alongside them). Drag a tab to
 re-dock or split it; the layout holds for the session and starts fresh next
 launch.
 
@@ -474,6 +474,28 @@ Before a query it reads *Run a query, then select a row to see its detail.* When
 result lands the first row is selected automatically, so the card populates straight
 away; click another row in **Table** (or a point in **Projection** / an event in
 **Timeline**) to retarget it.
+
+### Files
+
+A result carrying a `path` column browses as a tree of files. The tab interns
+the paths — one row per entry — and shows them as a listing or as an outline,
+with a breadcrumb, a quick filter, sortable name / size / modified columns, and
+every *other* column of the result beside them. `is_dir`, `size`, `mtime`,
+`link_target` and `is_symlink` are read by name when the query projects them;
+nothing else is required.
+
+`SELECT * FROM fs('<mount>')` is the case it was built for — a lading snapshot
+browses without leaving play, hash and expiry riding along as columns — but any
+result that names paths works.
+
+The directories between the rows are synthesised, so they carry no size, no time
+and no row of their own, and what a click publishes follows that split:
+`selection_key` is always the path, `selection` — the row cursor **Detail** and
+**Table** follow — only when a result row named the entry. Detail is the
+preview: a row is metadata rather than bytes, so activating a file moves the
+cursor rather than opening anything. The status line says what the interning
+made of the result, including rows dropped at the cap or carrying no usable
+path.
 
 ### Projection
 

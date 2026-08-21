@@ -422,6 +422,16 @@ var builtinTabDefs = []builtinTabDef{
 	// ARE result rows, so a click writes the ordinary row cursor.
 	{id: "chart", dockID: dockTabChart, title: "Chart", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelection}},
+	// Files browses the result as a tree of paths (ADR-0200): one required
+	// `path` column, the rest of the projection as columns beside name, size
+	// and modified. NoScroll, for the Vocabulary tab's reason — the browser's
+	// body is an etable that scrolls and culls itself, and the dock's own
+	// ScrollArea would give it a second scrollbar and an unbounded parent.
+	// It publishes twice because the tree it draws is wider than the result:
+	// `selection_key` is the path of whatever was clicked, `selection` the
+	// row behind it, which a synthesised directory does not have.
+	{id: "files", dockID: dockTabFiles, title: "Files", lazy: true, noScroll: true, shapeContract: true,
+		writes: []SignalID{signalSelection, signalSelectionKey}},
 	// Graph stays in the body against its classification: its input is the
 	// split and the signal store, so by the criterion above it is a tool pane,
 	// but its subject is the SESSION's reactive wiring rather than the
@@ -691,6 +701,14 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Panel = chartPanel{driver: inst.chartDriver}
 			spec.Render = func(f *TabFrame) {
 				scrollTab(func() { inst.renderChartTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
+			}
+		case "files":
+			// No scrollTab: the browser's list and outline are both etables,
+			// which scroll and cull themselves (the Vocabulary tab's reason,
+			// declared as NoScroll above).
+			spec.Panel = filesPanel{driver: inst.filesDriver}
+			spec.Render = func(f *TabFrame) {
+				inst.renderFilesTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed)
 			}
 		case "graph":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphTab) }

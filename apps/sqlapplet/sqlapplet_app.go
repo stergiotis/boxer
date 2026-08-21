@@ -33,7 +33,7 @@ var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "
 // cannot prune it and it rides along on every applet. TestTabPolicyCoversEveryRegisteredTab
 // pins that, because the failure is silent: a new panel in play just quietly
 // appears in every applet window.
-var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "network", "sankey", "dist", "icicle", "series", "treemap", "chart", "schema", "detail"}
+var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "network", "sankey", "dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"}
 
 // autoOffResultTabIDs are result panels `tabs: auto` does NOT show. They are
 // still listable — an applet that names one in `tabs:` gets it — so this is a
@@ -57,6 +57,11 @@ var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "
 // number — which is most of them, and would put a chart tab on applet windows
 // that never asked for one. An applet that wants a chart names the tab in
 // `tabs:`.
+//
+// Files is not here either (ADR-0200). Its contract is one column named
+// `path`, which is a narrow enough claim to be a statement of intent rather
+// than an accident — and an applet whose rows carry paths is exactly the case
+// the panel was added for, so it earns the same per-frame accept/reject.
 //
 // Icicle is deliberately NOT here. Its node contract is `id` + `parent` +
 // `value` — an ordinary hierarchy shape a recursive CTE can land on without

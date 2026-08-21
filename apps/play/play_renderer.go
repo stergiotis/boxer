@@ -128,6 +128,7 @@ const (
 	dockTabVocabulary  uint64 = 26
 	dockTabGlosses     uint64 = 27
 	dockTabCompletion  uint64 = 28
+	dockTabFiles       uint64 = 29
 )
 
 type PlayApp struct {
@@ -455,6 +456,11 @@ type PlayApp struct {
 	// observer shape and the same hierarchy contract as the Icicle tab, read as
 	// nested areas rather than depth rows — no lane, nothing to Close.
 	treemapDriver *treemapDriver
+
+	// filesDriver is the Files panel (ADR-0200): the active result interned
+	// into a read-only file system and browsed with widgets/fsbrowser — the
+	// widget apps/tally hosts over a lading snapshot, second host.
+	filesDriver *filesDriver
 
 	// chartDriver is the ADR-0172 Chart panel (Chart dock tab): the plain
 	// chart — a category against a count, a number against a number, a
@@ -1075,6 +1081,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.distDriver = NewDistDriver(mk())
 	inst.icicleDriver = NewIcicleDriver(mk())
 	inst.treemapDriver = newTreemapDriver(mk())
+	inst.filesDriver = newFilesDriver(mk())
 	inst.chartDriver = NewChartDriver(mk())
 	// The scaffold seam is the PUBLIC delivery op, not a private reach into
 	// the editor: a pane that writes SQL into the buffer is exactly the

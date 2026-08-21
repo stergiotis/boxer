@@ -191,7 +191,8 @@ func TestBuiltinTabMarkDeclarations(t *testing.T) {
 		}
 	}
 	assert.Equal(t, map[string]bool{"timeline": true, "world": true, "kanban": true, "network": true,
-		"sankey": true, "dist": true, "icicle": true, "series": true, "treemap": true, "chart": true}, shape)
+		"sankey": true, "dist": true, "icicle": true, "series": true, "treemap": true, "chart": true,
+		"files": true}, shape)
 
 	require.Contains(t, writes, "map", "the Map publishes its viewport without being a PanelI")
 	assert.Len(t, writes["map"], len(mapViewportSignals))
@@ -208,6 +209,10 @@ func TestBuiltinTabMarkDeclarations(t *testing.T) {
 	// rule applies to it.
 	assert.Equal(t, []SignalID{signalSelectionKey}, writes["sankey"])
 	assert.NotContains(t, writes["sankey"], signalSelection)
+	// The Files tab is the one panel that publishes BOTH, and the split is
+	// what its tree makes honest (ADR-0200): a path is true of every entry,
+	// a row cursor only of an entry a result row named.
+	assert.Equal(t, []SignalID{signalSelection, signalSelectionKey}, writes["files"])
 
 	for _, s := range specs {
 		if s.ShapeContract {

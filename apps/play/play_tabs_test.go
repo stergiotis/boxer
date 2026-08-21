@@ -24,7 +24,7 @@ func tabsTestApp() *PlayApp {
 func TestDefaultTabsEnumeration(t *testing.T) {
 	reg := tabsTestApp().Tabs()
 	specs := reg.all()
-	require.Len(t, specs, 28)
+	require.Len(t, specs, 29)
 
 	wantDockID := map[string]uint64{
 		"editor": dockTabEditor, "history": dockTabHistory, "preview": dockTabPreview,
@@ -32,7 +32,7 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 		"snippets": dockTabSnippets, "map": dockTabMap, "world": dockTabWorld,
 		"kanban": dockTabKanban, "network": dockTabNetwork, "sankey": dockTabSankey,
 		"dist": dockTabDist, "icicle": dockTabIcicle, "series": dockTabSeries,
-		"treemap": dockTabTreemap, "chart": dockTabChart,
+		"treemap": dockTabTreemap, "chart": dockTabChart, "files": dockTabFiles,
 		"graph":  dockTabGraph,
 		"schema": dockTabSchema, "diagnostics": dockTabDiagnostics, "passes": dockTabPasses,
 		"docs": dockTabDocs, "flow": dockTabFlow, "detail": dockTabDetail,
@@ -70,7 +70,8 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 	// the dock's body ScrollArea would only add a second scrollbar and an
 	// unbounded parent (ADR-0174 Update 2026-08-16). Completion's pane is the
 	// same table, for the same reason (ADR-0190 §SD8).
-	noScroll := map[string]bool{"map": true, "vocabulary": true, "completion": true}
+	// Files joins them: the browser's list and outline are etables of its own.
+	noScroll := map[string]bool{"map": true, "vocabulary": true, "completion": true, "files": true}
 	for id, s := range seen {
 		assert.Equal(t, noScroll[id], s.NoScroll, "NoScroll set for %q", id)
 	}
@@ -82,14 +83,14 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 		}
 	}
 	assert.ElementsMatch(t, []string{"table", "projection", "timeline", "world", "kanban", "network", "sankey",
-		"dist", "icicle", "series", "treemap", "chart", "schema", "detail"},
+		"dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"},
 		panelIDs, "chrome registers with a nil PanelI (SD7)")
 
 	// Presentation order per zone. Docs stays first among the tools so a
 	// fresh layout opens on it.
 	assert.Equal(t, []uint64{dockTabTable, dockTabProjection, dockTabTimeline,
 		dockTabMap, dockTabWorld, dockTabKanban, dockTabNetwork, dockTabSankey, dockTabDist, dockTabIcicle,
-		dockTabSeries, dockTabTreemap, dockTabChart, dockTabGraph, dockTabSchema},
+		dockTabSeries, dockTabTreemap, dockTabChart, dockTabFiles, dockTabGraph, dockTabSchema},
 		dockIDsOf(reg.byZone(TabZoneBody)))
 	assert.Equal(t, []uint64{dockTabDocs, dockTabPreview, dockTabFlow, dockTabPasses,
 		dockTabDiagnostics, dockTabSnippets, dockTabVocabulary, dockTabCompletion, dockTabGlosses,
@@ -110,18 +111,18 @@ func TestTabRegistryMutationAndFreeze(t *testing.T) {
 	require.Error(t, reg.Add(TabSpec{ID: "x", DockID: dockTabTable, Render: noop}), "duplicate DockID")
 
 	require.NoError(t, reg.Add(TabSpec{ID: "x", DockID: 64, Title: "X", Render: noop}))
-	require.Len(t, reg.all(), 29)
-	assert.Equal(t, TabZoneBody, reg.all()[28].Zone, "embedder tabs default to the body zone")
+	require.Len(t, reg.all(), 30)
+	assert.Equal(t, TabZoneBody, reg.all()[29].Zone, "embedder tabs default to the body zone")
 
 	// Replace keeps the position and re-validates against the others.
 	require.Error(t, reg.Replace("x", TabSpec{ID: "table", DockID: 64, Render: noop}),
 		"replacement must not collide with another tab")
 	require.NoError(t, reg.Replace("x", TabSpec{ID: "y", DockID: 65, Title: "Y", Render: noop}))
-	assert.Equal(t, "y", reg.all()[28].ID)
+	assert.Equal(t, "y", reg.all()[29].ID)
 	require.Error(t, reg.Replace("x", TabSpec{ID: "z", DockID: 66, Render: noop}), "x is gone")
 
 	require.NoError(t, reg.Remove("y"))
-	require.Len(t, reg.all(), 28)
+	require.Len(t, reg.all(), 29)
 	require.Error(t, reg.Remove("y"), "already removed")
 
 	reg.freeze()
