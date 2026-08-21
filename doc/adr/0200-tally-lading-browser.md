@@ -1,0 +1,370 @@
+---
+type: adr
+status: proposed
+date: 2026-08-20
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+---
+
+> **Status: proposed — pre-human-review.** Decision under consideration; do not
+> implement as if accepted.
+
+# ADR-0200: tally — a browser for the lading store, and an `fs.FS` browser widget
+
+## Context
+
+The lading store ([ADR-0198](./0198-fs-snapshot-store.md), proposed; M0–M6
+shipped) reads back three ways — Go `fs.FS`, SQL macros, SFTP for rclone — and
+none of them is a GUI. A power user of WinSCP, Cyberduck or FileZilla should
+recognise a lading browser on first sight, and the browser should use what
+the leeway shape gives every entry row: components formulated after the fact,
+glosses, the snapshot instant as a key column, cross-mount SQL. The design
+space, the feature inventories of the reference clients, the substrate
+inventory and the metaphor shift are worked through in
+[the survey page](../adr-background-work/lading-browser-survey.md); this ADR
+records what fell out and the answers to its open forks.
+
+Two facts carry the design. The adapter *is* an `fs.FS`, so a browser written
+against `fs.FS` browses a snapshot with no lading code — and a browser over
+`fs.FS` is wanted beyond lading (the `filepicker` dialog, a viewer over a
+capability grant, an rclone remote). And every entry is a facts row keyed
+`(mount, snapshot, path)`, so find, diff, history, `du` and integrity are one
+query each, already pinned by `ladingsql`'s operations tests.
+
+## Design space (QOC)
+
+**Question.** What kind of thing is the lading browser, and where does its
+code live? (Full matrix and reading: survey §6.)
+
+**Options.** **O1** a sqlapplet book only · **O2** a play "Files" result panel
+· **O3** a registered app composed from a reusable `fs.FS` browser widget ·
+**O4** O3 with the widget later offered as O2's panel.
+
+**Criteria.** C1 recognisability · C2 exploits the leeway shape · C3 cost now ·
+C4 reuse beyond lading · C5 posture (read-only, visibility) · C6 scale.
+
+|    | O1 | O2 | O3 | O4 |
+|----|----|----|----|----|
+| C1 | −− | −  | ++ | ++ |
+| C2 | ++ | ++ | +  | ++ |
+| C3 | ++ | +  | −  | −− |
+| C4 | −  | +  | ++ | ++ |
+| C5 | ++ | ++ | +  | +  |
+| C6 | +  | +  | +  | +  |
+
+O3, with O1 as its M0 and O2 recorded as a follow-up whose trigger is the
+first applet that wants a file list.
+
+## Decision
+
+We will build **`apps/tally`** — a registered, windowed keelson app that
+browses, previews, inspects, compares and searches lading snapshots — on a new
+reusable widget, **`widgets/fsbrowser`**, that renders any `fs.FS` as a list or
+an outline with host-supplied metadata columns. The first milestone is a
+sqlapplet book over the SQL surface. Nothing in the app mutates a snapshot.
+
+### SD1 — Names and homes
+
+`apps/tally` (a tally is the count of cargo checked against the bill of
+lading), id `github.com/stergiotis/boxer/apps/tally`, topic Data, no new
+`main()`. `public/thestack/imzero2/egui2/widgets/fsbrowser` for the widget.
+The book is `apps/sqlapplet/booklading`, book id `lading`. The store keeps its
+name; the tables keep `fs*`.
+
+### SD2 — The browser widget contract
+
+`fsbrowser` takes an `fs.FS`, a location (an `io/fs` path, `"."` the root),
+caller-owned `State` (expansion keyed by path, selection, cursor) and an
+optional `MetaProviderI` that supplies extra columns and badges per entry —
+the seam through which the lading host adds hash, text guarantee, content
+policy, error, expiry and component slots while an `os.DirFS` host adds
+nothing. Two modes over the same rows: *list* on `endETable` (sortable
+columns, `VisibleRange`-gated emission) and *outline* on the ADR-0176 tree
+widget with the same columns. A breadcrumb, a quick filter over the loaded
+listing, single / toggle / range selection and the ADR-0177 key subset
+(Enter, Backspace, arrows, Space) belong to the widget; directories are read
+on demand through `fs.ReadDir` and cached by the host's `CacheKey` (for a
+snapshot, forever — nothing can invalidate it). `Result` reports navigation,
+activation and selection changes; the widget never decides what a click
+means beyond that.
+
+### SD3 — A location is a triple
+
+A pane shows `(mount, snapshot | latest, path)` — the SFTP spelling
+`/<mount>/<snapshot>/<path>` is the address. *latest* is a follow toggle, not a
+name. Two panes are independent by default; *synchronized browsing* locks the
+path across them, which for one mount at two snapshots is time travel.
+
+### SD4 — Data paths
+
+Browse and preview go through `ladingadapter` (one `fs.FS` per `(mount,
+snapshot)`, cached, millisecond calls). Everything store-wide — Mounts,
+History, Diff, Find, Du, Problems — is SQL through `ladingsql.Expand` on
+lanes off the render thread, memoised on `(sql, revision)`, results as Arrow
+into the tables. Query spellings are app-local templates of the ADR-0198 §7
+catalogue; extraction into an exported package waits for a third consumer.
+
+### SD5 — Read-only, and what v1 leaves out (decided 2026-08-20)
+
+- **No in-app ingest in v1.** Snapshots are taken by Go or the CLI; the
+  Powerbox has no walk operation for a granted folder, and a free-text path
+  would bypass it. Recorded follow-ups: `stat` / `walk` handle operations
+  (ADR-0026 §SD3 named them; never shipped), or rclone remote strings.
+- **No export in v1** beyond *Copy SFTP path* and *Copy rclone mount command*
+  to the clipboard; single-file export via `fs.dialog.write` is the first
+  addition when wanted.
+- **Visibility is `VisibleAll` behind the `MountVisibilityI` seam.** The app
+  holds the operator's ClickHouse credentials as play does, so it sees what
+  they can read; the capability subject ADR-0198 left open stays deferred,
+  trigger: remote access (ADR-0082) or a multi-owner store.
+- **No purge, no annotations written from the GUI, no drag-and-drop, no
+  walker progress seam** — each has its own trigger in the survey §10.
+
+### SD6 — Macro arguments: slots, every mount, and `'latest'`
+
+`fs()`, `fsdata()` and `fssnap()` accept a `{name:Type}` slot for the mount
+and for the snapshot, resolved at expansion from the environment's bound
+params (`SET param_name = …` in the prelude); an unbound slot is refused with
+a message naming the slot, because the visibility check and the snapshot
+resolution need the value at expansion. This is what lets a book chapter or a
+play buffer take the mount as a knob rather than a literal. Two spellings
+ADR-0198 §SD11 left open are decided with it: **`'*'` as the mount** names
+every mount the caller may see — `fssnap('*')` is the store's ledger, `fs('*')`
+every visible mount's newest snapshot, resolved per mount as a set of `(mount,
+snapshot)` pairs — and is admitted only under a visibility the expansion can
+enumerate (`VisibleAll`, or a `VisibleSet` rendered as an `IN` list; a yes/no
+oracle refuses it); and **`'latest'` as the snapshot** spells what omission
+means, so a bound snapshot knob has a value for "newest" — the same word the
+SFTP head uses. `References` reports the resolved mount, a wildcard, or an
+unbound call, so play's dispatch still routes the statement server-side.
+play registers the mount policy kind (`ladingpolicy.PolicyComponentSQL`) so a
+statement can name a mount by its declared name through `LW_COMPONENT`.
+
+### SD7 — Chrome
+
+One dock area: Mounts at the left; Pane A and Pane B (collapsible, shown by
+default — compare is the store's strength); bottom tabs Preview, Info,
+History, Diff, Find, Du, Problems, SQL. Actions: Compare, Find, Open in play
+(a `windowhost.open` launch request with the selection bound into SQL), Copy
+path / Copy rclone command (`clipboard.write`). Verbs the reference clients
+have and this store cannot — rename, delete, mkdir, chmod, upload — are not
+shown.
+
+### SD8 — Renderings are declared
+
+Sizes, times, mount ids and hashes render through the gloss catalog (ADR-0186);
+preview is by type — text with highlighting, markdown, JSON, PNG/JPEG/GIF —
+through the seams ADR-0123 already binds; binary preview is a Go-side hex dump
+and a per-file diff a Go-side unified diff, both through `codeView`. A proper
+diff or hex widget is its own decision.
+
+### SD9 — Durable state
+
+Pane locations, layout mode and synchronized-browsing flag compose a launch
+kind (`tallyLaunch`, ADR-0135) so a window restores as a workingset
+(ADR-0148); column widths ride ADR-0151. Nothing else persists.
+
+## Surfaces — Tier 1
+
+| Surface | Change | Moves with it |
+| --- | --- | --- |
+| `ladingsql` (exported API under `public/`) | `fs()` / `fsdata()` / `fssnap()` accept prelude-bound `{name:Type}` slots, `'*'` as the mount and `'latest'` as the snapshot (SD6); `References` gains `All` / `Unbound` | goldens (two new); play's `RegisterComponents` adds the policy kind; the passreg factory is unchanged |
+| `public/thestack/imzero2/egui2/widgets/fsbrowser` | new exported widget package | the gallery (`registry.Demo`), glyph baseline, designlint scope |
+| `apps/tally` | new app id, manifest (caps `windowhost.open`, `clipboard.write`), help book | the host's app roster and the capslock check's import list; the Apps menu |
+| `public/fs/lading/ladingview` | new exported package: `Guard` / `Locked` (one lock over a store's adapter views) and `ReadHead` (a bounded stat-and-read for previews) | nothing else; it is what keeps file-handle plumbing out of the app package (see the 2026-08-20 update) |
+| `scripts/dev/fsbrowser-widget-scene.sh`, `scripts/dev/tally-scene.sh` | new headless scenes (ADR-0154 lane) | the verification plan below |
+| `public/keelson/vdd` (the facts vocabulary, ADR-0135 §SD2) | eight members added to the windowhost cohort: `tallyLaunchMountA/SnapA/DirA/MountB/SnapB/DirB` (textArray), `tallyLaunchSync` (bool), `tallyLaunchTarget` (symbol), ordinals 141–148 | the committed assignment golden; `apps/tally/launchcfg` (kind `tallyLaunch`, generated codec, `kindcheck` registration) |
+| `apps/sqlapplet/booklading` | new book id `lading` | the book corpus test |
+| `boxer fs snapshot` (CLI, `public/app/commands/ladingfs`) | new verb: walk a directory or an rclone remote into the store, optionally recording the policy under `--name` — the ingest route SD5 relies on | the how-to §3 |
+| egui2 IDL, capability subjects, vocabularies, `boxer.facts` | **unchanged** | nothing |
+
+## Alternatives
+
+- **A sqlapplet book only (O1).** Query-first; fails recognisability. Kept as M0.
+- **A play panel (O2).** Query-first posture; recorded as the follow-up.
+- **Extending `filepicker` into the browser.** A dialog's contract (commit a
+  path) is not a browser's; the widget is new and the dialog may adopt it.
+- **A DnD opcode, a native tree node, a hex/diff node now.** Tier-1 IDL work
+  for conveniences buttons and Go-side renderings cover.
+- **Binding visibility to a new capability subject now.** Decided against for
+  v1 (SD5); the seam keeps the door open.
+
+## Consequences
+
+### Positive
+
+- A recognisable browser over snapshots with compare, history, find, `du`
+  and integrity as views rather than features; the widget serves any `fs.FS`.
+- The book ships first and every query in it is the app's, pinned twice.
+- Macro knobs make lading usable from play and applets without literals.
+
+### Negative
+
+- A new exported widget to maintain; two panes and lazy trees carry the
+  etable/tree id and culling disciplines (survey §9).
+- Without ingest or export the app is a reader; the follow-ups are recorded,
+  not built.
+
+### Neutral
+
+- `VisibleAll` is the operator's own credentials; a multi-user deployment
+  revisits SD5.
+
+## Migration — Tier 1
+
+- **Breaks.** Nothing: additive macro arguments, new packages, a new app id,
+  a new book, eight new vocabulary members (append-only ordinals).
+- **Path.** None for existing callers; a literal mount keeps expanding as
+  before.
+- **Regeneration.** The vocabulary assignment golden
+  (`BOXER_VOCAB_GOLDEN_REGEN=1 go test ./public/keelson/vdd/`) and
+  `apps/tally/launchcfg/launchcfg.out.go` (its golden test with `-update`);
+  no IDL, no store.
+- **Old shape.** None.
+
+## Verification plan — Tier 1
+
+- **Lane: default `go test`.** `ladingsql`: slot resolution from the prelude,
+  the unbound refusal, `References` on unresolved calls, goldens. `sqlapplet`:
+  the lading book parses, classifies read-only, every knob prelude-bound,
+  tab selections as declared. `fsbrowser`: model and layout tests over
+  `fstest.MapFS`; a headless driver scene (ADR-0154) asserting navigation and
+  selection state. `tally`: manifest validity, launch-kind round trip.
+- **Lane: `//go:build integration`.** A seeded store; each book chapter's SQL
+  executed through the expansion; the app's lanes against the seeded mount.
+- **Lane: screenshots.** The widget in the gallery tour; the app through its
+  capture env vars.
+- **Gates.** doclint, codelint, designlint, the glyph and capslock
+  baselines, `go mod tidy --diff`.
+- **What would fail.** A slot resolving to the wrong mount; a chapter that
+  mutates; a pane whose listing disagrees with `fs.ReadDir`; a diff that
+  disagrees with the §7 query; an action that writes.
+- **Gap.** Scale (10⁶-entry mounts) is asserted by construction — lazy reads,
+  gated emission — not measured until a large mount exists in a lane.
+
+## Status
+
+Proposed — awaiting review. Milestones:
+
+- **M0 — the lading book.** ✓ SD6 in `ladingsql`; `booklading` with nine
+  chapters — ledger, browse, find, content search, history, diff, du,
+  problems, block audit — each pinned by the book test and executed against a
+  live server in the integration lane (2026-08-20).
+- **M1 — `fsbrowser`.** ✓ SD2 as `widgets/fsbrowser` (list and outline,
+  breadcrumb, quick filter, sort, selection, keyboard, host columns), the
+  gallery demo "file browser" over an in-memory tree, the headless scene
+  `scripts/dev/fsbrowser-widget-scene.sh` (2026-08-20).
+- **M2 — the app.** ✓ `apps/tally`: manifest, dock (Pane A over Preview /
+  Info), Mounts with snapshots and follow-latest, Preview by type, Info from
+  `fs()`, help book, the headless scene `scripts/dev/tally-scene.sh` against
+  a seeded store (2026-08-20).
+- **M3 — two panes and time.** ✓ Pane B beside Pane A (always shown; the
+  dock divider is the collapse), a Target switch for which pane the Mounts
+  clicks address, Sync browsing, the Diff tab (A's directory or the whole
+  snapshot, coloured added / removed / modified, a click travels pane B),
+  the History tab (timeline flags and the versions table, a click pins the
+  snapshot), Open in play, Copy rclone mount (2026-08-20).
+- **M4 — Find, Du, Problems.** ✓ Find (path pattern, extension, minimum
+  size, or a content needle with exact line numbers; scope this directory /
+  this snapshot / all mounts; a click travels), Du (the one-pass du table
+  and a treemap of the largest files under the directory), Problems (the
+  unreadable entries, and a BLAKE3 block audit run on demand) (2026-08-20).
+- **M5 — components.** ✓ The Info pane's Components section: which
+  registered kinds carry the entry — the store's own on the entry row (a
+  root row is an entry and a snapshot) and every kind in the default
+  component registry probed over its own table by the entry's key; the
+  integration-lane example is the store's own root row rather than a test
+  vocabulary (2026-08-20).
+- **M6 — durability.** ✓ `tallyLaunch` (the two pane locations, sync,
+  target) as a leeway-declared launch kind with a generated codec, declared
+  on the manifest with `Workingset: true`; the window restores as a
+  workingset and opens from a launch request; dirty means a choice made
+  after the mounts were known (2026-08-21). Column widths and the
+  acceptance flip remain.
+
+## Updates
+
+### 2026-08-20 — M0, M1 and M2 shipped; what they corrected
+
+**M0.** Three macro spellings rather than one (§SD6 as written now): slots,
+`'*'` as the mount, `'latest'` as the snapshot. The book needed the wildcard
+— without it every chapter wanted a mount id typed in before it showed a
+row, and a book whose every page opens empty is not a first milestone. play
+registers the mount policy kind so a chapter can name a mount. `boxer fs
+snapshot` joined the CLI because §SD5's "snapshots are taken by the CLI"
+named a verb that did not exist.
+
+**M1.** The widget is as §SD2 says, with one addition the outline needed:
+an unread directory carries a placeholder child under a NUL-suffixed key so
+it shows a disclosure control before anyone opened it, and a build loop that
+re-binds the tree state after every growth so expansion keyed by path can
+drive which directories are read. Verified by the headless lane, not by the
+capture env vars §Verification sketched — an accessibility-tree scene asserts
+the selection, the navigation and the outline mode in one run and leaves
+captures behind; the app follows the same lane.
+
+**M2.** Two things the design did not foresee. The capability gate (ADR-0026
+§SD10, `capslock`) resolves an interface call on `fs.File` / `fs.FileInfo` to
+every implementation, `*os.File` among them, so an app package that reads
+through an adapter view still reports `CAPABILITY_FILES` — a true statement
+about the call graph and a false one about the app. The file-handle plumbing
+(the locking wrapper over a view, the bounded stat-and-read a preview wants)
+therefore lives in `public/fs/lading/ladingview`, beside the adapter it
+serves, and the app handles bytes. And egui_dock's tabs are not in the
+accessibility tree, so a scene switches tabs by position; the scene script
+says so where it does it. Also recorded: the browser's directory reads run on
+the render thread through the adapter (a query each, cached forever per
+snapshot), which the slow-frame log shows as one 20–40 ms frame per first
+visit of a directory; a prefetching view is the follow-up if that ever reads
+as a hitch.
+
+**M3.** Pane B is always present rather than collapsible: egui_dock
+reconciles a tab added after the first frame into the *first* leaf, so a
+pane toggled on later would land beside Pane A as a tab, not to its right,
+and the preset that puts it to the right has to include it from the start.
+The dock divider is the collapse. The preset order matters too — the bottom
+leaf is split off first so it spans the window, then the upper leaf is split
+right for Pane B (imztop's shape). The lower tabs describe the *target*
+pane, which is whichever pane was clicked last, and the Mounts clicks address
+it; the diff reads A as the older side and B as the newer one, and the scene
+points B at a second mount for want of a second snapshot of the first.
+
+**M4.** Three tabs, all lanes over the §7 catalogue through the same
+`runTable` → `stringTable` path as Diff and History, so the app's SQL lives
+in one file of builders pinned by tests that expand every one of them. Find
+runs only when its Search button arms a key built from the knobs and the
+place, not on every keystroke. The treemap draws the largest 4 000 files
+under the directory — exact below the cap, a top-N picture above it — because
+a tree built from directory totals would double-count what a treemap sums
+from its leaves. The audit is behind a button because it costs what the
+snapshot weighs.
+
+**M5.** Smaller than §SD2 sketched and more honest: no optional component
+columns in the listing yet, because no domain writes a component over lading
+entries today and a column that is empty on every row would be a claim
+without evidence. What shipped is the read path and its worked example on
+data that exists — the root row reading as `LadingEntry` and
+`LadingSnapshot`, an ordinary file as `LadingEntry` alone — through the same
+presence predicates ADR-0189 publishes, keyed by the entry's backbone
+triple, over every registered kind's table. Columns come with the first
+writer. The probes skip a table they cannot query rather than failing the
+pane: a registered set over another shape is not this entry's concern.
+
+**M6.** The launch kind is the smallest record that reproduces a window —
+two locations, the sync flag, the target — and a pane that follows latest
+records no snapshot, so a restore follows latest too rather than pinning
+what happened to be newest at close. Dirty tracking is play's: a baseline of
+the composed config, compared per frame; the baseline is taken only once
+the mount list has arrived, because the list filling an empty pane is the
+app's doing, not the reader's. Column-width persistence (ADR-0151) is not
+wired — the browser's columns are the widget's, and the widget has no
+resolver seam yet; it is the one M6 item left open, with the acceptance flip.
+
+## References
+
+- [ADR-0198](./0198-fs-snapshot-store.md) (proposed) and
+  [the survey page](../adr-background-work/lading-browser-survey.md).
+- ADR-0026 (capabilities, Powerbox), ADR-0097 (play panels), ADR-0123,
+  ADR-0132 (sqlapplet), ADR-0135 / ADR-0148 (launch kinds, workingsets),
+  ADR-0151, ADR-0154, ADR-0176 (tree widget), ADR-0177 (keys), ADR-0186
+  (glosses), ADR-0189 (`LW_COMPONENT`).
