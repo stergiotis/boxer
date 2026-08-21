@@ -1159,6 +1159,73 @@ The threshold is a query decision, not a panel one: a roll-up you wrote is
 reproducible and shows up in the total, where a cell the renderer dropped for
 being too small to draw does neither.
 
+## The same disk, as a tree you can walk (Files)
+
+The **Files** tab (ADR-0200) reads one required column — `path` — and browses
+the result as a file tree: a sortable listing of one directory at a time, or
+the whole subtree as an outline, with a breadcrumb, a quick filter and the
+arrow keys. It is the widget `tally` browses lading snapshots with, over
+whatever a query returned.
+
+`is_dir`, `size`, `mtime`, `link_target` and `is_symlink` are read by name when
+the query projects them, and **every other column becomes a column of the
+browser**, so what a query selects is what the listing shows. Here the parts of
+the tables above are read as `database/table/part`, which is a hierarchy the
+server has and no directory on disk does:
+
+```sql
+SELECT concat(database, '/', table, '/', name) AS path,
+       bytes_on_disk                           AS size,
+       modification_time                       AS mtime,
+       part_type,
+       rows
+FROM system.parts
+WHERE active
+ORDER BY path
+```
+
+The databases and tables are **synthesised**: no row named them, so they carry
+no size and no time of their own — a directory's size is a claim this result
+did not make, and the `du` sections above are where totals belong. Clicking a
+row publishes two things, and the difference is that split: `selection_key` is
+the path of whatever was clicked, always, while `selection` — the row cursor
+the **Detail** tab follows — moves only for an entry a row named. Detail is the
+preview: a row here is metadata, not bytes.
+
+## A snapshot, browsed (`fs()`)
+
+The case the panel was built for. `fs()` (ADR-0198) projects the lading
+snapshot store one row per entry, so its result browses directly, with the
+store's own columns — the BLAKE3 hash, whether the text guarantee holds,
+whether the bytes were stored inline or referenced — riding beside name, size
+and modified. Nothing here is a listing this app assembled: it is the query.
+
+`'*'` is every mount the caller may read, and the newest complete snapshot of
+each; a mount id in its place browses one. Glossed columns answer the contract
+under their label, so `size` still sizes the entries while rendering as bytes:
+
+```sql
+SELECT path,
+       is_dir,
+       size AS "size@gloss/bytes",
+       mtime,
+       ext,
+       text,
+       lower(hex(content_hash)) AS hash
+FROM fs('*')
+ORDER BY path
+LIMIT 20000
+```
+
+This needs a store with something in it — `boxer fs snapshot` takes one — and
+the **lading** book has the same query as a chapter, beside find, diff, history
+and `du`. Two mounts under `'*'` merge into one tree; project `mount` and the
+column says which, or name a single mount to keep them apart. The mount is
+written here as a literal rather than as a `{m:String}` knob because a slot is
+resolved from the prelude and this app harvests the prelude away before the
+macro expands — the book's chapters take the knob and that is where it is
+being fixed.
+
 ## Bars, lines and a heatmap (Chart)
 
 The **Chart** tab (ADR-0172) is the plain chart the other panels leave
