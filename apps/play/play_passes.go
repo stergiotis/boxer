@@ -4,6 +4,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingpolicy"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	"github.com/stergiotis/boxer/public/identity/identsql"
@@ -59,7 +60,14 @@ func RegisterPasses(r *passreg.Registry) (err error) {
 // Only stores whose tables play actually reads belong here. sysmetrics is the
 // first — its rows are what ADR-0184's tee writes, and what loadstudy reads.
 func RegisterComponents(r *componentsql.Registry) (err error) {
-	return r.Register(sysmfacts.SysmetricsComponentSQL)
+	if err = r.Register(sysmfacts.SysmetricsComponentSQL); err != nil {
+		return
+	}
+	// The lading mount policy (ADR-0198 §SD2) is the one lading kind that
+	// lives in boxer.facts rather than behind an fs*() macro; registering it
+	// is what lets a statement name a mount by its declared name
+	// (ADR-0200 §SD6).
+	return r.Register(ladingpolicy.PolicyComponentSQL)
 }
 
 // RegisterVocabulary publishes every SQL function this build declares into one
