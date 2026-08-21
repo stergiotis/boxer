@@ -172,18 +172,19 @@ func (in Input) renderList(st *State, density styletokens.DensityE, res *Result)
 	if st.keyFrameID != 0 {
 		prev := st.rows
 		ki := applyKeys(st, prev, st.keyFrameID, st.lastVisibleRows)
-		switch {
-		case ki.up:
-			if st.Up() {
-				res.Navigated, res.SelectionChanged = true, true
-			}
-		case ki.activate:
+		// A move lands first, so an Enter in the same batch activates where
+		// the cursor arrived; Backspace last, because it leaves the listing.
+		if ki.moved && ki.row >= 0 && ki.row < len(prev) {
+			st.SelectOnly(prev[ki.row].Path)
+			res.SelectionChanged = true
+		}
+		if ki.activate {
 			if r := rowOfPath(prev, st.cursor); r >= 0 {
 				in.activate(st, prev, r, res)
 			}
-		case ki.moved && ki.row >= 0 && ki.row < len(prev):
-			st.SelectOnly(prev[ki.row].Path)
-			res.SelectionChanged = true
+		}
+		if ki.up && !res.Navigated && st.Up() {
+			res.Navigated, res.SelectionChanged = true, true
 		}
 	}
 

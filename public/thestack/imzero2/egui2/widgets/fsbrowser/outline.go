@@ -23,9 +23,6 @@ const placeholderKeySuffix = "\x00"
 // placeholder node has Ord -1 and an empty Path.
 func (st *State) buildOutline(fsys fs.FS, showHidden bool) (t tree.Tree, nodes []Entry) {
 	st.ensure()
-	if st.loadedDir == nil {
-		st.loadedDir = make(map[string]bool, 16)
-	}
 	t = tree.Tree{
 		Labels:  st.outlineT.Labels[:0],
 		Parents: st.outlineT.Parents[:0],

@@ -142,10 +142,9 @@ type State struct {
 	rows            []Entry
 
 	// outline mode
-	tree      tree.State
-	nodes     []Entry
-	outlineT  tree.Tree
-	loadedDir map[string]bool
+	tree     tree.State
+	nodes    []Entry
+	outlineT tree.Tree
 }
 
 func (st *State) ensure() {
@@ -258,7 +257,6 @@ func (st *State) SetCursor(p string) { st.cursor = p }
 // shows. The selection and the directory stay.
 func (st *State) Invalidate() {
 	st.cache = nil
-	st.loadedDir = nil
 	st.ensure()
 }
 
@@ -271,7 +269,6 @@ func (st *State) rekey(key string) (changed bool) {
 	}
 	st.cacheKey = key
 	st.cache = make(map[string]*listing, 16)
-	st.loadedDir = nil
 	st.clearSelection()
 	return true
 }
