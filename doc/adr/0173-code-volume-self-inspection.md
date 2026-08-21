@@ -212,6 +212,10 @@ eliminated code are absent by construction. It would add a fourth,
 systematically smaller "lines" magnitude whose only use would be the
 comparison this question rejects.
 
+One thing this question got wrong is recorded in §SD13: it treated "lines" as
+what the file instrument reports, and the file instrument reports at least
+three things whose orderings disagree.
+
 ## Decision
 
 **The frame.** One table per (artifact, lens), keyed on that artifact's
@@ -465,6 +469,85 @@ package) plus this paragraph saying what that row contains. Recorded so that a
 future reader who notices a 341 KB data symbol has an explanation rather than
 a mystery.
 
+### SD12 — `owner`: the unit a supply-chain question is asked in
+
+A package is a packaging decision; the account that can publish a new version
+of it is the trust boundary. `party` answers "is this ours" and the module
+list answers "what is in here", but neither answers "how many independent
+parties can change what we ship".
+
+One column, `owner`, on `go_modules` (§SD1) and `rust_crates` (§SD9). For Go
+it is **free and needs nothing**: the owner is a prefix of the module path the
+binary already declares — host plus organisation for the forge hosts, the host
+alone for vanity domains, with the few aggregate domains (`golang.org/x`,
+`k8s.io`, `google.golang.org`) mapped to their publisher. That puts a
+supply-chain answer in the §SD1 tier, the one that works on a deploy target
+with no source and no toolchain. For Rust it is the `repository` field of each
+crate's `Cargo.toml` in the registry cache — the §SD9 tier — falling back to
+the crate name where the field is absent.
+
+**What the column does not buy, measured.** It does not correct for packaging
+granularity between ecosystems, which is the reason it was first proposed.
+Against the second tree of the 2026-08-22 trial, on matched denominators —
+every package in each build — packages differ 1.67× and owners 1.70×: 556
+packages over 235 owners here, 926 over 399 there, which is 2.37 against 2.32
+packages per owner. Cargo crates, Go modules and the npm packages that
+actually reach a bundle are equally fine-grained. npm's reputation for
+fragmentation appears only in the lockfile lens (3,269 packages over 1,036
+owners, 3.16 each), and that is a fact about dev tooling rather than about
+what ships. Recorded so the granularity argument is not re-derived.
+
+**What it does buy** is two readings the package grain cannot express.
+
+- **Owners nobody chose.** Direct requirements name 74 owners here against a
+  build containing 235, so 161 (69%) arrive transitively; the second tree
+  chose 211 of 399, leaving 47%. A bigger dependency set is not automatically
+  a bigger unexamined one, and the split is the part a review can act on.
+- **Own code arriving as a dependency.** Grouping third-party rows by owner
+  puts the vendor's own name in the third-party column wherever a program's
+  code lives in more than one repository. It does not happen here — no
+  `replace` directive, no second first-party Go module, no git or path Cargo
+  dependency outside the workspace — which is precisely why the `party`
+  column has never been forced to admit that it is repository-scoped. In the
+  second tree it is worth 24 Go modules and 25 npm packages: 273,066 Go lines
+  of which 54.1% is generated, enough to move that tree's third-party ratio by
+  a third and its generated-code share by half.
+
+Deliberately not attempted: registry ownership through the crates.io and npm
+owner APIs. It is the more accurate answer and it needs the network, which
+every tier here is designed not to need.
+
+### SD13 — `code_stmts` and `code_branches`: the source lens has a magnitude too
+
+Q3 settled the choice *between* instruments. It did not notice that the file
+instrument itself reports several magnitudes, and that they order the same two
+trees differently. Over each tree's Go closure, third-party per first-party
+runs 2.57 / 2.18 / 2.65 here and 8.77 / 10.28 / 11.51 there for lines,
+statements and branch points respectively; across a whole build including the
+non-Go half the comparison changes sign, this tree carrying more third-party
+per hand-written unit by line and less by statement.
+
+The cause is the distortion this ADR already documents in another form. The
+largest single upstream in each of this repository's two languages is a table
+rather than logic: `andybalholm/brotli` is 255,835 code lines of which 18,059
+sit inside function bodies, and `linux-raw-sys` is 748,784 lines across the
+two versions in the client build, 96–98% of them never compiled. A line count
+charges full price for both, a statement count charges nothing, and neither is
+wrong — they answer different questions.
+
+Two columns on `go_packages` beside the existing line columns, from
+`go/parser` over the file list §SD3 already builds. Measured: 7,835 files in
+0.29 s wall and 4.3 s CPU, so it sits inside the §SD3 tier rather than needing
+one of its own, and it shares that pass's separate cache.
+
+**Beside lines, never instead of them.** Lines are the only magnitude
+available without a parser — §SD9's Rust classifier and any future one would
+each need their own — and the disagreement between the two *is* the finding,
+so a schema that offered only the semantic column would hide it. The §SD10
+authorship split survives the change of instrument, which is the check that
+makes it trustworthy: first-party volume here is 42.7% generated by line and
+42.3% by statement, but only 29.6% by branch point. Generators emit flat code.
+
 ### Milestones
 
 - **M0 — `go_modules` (§SD1).** ✓ Smallest, no prerequisites, immediately useful.
@@ -475,6 +558,11 @@ a mystery.
 - **M5 — `rust_crates` + Rust source volume (§SD9),** including the line classifier.
 - **M6 — the applet book widened (§SD6):** artifact selector, authored-vs-emitted view.
 - **M7 — `go_reach` subcommand, bgjob wiring, table (§SD4).** Last: highest cost, narrowest use.
+- **M8 — the `owner` column (§SD12).** The Go half is free from §SD1's
+  existing list, so it can land beside any of the above; the Rust half waits
+  on §SD9's registry read.
+- **M9 — `code_stmts` / `code_branches` (§SD13).** One parser pass on a file
+  list that already exists, in a cache that already exists.
 
 M3 moved ahead of the Rust work because it is nearly free and touches the
 largest single distortion in the numbers already being served. The first cut
@@ -486,6 +574,8 @@ in the godep book); M6 widens it rather than starting it.
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | `keelson('go_packages')` schema | 5 columns added (M2 ✓), `generator` added (M3) | `providersgodep` table builder + its query tests; any applet selecting `*` |
+| `keelson('go_packages')` schema | `code_stmts` / `code_branches` added (M9) | same builder + tests; §SD13's parser pass joins the §SD3 cache |
+| `keelson('go_modules')` / `rust_crates` schema | `owner` added (M8) | static provider registration; `go_modules` gains no prerequisite |
 | keelson table catalog | 5 tables added (`go_modules` ✓, `go_symbols` ✓, `go_reach`, `rust_symbols`, `rust_crates`) | `introspecthost` registrations; `keelson('tables')`/`keelson('columns')` output |
 | `boxer` CLI verbs | `code analysis golang reach` added (M7) | `entry-points.sh` baseline; extbin resolution roster |
 | imzero2 client config | read-only consumer of `ClientBinary` | nothing — no new knob, no new flag |
@@ -528,6 +618,16 @@ script — §SD8 and §SD9 read artifacts that already exist.
 - **A `code_volume_*` table family parallel to `go_packages`.** A second
   grain to keep in sync, and every question becomes a join, for no gain
   over columns on the table that already carries `class` and `module_path`.
+- **Counting packages as the supply-chain unit.** Kept, but not as the only
+  one — §SD12 adds `owner` because a maintainer account, not a package, is
+  what a compromise or an abandonment happens to. Measured, the two units rank
+  a pair of trees identically once the denominators match, so the column earns
+  its place on the chosen-versus-unchosen split and on vendor-owned
+  dependencies, not on granularity correction.
+- **Normalising every source figure to statements.** The inverse of Q3's
+  option *(a)*, and rejected the same way: it would hide the 65× spread
+  between a table and a function body instead of reporting it, and it needs a
+  parser per language where a line count needs none.
 - **A generated-file-to-input-file relation.** Would require modelling every
   generator; the tool name (§SD10) supports the grouping, and specific ratios
   are a `git ls-files` away.
@@ -601,7 +701,10 @@ script — §SD8 and §SD9 read artifacts that already exist.
   check fails at 5%, which is the regression this gate exists to catch);
   `rust_crates` row count diverging from `cargo tree` for the same feature
   set; a `go_packages` query exceeding its first-wait budget once the volume
-  cache is separate.
+  cache is separate. For §SD13, a package whose statement count exceeds its
+  code-line count, or a parse failure rate above zero on a tree that compiles
+  — both were zero over 32,648 files when measured. For §SD12, an `owner` that
+  is not a prefix of its own `path` for a Go row.
 - **Gap.** Attribution quality is reported, not gated — `module_attribution`
   for §SD2, `attribution` for §SD8 — because the only way to check either is
   the reconciliation the column says is absent. For §SD8 the measured coverage
@@ -695,6 +798,52 @@ since M2 changed `packagesTable`'s signature, and the default lane never
 builds it, so nothing reported it. The §SD10 live assertions were added to
 that file, which is how it was noticed — an argument for the verification
 plan's split lane being exercised rather than merely declared.
+
+### 2026-08-22 — measured against a second tree; two coordinates were missing
+
+The instruments were run over an unrelated public codebase — `grafana/grafana`
+at `ef9f33e4`, beside this repository at `487f57bc`, same Go toolchain — to
+find out whether the labels this ADR mandates are enough to keep two trees
+comparable. They are not yet. Three headline figures reversed while that
+comparison was being written and none of the reversals came from a measurement
+error; each came from a parameter the schema does not name. §SD12 and §SD13
+are the result, together with M8 and M9.
+
+- **The denominator mix is the failure mode in practice, not in theory.**
+  Q2 chose to report a labelled family and refuse to sum across it, and the
+  schema does make a cross-denominator total awkward. It does not stop a
+  *reader* pairing one tree's build against another tree's lockfile, which is
+  what happened: this repository's resolved-crate-directory figure set beside
+  the other tree's entire `yarn.lock` produced a confident "the two projects
+  carry the same third-party load per hand-written line" that survived a draft
+  and was wrong by a factor of 1.8. The same mistake recurred twice more in
+  the same session, once inside an argument for §SD12. Reporting the interval
+  across every defensible combination — 4.5–14.8 here against 7.6–13.6 there,
+  overlapping, therefore not separated by this evidence — is what the family
+  is for, and is now the recommended form when a free parameter survives.
+
+- **`party` is repository-scoped and nothing said so.** The rule "first-party
+  is what sits inside this tree" is exactly right for a program that lives in
+  one repository and silently wrong for one that does not. §SD12 keeps the
+  rule and makes it visible rather than replacing it.
+
+- **The magnitude of the source lens was assumed rather than chosen.** §SD13.
+
+Reproduced along the way, which is the part worth keeping. §SD3's classifier
+matched an independent counter exactly on the marker set (172 files, 262,615
+lines, identical to `grep` plus `wc`) and to one line in 23,969 against `scc`
+on the Rust client. §SD8's demangling convention reproduced on a current build
+— first-party 3.6% of text, `core`/`alloc`/`std` 23.0%, against the 3.3% and
+~23% in the Context. And the shipped lens was the only figure that did not
+move at any point in the exercise, in either language, because it reads a
+decision the linker already made rather than deriving one from a tree. That is
+the §SD2 and §SD8 tier justifying itself on a property nobody had claimed for
+it.
+
+The trial also produced the first measurement of these instruments against a
+codebase nobody here wrote, which is worth noting as a limit: every figure in
+the Context above is self-measurement, and self-measurement cannot show that a
+label is ambiguous. It took a second tree to find that three of them were.
 
 ## Status
 
