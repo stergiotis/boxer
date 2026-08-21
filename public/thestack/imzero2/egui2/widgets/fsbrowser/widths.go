@@ -28,7 +28,15 @@ const (
 // same number as Opts.MinPoints, so a column cannot be dragged below what
 // will come back on the next load.
 func MinColumnWidth(density styletokens.DensityE) float32 {
-	return widthContentMin + 2*styletokens.PaddingInner(density)
+	return widthContentMin + 2*cellInset(density)
+}
+
+// cellInset is the gap between a cell's content and its column gridline, both
+// sides. It is the tree widget's number and moves with it — the outline mode
+// draws its cells through that widget, so a browser whose list mode insets its
+// columns differently would shift every column as the reader switches modes.
+func cellInset(density styletokens.DensityE) float32 {
+	return styletokens.PaddingTight(density)
 }
 
 // widthColumns names the columns for the resolver, in emission order.

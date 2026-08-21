@@ -17,7 +17,6 @@ const (
 	defaultSizeWidth   float32 = 90
 	defaultTimeWidth   float32 = 140
 	defaultColumnWidth float32 = 120
-	rowOutlineInset    float32 = 1
 	filterWidth        float32 = 180
 
 	// Widget-id seeds, one namespace per id kind (ADR-0200 in the prefix).
@@ -296,6 +295,7 @@ func (in Input) pushColumns(plan widthPlan, density styletokens.DensityE) {
 // a frameless button; its glyph says which column orders the listing, and
 // which way.
 func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletokens.DensityE, plan widthPlan) {
+	pad := cellInset(density)
 	// withWidthMenu wraps a header in the reset gesture when widths persist:
 	// a context menu that returns this column, or every column, to its
 	// default (ADR-0151's clear affordance). ContextMenu senses hover only,
@@ -319,9 +319,9 @@ func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletoken
 	sortable := func(col uint32, text string, by SortByE) {
 		for range et.Headers(0, col) {
 			withWidthMenu(col, func() {
-				for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase + uint64(col))).
+				for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase+uint64(col))).
 					OuterMargin(0).
-					InnerMargin(styletokens.PaddingInner(density)).
+					InnerMarginSides(pad, pad, 0, 0).
 					KeepIter() {
 					label := text
 					if st.sortBy == by {
@@ -352,9 +352,9 @@ func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletoken
 		text := in.Columns[i].Header
 		for range et.Headers(0, col) {
 			withWidthMenu(col, func() {
-				for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase + uint64(col))).
+				for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase+uint64(col))).
 					OuterMargin(0).
-					InnerMargin(styletokens.PaddingInner(density)).
+					InnerMarginSides(pad, pad, 0, 0).
 					KeepIter() {
 					c.LabelAtoms(c.Atoms().BeginRichText(text).Strong().End().Keep()).Selectable(false).Send()
 				}
@@ -387,7 +387,10 @@ func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, e Entry, rowH float32
 			HoverCursorPointer()
 		for range fr.KeepIter() {
 			c.UiSetMinWidthAvailable()
-			c.UiSetMinHeight(rowH - rowOutlineInset)
+			// Both strokes, not one: a Frame paints its content rect grown by
+			// the stroke width on every side, so this is what makes the
+			// painted rect exactly the row. See tree.rowChrome.
+			c.UiSetMinHeight(rowH - 2*strokeWidth)
 		}
 	}
 	return c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id())
@@ -395,7 +398,7 @@ func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, e Entry, rowH float32
 
 func (in Input) paddedCell(e Entry, col int, density styletokens.DensityE, body func(e Entry)) {
 	ncols := uint64(builtinColumns + len(in.Columns))
-	pad := styletokens.PaddingInner(density)
+	pad := cellInset(density)
 	for range c.Frame(in.Ids.PrepareSeq(seqCellBase+uint64(e.Ord)*ncols+uint64(col))).
 		OuterMargin(0).
 		InnerMarginSides(pad, pad, 0, 0).
@@ -406,11 +409,18 @@ func (in Input) paddedCell(e Entry, col int, density styletokens.DensityE, body 
 
 // nameCell is the glyph and the name. Labels are non-selectable so the row's
 // sense behind them keeps the click.
+//
+// No `c.Horizontal()` around the pair: both callers already put this inside a
+// left-to-right, centred cell Ui — paddedCell's Frame in list mode, the tree's
+// outline cell in outline mode — and a Horizontal nested in one of those seats
+// its content about three points BELOW the row's midline, which is three
+// points off what the size and modified columns do. See tree.outlineCell for
+// the measurement; in outline mode the two nestings stacked and the name
+// column ran six points low, far enough that the cell clip took the descenders
+// off the directory names.
 func nameCell(e Entry) {
-	for range c.Horizontal().KeepIter() {
-		c.Label(glyphFor(e)).Selectable(false).Send()
-		c.Label(e.Name).Selectable(false).Truncate().Send()
-	}
+	c.Label(glyphFor(e)).Selectable(false).Send()
+	c.Label(e.Name).Selectable(false).Truncate().Send()
 }
 
 func sizeCell(e Entry) {

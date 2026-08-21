@@ -75,12 +75,16 @@ const (
 	// than padding a leaf by an eyeballed amount: a Button sizes to its glyph
 	// plus egui's button padding, which Go cannot measure and which moves with
 	// the theme.
-	discloseWidth float32 = 20
-	// rowOutlineInset is how much shorter than the row the chrome Frame's
-	// CONTENT is asked to be, so the selection outline's bottom edge does not
-	// sit on the row pitch. See rowChrome for what that fixes and for the
-	// three explanations it is not.
-	rowOutlineInset float32 = 1
+	//
+	// 16 rather than the 20 this started at. UiSetWidth pins the Ui's max as
+	// well as its min, so the slack shows up as a gap between the disclosure
+	// control and whatever the label starts with, on top of the row's own item
+	// spacing — 19 points of it at 20, which reads as the two belonging to
+	// different columns. Measured on `34_fsbrowser`'s outline capture at a
+	// point per pixel, the caret's ink is unchanged between the two, so 16 is
+	// still wider than the control it holds; below that the width would start
+	// clipping a glyph rather than trimming a gap.
+	discloseWidth float32 = 16
 	// scrollAlignCenter is decode_scroll_align's egui::Align::Center. A
 	// revealed row lands mid-viewport with its neighbours around it, which is
 	// what makes the reveal legible; TOP would put it against the edge with no
@@ -520,15 +524,20 @@ func (in Input) numStickyHeaders() uint32 {
 // renderHeaders emits the header row as deferred blocks rather than as
 // etHeaderText, so the titles get the same inset the cells get — the text
 // fallback is a bare ui.heading() sitting flush against the column gridline.
+//
+// "The same inset" is horizontal only, for the reason paddedCell gives: a
+// symmetric one spends the header row's height on margin and pushes the title
+// off its own midline, so a header no longer lines up with the column under it.
 func (in Input) renderHeaders(et c.EndETableFluid, density styletokens.DensityE) {
 	if in.numStickyHeaders() == 0 {
 		return
 	}
+	pad := cellInset(density)
 	header := func(col uint32, text string) {
 		for range et.Headers(0, col) {
-			for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase + uint64(col))).
+			for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase+uint64(col))).
 				OuterMargin(0).
-				InnerMargin(styletokens.PaddingInner(density)).
+				InnerMarginSides(pad, pad, 0, 0).
 				KeepIter() {
 				atoms := c.Atoms().BeginRichText(text).Strong().End().Keep()
 				c.LabelAtoms(atoms).Selectable(false).Send()
@@ -550,37 +559,31 @@ func (in Input) renderHeaders(et c.EndETableFluid, density styletokens.DensityE)
 // Selection beats the stripe, and the stroke is width 0 and transparent when
 // the row is not selected so nothing picks up an accidental border.
 //
-// # The content is a point shorter than the row, and that is what closes the outline
+// # The content is asked for the row MINUS both strokes, so the painted rect is the row
 //
-// Asking for the full rowH loses the selection outline's BOTTOM edge on every
-// row that has another row after it: top, left and right paint, the bottom
-// does not. It is the defect ADR-0176 M4 was reported with, and it is worth
-// the paragraph because the shape of it misleads.
+// egui does not paint a Frame at its content rect. `Frame::widget_rect` is
+// `content_rect + inner_margin + stroke.width`, so a stroked Frame paints a
+// point wider than its content on every side and the stroke lands inside
+// THAT. Asking for the full rowH therefore paints 24 points of chrome on a
+// 22-point pitch: the bottom edge falls in the next row (the defect ADR-0176
+// M4 was reported with) and the top edge falls in the previous one, where it
+// crosses whatever that row's outline column has hanging below its baseline.
 //
-// What it is not, each ruled out by measuring a headless capture at one pixel
-// per point:
+// Taking a single point off — what this did until 2026-08-21 — closes the
+// bottom edge and leaves the top one: 23 points still do not fit in 22, and
+// the capture that prompted this showed the outline's top edge cutting the
+// descenders of the row above it.
 //
-//   - not the next row painting over it. An unselected, unstriped row's fill
-//     is RGBA(0,0,0,0) and its stroke is width 0, so it paints nothing at all;
-//     the row below the affected one is usually exactly that.
-//   - not the row's own clip. egui_table builds a row Ui with `max_rect` and,
-//     unlike the cell path, never calls `shrink_clip_rect` — and with the
-//     point taken off here the bottom edge lands one pixel BELOW the row and
-//     is drawn, which a clip would have removed.
-//   - not rasterisation losing a hairline. At stroke width 2 the bottom edge
-//     is absent entirely rather than thinned.
+// Subtracting both strokes makes the painted rect exactly the row, on either
+// branch and by construction rather than by a measured constant:
 //
-// What is left is inside epaint's `StrokeKind::Inside` tessellation of a rect
-// whose height is exactly the row pitch: the fill wins the bottom band and the
-// three other sides survive. Taking a point off the content height moves the
-// stroke off that boundary and all four sides paint — measured on both row
-// parities, and a single row with nothing below it draws correctly either way.
-// The fill still covers the row, since the frame paints its own rect rather
-// than the content's, so this leaves no seam between adjacent stripes.
+//   - selected: content rowH-2, painted rowH, all four edges inside the row.
+//   - not selected: stroke width 0, content rowH, painted rowH — so adjacent
+//     stripes tile with no seam, where the old constant left a point of the
+//     backdrop showing between every pair.
 //
-// It is a workaround for a renderer detail, not a layout decision, and it is
-// pinned by `scripts/dev/tree-widget-scene.sh`'s capture: the reproduction is
-// select a row, expand its parent, look at the bottom edge.
+// Pinned by `scripts/dev/play-screenshot-tour.sh 34_fsbrowser`: the
+// reproduction is select a row, expand its parent, look at both edges.
 func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, r Row, rowH float32, selected bool) c.ResponseFlagsE {
 	fill := clearFill
 	switch {
@@ -604,7 +607,7 @@ func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, r Row, rowH float32, 
 			HoverCursorPointer()
 		for range fr.KeepIter() {
 			c.UiSetMinWidthAvailable()
-			c.UiSetMinHeight(rowH - rowOutlineInset)
+			c.UiSetMinHeight(rowH - 2*strokeWidth)
 		}
 	}
 	return c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id())
@@ -612,25 +615,46 @@ func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, r Row, rowH float32, 
 
 // outlineCell draws the indent, the disclosure control and the label, and
 // reports whether the disclosure was clicked.
+//
+// # There is no Horizontal here, and that is what keeps the column on the row's midline
+//
+// The obvious spelling wraps the three in a `c.Horizontal()`. It is not needed
+// — egui_table already builds every cell Ui as `left_to_right(Align::Center)`,
+// and a Frame's content Ui inherits its parent's layout — and it costs the
+// whole column its vertical placement.
+//
+// `ui.horizontal()` allocates a child Ui whose cross-axis extent is
+// `spacing.interact_size.y` rather than the cell's, and what centres in that
+// band is not what centres in the row. Measured on one capture at a point per
+// pixel, 22-point rows: the size and modified columns (Frame → Label) put
+// their ink 1 point ABOVE the row's midline; the outline column, one
+// Horizontal deep, put it 2 points below, and a host cell that opened a second
+// Horizontal of its own put it 5 below. Six points of drift between the first
+// column and the rest, on rows with 2 points of headroom — so the descenders
+// of the outline column's own labels fell outside the cell rect, which
+// egui_table clips (`cell_ui.shrink_clip_rect`), and "canonicaltypes" lost the
+// tails of its y and its p.
+//
+// The same applies to a host's [Column.Cell]: it runs inside this cell's Ui,
+// so it should emit its labels straight into it. One that wraps itself in a
+// Horizontal seats its content ~3 points low and gets that back by dropping
+// the wrapper.
 func (in Input) outlineCell(r Row, indent float32, density styletokens.DensityE) (toggled bool) {
 	in.paddedCell(r, 0, density, func(row Row) {
-		for range c.Horizontal().KeepIter() {
-			if d := float32(r.Depth) * indent; d > 0 {
-				c.AddSpace(d)
-			}
-			toggled = in.disclose(r)
-			if in.Outline.Cell != nil {
-				in.Outline.Cell(row)
-				return
-			}
-			// Selectable(false) is load-bearing, not tidiness: egui makes
-			// labels selectable by default and a selectable label senses
-			// click_and_drag, so it would sit over the row block behind it and
-			// eat every click on the label's own rect. Truncate keeps a long
-			// label on one line — the row height is fixed, so a wrapped label
-			// is a clipped one.
-			c.Label(in.Tree.Labels[row.Node]).Selectable(false).Truncate().Send()
+		if d := float32(r.Depth) * indent; d > 0 {
+			c.AddSpace(d)
 		}
+		toggled = in.disclose(r)
+		if in.Outline.Cell != nil {
+			in.Outline.Cell(row)
+			return
+		}
+		// Selectable(false) is load-bearing, not tidiness: egui makes labels
+		// selectable by default and a selectable label senses click_and_drag,
+		// so it would sit over the row block behind it and eat every click on
+		// the label's own rect. Truncate keeps a long label on one line — the
+		// row height is fixed, so a wrapped label is a clipped one.
+		c.Label(in.Tree.Labels[row.Node]).Selectable(false).Truncate().Send()
 	})
 	return
 }
@@ -693,13 +717,24 @@ func (in Input) disclose(r Row) (clicked bool) {
 // a cell still has to live inside.
 func (in Input) paddedCell(r Row, col int, density styletokens.DensityE, body func(r Row)) {
 	ncols := uint64(1 + len(in.Columns))
-	pad := styletokens.PaddingInner(density)
+	pad := cellInset(density)
 	for range c.Frame(in.Ids.PrepareSeq(seqCellBase+uint64(r.Node)*ncols+uint64(col))).
 		OuterMargin(0).
 		InnerMarginSides(pad, pad, 0, 0).
 		KeepIter() {
 		body(r)
 	}
+}
+
+// cellInset is the horizontal gap between a cell's content and its column
+// gridline, both sides — Px[2] rather than the Px[1] this used until
+// 2026-08-21. Four points read as text hugging the rule at the densities the
+// widget is used at, and a column's own gridline is a harder edge than the
+// widget interiors Px[1] is scaled for; six separates the two without costing
+// a column enough width to matter. A host sizing its columns should count it
+// twice, the way fsbrowser's MinColumnWidth does.
+func cellInset(density styletokens.DensityE) float32 {
+	return styletokens.PaddingTight(density)
 }
 
 // selectMode is how a click combines with the selection already there — the
