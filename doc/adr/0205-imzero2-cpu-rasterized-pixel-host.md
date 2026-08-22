@@ -240,7 +240,12 @@ outside it.
   (8c6696b3), four workers by default (41da3bdd).
 - **M3 — placement advice.** ✓ (2026-08-22) affinity and L3 budget at startup (0b25c9e3).
 - **M4 — a verification lane.** Not started; see §Verification plan.
-- **M5 — upstream the tiled blit.** Not started.
+- **M5 — upstream the tiled blit.** ✓ (2026-08-22) filed as
+  [DGriffin91/egui_software_backend#17](https://github.com/DGriffin91/egui_software_backend/pull/17),
+  one commit on top of upstream `main`, additive, with tests that need no
+  GPU. If it merges, the §SD2 delta shrinks to the two boxer-only items (a
+  `pub` widening and a clippy allow) and the re-sync in `VENDORING.md`
+  becomes near-trivial. Awaiting review.
 - **M6 — musl-static + gokrazy probe.** Not started; inherits ADR-0128 M3. The
   remaining C dependencies in this graph are `ring` (via `rustls` ← `reqwest` ←
   the `walkers` map widget) and `mimalloc`, so an appliance build that drops the
