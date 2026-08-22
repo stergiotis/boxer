@@ -517,3 +517,117 @@ lavapipe, and buys: no Vulkan loader, no ICD, no Mesa in the runtime image
 (§10.1 — three crates, 6.8 MB of binary, and a dependency the airgap tooling
 currently warns about when it is missing). That is a deployment-surface trade,
 and it should be argued on those terms rather than on throughput.
+
+## 12 Code footprint, and how well the rasterizer is optimised (added 2026-08-22)
+
+### 12.1 Footprint
+
+Symbol sizes from the two built hosts (`nm --size-sort -S`, attributed by the
+leading path segment of the demangled name), and source lines from the crates
+they come from:
+
+| | machine code (`.text`) | Rust source |
+| --- | --- | --- |
+| GPU stack: `naga`, `wgpu-core`, `wgpu-hal`, `wgpu`, `wgpu-types`, `egui-wgpu`, `ash`, `glow`, the allocators | **2,367,505 B** | 265,785 lines |
+| CPU stack: `egui_software_backend`, `constify`, `strength_reduce`, `bytemuck` | **138,103 B** | 4,690 lines |
+
+**17× less machine code, 57× less source.** Half the GPU stack's code is one
+crate: `naga` at 1,166,900 B, a shader compiler — which is exactly the kind of
+thing a software rasterizer does not need to carry.
+
+Whole-binary `.text` drops further than the attributed difference, 13.42 MB →
+9.83 MB, because removing wgpu also removes its share of the generic
+instantiations that land in `core`/`alloc` (`core` alone: 2.33 MB → 1.52 MB).
+
+### 12.2 What a frame actually costs it
+
+Measured on the same play frame as §11 (1920×1200, ~8,835 triangles), counting
+triangle areas directly from the primitives rather than trusting the crate's own
+buckets — those record a triangle's *pre-clip bounding box* and *half* a rect's,
+in opposite directions, which is a good way to be wrong by 5× in either
+direction:
+
+| | pixels |
+| --- | --- |
+| frame | 2,304,000 |
+| true triangle area (clip-bounded) | 9,360,547 |
+| **overdraw** | **4.1×** |
+| triangle *bounding-box* area | 55,170,777 (5.9× the true area) |
+
+That last row is why the rasterizer's span-walking matters: egui draws text as
+thin quads, so a rasterizer that filled bounding boxes would do six times the
+work.
+
+Holding the UI fixed and scaling only `IMZERO2_HEADLESS_PIXELS_PER_POINT` (so
+the triangle count stays at ~7,440 and only the pixel count moves) separates
+the two halves of the cost:
+
+| ppp | target | p50 |
+| --- | --- | --- |
+| 1.0 | 1280×800 (1.02 Mpx) | 1.83 ms |
+| 1.25 | 1600×1000 (1.60 Mpx) | 2.54 ms |
+| 1.5 | 1920×1200 (2.30 Mpx) | 3.11 ms |
+
+≈ **0.81 ms fixed + 1.0 ns per frame pixel** (±5 % — the fit is mildly
+superlinear, presumably cache). At 1920×1200 that is roughly a quarter fixed,
+three quarters fill. Per *covered* pixel the fill rate is ~4.1 Gpx/s
+single-threaded — about 0.9 pixels per cycle, or ~33 GB/s of read-modify-write
+traffic, which is the right order for one core against DDR5 plus a large L3.
+Stack sampling (`eu-stack`, on-CPU samples only) agrees: the leaves are
+`color::avx2::dispatch_avx2` and `egui_blend_u8_slice_one_src_tinted_fn_avx2`,
+i.e. the blend inner loop, not setup. 76 % of triangles and 75 % of rects need
+alpha blending; 84 % of triangles carry varying vertex colours, so most of the
+frame takes the general interpolating path rather than a flat fill.
+
+**Read that as: the inner loop is in good shape, and there is little headroom
+in it.** The gains available are not in the blend — they are in doing less of
+it, or doing it on more than one core.
+
+### 12.3 The path that is fast is the path that is single-threaded
+
+`render_direct` — the uncached path §5.2 chose and §10 committed — has **no
+rayon variant**. All three of the crate's parallel sites (`render_prims_to_cache`,
+`update_canvas_from_cached`, `blit_canvas_to_buffer`) are on the *caching*
+path. So the configuration in the tree is single-threaded by construction, and
+the `rayon` feature genuinely buys it nothing — which is what §5.2 observed,
+without noticing *why*.
+
+Turn both on together and the picture inverts. Same frame, same 1920×1200,
+600 frames, p50 of the rasterize step:
+
+| configuration | p50 | p90 | p99 |
+| --- | --- | --- | --- |
+| direct, no rayon — **what is committed** | 3.17 ms | 3.93 | 4.57 |
+| cached, no rayon | 3.56 ms | 5.81 | 14.56 |
+| cached + rayon, 1 thread | 2.13 ms | 3.51 | 14.10 |
+| cached + rayon, 8 threads | 0.75 ms | 1.14 | 5.19 |
+| **cached + rayon, 12–16 threads** | **0.70 ms** | **1.05** | 4.5–4.9 |
+| cached + rayon, 24 threads | 0.92 ms | 1.28 | 4.65 |
+| cached + rayon, 32 threads (rayon's default here) | 1.08 ms | 1.39 | 4.64 |
+
+**4.5× faster than the committed configuration at p50, 3.7× at p90, and the
+tail is unchanged.** It is also faster than either wgpu arm in §11 (1.34 ms on
+the GPU, 1.33 ms on lavapipe) — so §11.4's "not speed" conclusion holds only
+for the configuration currently in the tree.
+
+Note the 1-thread row: the rayon code path is faster than the non-rayon one
+*even with a single worker* (2.13 vs 3.56 ms), so this is not purely
+parallelism — the tiled iteration it uses has better locality.
+
+Fidelity does not pay for it. Against the wgpu render of the same scene, the
+cached+rayon output is marginally **closer** than the direct output
+(`08_treemap_category`: 2,505 visible deltas vs 2,758, max Δ 95 vs 112), and on
+table-shaped scenes the two CPU modes differ by six to ten pixels at Δ=1.
+
+What it costs: **two crates** (`rayon`, `rayon-core`), 168 KB of binary, a
+second full-screen canvas (~9 MB at 1920×1200), and a thread pool — which for
+an appliance host is a real question, not a free lunch. It also needs a
+thread-count policy: rayon's default on this machine (32) is 1.5× off the
+optimum, and the optimum is around half the hardware threads.
+
+### 12.4 Consequence
+
+§5.2 and the `with_caching(false)` decision it justified were measured in a
+world without rayon, and are wrong in one with it. Correcting that is a change
+to a committed default plus a new dependency and a thread pool, so it is a
+decision rather than a fix, and it is left open here.
