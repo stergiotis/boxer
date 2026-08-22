@@ -61,6 +61,7 @@
 
 use egui_software_backend::{BufferMutRef, ColorFieldOrder, EguiSoftwareRender};
 
+use crate::imzero2::cputopo;
 use crate::imzero2::headless::HeadlessError;
 
 /// Cap handed to egui for its font-atlas texture, and the ceiling
@@ -96,6 +97,12 @@ pub struct Soft {
     /// Mirrors `Gpu::max_texture_side` so the two are interchangeable behind
     /// the `Raster` alias. Constant here — see [`MAX_TEXTURE_SIDE`].
     pub max_texture_side: usize,
+    /// Cache topology, probed once. `None` when it cannot be read — containers
+    /// and VMs commonly report no L3 at all — in which case no advice is given.
+    topo: Option<cputopo::Topology>,
+    /// Whether the last geometry was reported as over the L3 budget, so a
+    /// resize only speaks up when the verdict actually changes.
+    over_budget: bool,
 }
 
 impl Soft {
@@ -114,6 +121,22 @@ impl Soft {
         if let Err(e) = rayon::ThreadPoolBuilder::new().num_threads(threads).build_global() {
             tracing::warn!(error = %e, threads, "rayon global pool already initialised — keeping it");
         }
+        // Advice, not enforcement: this process cannot know what else the box
+        // is for, so it names the pin rather than taking it.
+        let topo = cputopo::probe();
+        match &topo {
+            Some(t) if t.domains_spanned > 1 => tracing::warn!(
+                domains = t.domains_spanned,
+                l3_mib = t.l3_bytes / (1024 * 1024),
+                threads,
+                "worker pool may be scheduled across {} L3 domains; pinning it to one was measured \
+                 ~1.33x faster while the frame fits that domain — e.g. taskset -c {} (or systemd \
+                 CPUAffinity=)",
+                t.domains_spanned,
+                t.pin_hint
+            ),
+            _ => {}
+        }
         tracing::info!(
             width_px,
             height_px,
@@ -122,15 +145,23 @@ impl Soft {
             hardware_threads =
                 std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
             simd = cfg!(any(target_arch = "x86_64", target_arch = "aarch64")),
+            l3_domains = topo.as_ref().map(|t| t.domains_spanned),
+            l3_budget_px = topo.as_ref().map(cputopo::Topology::max_pixels),
             "headless CPU rasterizer up (no wgpu, no Vulkan loader, no ICD)"
         );
-        Ok(Self {
+        let mut soft = Self {
             render: EguiSoftwareRender::new(ColorFieldOrder::Bgra).with_caching(true),
             width_px,
             height_px,
             pixels_per_point,
             max_texture_side: MAX_TEXTURE_SIDE,
-        })
+            topo,
+            over_budget: false,
+        };
+        // Also at startup, not only on resize: a host launched straight into a
+        // 4K viewport would otherwise never hear about it.
+        soft.advise_working_set(width_px, height_px);
+        Ok(soft)
     }
 
     /// Consume a pass's texture deltas without rendering. Used when no sink
@@ -151,6 +182,41 @@ impl Soft {
         self.width_px = width_px;
         self.height_px = height_px;
         self.pixels_per_point = pixels_per_point;
+        self.advise_working_set(width_px, height_px);
+    }
+
+    /// Say something when the frame's hot working set crosses the L3 budget,
+    /// and only when the verdict changes — a viewer dragging a window edge
+    /// resizes on every frame.
+    fn advise_working_set(&mut self, width_px: u32, height_px: u32) {
+        let Some(topo) = &self.topo else { return };
+        let px = u64::from(width_px) * u64::from(height_px);
+        let over = px > topo.max_pixels();
+        if over == self.over_budget {
+            return;
+        }
+        self.over_budget = over;
+        if over {
+            // A 16:10 frame at the budget: w = sqrt(px * a), h = sqrt(px / a).
+            // Scaling sqrt(px) by `a` directly would square the aspect ratio.
+            const ASPECT: f64 = 1.6;
+            let budget = topo.max_pixels() as f64;
+            let (w, h) = ((budget * ASPECT).sqrt(), (budget / ASPECT).sqrt());
+            tracing::info!(
+                width_px,
+                height_px,
+                frame_px = px,
+                l3_budget_px = topo.max_pixels(),
+                l3_mib = topo.l3_bytes / (1024 * 1024),
+                "frame working set (frame buffer + canvas) no longer fits one L3 domain — cost \
+                 per pixel rises past here, and pinning the pool stops helping; roughly {:.0}x{:.0} \
+                 is the budget on this machine",
+                w,
+                h
+            );
+        } else {
+            tracing::info!(frame_px = px, "frame working set fits one L3 domain again");
+        }
     }
 
     /// Rasterize one already-tessellated pass into `frame` as tightly-packed

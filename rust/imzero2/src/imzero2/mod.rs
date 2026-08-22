@@ -5,6 +5,8 @@ pub mod apphost;
 pub mod code_view;
 #[cfg(feature = "headless")]
 pub mod codeclane;
+#[cfg(feature = "headless_soft")]
+pub mod cputopo;
 pub mod ctable_widths;
 pub mod date_picker_button;
 pub mod datetime_picker;
