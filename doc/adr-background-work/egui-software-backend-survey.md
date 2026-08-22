@@ -1060,3 +1060,54 @@ under an unchanged mesh is the shape of bug to watch for. Nothing in the
 gallery exhibits it — egui reuploads and remeshes text when its atlas grows —
 but the failure mode did not exist before this change, and it would show up as
 a stale region rather than a crash.
+
+## 18 Damage-tracked readback for the wgpu path — measured, not pursued (added 2026-08-22)
+
+§17 made the software host incremental, which left the wgpu host doing a full
+`LoadOp::Clear`, a full render pass and a full-frame `copy_texture_to_buffer`
+every frame. The obvious next step is to give it damage tracking too. Measuring
+the ceiling first says not to bother.
+
+### 18.1 Where the wgpu frame goes
+
+At 1920×1200, 600 frames, p50 of the rasterize step:
+
+| | µs |
+| --- | --- |
+| command encode | ~40 |
+| submit + GPU wait + buffer map | ~920 |
+| row-by-row unpad memcpy into `frame` | ~400 |
+
+And by building a variant that renders but never reads back:
+
+| | p50 |
+| --- | --- |
+| full — render + copy + map + unpad | 1439 µs |
+| **render only** | **938 µs** |
+
+So **readback is ~500 µs, 35 % of the frame**, and the render pass is the other
+65 %. Damage tracking shrinks the copy; it cannot touch the render. Its ceiling
+is therefore 1439 → ~940 µs, about **1.5×** — against the 2.7× the equivalent
+change bought on the software side, where the blit *was* the frame.
+
+### 18.2 A smaller thing worth knowing
+
+`copy_texture_to_buffer` needs 256-byte-aligned rows, so the host copies the
+staging buffer row by row into a tightly-packed `Vec<u8>`. At 1920×1200 the
+unpadded row is 7,680 bytes and `align(7680, 256)` is **also 7,680** — there is
+no padding to strip, and that loop is a 9.2 MB memcpy per frame doing nothing
+but changing which allocation the bytes live in. It is ~400 µs of the ~500.
+
+Removing it does not need damage tracking, only handing the sinks the mapped
+range instead of a copy — which means the mapping has to outlive
+`render_and_readback`, a borrow restructure of the host loop. Worth ~28 % of
+the wgpu frame, at no staleness risk.
+
+### 18.3 Disposition
+
+Not pursued, 2026-08-22. 1.5× on the arm that is already the right choice for a
+machine *with* a GPU, against a software host at 250 µs, did not justify ~150
+lines carrying the stale-region failure mode §17.6 describes. Recorded so the
+ceiling does not have to be re-derived: **the wgpu frame is render-bound, not
+readback-bound**, and anyone revisiting it should start with §18.2, which is
+cheaper and safer than damage tracking and captures most of the same win.
