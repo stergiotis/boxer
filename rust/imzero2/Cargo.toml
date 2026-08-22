@@ -80,7 +80,12 @@ headless_wgpu = ["headless_raster", "dep:wgpu", "dep:egui-wgpu", "dep:pollster"]
 # compile with both); ffmpeg is still reachable, since the encoder takes BGRA
 # from host memory either way. See
 # doc/adr-background-work/egui-software-backend-survey.md.
-headless_soft = ["headless_raster", "dep:egui_software_backend", "dep:bytemuck"]
+headless_soft = [
+    "headless_raster",
+    "dep:egui_software_backend",
+    "dep:bytemuck",
+    "dep:rayon",
+]
 # GPU-less, SVG-only host (headless_svg.rs). Drives the shared FFFI2
 # interpreter with `ctx.run_ui` and lets the always-registered SVG-export
 # plugin (apphost::init_common) write files on ExportSvg / ExportSvgWindow.
@@ -224,12 +229,19 @@ imzero2_egui = { path = "imzero2_egui" }
 # crates.io — vendor/egui_software_backend/VENDORING.md carries the upstream
 # commit, the deltas and the reasoning. `std` buys runtime SIMD dispatch;
 # `log` routes the backend's own errors (e.g. an unsupported paint callback)
-# into the tracing subscriber. `rayon` stays off: it only parallelises the
-# caching path, which this host does not use.
+# into the tracing subscriber. `rayon` parallelises the caching path, which is
+# the one this host uses and the reason it is ~4.5x faster than the uncached
+# single-threaded path it started on — see softraster.rs and
+# doc/adr-background-work/egui-software-backend-survey.md section 12.3.
 egui_software_backend = { path = "vendor/egui_software_backend", optional = true, default-features = false, features = [
     "std",
     "log",
+    "rayon",
 ] }
+# Already in the graph via the crate above; declared directly so softraster.rs
+# can size the global pool rather than take rayon's default, which is every
+# hardware thread and measurably past the useful point (section 13.2).
+rayon = { version = "1", optional = true }
 # One safe cast, in softraster.rs: the frame buffer is a `Vec<u8>` (what every
 # sink takes) and the rasterizer wants `&mut [[u8; 4]]`. `unsafe_code = "deny"`
 # rules out doing it by hand, and copying instead would cost a full-frame

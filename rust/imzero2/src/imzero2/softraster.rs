@@ -13,18 +13,32 @@
 //! row-by-row unpad copy. The rasterizer writes straight into the caller's
 //! frame buffer, so the frame is already where the sinks want it.
 //!
-//! Two settings differ from the vendored crate's defaults, both deliberate:
+//! Configuration, and why (measurements in
+//! `doc/adr-background-work/egui-software-backend-survey.md` §§12–13):
 //!
 //! - **`ColorFieldOrder::Bgra`** matches the wgpu host's
 //!   `TextureFormat::Bgra8Unorm`, so the two hosts are byte-comparable.
-//! - **`with_caching(false)`.** The crate's default is the other way round and
-//!   its docs call the uncached path "primarily intended for testing", but its
-//!   cache keeps a second full-screen canvas and re-composites all of it
-//!   whenever any primitive changed — two extra full-screen passes per frame
-//!   regardless of what actually moved. That wins for a few floating windows
-//!   over an empty background and loses by roughly 10× for a dock filling the
-//!   viewport, which is what imzero2 paints. Measurements:
-//!   `doc/adr-background-work/egui-software-backend-survey.md`.
+//! - **`with_caching(true)` plus the crate's `rayon` feature.** These two are
+//!   one decision, because the crate's parallelism lives entirely on its
+//!   caching path — `render_direct` has no parallel variant at all. Uncached
+//!   is the faster of the two *single-threaded* (3.17 ms vs 3.56 ms at
+//!   1920×1200), which is why this host started there; cached with a warm pool
+//!   is 0.70 ms, 4.5× better than either, and quicker than the wgpu host it
+//!   stands in for. Fidelity is unchanged — marginally closer to the wgpu
+//!   render, if anything.
+//! - **Half the hardware threads.** The work splits into rows of 64-pixel
+//!   tiles, so useful parallel width is the tile-row count (19 at 1920×1200,
+//!   37 at 3840×2400) and one very uneven primitive list; past the peak,
+//!   contention takes it back. Measured speedup peaks at 2.5× / 12 threads at
+//!   1920×1200 and 5.1× / 16 at 3840×2400 on a 32-thread machine. Rayon's own
+//!   default is every hardware thread, ~1.5× off the optimum.
+//!
+//! The costs of that choice, stated plainly: a second full-screen canvas
+//! (~9 MB at 1920×1200) and a worker pool, so this host is no longer the
+//! single-core-and-nothing-else proposition it was. The tail also degrades
+//! when the pool is tiny — at one worker p99 is ~14 ms against the uncached
+//! path's 4.6 — so a deployment pinned to one or two cores should set
+//! `IMZERO2_HEADLESS_RASTER_THREADS` and expect a worse p99 than p50 suggests.
 
 use egui_software_backend::{BufferMutRef, ColorFieldOrder, EguiSoftwareRender};
 
@@ -38,9 +52,23 @@ use crate::imzero2::headless::HeadlessError;
 /// an over-estimate is harmless.
 const MAX_TEXTURE_SIDE: usize = 8192;
 
+/// Worker count for the rasterizer's pool. `IMZERO2_HEADLESS_RASTER_THREADS`
+/// wins when set to a positive value; otherwise half the hardware threads,
+/// floored at one. See the module doc for why half.
+fn raster_threads() -> usize {
+    let hw = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+    match std::env::var("IMZERO2_HEADLESS_RASTER_THREADS")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+    {
+        Some(n) if n > 0 => n,
+        _ => (hw / 2).max(1),
+    }
+}
+
 /// CPU render state: the rasterizer plus the geometry it was last sized to.
 /// There is no device, no queue and no staging buffer — the whole struct is
-/// the renderer's own texture cache and three numbers.
+/// the renderer's own texture cache, a worker pool and three numbers.
 pub struct Soft {
     render: EguiSoftwareRender,
     width_px: u32,
@@ -59,15 +87,26 @@ impl Soft {
         height_px: u32,
         pixels_per_point: f32,
     ) -> Result<Self, HeadlessError> {
+        // Sizing the global pool rather than letting rayon default to every
+        // hardware thread. `build_global` fails only if something already
+        // initialised it, in which case that pool is what we get — worth a
+        // line in the log, not worth failing a render host over.
+        let threads = raster_threads();
+        if let Err(e) = rayon::ThreadPoolBuilder::new().num_threads(threads).build_global() {
+            tracing::warn!(error = %e, threads, "rayon global pool already initialised — keeping it");
+        }
         tracing::info!(
             width_px,
             height_px,
             pixels_per_point,
+            threads,
+            hardware_threads =
+                std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
             simd = cfg!(any(target_arch = "x86_64", target_arch = "aarch64")),
             "headless CPU rasterizer up (no wgpu, no Vulkan loader, no ICD)"
         );
         Ok(Self {
-            render: EguiSoftwareRender::new(ColorFieldOrder::Bgra).with_caching(false),
+            render: EguiSoftwareRender::new(ColorFieldOrder::Bgra).with_caching(true),
             width_px,
             height_px,
             pixels_per_point,

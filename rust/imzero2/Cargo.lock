@@ -2516,6 +2516,7 @@ dependencies = [
  "puffin",
  "puffin_http",
  "rand 0.10.2",
+ "rayon",
  "reqwest",
  "roaring",
  "strum",

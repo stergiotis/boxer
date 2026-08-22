@@ -58,18 +58,21 @@ It is **excluded** from the imzero2 workspace (`exclude = ["vendor"]` in
 and neither should reformat or gate on third-party source. It keeps its own
 `[workspace]` table so it stays self-contained.
 
-imzero2 enables `default-features = false, features = ["std", "log"]` — `std`
-for runtime SIMD detection (AVX2 / SSE4.1 / NEON, with a scalar fallback), `log`
-so the backend's own errors reach the tracing subscriber through the
-`tracing-log` bridge that `main.rs` installs. `rayon` is deliberately **off**:
-it parallelises the crate's caching path, which imzero2 does not use (see
-below).
+imzero2 enables `default-features = false, features = ["std", "log", "rayon"]`
+— `std` for runtime SIMD detection (AVX2 / SSE4.1 / NEON, with a scalar
+fallback), `log` so the backend's own errors reach the tracing subscriber
+through the `tracing-log` bridge that `main.rs` installs, and `rayon` for the
+worker pool.
 
-`EguiSoftwareRender` is constructed `.with_caching(false)`. The crate's default
-is the other way round, and its docs call the uncached path "primarily intended
-for testing", but for a full-viewport UI the cache costs about 10× — it keeps a
-second full-screen canvas and re-composites all of it whenever any primitive
-changed. The measurements are in the survey linked above.
+`EguiSoftwareRender` is constructed `.with_caching(true)`, and that is one
+decision with the `rayon` feature rather than two: **all three of the crate's
+parallel sections are on the caching path**, and `render_direct` has no
+parallel variant. Uncached is the faster of the two single-threaded, which is
+where this host started; cached with a warm pool is ~4.5× better than either
+and beats the wgpu host it stands in for. `softraster.rs` sizes the global pool
+to half the hardware threads — the measured curve peaks around there, because
+useful parallel width is bounded by the frame's 64-pixel tile-row count.
+Measurements and the full thread sweep are in the survey linked above.
 
 ## Re-syncing
 

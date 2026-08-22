@@ -628,9 +628,31 @@ optimum, and the optimum is around half the hardware threads.
 ### 12.4 Consequence
 
 §5.2 and the `with_caching(false)` decision it justified were measured in a
-world without rayon, and are wrong in one with it. Correcting that is a change
-to a committed default plus a new dependency and a thread pool, so it is a
-decision rather than a fix, and it is left open here.
+world without rayon, and are wrong in one with it.
+
+**Taken 2026-08-22**: `headless_soft` now builds the vendored crate with
+`rayon` and constructs the rasterizer `.with_caching(true)`, sizing the global
+pool to half the hardware threads (`IMZERO2_HEADLESS_RASTER_THREADS` overrides).
+§13 is the scaling evidence for the thread count; §5.2 stands only as a record
+of what the single-threaded case does.
+
+Verified by re-running the whole gallery on the new configuration — 66 scenes,
+92 images, the same single pre-existing failure — and diffing every image
+against the wgpu reference and against the previous CPU output:
+
+| direct vs cached+rayon, 92 images | count |
+| --- | --- |
+| differ, but inside that scene's own reproducibility floor | 80 |
+| differ beyond it | 12 |
+| pixel-identical | 0 |
+
+Of the twelve, six are scenes whose noise floor is zero, so only those are
+cleanly attributable to the mode: five treemap variants and `14_docs`. On
+those, the new output is **closer** to the wgpu render on five and farther on
+one, by 39 pixels. Gallery-wide the visible-delta share moves 0.267 % → 0.325 %
+against a 0.223 % noise floor, and the movement is dominated by `08_sankey`
+(+112 k) — the scene §10.4 established disagrees with *itself* by 314 k. Read
+the whole thing as a wash, marginally in the new mode's favour.
 
 ## 13 Scaling, and whether `rayon` is needed (added 2026-08-22)
 
@@ -723,7 +745,8 @@ the shapes here use none of rayon's cleverness beyond work-stealing over the
 uneven primitive list. The trade is 2 crates and 168 KB against ~150 lines of
 condvar-and-work-queue that would then be ours to maintain and get right. On a
 321-crate graph, and for a measured 4.5×, the crates look like the cheaper side
-of that — but it is a judgement, not a measurement.
+of that — but it is a judgement, not a measurement. **Taken 2026-08-22**: the
+crates; `headless_soft` depends on `rayon` (323 crates, +168 KB).
 
 One thing the table does explain independently: rayon's own dispatch cost grows
 from 5.7 µs at 16 threads to 17.1 µs (p90 43.5) at 32, which is part of why 32

@@ -291,6 +291,20 @@ var (
 		Category:    env.CategoryDev,
 	})
 
+	// HeadlessRasterThreads sizes the CPU rasterizer's worker pool in the
+	// headless_soft build. 0 (the default) means half the hardware threads,
+	// which is where the measured curve peaks: the work splits into rows of
+	// 64px tiles, so useful width is bounded by the tile-row count (19 at
+	// 1920x1200), and past the peak contention makes it slower again. Rayon's
+	// own default -- every hardware thread -- is about 1.5x off that optimum.
+	// Ignored by the wgpu host, which has no such pool.
+	HeadlessRasterThreads = env.NewInt(env.Spec{
+		Name:        "IMZERO2_HEADLESS_RASTER_THREADS",
+		Description: "CPU rasterizer worker threads in the headless_soft build; 0 = half the hardware threads (where the measured curve peaks)",
+		Category:    env.CategoryDev,
+		Default:     "0",
+	})
+
 	// HeadlessH264Out appends the raw Annex-B H.264 elementary stream to
 	// this file for verification. Empty disables.
 	HeadlessH264Out = env.NewPath(env.Spec{
