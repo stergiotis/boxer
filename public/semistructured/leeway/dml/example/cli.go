@@ -16,9 +16,6 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/apache/arrow-go/v18/parquet"
-	"github.com/apache/arrow-go/v18/parquet/compress"
-	"github.com/apache/arrow-go/v18/parquet/pqarrow"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -217,23 +214,6 @@ var compressionFlag = &cli.StringFlag{
 	},
 }
 
-const (
-	outputFormatArrowIpc string = "arrowIpc"
-	outputFormatParquet  string = "parquet"
-)
-
-var allOutputFormats = []string{outputFormatArrowIpc, outputFormatParquet}
-var outputFormatFlag = &cli.StringFlag{
-	Name:  "outputFormat",
-	Value: outputFormatArrowIpc,
-	Action: func(context *cli.Context, s string) error {
-		if slices.Index(allOutputFormats, s) < 0 {
-			return eb.Build().Str("outputFormat", s).Strs("possibleValues", allOutputFormats).Errorf("unknown output format")
-		}
-		return nil
-	},
-}
-
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "example",
@@ -317,7 +297,6 @@ func NewCliCommand() *cli.Command {
 				Name: "convert",
 				Flags: []cli.Flag{
 					compressionFlag,
-					outputFormatFlag,
 					&cli.UintFlag{
 						Name:  "maxInputJsonSize",
 						Value: 32 * 1024 * 1024,
@@ -330,7 +309,6 @@ func NewCliCommand() *cli.Command {
 				Action: func(context *cli.Context) (err error) {
 					var schema *arrow.Schema
 					var w *ipc.FileWriter
-					var w2 *pqarrow.FileWriter
 					stdoutBuf := bufio.NewWriter(os.Stdout)
 					defer stdoutBuf.Flush()
 					allocator := memory.DefaultAllocator
@@ -338,55 +316,26 @@ func NewCliCommand() *cli.Command {
 					ent := NewInEntityJson(allocator, 1)
 					schema = ent.GetSchema()
 					compression := context.String(compressionFlag.Name)
-					outputFormat := context.String(outputFormatFlag.Name)
 					maxInputJsonSize := context.Uint("maxInputJsonSize")
 					maxOutputJsonSize := context.Uint("maxOutputJsonSize")
 
-					switch outputFormat {
-					case outputFormatArrowIpc:
-						opts := make([]ipc.Option, 0, 8)
-						opts = append(opts, ipc.WithAllocator(allocator))
-						opts = append(opts, ipc.WithSchema(schema))
-						opts = append(opts, ipc.WithDictionaryDeltas(true))
-						switch compression {
-						case compressionZstd:
-							opts = append(opts, ipc.WithZstd())
-						case compressionUncompressed:
-							break
-						}
-						log.Info().Str("compression", compression).Msg("using apache arrow IPC output format")
-						w, err = ipc.NewFileWriter(stdoutBuf, opts...)
-						if err != nil {
-							err = eh.Errorf("unable to create arrow ipc file writer: %w", err)
-							return
-						}
-						defer w.Close()
-					case outputFormatParquet:
-						var codec compress.Compression
-						switch compression {
-						case compressionZstd:
-							codec = compress.Codecs.Zstd
-						case compressionUncompressed:
-							codec = compress.Codecs.Uncompressed
-						}
-						log.Info().Stringer("compression", codec).Msg("using apache parquet output format")
-						props := parquet.NewWriterProperties(
-							parquet.WithAllocator(allocator),
-							parquet.WithCompression(codec),
-						)
-						w2, err = pqarrow.NewFileWriter(schema,
-							stdoutBuf,
-							props,
-							pqarrow.NewArrowWriterProperties(
-								pqarrow.WithAllocator(allocator),
-								pqarrow.WithStoreSchema(),
-							))
-						if err != nil {
-							err = eh.Errorf("unable to create arrow parquet file writer: %w", err)
-							return
-						}
-						defer w2.Close()
+					opts := make([]ipc.Option, 0, 8)
+					opts = append(opts, ipc.WithAllocator(allocator))
+					opts = append(opts, ipc.WithSchema(schema))
+					opts = append(opts, ipc.WithDictionaryDeltas(true))
+					switch compression {
+					case compressionZstd:
+						opts = append(opts, ipc.WithZstd())
+					case compressionUncompressed:
+						break
 					}
+					log.Info().Str("compression", compression).Msg("using apache arrow IPC output format")
+					w, err = ipc.NewFileWriter(stdoutBuf, opts...)
+					if err != nil {
+						err = eh.Errorf("unable to create arrow ipc file writer: %w", err)
+						return
+					}
+					defer w.Close()
 					records := make([]arrow.RecordBatch, 0, 1)
 					lc := bytes.NewBuffer(make([]byte, 0, 4*4096))
 					hc := bytes.NewBuffer(make([]byte, 0, 4*4096))
@@ -418,7 +367,7 @@ func NewCliCommand() *cli.Command {
 									return
 								}
 								if i > 0 && i%batchSize == 0 {
-									records, err = dml.WriteArrowRecords(ent, records, w, w2)
+									records, err = dml.WriteArrowRecords(ent, records, w)
 									if err != nil {
 										err = eh.Errorf("unable to write arrow records: %w", err)
 										return
@@ -445,7 +394,7 @@ func NewCliCommand() *cli.Command {
 									return
 								}
 								if i > 0 && i%batchSize == 0 {
-									records, err = dml.WriteArrowRecords(ent, records, w, w2)
+									records, err = dml.WriteArrowRecords(ent, records, w)
 									if err != nil {
 										err = eh.Errorf("unable to write arrow records: %w", err)
 										return
@@ -454,7 +403,7 @@ func NewCliCommand() *cli.Command {
 								i++
 							}
 						}
-						_, err = dml.WriteArrowRecords(ent, records, w, w2)
+						_, err = dml.WriteArrowRecords(ent, records, w)
 						if err != nil {
 							err = eh.Errorf("unable to write arrow records: %w", err)
 							return

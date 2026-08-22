@@ -607,6 +607,12 @@ hypotheses from surprises:
   fourteen queries match byte-for-byte and the two that apply a string
   predicate to a path (U4, U9) fail to bind. Filed, not worked around.
   Details in the [logbook](./logbook.md).
+  **The flag is gone as of 2026-08-22**: `arrow-go`'s Parquet packages were
+  dropped from the tree along with the four modules only they pulled in
+  (`apache/thrift`, `andybalholm/brotli`, `grpc`, `genproto/googleapis/rpc`),
+  so re-running arm W means reinstating `--parquet-out` — the same
+  uncommitted-change footing the original run was on. The recorded numbers
+  stand; only the re-run is manual again.
 - **M4 — the USP counterpart.** ✓ **Done 2026-08-07.** Arms N-text and
   N-struct, DuckDB only. **H5 holds**: DuckDB's JSON type takes a runtime path
   and `json_tree` walks into arrays, so both structural facts the USP thesis

@@ -537,10 +537,9 @@ GPL-2.0-or-later; boxer elects FTL).
 ### 3.2 Apache-2.0 dependencies and downstream NOTICE propagation
 
 A subset of `go.mod` dependencies are Apache-2.0-licensed and ship
-their own `NOTICE` files (notably `github.com/apache/arrow-go/v18`,
-`github.com/apache/thrift`, and `github.com/tetratelabs/wazero`; the
-authoritative list is the `boxer gov license-gate` CSV inventory regenerated as
-shown above).
+their own `NOTICE` files (notably `github.com/apache/arrow-go/v18`
+and `github.com/tetratelabs/wazero`; the authoritative list is the
+`boxer gov license-gate` CSV inventory regenerated as shown above).
 
 When boxer is consumed in **source form** (`go get`, module proxy),
 downstream users receive these dependencies independently with their
