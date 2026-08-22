@@ -607,7 +607,8 @@ hypotheses from surprises:
   fourteen queries match byte-for-byte and the two that apply a string
   predicate to a path (U4, U9) fail to bind. Filed, not worked around.
   Details in the [logbook](./logbook.md).
-  **The flag is gone as of 2026-08-22**: `arrow-go`'s Parquet packages were
+  **The flag is gone as of 2026-08-22** ([ADR-0202](../../adr/0202-retire-arrow-parquet.md),
+  proposed): `arrow-go`'s Parquet packages were
   dropped from the tree along with the four modules only they pulled in
   (`apache/thrift`, `andybalholm/brotli`, `grpc`, `genproto/googleapis/rpc`),
   so re-running arm W means reinstating `--parquet-out` — the same
