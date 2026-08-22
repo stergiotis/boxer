@@ -351,6 +351,59 @@ func (inst *Client) Scroll(dx, dy float32) (err error) {
 	})
 }
 
+// Drag presses the primary button at (x0, y0), moves the pointer to (x1, y1)
+// in `steps` evenly spaced moves spread over `dur`, and releases there. The
+// press goes out on its own and every move waits its share of `dur`, so the
+// host sees a drag-started frame, dragged frames and a drag-stopped frame —
+// the shape a pan, a slider or a drag-to-select needs, and the one thing
+// [Client.ClickAt]'s back-to-back press/release cannot produce. steps < 1
+// becomes one move; dur <= 0 sends the moves without pausing.
+func (inst *Client) Drag(x0, y0, x1, y1 float32, steps int, dur time.Duration) (err error) {
+	if err = inst.MoveMouse(x0, y0); err != nil {
+		return err
+	}
+	if err = inst.mouseButton(x0, y0, true); err != nil {
+		return err
+	}
+	path := dragPath(x0, y0, x1, y1, steps)
+	var pause time.Duration
+	if dur > 0 {
+		pause = dur / time.Duration(len(path))
+	}
+	for _, p := range path {
+		if pause > 0 {
+			time.Sleep(pause)
+		}
+		if err = inst.MoveMouse(p[0], p[1]); err != nil {
+			return err
+		}
+	}
+	return inst.mouseButton(x1, y1, false)
+}
+
+func (inst *Client) mouseButton(x, y float32, pressed bool) (err error) {
+	return inst.SendInput(&InputEvent{
+		Event: &InputEvent_MouseButton{MouseButton: &MouseButton{
+			X: x, Y: y, Button: 0, Pressed: pressed,
+		}},
+	})
+}
+
+// dragPath is the `steps` pointer positions a drag from (x0, y0) to (x1, y1)
+// visits after the press, the last of them the end point itself. steps < 1 is
+// treated as 1.
+func dragPath(x0, y0, x1, y1 float32, steps int) (path [][2]float32) {
+	if steps < 1 {
+		steps = 1
+	}
+	path = make([][2]float32, steps)
+	for i := 1; i <= steps; i++ {
+		t := float32(i) / float32(steps)
+		path[i-1] = [2]float32{x0 + (x1-x0)*t, y0 + (y1-y0)*t}
+	}
+	return
+}
+
 // SetCadence switches the host's render cadence: 0 = continuous, 1 = reactive.
 //
 // Reactive is the default and the right one for a served deployment, but a

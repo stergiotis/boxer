@@ -24,6 +24,32 @@ func TestParseTraceSkipsCommentsAndBlanks(t *testing.T) {
 	assert.Equal(t, 400, steps[1].SettleMs)
 }
 
+func TestParseTraceDragStep(t *testing.T) {
+	steps, err := ParseTrace(strings.NewReader(
+		`{"do":"drag","x":10,"y":20,"toX":110,"toY":60,"steps":8,"durationMs":200}`))
+	require.NoError(t, err)
+	require.Len(t, steps, 1)
+	st := steps[0]
+	assert.Equal(t, "drag", st.Do)
+	assert.False(t, st.hasAnchor(), "a coordinate drag names no widget")
+	assert.Equal(t, float32(110), st.ToX)
+	assert.Equal(t, float32(60), st.ToY)
+	assert.Equal(t, 8, st.Steps)
+	assert.Equal(t, 200, st.DurationMs)
+	assert.Equal(t, "drag (10,20) -> (110,60)", st.describe())
+	// Anchored, X/Y read as the delta and the log line says so.
+	assert.Equal(t, "drag \"Slider\" by (120,0)", Step{Do: "drag", Name: "Slider", X: 120}.describe())
+}
+
+func TestDragPathEndsAtTheTargetWithStepsPoints(t *testing.T) {
+	path := dragPath(0, 0, 100, 50, 4)
+	require.Len(t, path, 4)
+	assert.Equal(t, [2]float32{25, 12.5}, path[0])
+	assert.Equal(t, [2]float32{100, 50}, path[3])
+	// steps < 1 still reaches the end point, in one move.
+	assert.Equal(t, [][2]float32{{100, 50}}, dragPath(0, 0, 100, 50, 0))
+}
+
 func TestParseTraceRejectsAVerblessStep(t *testing.T) {
 	// A step with no verb is a typo that would otherwise run as a silent no-op.
 	_, err := ParseTrace(strings.NewReader(`{"name":"Panes"}`))
@@ -54,7 +80,7 @@ func TestRequiresAnchorExcludesClick(t *testing.T) {
 	for _, verb := range []string{"type", "set_value", "focus", "scroll_into_view", "wait"} {
 		assert.True(t, requiresAnchor(verb), verb)
 	}
-	for _, verb := range []string{"capture", "key", "scroll", "cadence", "resize", "note"} {
+	for _, verb := range []string{"capture", "key", "scroll", "drag", "hover", "cadence", "resize", "note"} {
 		assert.False(t, requiresAnchor(verb), verb)
 	}
 }

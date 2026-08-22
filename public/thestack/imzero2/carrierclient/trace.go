@@ -26,8 +26,9 @@ import (
 
 // Step is one line of a trace.
 type Step struct {
-	// Do is the verb: click, hover, type, set_value, focus, scroll_into_view,
-	// key, scroll, wait, capture, cadence, resize, note, sleep.
+	// Do is the verb: click, hover, drag, type, set_value, focus,
+	// scroll_into_view, key, scroll, wait, capture, cadence, resize, note,
+	// sleep.
 	Do string `json:"do"`
 
 	// Anchor (ADR-0127 §SD4). Id wins; then name/contains plus role; nth
@@ -49,9 +50,22 @@ type Step struct {
 	Text string `json:"text,omitempty"`
 
 	// X, Y are the last-rung coordinate target, for painter-only widgets that
-	// have no node. Also the scroll delta for `scroll`.
+	// have no node. Also the scroll delta for `scroll`, and the start of a
+	// coordinate `drag` (or its delta when the drag is anchored).
 	X float32 `json:"x,omitempty"`
 	Y float32 `json:"y,omitempty"`
+
+	// ToX, ToY end a coordinate `drag` that started at X, Y. An anchored
+	// `drag` ignores them: it starts at the node's centre and reads X, Y as
+	// the delta, so a trace can say "drag this by 120 px" without knowing
+	// where the widget was laid out. Steps is the number of pointer moves
+	// between press and release (default 16), DurationMs the time they are
+	// spread over (default 320) — a host at 20 fps sees several moves per
+	// frame either way, which is what a real pointer produces.
+	ToX        float32 `json:"toX,omitempty"`
+	ToY        float32 `json:"toY,omitempty"`
+	Steps      int     `json:"steps,omitempty"`
+	DurationMs int     `json:"durationMs,omitempty"`
 
 	// Pointer makes an anchored `click` press the resolved node's bounds
 	// centre with a synthetic pointer instead of sending it an AccessKit
@@ -127,6 +141,13 @@ func (inst Step) describe() (s string) {
 	}
 	if inst.Role != "" {
 		b.WriteString(" (" + inst.Role + ")")
+	}
+	if inst.Do == "drag" {
+		if inst.hasAnchor() {
+			b.WriteString(" by " + fmtPoint(inst.X, inst.Y))
+		} else {
+			b.WriteString(" " + fmtPoint(inst.X, inst.Y) + " -> " + fmtPoint(inst.ToX, inst.ToY))
+		}
 	}
 	if inst.Text != "" {
 		b.WriteString(" " + strconv.Quote(inst.Text))
@@ -302,6 +323,20 @@ func waitFor(c *Client, st Step, opts RunOptions) (err error) {
 	}
 }
 
+// Defaults for a `drag` step that sets neither: sixteen moves over 320 ms is
+// a brisk pan — slow enough that a 20 fps host sees a handful of dragged
+// frames, fast enough not to dominate a trace.
+const (
+	defaultDragSteps      = 16
+	defaultDragDurationMs = 320
+)
+
+// fmtPoint renders a coordinate pair for a log line.
+func fmtPoint(x, y float32) string {
+	return "(" + strconv.FormatFloat(float64(x), 'f', -1, 32) + "," +
+		strconv.FormatFloat(float64(y), 'f', -1, 32) + ")"
+}
+
 // requiresAnchor reports whether a verb is meaningless without a widget.
 // `click` is deliberately absent: it falls back to a coordinate, which is the
 // last rung of the ladder and the only way to reach a painter-only widget.
@@ -355,6 +390,25 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		return c.PressKey(st.Text, st.Modifiers)
 	case "scroll":
 		return c.Scroll(st.X, st.Y)
+	case "drag":
+		// A press, moves, a release — the gesture a pan, a slider or a
+		// drag-to-select needs, which `click` cannot produce. Coordinate-only
+		// like `hover`, for the same reason: the things worth dragging on the
+		// painter lane (a map, a plot, a brush) have no node to anchor on.
+		// Anchored, it starts at the node's centre and X, Y is the delta.
+		x0, y0, x1, y1 := st.X, st.Y, st.ToX, st.ToY
+		if node != nil {
+			x0, y0 = nodeCentre(node)
+			x1, y1 = x0+st.X, y0+st.Y
+		}
+		steps, dur := st.Steps, st.DurationMs
+		if steps <= 0 {
+			steps = defaultDragSteps
+		}
+		if dur <= 0 {
+			dur = defaultDragDurationMs
+		}
+		return c.Drag(x0, y0, x1, y1, steps, time.Duration(dur)*time.Millisecond)
 	case "capture":
 		name := st.Text
 		if name == "" {

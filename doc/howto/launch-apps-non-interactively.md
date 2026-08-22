@@ -150,9 +150,12 @@ printf '%s\n' '{"do":"click","id":14343085323791920335,"settleMs":2500}' > "$S/t
 ```
 
 `capture` steps write PNGs into `IMZERO2_HEADLESS_DUMP_DIR`; the full verb
-list (`click`, `hover`, `type`, `set_value`, `focus`, `scroll_into_view`,
-`key`, `scroll`, `wait`, `capture`, `cadence`, `resize`, `note`, `sleep`)
-is documented on `carrierclient.Step`.
+list (`click`, `hover`, `drag`, `type`, `set_value`, `focus`,
+`scroll_into_view`, `key`, `scroll`, `wait`, `capture`, `cadence`, `resize`,
+`note`, `sleep`) is documented on `carrierclient.Step`. `drag` presses at
+`x`,`y`, moves to `toX`,`toY` in `steps` moves over `durationMs` and releases
+— the gesture for a map pan, a plot brush or a slider; anchored on a node it
+starts at the node's centre and reads `x`,`y` as the delta.
 
 ## 6. Worked example — the closing edge leaves nothing behind
 
