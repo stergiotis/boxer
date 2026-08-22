@@ -399,6 +399,18 @@ be necessary: several play panels render time-dependent content (a "ran N s
 ago" line, per-pass timings), and one scene is outright nondeterministic. All
 figures below mask the bottom 120 px, where the two live status lines sit.
 
+**One wgpu pair under-estimates that floor**, and it is worth knowing by how
+little. Re-running the software gallery a third time (2026-08-22, after a
+logging-only change that cannot move a pixel) left 64 of 72 nominally
+reproducible scenes differing — every one of them by Δ ≤ 2 with *zero* visible
+pixels, which is the cached compositor accumulating ±1 of blend rounding over a
+different number of frames. The 65th was `14_docs`, differing by 39 visible
+pixels in a region 2 px wide and 20 tall: a **blinking text caret**. Both wgpu
+runs had happened to catch it in the same phase, so its floor read as zero for
+a scene that is in fact time-dependent. Nothing in the tables here changes —
+the effect is tens of pixels — but a floor of "0" from a single pair means
+"did not vary twice", not "cannot vary".
+
 | over all 92 images | pixels | share |
 | --- | --- | --- |
 | identical | 184,545,441 | **98.2796 %** |
