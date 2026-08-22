@@ -756,3 +756,85 @@ threads regressed in §13.2.
 
 One machine, 32 hardware threads, one frame. The tile-row bound is structural
 and should transfer; the specific optimum thread count and the L3 knee will not.
+
+## 14 Choosing a renderer (added 2026-08-22)
+
+Everything below is one machine (32 hardware threads, integrated GPU), one
+frame (a play dock at 1920×1200, ~8,840 triangles), 600 frames per arm, p50/p99
+of the rasterize step, and peak RSS of the client process. §13.5's caveat
+applies throughout.
+
+### 14.1 The three arms side by side
+
+| | p50 | p90 | p99 | client RSS | needs |
+| --- | --- | --- | --- | --- | --- |
+| wgpu on a real GPU | 1.34 ms | 1.71 | 3.00 | 118 MiB | a GPU, Vulkan loader, ICD |
+| wgpu on lavapipe | 1.33 ms | 1.59 | **2.03** | 135 MiB | Vulkan loader + Mesa/lavapipe |
+| software, 8 workers | **0.73 ms** | 1.14 | 5.43 | 282 MiB | nothing |
+| software, 16 workers | 0.76 ms | 1.16 | 4.47 | 416 MiB | nothing |
+
+Two results here are not what the earlier sections would lead you to expect.
+
+**lavapipe is barely sensitive to core count.** Constrained with `taskset`, its
+p50 is 1.40 / 1.42 / 1.33 ms at 4 / 8 / 32 CPUs. Its cost is dominated by the
+submit-and-read-back path rather than by rasterization, so it does not collapse
+on a small machine the way a CPU rasterizer does. The software host over the
+same range is 1.24 / 0.94 / 0.80 ms — faster everywhere on p50, but by a margin
+that shrinks as cores do.
+
+**The software host's tail is its weak point, at every core count.** p99 is
+8.55 / 6.56 / 4.48 ms at 4 / 8 / 32 CPUs against lavapipe's 2.32 / 2.04 / 2.03.
+A frame in which any primitive changed re-composites the whole canvas — the
+vendored crate carries a `// TODO use tiles` exactly there — so the distribution
+is bimodal in a way neither wgpu arm is.
+
+### 14.2 Threads are a memory knob
+
+Peak RSS at 1920×1200, and what each pool size buys:
+
+| workers | RSS | p50 | p99 |
+| --- | --- | --- | --- |
+| 1 | 171 MiB | 2.07 ms | 15.67 ms |
+| 2 | 188 MiB | 1.25 ms | 8.21 ms |
+| 4 | 248 MiB | 0.93 ms | 5.57 ms |
+| 8 | 282 MiB | 0.73 ms | 5.43 ms |
+| 16 | 416 MiB | 0.76 ms | 4.47 ms |
+
+≈ 15 MiB per worker — per-thread allocator arenas (imzero2 runs mimalloc) plus
+the in-flight per-primitive raster each worker holds. RSS barely falls with
+resolution (268 MiB at 960×600 with 16 workers), which confirms it is the pool
+and not the buffers.
+
+**The p50 plateau starts at about 8 workers**; beyond that only p99 improves,
+at ~17 MiB each. On this machine the shipped default (half the hardware
+threads = 16) is therefore buying p99 with 134 MiB. That is a defensible
+default and a bad one for a memory-constrained box, which is what the env knob
+is for. It is *not* evidence for a different fraction in general — on an
+8-thread machine a quarter would be 2 workers, which is worse than lavapipe.
+
+### 14.3 When to use which
+
+- **wgpu on a real GPU** — a desktop seat, or a server that has a GPU and can
+  carry a Vulkan stack. Lowest memory of the three, and the GPU is then also
+  available for anything else that wants it.
+- **wgpu on lavapipe** — a GPU-less host that already carries Mesa, *and* cares
+  more about the tail than the median: streaming to a viewer where a 5 ms
+  hiccup is worse than a 0.6 ms saving is good. Also the least sensitive to
+  core count, so it degrades most gracefully on small machines.
+- **the software host** — a GPU-less host where the Vulkan/Mesa dependency is
+  itself the problem: an airgapped or minimal image (`scripts/dev/airgap-lib.sh`
+  currently warns when the loader or an ICD is missing), a container you do not
+  want to grow by a driver stack, or a build where 2.4 MB of shader compiler in
+  the binary is not welcome. Best median of the three, and no runtime
+  dependency at all — paid for in memory and in tail latency.
+- **neither** — if the deployment never needs pixels, `headless` (the ADR-0128
+  mesh draw-stream lane) or `headless_svg` remain the cheapest answers by a
+  wide margin, and this whole comparison is moot.
+
+### 14.4 What would change the picture
+
+The tail is the software host's one clear deficit, and it has a known cause
+rather than a mysterious one: the whole-canvas recomposite. Teaching the
+vendored crate to composite only dirty tiles — the `// TODO` its author already
+left — would attack exactly the p99 and probably the per-worker memory with it.
+That is upstream work, or a larger vendored delta than anything carried today.

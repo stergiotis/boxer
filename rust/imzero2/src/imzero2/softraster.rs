@@ -33,12 +33,31 @@
 //!   1920×1200 and 5.1× / 16 at 3840×2400 on a 32-thread machine. Rayon's own
 //!   default is every hardware thread, ~1.5× off the optimum.
 //!
-//! The costs of that choice, stated plainly: a second full-screen canvas
-//! (~9 MB at 1920×1200) and a worker pool, so this host is no longer the
-//! single-core-and-nothing-else proposition it was. The tail also degrades
-//! when the pool is tiny — at one worker p99 is ~14 ms against the uncached
-//! path's 4.6 — so a deployment pinned to one or two cores should set
-//! `IMZERO2_HEADLESS_RASTER_THREADS` and expect a worse p99 than p50 suggests.
+//! The costs of that choice, stated plainly, because they are larger than the
+//! canvas alone suggests. Measured peak RSS of this process at 1920×1200:
+//!
+//! | pool | RSS | p50 | p99 |
+//! | --- | --- | --- | --- |
+//! | uncached, 1 thread (what this host used to be) | 57 MiB | 3.17 ms | 4.57 ms |
+//! | cached, 1 | 171 MiB | 2.07 ms | 15.7 ms |
+//! | cached, 4 | 248 MiB | 0.93 ms | 5.6 ms |
+//! | cached, 8 | 282 MiB | 0.73 ms | 5.4 ms |
+//! | cached, 16 | 416 MiB | 0.76 ms | 4.5 ms |
+//!
+//! So **`IMZERO2_HEADLESS_RASTER_THREADS` is a memory knob as much as a speed
+//! one** — roughly 15 MiB per worker, most of it per-thread allocator arenas
+//! (imzero2 runs mimalloc) and the in-flight per-primitive raster each worker
+//! holds. The p50 plateau starts around 8 workers; past that only p99 improves,
+//! at ~17 MiB each. Against the uncached path this host replaced, that is 3–7×
+//! the memory, so it is no longer the one-core-and-nothing-else proposition it
+//! was, and a memory-constrained deployment should set the knob deliberately
+//! rather than take the default.
+//!
+//! The tail is this configuration's weak point in general: even at 16 workers
+//! p99 is 4.5 ms against ~2.0 ms for the same frame through wgpu on lavapipe,
+//! because a frame in which any primitive changed re-composites the whole
+//! canvas (the crate carries a `// TODO use tiles` exactly there). Latency-
+//! sensitive streaming should weigh that against the better p50.
 
 use egui_software_backend::{BufferMutRef, ColorFieldOrder, EguiSoftwareRender};
 
