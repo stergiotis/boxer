@@ -144,6 +144,19 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
+		Name: "portolan-m0", Category: "Maps & geo", Title: icons.IconGlobe + " portolan M0 spike (tiles on the painter lane)",
+		Stage:       [2]float32{760, 600},
+		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
+		Kind:        registry.DemoKindDX,
+		Description: "ADR-0204 M0: a fixed-camera slippy map drawn in Go through paintImage, panned by the canvas's R24 pointer row and zoomed by its R23 wheel row, both one frame behind. Measures the input lag and the first-paint bytes before the Leaflet port starts; no pyramid, no animation, no walkers.",
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			return newPortolanM0State()
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoPortolanM0(ids, state.(*portolanM0State))
+		},
+	})
+	registry.Register(registry.Demo{
 		Name: "mapraster", Category: "Maps & geo", Title: icons.IconGlobe + " mapRaster (in-DB geo raster)",
 		Stage:       [2]float32{760, 600},
 		Flags:       registry.DemoFlagNeedsLargeArea,
