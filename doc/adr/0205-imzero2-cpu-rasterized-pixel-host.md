@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-22
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-22
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. The code described here is already in the tree, which is the wrong order — see §Status.
 
 # ADR-0205: imzero2 — a CPU-rasterized pixel host
 
@@ -279,7 +277,7 @@ outside it.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-08-22.
 
 Recorded **after** the implementation rather than before it, which inverts
 [CODINGSTANDARDS § Design Before Code](../../CODINGSTANDARDS.md#design-before-code).
