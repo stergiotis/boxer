@@ -43,6 +43,8 @@ shipped/deviation list is in ADR-0024's 2026-06-12 Updates entry.
 # open http://127.0.0.1:8089/ in a WebCodecs-capable browser
 # (Chromium-family, Safari 16.4+, Firefox 130+)
 ./hmi_headless.sh --launch play         # any demo selector (see `main_go imzero2 demo --list`)
+HMI_RASTER=soft ./hmi_headless.sh       # CPU-rasterized pixel host (ADR-0205): no GPU, no Vulkan ICD; ffmpeg still encodes
+IMZERO2_HEADLESS_CODEC=mesh ./hmi_headless.sh  # lean mesh-lane host (ADR-0128 M3): no GPU, no ffmpeg; WebGL2 browser
 ```
 
 Both listeners (8089 and 8090) serve the viewer page *and* accept the

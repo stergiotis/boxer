@@ -12,10 +12,13 @@
 #
 # Viewer page: http://<host>:<port+1>/  (WebCodecs-capable browser required)
 #
-# The Rust feature set follows IMZERO2_HEADLESS_CODEC: `mesh` builds the lean
-# appliance host (`--features headless`, no wgpu/ffmpeg, ADR-0128 M3), anything
-# else builds the full one (`--features headless_wgpu`). So:
+# The Rust feature set follows IMZERO2_HEADLESS_CODEC and HMI_RASTER: `mesh`
+# builds the lean appliance host (`--features headless`, no wgpu/ffmpeg,
+# ADR-0128 M3), anything else builds the GPU one (`--features headless_wgpu`);
+# HMI_RASTER=soft swaps in the CPU-rasterized pixel host (`--features
+# headless_soft`, ADR-0205) for whatever codec is asked. So:
 #   IMZERO2_HEADLESS_CODEC=mesh ./hmi_headless.sh   # no GPU or ffmpeg needed
+#   HMI_RASTER=soft ./hmi_headless.sh               # no GPU, no Vulkan ICD; ffmpeg still encodes
 #
 # Encoder defaults to VAAPI (ADR-0024 SD3). On boxes without VAAPI H.264
 # encode (e.g. Fedora's mesa without the freeworld drivers), override:
@@ -99,25 +102,42 @@ esac
 # `./hmi_headless.sh | tee run.log` — still counts as interactive. HMI_BUILD=1/0
 # forces the decision; a missing binary rebuilds regardless, so a launcher never
 # starts nothing.
-# Which render host the requested codec needs (ADR-0128 M3). The lean `headless`
-# feature compiles in NO wgpu and NO ffmpeg and compile-time-forces
+# Which render host the requested codec needs (ADR-0128 M3, ADR-0205). The lean
+# `headless` feature compiles in NO wgpu and NO ffmpeg and compile-time-forces
 # CodecLane::mesh(), so it can serve the mesh draw-stream lane and nothing else;
-# every video codec needs `headless_wgpu` for the offscreen renderer and the
-# GPU->CPU readback the encoder consumes. Selecting on IMZERO2_HEADLESS_CODEC
-# means `IMZERO2_HEADLESS_CODEC=mesh` gets the appliance build — no GPU, mesa,
-# Vulkan or ffmpeg needed at run time — while the default h264 gets the full one.
-# The two use separate --target-dirs so flipping between them does not thrash a
-# single incremental cache.
-case "${IMZERO2_HEADLESS_CODEC:-}" in
-    mesh|draw-stream|drawstream)
-        rust_build=./build_rust_headless_mesh.sh
-        rust_target=headless_mesh
-        rust_features=headless
+# every video codec needs a raster host — `headless_wgpu` (offscreen wgpu +
+# GPU->CPU readback) or `headless_soft` (the CPU rasterizer, no GPU, no Vulkan
+# ICD; ADR-0205) — whose BGRA frames the encoder consumes. Selecting on
+# IMZERO2_HEADLESS_CODEC means `IMZERO2_HEADLESS_CODEC=mesh` gets the appliance
+# build — no GPU, mesa, Vulkan or ffmpeg needed at run time — while the default
+# h264 gets the GPU one. HMI_RASTER=soft overrides both with the CPU host, which
+# serves every lane (video through ffmpeg, mesh when asked or when no encoder
+# works — the configuration the gokrazy images run, ADR-0206 SD1). The three use
+# separate --target-dirs so flipping between them does not thrash a single
+# incremental cache.
+case "${HMI_RASTER:-wgpu}" in
+    soft)
+        rust_build=./build_rust_headless_soft.sh
+        rust_target=headless-soft
+        rust_features=headless_soft
+        ;;
+    wgpu)
+        case "${IMZERO2_HEADLESS_CODEC:-}" in
+            mesh|draw-stream|drawstream)
+                rust_build=./build_rust_headless_mesh.sh
+                rust_target=headless_mesh
+                rust_features=headless
+                ;;
+            *)
+                rust_build=./build_rust_headless.sh
+                rust_target=headless
+                rust_features=headless_wgpu
+                ;;
+        esac
         ;;
     *)
-        rust_build=./build_rust_headless.sh
-        rust_target=headless
-        rust_features=headless_wgpu
+        echo "hmi_headless.sh: HMI_RASTER='$HMI_RASTER' — expected 'wgpu' (default) or 'soft'" >&2
+        exit 1
         ;;
 esac
 
@@ -135,7 +155,7 @@ else
 	do_build=0
 fi
 if [[ "$do_build" == 1 ]]; then
-	echo "hmi_headless.sh: codec '${IMZERO2_HEADLESS_CODEC:-h264 (default)}' -> --features $rust_features" >&2
+	echo "hmi_headless.sh: codec '${IMZERO2_HEADLESS_CODEC:-h264 (default)}', raster '${HMI_RASTER:-wgpu (default)}' -> --features $rust_features" >&2
 	"$rust_build" || exit 1
 	./build_go.sh || exit 1
 fi
