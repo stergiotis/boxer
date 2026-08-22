@@ -89,8 +89,9 @@ Variable-arity outputs use CSR. The full set of CSR-shaped methods:
 - `GridDisksE` — one `values []uint64` + `offsets`.
 - `CellsToStringsE` — one `buf []byte` + `offsets` (H3 hex strings, no separators, no NUL).
 - `CellsToBoundariesE` — two parallel `lats []float64` / `lngs []float64` sharing one `offsets` (SD15; open rings, typically 5–6 vertices per row, up to 10 for pentagons whose boundary crosses an icosahedron face edge).
+- `DissolveE` — two levels (SD17): `ringOffsets` indexes the parallel `lats` / `lngs` vertex slices, `polygonOffsets` indexes rings; each polygon's first ring is its exterior, the rest are holes; rings are open as for boundaries. Whole-batch error model as for `CompactCellsE`.
 
-CSR invariants (identical across all four):
+CSR invariants (identical across all of them; for `DissolveE` they hold at each level):
 
 - `values` holds the flat concatenation of all rows' payloads.
 - `offsets` has length N+1 where N is the batch size.

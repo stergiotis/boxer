@@ -51,7 +51,7 @@ const (
 	// [StandardStageMaxH] height budget and into [LargeAreaStageMaxH]
 	// (currently 1000 px). Width budget stays at [StandardStageMaxW]
 	// regardless of this flag. Reserve for demos whose content (force
-	// graph, treemap, walkers map, code views, multi-panel layouts)
+	// graph, treemap, slippy map, code views, multi-panel layouts)
 	// truly needs the extra vertical room — most demos should fit
 	// inside the standard budget.
 	DemoFlagNeedsLargeArea DemoFlagsE = 1 << iota

@@ -83,6 +83,10 @@ type Map struct {
 	// wrappedOf remembers which wrapped tile each requested unwrapped tile
 	// maps to, for the loader's arrivals and for Draw.
 	wrappedOf map[TileCoords]TileCoords
+	// srcGen counts tile sources; it is the tiles' image version, so a
+	// switch re-uploads under the same ids instead of showing the old
+	// source's pixels.
+	srcGen uint64
 
 	// handlers
 	drag  dragHandler
@@ -154,11 +158,48 @@ func New(ids *c.WidgetIdStack, opts Options) *Map {
 		pixels:         make(map[TileCoords]*tilePixels, 64),
 		holders:        make(map[TileCoords]int, 64),
 		wrappedOf:      make(map[TileCoords]TileCoords, 64),
+		srcGen:         1,
 	}
+	m.wirePyramid()
+	return m
+}
+
+func (m *Map) wirePyramid() {
 	m.pyramid.OnRequest = m.requestTile
 	m.pyramid.OnAbort = func(coords TileCoords) { m.loader.Cancel(coords); m.dropHolder(coords) }
 	m.pyramid.OnUnload = m.dropHolder
-	return m
+}
+
+// Source is the tile source in use.
+func (m *Map) Source() TileSource { return m.opts.Source }
+
+// SetSource switches the tile source: requests to the old one are cancelled
+// and its tiles dropped, the pyramid restarts on the new one at the current
+// view, and the view's layer zoom limits follow the source. An empty template
+// is ignored.
+func (m *Map) SetSource(src TileSource) {
+	if src.URLTemplate == "" {
+		return
+	}
+	src = src.Normalized()
+	for coords := range m.wrappedOf {
+		m.loader.Cancel(coords)
+	}
+	m.loader.Drain()
+	for wrapped := range m.pixels {
+		m.tracker.Forget(wrapped)
+	}
+	m.pixels = make(map[TileCoords]*tilePixels, 64)
+	m.holders = make(map[TileCoords]int, 64)
+	m.wrappedOf = make(map[TileCoords]TileCoords, 64)
+	m.srcGen++
+	m.opts.Source = src
+	m.pyramid = NewPyramid(src)
+	m.wirePyramid()
+	m.view.SetLayerZoomLimits(src.MinZoom, src.MaxZoom, true, !math.IsInf(src.MaxZoom, 1))
+	if m.view.Loaded() && !m.opts.NoTiles {
+		m.pyramid.Sync(m.view, ViewEvents{ViewReset: true})
+	}
 }
 
 // Close stops the loader. The map must not be rendered afterwards.
@@ -347,13 +388,13 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 				continue
 			}
 			id := m.ids.PrepareStr("tile-" + td.Wrapped.Key()).Derive()
-			send := m.tracker.PixelsToSendFor(td.Wrapped, id, 1, px.px)
+			send := m.tracker.PixelsToSendFor(td.Wrapped, id, m.srcGen, px.px)
 			if len(send) > 0 {
 				m.bytesShipped += uint64(len(send)) * 4
 			}
 			r := td.Rect
 			c.PaintImage(id, float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y),
-				uint32(px.w), uint32(px.h), 1, send).Opacity(float32(td.Opacity)).Send()
+				uint32(px.w), uint32(px.h), m.srcGen, send).Opacity(float32(td.Opacity)).Send()
 		}
 	}
 	if overlay != nil {

@@ -49,3 +49,15 @@ var ErrCompactMixedResolution = eh.New("h3: compact input mixes resolutions")
 // ErrCompactDuplicateInput is returned by [Handle.CompactCellsE] when the
 // input set contains duplicate cells.
 var ErrCompactDuplicateInput = eh.New("h3: compact input contains duplicates")
+
+// ErrDissolveInvalidCell is returned by [Handle.DissolveE] when the input
+// contains a non-H3 cell.
+var ErrDissolveInvalidCell = eh.New("h3: dissolve input contains a non-H3 cell")
+
+// ErrDissolveMixedResolution is returned by [Handle.DissolveE] when the
+// input set mixes H3 resolutions.
+var ErrDissolveMixedResolution = eh.New("h3: dissolve input mixes resolutions")
+
+// ErrDissolveDuplicateInput is returned by [Handle.DissolveE] when the
+// input set contains duplicate cells.
+var ErrDissolveDuplicateInput = eh.New("h3: dissolve input contains duplicates")

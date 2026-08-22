@@ -23,7 +23,7 @@ import (
 // workers, a 512-tile byte cache, a 30 s negative cache, a 30 s timeout, the
 // system trust store.
 type LoaderOptions struct {
-	// Workers is the number of concurrent fetches — Leaflet's and walkers'
+	// Workers is the number of concurrent fetches — Leaflet's and the old binding's
 	// per-host budget of six.
 	Workers int
 	// ByteCacheTiles is how many compressed tiles the loader keeps, by count;

@@ -39,6 +39,7 @@ type Handle struct {
 	fnCompactCells   api.Function
 	fnUncompactCells api.Function
 	fnCellToBoundary api.Function
+	fnDissolve       api.Function
 
 	// scratch is a per-handle region of wasm linear memory, reused across
 	// bulk calls to avoid one alloc/free per call per region. It grows
@@ -49,7 +50,7 @@ type Handle struct {
 
 	// callStack is a pooled []uint64 for wazero's CallWithStack, avoiding
 	// the per-call []uint64 result allocation that Call performs. 16 slots
-	// cover every current export's max(params, results); polyfill uses 9.
+	// cover every current export's max(params, results); dissolve uses 10.
 	callStack [16]uint64
 
 	// iterLats / iterLngs are reusable Go-side staging buffers used by the

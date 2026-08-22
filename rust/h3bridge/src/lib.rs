@@ -12,7 +12,7 @@
 use core::slice;
 
 use h3o::{
-    geom::{ContainmentMode, TilerBuilder},
+    geom::{ContainmentMode, SolventBuilder, TilerBuilder},
     CellIndex, LatLng, Resolution,
 };
 
@@ -50,6 +50,12 @@ const COMPACT_OK: u32 = 0;
 const COMPACT_MIXED_RESOLUTION: u32 = 1;
 const COMPACT_DUPLICATE: u32 = 2;
 const COMPACT_INVALID_CELL: u32 = 3;
+
+// Dissolve return codes. 0/1 match GROW_OK/GROW_NEED_MORE.
+const DISSOLVE_INVALID_CELL: u32 = 2;
+const DISSOLVE_MIXED_RESOLUTION: u32 = 3;
+const DISSOLVE_DUPLICATE: u32 = 4;
+const DISSOLVE_INTERNAL: u32 = 5;
 
 #[no_mangle]
 pub extern "C" fn ext_alloc(n: u32) -> u32 {
@@ -93,6 +99,10 @@ unsafe fn as_u64_slice_mut<'a>(ptr: u32, n: u32) -> &'a mut [u64] {
 
 unsafe fn as_i32_slice_mut<'a>(ptr: u32, n: u32) -> &'a mut [i32] {
     unsafe { slice::from_raw_parts_mut(ptr as *mut i32, n as usize) }
+}
+
+unsafe fn as_u32_slice_mut<'a>(ptr: u32, n: u32) -> &'a mut [u32] {
+    unsafe { slice::from_raw_parts_mut(ptr as *mut u32, n as usize) }
 }
 
 unsafe fn as_u8_slice_mut<'a>(ptr: u32, n: u32) -> &'a mut [u8] {
@@ -705,6 +715,117 @@ pub extern "C" fn h3_uncompact_cells(
             out[w] = u64::from(child);
             w += 1;
         }
+    }
+    GROW_OK
+}
+
+// --- dissolve -------------------------------------------------------------
+
+/// Number of vertices of a geo-types ring without the closing duplicate
+/// that `Polygon::new` appends (last == first).
+fn open_ring_len(ring: &geo_types::LineString<f64>) -> usize {
+    let n = ring.0.len();
+    if n >= 2 && ring.0[0] == ring.0[n - 1] {
+        n - 1
+    } else {
+        n
+    }
+}
+
+/// Dissolves a set of same-resolution cells into the multipolygon of their
+/// union, as a two-level CSR: `lats`/`lngs` hold every vertex in degrees,
+/// `ring_offsets` (one per ring + 1) indexes vertices and `polygon_offsets`
+/// (one per polygon + 1) indexes rings. The first ring of each polygon is
+/// its exterior; the following rings are its holes.
+///
+/// Rings are open, like `h3_cell_to_boundary`'s: the closing vertex that
+/// geo-types appends is dropped. Vertex order is h3o's: exteriors wind
+/// counter-clockwise and holes clockwise — the winding the cell edges
+/// carry — with each polygon's exterior first and polygons in descending
+/// exterior area, all passed through unchanged.
+///
+/// The sizes are known only after the dissolve, so this follows the
+/// `h3_polygon_to_cells` protocol: the result is computed, its sizes are
+/// written to `needed_ptr` (three u32: vertices, rings, polygons), and
+/// `GROW_NEED_MORE` is returned — with nothing else written — when any of
+/// `vertex_cap`, `ring_cap`, `polygon_cap` is too small. `ring_offsets_ptr`
+/// must hold `ring_cap + 1` i32 and `polygon_offsets_ptr` `polygon_cap + 1`.
+///
+/// Whole-batch return codes (no per-element status: as for compaction, the
+/// output has no per-input row): 0 ok, 1 need-more, 2 invalid cell,
+/// 3 mixed resolutions, 4 duplicate cell, 5 other dissolution failure.
+#[no_mangle]
+pub extern "C" fn h3_dissolve(
+    cells_ptr: u32,
+    n: u32,
+    lats_ptr: u32,
+    lngs_ptr: u32,
+    ring_offsets_ptr: u32,
+    polygon_offsets_ptr: u32,
+    vertex_cap: u32,
+    ring_cap: u32,
+    polygon_cap: u32,
+    needed_ptr: u32,
+) -> u32 {
+    let raw = unsafe { as_u64_slice(cells_ptr, n) };
+
+    let mut cells: Vec<CellIndex> = Vec::with_capacity(n as usize);
+    for &c in raw {
+        match CellIndex::try_from(c) {
+            Ok(ci) => cells.push(ci),
+            Err(_) => return DISSOLVE_INVALID_CELL,
+        }
+    }
+
+    let multi = match SolventBuilder::new().build().dissolve(cells) {
+        Ok(m) => m,
+        Err(h3o::error::DissolutionError::UnsupportedResolution) => {
+            return DISSOLVE_MIXED_RESOLUTION
+        }
+        Err(h3o::error::DissolutionError::DuplicateInput) => return DISSOLVE_DUPLICATE,
+        // DissolutionError is #[non_exhaustive]; h3o may add variants.
+        Err(_) => return DISSOLVE_INTERNAL,
+    };
+
+    // Size pass.
+    let mut total_vertices: usize = 0;
+    let mut total_rings: usize = 0;
+    for poly in multi.0.iter() {
+        for ring in core::iter::once(poly.exterior()).chain(poly.interiors().iter()) {
+            total_vertices += open_ring_len(ring);
+            total_rings += 1;
+        }
+    }
+    let total_polygons = multi.0.len();
+
+    let needed = unsafe { as_u32_slice_mut(needed_ptr, 3) };
+    needed[0] = u32::try_from(total_vertices).unwrap_or(u32::MAX);
+    needed[1] = u32::try_from(total_rings).unwrap_or(u32::MAX);
+    needed[2] = u32::try_from(total_polygons).unwrap_or(u32::MAX);
+    if needed[0] > vertex_cap || needed[1] > ring_cap || needed[2] > polygon_cap {
+        return GROW_NEED_MORE;
+    }
+
+    let lats = unsafe { as_f64_slice_mut(lats_ptr, needed[0]) };
+    let lngs = unsafe { as_f64_slice_mut(lngs_ptr, needed[0]) };
+    let ring_offsets = unsafe { as_i32_slice_mut(ring_offsets_ptr, needed[1] + 1) };
+    let polygon_offsets = unsafe { as_i32_slice_mut(polygon_offsets_ptr, needed[2] + 1) };
+    ring_offsets[0] = 0;
+    polygon_offsets[0] = 0;
+    let mut v: usize = 0;
+    let mut r: usize = 0;
+    for (p, poly) in multi.0.iter().enumerate() {
+        for ring in core::iter::once(poly.exterior()).chain(poly.interiors().iter()) {
+            // geo uses (x=lng, y=lat).
+            for c in &ring.0[..open_ring_len(ring)] {
+                lats[v] = c.y;
+                lngs[v] = c.x;
+                v += 1;
+            }
+            r += 1;
+            ring_offsets[r] = v as i32;
+        }
+        polygon_offsets[p + 1] = r as i32;
     }
     GROW_OK
 }

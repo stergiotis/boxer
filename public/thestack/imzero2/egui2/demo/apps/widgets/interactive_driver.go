@@ -120,7 +120,7 @@ type App struct {
 	// no r7 yet, frames 2+ read the previous frame's advisory
 	// IsBlockSkipped and skip RenderDemoIntro / Embed / RenderDemoOutro
 	// for collapsed demos. Without the guard, all the demo Render
-	// closures (walkers tile fetch, graphs force-layout, treemap2
+	// closures (map tile fetch, graphs force-layout, treemap2
 	// layout) would fire every frame — the original ~11s ADR-0057
 	// startup stall, but recurring.
 	frame int32

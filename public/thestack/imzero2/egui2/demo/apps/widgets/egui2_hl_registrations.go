@@ -118,55 +118,16 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
-		Name: "walkers", Category: "Maps & geo", Title: icons.IconGlobe + " walkers (slippy maps)",
-		Stage: [2]float32{1024, 700}, Flags: registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork,
-		Kind:        registry.DemoKindUX,
-		Description: "Slippy maps via the walkers crate: OSM tile viewport, H3 heatmaps and a NoTiles choropleth canvas.",
-		Init: func(_ *c.WidgetIdStack) (state any) {
-			state = newWalkersDemoState()
-			return
-		},
-		RenderStateful: func(ids *c.WidgetIdStack, state any) {
-			st := state.(*walkersDemoState)
-			// Basic demo sits outside a CollapsingHeader so the map always renders
-			// (4-frame screenshot tour hits the open-animation gotcha inside a
-			// CollapsingHeader — see SKILLS.md §12 / §16.10).
-			demoWalkersBasic(ids, st)
-			for range c.CollapsingHeader(ids.PrepareStr("walkers-camera-demo"), c.WidgetText().Text("camera (viewport + pointer readback)").Keep()).DefaultOpen(true).KeepIter() {
-				demoWalkersCamera(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("walkers-heatmap-info"), c.WidgetText().Text("heatmap (H3, uniform)").Keep()).KeepIter() {
-				demoWalkersHeatmapInfo(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("walkers-choropleth-demo"), c.WidgetText().Text("choropleth (H3, NoTiles canvas)").Keep()).KeepIter() {
-				demoWalkersChoropleth(ids, st)
-			}
-		},
-	})
-	registry.Register(registry.Demo{
 		Name: "portolan", Category: "Maps & geo", Title: icons.IconGlobe + " portolan (slippy map)",
-		Stage:       [2]float32{760, 600},
+		Stage:       [2]float32{1024, 760},
 		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
 		Kind:        registry.DemoKindUX,
-		Description: "The slippy-map widget of ADR-0204 — Leaflet's map core ported to Go on the painter lane: raster tiles with cross-level retention, pan, anchored wheel zoom, double-click zoom, and an overlay through the projector hook. Basemap from BOXER_MAP_TILE_URL, OpenStreetMap by default.",
+		Description: "The slippy-map widget of ADR-0204 — Leaflet's map core ported to Go on the painter lane: raster tiles with cross-level retention, pan with inertia, anchored wheel zoom, animated double-click and box zoom, keyboard pan; markers, a route, an H3 region and a viewport-driven H3 heatmap through the projector hook; a tile-server switch; an H3 choropleth on a NoTiles canvas. Basemap from BOXER_MAP_TILE_URL, OpenStreetMap by default.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			return newPortolanDemoState(ids)
 		},
-		RenderStateful: func(_ *c.WidgetIdStack, state any) {
-			demoPortolan(state.(*portolanDemoState))
-		},
-	})
-	registry.Register(registry.Demo{
-		Name: "portolan-m0", Category: "Maps & geo", Title: icons.IconGlobe + " portolan M0 spike (tiles on the painter lane)",
-		Stage:       [2]float32{760, 600},
-		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
-		Kind:        registry.DemoKindDX,
-		Description: "ADR-0204 M0: a fixed-camera slippy map drawn in Go through paintImage, panned by the canvas's R24 pointer row and zoomed by its R23 wheel row, both one frame behind. Measures the input lag and the first-paint bytes before the Leaflet port starts; no pyramid, no animation, no walkers.",
-		Init: func(_ *c.WidgetIdStack) (state any) {
-			return newPortolanM0State()
-		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
-			demoPortolanM0(ids, state.(*portolanM0State))
+			demoPortolan(ids, state.(*portolanDemoState))
 		},
 	})
 	registry.Register(registry.Demo{
@@ -174,12 +135,12 @@ func init() {
 		Stage:       [2]float32{760, 600},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "An RGBA framebuffer (synthetic stand-in for an in-DB-rendered tile, ADR-0096) pinned to a lat/lon bbox and composited on a NoTiles walkers map via the mapRaster overlay.",
+		Description: "An RGBA framebuffer (synthetic stand-in for an in-DB-rendered tile, ADR-0096) pinned to a lat/lon bbox and composited on a NoTiles portolan map through Projector.Image.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
-			return &walkersRasterDemoState{opacity: 0.9}
+			return &rasterDemoState{opacity: 0.9}
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
-			demoWalkersRaster(ids, state.(*walkersRasterDemoState))
+			demoMapRaster(ids, state.(*rasterDemoState))
 		},
 	})
 	registry.Register(registry.Demo{

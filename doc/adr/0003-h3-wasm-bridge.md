@@ -156,6 +156,18 @@ SD16 adds no new ABI export; it reuses `h3_latlng_to_cell`. The ADR's earlier op
 
 **Consequences.** Three new user-facing methods, three new ABI exports, one new enum (`ContainmentModeE`). Pulling in h3o's polygon machinery is expected to grow the committed `h3.wasm` by a few tens of KiB; the `CONST_RANDOM_SEED`-pinned build remains byte-reproducible and CI parity continues to gate drift. The `CompactCellsE` deviation from SD5 (bulk-only error) is the first per-operation status-model exception and is documented inline here rather than in `EXPLANATION.md` so that the rationale stays co-located with the decision.
 
+### 2026-08-22 — Dissolve (cells → multipolygon), for ADR-0204 §SD9
+
+The H3 region overlay of the Go map widget ([ADR-0204](0204-leaflet-map-core-port.md) §SD9) needs the dissolve of a cell set into the multipolygon of its union, which until now ran only in imzero2's Rust. The bridge gains one export, the Go wrapper one method, the golden lane one file. The core decision is unchanged.
+
+- **SD17 — Dissolve: two-level CSR, whole-batch error model, three-size grow protocol.** `DissolveE(ctx, cells)` returns parallel `latsDeg`/`lngsDeg` vertex slices (degrees), `ringOffsets` (one per ring + 1, indexing vertices) and `polygonOffsets` (one per polygon + 1, indexing rings); each polygon's first ring is its exterior, the rest are holes. Rings are open like SD15's, and keep h3o's vertex order (exteriors counter-clockwise, holes clockwise, inherited from the cell edges; polygons in descending exterior area). Input must be one resolution and duplicate-free; a non-H3 cell, mixed resolutions or a duplicate fail the whole call (`ErrDissolveInvalidCell`, `ErrDissolveMixedResolution`, `ErrDissolveDuplicateInput`) — the SD13 model, for the same reason: the output has no per-input row. The three output sizes are known only after the dissolve, so the export follows the polyfill protocol (compute, report sizes, `need-more` when any cap is short; the one-retry settles with exact caps, at the cost of a second dissolve). Rejected: per-element status (no row to attach it to); a flat ring list without polygon grouping (the consumer fills polygons, so it needs to know which holes belong to which exterior); closed rings (SD15 precedent, and the consumer closes when it draws).
+
+**New ABI export (in lock-step with `rust/h3bridge/src/lib.rs`).**
+
+- `h3_dissolve(cells_ptr, n, lats_ptr, lngs_ptr, ring_offsets_ptr, polygon_offsets_ptr, vertex_cap, ring_cap, polygon_cap, needed_ptr) -> u32` — `needed_ptr` points at three u32 (vertices, rings, polygons), written on both `ok` and `need-more`; `ring_offsets_ptr` holds `ring_cap + 1` i32, `polygon_offsets_ptr` `polygon_cap + 1`. Return codes: `0` ok, `1` need-more, `2` invalid cell, `3` mixed resolutions, `4` duplicate cell, `5` other dissolution failure. The Go side starts at `6*n` vertices, `n` rings, `n` polygons.
+
+**Testing.** Golden `golden_dissolve.ndjson` (single cell, 7-cell disk, 6-cell ring with a hole, two disjoint cells, at res 5 for every reference point); shape tests asserting vertex counts (6 / 18 / 18+6 / 12), that every dissolved vertex is a boundary vertex of an input cell, and ring orientation; the three error paths; a grow-protocol case (a class-III cell with a distortion vertex exceeds the `6*n` initial cap). The committed `h3.wasm` grows by about 42 KiB.
+
 ## References
 
 - [`CODINGSTANDARDS.md`](../../CODINGSTANDARDS.md) — Go coding standard (SoA, `E` suffix, pre-allocation, `iter` package, no cgo policy).

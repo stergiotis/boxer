@@ -13,7 +13,7 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use h3o::{
-    geom::{ContainmentMode, TilerBuilder},
+    geom::{ContainmentMode, SolventBuilder, TilerBuilder},
     CellIndex, LatLng, Resolution,
 };
 
@@ -404,6 +404,94 @@ fn emit_compact_uncompact() {
     }
 }
 
+// Flattens the dissolve of `cells` into the bridge's two-level CSR: vertex
+// lats/lngs in degrees, ring offsets indexing vertices, polygon offsets
+// indexing rings; exterior first per polygon; rings open (the closing
+// vertex geo-types appends is dropped), as the h3_dissolve export emits.
+fn dissolve_csr(cells: &[CellIndex]) -> (Vec<f64>, Vec<f64>, Vec<i32>, Vec<i32>) {
+    let multi = SolventBuilder::new()
+        .build()
+        .dissolve(cells.iter().copied())
+        .expect("dissolvable");
+    let mut lats: Vec<f64> = Vec::new();
+    let mut lngs: Vec<f64> = Vec::new();
+    let mut ring_offsets: Vec<i32> = vec![0];
+    let mut polygon_offsets: Vec<i32> = vec![0];
+    for poly in multi.0.iter() {
+        for ring in std::iter::once(poly.exterior()).chain(poly.interiors().iter()) {
+            let n = ring.0.len();
+            let open = if n >= 2 && ring.0[0] == ring.0[n - 1] {
+                n - 1
+            } else {
+                n
+            };
+            for c in &ring.0[..open] {
+                lats.push(c.y);
+                lngs.push(c.x);
+            }
+            ring_offsets.push(lats.len() as i32);
+        }
+        polygon_offsets.push((ring_offsets.len() - 1) as i32);
+    }
+    (lats, lngs, ring_offsets, polygon_offsets)
+}
+
+fn emit_dissolve() {
+    let mut w = open("golden_dissolve.ndjson");
+    for (name, lat, lng) in reference_points() {
+        let ll = LatLng::new(lat, lng).expect("valid latlng");
+        let cell = ll.to_cell(Resolution::Five);
+        let disk: Vec<CellIndex> = cell.grid_disk::<Vec<CellIndex>>(1);
+        let neighbours: Vec<CellIndex> = disk.iter().copied().filter(|c| *c != cell).collect();
+        // A cell at grid distance 2 is never adjacent to the centre.
+        let far = cell
+            .grid_disk_distances::<Vec<(CellIndex, u32)>>(2)
+            .into_iter()
+            .find(|(_, k)| *k == 2)
+            .map(|(c, _)| c)
+            .expect("distance-2 cell");
+        let cases: [(&str, Vec<CellIndex>); 4] = [
+            ("single", vec![cell]),
+            ("disk1", disk),
+            ("ring1", neighbours),
+            ("pair", vec![cell, far]),
+        ];
+        for (case, cells) in cases {
+            let (lats, lngs, ring_offsets, polygon_offsets) = dissolve_csr(&cells);
+            let cells_str = cells
+                .iter()
+                .map(|c| u64::from(*c).to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let lats_str = lats
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let lngs_str = lngs
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let ring_str = ring_offsets
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let poly_str = polygon_offsets
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            writeln!(
+                w,
+                r#"{{"name":"{name}_{case}","res":5,"cells":[{cells_str}],"lats":[{lats_str}],"lngs":[{lngs_str}],"ring_offsets":[{ring_str}],"polygon_offsets":[{poly_str}]}}"#,
+            )
+            .unwrap();
+        }
+    }
+}
+
 fn main() {
     emit_latlng_to_cell();
     emit_cell_to_latlng();
@@ -415,5 +503,6 @@ fn main() {
     emit_boundaries();
     emit_polyfill();
     emit_compact_uncompact();
+    emit_dissolve();
     eprintln!("wrote golden vectors to {}", testdata_dir().display());
 }

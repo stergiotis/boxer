@@ -50,6 +50,7 @@ The design is fixed by [ADR-0003](../../../../doc/adr/0003-h3-wasm-bridge.md).
 | `GetResolutionsE`        | `[]uint64` cells                              | `[]ResolutionE`, `[]StatusE`                                |
 | `PolygonToCellsE`        | flat vert lats/lngs + ring offsets, `ResolutionE`, `ContainmentModeE` | flat `[]uint64` cells                  |
 | `CellsToBoundariesE`     | `[]uint64` cells                              | CSR `[]float64` lats + `[]float64` lngs + `[]int32` offsets, `[]StatusE` |
+| `DissolveE`              | `[]uint64` same-resolution cells              | two-level CSR `[]float64` lats + `[]float64` lngs + `[]int32` ring offsets + `[]int32` polygon offsets (bulk error only, SD17) |
 | `CompactCellsE`          | `[]uint64` same-resolution cells              | `[]uint64` compacted (bulk error only, SD13)                |
 | `UncompactCellsE`        | `[]uint64` cells, target `ResolutionE`        | flat `[]uint64` expanded, `[]StatusE` (SD14)                |
 
