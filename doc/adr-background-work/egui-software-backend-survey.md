@@ -879,3 +879,66 @@ one that looks decisive** — here `WGPU_BACKEND=vulkan` as well as
 measurement**: `headless.rs` logs `name=… backend=… device_type=…` on every
 start, and had this harness printed it beside each result the error could not
 have survived one run, let alone three sections.
+
+## 16 What transfers to other CPUs (added 2026-08-22)
+
+§13.5 warned that the numbers are one machine. This section separates the parts
+that are structural from the parts that are this silicon, prompted by asking
+what a Zen 3 16-core would do.
+
+### 16.1 The measurement machine, stated properly
+
+16 cores / 32 threads, **two L3 domains of 32 MB each** (8 cores per domain),
+256-bit LPDDR5X. That topology — 16C/32T, 2 CCDs, 32 MB L3 apiece — is the same
+shape as a Zen 3 5950X. The memory subsystem is not: ~256 GB/s here against
+~51 GB/s for dual-channel DDR4.
+
+The vendored crate carries `avx2.rs`, `sse41.rs` and `neon.rs` and **no
+AVX-512 path**, so Zen 3 and Zen 5 execute the same 256-bit code. Zen 5's ISA
+advantage does not apply to this workload.
+
+### 16.2 L3 residency decides which machine you are on
+
+Working set is roughly `2 × width × height × 4` — the frame buffer plus the
+canvas — before per-primitive caches. Pinning 16 workers inside one L3 domain
+versus splitting them across both:
+
+| ppp | pixels | working set | one CCD | split across CCDs |
+| --- | --- | --- | --- | --- |
+| 1.0 | 2.30 M | ~17.5 MB (fits 32 MB) | **753 µs** | 1003 µs (1.33× worse) |
+| 1.5 | 5.18 M | ~39.5 MB (spills) | 2373 µs | 2520 µs (1.06×) |
+| 2.0 | 9.22 M | ~70.3 MB (spills badly) | 4925 µs | **4642 µs (0.94× — better)** |
+
+The crossover is exactly where the working set stops fitting one domain's L3,
+and it inverts once it does: past that, spreading buys aggregate L3 capacity
+worth more than the locality it costs. This is also the mechanism behind
+§13.1's knee at ~5 Mpx, which was described there without a cause.
+
+**Consequence for any dual-CCD part, including a 5950X:** at 1920×1200 and
+below, pin the pool to one L3 domain — `taskset -c 0-15`, or systemd
+`CPUAffinity=` — and take 1.33×. The shipped default picks 16 workers on a
+32-thread machine but has no affinity, so the scheduler spreads them and lands
+in the *split* column. That is ~25 % left on the table for want of a pin, and
+it is a deployment setting rather than something this host should decide.
+
+### 16.3 So, a Zen 3 16-core
+
+**Measured, and structural — expect these to hold:** the topology effect above;
+the tile-row parallelism bound (§13.2) and therefore the 8–16 worker plateau;
+the same AVX2 inner loop; the ~15 MiB-per-worker memory cost.
+
+**Estimated — treat as a guess:** at ≤1920×1200 the working set is L3-resident
+and both parts have 32 MB per CCD, so DRAM bandwidth mostly does not bind and
+the gap should be roughly Zen 5's IPC-and-clock advantage on an AVX2 memory
+loop — call it 1.3–1.6×, putting p50 near 1.0–1.2 ms instead of 0.75 ms. Still
+well ahead of lavapipe (5.96 ms) and in the same league as the GPU arm.
+
+At 4K the working set spills and DRAM bandwidth becomes the binding constraint,
+where the two machines differ by ~5×. The 3.6 ms measured here would degrade by
+much more than the IPC ratio. **A CPU-rasterized appliance should be sized at
+1080p–1200p, not 4K** — and that conclusion is architecture-independent, since
+it follows from L3 capacity rather than from bandwidth.
+
+None of the estimates in this section were measured. The one experiment that
+would settle them is running §11's harness on the target machine;
+`IMZERO2_HEADLESS_RASTER_STATS=1` is all it needs.
