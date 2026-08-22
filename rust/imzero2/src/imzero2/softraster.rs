@@ -38,26 +38,36 @@
 //!
 //! | pool | RSS | p50 | p99 |
 //! | --- | --- | --- | --- |
-//! | uncached, 1 thread (what this host used to be) | 57 MiB | 3.17 ms | 4.57 ms |
-//! | cached, 1 | 171 MiB | 2.07 ms | 15.7 ms |
-//! | cached, 4 | 248 MiB | 0.93 ms | 5.6 ms |
-//! | cached, 8 | 282 MiB | 0.73 ms | 5.4 ms |
-//! | cached, 16 | 416 MiB | 0.76 ms | 4.5 ms |
+//! | uncached, 1 thread (what this host started as) | 57 MiB | 3.17 ms | 4.57 ms |
+//! | 1 worker | 179 MiB | 0.37 ms | 14.1 ms |
+//! | 2 | 187 MiB | 0.26 ms | 9.5 ms |
+//! | 4 | 228 MiB | 0.26 ms | 6.7 ms |
+//! | 8 | 302 MiB | 0.30 ms | 6.5 ms |
+//! | 16 (the default here) | 406 MiB | 0.26 ms | 5.2 ms |
+//! | 32 | — | 0.57 ms | 4.7 ms |
 //!
-//! So **`IMZERO2_HEADLESS_RASTER_THREADS` is a memory knob as much as a speed
-//! one** — roughly 15 MiB per worker, most of it per-thread allocator arenas
-//! (imzero2 runs mimalloc) and the in-flight per-primitive raster each worker
-//! holds. The p50 plateau starts around 8 workers; past that only p99 improves,
-//! at ~17 MiB each. Against the uncached path this host replaced, that is 3–7×
-//! the memory, so it is no longer the one-core-and-nothing-else proposition it
-//! was, and a memory-constrained deployment should set the knob deliberately
-//! rather than take the default.
+//! **Since the blit became tile-scoped, the thread count is a tail-latency and
+//! memory dial, not a throughput one.** p50 is flat from 2 to 16 workers — the
+//! parallel speedup collapsed from 2.5× to about 1.4× because there is far
+//! less work left to spread and what remains clusters into a few tile rows —
+//! while p99 keeps improving all the way out, because the frames in the tail
+//! are full repaints dominated by re-rasterizing primitives, which does still
+//! parallelise. Note what that implies: one worker with tiling (0.37 ms,
+//! 179 MiB) beats sixteen without it (0.76 ms, 406 MiB).
 //!
-//! The tail is this configuration's weak point in general: even at 16 workers
-//! p99 is 4.5 ms against ~2.0 ms for the same frame through wgpu on lavapipe,
-//! because a frame in which any primitive changed re-composites the whole
-//! canvas (the crate carries a `// TODO use tiles` exactly there). Latency-
-//! sensitive streaming should weigh that against the better p50.
+//! Roughly 15 MiB per worker, most of it per-thread allocator arenas (imzero2
+//! runs mimalloc) plus the in-flight per-primitive raster each worker holds.
+//! Going 4 → 16 workers buys ~1.5 ms of p99 for ~180 MiB and nothing on p50,
+//! so a memory-constrained deployment should set
+//! `IMZERO2_HEADLESS_RASTER_THREADS` low rather than take the default.
+//!
+//! The tail remains this host's weak point against a GPU — 5.2 ms at 16
+//! workers versus ~3.0 ms through wgpu — and it is **not** a compositing
+//! problem. Measured per phase, tail frames spend their time in
+//! `render_prims_to_cache`, i.e. rasterizing primitives whose cache entry went
+//! stale, while the blit stays at 0.2–0.6 ms even then. That is the cost of
+//! drawing a whole frame on a CPU, so it is inherent rather than an
+//! inefficiency waiting to be fixed.
 
 use egui_software_backend::{BufferMutRef, ColorFieldOrder, EguiSoftwareRender};
 
@@ -71,6 +81,11 @@ use crate::imzero2::headless::HeadlessError;
 /// SVG host (`headless_svg.rs`). egui only uses it to bound atlas growth, so
 /// an over-estimate is harmless.
 const MAX_TEXTURE_SIDE: usize = 8192;
+
+/// What an unpainted pixel is left as. Opaque black is what the wgpu host's
+/// `LoadOp::Clear(wgpu::Color::BLACK)` leaves, which keeps the two hosts
+/// byte-comparable on any pixel the UI does not cover.
+const CLEAR: [u8; 4] = [0, 0, 0, 255];
 
 /// Worker count for the rasterizer's pool. `IMZERO2_HEADLESS_RASTER_THREADS`
 /// wins when set to a positive value; otherwise half the hardware threads,
@@ -103,6 +118,12 @@ pub struct Soft {
     /// Whether the last geometry was reported as over the L3 budget, so a
     /// resize only speaks up when the verdict actually changes.
     over_budget: bool,
+    /// Byte length of the frame buffer this host last painted in full. While
+    /// the caller keeps handing back a buffer of that size, its untouched
+    /// tiles still hold the previous frame and only the changed ones need
+    /// repainting; anything else (first frame, resize, a caller that swapped
+    /// buffers) forces the full path. Zero means "not primed".
+    primed_bytes: usize,
 }
 
 impl Soft {
@@ -157,6 +178,7 @@ impl Soft {
             max_texture_side: MAX_TEXTURE_SIDE,
             topo,
             over_budget: false,
+            primed_bytes: 0,
         };
         // Also at startup, not only on resize: a host launched straight into a
         // 4K viewport would otherwise never hear about it.
@@ -182,6 +204,8 @@ impl Soft {
         self.width_px = width_px;
         self.height_px = height_px;
         self.pixels_per_point = pixels_per_point;
+        // The frame buffer is about to change size, so nothing in it survives.
+        self.primed_bytes = 0;
         self.advise_working_set(width_px, height_px);
     }
 
@@ -230,24 +254,32 @@ impl Soft {
     ) -> Result<(), HeadlessError> {
         let (w, h) = (self.width_px as usize, self.height_px as usize);
 
-        frame.resize(w * h * 4, 0);
+        let bytes = w * h * 4;
+        let primed = self.primed_bytes == bytes && frame.len() == bytes;
+        frame.resize(bytes, 0);
         // `[u8; 4]` is align-1 and `w * h * 4` divides by 4, so this cast can
         // only succeed; `bytemuck` is here purely to spell it without
         // `unsafe`, which the workspace lints deny.
         let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(frame.as_mut_slice());
-        // The rasterizer composites over whatever the buffer already holds and
-        // never guarantees full coverage, so the frame has to start from a
-        // known state. Opaque black is what the wgpu host's
-        // `LoadOp::Clear(wgpu::Color::BLACK)` leaves, which keeps the two
-        // hosts byte-comparable on any pixel the UI does not paint.
-        pixels.fill([0, 0, 0, 255]);
 
-        let mut buffer = BufferMutRef::new(pixels, w, h);
-        // `self.pixels_per_point`, not the pass's: it is the same value —
-        // `run_main_loop` feeds one scale into both `RawInput` and `resize` —
-        // and taking it from state is what keeps this symmetric with the wgpu
-        // host, which reads its own `ScreenDescriptor`.
-        self.render.render(&mut buffer, clipped, textures_delta, self.pixels_per_point);
+        if primed {
+            // Steady state. The buffer still holds the previous frame, so only
+            // the tiles the rasterizer marked dirty need repainting; it resets
+            // each to CLEAR before compositing, which is what stops the alpha
+            // blend from stacking on itself. This is the bulk of the frame:
+            // the unconditional blit paints every *occupied* tile, and in a
+            // full-viewport UI that is all of them.
+            self.render.render_to_canvas(w, h, clipped, textures_delta, self.pixels_per_point);
+            let mut buffer = BufferMutRef::new(pixels, w, h);
+            self.render.blit_dirty_to_buffer(&mut buffer, CLEAR);
+        } else {
+            // First frame, a resize, or a caller that handed back a different
+            // buffer: nothing in it can be trusted, so clear and paint whole.
+            pixels.fill(CLEAR);
+            let mut buffer = BufferMutRef::new(pixels, w, h);
+            self.render.render(&mut buffer, clipped, textures_delta, self.pixels_per_point);
+            self.primed_bytes = bytes;
+        }
         Ok(())
     }
 }

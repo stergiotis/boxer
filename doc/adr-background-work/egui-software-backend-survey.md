@@ -859,11 +859,9 @@ which is what `IMZERO2_HEADLESS_RASTER_THREADS` is for.
 ### 14.4 What would change the picture
 
 The tail is the software host's clearest remaining deficit against a real GPU
-(4.5 ms vs 3.0), and it has a known cause: any frame in which a primitive
-changed re-composites the whole canvas, where the vendored crate carries a
-`// TODO use tiles`. Teaching it to composite only dirty tiles would attack the
-p99 and probably the per-worker memory with it. That is upstream work, or a
-larger vendored delta than anything carried today.
+(4.5 ms vs 3.0). §17 went after it, found the diagnosis in this paragraph's
+earlier wording was wrong twice over, and fixed a different and larger problem
+instead.
 
 ## 15 A measurement that was not measuring what it said (added 2026-08-22)
 
@@ -954,3 +952,98 @@ it follows from L3 capacity rather than from bandwidth.
 None of the estimates in this section were measured. The one experiment that
 would settle them is running §11's harness on the target machine;
 `IMZERO2_HEADLESS_RASTER_STATS=1` is all it needs.
+
+## 17 Tiling the blit (added 2026-08-22)
+
+§14.4 blamed the software host's tail on "any frame in which a primitive
+changed re-composites the whole canvas". Going to fix that found the sentence
+wrong in both halves — and a larger win somewhere else.
+
+### 17.1 Two things the diagnosis had backwards
+
+**The canvas composite was never full-frame.** `update_canvas_from_cached` has
+filtered on `DIRTY_TILE_MASK` since before this survey existed. Measured per
+phase at 1920×1200 it costs **31–46 µs** of a ~800 µs frame.
+
+**What *is* full-frame is the blit.** `blit_canvas_to_buffer` paints every
+tile marked `OCCUPIED`, and in a UI that fills its viewport that is all 570 of
+them, every frame regardless of what changed: **437–606 µs**, 60–75 % of the
+frame. The host was compounding it by clearing the whole frame buffer to opaque
+black first.
+
+### 17.2 What was done
+
+A `blit_dirty_to_buffer` on the vendored crate paints only `DIRTY` tiles,
+resetting each to a caller-supplied clear colour first — the reset is what
+keeps the alpha composite from stacking, since the canvas is blended *over* the
+destination. The host keeps its frame buffer across frames and falls back to
+the full path on the first frame, on resize, or if it is handed a buffer of a
+different size.
+
+| 1920×1200, 600 frames | p50 | p90 | p99 |
+| --- | --- | --- | --- |
+| full blit | 723 µs | 1093 | 4449 |
+| **tiled blit** | **266 µs** | **574** | 4617 |
+
+**2.7× on p50, 1.9× on p90 — and no change at all to p99.**
+
+### 17.3 The tail was never the blit
+
+Instrumenting frames over 2 ms shows them dominated by
+`render_prims_to_cache` — re-rasterizing primitives whose cache entry went
+stale — while `blit_dirty` stays at 0.2–0.6 ms even on the worst of them. Ten
+of 600 frames exceed 2 ms and they are cold-cache or whole-UI-changed frames.
+
+So the p99 is the cost of rasterizing an entire frame on a CPU. It is inherent,
+not an inefficiency, and the gap to a GPU (5.2 ms against 3.0) will not close
+by compositing more cleverly.
+
+### 17.4 It changes what the thread knob is for
+
+Tiling removes most of the parallelisable work, so §13.2's scaling no longer
+describes this host:
+
+| workers | p50 | p90 | p99 | RSS |
+| --- | --- | --- | --- | --- |
+| 1 | 365 µs | 705 | 14.1 ms | 179 MiB |
+| 2 | 261 | 561 | 9.5 | 187 MiB |
+| 4 | 261 | 496 | 6.7 | 228 MiB |
+| 8 | 298 | 541 | 6.5 | 302 MiB |
+| 16 (default) | 255 | 521 | 5.2 | 406 MiB |
+| 32 | 572 | 895 | 4.7 | — |
+
+**Peak p50 speedup fell from 2.5× to about 1.4×**, and p50 is flat from 2 to 16
+workers — there is less work to spread, and what remains clusters into a few of
+the 19 tile rows, so most workers find their row clean and exit. p99 keeps
+improving all the way out, because tail frames are full repaints and *those*
+still parallelise.
+
+Two consequences worth stating plainly. **One worker with tiling (0.37 ms,
+179 MiB) beats sixteen without it (0.76 ms, 406 MiB)** — algorithm beat
+parallelism by 2× at 44 % of the memory. And the thread count is now a
+**tail-and-memory dial rather than a throughput one**: 4 → 16 workers buys
+~1.5 ms of p99 for ~180 MiB and nothing measurable on p50. The default is left
+at half the hardware threads, which is the best tail on offer, but a
+memory-constrained deployment should now set the knob low with far less to lose
+than before.
+
+### 17.5 Fidelity
+
+Full gallery, 66 scenes / 92 images, same single pre-existing failure. Against
+the wgpu reference the tiled path is **marginally closer** than the untiled one
+(0.3087 % visible against 0.3282 %, on a 0.2231 % noise floor). Of 92 images,
+10 are pixel-identical to the untiled run, 73 differ only inside their own
+reproducibility floor, and the 9 beyond it are the timing-dependent panels,
+each within ~2× of its own floor. Two scenes were also run twice on the tiled
+build to confirm the movement was self-noise rather than a tiling artefact.
+
+### 17.6 A risk the incremental path takes on
+
+A tile that never goes dirty keeps its contents indefinitely, so anything that
+changes a frame *without* marking primitives dirty would now persist as stale
+pixels where the old full blit would have papered over it. The primitive cache
+key hashes the texture *id*, not its contents, so a texture mutated in place
+under an unchanged mesh is the shape of bug to watch for. Nothing in the
+gallery exhibits it — egui reuploads and remeshes text when its atlas grows —
+but the failure mode did not exist before this change, and it would show up as
+a stale region rather than a crash.
