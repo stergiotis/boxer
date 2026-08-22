@@ -54,24 +54,6 @@ func (inst *Fetcher) FetchR10() (idsTrue []uint64, idsFalse iter.Seq[uint64]) {
 	idsFalse = inst.iterateU64h()
 	return
 }
-func (inst *Fetcher) FetchR15WalkersCameras() (mapIds []uint64, zooms []float64, centerLats []float64, centerLons []float64, minLats []float64, minLons []float64, maxLats []float64, maxLons []float64, screenWidthPxs []float32, screenHeightPxs []float32, hoverLats []float64, hoverLons []float64, flags []uint8, viewHashes iter.Seq[uint64]) {
-	inst.invoke(FuncProcIdFetchR15WalkersCameras)
-	mapIds = inst.readU64h()
-	zooms = inst.readF64h()
-	centerLats = inst.readF64h()
-	centerLons = inst.readF64h()
-	minLats = inst.readF64h()
-	minLons = inst.readF64h()
-	maxLats = inst.readF64h()
-	maxLons = inst.readF64h()
-	screenWidthPxs = inst.readF32h()
-	screenHeightPxs = inst.readF32h()
-	hoverLats = inst.readF64h()
-	hoverLons = inst.readF64h()
-	flags = inst.readU8h()
-	viewHashes = inst.iterateU64h()
-	return
-}
 func (inst *Fetcher) FetchR16ScrollDelta() (x float32, y float32) {
 	inst.invoke(FuncProcIdFetchR16ScrollDelta)
 	x = inst.readF32()

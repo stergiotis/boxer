@@ -4,9 +4,10 @@ version = "0.1.0"
 authors = ["Panos Stergiotis <p@stergiotis.ch>"]
 edition = "2024"
 # Deliberately lower than the parent crate's 1.94: this crate depends on egui
-# alone (whose own floor is 1.92) and never reaches h3o, which is what pushes
-# imzero2 itself to 1.94. Verified by building this package on its own under
-# 1.92. Do not raise it just to match the parent.
+# alone (whose own floor is 1.92); the parent's pin was set for a dependency it
+# no longer has and is kept for its own reasons (see the note there). Verified
+# by building this package on its own under 1.92. Do not raise it just to match
+# the parent.
 rust-version = "1.92"
 description = "ImZero2 Design System (IDS) — token layer over egui::Style; no widget forks. ADR-0029."
 

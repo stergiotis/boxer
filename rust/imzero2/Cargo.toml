@@ -13,13 +13,17 @@ version = "0.1.0"
 authors = ["Panos Stergiotis <p@stergiotis.ch>"]
 edition = "2024"
 include = ["**/*.rs", "Cargo.toml"]
-# The real floor, and lower than the 1.96 in ./rust-toolchain on purpose: that
-# file is the toolchain the build *uses*, this is the oldest one the crate
-# graph still compiles under. 1.94 because h3o 0.10 calls f64::mul_add from a
-# const fn and rustc const-stabilised that in 1.94 — 1.93 fails to build h3o
-# (see ADR-0095, 2026-07-28). h3o declares no `rust-version` of its own, so
-# cargo's MSRV-aware resolver cannot derive this; it was measured by building
-# under each toolchain.
+# Lower than the 1.96 in ./rust-toolchain on purpose: that file is the
+# toolchain the build *uses*, this is the floor the crate declares. 1.94 was
+# measured for h3o 0.10 (ADR-0095, 2026-07-28: a const fn calling
+# f64::mul_add, const-stabilised in 1.94); h3o left with ADR-0204 M4, and on
+# that day `cargo check --ignore-rust-version` of the default and headless_soft
+# feature sets passed under 1.93 and 1.92, with 1.92 the highest
+# `rust-version` any dependency declares (the egui 0.35 ring). So nothing in
+# the graph needs 1.94 any more; the pin is kept at 1.94 regardless, because
+# lowering it is its own decision (the airgap bundle's compile among the
+# things to check first — see ./rust-toolchain), not a side effect of dropping
+# a dependency.
 rust-version = "1.94"
 
 [package.metadata.docs.rs]
@@ -120,9 +124,9 @@ inspection = ["desktop", "eframe?/inspection"]
 # script, so this gate changes no shipped build. It exists to be left OFF: the
 # `libmimalloc-sys` build script needs a C toolchain for the target, and it is
 # one of exactly two crates that stop `--target x86_64-unknown-linux-musl` from
-# checking (the other is `ring`, which arrives via `reqwest` <- `walkers` and
-# leaves with ADR-0204 M4). Without it the appliance graph is pure Rust and
-# needs no cross C compiler at all. See ADR-0205 M6.
+# checking (the other was `ring`, which left with ADR-0204 M4). Without it the
+# appliance graph is pure Rust and needs no cross C compiler at all. See
+# ADR-0205 M6.
 fast_alloc = ["dep:mimalloc"]
 puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 dhat-heap = ["dep:dhat"]
@@ -131,7 +135,7 @@ x11 = ["eframe?/x11"]
 
 [dependencies]
 # Pinned to the 0.35 line, and pinned deliberately: every widget crate below
-# (egui_extras, egui_table, egui_dock, egui_graphs, walkers) links egui itself,
+# (egui_extras, egui_table, egui_dock, egui_graphs) links egui itself,
 # so the whole ring has to sit on one egui version or the same type appears
 # twice in the graph and nothing typechecks across the seam.
 #
@@ -143,10 +147,9 @@ x11 = ["eframe?/x11"]
 # manifest change instead.
 #
 # The ring can go to 0.36 once egui_graphs releases against it — egui_extras
-# 0.36.1, egui_table 0.10, egui_dock 0.21.1 and walkers 0.58 are all out
-# already, but egui_graphs 0.31.0 (its newest, and its master branch) still
-# asks for egui 0.35. Move all of them, and the wgpu/egui-wgpu pins below, in
-# one commit.
+# 0.36.1, egui_table 0.10 and egui_dock 0.21.1 are all out already, but
+# egui_graphs 0.31.0 (its newest, and its master branch) still asks for egui
+# 0.35. Move all of them, and the wgpu/egui-wgpu pins below, in one commit.
 egui = "0.35"
 eframe = { version = "0.35", optional = true, default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
@@ -187,10 +190,10 @@ bitflags = "2.9.4"
 roaring = "0.11.2"
 tracing = "0.1.43"
 tracing-subscriber = "0.3.22"
-# Bridges dependencies that log through the `log` crate (walkers, and it is not
-# alone) into the tracing subscriber. Declared directly rather than relying on
-# tracing-subscriber's builder `init()`, so the bridge's own level cap is ours
-# to set — see setup_tracing.
+# Bridges dependencies that log through the `log` crate (egui, wgpu, the
+# vendored software rasterizer) into the tracing subscriber. Declared directly
+# rather than relying on tracing-subscriber's builder `init()`, so the bridge's
+# own level cap is ours to set — see setup_tracing.
 tracing-log = "0.2"
 byteorder = "1.5.0"
 puffin_http = {version = "0.17.0", optional = true }
@@ -208,13 +211,6 @@ egui_dock = "0.20"
 egui_graphs = { version = "0.31", features = ["events"] }
 petgraph = { version = "0.8", default-features = false, features = ["stable_graph"] }
 png = "0.18"
-walkers = "0.56"
-# Tile downloads for a custom .TileUrl source that needs TLS configuration
-# walkers cannot express (imzero2::walkers_tiles). Both crates are already in
-# the tree via walkers itself; `blocking` is the only feature that adds
-# anything, and it keeps the tile workers off the optional tokio dependency.
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking"] }
-lru = "0.18"
 # Used by imzero2::svgexport to read the TTF `name` table at font-load time,
 # so SVG export can emit the real family name (e.g. "Noto Sans") instead of
 # the generic CSS keyword. Transitively present via ab_glyph; declared
@@ -225,7 +221,6 @@ ttf-parser = "0.25"
 # perfect rendering. `subsetter` is Typst's pure-Rust subsetter.
 subsetter = "0.2"
 base64 = "0.23"
-h3o = { version = "0.10", features = ["geo"] }
 # Concave-polygon fill for the painter (paintPolygonFilled.Concave()):
 # ear-clip triangulation → egui::Shape::Mesh, since epaint itself fills
 # only convex outlines.

@@ -48,32 +48,6 @@ type EtColWidthsValue struct {
 // by canvas id, drag-stable, carries modifiers) and the widget's own
 // r7 response for the click.
 
-// WalkersCameraValue is one map's camera, keyed by the map's widget id
-// in the R15 snapshot that StateManager.Sync refreshes each frame. Read
-// via [StateManager.GetWalkersCamera] with that map's handle.
-//
-// Entries are RETAINED between renders: a map that did not render this
-// frame keeps its last camera, because a reader running a frame behind
-// the viewport (the Go-side heatmap recompute) still needs one. A map
-// that has never rendered is absent, which is what ok=false means.
-type WalkersCameraValue struct {
-	MapId          uint64
-	Zoom           float64
-	CenterLat      float64
-	CenterLon      float64
-	MinLat         float64
-	MinLon         float64
-	MaxLat         float64
-	MaxLon         float64
-	ScreenWidthPx  float32
-	ScreenHeightPx float32
-	HoverLat       float64
-	HoverLon       float64
-	HoverValid     bool
-	Clicked        bool
-	ViewHash       uint64
-}
-
 // ScrollDeltaValue is the cached payload of the R16 scroll-delta drain.
 // Smoothed scroll-wheel delta from egui's InputState for the previous
 // frame. Positive Y = scroll up, positive X = scroll right; both in egui
@@ -240,13 +214,12 @@ type StateManager struct {
 	// "fetchers run only at frame end" convention and deadlocked when
 	// the render scope was inside a deferred-block capture (e.g. a
 	// dock.Tab body).
-	r15WalkersCameras map[uint64]WalkersCameraValue
-	r16ScrollDelta    ScrollDeltaValue
-	r17Modifiers      ModifiersValue
-	r18AvailableSize  AvailableSizeValue
-	r19ZoomDelta      ZoomDeltaValue
-	r20Pointer        PointerValue
-	r21UiRects        map[uint64]UiRectValue
+	r16ScrollDelta   ScrollDeltaValue
+	r17Modifiers     ModifiersValue
+	r18AvailableSize AvailableSizeValue
+	r19ZoomDelta     ZoomDeltaValue
+	r20Pointer       PointerValue
+	r21UiRects       map[uint64]UiRectValue
 	// r23CanvasWheel holds LAST frame's per-canvas wheel captures (ADR-0140),
 	// keyed by canvas widget id. Rebuilt each Sync; read via GetCanvasWheel.
 	r23CanvasWheel map[uint64]CanvasWheelValue
@@ -299,28 +272,12 @@ func NewStateManager() *StateManager {
 		etColWidths:          containers.NewBinarySearchGrowingKVOrdered[uint64, EtColWidthsValue](8),
 		overriddenBindingIds: containers.NewHashSet[uint64](128),
 		fetcher:              NewFetcher(),
-		r15WalkersCameras:    make(map[uint64]WalkersCameraValue, 4),
 		r21UiRects:           make(map[uint64]UiRectValue, 8),
 		r23CanvasWheel:       make(map[uint64]CanvasWheelValue, 8),
 		r24CanvasPointers:    make(map[uint64]CanvasCursorValue, 8),
 		r26KeyCaptures:       make(map[uint64][]CapturedKey, 4),
 		r22StarvedTextures:   make(map[uint64]struct{}, 8),
 	}
-}
-
-// GetWalkersCamera returns the last camera reported by the WalkersMap with
-// the given handle. ok=false means that map has never rendered — NOT that it
-// did not render this frame, since entries are retained (see
-// [WalkersCameraValue]).
-//
-// Keyed since 2026-08-04. The register was a single slot before that, so the
-// last map to render in a frame was the only one any reader could see: two
-// maps in one process — two windows of one app, or play beside terrainscope —
-// and a caller either acted on another map's camera or, once it compared
-// MapId, never saw its own again.
-func (inst *StateManager) GetWalkersCamera(h widgethandle.WidgetHandle) (v WalkersCameraValue, ok bool) {
-	v, ok = inst.r15WalkersCameras[h.Resolve()]
-	return
 }
 
 // GetScrollDelta returns last frame's R16 smoothed scroll-wheel delta.
@@ -576,7 +533,7 @@ func (inst *StateManager) GetResponse(h widgethandle.WidgetHandle) ResponseFlags
 // sender that keeps "already sent" memory (ImageVersionTracker, the Map
 // raster's lastSentVersion, heatmapscroll's head) must consult this and
 // re-ship. One-frame lag, like every register in this file. Ids are in the
-// sender's own id space (widget ids; the walkers mapRaster rasterId).
+// sender's own id space (widget ids; a raster overlay's own id).
 func (inst *StateManager) TextureStarved(id uint64) bool {
 	_, ok := inst.r22StarvedTextures[id]
 	return ok
@@ -824,40 +781,6 @@ func (inst *StateManager) Sync() {
 	inst.r9SDatabinds.Reset()
 	inst.r10Databinds.Reset()
 	blacklist.Clear()
-
-	// Per-frame inline-fetcher snapshot. Each call is one opcode + a
-	// small fixed-size payload; the corresponding Rust handler returns
-	// zeros / empty arrays when no source widget rendered last frame,
-	// so the cost is bounded regardless of which demos are mounted.
-	// Widget code reads these caches via the matching Get* method
-	// instead of calling Fetcher inline — an inline fetch inside a
-	// deferred-block capture scope (a dock.Tab body) buffers rather than
-	// flushes, and deadlocks the render loop.
-	{
-		// One row per map that has ever rendered; Rust retains them, so this
-		// replaces the snapshot wholesale rather than merging into it.
-		mapIds, zooms, cLats, cLons, minLats, minLons, maxLats, maxLons,
-			sws, shs, hLats, hLons, flags, viewHashSeq := fetcher.FetchR15WalkersCameras()
-		clear(inst.r15WalkersCameras)
-		i := 0
-		for vh := range viewHashSeq {
-			if i >= len(mapIds) {
-				break
-			}
-			inst.r15WalkersCameras[mapIds[i]] = WalkersCameraValue{
-				MapId: mapIds[i], Zoom: zooms[i],
-				CenterLat: cLats[i], CenterLon: cLons[i],
-				MinLat: minLats[i], MinLon: minLons[i],
-				MaxLat: maxLats[i], MaxLon: maxLons[i],
-				ScreenWidthPx: sws[i], ScreenHeightPx: shs[i],
-				HoverLat: hLats[i], HoverLon: hLons[i],
-				HoverValid: flags[i]&1 != 0,
-				Clicked:    flags[i]&2 != 0,
-				ViewHash:   vh,
-			}
-			i++
-		}
-	}
 	{
 		x, y := fetcher.FetchR16ScrollDelta()
 		inst.r16ScrollDelta = ScrollDeltaValue{X: x, Y: y}

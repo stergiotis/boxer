@@ -57,7 +57,6 @@ status: draft
 | FetchGraphMetrics | Fetcher | No | 0 | 0 | - | - |
 | FetchGraphSelection | Fetcher | No | 0 | 0 | - | - |
 | FetchR10 | Fetcher | No | 0 | 0 | - | - |
-| FetchR15WalkersCameras | Fetcher | No | 0 | 0 | - | - |
 | FetchR16ScrollDelta | Fetcher | No | 0 | 0 | - | - |
 | FetchR17Modifiers | Fetcher | No | 0 | 0 | - | - |
 | FetchR18AvailableSize | Fetcher | No | 0 | 0 | - | - |
@@ -84,8 +83,6 @@ status: draft
 | Grid | BuilderFactory | Yes | 0 | 0 | 6 | Immediate, BlockIterator |
 | Group | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | GuiZoomZoomMenuButtons | Procedural | No | 0 | 0 | - | - |
-| H3CellsColored | BuilderFactory | No | 2 | 0 | 2 | Immediate |
-| H3Region | BuilderFactory | No | 1 | 0 | 3 | Immediate |
 | Horizontal | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | HorizontalCentered | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | HorizontalTop | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
@@ -100,9 +97,6 @@ status: draft
 | Label | BuilderFactory | No | 1 | 0 | 4 | Immediate, Retained |
 | LabelAtoms | BuilderFactory | No | 0 | 1 | 4 | Immediate, Retained |
 | LabelWidgetText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
-| MapMarker | BuilderFactory | No | 3 | 0 | 3 | Immediate |
-| MapPolyline | BuilderFactory | No | 2 | 0 | 2 | Immediate |
-| MapRaster | BuilderFactory | No | 9 | 0 | 2 | Immediate |
 | MeasureText | Procedural | No | 4 | 0 | - | - |
 | MeasureTextSize | Procedural | No | 5 | 0 | - | - |
 | MemoryResetAreas | Procedural | No | 0 | 0 | - | - |
@@ -194,7 +188,6 @@ status: draft
 | Vertical | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | VerticalCentered | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | VerticalCenteredJustified | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
-| WalkersMap | BuilderFactory | Yes | 3 | 0 | 14 | Immediate, Retained |
 | WarnIfDebugBuild | Procedural | No | 0 | 0 | - | - |
 | WidgetText | BuilderFactory | No | 0 | 0 | 1 | Retained |
 | WidgetsGlobalThemePreferenceButtons | Procedural | No | 0 | 0 | - | - |
@@ -930,54 +923,6 @@ Block
 
 ---
 
-### H3CellsColored
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| cellIds | plain | u64h |
-| cols | plain | u32h |
-
-#### Builder Methods
-
-- **StrokeWidth**(width: f32)
-- **StrokeColor**(col: u32)
-
-#### Return Type
-
-H3CellsColored
-
----
-
-### H3Region
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| cellIds | plain | u64h |
-
-#### Builder Methods
-
-- **Fill**(col: u32)
-- **Stroke**(col: u32, width: f32)
-- **Label**(text: s)
-
-#### Return Type
-
-H3Region
-
----
-
 ### Horizontal
 
 - **Type:** BuilderFactory
@@ -1221,87 +1166,6 @@ Label
 #### Return Type
 
 Label
-
----
-
-### MapMarker
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| markerId | plain | u64 |
-| lat | plain | f64 |
-| lon | plain | f64 |
-
-#### Builder Methods
-
-- **Label**(text: s)
-- **Color**(col: u32)
-- **Radius**(radius: f32)
-
-#### Return Type
-
-MapMarker
-
----
-
-### MapPolyline
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| lats | plain | f64h |
-| lons | plain | f64h |
-
-#### Builder Methods
-
-- **Stroke**(col: u32, width: f32)
-- **Closed**(closed: b)
-
-#### Return Type
-
-MapPolyline
-
----
-
-### MapRaster
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| rasterId | plain | u64 |
-| minLat | plain | f64 |
-| minLon | plain | f64 |
-| maxLat | plain | f64 |
-| maxLon | plain | f64 |
-| widthPx | plain | u32 |
-| heightPx | plain | u32 |
-| contentVersion | plain | u64 |
-| pixels | plain | u32h |
-
-#### Builder Methods
-
-- **Opacity**(op: f32)
-- **Nearest**(on: b)
-
-#### Return Type
-
-MapRaster
 
 ---
 
@@ -2651,43 +2515,6 @@ Block
 
 ---
 
-### WalkersMap
-
-- **Type:** BuilderFactory
-- **Identity:** Yes
-- **Features:** Immediate, Retained
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| initLat | plain | f64 |
-| initLon | plain | f64 |
-| noTiles | plain | b |
-
-#### Builder Methods
-
-- **Width**(wi: f32)
-- **Height**(he: f32)
-- **FillAvailable**(on: b)
-- **SetZoom**(zoom: f64)
-- **CenterAt**(lat: f64, lon: f64)
-- **ZoomGesture**(enabled: b)
-- **Panning**(enabled: b)
-- **TileUrl**(url: s)
-- **TileAttribution**(text: s)
-- **TileAttributionUrl**(url: s)
-- **TileMaxZoom**(zoom: u8)
-- **TileSize**(size: u32)
-- **TileCaFile**(path: s)
-- **TileInsecureTls**(on: b)
-
-#### Return Type
-
-WalkersMap
-
----
-
 ### WidgetText
 
 - **Type:** BuilderFactory
@@ -3343,31 +3170,6 @@ Block
 |------|------|
 | idsTrue | u64h |
 | idsFalse | u64h |
-
----
-
-### FetchR15WalkersCameras
-
-- **Type:** Fetcher
-
-#### Return Values
-
-| Name | Type |
-|------|------|
-| mapIds | u64h |
-| zooms | f64h |
-| centerLats | f64h |
-| centerLons | f64h |
-| minLats | f64h |
-| minLons | f64h |
-| maxLats | f64h |
-| maxLons | f64h |
-| screenWidthPxs | f32h |
-| screenHeightPxs | f32h |
-| hoverLats | f64h |
-| hoverLons | f64h |
-| flags | u8h |
-| viewHashes | u64h |
 
 ---
 

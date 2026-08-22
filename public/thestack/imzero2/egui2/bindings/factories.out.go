@@ -549,31 +549,6 @@ func GuiZoomZoomMenuButtons() {
 	r.SendIntermediate()
 }
 
-func H3CellsColored(cellIds []uint64, cols color.Colors) (inst H3CellsColoredFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdH3CellsColored))
-	runtime.PutUint64SliceArg(r, cellIds)
-	color.PutColorsSlice(r, cols)
-
-	inst = H3CellsColoredFluid{
-		r: r,
-	}
-
-	return
-}
-
-func H3Region(cellIds []uint64) (inst H3RegionFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdH3Region))
-	runtime.PutUint64SliceArg(r, cellIds)
-
-	inst = H3RegionFluid{
-		r: r,
-	}
-
-	return
-}
-
 func Horizontal() (inst HorizontalFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdHorizontal))
@@ -756,53 +731,6 @@ func LabelWidgetText(widgetText typed.RetainedFffiHolderTyped[WidgetTextS]) (ins
 	r.SpliceRetained(widgetText.Untype())
 
 	inst = LabelWidgetTextFluid{
-		r: r,
-	}
-
-	return
-}
-
-func MapMarker(markerId uint64, lat float64, lon float64) (inst MapMarkerFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdMapMarker))
-	r.WriteUint64(markerId)
-	r.WriteFloat64(lat)
-	r.WriteFloat64(lon)
-
-	inst = MapMarkerFluid{
-		r: r,
-	}
-
-	return
-}
-
-func MapPolyline(lats []float64, lons []float64) (inst MapPolylineFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdMapPolyline))
-	runtime.PutFloat64SliceArg(r, lats)
-	runtime.PutFloat64SliceArg(r, lons)
-
-	inst = MapPolylineFluid{
-		r: r,
-	}
-
-	return
-}
-
-func MapRaster(rasterId uint64, minLat float64, minLon float64, maxLat float64, maxLon float64, widthPx uint32, heightPx uint32, contentVersion uint64, pixels []uint32) (inst MapRasterFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdMapRaster))
-	r.WriteUint64(rasterId)
-	r.WriteFloat64(minLat)
-	r.WriteFloat64(minLon)
-	r.WriteFloat64(maxLat)
-	r.WriteFloat64(maxLon)
-	r.WriteUint32(widthPx)
-	r.WriteUint32(heightPx)
-	r.WriteUint64(contentVersion)
-	runtime.PutUint32SliceArg(r, pixels)
-
-	inst = MapRasterFluid{
 		r: r,
 	}
 
@@ -1988,25 +1916,6 @@ func VerticalCenteredJustified() (inst VerticalCenteredJustifiedFluid) {
 	inst = VerticalCenteredJustifiedFluid{
 		r: r,
 	}
-
-	return
-}
-
-func WalkersMap(i WidgetIdCreatorI, initLat float64, initLon float64, noTiles bool) (inst WalkersMapFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdWalkersMap))
-	v := i.Derive()
-	r.WriteWidgetId(checkId(v))
-	r.WriteFloat64(initLat)
-	r.WriteFloat64(initLon)
-	r.WriteBool(noTiles)
-
-	inst = WalkersMapFluid{
-		r: r,
-	}
-
-	inst.id = v
-	inst.idGen = i
 
 	return
 }

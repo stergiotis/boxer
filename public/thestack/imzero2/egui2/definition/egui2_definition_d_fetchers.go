@@ -312,7 +312,7 @@ self.io.write_plain_f32h(len, self.r21_ui_rect_max_y.drain(..))?;
 	// the pixels on the next frame (see ImageVersionTracker.PixelsToSendFor
 	// and the scrollingTexture fresh-texture report). Ids live in the
 	// sender's own id space (widget ids for image/scrollingTexture, the
-	// caller-chosen rasterId for the walkers mapRaster overlay) — a
+	// caller-chosen rasterId of a raster overlay) — a
 	// consumer only matches ids it itself sent.
 	fetchers = append(fetchers, idl.NewFetcherNode("fetchR22StarvedTextures").
 		WithApplyCodeClientRust(rustClientCode(`

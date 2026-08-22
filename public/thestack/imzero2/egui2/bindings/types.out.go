@@ -177,16 +177,6 @@ type GroupFluid struct {
 }
 type GroupMethodIdE uint32
 
-type H3CellsColoredFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type H3CellsColoredMethodIdE uint32
-
-type H3RegionFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type H3RegionMethodIdE uint32
-
 type HorizontalFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -264,21 +254,6 @@ type LabelWidgetTextFluid struct {
 	r *typed.RetainedFffiBuilder
 }
 type LabelWidgetTextMethodIdE uint32
-
-type MapMarkerFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type MapMarkerMethodIdE uint32
-
-type MapPolylineFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type MapPolylineMethodIdE uint32
-
-type MapRasterFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type MapRasterMethodIdE uint32
 
 type MenuBarFluid struct {
 	r *typed.RetainedFffiBuilder
@@ -643,13 +618,6 @@ type VerticalCenteredJustifiedFluid struct {
 }
 type VerticalCenteredJustifiedMethodIdE uint32
 
-type WalkersMapFluid struct {
-	r     *typed.RetainedFffiBuilder
-	id    uint64
-	idGen WidgetIdCreatorI
-}
-type WalkersMapMethodIdE uint32
-
 type WidgetTextFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -720,10 +688,6 @@ type GraphEdgeS struct{}
 
 type GraphNodeS struct{}
 
-type H3CellsColoredS struct{}
-
-type H3RegionS struct{}
-
 type HoverUiDummyS struct{}
 
 type HyperlinkS struct{}
@@ -743,12 +707,6 @@ type LabelS struct{}
 func (inst LabelS) DummyInterfaceImplementationMethodWidgetI() {}
 
 var _ WidgetI = LabelS{}
-
-type MapMarkerS struct{}
-
-type MapPolylineS struct{}
-
-type MapRasterS struct{}
 
 type NewTableColumnS struct{}
 
@@ -807,12 +765,6 @@ type TimeRangePickerS struct{}
 func (inst TimeRangePickerS) DummyInterfaceImplementationMethodWidgetI() {}
 
 var _ WidgetI = TimeRangePickerS{}
-
-type WalkersMapS struct{}
-
-func (inst WalkersMapS) DummyInterfaceImplementationMethodWidgetI() {}
-
-var _ WidgetI = WalkersMapS{}
 
 type WidgetTextS struct{}
 

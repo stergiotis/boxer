@@ -25,7 +25,7 @@ func TestConfigured(t *testing.T) {
 	}
 }
 
-// TestOpenStreetMapDefaults pins the defaults against the values walkers'
+// TestOpenStreetMapDefaults pins the defaults against the values the retired walkers binding
 // built-in source hard-codes (sources/openstreetmap.rs, and the TileSource
 // trait's own tile_size/max_zoom). They are the whole point of expressing the
 // default server as env params: if they drift from what the renderer's
@@ -44,7 +44,7 @@ func TestOpenStreetMapDefaults(t *testing.T) {
 			t.Errorf("%s default = %q; want %q", tc.name, tc.got, tc.want)
 		}
 	}
-	// walkers' TileSource::max_zoom default, and what OSM actually serves.
+	// hard-coded (its TileSource::max_zoom default), and what OSM actually serves.
 	if zoom, set := clampMaxZoom(TileMaxZoom.Get()); !set || zoom != 19 {
 		t.Errorf("BOXER_MAP_TILE_MAX_ZOOM default = (%d, %t); want (19, true)", zoom, set)
 	}
@@ -53,8 +53,8 @@ func TestOpenStreetMapDefaults(t *testing.T) {
 // TestTLSKnobsDefaultToVerifiedPublicRoots pins the safe default: with nothing
 // set, neither TLS knob is on, so a basemap fetches under ordinary certificate
 // verification. Apply gates both on BOXER_MAP_TILE_URL as well, which this
-// cannot observe through the fluid — that gating is asserted by reading Apply,
-// and restated renderer-side in build_walkers_tiles.
+// cannot observe through the fluid — that gating is asserted by reading
+// PortolanLoader, which applies it.
 func TestTLSKnobsDefaultToVerifiedPublicRoots(t *testing.T) {
 	if TileInsecureTLS.Get() {
 		t.Fatalf("BOXER_MAP_TILE_INSECURE_TLS defaults to true; verification must be on unless asked")
@@ -64,7 +64,7 @@ func TestTLSKnobsDefaultToVerifiedPublicRoots(t *testing.T) {
 	}
 
 	// A CA file is a path, not the PEM itself — it is read renderer-side, once
-	// per tile-source construction, because the walkersMap opcode ships every
+	// per tile-source construction, because the map widget reads every
 	// frame.
 	TileCAFile.SetForTest(t, "/etc/ssl/gis-ca.pem")
 	if got := TileCAFile.Get(); got != "/etc/ssl/gis-ca.pem" {

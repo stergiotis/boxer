@@ -140,8 +140,8 @@ impl ImageCache {
 
     /// Upload-if-needed and return the cached texture id **without drawing**.
     /// Mirrors `show`'s cache logic for callers that paint the texture
-    /// themselves — e.g. the walkers `mapRaster` overlay, which projects the
-    /// texture onto a geographic quad rather than the ui cursor. Returns
+    /// themselves — e.g. the painter lane's `paintImage`, which draws the
+    /// texture into a caller-given rect rather than at the ui cursor. Returns
     /// `None` when there's nothing to show (no pixels and no cached entry).
     #[allow(clippy::too_many_arguments)]
     pub fn ensure(

@@ -569,14 +569,8 @@ fn parse_ttf_family_name(bytes: &[u8], index: u32) -> Option<String> {
 /// live inside `ImZeroFffi`) and the reader (the `SvgExportPlugin`) can
 /// share a handle.
 ///
-/// **Coverage gap — walkers tiles**: the `walkers` crate loads tiles
-/// internally via its own `ctx.load_texture` call inside `Tile::new`,
-/// with no external hook. Wiring it would require either forking
-/// walkers to expose a tile-pixel callback, or implementing the
-/// `walkers::Tiles` trait from scratch (intercepting the bytes →
-/// `ColorImage` decode before upload). Until then, textured meshes
-/// produced by `walkers::HttpTiles` fall through to the visitor's
-/// comment-skip path.
+/// A textured mesh whose texture did not go through one of those caches
+/// falls through to the visitor's comment-skip path.
 #[derive(Default, Debug)]
 pub struct TexturePixelCache {
     textures: HashMap<egui::TextureId, CachedTexture>,
@@ -1759,9 +1753,8 @@ impl SvgBuilder {
     fn emit_mesh(&mut self, mesh: &Mesh) {
         if mesh.texture_id != TextureId::default() {
             // Textured mesh: try to embed pixels from the shared texture
-            // cache as an `<image>`. The cache is populated by the
-            // image-widget upload path (see `ImageCache::upload`); scrolling-
-            // texture and walkers don't currently mirror their pixels.
+            // cache as an `<image>`. The cache is populated by the image and
+            // scrolling-texture upload paths (see `ImageCache::upload`).
             if self.try_emit_textured_mesh(mesh) {
                 self.counts.triangles_emitted += (mesh.indices.len() / 3) as u32;
                 return;
@@ -1769,8 +1762,8 @@ impl SvgBuilder {
             self.counts.textured_meshes_skipped += 1;
             // texture_id is intentionally omitted: it's a TextureId::Managed(N)
             // from the egui texture cache, allocated in insertion order
-            // (which depends on network tile fetch order in the walkers /
-            // elevation-profile demos). Including it would scramble the
+            // (which depends on upload order — e.g. on network tile fetch
+            // order in a map demo). Including it would scramble the
             // SVG output byte-for-byte between tour runs without any visual
             // meaning. The verts/tris counts are deterministic from the
             // geometry and still useful as diagnostic info.

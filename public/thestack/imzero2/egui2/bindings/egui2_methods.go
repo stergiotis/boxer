@@ -343,13 +343,11 @@ func (inst *DockAreaFluid) ActivateTab(tabId uint64) {
 //
 // A paintCanvas that adopts .CaptureScroll() (ADR-0140) consumes the wheel
 // itself while hovered, so it no longer needs this to avoid the double-scroll
-// and can live under a plain Tab's ScrollArea. TabNoScroll remains for the
-// walkers map (below), for widgets that read the wheel globally without
-// consuming, and for bodies that must clip rather than scroll.
-//
-// The walkers read-without-consume half is reported upstream as
-// https://github.com/podusowski/walkers/issues/544; when a consuming
-// walkers lands, map-hosting tabs can return to plain Tab.
+// and can live under a plain Tab's ScrollArea. TabNoScroll remains for
+// widgets that read the wheel globally without consuming, and for bodies
+// that must clip rather than scroll. (The walkers map binding, which read
+// without consuming, was the case that introduced it; it left with
+// ADR-0204 M4 — the portolan map captures the wheel itself.)
 func (inst *DockAreaFluid) TabNoScroll(tabId uint64, title string) iter.Seq[functional.NilIteratorValueType] {
 	inst.noScrollTabs = append(inst.noScrollTabs, tabId)
 	return inst.Tab(tabId, title)

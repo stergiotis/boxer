@@ -70,7 +70,7 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 		}
 
 		// Tabs whose body must not be wrapped in a live ScrollArea (both axes
-		// off — overflow clips). Viewport-style bodies (walkers map, canvases)
+		// off — overflow clips). Viewport-style bodies (a slippy map, canvases)
 		// read wheel/zoom input globally without consuming it, so the default
 		// per-tab ScrollArea would scroll the panel in the same gesture that
 		// pans/zooms the widget content.

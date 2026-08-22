@@ -366,7 +366,7 @@ var builtinTabDefs = []builtinTabDef{
 		writes: []SignalID{signalSelection}},
 	{id: "timeline", dockID: dockTabTimeline, title: "Timeline", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelection, signalTimelineMin, signalTimelineMax}},
-	// NoScroll: the walkers map reads wheel/zoom input globally (no
+	// NoScroll: the map reads wheel/zoom input globally (no
 	// consumption), so the dock's default body ScrollArea would scroll the
 	// panel in the same gesture that pans/zooms the map.
 	// The Map is chrome (no PanelI) that nonetheless publishes its viewport —

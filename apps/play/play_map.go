@@ -17,9 +17,9 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
 
-// MapDriver is the ADR-0096 geo-raster map panel: a walkers slippy map whose
+// MapDriver is the ADR-0096 geo-raster map panel: a slippy map whose
 // viewport drives an in-DB-rendered RGBA raster. Each frame it reads the
-// previous frame's camera (fetchR15WalkersCameras, cached, keyed by this
+// previous frame's camera (once a keyed fetcher register, now the map's own
 // map's handle); once the camera has
 // settled it EMITS the viewport as the six reserved vp_* signals (ADR-0096
 // §SD6 realized via ADR-0097 slice 5c) and demands a panel-authored node whose
@@ -292,7 +292,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	inst.renderControls()
 
 	// The map is created on first render, after the BOXER_PLAY_* seeds have
-	// been applied. It owns its view Go-side (ADR-0204), so the walkers
+	// been applied. It owns its view Go-side (ADR-0204), so the old binding's
 	// opcode's one-shot SetZoom and the keyed camera register are gone: the
 	// view is read directly, and the "no basemap" toggle is a switch on it.
 	if inst.pm == nil {
@@ -344,7 +344,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 
 	// The last-good raster, pinned to the bounds it was computed for, so it
 	// pans/zooms correctly under the view until the next result lands.
-	// Projector.Image carries the send-once protocol the walkers raster
+	// Projector.Image carries the send-once protocol the old raster opcode
 	// overlay had — pixels ship on a version bump or when the host reports
 	// the texture starved (a hidden tab's discarded upload, the idle LRU).
 	overlay := func(p portolan.Projector) {

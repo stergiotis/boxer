@@ -419,7 +419,7 @@ type PlayApp struct {
 	timelineBandsSql       string
 	timelineNowLineEnabled bool
 
-	// mapDriver is the ADR-0096 geo-raster map panel (Map dock tab): a walkers
+	// mapDriver is the ADR-0096 geo-raster map panel (Map dock tab): a slippy
 	// map whose viewport drives an in-DB-rendered raster on a panel-local lane.
 	mapDriver *MapDriver
 

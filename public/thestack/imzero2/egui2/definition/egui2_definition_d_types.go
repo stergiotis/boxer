@@ -122,25 +122,6 @@ func structGraphDrain() ir.ConcreteType {
 	return ir.NewConcreteType("graphDrain")
 }
 
-func structWalkersMap() ir.ConcreteType {
-	return ir.NewConcreteType("walkersMap", traitWidget())
-}
-func structMapMarker() ir.ConcreteType {
-	return ir.NewConcreteType("mapMarker")
-}
-func structMapPolyline() ir.ConcreteType {
-	return ir.NewConcreteType("mapPolyline")
-}
-func structH3Region() ir.ConcreteType {
-	return ir.NewConcreteType("h3Region")
-}
-func structH3CellsColored() ir.ConcreteType {
-	return ir.NewConcreteType("h3CellsColored")
-}
-func structMapRaster() ir.ConcreteType {
-	return ir.NewConcreteType("mapRaster")
-}
-
 func structImage() ir.ConcreteType {
 	return ir.NewConcreteType("image", traitWidget())
 }
