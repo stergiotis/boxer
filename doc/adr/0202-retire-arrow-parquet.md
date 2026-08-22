@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-22
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-22
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0202: retire arrow-go's parquet packages
 
@@ -153,7 +151,7 @@ discover it.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-08-22.
 
 The removal landed first, in `249f2bd4`, and this ADR was written after it
 rather than before. That is the wrong order for a Tier-1 surface; it is
