@@ -43,7 +43,7 @@ required-features = ["headless"]
 # EGUI_INSPECTION env var opens the port (see the `inspection` feature note
 # below). Headless builds pass `--no-default-features`, so they never pick it
 # up — and could not, since `inspection` pulls in the eframe-only `desktop`.
-default = ["desktop", "inspection"]
+default = ["desktop", "inspection", "fast_alloc"]
 # egui-wgpu is pulled in transitively by eframe under `desktop`; declare it on
 # the feature too so `entry.rs` can name `egui_wgpu::wgpu::PresentMode` when
 # mapping the `-vsync` flag onto the wgpu swapchain (eframe 0.35 dropped the
@@ -76,9 +76,10 @@ headless_wgpu = ["headless_raster", "dep:wgpu", "dep:egui-wgpu", "dep:pollster"]
 # GPU-less pixel host: the same frames, rasterized on the CPU by the vendored
 # `egui_software_backend`. No wgpu, no Vulkan loader, no ICD — `cargo tree
 # --features headless_soft` carries none of it, and neither does the runtime
-# image. Mutually exclusive with `headless_wgpu` (headless.rs refuses to
-# compile with both); ffmpeg is still reachable, since the encoder takes BGRA
-# from host memory either way. See
+# image. A build enabling both raster hosts resolves to wgpu rather than
+# failing (ADR-0205 SD1; headless.rs gates the CPU host on
+# `not(feature = "headless_wgpu")`). ffmpeg is still reachable, since the
+# encoder takes BGRA from host memory either way. See
 # doc/adr-background-work/egui-software-backend-survey.md.
 headless_soft = [
     "headless_raster",
@@ -115,6 +116,14 @@ headless_svg = []
 # the puffin profiler server (main.rs, under `--features puffin`). See
 # doc/howto/egui-mcp.md.
 inspection = ["desktop", "eframe?/inspection"]
+# The mimalloc global allocator (main.rs), on by default and in every build
+# script, so this gate changes no shipped build. It exists to be left OFF: the
+# `libmimalloc-sys` build script needs a C toolchain for the target, and it is
+# one of exactly two crates that stop `--target x86_64-unknown-linux-musl` from
+# checking (the other is `ring`, which arrives via `reqwest` <- `walkers` and
+# leaves with ADR-0204 M4). Without it the appliance graph is pure Rust and
+# needs no cross C compiler at all. See ADR-0205 M6.
+fast_alloc = ["dep:mimalloc"]
 puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 dhat-heap = ["dep:dhat"]
 wayland = ["eframe?/wayland"]
@@ -187,7 +196,7 @@ byteorder = "1.5.0"
 puffin_http = {version = "0.17.0", optional = true }
 puffin = {version = "0.20.0", optional = true }
 profiling = "1.0.17"
-mimalloc = "0.1.48"
+mimalloc = { version = "0.1.48", optional = true }
 dhat = { version = "0.3.3", optional = true }
 memmap2 = "0.9.9"
 rand = "0.10.2"

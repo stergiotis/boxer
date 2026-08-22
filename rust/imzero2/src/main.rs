@@ -7,7 +7,10 @@ use imzero2::cli::flags;
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-#[cfg(not(feature = "dhat-heap"))]
+// `fast_alloc` is on in every shipped build; a build that leaves it off falls
+// back to the system allocator so the graph carries no C toolchain dependency
+// (ADR-0205 M6).
+#[cfg(all(not(feature = "dhat-heap"), feature = "fast_alloc"))]
 #[global_allocator] // copied from egui_demo_app
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc; // Much faster allocator, can give 20% speedups: https://github.com/emilk/egui/pull/7029
 

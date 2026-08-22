@@ -79,15 +79,25 @@ target="target/ci"
 # ships: the desktop seat, the three headless hosts, and the mesh-only
 # appliance build. `check` rather than `build` — these exist to catch the
 # does-it-still-compile class, and codegen would triple the runtime.
+# `fast_alloc` rides along on each because every build script passes it; the
+# allocator-free shape is checked separately below.
 for features in \
-    "--no-default-features --features headless" \
-    "--no-default-features --features headless_svg" \
-    "--no-default-features --features headless_wgpu" \
-    "--no-default-features --features headless_soft"; do
+    "--no-default-features --features headless,fast_alloc" \
+    "--no-default-features --features headless_svg,fast_alloc" \
+    "--no-default-features --features headless_wgpu,fast_alloc" \
+    "--no-default-features --features headless_soft,fast_alloc"; do
     # shellcheck disable=SC2086 # deliberate word splitting of the flag pair
     run_step "check $features" cargo check --quiet $features --target-dir "$target" --all-targets
 done
 run_step "check desktop (default features)" cargo check --quiet --target-dir "$target" --all-targets
+
+# The appliance shape (ADR-0205 M6): no mimalloc, so `libmimalloc-sys` and its
+# C toolchain requirement leave the graph. Nothing ships this way yet — it is
+# checked because it is the configuration a musl-static build needs, and it
+# would otherwise break unnoticed between here and that build.
+run_step "check headless_soft without fast_alloc" \
+    cargo check --quiet --no-default-features --features headless_soft \
+    --target-dir "$target" --all-targets
 
 # Tests run once, under the feature set that has them. The CPU rasterizer's
 # own tests plus the crate's existing ~106.

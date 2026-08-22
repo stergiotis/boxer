@@ -17,4 +17,4 @@
 set -ev
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
-cargo build --release --no-default-features --features headless_soft --target-dir target/headless-soft
+cargo build --release --no-default-features --features headless_soft,fast_alloc --target-dir target/headless-soft

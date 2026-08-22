@@ -18,4 +18,4 @@
 set -ev
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
-cargo build --release --no-default-features --features headless --target-dir target/headless_mesh
+cargo build --release --no-default-features --features headless,fast_alloc --target-dir target/headless_mesh

@@ -11,4 +11,4 @@
 set -ev
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
-cargo build --release --no-default-features --features headless_wgpu --target-dir target/headless
+cargo build --release --no-default-features --features headless_wgpu,fast_alloc --target-dir target/headless

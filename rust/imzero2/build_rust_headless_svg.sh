@@ -7,4 +7,4 @@
 set -ev
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
-cargo build --release --no-default-features --features headless_svg --target-dir target/headless_svg
+cargo build --release --no-default-features --features headless_svg,fast_alloc --target-dir target/headless_svg
