@@ -265,9 +265,17 @@ how it gets bytes, not a separate design.
   through `paintImage` (Q5), zero re-ships across pan and zoom, Go ~0.5–1 ms
   per frame. *Desktop half done the same day*: on the desktop host the owner
   judged pan and zoom to feel right — the gate is passed, O3 stands.
-- **M1 — geo and geometry.** `LatLng`, bounds, `Point`, `Transformation`,
-  the `CRS` interface with its four implementations, three projections,
+- **M1 — geo and geometry.** ✓ `LatLng`, bounds, `Point`, `Transformation`,
+  the `CRSI` interface with its four implementations, three projections,
   `LineUtil`/`PolyUtil`; Leaflet's geo/geometry/CRS/projection specs ported.
+  *Done 2026-08-22*: package `widgets/portolan` (~1,060 lines of Go, ~1,380 of
+  tests); 131 of the 153 upstream `it`s ported as 206 passing Go tests, the 22
+  skipped being JavaScript-specific (constructor polymorphism, `validate`,
+  altitude, `isFlat`, `console.warn` spies) and listed in each test file's
+  header. No port bug surfaced; one evaluation-order change keeps EPSG:3857
+  pixels bit-identical to Leaflet's, and `doc.go` states the two caveats that
+  remain (libm `sin` ulps, FMA targets). The interfaces are `CRSI` and
+  `ProjectionI`, per CS005.
 - **M2 — view, pyramid, tiles.** View state, limits, `zoomSnap`,
   `getBoundsZoom`/`fitBounds`; the pyramid (§SD5); `TileSource` with
   Leaflet's URL template and options; Go fetch, LRU, negative cache, decode;
@@ -424,8 +432,9 @@ camera readback's consumers other than through the new package's view state.
 ## Status
 
 Proposed — 2026-08-22; revised in place the same day with M0's results, both
-halves (§SD6, §SD8, Q1, Q5). Implementation: the `drag` verb and the M0 spike
-only. On acceptance this ADR supersedes
+halves (§SD6, §SD8, Q1, Q5), and with M1's completion. Implementation so far:
+the `drag` verb, the M0 spike and M1's kernel package. On acceptance this ADR
+supersedes
 [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) (folded in, §SD4) and
 the Decision of [ADR-0203](./0203-map-widget-without-the-http-stack.md)
 (Q2 records what is left of its O2/O3); at M4 it supersedes

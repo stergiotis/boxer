@@ -445,6 +445,26 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   `cyclonedx-gomod` SBOM and so sees Go modules only (ADR-0004). Rust
   dependencies are governed by this document.
 
+### 1.9 Volodymyr Agafonkin / CloudMade -- Leaflet map core, ported (BSD-2-Clause)
+
+- Directory: `public/thestack/imzero2/egui2/widgets/portolan/` — a Go port of
+  Leaflet's map kernel (coordinate reference systems, projections, geometry
+  utilities, view state, gesture handlers and tile pyramid as the milestones of
+  ADR-0204 land), re-targeted onto the imzero2 painter lane. Not a vendored
+  copy: the code is re-idiomised Go; what is Leaflet's is the algorithms and
+  their behaviour, transliterated module by module (the map is in the
+  package's `doc.go`).
+- Origin: <https://github.com/Leaflet/Leaflet>, commit
+  `c96f31a7a350a07cfbc852cf88e6ca69af5f5ec9` (the 2.0.0-alpha.1 line).
+- Use: the slippy-map widget that replaces the `walkers` crate binding
+  (ADR-0056) once the port reaches parity.
+- Licence: BSD-2-Clause; the text travels with the package as
+  `LICENSE-leaflet.txt`, and the package comment carries the attribution.
+  BSD-2 is compatible with the root [LICENSE](LICENSE) (MIT) — the notice and
+  disclaimer are what must be retained, and they are.
+- Not covered by `scripts/ci/license_gate.sh` for the same reason as 1.8:
+  the port is first-party Go source, not a module dependency.
+
 ## 2. Vendored binary artifacts
 
 ### 2.1 h3.wasm -- H3 hierarchical geospatial index (Apache-2.0)
