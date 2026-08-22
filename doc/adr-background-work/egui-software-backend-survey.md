@@ -631,3 +631,105 @@ optimum, and the optimum is around half the hardware threads.
 world without rayon, and are wrong in one with it. Correcting that is a change
 to a committed default plus a new dependency and a thread pool, so it is a
 decision rather than a fix, and it is left open here.
+
+## 13 Scaling, and whether `rayon` is needed (added 2026-08-22)
+
+§12.3 found a configuration 4.5× faster than the committed one. Two follow-up
+questions: how far does that scale, and does it have to be `rayon` that gets
+it there.
+
+### 13.1 With pixels
+
+Single-threaded, direct path, UI held fixed and only `pixels_per_point` moved:
+
+| target | pixels | p50 | ns/pixel |
+| --- | --- | --- | --- |
+| 1920×1200 | 2.30 M | 2.98 ms | 1.29 |
+| 2880×1800 | 5.18 M | 5.21 ms | 1.00 |
+| 3840×2400 | 9.22 M | 12.41 ms | 1.35 |
+
+Linear to about 5 Mpx, then a knee — at 4K the canvas and frame buffer are
+~37 MB each and stop fitting alongside each other in L3. §12.2's
+"0.81 ms fixed + 1.0 ns/pixel" holds up to the knee and understates past it.
+
+### 13.2 With threads
+
+Cached + rayon, same frame, sweeping `RAYON_NUM_THREADS`:
+
+| threads | 1920×1200 (19 tile rows) | 3840×2400 (37 tile rows) |
+| --- | --- | --- |
+| 1 | 1.73 ms — 1.00× | 18.45 ms — 1.00× |
+| 2 | 1.26 ms — 1.38× | |
+| 4 | 0.87 ms — 1.98× | 6.26 ms — 2.95× |
+| 8 | 0.71 ms — 2.43× | 4.18 ms — 4.41× |
+| 12 | **0.68 ms — 2.54×** | |
+| 16 | 0.76 ms — 2.28× | **3.63 ms — 5.08×** |
+| 24 | 0.95 ms — 1.82× | |
+| 32 | 1.08 ms — 1.60× | 3.64 ms — 5.07× |
+
+**It scales badly, and predictably so.** Peak speedup is 2.5× at 1920×1200 and
+5.1× at 3840×2400, on a machine with 32 hardware threads — 21 % and 32 %
+parallel efficiency at their respective optima. Fitting Amdahl to the low end
+gives a serial fraction of ~33 % at 1200p and ~14 % at 2400p.
+
+The reason is the decomposition, not the machine. Two of the three parallel
+sections split the frame into **rows of 64-pixel tiles** — 19 of them at
+1920×1200, 37 at 3840×2400 — so the available width is the tile-row count, and
+resolution is what buys more of it. The third splits the **31 clipped
+primitives**, which are wildly uneven (one full-viewport background against
+runs of glyphs), so the largest single primitive bounds that section however
+many threads are free. Past the optimum both effects invert into contention and
+the curve turns back down.
+
+Practical consequence: the useful setting is around **half the hardware
+threads**, and rayon's default (all of them) is 1.5× off the optimum at 1200p.
+
+### 13.3 With content
+
+Not isolated, and worth saying so rather than implying otherwise. The play
+table virtualises its rows, so widening the query from 20 to 2,000 rows moves
+the triangle count from 8,841 to 8,845 and the frame cost not at all. The
+per-primitive half of the cost is the 0.81 ms fixed term in §12.2 — about a
+quarter of a 1200p frame — but nothing here varies it independently.
+
+### 13.4 Is it `rayon`?
+
+Three questions stacked inside one, and they have different answers.
+
+**Is parallelism needed?** To beat the GPU, yes. Single-threaded direct is
+2.98 ms against wgpu's 1.30 ms at 1920×1200; cached+rayon at 12–16 threads is
+0.70 ms. Without threads the software host is a GPU-less *fallback*; with them
+it is faster than the thing it replaces.
+
+**Does it need a persistent pool?** Yes — this is the load-bearing answer. The
+three sites are ordinary data-parallel shapes (`par_chunks_mut` twice, an
+order-preserving `par_iter().map().collect()` once) that `std::thread::scope`
+expresses directly. But scope spawns OS threads per call, and per *empty*
+parallel section that costs:
+
+| threads | `std::thread::scope` | rayon (warm pool) |
+| --- | --- | --- |
+| 4 | 49.2 µs | 5.5 µs |
+| 8 | 80.4 µs | 6.5 µs |
+| 16 | **153.6 µs** | **5.7 µs** |
+| 32 | 288.1 µs | 17.1 µs |
+
+At 16 threads that is 27× rayon's dispatch, and there are three sections per
+frame: ~460 µs of pure overhead against a ~700 µs frame. Spawn-per-call would
+give back roughly two thirds of the win and land slower than wgpu.
+
+**Does it need `rayon` specifically?** No. Any persistent pool would do, and
+the shapes here use none of rayon's cleverness beyond work-stealing over the
+uneven primitive list. The trade is 2 crates and 168 KB against ~150 lines of
+condvar-and-work-queue that would then be ours to maintain and get right. On a
+321-crate graph, and for a measured 4.5×, the crates look like the cheaper side
+of that — but it is a judgement, not a measurement.
+
+One thing the table does explain independently: rayon's own dispatch cost grows
+from 5.7 µs at 16 threads to 17.1 µs (p90 43.5) at 32, which is part of why 32
+threads regressed in §13.2.
+
+### 13.5 Caveat
+
+One machine, 32 hardware threads, one frame. The tile-row bound is structural
+and should transfer; the specific optimum thread count and the L3 knee will not.
