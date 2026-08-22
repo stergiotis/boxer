@@ -12,6 +12,8 @@ Rather than assembling best-of-breed parts with fragmented models and logs, boxe
 
 Boxer reimplements and vendors much of what mainstream practice imports or rents. The premises behind that trade — dependencies as owned liabilities with known incentives, problem-oriented description languages on a boring host, one machine-readable data model projected across memory / wire / storage, a toolkit that observes itself (runtime and code), mechanical sympathy as the efficiency posture, one machine-checked architect, and interfaces split by task complexity up to agentic operation — are stated, with their costs and failure modes, in [doc/explanation/why-boxer.md](doc/explanation/why-boxer.md). The full form of the statement above, and what each clause rests on, is in [doc/explanation/positioning-statement.md](doc/explanation/positioning-statement.md).
 
+Read off its architecture rather than its premises, the same stack is: boxer runs data apps from one Go host process — a Rust client beside it only renders, helpers (`clickhouse-local`, `ffmpeg`, `rclone`) ride pipes, and a ClickHouse server is the only durable store; the same app runs on a desktop, in a browser, or from a roughly 110 MB appliance image, and everything durable — app state, metrics, query runs, even file trees — lands in one queryable table shape. The drawing is [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
+
 ## Installation
 ```
 go get github.com/stergiotis/boxer
@@ -56,7 +58,7 @@ Without these tags, packages that opt into one of those features are compiled ou
 ## Documentation
 Boxer follows the [Diátaxis](https://diataxis.fr/) framework (ADR-0001). Docs live next to the code they describe:
 
-* **Architecture overview** — [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) draws how the pieces fit: the operation modes (desktop, headless, appliance images) and the data architecture (the two ClickHouse engines, the `boxer.*` tables, ad-hoc datasets, the filesystem snapshot store and its rclone seam). Draft, pending review.
+* **Architecture overview** — [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) draws how the pieces fit: the operation modes (desktop, headless, appliance images) and the data architecture (the two ClickHouse engines, the `boxer.*` tables, ad-hoc datasets, the filesystem snapshot store and its rclone seam).
 * **Architecture decisions** — [`doc/adr/`](doc/adr/) records the *why* behind cross-cutting choices (nanopass discipline, h3 WASM bridge, license gate, Kafka port, leeway membership-role classifier, …).
 * **Per-package docs** — larger subsystems co-locate `TUTORIAL.md` / `HOWTO.md` / `EXPLANATION.md` / reference docs with their source (e.g. [`public/db/clickhouse/dsl/EXPLANATION.md`](public/db/clickhouse/dsl/EXPLANATION.md)).
 * **Standards** — [`CODINGSTANDARDS.md`](CODINGSTANDARDS.md) and [`doc/DOCUMENTATION_STANDARD.md`](doc/DOCUMENTATION_STANDARD.md).

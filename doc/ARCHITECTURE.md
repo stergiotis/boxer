@@ -23,6 +23,14 @@ ad-hoc datasets, the filesystem snapshot store and its rclone seam. Each
 section names the decision records that carry the *why*; the page only
 carries the shape they add up to, which no single ADR states.
 
+**In two sentences.** Boxer runs data apps from one Go host process — a Rust
+client beside it only renders, helpers (`clickhouse-local` workers, `ffmpeg`,
+`rclone`) ride pipes, and a ClickHouse server is the only durable store. The
+same app runs on a desktop, in a browser, or from a 109 MB appliance image,
+and everything durable — app state, metrics, query runs, even file trees —
+lands in one queryable table shape. §5 states this in Moore's positioning
+form and says which section supplies each clause.
+
 Three facts make the drawings possible at all, and recur throughout:
 
 - **One app source, every host.** A keelson app is four methods —
@@ -784,7 +792,47 @@ unchanged; what differs per mode is what the box has next to it.
 | the lading store, rclone | the server, `rclone` via extbin | no `rclone` in the images; the store's tables only where `CLICKHOUSE_URL` names a server that has them |
 | the bus | in-process; NATS for the sysmetrics plane (`natsbus`, a bridge — the UI-coupled brokers stay on `inprocbus`) | in-process |
 
-## 5. Where this page stops
+## 5. What it adds up to — a positioning statement read off this page
+
+The [positioning statement](./explanation/positioning-statement.md) that
+leads the README is cut from the premises. The same template — *for* a
+target *who* has a need, *the product* is a category *that* delivers a
+benefit; *unlike* the alternative, it differs in one way — can be filled from
+this page alone, which shows what the architecture evidences by itself:
+
+> **For** the small team or integrator who must run data-engineering apps on
+> whatever box it controls — a desktop seat, a headless server, or an
+> appliance image — and keep every durable fact queryable in one place,
+> **who** needs the same app to run unchanged across those hosts and wants
+> the whole system to fit on one page, **boxer** is an application runtime
+> over ClickHouse — a Go host process that owns the apps, the bus, the data
+> paths and the network policy, a Rust client beside it that renders and
+> nothing else, and helpers (`clickhouse-local` workers, `ffmpeg`, `rclone`)
+> spawned over pipes — **that** runs one app source on a desktop window, in a
+> browser over one WebSocket (video or meshes), or from a 109 MB appliance
+> image with no GPU stack, while every durable fact — app state, metrics,
+> query runs, even filesystem snapshots served to rclone — lands as
+> facts-shaped rows in one ClickHouse server, queryable with the same SQL
+> vocabulary. **Unlike** a stack assembled from a web front end, an API tier,
+> a message broker and several stores — each a process, a deployment and a
+> data model of its own — **boxer** keeps apps, bus, data paths and network
+> policy in one Go host process a person can read, lets the Rust side render
+> and nothing else, and holds everything durable, down to a directory tree,
+> in one ClickHouse shape.
+
+Where each slot comes from: *for / who* — this page's audience line, §2's
+three axes and §4; *is a* — §1 (four process kinds, "the Rust side renders
+and nothing else", "two engines, no shared state"); *that* — §1's first fact,
+§2.1–2.6, §3.2–3.3 and §3.6–3.7. The *unlike* clause is the one this page
+does not supply: it contrasts only internal alternatives (GPU, CPU or browser
+rasterization; chlocal or the server; the facts shape or bespoke tables; the
+NixOS box or the appliance), so the service-stack foil is an inference from
+"one host process, one store". Two things the architecture reading leaves
+out, against the README's premise reading: sovereignty and auditability from
+source — present here only as Go-owned egress and the airgapped bundle — and
+the problem-oriented-language premise, which this page does not touch.
+
+## 6. Where this page stops
 
 The records, by area, with their state on 2026-08-23 — cite them, not this
 page:
