@@ -1,0 +1,58 @@
+{
+    "Hostname": "boxer-soft-video",
+    "KernelPackage": "github.com/gokrazy/kernel.amd64",
+    "FirmwarePackage": "",
+    "EEPROMPackage": "",
+    "Environment": [
+        "GOOS=linux",
+        "GOARCH=amd64"
+    ],
+    "Packages": [
+        "github.com/gokrazy/serial-busybox",
+        "github.com/stergiotis/boxer/public/thestack/cmd/imzero2"
+    ],
+    "PackageConfig": {
+        "github.com/stergiotis/boxer/public/thestack/cmd/imzero2": {
+            "GoBuildTags": [
+                "boxer_enable_profiling",
+                "binary_log"
+            ],
+            "GoBuildEnvironment": [
+                "CGO_ENABLED=0"
+            ],
+            "ExtraFilePaths": {
+                "/usr/bin/imzero2-client": "_stage/imzero2-client",
+                "/usr/share/imzero2/MainFont.ttf": "_stage/MainFont.ttf",
+                "/usr/share/imzero2/Phosphor.ttf": "_stage/Phosphor.ttf",
+                "/lib64": "_stage/lib",
+                "/usr/bin/ffmpeg": "_stage/ffmpeg"
+            },
+            "Environment": [
+                "IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089",
+                "IMZERO2_HEADLESS_FPS=30",
+                "LD_LIBRARY_PATH=/lib64",
+                "XDG_CACHE_HOME=/tmp/.cache",
+                "IMZERO2_FFMPEG_BIN=/usr/bin/ffmpeg"
+            ],
+            "CommandLineFlags": [
+                "--logFormat=console",
+                "--logLevel=info",
+                "imzero2",
+                "demo",
+                "--clientBinary",
+                "/usr/bin/imzero2-client",
+                "--clientInitialMainWindowWidth",
+                "1280",
+                "--clientInitialMainWindowHeight",
+                "800",
+                "--mainFontTTF",
+                "/usr/share/imzero2/MainFont.ttf",
+                "--phosphorFontTTF",
+                "/usr/share/imzero2/Phosphor.ttf",
+                "--launch",
+                "widgets"
+            ]
+        }
+    },
+    "SerialConsole": "ttyS0,115200"
+}

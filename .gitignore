@@ -115,3 +115,12 @@ rust/*/target/
 # ignored so doclint and the gov gate do not walk a mounted snapshot as if it
 # were repo source.
 /tally/
+
+# gokrazy appliance build artifacts (showcase/gokrazy/README.md). Only build.sh
+# and the two config.json files are source: `_stage/` holds the binaries, fonts
+# and glibc closure the packer copies into the image, `builddir/` is the module
+# context gokrazy builds boxer in (a generated go.mod carrying a replace back to
+# this checkout), and the disk images are hundreds of MB.
+/showcase/gokrazy/instances/*/_stage/
+/showcase/gokrazy/instances/*/builddir/
+/showcase/gokrazy/instances/*/*.img

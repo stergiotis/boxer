@@ -287,6 +287,41 @@ above are open to being reversed on review rather than presented as settled.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 
+## Updates
+
+### 2026-08-22 — M6 splits: the gokrazy half is done, musl-static is not
+
+M6 pairs "musl-static + gokrazy probe" as one milestone, on the assumption that
+an appliance image needs a statically-linked binary. The probe found that wrong,
+and the two halves are separable.
+
+`ldd` on the `headless_soft` binary lists **four files** — `libgcc_s`, `libm`,
+`libc` and the loader, about 4.8 MB — so an image can simply carry them. The
+measurement is easy to misread: `headless_wgpu` prints the same four, because it
+reaches Vulkan through `dlopen` where `ldd` cannot see it. That invisible closure
+is the one ADR-0128 was avoiding, and it is what this ADR removed.
+
+**Done:** two gokrazy appliance images, booted and verified, recorded in
+[ADR-0206](./0206-gokrazy-appliance-image.md). They differ only by whether a
+static ffmpeg is present; the one without it degrades to the ADR-0128 mesh lane
+on its own. Measured in-frame on the appliance: 1.1 ms per frame in Rust at
+1920x984, against the 1.22 ms at 1280x800 recorded above.
+
+**Still open:** the musl target. `cargo check --target
+x86_64-unknown-linux-musl --features headless_soft` fails on exactly two build
+scripts, `ring` and `libmimalloc-sys`, both only for a missing cross C compiler.
+The allocator half is now handled — a new `fast_alloc` feature gates mimalloc,
+on by default and in all four build scripts, so no shipped build changed, and
+the CI lane gained a check for the allocator-free configuration. `ring` arrives
+via `reqwest` <- `walkers` and leaves with ADR-0204 M4; a walkers feature gate
+here was rejected as duplicating that milestone.
+
+**Correction.** `Cargo.toml` described `headless_soft` and `headless_wgpu` as
+mutually exclusive, "headless.rs refuses to compile with both". It does not:
+`headless.rs` gates the CPU host on `not(feature = "headless_wgpu")`, which is
+the precedence SD1 specifies. The comment was wrong and has been corrected; the
+decision above was right.
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless host and pixel streaming.
