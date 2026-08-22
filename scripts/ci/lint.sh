@@ -259,6 +259,24 @@ else
     step_end fail
 fi
 
+step_begin "rust_imzero2_check"
+# Feature-matrix `cargo check` plus the crate's tests for rust/imzero2, and the
+# ADR-0128 SD6 / ADR-0205 guarantee that a GPU-less feature set pulls no wgpu.
+# The crate had no automated gate at all until ADR-0205 M4, which is how three
+# Dependabot bumps merged green and broken on 2026-08-10, and how an eframe PR
+# floated egui in a lock-only commit on 2026-08-19. Deliberately excludes
+# clippy: rust/imzero2/check.sh runs it with -D warnings and it is red at HEAD,
+# mostly in generated code, so gating on it would have kept the crate ungated.
+# ~50s cold, ~3s warm. Skips gracefully without cargo, like h3_wasm_parity.
+if out=$("$here/rust_imzero2_check.sh" 2>&1); then
+    echo "passed"
+    step_end pass
+else
+    echo "$out"
+    rc=1
+    step_end fail
+fi
+
 step_begin "gofmt"
 # Go formatting enforcement — plain `gofmt`, the baseline §9 defers to. It is
 # the Go counterpart of the rustfmt step below, and closes the gap

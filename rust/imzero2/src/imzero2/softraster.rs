@@ -294,3 +294,179 @@ impl Soft {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const W: u32 = 320;
+    const H: u32 = 256;
+
+    /// Run one egui pass and hand the result to `soft`, writing into `frame`.
+    fn render_into(
+        soft: &mut Soft,
+        ctx: &egui::Context,
+        i: usize,
+        content: impl Fn(&egui::Context),
+        frame: &mut Vec<u8>,
+    ) {
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(W as f32, H as f32),
+            )),
+            max_texture_side: Some(MAX_TEXTURE_SIDE),
+            time: Some(i as f64 / 60.0),
+            predicted_dt: 1.0 / 60.0,
+            focused: true,
+            ..Default::default()
+        };
+        let out = ctx.run_ui(raw, |ui| content(ui.ctx()));
+        let clipped = ctx.tessellate(out.shapes, out.pixels_per_point);
+        soft.render_and_readback(&clipped, &out.textures_delta, frame)
+            .expect("render_and_readback");
+    }
+
+    /// An opaque square sliding across an otherwise untouched frame. Content
+    /// that *moves* is what distinguishes the incremental path: a tile it
+    /// leaves has to be repainted, not merely left alone.
+    fn sliding_square(ctx: &egui::Context, i: usize) {
+        egui::Area::new("sq".into()).fixed_pos(egui::Pos2::ZERO).show(ctx, |ui| {
+            let x = 8.0 + (i as f32) * 12.0;
+            ui.painter().rect_filled(
+                egui::Rect::from_min_size(egui::pos2(x, 90.0), egui::Vec2::splat(40.0)),
+                0.0,
+                egui::Color32::from_rgb(210, 50, 50),
+            );
+            ui.allocate_space(ui.available_size());
+        });
+    }
+
+    /// The incremental path (a frame buffer handed back each time) must land on
+    /// the same pixels as the full path (a fresh buffer every frame, which is
+    /// what `primed_bytes` refuses to trust). Guards the dirty-tile contract:
+    /// under-reporting a dirty tile shows up here as a smear left behind by the
+    /// square.
+    #[test]
+    fn incremental_frames_match_full_frames() {
+        let frames = 8;
+
+        let ctx_full = egui::Context::default();
+        let mut full = Soft::new(W, H, 1.0).expect("Soft::new");
+        let mut last_full = Vec::new();
+        for i in 0..frames {
+            // A fresh buffer each pass never matches `primed_bytes`, so this
+            // takes the clear-and-paint-whole branch every time.
+            let mut fresh = Vec::new();
+            render_into(
+                &mut full,
+                &ctx_full,
+                i,
+                |c| sliding_square(c, i),
+                &mut fresh,
+            );
+            last_full = fresh;
+        }
+
+        let ctx_inc = egui::Context::default();
+        let mut inc = Soft::new(W, H, 1.0).expect("Soft::new");
+        let mut persistent = Vec::new();
+        for i in 0..frames {
+            render_into(
+                &mut inc,
+                &ctx_inc,
+                i,
+                |c| sliding_square(c, i),
+                &mut persistent,
+            );
+        }
+
+        assert_eq!(last_full.len(), persistent.len(), "frame sizes differ");
+        let differing = last_full
+            .chunks_exact(4)
+            .zip(persistent.chunks_exact(4))
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(
+            differing,
+            0,
+            "incremental path diverged from the full path on {differing} of {} pixels",
+            last_full.len() / 4
+        );
+    }
+
+    /// A resize must drop the priming, or the next frame composites onto a
+    /// buffer of the wrong geometry.
+    #[test]
+    fn resize_forces_a_full_repaint() {
+        let ctx = egui::Context::default();
+        let mut soft = Soft::new(W, H, 1.0).expect("Soft::new");
+        let mut frame = Vec::new();
+        render_into(&mut soft, &ctx, 0, |c| sliding_square(c, 0), &mut frame);
+        assert_eq!(frame.len(), (W * H * 4) as usize);
+
+        soft.resize(W / 2, H / 2, 1.0);
+        assert_eq!(
+            soft.primed_bytes, 0,
+            "resize must un-prime the frame buffer"
+        );
+        render_into(&mut soft, &ctx, 1, |c| sliding_square(c, 1), &mut frame);
+        assert_eq!(
+            frame.len(),
+            (W / 2 * (H / 2) * 4) as usize,
+            "frame did not follow the resize"
+        );
+    }
+
+    /// The failure mode the incremental path takes on, and the reason it is
+    /// worth a test rather than a comment: the primitive cache keys on a
+    /// texture's *id*, not its contents, so a texture mutated in place under an
+    /// unchanged mesh produces no dirty tile and the old pixels survive.
+    ///
+    /// `egui::TextureHandle::set` is exactly that shape — same id, same mesh,
+    /// new pixels.
+    #[test]
+    fn texture_mutated_in_place_still_repaints() {
+        let ctx = egui::Context::default();
+        let mut soft = Soft::new(W, H, 1.0).expect("Soft::new");
+        let mut frame = Vec::new();
+
+        let solid = |c: egui::Color32| egui::ColorImage::new([16, 16], vec![c; 16 * 16]);
+        let mut tex = ctx.load_texture(
+            "probe",
+            solid(egui::Color32::from_rgb(20, 200, 20)),
+            egui::TextureOptions::NEAREST,
+        );
+        let id = tex.id();
+        let draw = move |c: &egui::Context| {
+            egui::Area::new("tex".into()).fixed_pos(egui::Pos2::ZERO).show(c, |ui| {
+                let mut mesh = egui::Mesh::with_texture(id);
+                mesh.add_rect_with_uv(
+                    egui::Rect::from_min_size(egui::pos2(40.0, 40.0), egui::Vec2::splat(64.0)),
+                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
+                ui.painter().add(egui::Shape::mesh(mesh));
+                ui.allocate_space(ui.available_size());
+            });
+        };
+
+        render_into(&mut soft, &ctx, 0, draw, &mut frame);
+        let green = frame.clone();
+
+        // Same id, same mesh, different pixels.
+        tex.set(
+            solid(egui::Color32::from_rgb(200, 20, 200)),
+            egui::TextureOptions::NEAREST,
+        );
+        render_into(&mut soft, &ctx, 1, draw, &mut frame);
+
+        let changed =
+            green.chunks_exact(4).zip(frame.chunks_exact(4)).filter(|(a, b)| a != b).count();
+        assert!(
+            changed > 0,
+            "texture was replaced under an unchanged mesh and the frame did not \
+             change: the incremental blit is serving stale tiles"
+        );
+    }
+}

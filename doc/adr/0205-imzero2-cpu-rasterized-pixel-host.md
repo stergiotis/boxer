@@ -214,21 +214,44 @@ outside it.
 
 ## Verification plan — Tier 1
 
-- **Lane.** None automated. **This is the plan's gap and the largest open risk
-  in this ADR.**
-- **What would fail today.** Nothing. Every claim above was established by
-  running `scripts/dev/play-screenshot-tour.sh` on each host and diffing the
-  galleries by hand, gated against a per-scene reproducibility floor built from
-  two wgpu runs. A rasterizer regression, or the §Consequences staleness bug,
-  would reach a release unnoticed.
-- **What the lane should be.** A golden-image test in the `//go:build
-  integration` lane over a small subset of tour scenes, compared with a
-  tolerance rather than exact equality — several play panels render
-  time-dependent content, and one scene disagrees with itself by 14.8 %.
-  `IMZERO2_HEADLESS_RASTER_STATS=1` gives the performance side.
-- **Prior question.** The Rust side has no CI at all today (`cargo` never runs
-  in workflows, and `check.sh`'s clippy gate is red at HEAD for unrelated
-  reasons), so this is partly a question about whether that changes.
+- **Lane.** `scripts/ci/rust_imzero2_check.sh`, run by `scripts/ci/lint.sh`,
+  which `lint.yaml` runs in CI. ~50 s cold, ~3 s warm, and it skips gracefully
+  without cargo like `h3_wasm_parity.sh`.
+- **What it checks.**
+  1. `cargo check --all-targets` across the five shipped feature sets — desktop,
+     `headless`, `headless_svg`, `headless_wgpu`, `headless_soft`.
+  2. `cargo test` under `headless_soft`: the crate's existing tests plus three
+     that assert this ADR's contracts — the incremental blit agrees with the
+     full one (§SD4), a resize drops the frame-buffer priming, and a texture
+     mutated in place under an unchanged mesh still repaints (the staleness mode
+     in §Consequences).
+  3. That `headless`, `headless_svg` and `headless_soft` pull **no wgpu-family
+     crate**, which ADR-0128 SD6 calls "a hard guarantee" and which a feature
+     edit could otherwise break silently, since everything would still build.
+- **What would fail.** A feature set that stops compiling; a dirty-tile bug that
+  makes the incremental path diverge; a resize that leaves stale priming; a
+  texture update that stops repainting; wgpu leaking into a GPU-less build. All
+  three test properties were verified against deliberately broken
+  implementations — each fails for its own reason and no other.
+- **What it does not cover, and why that is accepted.**
+  - **Fidelity against wgpu.** The strongest property found — that the two hosts
+    agree pixel-for-pixel — needs a GPU, which CI does not have. It stays a
+    manual gallery diff (`scripts/dev/play-screenshot-tour.sh` on each host,
+    compared against a per-scene reproducibility floor built from two wgpu runs;
+    exact equality is the wrong test, since several play panels draw
+    time-dependent content and one scene disagrees with itself by 14.8 %).
+  - **Performance.** No p50/p99 assertion; a config regression that costs 4×
+    would still merge. `IMZERO2_HEADLESS_RASTER_STATS=1` makes it a one-command
+    manual check, and a threshold in CI would be flaky on shared runners.
+  - **`cargo clippy`.** `rust/imzero2/check.sh` runs it with `-D warnings` and
+    it is red at HEAD with ~2,100 findings, mostly in the generated interpreter.
+    Gating on it is its own piece of work; holding this lane hostage to it would
+    have left the crate ungated for longer.
+- **What this fixes beyond this ADR.** `rust/imzero2` had no automated gate at
+  all, which is how three Dependabot bumps merged green and broken on
+  2026-08-10, and how an eframe PR floated egui to 0.36 in a lock-only commit
+  on 2026-08-19 (84 type errors). The feature-matrix check is aimed squarely at
+  that class, and it is the larger share of this lane's value.
 
 ## Milestones
 
@@ -239,7 +262,10 @@ outside it.
 - **M2 — the configuration.** ✓ (2026-08-22) cached + pool (b3aa3980), tile-scoped blit
   (8c6696b3), four workers by default (41da3bdd).
 - **M3 — placement advice.** ✓ (2026-08-22) affinity and L3 budget at startup (0b25c9e3).
-- **M4 — a verification lane.** Not started; see §Verification plan.
+- **M4 — a verification lane.** ✓ (2026-08-22) `rust_imzero2_check.sh`,
+  wired into `lint.sh`; three contract tests, the feature matrix and the
+  no-wgpu assertion. Fidelity-vs-wgpu and performance stay manual — see
+  §Verification plan.
 - **M5 — upstream the tiled blit.** ✓ (2026-08-22) filed as
   [DGriffin91/egui_software_backend#17](https://github.com/DGriffin91/egui_software_backend/pull/17),
   one commit on top of upstream `main`, additive, with tests that need no

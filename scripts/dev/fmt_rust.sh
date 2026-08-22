@@ -76,9 +76,21 @@ for manifest in "${manifests[@]}"; do
         continue
     fi
     checked=$((checked + 1))
-    echo "=== cargo fmt --all ($mode): $crate ==="
+    # `cargo fmt --all` reaches PATH DEPENDENCIES, not just workspace members,
+    # and a workspace `exclude` does not spare them. rust/imzero2 vendors
+    # third-party source under vendor/ that is deliberately kept byte-identical
+    # to upstream (see its VENDORING.md), so --all would rewrite it — or, in
+    # --check mode, fail the lint gate on it, which is exactly what happened
+    # when the vendored crate landed. Name that crate's first-party packages
+    # instead, and keep the list in step with its workspace members.
+    # rust/imzero2/check.sh carries the same exception for the same reason.
+    case "$crate" in
+    */imzero2) fmt_scope=(-p imzero2 -p imzero2_egui) ;;
+    *) fmt_scope=(--all) ;;
+    esac
+    echo "=== cargo fmt ${fmt_scope[*]} ($mode): $crate ==="
     # Subshell + cd so the rustup proxy resolves this crate's pinned toolchain.
-    if ! ( cd "$crate" && cargo fmt --all "${fmt_args[@]}" ); then
+    if ! ( cd "$crate" && cargo fmt "${fmt_scope[@]}" "${fmt_args[@]}" ); then
         rc=1
         [ "$mode" = "check" ] && echo "fmt_rust: $crate is not formatted — run scripts/dev/fmt_rust.sh to fix" >&2
     fi
