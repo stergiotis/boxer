@@ -142,17 +142,17 @@ enabling step for the appliance target, without writing a CPU rasterizer.
 > a measured 28.6–62 ms CPU/frame for mesa/llvmpipe raster + readback at
 > 1280×800. A vendored CPU rasterizer (`headless_soft`,
 > [survey](../adr-background-work/egui-software-backend-survey.md)) does the
-> same job for **2.47 ms CPU/frame** at 1280×800 on four cores — 12–25× less,
-> confirmed against a directly measured lavapipe arm (102.6 ms CPU/frame at
-> 1920×1200, versus 8.22 ms for the rasterizer). It adds no C closure of its
+> same job for **1.22 ms CPU/frame** at 1280×800 — 23–51× less, confirmed
+> against a directly measured lavapipe arm (102.6 ms CPU/frame at 1920×1200,
+> versus 1.58 ms for the rasterizer). It adds no C closure of its
 > own: `cargo tree --features headless_soft` carries no wgpu, no naga, no mesa.
 >
 > This does **not** retire the lane, for two reasons the survey does not touch.
 > The *encoder* half of the C closure is untouched — ffmpeg is still an external
 > dynamically-linked binary and still costs the 14–18 ms this ADR measured — so
 > a **streaming** appliance still wants the mesh lane, which encodes nothing.
-> And the rasterizer costs memory the lane does not: 188–416 MiB of client RSS
-> against the lane's tessellate-and-serialize.
+> And the rasterizer costs memory the lane does not: ~228 MiB of client RSS at
+> its default pool size, against the lane's tessellate-and-serialize.
 >
 > What it does change is that "pixels" and "appliance" are no longer mutually
 > exclusive. A gokrazy image that renders server-side — scripted captures

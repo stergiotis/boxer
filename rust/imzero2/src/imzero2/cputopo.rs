@@ -28,6 +28,10 @@ pub struct Topology {
     /// CPU list of one spanned domain, verbatim from sysfs, so the advice can
     /// name something the operator can paste into `taskset -c`.
     pub pin_hint: String,
+    /// Allowed CPUs in the smallest spanned domain. A pool small enough to sit
+    /// inside one domain tends to be co-scheduled there anyway, which is why
+    /// [`Self::pinning_would_pay`] does not nag about it.
+    pub domain_cpus: usize,
 }
 
 impl Topology {
@@ -39,6 +43,16 @@ impl Topology {
     /// (no longer), which is what this bound picks out.
     pub fn max_pixels(&self) -> u64 {
         self.l3_bytes / 8
+    }
+
+    /// Whether pinning a pool of `workers` to one L3 domain is worth saying
+    /// anything about. Measured at 1920×1200 with a tile-scoped blit: 16
+    /// workers spanning two domains cost 1.32× against staying in one, while 4
+    /// workers cost 1.05× — nothing. The threshold is half a domain's CPUs,
+    /// the point past which the pool cannot plausibly be co-scheduled inside
+    /// one domain.
+    pub fn pinning_would_pay(&self, workers: usize) -> bool {
+        self.domains_spanned > 1 && workers * 2 > self.domain_cpus
     }
 }
 
@@ -143,6 +157,11 @@ pub fn probe() -> Option<Topology> {
         .filter(|(list, _)| parse_cpu_list(list).iter().any(|c| allowed.contains(c)))
         .collect();
     let smallest = spanned.iter().map(|(_, b)| *b).min()?;
+    let domain_cpus = spanned
+        .iter()
+        .map(|(list, _)| parse_cpu_list(list).iter().filter(|c| allowed.contains(c)).count())
+        .min()
+        .unwrap_or(0);
     // Hint with the domain holding the most allowed CPUs — the one a pin would
     // most plausibly target.
     let hint = spanned
@@ -153,6 +172,7 @@ pub fn probe() -> Option<Topology> {
         domains_spanned: spanned.len(),
         l3_bytes: smallest,
         pin_hint: hint,
+        domain_cpus,
     })
 }
 
@@ -195,11 +215,35 @@ mod tests {
             domains_spanned: 1,
             l3_bytes: 32 * 1024 * 1024,
             pin_hint: "0-15".to_owned(),
+            domain_cpus: 16,
         };
         // 32 MB / 8 bytes per pixel = 4.19 Mpx, so 1920x1200 (2.30 Mpx) fits
         // and 2880x1800 (5.18 Mpx) does not — the measured crossover.
         assert_eq!(t.max_pixels(), 4 * 1024 * 1024);
         assert!(u64::from(1920u32 * 1200) < t.max_pixels());
         assert!(u64::from(2880u32 * 1800) > t.max_pixels());
+    }
+
+    #[test]
+    fn pinning_advice_only_fires_for_a_pool_that_cannot_fit_one_domain() {
+        let one = Topology {
+            domains_spanned: 1,
+            l3_bytes: 32 * 1024 * 1024,
+            pin_hint: "0-15".to_owned(),
+            domain_cpus: 16,
+        };
+        assert!(
+            !one.pinning_would_pay(16),
+            "nothing to pin to with one domain"
+        );
+        let two = Topology {
+            domains_spanned: 2,
+            ..one
+        };
+        assert!(
+            !two.pinning_would_pay(4),
+            "4 workers measured 1.05x — not worth saying"
+        );
+        assert!(two.pinning_would_pay(16), "16 workers measured 1.32x");
     }
 }

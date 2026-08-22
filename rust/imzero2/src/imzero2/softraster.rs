@@ -41,9 +41,9 @@
 //! | uncached, 1 thread (what this host started as) | 57 MiB | 3.17 ms | 4.57 ms |
 //! | 1 worker | 179 MiB | 0.37 ms | 14.1 ms |
 //! | 2 | 187 MiB | 0.26 ms | 9.5 ms |
-//! | 4 | 228 MiB | 0.26 ms | 6.7 ms |
+//! | **4 — the default** | 228 MiB | 0.26 ms | 6.7 ms |
 //! | 8 | 302 MiB | 0.30 ms | 6.5 ms |
-//! | 16 (the default here) | 406 MiB | 0.26 ms | 5.2 ms |
+//! | 16 | 406 MiB | 0.26 ms | 5.2 ms |
 //! | 32 | — | 0.57 ms | 4.7 ms |
 //!
 //! **Since the blit became tile-scoped, the thread count is a tail-latency and
@@ -57,9 +57,10 @@
 //!
 //! Roughly 15 MiB per worker, most of it per-thread allocator arenas (imzero2
 //! runs mimalloc) plus the in-flight per-primitive raster each worker holds.
-//! Going 4 → 16 workers buys ~1.5 ms of p99 for ~180 MiB and nothing on p50,
-//! so a memory-constrained deployment should set
-//! `IMZERO2_HEADLESS_RASTER_THREADS` low rather than take the default.
+//! Going 4 → 16 workers buys ~1.5 ms of p99 for ~180 MiB and ~2 ms more CPU per
+//! frame, and nothing at all on p50 — which is why the default is four rather
+//! than half the hardware threads. Raise it with
+//! `IMZERO2_HEADLESS_RASTER_THREADS` where the tail matters more than the RSS.
 //!
 //! The tail remains this host's weak point against a GPU — 5.2 ms at 16
 //! workers versus ~3.0 ms through wgpu — and it is **not** a compositing
@@ -87,9 +88,18 @@ const MAX_TEXTURE_SIDE: usize = 8192;
 /// byte-comparable on any pixel the UI does not cover.
 const CLEAR: [u8; 4] = [0, 0, 0, 255];
 
+/// Default ceiling on the worker pool. Once the blit is tile-scoped, measured
+/// p50 is flat from two workers to sixteen, so workers past this point buy only
+/// tail latency — about 1.5 ms of p99 for 180 MiB going 4 → 16 — while the
+/// memory is charged whether or not the tail matters. Four is where that trade
+/// stops paying by default; a deployment that values p99 over RSS raises it
+/// with the env var.
+const DEFAULT_WORKERS: usize = 4;
+
 /// Worker count for the rasterizer's pool. `IMZERO2_HEADLESS_RASTER_THREADS`
-/// wins when set to a positive value; otherwise half the hardware threads,
-/// floored at one. See the module doc for why half.
+/// wins when set to a positive value; otherwise [`DEFAULT_WORKERS`], capped at
+/// half the hardware threads so a small box keeps cores for the Go host, the
+/// carrier and the encoder, and floored at one.
 fn raster_threads() -> usize {
     let hw = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
     match std::env::var("IMZERO2_HEADLESS_RASTER_THREADS")
@@ -97,7 +107,7 @@ fn raster_threads() -> usize {
         .and_then(|v| v.trim().parse::<usize>().ok())
     {
         Some(n) if n > 0 => n,
-        _ => (hw / 2).max(1),
+        _ => DEFAULT_WORKERS.min((hw / 2).max(1)),
     }
 }
 
@@ -146,13 +156,14 @@ impl Soft {
         // is for, so it names the pin rather than taking it.
         let topo = cputopo::probe();
         match &topo {
-            Some(t) if t.domains_spanned > 1 => tracing::warn!(
+            Some(t) if t.pinning_would_pay(threads) => tracing::warn!(
                 domains = t.domains_spanned,
                 l3_mib = t.l3_bytes / (1024 * 1024),
                 threads,
-                "worker pool may be scheduled across {} L3 domains; pinning it to one was measured \
-                 ~1.33x faster while the frame fits that domain — e.g. taskset -c {} (or systemd \
-                 CPUAffinity=)",
+                "worker pool of {} may be scheduled across {} L3 domains; a pool this size was \
+                 measured 1.32x faster pinned to one while the frame fits that domain — e.g. \
+                 taskset -c {} (or systemd CPUAffinity=)",
+                threads,
                 t.domains_spanned,
                 t.pin_hint
             ),

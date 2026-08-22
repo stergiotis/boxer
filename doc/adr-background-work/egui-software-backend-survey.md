@@ -691,6 +691,11 @@ Linear to about 5 Mpx, then a knee — at 4K the canvas and frame buffer are
 
 ### 13.2 With threads
 
+> **Superseded by §17.4.** Tiling the blit removed most of the parallelisable
+> work, and the peak speedup below fell from 2.5× to about 1.4×. The *shape*
+> explained here — a bound set by tile-row count — is why; the numbers are the
+> pre-tiling host.
+
 Cached + rayon, same frame, sweeping `RAYON_NUM_THREADS`:
 
 | threads | 1920×1200 (19 tile rows) | 3840×2400 (37 tile rows) |
@@ -789,65 +794,72 @@ caveat applies throughout.
 
 ### 14.1 The four arms side by side
 
+Re-measured 2026-08-22 after §17's tiling and with the shipped default of four
+workers.
+
 | | p50 | p90 | p99 | CPU per frame | client RSS | needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| wgpu on a real GPU | 1.34 ms | 1.71 | **3.00** | **1.45 ms** | **118 MiB** | a GPU, Vulkan loader, ICD |
+| wgpu on a real GPU | 1.34 ms | 1.71 | **3.00** | 1.32 ms | **118 MiB** | a GPU, Vulkan loader, ICD |
 | wgpu on lavapipe | 5.96 ms | 6.61 | 7.42 | 102.6 ms | 157 MiB | Vulkan loader + Mesa |
-| software, 8 workers | 0.73 ms | 1.14 | 5.43 | 5.20 ms | 282 MiB | nothing |
-| software, 16 workers | **0.76 ms** | 1.16 | 4.47 | 8.22 ms | 416 MiB | nothing |
+| **software, 4 workers (default)** | **0.25 ms** | **0.51** | 6.15 | **1.58 ms** | 228 MiB | nothing |
+| software, 16 workers | 0.26 ms | 0.52 | 5.17 | 3.57 ms | 406 MiB | nothing |
 
 **Wall-clock is not the interesting column.** CPU-seconds per frame is, because
 it decides how many sessions a host carries. At 60 fps: wgpu-on-GPU costs
-~0.09 of a core per session, the software host 0.31 (8 workers) to 0.49 (16),
-and lavapipe **6.2 cores** — it cannot sustain 60 fps on this machine at all.
+~0.079 of a core per session, the software host at its default ~0.095, and
+lavapipe **6.2 cores** — it cannot sustain 60 fps on this machine at all.
 
-That reframes what the GPU buys. It is not that the GPU "stays free" — it is
-busier, obviously. It is that **rendering stops competing with everything else
-on the CPU**: the Go host, the ClickHouse client, the encoder. A box serving
-many sessions is CPU-bound long before it is wall-clock-bound.
+Note how much that moved. Before tiling, the software host spent 5.2–8.2 ms of
+CPU per frame and the GPU's real argument was that it kept the CPU free for the
+Go host, the ClickHouse client and the encoder. At 1.58 ms against 1.32 ms that
+argument is now close to a wash: the GPU is still cheaper in CPU, by about 20 %,
+not by a factor of four. What survives untouched is memory and the tail.
+
+Two caveats on the memory column: it is client RSS only, and **GPU memory was
+not measured** — on this integrated part VRAM comes out of system RAM anyway,
+and per-process attribution was not separable from the compositor's usage.
 
 Two caveats on the memory column: it is client RSS only, and **GPU memory was
 not measured** — on this integrated part VRAM comes out of system RAM anyway,
 and per-process attribution was not separable from the compositor's usage. So
 "118 MiB" understates the GPU arm's true total by an unknown amount.
 
-### 14.2 Threads are a memory knob
+### 14.2 Threads buy tail latency, and cost memory
 
-Peak RSS at 1920×1200, and what each pool size buys:
+Post-tiling, at 1920×1200 (full sweep and the reasoning in §17.4):
 
-| workers | RSS | p50 | p99 | CPU/frame |
-| --- | --- | --- | --- | --- |
-| 1 | 171 MiB | 2.07 ms | 15.67 ms | |
-| 2 | 188 MiB | 1.25 ms | 8.21 ms | |
-| 4 | 248 MiB | 0.93 ms | 5.57 ms | |
-| 8 | 282 MiB | 0.73 ms | 5.43 ms | 5.20 ms |
-| 16 | 416 MiB | 0.76 ms | 4.47 ms | 8.22 ms |
+| workers | RSS | p50 | p99 |
+| --- | --- | --- | --- |
+| 1 | 179 MiB | 0.37 ms | 14.1 ms |
+| 2 | 187 MiB | 0.26 ms | 9.5 ms |
+| **4 (default)** | **228 MiB** | **0.26 ms** | **6.7 ms** |
+| 8 | 302 MiB | 0.30 ms | 6.5 ms |
+| 16 | 406 MiB | 0.26 ms | 5.2 ms |
+| 32 | — | 0.57 ms | 4.7 ms |
 
 ≈ 15 MiB per worker — per-thread allocator arenas (imzero2 runs mimalloc) plus
 the in-flight per-primitive raster each worker holds. RSS barely falls with
-resolution (268 MiB at 960×600 with 16 workers), which confirms it is the pool
-and not the buffers.
+resolution, which confirms it is the pool and not the buffers.
 
-**The p50 plateau starts at about 8 workers**; past that only p99 improves, at
-~17 MiB and ~0.4 ms of CPU each. On this machine the shipped default (half the
-hardware threads = 16) buys a 1 ms better p99 for 134 MiB and 58 % more CPU per
-frame. That is defensible for a single-session host and wrong for a dense one,
-which is what `IMZERO2_HEADLESS_RASTER_THREADS` is for.
+**p50 is flat from 2 to 16 workers**, so the knob no longer trades throughput
+at all: 4 → 16 buys ~1.5 ms of p99 for ~180 MiB and 2 ms more CPU per frame.
+The default was lowered from sixteen to four on that evidence. Raise it with
+`IMZERO2_HEADLESS_RASTER_THREADS` where the tail matters more than the RSS.
 
 ### 14.3 When to use which
 
 - **wgpu on a real GPU** — anywhere a GPU exists and a Vulkan stack is
-  acceptable. It is the only arm that does not spend the CPU: ~1.45 ms per
-  frame against 5–8 ms, which is 3.6–5.7× the session density on a host that
-  is also running queries. Best tail, lowest host memory. The cost is the
-  driver stack in the image, and GPU memory this measurement did not capture.
+  acceptable. Best tail by a clear margin (3.0 ms against 6.2), lowest host
+  memory (118 MiB against 228), and still the cheapest in CPU — though only by
+  ~20 % now, not the 4× it was before tiling. The cost is the driver stack in
+  the image, and GPU memory this measurement did not capture.
 - **the software host** — GPU-less deployments, and the clear winner over
-  lavapipe there: **7.8× the throughput and 12.5× less CPU**, with a better
-  tail too (4.5 ms vs 7.4). Also the right answer when the Vulkan/Mesa
-  dependency is itself the problem — an airgapped or minimal image
-  (`scripts/dev/airgap-lib.sh` warns today when the loader or an ICD is
-  missing), or a build where 2.4 MB of shader compiler is unwelcome. Paid for
-  in memory (2–3× the GPU arm) and in CPU.
+  lavapipe there: **24× the throughput and 65× less CPU**, with a better tail
+  too. Also the right answer when the Vulkan/Mesa dependency is itself the
+  problem — an airgapped or minimal image (`scripts/dev/airgap-lib.sh` warns
+  today when the loader or an ICD is missing), or a build where 2.4 MB of
+  shader compiler is unwelcome. It is now the *fastest* arm in wall-clock by
+  5×; what it still pays is ~2× the memory and a tail twice the GPU's.
 - **wgpu on lavapipe** — hard to justify on these numbers. It is slower than
   the software host on every axis measured and needs Mesa besides. It remains
   the fallback when something *must* go through a Vulkan device — a
@@ -924,12 +936,13 @@ and it inverts once it does: past that, spreading buys aggregate L3 capacity
 worth more than the locality it costs. This is also the mechanism behind
 §13.1's knee at ~5 Mpx, which was described there without a cause.
 
-**Consequence for any dual-CCD part, including a 5950X:** at 1920×1200 and
-below, pin the pool to one L3 domain — `taskset -c 0-15`, or systemd
-`CPUAffinity=` — and take 1.33×. The shipped default picks 16 workers on a
-32-thread machine but has no affinity, so the scheduler spreads them and lands
-in the *split* column. That is ~25 % left on the table for want of a pin, and
-it is a deployment setting rather than something this host should decide.
+**Consequence for any dual-CCD part, including a 5950X** — but only for a
+*large* pool. Re-measured after §17's tiling: at **16 workers** spanning two
+domains still costs 1.32× (302 µs against 400), while at the shipped default of
+**4 workers it costs 1.05×** (212 against 222), which is nothing. A pool small
+enough to sit inside one domain tends to be co-scheduled there anyway. The host
+warns about affinity only when the pool is more than half a domain's CPUs, on
+exactly that evidence.
 
 ### 16.3 So, a Zen 3 16-core
 
