@@ -137,6 +137,32 @@ per-frame work is `ctx.run` + tessellate + serialize (≈ 0.5 ms measured). A
 statically-linked host with no GL, no mesa, no ffmpeg becomes feasible — the
 enabling step for the appliance target, without writing a CPU rasterizer.
 
+> **Note, 2026-08-22 — the "without writing a CPU rasterizer" clause is now
+> optional.** The Context above rules server-side pixels out of the appliance on
+> a measured 28.6–62 ms CPU/frame for mesa/llvmpipe raster + readback at
+> 1280×800. A vendored CPU rasterizer (`headless_soft`,
+> [survey](../adr-background-work/egui-software-backend-survey.md)) does the
+> same job for **2.47 ms CPU/frame** at 1280×800 on four cores — 12–25× less,
+> confirmed against a directly measured lavapipe arm (102.6 ms CPU/frame at
+> 1920×1200, versus 8.22 ms for the rasterizer). It adds no C closure of its
+> own: `cargo tree --features headless_soft` carries no wgpu, no naga, no mesa.
+>
+> This does **not** retire the lane, for two reasons the survey does not touch.
+> The *encoder* half of the C closure is untouched — ffmpeg is still an external
+> dynamically-linked binary and still costs the 14–18 ms this ADR measured — so
+> a **streaming** appliance still wants the mesh lane, which encodes nothing.
+> And the rasterizer costs memory the lane does not: 188–416 MiB of client RSS
+> against the lane's tessellate-and-serialize.
+>
+> What it does change is that "pixels" and "appliance" are no longer mutually
+> exclusive. A gokrazy image that renders server-side — scripted captures
+> (ADR-0154), PNG endpoints, an image-serving head — is now viable without
+> mesa, where before it was not. The musl-static half of M3 is unaffected and
+> still deferred; note that the remaining C dependencies in that graph are
+> `ring` (via `rustls` ← `reqwest` ← the `walkers` map widget) and `mimalloc`,
+> so an appliance build that drops the map widget drops the crypto closure with
+> it.
+
 The M3 topology keeps this a *mode of the existing host*, not a second host
 binary. wgpu — the offscreen renderer and its GPU→CPU readback — moves behind a
 `headless_wgpu` Cargo feature; the bare `headless` feature is the carrier +
