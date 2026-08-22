@@ -359,12 +359,58 @@ how it gets bytes, not a separate design.
   240 px after a click or a drag, and tiles load through it all with zero
   re-ships. Not instrumented headless: pinch (no touch verb) and box zoom
   (the `drag` verb holds no modifier) — unit tests only.
-- **M4 — overlays and removal.** Markers, polylines with simplify and clip,
-  polygons, labels, raster via `paintImage`, H3 cells and regions (§SD9);
-  the demo gallery moves; delete `walkers_tiles.rs`, the walkers sections of
-  the interpreter and the walkers IDL; remove `walkers`, `reqwest` and, if
-  unused, `h3o`/`geo` from the manifest; re-measure ADR-0203's figures and
-  the musl check.
+- **M4 — overlays and removal.** ✓ Done 2026-08-22. *Overlays:* the
+  Projector gained Leaflet's vector pipeline — `Polyline` projects, clips
+  segment by segment to the viewport padded by 10% (Cohen–Sutherland, parts
+  split where the line leaves) and simplifies each part at `smoothFactor`
+  1 px; `Polygon` clips by Sutherland–Hodgman inside the clip box grown by
+  the stroke width, simplifies and fills ear-clipped with an optional
+  stroke; `ConvexPolygon` is the same with the painter's feathered fan for
+  rings known convex (H3 cells); `Marker`, `Label`, `Image` as before. The
+  map gained `SetSource` (the pyramid restarts on the new source at the
+  current view; the tile image version carries a source generation, so the
+  host re-uploads under the same ids instead of showing the old source) and
+  `Source`. *H3 (§SD9):* the `h3bridge` wasm gained `h3_dissolve` (cells →
+  multipolygon as CSR vertices, ring offsets, polygon offsets; open rings,
+  exteriors counter-clockwise, holes clockwise; a grow-once buffer protocol
+  like `h3_polygon_to_cells`) and the Go wrapper `Handle.DissolveE`, with ten
+  tests, a parity golden and the wasm rebuilt (340,768 → 383,580 bytes; no
+  existing golden moved); the new package `portolan/h3overlay` draws cells
+  (`Layer.Cells`, boundaries from `CellsToBoundariesE`, one convex fill per
+  cell) and regions (`Region.Draw`: cell fills, the dissolved outline
+  stroked holes included, a label at the largest exterior ring's centroid,
+  the dissolve cached by cell set), plus `ViewportCells` and
+  `ResolutionForZoom`; the map widget itself does not import the `h3`
+  runtime — only a caller that wants H3 pays for it. *The gallery:* the
+  walkers demo and the M0 spike are gone; the `portolan` demo carries
+  markers, the route, the H3 region, the viewport-driven heatmap, a
+  tile-server switch, the camera readout from the map itself and the
+  NoTiles choropleth; `mapraster` runs on `Projector.Image`. *Removal:* the
+  walkers IDL (`egui2_definition_d_walkers.go` and its six type
+  constructors) deleted and both dispatches regenerated (−1,523 generated
+  lines, the wire enum renumbered, so both sides rebuild together);
+  `walkers_tiles.rs`, the interpreter's walkers/H3 preamble and its
+  registers, the hand-written R15 camera cache (`WalkersCameraValue`,
+  `GetWalkersCamera`) and `basemap.Apply` deleted; `walkers`, `reqwest` and
+  `h3o` left the imzero2 manifest; SKILL.md §16 rewritten for portolan,
+  ADR-0056 marked superseded with a dated Update, the howtos that promised
+  "tiles are not captured headless" corrected (they are painter images now;
+  the SVG mirror stays Q3), every doc link to a deleted file de-linked.
+  *Figures (ADR-0203's Context re-taken, 2026-08-23):* distinct crates in
+  `cargo tree -e normal` 435 → 313 for the desktop build and 321 → 166 for
+  `headless_soft` — 117 lock entries gone, no additions, no version moves;
+  `reqwest`, `rustls`, `ring`, `hyper`, `walkers`, `h3o`, `geo`, `resvg`
+  and the second `png` appear in neither tree (`lru`, whose only user was
+  `walkers_tiles.rs`, went with it); compiler warnings 77 → 43, the
+  difference exactly the removed code's `geo_types` deprecations; and
+  `cargo check --target x86_64-unknown-linux-musl --no-default-features
+  --features headless_soft` passes with `ring` gone and `fast_alloc` off
+  (ADR-0205 M6) — the only `cc` user left is `blake3`'s build dependency,
+  which has a pure-Rust fallback, so no C toolchain stands between the
+  headless host and a static musl appliance. The crate's `rust-version`
+  stays 1.94 (its justification was `h3o`; a re-check finds 1.92 would
+  compile — lowering is a separate decision). `scripts/ci/
+  rust_imzero2_check.sh` passes.
 - **M5 — regression net.** A headless map scene that drags and zooms with
   §SD10's verb and asserts the camera readback; the screenshot tour scene.
 
@@ -405,9 +451,9 @@ weeks, with the go/no-go after M0.
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | egui2 IDL (`egui2_definition_d_walkers.go`) | `walkersMap`, `mapMarker`, `mapPolyline`, `h3Cells`, `h3Region`, `mapRaster`, `fetchR15WalkersCameras` removed at M4 | regenerated dispatch on both sides; `SKILL.md` §16; the interpreter's walkers sections; `walkers_tiles.rs` |
-| Exported Go API under `public/` | new package `widgets/portolan` (`Map`, overlays, view readback); `c.WalkersMap*`, `c.MapMarker*`…, `basemap.Apply(c.WalkersMapFluid)` removed at M4 | `play`, `terrainscope`, the demo gallery; `basemap` gains the `portolan`-typed `Apply` |
+| Exported Go API under `public/` | new packages `widgets/portolan` (`Map`, overlays, view readback) and `widgets/portolan/h3overlay` (cells, regions); `c.WalkersMap*`, `c.MapMarker*`…, `StateManager.GetWalkersCamera`, `basemap.Apply(c.WalkersMapFluid)` removed at M4 | `play`, `terrainscope`, the demo gallery; `basemap` gained `PortolanSource`/`PortolanLoader` at M2 |
 | Env registry (ADR-0009) | `BOXER_MAP_TILE_*` names and meanings kept; `_CA_FILE` / `_INSECURE_TLS` now configure Go's `http.Transport` instead of the renderer | `doc/env-vars.md` regeneration; the descriptions' "renderer" wording |
-| `h3bridge` wasm exports + Go wrapper | `h3_dissolve` added; `CellsToMultiPolygonE` (or similar) added | prebuilt wasm rebuilt at the last-good toolchain; `scripts/ci/h3_wasm_parity.sh` gains the case |
+| `h3bridge` wasm exports + Go wrapper | `h3_dissolve` added (M4); `Handle.DissolveE` added | prebuilt wasm rebuilt (340,768 → 383,580 bytes); `scripts/ci/h3_wasm_parity.sh` gains the case (`golden_dissolve.ndjson`); ADR-0003 carries the dated Update |
 | `imzero2` Cargo manifest | `walkers`, `reqwest` removed at M4; `h3o`, `geo` if unused; `[patch.crates-io]` untouched | `Cargo.lock`; the airgap bundle's crate set; ADR-0203's Context figures re-taken |
 | Headless trace driver (ADR-0154) | `drag` verb added (M0, shipped 2026-08-22) | its verb list in `doc/howto/launch-apps-non-interactively.md`; `carrierclient` |
 | `THIRD_PARTY_NOTICES.md` | Leaflet, BSD-2-Clause | the in-package licence text (§SD3) |
@@ -513,10 +559,11 @@ camera readback's consumers other than through the new package's view state.
 ## Status
 
 Proposed — 2026-08-22; revised in place the same day with M0's results, both
-halves (§SD6, §SD8, Q1, Q5), and with M1's, M2's and M3's completion.
-Implementation so far: the `drag` verb, the M0 spike, M1's kernel, M2's
-widget, with `play` and `terrainscope` on it, and M3's animations and
-handlers. On acceptance this ADR
+halves (§SD6, §SD8, Q1, Q5), and with M1's to M4's completion.
+Implementation so far: the `drag` verb, M1's kernel, M2's widget, with
+`play` and `terrainscope` on it, M3's animations and handlers, M4's overlays,
+H3 and the removal of the walkers binding (ADR-0056 now carries its
+supersession). On acceptance this ADR
 supersedes
 [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) (folded in, §SD4) and
 the Decision of [ADR-0203](./0203-map-widget-without-the-http-stack.md)

@@ -1292,158 +1292,50 @@ This avoids sentinel-value fragility (`0.0` meaning "unset"?) and preserves any 
 - Add a short-lived `tracing::info!(…)` inside the drain/apply for the duration of bring-up (node count, pending lengths, edges added this frame). Remove before committing.
 - For visual checks, run `IMZERO2_SCREENSHOT_DIR=/tmp/verify bash rust/imzero2/hmi.sh` and inspect `<window>.png`. Beware the 4-frame tour isn't enough for libraries that do first-frame geometry (force-directed convergence, etc.) — the screenshot captures an un-settled state; that doesn't mean the binding is broken.
 - A temporary revisit entry in `demoWindows` (same handle, different filename) lets the tour close and re-open a window to verify state persistence across hide/show cycles.
-## 16. walkers map + H3 overlays — binding limitations & gotchas
+## 16. portolan — the slippy map, its overlays and H3
 
-Companion notes for the bindings in [`egui2_definition_d_walkers.go`](../../../public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) and the Rust glue in [`interpreter.rs`](../../../rust/imzero2/src/imzero2/interpreter.rs). Covers what works, what doesn't, and the shapes that cross the FFI. See ADR-0007 for the design rationale.
+The slippy map is a Go widget on the painter lane (ADR-0204: Leaflet's map core ported; package [`widgets/portolan`](../../../public/thestack/imzero2/egui2/widgets/portolan/)), not an opcode: there is no map IDL, no Rust glue, and the host's only involvement is `paintImage` for the tiles and the canvas registers for input. The former `walkersMap` binding (ADR-0056) left at ADR-0204 M4 — `c.WalkersMap`, `c.MapMarker`, `c.H3Region`, `fetchR15WalkersCameras` and `StateManager.GetWalkersCamera` do not exist any more. The gallery demo [`egui2_hl_portolan_demo.go`](../../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_portolan_demo.go) exercises everything below.
 
 ### 16.1 API surface, in one page
 
-| What | IDL node | Shape |
+| What | Go | Shape |
 |---|---|---|
-| Basemap | `walkersMap` (plain widget) | `(id, initLat, initLon, noTiles) + .Width/.Height/.SetZoom/.CenterAt/.ZoomGesture/.Panning/.TileUrl/.TileAttribution/.TileAttributionUrl/.TileMaxZoom/.TileSize/.TileCaFile/.TileInsecureTls` |
-| Point marker | `mapMarker` (register-drain) | `(markerId, lat, lon) + .Label/.Color/.Radius` |
-| Polyline / closed ring | `mapPolyline` (register-drain) | `(lats[], lons[]) + .Stroke/.Closed` |
-| Bulk choropleth | `h3CellsColored` (register-drain) | `(cellIds[], rgbas[]) + .StrokeWidth/.StrokeColor` |
-| Aggregated ROI outline | `h3Region` (register-drain) | `(cellIds[]) + .Fill/.Stroke/.Label` |
-| Viewport / pointer read-back | `fetchR15WalkersCameras` (fetcher) | 14 parallel arrays keyed by `mapIds[]`; read one map's via `StateManager.GetWalkersCamera(handle) (WalkersCameraValue, ok)` |
+| The map | `portolan.New(ids, portolan.Options{...}) *Map` | `Options`: `Source` (`TileSource`, OSM by default), `Loader` (`LoaderOptions`), `Center`, `Zoom`, `CRS` (EPSG3857 by default; `EPSG4326`, `EPSG3395`, `Simple`), `MinZoom/MaxZoom` + `Has*`, `MaxBounds`, `ZoomSnap` (0 = continuous), `ZoomDelta`, `NoDragging/NoScrollWheelZoom/NoDoubleClickZoom/NoPinchZoom/NoBoxZoom/NoKeyboard/NoZoomAnimation`, `Handlers` (inertia, viscosity, wheel knobs — Leaflet's defaults), `Background`, `HideAttribution`, `NoTiles` |
+| Basemap from the environment | `basemap.PortolanSource()`, `basemap.PortolanLoader()` | the `BOXER_MAP_TILE_*` vars as a `TileSource` and the TLS knobs as `LoaderOptions`; every app's map goes through these |
+| Draw | `m.Render(w, h, overlay func(portolan.Projector))`, `m.RenderFill(fallbackW, fallbackH, overlay)` | one canvas per frame; `RenderFill` takes the pane's captured size |
+| The view | `m.View() *portolan.View` | Leaflet's Map view: `SetView/SetZoom/PanTo/PanBy/FitBounds/FitWorld`, animated `SetViewAnimated/SetZoomAnimated/SetZoomAroundAnimated/PanToAnimated/PanByAnimated/FlyTo/FlyToBounds/FitBoundsAnimated`, `Stop`, `Center/Zoom/Bounds/Size`, `LatLngToContainerPoint/ContainerPointToLatLng`, `SetMaxBounds/SetMinZoom/SetMaxZoom` |
+| Readback | `m.Hover() (LatLng, bool)`, `m.Clicked() (LatLng, bool)`, `m.ViewHash()`, `m.Events()`, `m.Loading()`, `m.Stats()`, `m.Health()`, `m.BytesShipped()`, `m.Reships()` | all from the map itself, one frame behind the host like every canvas register |
+| Tiles | `m.SetSource(src)`, `m.Source()`, `m.SetNoTiles(on)` | a source switch restarts the pyramid at the current view and re-uploads under the same ids |
+| Overlays (inside the callback) | `p.Marker`, `p.Label`, `p.Polyline`, `p.Polygon`, `p.ConvexPolygon`, `p.Image`; `p.ToCanvas/ToLatLng/View` | canvas-pixel painting through `c.Paint*`; polylines and polygons are projected, clipped to the padded viewport and simplified per frame (Leaflet's vector pipeline), so a geometry far larger than the view costs its visible part |
+| H3 cells and regions | [`portolan/h3overlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/h3overlay/): `Layer.Cells`, `Layer.Region`, `ViewportCells`, `ResolutionForZoom` | boundaries and the dissolve come from the `h3` wasm bridge (`public/science/geo/h3`); the caller owns the `h3.Handle` — the map does not depend on the runtime |
 
-Two emission patterns trip up new walkers code routinely — read §16.2 (overlay ordering) and §16.3 (sticky `SetZoom`/`CenterAt` semantics) before writing or modifying a walkers demo. The remaining subsections are reference material for narrower gotchas.
+### 16.2 Input is read the canvas way — and the map takes keyboard focus itself
 
-### 16.2 Overlays must be emitted before the map opcode in the same frame
+The map owns a `PaintCanvas` with a sense region over it: the drag's origin is the sense region's press, positions come from the frame-end pointer (R20), and the view during a drag is the view at the press plus the offset from the origin (never a sum of per-frame deltas — that recipe lost 20 × 10 px of a 240 × 120 px drag). The wheel and the pinch arrive through the canvas's R23 row. None of that needs a `TabNoScroll`: the canvas captures the wheel while hovered, so a map sits under a plain `Tab`.
 
-* **Symptom.** `MapMarker` / `MapPolyline` / `H3CellsColored` / `H3Region` calls don't render on the map. Rust logs `walkers pending overlays leaked` and the registers are cleared at frame end.
-* **Cause.** Overlays are a register-drain pattern (see §13.1 "The Global Register File"). Each overlay opcode pushes into a per-frame `Vec<…>` on the interpreter; the next `WalkersMap.Send()` in the same frame `std::mem::take`s and consumes it. Overlays emitted *after* the map have no consumer this frame — `prepare_next_frame()` clears the leaked registers and logs.
-* **Pattern.** Always emit overlays before the map opcode:
+Arrow keys pan and Escape cancels a box zoom through a key-capturing Frame (ADR-0177) around the canvas. The map asks for focus on a press **and again on the click's release**: egui's default surrenders focus at a click's release when the focused widget is not the clicked one, so a press-time request alone leaves the arrows dead. If you wrap the map in something that takes focus on click, expect to lose the keys.
 
-```go
-// WRONG — overlays orphaned, never rendered
-c.WalkersMap(ids.PrepareStr("m"), lat, lon, false).Width(w).Height(h).Send()
-c.MapMarker(1, lat, lon).Color(color.Hex(0xff0000ff)).Send()
-c.MapPolyline(lats, lons).Stroke(color.Hex(0xffffffff), 2).Send()
+### 16.3 Overlays are drawn in the callback, with the frame's projector
 
-// RIGHT — overlays drain into the map render
-c.MapMarker(1, lat, lon).Color(color.Hex(0xff0000ff)).Send()
-c.MapPolyline(lats, lons).Stroke(color.Hex(0xffffffff), 2).Send()
-c.WalkersMap(ids.PrepareStr("m"), lat, lon, false).Width(w).Height(h).Send()
-```
+The `Projector` is valid only inside the `Render` callback for that frame — it closes over the view the tiles were just drawn with. Compute geometry outside (cells, colours, simplification inputs) and only project and paint inside. `p.Image` carries the send-once protocol (pixels ship on a version bump or when the host reports the texture starved; pass the full slice every frame and let it decide) — the play Map panel's raster and the `mapraster` demo are the examples.
 
-If overlays must be computed from the visible viewport (e.g. a viewport-driven heatmap), emit them from the **previous** frame's camera via `StateManager.GetWalkersCamera()` and accept the one-frame lag — imperceptible at interactive cadence. The camera cannot be fetched inline during render; see `doc/skills/imzero2-fetchers/SKILL.md` for the deadlock rationale and §16.5 below for how to address a specific map.
+### 16.4 Two maps in one scope need their own id scopes
 
-### 16.3 `SetZoom` and `CenterAt` are sticky for one frame — gate them on an apply-once flag
+A map derives its ids from the stack it was given at `New` (`portolan`, `portolan-canvas`, `portolan-area`, `portolan-keys`, `tile-*`). Two maps rendered under the same stack state collide silently (the second one's responses vanish — the usual duplicate-id symptom). Wrap each in its own `c.IdScope(...)` at both construction and render, as the demo does for its choropleth canvas.
 
-* **Symptom.** After the app computes a new view (e.g. "fit the two clicked points", "recentre on selection") the user can no longer pan or zoom the map interactively. Every drag snaps back to the computed position on the next frame; the zoom slider has no visible effect.
-* **Cause.** `WalkersMap.SetZoom(z)` and `WalkersMap.CenterAt(lat, lon)` set `override_zoom` / `override_center` arguments on the walkers widget. On the Rust side these are **sticky for exactly one frame**: walkers applies the override to its internal `MapMemory`, then clears it. User pan/zoom writes into the same `MapMemory` between frames. If Go code calls `SetZoom` / `CenterAt` unconditionally every frame, the user's interactive state is overwritten on every render before walkers gets a chance to honour it.
-* **Pattern.** Gate the calls on a boolean that flips on a discrete event and clears after one use:
+### 16.5 Headless and export
 
-```go
-type st struct {
-    overrideZoom   float64
-    applyZoom      bool
-    overrideCenter [2]float64
-    applyCenter    bool
-}
+Tiles are painter images, so a headless PNG capture shows the basemap (unlike the removed binding, whose tiles lived outside the painter). Whether the SVG export mirrors `paintImage` rasters is ADR-0204's Q3, still open — check the output before relying on it. The `drag` trace verb (`{"do":"drag","x":..,"y":..,"toX":..,"toY":..,"steps":..,"durationMs":..}`) pans a map in a headless scene; the demo's readout labels (`centre … zoom … bounds …`, `tiles: …`, `shipped …`) are what a scene asserts on.
 
-// On the event that should retarget the view (e.g. user finishes selection):
-st.overrideZoom = 12.0
-st.applyZoom = true
-st.overrideCenter = [2]float64{midLat, midLon}
-st.applyCenter = true
+### 16.6 Resolution of common errors
 
-// In the render body:
-mw := c.WalkersMap(ids.PrepareStr("m"), initLat, initLon, false).
-    Width(w).Height(h)
-if st.applyZoom {
-    mw = mw.SetZoom(st.overrideZoom)
-    st.applyZoom = false
-}
-if st.applyCenter {
-    mw = mw.CenterAt(st.overrideCenter[0], st.overrideCenter[1])
-    st.applyCenter = false
-}
-mw.Send()
-```
-
-The canonical implementation lives in `egui2_hl_walkers_demo.go` (search for `applyZoom`). The deliberate opposite case — driving a non-interactive secondary map from a primary's camera *every frame* — is described in §16.4; outside that pattern, an unconditional per-frame `SetZoom` / `CenterAt` is almost always a bug.
-
-### 16.4 Ctrl+Wheel zooms all visible walkers maps at once
-
-* **Symptom.** Multiple `walkersMap` widgets visible; Ctrl+Wheel over one of them zooms all of them.
-* **Cause.** Walkers' gesture handler reads `ui.input(|i| i.zoom_delta())` once per map and gates via `ui.ui_contains_pointer()` on the parent Ui, not the map's response rect. In overlapping or stacked layouts more than one parent Ui's rect can contain the pointer, so multiple maps apply the zoom delta. This is walkers-side, not ImZero2-side.
-* **Pattern.** For dashboards with multiple maps, keep zoom interactive on exactly one — call `.ZoomGesture(false)` on the others and mirror state explicitly: read the primary's camera via `StateManager.GetWalkersCamera()` and drive the secondaries with `.SetZoom(z).CenterAt(lat, lon)` every frame. (Driving every frame is appropriate here because the secondary is non-interactive by construction — for the user-interactive case, the per-frame override is a bug; see §16.3.)
-
-### 16.5 The camera fetcher is keyed by map id, and entries are retained
-
-* **Pattern.** `StateManager.GetWalkersCamera(handle)` takes the map's widget handle and returns `(WalkersCameraValue, ok)`. Pass the handle of the map you mean; there is no ambient "current" camera to get wrong.
-* **Retained, not drained.** A map that did not render this frame keeps its last camera, because a reader running a frame behind the viewport — the Go-side heatmap recompute is the motivating case — still needs one. `ok == false` means that map has never rendered, not that it is stale. One entry per map id ever rendered, so the map is bounded the way the dock's state is.
-* **Non-consuming.** Several readers per frame (an overlay emitter and an on-screen camera readout) all see the same value.
-* **History.** This was a single `walkers_last_camera` slot until 2026-08-04, which meant the last map to render in a frame was the only one anyone could read: two maps — two windows of one app, or play beside terrainscope — and a reader either got the wrong camera or, once it checked the id, none at all. Code written against that era may still arrange for "my map renders last"; that workaround is no longer needed and the ordering it depends on is not guaranteed.
-
-### 16.6 Antimeridian-crossing polygons are culled incorrectly
-
-* **Symptom.** A region whose cells straddle ±180° longitude (Russia, Fiji, Aleutians, NZ dateline) disappears or renders as a world-spanning ghost.
-* **Cause.** `OverlayPlugin` culls each overlay by a naive AABB in lat/lng space. For a polygon that spans the antimeridian, `min_lon` and `max_lon` invert (e.g. `-179.5` to `+179.5` becomes the whole world) and the AABB check either admits everything or nothing depending on the viewport.
-* **Pattern.** Either (a) split such polygons at ±180° on the Go side before sending, or (b) skip the Go-side cull for sensitive data and rely on egui's screen-space clipping. Long-term fix is an antimeridian-aware splitter in `bbox_of_rings`; deferred until the first real dataset hits it.
-
-### 16.7 `h3Region` fill paints per-cell hexes, not a single tessellated polygon
-
-* **Symptom.** At low zoom levels with large cell counts (thousands of cells in a country-scale ROI), you can see the hex grid inside the filled area; fill performance drops roughly linearly with cell count.
-* **Cause.** `h3Region.Fill` is implemented by drawing each cell as a `egui::Shape::convex_polygon`. Filling the dissolved outline instead needs concave tessellation, which the binding does not do. Per-cell fill is honest at H3-native scales (hundreds of cells) and visually reveals the H3 grid — often desired.
-* **The escape hatch is cheaper than it was.** `earcutr` is now a dependency (ear-clip triangulation, added for the painter's `paintPolygonFilled(...).Concave()`), so a smooth fill no longer means taking a new dep — only routing `H3RegionRenderable.outline_rings` through it instead of `cell_boundaries`.
-* **Pattern.** For country-scale ROIs where you want a smooth fill, use `h3Region.Stroke(...)` only (omit `.Fill(...)`) and let the dissolved outline do the work. Or compact the cellset to the coarsest resolution that still bounds your area.
-
-### 16.8 Custom tile servers
-
-* **Don't call these directly in an app — use `widgets/basemap`.** `basemap.Apply(mw)` resolves the whole tile config from the `BOXER_MAP_TILE_*` env block (ADR-0009), so one deployment-level setting repoints every basemap. The methods below are what it sends; call them yourself only in a widget demo or a one-off.
-* **`.TileUrl(template)`** — XYZ template with `{z}`, `{x}`, `{y}` placeholders. Empty **at the widget level** falls back to walkers' built-in `OpenStreetMap` source, but `basemap.Apply` always sends a URL: `BOXER_MAP_TILE_URL` defaults to the OpenStreetMap endpoint, so the default server is stated in the env registry rather than hidden in Rust (ADR-0056 §SD16).
-* **No `{s}` subdomain rotation.** Replace `{s}` with a concrete subdomain (`a`, `b`, `c`) before passing the URL. This is a deliberate v1 cut; revisit if rate-limiting becomes a real problem.
-* **TLS: `.TileCaFile(path)` / `.TileInsecureTls(on)`** — the renderer's HTTP client trusts the bundled webpki roots and nothing else (no system trust store, `SSL_CERT_FILE` ignored), so an https tile server behind an internal CA needs one of these. The CA file must hold the **issuing CA**; a bare self-signed server certificate is not accepted as its own trust anchor and needs the insecure knob. `basemap.Apply` gates both on `BOXER_MAP_TILE_URL` being set *explicitly*, so neither can weaken the connection to the default public server (§SD17).
-* **Change detection.** The Rust side hashes `(url, attribution, attributionUrl, size, maxZoom, noTiles, caFile, insecureTls)` per map id. When the hash changes the tile source is rebuilt in place; `MapMemory` (pan/zoom) survives. Logged at `INFO`.
-* **Attribution leaks once.** `walkers::sources::Attribution` requires `&'static str`. The custom-source bridge `Box::leak`s the user-supplied strings **once at construction time**, not per `attribution()` call. Bounded growth in practice (one leak per unique attribution seen during the process lifetime).
-
-### 16.9 `walkers::Position` coordinate order is `(lng, lat)` in constructors, not `(lat, lng)`
-
-* **Symptom.** Points render on the wrong hemisphere or meridian.
-* **Cause.** `walkers::Position` is a type alias for `geo_types::Point<f64>`, where `x=longitude, y=latitude`. Constructors: `walkers::lon_lat(lon, lat)` and `walkers::lat_lon(lat, lon)`. Accessors: `.lng()` and `.lat()` — **not** `.lon()` (does not exist on `geo_types::Point`).
-* **Pattern.** Always use the named constructors (`walkers::lon_lat`/`walkers::lat_lon`) and accessors (`.lat()`/`.lng()`). Never poke `.x`/`.y` unless converting from a flat `Vec2`.
-
-### 16.10 `Projector::project`/`unproject` take and return absolute viewport coordinates
-
-* **Symptom.** Overlays drift relative to tiles when zooming — millimetres at low zoom, kilometres at high zoom (Mercator scaling amplifies the error).
-* **Cause.** Walkers' `Projector::project(Position) -> Vec2` returns **absolute** viewport-space pixels — it internally adds `clip_rect.center()`. Same for `unproject(Vec2) -> Position`, which expects absolute pixels and subtracts `clip_center`. Adding `rect.center()` to `project`'s output (or subtracting it from `unproject`'s input) double-counts the center and the error grows with zoom.
-* **Pattern.** Convert directly: `projector.project(pos).to_pos2()` and `projector.unproject(screen_pos.to_vec2())`. Do not add/subtract any `rect.center()`. The fix is baked into `OverlayPlugin`; mentioned here so plugin authors extending the binding don't re-introduce it.
-
-### 16.11 h3o-wazero initialization and handle reuse
-
-* **Pattern.** The demo boots a single `h3.Runtime` with `PoolSize: 1` via `sync.Once` and checks out exactly one `Handle` that lives for the process. ImZero2's Go side is single-threaded (see pitfall §12 "Framework Data Race"), so a single handle is safe across frames and amortises wazero's scratch allocation.
-* **Lazy init, do not panic.** `ensureH3()` returns an error instead of panicking; UI code that needs H3 should render a graceful fallback label (`"h3 runtime not ready"`) and skip the overlay. Burst-starting the runtime on frame 0 adds ~10–50 ms of wasm compile time — acceptable, but don't do it synchronously inside a hot render path if you care about first-paint latency.
-* **Resolution choice.** The demo uses the heuristic `h3ResForZoom(zoom) = clamp(round(zoom/2 - 1), 1, 12)`. Works for a rough "cells scale with view" mapping; real apps should tune (or precompute per-resolution cell sets and pick based on data size, not zoom).
-
-### 16.12 Tiles are fetched by imzero2, not by walkers
-
-* **`walkers::HttpTiles` is never constructed.** `imzero2::walkers_tiles::BasemapTiles` implements walkers' public `Tiles` trait and is the only tile client (ADR-0056 §SD12, §SD19). walkers exposes no seam for TLS configuration — its client is built internally from `HttpOptions`, and `Fetch`/`TilesIo`/`TileFactory` are private to the crate — and two clients selected by an env knob meant the path a deployment ran was not the path anyone tested.
-* **One process-wide download pool.** Six worker threads in a `OnceLock`, shared by every map, logging `started the tile download pool` exactly once. walkers gives each `HttpTiles` its own runtime and its own six-download budget, so N maps meant 6N concurrent connections to one server; the pool makes the cap mean something at the level a tile server rate-limits at. A second start line would mean the pool had stopped being shared.
-* **Thread safety.** Workers touch only `egui::Context` (`Send + Sync`) — decoding and texture upload happen there deliberately, off the render thread, because a screenful is 20–40 PNG decodes. The ImZero2 single-thread rule for the Go-facing `c.*` API is unaffected.
-* **Footprint.** `reqwest` (rustls, `blocking`) and `lru` are direct deps; `tokio` still arrives via walkers on native. Binary grows by ~5 MB. The wasm build path omits tokio.
-* **User agent** is `boxer-imzero2/<version>`, not `walkers/<version>`. OpenStreetMap's tile usage policy wants an identifying agent with contact details; adding contact configuration is deferred (§SD21).
-
-### 16.13 Resolution of common errors
-
-| Symptom / log line | Likely cause | Fix |
+| Symptom | Cause | Fix |
 |---|---|---|
-| *(silent — the `late culled walkers map` line is commented out in `render_walkers_map`)* Map renders nothing and its overlays vanish | Parent block (window/collapsing header) was skipped this frame, so the widget was late-culled | Move the `walkersMap` out of a collapsing header, or use `.DefaultOpen(true)` and a wrapper that survives the 4-frame screenshot tour (see §12 CollapsingHeader pitfall). Uncomment the `tracing::debug!` to confirm before hunting elsewhere |
-| `walkers pending overlays leaked` | Register-drain overlays sent without a following `walkersMap` to drain them | Ensure overlay calls happen *before* the `walkersMap` opcode, in the same frame (see §16.2) |
-| `walkers tile config changed — rebuilt the tile source` (repeated) | Tile config signature changing every frame | Likely inadvertent (changing URL / attribution / zoom / size / TLS config in a tight loop). Pin the config to a Go-side variable and only update on real user input |
-| `h3 runtime init failed` | h3o-wasm artifact missing or wazero compile error | Verify boxer's `public/science/geo/h3/internal/h3o_wasm` has the built artifact (`.wasm` file); rebuild boxer if stale |
-
-### 16.14 Known limitations — longer-term work
-
-- **Bug 2** (§16.4) — upstream walkers issue; needs a tighter `response.rect.contains(pointer_pos)` gate in walkers' own gesture handler.
-- **Antimeridian culling** (§16.6) — wait for first real dataset to hit this; then add splitter in `bbox_of_rings`.
-- **Concave tessellation** (§16.7) — route `h3Region.Fill` through the `earcutr` dep that already exists, when a real ROI workflow demands smooth fills at country scale.
-- **`{s}` subdomain rotation** (§16.8) — add a `.TileSubdomains([]string)` method if public-tile rate-limiting becomes visible.
-- **Tile transport still lives in the renderer** (§16.12) — [ADR-0165](../../adr/0165-imzero2-tile-transport-over-fffi2.md) proposes routing requests over FFFI2 into Go so there is one configured network egress point; the `TileTransport` trait is the seam it drops into.
-- **Mapbox/Geoportal presets** — users can pass the right URL template with `.TileUrl` today; a named preset would save typing but adds little beyond that.
-- **Interactive ROI drawing** — v1 is display-only. Brush / click-to-draw / vertex-drag edit modes are scoped in the design but not implemented. Go owns drawing state by design (no Rust-side draw-tool state).
+| Grey map, `tiles: N requested · 0 loaded`, `consecutive fetch failures` rising | the tile server is unreachable or its TLS does not chain | `BOXER_MAP_TILE_URL` / `_CA_FILE` / `_INSECURE_TLS` (doc/env-vars.md); `m.Health()` carries the last error |
+| Arrows do nothing | the map never got focus (see §16.2) | click the map first; do not wrap it in a focusable Frame |
+| Overlay drawn at the wrong place after a zoom | geometry projected outside the callback, or cached canvas points | project inside the callback every frame |
+| Second map inert | duplicate ids | own `c.IdScope` per map (§16.4) |
+| H3 layer empty | the `h3` runtime failed to initialise | check the log for `h3 runtime init failed`; the demo's `ensureH3` pattern |
 
 ## 17. Badge / Chip — high-level Frame composition
 

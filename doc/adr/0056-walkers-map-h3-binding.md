@@ -175,19 +175,25 @@ The Decision left the unconfigured case to the renderer: empty URL template → 
 
 **Consequences.** Verified live: the pool logs `started the tile download pool` exactly once with six workers; the default OpenStreetMap path fetches with no errors; and both TLS paths still work against a probe server — insecure serves tiles and warns once, the CA file serves tiles and adds roots with verification on.
 
+### 2026-08-22 — superseded by ADR-0204: the binding is removed
+
+ADR-0204 ported Leaflet's map core to Go on the painter lane (`widgets/portolan`), and its M4 removed everything this ADR added: the `walkersMap`, `mapMarker`, `mapPolyline`, `h3Cells`/`h3CellsColored`, `h3Region` and `mapRaster` opcodes and the `fetchR15WalkersCameras` fetcher from the IDL and both generated dispatches; `walkers_tiles.rs` and the interpreter's walkers sections; the `walkers`, `reqwest` and `h3o` crates from the imzero2 manifest (the H3 dissolve now lives in the `h3bridge` wasm, ADR-0204 §SD9); `basemap.Apply`; SKILL.md §16 (rewritten for portolan). What this ADR's Updates settled carries over unchanged in kind: the basemap is still configured through the `BOXER_MAP_TILE_*` env defaults (now `basemap.PortolanSource`/`PortolanLoader`), one download pool still serves every map, and the TLS knobs still apply only to an explicitly configured server. The camera register is gone because the map owns its view Go-side; readers ask the `portolan.Map` directly.
+
 ## Status
 
-Accepted — 2026-04-23. Implementation shipped across commits `8669a813` (initial binding), `0556800f` (tile server config), `1bdbebc8` (RadioButton UX cleanup), `c5f163ba` (h3o-wazero integration + uniform heatmap), and `7162f955` (SKILL.md §16 + this ADR). Known limitations documented here and in [`SKILL.md §16`](../skills/imzero2/SKILL.md) are deferred work with explicit triggers — no blocker for the current scope.
+Superseded by [ADR-0204](./0204-leaflet-map-core-port.md) — 2026-08-22, whose
+M4 removed the binding (see the Update of that date). Before that: Accepted —
+2026-04-23. Implementation shipped across commits `8669a813` (initial binding), `0556800f` (tile server config), `1bdbebc8` (RadioButton UX cleanup), `c5f163ba` (h3o-wazero integration + uniform heatmap), and `7162f955` (SKILL.md §16 + this ADR). Known limitations documented here and in [`SKILL.md §16`](../skills/imzero2/SKILL.md) are deferred work with explicit triggers — no blocker for the current scope.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
 ## References
 
-- [`doc/skills/imzero2/SKILL.md`](../skills/imzero2/SKILL.md) §16 — walkers binding limitations and gotchas (companion to this ADR).
+- [`doc/skills/imzero2/SKILL.md`](../skills/imzero2/SKILL.md) §16 — was the walkers binding's limitations and gotchas (companion to this ADR); rewritten for the portolan map at ADR-0204 M4.
 - [`doc/adr/0003-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — prior ImZero2 binding ADR; template shape followed here.
-- [`public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) — walkers IDL definitions (walkersMap, mapMarker, mapPolyline, h3CellsColored, h3Region, fetchR15WalkersCamera).
+- `public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go` — the walkers IDL definitions (walkersMap, mapMarker, mapPolyline, h3CellsColored, h3Region, fetchR15WalkersCamera); deleted at ADR-0204 M4, in the history before commit `10085a45`'s successors.
 - [`rust/imzero2/src/imzero2/interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs) — `WalkersState`, `CustomTileSource`, `OverlayPlugin`, `render_walkers_map`, `aggregate_h3_region`, `bbox_of_rings`.
-- [`public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go) — reference demo including the uniform-heatmap challenger.
+- `public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go` — the reference demo including the uniform-heatmap challenger; replaced by `egui2_hl_portolan_demo.go` at ADR-0204 M4.
 - [`public/science/geo/h3/`](https://github.com/stergiotis/boxer/tree/main/public/science/geo/h3) — h3o compiled to wasm + wazero runtime (Go-side H3 without CGO).
 - [`walkers = "0.53"`](https://crates.io/crates/walkers) — slippy map widget for egui.
 - [`h3o = "0.9"`](https://crates.io/crates/h3o) — pure-Rust H3 implementation (native + wasm).

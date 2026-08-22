@@ -33,7 +33,7 @@ WithApplyCodeClientRust(applyCodeWidgetRustOnEvent(true, respEventClicked,
     rustClientCode("self.r10_push({{Id}}.value(), true);\n"))).
 ```
 
-The push value is the literal `true`: inside the `clicked()` gate the radio is by definition newly selected, so the previous `checked || clicked` collapses to `true`. The bound `*bool` becomes `true` on the click frame and the user reads the rising edge against the current `walkersTileSrcIdx == i` predicate (or analogous). The walkers tile-server selector at [`egui2_hl_walkers_demo.go:225`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go) is the canonical migration: a persistent `walkersRadioBound []bool` plus a two-pass loop (edge-detect, then render) that avoids the one-frame visual artifact when selection changes.
+The push value is the literal `true`: inside the `clicked()` gate the radio is by definition newly selected, so the previous `checked || clicked` collapses to `true`. The bound `*bool` becomes `true` on the click frame and the user reads the rising edge against the current `walkersTileSrcIdx == i` predicate (or analogous). The walkers tile-server selector at `egui2_hl_walkers_demo.go:225` is the canonical migration: a persistent `walkersRadioBound []bool` plus a two-pass loop (edge-detect, then render) that avoids the one-frame visual artifact when selection changes.
 
 ## Alternatives
 
@@ -73,5 +73,5 @@ ADRs are append-only; supersession is recorded, not deleted.
 - Commit landing the contract: `7a664db9` — *fix(imzero2): gate RadioButton state push on .clicked() event*.
 - Helper: [`egui2_definition_d_codeblocks.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_codeblocks.go).
 - Drift guard: [`egui2_definition_d_widgets_test.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_widgets_test.go).
-- Migration example: [`egui2_hl_walkers_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go).
+- Migration example: `egui2_hl_walkers_demo.go`.
 - Related: [ADR-0059 — declarative layouting](0059-imzero2-declarative-layouting-over-visual-builder.md), [ADR-0012 — collapsible retained bodies](0012-imzero2-collapsible-retained-bodies.md).

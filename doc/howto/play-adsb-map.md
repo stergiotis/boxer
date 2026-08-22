@@ -10,8 +10,9 @@ reviewed-date: 2026-06-27
 
 The `play` app's **Map** tab ([ADR-0096](../adr/0096-play-geo-raster-map-panel.md))
 renders a geo-raster: points are binned into a pixel grid and coloured *inside
-ClickHouse*, then drawn on a [walkers](../adr/0056-walkers-map-h3-binding.md)
-slippy map that re-queries as you pan and zoom. This recipe reproduces the
+ClickHouse*, then drawn on a slippy map
+([portolan](../adr/0204-leaflet-map-core-port.md)) that re-queries as you pan
+and zoom. This recipe reproduces the
 canonical case — aircraft density over London, the
 [adsb.exposed](https://github.com/ClickHouse/adsb.exposed) technique — end to
 end.
@@ -143,16 +144,15 @@ go test -tags="$(cat ./tags)" ./apps/play/ -run TestMapRasterLive -v -timeout 60
 ## Optional — OpenStreetMap basemap
 
 Uncheck **"no basemap"** in the Map controls to draw the raster over OSM tiles
-(the walkers default source), and lower **opacity** to about 0.5–0.7 so the map
-reads through. Two caveats:
+(the default source), and lower **opacity** to about 0.5–0.7 so the map reads
+through. Two caveats:
 
 - It is **online** — tiles load from `tile.openstreetmap.org`, which breaks the
   offline/airgap path (that is why `noTiles` is the default).
-- The basemap is **not captured in headless screenshots**: walkers' `HttpTiles`
-  load outside the egui painter, so the SVG/screenshot export
-  ([ADR-0096](../adr/0096-play-geo-raster-map-panel.md) §SD8) sees only the
-  raster overlay. OSM shows in an interactive window only. There is no env knob
-  for the toggle.
+- The basemap shows in headless PNG captures (tiles are painter images since
+  ADR-0204 M4), but whether the SVG export embeds them is still open (ADR-0204
+  Q3) — check the export before relying on it. There is no env knob for the
+  toggle.
 
 A custom XYZ tile server can be substituted, but the panel currently hardcodes
 the default source; passing a real `.TileUrl("https://.../{z}/{x}/{y}.png")`

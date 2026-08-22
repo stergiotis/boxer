@@ -90,9 +90,9 @@ you need (tables, plots, cards). Everything the widget paints is exported.
   having a matching font.
 - **Not everything translates.** Vector content — text, shapes, plots, tables —
   maps cleanly. Textured images embed only when their pixels are in the texture
-  cache; custom wgpu paint callbacks become placeholder rectangles; walkers map
-  tiles are not captured. Check the output for anything painted through those
-  paths.
+  cache; custom wgpu paint callbacks become placeholder rectangles; whether
+  map tiles (painter images, ADR-0204) embed is still open (its Q3). Check the
+  output for anything painted through those paths.
 - **Background versus theme.** egui's default theme is light text on a dark
   surface. `bg=transparent` suits embedding in a dark-themed page, but on a white
   page the text is invisible — use an opaque `bg` for standalone viewing.

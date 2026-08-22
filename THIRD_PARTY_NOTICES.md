@@ -456,8 +456,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   package's `doc.go`).
 - Origin: <https://github.com/Leaflet/Leaflet>, commit
   `c96f31a7a350a07cfbc852cf88e6ca69af5f5ec9` (the 2.0.0-alpha.1 line).
-- Use: the slippy-map widget that replaces the `walkers` crate binding
-  (ADR-0056) once the port reaches parity.
+- Use: the slippy-map widget; it replaced the `walkers` crate binding
+  (ADR-0056) at ADR-0204 M4.
 - Licence: BSD-2-Clause; the text travels with the package as
   `LICENSE-leaflet.txt`, and the package comment carries the attribution.
   BSD-2 is compatible with the root [LICENSE](LICENSE) (MIT) — the notice and

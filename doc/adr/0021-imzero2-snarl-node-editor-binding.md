@@ -256,4 +256,4 @@ point if a node editor is wanted again; ADR-0194 does not decide that.
 - [`Fattorino/ImNodeFlow`](https://github.com/Fattorino/ImNodeFlow) — simpler C++ reference cited in the request; covered by Snarl on functionality (see O3/O4 in QOC).
 - [`egui_xyflow`](https://github.com/avinkrisv/egui_xyflow) — alternative crate held in reserve as the O2 escape hatch.
 - [`public/thestack/imzero2/egui2/definition/egui2_definition_d_dock.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_dock.go) — viewer-trait + retained-state binding precedent that this ADR mirrors.
-- [`public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) — register-drain accumulator + thick-client apply precedent.
+- `public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go` — register-drain accumulator + thick-client apply precedent.

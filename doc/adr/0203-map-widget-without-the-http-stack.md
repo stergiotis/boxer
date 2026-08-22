@@ -132,6 +132,21 @@ This is the same shape as [ADR-0202](./0202-retire-arrow-parquet.md), where thre
 call sites were holding a subtree worth 29.5% of the Go closure. Here one widget
 holds a transport stack worth 5.5% of the client's machine code.
 
+**Re-measured 2026-08-23, after ADR-0204 M4 removed the binding.** The
+figures above described a tree that no longer exists: with `walkers`,
+imzero2's own `reqwest` and `h3o` out of the manifest (and `lru`, which only
+`walkers_tiles.rs` used), the distinct-crate count of `cargo tree -e normal`
+fell from 435 to 313 for the desktop build and from 321 to 166 for the
+`headless_soft` host — 117 lock entries, no additions — and none of
+`reqwest`, `rustls`, `ring`, `hyper`, `walkers`, `h3o`, `geo`, `resvg` or the
+second `png` remains in either tree. The musl check passes: `cargo check
+--target x86_64-unknown-linux-musl --no-default-features --features
+headless_soft` with `fast_alloc` off (ADR-0205 M6) has no C-compiling crate
+left but `blake3`'s build dependency, which falls back to pure Rust. O1–O3 of
+the Design space below are therefore moot as remedies; what remains of this
+ADR is the analysis, and its Decision is superseded by ADR-0204 on that
+ADR's acceptance (its Q2 / F7).
+
 ## Design space (QOC)
 
 **Question.** How should the basemap widget stop dragging an HTTP and TLS stack
@@ -467,7 +482,7 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 - [ADR-0154 — headless carrier tree and driver](./0154-headless-carrier-tree-and-driver.md) — the trace driver M3 extends.
 - [ADR-0173 — code-volume self-inspection](./0173-code-volume-self-inspection.md) — the symbol-table and owner lenses the Context figures were taken with.
 - [ADR-0202 — retire arrow-go's parquet packages](./0202-retire-arrow-parquet.md) — the same pattern on the Go side.
-- [`rust/imzero2/src/imzero2/walkers_tiles.rs`](../../rust/imzero2/src/imzero2/walkers_tiles.rs) — `BasemapTiles`, `TileTransport`.
+- `rust/imzero2/src/imzero2/walkers_tiles.rs` — `BasemapTiles`, `TileTransport`.
 - [`rust/imzero2/src/imzero2/image.rs`](../../rust/imzero2/src/imzero2/image.rs) — the texture registry §SD3 reuses.
 - [`rust/imzero2/src/imzero2/svgexport.rs`](../../rust/imzero2/src/imzero2/svgexport.rs) — `TexturePixelCache` and the recorded tile coverage gap (Q1).
 - [`doc/skills/imzero2-fetchers/SKILL.md`](../skills/imzero2-fetchers/SKILL.md) — the `Sync()`-only fetcher rule an O5 request path must fit.

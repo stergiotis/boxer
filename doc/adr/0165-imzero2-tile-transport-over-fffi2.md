@@ -92,6 +92,6 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 ## References
 
 - [`doc/adr/0056-walkers-map-h3-binding.md`](./0056-walkers-map-h3-binding.md) — the walkers binding, and §SD12–SD21 for the TLS knobs, the `TileTransport` seam, and the convergence onto one tile client.
-- [`rust/imzero2/src/imzero2/walkers_tiles.rs`](../../rust/imzero2/src/imzero2/walkers_tiles.rs) — `TileTransport`, `HttpTransport`, `BasemapTiles`.
+- `rust/imzero2/src/imzero2/walkers_tiles.rs` — `TileTransport`, `HttpTransport`, `BasemapTiles`.
 - [`doc/skills/imzero2-fetchers/SKILL.md`](../skills/imzero2-fetchers/SKILL.md) — the `Sync()`-only fetcher rule this design has to fit.
 - [`doc/adr/0009-environment-variable-registry.md`](./0009-environment-variable-registry.md) — the registry the tile knobs live in.
