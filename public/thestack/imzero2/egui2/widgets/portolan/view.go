@@ -40,6 +40,7 @@ type View struct {
 	// enforcingBounds breaks the moveend → panInsideBounds → moveend loop,
 	// as Leaflet's _enforcingBounds does.
 	enforcingBounds bool
+	anim            animState
 }
 
 // ViewEvents are the Leaflet map events a frame produced, as flags. Move
@@ -51,11 +52,21 @@ type ViewEvents struct {
 	// ViewReset is a hard view change (setView without animation); Load is
 	// the first.
 	ViewReset, Load bool
+	// Animating marks Move/Zoom that belong to a fly or a pinch: the pyramid
+	// then re-levels without pruning (the flag Leaflet's _resetView reads).
+	Animating bool
+	// ZoomAnimStart marks the frame a zoom animation began, toward
+	// ZoomAnimCenter/ZoomAnimZoom; the pyramid loads that level at once and
+	// keeps the old one underneath (GridLayer's zoomanim).
+	ZoomAnimStart  bool
+	ZoomAnimCenter LatLng
+	ZoomAnimZoom   float64
 }
 
 // Any reports whether anything happened.
 func (e ViewEvents) Any() bool {
-	return e.MoveStart || e.Move || e.MoveEnd || e.ZoomStart || e.Zoom || e.ZoomEnd || e.ViewReset || e.Load
+	return e.MoveStart || e.Move || e.MoveEnd || e.ZoomStart || e.Zoom || e.ZoomEnd ||
+		e.ViewReset || e.Load || e.ZoomAnimStart
 }
 
 // ViewOptions configures a View. The zero value is Leaflet's defaults except
@@ -93,6 +104,7 @@ func NewView(opts ViewOptions) *View {
 	if v.zoomDelta == 0 {
 		v.zoomDelta = 1
 	}
+	v.anim.zoomEnabled = true
 	return v
 }
 

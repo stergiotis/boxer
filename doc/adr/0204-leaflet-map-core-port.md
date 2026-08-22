@@ -206,7 +206,32 @@ how it gets bytes, not a separate design.
   position is applied too. With that recipe a 24-move, 240 × 120 px drag
   lands at 240.01 × 119.98 px; with per-frame deltas off the canvas's own row
   it lost 20 × 10 px. A wheel notch arrives spread over a dozen frames of
-  smooth scroll; anchored zoom applied per frame is fine.
+  smooth scroll; anchored zoom applied per frame is fine. M3 made the
+  animations `View` state machines stepped by `Tick(now)` — the pan
+  (0.25 s ease-out), the zoom animation (250 ms, Leaflet's cubic-bezier; the
+  view interpolated silently, the pyramid told the target level once through
+  `ZoomAnimStart`), the fly (van Wijk–Nuij) and the pinch's end — and
+  Leaflet's handlers sampled-input machines over them, with four deviations
+  the carrier forced or the port chose. (1) A zoom request during a zoom
+  animation restarts it from the interpolated view instead of being dropped,
+  and the wheel and the double click build their next target on the running
+  animation's target (`TargetZoom`): egui spreads one notch over a dozen
+  frames, so under Leaflet's rule a notch lost most of itself (measured 0.52
+  levels with drop-and-jump, 0.69 with the restart; three notches 100 ms
+  apart add exactly three notches). (2) `Stop` ends every animation where it
+  is — Leaflet's `_stop` for the pan and the fly, and an in-place end for
+  the zoom animation, which Leaflet never interrupts (a press during its
+  250 ms is ignored there; here the drag starts from where the map is).
+  (3) The map takes keyboard focus on a press and again on the click's
+  release: egui's `SurrenderFocusOn::Clicks` default hands focus back at
+  the release, because only the clicked widget counts as hovered during a
+  click, so a press-time request alone left the arrows dead (the capture
+  Frame of ADR-0177, which must not be focusable itself). (4) The
+  keyboard's zoom keys are deferred: the `keycodes` vocabulary has no `+`
+  or `-`. The pyramid's per-move update carries GridLayer's 200 ms
+  `updateInterval` throttle since M3 (§SD5 described it a milestone
+  early); a pinch ends 120 ms after its last factor, egui reporting no
+  gesture end.
 - **SD7 — CRS from the first milestone.** `EPSG3857` by default; `EPSG4326`,
   `EPSG3395` and `SimpleCRS` alongside it, behind one interface, because the
   projection code is the cheapest part of the port and `SimpleCRS` is what
@@ -307,9 +332,33 @@ how it gets bytes, not a separate design.
   and ~4,000 of tests. No pyramid or view port bug surfaced; three URL
   templating fixes did (braces in hosts, the https upgrade, `{-y}` on an
   infinite CRS).
-- **M3 — feel.** Inertia, pan and zoom animation, `flyTo`, `maxBounds` and
-  viscosity, pinch, box zoom, keyboard; handler specs as sampled-input
-  tests; a tuning pass against the carrier's input cadence.
+- **M3 — feel.** ✓ Done 2026-08-22: `anim.go` (the pan, zoom and fly
+  animations; `Stop`, `SetViewAnimated`, `PanByAnimated`, `FlyTo`,
+  `FlyToBounds`, `FitBoundsAnimated`) and `handlers.go` (drag with inertia
+  and `maxBounds` viscosity, wheel, pinch, double click, box zoom, keyboard
+  pan), wired into the widget under a key-capturing Frame, plus the
+  pyramid's update throttle — 885 lines of Go and 1,612 of tests; the
+  package stands at 525 passing cases, ~4,400 lines of Go and ~5,600 of
+  tests. Specs ported: the six handler specs (21 of 50 `it`s — the rest
+  DOM, touch plumbing, the enable/disable API, `worldCopyJump`, click
+  suppression, the zoom keys and the `'center'` options the port has not
+  got), MapSpec's animation cases (14: `#flyTo`, `#flyToBounds`, `#stop`,
+  animated `#setView`/`#setZoom`) and GridLayerSpec's animated grid (5,
+  MAD–TRD's 224 loaded / 209 unloaded among them, reproduced exactly when
+  wired as the spec's grid is), with 14 port-only cases for inertia,
+  viscosity, bounce and the keyboard rules the specs do not cover. No
+  handler port bug surfaced; the ports found two in the widget's own
+  seams — a wheel re-perform that jumped and lost the remainder (§SD6 (1))
+  and a drag that seeded inertia with the press origin — and the
+  tuning pass found the focus trap (§SD6 (3)). Headless on
+  `headless_soft`: a 240 × 120 px drag over 600 ms lands at 243 × 121 px
+  (three px of Leaflet's inertia at the release speed), a flick coasts
+  43 px after release, one notch settles at +0.69 about the pointer with
+  the zoom read mid-animation, a double click animates to the
+  pointer-anchored level exactly, ArrowRight pans 80 px and a shift-arrow
+  240 px after a click or a drag, and tiles load through it all with zero
+  re-ships. Not instrumented headless: pinch (no touch verb) and box zoom
+  (the `drag` verb holds no modifier) — unit tests only.
 - **M4 — overlays and removal.** Markers, polylines with simplify and clip,
   polygons, labels, raster via `paintImage`, H3 cells and regions (§SD9);
   the demo gallery moves; delete `walkers_tiles.rs`, the walkers sections of
@@ -336,16 +385,20 @@ weeks, with the go/no-go after M0.
   cache; whether the painter's instance has the mirror attached is to be
   verified in M0. If it does, ADR-0203 Q1's gap closes with the port.
 - **Q4 — Pinch.** Zoom factor plus anchor (§SD6) is what every egui widget
-  gets; whether a map user misses the midpoint pan is a question for the
-  carrier's touch clients, answered in M3.
+  gets, and M3 built it so (a gesture ends 120 ms after its last factor and
+  snaps); whether a map user misses the midpoint pan is still a question
+  for the carrier's touch clients — the headless driver has no touch verb,
+  so M3 could not answer it.
 - **Q5 — Bandwidth — measured.** 256 KB per 256 px tile, exactly: the first
   full paint of a 720 × 460 view at zoom 12 shipped 12 tiles, 3.00 MB, in
   9–10 frames (about 150 ms with OSM over the internet); a pan plus two zoom
   levels reached 9.0 MB with zero re-ships. That is ~12× the PNG bytes, over
   the in-process channel, not a network; a 1400 × 900 view is ~30 tiles,
   ~7.5 MB on first paint. Closed.
-- **Q6 — `ZoomSnap` default.** 0 keeps today's feel; Leaflet's 1 with
-  animated whole-level steps may be preferred once animation exists (M3).
+- **Q6 — `ZoomSnap` default.** Stays 0 after M3: a notch zooms by +0.69
+  through the sigmoid, animated; with 1 each notch would be one animated
+  whole level. Both are a one-line option; which feels better on the
+  desktop is the user's call, not the port's.
 
 ## Surfaces — Tier 1
 
@@ -451,15 +504,19 @@ camera readback's consumers other than through the new package's view state.
   `reqwest`, `rustls`, `ring` or `hyper` named by `cargo tree` under the
   client after M4; a third C-compiling crate in the musl check.
 - **Gap.** Feel — inertia, animation timing, snap — is not gated by anything
-  but a person; the `drag` verb makes it reproducible, not automatic. The
-  carrier's touch path (pinch) has no driver-side instrument.
+  but a person; the `drag` verb makes it reproducible, not automatic, and
+  M3's readouts (a flick's coast, a zoom read mid-animation) are
+  observations, not assertions, until M5. The carrier's touch path (pinch)
+  has no driver-side instrument, and neither has a modifier-held drag (box
+  zoom).
 
 ## Status
 
 Proposed — 2026-08-22; revised in place the same day with M0's results, both
-halves (§SD6, §SD8, Q1, Q5), and with M1's and M2's completion.
-Implementation so far: the `drag` verb, the M0 spike, M1's kernel and M2's
-widget, with `play` and `terrainscope` on it. On acceptance this ADR
+halves (§SD6, §SD8, Q1, Q5), and with M1's, M2's and M3's completion.
+Implementation so far: the `drag` verb, the M0 spike, M1's kernel, M2's
+widget, with `play` and `terrainscope` on it, and M3's animations and
+handlers. On acceptance this ADR
 supersedes
 [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) (folded in, §SD4) and
 the Decision of [ADR-0203](./0203-map-widget-without-the-http-stack.md)

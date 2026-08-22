@@ -6,12 +6,13 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 // Options configures a Map. The zero value is unusable without a Source; the
-// rest default to Leaflet's behaviour with this tree's two deliberate
-// differences (ZoomSnap 0, continuous zoom; no animation until M3).
+// rest default to Leaflet's behaviour with this tree's one deliberate
+// difference, ZoomSnap 0 (continuous zoom).
 type Options struct {
 	// Source is where tiles come from; Loader how they are fetched.
 	Source TileSource
@@ -28,8 +29,12 @@ type Options struct {
 	HasMinZoom, HasMaxZoom bool
 	MaxBounds              LatLngBounds
 	ZoomSnap, ZoomDelta    float64
-	// The interaction handlers are on unless disabled.
+	// The interaction handlers are on unless disabled; Handlers carries
+	// their numeric knobs (zero = DefaultHandlerOptions, i.e. Leaflet's).
 	NoDragging, NoScrollWheelZoom, NoDoubleClickZoom bool
+	NoPinchZoom, NoBoxZoom, NoKeyboard               bool
+	NoZoomAnimation                                  bool
+	Handlers                                         HandlerOptions
 	// Background is the colour under the tiles (0 = a light grey).
 	Background uint32
 	// HideAttribution suppresses the source's attribution label.
@@ -57,11 +62,13 @@ func (p Projector) ToLatLng(px Point) LatLng { return p.view.ContainerPointToLat
 func (p Projector) View() *View { return p.view }
 
 // Map is the slippy-map widget: a View, a Pyramid and a TileLoader behind a
-// painter-lane canvas. Create one per map instance and keep it; call Render
-// every frame (ADR-0204 §SD1, §SD2).
+// painter-lane canvas, with Leaflet's handlers between the lane's registers
+// and the view. Create one per map instance and keep it; call Render every
+// frame (ADR-0204 §SD1, §SD2).
 type Map struct {
 	ids     *c.WidgetIdStack
 	opts    Options
+	hopts   HandlerOptions
 	view    *View
 	pyramid *Pyramid
 	loader  *TileLoader
@@ -73,22 +80,21 @@ type Map struct {
 	// when the last holder is pruned.
 	pixels  map[TileCoords]*tilePixels
 	holders map[TileCoords]int
-	// unwrappedOf remembers which wrapped tile each requested unwrapped tile
+	// wrappedOf remembers which wrapped tile each requested unwrapped tile
 	// maps to, for the loader's arrivals and for Draw.
 	wrappedOf map[TileCoords]TileCoords
 
-	// input
-	dragging                   bool
-	dragOriginX, dragOriginY   float32
-	dragStartCenter            LatLng
-	dragLastOffX, dragLastOffY float64
+	// handlers
+	drag  dragHandler
+	wheel wheelHandler
+	pinch pinchHandler
+	box   boxZoom
+	// press bookkeeping for the drag's origin (M0's recipe)
 	prevPosX, prevPosY         float32
 	prevPosOk                  bool
 	pressOriginX, pressOriginY float32
 	pressOriginOk              bool
-	wheelDelta                 float64
-	wheelStart                 time.Time
-	wheelPos                   Point
+	keyFrameID                 uint64
 
 	// per-frame readback
 	events    ViewEvents
@@ -108,12 +114,11 @@ type tilePixels struct {
 	w, h int
 }
 
-// Wheel constants — Leaflet's ScrollWheelZoomHandler.
-const (
-	wheelDebounce         = 40 * time.Millisecond
-	wheelPxPerZoom        = 60.0
-	defaultBackgroundRGBA = 0xd8d8dcff
-)
+const defaultBackgroundRGBA = 0xd8d8dcff
+
+// mapKeyMask is what the map eats while focused: the arrows pan, Escape
+// cancels a box zoom. The zoom keys wait for keycodes the vocabulary lacks.
+var mapKeyMask = keycodes.MaskOf(keycodes.ArrowUp, keycodes.ArrowDown, keycodes.ArrowLeft, keycodes.ArrowRight, keycodes.Escape)
 
 // New makes a map. ids scopes every id the widget derives; opts.Source is
 // required.
@@ -126,15 +131,21 @@ func New(ids *c.WidgetIdStack, opts Options) *Map {
 	if opts.Background == 0 {
 		opts.Background = defaultBackgroundRGBA
 	}
+	hopts := opts.Handlers
+	if hopts == (HandlerOptions{}) {
+		hopts = DefaultHandlerOptions()
+	}
 	view := NewView(ViewOptions{
 		CRS: opts.CRS, MinZoom: opts.MinZoom, MaxZoom: opts.MaxZoom,
 		HasMinZoom: opts.HasMinZoom, HasMaxZoom: opts.HasMaxZoom,
 		ZoomSnap: opts.ZoomSnap, ZoomDelta: opts.ZoomDelta, MaxBounds: opts.MaxBounds,
 	})
 	view.SetLayerZoomLimits(opts.Source.MinZoom, opts.Source.MaxZoom, true, !math.IsInf(opts.Source.MaxZoom, 1))
+	view.SetZoomAnimation(!opts.NoZoomAnimation)
 	m := &Map{
 		ids:            ids,
 		opts:           opts,
+		hopts:          hopts,
 		view:           view,
 		pyramid:        NewPyramid(opts.Source),
 		loader:         NewTileLoader(opts.Loader),
@@ -153,7 +164,7 @@ func New(ids *c.WidgetIdStack, opts Options) *Map {
 // Close stops the loader. The map must not be rendered afterwards.
 func (m *Map) Close() { m.loader.Close() }
 
-// View is the map's camera — use it to SetView/FitBounds/PanTo between
+// View is the map's camera — use it to SetView/FlyTo/FitBounds/PanTo between
 // frames; Render reads it.
 func (m *Map) View() *View { return m.view }
 
@@ -185,29 +196,6 @@ func (m *Map) Hover() (LatLng, bool) { return m.hover, m.hoverOk }
 // and release without a drag in between.
 func (m *Map) Clicked() (LatLng, bool) { return m.clicked, m.clickedOk }
 
-// SetNoTiles turns the basemap off (background and overlays only) or back
-// on; turning it on again reloads the viewport's tiles.
-func (m *Map) SetNoTiles(on bool) {
-	if on == m.opts.NoTiles {
-		return
-	}
-	m.opts.NoTiles = on
-	if !on && m.view.Loaded() {
-		m.pyramid.Sync(m.view, ViewEvents{ViewReset: true})
-	}
-}
-
-// RenderFill is Render sized to the pane the map sits in, as reported by the
-// layout probe one frame late; fallbackW/fallbackH are used on the first
-// frame and whenever the probe has nothing (a hidden tab).
-func (m *Map) RenderFill(fallbackW, fallbackH float32, overlay func(Projector)) {
-	w, h := fallbackW, fallbackH
-	if pw, ph, ok := c.CapturePaneSize(m.ids.PrepareStr("portolan-pane").Derive()); ok && pw > 0 && ph > 0 {
-		w, h = pw, ph
-	}
-	m.Render(w, h, overlay)
-}
-
 // Loading reports tiles still on their way.
 func (m *Map) Loading() bool { return m.pyramid.IsLoading() || m.loader.Pending() > 0 }
 
@@ -220,6 +208,18 @@ func (m *Map) Health() LoaderHealth { return m.loader.Health() }
 // textures).
 func (m *Map) BytesShipped() uint64 { return m.bytesShipped }
 func (m *Map) Reships() uint64      { return m.reships }
+
+// SetNoTiles turns the basemap off (background and overlays only) or back
+// on; turning it on again reloads the viewport's tiles.
+func (m *Map) SetNoTiles(on bool) {
+	if on == m.opts.NoTiles {
+		return
+	}
+	m.opts.NoTiles = on
+	if !on && m.view.Loaded() {
+		m.pyramid.Sync(m.view, ViewEvents{ViewReset: true})
+	}
+}
 
 func (m *Map) requestTile(coords, wrapped TileCoords) {
 	m.wrappedOf[coords] = wrapped
@@ -245,13 +245,31 @@ func (m *Map) dropHolder(coords TileCoords) {
 	}
 }
 
+// RenderFill is Render sized to the pane the map sits in, as reported by the
+// layout probe one frame late; fallbackW/fallbackH are used on the first
+// frame and whenever the probe has nothing (a hidden tab).
+func (m *Map) RenderFill(fallbackW, fallbackH float32, overlay func(Projector)) {
+	w, h := fallbackW, fallbackH
+	if pw, ph, ok := c.CapturePaneSize(m.ids.PrepareStr("portolan-pane").Derive()); ok && pw > 0 && ph > 0 {
+		w, h = pw, ph
+	}
+	m.Render(w, h, overlay)
+}
+
 // Render draws the map into a w×h canvas at the current layout position and
 // applies the previous frame's input. overlay, when not nil, is called after
 // the tiles and before the canvas is flushed, to paint on top with c.Paint*
 // in canvas coordinates through the Projector.
 func (m *Map) Render(w, h float32, overlay func(Projector)) {
 	for range c.IdScope(m.ids.PrepareStr("portolan")) {
-		m.frame(w, h, overlay)
+		// The key-capturing Frame around the body: while it has focus (a
+		// click on the map gives it), the arrows pan and Escape cancels a box
+		// zoom (ADR-0177).
+		kf := c.Frame(m.ids.PrepareStr("portolan-keys")).CaptureKeys(uint64(mapKeyMask))
+		m.keyFrameID = kf.Id()
+		for range kf.KeepIter() {
+			m.frame(w, h, overlay)
+		}
 	}
 }
 
@@ -266,6 +284,9 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 	if !m.view.Loaded() && !math.IsNaN(m.opts.Center.Lat) && !math.IsNaN(m.opts.Center.Lng) {
 		m.view.SetView(m.opts.Center, m.opts.Zoom)
 	}
+	// Running animations step first, so a handler that starts a new one this
+	// frame starts it from the current view.
+	m.view.Tick(now)
 
 	canvasH := widgethandle.Make(m.ids.PrepareStr("portolan-canvas").Derive())
 	areaH := widgethandle.Make(m.ids.PrepareStr("portolan-area").Derive())
@@ -288,7 +309,15 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 		}
 		if posOk && flags.HasPrimaryClicked() {
 			m.clicked, m.clickedOk = m.view.ContainerPointToLatLng(Point{float64(posX), float64(posY)}), true
+			// The release of a click surrenders the focus the press asked
+			// for (egui's SurrenderFocusOn::Clicks, and during a click only
+			// the clicked widget counts as hovered), so it is asked for again
+			// here — a drag has no click and keeps the press's focus.
+			m.focusKeys()
 		}
+	}
+	if m.view.Loaded() && !m.opts.NoKeyboard {
+		m.handleKeys(sm)
 	}
 
 	// ---- view → pyramid ----
@@ -330,6 +359,10 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 	if overlay != nil {
 		overlay(Projector{view: m.view, m: m})
 	}
+	if r, ok := m.box.rect(); ok {
+		c.PaintRectFilled(float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y), 0, color.Hex(0xffffff40)).Send()
+		c.PaintRectStroke(float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y), 0, color.Hex(0x3388ffff), 2).Send()
+	}
 	if !m.opts.HideAttribution && !m.opts.NoTiles && m.opts.Source.Attribution != "" {
 		m.paintAttribution(w, h)
 	}
@@ -345,7 +378,8 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 		CaptureScroll().
 		Send()
 
-	if again || (!m.opts.NoTiles && (m.loader.Pending() > 0 || m.pyramid.IsLoading())) || m.wheelDelta != 0 {
+	if again || m.view.Animating() || m.wheel.hasStart || m.pinch.active ||
+		(!m.opts.NoTiles && (m.loader.Pending() > 0 || m.pyramid.IsLoading())) {
 		c.RequestRepaintAfter(1.0 / 60)
 	}
 	m.events = ev
@@ -359,88 +393,112 @@ func (m *Map) paintAttribution(w, h float32) {
 	c.PaintText(w-4, h-3, 2, 2, text, fontSize, color.Hex(0x333333ff)).Send()
 }
 
-// handleInput applies last frame's gestures to the view: the drag (M0's
-// recipe — the sense region's press origin, positions from the frame-end
-// pointer, the view at the press plus the offset), the wheel (Leaflet's
-// handler: accumulate, 40 ms debounce, sigmoid, anchored), the pinch as a zoom
-// factor, and the double-click.
+// handleInput feeds last frame's registers to the handlers: the drag or a
+// shift-drag box (the sense region's press origin, positions from the
+// frame-end pointer — M0's recipe), the wheel, the pinch, the double-click.
 func (m *Map) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, flags c.ResponseFlagsE,
 	wheel c.CanvasWheelValue, ptr c.PointerValue, now time.Time) {
+	v := m.view
 	posX, posY, posOk := cur.PosX, cur.PosY, !isNaN32(cur.PosX) && !isNaN32(cur.PosY)
 	if ptr.Valid && !isNaN32(ptr.X) && !isNaN32(ptr.Y) {
 		posX, posY, posOk = ptr.X-cur.OriginX, ptr.Y-cur.OriginY, true
 	}
+	pos := Point{float64(posX), float64(posY)}
 
-	if !m.opts.NoDragging {
-		if flags.HasIsPointerButtonDown() && posOk && !m.dragging && !m.pressOriginOk {
-			m.pressOriginX, m.pressOriginY, m.pressOriginOk = posX, posY, true
+	if flags.HasIsPointerButtonDown() && posOk && !m.drag.active && !m.box.active && !m.pressOriginOk {
+		m.pressOriginX, m.pressOriginY, m.pressOriginOk = posX, posY, true
+		// A press focuses the map, so the arrows work straight after without
+		// a Tab. The capture Frame does not sense clicks (it must not — see
+		// the tree widget's keys.go), so focus is asked for here.
+		m.focusKeys()
+	}
+	if !flags.HasIsPointerButtonDown() && !m.drag.active && !m.box.active {
+		m.pressOriginOk = false
+	}
+	if flags.HasDragStarted() && posOk {
+		var origin Point
+		switch {
+		case areaOk && !isNaN32(areaCur.PosX) && !isNaN32(areaCur.PosY):
+			// The sense region's drag-started row: the press origin.
+			origin = Point{float64(areaCur.PosX), float64(areaCur.PosY)}
+		case m.pressOriginOk:
+			origin = Point{float64(m.pressOriginX), float64(m.pressOriginY)}
+		case m.prevPosOk:
+			origin = Point{float64(m.prevPosX), float64(m.prevPosY)}
+		default:
+			origin = pos
 		}
-		if !flags.HasIsPointerButtonDown() && !m.dragging {
+		shift := areaCur.Shift()
+		if !areaOk {
+			shift = cur.Shift()
+		}
+		switch {
+		case !m.opts.NoBoxZoom && shift:
+			m.box.begin(origin)
+		case !m.opts.NoDragging:
+			m.drag.start(v, origin, now, m.hopts)
+		}
+	}
+	switch {
+	case m.box.active:
+		if (flags.HasDragged() || flags.HasDragStopped()) && posOk {
+			m.box.move(pos)
+		}
+		if flags.HasDragStopped() {
+			m.box.finish(v)
 			m.pressOriginOk = false
 		}
-		if flags.HasDragStarted() && posOk {
-			m.dragging = true
-			switch {
-			case areaOk && !isNaN32(areaCur.PosX) && !isNaN32(areaCur.PosY):
-				m.dragOriginX, m.dragOriginY = areaCur.PosX, areaCur.PosY
-			case m.pressOriginOk:
-				m.dragOriginX, m.dragOriginY = m.pressOriginX, m.pressOriginY
-			case m.prevPosOk:
-				m.dragOriginX, m.dragOriginY = m.prevPosX, m.prevPosY
-			default:
-				m.dragOriginX, m.dragOriginY = posX, posY
-			}
-			m.dragStartCenter = m.view.Center()
-			m.dragLastOffX, m.dragLastOffY = 0, 0
-			m.view.MoveStart(false)
+	case m.drag.active:
+		if (flags.HasDragged() || flags.HasDragStopped()) && posOk {
+			m.drag.move(v, pos, now, m.hopts)
 		}
-		if m.dragging && (flags.HasDragged() || flags.HasDragStopped()) && posOk {
-			offX := float64(posX - m.dragOriginX)
-			offY := float64(posY - m.dragOriginY)
-			if offX != m.dragLastOffX || offY != m.dragLastOffY {
-				start := m.view.Project(m.dragStartCenter)
-				m.view.MoveTo(m.view.Unproject(start.Subtract(Point{offX, offY})), m.view.Zoom())
-				m.dragLastOffX, m.dragLastOffY = offX, offY
-			}
-		}
-		if flags.HasDragStopped() && m.dragging {
-			m.dragging = false
+		if flags.HasDragStopped() {
+			m.drag.end(v, now, m.hopts)
 			m.pressOriginOk = false
-			m.view.MoveEnd(false)
 		}
 	}
 	m.prevPosX, m.prevPosY, m.prevPosOk = posX, posY, posOk && flags.HasContainsPointer()
 
-	if !m.opts.NoScrollWheelZoom && !m.dragging {
-		// ctrl+wheel and a pinch arrive as a zoom factor: apply at once,
-		// anchored at the pointer.
-		if wheel.Zoom > 0 && wheel.Zoom != 1 {
-			anchor := m.wheelAnchor(wheel)
-			z := m.view.LimitZoom(m.view.Zoom() + math.Log2(float64(wheel.Zoom)))
-			if z != m.view.Zoom() {
-				m.view.SetZoomAround(anchor, z)
-			}
+	if !m.drag.active && !m.box.active {
+		anchor := m.wheelAnchor(wheel)
+		if !m.opts.NoPinchZoom && wheel.Zoom > 0 && wheel.Zoom != 1 {
+			m.pinch.step(v, float64(wheel.Zoom), anchor, now, m.hopts)
 		}
-		// A plain wheel accumulates, and zooms 40 ms after the first notch —
-		// Leaflet's ScrollWheelZoomHandler.
-		if wheel.ScrollY != 0 {
-			m.wheelDelta += float64(wheel.ScrollY)
-			m.wheelPos = m.wheelAnchor(wheel)
-			if m.wheelStart.IsZero() {
-				m.wheelStart = now
-			}
-		}
-		if m.wheelDelta != 0 && now.Sub(m.wheelStart) >= wheelDebounce {
-			m.performWheelZoom()
+		if !m.opts.NoScrollWheelZoom && wheel.ScrollY != 0 {
+			m.wheel.wheel(float64(wheel.ScrollY), anchor, now)
 		}
 	}
+	m.wheel.tick(v, now, m.hopts)
+	m.pinch.tick(v, now)
 
 	if !m.opts.NoDoubleClickZoom && flags.HasDoubleClicked() && posOk {
-		delta := m.view.ZoomDelta()
-		if cur.Shift() {
-			delta = -delta
+		doubleClick(v, pos, cur.Shift())
+	}
+}
+
+// focusKeys asks egui to focus the key-capturing Frame.
+func (m *Map) focusKeys() {
+	if !m.opts.NoKeyboard && m.keyFrameID != 0 {
+		c.RequestFocus(m.keyFrameID)
+	}
+}
+
+// handleKeys applies the keys the capture Frame ate while focused.
+func (m *Map) handleKeys(sm *c.StateManager) {
+	caps := sm.GetCapturedKeys(widgethandle.Make(m.keyFrameID))
+	for _, k := range caps {
+		switch k.Code {
+		case keycodes.ArrowLeft:
+			keyboardPan(m.view, -1, 0, k.Shift(), m.hopts)
+		case keycodes.ArrowRight:
+			keyboardPan(m.view, 1, 0, k.Shift(), m.hopts)
+		case keycodes.ArrowUp:
+			keyboardPan(m.view, 0, -1, k.Shift(), m.hopts)
+		case keycodes.ArrowDown:
+			keyboardPan(m.view, 0, 1, k.Shift(), m.hopts)
+		case keycodes.Escape:
+			m.box.cancel()
 		}
-		m.view.SetZoomAround(Point{float64(posX), float64(posY)}, m.view.Zoom()+delta)
 	}
 }
 
@@ -449,30 +507,6 @@ func (m *Map) wheelAnchor(wheel c.CanvasWheelValue) Point {
 		return Point{float64(wheel.HoverX), float64(wheel.HoverY)}
 	}
 	return m.size.DivideBy(2)
-}
-
-// performWheelZoom is Leaflet's _performZoom: the accumulated delta through a
-// sigmoid, snapped, applied about the pointer.
-func (m *Map) performWheelZoom() {
-	delta := m.wheelDelta
-	m.wheelDelta = 0
-	m.wheelStart = time.Time{}
-	zoom := m.view.Zoom()
-	snap := m.view.ZoomSnap()
-	d2 := delta / (wheelPxPerZoom * 4)
-	d3 := 4 * math.Log(2/(1+math.Exp(-math.Abs(d2)))) / math.Ln2
-	d4 := d3
-	if snap != 0 {
-		d4 = math.Ceil(d3/snap) * snap
-	}
-	if delta < 0 {
-		d4 = -d4
-	}
-	dz := m.view.LimitZoom(zoom+d4) - zoom
-	if dz == 0 {
-		return
-	}
-	m.view.SetZoomAround(m.wheelPos, zoom+dz)
 }
 
 func isNaN32(v float32) bool { return math.IsNaN(float64(v)) }

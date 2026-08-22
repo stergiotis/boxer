@@ -39,7 +39,17 @@ type Pyramid struct {
 	// pruneAt is that deferred prune, pending while prunePending.
 	pruneAt      time.Time
 	prunePending bool
-	fading       bool
+	// updateInterval throttles the per-move Update the way Leaflet's
+	// updateInterval (200 ms) throttles GridLayer's _onMove: the first move
+	// updates at once, the moves of the interval that follows coalesce into
+	// one update at its end (from Tick), and a moveend updates regardless;
+	// 0 updates on every move. clock is the time Tick last saw — before the
+	// first Tick nothing is throttled.
+	updateInterval time.Duration
+	lastUpdate     time.Time
+	updatePending  bool
+	clock          time.Time
+	fading         bool
 
 	stats PyramidStats
 
@@ -81,10 +91,12 @@ type TileDraw struct {
 }
 
 // Fade is how long a tile takes to fade in, Leaflet's 200 ms; FadeThenPrune
-// is the extra wait before pruning after a full load.
+// is the extra wait before pruning after a full load; tileUpdateInterval is
+// Leaflet's updateInterval, the per-move update throttle.
 const (
-	tileFade      = 200 * time.Millisecond
-	tileFadePrune = 250 * time.Millisecond
+	tileFade           = 200 * time.Millisecond
+	tileFadePrune      = 250 * time.Millisecond
+	tileUpdateInterval = 200 * time.Millisecond
 )
 
 // NewPyramid makes an empty pyramid for a source.
@@ -94,6 +106,8 @@ func NewPyramid(src TileSource) *Pyramid {
 		tiles:  make(map[TileCoords]*tile, 64),
 		levels: make(map[int]struct{}, 4),
 		fade:   true,
+
+		updateInterval: tileUpdateInterval,
 	}
 }
 
@@ -101,21 +115,52 @@ func NewPyramid(src TileSource) *Pyramid {
 // default).
 func (p *Pyramid) SetFade(on bool) { p.fade = on }
 
+// SetUpdateInterval sets the per-move update throttle (Leaflet's
+// updateInterval, 200 ms by default); 0 updates on every move.
+func (p *Pyramid) SetUpdateInterval(d time.Duration) { p.updateInterval = d }
+
 // Sync applies a frame's view events the way GridLayer's getEvents wires them:
-// a hard view change or a zoom re-selects the level (SetView), a move or its
-// end re-requests the viewport's tiles (Update). Call it after the view has
-// changed for the frame; the pinch/fly "animating" flags of M3 are not yet
-// passed through.
+// a hard view change or a zoom re-selects the level (SetView) — without
+// pruning or re-requesting while a fly or a pinch is animating — a move or
+// its end re-requests the viewport's tiles (Update), and the start of a zoom
+// animation loads the target level at once, keeping the old one underneath
+// (GridLayer's zoomanim → _setView with noPrune). Call it after the view has
+// changed for the frame.
 func (p *Pyramid) Sync(v *View, ev ViewEvents) {
 	if !v.Loaded() {
 		return
 	}
+	if ev.ZoomAnimStart {
+		tv := *v
+		tv.setSilently(ev.ZoomAnimCenter, ev.ZoomAnimZoom)
+		p.SetView(&tv, true, false)
+		return
+	}
 	if ev.ViewReset || ev.Zoom {
-		p.SetView(v, false, false)
+		p.SetView(v, ev.Animating, ev.Animating)
 	}
-	if ev.MoveEnd || ev.Move {
+	if v.AnimatingZoom() {
+		return
+	}
+	switch {
+	case ev.MoveEnd:
+		p.updatePending = false
 		p.Update(v)
+	case ev.Move:
+		p.onMove(v)
 	}
+}
+
+// onMove is the throttled _onMove: an update at once when the interval has
+// passed since the last one, otherwise one update at the interval's end.
+func (p *Pyramid) onMove(v *View) {
+	if p.updateInterval <= 0 || p.clock.IsZero() || p.clock.Sub(p.lastUpdate) >= p.updateInterval {
+		p.lastUpdate = p.clock
+		p.updatePending = false
+		p.Update(v)
+		return
+	}
+	p.updatePending = true
 }
 
 // Source is the pyramid's tile source.
@@ -415,6 +460,7 @@ func (p *Pyramid) TileReady(v *View, c TileCoords, failed bool, now time.Time) {
 // frame with the clock. It reports whether another frame is needed — a fade
 // or a pending prune.
 func (p *Pyramid) Tick(v *View, now time.Time) (again bool) {
+	p.clock = now
 	if p.fading {
 		nextFrame, willPrune := false, false
 		for _, t := range p.tiles {
@@ -443,6 +489,17 @@ func (p *Pyramid) Tick(v *View, now time.Time) (again bool) {
 		if !now.Before(p.pruneAt) {
 			p.prunePending = false
 			p.pruneTiles(v)
+		} else {
+			again = true
+		}
+	}
+	if p.updatePending {
+		if now.Sub(p.lastUpdate) >= p.updateInterval {
+			p.updatePending = false
+			p.lastUpdate = now
+			if !v.AnimatingZoom() {
+				p.Update(v)
+			}
 		} else {
 			again = true
 		}
