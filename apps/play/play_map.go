@@ -10,10 +10,10 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
 
@@ -35,6 +35,7 @@ import (
 // SD10 deferrals in the ADR.
 type MapDriver struct {
 	ids    *c.WidgetIdStack
+	pm     *portolan.Map // the map widget, created on first Render
 	client *Client
 
 	// Controls + display. The map fills the tab body by default (FillAvailable
@@ -53,7 +54,6 @@ type MapDriver struct {
 	initLat      float64
 	initLon      float64
 	initZoom     float64
-	inited       bool
 	forceRefresh bool
 
 	// renderIdx selects builtinRenders; customColorSQL is the colour expression
@@ -70,11 +70,10 @@ type MapDriver struct {
 	tableField sqleditor.Field
 	colorField sqleditor.Field
 
-	// Debounce on the quantized viewHash: reset the timer whenever it changes,
-	// fire only once the camera has been stable for mapDebounce.
-	lastViewHash    uint64
-	viewStableAt    time.Time
-	lastSentVersion uint64
+	// Debounce on the map's view hash: reset the timer whenever it changes,
+	// fire only once the view has been stable for mapDebounce.
+	lastViewHash uint64
+	viewStableAt time.Time
 
 	// lane runs the raster query off the render thread (ADR-0097 3f). Since
 	// slice 5c the raster is a panel-authored NODE on the param seam: template
@@ -130,7 +129,6 @@ type MapDriver struct {
 var mapViewportSignals = [...]SignalID{"vp_min_x", "vp_max_x", "vp_min_y", "vp_max_y", "vp_w", "vp_h"}
 
 const (
-	mapRasterID uint64 = 1
 	mapDebounce        = 250 * time.Millisecond
 	mapMaxDim   uint32 = 1024 // bounds query cost + Arrow size per view
 
@@ -284,41 +282,44 @@ func parseWxH(s string) (w, h float64, ok bool) {
 	return wv, hv, true
 }
 
-// mapHandle is this driver's map in the keyed camera register (r15). Derived
-// at the same id-stack nesting as the WalkersMap call in Render, so the two
-// agree; Prepare+Derive is balanced and leaves the stack as it found it.
-func (inst *MapDriver) mapHandle() widgethandle.WidgetHandle {
-	return widgethandle.Make(inst.ids.PrepareStr("map").Derive())
-}
-
-// Render draws the controls, the last-good raster overlay, and the map; and,
-// once the viewport has settled (debounced), publishes it as the vp_* signals
-// and demands the raster node compiled against the frame's signal snapshot
-// (sig; emits land next frame — the 5a frame consistency). Order matters: the
-// mapRaster overlay is a register-drain node, so it must be emitted BEFORE the
-// walkersMap that drains it.
+// Render draws the controls and the map; the last-good raster rides on the map
+// as an overlay through the projector, pinned to the bounds it was computed
+// for. Once the view has settled (debounced), the viewport is published as the
+// vp_* signals and the raster node is demanded against the frame's signal
+// snapshot (sig; emits land next frame — the 5a frame consistency).
 func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	inst.syncProgress()
 	inst.renderControls()
 
-	// Previous frame's camera for THIS map (refreshed at last frame's end).
-	// Reading the cache rather than inline-fetching avoids the dock.Tab
-	// render-loop deadlock — same idiom as the walkers demo's
-	// demoWalkersCamera. Keyed by the map's own handle: the register held one
-	// camera process-wide until 2026-08-04, so a second map — the same
-	// playground open in another window, or terrainscope beside it — used to
-	// hand this driver its viewport, and these vp_* signals published it.
-	cam, camOk := c.CurrentApplicationState.StateManager.GetWalkersCamera(inst.mapHandle())
-	if camOk {
-		if cam.ViewHash != inst.lastViewHash {
-			inst.lastViewHash = cam.ViewHash
+	// The map is created on first render, after the BOXER_PLAY_* seeds have
+	// been applied. It owns its view Go-side (ADR-0204), so the walkers
+	// opcode's one-shot SetZoom and the keyed camera register are gone: the
+	// view is read directly, and the "no basemap" toggle is a switch on it.
+	if inst.pm == nil {
+		inst.pm = portolan.New(inst.ids, portolan.Options{
+			Source:  basemap.PortolanSource(),
+			Loader:  basemap.PortolanLoader(),
+			Center:  portolan.LL(inst.initLat, inst.initLon),
+			Zoom:    inst.initZoom,
+			NoTiles: inst.noTiles,
+		})
+	}
+	inst.pm.SetNoTiles(inst.noTiles)
+
+	// The view as drawn last frame (the widget applies its registers one
+	// frame behind, like every capture/fetch pair). Debounced on a stable
+	// view before the vp_* signals are published.
+	if v := inst.pm.View(); v.Loaded() {
+		if vh := inst.pm.ViewHash(); vh != inst.lastViewHash {
+			inst.lastViewHash = vh
 			inst.viewStableAt = time.Now()
 		}
 		settled := !inst.viewStableAt.IsZero() && time.Since(inst.viewStableAt) >= mapDebounce
 		if (inst.live && settled) || inst.forceRefresh {
 			inst.forceRefresh = false
-			inst.updateViewport(cam.MinLat, cam.MaxLat, cam.MinLon, cam.MaxLon,
-				cam.ScreenWidthPx, cam.ScreenHeightPx, emit)
+			b, sz := v.Bounds(), v.Size()
+			inst.updateViewport(b.GetSouth(), b.GetNorth(), b.GetWest(), b.GetEast(),
+				float32(sz.X), float32(sz.Y), emit)
 		}
 	}
 
@@ -341,57 +342,30 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 		}
 	}
 
-	// Draw the last-good raster, pinned to the bounds it was computed for, so it
-	// pans/zooms correctly under the camera until the next result lands.
-	// TextureStarved closes the send-once loop: the full upload can go into a
-	// discarded hidden-tab buffer, and the host's idle LRU evicts the texture
-	// after ~10 s uninterpreted — either way the host reports the rasterId
-	// starved and the pixels re-ship (previously the raster stayed invisible
-	// after a tab switch until a pan bumped the version).
-	if inst.packW > 0 && inst.packH > 0 {
-		toSend := inst.pixels
-		if inst.version == inst.lastSentVersion &&
-			!c.CurrentApplicationState.StateManager.TextureStarved(mapRasterID) {
-			toSend = []uint32{} // unchanged → reuse the cached texture (empty, NOT nil)
+	// The last-good raster, pinned to the bounds it was computed for, so it
+	// pans/zooms correctly under the view until the next result lands.
+	// Projector.Image carries the send-once protocol the walkers raster
+	// overlay had — pixels ship on a version bump or when the host reports
+	// the texture starved (a hidden tab's discarded upload, the idle LRU).
+	overlay := func(p portolan.Projector) {
+		if inst.packW > 0 && inst.packH > 0 {
+			p.Image("map-raster",
+				portolan.LatLngBoundsOf(
+					portolan.LL(inst.packBounds[0], inst.packBounds[1]),
+					portolan.LL(inst.packBounds[2], inst.packBounds[3])),
+				inst.packW, inst.packH, inst.version, inst.pixels,
+			).Opacity(float32(inst.opacity)).Send()
 		}
-		c.MapRaster(mapRasterID,
-			inst.packBounds[0], inst.packBounds[1], inst.packBounds[2], inst.packBounds[3],
-			inst.packW, inst.packH, inst.version, toSend,
-		).Opacity(float32(inst.opacity)).Send()
-		inst.lastSentVersion = inst.version
 	}
 
-	// The map (drains the overlay, reports the next camera). noTiles keeps it
-	// offline; with the basemap on, basemap.Apply picks the tile source — a
-	// self-hosted GIS when BOXER_MAP_TILE_URL is set, else the OpenStreetMap
-	// default that variable carries (needs network). Sizing: fill the
-	// (no-scroll, bounded) tab body so the
-	// whole map is always visible; a BOXER_PLAY_MAP_SIZE override pins fixed
-	// dims instead, keeping scripted captures deterministic across hosts.
-	mw := c.WalkersMap(inst.ids.PrepareStr("map"),
-		inst.initLat, inst.initLon, inst.noTiles,
-	)
+	// Sizing: fill the (no-scroll, bounded) tab body so the whole map is
+	// always visible; a BOXER_PLAY_MAP_SIZE override pins fixed dims instead,
+	// keeping scripted captures deterministic across hosts.
 	if inst.fixedSize {
-		mw = mw.Width(float32(inst.mapWidth)).Height(float32(inst.mapHeight))
+		inst.pm.Render(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
 	} else {
-		mw = mw.FillAvailable(true)
+		inst.pm.RenderFill(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
 	}
-	if !inst.noTiles {
-		mw = basemap.Apply(mw)
-	}
-	// SetZoom is a one-shot op: sent into a hidden tab's discarded buffer it
-	// is silently lost, so "sent" may not mean "applied". Keep sending until
-	// the camera register proves THIS map rendered at least one frame — a
-	// keyed lookup, so another app's map filling the register while this tab
-	// is hidden cannot end the re-send early. The frame after first render
-	// stops it, so a user zoom is never fought.
-	if !inst.inited {
-		mw = mw.SetZoom(inst.initZoom)
-		if camOk {
-			inst.inited = true
-		}
-	}
-	mw.Send()
 }
 
 // noteLane mirrors one demand's lane state onto the panel. Every field is

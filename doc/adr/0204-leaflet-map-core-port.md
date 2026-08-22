@@ -131,8 +131,9 @@ how it gets bytes, not a separate design.
 - **SD1 — Name and home.** The entry is `Map`; neither the crate's name nor
   Leaflet's appears in the Go surface. The package is `widgets/portolan` — a
   portolan is the nautical chart ruled with rhumb lines, which is what a
-  Web-Mercator basemap is — so a call reads `portolan.Map(c, …)` the way
-  charts read `implot.Begin(c, …)`. House names are nautical (`keelson`,
+  Web-Mercator basemap is — so the widget is a `*portolan.Map`, made once
+  with `portolan.New(ids, opts)` and drawn every frame with `Render`, the way
+  charts are `implot.Begin(…)`. House names are nautical (`keelson`,
   `lading`, `leeway`, `tally`), and unlike ADR-0149 §SD8 the package name
   does not carry the provenance: that lives in the in-package licence text,
   the package comment and `THIRD_PARTY_NOTICES.md` (§SD3). A bare `c.Map` is
@@ -276,12 +277,36 @@ how it gets bytes, not a separate design.
   pixels bit-identical to Leaflet's, and `doc.go` states the two caveats that
   remain (libm `sin` ulps, FMA targets). The interfaces are `CRSI` and
   `ProjectionI`, per CS005.
-- **M2 — view, pyramid, tiles.** View state, limits, `zoomSnap`,
+- **M2 — view, pyramid, tiles.** ✓ View state, limits, `zoomSnap`,
   `getBoundsZoom`/`fitBounds`; the pyramid (§SD5); `TileSource` with
   Leaflet's URL template and options; Go fetch, LRU, negative cache, decode;
   `paintImage` emission. Parity with the walkers widget for pan, wheel and
   double-click; `play` and `terrainscope` move over; `GridLayerSpec`'s
-  tile-count cases ported.
+  tile-count cases ported. *Done 2026-08-22*: `view.go` (Map.js's view
+  state without DOM or animation), `pyramid.go` (GridLayer's bookkeeping —
+  retention five up / two down, prune, centre-out load order, fade,
+  `Sync` wiring the view's events the way `getEvents` does), `tilesource.go`
+  (TileLayer's options and templating), `loader.go` (six workers, a 512-tile
+  byte cache, a 30 s negative cache, the `BOXER_MAP_TILE_*` TLS knobs on
+  Go's transport — ADR-0165's Q1–Q3 as §SD4 said), `widget.go` (the
+  `Map`: M0's input recipe, Leaflet's wheel handler, double-click, hover and
+  click readback, `RenderFill`, a no-tiles mode) and `overlay.go` (Marker,
+  Label, Polyline and a bounds-pinned raster through the Projector that
+  `Render` hands its overlay callback — the minimal overlay surface `play`
+  and `terrainscope` needed; the builder-style overlays and H3 come with
+  M4). `basemap` gained `PortolanSource`/`PortolanLoader`; the gallery gained
+  the `portolan` demo; `play`'s map panel and `terrainscope` run on
+  `portolan.Map` (terrainscope opens at zoom 8, where walkers' default was
+  16). Headless parity on the `headless_soft` host: a 240 × 120 px drag
+  lands at 240.01 × 119.98, a wheel notch zooms by Leaflet's sigmoid
+  (+0.68 at 60 px) about the pointer, a double-click by one level, 47 tiles
+  requested and 35 unloaded across a zoom sequence with zero re-ships.
+  Specs ported: GridLayerSpec 32 of 37, MapSpec 110 of 238 (the rest DOM,
+  animation or `throws` guards), TileLayerSpec 14 of 23 plus 26 hand-derived
+  pins; the package's tests stand at 454 passing cases, ~3,400 lines of Go
+  and ~4,000 of tests. No pyramid or view port bug surfaced; three URL
+  templating fixes did (braces in hosts, the https upgrade, `{-y}` on an
+  infinite CRS).
 - **M3 — feel.** Inertia, pan and zoom animation, `flyTo`, `maxBounds` and
   viscosity, pinch, box zoom, keyboard; handler specs as sampled-input
   tests; a tuning pass against the carrier's input cadence.
@@ -432,8 +457,9 @@ camera readback's consumers other than through the new package's view state.
 ## Status
 
 Proposed — 2026-08-22; revised in place the same day with M0's results, both
-halves (§SD6, §SD8, Q1, Q5), and with M1's completion. Implementation so far:
-the `drag` verb, the M0 spike and M1's kernel package. On acceptance this ADR
+halves (§SD6, §SD8, Q1, Q5), and with M1's and M2's completion.
+Implementation so far: the `drag` verb, the M0 spike, M1's kernel and M2's
+widget, with `play` and `terrainscope` on it. On acceptance this ADR
 supersedes
 [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) (folded in, §SD4) and
 the Decision of [ADR-0203](./0203-map-widget-without-the-http-stack.md)

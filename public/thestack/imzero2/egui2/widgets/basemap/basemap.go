@@ -23,6 +23,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
 // OpenStreetMap, as the values walkers' built-in source hard-codes. Kept as
@@ -173,4 +174,36 @@ func clampMaxZoom(mz int64) (zoom uint8, set bool) {
 		mz = 255
 	}
 	return uint8(mz), true
+}
+
+// PortolanSource is the registry's basemap as a portolan tile source — the
+// portolan-typed twin of Apply (ADR-0204 §SD1): the URL (OpenStreetMap unless
+// BOXER_MAP_TILE_URL says otherwise), the attribution and the max zoom.
+func PortolanSource() (src portolan.TileSource) {
+	src = portolan.NewTileSource(strings.TrimSpace(TileURL.Get()))
+	if attr := strings.TrimSpace(TileAttribution.Get()); attr != "" {
+		src.Attribution = attr
+		if attrURL := strings.TrimSpace(TileAttributionURL.Get()); attrURL != "" {
+			src.AttributionURL = attrURL
+		}
+	}
+	if zoom, set := clampMaxZoom(TileMaxZoom.Get()); set {
+		src.MaxZoom = float64(zoom)
+		src = src.Normalized()
+	}
+	return
+}
+
+// PortolanLoader is the registry's TLS pair as loader options. As with Apply,
+// the knobs bite only when a custom BOXER_MAP_TILE_URL is configured — a
+// private CA must not be trusted for the public default — and they keep
+// their names and meanings, honoured now by Go's http.Transport rather than
+// by the renderer (ADR-0204 §SD4).
+func PortolanLoader() (opts portolan.LoaderOptions) {
+	if !Configured() {
+		return
+	}
+	opts.CAFile = strings.TrimSpace(TileCAFile.Get())
+	opts.InsecureTLS = TileInsecureTLS.Get()
+	return
 }

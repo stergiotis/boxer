@@ -144,6 +144,19 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
+		Name: "portolan", Category: "Maps & geo", Title: icons.IconGlobe + " portolan (slippy map)",
+		Stage:       [2]float32{760, 600},
+		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
+		Kind:        registry.DemoKindUX,
+		Description: "The slippy-map widget of ADR-0204 — Leaflet's map core ported to Go on the painter lane: raster tiles with cross-level retention, pan, anchored wheel zoom, double-click zoom, and an overlay through the projector hook. Basemap from BOXER_MAP_TILE_URL, OpenStreetMap by default.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			return newPortolanDemoState(ids)
+		},
+		RenderStateful: func(_ *c.WidgetIdStack, state any) {
+			demoPortolan(state.(*portolanDemoState))
+		},
+	})
+	registry.Register(registry.Demo{
 		Name: "portolan-m0", Category: "Maps & geo", Title: icons.IconGlobe + " portolan M0 spike (tiles on the painter lane)",
 		Stage:       [2]float32{760, 600},
 		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,

@@ -36,12 +36,12 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/science/geo/swisstopo"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
 const (
@@ -207,6 +207,7 @@ type App struct {
 	overrideCenter [2]float64
 	applyZoom      bool
 	applyCenter    bool
+	pm             *portolan.Map // the map widget, created on first renderMap
 
 	// plotEpoch is folded into the plot widget id; bumping it on reset gives
 	// egui_plot fresh widget state so its cached axis transform doesn't
@@ -428,58 +429,52 @@ func (inst *App) renderMap() {
 	res := inst.result
 	inst.mu.Unlock()
 
-	sm := c.CurrentApplicationState.StateManager
-
-	inst.ids.PrepareStr("ts-map")
-	mapH := widgethandle.Make(inst.ids.Derive())
-
-	// Keyed by this map's handle (r15 was a single process-wide slot until
-	// 2026-08-04, which is what the MapId comparison here used to guard
-	// against — and it could only reject another map's camera, never recover
-	// this one's when the other map rendered later in the frame).
-	cam, ok := sm.GetWalkersCamera(mapH)
-	if ok && cam.Clicked && cam.HoverValid {
-		inst.handleClick(cam.HoverLat, cam.HoverLon)
+	// The map is created on first render; it owns its view Go-side
+	// (ADR-0204). Zoom 8 shows the whole country to pick the points on.
+	if inst.pm == nil {
+		inst.pm = portolan.New(inst.ids, portolan.Options{
+			Source: basemap.PortolanSource(),
+			Loader: basemap.PortolanLoader(),
+			Center: portolan.LL(swissCenterLat, swissCenterLon),
+			Zoom:   8,
+		})
 	}
-
-	// Overlays — must be emitted BEFORE the WalkersMap opcode so they drain
-	// into this frame's map render. See SKILLS.md §16.2.
-	if inst.stage >= selectionStagePt1 {
-		c.MapMarker(markerIdPt1, inst.pt1Lat, inst.pt1Lon).
-			Label(fmt.Sprintf("observer (%.5f, %.5f)", inst.pt1Lat, inst.pt1Lon)).
-			Color(color.Hex(0x44ff44ff)).Radius(8).Send()
+	// A primary click on the map — last frame's, like every register — places
+	// the observer, then the target.
+	if ll, ok := inst.pm.Clicked(); ok {
+		inst.handleClick(ll.Lat, ll.Lng)
 	}
-	if inst.stage >= selectionStagePt2 {
-		c.MapMarker(markerIdPt2, inst.pt2Lat, inst.pt2Lon).
-			Label(fmt.Sprintf("target (%.5f, %.5f)", inst.pt2Lat, inst.pt2Lon)).
-			Color(color.Hex(0xff4444ff)).Radius(8).Send()
-	}
-	if res != nil {
-		inst.renderFanOverlay(res)
-	}
-
-	inst.ids.PrepareStr("ts-map")
-	mw := c.WalkersMap(inst.ids, swissCenterLat, swissCenterLon, false).
-		Width(mapStageW).Height(mapStageH)
-	// Shared basemap tile server (BOXER_MAP_TILE_URL); unset keeps the
-	// OpenStreetMap default that variable carries.
-	mw = basemap.Apply(mw)
+	// Sticky-once overrides from the sweep: zoom, then centre.
 	if inst.applyZoom {
-		mw = mw.SetZoom(inst.overrideZoom)
+		inst.pm.View().SetZoom(inst.overrideZoom)
 		inst.applyZoom = false
 	}
 	if inst.applyCenter {
-		mw = mw.CenterAt(inst.overrideCenter[0], inst.overrideCenter[1])
+		inst.pm.View().PanTo(portolan.LL(inst.overrideCenter[0], inst.overrideCenter[1]))
 		inst.applyCenter = false
 	}
-	mw.Send()
+	inst.pm.Render(mapStageW, mapStageH, func(p portolan.Projector) {
+		if res != nil {
+			inst.renderFanOverlay(p, res)
+		}
+		if inst.stage >= selectionStagePt1 {
+			pt := portolan.LL(inst.pt1Lat, inst.pt1Lon)
+			p.Marker(pt, 8, color.Hex(0x44ff44ff))
+			p.Label(pt, 11, -2, 0, 2, fmt.Sprintf("observer (%.5f, %.5f)", inst.pt1Lat, inst.pt1Lon), 12, color.Hex(0xffffffff))
+		}
+		if inst.stage >= selectionStagePt2 {
+			pt := portolan.LL(inst.pt2Lat, inst.pt2Lon)
+			p.Marker(pt, 8, color.Hex(0xff4444ff))
+			p.Label(pt, 11, -2, 0, 2, fmt.Sprintf("target (%.5f, %.5f)", inst.pt2Lat, inst.pt2Lon), 12, color.Hex(0xffffffff))
+		}
+	})
 }
 
 // renderFanOverlay draws the swept rays as map polylines from the observer to
 // each ray's nominal rotated target, coloured by visibility probability
 // (green = clear from every sampled centre, red = blocked from all). The
 // centre ray is drawn strong.
-func (inst *App) renderFanOverlay(res *sweepResult) {
+func (inst *App) renderFanOverlay(p portolan.Projector, res *sweepResult) {
 	tgts := res.ens.Nominal.Targets
 	for i := range tgts {
 		tgtWGS := swisstopo.LV95ToWGS84(tgts[i])
@@ -489,10 +484,10 @@ func (inst *App) renderFanOverlay(res *sweepResult) {
 		if isCenter {
 			width = styletokens.StrokeStrong
 		}
-		c.MapPolyline(
+		p.Polyline(
 			[]float64{inst.pt1Lat, tgtWGS.Lat},
 			[]float64{inst.pt1Lon, tgtWGS.Lon},
-		).Stroke(col, width).Send()
+			col, width)
 	}
 }
 
