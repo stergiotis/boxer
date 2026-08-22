@@ -411,8 +411,23 @@ how it gets bytes, not a separate design.
   stays 1.94 (its justification was `h3o`; a re-check finds 1.92 would
   compile — lowering is a separate decision). `scripts/ci/
   rust_imzero2_check.sh` passes.
-- **M5 — regression net.** A headless map scene that drags and zooms with
-  §SD10's verb and asserts the camera readback; the screenshot tour scene.
+- **M5 — regression net.** ✓ Done 2026-08-23.
+  `scripts/dev/portolan-map-scene.sh` drives the gallery's portolan demo
+  headless (a private Go host paired with the CPU-rasterised client, tiles
+  from `scripts/dev/tile-stub-server.py` — a generated PNG per `{z}/{x}/{y}`
+  on a loopback port, so the scene is offline and its pixels repeat) and
+  asserts the CAMERA the demo reads back, not the picture: a 240 × 120 px
+  drag by §SD10's verb moves the centre by that within 6 px (a measured run:
+  243.01 × 121.00, the 3 px being inertia at 200 px/s), a wheel notch at the
+  canvas centre zooms +0.55…0.80 about it (measured +0.69, the centre off by
+  0.2 × 0.6 px), a double click zooms +1.00 anchored (measured +1.00, 0.4 px),
+  ArrowRight after the click pans 80 px (79.88), and the pipeline ends with
+  every tile loaded, no errors and no re-ships (55 of 55). The map reports its
+  canvas origin (`Map.CanvasOrigin`, from the R24 row — the canvas is
+  painter-only and has no accessibility node) and the demo prints it, which
+  is how the scene aims its pointer. The screenshot tour gained `tiles=stub`
+  (a scene knob that starts the stub and points `BOXER_MAP_TILE_URL` at it)
+  and `scene_35_portolan`, a pan and a capture over the stub tiles.
 
 Estimate: roughly 3,300 lines of Go plus ~1,500 of tests, five to seven
 weeks, with the go/no-go after M0.
@@ -538,32 +553,39 @@ camera readback's consumers other than through the new package's view state.
 ## Verification plan — Tier 1
 
 - **Lane.** Default `go test` for the kernel, with Leaflet's geo, geometry,
-  CRS, projection and `GridLayerSpec` tile-count cases as Go tests; a
-  headless map scene that drags and zooms through §SD10's verb and asserts
-  the camera readback (M5); the screenshot tour scene; `cargo tree` grep and
-  the musl check from [ADR-0203's Verification plan](./0203-map-widget-without-the-http-stack.md)
-  after M4.
+  CRS, projection, handler, animation and `GridLayerSpec` cases as Go tests
+  (525 in the package, plus `h3overlay`'s and the bridge's dissolve tests);
+  `scripts/dev/portolan-map-scene.sh`, the headless scene that drags and
+  zooms through §SD10's verb and asserts the camera readback (M5, on stub
+  tiles, exit status the verdict); the screenshot tour's `scene_35_portolan`;
+  `cargo tree` and the musl check from
+  [ADR-0203's Verification plan](./0203-map-widget-without-the-http-stack.md),
+  re-taken at M4.
 - **What would fail.** A pyramid change that loads or unloads a different
   tile count than Leaflet's spec says; a projection that round-trips off by
   more than the spec's tolerance; a drag in the headless scene that leaves
-  the camera where it started, or moves it by the wrong amount; `walkers`,
+  the camera where it started or moves it by the wrong amount, a notch that
+  zooms about the wrong point, a double click that misses its level, an
+  arrow the map does not hear, a tile that errors or ships twice; `walkers`,
   `reqwest`, `rustls`, `ring` or `hyper` named by `cargo tree` under the
-  client after M4; a third C-compiling crate in the musl check.
-- **Gap.** Feel — inertia, animation timing, snap — is not gated by anything
-  but a person; the `drag` verb makes it reproducible, not automatic, and
-  M3's readouts (a flick's coast, a zoom read mid-animation) are
-  observations, not assertions, until M5. The carrier's touch path (pinch)
-  has no driver-side instrument, and neither has a modifier-held drag (box
-  zoom).
+  client; a C-compiling crate in the musl check.
+- **Gap.** Feel — how the inertia and the animations look — is still a
+  person's call; the scene asserts where the camera ends, not how it got
+  there (a flick's coast and a zoom read mid-animation were M3's
+  observations). The carrier's touch path (pinch) has no driver-side
+  instrument, and neither has a modifier-held drag (box zoom); both rest on
+  their unit tests. The scene runs on the CPU-rasterised client by default —
+  the wgpu headless client is a rebuild away, not a second lane.
 
 ## Status
 
-Proposed — 2026-08-22; revised in place the same day with M0's results, both
-halves (§SD6, §SD8, Q1, Q5), and with M1's to M4's completion.
-Implementation so far: the `drag` verb, M1's kernel, M2's widget, with
+Proposed — 2026-08-22; revised in place through 2026-08-23 with M0's
+results, both halves (§SD6, §SD8, Q1, Q5), and with M1's to M5's completion.
+Every milestone has landed: the `drag` verb, M1's kernel, M2's widget, with
 `play` and `terrainscope` on it, M3's animations and handlers, M4's overlays,
 H3 and the removal of the walkers binding (ADR-0056 now carries its
-supersession). On acceptance this ADR
+supersession), M5's scene and tour scene. Open for the reader who accepts:
+Q2 (F7), Q3, Q4, Q6. On acceptance this ADR
 supersedes
 [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) (folded in, §SD4) and
 the Decision of [ADR-0203](./0203-map-widget-without-the-http-stack.md)

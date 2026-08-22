@@ -103,6 +103,9 @@ type Map struct {
 	// per-frame readback
 	events    ViewEvents
 	size      Point
+	originX   float32 // the canvas's screen origin last frame (R24), for scenes
+	originY   float32
+	originOk  bool
 	hover     LatLng
 	hoverOk   bool
 	clicked   LatLng
@@ -237,6 +240,12 @@ func (m *Map) Hover() (LatLng, bool) { return m.hover, m.hoverOk }
 // and release without a drag in between.
 func (m *Map) Clicked() (LatLng, bool) { return m.clicked, m.clickedOk }
 
+// CanvasOrigin is the screen position of the canvas's top-left corner as the
+// host reported it last frame — what a headless scene needs to aim a pointer
+// at the map, since the canvas is painter-only and absent from the
+// accessibility tree. ok is false before the first frame with a live canvas.
+func (m *Map) CanvasOrigin() (x, y float32, ok bool) { return m.originX, m.originY, m.originOk }
+
 // Loading reports tiles still on their way.
 func (m *Map) Loading() bool { return m.pyramid.IsLoading() || m.loader.Pending() > 0 }
 
@@ -338,6 +347,9 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 	ptr := sm.GetPointer()
 
 	m.hoverOk, m.clickedOk = false, false
+	if live && !isNaN32(cur.OriginX) && !isNaN32(cur.OriginY) {
+		m.originX, m.originY, m.originOk = cur.OriginX, cur.OriginY, true
+	}
 	if live && m.view.Loaded() {
 		m.handleInput(cur, areaCur, areaOk, flags, wheel, ptr, now)
 		// Hover and click readback, for apps that pick points on the map.

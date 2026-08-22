@@ -89,6 +89,9 @@ export CLICKHOUSE_USER="${CLICKHOUSE_USER:-default}"
 #           skipped when no selected scene launches play
 #   prelude optional trace lines replacing the default wait for play's Run
 #           button, for a launch target whose mount anchor is something else
+#   tiles — optional; `stub` starts scripts/dev/tile-stub-server.py for the
+#           scene and points BOXER_MAP_TILE_URL at it, so a map scene fetches
+#           no real tiles: offline, and the same pixels every run
 #   size  — optional WxH viewport for this scene alone, for an app whose window
 #           is a fixed size the tour's default viewport would swim in
 #
@@ -1738,6 +1741,20 @@ scene_34_fsbrowser() {
 {\"do\":\"capture\",\"text\":\"34_fsbrowser_outline\",\"comment\":\"outline mode: unread directories carry a disclosure control\"}"
 }
 
+scene_35_portolan() {
+	desc="Slippy map widget (ADR-0204) — the gallery demo on a stub tile server: Leaflet's map core in Go on the painter lane, panned here by the drag verb after the tiles landed; markers, a route, the dissolved H3 region, the viewport heatmap, the camera readout. The camera itself is asserted by scripts/dev/portolan-map-scene.sh; this scene is the picture"
+	launch=widgets
+	prelude="$gallery_prelude"
+	tiles=stub
+	settle=200
+	size=960x720
+	steps="$(gallery_open 'portolan (slippy')
+{\"do\":\"wait\",\"valueContains\":\"loading false\",\"role\":\"label\",\"settleMs\":500,\"comment\":\"every tile of the first view landed\"}
+{\"do\":\"drag\",\"x\":380,\"y\":450,\"toX\":500,\"toY\":510,\"steps\":16,\"durationMs\":600,\"settleMs\":1500,\"comment\":\"a pan by the drag verb (ADR-0204 §SD10); the map is the only widget under that point\"}
+{\"do\":\"wait\",\"valueContains\":\"loading false\",\"role\":\"label\",\"settleMs\":400,\"comment\":\"the tiles the pan uncovered landed too\"}
+{\"do\":\"capture\",\"text\":\"35_portolan\",\"comment\":\"the map after the pan: stub tiles, overlays, the readout below\"}"
+}
+
 # =============================================================================
 # Fixtures the scenes read. Checked once, up front, so a missing one is a line
 # of output rather than twenty screenshots of an error state.
@@ -1764,7 +1781,7 @@ list_scenes() {
 
 if [[ -n "${PLAYSHOT_LIST:-}" ]]; then
 	for fn in $(list_scenes); do
-		desc=""; sql=""; senv=(); steps=""; settle=""; launch=""; prelude=""; size=""
+		desc=""; sql=""; senv=(); steps=""; settle=""; launch=""; prelude=""; size=""; tiles=""
 		"$fn"
 		printf '%-28s %s\n' "${fn#scene_}" "$desc"
 	done
@@ -1793,7 +1810,7 @@ ch() { curl -sS --max-time 10 --get --data-urlencode "query=$1" "$CLICKHOUSE_URL
 # does not die on a ClickHouse it never touches.
 needs_ch=0
 for fn in "${selected[@]}"; do
-	desc=""; sql=""; senv=(); steps=""; settle=""; launch=""; prelude=""; size=""
+	desc=""; sql=""; senv=(); steps=""; settle=""; launch=""; prelude=""; size=""; tiles=""
 	"$fn"
 	if [[ "${launch:-play}" == play ]]; then needs_ch=1; break; fi
 done
@@ -1902,7 +1919,7 @@ index="$OUT/index.md"
 } >"$index"
 
 for fn in "${selected[@]}"; do
-	desc=""; sql=""; senv=(); steps=""; settle=""; launch=""; prelude=""; size=""
+	desc=""; sql=""; senv=(); steps=""; settle=""; launch=""; prelude=""; size=""; tiles=""
 	"$fn"
 	name="${fn#scene_}"
 	geometry "${size:-$SIZE}"
@@ -1928,6 +1945,23 @@ for fn in "${selected[@]}"; do
 	} >"$trace"
 
 	start=$SECONDS
+	# A map scene's tiles come from the stub server (see `tiles` above): started
+	# per scene on a free port, torn down with the scene.
+	stub_pid=""
+	if [[ "$tiles" == stub ]]; then
+		python3 "$here/tile-stub-server.py" 0 >"$OUT/logs/$name.tiles.log" 2>&1 &
+		stub_pid=$!
+		for _ in $(seq 1 50); do
+			grep -q '^ready ' "$OUT/logs/$name.tiles.log" 2>/dev/null && break
+			sleep 0.1
+		done
+		tile_port=$(awk '/^ready /{print $2; exit}' "$OUT/logs/$name.tiles.log")
+		if [[ -n "$tile_port" ]]; then
+			senv+=("BOXER_MAP_TILE_URL=http://127.0.0.1:$tile_port/{z}/{x}/{y}.png")
+		else
+			log "  WARNING: the tile stub did not start — $name fetches real tiles"
+		fi
+	fi
 	# The host renders offscreen and answers the driver; it exits when the
 	# driver's run is over and we tear it down. IMZERO2_HEADLESS_DUMP_DIR is
 	# the directory the host writes captures into — the trace names the file,
@@ -1987,6 +2021,7 @@ for fn in "${selected[@]}"; do
 		(exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null || break
 		sleep 0.25
 	done
+	[[ -n "$stub_pid" ]] && { kill "$stub_pid" 2>/dev/null; wait "$stub_pid" 2>/dev/null; }
 	took=$((SECONDS - start))
 
 	# Only what THIS scene wrote. A plain $name*.png glob also matches a

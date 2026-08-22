@@ -189,6 +189,11 @@ func demoPortolan(ids *c.WidgetIdStack, st *portolanDemoState) {
 		ps.TileLoadStart, ps.TileLoad, ps.TileError, ps.TileUnload, h.Pending+h.InFlight, m.Loading())).Send()
 	c.Label(fmt.Sprintf("shipped %.2f MB through paintImage · re-ships %d · consecutive fetch failures %d",
 		float64(m.BytesShipped())/(1<<20), m.Reships(), h.ConsecutiveFailures)).Send()
+	// The canvas's screen rect, for a headless scene to aim its pointer at: the
+	// canvas is painter-only and has no node in the accessibility tree.
+	if ox, oy, ok := m.CanvasOrigin(); ok {
+		c.Label(fmt.Sprintf("canvas at %.0f,%.0f · %d × %d px", ox, oy, portolanDemoW, portolanDemoH)).Send()
+	}
 	c.Label("portolan (ADR-0204): drag to pan (with inertia), wheel to zoom about the pointer, double-click to zoom in " +
 		"(shift: out), shift-drag a box to zoom to it, arrows to pan once the map has focus. Tiles are retained across " +
 		"levels while the new level loads; the overlays below are drawn through the projector hook.").Wrap().Send()
