@@ -25,10 +25,12 @@ A dependency audit measured what that widget costs. The finding that prompts thi
 ADR is that the cost is not the widget.
 
 **walkers has no way to opt out of its HTTP client.** In 0.56, 0.57 and 0.58
-alike, `reqwest` (with `rustls-tls` hard-coded), `reqwest-middleware`,
-`http-cache-reqwest` and `tokio` are declared **non-optional**; the only feature
-keys are `default`, `mvt`, `pmtiles` and `serde`, none of which gates HTTP.
-Verified against the crates.io index rather than the vendored copy. This extends
+alike, and on upstream's master branch at the time of writing, `reqwest` (with
+`rustls-tls` hard-coded), `reqwest-middleware`, `http-cache-reqwest` and `tokio`
+are declared **non-optional** (as is `futures`, which only the same async I/O
+uses); the only feature keys are `default`, `mvt`, `pmtiles` and `serde`, none
+of which gates HTTP. Verified against the crates.io index and the upstream
+repository rather than the vendored copy. This extends
 the [ADR-0056 §SD12–SD15](./0056-walkers-map-h3-binding.md) finding that walkers
 exposes no TLS *seam*: it has no TLS *switch* either.
 
@@ -45,13 +47,56 @@ The shipped bytes break down as `rustls` 331,932, `reqwest` 112,552,
 `hyper-util` 96,778, `ring` 95,973, `tokio` 91,418. **walkers' own widget code is
 13,826 bytes.** The transport is 76× the size of the thing it is there to serve.
 
+**Two owners, not one — and the figures split along that line.** The chain has
+two roots in the manifest: walkers' non-optional dependencies, and imzero2's own
+`reqwest = { features = ["rustls-tls", "blocking"] }` line, declared for
+`HttpTransport` in `walkers_tiles.rs`. A measurement of the closure with walkers'
+HTTP dependencies feature-gated — a scratch copy of the crate with the five
+dependencies behind a default-on feature, `cargo tree -e normal` diffed per build
+profile — puts numbers on each root:
+
+| Change | desktop (`default`) | `headless` / `headless_soft` |
+| --- | --- | --- |
+| walkers gated, imzero2's `reqwest` line kept (O2 alone) | −40 crates, −4 build scripts — the figures in the table above | −43 crates, −4 build scripts (`anyhow` stays via `prost-derive`; `rustix` leaves) |
+| walkers gated *and* imzero2's `reqwest` line removed (O2 with ADR-0165) | −74 crates, −7 build scripts | −99 crates, −8 build scripts |
+
+The 40 crates are the HTTP *cache* layer and the middleware — `cacache`, `ssri`,
+`sha1`/`sha2`/`digest`, `miette`, `time`, `serde_json`, `bincode`, `tempfile`,
+`walkdir`, `reqwest-middleware`, `futures`. `reqwest`, `hyper`, `rustls`, `ring`
+and `tokio` are in neither column of the first row: imzero2's own line keeps
+every one of them, and they leave only when that line goes too. Under both
+changes `tokio` leaves the desktop build but stays in every headless build, where
+imzero2's own WebSocket carrier enables it — so "zero network dependencies in the
+render client" is a desktop statement. The shipped bytes above are live today
+because `HttpTransport` uses them, not because walkers does; walkers' copy of the
+same crates is what survives dead-code elimination as supply surface.
+
 **This corrects what ADR-0165 claims to deliver.** That ADR says `HttpTransport`
 is retired "along with the renderer's `reqwest` and TLS knobs". It retires the
-renderer's *own* `reqwest` dependency — declared directly in imzero2's manifest
-with `rustls-tls` and `blocking` — and should let the linker drop most of the
+renderer's *own* `reqwest` dependency and should let the linker drop most of the
 1.06 MB. It does not remove the dependency: walkers keeps pulling the chain into
-the build graph, so the 40 crates, 24 owners and 4 build scripts survive the move.
-ADR-0165 buys shipped bytes; it does not buy supply surface.
+the build graph, so the 40 crates, 24 owners and 4 build scripts survive the move
+— and so do `reqwest`, `rustls`, `ring`, `hyper` and `tokio` themselves.
+ADR-0165 buys shipped bytes; it does not buy supply surface. Symmetrically, this
+ADR's O2 alone buys the cache layer; it does not buy the TLS stack. Neither alone
+reaches it; both together do.
+
+**The chain is also half of what blocks a static musl build.**
+[ADR-0128](./0128-imzero2-mesh-draw-stream-codec-lane.md) defers a musl-static
+appliance target. `cargo check --target x86_64-unknown-linux-musl
+--no-default-features --features headless` on a host with the musl `std` but no
+musl C compiler checks 340 of the closure's 348 crates clean — `tokio`,
+`tungstenite`, the egui ring, `blake3` (which falls back to intrinsics) — and
+fails exactly two build scripts, both with *tool not found:
+`x86_64-linux-musl-gcc`*: `ring`, reached through `rustls` from both roots
+above, and `libmimalloc-sys`, imzero2's own global allocator; the eight crates
+it does not reach are the ones downstream of those two. Nothing in the
+closure needs `cmake`, `pkg-config` or `bindgen`; `ring` and `libmimalloc-sys`
+are the only crates that compile C. Removing the HTTP chain removes `ring`;
+`mimalloc` remains either way, and is a companion item under ADR-0128 — make it
+optional for the appliance profile, or supply a musl C toolchain — not this
+ADR's. With both gone the headless host is pure Rust and links a static musl
+binary with rustc's self-contained target and no external toolchain.
 
 **What replacing the widget would cost is now measured too.** walkers is 2,858
 code lines. The raster-map core this tree needs is ~1,214 of them — 337
@@ -101,8 +146,9 @@ into the render client?
   already a self-contained module and the `Tiles` trait this tree implements is
   already public, so the change is additive and default-preserving for every
   other user.
-- **O3 — Vendor a patched walkers.** Carry O2's patch locally, as this tree
-  already does for `egui_software_backend`, whose `VENDORING.md` records the
+- **O3 — Carry a patched walkers locally.** O2's patch on a fork, reached
+  through `[patch.crates-io]` — as a git source, or as a vendored copy the way
+  this tree carries `egui_software_backend`, whose `VENDORING.md` records the
   upstream commit, the deltas and the reasoning.
 - **O4 — Reimplement the map core in Rust,** inside imzero2: ~1,214 lines, no
   IDL change.
@@ -112,26 +158,36 @@ into the render client?
 
 **Criteria.**
 
-- **C1 — Removes the supply surface** — the 40 crates, 24 owners and 4 build
-  scripts, not just the bytes.
-- **C2 — Removes shipped bytes** — the 1.06 MB, conditional on ADR-0165 for
-  the renderer's own client.
+- **C1 — Removes the supply surface** — the crates, owners and build scripts,
+  not just the bytes. Two tiers, per the Context measurement: the cache layer
+  (any option alone) and the TLS stack (only together with ADR-0165).
+- **C2 — Removes shipped bytes** — the 1.06 MB. This criterion belongs to
+  ADR-0165, which removes the line that keeps the bytes live; no option here
+  moves it on its own.
 - **C3 — Independent of anyone else's timeline.**
 - **C4 — Code this tree owns and tests indefinitely.**
 - **C5 — Risk of behaviour regression** — pan/zoom feel, tile fallback, the
   details walkers has already debugged.
+- **C6 — Unblocks a static musl appliance build** — removes `ring`, one of the
+  two C-compiling crates in the headless closure. Conditional on ADR-0165 for
+  every option, and `mimalloc` remains either way.
 
 |    | O1 | O2 | O3 | O4 | O5 |
 |----|----|----|----|----|----|
-| C1 | −− | ++ | ++ | ++ | ++ |
-| C2 | −− | ++ | ++ | ++ | ++ |
+| C1 | −− | +  | +  | +  | +  |
+| C2 | −− | 0  | 0  | 0  | 0  |
 | C3 | ++ | −− | +  | ++ | ++ |
 | C4 | ++ | ++ | +  | −  | −  |
 | C5 | ++ | ++ | ++ | −  | −− |
+| C6 | −− | +  | +  | +  | +  |
 
-O2 is the only option that reaches C1 and C2 without paying C4 or C5 at all, and
-it is worth doing for its own sake — every downstream user of walkers gets the
-same relief. Its single weakness is C3, and O3 is exactly the bridge for that.
+C1 and C6 read `+` rather than `++` for O2–O5 because each reaches its full
+value only with ADR-0165 alongside; C2 reads `0` because it is ADR-0165's to
+deliver. O2 is the only option that reaches C1 and C6 without paying C4 or C5 at
+all, and it is worth doing for its own sake — every downstream user of walkers
+gets the same relief, including from an open RUSTSEC advisory upstream already
+tracks (`bincode`, unmaintained, sits in the cache layer via `cacache`). Its
+single weakness is C3, and O3 is exactly the bridge for that.
 O4 is dominated by O5 on architecture fit and by O2/O3 on cost: it buys the same
 independence as O5 while putting stateful UI logic in the artifact this tree
 keeps deliberately thin, and it needs no IDL change only because it declines the
@@ -142,10 +198,21 @@ split that would make the logic testable from Go.
 *Proposed, not implemented.* Sequence rather than choose:
 
 1. **Upstream the feature gate (O2)**, carrying it locally until it lands (O3).
-   Two mechanisms are already present: the manifest's `[patch.crates-io]`
-   section, which exists but holds only commented examples, and the
-   `vendor/` + `path =` form used for `egui_software_backend`, which comes with
-   a `VENDORING.md` discipline the patch should inherit. Behaviour is unchanged;
+   The local carry is a `[patch.crates-io]` entry pointing at the patch branch
+   of a fork (`git = …, rev = …`); the manifest's `[patch.crates-io]` section
+   exists and holds only commented examples. Not a vendored copy: the
+   `vendor/` + `path =` form used for `egui_software_backend` would commit
+   ~4.6k lines of third-party source into a public repository to carry a
+   ten-line diff, which is the objection
+   [ADR-0056 §SD12](./0056-walkers-map-h3-binding.md) raised when it rejected a
+   patched walkers for the TLS knob — and that vendoring has itself not been
+   recorded in an ADR yet (its `VENDORING.md` says so). §SD12 is superseded
+   here in its conclusion, not its reasoning: the diff is still small and the
+   upgrade still manual, but what it buys is now the cache layer and, with
+   ADR-0165, the TLS stack and `ring`, rather than one certificate field. The
+   airgap bundle's `cargo vendor`
+   ([ADR-0095](./0095-airgapped-build-bundle.md)) carries git dependencies, so
+   the fork need not be reachable from a target host. Behaviour is unchanged;
    the widget is unchanged; `BasemapTiles` continues to be the only tile
    client.
 2. **Land [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) independently.**
@@ -167,8 +234,9 @@ split that would make the logic testable from Go.
   frame shows 20–60 tiles. Sixty separate opcodes per map per frame is a
   measurable tax on a stream that is already the frame's bottleneck; one op
   carrying an array of `(texture id, screen rect, uv rect)` matches the shape
-  the mesh and atoms paths already use. The per-frame op budget is a thing to
-  measure before committing, not to assume — see Q2.
+  the mesh and atoms paths already use — and walkers' own `TilePiece { tile, uv }`
+  is already that item, one per visible tile. The per-frame op budget is a
+  thing to measure before committing, not to assume — see Q2.
 - **SD3 — Under O5 the texture registry stays in Rust, keyed by tile id.**
   Textures are GPU resources with a lifetime the render loop owns.
   [`image.rs`](../../rust/imzero2/src/imzero2/image.rs) already provides
@@ -188,44 +256,88 @@ split that would make the logic testable from Go.
   `projector` — carry 1 branch point across 111 statements and port to any
   language mechanically. A reimplementation that budgets by line count will
   mis-estimate; the work is concentrated in 43 branch points across two modules.
+  Part of the `tiles.rs` row is already paid: `walkers_tiles.rs` carries its own
+  lower-zoom interpolation and cache-or-interpolate path, mirrored from
+  `HttpTiles` under [ADR-0056 §SD13](./0056-walkers-map-h3-binding.md).
+- **SD6 — The upstream gate covers the async I/O, not just `http_tiles`.**
+  `io/fetch.rs` holds the `TileFactory` trait and the async fetch loop over
+  `futures` channels; the trait's only implementation is `EguiTileFactory` in
+  `tiles.rs`, and its only users are `HttpTiles` and `PmTiles`. So the whole
+  `io` module, `http_tiles`, and the `EguiTileFactory` impl in `tiles.rs` go
+  behind the gate, with the `HttpTiles`/`Stats`/`HttpOptions` re-exports;
+  `pmtiles` implies the gate (same tokio runtime); `futures` becomes optional
+  with the four HTTP crates; `LocalTiles` (which decodes through `Tile::new`
+  directly) and `sources` — `TileSource`, `Attribution`, `OpenStreetMap`, all
+  three used by this tree — stay ungated. Upstream
+  declares the crates as workspace dependencies, so the patch is one hunk in
+  the workspace manifest, one in the crate's, and roughly ten `cfg` lines. The
+  PR targets master, which is on egui 0.36; the local carry is the same patch
+  on the 0.56.0 tag, because this tree's egui ring is pinned at 0.35 until
+  `egui_graphs` releases against 0.36.
 
 ### Milestones
 
-- **M0 — Verify the byte claim.** Build the client with the tile client removed
-  and re-read its symbol table with the [ADR-0173 §SD8](./0173-code-volume-self-inspection.md)
-  lens. The 1.06 MB is expected to fall to near zero under dead-code
-  elimination; that expectation is unverified and cheap to settle.
-- **M1 — Upstream patch (O2).** One manifest change plus `#[cfg(feature)]` on
-  the `http_tiles` and `io` modules.
-- **M2 — Carry it locally (O3)** until M1 lands, and re-measure the four figures
-  in the Context table.
-- **M3 — Only if M1 stalls: O5.** Prototype the draw-list op against the
-  existing texture registry before moving any projection code.
+- **M0 — Verify the byte claim.** Build the client with imzero2's own `reqwest`
+  line removed (the ADR-0165 move, or a scratch build that stubs
+  `HttpTransport`) and re-read its symbol table with the
+  [ADR-0173 §SD8](./0173-code-volume-self-inspection.md) lens. The 1.06 MB is
+  expected to fall to near zero under dead-code elimination while walkers' copy
+  of the chain stays in the graph; that expectation is unverified and cheap to
+  settle. The crate-count side is settled (Context table): the gate alone moves
+  the cache layer, both changes move the stack.
+- **M1 — Upstream patch (O2).** The gate of §SD6: two manifest hunks and the
+  `cfg` lines, PR against master.
+- **M2 — Carry it locally (O3)** as a git `[patch.crates-io]` on the 0.56.0 tag
+  until M1 lands, and re-measure the Context figures — the expected result is
+  the first row of the Context table, not the second.
+- **M3 — A `drag` verb for the headless trace driver.** The driver's verbs
+  today are `click`, `focus`, `hover`, `key`, `scroll`, `scroll_into_view`,
+  `set_value`, `type`, `capture`, `resize`, `cadence`, `sleep` — zoom is
+  drivable, pan is not, and Go can already read the camera back through
+  `FetchR15WalkersCameras`. This is the precondition for Q3, and it is useful
+  under O2/O3 too, as the first regression net the map has had.
+- **M4 — Only if M1 stalls: O5.** Prototype the draw-list op against the
+  existing texture registry before moving any projection code; M3 first.
 
 ### Open questions
 
-- **Q1 — SVG export.** [`svgexport.rs`](../../rust/imzero2/src/imzero2/svgexport.rs)
-  and the headless lane would need to handle textured quads for an O5 map to
-  survive export. Whether they do today — for the current map, let alone a new
-  one — is unchecked, and it may already be a gap.
+- **Q1 — SVG export — answered: it is a gap today.**
+  [`svgexport.rs`](../../rust/imzero2/src/imzero2/svgexport.rs) records it
+  beside `TexturePixelCache` ("coverage gap — walkers tiles"): tiles are
+  uploaded inside walkers' `Tile::new` with no hook, so the textured meshes
+  fall through to the visitor's comment-skip path and an exported map is an
+  empty frame with its overlays. The note's own remedy — implement `Tiles` from
+  scratch and intercept the bytes before upload — is what `BasemapTiles` now
+  is; its download workers decode every tile, so mirroring the decoded RGBA
+  into the pixel cache closes the gap under O2/O3 without touching walkers.
+  Under O5 it closes for free: §SD3's registry in `image.rs` already mirrors.
+  Not a blocker for any option; a small fix that should land regardless.
 - **Q2 — Per-frame op budget under O5.** 20–60 tiles per map per frame against a
   16 ms budget on a stream that already carries the whole widget tree. SD2
   proposes one op; the measurement has not been done.
-- **Q3 — Pan/zoom parity.** There is no test today that would catch a
-  regression in map feel. Whether the headless driver can assert on camera state
-  after a synthetic drag decides whether O4/O5 are testable at all.
-- **Q4 — Does upstream want the patch?** Unknown. The change is additive and
-  default-preserving, which is the shape most maintainers accept, but the answer
-  determines whether O3 is a two-week bridge or a permanent fork.
+- **Q3 — Pan/zoom parity — half answered.** There is no test today that would
+  catch a regression in map feel. The headless trace driver can scroll (zoom)
+  but cannot drag (pan), and Go can read the camera after either; egui_mcp can
+  drag but is desktop-only. So zoom parity is assertable now, pan parity after
+  M3; O4/O5 stay untestable until then.
+- **Q4 — Does upstream want the patch? — still unknown, but the field is
+  clear.** walkers has no issue or PR about an optional HTTP client, in any
+  state; master still declares the five crates non-optional, as workspace
+  dependencies. The change is additive and default-preserving, which is the
+  shape most maintainers accept, and one of the crates it makes avoidable
+  (`bincode`, via `cacache`) is the subject of an open RUSTSEC advisory in
+  upstream's own tracker. The answer still determines whether O3 is a two-week
+  bridge or a permanent fork.
 
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `imzero2` Cargo manifest | `walkers` gains `default-features = false` (O2/O3); direct `reqwest` removed (with ADR-0165) | `Cargo.lock`; the airgap bundle's crate set |
+| `imzero2` Cargo manifest | `walkers` gains `default-features = false` and a git `[patch.crates-io]` entry (O2/O3); direct `reqwest` removed (with ADR-0165) | `Cargo.lock` (a git source until M1 lands); the airgap bundle's crate set |
 | egui2 IDL | unchanged under O2/O3; one draw-list op added under O5 | regenerated dispatch on both sides; `SKILL.md` |
 | `walkersMap` opcode and overlay contract | unchanged under every option (§SD1) | nothing |
 | `BOXER_MAP_TILE_CA_FILE` / `BOXER_MAP_TILE_INSECURE_TLS` | retired by ADR-0165, not by this ADR | `doc/env-vars.md` regeneration |
+| headless trace driver ([ADR-0154](./0154-headless-carrier-tree-and-driver.md)) | gains a `drag` verb (M3) | its verb list in [launch-apps-non-interactively](../howto/launch-apps-non-interactively.md) |
 
 Untouched: the H3 binding, the camera fetcher, the overlay node types, and every
 Go call site that draws a map.
@@ -256,9 +368,12 @@ Go call site that draws a map.
 - Under O2/O3: 40 crates, 24 owners and 4 build scripts leave the client's
   dependency graph for a manifest change, with no behaviour change and no code
   this tree has to maintain.
-- Together with ADR-0165, the render client reaches zero network dependencies —
-  the property ADR-0165's Context claims for it, which this ADR shows is not
-  reached by ADR-0165 alone.
+- Together with ADR-0165, the desktop client reaches zero network dependencies
+  — the property ADR-0165's Context claims for it, which this ADR shows is not
+  reached by ADR-0165 alone; the headless clients keep `tokio` for their own
+  carrier and lose everything else.
+- `ring` leaves the closure, which is half of what a static musl appliance build
+  needs (Context); the other half, `mimalloc`, is ADR-0128's to decide.
 - The measurement generalises: `default-features = false` on a widget crate is
   worth checking wherever one is bound, and this is the second subtree in a
   month (after [ADR-0202](./0202-retire-arrow-parquet.md)) whose cost sat far
@@ -267,7 +382,9 @@ Go call site that draws a map.
 ### Negative
 
 - O2 puts this tree on someone else's release schedule; O3 is the mitigation and
-  is itself a maintenance item.
+  is itself a maintenance item — a git source in `Cargo.lock`, a fork branch to
+  keep on the 0.56.0 tag until the egui ring moves, and the ADR-0056 §SD12
+  objection it overrides.
 - O5, if it comes, adds ~1,214 lines of widget code and an IDL op, and the
   43 branch points in `tiles.rs` and `center.rs` are where map widgets are
   historically wrong in ways users notice before tests do.
@@ -279,7 +396,12 @@ Go call site that draws a map.
 
 - The Context figures are one measurement of one build on one host. They are
   reproducible from the tree (`cargo tree`, a symbol-table read, and a line
-  count) and should be re-taken rather than trusted after any dependency bump.
+  count; the two-tier table by gating the five dependencies in a scratch copy
+  of the crate and diffing `cargo tree -e normal` per profile; the musl result
+  by `cargo check` against the musl target) and should be re-taken rather than
+  trusted after any dependency bump.
+- ADR-0056 §SD12's kill-reason stands as written — a small diff is still a
+  manual merge on every upgrade. What changed is what the patch buys.
 - walkers' own code is 13,826 bytes of the client. Whatever happens to the
   transport, the widget itself was never the weight.
 
@@ -299,13 +421,24 @@ Go call site that draws a map.
 
 - **Lane.** `cargo build` for the manifest change; the existing headless map
   scene for behaviour.
-- **What would fail.** After O2/O3, `cargo tree -e normal` naming `reqwest`,
-  `rustls`, `hyper` or `tokio` anywhere under the client — the check is a grep
-  over `cargo tree` output and belongs in the Rust lane, which today has no CI
-  gate ([ADR-0173](./0173-code-volume-self-inspection.md) records the same gap
-  for the Rust artifact generally). A symbol-table read that still finds
-  `rustls` text after M0 would mean dead-code elimination is not doing what M0
-  assumes.
+- **What would fail.** Two tiers, matching the Context table. After O2/O3
+  alone: `cargo tree -e normal` still naming `http-cache-reqwest`, `cacache` or
+  `reqwest-middleware` under the client — `reqwest`, `rustls`, `hyper` and
+  `tokio` are *expected* to remain at this tier, and a check that greps for
+  them would fail for the wrong reason. After O2/O3 with ADR-0165: any of
+  `reqwest`, `rustls`, `ring`, `hyper` in any profile, and `tokio` in the
+  desktop profile (it stays in the headless profiles for the carrier). Both
+  checks are a grep over `cargo tree` output and belong in the Rust lane, which
+  today has no CI gate ([ADR-0173](./0173-code-volume-self-inspection.md)
+  records the same gap for the Rust artifact generally). A symbol-table read
+  that still finds `rustls` text after M0 would mean dead-code elimination is
+  not doing what M0 assumes.
+- **musl.** `cargo check --target x86_64-unknown-linux-musl
+  --no-default-features --features headless` without a musl C compiler: today
+  it fails two build scripts (`ring`, `libmimalloc-sys`); after O2/O3 with
+  ADR-0165 it should fail exactly one (`libmimalloc-sys`), and none once
+  `mimalloc` is optional for that profile. A third failing build script at any
+  stage is a new C-compiling dependency and a regression against C6.
 - **Gap.** Map feel is not gated by anything today (Q3). Under O2/O3 that is
   acceptable because the widget does not change; under O4/O5 it is the first
   thing that needs building, and this ADR should not be flipped to accepted with
@@ -313,11 +446,14 @@ Go call site that draws a map.
 
 ## Status
 
-Proposed — 2026-08-22. No implementation. Supersedes nothing;
-[ADR-0056 §SD4, §SD6, §SD11](./0056-walkers-map-h3-binding.md) would be
-superseded only under O4/O5 (§SD4 above), and
-[ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) is corrected rather than
-superseded — its Decision claims a dependency removal it does not deliver alone.
+Proposed — 2026-08-22; revised in place the same day after the closure and musl
+measurements in the Context. No implementation. Supersedes
+[ADR-0056 §SD12](./0056-walkers-map-h3-binding.md) in its conclusion only (a
+patched walkers is now carried, as a git patch rather than a vendored copy);
+§SD4, §SD6, §SD11 of the same ADR would be superseded only under O4/O5 (§SD4
+above), and [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) is
+corrected rather than superseded — its Decision claims a dependency removal it
+does not deliver alone.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 
@@ -326,9 +462,12 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 - [ADR-0056 — walkers map and H3 binding](./0056-walkers-map-h3-binding.md) — the binding, its TLS updates, and the convergence onto one tile client.
 - [ADR-0165 — imzero2 tile transport over FFFI2](./0165-imzero2-tile-transport-over-fffi2.md) — the fetch move this ADR sequences with and corrects.
 - [ADR-0058 — imzero2 scrolling texture widget](./0058-imzero2-scrolling-texture-widget.md) — the existing textured-quad drawing path.
-- [ADR-0128 — imzero2 mesh draw stream codec lane](./0128-imzero2-mesh-draw-stream-codec-lane.md) — the draw-stream shape an O5 draw list would sit beside.
+- [ADR-0128 — imzero2 mesh draw stream codec lane](./0128-imzero2-mesh-draw-stream-codec-lane.md) — the draw-stream shape an O5 draw list would sit beside, and the deferred musl-static appliance target the Context measurement bears on.
+- [ADR-0095 — airgapped build bundle](./0095-airgapped-build-bundle.md) — `cargo vendor` carries the O3 git patch into the bundle.
+- [ADR-0154 — headless carrier tree and driver](./0154-headless-carrier-tree-and-driver.md) — the trace driver M3 extends.
 - [ADR-0173 — code-volume self-inspection](./0173-code-volume-self-inspection.md) — the symbol-table and owner lenses the Context figures were taken with.
 - [ADR-0202 — retire arrow-go's parquet packages](./0202-retire-arrow-parquet.md) — the same pattern on the Go side.
 - [`rust/imzero2/src/imzero2/walkers_tiles.rs`](../../rust/imzero2/src/imzero2/walkers_tiles.rs) — `BasemapTiles`, `TileTransport`.
 - [`rust/imzero2/src/imzero2/image.rs`](../../rust/imzero2/src/imzero2/image.rs) — the texture registry §SD3 reuses.
+- [`rust/imzero2/src/imzero2/svgexport.rs`](../../rust/imzero2/src/imzero2/svgexport.rs) — `TexturePixelCache` and the recorded tile coverage gap (Q1).
 - [`doc/skills/imzero2-fetchers/SKILL.md`](../skills/imzero2-fetchers/SKILL.md) — the `Sync()`-only fetcher rule an O5 request path must fit.
