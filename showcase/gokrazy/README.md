@@ -48,9 +48,49 @@ ffmpeg is in the image, which is the whole point of the pair.
 | --- | --- | --- |
 | `boxer-soft` | absent | The encoder probe finds nothing to spawn, so `CodecLane::best()` falls back to the ADR-0128 mesh draw-stream lane, which needs no encoder. |
 | `boxer-soft-video` | static, software-only | The H.264 lane. A fully static ffmpeg cannot `dlopen` a VAAPI driver, so every hardware lane fails and `libopenh264` is the only candidate — the case `codeclane.rs` already documents. |
+| `boxer-soft-play` | static, software-only | The same, plus `clickhouse-local` and the `play` SQL playground. See "The ClickHouse variant" below. |
 
 The no-ffmpeg image demonstrates that fallback rather than asserting it: there
 is no configuration anywhere that says "use mesh", only an absent binary.
+
+## The ClickHouse variant
+
+`boxer-soft-play` carries `clickhouse-local` at
+`chlocalpool.DefaultBinaryPath` and runs `play` instead of the widget gallery.
+Two things about it are worth stating plainly, because both were wrong in the
+first draft.
+
+**The binary rides the A/B root images, not `/perm`.** 728 MB compresses to
+about 261 MB in squashfs, taking the image from 119 MB to 380 MB, which the
+500 MB root holds comfortably. The deciding argument is not size, though: an
+update then swaps the engine and the app that expects it together, the root is
+read-only and verified, and `/perm` is not usable for this at all — gokrazy
+leaves it unformatted in a file image, and the boot log says so
+(`/perm/random.seed: read-only file system`). Putting an executable there would
+mean provisioning a filesystem first and mounting it exec.
+
+**`clickhouse-local` is not what `play` queries.** play talks HTTP to a
+ClickHouse *server*; `chlocalbroker` appears in it only as a capability grant
+for the timerangepicker's evaluator pool. So the image points play at an
+endpoint with `CLICKHOUSE_URL`, set to `http://10.0.2.2:8123/` — QEMU
+user-mode networking's alias for the host, so the appliance queries whatever
+ClickHouse is already running there. A real deployment sets it to a real
+endpoint. `clickhouse-local` stays in the image because the ad-hoc dataset path
+([ADR-0134](../../doc/adr/0134-adhoc-datasets.md)) and the `apps/sqlapplet`
+books do use it.
+
+Verified end to end: `SELECT * FROM boxer.facts` typed into the appliance
+returned **95,826 rows in 591 ms**, and the host's `system.query_log` shows the
+guest's `SELECT * FROM "boxer"."facts" FORMAT ArrowStream` plus the leeway UDF
+registration it does at startup.
+
+The pool spawns `MinIdle: 2` workers, so this variant wants more than the 1 GiB
+`gok vm run` gives a guest. Extra QEMU arguments go after `--`, and QEMU takes
+the last `-m`:
+
+```sh
+gok -i boxer-soft-play vm run --arch amd64 -- -m 3072
+```
 
 ## Building
 
@@ -71,7 +111,8 @@ this reuses it rather than growing a second:
 Then:
 
 ```sh
-./showcase/gokrazy/build.sh                       # both variants
+./showcase/gokrazy/build.sh                       # the two ffmpeg variants
+./showcase/gokrazy/build.sh --variant all         # ...and the ClickHouse one
 ./showcase/gokrazy/build.sh --variant mesh        # just the no-ffmpeg one
 ./showcase/gokrazy/build.sh --variant video --run # build and boot in QEMU
 ```
@@ -126,6 +167,22 @@ This is acceptable **only** because `gok vm run` uses QEMU user-mode
 networking, which is host-local NAT and not reachable from the LAN. An image
 put on real hardware needs ADR-0082, or an authenticating TLS reverse proxy in
 front, before that port is exposed.
+
+## `gok vm run` rebuilds the Go program every time
+
+The Rust host is staged once, into `_stage/`; the Go program is built by
+gokrazy from the checkout on **every** `vm run`. In a working tree where the
+egui2 IDL is being regenerated, the two halves drift apart between boots, and
+the symptom does not name the cause: the carrier accepts viewers and serves
+zero frames, with
+
+```
+ERROR headless.rs: interpret error during dispatch
+error=FFFI error: unable to convert from representation
+```
+
+in the program log. Re-run `build.sh` (without `--no-rust-build`) so both
+halves come from the same tree.
 
 ## What this does not cover
 

@@ -77,8 +77,9 @@ this is the *appliance* line ADR-0128 named. Both can be true.
 
 ## Decision
 
-We will build **two gokrazy x86-64 appliance images** from one `headless_soft`
-host, under `showcase/gokrazy/`.
+We will build **gokrazy x86-64 appliance images** from one `headless_soft`
+host, under `showcase/gokrazy/`: a pair isolating ffmpeg, and a third carrying
+ClickHouse (§SD6).
 
 ### SD1 — one host build, two images, ffmpeg the only difference
 
@@ -153,6 +154,31 @@ This is acceptable **only** under QEMU user-mode networking, which is host-local
 NAT. An image on real hardware needs ADR-0082 or an authenticating TLS proxy
 first. Recorded as a decision rather than a README note because it is the one
 thing about these images that can hurt someone.
+
+### SD6 — clickhouse-local rides the A/B roots; the query endpoint is external
+
+[ADR-0134](./0134-adhoc-datasets.md) SD8 deferred to this probe whether
+`clickhouse-local` rides the A/B root images or parks under `/perm`. It rides
+the roots. 728 MB compresses to ~261 MB, taking the image to 380 MB inside a
+500 MB root, so size does not decide it; three other things do. An update swaps
+the engine and the app that expects it together. The root is read-only and
+verified where `/perm` is user-writable. And `/perm` cannot hold it anyway
+without new provisioning: gokrazy leaves it unformatted in a file image, which
+the boot log states as `/perm/random.seed: read-only file system`.
+
+The endpoint is a separate question with a separate answer. `play` queries a
+ClickHouse **server** over HTTP; `chlocalbroker` appears in it only as a
+capability grant for the timerangepicker's evaluator pool, so shipping
+`clickhouse-local` does not make `play` work. The image sets `CLICKHOUSE_URL`
+to an endpoint outside itself — under QEMU, the host — and carries
+`clickhouse-local` for the paths that genuinely use it: ADR-0134's ad-hoc
+datasets and the `apps/sqlapplet` books.
+
+An appliance that had to be self-contained would need a ClickHouse *server* in
+the image, which is a different decision: gokrazy supervises Go programs, so it
+would need a supervisor package, a server config, and a formatted `/perm` for
+the data directory. Not taken here, and not needed for a demonstrator whose
+data lives elsewhere.
 
 ## Surfaces — Tier 1
 
@@ -259,11 +285,13 @@ changes.
   scripts, and the allocator-free check in the CI lane.
 - **M2 — boot and contrast.** ✓ (2026-08-22) both variants booted; the H.264 vs
   mesh table in §Verification.
-- **M3 — a ClickHouse-backed variant.** Not started. Answers
-  [ADR-0134](./0134-adhoc-datasets.md) SD8's question, deferred *to this probe*:
-  whether `clickhouse-local` rides the A/B root images or parks under `/perm`.
-  The current images come up `facts:mem` / `persist:mem`, which is the baseline
-  to diverge from.
+- **M3 — a ClickHouse-backed variant.** ✓ (2026-08-22) `boxer-soft-play`,
+  380 MB, answering ADR-0134 SD8 in §SD6. Verified end to end: `SELECT * FROM
+  boxer.facts` from the appliance returned **95,826 rows in 591 ms**, and the
+  host's `system.query_log` carries the guest's
+  `SELECT * FROM "boxer"."facts" FORMAT ArrowStream` and its startup leeway UDF
+  registration. The glibc closure widened from 4 files to 7 on its own —
+  `build.sh` reads it from the binaries rather than listing it (§SD2).
 - **M4 — musl-static.** Blocked on ADR-0204 M4 (§SD4). `fast_alloc` is the half
   that could land early; `ring` is the half that cannot.
 

@@ -13,6 +13,13 @@
 #                      CodecLane::best() degrades to the ADR-0128 mesh
 #                      draw-stream lane, which needs no encoder at all. The
 #                      image demonstrates that fallback rather than asserting it.
+#   boxer-soft-play    the video image plus clickhouse-local, running the `play`
+#                      SQL playground instead of the widget gallery. ADR-0134
+#                      SD8 asked whether that binary rides the A/B root images
+#                      or parks under /perm; it rides the roots, because an
+#                      update then swaps the engine and the app that expects it
+#                      together, and /perm is user-writable and needs an mkfs
+#                      gokrazy does not do. 728 MB compresses to ~185 MB.
 #   boxer-soft-video   the same host binary plus the static, software-only
 #                      ffmpeg the airgap lane already builds
 #                      (scripts/dev/build-static-ffmpeg.sh), so the H.264 lane
@@ -25,7 +32,7 @@
 # packer copies into the image), `builddir/` (the module context gokrazy builds
 # boxer in) and the `.img` outputs are all produced by this script.
 #
-# usage: build.sh [--variant mesh|video|both] [--run] [--no-rust-build]
+# usage: build.sh [--variant mesh|video|play|both|all] [--run] [--no-rust-build]
 set -euo pipefail
 
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
@@ -70,12 +77,17 @@ if [ "$rust_build" = 1 ] || [ ! -x "$rust_bin" ]; then
 fi
 [ -x "$rust_bin" ] || { echo "build.sh: no host binary at $rust_bin" >&2; exit 1; }
 
-# The image has no dynamic loader of its own, so whatever this binary asks for
-# has to be staged next to it. Read that list from the binary rather than
+# The image has no dynamic loader of its own, so whatever these binaries ask for
+# has to be staged next to them. Read that list from the binaries rather than
 # hardcoding it: a new dependency should break the build here, loudly, instead
-# of at boot.
-mapfile -t needed < <(ldd "$rust_bin" | awk '/=>/ {print $3} /ld-linux/ {print $1}' | grep '^/' | sort -u)
-[ "${#needed[@]}" -gt 0 ] || { echo "build.sh: could not read the host's dynamic closure" >&2; exit 1; }
+# of at boot. clickhouse-local widens the set (librt, libpthread, libdl), which
+# is why this is computed per variant rather than once.
+closure_of() {  # <binary>... -> newline-separated absolute paths
+    local b
+    for b in "$@"; do
+        ldd "$b" | awk '/=>/ {print $3} /ld-linux/ {print $1}' | grep '^/'
+    done | sort -u
+}
 
 # ---- fonts ------------------------------------------------------------------
 # gokrazy has no fontconfig, so the host cannot fc-match at run time the way
@@ -97,18 +109,37 @@ fi
 # invokes. scripts/dev/build-static-ffmpeg.sh produces it.
 static_ffmpeg="${IMZERO2_STATIC_FFMPEG:-$repo/.airgap-ffmpeg-src/ffmpeg-7.1.1/ffmpeg}"
 
+# clickhouse-local for the `play` variant. On the host it is a symlink to the
+# one fat `clickhouse` binary, which dispatches on argv[0]; the image gets a
+# single copy installed under the name it must answer to, which is also
+# chlocalpool.DefaultBinaryPath.
+clickhouse_bin="${IMZERO2_CLICKHOUSE_BIN:-$(readlink -f "$(command -v clickhouse-local || true)" 2>/dev/null)}"
+
 # gokrazy needs the image size up front when writing to a file rather than a
 # device. Two root partitions carry a copy each of the kernel and modules, the
 # Go host, the ~39 MB Rust host and (in the video variant) the 22 MB ffmpeg;
 # 2 GiB leaves room for those plus a usable /perm.
 storage_bytes="${IMZERO2_APPLIANCE_BYTES:-2147483648}"
 
-stage_one() {  # <instance> <with-ffmpeg 0|1>
-    local inst="$1" with_ffmpeg="$2"
+stage_one() {  # <instance> <with-ffmpeg 0|1> <with-clickhouse 0|1>
+    local inst="$1" with_ffmpeg="$2" with_ch="${3:-0}"
     local dir="$instances/$inst" stage="$instances/$inst/_stage"
 
     rm -rf "$stage"; mkdir -p "$stage/lib"
     install -m 0755 "$rust_bin" "$stage/imzero2-client"
+
+    local closure_binaries=("$rust_bin")
+    if [ "$with_ch" = 1 ]; then
+        [ -n "$clickhouse_bin" ] && [ -x "$clickhouse_bin" ] || {
+            echo "build.sh: no clickhouse-local found; install it or set IMZERO2_CLICKHOUSE_BIN" >&2
+            echo "build.sh: see https://clickhouse.com/docs/en/install" >&2
+            exit 1; }
+        echo "build.sh: staging clickhouse-local ($(du -h "$clickhouse_bin" | cut -f1))" >&2
+        install -m 0755 "$clickhouse_bin" "$stage/clickhouse-local"
+        closure_binaries+=("$clickhouse_bin")
+    fi
+    mapfile -t needed < <(closure_of "${closure_binaries[@]}")
+    [ "${#needed[@]}" -gt 0 ] || { echo "build.sh: could not read the dynamic closure" >&2; exit 1; }
     install -m 0644 "$phosphor" "$stage/Phosphor.ttf"
     # Copied to a plain name: the packaged Noto is a variable font whose
     # filename carries brackets ("NotoSans[wght].ttf"), which are awkward in
@@ -148,9 +179,9 @@ replace github.com/stergiotis/boxer => ../../../../../../../..
 EOF
 }
 
-build_one() {  # <instance> <with-ffmpeg 0|1>
-    local inst="$1" with_ffmpeg="$2"
-    stage_one "$inst" "$with_ffmpeg"
+build_one() {  # <instance> <with-ffmpeg 0|1> <with-clickhouse 0|1>
+    local inst="$1" with_ffmpeg="$2" with_ch="${3:-0}"
+    stage_one "$inst" "$with_ffmpeg" "$with_ch"
     local img="$instances/$inst/$inst.img"
     echo "build.sh: packing $inst -> $img" >&2
     ( cd "$instances/$inst" && gok --parent_dir "$instances" -i "$inst" \
@@ -159,16 +190,18 @@ build_one() {  # <instance> <with-ffmpeg 0|1>
 }
 
 case "$variant" in
-    mesh)  build_one boxer-soft 0 ;;
-    video) build_one boxer-soft-video 1 ;;
-    both)  build_one boxer-soft 0; build_one boxer-soft-video 1 ;;
-    *) echo "build.sh: --variant must be mesh, video or both" >&2; exit 2 ;;
+    mesh)  build_one boxer-soft 0 0 ;;
+    video) build_one boxer-soft-video 1 0 ;;
+    play)  build_one boxer-soft-play 1 1 ;;
+    both)  build_one boxer-soft 0 0; build_one boxer-soft-video 1 0 ;;
+    all)   build_one boxer-soft 0 0; build_one boxer-soft-video 1 0; build_one boxer-soft-play 1 1 ;;
+    *) echo "build.sh: --variant must be mesh, video, play, both or all" >&2; exit 2 ;;
 esac
 
 if [ "$run_vm" = 1 ]; then
     command -v qemu-system-x86_64 >/dev/null 2>&1 || {
         echo "build.sh: --run needs QEMU (dnf install qemu-system-x86)" >&2; exit 1; }
-    case "$variant" in video) inst=boxer-soft-video ;; *) inst=boxer-soft ;; esac
+    case "$variant" in play) inst=boxer-soft-play ;; video) inst=boxer-soft-video ;; *) inst=boxer-soft ;; esac
     # gok's default -netdev forwards only 80 (the gokrazy web UI) and 22, so the
     # carrier would be unreachable. Override it to add the carrier port and the
     # viewer page beside it (IMZERO2_HEADLESS_LISTEN + 1). Note that `vm run`
