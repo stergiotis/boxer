@@ -471,18 +471,20 @@ separately because it is identical work under either host, and it costs
 | arm | p50 | p90 | p99 |
 | --- | --- | --- | --- |
 | wgpu on the integrated GPU | **1.34 ms** | 1.71 | 3.00 |
-| wgpu on lavapipe (Mesa software Vulkan) | **1.33 ms** | 1.60 | 2.14 |
+| wgpu on lavapipe (Mesa software Vulkan) | **5.96 ms** | 6.61 | 7.42 |
 | **CPU rasterizer (`headless_soft`)** | **3.17 ms** | 3.93 | 4.57 |
 | CPU, `with_caching(true)` | 3.56 ms | 5.81 | 14.56 |
 | CPU, both raster optimisations off | 56.18 ms | 61.68 | 75.72 |
 
 ### 11.2 What that overturns
 
-**§5.1 is wrong about real content, in both directions.** It reported the CPU
-path at 0.30 ms and lavapipe at 2.17 ms on synthetic content at a similar size;
-the real frame costs the CPU path **10× more** and lavapipe **1.6× less**. The
-ordering inverts: on this machine the CPU rasterizer is **~2.4× slower** than
-either wgpu arm, and lavapipe is indistinguishable from the real GPU.
+**§5.1 understated a real frame for every renderer.** It reported the CPU path
+at 0.30 ms and lavapipe at 2.17 ms on synthetic content at a similar size; the
+real frame costs the CPU path **10×** more and lavapipe **2.7×** more. What
+inverts is only the comparison against a *real GPU*: the CPU rasterizer was
+**~2.4× slower** than wgpu-on-GPU in the configuration committed at the time
+(§12.3 later changed that configuration). It stays comfortably ahead of
+lavapipe — §5.1's one surviving claim.
 
 The synthetic case underestimated a real frame in the way a CPU rasterizer
 cares about most. It drew ~2,500 triangles of text over one panel background;
@@ -512,8 +514,9 @@ the frame costs more than the readback saves.
 
 ### 11.4 So what is `headless_soft` actually for
 
-Not speed. On this machine it costs about 1.8 ms per rendered frame against
-lavapipe, and buys: no Vulkan loader, no ICD, no Mesa in the runtime image
+Not speed *against a real GPU*. On this machine it cost about 1.8 ms per
+rendered frame more than wgpu-on-GPU, and buys: no Vulkan loader, no ICD, no
+Mesa in the runtime image
 (§10.1 — three crates, 6.8 MB of binary, and a dependency the airgap tooling
 currently warns about when it is missing). That is a deployment-surface trade,
 and it should be argued on those terms rather than on throughput.
@@ -607,8 +610,8 @@ Turn both on together and the picture inverts. Same frame, same 1920×1200,
 
 **4.5× faster than the committed configuration at p50, 3.7× at p90, and the
 tail is unchanged.** It is also faster than either wgpu arm in §11 (1.34 ms on
-the GPU, 1.33 ms on lavapipe) — so §11.4's "not speed" conclusion holds only
-for the configuration currently in the tree.
+the GPU) — so §11.4's "not speed" conclusion holds only for the configuration
+that was in the tree when §11 was written.
 
 Note the 1-thread row: the rayon code path is faster than the non-rayon one
 *even with a single worker* (2.13 vs 3.56 ms), so this is not purely
@@ -757,84 +760,122 @@ threads regressed in §13.2.
 One machine, 32 hardware threads, one frame. The tile-row bound is structural
 and should transfer; the specific optimum thread count and the L3 knee will not.
 
-## 14 Choosing a renderer (added 2026-08-22)
+## 14 Choosing a renderer (added 2026-08-22, corrected same day)
+
+> **The first version of this section was wrong.** Its lavapipe column was not
+> lavapipe: `headless.rs` asks wgpu for `Backends::PRIMARY | GL`, so restricting
+> Vulkan with `VK_DRIVER_FILES` left it free to pick the **OpenGL driver on the
+> real GPU** instead — which is what "lavapipe is barely sensitive to core
+> count" and "lavapipe has the tightest tail" were actually measuring. Pinning
+> `WGPU_BACKEND=vulkan` as well gets `llvmpipe … device_type=Cpu`, and the
+> numbers move by 4.5×. §15 records the mistake; the table below is the
+> corrected one.
 
 Everything below is one machine (32 hardware threads, integrated GPU), one
-frame (a play dock at 1920×1200, ~8,840 triangles), 600 frames per arm, p50/p99
-of the rasterize step, and peak RSS of the client process. §13.5's caveat
-applies throughout.
+frame (a play dock at 1920×1200, ~8,840 triangles), 600 frames per arm. §13.5's
+caveat applies throughout.
 
-### 14.1 The three arms side by side
+### 14.1 The four arms side by side
 
-| | p50 | p90 | p99 | client RSS | needs |
-| --- | --- | --- | --- | --- | --- |
-| wgpu on a real GPU | 1.34 ms | 1.71 | 3.00 | 118 MiB | a GPU, Vulkan loader, ICD |
-| wgpu on lavapipe | 1.33 ms | 1.59 | **2.03** | 135 MiB | Vulkan loader + Mesa/lavapipe |
-| software, 8 workers | **0.73 ms** | 1.14 | 5.43 | 282 MiB | nothing |
-| software, 16 workers | 0.76 ms | 1.16 | 4.47 | 416 MiB | nothing |
+| | p50 | p90 | p99 | CPU per frame | client RSS | needs |
+| --- | --- | --- | --- | --- | --- | --- |
+| wgpu on a real GPU | 1.34 ms | 1.71 | **3.00** | **1.45 ms** | **118 MiB** | a GPU, Vulkan loader, ICD |
+| wgpu on lavapipe | 5.96 ms | 6.61 | 7.42 | 102.6 ms | 157 MiB | Vulkan loader + Mesa |
+| software, 8 workers | 0.73 ms | 1.14 | 5.43 | 5.20 ms | 282 MiB | nothing |
+| software, 16 workers | **0.76 ms** | 1.16 | 4.47 | 8.22 ms | 416 MiB | nothing |
 
-Two results here are not what the earlier sections would lead you to expect.
+**Wall-clock is not the interesting column.** CPU-seconds per frame is, because
+it decides how many sessions a host carries. At 60 fps: wgpu-on-GPU costs
+~0.09 of a core per session, the software host 0.31 (8 workers) to 0.49 (16),
+and lavapipe **6.2 cores** — it cannot sustain 60 fps on this machine at all.
 
-**lavapipe is barely sensitive to core count.** Constrained with `taskset`, its
-p50 is 1.40 / 1.42 / 1.33 ms at 4 / 8 / 32 CPUs. Its cost is dominated by the
-submit-and-read-back path rather than by rasterization, so it does not collapse
-on a small machine the way a CPU rasterizer does. The software host over the
-same range is 1.24 / 0.94 / 0.80 ms — faster everywhere on p50, but by a margin
-that shrinks as cores do.
+That reframes what the GPU buys. It is not that the GPU "stays free" — it is
+busier, obviously. It is that **rendering stops competing with everything else
+on the CPU**: the Go host, the ClickHouse client, the encoder. A box serving
+many sessions is CPU-bound long before it is wall-clock-bound.
 
-**The software host's tail is its weak point, at every core count.** p99 is
-8.55 / 6.56 / 4.48 ms at 4 / 8 / 32 CPUs against lavapipe's 2.32 / 2.04 / 2.03.
-A frame in which any primitive changed re-composites the whole canvas — the
-vendored crate carries a `// TODO use tiles` exactly there — so the distribution
-is bimodal in a way neither wgpu arm is.
+Two caveats on the memory column: it is client RSS only, and **GPU memory was
+not measured** — on this integrated part VRAM comes out of system RAM anyway,
+and per-process attribution was not separable from the compositor's usage. So
+"118 MiB" understates the GPU arm's true total by an unknown amount.
 
 ### 14.2 Threads are a memory knob
 
 Peak RSS at 1920×1200, and what each pool size buys:
 
-| workers | RSS | p50 | p99 |
-| --- | --- | --- | --- |
-| 1 | 171 MiB | 2.07 ms | 15.67 ms |
-| 2 | 188 MiB | 1.25 ms | 8.21 ms |
-| 4 | 248 MiB | 0.93 ms | 5.57 ms |
-| 8 | 282 MiB | 0.73 ms | 5.43 ms |
-| 16 | 416 MiB | 0.76 ms | 4.47 ms |
+| workers | RSS | p50 | p99 | CPU/frame |
+| --- | --- | --- | --- | --- |
+| 1 | 171 MiB | 2.07 ms | 15.67 ms | |
+| 2 | 188 MiB | 1.25 ms | 8.21 ms | |
+| 4 | 248 MiB | 0.93 ms | 5.57 ms | |
+| 8 | 282 MiB | 0.73 ms | 5.43 ms | 5.20 ms |
+| 16 | 416 MiB | 0.76 ms | 4.47 ms | 8.22 ms |
 
 ≈ 15 MiB per worker — per-thread allocator arenas (imzero2 runs mimalloc) plus
 the in-flight per-primitive raster each worker holds. RSS barely falls with
 resolution (268 MiB at 960×600 with 16 workers), which confirms it is the pool
 and not the buffers.
 
-**The p50 plateau starts at about 8 workers**; beyond that only p99 improves,
-at ~17 MiB each. On this machine the shipped default (half the hardware
-threads = 16) is therefore buying p99 with 134 MiB. That is a defensible
-default and a bad one for a memory-constrained box, which is what the env knob
-is for. It is *not* evidence for a different fraction in general — on an
-8-thread machine a quarter would be 2 workers, which is worse than lavapipe.
+**The p50 plateau starts at about 8 workers**; past that only p99 improves, at
+~17 MiB and ~0.4 ms of CPU each. On this machine the shipped default (half the
+hardware threads = 16) buys a 1 ms better p99 for 134 MiB and 58 % more CPU per
+frame. That is defensible for a single-session host and wrong for a dense one,
+which is what `IMZERO2_HEADLESS_RASTER_THREADS` is for.
 
 ### 14.3 When to use which
 
-- **wgpu on a real GPU** — a desktop seat, or a server that has a GPU and can
-  carry a Vulkan stack. Lowest memory of the three, and the GPU is then also
-  available for anything else that wants it.
-- **wgpu on lavapipe** — a GPU-less host that already carries Mesa, *and* cares
-  more about the tail than the median: streaming to a viewer where a 5 ms
-  hiccup is worse than a 0.6 ms saving is good. Also the least sensitive to
-  core count, so it degrades most gracefully on small machines.
-- **the software host** — a GPU-less host where the Vulkan/Mesa dependency is
-  itself the problem: an airgapped or minimal image (`scripts/dev/airgap-lib.sh`
-  currently warns when the loader or an ICD is missing), a container you do not
-  want to grow by a driver stack, or a build where 2.4 MB of shader compiler in
-  the binary is not welcome. Best median of the three, and no runtime
-  dependency at all — paid for in memory and in tail latency.
+- **wgpu on a real GPU** — anywhere a GPU exists and a Vulkan stack is
+  acceptable. It is the only arm that does not spend the CPU: ~1.45 ms per
+  frame against 5–8 ms, which is 3.6–5.7× the session density on a host that
+  is also running queries. Best tail, lowest host memory. The cost is the
+  driver stack in the image, and GPU memory this measurement did not capture.
+- **the software host** — GPU-less deployments, and the clear winner over
+  lavapipe there: **7.8× the throughput and 12.5× less CPU**, with a better
+  tail too (4.5 ms vs 7.4). Also the right answer when the Vulkan/Mesa
+  dependency is itself the problem — an airgapped or minimal image
+  (`scripts/dev/airgap-lib.sh` warns today when the loader or an ICD is
+  missing), or a build where 2.4 MB of shader compiler is unwelcome. Paid for
+  in memory (2–3× the GPU arm) and in CPU.
+- **wgpu on lavapipe** — hard to justify on these numbers. It is slower than
+  the software host on every axis measured and needs Mesa besides. It remains
+  the fallback when something *must* go through a Vulkan device — a
+  wgpu-specific code path, or a compute use the CPU rasterizer cannot serve.
 - **neither** — if the deployment never needs pixels, `headless` (the ADR-0128
   mesh draw-stream lane) or `headless_svg` remain the cheapest answers by a
   wide margin, and this whole comparison is moot.
 
 ### 14.4 What would change the picture
 
-The tail is the software host's one clear deficit, and it has a known cause
-rather than a mysterious one: the whole-canvas recomposite. Teaching the
-vendored crate to composite only dirty tiles — the `// TODO` its author already
-left — would attack exactly the p99 and probably the per-worker memory with it.
-That is upstream work, or a larger vendored delta than anything carried today.
+The tail is the software host's clearest remaining deficit against a real GPU
+(4.5 ms vs 3.0), and it has a known cause: any frame in which a primitive
+changed re-composites the whole canvas, where the vendored crate carries a
+`// TODO use tiles`. Teaching it to composite only dirty tiles would attack the
+p99 and probably the per-worker memory with it. That is upstream work, or a
+larger vendored delta than anything carried today.
+
+## 15 A measurement that was not measuring what it said (added 2026-08-22)
+
+Worth recording, because the failure mode is generic and quiet.
+
+Three sections of this page reported lavapipe at ~1.33 ms, tighter-tailed than
+a real GPU and almost insensitive to core count. All of it was wrong. Setting
+`VK_DRIVER_FILES` to the lavapipe ICD constrains which **Vulkan** driver is
+visible; it says nothing about which *backend* wgpu chooses, and `headless.rs`
+asks for `Backends::PRIMARY | GL`. With Vulkan narrowed to a slow CPU device,
+wgpu preferred the OpenGL driver on the real GPU — so the "software Vulkan"
+column was the hardware GPU under another API.
+
+Nothing in the output said so. The frames were correct, the timings were
+stable and repeatable, and the numbers were *plausible* — a software rasterizer
+being competitive is surprising but not absurd. What exposed it was measuring a
+different quantity: CPU-seconds per frame. 1.50 ms of CPU for a frame a
+software rasterizer should sweat over is not a suspicious number, it is an
+impossible one, and that is what prompted reading back the adapter line the
+host had been logging all along.
+
+Two things to take from it. **Pin every layer of a driver selection, not the
+one that looks decisive** — here `WGPU_BACKEND=vulkan` as well as
+`VK_DRIVER_FILES`. And **assert the identity of what you measured inside the
+measurement**: `headless.rs` logs `name=… backend=… device_type=…` on every
+start, and had this harness printed it beside each result the error could not
+have survived one run, let alone three sections.
