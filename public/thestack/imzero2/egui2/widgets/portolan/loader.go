@@ -78,10 +78,12 @@ func (o LoaderOptions) withDefaults() LoaderOptions {
 // are the unwrapped coordinates the tile was requested as.
 type TileArrival struct {
 	Coords, Wrapped TileCoords
-	Pixels          []uint32
-	W, H            int
-	Failed          bool
-	Err             error
+	// URL is what was fetched — the source's tile, or its ErrorTileURL.
+	URL    string
+	Pixels []uint32
+	W, H   int
+	Failed bool
+	Err    error
 }
 
 // LoaderHealth is what an operator would want to know when the map is grey:
@@ -99,6 +101,12 @@ type tileRequest struct {
 	url             string
 }
 
+// tileWaiter is a request riding on a URL's fetch; several can share one
+// URL with different coordinates (an ErrorTileURL), so each keeps its own.
+type tileWaiter struct {
+	coords, wrapped TileCoords
+}
+
 // TileLoader fetches, caches and decodes tiles on a worker pool, off the
 // frame thread (ADR-0165's constraint): the frame requests tiles and drains
 // arrivals. Requests are served in the order they were made — the pyramid
@@ -112,7 +120,7 @@ type TileLoader struct {
 	cond      *sync.Cond
 	queue     []TileCoords
 	pending   map[TileCoords]*tileRequest // queued, not started
-	inflight  map[string][]TileCoords     // url → requests waiting on it
+	inflight  map[string][]tileWaiter     // url → requests waiting on it
 	cancelled map[TileCoords]struct{}     // cancelled while in flight
 	arrivals  []TileArrival
 	cache     *byteCache
@@ -128,7 +136,7 @@ func NewTileLoader(opts LoaderOptions) *TileLoader {
 	l := &TileLoader{
 		opts:      opts,
 		pending:   make(map[TileCoords]*tileRequest, 64),
-		inflight:  make(map[string][]TileCoords, 16),
+		inflight:  make(map[string][]tileWaiter, 16),
 		cancelled: make(map[TileCoords]struct{}, 16),
 		cache:     newByteCache(opts.ByteCacheTiles),
 		negative:  make(map[string]time.Time, 16),
@@ -185,8 +193,8 @@ func (l *TileLoader) Request(coords, wrapped TileCoords, url string) {
 		return
 	}
 	for _, waiting := range l.inflight {
-		for _, c := range waiting {
-			if c == coords {
+		for _, w := range waiting {
+			if w.coords == coords {
 				return
 			}
 		}
@@ -206,8 +214,8 @@ func (l *TileLoader) Cancel(coords TileCoords) {
 		return
 	}
 	for _, waiting := range l.inflight {
-		for _, c := range waiting {
-			if c == coords {
+		for _, w := range waiting {
+			if w.coords == coords {
 				l.cancelled[coords] = struct{}{}
 				return
 			}
@@ -280,15 +288,17 @@ func (l *TileLoader) worker() {
 		}
 		delete(l.pending, coords)
 		if waiting, busy := l.inflight[req.url]; busy {
-			l.inflight[req.url] = append(waiting, coords)
+			l.inflight[req.url] = append(waiting, tileWaiter{coords, req.wrapped})
 			l.mu.Unlock()
 			continue
 		}
-		l.inflight[req.url] = []TileCoords{coords}
-		now := time.Now()
-		if exp, bad := l.negative[req.url]; bad && now.Before(exp) {
-			l.finish(req, nil, 0, 0, eh.Errorf("portolan: tile failed recently, not retried before %s", exp.Format(time.RFC3339)))
-			continue // finish unlocks
+		l.inflight[req.url] = []tileWaiter{{coords, req.wrapped}}
+		if exp, bad := l.negative[req.url]; bad && time.Now().Before(exp) {
+			// A hit on the negative cache is not a new failure: it neither
+			// extends the entry (the tile is retried once the TTL from the
+			// real failure has passed) nor counts in Health.
+			l.deliver(req, nil, 0, 0, eh.Errorf("portolan: tile failed recently, not retried before %s", exp.Format(time.RFC3339)))
+			continue // deliver unlocks
 		}
 		data, cached := l.cache.get(req.url)
 		l.mu.Unlock()
@@ -308,30 +318,36 @@ func (l *TileLoader) worker() {
 			px, w, h, err = decodeTile(data)
 		}
 		l.mu.Lock()
-		l.finish(req, px, w, h, err) // unlocks
+		l.record(req.url, err)
+		l.deliver(req, px, w, h, err) // unlocks
 	}
 }
 
-// finish delivers a fetch's outcome to every request waiting on its URL.
-// Called with the mutex held; releases it.
-func (l *TileLoader) finish(req *tileRequest, px []uint32, w, h int, err error) {
-	waiting := l.inflight[req.url]
-	delete(l.inflight, req.url)
+// record books a fetch's outcome: a failure enters the negative cache and
+// the health counters, a success resets the failure streak. Mutex held.
+func (l *TileLoader) record(url string, err error) {
 	if err != nil {
-		l.negative[req.url] = time.Now().Add(l.opts.NegativeTTL)
+		l.negative[url] = time.Now().Add(l.opts.NegativeTTL)
 		l.health.ConsecutiveFailures++
 		l.health.LastError = err.Error()
 		l.health.LastFailureAt = time.Now()
 	} else {
 		l.health.ConsecutiveFailures = 0
 	}
-	for _, c := range waiting {
-		if _, gone := l.cancelled[c]; gone {
-			delete(l.cancelled, c)
+}
+
+// deliver hands an outcome to every request waiting on its URL. Called with
+// the mutex held; releases it.
+func (l *TileLoader) deliver(req *tileRequest, px []uint32, w, h int, err error) {
+	waiting := l.inflight[req.url]
+	delete(l.inflight, req.url)
+	for _, wt := range waiting {
+		if _, gone := l.cancelled[wt.coords]; gone {
+			delete(l.cancelled, wt.coords)
 			continue
 		}
 		l.arrivals = append(l.arrivals, TileArrival{
-			Coords: c, Wrapped: req.wrapped, Pixels: px, W: w, H: h, Failed: err != nil, Err: err,
+			Coords: wt.coords, Wrapped: wt.wrapped, URL: req.url, Pixels: px, W: w, H: h, Failed: err != nil, Err: err,
 		})
 	}
 	l.mu.Unlock()
@@ -361,7 +377,11 @@ func (l *TileLoader) fetch(url string) ([]byte, error) {
 	return data, nil
 }
 
-// decodeTile decodes PNG/JPEG bytes into the paintImage packing.
+// decodeTile decodes PNG/JPEG bytes into the paintImage packing: 0xRRGGBBAA
+// with STRAIGHT (non-premultiplied) alpha, which is what the host's texture
+// upload expects (it premultiplies itself). Hence image.NRGBA, not RGBA,
+// whose channels Go's image package premultiplies — a translucent tile
+// would otherwise be premultiplied twice and darken at its edges.
 func decodeTile(data []byte) (px []uint32, w, h int, err error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
@@ -369,12 +389,12 @@ func decodeTile(data []byte) (px []uint32, w, h int, err error) {
 	}
 	b := img.Bounds()
 	w, h = b.Dx(), b.Dy()
-	rgba := image.NewRGBA(image.Rect(0, 0, w, h))
-	draw.Draw(rgba, rgba.Bounds(), img, b.Min, draw.Src)
+	nrgba := image.NewNRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(nrgba, nrgba.Bounds(), img, b.Min, draw.Src)
 	px = make([]uint32, w*h)
 	for i := range px {
 		o := i * 4
-		px[i] = uint32(rgba.Pix[o])<<24 | uint32(rgba.Pix[o+1])<<16 | uint32(rgba.Pix[o+2])<<8 | uint32(rgba.Pix[o+3])
+		px[i] = uint32(nrgba.Pix[o])<<24 | uint32(nrgba.Pix[o+1])<<16 | uint32(nrgba.Pix[o+2])<<8 | uint32(nrgba.Pix[o+3])
 	}
 	return px, w, h, nil
 }

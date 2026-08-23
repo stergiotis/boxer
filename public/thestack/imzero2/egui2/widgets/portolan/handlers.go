@@ -10,12 +10,16 @@ import (
 // painter lane's registers report each frame, tests feed them samples. They
 // act on a View; the widget owns the readback and the drawing.
 
-// HandlerOptions are Leaflet's interaction options.
+// HandlerOptions are Leaflet's interaction options. The zero value is
+// Leaflet's defaults: a zero number means its default, and the two switches
+// are spelled so that false is upstream's setting — a partial literal keeps
+// the rest at Leaflet's values rather than at zero.
 type HandlerOptions struct {
-	// Inertia continues a drag after release (DragHandler's inertia);
-	// InertiaDeceleration in px/s² (3400), InertiaMaxSpeed in px/s (+Inf),
-	// EaseLinearity the inertia pan's ease (0.2).
-	Inertia             bool
+	// NoInertia turns off the coast after a drag's release (DragHandler's
+	// inertia, on upstream); InertiaDeceleration in px/s² (3400),
+	// InertiaMaxSpeed in px/s (+Inf), EaseLinearity the inertia pan's ease
+	// (0.2).
+	NoInertia           bool
 	InertiaDeceleration float64
 	InertiaMaxSpeed     float64
 	EaseLinearity       float64
@@ -26,20 +30,38 @@ type HandlerOptions struct {
 	// and 60 px.
 	WheelDebounce  time.Duration
 	WheelPxPerZoom float64
-	// BounceAtZoomLimits lets a pinch overshoot the zoom limits and snap
-	// back (Leaflet's default on).
-	BounceAtZoomLimits bool
+	// NoBounceAtZoomLimits stops a pinch at the zoom limits instead of
+	// letting it overshoot and snap back (Leaflet's bounceAtZoomLimits, on
+	// upstream).
+	NoBounceAtZoomLimits bool
 	// KeyboardPanDelta is the arrow keys' pan in px (80).
 	KeyboardPanDelta float64
 }
 
-// DefaultHandlerOptions are Leaflet's defaults.
-func DefaultHandlerOptions() HandlerOptions {
-	return HandlerOptions{
-		Inertia: true, InertiaDeceleration: 3400, InertiaMaxSpeed: math.Inf(1), EaseLinearity: 0.2,
-		WheelDebounce: 40 * time.Millisecond, WheelPxPerZoom: 60,
-		BounceAtZoomLimits: true, KeyboardPanDelta: 80,
+// DefaultHandlerOptions are Leaflet's defaults, spelled out.
+func DefaultHandlerOptions() HandlerOptions { return HandlerOptions{}.withDefaults() }
+
+// withDefaults fills every zero number with Leaflet's value.
+func (o HandlerOptions) withDefaults() HandlerOptions {
+	if o.InertiaDeceleration <= 0 {
+		o.InertiaDeceleration = 3400
 	}
+	if o.InertiaMaxSpeed <= 0 {
+		o.InertiaMaxSpeed = math.Inf(1)
+	}
+	if o.EaseLinearity <= 0 {
+		o.EaseLinearity = 0.2
+	}
+	if o.WheelDebounce <= 0 {
+		o.WheelDebounce = 40 * time.Millisecond
+	}
+	if o.WheelPxPerZoom <= 0 {
+		o.WheelPxPerZoom = 60
+	}
+	if o.KeyboardPanDelta <= 0 {
+		o.KeyboardPanDelta = 80
+	}
+	return o
 }
 
 // ---- drag: DragHandler + Draggable ------------------------------------------
@@ -115,7 +137,7 @@ func (d *dragHandler) move(v *View, pos Point, now time.Time, opts HandlerOption
 		v.MoveTo(v.Unproject(v.Project(d.startCenter).Subtract(offset)), v.Zoom())
 		d.lastOffset = offset
 	}
-	if opts.Inertia {
+	if !opts.NoInertia {
 		// Leaflet records the (unlimited) pane position; the offset is it.
 		d.lastPos, d.lastTime = d.origin.Add(offset), now
 		d.positions = append(d.positions, d.lastPos)
@@ -138,7 +160,7 @@ func (d *dragHandler) end(v *View, now time.Time, opts HandlerOptions) {
 		return
 	}
 	d.active = false
-	noInertia := !opts.Inertia || len(d.times) < 2
+	noInertia := opts.NoInertia || len(d.times) < 2
 	if noInertia {
 		v.MoveEnd(false)
 		return
@@ -264,8 +286,8 @@ func (p *pinchHandler) step(v *View, factor float64, anchor Point, now time.Time
 		v.MoveStart(true)
 	}
 	p.scale *= factor
-	p.zoom = v.ScaleZoom(p.scale, p.startZoom)
-	if !opts.BounceAtZoomLimits &&
+	p.zoom = v.ScaleZoomAt(p.scale, p.startZoom)
+	if opts.NoBounceAtZoomLimits &&
 		((p.zoom < v.MinZoom() && p.scale < 1) || (p.zoom > v.MaxZoom() && p.scale > 1)) {
 		p.zoom = v.LimitZoom(p.zoom)
 	}

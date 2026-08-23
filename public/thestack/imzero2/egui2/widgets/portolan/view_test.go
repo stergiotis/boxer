@@ -709,7 +709,7 @@ func TestMap_GetPixelWorldBounds(t *testing.T) {
 		// unit square [2^-54, 2^-54]–[1, 1]. The unloaded View's zoom is 0,
 		// so its world is that square at scale 256 — the same corners ×256.
 		v := specView()
-		b, ok := v.PixelWorldBounds(math.NaN())
+		b, ok := v.PixelWorldBounds()
 		require.True(t, ok)
 		assert.Equal(t, BoundsOf(
 			Pt(256*5.551115123125783e-17, 256*5.551115123125783e-17), Pt(256, 256)), b)
@@ -718,7 +718,7 @@ func TestMap_GetPixelWorldBounds(t *testing.T) {
 	t.Run("return changed map bounds if really zoomed in", func(t *testing.T) {
 		v := specView()
 		v.SetZoom(20)
-		b, ok := v.PixelWorldBounds(math.NaN())
+		b, ok := v.PixelWorldBounds()
 		require.True(t, ok)
 		assert.Equal(t, BoundsOf(
 			Pt(1.4901161193847656e-8, 1.4901161193847656e-8), Pt(268435456, 268435456)), b)
@@ -727,7 +727,7 @@ func TestMap_GetPixelWorldBounds(t *testing.T) {
 	t.Run("return new pixels on zoom change", func(t *testing.T) {
 		v := specView()
 		v.SetZoom(5)
-		b, ok := v.PixelWorldBounds(math.NaN())
+		b, ok := v.PixelWorldBounds()
 		require.True(t, ok)
 		assert.Equal(t, BoundsOf(
 			Pt(4.547473508864641e-13, 4.547473508864641e-13), Pt(8192, 8192)), b)
@@ -735,7 +735,7 @@ func TestMap_GetPixelWorldBounds(t *testing.T) {
 		v.PanTo(LL(0, 0))
 
 		// view does not change pixel world bounds
-		b, ok = v.PixelWorldBounds(math.NaN())
+		b, ok = v.PixelWorldBounds()
 		require.True(t, ok)
 		assert.Equal(t, BoundsOf(
 			Pt(4.547473508864641e-13, 4.547473508864641e-13), Pt(8192, 8192)), b)
@@ -744,7 +744,7 @@ func TestMap_GetPixelWorldBounds(t *testing.T) {
 	t.Run("return infinity bounds on infinity zoom", func(t *testing.T) {
 		v := specView()
 		v.SetZoom(math.Inf(1))
-		b, ok := v.PixelWorldBounds(math.NaN())
+		b, ok := v.PixelWorldBounds()
 		require.True(t, ok)
 		inf := math.Inf(1)
 		assert.Equal(t, BoundsOf(Pt(inf, inf), Pt(inf, inf)), b)
@@ -1143,15 +1143,15 @@ func TestMap_GetScaleZoomAndGetZoomScale(t *testing.T) {
 	t.Run("converts zoom to scale and vice versa and returns the same values", func(t *testing.T) {
 		v := specView()
 		toZoom, fromZoom := 6.25, 8.5
-		scale := v.ZoomScale(toZoom, fromZoom)
-		assert.Equal(t, toZoom, jsRound(v.ScaleZoom(scale, fromZoom)*100)/100)
+		scale := v.ZoomScaleAt(toZoom, fromZoom)
+		assert.Equal(t, toZoom, jsRound(v.ScaleZoomAt(scale, fromZoom)*100)/100)
 	})
 
 	t.Run("converts scale to zoom and returns Infinity if map crs.zoom returns NaN", func(t *testing.T) {
 		stub := &stubCRS{CRSI: EPSG3857, zoom: func(float64) (float64, bool) { return math.NaN(), true }}
 		v := specViewOpts(ViewOptions{CRS: stub})
 		scale, fromZoom := 0.25, 8.5
-		assert.Equal(t, math.Inf(1), v.ScaleZoom(scale, fromZoom))
+		assert.Equal(t, math.Inf(1), v.ScaleZoomAt(scale, fromZoom))
 	})
 }
 

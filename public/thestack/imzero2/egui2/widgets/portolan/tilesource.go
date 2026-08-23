@@ -49,7 +49,9 @@ type TileSource struct {
 	// repeating across the antimeridian.
 	Bounds LatLngBounds
 	NoWrap bool
-	// ErrorTileURL, when set, is shown for tiles that failed to load.
+	// ErrorTileURL, when set, is the image drawn in place of a tile that
+	// failed to load (TileLayer's errorTileUrl); the tile still counts as an
+	// error.
 	ErrorTileURL string
 	// Opacity of the layer, 1 by default.
 	Opacity float64

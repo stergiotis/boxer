@@ -17,6 +17,7 @@
 //
 // Module map, this package's file ← the upstream module it transliterates:
 //
+//	util.go           ← src/core/Util.js (wrapNum, formatNum, Math.round)
 //	point.go          ← src/geometry/Point.js, src/geometry/Bounds.js
 //	transformation.go ← src/geometry/Transformation.js
 //	latlng.go         ← src/geo/LatLng.js, src/geo/LatLngBounds.js
@@ -24,6 +25,17 @@
 //	crs.go            ← src/geo/crs/*.js
 //	lineutil.go       ← src/geometry/LineUtil.js
 //	polyutil.go       ← src/geometry/PolyUtil.js
+//	view.go           ← src/map/Map.js (view state, limits, fitBounds)
+//	anim.go           ← src/map/Map.js (setView's animations, flyTo), src/dom/PosAnimation.js
+//	handlers.go       ← src/map/handler/*.js (drag, wheel, pinch, double click, box zoom, keyboard)
+//	pyramid.go        ← src/layer/tile/GridLayer.js
+//	tilesource.go     ← src/layer/tile/TileLayer.js (options, URL templating)
+//	loader.go         — no upstream module: the fetch, cache and decode the browser did
+//	widget.go         — no upstream module: the painter-lane canvas, registers and readback
+//	overlay.go        ← src/layer/vector/Polyline.js, Polygon.js, Renderer.js (the clip and simplify pipeline)
+//
+// The sub-package h3overlay draws H3 cells and regions on the map through
+// the h3 wasm bridge; the map itself does not depend on it.
 //
 // Two deliberate departures from upstream: pixel rounding uses JavaScript's
 // Math.round (half toward +∞, see jsRound), not Go's math.Round; and LatLng
@@ -33,12 +45,17 @@
 // The numbers match Leaflet's as far as IEEE double arithmetic in Go allows:
 // every ported specification holds with Leaflet's own tolerances, and the
 // EPSG:3857 pixel transform is evaluated in JavaScript's order so its pixels
-// match bit for bit on amd64. Two things can still move the last bit — Go's
-// math.Sin is not V8's fdlibm and differs by an ulp for some inputs, and a
-// target that fuses multiply-add (arm64, GOAMD64=v3) rounds a·x+b once where
-// JavaScript rounds twice. Neither is visible at tile resolution.
+// match on amd64. Three things can still move the last bit — jsRound is
+// floor(x+0.5), which parts from Math.round at 0.49999999999999994 and above
+// 2^52; Go's math.Sin is not V8's fdlibm and differs by an ulp for some
+// inputs; and a target that fuses multiply-add (arm64, GOAMD64=v3) rounds
+// a·x+b once where JavaScript rounds twice. None is visible at tile
+// resolution.
 //
-// This is milestone M1 of ADR-0204 — the geo and geometry kernel, with
-// Leaflet's specifications for it ported as the package's tests. The view,
-// the pyramid, the handlers and the widget itself follow in M2–M4.
+// Leaflet's specifications are ported as the package's tests — geo,
+// geometry, CRS and projection (M1), MapSpec's view and GridLayerSpec's
+// tile counts (M2), the handler and animation specs (M3) — with each test
+// file's header listing the upstream cases it leaves out and why. Where the
+// port deviates from upstream on purpose the deviation is at the code, and
+// the larger ones are in ADR-0204 §SD6.
 package portolan

@@ -231,21 +231,23 @@ func (v *View) Unproject(p Point) LatLng { return v.crs.PointToLatLng(p, v.zoom)
 // UnprojectAt inverts ProjectAt.
 func (v *View) UnprojectAt(p Point, zoom float64) LatLng { return v.crs.PointToLatLng(p, zoom) }
 
-// ZoomScale is the scale factor between two zooms (Leaflet's getZoomScale);
-// a NaN fromZoom means the current zoom.
-func (v *View) ZoomScale(toZoom, fromZoom float64) float64 {
-	if math.IsNaN(fromZoom) {
-		fromZoom = v.zoom
-	}
+// ZoomScale is the scale factor from the current zoom to toZoom (Leaflet's
+// getZoomScale with its fromZoom defaulted); ZoomScaleAt takes both zooms.
+func (v *View) ZoomScale(toZoom float64) float64 { return v.ZoomScaleAt(toZoom, v.zoom) }
+
+// ZoomScaleAt is the scale factor between two zooms.
+func (v *View) ZoomScaleAt(toZoom, fromZoom float64) float64 {
 	return v.crs.Scale(toZoom) / v.crs.Scale(fromZoom)
 }
 
-// ScaleZoom is the zoom reached by scaling fromZoom (NaN = current) by
-// scale; +Inf when the arithmetic has no answer (Leaflet's getScaleZoom).
-func (v *View) ScaleZoom(scale, fromZoom float64) float64 {
-	if math.IsNaN(fromZoom) {
-		fromZoom = v.zoom
-	}
+// ScaleZoom is the zoom reached by scaling the current zoom by scale
+// (Leaflet's getScaleZoom with its fromZoom defaulted); ScaleZoomAt takes
+// the zoom to scale from. +Inf when the arithmetic has no answer.
+func (v *View) ScaleZoom(scale float64) float64 { return v.ScaleZoomAt(scale, v.zoom) }
+
+// ScaleZoomAt is the zoom reached by scaling fromZoom by scale; +Inf when
+// the arithmetic has no answer.
+func (v *View) ScaleZoomAt(scale, fromZoom float64) float64 {
 	zoom := v.crs.Zoom(scale * v.crs.Scale(fromZoom))
 	if math.IsNaN(zoom) {
 		return math.Inf(1)
@@ -274,12 +276,13 @@ func (v *View) PixelBoundsAt(center LatLng, zoom float64) Bounds {
 	return BoundsOf(tl, tl.Add(v.size))
 }
 
-// PixelWorldBounds is the whole world in projected pixels at a zoom (NaN =
-// current); false for an infinite CRS.
-func (v *View) PixelWorldBounds(zoom float64) (Bounds, bool) {
-	if math.IsNaN(zoom) {
-		zoom = v.zoom
-	}
+// PixelWorldBounds is the whole world in projected pixels at the current
+// zoom; false for an infinite CRS. PixelWorldBoundsAt takes the zoom.
+func (v *View) PixelWorldBounds() (Bounds, bool) { return v.PixelWorldBoundsAt(v.zoom) }
+
+// PixelWorldBoundsAt is the whole world in projected pixels at a zoom; false
+// for an infinite CRS.
+func (v *View) PixelWorldBoundsAt(zoom float64) (Bounds, bool) {
 	return v.crs.GetProjectedBounds(zoom)
 }
 
@@ -331,7 +334,7 @@ func (v *View) BoundsZoom(bounds LatLngBounds, inside bool, padding Point) float
 	} else {
 		scale = math.Min(scalex, scaley)
 	}
-	zoom = v.ScaleZoom(scale, zoom)
+	zoom = v.ScaleZoomAt(scale, zoom)
 	if snap != 0 {
 		// don't jump if within 1% of a snap level
 		zoom = jsRound(zoom/(snap/100)) * (snap / 100)
@@ -384,7 +387,7 @@ func (v *View) ZoomOut(delta float64) {
 // SetZoomAround zooms so the geography under a viewport point stays under
 // it — the wheel's and the double-click's zoom.
 func (v *View) SetZoomAround(containerPoint Point, zoom float64) {
-	scale := v.ZoomScale(zoom, math.NaN())
+	scale := v.ZoomScale(zoom)
 	viewHalf := v.size.DivideBy(2)
 	centerOffset := containerPoint.Subtract(viewHalf).MultiplyBy(1 - 1/scale)
 	newCenter := v.ContainerPointToLatLng(viewHalf.Add(centerOffset))

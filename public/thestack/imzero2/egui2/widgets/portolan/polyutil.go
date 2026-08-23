@@ -69,7 +69,8 @@ func PolygonCenter(latlngs []LatLng, crs CRSI) (LatLng, error) {
 }
 
 // Centroid is the arithmetic mean of the points in degrees. An empty slice
-// gives NaN coordinates, as Leaflet's does.
+// gives NaN coordinates (where Leaflet's centroid throws, constructing a
+// LatLng from NaN); callers guard.
 func Centroid(latlngs []LatLng) LatLng {
 	latSum, lngSum, n := 0.0, 0.0, 0.0
 	for _, l := range latlngs {

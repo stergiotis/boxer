@@ -96,6 +96,7 @@ package portolan
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -190,7 +191,7 @@ func handlerSpecPaneOffset(v *View, loadedCenter LatLng) Point {
 func TestDragHandler(t *testing.T) {
 	// describe('pointer events') — every map here has inertia: false.
 	opts := DefaultHandlerOptions()
-	opts.Inertia = false
+	opts.NoInertia = true
 
 	t.Run("change the center of the map", func(t *testing.T) {
 		v := specView()
@@ -377,7 +378,7 @@ func TestDragHandler_MaxBoundsViscosity(t *testing.T) {
 			v.TakeEvents()
 			v.SetClock(handlerSpecT0)
 			opts := DefaultHandlerOptions()
-			opts.Inertia = false
+			opts.NoInertia = true
 			opts.MaxBoundsViscosity = tc.viscosity
 
 			var d dragHandler
@@ -623,7 +624,7 @@ func TestPinchZoomHandler(t *testing.T) {
 		return v
 	}
 	opts := DefaultHandlerOptions()
-	opts.Inertia = false
+	opts.NoInertia = true
 	// Both fingers move 200 px along y = 300 over 500 ms, symmetric about
 	// (300, 300): out from 50 px apart to 450, in from 450 to 50.
 	mid := Pt(300, 300)
@@ -739,7 +740,7 @@ func TestPinchZoomHandler_BounceAtZoomLimits(t *testing.T) {
 	t.Run("on: overshoots while the fingers are down and snaps back on release", func(t *testing.T) {
 		v := newMap()
 		opts := DefaultHandlerOptions()
-		require.True(t, opts.BounceAtZoomLimits)
+		require.False(t, opts.NoBounceAtZoomLimits)
 		var p pinchHandler
 		last := handlerSpecPinch(v, &p, mid, 50, 450, 500*time.Millisecond, handlerSpecT0, opts, nil)
 		assert.InDelta(t, 4.169925001442312, v.Zoom(), 1e-9, "past maxZoom 3")
@@ -753,7 +754,7 @@ func TestPinchZoomHandler_BounceAtZoomLimits(t *testing.T) {
 	t.Run("off: stops at the limit", func(t *testing.T) {
 		v := newMap()
 		opts := DefaultHandlerOptions()
-		opts.BounceAtZoomLimits = false
+		opts.NoBounceAtZoomLimits = true
 		var p pinchHandler
 		maxSeen := 0.0
 		last := handlerSpecPinch(v, &p, mid, 50, 450, 500*time.Millisecond, handlerSpecT0, opts, func() {
@@ -970,4 +971,20 @@ func TestKeyboardHandler_PanRules(t *testing.T) {
 		handlerSpecRun(v, t2, panAnimDefaultDuration)
 		assert.Equal(t, Pt(0, 160), handlerSpecPaneOffset(v, LL(0, 0)))
 	})
+}
+
+func TestHandlerOptions_PartialLiteralKeepsLeafletDefaults(t *testing.T) {
+	// A literal that sets one knob must not zero the others (the widget
+	// used to substitute DefaultHandlerOptions only for the all-zero value, so
+	// a partial literal gave WheelPxPerZoom 0 and a NaN inertia pan).
+	got := HandlerOptions{MaxBoundsViscosity: 1}.withDefaults()
+	want := DefaultHandlerOptions()
+	want.MaxBoundsViscosity = 1
+	assert.Equal(t, want, got)
+	assert.False(t, got.NoInertia, "the zero value of the switches is upstream's setting")
+	assert.False(t, got.NoBounceAtZoomLimits)
+	assert.Equal(t, 60.0, got.WheelPxPerZoom)
+	assert.Equal(t, 3400.0, got.InertiaDeceleration)
+	assert.Equal(t, 0.2, got.EaseLinearity)
+	assert.True(t, math.IsInf(got.InertiaMaxSpeed, 1))
 }

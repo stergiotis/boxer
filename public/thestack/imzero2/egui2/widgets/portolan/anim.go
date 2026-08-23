@@ -252,7 +252,7 @@ func (v *View) Tick(now time.Time) (animating bool) {
 		if t <= 1 {
 			s := (1 - math.Pow(1-t, 1.5)) * a.s
 			center := v.UnprojectAt(a.from.Add(a.to.Subtract(a.from).MultiplyBy(a.u(s)/a.u1)), a.startZoom)
-			zoom := v.ScaleZoom(a.w0/a.w(s), a.startZoom)
+			zoom := v.ScaleZoomAt(a.w0/a.w(s), a.startZoom)
 			v.events.Animating = true
 			v.MoveTo(center, zoom)
 		} else {
@@ -323,7 +323,7 @@ func (v *View) SetZoomAnimated(zoom float64, opts AnimateOptions) {
 // SetZoomAroundAnimated is SetZoomAround with animation — the wheel's and
 // the double-click's zoom.
 func (v *View) SetZoomAroundAnimated(containerPoint Point, zoom float64, opts AnimateOptions) {
-	scale := v.ZoomScale(zoom, math.NaN())
+	scale := v.ZoomScale(zoom)
 	viewHalf := v.size.DivideBy(2)
 	centerOffset := containerPoint.Subtract(viewHalf).MultiplyBy(1 - 1/scale)
 	newCenter := v.ContainerPointToLatLng(viewHalf.Add(centerOffset))
@@ -398,7 +398,7 @@ func (v *View) tryAnimatedZoom(center LatLng, zoom float64, opts AnimateOptions)
 	if !v.anim.zoomEnabled || opts.Animate == AnimateNo || math.Abs(zoom-v.zoom) > zoomAnimationThreshold {
 		return false
 	}
-	scale := v.ZoomScale(zoom, math.NaN())
+	scale := v.ZoomScale(zoom)
 	offset := v.centerOffset(center).DivideBy(1 - 1/scale)
 	if opts.Animate != AnimateYes && !v.size.Contains(offset) {
 		return false
@@ -448,7 +448,7 @@ func (v *View) FlyTo(targetCenter LatLng, targetZoom float64, opts FlyOptions) {
 	from := v.Project(v.center)
 	to := v.Project(targetCenter)
 	w0 := math.Max(v.size.X, v.size.Y)
-	w1 := w0 * v.ZoomScale(startZoom, targetZoom)
+	w1 := w0 * v.ZoomScaleAt(startZoom, targetZoom)
 	u1 := to.DistanceTo(from)
 	if u1 == 0 {
 		u1 = 1

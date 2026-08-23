@@ -4,6 +4,8 @@ import (
 	"math"
 	"sort"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // Pyramid is the tile bookkeeping of src/layer/tile/GridLayer.js without its
@@ -68,6 +70,9 @@ type Pyramid struct {
 type PyramidStats struct {
 	Loading, Load                                         int
 	TileLoadStart, TileLoad, TileError, TileUnload, Abort int
+	// RefusedUpdates counts update passes refused for a non-finite tile
+	// range (an infinite or NaN view) — where upstream throws.
+	RefusedUpdates int
 }
 
 type tile struct {
@@ -249,7 +254,7 @@ func (p *Pyramid) resetGrid(v *View) {
 	crs := v.CRS()
 	tileSize := p.src.TileSize
 	zoom := float64(p.zoom)
-	if b, ok := v.PixelWorldBounds(zoom); ok {
+	if b, ok := v.PixelWorldBoundsAt(zoom); ok {
 		p.globalTileRange, p.hasGlobalRange = pxBoundsToTileRange(b, tileSize), true
 	} else {
 		p.hasGlobalRange = false
@@ -276,7 +281,7 @@ func pxBoundsToTileRange(b Bounds, tileSize Point) Bounds {
 // tiledPixelBounds is the viewport in the level's pixels (Leaflet's
 // _getTiledPixelBounds, without the zoom-animation branch).
 func (p *Pyramid) tiledPixelBounds(v *View, center LatLng) Bounds {
-	scale := v.ZoomScale(v.Zoom(), float64(p.zoom))
+	scale := v.ZoomScaleAt(v.Zoom(), float64(p.zoom))
 	pixelCenter := v.ProjectAt(center, float64(p.zoom)).Floor()
 	halfSize := v.Size().DivideBy(scale * 2)
 	return BoundsOf(pixelCenter.Subtract(halfSize), pixelCenter.Add(halfSize))
@@ -298,10 +303,14 @@ func (p *Pyramid) Update(v *View) {
 	noPruneRange := BoundsOf(
 		tileRange.GetBottomLeft().Subtract(Point{margin, -margin}),
 		tileRange.GetTopRight().Add(Point{margin, -margin}))
-	if math.IsInf(tileRange.Min.X, 0) || math.IsInf(tileRange.Min.Y, 0) ||
-		math.IsInf(tileRange.Max.X, 0) || math.IsInf(tileRange.Max.Y, 0) ||
-		math.IsNaN(tileRange.Min.X) || math.IsNaN(tileRange.Max.Y) {
-		panic("portolan: attempted to load an infinite number of tiles")
+	if !finite(tileRange.Min.X) || !finite(tileRange.Min.Y) || !finite(tileRange.Max.X) || !finite(tileRange.Max.Y) {
+		// Upstream throws here ("Attempted to load an infinite number of
+		// tiles"); a widget's frame must not die of a degenerate view, so
+		// the pass is refused and logged — the tiles stay as they are.
+		p.stats.RefusedUpdates++
+		log.Error().Float64("zoom", v.Zoom()).Float64("lat", center.Lat).Float64("lng", center.Lng).
+			Msg("portolan: attempted to load an infinite number of tiles; update refused")
+		return
 	}
 	for _, t := range p.tiles {
 		c := t.coords
@@ -544,6 +553,8 @@ func (p *Pyramid) pruneTiles(v *View) {
 	}
 }
 
+func finite(f float64) bool { return !math.IsInf(f, 0) && !math.IsNaN(f) }
+
 func floorDiv2(x int) int { return int(math.Floor(float64(x) / 2)) }
 
 func (p *Pyramid) retainParent(x, y, z, minZoom int) bool {
@@ -632,7 +643,7 @@ func (p *Pyramid) Draw(v *View, now time.Time) (out []TileDraw) {
 		if !t.loaded {
 			continue
 		}
-		scale := v.ZoomScale(zoom, float64(t.coords.Z))
+		scale := v.ZoomScaleAt(zoom, float64(t.coords.Z))
 		min := Point{float64(t.coords.X), float64(t.coords.Y)}.ScaleBy(tileSize).MultiplyBy(scale).Subtract(origin)
 		max := min.Add(tileSize.MultiplyBy(scale))
 		opacity := p.src.Opacity

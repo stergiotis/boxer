@@ -17,10 +17,12 @@ type Options struct {
 	// Source is where tiles come from; Loader how they are fetched.
 	Source TileSource
 	Loader LoaderOptions
-	// Center and Zoom are the initial view; an invalid (NaN) Center leaves
-	// the map unloaded until SetView is called.
-	Center LatLng
-	Zoom   float64
+	// Center and Zoom are the initial view, set on the first frame; with
+	// NoInitialView the map stays unloaded until View().SetView (or
+	// FitBounds, FlyTo, …) is called.
+	Center        LatLng
+	Zoom          float64
+	NoInitialView bool
 	// CRS defaults to EPSG3857.
 	CRS CRSI
 	// MinZoom/MaxZoom override the source's when Has*; MaxBounds keeps the
@@ -30,7 +32,7 @@ type Options struct {
 	MaxBounds              LatLngBounds
 	ZoomSnap, ZoomDelta    float64
 	// The interaction handlers are on unless disabled; Handlers carries
-	// their numeric knobs (zero = DefaultHandlerOptions, i.e. Leaflet's).
+	// their knobs, zero meaning Leaflet's value field by field.
 	NoDragging, NoScrollWheelZoom, NoDoubleClickZoom bool
 	NoPinchZoom, NoBoxZoom, NoKeyboard               bool
 	NoZoomAnimation                                  bool
@@ -83,9 +85,13 @@ type Map struct {
 	// wrappedOf remembers which wrapped tile each requested unwrapped tile
 	// maps to, for the loader's arrivals and for Draw.
 	wrappedOf map[TileCoords]TileCoords
-	// srcGen counts tile sources; it is the tiles' image version, so a
-	// switch re-uploads under the same ids instead of showing the old
-	// source's pixels.
+	// errTiles marks wrapped tiles whose pixels are the source's error image,
+	// so a later request for them goes to the loader again instead of
+	// reusing the error image as if it were the tile.
+	errTiles map[TileCoords]struct{}
+	// srcGen counts tile sources; it is the high half of the tiles' image
+	// version (tileVersion), so a switch re-uploads under the same ids
+	// instead of showing the old source's pixels.
 	srcGen uint64
 
 	// handlers
@@ -119,7 +125,15 @@ type Map struct {
 type tilePixels struct {
 	px   []uint32
 	w, h int
+	// gen counts the pixels stored under this wrapped key — an error image
+	// replaced by the tile, or the reverse — so the host's texture, which
+	// re-uploads only on a version change, follows.
+	gen uint64
 }
+
+// tileVersion is the tile's paintImage content version: the source
+// generation above the per-tile pixel generation.
+func (m *Map) tileVersion(t *tilePixels) uint64 { return m.srcGen<<32 | t.gen }
 
 const defaultBackgroundRGBA = 0xd8d8dcff
 
@@ -138,10 +152,7 @@ func New(ids *c.WidgetIdStack, opts Options) *Map {
 	if opts.Background == 0 {
 		opts.Background = defaultBackgroundRGBA
 	}
-	hopts := opts.Handlers
-	if hopts == (HandlerOptions{}) {
-		hopts = DefaultHandlerOptions()
-	}
+	hopts := opts.Handlers.withDefaults()
 	view := NewView(ViewOptions{
 		CRS: opts.CRS, MinZoom: opts.MinZoom, MaxZoom: opts.MaxZoom,
 		HasMinZoom: opts.HasMinZoom, HasMaxZoom: opts.HasMaxZoom,
@@ -161,6 +172,7 @@ func New(ids *c.WidgetIdStack, opts Options) *Map {
 		pixels:         make(map[TileCoords]*tilePixels, 64),
 		holders:        make(map[TileCoords]int, 64),
 		wrappedOf:      make(map[TileCoords]TileCoords, 64),
+		errTiles:       make(map[TileCoords]struct{}, 8),
 		srcGen:         1,
 	}
 	m.wirePyramid()
@@ -195,6 +207,7 @@ func (m *Map) SetSource(src TileSource) {
 	m.pixels = make(map[TileCoords]*tilePixels, 64)
 	m.holders = make(map[TileCoords]int, 64)
 	m.wrappedOf = make(map[TileCoords]TileCoords, 64)
+	m.errTiles = make(map[TileCoords]struct{}, 8)
 	m.srcGen++
 	m.opts.Source = src
 	m.pyramid = NewPyramid(src)
@@ -274,10 +287,12 @@ func (m *Map) SetNoTiles(on bool) {
 func (m *Map) requestTile(coords, wrapped TileCoords) {
 	m.wrappedOf[coords] = wrapped
 	m.holders[wrapped]++
-	if px, ok := m.pixels[wrapped]; ok && px != nil {
-		// Already decoded for another unwrapped copy: ready at once.
-		m.pyramid.TileReady(m.view, coords, false, time.Now())
-		return
+	if _, isErr := m.errTiles[wrapped]; !isErr {
+		if px, ok := m.pixels[wrapped]; ok && px != nil {
+			// Already decoded for another unwrapped copy: ready at once.
+			m.pyramid.TileReady(m.view, coords, false, time.Now())
+			return
+		}
 	}
 	m.loader.Request(coords, wrapped, m.opts.Source.URL(wrapped, m.pyramid.GlobalRows()))
 }
@@ -291,7 +306,40 @@ func (m *Map) dropHolder(coords TileCoords) {
 	if m.holders[wrapped]--; m.holders[wrapped] <= 0 {
 		delete(m.holders, wrapped)
 		delete(m.pixels, wrapped)
+		delete(m.errTiles, wrapped)
 		m.tracker.Forget(wrapped)
+	}
+}
+
+// absorbArrivals stores the loader's decoded tiles and tells the pyramid.
+// A failed tile with an ErrorTileURL is re-pointed at it first (TileLayer's
+// _tileOnError) and is ready — as failed — when the error image arrives; the
+// byte cache makes that image one fetch.
+func (m *Map) absorbArrivals(arrivals []TileArrival, now time.Time) {
+	errURL := m.opts.Source.ErrorTileURL
+	for _, a := range arrivals {
+		if _, held := m.wrappedOf[a.Coords]; !held {
+			// Requested under a source since switched: nothing holds it.
+			continue
+		}
+		if a.Failed && errURL != "" && a.URL != errURL {
+			m.loader.Request(a.Coords, a.Wrapped, errURL)
+			continue
+		}
+		isErrImage := errURL != "" && a.URL == errURL
+		if !a.Failed {
+			var gen uint64
+			if old := m.pixels[a.Wrapped]; old != nil {
+				gen = old.gen + 1
+			}
+			m.pixels[a.Wrapped] = &tilePixels{px: a.Pixels, w: a.W, h: a.H, gen: gen}
+			if isErrImage {
+				m.errTiles[a.Wrapped] = struct{}{}
+			} else {
+				delete(m.errTiles, a.Wrapped)
+			}
+		}
+		m.pyramid.TileReady(m.view, a.Coords, a.Failed || isErrImage, now)
 	}
 }
 
@@ -331,7 +379,7 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 	sizeChanged := size != m.size
 	m.size = size
 	m.view.SetSize(size)
-	if !m.view.Loaded() && !math.IsNaN(m.opts.Center.Lat) && !math.IsNaN(m.opts.Center.Lng) {
+	if !m.view.Loaded() && !m.opts.NoInitialView {
 		m.view.SetView(m.opts.Center, m.opts.Zoom)
 	}
 	// Running animations step first, so a handler that starts a new one this
@@ -381,13 +429,7 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 	again := false
 	if !m.opts.NoTiles {
 		m.pyramid.Sync(m.view, ev)
-		// ---- arrivals ----
-		for _, a := range m.loader.Drain() {
-			if !a.Failed {
-				m.pixels[a.Wrapped] = &tilePixels{px: a.Pixels, w: a.W, h: a.H}
-			}
-			m.pyramid.TileReady(m.view, a.Coords, a.Failed, now)
-		}
+		m.absorbArrivals(m.loader.Drain(), now)
 		again = m.pyramid.Tick(m.view, now)
 	}
 
@@ -400,13 +442,14 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 				continue
 			}
 			id := m.ids.PrepareStr("tile-" + td.Wrapped.Key()).Derive()
-			send := m.tracker.PixelsToSendFor(td.Wrapped, id, m.srcGen, px.px)
+			version := m.tileVersion(px)
+			send := m.tracker.PixelsToSendFor(td.Wrapped, id, version, px.px)
 			if len(send) > 0 {
 				m.bytesShipped += uint64(len(send)) * 4
 			}
 			r := td.Rect
 			c.PaintImage(id, float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y),
-				uint32(px.w), uint32(px.h), m.srcGen, send).Opacity(float32(td.Opacity)).Send()
+				uint32(px.w), uint32(px.h), version, send).Opacity(float32(td.Opacity)).Send()
 		}
 	}
 	if overlay != nil {

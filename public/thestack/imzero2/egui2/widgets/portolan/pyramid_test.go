@@ -699,24 +699,27 @@ func TestGridLayer_NoWrapOption(t *testing.T) {
 func TestGridLayer_SanityChecksForInfinity(t *testing.T) {
 	// Upstream's throw is Point's own ("Invalid Point object: (NaN, NaN)" —
 	// the map has no zoom yet); here the view takes the infinite centre and
-	// the pyramid refuses the infinite tile range.
-	const infinite = "portolan: attempted to load an infinite number of tiles"
-
-	t.Run("Throws error on map center at plus Infinity longitude", func(t *testing.T) {
-		g := newGridTest(t, Pt(800, 600), gridSource())
-		assert.PanicsWithValue(t, infinite, func() {
-			g.v.PanTo(LL(math.Inf(1), math.Inf(1)))
-			g.sync()
+	// the pyramid refuses the infinite tile range. Where upstream throws, the
+	// port logs and refuses the update pass — a widget's frame must not die
+	// of a degenerate view — which RefusedUpdates counts.
+	for _, tc := range []struct {
+		name   string
+		center LatLng
+	}{
+		{"Refuses on map center at plus Infinity longitude", LL(math.Inf(1), math.Inf(1))},
+		{"Refuses on map center at minus Infinity longitude", LL(math.Inf(-1), math.Inf(-1))},
+		{"Refuses on a NaN map center", LL(math.NaN(), math.NaN())},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newGridTest(t, Pt(800, 600), gridSource())
+			assert.NotPanics(t, func() {
+				g.v.PanTo(tc.center)
+				g.sync()
+			})
+			assert.Positive(t, g.p.Stats().RefusedUpdates)
+			assert.Empty(t, g.createdKeys(), "no tile is requested for an infinite range")
 		})
-	})
-
-	t.Run("Throws error on map center at minus Infinity longitude", func(t *testing.T) {
-		g := newGridTest(t, Pt(800, 600), gridSource())
-		assert.PanicsWithValue(t, infinite, func() {
-			g.v.PanTo(LL(math.Inf(-1), math.Inf(-1)))
-			g.sync()
-		})
-	})
+	}
 }
 
 func TestGridLayer_DoesNotCallGetZoomScaleWithNullAfterInvalidateAll(t *testing.T) {
