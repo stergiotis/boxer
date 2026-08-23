@@ -184,6 +184,37 @@ useful cross-check on this boundary; it is not the authority for it.
   Rejected: it cannot express the four streaming sites' pipes, process groups,
   and signal handling without re-exposing all of `exec.Cmd` anyway.
 
+## Updates
+
+### 2026-08-23 — `Program.Argv`: declaring a multi-call binary's subcommand
+
+`Program` gained an optional `Argv []string`. When set, `Argv[0]` is the PATH
+lookup name and `Argv[1:]` are leading arguments prepended to every invocation;
+`Name` becomes the invocation spelled out ("clickhouse local") and keys the
+registry. Empty `Argv` keeps the previous behaviour, so every other declaration
+is untouched.
+
+This exists because ClickHouse ships one fat binary that dispatches on argv[0],
+with `clickhouse-local` / `clickhouse-client` as symlinks a single-binary
+install does not create. Resolving `clickhouse` and passing the subcommand is
+the form that works under both install shapes, and it lets two subcommands of
+the same binary be two declarations — `clickhouse local` and `clickhouse format`
+— rather than one call site borrowing the other's. `clickhouse format` carries
+no `OverrideEnv`: its one caller already takes a configured path, so there is no
+override need yet (§Deferred's rule for when to populate the field).
+
+`Opts.Path` replaces `Argv[0]` only: the leading arguments still apply, so a
+caller-supplied path names the multi-call binary. That is what keeps
+resolve-once-reuse-later call sites (`chexec.LocalExecutor`, `chlocalpool`)
+correct, and it is asserted in `TestArgvPrefixIsPrepended` because getting it
+wrong is silent — the process starts and misreads its first real argument.
+
+A fallback to the legacy alias when `Argv[0]` misses was considered and dropped:
+`clickhouse-common-static` provides `/usr/bin/clickhouse` wherever it provides
+the symlinks, so the fallback would guard nothing while making `Opts.Path`
+ambiguous about whether the prefix applies.
+
+
 ## Deferred
 
 - `OverrideEnv` is populated for `clickhouse-local` (`BOXER_CLICKHOUSE_LOCAL`, a

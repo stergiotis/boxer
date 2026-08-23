@@ -239,3 +239,23 @@ func TestResolve_HostAndLocal(t *testing.T) {
 		t.Errorf("override resolve = (%q, %v), want ('/opt/custom/tool', true)", path, ok)
 	}
 }
+
+// A multi-call program (`clickhouse local`) must prepend its subcommand to
+// every invocation — including when the caller supplies an explicit path, which
+// names the multi-call binary and not the subcommand. Getting that wrong is
+// silent: the process starts and misreads the first real argument.
+func TestArgvPrefixIsPrepended(t *testing.T) {
+	p := &Program{Name: "multicall probe", Argv: []string{"probe", "sub"}, Kind: Host}
+	cmd, err := p.Command(context.Background(), Opts{Path: "/opt/probe"}, "--query", "SELECT 1")
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	want := []string{"/opt/probe", "sub", "--query", "SELECT 1"}
+	if !slices.Equal(cmd.Args, want) {
+		t.Errorf("argv = %q, want %q", cmd.Args, want)
+	}
+	// The declaration must not be reachable through the returned argv.
+	if !slices.Equal(p.Argv, []string{"probe", "sub"}) {
+		t.Errorf("Argv mutated to %q", p.Argv)
+	}
+}

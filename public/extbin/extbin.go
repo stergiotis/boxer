@@ -34,7 +34,7 @@ type Kind uint8
 
 const (
 	// Host is an ambient binary looked up on PATH — the bulk of boxer's
-	// external dependencies (git, clickhouse-local, tinygo, rustfmt, …). Such
+	// external dependencies (git, clickhouse, tinygo, rustfmt, …). Such
 	// binaries are, by nature, not pinned; declaring them here at least makes
 	// the set enumerable and gives each a uniform override + install hint.
 	Host Kind = iota
@@ -74,8 +74,17 @@ func (k Kind) String() string {
 type Program struct {
 	// Name is the invocation/lookup name for Host and GoTool programs (e.g.
 	// "git", "scc"). For Local programs it is a role label used only to key the
-	// audit registry. Must be unique across all declarations.
+	// audit registry. When [Program.Argv] is set, Name is the whole invocation
+	// spelled out ("clickhouse local") and is a label only. Must be unique
+	// across all declarations.
 	Name string
+	// Argv, when non-empty, replaces Name as the invocation: Argv[0] is the
+	// PATH lookup name and Argv[1:] are leading arguments prepended to every
+	// call. It is how a multi-call binary's subcommand is declared — `clickhouse
+	// local` rather than the `clickhouse-local` symlink — so boxer does not
+	// depend on per-subcommand symlinks that a single-binary install omits.
+	// Host and Local only; ignored for GoTool and GoToolchain.
+	Argv []string
 	// Kind is the resolution policy.
 	Kind Kind
 	// Module is the go.mod tool-block module path for a GoTool (e.g.
@@ -98,7 +107,9 @@ type Opts struct {
 	Dir string
 	// Path overrides binary resolution with an explicit executable path. It is
 	// the highest-priority source for any kind, and is required for Local
-	// programs.
+	// programs. It replaces [Program.Argv][0] only: a program's leading
+	// subcommand arguments still apply, so a caller-supplied path names the
+	// multi-call binary (`/usr/bin/clickhouse`), not the subcommand.
 	Path string
 	// Env sets the child environment, exactly like exec.Cmd.Env: nil inherits
 	// the parent's, non-nil replaces it wholesale. Callers wanting
@@ -160,7 +171,10 @@ func (p *Program) Command(ctx context.Context, o Opts, args ...string) (cmd *exe
 	if err != nil {
 		return
 	}
-	cmd = exec.CommandContext(ctx, name, append(pre, args...)...)
+	argv := make([]string, 0, len(pre)+len(args))
+	argv = append(argv, pre...)
+	argv = append(argv, args...)
+	cmd = exec.CommandContext(ctx, name, argv...)
 	cmd.Dir = o.Dir
 	cmd.Env = o.Env
 	return
@@ -226,7 +240,7 @@ func (p *Program) Resolve() (path string, available bool) {
 	}
 	switch p.Kind {
 	case Host:
-		if bin, err := exec.LookPath(p.Name); err == nil {
+		if bin, err := exec.LookPath(p.lookupName()); err == nil {
 			return bin, true
 		}
 	case GoToolchain:
@@ -251,7 +265,7 @@ func (p *Program) Resolve() (path string, available bool) {
 // Name}; callers of the capture path additionally consult goToolFallback.
 func (p *Program) resolve(o Opts) (name string, pre []string, err error) {
 	if o.Path != "" {
-		name = o.Path
+		name, pre = o.Path, p.prefixArgs()
 		return
 	}
 	switch p.Kind {
@@ -259,6 +273,7 @@ func (p *Program) resolve(o Opts) (name string, pre []string, err error) {
 		err = eh.Errorf("extbin: program %q is Local and requires an explicit Opts.Path", p.Name)
 	case Host:
 		name, err = p.lookHost()
+		pre = p.prefixArgs()
 	case GoToolchain:
 		if bin, ok := p.override(); ok {
 			name = bin
@@ -279,11 +294,30 @@ func (p *Program) lookHost() (name string, err error) {
 		name = bin
 		return
 	}
-	name, err = exec.LookPath(p.Name)
+	name, err = exec.LookPath(p.lookupName())
 	if err != nil {
 		err = p.notFound(err)
 	}
 	return
+}
+
+// lookupName is the executable to find on PATH: Argv[0] when the program
+// declares a multi-call invocation, otherwise Name.
+func (p *Program) lookupName() (name string) {
+	if len(p.Argv) > 0 {
+		return p.Argv[0]
+	}
+	return p.Name
+}
+
+// prefixArgs is the leading argument list every invocation carries — the
+// subcommand of a multi-call binary. It returns a copy so a caller appending to
+// it cannot reach the declaration's backing array.
+func (p *Program) prefixArgs() (pre []string) {
+	if len(p.Argv) < 2 {
+		return nil
+	}
+	return append([]string(nil), p.Argv[1:]...)
 }
 
 func (p *Program) override() (path string, ok bool) {
@@ -310,9 +344,9 @@ func (p *Program) goToolFallback(ctx context.Context, o Opts, args []string) (cm
 
 func (p *Program) notFound(cause error) (err error) {
 	if p.InstallHint != "" {
-		return eh.Errorf("extbin: program %q not found (%s): %w", p.Name, p.InstallHint, cause)
+		return eh.Errorf("extbin: program %q not found (looked for %q; %s): %w", p.Name, p.lookupName(), p.InstallHint, cause)
 	}
-	return eh.Errorf("extbin: program %q not found: %w", p.Name, cause)
+	return eh.Errorf("extbin: program %q not found (looked for %q): %w", p.Name, p.lookupName(), cause)
 }
 
 // goBinary resolves the `go` executable, preferring PATH and falling back to
