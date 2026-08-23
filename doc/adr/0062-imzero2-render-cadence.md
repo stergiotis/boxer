@@ -215,6 +215,81 @@ Frame delivery is byte-identical in both pairs; only the CPU moves. That confirm
 
 **Not adoptable yet, and not for the obvious reason.** The fix is unreleased: 0.36.1 still carries the `Poll`. Taking it needs a release *after* it, and this tree pins `egui`/`eframe` to `0.35` — a pin added deliberately, because the `>=0.35.0` requirement it replaced had resolved to 0.36.1 and the imzero2 lib does not compile against 0.36. So the order of work is: port the client to the 0.36 API, then move to whatever release carries #8398. SD6 stays open until then, with `IMZERO2_RENDER_CADENCE=reactive` the mitigation — but SD6's *own* question is now settled in the negative: the throttle-when-hidden mode it contemplated is unnecessary, because the spin was never the cadence's fault.
 
+### 2026-08-23 — measured on GNOME/mutter: the doubling is compositor-specific, and reactive does not save the core
+
+Every pacing figure above comes from one session type (COSMIC/Wayland on an AMD
+part). The 2026-07-22 and 2026-08-19 entries were re-run on **GNOME/mutter,
+Wayland, a four-core Intel mobile part, one 1920×1080 output at 60.009 Hz**,
+against a tree still pinning `egui`/`eframe` **0.35.0** — so pre-#8398, the
+version the 2026-08-19 entries measured. The demo used is `widgets`, at
+1280×800.
+
+**A correction to the capture method first.** The
+[triage how-to](../howto/imzero2-render-troubleshooting.md) step 2 counts
+`wl_surface.commit()`. That double-counts: eframe also commits without
+attaching a buffer to re-arm a frame callback, and one 15 s capture here holds
+2,326 commits against 1,158 attaches. Counting `wl_surface.attach` on the
+window's own surface gives the presented-frame cadence; on `.commit()` the same
+capture reports a nonsense ~168 fps with a bimodal delta distribution.
+
+| arm (visible window) | fps | p50 | p90 | p99 | doubled | client CPU |
+| --- | --- | --- | --- | --- | --- | --- |
+| `-vsync on`, continuous | 60.0–60.1 | 16.65–16.68 ms | 17.0 | 17.6–18.8 | **0.0–0.6 %** | 96.3–97.5 % |
+| `-vsync off`, continuous | 60.0 | 16.67 ms | 17.05 | 20.45 | 0.3 % | 97.2 % |
+| `-vsync on`, reactive | 1.0 | 984 ms | — | — | — | **0.2 %** |
+
+**The "60→30" doubling does not reproduce here.** The 2026-07-22 entry found a
+steady missed-refresh beat under `vsync` and called it a "compositor + toolkit
+present-pacing floor"; on mutter it is 0.0–0.6 % with a pacing std of
+0.6–1.3 ms. `-vsync off` — the one app-side lever, and the entry's remedy —
+changes nothing measurable, because there is nothing to remove. The floor is
+therefore **compositor-specific rather than a property of the toolkit**, and the
+how-to should say so before recommending step 3.
+
+**The continuous-mode CPU cost reproduces exactly.** 96.3–97.5 % of a core to
+serve 60 fps of a *visible* window, against the 98.5 % and 99.7 % the
+2026-08-19 entries measured. Neither the compositor nor the vendor changes it,
+which is what a defect in eframe's control flow should look like.
+
+**Reactive on a visible idle window** costs 0.2 % of a core at 1.0 fps —
+matching the 0.1 % recorded, and re-confirming why O2 was rejected: an operator
+watching an idle monitor gets one frame a second.
+
+**What is new: reactive does not mitigate an occluded window on this
+compositor.** Mapping a second, larger client over the measured one:
+
+| cadence | state | fps | client CPU |
+| --- | --- | --- | --- |
+| continuous | visible | 59.8 | 97.4 % |
+| continuous | **covered** | **0.1** | **100.0 %** |
+| reactive | visible | 1.0 | 0.2 % |
+| reactive | **covered** | **0.0** | **92.0 %** (replicate: 100 %) |
+
+The 2026-08-19 entry closes by offering `IMZERO2_RENDER_CADENCE=reactive` as
+"the mitigation for a window left in the background", on a weston probe where
+reactive held the client at 1.8 %. That probe was still *delivering* frame
+callbacks, once a second; mutter withholds them from a covered surface
+altogether. A timed repaint whose callback never arrives is permanently due, so
+`about_to_wait` re-Polls exactly as it does in continuous mode — the same
+mechanism that entry diagnosed, reached by a different route. **On GNOME the
+documented workaround does not save the core**, and the only remedy is the
+upstream fix (#8398) the tree cannot take until the 0.36 port.
+
+This strengthens rather than contradicts the framing filed as
+[#8434](https://github.com/emilk/egui/issues/8434): keying the backstop on "a
+redraw requested but unserviced for > N ms" would catch this case, where keying
+on cadence does not. SD6 stays open and its disposition is unchanged.
+
+Two caveats on the occlusion rows. Occlusion was established by stacking a
+second client rather than by an occlusion signal — winit emits no
+`WindowEvent::Occluded` on Wayland (the 2026-08-19 entry's own finding), so
+there is nothing to assert against. And GNOME's focus handling made which
+window ends up on top non-deterministic across runs: the visible/covered
+contrast rests on the run whose two phases are self-evident from their own frame
+counts, with a replicate in which *both* phases were covered and both spun
+(99.9 %, 100 %). A third observation, incidental: mutter throttles a covered
+surface harder than the ~1 Hz the Context recorded for COSMIC — 0.1 fps, not 1.
+
 ## References
 
 - [ADR-0009](0009-environment-variable-registry.md) — environment-variable registry; `CategorialStringVar` and the default-on-unrecognised-value convention used here.

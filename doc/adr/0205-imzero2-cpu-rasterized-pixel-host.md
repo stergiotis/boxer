@@ -398,6 +398,100 @@ code, same 256-bit path) and anything in §Surfaces. The wgpu arm on this part
 varies 1.7× run to run, so its figures above are quoted as a pair rather than a
 best case.
 
+### 2026-08-23 — a third machine, an Intel mobile part: p50 transfers again, and two orderings move once more
+
+[Survey §19](../adr-background-work/egui-software-backend-survey.md) closed by
+noting that two machines separate a host property from a machine property but
+are "not enough to claim a curve". §11's harness has now been run unchanged on a
+third: **four cores / eight threads, one L3 domain of 8 MiB, dual-channel DDR4,
+an integrated GPU** — an Intel mobile part, where both earlier machines were
+AMD. AVX2 and no AVX-512, so the same 256-bit code path executes as in §16.1.
+Nothing here reverses §Decision; SD1–SD5 stand.
+
+Protocol as §19.2, with one difference stated so the columns are read
+correctly: `IMZERO2_HEADLESS_LISTEN` was left unset, so the host pushes a
+`NullSink` and the full tessellate-and-rasterize path runs on every frame with
+no carrier and no encoder in the loop. 1920×1200, 660 frames, 60 Hz,
+`IMZERO2_HEADLESS_RASTER_STATS=1`. The frame is 31 clipped primitives and
+~6,405 triangles (ClickHouse was running, so the panels populate). Adapter
+identity was read back per §15's rule on every wgpu arm.
+
+**Every arm held 60 Hz** — 660 frames in 11.02–11.07 s — except lavapipe, which
+slipped to 11.21–11.47 s.
+
+| arm | p50 | p90 | p99 | client CPU/frame | peak RSS |
+| --- | --- | --- | --- | --- | --- |
+| **software, 4 workers (default)**, n=7 | **296 µs** (203–309) | 533 | 6.0 ms | **1.82 ms** | 167 MiB |
+| wgpu on the integrated GPU, n=5 | 9,313 µs (9,074–9,689) | 10.9 ms | 11.9 ms | 2.76 ms | **141 MiB** |
+| wgpu on lavapipe, n=2 | 11,509 µs | 14.4–15.0 ms | 21–27 ms | 61.0 ms | 145 MiB |
+
+**p50 transfers a third time.** 296 µs against 250 µs on the reference machine
+and 241 µs on the Zen 2 — within 23 % across three parts differing 4× in cores
+and 8× in L3. §19.3's explanation (post-§SD4 the median frame repaints a
+dirty-tile set that fits anywhere) now has a third data point rather than a
+second. The §17.4 thread curve reproduces in shape but with a narrower plateau:
+
+| workers | 1 | 2 | **4 (default)** | 8 |
+| --- | --- | --- | --- | --- |
+| p50, this machine | 372 µs | 342 | **296** | 375 |
+| p50, §19.6 Zen 2 | 360 | 259 | 241 | 297 |
+| p50, §17.4 reference | 365 | 261 | 261 | 298 |
+| client CPU/frame | 1.39 ms | 1.58 | 1.82 | 2.92 |
+| peak RSS | 107 MiB | 111 | 167 | 199 |
+
+All three agree to within 4 % at one worker; at two this part is ~31 % slower
+than either. The default is the best of the four measured here, so §SD3's
+`min(4, hardware_threads / 2)` again selects the right point without the
+operator being involved.
+
+**The lavapipe arm §19.1 could not construct exists here**, and it does not
+change §14.3's reading: 61.0 ms of CPU per frame is ~3.7 cores at 60 Hz on a
+four-core part, which is why it is the one arm that missed the tick. Against it
+the software host is 39× in wall-clock and 34× in CPU.
+
+**Correction 2 moves further in the same direction.** §Consequences reports the
+GPU as ~20 % cheaper in CPU; §19.5 measured it ~15 % *more* expensive; here it
+is **52 % more expensive** (2.76 ms against 1.82). Two machines of three now
+order it that way, so the CPU-per-frame ordering should not be carried as a
+property of the host. As in §19.5 the quantity is whole-client CPU, so the
+within-machine comparison is what carries it.
+
+**Correction 1's sign is not stable either.** §14.1 recorded the software host
+at ~1.9× the wgpu arm's RSS (228 against 118 MiB); §19.5 found it *lower*
+(156 against 166); here it is **higher again, by 1.18×** (167 against 141). The
+direction flips with the machine and the Vulkan driver, which is the strongest
+form of §19.5's point: this is not a property of the host, and the ADR should
+not carry a memory ratio at all.
+
+**What is new here is the GPU arm's absolute cost.** 9.3 ms against 1.34 ms on
+the reference machine and 2.5–4.2 ms on the Zen 2 — a readback-bound frame
+(§18.1) on a weak integrated GPU behind DDR4. It leaves the headless GPU arm
+7 ms of margin in a 16.6 ms budget, where the software host uses 296 µs. The
+software host is **31× faster in wall-clock** here, the largest gap recorded;
+§18.2's unpadded row-copy is the first thing to look at for anyone who needs
+that arm on this class of part.
+
+Two caveats. **The arms differ in how reproducible they are**: the wgpu arm
+replicated to 1.5 % across five runs, while the software arm spread 203–309 µs
+across seven — this is a 15 W mobile part, and runs were spaced with a cooldown
+after the first pair. The median is quoted and the spread is the error bar.
+**And machine and tree are confounded exactly as §19.8 says**, though less so:
+these figures come from a tree two commits after §19's.
+
+The viewport sweep agrees with §19.4 on the conclusion and not on the split. On
+8 MiB the §SD5 pixel budget is ~1.05 Mpx, so 1920×1200 sits 2.2× over it rather
+than the Zen 2's 4.4×:
+
+| | 912×568 | 1280×800 | 1920×1200 |
+| --- | --- | --- | --- |
+| p50 | 186 µs | 234 µs | 296 µs |
+| p99 | 3.8 ms | 4.7 ms | 6.0 ms |
+
+4.45× the pixels costs 1.59× at p50 and 1.56× at p99, against §19.4's 1.29× and
+2.2×. The median barely moves on both machines; the tail penalty is milder here,
+which is what twice the L3 should buy. "Size a CPU-rasterized appliance at
+1080p–1200p" survives on a third part.
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless host and pixel streaming.

@@ -292,6 +292,41 @@ reachable with the highlight cached. The before/after was **not** measured live:
 getting a "before" means mutating a worktree shared with concurrent sessions, and
 the benchmark carries the delta more precisely anyway.
 
+## Update 2026-08-23 — the ratio holds; the §Context absolutes are pre-ADR-0196
+
+Re-ran the committed benchmarks on a four-core Intel mobile part
+(`-benchtime 300x`, the same form §Context used). **The assertion this ADR
+actually rests on reproduces**: a `Prepare*` hit stays orders below the `Build*`
+it skips.
+
+| | `Build*` | `Prepare*` hit | ratio |
+| --- | --- | --- | --- |
+| SQL one-liner | 48.3 µs / 333 allocs | 359 ns / 0 allocs | 134× |
+| SQL 3-line CTE | 139.7 µs / 775 allocs | 710 ns / 2 allocs | 197× |
+| Markdown ~0.5 KB | 85.7 µs / 457 allocs | 488 ns / 1 alloc | 176× |
+
+**The absolute figures in §Context no longer reproduce, and the machine is not
+why.** The CTE row is recorded there as 3.5 ms and 30,849 allocs; it now costs
+139.7 µs and 775. That is
+[ADR-0196](./0196-nanopass-two-stage-sll-parsing.md) (2026-08-18), which
+removed the WITH-clause ambiguity and put two-stage SLL parsing at every
+grammar seam — its own table records the same shape of input moving 3.51 ms →
+0.11 ms, 32×. §SD5 named full-context LL as the suspect and ADR-0196 is the
+answer to it, so this is the expected consequence arriving, not a discrepancy.
+
+**One argument in §Context should not be cited as it stands.** "A Graph tab
+showing three CTE nodes re-parses roughly 10.5 ms of SQL every frame — most of a
+60 Hz budget" is now about **0.42 ms**, ~2.5 % of the budget. The decision is
+unaffected — a memo that turns a per-frame 140 µs × N into a 700 ns probe is
+still the right shape, and §Consequences' reasoning never depended on the
+magnitude — but the sentence overstates the motivation by ~25× against the
+current tree and should be read as a pre-ADR-0196 measurement.
+
+Two rows could not be compared: the committed benchmark's markdown and JSON
+sizes (~0.5 KB / ~10 KB, and ~15 KB) are not §Context's (~0.5 KB / ~200 KB, and
+~312 KB), so only the small markdown row above is like-for-like. The map-probe
+rows were not re-measured.
+
 ## Validation
 
 - Unit: a hit returns the same holder; different languages with identical source
