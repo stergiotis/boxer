@@ -12,7 +12,6 @@ package regex_explorer
 
 import (
 	"context"
-	"os/exec"
 	"reflect"
 	"slices"
 	"strings"
@@ -24,6 +23,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -41,18 +41,18 @@ func newTestApp(t *testing.T) (inst *App) {
 }
 
 // skipIfNoClickHouseLocal short-circuits integration tests when the
-// clickhouse-local binary is absent — avoids hard-failing on machines
+// clickhouse binary is absent — avoids hard-failing on machines
 // that do not have ClickHouse installed.
 func skipIfNoClickHouseLocal(t *testing.T) {
 	t.Helper()
-	if _, err := exec.LookPath("clickhouse-local"); err != nil {
-		t.Skipf("clickhouse-local not on PATH: %v", err)
+	if _, ok := extbin.ClickHouseLocal.Resolve(); !ok {
+		t.Skip("clickhouse not on PATH")
 	}
 }
 
 // setupTestBus stands up an in-proc bus + chlocalbroker.Service and
 // returns a bus client with the regex_explorer cap. The broker (and
-// its pool) is torn down on test cleanup. Skips if clickhouse-local
+// its pool) is torn down on test cleanup. Skips if clickhouse
 // is not on PATH.
 func setupTestBus(t *testing.T) (caller runtimeapp.BusI) {
 	t.Helper()

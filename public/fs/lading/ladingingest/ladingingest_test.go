@@ -97,7 +97,7 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	require.NoError(t, lading.Provision(ctx, exec, ladingschema.ProfileCorpus))

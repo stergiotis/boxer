@@ -39,7 +39,7 @@ import (
 func setupE2E(t *testing.T) (svc *adhocdata.Service, query func(sql string) string) {
 	t.Helper()
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed: %v", err)
+		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	bus := inprocbus.NewInst(logger)

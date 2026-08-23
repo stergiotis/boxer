@@ -68,7 +68,7 @@ func newWorker(ctx context.Context, p *Pool) (w *Worker, err error) {
 	// ctx would let a cancelled Acquire kill a live pooled worker.
 	cmd, err := extbin.ClickHouseLocal.Command(context.Background(), extbin.Opts{Path: cfg.BinaryPath}, args...)
 	if err != nil {
-		err = eh.Errorf("chlocalpool: resolve clickhouse-local: %w", err)
+		err = eh.Errorf("chlocalpool: resolve clickhouse local: %w", err)
 		return
 	}
 	stderr := &capBuffer{cap: int(cfg.StderrCapBytes)}

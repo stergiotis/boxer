@@ -52,7 +52,7 @@ func ph(b byte) (out types.PatchHash) {
 func TestAppendAppliedFailureLeavesOrderUnambiguous(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	flaky := &flakyExecutor{inner: local, failNth: 2}

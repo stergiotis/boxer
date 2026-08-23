@@ -1704,7 +1704,7 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	inst.writeGateNotice = ""
 	if runIsInsertWrapper(runSQL) {
 		if AllowWrites.Get() == "" {
-			inst.writeGateNotice = "the INSERT is gated — set BOXER_PLAY_ALLOW_WRITES=1 to execute writes from play, or copy Preview → As sent and run it via clickhouse-client"
+			inst.writeGateNotice = "the INSERT is gated — set BOXER_PLAY_ALLOW_WRITES=1 to execute writes from play, or copy Preview → As sent and run it via `clickhouse client`"
 			return
 		}
 		inst.executeWriteRun(runSQL, sigParams)

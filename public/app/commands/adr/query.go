@@ -62,7 +62,7 @@ var overviewQueries = []namedQuery{
          ORDER BY s.code_refs DESC, s.num LIMIT 20`},
 }
 
-// resolveChBinary reports whether clickhouse-local is reachable and, when it is
+// resolveChBinary reports whether `clickhouse local` is reachable and, when it is
 // via the bundled path, returns that path as an explicit override. An empty
 // path with ok=true means "resolve on PATH at call time" (left to extbin).
 func resolveChBinary() (path string, ok bool) {
@@ -70,7 +70,7 @@ func resolveChBinary() (path string, ok bool) {
 		return chlocalpool.DefaultBinaryPath, true
 	}
 	// Command resolves the binary (PATH lookup) without running it; a nil error
-	// means clickhouse-local is installed.
+	// means clickhouse is installed.
 	if _, err := extbin.ClickHouseLocal.Command(context.Background(), extbin.Opts{}); err == nil {
 		return "", true
 	}
@@ -93,7 +93,7 @@ type ArrowTables struct {
 }
 
 // chTablePrelude binds each named Arrow file to the table of the same name.
-// The files are referenced by basename and clickhouse-local is run with its
+// The files are referenced by basename and `clickhouse local` is run with its
 // working directory set to where they live (see RunQuery), so no
 // absolute-path file()-access policy is involved.
 func chTablePrelude(t ArrowTables) string {
@@ -114,7 +114,7 @@ func chTablePrelude(t ArrowTables) string {
 }
 
 // RunQuery executes one SQL statement against the bound tables via
-// clickhouse-local. ok=false means the binary is unreachable; callers decide
+// `clickhouse local`. ok=false means the binary is unreachable; callers decide
 // whether to error or fall back.
 func RunQuery(tables ArrowTables, query, format string, stdout io.Writer) (ok bool, err error) {
 	if tables.Adr == "" {
@@ -132,7 +132,7 @@ func RunQuery(tables ArrowTables, query, format string, stdout io.Writer) (ok bo
 		extbin.Opts{Path: bin, Dir: filepath.Dir(tables.Adr)},
 		"--multiquery", "--output-format", format)
 	if err != nil {
-		return true, eb.Build().Str("query", query).Errorf("resolve clickhouse-local: %w", err)
+		return true, eb.Build().Str("query", query).Errorf("resolve clickhouse local: %w", err)
 	}
 	cmd.Stdin = strings.NewReader(script)
 	cmd.Stdout = stdout
@@ -140,13 +140,13 @@ func RunQuery(tables ArrowTables, query, format string, stdout io.Writer) (ok bo
 	cmd.Stderr = &stderr
 	if runErr := cmd.Run(); runErr != nil {
 		return true, eb.Build().Str("stderr", stderr.String()).Str("bin", cmd.Path).
-			Str("query", query).Errorf("clickhouse-local: %w", runErr)
+			Str("query", query).Errorf("clickhouse local: %w", runErr)
 	}
 	return true, nil
 }
 
 // RunOverview runs the canned overview queries, each under a heading. ok=false
-// means clickhouse-local is unreachable (callers fall back to RenderBoardASCII).
+// means `clickhouse local` is unreachable (callers fall back to RenderBoardASCII).
 func RunOverview(tables ArrowTables, stdout io.Writer) (ok bool, err error) {
 	if _, found := resolveChBinary(); !found {
 		return false, nil

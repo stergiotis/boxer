@@ -29,7 +29,7 @@ viewer at a time (v1 single-session); software render + encode (no GPU needed).
   showing one person or screen-sharing.
 - **Demo selection:** boots into the **interactive carousel** — the viewer
   opens any demo (sccmap, widgets, leewaywidgets, ...) from the in-browser
-  launcher. Auto-booting one demo (`LAUNCH=sccmap`) needs `clickhouse-local`
+  launcher. Auto-booting one demo (`LAUNCH=sccmap`) needs the `clickhouse` binary
   baked in (+~2 GB), because `--launch` resolves via a SQL query; the lean
   default avoids it. See demo.env.example.
 - Security is entirely Caddy's: TLS (Let's Encrypt) + HTTP basic-auth. The app

@@ -57,7 +57,7 @@ func NewCliCommand() *cli.Command {
 			},
 			{
 				Name:   "overview",
-				Usage:  "print the canned two-axis overview via clickhouse-local (plain-text board if it is absent)",
+				Usage:  "print the canned two-axis overview via `clickhouse local` (plain-text board if it is absent)",
 				Flags:  rootFlags(),
 				Action: actionOverview,
 			},
@@ -65,7 +65,7 @@ func NewCliCommand() *cli.Command {
 				Name:      "query",
 				Usage:     "run an arbitrary SQL query against the `adr`, `coderef`, `subtask` and `adrcontent` tables",
 				ArgsUsage: "<SQL>",
-				Flags:     append(rootFlags(), &cli.StringFlag{Name: "format", Value: "PrettyCompact", Usage: "clickhouse-local --output-format"}),
+				Flags:     append(rootFlags(), &cli.StringFlag{Name: "format", Value: "PrettyCompact", Usage: "clickhouse local --output-format"}),
 				Action:    actionQuery,
 			},
 		},
@@ -160,7 +160,7 @@ func actionOverview(c *cli.Context) error {
 	}
 	if !ok {
 		log.Warn().Str("lookedAt", chlocalpool.DefaultBinaryPath).
-			Msg("clickhouse-local not found; printing the plain-text board instead")
+			Msg("clickhouse not found; printing the plain-text board instead")
 		if _, e := fmt.Fprintln(os.Stdout, "ADR overview — decision status × code-evidence implementation degree:"); e != nil {
 			return e
 		}
@@ -188,7 +188,7 @@ func actionQuery(c *cli.Context) error {
 		return err
 	}
 	if !ok {
-		return eh.Errorf("clickhouse-local not found (looked at %s and $PATH); install it or run `boxer adr build` and query the Arrow files yourself", chlocalpool.DefaultBinaryPath)
+		return eh.Errorf("clickhouse not found (looked at %s and $PATH); install it or run `boxer adr build` and query the Arrow files yourself", chlocalpool.DefaultBinaryPath)
 	}
 	return nil
 }

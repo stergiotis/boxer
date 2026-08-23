@@ -55,8 +55,9 @@ is no configuration anywhere that says "use mesh", only an absent binary.
 
 ## The ClickHouse variant
 
-`boxer-soft-play` carries `clickhouse-local` at
-`chlocalpool.DefaultBinaryPath` and runs `play` instead of the widget gallery.
+`boxer-soft-play` carries the `clickhouse` binary at
+`chlocalpool.DefaultBinaryPath` — boxer invokes it as `clickhouse local` — and
+runs `play` instead of the widget gallery.
 Two things about it are worth stating plainly, because both were wrong in the
 first draft.
 

@@ -24,18 +24,18 @@ from any client once installed. The **client-side** names — column handles,
 `LW_GET*`, `LW_PLAIN`/`LW_TV*` — are rewritten before the statement ships and
 exist only where a host runs the nanopass pipeline: `play`, or any Go host
 that registers the standard pre-execute set (ADR-0108 §SD7). In a bare
-`clickhouse-client` session the client-side names are unknown functions;
+`clickhouse client` session the client-side names are unknown functions;
 that is not a provisioning problem, it is the wrong side of the split.
 
 ## 1. Install the surface
 
 The three server families install together under one version marker, from the
-CLI or as a plain DDL script through `clickhouse-client`:
+CLI or as a plain DDL script through `clickhouse client`:
 
 ```sh
 boxer leeway sqlsurface install --url http://localhost:8123/
 # or, offline / air-gapped:
-boxer leeway sqlsurface print | clickhouse-client -n
+boxer leeway sqlsurface print | clickhouse client -n
 ```
 
 Prefer `print` over the older per-family scripts (`readback.HelperUDFsSQL()`,

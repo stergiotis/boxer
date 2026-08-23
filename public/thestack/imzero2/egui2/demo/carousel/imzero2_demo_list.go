@@ -168,7 +168,7 @@ func renderManifestList(manifests []runtimeapp.Manifest, outputPath, format stri
 // (neither at chlocalpool.DefaultBinaryPath nor on $PATH); callers decide
 // whether to error or fall back. format is the --output-format name (e.g.
 // "TabSeparated", "PrettyCompact"); empty string defaults to PrettyCompact.
-// On a non-zero exit the clickhouse-local stderr and the executed query
+// On a non-zero exit the `clickhouse local` stderr and the executed query
 // are folded into the returned error for diagnostic visibility.
 func runChLocalQuery(arrowBytes []byte, query, format string, stdout io.Writer) (ok bool, err error) {
 	if format == "" {

@@ -2,11 +2,11 @@
 # Resolve OS fonts (Noto) the way hmi_headless.sh does; Phosphor is bundled.
 # Then launch the headless host. Build steps are NOT here — binaries are baked.
 #
-# LAUNCH auto-opens a demo, but `--launch` is resolved via clickhouse-local
+# LAUNCH auto-opens a demo, but `--launch` is resolved via `clickhouse local`
 # (a hard dependency), which is NOT in this image. So leave LAUNCH EMPTY to
 # start the interactive carousel — the viewer opens any demo (sccmap, widgets,
-# leeway, ...) from the launcher in the browser, no clickhouse-local needed.
-# Set LAUNCH only in the clickhouse-local image variant (see DEPLOY.md).
+# leeway, ...) from the launcher in the browser, no clickhouse needed.
+# Set LAUNCH only in the clickhouse image variant (see DEPLOY.md).
 set -eu
 
 resolve_font() { fc-match -f '%{file}' "$1" 2>/dev/null || true; }

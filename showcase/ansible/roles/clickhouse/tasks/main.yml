@@ -2,8 +2,8 @@
 # Optional ClickHouse on the showcase box (OFF by default). Two independent
 # toggles, both pulling from ClickHouse's official RPM repo:
 #
-#   imzero2_install_clickhouse_local  -> /usr/bin/clickhouse-local, the per-query
-#       subprocess the demo spawns via chlocalpool/chlocalbroker (ADR-0028). NO
+#   imzero2_install_clickhouse_local  -> /usr/bin/clickhouse, spawned as
+#       `clickhouse local` per query by chlocalpool/chlocalbroker (ADR-0028). NO
 #       daemon, NO port. This is what regex_explorer and `--launch <app>` SQL
 #       resolution need (imzero2_demo_resolve.go hard-errors without it); the lean
 #       default image omits it (+~2 GB). The carousel is best-effort otherwise —
@@ -41,19 +41,20 @@
         repo_gpgcheck: false
         enabled: true
 
-# --- clickhouse-local: the per-query subprocess binary (no daemon) -----------
-- name: Install clickhouse-local (the binary chlocalpool spawns)
+# --- clickhouse: the per-query subprocess binary (no daemon) -----------------
+- name: Install the clickhouse binary (what chlocalpool spawns as `clickhouse local`)
   when: imzero2_install_clickhouse_local
-  # clickhouse-common-static carries /usr/bin/clickhouse + the clickhouse-local
-  # symlink == chlocalpool.DefaultBinaryPath (/usr/bin/clickhouse-local).
+  # clickhouse-common-static carries /usr/bin/clickhouse ==
+  # chlocalpool.DefaultBinaryPath. The per-subcommand symlinks it also drops
+  # (clickhouse-local, clickhouse-client) are not what boxer resolves.
   ansible.builtin.package:
     name: clickhouse-common-static
     state: present
 
-- name: Verify /usr/bin/clickhouse-local landed where the app expects it
+- name: Verify /usr/bin/clickhouse landed where the app expects it
   when: imzero2_install_clickhouse_local
   ansible.builtin.stat:
-    path: /usr/bin/clickhouse-local
+    path: /usr/bin/clickhouse
   register: _ch_local_bin
   failed_when: not _ch_local_bin.stat.exists
 
@@ -61,7 +62,7 @@
 - name: Install ClickHouse server + client
   when: imzero2_install_clickhouse_server
   # clickhouse-server depends on clickhouse-common-static, so this ALSO provides
-  # /usr/bin/clickhouse-local even when imzero2_install_clickhouse_local is false.
+  # /usr/bin/clickhouse even when imzero2_install_clickhouse_local is false.
   # On a non-interactive (Ansible) install the `default` user is left with an
   # EMPTY password — exactly the wanted posture, safe behind the loopback bind.
   ansible.builtin.package:

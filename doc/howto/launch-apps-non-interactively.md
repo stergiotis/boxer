@@ -26,7 +26,7 @@ The worked example at the end is the one used to verify the closing edge of
 Caveats first: the headless Rust client must be built and must not be older
 than the last egui2 codegen (a stale client desyncs the FFFI wire on
 whichever opcode moved, which reads like an app bug); `POST /query` needs
-`clickhouse-local` on the PATH; and this box routinely runs other sessions'
+the `clickhouse` binary on the PATH; and this box routinely runs other sessions'
 hosts, so pick your own ports and kill only your own PIDs.
 
 ## 1. Build the host into a scratch directory
@@ -55,7 +55,7 @@ than it, rebuild it first.
 ```
 
 `--launch` takes either a bare alias (`play`) or a SQL `WHERE` clause over
-the `--list` table, evaluated with `clickhouse-local`:
+the `--list` table, evaluated with `clickhouse local`:
 
 ```sh
 --launch play

@@ -102,7 +102,7 @@ func TestMintGodepBook(t *testing.T) {
 // with a signal value at execute time.
 func TestGodepBookQueriesExecute(t *testing.T) {
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed: %v", err)
+		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t)).Level(zerolog.WarnLevel)
 	bus := inprocbus.NewInst(logger)

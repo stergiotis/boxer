@@ -15,7 +15,7 @@ import (
 
 // extbinProvider exposes the extbin external-program registry (ADR-0118) as
 // keelson.extbin — the audited surface of every host binary this process is
-// wired to invoke (git, clickhouse-local, scc, the profilers, built
+// wired to invoke (git, clickhouse, scc, the profilers, built
 // artifacts, …), plus where each currently resolves on this host and a blake3
 // digest of the resolved binary. That turns "what can this box execute, and is
 // it the binary I expect" into a query rather than a filesystem audit.

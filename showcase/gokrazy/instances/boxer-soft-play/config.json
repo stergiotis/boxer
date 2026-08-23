@@ -26,7 +26,7 @@
                 "/usr/share/imzero2/Phosphor.ttf": "_stage/Phosphor.ttf",
                 "/lib64": "_stage/lib",
                 "/usr/bin/ffmpeg": "_stage/ffmpeg",
-                "/usr/bin/clickhouse-local": "_stage/clickhouse-local"
+                "/usr/bin/clickhouse": "_stage/clickhouse"
             },
             "Environment": [
                 "IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089",

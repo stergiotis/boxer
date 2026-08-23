@@ -2,11 +2,11 @@ package chpack_test
 
 import (
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/aspectcodec"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
@@ -151,9 +151,8 @@ func aspectStatementsOnly() (stmts []string) {
 // decoding agrees with the Go decoder — over literals and over
 // system.columns (ADR-0182 verification).
 func TestAspectUdfsAgainstClickHouseLocal(t *testing.T) {
-	bin, err := exec.LookPath("clickhouse-local")
-	if err != nil {
-		t.Skipf("clickhouse-local not on PATH, skipping: %v", err)
+	if _, ok := extbin.ClickHouseLocal.Resolve(); !ok {
+		t.Skip("clickhouse not on PATH, skipping")
 	}
 	ddlSQL, names := aspectProbe(t)
 	var plainName, taggedValName string
@@ -192,12 +191,13 @@ func TestAspectUdfsAgainstClickHouseLocal(t *testing.T) {
 	script.WriteString(strings.Join(queries, ";\n"))
 	script.WriteString(";\n")
 
-	cmd := exec.Command(bin, "--multiquery", "--output-format", "TSV")
+	cmd, err := extbin.ClickHouseLocal.Command(t.Context(), extbin.Opts{}, "--multiquery", "--output-format", "TSV")
+	require.NoError(t, err)
 	cmd.Stdin = strings.NewReader(script.String())
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	require.NoErrorf(t, cmd.Run(), "clickhouse-local failed, stderr:\n%s", stderr.String())
+	require.NoErrorf(t, cmd.Run(), "clickhouse local failed, stderr:\n%s", stderr.String())
 
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
 	require.Len(t, lines, len(queries), stdout.String())

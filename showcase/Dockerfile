@@ -45,7 +45,7 @@ ENV LIBGL_ALWAYS_SOFTWARE=1 \
     IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089 \
     IMZERO2_HEADLESS_FPS=30 \
     IMZERO2_HEADLESS_ENCODER_ARGS="-c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 100000"
-# LAUNCH intentionally unset → interactive carousel (no clickhouse-local needed).
+# LAUNCH intentionally unset → interactive carousel (no clickhouse needed).
 
 EXPOSE 8089 8090
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/entrypoint.sh"]

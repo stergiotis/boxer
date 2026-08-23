@@ -121,9 +121,9 @@ Two independent toggles in the `clickhouse` role add ClickHouse to the box. Both
 default off and pull from ClickHouse's official RPM repo (arch-resolved by dnf —
 this box is x86_64, a Hetzner CPX/CX, not ARM).
 
-- **`imzero2_install_clickhouse_local: true`** installs `/usr/bin/clickhouse-local`,
-  the per-query subprocess the demo spawns via `chlocalpool`/`chlocalbroker`
-  (ADR-0028). No daemon, no port. `regex_explorer` and the `--launch <app>` SQL
+- **`imzero2_install_clickhouse_local: true`** installs `/usr/bin/clickhouse`,
+  which the demo spawns per query as `clickhouse local` via
+  `chlocalpool`/`chlocalbroker` (ADR-0028). No daemon, no port. `regex_explorer` and the `--launch <app>` SQL
   resolution **require** it; without it the carousel still boots but logs
   `ch.local.* will be unbound`. The lean default image omits it (+~2 GB).
 - **`imzero2_install_clickhouse_server: true`** installs a `clickhouse-server`
@@ -135,7 +135,7 @@ this box is x86_64, a Hetzner CPX/CX, not ARM).
   `imzero2_clickhouse_max_memory_bytes` (2 GiB default) so it coexists with the
   carrier and the on-box build.
 
-Enabling the server pulls in `clickhouse-local` too (shared dependency). **No
+Enabling the server pulls in the `clickhouse` binary too (shared dependency). **No
 firewall port is opened** — the server stays on loopback, which is what makes the
 empty-password default user safe. Turn a toggle on in the root-only extra-vars
 file (the pull loop re-reads it), then re-run:
@@ -145,8 +145,8 @@ echo 'imzero2_install_clickhouse_local: true' | sudo tee -a /etc/imzero2/provisi
 sudo systemctl start imzero2-pull.service          # or wait for the daily timer
 ```
 
-Verify: `clickhouse-local --query "SELECT 1"` (local binary) and, for the server,
-`systemctl status clickhouse-server` + `clickhouse-client --query "SELECT 1"`.
+Verify: `clickhouse local --query "SELECT 1"` (local binary) and, for the server,
+`systemctl status clickhouse-server` + `clickhouse client --query "SELECT 1"`.
 
 ## Hardening (systemd sandboxing)
 

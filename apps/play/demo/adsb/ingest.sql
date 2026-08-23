@@ -4,7 +4,7 @@
 -- MATERIALIZED mercator_x/mercator_y recompute locally on INSERT, and the local
 -- sample10/sample100 materialized views populate as a side effect.
 --
--- Parameters (passed by demo.sh via clickhouse-client --param_*):
+-- Parameters (passed by demo.sh via `clickhouse client --param_*`):
 --   min_lat/max_lat/min_lon/max_lon : Float64  viewport bbox (WGS84)
 --   day                             : Date     the single UTC day to load
 --   hour                            : UInt8    UTC hour (0-23); demo.sh runs one

@@ -66,7 +66,7 @@ func serve(t *testing.T, snapshots int) *rig {
 	t.Helper()
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	require.NoError(t, lading.Provision(ctx, exec, ladingschema.ProfileCorpus))
@@ -249,7 +249,7 @@ func TestEveryWriteIsRefused(t *testing.T) {
 func TestAnInvisibleMountIsAbsent(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	require.NoError(t, lading.Provision(ctx, exec, ladingschema.ProfileCorpus))

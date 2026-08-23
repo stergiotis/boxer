@@ -30,7 +30,7 @@ MAIN_FONT="${MAIN_FONT:-/usr/share/fonts/google-noto-vf/NotoSans[wght].ttf}"
 #
 # It is not enough for the face to be monospaced. Anything that renders a
 # query result — ClickHouse's own `system.documentation` examples, a
-# `clickhouse-client` transcript pasted into a doc — draws its frame from
+# `clickhouse client` transcript pasted into a doc — draws its frame from
 # U+2500-block characters, and a face without them sends exactly those
 # characters to the fallback chain, where the advance is somebody else's.
 # The result is a box whose corners do not meet: every row is individually
@@ -160,8 +160,8 @@ rm -f "$flightRecord"
 	#--waitForDebugger \
 #export BOXER_IMZERO_DEBUG_MODE="flamegraph"
 # regex_explorer uses `clickhouse local` via subprocess — no server
-# needed. Set REGEX_EXPLORER_CLICKHOUSE_LOCAL_BIN to override the
-# binary path; default resolves "clickhouse-local" through $PATH.
+# needed. Set BOXER_CLICKHOUSE_LOCAL to override the binary path;
+# default resolves "clickhouse" through $PATH.
 
 # Launch from the Go module root rather than rust/imzero2 so apps that
 # shell out to the toolchain at runtime (e.g. godepview's go/packages

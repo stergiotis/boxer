@@ -27,7 +27,7 @@ func NewCliCommand() *cli.Command {
 		Usage: "print the boxer.facts setup DDL keelson applies on first run (stdout; no DB connection)",
 		Description: "Emits the exact CREATE DATABASE + CREATE TABLE script chstore.SetupTable executes on first run. " +
 			"With no flags the output matches the default first-run initialisation (" + def.Database + "." + def.Table + "). " +
-			"Pipe it into a client to apply it, e.g. `app keelsonddl | clickhouse-client -mn`.",
+			"Pipe it into a client to apply it, e.g. `app keelsonddl | clickhouse client -mn`.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "database",

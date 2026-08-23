@@ -192,7 +192,7 @@ func TestRegistry_IncludesDeclaredProgramsSorted(t *testing.T) {
 		}
 	}
 	// The manifest's cornerstone programs are present.
-	for _, want := range []string{"git", "go", "scc", "clickhouse-local"} {
+	for _, want := range []string{"git", "go", "scc", "clickhouse local"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("registry missing declared program %q", want)
 		}

@@ -51,12 +51,31 @@ var (
 // Data / query engines.
 var (
 	// ClickHouseLocal runs one-shot SQL over local files (adr query, recordstore
-	// exec, the chlocalpool worker, arrow formatting, mine-trends). Callers with
-	// a configured binary path pass it via [Opts].Path.
+	// exec, the chlocalpool worker, mine-trends). Callers with a configured
+	// binary path pass it via [Opts].Path — which names the `clickhouse` binary,
+	// not a subcommand-specific one.
+	//
+	// It is declared as the multi-call `clickhouse local` rather than the
+	// `clickhouse-local` alias: the packaged installs provide both, but the
+	// self-extracting single-binary install (`curl https://clickhouse.com/ | sh`)
+	// drops only `clickhouse`, so the subcommand form is the one that resolves
+	// everywhere.
 	ClickHouseLocal = Declare(Program{
-		Name:        "clickhouse-local",
+		Name:        "clickhouse local",
+		Argv:        []string{"clickhouse", "local"},
 		Kind:        Host,
 		OverrideEnv: "BOXER_CLICKHOUSE_LOCAL",
+		InstallHint: "https://clickhouse.com/docs/en/install",
+	})
+
+	// ClickHouseFormat pretty-prints, hilites or obfuscates SQL for
+	// db/clickhouse/cli.Formater. A distinct subcommand of the same binary, so a
+	// distinct declaration — the flags it takes (--hilite, --obfuscate,
+	// --oneline) are not `clickhouse local` flags.
+	ClickHouseFormat = Declare(Program{
+		Name:        "clickhouse format",
+		Argv:        []string{"clickhouse", "format"},
+		Kind:        Host,
 		InstallHint: "https://clickhouse.com/docs/en/install",
 	})
 )

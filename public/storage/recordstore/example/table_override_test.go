@@ -19,7 +19,7 @@ import (
 func TestDeviceStoreTableOverride(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	t0 := time.Unix(1_600_000_000, 0).UTC()

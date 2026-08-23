@@ -15,13 +15,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// requireBinary skips the test if /usr/bin/clickhouse-local is absent.
+// requireBinary skips the test if chlocalpool.DefaultBinaryPath is absent.
 // Most pool tests need a real subprocess; non-binary tests stand alone.
 func requireBinary(t *testing.T) (path string) {
 	t.Helper()
 	p, err := exec.LookPath(DefaultBinaryPath)
 	if err != nil {
-		t.Skipf("clickhouse-local not installed at %s: %v", DefaultBinaryPath, err)
+		t.Skipf("clickhouse not installed at %s: %v", DefaultBinaryPath, err)
 	}
 	path = p
 	return
@@ -110,7 +110,7 @@ func TestConfig_ValidateRejectsSpawnConcurrencyExceedingMax(t *testing.T) {
 
 func TestNew_RejectsMissingBinary(t *testing.T) {
 	cfg := Config{
-		BinaryPath: "/nonexistent/clickhouse-local-xyz",
+		BinaryPath: "/nonexistent/clickhouse-xyz",
 	}
 	_, err := New(cfg, zerolog.Nop())
 	require.Error(t, err)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
@@ -87,11 +88,15 @@ func TestFormatSurfaceStatusInSync(t *testing.T) {
 // printed script the way an operator would and asserts the marker answers
 // afterwards.
 func TestPrintedScriptInstallsWithTheMarker(t *testing.T) {
-	bin, err := exec.LookPath("clickhouse-local")
-	if err != nil {
-		t.Skipf("clickhouse-local not on PATH, skipping: %v", err)
+	if _, ok := extbin.ClickHouseLocal.Resolve(); !ok {
+		t.Skip("clickhouse not on PATH, skipping")
 	}
 	dir := t.TempDir()
+	chLocal := func(args ...string) *exec.Cmd {
+		cmd, cmdErr := extbin.ClickHouseLocal.Command(t.Context(), extbin.Opts{}, args...)
+		require.NoError(t, cmdErr)
+		return cmd
+	}
 
 	var script strings.Builder
 	for _, stmt := range lwsqlsurface.Statements() {
@@ -101,7 +106,7 @@ func TestPrintedScriptInstallsWithTheMarker(t *testing.T) {
 
 	run := func(t *testing.T, args ...string) string {
 		t.Helper()
-		cmd := exec.Command(bin, append([]string{"--path", dir, "--output-format", "TSV"}, args...)...)
+		cmd := chLocal(append([]string{"--path", dir, "--output-format", "TSV"}, args...)...)
 		var stdout, stderr strings.Builder
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
@@ -109,7 +114,7 @@ func TestPrintedScriptInstallsWithTheMarker(t *testing.T) {
 		return strings.TrimSpace(stdout.String())
 	}
 
-	install := exec.Command(bin, "--path", dir, "--multiquery", "--output-format", "TSV")
+	install := chLocal("--path", dir, "--multiquery", "--output-format", "TSV")
 	install.Stdin = strings.NewReader(script.String())
 	var stderr strings.Builder
 	install.Stderr = &stderr

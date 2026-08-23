@@ -42,7 +42,7 @@ func newFlakyStore(t *testing.T, failFirst int) (st *DeviceStore, ctx context.Co
 	t.Helper()
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx = context.Background()
 	st = NewDeviceStore(&flakyExecutor{inner: local, failFirst: failFirst}, nil, DeviceStoreConfig{})
@@ -234,7 +234,7 @@ func TestDeviceStoreIngestRejectsDuplicateKeys(t *testing.T) {
 func TestDeviceStoreVerifySchemaDetectsDrift(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	st := NewDeviceStore(local, nil, DeviceStoreConfig{})

@@ -35,7 +35,7 @@
 #                small enough to survive the idled instance's slow link and stay
 #                under the row cap (this also makes full-res planes_mercator
 #                viable). Set e.g. "10 11 12" for a quick partial load.
-#   CH           clickhouse-client binary (default: clickhouse-client)
+#   CH           clickhouse client invocation, word-split (default: "clickhouse client")
 #   ADSB_VIEW_CENTER ADSB_VIEW_ZOOM  only the play map-view hint printed at the
 #                end (default: Zürich, zoom 8); presets like switzerland.sh set
 #                a country-wide view.
@@ -43,7 +43,10 @@
 set -euo pipefail
 here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 
-: "${CH:=clickhouse-client}"
+: "${CH:=clickhouse client}"
+# Word-split into an array: the default is the two-word multi-call invocation
+# `clickhouse client`, not a single binary name.
+read -r -a ch <<< "$CH"
 : "${ADSB_MIN_LAT:=45.5}" ; : "${ADSB_MAX_LAT:=49.0}"
 : "${ADSB_MIN_LON:=5.5}"  ; : "${ADSB_MAX_LON:=12.0}"
 : "${ADSB_DAY:=$(date -u -d 'yesterday' +%F)}"
@@ -84,19 +87,19 @@ remote_flags=(
 )
 
 echo "· schema (idempotent) …"
-"$CH" --multiquery < "$here/setup.sql"
+"${ch[@]}" --multiquery < "$here/setup.sql"
 
 # Wake the idled staging instance (and fail fast if it is unreachable) BEFORE we
 # TRUNCATE, so a network problem never leaves the local tables empty.
 echo "· waking the public instance (idled to zero — first connect ~30–60s) …"
-"$CH" --progress "${remote_flags[@]}" --query \
+"${ch[@]}" --progress "${remote_flags[@]}" --query \
   "SELECT 1 FROM remoteSecure('kvzqttvc2n.eu-west-1.aws.clickhouse-staging.com:9440', default.planes_mercator_sample100, 'website', '') LIMIT 1" >/dev/null
 
 if [ "$ADSB_APPEND" = 1 ]; then
   echo "· append mode (ADSB_APPEND=1): keeping existing rows — no TRUNCATE"
 else
   echo "· clearing any previous slice …"
-  "$CH" --multiquery --query "
+  "${ch[@]}" --multiquery --query "
     TRUNCATE TABLE IF EXISTS planes_mercator;
     TRUNCATE TABLE IF EXISTS planes_mercator_sample10;
     TRUNCATE TABLE IF EXISTS planes_mercator_sample100;"
@@ -118,7 +121,7 @@ for day in ${ADSB_DAYS}; do
   for h in ${ADSB_HOURS}; do
     ok=0
     for attempt in 1 2 3; do
-      if "$CH" --progress "${remote_flags[@]}" \
+      if "${ch[@]}" --progress "${remote_flags[@]}" \
           --param_min_lat="$ADSB_MIN_LAT" --param_max_lat="$ADSB_MAX_LAT" \
           --param_min_lon="$ADSB_MIN_LON" --param_max_lon="$ADSB_MAX_LON" \
           --param_day="$day" --param_hour="$h" \
@@ -137,7 +140,7 @@ done
 [ -n "$failed" ] && echo "· WARNING: chunks failed:${failed} — slice is partial (re-run to retry)" >&2 || true
 
 echo "· loaded:"
-"$CH" --format PrettyCompact --query "
+"${ch[@]}" --format PrettyCompact --query "
   SELECT * FROM (
     SELECT 'planes_mercator'            AS tbl, count() AS rows, uniqExact(icao) AS aircraft, min(date) AS first_day, max(date) AS last_day FROM planes_mercator
     UNION ALL SELECT 'planes_mercator_sample10',  count(), uniqExact(icao), min(date), max(date) FROM planes_mercator_sample10

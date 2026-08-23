@@ -26,7 +26,7 @@ import (
 func requireCH(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed at %s: %v", chlocalpool.DefaultBinaryPath, err)
+		t.Skipf("clickhouse not installed at %s: %v", chlocalpool.DefaultBinaryPath, err)
 	}
 }
 

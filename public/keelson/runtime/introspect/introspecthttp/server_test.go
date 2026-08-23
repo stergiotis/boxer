@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -23,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
@@ -33,26 +33,29 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 )
 
-func chBin(t *testing.T) (bin string) {
+// chOpts resolves `clickhouse local`, preferring the packaged path over PATH,
+// and skips when neither is there. It yields [extbin.Opts] rather than a bare
+// path because the invocation carries a subcommand extbin owns.
+func chOpts(t *testing.T) (o extbin.Opts) {
 	t.Helper()
-	if p, err := exec.LookPath("clickhouse-local"); err == nil {
-		return p
+	if _, err := os.Stat(chlocalpool.DefaultBinaryPath); err == nil {
+		return extbin.Opts{Path: chlocalpool.DefaultBinaryPath}
 	}
-	const def = "/usr/bin/clickhouse-local"
-	if _, err := os.Stat(def); err == nil {
-		return def
+	if _, ok := extbin.ClickHouseLocal.Resolve(); ok {
+		return extbin.Opts{}
 	}
-	t.Skip("clickhouse-local not installed")
+	t.Skip("clickhouse not installed")
 	return
 }
 
-func runCH(t *testing.T, bin, query string) (out string) {
+func runCH(t *testing.T, o extbin.Opts, query string) (out string) {
 	t.Helper()
-	cmd := exec.Command(bin, "--query", query)
+	cmd, err := extbin.ClickHouseLocal.Command(t.Context(), o, "--query", query)
+	require.NoError(t, err)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	require.NoError(t, cmd.Run(), "clickhouse-local failed; stderr: %s", stderr.String())
+	require.NoError(t, cmd.Run(), "clickhouse local failed; stderr: %s", stderr.String())
 	return strings.TrimSpace(stdout.String())
 }
 
@@ -67,12 +70,12 @@ func newTestServer(t *testing.T) *Server {
 	return s
 }
 
-// TestServer_UrlTableFunction is the SD3 end-to-end check: clickhouse-local
+// TestServer_UrlTableFunction is the SD3 end-to-end check: `clickhouse local`
 // pulls keelson.env from our HTTP endpoint via url()+ArrowStream.
 func TestServer_UrlTableFunction(t *testing.T) {
-	bin := chBin(t)
+	ch := chOpts(t)
 	s := newTestServer(t)
-	out := runCH(t, bin, fmt.Sprintf(
+	out := runCH(t, ch, fmt.Sprintf(
 		"SELECT count() FROM url('%s/table/env', 'ArrowStream')", s.BaseURL()))
 	n, err := strconv.Atoi(out)
 	require.NoError(t, err, "output: %q", out)
@@ -83,13 +86,13 @@ func TestServer_UrlTableFunction(t *testing.T) {
 // keelson tables — the "clickhouse-server joins keelson tables with
 // other data" path (ADR-0094 §SD3).
 func TestServer_MultipleUrlTables(t *testing.T) {
-	bin := chBin(t)
+	ch := chOpts(t)
 	_, _ = runinfo.Init() // give keelson.build a row
 	s := newTestServer(t)
 	q := fmt.Sprintf(
 		"SELECT (SELECT count() FROM url('%[1]s/table/env','ArrowStream')) AS e, "+
 			"(SELECT count() FROM url('%[1]s/table/build','ArrowStream')) AS b", s.BaseURL())
-	out := runCH(t, bin, q)
+	out := runCH(t, ch, q)
 	fields := strings.Fields(out)
 	require.Len(t, fields, 2, "output: %q", out)
 	e, _ := strconv.Atoi(fields[0])
@@ -118,9 +121,9 @@ func TestServer_ColsProjection(t *testing.T) {
 // TestServer_CatalogViaUrl checks the system.tables-equivalent: querying
 // keelson.tables over url() lists every registered table, itself included.
 func TestServer_CatalogViaUrl(t *testing.T) {
-	bin := chBin(t)
+	ch := chOpts(t)
 	s := newTestServer(t)
-	out := runCH(t, bin, fmt.Sprintf(
+	out := runCH(t, ch, fmt.Sprintf(
 		"SELECT name FROM url('%s/table/tables','ArrowStream') ORDER BY name", s.BaseURL()))
 	for _, want := range []string{"apps", "build", "columns", "env", "sbom", "tables"} {
 		assert.Contains(t, out, want, "catalog should list %q", want)
@@ -154,11 +157,11 @@ func TestServer_TablesListing(t *testing.T) {
 }
 
 // newQueryServer wires a /query-capable server backed by a real chlocal
-// broker (skips when clickhouse-local is absent).
+// broker (skips when clickhouse is absent).
 func newQueryServer(t *testing.T) *Server {
 	t.Helper()
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed: %v", err)
+	if _, err := os.Stat(chlocalpool.DefaultBinaryPath); err != nil {
+		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	bus := inprocbus.NewInst(logger)
@@ -197,7 +200,7 @@ func newQueryServer(t *testing.T) *Server {
 
 // TestServer_QueryEndpoint exercises the full self-referential loop: a
 // keelson('env') query is rewritten to url() against this server, run by
-// clickhouse-local (which fetches /table/env back from this same server),
+// `clickhouse local` (which fetches /table/env back from this same server),
 // and returned as ArrowStream — the play-compatible path (ADR-0094 §SD4).
 func TestServer_QueryEndpoint(t *testing.T) {
 	s := newQueryServer(t)

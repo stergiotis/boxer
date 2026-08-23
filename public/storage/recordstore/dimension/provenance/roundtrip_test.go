@@ -19,7 +19,7 @@ func TestS1ProvenanceRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 
 	st := NewProvenanceStore(exec, nil, ProvenanceStoreConfig{})

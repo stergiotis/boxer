@@ -104,7 +104,7 @@ func TestAdrBookCorpus(t *testing.T) {
 // tables, which read this repository's own corpus off disk.
 func TestAdrBookQueries(t *testing.T) {
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed: %v", err)
+		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	bus := inprocbus.NewInst(logger)

@@ -25,7 +25,7 @@ func openStoreBackendAt(t *testing.T, location string) (b *StoreBackend) {
 	t.Helper()
 	exec, err := chexec.NewLocalExecutor(location, nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	b, err = OpenStoreBackend(context.Background(), exec, nil)
 	require.NoError(t, err)

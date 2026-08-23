@@ -142,7 +142,7 @@ func (codevolGateSource) Get() ([]codevol.ModuleInfo, codevol.SymbolReport) {
 // shape every appliance build has.
 func TestCodevolBookQueries(t *testing.T) {
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed: %v", err)
+		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	bus := inprocbus.NewInst(logger)

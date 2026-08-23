@@ -6,7 +6,7 @@
 // dependency direction stays one-way: keelson imports recordstore, never the
 // reverse. Its sibling
 // [github.com/stergiotis/boxer/public/storage/recordstore/chexec.LocalExecutor]
-// covers tests and local tooling by shelling out to `clickhouse-local`; this
+// covers tests and local tooling by shelling out to `clickhouse local`; this
 // one talks to a server over HTTP and is what a long-running keelson service
 // binds.
 //

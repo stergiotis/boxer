@@ -42,7 +42,7 @@ The Grafana-derived contents of this package are limited to:
 
 The relative-expression grammar of Grafana's datemath (`now-5m`,
 `now/d`, etc.) is NOT ported. Expressions in this package are
-ClickHouse SQL fragments evaluated via the `clickhouse-local` CLI;
+ClickHouse SQL fragments evaluated via the `clickhouse local` CLI;
 see ADR-0016 §"Decision".
 
 ----------------------------------------------------------------------
@@ -54,7 +54,7 @@ MODIFICATIONS APPLIED DURING PORT
     a reference for UX shape and preset semantics.
 
   * Replaced Grafana's datemath grammar with ClickHouse SQL evaluated
-    by clickhouse-local. Anchor injected via WITH ... AS anchor_now
+    by `clickhouse local`. Anchor injected via WITH ... AS anchor_now
     per ADR-0016. The picker is therefore in ClickHouse SQL idiom,
     not Grafana datemath.
 
@@ -91,11 +91,10 @@ This package's only direct in-tree dependency is the ClickHouse SQL
 DSL parser at public/db/clickhouse/dsl/, used in-process for
 sub-millisecond syntax validation as the user types.
 
-The runtime requirement on the `clickhouse-local` CLI binary is a
-process-level dependency, not a build-time link. Tests probe via
-exec.LookPath("clickhouse-local") (with `clickhouse local`
-fallback) and call t.Skip when the binary is missing; CI does not
-install it.
+The runtime requirement on the `clickhouse` CLI binary, invoked as
+`clickhouse local`, is a process-level dependency, not a build-time
+link. Tests probe via extbin.ClickHouseLocal.Resolve() and call
+t.Skip when the binary is missing; CI does not install it.
 
 ----------------------------------------------------------------------
 RE-PINNING UPSTREAM

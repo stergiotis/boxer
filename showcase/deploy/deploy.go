@@ -484,7 +484,7 @@ func relabelSELinux(ctx context.Context, lg zerolog.Logger, dir string) {
 }
 
 // gate starts the candidate on a scratch loopback port (interactive
-// carousel: no --launch, so no clickhouse-local is needed) and requires
+// carousel: no --launch, so no clickhouse binary is needed) and requires
 // ws_probe to decode real access units before the swap is allowed.
 func gate(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) error {
 	gctx, cancel := context.WithTimeout(ctx, cfg.GateTimeout)

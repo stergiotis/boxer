@@ -346,7 +346,7 @@ selects a codec (§SD1). The third, `boxer-soft-play`, is the video image plus
    └──────────────────────────────────┘     └──────────────────────────────────┘
         both: IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089, 30 fps, --launch widgets
 
-   boxer-soft-play.img  (380 MB) = boxer-soft-video + /usr/bin/clickhouse-local on the
+   boxer-soft-play.img  (380 MB) = boxer-soft-video + /usr/bin/clickhouse on the
                                    A/B roots · CLICKHOUSE_URL → a server outside the image · --launch play
 ```
 
@@ -789,7 +789,7 @@ unchanged; what differs per mode is what the box has next to it.
 | | desktop / headless on a server OS | the appliance images (2026-08-22) |
 | --- | --- | --- |
 | ClickHouse server | whatever the deployment provides; the showcase box runs one beside the host | the ffmpeg pair: none, `facts:mem` / `persist:mem`; `boxer-soft-play`: `CLICKHOUSE_URL` names a server outside the image (under QEMU, the host) |
-| `clickhouse-local` | on PATH or `BOXER_CLICKHOUSE_LOCAL`; needed by `/query` and by `--launch "<SQL WHERE>"` | not in the ffmpeg pair (a bare `--launch <alias>` resolves without it); in `boxer-soft-play` on the A/B roots (ADR-0206 §SD6) |
+| `clickhouse local` | the `clickhouse` binary on PATH or at `BOXER_CLICKHOUSE_LOCAL` (which names the multi-call binary, not the `clickhouse-local` symlink); needed by `/query` and by `--launch "<SQL WHERE>"` | not in the ffmpeg pair (a bare `--launch <alias>` resolves without it); in `boxer-soft-play` on the A/B roots (ADR-0206 §SD6) |
 | ad-hoc datasets | `BOXER_ADHOC_DIR`, default under the user cache dir | the images set `XDG_CACHE_HOME=/tmp/.cache`, a tmpfs with no swap (ADR-0134 §SD8 names `/perm` for a persistent placement) |
 | the lading store, rclone | the server, `rclone` via extbin | no `rclone` in the images; the store's tables only where `CLICKHOUSE_URL` names a server that has them |
 | the bus | in-process; NATS for the sysmetrics plane (`natsbus`, a bridge — the UI-coupled brokers stay on `inprocbus`) | in-process |

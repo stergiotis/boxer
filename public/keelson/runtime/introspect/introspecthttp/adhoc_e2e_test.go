@@ -36,7 +36,7 @@ import (
 // the two coexist.
 func TestServer_AdhocQueryEndpoint(t *testing.T) {
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed: %v", err)
+		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	bus := inprocbus.NewInst(logger)
@@ -188,7 +188,7 @@ func adhocInt64Stream(t *testing.T, vals ...int64) []byte {
 // on a statement that merely ran.
 func TestProbeIsFetchedByARealEngine(t *testing.T) {
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed: %v", err)
+		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	bus := inprocbus.NewInst(logger)

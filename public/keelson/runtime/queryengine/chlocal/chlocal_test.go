@@ -55,7 +55,7 @@ func arrowFileWithRows(t *testing.T, rows int32) (b []byte) {
 func requireBinary(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed at %s: %v", chlocalpool.DefaultBinaryPath, err)
+		t.Skipf("clickhouse not installed at %s: %v", chlocalpool.DefaultBinaryPath, err)
 	}
 }
 

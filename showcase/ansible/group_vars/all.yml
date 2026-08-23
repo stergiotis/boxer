@@ -85,8 +85,9 @@ imzero2_selinux_label_releases: true
 imzero2_bootstrap_first_release: false  # run the (long, cold) first build inside the play
 
 # --- optional ClickHouse (off by default; see roles/clickhouse) ---
-# clickhouse-local is the /usr/bin/clickhouse-local binary the demo spawns per
-# query (ADR-0028) for regex_explorer + `--launch` resolution. The server is a
+# clickhouse-local installs the /usr/bin/clickhouse binary the demo spawns per
+# query as `clickhouse local` (ADR-0028) for regex_explorer + `--launch`
+# resolution. The server is a
 # loopback-only daemon (default user, empty password) for the HTTP-endpoint path
 # (CLICKHOUSE_ENDPOINT / CLICKHOUSE_URL) — nothing in the stock demo dials it yet.
 # Flip either on in the root-only extra-vars file (imzero2_extra_vars_file).

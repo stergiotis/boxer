@@ -2,12 +2,12 @@ package demo
 
 import (
 	"os"
-	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
@@ -23,16 +23,16 @@ const (
 // skipIfNoClickhouseLocal lets the SQL launch tests run live where the
 // binary is installed and silently skip on minimal CI without it. The
 // project memory `reference_clickhouse_local.md` records that
-// /usr/bin/clickhouse-local is the expected path on the maintainer's box.
+// chlocalpool.DefaultBinaryPath is the expected path on the maintainer's box.
 func skipIfNoClickhouseLocal(t *testing.T) {
 	t.Helper()
 	if _, err := os.Stat(chlocalpool.DefaultBinaryPath); err == nil {
 		return
 	}
-	if _, err := exec.LookPath("clickhouse-local"); err == nil {
+	if _, ok := extbin.ClickHouseLocal.Resolve(); ok {
 		return
 	}
-	t.Skip("clickhouse-local not found; skipping SQL launch test")
+	t.Skip("clickhouse not found; skipping SQL launch test")
 }
 
 func extractIds(apps []app.AppI) (ids []app.AppIdT) {
@@ -160,7 +160,7 @@ func TestResolveLaunchSql_SyntaxError(t *testing.T) {
 	// The clickhouse-local stderr is folded into the error; the
 	// executed query is in a structured field so users see what
 	// the runtime asked for.
-	assert.Contains(t, err.Error(), "clickhouse-local")
+	assert.Contains(t, err.Error(), "clickhouse local")
 }
 
 func TestResolveLaunchSql_EmptyExpr(t *testing.T) {

@@ -26,7 +26,7 @@ func TestProvenanceStampingEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 
 	// Provenance descriptor store — NO stampers (the recursion guard) — over the

@@ -467,6 +467,38 @@ The pattern: the chosen O3 design wins on isolation, lifecycle bounding, and cap
 
 **Status.** Noted, not scoped. No ADR-0045 (or other subsequent number) drafted; no work scheduled. This entry exists to anchor the option so a future reader landing on a use case that ADR-0028's subprocess model cannot serve — sub-ms inner loops, persistent in-process session state, long-running streaming consumers — knows the option exists and what it costs to pursue. `status` of this ADR remains `proposed`; this update does not change it.
 
+### 2026-08-23 — the spawned invocation is `clickhouse local`, not `clickhouse-local`
+
+`chlocalpool` now spawns the multi-call ClickHouse binary with the `local`
+subcommand rather than the `clickhouse-local` alias. Nothing about the pool's
+shape changes — the same one-shot process, the same `--path` / `--max_memory_usage`
+/ `--logger.console` arguments over the same pipes.
+
+**Why.** `clickhouse-local` is a per-subcommand symlink onto the one fat
+`clickhouse` binary. The packaged installs (`clickhouse-common-static`) drop
+both, but the self-extracting single-binary install leaves only `clickhouse`, so
+the alias is the narrower of the two resolutions. Declaring the subcommand form
+also lets `extbin` carry `clickhouse format` as its own program, which
+`db/clickhouse/cli.Formater` had been borrowing the `clickhouse-local`
+declaration for.
+
+**What moved.**
+
+- `chlocalpool.DefaultBinaryPath` is `/usr/bin/clickhouse`. It names the
+  multi-call binary; `extbin` supplies the `local` argument. A `Config.BinaryPath`
+  an operator sets must likewise name the binary, not a subcommand alias — a
+  stale `/usr/bin/clickhouse-local` there now yields `clickhouse-local local …`
+  and fails at startup rather than silently.
+- `BOXER_CLICKHOUSE_LOCAL` keeps its name and has the same corrected meaning.
+- The gokrazy `boxer-soft-play` image stages the binary as `/usr/bin/clickhouse`
+  (it no longer relies on argv[0] dispatch), and the ansible role verifies that
+  path.
+
+**Not changed.** The engine is still called clickhouse-local in ClickHouse's own
+documentation, and prose in this repo that names the engine rather than an
+invocation was left alone.
+
+
 ## References
 
 - [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) — parent framework; this ADR extends §SD3 (subject taxonomy) and §SD10 (capslock).

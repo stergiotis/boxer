@@ -115,7 +115,7 @@ func TestLateComponentDecodesRowsTheAgentWrote(t *testing.T) {
 func TestLateComponentFindsTheAgentsRowsBySql(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	for _, stmt := range splitStatements(t, "facts_ddl_clickhouse.out.sql") {

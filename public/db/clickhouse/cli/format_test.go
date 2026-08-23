@@ -9,7 +9,7 @@ import (
 func TestFormater(t *testing.T) {
 	t.Skip("still necessary?")
 	opts := FormaterOptions{
-		BinaryPath:      "clickhouse format",
+		BinaryPath:      "", // resolved through extbin as `clickhouse format`
 		Hilite:          false,
 		KeepComments:    true,
 		MaxLineLength:   0,
@@ -36,7 +36,7 @@ select 1,2,3 fRom "tbl2" as uu;`)
 func TestFormaterColors(t *testing.T) {
 	t.Skip("still necessary?")
 	opts := FormaterOptions{
-		BinaryPath:      "clickhouse format",
+		BinaryPath:      "", // resolved through extbin as `clickhouse format`
 		Hilite:          true,
 		KeepComments:    true,
 		MaxLineLength:   0,

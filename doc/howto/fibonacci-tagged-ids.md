@@ -63,8 +63,9 @@ as invalid, so the zero id can never be mistaken for data.
 ## Prerequisites
 
 - Repo build tags on every Go invocation: `-tags "$(cat ./tags)"`.
-- `clickhouse` / `clickhouse-local` on `$PATH` for the SQL steps (the
-  server-truth tests skip without it; the recipe below needs it).
+- `clickhouse` on `$PATH` for the SQL steps — invoked as `clickhouse client` /
+  `clickhouse local` (the server-truth tests skip without it; the recipe below
+  needs it).
 
 ## Steps
 
@@ -138,16 +139,16 @@ quoting-insensitive.
 **Route B — install the UDFs once, query with the names directly.**
 
 ```sh
-go run -tags "$(cat ./tags)" ./public/app leeway id udf | clickhouse-client -n
+go run -tags "$(cat ./tags)" ./public/app leeway id udf | clickhouse client -n
 ```
 
 The statements are `CREATE OR REPLACE FUNCTION`, so re-running is safe.
-A self-contained smoke test with `clickhouse-local` (UDFs live only for the
+A self-contained smoke test with `clickhouse local` (UDFs live only for the
 invocation there):
 
 ```sh
 UDFS="$(go run -tags "$(cat ./tags)" ./public/app leeway id udf)"
-clickhouse-local -n --query "$UDFS
+clickhouse local -n --query "$UDFS
 SELECT id,
        LW_ID_IS_VALID(id)  AS valid,
        LW_ID_TAG_VALUE(id) AS tag,

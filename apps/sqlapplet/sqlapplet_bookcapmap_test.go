@@ -188,7 +188,7 @@ func overSink(sql string, sink string) (out string) {
 // classifies and mints can still name a column that does not exist.
 func TestCapmapBookQueriesExecute(t *testing.T) {
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed: %v", err)
+		t.Skipf("clickhouse not installed: %v", err)
 	}
 	capmapTestVault(t)
 

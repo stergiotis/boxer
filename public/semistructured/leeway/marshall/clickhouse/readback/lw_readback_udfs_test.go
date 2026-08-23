@@ -2,10 +2,10 @@ package readback
 
 import (
 	_ "embed"
-	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwextract"
 )
 
@@ -21,17 +21,16 @@ var udfTruthTestSQL string
 // run the UDF DDL and the truth-table together without a server.
 func runClickHouseLocal(t *testing.T, script string) string {
 	t.Helper()
-	bin, err := exec.LookPath("clickhouse-local")
+	cmd, err := extbin.ClickHouseLocal.Command(t.Context(), extbin.Opts{}, "--multiquery", "--output-format", "TSV")
 	if err != nil {
-		t.Skipf("clickhouse-local not on PATH, skipping (install ClickHouse to run UDF tests): %v", err)
+		t.Skipf("clickhouse not on PATH, skipping (install ClickHouse to run UDF tests): %v", err)
 	}
-	cmd := exec.Command(bin, "--multiquery", "--output-format", "TSV")
 	cmd.Stdin = strings.NewReader(script)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("clickhouse-local failed: %v\nstderr:\n%s", err, stderr.String())
+		t.Fatalf("clickhouse local failed: %v\nstderr:\n%s", err, stderr.String())
 	}
 	return stdout.String()
 }

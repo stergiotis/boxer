@@ -83,7 +83,7 @@ var synthProcs = []synthProc{
 	{843, 842, "main_go", "./main_go imzero2 demo --clientBinary ./imzero2", "boxer", 0, 196},
 	{1190, 1, "wezterm-gui", "wezterm-gui", "boxer", 0, 240},
 	{1455, 1190, "go", "go test -tags ... ./...", "boxer", 0, 88},
-	{1556, 1, "clickhouse-loc", "clickhouse-local --query ...", "boxer", 0, 420},
+	{1556, 1, "clickhouse", "clickhouse local --query ...", "boxer", 0, 420},
 	{1789, 1, "pipewire", "/usr/bin/pipewire", "boxer", 0.3, 22},
 	{2003, 1, "systemd-resolve", "/usr/lib/systemd/systemd-resolved", "systemd-resolve", 0.0, 18},
 }

@@ -104,7 +104,7 @@ directly; the sampled tables matter at billions of rows, not here.
 | `ADSB_APPEND` | `0` | `1` keeps existing rows (skips the initial `TRUNCATE`) and adds this slice on top — **accumulate** across runs. Overlapping day+bbox re-loads duplicate rows (MergeTree doesn't dedupe) |
 | `ADSB_SRC` | `planes_mercator_sample10` | remote source; the 10% sample (~0.8 M rows/day) is quick and dense. `planes_mercator` is full resolution — viable now that the load is chunked (see below) |
 | `ADSB_HOURS` | `0`…`23` (all) | which UTC hours to load, space-separated. Each `(day, hour)` is **one `INSERT`**, so set e.g. `"10 11 12"` for a fast partial (midday) load |
-| `CH` | `clickhouse-client` | client binary |
+| `CH` | `clickhouse client` | client invocation (word-split) |
 
 Reference volume: the default box for one day is ≈0.84 M rows / ~5 k aircraft
 from the 10% sample. The load runs **one `INSERT` per `(day, UTC hour)`** (≈1/24

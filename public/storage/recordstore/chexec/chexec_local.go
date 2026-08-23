@@ -1,6 +1,6 @@
 // Package chexec provides concrete recordstore.ExecutorI implementations.
 //
-// LocalExecutor runs every call as a one-shot `clickhouse-local` process
+// LocalExecutor runs every call as a one-shot `clickhouse local` process
 // against a persistent --path directory, so tables created by Exec survive
 // across calls (use a durable engine such as MergeTree; Memory tables
 // vanish with each process). It is meant for tests and local tooling, not
@@ -28,15 +28,15 @@ type LocalExecutor struct {
 	alloc  memory.Allocator
 }
 
-// NewLocalExecutor creates an executor over `clickhouse-local` with state
-// persisted under path (a directory; created by clickhouse-local on first
+// NewLocalExecutor creates an executor over `clickhouse local` with state
+// persisted under path (a directory; created by clickhouse on first
 // use). Returns an error when the binary is not on PATH.
 func NewLocalExecutor(path string, alloc memory.Allocator) (inst *LocalExecutor, err error) {
 	// Resolve once at construction (Command does the PATH lookup without
 	// running), caching the concrete path and failing fast when it is absent.
 	probe, err := extbin.ClickHouseLocal.Command(context.Background(), extbin.Opts{})
 	if err != nil {
-		err = eh.Errorf("clickhouse-local not available: %w", err)
+		err = eh.Errorf("clickhouse local not available: %w", err)
 		return
 	}
 	if alloc == nil {
@@ -54,7 +54,7 @@ func (inst *LocalExecutor) run(ctx context.Context, sql string, outputFormat str
 	args = append(args, "--query", sql)
 	cmd, err := extbin.ClickHouseLocal.Command(ctx, extbin.Opts{Path: inst.binary}, args...)
 	if err != nil {
-		err = eh.Errorf("resolve clickhouse-local: %w", err)
+		err = eh.Errorf("resolve clickhouse local: %w", err)
 		return
 	}
 	if stdin != nil {
@@ -65,7 +65,7 @@ func (inst *LocalExecutor) run(ctx context.Context, sql string, outputFormat str
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if err != nil {
-		err = eh.Errorf("clickhouse-local failed: %w; stderr: %s", err, stderr.String())
+		err = eh.Errorf("clickhouse local failed: %w; stderr: %s", err, stderr.String())
 		return
 	}
 	stdout = out.Bytes()

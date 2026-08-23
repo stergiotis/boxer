@@ -61,7 +61,7 @@ func (inst *failingExecutor) InsertArrow(ctx context.Context, table string, reco
 func TestDeviceStoreCacheBatchesFetches(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	counting := &countingExecutor{inner: local}
 	ctx := context.Background()
@@ -152,7 +152,7 @@ func TestDeviceStoreCacheFetchErrorBackoff(t *testing.T) {
 func TestDeviceStoreLocalWritesWriteThrough(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	st := NewDeviceStore(local, nil, DeviceStoreConfig{})
@@ -214,7 +214,7 @@ func TestDeviceStoreLocalWritesWriteThrough(t *testing.T) {
 func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	counting := &countingExecutor{inner: local}
 	ctx := context.Background()
@@ -312,7 +312,7 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 func TestDeviceCacheGetFetch(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	counting := &countingExecutor{inner: local}
 	ctx := context.Background()
@@ -371,7 +371,7 @@ func TestDeviceCacheGetFetch(t *testing.T) {
 func TestDeviceCacheGetFetchDirtyRawWindow(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	st := NewDeviceStore(local, nil, DeviceStoreConfig{})

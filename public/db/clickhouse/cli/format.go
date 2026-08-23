@@ -44,6 +44,10 @@ type Formater struct {
 	stderrBuf *bytes.Buffer
 }
 type FormaterOptions struct {
+	// BinaryPath optionally names the multi-call `clickhouse` executable. Empty
+	// resolves it through extbin (PATH or $BOXER_CLICKHOUSE_FORMAT); the
+	// `format` subcommand is added either way, so this is a path to the binary
+	// and never carries the subcommand itself.
 	BinaryPath      string
 	Hilite          bool
 	KeepComments    bool
@@ -115,9 +119,9 @@ func (inst *Formater) FormatToWriter(sql io.Reader, out io.Writer) (err error) {
 		defer cancel()
 	}
 	stderrBuf := inst.stderrBuf
-	cmd, err := extbin.ClickHouseLocal.Command(ctx, extbin.Opts{Path: inst.opts.BinaryPath}, inst.args...)
+	cmd, err := extbin.ClickHouseFormat.Command(ctx, extbin.Opts{Path: inst.opts.BinaryPath}, inst.args...)
 	if err != nil {
-		err = eb.Build().Str("binary", inst.opts.BinaryPath).Errorf("resolve clickhouse-local: %w", err)
+		err = eb.Build().Str("binary", inst.opts.BinaryPath).Errorf("resolve clickhouse format: %w", err)
 		return
 	}
 	cmd.Stdin = sql

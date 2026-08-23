@@ -1,7 +1,7 @@
 #!/bin/sh
 # ExecStart for imzero2-demo.service (ADR-0085): run the CURRENT release.
 # Resolves OS fonts like hmi_headless.sh; no --launch → interactive carousel
-# (so no clickhouse-local is needed). The deploy tool swaps `current` and
+# (so no clickhouse binary is needed). The deploy tool swaps `current` and
 # restarts this unit.
 set -eu
 CUR="${IMZERO2_CURRENT:-/opt/imzero2/current}"

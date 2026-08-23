@@ -13,7 +13,7 @@ status: draft
 You have a corpus of ADRs under [doc/adr](../adr) and have lost the thread of
 which are merely *decided* versus actually *built*. `boxer adr` loads the whole
 corpus into Apache Arrow tables and lets you query them with
-`clickhouse-local`, crossing two independent axes:
+`clickhouse local`, crossing two independent axes:
 
 - **Decision lifecycle** — the front-matter `status` (`proposed`, `accepted`,
   `superseded`, `withdrawn`, `deferred`).
@@ -37,8 +37,10 @@ dozen packages, are the drift cases this surfaces.
 
 - A built `boxer` binary — `./boxer.sh` (which applies the [`./tags`](../../tags)
   build tags) or `go build -tags "$(cat ./tags)" -o boxer ./public/app`.
-- `clickhouse-local` on `$PATH` or at `/usr/bin/clickhouse-local` for the SQL
-  paths. Without it, `overview` still prints a plain-text board; `query` needs it.
+- The `clickhouse` binary on `$PATH` or at `/usr/bin/clickhouse` for the SQL
+  paths — it is invoked as `clickhouse local`, so the `clickhouse-local` symlink
+  alone does not satisfy this. Without it, `overview` still prints a plain-text
+  board; `query` needs it.
 
 ## Steps
 
@@ -69,7 +71,7 @@ boxer adr query "SELECT num, last_date, title FROM adr WHERE status='accepted' A
 boxer adr query "SELECT num, path FROM adrcontent WHERE \`content@text/markdown\` ILIKE '%airgap%' ORDER BY num"
 ```
 
-`--format` selects any `clickhouse-local` output format (`PrettyCompact` is the
+`--format` selects any `clickhouse local` output format (`PrettyCompact` is the
 default; `JSONEachRow`, `CSV`, `Markdown`, … all work).
 
 ### 3. Persist the Arrow files

@@ -2,12 +2,12 @@ package evaluator_test
 
 import (
 	"context"
-	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -20,17 +20,15 @@ const testPoolName = "timerangepicker_test"
 
 func skipIfNoClickHouseLocal(t *testing.T) {
 	t.Helper()
-	if _, err := exec.LookPath("clickhouse-local"); err != nil {
-		if _, fallbackErr := exec.LookPath("clickhouse"); fallbackErr != nil {
-			t.Skipf("clickhouse-local not on PATH: %v", err)
-		}
+	if _, ok := extbin.ClickHouseLocal.Resolve(); !ok {
+		t.Skip("clickhouse not on PATH")
 	}
 }
 
 // setupTestEvaluator stands up an in-proc bus + chlocalbroker.Service
 // and returns an Evaluator bound to a test bus client with the
 // timerangepicker pool cap. The broker (and its pool) is torn down on
-// test cleanup. Skips when clickhouse-local is not on PATH.
+// test cleanup. Skips when clickhouse is not on PATH.
 func setupTestEvaluator(t *testing.T) (ev *evaluator.Evaluator) {
 	t.Helper()
 	skipIfNoClickHouseLocal(t)

@@ -17,7 +17,7 @@ import (
 func TestAccountLifecycle(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	st := NewLedgerStore(exec, nil, LedgerStoreConfig{})

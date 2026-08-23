@@ -16,7 +16,7 @@ import (
 // MergeTree makes rows durable across the executor's one-shot processes.
 func TestPushoutStorageConformance(t *testing.T) {
 	if _, err := chexec.NewLocalExecutor(t.TempDir(), nil); err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	storagetest.Run(t, func(location string) (repo.StorageI, error) {
 		exec, err := chexec.NewLocalExecutor(location, nil)

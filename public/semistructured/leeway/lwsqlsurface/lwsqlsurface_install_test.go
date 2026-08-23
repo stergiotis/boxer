@@ -3,13 +3,13 @@ package lwsqlsurface_test
 import (
 	"context"
 	"io"
-	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
@@ -35,18 +35,16 @@ import (
 // which is what the collision check is about.
 type localConn struct {
 	t       *testing.T
-	bin     string
 	path    string
 	pending []string
 }
 
 func newLocalConn(t *testing.T) (conn *localConn) {
 	t.Helper()
-	bin, err := exec.LookPath("clickhouse-local")
-	if err != nil {
-		t.Skipf("clickhouse-local not on PATH, skipping (install ClickHouse to run surface install tests): %v", err)
+	if _, ok := extbin.ClickHouseLocal.Resolve(); !ok {
+		t.Skip("clickhouse not on PATH, skipping (install ClickHouse to run surface install tests)")
 	}
-	return &localConn{t: t, bin: bin, path: t.TempDir()}
+	return &localConn{t: t, path: t.TempDir()}
 }
 
 // run executes one statement or script, after any buffered writes.
@@ -59,7 +57,11 @@ func (inst *localConn) run(sql string) (out string, err error) {
 }
 
 func (inst *localConn) exec(script string) (out string, err error) {
-	cmd := exec.Command(inst.bin, "--path", inst.path, "--multiquery", "--output-format", "TSV")
+	cmd, err := extbin.ClickHouseLocal.Command(inst.t.Context(), extbin.Opts{},
+		"--path", inst.path, "--multiquery", "--output-format", "TSV")
+	if err != nil {
+		return
+	}
 	cmd.Stdin = strings.NewReader(script)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout

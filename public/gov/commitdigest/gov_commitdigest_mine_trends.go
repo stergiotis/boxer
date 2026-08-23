@@ -20,16 +20,16 @@ var trendMiningSQL string
 func newMineTrendsCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "mine-trends",
-		Usage: "Read extract JSON from stdin, emit a window-level trend digest via clickhouse-local",
-		Description: "Runs the bundled trend-mining SQL via clickhouse-local over the flattened " +
+		Usage: "Read extract JSON from stdin, emit a window-level trend digest via `clickhouse local`",
+		Description: "Runs the bundled trend-mining SQL via `clickhouse local` over the flattened " +
 			"file-change rows derived from extract output. Output is a single JSON object covering " +
 			"mode distribution, path-prefix churn, follow-up density, revert events, temporal " +
 			"coupling edges, net-LOC series, and hot files. Intended to feed `synthesize-threads`.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "clickhouse-binary",
-				Value: "clickhouse-local",
-				Usage: "Path to the clickhouse-local executable (looked up in PATH if not absolute)",
+				Value: "clickhouse",
+				Usage: "Path to the multi-call clickhouse executable (looked up in PATH if not absolute); the `local` subcommand is added",
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -45,7 +45,7 @@ func newMineTrendsCommand() *cli.Command {
 				return eh.Errorf("unable to parse extract JSON from stdin: %w", err)
 			}
 
-			// clickhouse-local reads piped stdin via ParallelParsingBlockInputFormat
+			// clickhouse local reads piped stdin via ParallelParsingBlockInputFormat
 			// which has ragged behaviour when Go wraps a non-*os.File Reader —
 			// manifests as silent 0-byte output. Route flattened rows through a
 			// named temp file and invoke with --file / --table, which is the
@@ -78,13 +78,13 @@ func newMineTrendsCommand() *cli.Command {
 				"--query="+trendMiningSQL,
 			)
 			if cmdErr != nil {
-				return eb.Build().Str("binary", bin).Errorf("unable to build clickhouse-local command: %w", cmdErr)
+				return eb.Build().Str("binary", bin).Errorf("unable to build clickhouse local command: %w", cmdErr)
 			}
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			err = cmd.Run()
 			if err != nil {
-				return eb.Build().Str("binary", bin).Errorf("clickhouse-local failed: %w", err)
+				return eb.Build().Str("binary", bin).Errorf("clickhouse local failed: %w", err)
 			}
 			return nil
 		},

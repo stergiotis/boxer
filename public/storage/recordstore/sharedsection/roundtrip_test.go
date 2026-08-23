@@ -19,7 +19,7 @@ import (
 func TestAssetSharedSectionRoundTrip(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	st := NewAssetStore(exec, nil, AssetStoreConfig{})
@@ -119,7 +119,7 @@ func TestAssetSharedSectionRoundTrip(t *testing.T) {
 func TestAssetBuilderRefusesDoubleAddAndRawMixing(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	st := NewAssetStore(exec, nil, AssetStoreConfig{})

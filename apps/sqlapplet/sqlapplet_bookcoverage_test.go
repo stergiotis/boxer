@@ -164,7 +164,7 @@ func (f *fakeCoverageGateSource) Seq() uint64                    { return f.seq 
 // does not exist.
 func TestCoverageBookQueriesExecute(t *testing.T) {
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
-		t.Skipf("clickhouse-local not installed: %v", err)
+		t.Skipf("clickhouse not installed: %v", err)
 	}
 
 	logger := zerolog.New(zerolog.NewTestWriter(t)).Level(zerolog.WarnLevel)

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/analytics/stats/letterval"
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/data/chstats"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -102,15 +102,14 @@ func TestLevelsFromArrayShortInput(t *testing.T) {
 // Integration test against clickhouse-local subprocess.
 //
 // Skips when clickhouse-local is unavailable; the project's reference
-// invariant (memory: reference_clickhouse_local) says /usr/bin/
-// clickhouse-local is installed locally. CI runners may or may not
+// invariant (memory: reference_clickhouse_local) says the clickhouse
+// binary is installed locally. CI runners may or may not
 // satisfy this — gated explicitly so the unit tests above always run.
 // ---------------------------------------------------------------------------
 
 func TestRoundTrip_QuantilesTDigest_clickhouseLocal(t *testing.T) {
-	bin, lookErr := exec.LookPath("clickhouse-local")
-	if lookErr != nil {
-		t.Skipf("clickhouse-local not in PATH: %v", lookErr)
+	if _, ok := extbin.ClickHouseLocal.Resolve(); !ok {
+		t.Skip("clickhouse not in PATH")
 	}
 
 	// 10k Gaussian samples — large enough that t-digest approximation
@@ -125,7 +124,7 @@ func TestRoundTrip_QuantilesTDigest_clickhouseLocal(t *testing.T) {
 	}
 
 	// Stream samples as a single-column TSV table over stdin —
-	// clickhouse-local exposes stdin as `table` when `--structure` and
+	// `clickhouse local` exposes stdin as `table` when `--structure` and
 	// `--input-format` are set, sidestepping ARG_MAX limits a VALUES
 	// literal hits at 10k+ rows.
 	var stdinBuf bytes.Buffer
@@ -138,15 +137,16 @@ func TestRoundTrip_QuantilesTDigest_clickhouseLocal(t *testing.T) {
 		chstats.BuildLVSelect("x", maxDepth))
 
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command(bin,
+	cmd, cmdErr := extbin.ClickHouseLocal.Command(t.Context(), extbin.Opts{},
 		"--input-format", "TabSeparated",
 		"--structure", "x Float64",
 		"--query", sql)
+	require.NoError(t, cmdErr)
 	cmd.Stdin = &stdinBuf
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("clickhouse-local: %v; stderr=%s", err, stderr.String())
+		t.Fatalf("clickhouse local: %v; stderr=%s", err, stderr.String())
 	}
 
 	arr := parseTSVArray(t, strings.TrimSpace(stdout.String()))

@@ -13,7 +13,7 @@
 #                      CodecLane::best() degrades to the ADR-0128 mesh
 #                      draw-stream lane, which needs no encoder at all. The
 #                      image demonstrates that fallback rather than asserting it.
-#   boxer-soft-play    the video image plus clickhouse-local, running the `play`
+#   boxer-soft-play    the video image plus the clickhouse binary, running the `play`
 #                      SQL playground instead of the widget gallery. ADR-0134
 #                      SD8 asked whether that binary rides the A/B root images
 #                      or parks under /perm; it rides the roots, because an
@@ -80,7 +80,7 @@ fi
 # The image has no dynamic loader of its own, so whatever these binaries ask for
 # has to be staged next to them. Read that list from the binaries rather than
 # hardcoding it: a new dependency should break the build here, loudly, instead
-# of at boot. clickhouse-local widens the set (librt, libpthread, libdl), which
+# of at boot. clickhouse widens the set (librt, libpthread, libdl), which
 # is why this is computed per variant rather than once.
 closure_of() {  # <binary>... -> newline-separated absolute paths
     local b
@@ -109,11 +109,12 @@ fi
 # invokes. scripts/dev/build-static-ffmpeg.sh produces it.
 static_ffmpeg="${IMZERO2_STATIC_FFMPEG:-$repo/.airgap-ffmpeg-src/ffmpeg-7.1.1/ffmpeg}"
 
-# clickhouse-local for the `play` variant. On the host it is a symlink to the
-# one fat `clickhouse` binary, which dispatches on argv[0]; the image gets a
-# single copy installed under the name it must answer to, which is also
-# chlocalpool.DefaultBinaryPath.
-clickhouse_bin="${IMZERO2_CLICKHOUSE_BIN:-$(readlink -f "$(command -v clickhouse-local || true)" 2>/dev/null)}"
+# The clickhouse engine for the `play` variant. boxer invokes it as
+# `clickhouse local` (the multi-call form), so the image needs only the one fat
+# binary under its own name — no argv[0] symlink — installed at
+# chlocalpool.DefaultBinaryPath. `clickhouse-local` on the host is a symlink to
+# that same binary, so resolve through it as a fallback.
+clickhouse_bin="${IMZERO2_CLICKHOUSE_BIN:-$(readlink -f "$(command -v clickhouse || command -v clickhouse-local || true)" 2>/dev/null)}"
 
 # gokrazy needs the image size up front when writing to a file rather than a
 # device. Two root partitions carry a copy each of the kernel and modules, the
@@ -131,11 +132,11 @@ stage_one() {  # <instance> <with-ffmpeg 0|1> <with-clickhouse 0|1>
     local closure_binaries=("$rust_bin")
     if [ "$with_ch" = 1 ]; then
         [ -n "$clickhouse_bin" ] && [ -x "$clickhouse_bin" ] || {
-            echo "build.sh: no clickhouse-local found; install it or set IMZERO2_CLICKHOUSE_BIN" >&2
+            echo "build.sh: no clickhouse binary found; install it or set IMZERO2_CLICKHOUSE_BIN" >&2
             echo "build.sh: see https://clickhouse.com/docs/en/install" >&2
             exit 1; }
-        echo "build.sh: staging clickhouse-local ($(du -h "$clickhouse_bin" | cut -f1))" >&2
-        install -m 0755 "$clickhouse_bin" "$stage/clickhouse-local"
+        echo "build.sh: staging clickhouse ($(du -h "$clickhouse_bin" | cut -f1))" >&2
+        install -m 0755 "$clickhouse_bin" "$stage/clickhouse"
         closure_binaries+=("$clickhouse_bin")
     fi
     mapfile -t needed < <(closure_of "${closure_binaries[@]}")

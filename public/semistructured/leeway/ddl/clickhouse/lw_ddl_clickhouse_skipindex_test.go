@@ -1,11 +1,11 @@
 package clickhouse_test
 
 import (
-	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -98,15 +98,14 @@ func TestComposeCreateTable_SkipIndexPolicy(t *testing.T) {
 }
 
 // TestSkipIndexes_PruneGranules executes the SD4 acceptance criterion the way
-// ADR-0066's matrix was verified: clickhouse-local, EXPLAIN indexes = 1, a
+// ADR-0066's matrix was verified: `clickhouse local`, EXPLAIN indexes = 1, a
 // `has` guard over a bloom_filter-indexed membership lane. The skip stages
 // chain, so the assertion compares the first stage's denominator (all
 // selected granules) against the last stage's numerator (granules left after
 // every skip index ran).
 func TestSkipIndexes_PruneGranules(t *testing.T) {
-	bin, err := exec.LookPath("clickhouse-local")
-	if err != nil {
-		t.Skipf("clickhouse-local not on PATH, skipping: %v", err)
+	if _, ok := extbin.ClickHouseLocal.Resolve(); !ok {
+		t.Skip("clickhouse not on PATH, skipping")
 	}
 
 	ir, conv := composeFixture(t)
@@ -139,12 +138,13 @@ func TestSkipIndexes_PruneGranules(t *testing.T) {
 		"SELECT number, toDateTime64(number, 3), ['v'], [intDiv(number, 8192)], [1] FROM numbers(200000);\n" +
 		"EXPLAIN indexes = 1 SELECT count() FROM tprune WHERE has(" + membLane + ", 3);\n"
 
-	cmd := exec.Command(bin, "--multiquery", "--output-format", "TSVRaw")
+	cmd, err := extbin.ClickHouseLocal.Command(t.Context(), extbin.Opts{}, "--multiquery", "--output-format", "TSVRaw")
+	require.NoError(t, err)
 	cmd.Stdin = strings.NewReader(script)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	require.NoError(t, cmd.Run(), "clickhouse-local failed:\n%s\nscript:\n%s", stderr.String(), script)
+	require.NoError(t, cmd.Run(), "clickhouse local failed:\n%s\nscript:\n%s", stderr.String(), script)
 
 	explain := stdout.String()
 	require.Contains(t, explain, "idx_section_symbol_role_lr", "the derived index must appear in the plan:\n%s", explain)

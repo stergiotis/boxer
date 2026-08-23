@@ -102,7 +102,7 @@ Practical paths today, in the order most people will want them:
 ```sh
 boxer leeway sqlsurface install --url http://localhost:8123/   # provision and verify
 boxer leeway sqlsurface status                                 # what does this server carry?
-boxer leeway sqlsurface print | clickhouse-client -n           # offline, marker included
+boxer leeway sqlsurface print | clickhouse client -n           # offline, marker included
 ```
 
 `status` reports and changes nothing. It separates two kinds of leftover,

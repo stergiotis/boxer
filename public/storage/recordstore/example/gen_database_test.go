@@ -64,7 +64,7 @@ type KindA struct {
 	// resolving as mydb.valcheck but not as the bare (default-database) name.
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
-		t.Skipf("clickhouse-local unavailable: %v", err)
+		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
 	require.NoError(t, exec.Exec(ctx, ddl))

@@ -1,7 +1,7 @@
 package lwsql
 
 import (
-	"os/exec"
+	"github.com/stergiotis/boxer/public/extbin"
 	"strings"
 	"testing"
 
@@ -93,17 +93,16 @@ func TestAuditQueries_UnderscoreSeparator(t *testing.T) {
 // clickhouse-local, returning one output line per audit query.
 func runAuditLocal(t *testing.T, script string) []string {
 	t.Helper()
-	bin, err := exec.LookPath("clickhouse-local")
+	cmd, err := extbin.ClickHouseLocal.Command(t.Context(), extbin.Opts{}, "--multiquery", "--output-format", "TSV")
 	if err != nil {
-		t.Skipf("clickhouse-local not on PATH, skipping: %v", err)
+		t.Skipf("clickhouse not on PATH, skipping: %v", err)
 	}
-	cmd := exec.Command(bin, "--multiquery", "--output-format", "TSV")
 	cmd.Stdin = strings.NewReader(script)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("clickhouse-local failed: %v\nstderr:\n%s\nscript:\n%s", err, stderr.String(), script)
+		t.Fatalf("clickhouse local failed: %v\nstderr:\n%s\nscript:\n%s", err, stderr.String(), script)
 	}
 	return strings.Fields(stdout.String())
 }

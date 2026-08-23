@@ -21,4 +21,4 @@
     - repo       # read-only clone (clone-if-absent) + signer trust
     - units      # systemd units + polkit + Fedora drop-ins + the pull timer
     - caddy      # TLS + password front door
-    - clickhouse # OPTIONAL (off by default): clickhouse-local + a loopback-only CH server
+    - clickhouse # OPTIONAL (off by default): the clickhouse binary + a loopback-only CH server

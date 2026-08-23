@@ -8,7 +8,9 @@ import (
 
 // Defaults for Config fields per ADR-0028 §SD3.
 const (
-	DefaultBinaryPath                        = "/usr/bin/clickhouse-local"
+	// DefaultBinaryPath names the multi-call `clickhouse` binary; extbin adds
+	// the `local` subcommand. The packaged install puts it here.
+	DefaultBinaryPath                        = "/usr/bin/clickhouse"
 	DefaultMinIdle             uint8         = 2
 	DefaultMaxConcurrent       uint8         = 8
 	DefaultSpawnConcurrency    uint8         = 2
