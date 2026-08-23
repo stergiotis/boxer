@@ -26,8 +26,9 @@ rasterizer", on a measured 28.6–62 ms CPU/frame for llvmpipe at 1280×800.
 
 Two things changed. `egui_software_backend` exists, is 4,690 lines, and compiles
 against the pinned egui 0.35 with no source change. And measured on real imzero2
-content it costs **1.22 ms CPU/frame** at 1280×800 — 23–51× under the figure
-that ruled the option out.
+content it cost **1.22 ms CPU/frame** at 1280×800 — 23–51× under the figure that
+ruled the option out. (That was the figure this decision was taken on; §SD4's
+tiling later brought the same size to 234 µs. The argument only got stronger.)
 
 The full measurement record, including several conclusions that were wrong on
 the way, is
@@ -114,8 +115,10 @@ wrong for two commits.
 The pool defaults to **4 workers**, capped at half the hardware threads so a
 small box keeps cores for the Go host, the carrier and the encoder.
 `IMZERO2_HEADLESS_RASTER_THREADS` (ADR-0009) overrides. Since §SD4, p50 is flat
-from 2 to 16 workers, so the knob buys tail latency and costs ~15 MiB per
-worker — a memory dial, not a throughput one.
+from 2 to 16 workers, so the knob buys tail latency and costs ~13–15 MiB per
+worker — a memory dial, not a throughput one. On a four-core part the plateau is
+narrower (flat 2→4, worse at 8, on both such machines measured), and the cap is
+what keeps the default inside it.
 
 ### SD4 — the blit is tile-scoped, and the host's frame buffer persists
 
@@ -172,24 +175,38 @@ It advises and does not act: this process cannot know what else the box is for.
   Mesa**: 321 → 323 crates, zero wgpu-family, binary 45.6 → 39.0 MB. The
   renderer is 138 KB of `.text` against the GPU stack's 2.37 MB (17×), from
   4,690 source lines against 265,785 (57×).
-- Fastest arm measured in wall-clock: 0.25 ms p50 against wgpu's 1.34 ms —
-  though ~2.9× of that gap is incrementality (§SD4) the wgpu path could also
-  have, so the like-for-like rasterizer win is ~1.9×.
+- Fastest arm measured in wall-clock on every machine tried, by a margin that
+  is itself machine-dependent: 0.25 ms p50 against wgpu's 1.34 ms here (5.4×),
+  0.24 against 2.5–4.2 ms on a Zen 2 APU (10–17×), 0.30 against 9.3 ms on an
+  Intel mobile part (31×). About 2.9× of the gap is incrementality (§SD4) the
+  wgpu path could also have, so the like-for-like rasterizer win on *this*
+  machine is ~1.9×; the wider margins elsewhere are the GPU arm's readback
+  (§18.1) on weaker parts. **Headless only** — in a window the ordering
+  reverses (survey §20.3).
 - Fidelity is not a compromise: 98.3 % of pixels identical to the wgpu render
   across 92 gallery images, with a visible-delta share (0.31 %) barely above the
   0.22 % floor two runs of the *same* renderer produce.
-- Re-opens server-side pixels for the appliance target (ADR-0128 M3): 1.22 ms
-  CPU/frame at 1280×800.
+- Re-opens server-side pixels for the appliance target (ADR-0128 M3). The
+  1.22 ms CPU/frame at 1280×800 this originally cited was measured before §SD4's
+  tiling; the rasterize step at that size is now 234 µs (2026-08-23 entry).
 
 ### Negative
 
-- **Memory.** 228 MiB client RSS at the default against wgpu's 118 MiB, ~15 MiB
-  of it per worker (mimalloc per-thread arenas plus each worker's in-flight
-  primitive raster). This host is no longer the one-core-and-nothing-else
-  proposition ADR-0128 SD6 imagined.
-- **Tail.** p99 6.2 ms against wgpu's 3.0 ms. The cause is measured and
-  inherent: tail frames re-rasterize primitives whose cache went stale, which is
-  the cost of drawing a whole frame on a CPU.
+- **Memory.** ~13–15 MiB per worker (mimalloc per-thread arenas plus each
+  worker's in-flight primitive raster), which reproduces on every machine
+  measured because it is a within-run difference. This host is no longer the
+  one-core-and-nothing-else proposition ADR-0128 SD6 imagined. **How it compares
+  to the wgpu arm is not a property of this host and should not be quoted as
+  one:** 228 MiB against 118 on the reference machine, 156 against 166 on a
+  Zen 2 APU, 167 against 141 on an Intel mobile part — the ratio flips sign with
+  the machine and its Vulkan driver (2026-08-23 entry).
+- **Tail.** p99 6.2 ms, and ~6.0 ms on both other machines measured — the one
+  figure here that travels. The cause is measured and inherent: tail frames
+  re-rasterize primitives whose cache went stale, which is the cost of drawing a
+  whole frame on a CPU. Whether that loses to the GPU arm depends on the GPU:
+  3.0 ms on the reference machine, 8.3–8.8 on a Zen 2 APU, 11.9 on an Intel
+  mobile part, so the deficit this once recorded is a surplus on the latter
+  two.
 - **A sixth crate on the egui ring**, from a thin-bus-factor upstream, now
   carrying a local delta of our own (§SD4).
 - **A staleness failure mode that did not exist before.** A tile that never goes

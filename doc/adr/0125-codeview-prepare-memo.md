@@ -73,19 +73,28 @@ CST walk for semantic refinement (`dsl_highlight.go:52-68`). Measured on a
 development machine (`-benchtime` 200–500x); the ratios matter here, not the
 absolute figures:
 
-| call | source | per call | allocs |
-| --- | --- | --- | --- |
-| `BuildSql` | `SELECT count() FROM anchor.facts` (31 B) | 129 µs | 700 |
-| `BuildSql` | typical aggregate (85 B) | 145 µs | 621 |
-| `BuildSql` | 3-line CTE (180 B) | **3.5 ms** | 30 849 |
-| `BuildMarkdown` | ~0.5 KB | 104 µs | 441 |
-| `BuildMarkdown` | ~200 KB | 26 ms | 70 313 |
-| `BuildJson` | ~312 KB | 93 µs | 34 |
-| map probe by source | ~1 KB | 30–45 ns | 0 |
-| map probe by source | ~312 KB | 6.8 µs | 0 |
+**These are pre-[ADR-0196](./0196-nanopass-two-stage-sll-parsing.md) figures.**
+That ADR (2026-08-18) removed the WITH-clause ambiguity §SD5 suspected and put
+two-stage SLL parsing at every grammar seam; the SQL rows fell by 25–32×. The
+last column is a re-run on current `main` (2026-08-23 update):
 
-A Graph tab showing three CTE nodes re-parses roughly **10.5 ms of SQL every
-frame** — most of a 60 Hz budget, before anything is drawn.
+| call | source | per call | allocs | on current `main` |
+| --- | --- | --- | --- | --- |
+| `BuildSql` | `SELECT count() FROM anchor.facts` (31 B) | 129 µs | 700 | 48 µs / 333 |
+| `BuildSql` | typical aggregate (85 B) | 145 µs | 621 | — |
+| `BuildSql` | 3-line CTE (180 B) | **3.5 ms** | 30 849 | **140 µs / 775** |
+| `BuildMarkdown` | ~0.5 KB | 104 µs | 441 | 86 µs / 457 |
+| `BuildMarkdown` | ~200 KB | 26 ms | 70 313 | — |
+| `BuildJson` | ~312 KB | 93 µs | 34 | — |
+| map probe by source | ~1 KB | 30–45 ns | 0 | — |
+| map probe by source | ~312 KB | 6.8 µs | 0 | — |
+
+A Graph tab showing three CTE nodes re-parsed roughly **10.5 ms of SQL every
+frame** when this was written — most of a 60 Hz budget, before anything is
+drawn. On current `main` the same tab re-parses about **0.42 ms**, ~2.5 % of the
+budget. The waste has the same shape and the memo is still the answer; the
+magnitude that motivated it is not, and this paragraph should not be quoted as a
+live figure.
 
 A measurement caveat worth recording, because it nearly became the argument: a
 first probe benchmark reported 8.6 TB/s, which is impossible.
@@ -274,6 +283,10 @@ Measured after (`-benchtime 200000x`, so the cold miss amortises out; the
 `-benchtime 300x` figures in §Context are dominated by it — 31 023 allocs ÷ 300
 is the "102 allocs/op" a short run reports):
 
+Also pre-ADR-0196: the two SQL rows are 48 µs and 140 µs on current `main`, so
+their ratios are ~134× and ~197× rather than the figures below (2026-08-23
+update). The markdown and JSON rows are unaffected by that work.
+
 | | `Build*` | `Prepare*` hit | ratio |
 | --- | --- | --- | --- |
 | SQL one-liner | 137 µs | 164 ns | ~840× |
@@ -287,8 +300,10 @@ A miss costs the build plus ~576 ns of bookkeeping (4.84 µs against `BuildJson`
 
 Live: the Graph tab on a two-CTE query, with the Preview pane rendering the
 whole highlighted CTE every frame, reports **Go 1.2–1.3 ms** at 63 fps. That
-source alone costs 3.87 ms through `BuildSql`, so a frame budget under it is only
-reachable with the highlight cached. The before/after was **not** measured live:
+source alone cost 3.87 ms through `BuildSql` at the time, so a frame budget under
+it was only reachable with the highlight cached; post-ADR-0196 that build is a
+few hundred µs, so the memo still removes the work but is no longer the
+difference between fitting the budget and missing it. The before/after was **not** measured live:
 getting a "before" means mutating a worktree shared with concurrent sessions, and
 the benchmark carries the delta more precisely anyway.
 
@@ -339,7 +354,9 @@ rows were not re-measured.
   torn state and that a build is never run under the lock (a build that blocks
   must not block a probe).
 - Bench: the §Context table, as a guard — a `Prepare*` hit must stay in the
-  tens-of-ns-to-µs band, three orders below `Build*`.
+  tens-of-ns-to-µs band, well below `Build*`. Post-ADR-0196 the measured margin
+  on SQL is 134–197×, not the three orders this first assumed; the guard is the
+  band, not the exponent.
 - Live: the Graph tab with a three-CTE query, before and after, read off the
   status bar's Go-time (the same instrument that showed ~1.9 ms/frame on a
   literal-only `SELECT` during ADR-0123's live run).
