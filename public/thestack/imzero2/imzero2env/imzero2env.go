@@ -93,9 +93,14 @@ var (
 
 	// Density is the IDS density preset (tight | standard | roomy).
 	// Case-insensitive; anything else is treated as "standard".
+	//
+	// Launch-time seed only: the host chrome's Layout ▸ Density menu
+	// switches the live preset on both sides of the FFFI boundary
+	// (ADR-0032 §SD1, Update 2026-08-23), and the switch is not written
+	// back here.
 	Density = env.NewString(env.Spec{
 		Name:        "IMZERO2_DENSITY",
-		Description: "IDS density preset (tight|standard|roomy); empty defaults to standard",
+		Description: "IDS density preset (tight|standard|roomy) at launch, switchable at runtime via Layout ▸ Density; empty defaults to standard",
 		Category:    env.CategoryDev,
 	})
 

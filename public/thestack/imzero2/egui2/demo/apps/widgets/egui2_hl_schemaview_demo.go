@@ -77,7 +77,7 @@ func demoSchemaView(ids *c.WidgetIdStack, st *schemaViewDemoState) {
 				}
 			}
 		}
-		c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+		c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
 	}
 	schemaview.Render(schemaview.Input{Ids: ids, ScopeKey: "schemaview", Model: st.model})
 }

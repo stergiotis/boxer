@@ -9,6 +9,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/metricsoverlay"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/videooutput"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
@@ -57,10 +58,6 @@ type ChromeConfig struct {
 func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 	ids := c.NewWidgetIdStack()
 	_ = ids
-	// Captured once at setup so the per-frame closure pays no per-call
-	// env-read cost. ADR-0032 §SD2 — IDS spacing tokens at the active
-	// density preset.
-	density := styletokens.DensityFromEnv()
 	// Screenshot/tour mode (IMZERO2_SCREENSHOT_DIR set). Drives two things,
 	// captured once so the per-frame closure doesn't repeat the env read:
 	//   1. Skips the bottom status panel — the metrics overlay (Go ms / Rust
@@ -139,6 +136,12 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 		}
 		c.CurrentApplicationState.StartServersideFrame()
 		defer c.CurrentApplicationState.FinishServersideFrame()
+		// Resolved per frame rather than captured at setup: the Density
+		// submenu below switches the preset at runtime (ADR-0032 §SD1,
+		// Update 2026-08-23). ActiveDensity is an atomic load, so this is
+		// cheaper than the env-var handle it replaced. ADR-0032 §SD2 — IDS
+		// spacing tokens at the active density preset.
+		density := styletokens.ActiveDensity()
 		for range c.PanelTop(ids.PrepareStr("topPanel")).KeepIter() {
 			for range c.MenuBar().KeepIter() {
 				// File menu holds only Quit, which terminates the host — omit the
@@ -156,6 +159,27 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 						c.MemoryResetAreas()
 					}
 					c.GuiZoomZoomMenuButtons()
+					// IDS density preset (ADR-0032 §SD1). The switch has to
+					// land on both sides of the FFFI boundary: the Go token
+					// tables feed every widget's own spacing arithmetic, while
+					// SetIdsDensity re-applies the Rust style overlay that
+					// drives egui's built-in spacing and the type scale. The
+					// selection reads back from ActiveDensity every frame, so
+					// a switch from anywhere else (another host, a future
+					// config reload) shows up here without extra state.
+					for range c.MenuButton(c.Atoms().Text("Density").Keep()).KeepIter() {
+						selected := density
+						if selector.Segmented(ids, "density", &selected).
+							Style(selector.StyleRadio).
+							Vertical().
+							Option(styletokens.DensityTight, "Tight").
+							Option(styletokens.DensityStandard, "Standard").
+							Option(styletokens.DensityRoomy, "Roomy").
+							SendResp() {
+							styletokens.SetActiveDensity(selected)
+							c.SetIdsDensity(uint32(selected))
+						}
+					}
 				}
 				if cc.ExtraMenus != nil {
 					cc.ExtraMenus()

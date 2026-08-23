@@ -96,7 +96,7 @@ func badgeSection(d styletokens.DensityE, title, caption string) {
 // -----------------------------------------------------------------------------
 
 func demoBadgeStyle(ids *c.WidgetIdStack) {
-	d := styletokens.DensityFromEnv()
+	d := styletokens.ActiveDensity()
 	c.Label("Badge / Chip — a Frame + LabelAtoms composition over the existing").Send()
 	c.Label("FFFI2 primitives. No new IDL or Rust opcodes were added.").Send()
 	c.AddSpace(styletokens.PaddingInner(d))
@@ -144,7 +144,7 @@ func demoBadgeStyle(ids *c.WidgetIdStack) {
 // -----------------------------------------------------------------------------
 
 func demoBadgeExtras(ids *c.WidgetIdStack) {
-	d := styletokens.DensityFromEnv()
+	d := styletokens.ActiveDensity()
 	c.Label("Three orthogonal knobs that decorate any tone × variant × size").Send()
 	c.Label("combination: a leading glyph, a fully-rounded pill shape, and a").Send() // designlint:ignore=L1 (continuation of preceding line)
 	c.Label("hover tooltip.").Send()                                                  // designlint:ignore=L1 (continuation of preceding line)
@@ -199,7 +199,7 @@ func demoBadgeExtras(ids *c.WidgetIdStack) {
 // -----------------------------------------------------------------------------
 
 func demoBadgeInteractive(ids *c.WidgetIdStack, st *badgesInteractiveState) {
-	d := styletokens.DensityFromEnv()
+	d := styletokens.ActiveDensity()
 	c.Label("Patterns built from Badge: clickable filter chips, status pills,").Send()
 	c.Label("monospace notification counts and a manually-composed dismissible").Send() // designlint:ignore=L1 (continuation of preceding line)
 	c.Label("tag list (\"chip + ×\" = two adjacent badges in an IdScope).").Send()      // designlint:ignore=L1 (continuation of preceding line)

@@ -62,7 +62,7 @@ func New(ids *c.WidgetIdStack, idPrefix string) (inst Renderer) {
 		defaultOpen: true,
 		nameWidth:   defaultNameWidth,
 		valueWidth:  defaultValueWidth,
-		density:     styletokens.DensityFromEnv(),
+		density:     styletokens.ActiveDensity(),
 	}
 	return
 }
@@ -149,6 +149,8 @@ func (inst Renderer) DefaultOpen(v bool) (out Renderer) {
 // for a one-shot draw nobody interacts with; pass a retained *State
 // for anything the reader can open.
 func (inst Renderer) Render(state *State, fields []Field) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	if state == nil {
 		state = &State{}
 	}

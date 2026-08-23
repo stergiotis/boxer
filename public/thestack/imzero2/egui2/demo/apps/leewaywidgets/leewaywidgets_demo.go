@@ -141,7 +141,7 @@ func (inst *App) renderGallery() {
 			c.UiSetMaxWidth(galleryTreeWidth)
 			inst.renderViewTree()
 		}
-		c.AddSpace(styletokens.GapItems(styletokens.DensityFromEnv()))
+		c.AddSpace(styletokens.GapItems(styletokens.ActiveDensity()))
 		for range c.Vertical().KeepIter() {
 			c.UiSetMinHeight(galleryContentH)
 			c.UiSetMaxHeight(galleryContentH)

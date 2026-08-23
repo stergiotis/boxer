@@ -55,7 +55,7 @@ var _ app.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	inst = &App{
 		ids:     c.NewWidgetIdStack(),
-		density: styletokens.DensityFromEnv(),
+		density: styletokens.ActiveDensity(),
 		smooth:  trendsmooth.New(),
 	}
 	return
@@ -76,6 +76,8 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 // pre-pushed a window-unique salt onto inst.ids, so widget ids derived from it
 // are scoped per window.
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	s, sErr := ensureSampler()
 	if sErr != nil {
 		renderInitErrorPanel(sErr)

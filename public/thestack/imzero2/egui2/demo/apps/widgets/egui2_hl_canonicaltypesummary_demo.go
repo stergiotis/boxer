@@ -69,7 +69,7 @@ func init() {
 }
 
 func demoCanonicalTypeSummary(ids *c.WidgetIdStack) {
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 	c.Label("Each row summarises one canonical type; click a row's arrow-square-out glyph to open its inspector (the last row starts open):").Send()
 	c.Separator().Horizontal().Send()
 	c.AddSpace(styletokens.GapInline(density))

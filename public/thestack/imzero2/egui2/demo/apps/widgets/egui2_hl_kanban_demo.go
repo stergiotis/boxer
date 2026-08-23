@@ -102,9 +102,9 @@ func demoKanban(ids *c.WidgetIdStack, st *kanbanDemoState) {
 			st.group = kanban.GroupByField
 		}
 	}
-	c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+	c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
 	kanban.RenderLegend(st.model.DotLegend)
-	c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+	c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
 	kanban.Render(kanban.Input{
 		Ids: ids, ScopeKey: "kanban", Model: st.model, Group: st.group,
 		GroupField: func(cd *kanban.Card) (key, label string) {

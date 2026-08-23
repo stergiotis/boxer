@@ -13,7 +13,7 @@ import (
 // no Renderer struct to cache the density on, so each call site reads
 // the env afresh (cheap; ~once per Frame call site).
 func padDefault() (v float32) {
-	v = styletokens.PaddingDefault(styletokens.DensityFromEnv())
+	v = styletokens.PaddingDefault(styletokens.ActiveDensity())
 	return
 }
 
@@ -29,7 +29,7 @@ func padDefault() (v float32) {
 // separated by exactly one item_spacing (8 px at standard density) and
 // the hierarchy rode on font size alone (L1 in the rendering review).
 func headingGap(level uint8) (v float32) {
-	d := styletokens.DensityFromEnv()
+	d := styletokens.ActiveDensity()
 	if level <= 2 {
 		v = styletokens.PaddingOuter(d)
 		return
@@ -215,7 +215,7 @@ func tableFlows(rows int, hasHeader bool) (flows bool, maxScrollHeight float32) 
 // `ui.heading()` (TextStyle::Heading, the larger step), so a table with
 // a header sizes off HeadingPt and a headerless one off BodyPt.
 func tableRowHeight(hasHeader bool) (h float32) {
-	d := styletokens.DensityFromEnv()
+	d := styletokens.ActiveDensity()
 	pt := styletokens.ScaledPt(styletokens.BodyPt, d)
 	if hasHeader {
 		if hp := styletokens.ScaledPt(styletokens.HeadingPt, d); hp > pt {
@@ -251,7 +251,7 @@ func tableColumnCap(cols int) (w float32) {
 // and stays pinned near egui_extras' 100pt fallback suggestion. Feeding
 // an absolute initial width side-steps that feedback loop.
 func tableColumnWidth(runes uint32, colCap float32) (w float32) {
-	pt := styletokens.ScaledPt(styletokens.BodyPt, styletokens.DensityFromEnv())
+	pt := styletokens.ScaledPt(styletokens.BodyPt, styletokens.ActiveDensity())
 	w = float32(runes)*pt*tableGlyphAdvance + tableCellPadding
 	if w < tableColumnMinWidth {
 		w = tableColumnMinWidth
@@ -439,7 +439,7 @@ func renderRuns(runs []paragraphRun, rc *renderCtx) {
 		return
 	}
 	for range c.HorizontalWrapped().KeepIter() {
-		c.UiSetItemSpacing(0, styletokens.GapItems(styletokens.DensityFromEnv()))
+		c.UiSetItemSpacing(0, styletokens.GapItems(styletokens.ActiveDensity()))
 		for i := range runs {
 			r := &runs[i]
 			switch r.kind {

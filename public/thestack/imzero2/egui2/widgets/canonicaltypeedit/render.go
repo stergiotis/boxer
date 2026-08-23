@@ -108,7 +108,7 @@ func (m *Model) renderEditBody(ids *c.WidgetIdStack) (changed bool) {
 	// rule below reads formChanged=false whenever it is collapsed.
 	var formChanged bool
 	if m.formOpen {
-		c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
+		c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 		formChanged = m.renderForm(ids)
 	}
 

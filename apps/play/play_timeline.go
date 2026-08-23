@@ -222,7 +222,7 @@ func (inst *TimelineDriver) RenderContractHelp() {
 		// where 6 reads as a paragraph break. Taking the magnitude one step
 		// down keeps the spacing where it was AND makes it scale with density,
 		// which a bare literal never did.
-		c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
+		c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 		for _, line := range []string{
 			"  Points       _tl_time",
 			"  Intervals    _tl_time + _tl_time_end  (+ optional _tl_lane, _tl_intensity)",
@@ -232,7 +232,7 @@ func (inst *TimelineDriver) RenderContractHelp() {
 				rt.Monospace()
 			}
 		}
-		c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
+		c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 		for rt := range c.RichTextLabel(
 			"Timestamps must be DateTime64(N); strings for labels and lanes. " +
 				"The Snippets tab carries a ready-made query for each shape, and one for the background-bands overlay.") {

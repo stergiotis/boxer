@@ -239,7 +239,7 @@ var _ app.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	inst = &App{
 		ids:               c.NewWidgetIdStack(),
-		density:           styletokens.DensityFromEnv(),
+		density:           styletokens.ActiveDensity(),
 		cpuCoresDigest:    tdigest.NewTDigest(),
 		cpuHistoryDigest:  tdigest.NewTDigest(),
 		diskDistsumDigest: tdigest.NewTDigest(),
@@ -268,6 +268,8 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 // are scoped under that salt — no further package-level coordination
 // is needed (every render helper is a method on *App).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	// activeSampler hands back the replay session while one is on and the live
 	// singleton otherwise (ADR-0197 §SD5); the panels cannot tell which.
 	s, sErr := activeSampler()

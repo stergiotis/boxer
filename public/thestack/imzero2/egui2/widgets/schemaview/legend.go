@@ -112,7 +112,7 @@ func renderLegendBody(ids *c.WidgetIdStack) {
 	for rt := range c.RichTextLabel("navigator glyphs") {
 		rt.Weak().Small()
 	}
-	c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 	for range c.Grid(ids.PrepareStr("legend-grid")).NumColumns(2).KeepIter() {
 		for i, e := range legendEntries {
 			badge.New(ids.PrepareSeq(uint64(0x1e6e_0000+i)), e.glyph).

@@ -58,7 +58,7 @@ func TestWidthColumnsAndDefaults(t *testing.T) {
 	d := in.widthDefaults()
 	assert.Equal(t, []float64{float64(defaultNameWidth), float64(defaultSizeWidth), float64(defaultTimeWidth), 110, float64(defaultColumnWidth)}, d)
 	assert.NotEqual(t, widthSignature(cols), widthSignature(cols[:4]))
-	assert.Greater(t, MinColumnWidth(styletokens.DensityFromEnv()), widthContentMin)
+	assert.Greater(t, MinColumnWidth(styletokens.ActiveDensity()), widthContentMin)
 }
 
 func TestPlanWidthsWithoutAResolverIsTheDefaults(t *testing.T) {

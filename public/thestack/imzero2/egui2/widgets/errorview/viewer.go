@@ -53,7 +53,7 @@ func New(ids *c.WidgetIdStack, idPrefix string) (inst Renderer) {
 		indent:      12,
 		errorFg:     defaultErrorFg,
 		mutedFg:     defaultMutedFg,
-		density:     styletokens.DensityFromEnv(),
+		density:     styletokens.ActiveDensity(),
 	}
 	return
 }
@@ -108,6 +108,8 @@ func (inst Renderer) MutedFg(col color.Color) (out Renderer) {
 // Empty contexts (no streams or no facts) short-circuit so the UI
 // doesn't grow an "error chain — 0 streams" header.
 func (inst Renderer) Render(ctx Context) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	if ctx.IsEmpty() {
 		return
 	}

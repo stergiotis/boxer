@@ -434,7 +434,7 @@ func NewInst(registry *app.Registry, logger zerolog.Logger) (inst *Inst) {
 	inst = &Inst{
 		registry:   registry,
 		logger:     logger,
-		density:    styletokens.DensityFromEnv(),
+		density:    styletokens.ActiveDensity(),
 		mountState: make(map[app.AppI]*instMount),
 		fpSaveSvg: filepicker.New("windowhost-save-svg", filepicker.ModeSave,
 			filepicker.WithExtensionFilter(".svg"),
@@ -1138,6 +1138,8 @@ func emitStopped(facts factsstore.FactsStoreI, logger zerolog.Logger, runId stri
 // "open" button per app and runs inside a c.PanelCentral so the user
 // can at least see something on the desktop after launch.
 func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	// Snapshot the slice under lock; the iteration runs without the
 	// lock held so AppI.Frame can re-enter (e.g., to call Open via the
 	// Apps menu, which would otherwise deadlock).

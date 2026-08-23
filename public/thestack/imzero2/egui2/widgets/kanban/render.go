@@ -101,7 +101,7 @@ func Render(in Input) {
 	if colW <= 0 {
 		colW = defaultColumnWidth
 	}
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 
 	if in.Group == GroupByParent || (in.Group == GroupByField && in.GroupField != nil) {
 		renderGrouped(in, m, colW, density)
@@ -168,7 +168,7 @@ func RenderLegend(legend []DotKind) {
 	if len(legend) == 0 {
 		return
 	}
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 	for range c.Horizontal().KeepIter() {
 		for i, dk := range legend {
 			renderLegendEntry(dk)

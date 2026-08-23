@@ -323,7 +323,7 @@ func (h *profilesHub) syncEntry(e *profileEntry) {
 func (inst *App) renderProfilesPanel() {
 	inst.sectionHeader("Profile capture")
 	c.Label("Captures profile this process, publishes it as an ad-hoc dataset (alias pprof_<kind>, stable handle across re-captures), and Explore opens a play window on it — focused on the flamegraph, with the other lenses a tab away.").Send()
-	c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 
 	for _, spec := range profileKinds {
 		e := profiles.entry(spec.key)
@@ -363,9 +363,9 @@ func (inst *App) renderProfilesPanel() {
 		if lastErr != "" {
 			c.Label(lastErr).Send()
 		}
-		c.AddSpace(styletokens.PaddingHair(styletokens.DensityFromEnv()))
+		c.AddSpace(styletokens.PaddingHair(styletokens.ActiveDensity()))
 	}
 
-	c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 	c.Label("Block and mutex profiles are omitted: they stay empty unless their runtime rates are set, and imzrt does not mutate runtime tunables.").Send()
 }

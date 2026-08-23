@@ -657,7 +657,7 @@ func (inst *treemapDriver) renderCategoryKey() {
 	if len(inst.color.catOrder) == 0 {
 		return
 	}
-	gap := styletokens.GapItems(styletokens.DensityFromEnv())
+	gap := styletokens.GapItems(styletokens.ActiveDensity())
 	for range c.HorizontalTop().KeepIter() {
 		for i, key := range inst.color.catOrder {
 			if i >= treemapLegendMaxCats {
@@ -922,7 +922,7 @@ func (inst *treemapDriver) describeNode(n *layout.Node) string {
 // by c.Separator(), which in a horizontal row is a vertical rule sized to the
 // pane's whole height.
 func (inst *treemapDriver) renderControls() {
-	gap := styletokens.GapSections(styletokens.DensityFromEnv())
+	gap := styletokens.GapSections(styletokens.ActiveDensity())
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("colour").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		if inst.color.kind == hierColorNone {

@@ -388,7 +388,7 @@ func (inst *IcicleDriver) nodeAt(h icicleview.Hit) *icicle.Node {
 // control rows, which is how it was found — and how the Flow, Network and
 // Sankey panels were then found to have it too.
 func (inst *IcicleDriver) renderControls() {
-	gap := styletokens.GapSections(styletokens.DensityFromEnv())
+	gap := styletokens.GapSections(styletokens.ActiveDensity())
 	for range c.HorizontalTop().KeepIter() {
 		selector.Segmented(inst.ids, "icicle-orient", &inst.orient).
 			Inline().

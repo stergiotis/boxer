@@ -129,7 +129,7 @@ func Render(in Input) {
 // ScrollArea fills and clips it (a ScrollArea inside the former width-pinned
 // Vertical-in-Horizontal collapsed to its first child — see the package history).
 func renderNavHeader(ids *c.WidgetIdStack, m *Model, scope string) {
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 	t := m.Table
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabel(t.DictionaryEntry.Name.String()) {
@@ -212,14 +212,14 @@ func (m *Model) navCell(r tree.Row) {
 	if g := m.navNodes[node].glyph; g != "" {
 		c.LabelAtoms(c.Atoms().BeginRichText(g).Monospace().End().Keep()).
 			Selectable(false).Send()
-		c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+		c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
 	}
 	c.Label(m.navLabels[node]).Selectable(false).Truncate().Send()
 	typ := m.navNodes[node].typ
 	if typ == "" {
 		return
 	}
-	c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+	c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
 	c.LabelAtoms(c.Atoms().
 		BeginRichTextColored(navTypeFg, navTypeBg, typ).Small().End().
 		Keep()).Selectable(false).Truncate().Send()
@@ -299,7 +299,7 @@ func renderDetail(ids *c.WidgetIdStack, m *Model) {
 // (in the category tone) and trailed by a small kind chip, so the detail header
 // echoes the tree at a glance.
 func detailHeaderCat(ids *c.WidgetIdStack, name, glyph string, glyphTone styletokens.RGBA8, kind string, kindTone badge.ToneE) {
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabelColored(color.Hex(glyphTone.AsHex()).Keep(), color.Transparent.Keep(), glyph) {
 			rt.Strong().Size(15)
@@ -391,7 +391,7 @@ func renderTypeBlock(ids *c.WidgetIdStack, ct canonicaltypes.PrimitiveAstNodeI) 
 	for range c.Horizontal().KeepIter() {
 		canonicaltypesummary.New("schemaview-coltype").Render(ids.PrepareStr("cts-col"), canonicalOf(ct))
 	}
-	c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 }
 
 // --- formatting helpers ---

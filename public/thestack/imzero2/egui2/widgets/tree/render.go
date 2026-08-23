@@ -363,7 +363,7 @@ func Render(in Input) (res Result) {
 	if scopeKey == "" {
 		scopeKey = "tree"
 	}
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 
 	// One action per frame: a user can click at most one control, so a single
 	// slot each is enough and there is no ordering to arbitrate.

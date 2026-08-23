@@ -160,7 +160,7 @@ func renderReport(title string, body string) {
 			// A blank line in the rendered body. On the ladder at the magnitude
 			// it already had, so it scales with density instead of staying 4px
 			// while the text around it grows.
-			c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
+			c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 			continue
 		}
 		c.Label(line).Send()

@@ -133,7 +133,7 @@ func ProvenanceChip(p Provenance) {
 	}
 	mutedFg := color.Hex(styletokens.NeutralTextSecondary.AsHex())
 	transparentBg := color.Transparent
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 	gap := styletokens.GapInline(density)
 	for range c.Horizontal().KeepIter() {
 		// "↳" is the visual binding cue — same glyph used in the

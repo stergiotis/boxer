@@ -620,7 +620,7 @@ func (inst *SeriesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	}
 	inst.smooth.BeginFrame()
 
-	dens := styletokens.DensityFromEnv()
+	dens := styletokens.ActiveDensity()
 	c.Label(inst.statusLine()).Send()
 	c.AddSpace(styletokens.GapInline(dens))
 	inst.renderControls()

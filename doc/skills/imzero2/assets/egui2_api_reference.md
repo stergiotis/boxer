@@ -156,6 +156,7 @@ status: draft
 | SelectableLabel | BuilderFactory | Yes | 2 | 0 | 0 | Immediate |
 | Separator | BuilderFactory | No | 0 | 0 | 5 | Immediate |
 | SetAnimationFreeze | Procedural | No | 1 | 0 | - | - |
+| SetIdsDensity | Procedural | No | 1 | 0 | - | - |
 | SetVideoPipeline | Procedural | No | 1 | 0 | - | - |
 | SetWindowCollapsed | Procedural | Yes | 1 | 0 | - | - |
 | ShowDebugTools | Procedural | No | 0 | 0 | - | - |
@@ -2898,6 +2899,19 @@ Block
 | Name | Kind | Type |
 |------|------|------|
 | freeze | plain | b |
+
+---
+
+### SetIdsDensity
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| density | plain | u32 |
 
 ---
 

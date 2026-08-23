@@ -1074,7 +1074,7 @@ func TestTableRowHeight_TracksTypeScale(t *testing.T) {
 	// A table with a header sizes off the larger heading step, because
 	// the interpreter draws header cells with ui.heading() and one row
 	// height covers header and body alike.
-	d := styletokens.DensityFromEnv()
+	d := styletokens.ActiveDensity()
 	wantHeader := styletokens.ScaledPt(styletokens.HeadingPt, d) * tableRowHeightFactor
 	wantBody := styletokens.ScaledPt(styletokens.BodyPt, d) * tableRowHeightFactor
 	if got := tableRowHeight(true); got != wantHeader {
@@ -1564,7 +1564,7 @@ func kindsOfRuns(runs []paragraphRun) []runKindE {
 func TestParse_HeadingFontSize_TableCovers1Through6AndFallback(t *testing.T) {
 	// The tuned ladder, then the density adjustment on top — headings
 	// move with the type scale the way table rows already do.
-	d := styletokens.DensityFromEnv()
+	d := styletokens.ActiveDensity()
 	cases := []struct {
 		level uint8
 		base  float32
@@ -1615,7 +1615,7 @@ func TestHeadingFontSize_LadderDescendsAndStraddlesBody(t *testing.T) {
 	// smallest heading came out under it. Pinned rather than corrected:
 	// retuning the ladder moves every markdown-bearing capture again and
 	// is a typographic decision of its own, not part of the density fix.
-	d := styletokens.DensityFromEnv()
+	d := styletokens.ActiveDensity()
 	body := styletokens.ScaledPt(styletokens.BodyPt, d)
 	for level := uint8(1); level <= 5; level++ {
 		if got := headingFontSize(level); got <= body {
@@ -1629,7 +1629,7 @@ func TestHeadingFontSize_LadderDescendsAndStraddlesBody(t *testing.T) {
 }
 
 func TestHeadingGap_TwoTiers(t *testing.T) {
-	d := styletokens.DensityFromEnv()
+	d := styletokens.ActiveDensity()
 	outer := styletokens.PaddingOuter(d)
 	def := styletokens.PaddingDefault(d)
 	if outer <= def {

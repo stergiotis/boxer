@@ -860,7 +860,7 @@ func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
 // headings, and the hierarchy read differently at each density (L6 in
 // the rendering review).
 func headingFontSize(level uint8) (sz float32) {
-	sz = styletokens.ScaledPt(headingFontSizeBase(level), styletokens.DensityFromEnv())
+	sz = styletokens.ScaledPt(headingFontSizeBase(level), styletokens.ActiveDensity())
 	return
 }
 

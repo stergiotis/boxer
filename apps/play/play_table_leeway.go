@@ -271,14 +271,14 @@ func (inst *PlayApp) renderTableOptionsBar() {
 			// gap stands in for a rule between control groups, so it wants to
 			// read as a break rather than as an item gap, and it scales with
 			// density like everything else in the row.
-			c.AddSpace(styletokens.GapPanels(styletokens.DensityFromEnv()))
+			c.AddSpace(styletokens.GapPanels(styletokens.ActiveDensity()))
 			c.Checkbox(ids.PrepareStr("table-show-support"),
 				inst.tableOpts.showSupport, "Support columns").
 				SendRespVal(&inst.tableOpts.showSupport)
 			c.Checkbox(ids.PrepareStr("table-show-membership"),
 				inst.tableOpts.showMembership, "Membership columns").
 				SendRespVal(&inst.tableOpts.showMembership)
-			c.AddSpace(styletokens.GapPanels(styletokens.DensityFromEnv()))
+			c.AddSpace(styletokens.GapPanels(styletokens.ActiveDensity()))
 			for range c.HoverText("Drops a tagged section once none of its attributes appear on the current page — which sections that is can change as you page through.").KeepIter() {
 				c.Checkbox(ids.PrepareStr("table-hide-empty-sections"),
 					inst.tableOpts.hideEmptySections, "Hide empty sections").

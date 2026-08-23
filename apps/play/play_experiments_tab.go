@@ -166,7 +166,7 @@ func (inst *experimentsDriver) isTextSink() bool {
 // so what is chrome and what is the artifact stay distinguishable.
 func (inst *PlayApp) renderExperimentsTab(rec arrow.RecordBatch, schema *arrow.Schema) {
 	d := inst.experiments
-	gap := styletokens.GapItems(styletokens.DensityFromEnv())
+	gap := styletokens.GapItems(styletokens.ActiveDensity())
 	d.renderControls()
 	c.AddSpace(gap)
 	d.renderGuide()
@@ -237,7 +237,7 @@ func (inst *experimentsDriver) renderGuide() {
 }
 
 func (inst *experimentsDriver) renderControls() {
-	gap := styletokens.GapSections(styletokens.DensityFromEnv())
+	gap := styletokens.GapSections(styletokens.ActiveDensity())
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("source").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "exp-source", &inst.source).
@@ -376,7 +376,7 @@ func (inst *experimentsDriver) renderBody(rec arrow.RecordBatch, schema *arrow.S
 	if inst.notice != "" {
 		c.Label(inst.notice).Send()
 		if inst.sink != experimentsSinkTopology || inst.topoView == nil {
-			c.AddSpace(styletokens.GapItems(styletokens.DensityFromEnv()))
+			c.AddSpace(styletokens.GapItems(styletokens.ActiveDensity()))
 		}
 	}
 	switch {
@@ -510,7 +510,7 @@ func (inst *experimentsDriver) topologyPointerLine() string {
 // renderTopologyLegend names the four attribute states. The colours are
 // data-bearing — the whole point of the view — so they need a key.
 func (inst *experimentsDriver) renderTopologyLegend() {
-	gap := styletokens.GapItems(styletokens.DensityFromEnv())
+	gap := styletokens.GapItems(styletokens.ActiveDensity())
 	for range c.HorizontalTop().KeepIter() {
 		for _, st := range []leewaywidgets.AttrStateE{
 			leewaywidgets.AttrStateValueAndTags,
@@ -535,7 +535,7 @@ func (inst *experimentsDriver) renderTopologyLegend() {
 func (inst *experimentsDriver) renderText() {
 	for _, line := range inst.textOut {
 		if line == "" {
-			c.AddSpace(styletokens.GapItems(styletokens.DensityFromEnv()))
+			c.AddSpace(styletokens.GapItems(styletokens.ActiveDensity()))
 			continue
 		}
 		c.LabelAtoms(c.Atoms().BeginRichText(line).Monospace().End().Keep()).Send()

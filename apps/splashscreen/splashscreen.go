@@ -142,7 +142,7 @@ var _ app.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	inst = &App{
 		ids:        c.NewWidgetIdStack(),
-		density:    styletokens.DensityFromEnv(),
+		density:    styletokens.ActiveDensity(),
 		tab:        tabSplash,
 		imgTracker: c.NewImageVersionTracker[string](),
 	}
@@ -176,6 +176,8 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 // calls Frame directly), the caller must bind inst.ids to its own
 // scoped stack first.
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	inst.renderBody()
 	return
 }

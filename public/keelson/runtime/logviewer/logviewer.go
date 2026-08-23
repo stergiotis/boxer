@@ -163,7 +163,7 @@ func newInstance(m app.Manifest) (out *LogViewerApp) {
 	out = &LogViewerApp{
 		manifest:    m,
 		ids:         ids,
-		density:     styletokens.DensityFromEnv(),
+		density:     styletokens.ActiveDensity(),
 		filterLevel: zerolog.TraceLevel,
 		follow:      true,
 		maxRows:     256,
@@ -202,6 +202,8 @@ func (inst *LogViewerApp) Frame(ctx app.FrameContextI) (err error)   { return in
 // past the tile height, expanding the dock tile and stranding the
 // outer ScrollArea with a confusing nested-scroll behaviour.
 func (inst *LogViewerApp) render() (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	sink := sinkRef.Load()
 	if sink == nil {
 		c.Label("Logbridge not installed — host did not call logviewer.RegisterSink()").Send()

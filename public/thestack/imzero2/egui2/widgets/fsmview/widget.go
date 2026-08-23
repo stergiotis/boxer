@@ -168,7 +168,7 @@ func New[T comparable](ids *c.WidgetIdStack, scopeKey string, m *Machine[T]) *Wi
 		machine:  m,
 		title:    scopeKey,
 		renderer: RendererTable,
-		density:  styletokens.DensityFromEnv(),
+		density:  styletokens.ActiveDensity(),
 	}
 }
 
@@ -340,6 +340,8 @@ func (inst *Widget[T]) HistorySnapshot() []Transition[T] {
 // cascade position (egui_dock-style retention takes over on subsequent
 // frames so user-driven drag positions stick).
 func (inst *Widget[T]) Render() {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		inst.renderChip()
 		inst.renderPopupAndTether()
@@ -352,6 +354,8 @@ func (inst *Widget[T]) Render() {
 // must be emitted away from the chip's call site (the dock-tab case). Callers
 // using all-in-one [Widget.Render] never need this.
 func (inst *Widget[T]) RenderChip() {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		inst.renderChip()
 	}
@@ -363,6 +367,8 @@ func (inst *Widget[T]) RenderChip() {
 // never inside a dock-tab body. No-op when the popup is closed. The toggle↔window
 // link is by scope (the tether), so the two calls need not be nested.
 func (inst *Widget[T]) RenderPopup() {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		inst.renderPopupAndTether()
 	}

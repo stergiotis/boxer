@@ -325,7 +325,7 @@ func (inst Renderer) renderLevel2Body(scope string, state *instanceState, canoni
 
 	if !ok {
 		errCol := color.Hex(styletokens.ErrorDefault.AsHex())
-		c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
+		c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 		msg := "parse error: " + firstLine(state.parseErr.Error())
 		c.LabelAtoms(c.Atoms().BeginRichTextColored(errCol, transparentBg, msg).Small().End().Keep()).Send()
 		return
@@ -354,7 +354,7 @@ func (inst Renderer) renderLevel2Body(scope string, state *instanceState, canoni
 func (inst Renderer) renderTabBar(scope string, state *instanceState) {
 	selector.SegmentedAbs(scope+"-tab", &state.tab).
 		Style(selector.StyleSelectable).
-		Gap(styletokens.GapInline(styletokens.DensityFromEnv())).
+		Gap(styletokens.GapInline(styletokens.ActiveDensity())).
 		Option(tabLayout, "Layout").
 		Option(tabMembers, "Members").
 		Option(tabCodec, "Go codec").
@@ -367,7 +367,7 @@ func (inst Renderer) renderTabBar(scope string, state *instanceState) {
 // muted "var" label. The footprint is type-level (see the honest caveat
 // below the strip), not a byte-exact runtime encoding for non-network types.
 func renderLayoutTab(scope string, ast canonicaltypes.AstNodeI) {
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 	fixedBytes, anyVar, count := footprint(ast)
 	c.LabelAtoms(c.Atoms().BeginRichText(footprintHeader(count, fixedBytes, anyVar)).Small().Weak().End().Keep()).Send()
 	c.AddSpace(styletokens.PaddingInner(density))

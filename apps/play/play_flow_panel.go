@@ -625,7 +625,7 @@ func (inst *flowDriver) renderLensText(lines []string, feed flowLensFeed) {
 		if ln == "" {
 			// A blank source line in the dump. On the spacing ladder so it
 			// scales with density like the text around it does.
-			c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+			c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
 			continue
 		}
 		for rt := range c.RichTextLabel(ln) {

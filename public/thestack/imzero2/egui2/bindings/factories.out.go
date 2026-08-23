@@ -1558,6 +1558,14 @@ func SetAnimationFreeze(freeze bool) {
 	r.SendIntermediate()
 }
 
+func SetIdsDensity(density uint32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdSetIdsDensity))
+	r.WriteUint32(density)
+
+	r.SendIntermediate()
+}
+
 func SetVideoPipeline(codec uint32) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdSetVideoPipeline))

@@ -34,7 +34,7 @@ var manifest = runtimeapp.Manifest{
 // showcase couldn't fit all 8 sections — see ADR-0037 follow-on
 // discussion. Splitting into 4 section PNGs is the workaround.
 func RenderTourPalette(ids *c.WidgetIdStack) {
-	inst := &App{ids: ids, density: styletokens.DensityFromEnv()}
+	inst := &App{ids: ids, density: styletokens.ActiveDensity()}
 	c.Label("IDS palette — ADR-0031 §SD2 + §SD4").Send()
 	c.Label(fmt.Sprintf("active density: %s   (IMZERO2_DENSITY)", inst.density.String())).Send()
 	c.Separator().Horizontal().Send()
@@ -46,7 +46,7 @@ func RenderTourPalette(ids *c.WidgetIdStack) {
 
 // RenderTourTypography renders the type-scale section.
 func RenderTourTypography(ids *c.WidgetIdStack) {
-	inst := &App{ids: ids, density: styletokens.DensityFromEnv()}
+	inst := &App{ids: ids, density: styletokens.ActiveDensity()}
 	c.Label("IDS typography — ADR-0030 §SD3").Send()
 	c.Label(fmt.Sprintf("active density: %s   (IMZERO2_DENSITY)", inst.density.String())).Send()
 	c.Separator().Horizontal().Send()
@@ -57,7 +57,7 @@ func RenderTourTypography(ids *c.WidgetIdStack) {
 // RenderTourEncoding renders the data-encoding palettes + the implot
 // integration sample (QualitativeCycle-driven series colors).
 func RenderTourEncoding(ids *c.WidgetIdStack) {
-	inst := &App{ids: ids, density: styletokens.DensityFromEnv()}
+	inst := &App{ids: ids, density: styletokens.ActiveDensity()}
 	c.Label("IDS data encoding — ADR-0031 §SD3, ADR-0156 (Okabe-Ito / Crameri / viridis)").Send()
 	c.Label(fmt.Sprintf("active density: %s   (IMZERO2_DENSITY)", inst.density.String())).Send()
 	c.Separator().Horizontal().Send()
@@ -71,7 +71,7 @@ func RenderTourEncoding(ids *c.WidgetIdStack) {
 // RenderTourGeometry renders the density spec + rounding ladder + stroke
 // ladder — the three non-color foundation surfaces.
 func RenderTourGeometry(ids *c.WidgetIdStack) {
-	inst := &App{ids: ids, density: styletokens.DensityFromEnv()}
+	inst := &App{ids: ids, density: styletokens.ActiveDensity()}
 	c.Label("IDS geometry — ADR-0032 (density / rounding / stroke)").Send()
 	c.Label(fmt.Sprintf("active density: %s   (IMZERO2_DENSITY)", inst.density.String())).Send()
 	c.Separator().Horizontal().Send()

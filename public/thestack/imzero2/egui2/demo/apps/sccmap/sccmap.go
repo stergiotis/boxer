@@ -351,8 +351,9 @@ type App struct {
 	// each other.
 	distRenderer distsummary.Renderer
 
-	// density is captured once at construction (IMZERO2_DENSITY) and
-	// fed to styletokens.* accessors so spacing scales with the IDS
+	// density is re-resolved from styletokens.ActiveDensity at the top of
+	// every Frame — the preset is runtime-switchable (Layout ▸ Density) —
+	// and fed to styletokens.* accessors so spacing scales with the IDS
 	// density preset rather than being hardcoded in pixels.
 	density styletokens.DensityE
 
@@ -379,7 +380,7 @@ func newApp() (inst *App) {
 		sizeMetricIdx:  defaultSizeMetricIdx,
 		colorMetricIdx: defaultColorMetricIdx,
 		showValues:     true,
-		density:        styletokens.DensityFromEnv(),
+		density:        styletokens.ActiveDensity(),
 		distRenderer:   distsummary.New("scc-dist"),
 	}
 	return
@@ -560,6 +561,8 @@ func (inst *App) probeSeq(role string) (seq uint64) {
 }
 
 func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	// Consume a completed scan (if any) before rendering, so the header box and
 	// the treemap reflect the newest data this frame.
 	inst.drainScan()

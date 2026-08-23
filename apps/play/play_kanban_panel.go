@@ -385,7 +385,7 @@ func (inst *KanbanDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 		m.SetSelected(0)
 	}
 
-	dens := styletokens.DensityFromEnv()
+	dens := styletokens.ActiveDensity()
 	c.Label(inst.statusLine()).Send()
 	c.AddSpace(styletokens.GapInline(dens))
 	kanban.RenderLegend(m.DotLegend) // no-op when the board carries no dots

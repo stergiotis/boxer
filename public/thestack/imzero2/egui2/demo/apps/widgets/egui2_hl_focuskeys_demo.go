@@ -254,7 +254,7 @@ func (inst *focusDemoState) panel(ids *c.WidgetIdStack, name string, which int, 
 
 	f = f.Fill(color.Hex(styletokens.NeutralBgFaint.AsHex())).
 		Stroke(strokeW, stroke).
-		InnerMargin(styletokens.PaddingOuter(styletokens.DensityFromEnv())).
+		InnerMargin(styletokens.PaddingOuter(styletokens.ActiveDensity())).
 		HoverCursorPointer()
 	if captures {
 		// CaptureKeys implies Focusable — capture is gated on has_focus, so a

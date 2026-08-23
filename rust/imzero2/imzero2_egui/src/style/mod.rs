@@ -1,9 +1,12 @@
 //! IDS style overlay: tokens + apply entries.
 //!
-//! `apply(ctx, density)` is the one-shot startup call apps make. It writes
-//! IDS spacing, rounding, stroke, font, and color tokens into the active
-//! `egui::Context`. Per ADR-0029 §SD13 the apply runs once and never touches
-//! the render path again.
+//! `apply(ctx, density)` is the startup call apps make. It writes IDS
+//! spacing, rounding, stroke, font, and color tokens into the active
+//! `egui::Context`. Per ADR-0029 §SD13 no design-system code runs in the
+//! render path: the apply is event-driven, once at startup and again only
+//! when something asks for a different density — the `setIdsDensity` opcode
+//! behind the host chrome's Layout ▸ Density menu (ADR-0032 §SD1, Update
+//! 2026-08-23).
 
 pub mod data_encoding;
 pub mod tokens;

@@ -779,7 +779,7 @@ func (inst *SankeyDriver) selectedNodeID() string {
 // makes the control row that tall, and shoves the diagram off the bottom — the
 // trap the Table pane's options bar hit first.
 func (inst *SankeyDriver) renderControls(stagesGiven bool) {
-	gap := styletokens.GapSections(styletokens.DensityFromEnv())
+	gap := styletokens.GapSections(styletokens.ActiveDensity())
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("mode").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 		selector.Segmented(inst.ids, "sankey-mode", &inst.choice).

@@ -361,6 +361,23 @@ This is not a token change — `ROUNDING_LG` stays defined per §SD3 and is stil
 
 `status` stays `proposed` per the ADR convention.
 
+### 2026-08-23 — Density is switchable at runtime (Layout ▸ Density)
+
+§SD1 said the active preset "comes from per-user config … or the `IMZERO2_DENSITY` env var", and §Context listed "density resolution happens once at startup" among the performance premises. Comparing presets therefore meant restarting the process with a different env var — awkward for the case density exists to serve, which is a person deciding how tightly *their* screen should pack.
+
+**What changed.** The shared host chrome (`imzhost.DecorateRenderer`) grows a `Layout ▸ Density` submenu with the three presets. Selecting one moves the preset on both sides of the FFFI boundary in the same frame:
+
+- **Go** — `styletokens.ActiveDensity()` replaces `DensityFromEnv()` as the accessor widgets resolve tokens through. It reads a process-wide atomic seeded from the env var on first use; `SetActiveDensity` moves it. `DensityFromEnv` remains, now documented as the launch-time seed.
+- **Rust** — a new `setIdsDensity` opcode re-runs `style::apply_style_only(ctx, density)`, rewriting `egui::Spacing` and the §SD3-bound `text_styles` in the live `Context`, then requests a repaint.
+
+Both are needed: the Go token tables feed each widget's own spacing arithmetic, and the Rust overlay drives egui's built-in spacing and the type scale. A one-sided switch leaves half the screen at the old preset.
+
+**Against [ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) §SD13.** That invariant forbids design-system code in the *render path*; it is not violated here. The re-apply is event-driven — once at startup, and again only when someone picks a different preset — and the per-frame Go accessor got cheaper rather than more expensive: an atomic load in place of the env-var handle's mutex-guarded `Get`.
+
+**Cost.** The ~20 widgets and apps that cached density in a struct at construction now re-resolve it at the top of their frame entry, so a switch reaches them on the next frame rather than on the next instantiation. During the switch frame itself the two sides can disagree for the Uis egui has already laid out — visible as one frame of mixed spacing, which is why the opcode requests a repaint.
+
+**Not addressed.** Persistence is unchanged: the choice lives for the process, and the `$XDG_CONFIG_HOME/imzero2/density.toml` surface §SD1 reserves is still deferred, so a restart returns to whatever `IMZERO2_DENSITY` says. Open question 5 (per-screen override) is untouched — the preset stays fleet-wide within the app, and mixed-density screens remain a Tier 2 rubric V4 finding.
+
 ## References
 
 - [ADR-0029 — ImZero2 design system: foundations, data-intensive patterns, policy-as-code](./0029-imzero2-design-system-and-policy-as-code.md) — parent; §SD3 (density), §SD6 (spacing), §SD7 (motion).

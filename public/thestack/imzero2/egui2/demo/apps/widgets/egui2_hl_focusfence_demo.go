@@ -209,7 +209,7 @@ func (inst *fenceDemoState) fencePanel(ids *c.WidgetIdStack, name string, which 
 	}
 	f = f.Fill(color.Hex(styletokens.NeutralBgFaint.AsHex())).
 		Stroke(strokeW, stroke).
-		InnerMargin(styletokens.PaddingOuter(styletokens.DensityFromEnv())).
+		InnerMargin(styletokens.PaddingOuter(styletokens.ActiveDensity())).
 		HoverCursorPointer()
 	if captures {
 		f = f.CaptureKeys(uint64(keycodes.Navigation))

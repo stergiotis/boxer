@@ -419,7 +419,7 @@ func (inst *Widget) Render() (clicked CountryIdx, clickedOk bool) {
 			for range c.Horizontal().KeepIter() {
 				if inst.legend != nil {
 					inst.legend.Render()
-					c.AddSpace(styletokens.GapSections(styletokens.DensityFromEnv()))
+					c.AddSpace(styletokens.GapSections(styletokens.ActiveDensity()))
 				}
 				inst.renderReadout()
 			}

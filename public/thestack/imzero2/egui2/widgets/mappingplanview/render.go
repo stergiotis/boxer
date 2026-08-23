@@ -167,7 +167,7 @@ func paneTabIDs(m *Model) []uint64 {
 }
 
 func renderEditor(ids *c.WidgetIdStack, m *Model) {
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 	renderVerdict(ids, m)
 	c.Separator().Send()
 
@@ -328,7 +328,7 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 
 	glyph, word, catCol := rowCategory(r)
 	tagged := r.Membership != ""
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 
 	for range c.Horizontal().KeepIter() {
 		// Category colour bar — plain / value / const at a glance.
@@ -463,7 +463,7 @@ func renderTupleRowBody(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 				e.GoField = "Label"
 			}
 		}
-		c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+		c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
 		if c.Button(ids.PrepareStr("add-elem"), c.Atoms().Text("+ value element").Keep()).Small().SendResp().HasPrimaryClicked() {
 			e := m.AddElem(r)
 			e.GoField = "NewElem"
@@ -477,7 +477,7 @@ func renderTupleRowBody(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 // a value element binds a sub-column and authors its canonical value type.
 // Returns true if the element's remove button fired.
 func renderTupleElem(ids *c.WidgetIdStack, m *Model, e *TupleElemRow) (remove bool) {
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 	for range c.Horizontal().KeepIter() {
 		c.AddSpace(styletokens.PaddingOuter(density)) // indent under the tuple card
 		for range c.Frame(ids.PrepareStr("elem")).
@@ -576,7 +576,7 @@ func renderRowHeader(ids *c.WidgetIdStack, r *FieldRow, glyph, word string, catC
 		r.fsmW.RenderChip()
 	}
 
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabelColored(color.Hex(catCol.AsHex()).Keep(), color.Transparent.Keep(), glyph+" "+word) {
 			rt.Small()

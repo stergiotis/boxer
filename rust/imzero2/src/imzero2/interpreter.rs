@@ -9488,6 +9488,28 @@ self.apply_widget(w,u,f,Some(i));
 
                 self.animation_freeze = freeze;
             }
+            FuncProcId::SetIdsDensity => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::SetIdsDensity");
+                // arguments
+                #[allow(unused_mut)]
+                let mut density = self.io.read_plain_u32()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                imzero2_egui::style::apply_style_only(
+                    c,
+                    match density {
+                        0 => imzero2_egui::style::tokens::Density::Tight,
+                        2 => imzero2_egui::style::tokens::Density::Roomy,
+                        _ => imzero2_egui::style::tokens::Density::Standard,
+                    },
+                );
+                c.request_repaint();
+            }
             FuncProcId::SetVideoPipeline => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::SetVideoPipeline");

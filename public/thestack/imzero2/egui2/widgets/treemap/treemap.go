@@ -404,7 +404,7 @@ type Treemap struct {
 
 	// density resolves IDS spacing tokens at the active preset
 	// (ADR-0032 §SD2). Read once at construction from
-	// styletokens.DensityFromEnv() — the overlay is applied at Rust
+	// styletokens.ActiveDensity() — the overlay is applied at Rust
 	// startup with the same env var, so a runtime toggle here would
 	// diverge from the visible state.
 	density styletokens.DensityE
@@ -493,7 +493,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, root *layout.Node, opts ...Optio
 		ids:             ids,
 		scopeKey:        scopeKey,
 		root:            root,
-		density:         styletokens.DensityFromEnv(),
+		density:         styletokens.ActiveDensity(),
 		breadcrumb:      []*layout.Node{root},
 		containerW:      defaultContainerW,
 		containerH:      defaultContainerH,
@@ -1164,6 +1164,8 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 // Wraps its body in c.IdScope(scopeKey) so multiple instances sharing the
 // same WidgetIdStack don't collide.
 func (t *Treemap) Render() {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	t.density = styletokens.ActiveDensity()
 	for range c.IdScope(t.ids.PrepareStr(t.scopeKey)) {
 		t.renderBody()
 	}

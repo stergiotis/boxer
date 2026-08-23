@@ -69,6 +69,31 @@ if {{EguiUiOptionalOuter}}.is_some() {
     self.r18_avail_h = f32::NAN;
 }
 `)).Build())
+	// setIdsDensity re-applies the IDS style overlay at a new density preset
+	// (0=Tight, 1=Standard, 2=Roomy) — the runtime counterpart to the
+	// startup-time IMZERO2_DENSITY read in apphost::init_common. Fonts are
+	// left alone (apply_style_only): density moves the pt sizes in
+	// style.text_styles, not the FontDefinitions the host loaded.
+	//
+	// The Go side keeps its own copy of the token tables, so a caller must
+	// also move styletokens.SetActiveDensity — imzhost.DecorateRenderer's
+	// Layout menu does both. ADR-0032 §SD1 (Update 2026-08-23).
+	specials = append(specials,
+		idl.NewProceduralNode("setIdsDensity").
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("density", ctabb.U32).
+				Build()).
+			WithApplyCodeClientRust(rustClientCode(`
+				imzero2_egui::style::apply_style_only(
+					{{EguiContext}},
+					match density {
+						0 => imzero2_egui::style::tokens::Density::Tight,
+						2 => imzero2_egui::style::tokens::Density::Roomy,
+						_ => imzero2_egui::style::tokens::Density::Standard,
+					},
+				);
+				{{EguiContext}}.request_repaint();
+`)).Build())
 	specials = append(specials,
 		idl.NewProceduralNode("guiZoomZoomMenuButtons").
 			WithApplyCodeClientRust(rustClientCode(`

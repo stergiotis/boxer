@@ -137,7 +137,7 @@ func newInstance(m app.Manifest) (out *App) {
 	out = &App{
 		manifest: m,
 		ids:      c.NewWidgetIdStack(),
-		density:  styletokens.DensityFromEnv(),
+		density:  styletokens.ActiveDensity(),
 	}
 	return
 }
@@ -151,6 +151,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	return inst.render()
 }
 

@@ -128,7 +128,7 @@ func New(idPrefix string) (inst Renderer) {
 		showTicks:  true,
 		showValue:  true,
 		formatFunc: defaultFormat,
-		density:    styletokens.DensityFromEnv(),
+		density:    styletokens.ActiveDensity(),
 	}
 	return
 }
@@ -251,6 +251,8 @@ func TrafficLight(min, max float64) []Zone {
 // consumes idGen.Derive() exactly once. The needle clamps to the sweep; the
 // readout shows the true value.
 func (inst Renderer) Render(idGen c.WidgetIdCreatorI, value float64) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	callId := idGen.Derive()
 	d := inst.resolveDiameter()
 	if d <= 0 {

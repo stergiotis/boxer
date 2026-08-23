@@ -107,7 +107,7 @@ func New(api task.TaskApiI, ids *c.WidgetIdStack, idPrefix string, opts Opts) (i
 		api:      api,
 		ids:      ids,
 		idPrefix: idPrefix,
-		density:  styletokens.DensityFromEnv(),
+		density:  styletokens.ActiveDensity(),
 		opts:     opts,
 		inflight: containers.NewBinarySearchGrowingKVOrdered[task.TaskIdT, *inflightRow](16),
 	}
@@ -272,6 +272,8 @@ func (inst *Inst) terminal(id task.TaskIdT, final string, atMs int64, reason str
 // goroutine. Snapshots state under the lock then renders without it
 // so ObserverI callbacks aren't blocked behind the egui scope.
 func (inst *Inst) Render() {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	inst.mu.Lock()
 	inflight := make([]inflightRow, 0, inst.inflight.Len())
 	// IterateValues yields *inflightRow in TaskId order; dereference to

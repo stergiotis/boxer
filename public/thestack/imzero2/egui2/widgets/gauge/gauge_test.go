@@ -178,7 +178,7 @@ func TestResolveDiameterOverride(t *testing.T) {
 	}
 	// Diameter(0) clears the override -> falls back to the Size preset.
 	got := New("g").Size(SizeLg).Diameter(0).resolveDiameter()
-	if !approx(got, diameterFor(SizeLg, styletokens.DensityFromEnv())) {
+	if !approx(got, diameterFor(SizeLg, styletokens.ActiveDensity())) {
 		t.Errorf("cleared override = %v, want Size preset", got)
 	}
 }

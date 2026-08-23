@@ -141,7 +141,7 @@ var _ app.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	inst = &App{
 		ids:         c.NewWidgetIdStack(),
-		density:     styletokens.DensityFromEnv(),
+		density:     styletokens.ActiveDensity(),
 		lazy:        map[uint64]*lazypane.Pane{},
 		imgs:        c.NewImageVersionTracker[string](),
 		diffThisDir: true,
@@ -199,6 +199,8 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	inst.ensureColWidths(ctx)
 	inst.renderBody()
 	inst.flushColWidths()

@@ -61,6 +61,6 @@ func init() {
 func demoCanonicalTypeEdit(ids *c.WidgetIdStack, st *ctEditDemoState) {
 	c.Label("Edit a canonical type — it opens compact (one row: the bar + a caret; click the caret for the structured form); click '+ element' to grow it into a group/signature (chips with '-'/'_' separators):").Send()
 	c.Separator().Horizontal().Send()
-	c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+	c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
 	st.model.Render(ids, "ctedit-demo")
 }

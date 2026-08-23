@@ -121,7 +121,7 @@ var _ app.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	inst = &App{
 		ids:     c.NewWidgetIdStack(),
-		density: styletokens.DensityFromEnv(),
+		density: styletokens.ActiveDensity(),
 	}
 	return
 }
@@ -151,6 +151,8 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 // discards the host salt and collides with sibling apps that share a
 // label string).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	inst.renderApp()
 	return
 }

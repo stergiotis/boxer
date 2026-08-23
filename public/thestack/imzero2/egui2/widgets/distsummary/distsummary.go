@@ -735,7 +735,7 @@ func (inst Renderer) renderLevel2Body(scope string, state *instanceState, digest
 func (inst Renderer) renderTabBar(scope string, state *instanceState) {
 	selector.SegmentedAbs(scope+"-tab", &state.tab).
 		Style(selector.StyleSelectable).
-		Gap(styletokens.GapInline(styletokens.DensityFromEnv())).
+		Gap(styletokens.GapInline(styletokens.ActiveDensity())).
 		Option(tabECDF, "ECDF").
 		Option(tabBoxenplot, "Boxenplot").
 		SendResp()
@@ -1049,7 +1049,7 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 			c.LabelAtoms(
 				c.Atoms().BeginRichText("conservative DKW preview band").Small().Weak().End().Keep(),
 			).Send()
-			c.AddSpace(styletokens.GapItems(styletokens.DensityFromEnv()))
+			c.AddSpace(styletokens.GapItems(styletokens.ActiveDensity()))
 			if c.Button(c.MakeAbsoluteIdStr(scope+"-band-compute"), c.Atoms().Text("Compute exact band").Keep()).
 				Small().
 				SendResp().

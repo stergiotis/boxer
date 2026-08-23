@@ -327,7 +327,7 @@ func (inst *DistDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k di
 		inst.selected = 0
 	}
 
-	dens := styletokens.DensityFromEnv()
+	dens := styletokens.ActiveDensity()
 	c.Label(inst.statusLine()).Send()
 	c.AddSpace(styletokens.GapInline(dens))
 	inst.renderSelectors(emit, k)

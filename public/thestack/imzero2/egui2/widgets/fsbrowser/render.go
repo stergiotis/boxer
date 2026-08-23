@@ -52,7 +52,7 @@ func Render(in Input) (res Result) {
 	if scopeKey == "" {
 		scopeKey = "fsbrowser"
 	}
-	density := styletokens.DensityFromEnv()
+	density := styletokens.ActiveDensity()
 	for range c.IdScope(in.Ids.PrepareStr(scopeKey)) {
 		if !in.HideBreadcrumb {
 			if in.renderBreadcrumb(st, density) {

@@ -26,7 +26,7 @@ func newApp() (inst *App) {
 		// Density is read once at app construction; the IDS overlay is
 		// applied once at Rust startup with the same env var, so a
 		// runtime toggle here would diverge from the visible state.
-		density: styletokens.DensityFromEnv(),
+		density: styletokens.ActiveDensity(),
 	}
 	return
 }
@@ -41,6 +41,8 @@ func (inst *App) Mount(ctx runtimeapp.MountContextI) (err error) {
 func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) { return }
 
 func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	inst.render()
 	return
 }

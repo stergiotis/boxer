@@ -1,8 +1,11 @@
 //! Density preset (ADR-0029 §SD3, ADR-0032 §SD1).
 //!
-//! Three modes: Tight / Standard / Roomy. The active preset is set once at
-//! app startup. Mixed-density screens are a Tier 2 finding (rule V4); the
-//! preset is per-app, fleet-wide.
+//! Three modes: Tight / Standard / Roomy. `from_env` seeds the preset at app
+//! startup; the host chrome's Layout ▸ Density menu can switch it afterwards
+//! by re-running the overlay (the `setIdsDensity` opcode calls
+//! [`super::super::apply_style_only`]) — ADR-0032 §SD1, Update 2026-08-23.
+//! Mixed-density screens are a Tier 2 finding (rule V4); the preset is
+//! per-app, fleet-wide.
 
 use std::env;
 

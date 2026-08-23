@@ -100,7 +100,7 @@ func newApp() (inst *App) {
 	n := instanceCounter.Add(1)
 	inst = &App{
 		ids:           c.NewWidgetIdStack(),
-		density:       styletokens.DensityFromEnv(),
+		density:       styletokens.ActiveDensity(),
 		instNum:       n,
 		streamLevel:   zerolog.InfoLevel,
 		streamEveryN:  30,
@@ -135,6 +135,8 @@ func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) { return }
 // salt onto inst.ids via c.IdScope (windowhost.renderWindowBody) so
 // widget ids are scoped without a local IdScope wrapper.
 func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
+	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
+	inst.density = styletokens.ActiveDensity()
 	inst.frameCounter++
 	if inst.streamEnabled && inst.streamEveryN > 0 && inst.frameCounter%inst.streamEveryN == 0 {
 		inst.emit(inst.streamLevel, fmt.Sprintf("stream tick #%d", inst.frameCounter/inst.streamEveryN))

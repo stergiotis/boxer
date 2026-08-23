@@ -91,7 +91,8 @@ func markerColor(idx int) (cl color.Color) {
 }
 
 // Density-aware spacing helpers — IDS spacing tokens at the active
-// density (cached once at newApp from styletokens.DensityFromEnv()).
+// density (inst.density, re-resolved from styletokens.ActiveDensity at
+// the top of every Frame so a Layout ▸ Density switch lands next frame).
 // Naming shortens the styletokens accessor names so
 // c.AddSpace(inst.spaceItems()) stays legible inside chained widget
 // builders. ADR-0032 §SD2.
