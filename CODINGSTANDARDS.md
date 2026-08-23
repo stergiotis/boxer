@@ -144,6 +144,9 @@ err = eb.Build().Str("path", path).Errorf("config: open config: %w", err)
     ```
 ## Naming & Style
 
+### Subsystem Names
+A subsystem large enough to carry a name of its own gets a nautical one (`keelson`, `leeway`, `lading`, `tally`, `portolan`); a package named for a well-known technical term (`fec`, `dsl`) keeps that term instead. Record a new house name in the table in [README § House names](./README.md#house-names) — that table is the register, and [ADR-0035](./doc/adr/0035-keelson-namespace-introduction.md) the convention.
+
 ### Interface Naming
 Interface names must end with a capital `I`.
 ```go
