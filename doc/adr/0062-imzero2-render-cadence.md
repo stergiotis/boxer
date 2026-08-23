@@ -283,7 +283,12 @@ on cadence does not. SD6 stays open and its disposition is unchanged.
 Two caveats on the occlusion rows. Occlusion was established by stacking a
 second client rather than by an occlusion signal — winit emits no
 `WindowEvent::Occluded` on Wayland (the 2026-08-19 entry's own finding), so
-there is nothing to assert against. And GNOME's focus handling made which
+there is nothing to assert against. It is confirmed in the capture instead: a
+throttled window issues `wl_surface.frame(new id wl_callback#N)` and **no
+`wl_callback#N.done` ever arrives**, while a healthy 15 s arm services 1,158 of
+them. That check is what distinguishes a compositor withholding callbacks from
+an app that has stopped asking, and the two are indistinguishable by frame count
+alone — worth running before reading a stalled window as an application bug. And GNOME's focus handling made which
 window ends up on top non-deterministic across runs: the visible/covered
 contrast rests on the run whose two phases are self-evident from their own frame
 counts, with a replicate in which *both* phases were covered and both spun

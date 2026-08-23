@@ -55,24 +55,37 @@ factor is usually the compositor, which none of the app-side knobs touch.
      reactive-cadence idle window); stop here and see Troubleshooting.
 
 2. **(Optional) Measure the pacing distribution directly.** The overlay is a
-   summary; for hard numbers, count how far apart the client commits frames to
-   the compositor:
+   summary; for hard numbers, count how far apart the client hands new frames to
+   the compositor.
+
+   Count `wl_surface.attach`, **not** `wl_surface.commit`: eframe also commits
+   without attaching a buffer, to re-arm a frame callback, so a commit-based
+   count roughly doubles the frame rate and reports a bimodal delta
+   distribution. One 15 s capture measured here held 2,326 commits against 1,158
+   attaches, and reading it on commits gave a nonsensical ~168 fps against a real
+   60.0. Group by surface too — a session has several — and keep the busiest,
+   which is the app window.
 
    ```bash
    WAYLAND_DEBUG=1 VSYNC=on ./rust/imzero2/hmi.sh 2> /tmp/wl.log   # Ctrl-C after ~10 s
    python3 - /tmp/wl.log <<'PY'
    import re, sys, statistics as st
-   ts = re.compile(r'^\[\s*(\d+)\.(\d+)\]')            # libwayland stamps are ms
-   t = []
+   from collections import defaultdict
+   ts  = re.compile(r'^\[\s*(\d+)\.(\d+)\]')          # libwayland stamps are ms
+   att = re.compile(r'->\s*wl_surface[#@](\d+)\.attach\(')  # one per presented frame
+   per = defaultdict(list)
    for l in open(sys.argv[1], errors='replace'):
-       m = ts.match(l)
-       if m and '->' in l and '.commit()' in l:
-           t.append(int(m.group(1)) + int(m.group(2))/1000)
+       m, a = ts.match(l), att.search(l)
+       if m and a:
+           per[a.group(1)].append(int(m.group(1)) + int(m.group(2))/1000)
+   sid, t = max(per.items(), key=lambda kv: len(kv[1]))   # the app window
+   t = t[len(t)//4:]                                      # drop the startup quarter
    d = sorted(t[i+1]-t[i] for i in range(len(t)-1))
    n = len(d); p = lambda q: d[min(n-1, int(q*n))]
    dbl = sum(1 for x in d if 1.5/60*1000 <= x < 2.5/60*1000)  # frames near 2× refresh
-   print(f"n={n} p50={p(.5):.1f} p90={p(.9):.1f} p99={p(.99):.1f} "
-         f"std={st.pstdev(d):.1f}ms  doubled≈{100*dbl/n:.0f}%")
+   print(f"surface=#{sid} n={n} fps={1000/st.median(d):.1f} p50={p(.5):.1f} "
+         f"p90={p(.9):.1f} p99={p(.99):.1f} std={st.pstdev(d):.1f}ms "
+         f"doubled≈{100*dbl/n:.0f}%")
    PY
    ```
 
@@ -88,8 +101,14 @@ factor is usually the compositor, which none of the app-side knobs touch.
    VSYNC=off ./rust/imzero2/hmi.sh          # demo; per-app: the client's -vsync off flag
    ```
 
-   Re-measure (step 1 or 2). The doubling rate typically drops. This is the only
-   knob imzero2 itself owns.
+   Re-measure (step 1 or 2). This is the only knob imzero2 itself owns — but
+   **expect it to do nothing unless you have a doubling to remove.** Whether
+   there is one depends on the compositor, not on imzero2: it was measured on
+   COSMIC, while on GNOME/mutter the same build paces at 0.0–0.6 % doubled with
+   `vsync` on and `-vsync off` changes nothing measurable
+   ([ADR-0062](../adr/0062-imzero2-render-cadence.md), 2026-08-23). Measure
+   first; if step 2 already reports a low `doubled≈`, this lever is not your
+   problem.
 
 4. **Check the OS levers (root, per-machine — they widen/narrow the tail, not the
    beat).** A render loop that sleeps most of each frame pays wake-up latency on
@@ -113,7 +132,10 @@ factor is usually the compositor, which none of the app-side knobs touch.
    bug. A bare single-process `eframe`/`wgpu` app on the same session exhibits the
    same doubling — so the Go↔Rust lock-step is not the cause. Don't chase an
    app-side fix for this part; the only remedies are `-vsync off` (step 3) or the
-   compositor itself.
+   compositor itself. The floor is a property of *your* compositor: it was
+   measured on COSMIC and is essentially absent on GNOME/mutter, so "my
+   colleague's box doesn't do this" is an expected outcome rather than evidence
+   that something is wrong with yours.
 
 ## Verification
 
@@ -137,11 +159,21 @@ to confirm *which* factors moved the number, not to reach a perfect 60.
   `IMZERO2_RENDER_CADENCE=reactive` drops idle windows to a heartbeat by design
   ([ADR-0062](../adr/0062-imzero2-render-cadence.md)).
 
-- **Symptom:** the window drops to ~1 fps when it loses focus or is covered.
+- **Symptom:** the window drops to ~1 fps (on some compositors to ~0) when it
+  loses focus or is covered.
   **Cause:** the compositor throttles occluded windows' frame callbacks; with
   `vsync` the lock-stepped loop inherits that wait.
-  **Fix:** expected, not a bug ([ADR-0062 Context](../adr/0062-imzero2-render-cadence.md)).
-  It returns to full rate on focus.
+  **Fix:** the *frame rate* is expected, not a bug
+  ([ADR-0062 Context](../adr/0062-imzero2-render-cadence.md)); it returns to full
+  rate on focus. **The CPU cost is not expected and has no fix in this tree.**
+  A backgrounded client keeps a core busy delivering no frames — an eframe
+  control-flow defect fixed upstream in
+  [emilk/egui#8398](https://github.com/emilk/egui/pull/8398), which the pinned
+  0.35 predates. `IMZERO2_RENDER_CADENCE=reactive` avoids it only where the
+  compositor still delivers throttled frame callbacks; where it withholds them
+  entirely (measured on GNOME/mutter) reactive spins too, so the only reliable
+  remedy today is not to leave the window covered
+  ([ADR-0062](../adr/0062-imzero2-render-cadence.md), 2026-08-23).
 
 - **Symptom:** scroll itself registers inconsistently, not just unevenly.
   **Cause:** would point at the egui-side scroll path rather than pacing — not
