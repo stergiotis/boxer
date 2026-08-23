@@ -124,3 +124,5 @@ rust/*/target/
 /showcase/gokrazy/instances/*/_stage/
 /showcase/gokrazy/instances/*/builddir/
 /showcase/gokrazy/instances/*/*.img
+
+.vscode
