@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
@@ -256,53 +257,94 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 	if view.Tree {
 		treeOrder, treeDepth = buildProcOrder(procs)
 	}
-	for row := range procs {
+
+	// Emit only the cells egui_table will actually draw. Ungated, every
+	// process built nine deferred blocks per frame and marshalled them
+	// across FFFI for the Rust side to cull immediately — with a few
+	// hundred processes against ~35 visible rows that is ~90% of the
+	// frame's bytes thrown away, and a CPU profile put this one loop at a
+	// third of the whole Go frame (the allocation rate alone dragged the
+	// collector into it). The tree order above is still built over ALL
+	// procs: srcIdx/depth for a visible row depend on the whole forest.
+	//
+	// VisibleRange reports the PREVIOUS frame's window (one-frame lag,
+	// self-correcting); ok is false on the first frame the table is shown,
+	// where the full range is emitted so egui_table can populate its
+	// block-map cache.
+	rowBegin, rowEnd := 0, len(procs)
+	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
+		rowBegin = min(int(rb), rowEnd)
+		rowEnd = min(int(re), rowEnd)
+	}
+	var colVis [procNumCols]bool
+	for col := range colVis {
+		colVis[col], _ = et.ColVisible(uint32(col))
+	}
+	for row := rowBegin; row < rowEnd; row++ {
 		srcIdx, d := row, 0
 		if view.Tree {
 			srcIdx, d = treeOrder[row], treeDepth[row]
 		}
 		p := procs[srcIdx]
 		r := uint64(row)
-		for range et.Cells(r, 0) {
-			procCellLabel(fmt.Sprintf("%d", p.PID))
+		if colVis[0] {
+			for range et.Cells(r, 0) {
+				procCellLabel(strconv.FormatUint(uint64(p.PID), 10))
+			}
 		}
-		for range et.Cells(r, 1) {
-			procCellLabel(p.User)
+		if colVis[1] {
+			for range et.Cells(r, 1) {
+				procCellLabel(p.User)
+			}
 		}
 		smoothedPct := p.CPUPercent
 		if srcIdx < len(smoothed) {
 			smoothedPct = smoothed[srcIdx]
 		}
-		for range et.Cells(r, 2) {
-			// CPU%~ — smoothed. Tinted with the heatmap palette only
-			// when the smoothed column is driving the sort, so the
-			// background colour reads as a visual hint "this is the
-			// value the row order is keying off". Same idiom on the
-			// raw column below.
-			inst.renderProcCPUCell(r, smoothedPct, view.SortBy == ProcSortByCPU, 0x6000)
+		if colVis[2] {
+			for range et.Cells(r, 2) {
+				// CPU%~ — smoothed. Tinted with the heatmap palette only
+				// when the smoothed column is driving the sort, so the
+				// background colour reads as a visual hint "this is the
+				// value the row order is keying off". Same idiom on the
+				// raw column below.
+				inst.renderProcCPUCell(r, smoothedPct, view.SortBy == ProcSortByCPU, 0x6000)
+			}
 		}
-		for range et.Cells(r, 3) {
-			// CPU% — raw sampler-interval value. Tinted only when the
-			// user has clicked the raw header (sort key flipped to
-			// ProcSortByCPURaw). When neither CPU column is the active
-			// sort, both stay untinted — the heatmap above already
-			// carries the colour-coded load story.
-			inst.renderProcCPUCell(r, p.CPUPercent, view.SortBy == ProcSortByCPURaw, 0x6100)
+		if colVis[3] {
+			for range et.Cells(r, 3) {
+				// CPU% — raw sampler-interval value. Tinted only when the
+				// user has clicked the raw header (sort key flipped to
+				// ProcSortByCPURaw). When neither CPU column is the active
+				// sort, both stay untinted — the heatmap above already
+				// carries the colour-coded load story.
+				inst.renderProcCPUCell(r, p.CPUPercent, view.SortBy == ProcSortByCPURaw, 0x6100)
+			}
 		}
-		for range et.Cells(r, 4) {
-			procCellLabel(humanBytes(p.RSSBytes))
+		if colVis[4] {
+			for range et.Cells(r, 4) {
+				procCellLabel(humanBytes(p.RSSBytes))
+			}
 		}
-		for range et.Cells(r, 5) {
-			procCellLabel(humanBytes(p.VMSizeBytes))
+		if colVis[5] {
+			for range et.Cells(r, 5) {
+				procCellLabel(humanBytes(p.VMSizeBytes))
+			}
 		}
-		for range et.Cells(r, 6) {
-			procCellLabel(string(p.State))
+		if colVis[6] {
+			for range et.Cells(r, 6) {
+				procCellLabel(string(p.State))
+			}
 		}
-		for range et.Cells(r, 7) {
-			procCellLabel(treeIndent(d, p.Name))
+		if colVis[7] {
+			for range et.Cells(r, 7) {
+				procCellLabel(treeIndent(d, p.Name))
+			}
 		}
-		for range et.Cells(r, 8) {
-			procCellLabel(p.Cmd)
+		if colVis[8] {
+			for range et.Cells(r, 8) {
+				procCellLabel(p.Cmd)
+			}
 		}
 	}
 
@@ -310,6 +352,11 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 }
 
 const (
+	// procNumCols is the number of columns in the process table — the
+	// EtColumn declarations in renderProcPanel, the headers table in
+	// renderProcHeader and the per-column visibility gate must all agree
+	// on it.
+	procNumCols = 9
 	// procRowHeight is the per-row height in the process table; chosen
 	// to leave ~7 px of vertical breathing room around the default
 	// label font (egui dark, ~14 px) while staying compact enough for
@@ -349,7 +396,7 @@ func procCellLabel(text string) {
 // ever simultaneously asked to tint (the contract is one-or-none
 // today, but a future toggle could change that).
 func (inst *App) renderProcCPUCell(r uint64, pct float32, tint bool, baseSeq uint64) {
-	text := fmt.Sprintf("%.1f", pct)
+	text := strconv.FormatFloat(float64(pct), 'f', 1, 32)
 	if !tint {
 		procCellLabel(text)
 		return
@@ -378,6 +425,7 @@ func (inst *App) renderProcHeader(et c.EndETableFluid, view procViewState) {
 		key   ProcSortByE
 		seq   uint64
 	}{
+		// Keep this in step with procNumCols and the EtColumn block.
 		{"PID", ProcSortByPID, 0x600},
 		{"User", ProcSortByUser, 0x601},
 		{"CPU%~", ProcSortByCPU, 0x602},
@@ -390,6 +438,11 @@ func (inst *App) renderProcHeader(et c.EndETableFluid, view procViewState) {
 	}
 	for col, h := range headers {
 		colu := uint32(col)
+		// Same visibility gate as the body cells: a header block for a
+		// scrolled-out column is built and marshalled for nothing.
+		if vis, _ := et.ColVisible(colu); !vis {
+			continue
+		}
 		hc := h
 		for range et.Headers(0, colu) {
 			label := hc.label
