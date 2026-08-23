@@ -407,28 +407,6 @@ func (inst *DeferredBlockScope) Reset() {
 	inst.capturing = false
 }
 
-// foldHint applies the peak-ratchet + slow-decay update rule to one hint:
-//
-//	observed >= old : next = observed                          (ratchet up)
-//	observed <  old : next = old - ((old - observed) >> N)     (decay)
-//
-// Shared by the dataBuf and tempBuf hints so the two cannot drift apart in
-// their smoothing behaviour. See [DeferredBlockScope.ReleaseWithHint].
-func foldHint(h *atomic.Uint64, observed uint64) {
-	for {
-		old := h.Load()
-		var next uint64
-		if observed >= old {
-			next = observed
-		} else {
-			next = old - ((old - observed) >> deferredHintDecayShift)
-		}
-		if next == old || h.CompareAndSwap(old, next) {
-			return
-		}
-	}
-}
-
 // ReleaseWithHint finalises the scope and folds its observed dataBuf
 // high-water mark back into the per-kind hint via a peak-ratchet +
 // slow-decay CAS loop:
@@ -452,7 +430,7 @@ func (inst *DeferredBlockScope) ReleaseWithHint() {
 	}
 	sh := inst.scope
 	if sh != nil && inst.dataBuf != nil {
-		foldHint(&sh.hint, uint64(inst.dataBuf.Len()))
+		FoldSizeHint(&sh.hint, uint64(inst.dataBuf.Len()))
 	}
 
 	// Recycle, unless an outlier frame grew a buffer past the ceiling.

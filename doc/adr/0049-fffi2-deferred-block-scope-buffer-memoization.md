@@ -239,3 +239,89 @@ Same protocol as the entry above — both arms from one pristine worktree at one
 **Two things this entry deliberately did *not* ship.** Pooling turns use-after-release from a nil-pointer panic into silent cross-frame corruption, so `Begin` and `End` now check a `released` flag and panic loudly; that is a real hazard the previous nil-out shape handled for free. And the M1 note on `deferredTempBufInitialCap` said to "promote to a hint in a follow-up if profiling shows it's worth it" — a `tempHint` was built, tested and measured, moved nothing, and was reverted. Profiling answered the ADR's own question in the negative.
 
 **Where the remaining `growSlice` actually lives.** The previous entry named `Fffi2.SendIntermediate` as the next candidate and assumed it grew a scope's `tempBuf`. It does not. `DockAreaFluid.Tab` ([`egui2_methods.go`](../../public/thestack/imzero2/egui2/bindings/egui2_methods.go), hand-written) captures each tab body into its own `&bytes.Buffer{}` — zero capacity, one per tab per frame — which never touches a scope at all. That is 73 MB per 30 s over ~22 doublings per frame, and it is why neither pooling nor a `tempHint` moved it. It is also not a hint's job: one shared hint would size every tab to the largest tab, allocating more than the doubling it saves. Pooling those buffers is the shape that fits, and it needs a release point after `Send` consumes `inst.bodies`, which alias them.
+
+### 2026-08-23 — The ceiling is adaptive; the dock tab buffers are pooled
+
+The entry above closed with two things: a fixed 256 KiB ceiling on the
+`RetainedFffiBuilder` pool, and `DockAreaFluid.Tab`'s per-tab
+`&bytes.Buffer{}` named as the remaining `growSlice` site with the shape of
+its fix already worked out. A profile of the demo carousel hosting `imztop`
+(Processes) and `play` found both, together accounting for **78 % of every
+byte the process allocated**.
+
+| Quantity (20 s window) | Before | After |
+| --- | --- | --- |
+| Total allocated | 2.27 GB | 1.19 GB (−48 %) |
+| `bytes.growSlice` | 1 818 MB (78.3 % of all bytes) | 59.8 MB (5.0 %) — **−97 %** |
+| — `WriteToFixedKey` → `Buffer.Write` | 897 MB | 26.6 MB |
+| — `Fffi2.SendIntermediate` → `Buffer.Write` | 797 MB | 37.9 MB |
+| `DockAreaFluid.Tab` subtree | 1 245 MB | pooled (no `growSlice` caller left in the top set) |
+| `runtime.gcBgMarkWorker`, CPU share | 34.8 % | 13.8 % |
+| Live heap after the run | — | 68 MB |
+
+**Why the fixed ceiling failed a second time.** 256 KiB sat above the working
+set when it was set and below it a week later: the dock area splices every
+tab body into one builder buffer, which the slow-frame log put at ~395 KiB.
+Each frame that buffer failed the retention predicate, was dropped, and was
+re-grown from `defaultBufferSize` by doubling — the 2026-08-18 pathology
+exactly, at a different scale. A fixed number cannot be right about a working
+set that moves with the UI, and the 2026-08-18 entry's own framing said so:
+"a ceiling is insurance against an outlier, not a sizing mechanism".
+
+**Decision.** `largestPooledBuffer` is replaced by
+`runtime.PooledBufferCeiling(hint)` = `clamp(2 × hint, 256 KiB, 4 MiB)`, where
+the hint is `builderSizeHint`, a `FoldSizeHint` smoothing of observed builder
+payloads. Slack 2 because `bytes.Buffer` doubles: the capacity behind an
+*h*-byte payload is under 2*h*, so the buffer that just carried the working
+set is retained while a several-times-larger outlier is not. The clamps keep
+both failure modes off the table — under the min it would discard the first
+big buffer a quiet pool ever sees, over the max it stops being golang/go#23199
+insurance.
+
+Only payloads ≥ `PooledCeilingMin / 2` fold into the hint. This pool's
+population is overwhelmingly small widget builders (~200k acquisitions/s in
+the same profile); folding all of them would drag the hint to *their* size —
+pinning the ceiling at its minimum, which is the fixed-ceiling bug wearing an
+adaptive hat — and pay an atomic write per opcode to do it. The floor is the
+smallest payload the ceiling could ever drop, so no builder at risk is
+excluded from the hint that judges it.
+
+The floor costs one property: a hint decays only when something folds into it,
+so once the big builders stop appearing — their dock tab is closed — the hint
+freezes rather than decaying back, and the ceiling stays wide for the rest of
+the run. Accepted, because a ceiling that is too high only widens what the
+pool may keep, and `PooledCeilingMax` plus `sync.Pool`'s collector-driven
+clearing still bound retention. It does mean `builderSizeHint` is a high-water
+mark of the run, not a reading of the current working set the way a
+`ScopeHint` is.
+
+**Dock tab buffers.** `Tab` now takes its capture buffer from a `BufferHint`
+pool (`runtime.RegisterBufferHint("dockTabBody")`) and `send` returns it after
+`d.Send()` — the release point this ADR predicted, placed after
+`AppendRawToCapture` has copied each body into the deferred scope's slab, since
+`inst.bodies` aliases those buffers until then.
+
+The previous entry's objection to hinting them is upheld: a `BufferHint` sizes
+COLD buffers at a flat 4 KiB floor and never from its hint, because its kind
+covers regions of wildly different sizes — a markdown book and a one-line
+loading placeholder are both `dockTabBody` — and sizing every tab to the
+largest tab would allocate more than the doubling it saves. The hint is used
+for the retention ceiling only, where sizing to the largest member is the
+correct behaviour. That asymmetry with `ScopeHint`, whose per-IDL-kind
+population *is* homogeneous, is the reason both types exist.
+
+**Caveat on the measurement.** Unlike the two entries above, this is not the
+pristine-worktree A/B protocol: both arms are a live desktop session with the
+same two apps open, not two builds of one commit rendering an identical frame
+count. The scenes are close but not identical (`play`'s CPU share moved 33 % →
+37 % between captures), so the CPU shares are indicative. The allocation
+attribution is the solid part — a 30× drop in `growSlice` is not scene noise.
+The working set had also just shrunk for an unrelated reason: `imztop`'s
+process table gained the `VisibleRange` gate every other etable consumer
+already had, taking a frame's wire bytes from ~1.7–3.1 MB to ~470 KB.
+
+**Still open.** `ScopeHintsSnapshot` has a sibling registry now
+(`bufferHints`) with no snapshot of its own, so the `top_scopes` slow-frame
+line does not report detached capture buffers. Decision item 5's
+`/debug/pprof/custom/scopehints` handler remains unwired, as the 2026-08-18
+entry recorded.
