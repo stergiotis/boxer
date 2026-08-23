@@ -337,6 +337,16 @@ windowing/IME/clipboard/HiDPI layer for a thin one, to save GPU usage on a
 machine that has a GPU. The AccessKit saving in §6.3 is available without it —
 by flipping one eframe feature.
 
+> **Measured in §20 (2026-08-23).** The disposition stands, but two of the
+> premises here have moved. "To save GPU usage on a machine that has a GPU"
+> understates the case: the saving is the dependency closure — 247 crates and
+> 5.7 MB of `.text` — not GPU usage. And the implied throughput argument runs
+> the *other* way on the desktop, where wgpu is 15–26 % faster because it pays
+> no readback (§20.3). The layer concern is the one that survived contact:
+> both defects the probe hit were in the windowing layer (§20.5), and AccessKit
+> is shared by eframe's painters rather than owned by either, so replacing
+> eframe forfeits it.
+
 **O4 — do nothing.** The mesh draw-stream lane ([ADR-0128](../adr/0128-imzero2-mesh-draw-stream-codec-lane.md))
 is already the GPU-less answer for the carrier, and it moves less data than
 pixels. O1's value is precisely the cases the mesh lane does not cover: PNG
@@ -1111,3 +1121,382 @@ lines carrying the stale-region failure mode §17.6 describes. Recorded so the
 ceiling does not have to be re-derived: **the wgpu frame is render-bound, not
 readback-bound**, and anyone revisiting it should start with §18.2, which is
 cheaper and safer than damage tracking and captures most of the same win.
+
+## 19 A second machine: a four-core Zen 2 APU (added 2026-08-23)
+
+§16.3 closed by saying that none of its estimates were measured, and that the
+one experiment that would settle them is running §11's harness on the target
+machine. This section is that run, on a machine at the far end of the range
+from §16.1's: a quarter of the cores, an eighth of the L3, one domain instead
+of two.
+
+Nothing here overturns the decision in ADR-0205. It does move three figures the
+ADR records as consequences of the *host* into the column of things that were
+properties of the *machine* they were measured on.
+
+### 19.1 The machine, and the arm that could not be run
+
+Four cores / eight threads (Zen 2, an integrated-GPU handheld part), **one L3
+domain of 4 MiB**, LPDDR5, `performance` governor. AVX2 and no AVX-512, so as
+in §16.1 the same 256-bit code path executes.
+
+The GPU is reachable: `name=AMD backend=Vulkan device_type=IntegratedGpu`,
+logged per §15's rule and quoted here for the reason §15 gives. **lavapipe
+could not be measured at all** — the OS image ships only the vendor ICD, and
+Mesa's software Vulkan is not installable on it without rebuilding the image.
+That is worth recording as an observation about the class rather than as a hole
+in the data: on an appliance-shaped system, the Vulkan fallback O1 assumes is
+not necessarily there to fall back to.
+
+### 19.2 The measurement
+
+§11's harness unchanged: the app launched headless per
+[the non-interactive launch how-to](../howto/launch-apps-non-interactively.md),
+continuous cadence at 60 Hz, `IMZERO2_HEADLESS_RASTER_STATS=1`,
+`IMZERO2_HEADLESS_MAX_FRAMES=660`, one arm at a time, with the PNG dump
+interval pushed far out so the pixel path runs on every frame with no viewer
+attached. Client CPU and peak RSS come from `getrusage` and `/proc` around the
+client process.
+
+The frame is the same shape but not the same frame: **31 clipped primitives and
+~7,300 triangles**, against §11's 31 and ~8,840. Two reasons, and the second
+matters more than it first appears. No ClickHouse was running, so the panels lay
+out empty rather than populated. And **this is not the tree §11 measured**: the
+`walkers` map binding was removed after ADR-0205 was recorded (`acaf731c`), the
+portolan widget took its place, and other work landed alongside. So the
+comparison throughout §19 is machine-*and*-tree, not machine alone; where a
+figure could plausibly move for either reason, this section says so rather than
+attributing it to the CPU.
+
+Triangle counts also vary run to run on one host — 5,175 to 6,945 across the
+runs here — because several play panels draw time-dependent content (§10.4
+records a scene that disagrees with itself by 14.8 %). Read every figure below
+as being for a frame roughly 18 % lighter in triangles than §11's, with that
+much noise on top.
+
+**Every arm held 60 Hz** — 660 frames in 11.00–11.04 s in all of them. What
+follows is about margin and cost, not about feasibility.
+
+### 19.3 p50 transfers, and §16.3's estimate was pessimistic
+
+At 1920×1200, two runs of each arm:
+
+| arm | p50 | p90 | p99 | client CPU/frame | peak RSS | §14.1 p50 |
+| --- | --- | --- | --- | --- | --- | --- |
+| **software, 4 workers (default)** | **241 / 244 µs** | 663 / 738 | 7.9 / 8.1 ms | 4.98 / 5.03 ms | 156 MiB | 250 µs |
+| wgpu on the integrated GPU | 2463 / 4175 µs | 4830 / 5724 | 8.3 / 8.8 ms | 5.73 / 5.98 ms | 166 MiB | 1340 µs |
+| wgpu on lavapipe | not installable — §19.1 | | | | | 5960 µs |
+
+The software host's median is **within 4 % of the reference machine's**, on a
+part with a quarter of the cores and an eighth of the L3. §16.3 estimated a
+1.3–1.6× degradation, putting p50 near 1.0–1.2 ms.
+
+The frame here is ~18 % lighter (§19.2), so "within 4 %" is tighter than the
+data can really carry — but the gap to close was 4–5×, and an 18 % content
+difference does not close it. The direction of the result is safe; the last
+significant figure is not.
+
+This is not the machine being unexpectedly fast. The same work, measured on the
+same frames, is about twice as slow here: tessellation — identical under either
+host, which is why §11 reports it separately — costs 136–215 µs against §11's
+70–100.
+
+The explanation is §17. Once the blit is tile-scoped the median frame repaints a
+small dirty-tile set rather than the viewport, and a small dirty-tile set fits
+in any of these machines' caches. p50 stopped being a function of machine size
+when that landed; this is the first measurement that shows it, and it means
+§16.3's estimate was answering a question about the pre-§17 host.
+
+### 19.4 L3 residency binds the tail, not the median
+
+The §SD5 advice fires immediately here, and correctly: the L3 pixel budget is
+**524,288 px ≈ 916×572**, against a 1920×1200 frame of 2.30 Mpx — 4.4× over.
+§16.2 would predict that to be expensive. Sweeping the software host at four
+workers across three viewport sizes:
+
+| | 912×568 (at the budget) | 1280×800 | 1920×1200 |
+| --- | --- | --- | --- |
+| p50 | 187 µs | 206 µs | 241 µs |
+| p90 | 479 µs | 391 µs | 663 µs |
+| p99 | 3.5 ms | 6.4 ms | 7.9 ms |
+
+4.4× the pixels costs **1.29× at p50 and 2.2× at p99**.
+
+§16.2's table was measured on the pre-§17 full-frame path, where every frame
+paid the whole working set, and it therefore reads as a statement about
+throughput. Post-tiling it is a statement about the tail: incremental frames do
+not touch enough of the buffer to care, and the cache-stale full repaints that
+§17.3 identified as the tail pay the entire bill.
+
+§16.3's practical form — size a CPU-rasterized appliance at 1080p–1200p, not 4K
+— survives, but the reason changes. On a 4 MiB-L3 part, 1200p is comfortable at
+the median while sitting 4.4× over the budget; what widening the viewport buys
+you is tail latency.
+
+### 19.5 Two of §14.1's columns do not hold here
+
+**Memory.** §14.1 records 228 MiB for the software host against wgpu's 118 MiB,
+and ADR-0205 carries it as the first entry under Consequences → Negative. Here
+the same two arms are **156 MiB and 166 MiB**, with the software host the lower
+of the two.
+
+What that does and does not establish is worth being careful about, because the
+absolute numbers are confounded twice over. The tree lost `walkers` — and with
+it `reqwest`, `rustls` and `ring` — after §14.1 was measured (§19.2), which
+removes memory from *both* arms; and the wgpu arm's RSS is substantially its
+Vulkan driver's, which is a different driver on this machine, so that column is
+not comparable across the two boxes at all.
+
+What survives is the part measured **on one machine, from one tree, on one
+day**: at the shipped default the software host is not the memory-expensive
+arm — it is level with wgpu or below it. The per-worker cost also reproduces
+independently of any of this, since it is a within-run difference: across
+§19.6's sweep RSS goes 112 → 205 MiB from one to eight workers, ≈ 13 MiB per
+worker against §14.2's ≈ 15.
+
+So: **"roughly twice the memory of the wgpu arm" does not hold here**, and the
+ADR should not carry it as a general property. Why the reference machine saw
+228 MiB is not settled by this measurement — per-thread allocator arenas
+scaling with its 32 hardware threads is a candidate, the dependency delta is
+another, and separating them needs the old tree rebuilt on both machines.
+
+**CPU per frame.** §14.1 concludes that the GPU "is still the cheapest in CPU —
+though only by ~20 % now, not the 4× it was before tiling". On this machine the
+ordering reverses: 4.98 ms against 5.73, and 5.03 against 5.98 on the replicate.
+Driving the Vulkan device and reading the frame back has a host-side cost that
+does not shrink with the frame, and §18.1 already localised most of it — submit
+and wait, plus the unpad memcpy §18.2 describes.
+
+One caveat bounds how far that can be pushed. The figure here is the whole
+client process, so it includes the FFFI interpret and the egui pass alongside
+the rasterizer, and §14.1 does not record how its own column was measured. The
+*within-machine* comparison — one quantity, one frame, two hosts — is what
+carries the reversal; the cross-machine absolutes are not safe to divide.
+
+### 19.6 The thread knob, on a machine small enough for the cap to bite
+
+`min(4, hardware_threads / 2)` selects four here, the same as the reference
+machine's default, so the shipped configuration is directly comparable. Best of
+two runs at 1920×1200, against §17.4's table:
+
+| workers | 1 | 2 | **4 (default)** | 8 |
+| --- | --- | --- | --- | --- |
+| p50, this machine | 360 µs | 259 µs | **241 µs** | 297 µs |
+| p50, §17.4 reference | 365 µs | 261 µs | 261 µs | 298 µs |
+| client CPU/frame | 4.26 ms | 4.57 | 4.98 | 6.12 |
+| peak RSS | 112 MiB | 120 | 156 | 205 |
+
+The two p50 rows agree to within 8 % at every worker count, which is a stronger
+version of §19.3's result: not only the default configuration but the whole
+shape of the curve is machine-independent over an 8× range of cores.
+
+What differs is where it ends. The plateau §14.2 found from 2 to 16 workers is
+present but compressed — flat from 2 to 4, degrading at 8, which is every
+hardware thread on four physical cores and the local analogue of the reference
+machine's regression at 32. Raising `IMZERO2_HEADLESS_RASTER_THREADS` on a part
+this size buys nothing and costs on all three of the remaining rows. The §SD3
+cap reaches that conclusion without the operator being involved, which is the
+first evidence that the cap and not just the constant was the right shape.
+
+### 19.7 Where the frame's CPU actually goes here
+
+At 1920×1200 the software host spends 241 µs of a ~4,980 µs client frame inside
+the rasterizer. At the smallest viewport measured it spends 187 µs of ~4,820 —
+so about 4.6 ms of every frame is something other than rasterizing, on every
+arm and at every size.
+
+§11.3 put the rasterizer's absolute cost at ~19 % of one core at 60 Hz and
+called it not a problem. On this machine it is ~1.4 % of one core, and the
+client around it is ~30 %. The value of further raster work on this class of
+part is therefore roughly 5 % of a frame; if a machine like this needs to be
+faster, the FFFI interpret and the egui pass are where the time is.
+
+### 19.8 Caveats
+
+- **The wgpu arm is not stable on this machine.** Two identical runs gave p50
+  2463 µs and 4175 µs, a 1.7× spread, and its p50 across the three viewport
+  sizes (2795, 2595, 2463 µs, largest last) runs backwards with respect to
+  resolution — which is what a fixed submit-and-wait cost plus that much
+  run-to-run variance looks like, and is consistent with §18.1. The software
+  arm reproduced to 1.5 % (241 / 244 µs). Both runs are quoted above rather
+  than the better one; a GPU figure from a part like this needs replicates.
+- **The machine was quiet but not idle** — roughly 0.3–0.5 of a core of
+  unrelated background work throughout. The p50 column is robust to that; the
+  p99 column should be read as an upper bound.
+- One run per arm except the five that were replicated. A first pass produced
+  478 µs at two workers and 642 µs at eight, neither of which the replicate
+  reproduced; §19.6 quotes the replicated values, and those two discards are
+  why the arms were replicated at all.
+- **Fidelity was not re-measured.** Nothing here touches §10.3; the rasterizer
+  is the same code taking the same 256-bit path.
+- **Two variables moved at once.** The reference figures come from the tree as
+  it stood on 2026-08-22; these come from a working tree a day later that had
+  also dropped the `walkers` map binding and gained portolan. Machine and tree
+  are therefore confounded in every cross-machine comparison here. The
+  within-machine comparisons — the arms against each other, the thread sweep,
+  the resolution sweep — are not affected, and where a conclusion rests on one
+  of those it is stated that way.
+- One machine, one build, one frame shape — §13.5's caveat applies to this
+  section exactly as it does to the rest. Two machines is enough to separate a
+  host property from a machine property in the cases above; it is not enough to
+  claim a curve.
+
+## 20 A window on the CPU rasterizer, and what the desktop comparison says (added 2026-08-23)
+
+§8 O3 — "replace eframe on the desktop host" — was costed on reasoning, not
+measurement, and rejected on the windowing layer rather than on the renderer.
+This section measures the part that was assumed. It does not reverse O3's
+disposition; it moves the argument onto numbers, and it removes one premise
+that would have been cited in O3's favour.
+
+The vehicle is a deliberately throwaway probe, `desktop_soft`
+(`rust/imzero2/src/imzero2/desktop_soft.rs`, ~330 lines, runtime-selected by
+`IMZERO2_DESKTOP_SOFT=1`): a winit window, egui-winit input, `softraster::Soft`,
+and a softbuffer blit. It is **not** O3 — no IME, no clipboard, no
+multi-viewport, no AccessKit, no reactive cadence, and HiDPI pinned rather than
+handled. Nothing here should be read as an argument that 330 lines is what the
+job costs.
+
+### 20.1 The integration was cheap; that is the least interesting result
+
+`winit` and `egui-winit` are already in the dependency graph under `desktop` via
+eframe, so **`softbuffer` was the only crate added**, and the host compiled
+against the pinned egui 0.35 ring without touching it. The vendored crate's own
+winit integration — deleted per `VENDORING.md`, and the surface §3 found does
+not build at 0.35 — was not needed at all, because imzero2 supplies its own
+host loop either way.
+
+### 20.2 Presentation costs about as much as rasterizing
+
+Measured on the same play frame, paced at 60 Hz, 660 frames per run, across six
+runs at two viewport sizes:
+
+| | rasterize p50 | present p50 |
+| --- | --- | --- |
+| 912×568 | 263–438 µs | 277–453 µs |
+| 1200×720 | 322–450 µs | 281–429 µs |
+
+Both have ~1.7× run-to-run spread at these sizes, so read the ranges rather
+than any single figure. The shape is what matters: **present is not a rounding
+error on top of raster, it is the same order of magnitude**, taking a whole
+windowed frame to roughly 0.8–0.9 ms of paint.
+
+Present is also close to **flat in pixel count** — 1200×720 is 1.67× the pixels
+of 912×568 and present does not move — so it is dominated by fixed per-frame
+cost (buffer acquire plus the X11 round trip) rather than by the copy. It
+therefore gets relatively cheaper as the viewport grows, which is the opposite
+of how the rasterizer scales.
+
+### 20.3 The headless ordering does not transfer to a window
+
+§14.1 has the software host ahead of wgpu by 5× in wall-clock, and §19.3 has it
+10× ahead on the second machine. Neither number predicts the desktop. Measured
+on the same span in both hosts — eframe's `cpu_usage` and the probe's
+`frame_us`, each covering the app callbacks plus tessellate, paint and present,
+excluding vsync wait — on the four-core machine of §19:
+
+| | wgpu desktop | software desktop |
+| --- | --- | --- |
+| 912×568, frame p50 | **4101 µs** | 4699 µs |
+| 1200×720, frame p50 | **3693 µs** | 4982 µs |
+| 1200×720, frame p99 | **5731 µs** | 9053 µs |
+| client CPU/frame, 1200×720 | **3.53 ms** | 4.41 ms |
+
+**On the desktop, wgpu is faster by 15–26 % and cheaper in CPU by 13–20 %.**
+
+The mechanism is structural, and §18.1 already contains it: the headless wgpu
+arm pays a synchronous GPU→CPU **readback**, measured there at 35 % of its
+frame, and the desktop wgpu arm pays none — it submits to a swapchain and the
+CPU moves on while the GPU works. The CPU rasterizer was never being compared
+against "wgpu"; it was being compared against wgpu-plus-readback. Remove the
+readback and the ordering inverts.
+
+Span identity was checked rather than assumed (§15): eframe starts its frame
+timer in `wgpu_integration.rs` before `take_egui_input` and before the app
+callback, so the FFFI dispatch sits inside both spans, and both exclude vsync
+wait — the probe has none to exclude, since softbuffer does not throttle.
+
+**One thing does not reconcile, and it bounds the precision.** The probe's own
+paint is directly measured at ~0.8 ms (§20.2), yet it trails wgpu by 1.29 ms at
+1200×720. Both totals are dominated by a ~3.5–4 ms component that is largely
+Go-side wait, and the two hosts schedule repaints differently, so that component
+is probably not equal between them. The direction is consistent at both sizes
+and agrees with the CPU-per-frame column, which is methodology-independent; the
+exact percentages are not solid. Separating paint from wait needs eframe
+vendored, which is more than a baseline is worth.
+
+### 20.4 What the software path buys instead
+
+Not speed — the same conclusion §11.4 reached for the headless host, arrived at
+again from the other end. What it buys is the dependency closure, and on the
+desktop that is larger than on the headless side because the desktop build
+carries eframe's wgpu integration too:
+
+| | wgpu desktop | software desktop |
+| --- | --- | --- |
+| crates | 882 | **635** |
+| binary | 48.9 MB | **38.1 MB** |
+| `.text` | 15.51 MB | **9.81 MB** |
+| wgpu-family crates | `ash`, `egui-wgpu`, `glow`, `naga`, `wgpu`, `wgpu-core`, `wgpu-hal`, `wgpu-types` | **none** |
+| peak client RSS | 156–162 MiB | **101–126 MiB** |
+
+247 fewer crates, 5.7 MB less machine code, the whole Vulkan and
+shader-compiler stack absent, and lower memory besides. So the desktop trade is
+explicit rather than free: **~15–25 % of frame time and ~15 % of CPU, in
+exchange for that closure.**
+
+### 20.5 Both defects were in the windowing layer, and both were the same bug
+
+The probe broke twice, and neither was in the rasterizer:
+
+1. **Layout at the wrong scale.** `egui_winit::State::new` was given
+   `native_pixels_per_point = Some(1.0)`, but egui laid out at 1.5 — the X11
+   scale factor — while `Soft` had been constructed at 1.0. The layout shrank
+   and the clip rects landed wrong. Found by a triangle count that did not
+   match the headless control, not by looking at it.
+2. **Pointer positions off by the same factor.** `egui_winit::pixels_per_point`
+   is `zoom_factor × window.scale_factor()` and ignores the pinned value
+   entirely, so `on_cursor_moved` divides physical cursor pixels by 1.5 against
+   a 1.0 layout. It is a *scale* error — zero at the origin, growing with
+   distance — which is why it presents as a drifting offset.
+
+One root cause, two symptoms, in ~330 lines. This is the concrete form of the
+concern §8 raised in the abstract: the renderer is the part that ports cleanly,
+and the windowing layer is where the work actually is. AccessKit is the same
+story — it lives in eframe's `winit_integration.rs`, shared by both painters,
+so a host that replaces eframe loses it, and with it `egui_mcp`
+([ADR-0057](../adr/0057-demo-registry-and-drivers.md)) and the
+[ADR-0154](../adr/0154-headless-carrier-tree-and-driver.md) driver on the
+desktop.
+
+### 20.6 The condition any implementation has to meet
+
+Recorded as a standing constraint rather than a decision: a software-rendered
+desktop edition is worth building **only if the maintenance burden stays small
+and the codebase separates cleanly** from the wgpu desktop host. On the evidence
+above that is a real filter, not a formality — the two defects landed precisely
+in the code a thin host would own and keep owning, and each shipped host is one
+more place an egui-ring bump has to be carried.
+
+It also ranks the shapes. Adding a software painter *inside* eframe (a third
+`Renderer` variant alongside `Glow` and `Wgpu`) keeps winit, IME, clipboard,
+HiDPI and AccessKit shared and confines the new code to a painter — the
+cleanest separation available, at the cost of being upstream work on a pinned
+crate. Promoting a probe-shaped host duplicates the windowing layer instead of
+sharing it, which is the arrangement this section's defects argue against. A
+browserless carrier client is a third shape: it keeps the accessibility tree
+(the carrier already serves it, which is how `imzero2 drive --dumpTree` works)
+at the cost of a process boundary and either raw-pixel bandwidth or the ffmpeg
+closure ADR-0205 did not address.
+
+### 20.7 Caveats
+
+- **The probe is not O3 and its numbers are not O3's numbers.** A host that
+  handled HiDPI, IME, clipboard and AccessKit properly would do more work per
+  frame than this one does.
+- **One machine, one display server**, and the display is 1280×800, so there is
+  no windowed 1920×1200 arm. Present cost in particular is an X11 number.
+- **Fidelity was not compared** between the two desktop painters. §10.3 covers
+  the rasterizer against wgpu headless, and nothing here changes the rasterizer.
+- The frame-span reconciliation gap in §20.3 is unresolved and bounds every
+  percentage in that table.

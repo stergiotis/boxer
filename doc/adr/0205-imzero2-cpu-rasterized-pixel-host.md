@@ -322,6 +322,82 @@ mutually exclusive, "headless.rs refuses to compile with both". It does not:
 the precedence SD1 specifies. The comment was wrong and has been corrected; the
 decision above was right.
 
+### 2026-08-23 — re-measured on a four-core Zen 2 APU: p50 transfers, three recorded costs do not
+
+Every number above comes from one machine — 16 cores / 32 threads, two 32 MB L3
+domains. §11's harness has now been run unchanged on a second: four cores /
+eight threads, **one L3 domain of 4 MiB**, integrated GPU.
+[Survey §19](../adr-background-work/egui-software-backend-survey.md#19-a-second-machine-a-four-core-zen-2-apu-added-2026-08-23)
+carries the full record. Nothing in §Decision reverses; SD1–SD5 stand as
+written. Three recorded figures need qualifying, two of them in §Consequences.
+
+**What held.** The software host's p50 is 241 µs at 1920×1200 against the
+250 µs recorded here — within 4 %, on a part with a quarter of the cores and an
+eighth of the L3, and one where identical work (tessellation) runs about twice
+as slow. The §17.4 thread curve reproduces to within 8 % at one, two, four and
+eight workers. §SD4 is why: the median frame repaints a dirty-tile set small
+enough to fit anywhere, so p50 stopped tracking machine size. §SD3's default
+selects four workers on both machines, and here the `hardware_threads / 2` cap
+is what does it — eight workers is every thread on four cores and is worse on
+p50, CPU and RSS alike, so the cap and not just the constant earns its keep.
+§SD5's advice fired correctly and unprompted at startup.
+
+**Correction 1 — "Memory: 228 MiB against wgpu's 118 MiB".** On this machine
+the same two arms are 156 MiB and 166 MiB, with the CPU host the *lower* of the
+two, so **the recorded 2× does not hold generally** and this entry should not be
+read as a property of the host.
+
+Why the reference machine saw 228 MiB is *not* settled here, and the absolutes
+are confounded: the measurement tree had already dropped `walkers` (and with it
+`reqwest`/`rustls`/`ring`) after this ADR was recorded, which takes memory off
+both arms, and the wgpu arm's RSS is largely its Vulkan driver's — a different
+driver on this machine. Per-thread allocator arenas scaling with 32 hardware
+threads is a candidate cause, not a finding. What the measurement does support
+is the within-machine, within-tree comparison: at the shipped default the CPU
+host is level with the wgpu arm or below it.
+
+**Correction 2 — the CPU-per-frame ordering.** §Consequences reports the GPU as
+~20 % cheaper in CPU. Here it is ~15 % more expensive: 4.98 ms against 5.73,
+replicated. Submitting to the Vulkan device and reading the frame back has a
+host-side cost that does not shrink with the frame (survey §18.1). The measured
+quantity is whole-client CPU, so the within-machine comparison is the part that
+carries this; the cross-machine absolutes are not comparable.
+
+**Correction 3 — how the L3 budget should be read.** The working-set note in
+§SD5 fires at 4.4× over budget here, and the median barely moves: 4.4× the
+pixels costs 1.29× at p50 and 2.2× at p99. Post-§SD4 the residency argument is
+about the tail, not throughput. "Size a CPU-rasterized appliance at
+1080p–1200p" survives; what widening the viewport costs is tail latency.
+
+**One observation about §Alternatives.** O1 is retained above as the fallback
+when something must go through a Vulkan device. On this machine that fallback
+could not be constructed: the OS image ships only the vendor ICD and Mesa's
+software Vulkan is not installable without rebuilding the image. On an
+appliance-shaped system the lavapipe arm may simply not exist.
+
+**A note on citing the wall-clock figure.** §Consequences records the CPU host
+as "the fastest arm measured in wall-clock", and §19 widens that to 10× on the
+second machine. Both are **headless** results and neither transfers to a
+window: survey §20.3 measures the two painters on one span in an on-screen host
+and finds wgpu 15–26 % *faster*. The cause is already in this ADR's own
+material — the headless wgpu arm pays a synchronous GPU→CPU readback (survey
+§18.1 puts it at 35 % of that frame) and a desktop wgpu arm pays none. The
+comparison here is sound for the host this ADR is about; it should not be cited
+in support of a software-rendered desktop edition, where the argument is the
+dependency closure and not throughput.
+
+Two variables moved at once, and it is worth stating plainly: these figures come
+from a working tree a day newer than the one above, which had also dropped the
+`walkers` map binding and gained portolan. Machine and tree are confounded in
+every cross-machine number here. The within-machine comparisons — the arms
+against each other, the thread sweep, the resolution sweep — are unaffected, and
+each correction above rests on one of those.
+
+Not re-measured: fidelity against wgpu (§10.3 of the survey is untouched — same
+code, same 256-bit path) and anything in §Surfaces. The wgpu arm on this part
+varies 1.7× run to run, so its figures above are quoted as a pair rather than a
+best case.
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless host and pixel streaming.
