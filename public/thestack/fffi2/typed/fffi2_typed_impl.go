@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"sync"
+	"sync/atomic"
 	"unique"
 
 	"github.com/rs/zerolog/log"
@@ -42,28 +43,45 @@ func (inst RetainedFffiHolderTyped[T]) Untype() *RetainedFffiHolder {
 	}
 }
 
-// largestPooledBuffer is the retention ceiling for [RetainedFffiBuilder.putInPool]:
-// a builder whose buffer has grown past it is dropped instead of pooled, so one
-// outlier frame cannot pin an arbitrarily large allocation (golang/go#23199).
+// builderSizeHint is the smoothed high-water mark of the wire bytes a single
+// [RetainedFffiBuilder] carries, and with it the ADAPTIVE retention ceiling
+// [RetainedFffiBuilder.putInPool] applies (runtime.PooledBufferCeiling: twice
+// the hint, clamped to [runtime.PooledCeilingMin, runtime.PooledCeilingMax]).
 //
-// It must sit *above* the working set, not below it. At 4 KiB — the value this
-// pool shipped with — it sat below: a frame's spliced deferred-block maps run to
-// a few hundred KiB (measured 2026-08-18 at ~460 KiB/frame of wire bytes, with
-// mean bytes.growSlice allocation 31.4 KiB), so every buffer that mattered was
-// discarded and re-grown by doubling from defaultBufferSize on the next frame.
-// The pool still *hit* ~99.9% of the time; it just never handed back anything
-// bigger than 4 KiB. bytes.growSlice was 47.8% of all bytes allocated.
+// A ceiling is insurance against an outlier, not a sizing mechanism; put it
+// under the steady state and it becomes the bug it was meant to prevent. This
+// pool has now been there twice with a FIXED value — at 4 KiB (ADR-0049
+// Update 2026-08-18, where bytes.growSlice was 47.8% of all bytes allocated),
+// and again at 256 KiB, which a 2026-08-23 profile caught discarding the dock
+// area's ~400 KiB spliced block map every frame. A ceiling that tracks the
+// working set cannot drift under it a third time.
 //
-// Above the working set the pool is self-tuning: grown buffers survive Put, so
-// after the first few frames Get returns a right-sized buffer and the doubling
-// stops without any explicit sizing logic. Retention stays bounded because
-// sync.Pool is cleared by the collector (victim cache: two GC cycles).
-// See ADR-0049 (C5) and its 2026-08-18 Update.
-const largestPooledBuffer = 256 * 1024
+// Only builders at or above builderHintParticipationFloor fold into the hint.
+// The population here is overwhelmingly small widget builders — a profile put
+// acquisitions at ~200k/s — and folding every one of them would drag the hint
+// to their size, pay an atomic write per opcode to do it, and leave the
+// ceiling pinned at the minimum. The buffers a retention ceiling is about are
+// the big ones, so they are the ones that get a vote.
+var builderSizeHint atomic.Uint64
+
+// builderHintParticipationFloor is the payload size at which a builder starts
+// folding into builderSizeHint. Set to the smallest payload that could ever
+// be at risk of the ceiling — PooledCeilingMin / slack — so no builder that
+// the ceiling could drop is excluded from the hint that sets it.
+//
+// Consequence worth naming: a hint only decays when something folds into it,
+// so when the big builders stop appearing at all (the dock tab that produced
+// them is closed) the hint freezes at its last value rather than decaying
+// back. The ceiling it implies then stays high for the process's lifetime.
+// That is deliberate — a ceiling too high only widens what the pool is
+// allowed to keep, and PooledCeilingMax plus sync.Pool's collector-driven
+// clearing still bound the retention — but it does mean this hint is not a
+// reading of the CURRENT working set the way a ScopeHint's is.
+const builderHintParticipationFloor = runtime.PooledCeilingMin / 2
 
 // defaultBufferSize is the capacity of a *fresh* buffer — pool misses only,
 // which are rare (~0.06% of acquisitions in the same measurement). It is
-// deliberately small and deliberately NOT derived from largestPooledBuffer:
+// deliberately small and deliberately NOT derived from the ceiling:
 // the many small widget builders would otherwise each start at a fraction of
 // the ceiling, paying the outliers' size on every miss.
 const defaultBufferSize = 512
@@ -203,8 +221,12 @@ func (inst *RetainedFffiBuilder) BuildRetained() *RetainedFffiHolder {
 	}
 }
 func (inst *RetainedFffiBuilder) putInPool() {
+	n := uint64(inst.builder.buf.Len())
 	inst.builder.buf.Reset()
-	if inst.builder.buf.Cap() <= largestPooledBuffer {
+	if n >= builderHintParticipationFloor {
+		runtime.FoldSizeHint(&builderSizeHint, n)
+	}
+	if uint64(inst.builder.buf.Cap()) <= runtime.PooledBufferCeiling(builderSizeHint.Load()) {
 		// see https://github.com/golang/go/issues/23199
 		retainedFffiBuilderPool.Put(inst.builder)
 	}

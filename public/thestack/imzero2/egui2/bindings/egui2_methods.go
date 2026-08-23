@@ -8,6 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
@@ -251,17 +252,32 @@ type dockSplitS struct {
 // changes survive. Calling neither InitRoot nor Split keeps the
 // historical "everything in one leaf" default.
 type DockAreaFluid struct {
-	idGen         WidgetIdCreatorI
-	derivedId     uint64
-	ids           []uint64
-	titles        []string
-	bodies        [][]byte
+	idGen     WidgetIdCreatorI
+	derivedId uint64
+	ids       []uint64
+	titles    []string
+	bodies    [][]byte
+	// bodyBufs parallels bodies: the buffers those slices alias, held so
+	// send can hand them back to dockTabBodyBuffers once the bytes have
+	// been copied out. Never release one before that copy — the slice in
+	// bodies aliases it.
+	bodyBufs      []*bytes.Buffer
 	noScrollTabs  []uint64
 	rootTabs      []uint64
 	splits        []dockSplitS
 	nextLeafId    DockLeafIdT
 	activateTabId uint64
 }
+
+// dockTabBodyBuffers is the hinted pool behind every dock tab's detached
+// capture buffer (ADR-0049). A tab body is captured into its own buffer each
+// frame and consumed by send in that same frame, so the buffer can go
+// straight back — and, pooled, it keeps the capacity it grew to instead of
+// re-doubling from zero. Before this, an allocation profile attributed
+// ~1.25 GB per 20 s of run time to those re-grows, over half of everything
+// the process allocated; the ADR had already named this call site as the
+// large detached buffer its scope hints do not cover.
+var dockTabBodyBuffers = runtime.RegisterBufferHint("dockTabBody")
 
 // DockArea opens an iter-style dock area scope.
 //
@@ -308,7 +324,7 @@ func DockArea(id WidgetIdCreatorI) iter.Seq[*DockAreaFluid] {
 // preserving splits and drag-order for everything that stayed.
 func (inst *DockAreaFluid) Tab(tabId uint64, title string) iter.Seq[functional.NilIteratorValueType] {
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		buf := &bytes.Buffer{}
+		buf := dockTabBodyBuffers.Acquire()
 		fffi := typed.GetCurrentFffiCapture()
 		fffi.BeginCapture(buf, binary.LittleEndian)
 		defer func() {
@@ -316,6 +332,7 @@ func (inst *DockAreaFluid) Tab(tabId uint64, title string) iter.Seq[functional.N
 			inst.ids = append(inst.ids, tabId)
 			inst.titles = append(inst.titles, title)
 			inst.bodies = append(inst.bodies, buf.Bytes())
+			inst.bodyBufs = append(inst.bodyBufs, buf)
 		}()
 		yield(functional.NilIteratorValue)
 	}
@@ -451,6 +468,14 @@ func (inst *DockAreaFluid) send() {
 		d.EndTabBody()
 	}
 	d.Send()
+	// AppendRawToCapture copied each body into the deferred scope's slab
+	// (DeferredBlockScope.End), and Send has shipped it, so nothing aliases
+	// the tab buffers any more and they can be recycled.
+	for _, buf := range inst.bodyBufs {
+		dockTabBodyBuffers.Release(buf)
+	}
+	inst.bodyBufs = nil
+	inst.bodies = nil
 }
 
 // RichTextScope is a typed wrapper around AtomsFluid that restricts the
