@@ -126,3 +126,11 @@ rust/*/target/
 /showcase/gokrazy/instances/*/*.img
 
 .vscode
+
+# Local static-ffmpeg build (scripts/dev/build-static-ffmpeg.sh). Run from the
+# repo root it defaults --src-dir to ./_ffmpeg-src (codec tarballs plus their
+# unpacked trees and a _prefix/, ~1 GB) and --out to ./ffmpeg-static (a ~20 MB
+# linked binary). Ignored so doclint and the gov gate do not walk vendored
+# upstream READMEs as if they were repo docs. Anchored: repo root only.
+/_ffmpeg-src/
+/ffmpeg-static
