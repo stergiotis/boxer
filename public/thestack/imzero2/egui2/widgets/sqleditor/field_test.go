@@ -1,7 +1,8 @@
 package sqleditor
 
-// The two pieces of [Field] that are not a draw call: the error overlay's
-// clamp, and the lex job's per-edit memo.
+// The pieces of [Field] that are not a draw call: the error overlay's clamp,
+// the lex job's per-edit memo, and the newline fold that holds a one-row field
+// to one row.
 
 import (
 	"testing"
@@ -72,4 +73,36 @@ func TestFieldHighlightJobRebuildsOnlyOnChange(t *testing.T) {
 	_, ok = f.highlightJob("")
 	require.False(t, ok)
 	require.Equal(t, "a = 2", f.jobFor)
+}
+
+func TestFoldNewlinesHoldsAOneRowFieldToOneRow(t *testing.T) {
+	// A single-line TextEdit refuses Enter but not a PASTE, so these are the
+	// shapes a multi-line SQL fragment actually arrives in.
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"no line break is returned unchanged", "planes_mercator_sample100", "planes_mercator_sample100"},
+		{"empty", "", ""},
+		{"unix", "SELECT 1\nFROM t", "SELECT 1 FROM t"},
+		{"windows folds to ONE space", "SELECT 1\r\nFROM t", "SELECT 1 FROM t"},
+		{"classic mac", "SELECT 1\rFROM t", "SELECT 1 FROM t"},
+		{"mixed, several", "a\nb\r\nc\rd", "a b c d"},
+		{"a break is a space, not a deletion -- tokens must not fuse", "FROM\nt", "FROM t"},
+		{"blank lines each become a space", "a\n\n\nb", "a   b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, foldNewlines(tc.in))
+		})
+	}
+}
+
+func TestFoldNewlinesLeavesOtherWhitespaceAlone(t *testing.T) {
+	// Only line breaks are folded. Tabs and runs of spaces are the fragment's
+	// own formatting and survive, so a round trip through the field does not
+	// quietly reformat what the user typed.
+	const in = "a\t b  c"
+	require.Equal(t, in, foldNewlines(in))
 }

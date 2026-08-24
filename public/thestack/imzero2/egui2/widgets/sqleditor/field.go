@@ -5,6 +5,8 @@ package sqleditor
 // source, in place of the plain TextEdit those carry today.
 
 import (
+	"strings"
+
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -27,6 +29,12 @@ type FieldFrame struct {
 	// line — and one selects egui's single-line form, in which Enter inserts
 	// nothing and needs no disarming. Above one selects the multi-line form,
 	// which wraps.
+	//
+	// A one-row field is kept one row whatever it is given, which costs the
+	// embedder one thing worth knowing: [Field.Render] REWRITES a bound value
+	// carrying newlines, folding them to spaces. A single-line control holding
+	// a value it cannot show is the worse of the two surprises — see the
+	// no-wrap note in Render.
 	Rows uint32
 	// Width is the desired width in points; zero leaves egui's default. A
 	// positive infinity is egui's fill idiom — the field takes the available
@@ -77,6 +85,28 @@ func (inst *Field) Render(ids *c.WidgetIdStack, f FieldFrame) {
 	if rows == 0 {
 		rows = 1
 	}
+	// A one-row field is a LINE, and is held to one however the text arrived.
+	// Two things can otherwise make it taller, and neither is egui misbehaving:
+	//
+	//   - The layouter installed with the highlight job wraps at the widget's
+	//     width. egui's own singleline rule (lay out at infinite width, scroll
+	//     horizontally) lives in the DEFAULT layouter and does not reach a
+	//     custom one, so a highlighted single-line field wraps where a plain
+	//     TextEdit would not. NoWrapLayout below restores it.
+	//   - A singleline TextEdit refuses Enter, but a PASTE carries newlines
+	//     straight into the buffer, and the galley then has real logical lines
+	//     to lay out. Folding them to spaces is what keeps the row count at
+	//     one; the alternative is a control silently several rows tall.
+	//
+	// Measured before this: play's Map panel took a multi-line table source
+	// into a 240pt-wide one-row field and drew it SEVEN rows tall, which ate
+	// the map underneath it.
+	if rows == 1 {
+		if folded := foldNewlines(view); folded != view {
+			view = folded
+			*f.Value = folded
+		}
+	}
 	// CodeEditor is egui's `code_editor()` preset, which sets monospace AND
 	// tab-capture. The font is wanted; the tab-capture is not, and it is
 	// released rather than inherited: a field is a CONTROL in a strip, not a
@@ -87,6 +117,9 @@ func (inst *Field) Render(ids *c.WidgetIdStack, f FieldFrame) {
 		LockFocus(false).
 		DesiredRows(rows).
 		HintText(f.Hint)
+	if rows == 1 {
+		b = b.NoWrapLayout()
+	}
 	if f.Width > 0 {
 		b = b.DesiredWidth(f.Width)
 	}
@@ -100,6 +133,19 @@ func (inst *Field) Render(ids *c.WidgetIdStack, f FieldFrame) {
 		}
 	}
 	b.SendRespVal(f.Value)
+}
+
+// newlineFolder turns every line break into a single space. A replacer rather
+// than a strings.Map so CRLF collapses to ONE space instead of two.
+var newlineFolder = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
+
+// foldNewlines is newlineFolder with the common case — no line break at all —
+// costing a scan and no allocation.
+func foldNewlines(s string) string {
+	if !strings.ContainsAny(s, "\n\r") {
+		return s
+	}
+	return newlineFolder.Replace(s)
 }
 
 // highlightJob returns the retained CodeViewJob for the fragment, rebuilding
