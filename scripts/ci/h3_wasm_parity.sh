@@ -3,10 +3,20 @@
 # the committed artifact. Drift exits non-zero; CI wires this into
 # scripts/ci/lint.sh.
 #
-# Graceful skip when cargo or the wasm32-unknown-unknown target is absent:
+# Graceful skip when any part of the build pipeline is absent — cargo, the
+# wasm32-unknown-unknown target, or the wasm-strip / wasm-opt post-processors:
 # prints a 'skipped' line and exits 0. The intent is that contributors who
-# have not installed the Rust toolchain still see a green lint, while CI
-# (which has the toolchain) enforces the invariant.
+# have not installed the toolchain still see a green lint, while CI (which has
+# all of it) enforces the invariant.
+#
+# The post-processors are part of that pipeline, not an optional extra. The
+# committed blob is the OUTPUT of `wasm-strip` + `wasm-opt -Oz`, so a machine
+# missing them rebuilds something that cannot match it and never could: -Oz
+# alone accounts for ~90 KB and roughly half the function-section entries.
+# Before this skip existed the step reported that as DRIFT and told the reader
+# to "run build_h3_wasm.sh and commit the result" — which would have replaced
+# the optimised artifact with an unoptimised one and moved the drift to every
+# machine that DOES have binaryen.
 
 set -e
 set -o pipefail
@@ -25,6 +35,14 @@ fi
 sysroot=$(rustc --print sysroot 2>/dev/null || true)
 if [ -z "$sysroot" ] || [ ! -d "$sysroot/lib/rustlib/wasm32-unknown-unknown" ]; then
     echo "h3_wasm_parity: skipped (wasm32-unknown-unknown target not installed)"
+    exit 0
+fi
+
+missing_pp=()
+command -v wasm-strip >/dev/null 2>&1 || missing_pp+=("wasm-strip (wabt)")
+command -v wasm-opt   >/dev/null 2>&1 || missing_pp+=("wasm-opt (binaryen)")
+if [ ${#missing_pp[@]} -gt 0 ]; then
+    echo "h3_wasm_parity: skipped (post-processor(s) not installed: ${missing_pp[*]})"
     exit 0
 fi
 
@@ -56,15 +74,12 @@ if [ ! -f "$built" ]; then
     exit 1
 fi
 
-if command -v wasm-strip >/dev/null 2>&1; then
-    wasm-strip "$built"
-fi
-if command -v wasm-opt >/dev/null 2>&1; then
-    # Feature flags must match scripts/dev/build_h3_wasm.sh.
-    wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int \
-        --strip-debug --strip-producers "$built" -o "$built.opt"
-    mv "$built.opt" "$built"
-fi
+# Both are present — the skip above returned otherwise. Feature flags must
+# match scripts/dev/build_h3_wasm.sh.
+wasm-strip "$built"
+wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int \
+    --strip-debug --strip-producers "$built" -o "$built.opt"
+mv "$built.opt" "$built"
 
 new_hash=$(sha256sum "$built" | awk '{print $1}')
 cur_hash=$(sha256sum "$committed" | awk '{print $1}')

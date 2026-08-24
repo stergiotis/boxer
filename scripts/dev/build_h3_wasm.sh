@@ -10,9 +10,13 @@
 #     Under Fedora's system cargo:
 #         sudo dnf install rust-std-static-wasm32-unknown-unknown
 #
-# Optional post-processors (improve reproducibility of the committed blob):
+# Required post-processors — the committed blob is their output, not cargo's:
 #   - `wasm-strip` from wabt  (dnf install wabt)
 #   - `wasm-opt -Oz` from binaryen  (dnf install binaryen)
+# They were optional until it became clear what skipping them costs: the blob
+# they are skipped for is ~23% larger and byte-different, so writing it over
+# the committed artifact hands the drift to scripts/ci/h3_wasm_parity.sh on
+# every machine that HAS them. Missing either is now an error.
 #
 # The script is idempotent: running it twice on a clean tree should produce
 # byte-identical output.
@@ -44,6 +48,15 @@ if [ -z "$sysroot" ] || [ ! -d "$sysroot/lib/rustlib/wasm32-unknown-unknown" ]; 
     exit 1
 fi
 
+missing_pp=()
+command -v wasm-strip >/dev/null 2>&1 || missing_pp+=("wasm-strip  (dnf install wabt)")
+command -v wasm-opt   >/dev/null 2>&1 || missing_pp+=("wasm-opt    (dnf install binaryen)")
+if [ ${#missing_pp[@]} -gt 0 ]; then
+    echo "ERROR: post-processor(s) not installed; the artifact would not match CI's:" >&2
+    printf '  %s\n' "${missing_pp[@]}" >&2
+    exit 1
+fi
+
 # Fixed seed for const-random (transitively used by h3o → ahash → const-random)
 # so the release wasm is byte-reproducible across machines.
 export CONST_RANDOM_SEED="boxer-h3-fixed-seed"
@@ -71,19 +84,15 @@ tmp=$(mktemp --suffix=.wasm)
 trap 'rm -f "$tmp"' EXIT
 cp "$built" "$tmp"
 
-if command -v wasm-strip >/dev/null 2>&1; then
-    echo "=== wasm-strip ==="
-    wasm-strip "$tmp"
-fi
+echo "=== wasm-strip ==="
+wasm-strip "$tmp"
 
-if command -v wasm-opt >/dev/null 2>&1; then
-    echo "=== wasm-opt -Oz --strip-debug --strip-producers ==="
-    # rustc (≥1.82) emits bulk-memory and nontrapping float-to-int by default
-    # and the wazero runtime accepts both; wasm-opt must be told to allow them.
-    wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int \
-        --strip-debug --strip-producers "$tmp" -o "$tmp.opt"
-    mv "$tmp.opt" "$tmp"
-fi
+echo "=== wasm-opt -Oz --strip-debug --strip-producers ==="
+# rustc (≥1.82) emits bulk-memory and nontrapping float-to-int by default
+# and the wazero runtime accepts both; wasm-opt must be told to allow them.
+wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int \
+    --strip-debug --strip-producers "$tmp" -o "$tmp.opt"
+mv "$tmp.opt" "$tmp"
 
 mkdir -p "$(dirname "$dst")"
 cp "$tmp" "$dst"
