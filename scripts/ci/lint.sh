@@ -32,8 +32,17 @@ step_end() {
 
 step_begin "go vet"
 # go vet has no built-in exclude for generated files, so filter output.
-if go vet -tags "$tags" ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' | grep -q .; then
-    go vet -tags "$tags" ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:'
+#
+# `^warning: ` is dropped too, here and in the designlint step below. Those are
+# the go COMMAND's own lines about the machine, not the analysis's about the
+# code — "warning: both GOPATH and GOROOT are the same directory" on a checkout
+# where go is installed under $HOME/go being the one seen in practice. Both
+# steps treat any surviving output as a finding, so without this a toolchain
+# note about the contributor's install reads as a code defect. Nothing real is
+# hidden: findings carry a file:line:col prefix, and a package that fails to
+# build arrives as `# pkg` or `vet: ...`, none of which start with "warning: ".
+if go vet -tags "$tags" ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' | grep -v '^warning: ' | grep -q .; then
+    go vet -tags "$tags" ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' | grep -v '^warning: '
     rc=1
     step_end fail
 else
@@ -192,7 +201,7 @@ dl_bin=$(mktemp -t designlint.XXXXXX)
 if go build -tags "$tags" -o "$dl_bin" ./public/keelson/designsystem/lint/cmd/designlint 2>/dev/null; then
     dl_out=$(go vet -vettool="$dl_bin" -tags "$tags" \
         ./public/thestack/imzero2/... ./public/keelson/runtime/... 2>&1 \
-        | grep -v '\.out\.go:' | grep -v '\.gen\.go:' || true)
+        | grep -v '\.out\.go:' | grep -v '\.gen\.go:' | grep -v '^warning: ' || true)
     rm -f "$dl_bin"
     if [ -n "$dl_out" ]; then
         printf '%s\n' "$dl_out"
