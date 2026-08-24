@@ -28,7 +28,10 @@ type FieldFrame struct {
 	// nothing and needs no disarming. Above one selects the multi-line form,
 	// which wraps.
 	Rows uint32
-	// Width is the desired width in points; zero leaves egui's default.
+	// Width is the desired width in points; zero leaves egui's default. A
+	// positive infinity is egui's fill idiom — the field takes the available
+	// width of whatever it is laid out in, which is what an embedder wants when
+	// the field owns its own row rather than sharing one.
 	Width float32
 	// Mark is a byte range within Value to underline as an error, empty when
 	// there is none. The tone is the widget's ([ToneError]) rather than the

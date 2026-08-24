@@ -422,16 +422,7 @@ func (inst *MapDriver) renderControls() {
 		inst.renderModeCombo()
 	}
 	if builtinRenders[inst.renderIdx].custom {
-		// Four rows, not the three the default block occupies: that is what
-		// egui's multiline default gave this control before it was a SQL
-		// field, and an adoption is the wrong commit to retune a panel's
-		// height in.
-		inst.colorField.Render(inst.ids, sqleditor.FieldFrame{
-			IDSlot: "map-color",
-			Value:  &inst.customColorSQL,
-			Rows:   4,
-			Width:  420,
-		})
+		inst.renderColorEditor()
 	}
 	for range c.Horizontal().KeepIter() {
 		c.SliderF64(inst.ids.PrepareStr("map-opacity"), inst.opacity, 0.1, 1.0).
@@ -469,6 +460,75 @@ func (inst *MapDriver) renderControls() {
 		}
 	}
 	c.Label(inst.statusLine()).Send()
+}
+
+// Geometry of the custom-colour editor's pane.
+//
+// The pane exists to make the editor's occupied height CONSTANT. A multiline
+// egui TextEdit sizes to max(desired_rows, content), and the map fills what the
+// controls leave — so an unbounded editor that grew with the expression would
+// shrink the map, change vp_h, and re-key the raster demand (the same coupling
+// that keeps the progress row in renderControls on the button row instead of a
+// row of its own). Unpinned, a long expression re-fetches the raster on the
+// keystroke that adds a line.
+//
+// Measured through scripts/dev/play-screenshot-tour.sh (scene 05_map_custom_color):
+// with the pin in place the raster's top edge lands on the same y for the
+// default three-line expression and for one several times too tall for the
+// pane — the overflow scrolls inside it instead.
+const (
+	// Desired rows of the field itself — four, which is what egui's multiline
+	// default gave this control before it was a SQL field.
+	mapColorRows = 4
+	// Per-row allowance. A four-row field measured 64pt tall at Standard
+	// density, so ~14pt of row plus the TextEdit's own margins; 15 is that
+	// rounded up, so the Roomy density's larger row still fits.
+	mapColorRowH = 15.0
+	// The pinned pane height.
+	mapColorPaneH = mapColorRows*mapColorRowH + 8.0
+)
+
+// renderColorEditor draws the custom render's colour expression, folded behind
+// its own header and pinned to a fixed pane.
+//
+// Three things this shape buys over the bare field it replaces:
+//
+//   - Collapsible, so the expression can be written once and folded away; the
+//     panel's other controls are one-liners and a four-row editor between them
+//     is the clutter. DefaultOpen(true) because the block appears only when the
+//     Custom render is selected — selecting it and being shown nothing would
+//     read as a broken mode. egui persists the fold per id, so a user who
+//     collapses it keeps it collapsed.
+//   - A pane of fixed height, so a long expression scrolls inside it (see the
+//     consts above for why growth here is worse than untidy).
+//   - Infinite desired width, so the editor fills the panel rather than sitting
+//     at a fixed 420pt with the rest of the row empty.
+//
+// The height bound goes on the ui the ScrollArea is constructed IN, not inside
+// its body. egui sizes a scroll viewport from the available height at
+// construction; a set_max_height on the CONTENT ui re-bounds only the content,
+// which is the thing that was already free to grow. With the calls inside, a
+// five-row expression grew the pane to five rows — measured, not reasoned.
+//
+// Min as well as max: the max alone caps the pane, but the ScrollArea still
+// shrinks to a short expression, and the height the PANEL gives up is what the
+// map's vp_h is computed from. The min is what makes that constant. A short
+// expression therefore underfills its pane by a few points, which is the price.
+func (inst *MapDriver) renderColorEditor() {
+	for range c.CollapsingHeader(inst.ids.PrepareStr("map-color-hdr"),
+		c.WidgetText().Text("Colour expression").Keep()).
+		DefaultOpen(true).KeepIter() {
+		c.UiSetMinHeight(mapColorPaneH)
+		c.UiSetMaxHeight(mapColorPaneH)
+		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+			inst.colorField.Render(inst.ids, sqleditor.FieldFrame{
+				IDSlot: "map-color",
+				Value:  &inst.customColorSQL,
+				Rows:   mapColorRows,
+				Width:  float32(math.Inf(1)),
+			})
+		}
+	}
 }
 
 // renderModeCombo is the colour-mode picker (mirrors play_projection's
