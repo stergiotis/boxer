@@ -172,7 +172,7 @@ eframe = { version = "0.35", optional = true, default-features = false, features
 # picks up wgpu 30 (which rides on an egui major bump — see Cargo.toml's
 # `egui`/`eframe` deps).
 wgpu = { version = "29.0.1", optional = true }
-egui-wgpu = { version = "0.35.0", optional = true }
+egui-wgpu = { version = "0.36.1", optional = true }
 pollster = { version = "1.0", optional = true }
 # ADR-0024 SD4/SD6/SD7: WebSocket carrier + protobuf wire. The proto
 # contract lives at proto/boxer/imzero2/v1/input.proto; inputproto.rs
