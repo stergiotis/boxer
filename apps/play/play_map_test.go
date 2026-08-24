@@ -308,3 +308,49 @@ func TestMercatorInverseRoundTrip(t *testing.T) {
 		require.InDelta(t, tc.lat, mercYToLat(float64(y)), 1e-6, "lat %v", tc.lat)
 	}
 }
+
+func TestSanitizeTableFoldsLinesAndBlocksStatementBreakers(t *testing.T) {
+	// The Map's source editor is multi-line on demand, so a break is folded
+	// rather than refused; the three statement-breakers stay refusals, since
+	// they are what could carry the splice out of `FROM <src> WHERE …`.
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain identifier", "planes_mercator_sample100", "planes_mercator_sample100"},
+		{"qualified", "default.planes_mercator_sample100", "default.planes_mercator_sample100"},
+		{"surrounding space is trimmed", "  planes  ", "planes"},
+		{"empty", "", ""},
+		{"whitespace only", " \n\t ", ""},
+		{
+			"a table function written over several lines folds to one",
+			"merge(default,\n       '^planes_mercator_sample100$')",
+			"merge(default,        '^planes_mercator_sample100$')",
+		},
+		{"CRLF folds to ONE space", "merge(a,\r\n'b')", "merge(a, 'b')"},
+		{"leading break is folded then trimmed", "\nplanes\n", "planes"},
+		// The refusals. Each is checked AFTER the fold, so hiding one behind a
+		// line break does not get it through.
+		{"terminator", "planes; DROP TABLE x", ""},
+		{"terminator behind a break", "planes\n; DROP TABLE x", ""},
+		{"line comment", "planes -- rest of the line", ""},
+		{"line comment behind a break", "planes\n-- rest of the line", ""},
+		{"block comment", "planes /* x */", ""},
+		{"block comment behind a break", "planes\n/* x */", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, sanitizeTable(tc.in))
+		})
+	}
+}
+
+func TestSanitizeTableFoldCannotForgeAStatementBreaker(t *testing.T) {
+	// The fold inserts a SPACE, so it can only separate characters. Two dashes
+	// or a slash-star split by a line break must stay split, not become the
+	// comment opener the checks look for -- which is what makes folding before
+	// the checks safe rather than a hole in them.
+	require.Equal(t, "a- -b", sanitizeTable("a-\n-b"))
+	require.Equal(t, "a/ *b", sanitizeTable("a/\n*b"))
+}

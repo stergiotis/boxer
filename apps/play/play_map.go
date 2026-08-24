@@ -455,33 +455,53 @@ func (inst *MapDriver) renderControls() {
 	c.Label(inst.statusLine()).Send()
 }
 
+// mapTablePaneH caps the table-source editor. Six rows, against the colour
+// block's four, and it SHRINKS to its content where the colour pane is pinned —
+// the two controls want opposite things and the asymmetry is the point:
+//
+//   - A source is usually a table name, so a pinned pane would spend four rows
+//     of the panel on one word forever.
+//   - It is occasionally a formatted statement, so it must be allowed to grow.
+//   - The vp_h churn that growth causes, which is what pinned the colour pane,
+//     costs nothing here: editing the source changes the node TEMPLATE, which
+//     re-keys the raster demand by itself. The map re-fetches either way.
+const mapTableRows = 6
+
+var mapTablePaneH = float32(mapTableRows*mapColorRowH + 8.0)
+
 // renderTableEditor draws the raster's table source, folded behind its own
 // header.
 //
-// The source is a SQL fragment — a table name, a table function, and in
-// principle something long — so it gets the panel's full width rather than the
-// fixed 240pt it used to sit at, where a long one wrapped.
+// Multi-line on demand: it starts at one row, grows as the source does, and
+// stops at mapTablePaneH with the overflow scrolling inside the pane. That is
+// what [sqleditor.FieldFrame.MultiLine] buys over `Rows: 1` — a line break
+// becomes a character the user may type, so a subquery or a long table function
+// can be laid out readably instead of living on one unreadable line.
 //
-// It needs no pinned pane, unlike the colour editor beside it, and the
-// difference is worth stating rather than looking like an oversight: the field
-// is one row and [sqleditor.Field] now holds it there (no-wrap layout, newlines
-// folded), so there is no growth for a pane to bound. The bound moved into the
-// widget, which is where every other single-line SQL field in the app benefits
-// from it too. What a long source does here is scroll sideways inside its own
-// row, leaving the map below it exactly where it was.
+// The source is a SQL fragment, so it takes the panel's full width rather than
+// the fixed 240pt it used to sit at, where a long one wrapped into the map.
 //
-// This is the control that motivated the whole block: a pasted multi-line
-// source drew SEVEN rows tall at 240pt and squeezed the raster to 107px.
+// What the user types is what the editor keeps; sanitizeTable folds the breaks
+// back out on the way into the generated template, so the formatting is an
+// editing convenience and not a change to the SQL that runs.
 func (inst *MapDriver) renderTableEditor() {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("map-table-hdr"),
 		c.WidgetText().Text("Table source").Keep()).
 		DefaultOpen(true).KeepIter() {
-		inst.tableField.Render(inst.ids, sqleditor.FieldFrame{
-			IDSlot: "map-table",
-			Value:  &inst.table,
-			Hint:   "table, or a table function",
-			Width:  float32(math.Inf(1)),
-		})
+		// Max without a min, and vertical auto-shrink left ON: this pane is a
+		// CEILING, not a fixed size. Horizontal auto-shrink off, so the field
+		// fills the panel instead of hugging a short table name.
+		c.UiSetMaxHeight(mapTablePaneH)
+		for range c.ScrollArea().Vscroll(true).AutoShrink(false, true).KeepIter() {
+			inst.tableField.Render(inst.ids, sqleditor.FieldFrame{
+				IDSlot:    "map-table",
+				Value:     &inst.table,
+				Hint:      "table, or a table function",
+				Rows:      1,
+				MultiLine: true,
+				Width:     float32(math.Inf(1)),
+			})
+		}
 	}
 }
 
@@ -936,17 +956,40 @@ func clampDim(px float32) uint32 {
 // (remote / remoteSecure / url / file / merge / …) so the Map panel can read a
 // remote ClickHouse — e.g. adsb.exposed via
 // `remoteSecure('…:9440', default.planes_mercator_sample100, 'website', ”)`.
-// It blocks only statement-breakers (terminator, comment markers, newlines) so
-// the inlined source stays inside `FROM <src> WHERE …`. The playground already
+// It blocks only statement-breakers (terminator, comment markers) so the
+// inlined source stays inside `FROM <src> WHERE …`. The playground already
 // grants arbitrary SQL via the editor, so this is no new capability — just a
 // guard against accidental breakage. Returns "" for empty/invalid input.
+//
+// A newline is NOT a rejection any more: the panel's source editor is
+// multi-line on demand, so a source may legitimately be written over several
+// lines, and a line break is whitespace to SQL. It is folded to a space, which
+// keeps the generated template's FROM clause on one line rather than splicing
+// somebody's indentation into the middle of a WITH block.
+//
+// Folding before the checks is safe in the direction that matters: a break
+// becomes a SPACE, so it can only separate characters, never join two into a
+// `--` or a `/*` that was not already there.
 func sanitizeTable(s string) string {
-	s = strings.TrimSpace(s)
+	s = strings.TrimSpace(foldSourceLines(s))
 	if s == "" {
 		return ""
 	}
-	if strings.ContainsAny(s, ";\n\r") || strings.Contains(s, "--") || strings.Contains(s, "/*") {
+	if strings.Contains(s, ";") || strings.Contains(s, "--") || strings.Contains(s, "/*") {
 		return ""
 	}
 	return s
+}
+
+// foldSourceLines turns every line break in a table source into one space.
+// Deliberately not shared with the identically-shaped fold in sqleditor: that
+// one keeps a WIDGET one row tall, this one keeps generated SQL on one line,
+// and the two would drift apart the moment either grew a rule of its own.
+var sourceLineFolder = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
+
+func foldSourceLines(s string) string {
+	if !strings.ContainsAny(s, "\n\r") {
+		return s
+	}
+	return sourceLineFolder.Replace(s)
 }

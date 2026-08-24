@@ -258,20 +258,34 @@ LIMIT 500"
 }
 
 scene_05_map_long_source() {
-	desc="Map — a table source pasted in over several lines: the field is held to ONE row (ADR-0187 §SD7), so the raster keeps its height instead of being squeezed by a control that grew"
-	# The regression this scene exists for: the source field was nominally
-	# single-line, but the layouter that comes with its highlight job wrapped at
-	# the field's fixed 240pt, and a paste carries newlines past a singleline
-	# TextEdit's Enter handling. A source like this one drew SEVEN rows tall and
-	# left the raster 107px high. sanitizeTable then rejected it for the
-	# newlines, so it did not even work -- it only took the space.
+	desc="Map — a table source written over many lines (ADR-0187 §SD7): the editor is multi-line ON DEMAND, growing with the source and stopping at a six-row ceiling with the rest scrolled, while the raster below keeps its height"
+	# The regression this scene exists for, and the feature that replaced it.
 	#
-	# A table FUNCTION, so the fold is load-bearing in both directions: folded
-	# it is a valid source and the raster draws; unfolded it is rejected.
+	# The field was nominally single-line, but the layouter that comes with its
+	# highlight job wrapped at the field's fixed 240pt, and a paste carries
+	# newlines past a singleline TextEdit's Enter handling. A source like this
+	# drew as many rows as it had lines and left the raster 107px high --
+	# and sanitizeTable then REJECTED it for the newlines, so it did not even
+	# work: it only took the space.
+	#
+	# Now the height is a ceiling the panel chose rather than whatever the text
+	# happens to need, and the newlines are folded on the way into the template
+	# instead of refused. Deliberately taller than the six-row cap, so the shot
+	# shows the clip; deliberately still VALID, so it also shows the fold
+	# producing SQL that runs -- a capture of a syntax error would prove only
+	# half of it.
 	senv=(
 		BOXER_PLAY_FOCUS_MAP=1
-		"BOXER_PLAY_MAP_TABLE=merge(default,
-       '^planes_mercator_sample100$')"
+		"BOXER_PLAY_MAP_TABLE=merge(
+       default,
+
+
+
+       '^planes_mercator_sample100$'
+
+
+
+)"
 		BOXER_PLAY_MAP_CENTER=47.4,8.5
 		BOXER_PLAY_MAP_ZOOM=7
 	)
