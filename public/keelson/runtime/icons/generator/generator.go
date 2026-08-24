@@ -222,13 +222,21 @@ func NewCommand() *cli.Command {
 				err = eb.Build().Str("path", constsOut).Errorf("unable to create constsOut: %w", err)
 				return
 			}
-			defer constsW.Close()
+			defer func() {
+				if cerr := constsW.Close(); cerr != nil && err == nil {
+					err = eb.Build().Str("path", constsOut).Errorf("unable to close constsOut: %w", cerr)
+				}
+			}()
 			lookupW, err = os.Create(lookupOut)
 			if err != nil {
 				err = eb.Build().Str("path", lookupOut).Errorf("unable to create lookupOut: %w", err)
 				return
 			}
-			defer lookupW.Close()
+			defer func() {
+				if cerr := lookupW.Close(); cerr != nil && err == nil {
+					err = eb.Build().Str("path", lookupOut).Errorf("unable to close lookupOut: %w", cerr)
+				}
+			}()
 
 			err = gen.GenerateGo(constsW, lookupW, c.String("package"))
 			if err != nil {

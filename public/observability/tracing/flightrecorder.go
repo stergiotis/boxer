@@ -111,13 +111,17 @@ func writeFlightRecorderTrace(d string) {
 	} else {
 		var f *os.File
 		f, err = os.Create(d)
-		if f != nil {
-			defer f.Close()
-		}
 		if err != nil {
 			err = eb.Build().Str("path", d).Errorf("unable to open file for writing flight recorder output trace data: %w", err)
 		} else {
 			_, err = flightRecorder.WriteTo(f)
+			// Closed here rather than deferred: the log below reports the
+			// outcome, and a deferred close would run after it -- reporting a
+			// trace that failed to flush as one that was written.
+			cerr := f.Close()
+			if err == nil && cerr != nil {
+				err = eb.Build().Str("path", d).Errorf("unable to close flight recorder output trace file: %w", cerr)
+			}
 		}
 	}
 	if err == nil {

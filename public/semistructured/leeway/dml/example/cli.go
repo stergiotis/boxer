@@ -234,7 +234,7 @@ func NewCliCommand() *cli.Command {
 								Value: 32 * 1024 * 1024,
 							},
 						},
-						Action: func(context *cli.Context) error {
+						Action: func(context *cli.Context) (err error) {
 							sc := bufio.NewScanner(os.Stdin)
 							sc.Split(bufio.ScanLines)
 							maxInputJsonSize := context.Uint("maxInputJsonSize")
@@ -242,7 +242,13 @@ func NewCliCommand() *cli.Command {
 							sc.Buffer(make([]byte, 0, maxInputJsonSize), int(maxInputJsonSize))
 							dec := jsontext.NewDecoder(io.MultiReader())
 							out := bufio.NewWriter(os.Stdout)
-							defer out.Flush()
+							defer func() {
+								// The buffer holds the tail of the output; a
+								// failed flush is truncated JSON, not success.
+								if ferr := out.Flush(); ferr != nil && err == nil {
+									err = eh.Errorf("unable to flush output: %w", ferr)
+								}
+							}()
 							skipped := 0
 							passthrough := 0
 							for sc.Scan() {
@@ -280,7 +286,7 @@ func NewCliCommand() *cli.Command {
 									}
 								}
 							}
-							err := sc.Err()
+							err = sc.Err()
 							if errors.Is(err, io.EOF) {
 								err = nil
 							} else if err != nil {
@@ -310,7 +316,13 @@ func NewCliCommand() *cli.Command {
 					var schema *arrow.Schema
 					var w *ipc.FileWriter
 					stdoutBuf := bufio.NewWriter(os.Stdout)
-					defer stdoutBuf.Flush()
+					defer func() {
+						// Runs after the writer's Close below (defers are LIFO),
+						// so the footer is in the buffer by the time this flushes.
+						if ferr := stdoutBuf.Flush(); ferr != nil && err == nil {
+							err = eh.Errorf("unable to flush output: %w", ferr)
+						}
+					}()
 					allocator := memory.DefaultAllocator
 					const batchSize = 4096
 					ent := NewInEntityJson(allocator, 1)
@@ -335,7 +347,13 @@ func NewCliCommand() *cli.Command {
 						err = eh.Errorf("unable to create arrow ipc file writer: %w", err)
 						return
 					}
-					defer w.Close()
+					defer func() {
+						// Close writes the IPC footer; without its error a
+						// truncated file reports success.
+						if cerr := w.Close(); cerr != nil && err == nil {
+							err = eh.Errorf("unable to close arrow ipc file writer: %w", cerr)
+						}
+					}()
 					records := make([]arrow.RecordBatch, 0, 1)
 					lc := bytes.NewBuffer(make([]byte, 0, 4*4096))
 					hc := bytes.NewBuffer(make([]byte, 0, 4*4096))

@@ -1213,7 +1213,14 @@ func (inst *Driver) readListInnerUint64(rec arrow.RecordBatch, arrowColIdx int, 
 	case *array.Int64:
 		val = uint64(arr.Value(flatIdx))
 	default:
-		fmt.Sscanf(inner.ValueStr(flatIdx), "%d", &val)
+		// This reader has no error channel, and 0 is a valid reference, so a
+		// dropped scan error is a wrong id rather than a missing one. Warn in
+		// the shape the "should never get here" branch below already uses.
+		text := inner.ValueStr(flatIdx)
+		if _, serr := fmt.Sscanf(text, "%d", &val); serr != nil {
+			val = 0
+			log.Warn().Caller(0).Err(serr).Str("value", text).Msg("unable to parse list inner value as uint64")
+		}
 	}
 	return
 }

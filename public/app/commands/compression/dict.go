@@ -18,6 +18,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/identity/fibonaccicode"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v2"
 )
 
@@ -241,7 +242,7 @@ func NewDictCommand() *cli.Command {
 				Value: false,
 			},
 		},
-		Action: func(context *cli.Context) error {
+		Action: func(context *cli.Context) (err error) {
 			corpus, err := io.ReadAll(bufio.NewReader(os.Stdin))
 			if err != nil {
 				return err
@@ -281,7 +282,13 @@ func NewDictCommand() *cli.Command {
 			var fCleaned *os.File
 			fCleaned, err = os.Create("cleaned.txt")
 			if fCleaned != nil {
-				defer fCleaned.Close()
+				defer func() {
+					// The file is written to throughout the action below, so
+					// its close is where a short write surfaces.
+					if cerr := fCleaned.Close(); cerr != nil && err == nil {
+						err = eh.Errorf("unable to close cleaned.txt: %w", cerr)
+					}
+				}()
 			}
 			if err != nil {
 				return err

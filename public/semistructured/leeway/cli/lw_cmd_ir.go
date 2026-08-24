@@ -101,17 +101,25 @@ func NewCliCommandIr() *cli.Command {
 						schema := entity.GetSchema()
 						var w *ipc.FileWriter
 						w, err = ipc.NewFileWriter(os.Stdout, ipc.WithZstd(), ipc.WithAllocator(allocator), ipc.WithSchema(schema))
-						if w != nil {
-							defer w.Close()
-						}
 						if err != nil {
+							if w != nil {
+								_ = w.Close()
+							}
 							return eh.Errorf("unable to create file writer: %w", err)
 						}
 						for _, rec := range records {
 							err = w.Write(rec)
 							if err != nil {
+								_ = w.Close()
 								return eh.Errorf("unable to write record batch: %w", err)
 							}
+						}
+						// Not deferred: Close writes the IPC footer, so its error
+						// is what distinguishes a complete file from a truncated
+						// one that no reader will accept.
+						err = w.Close()
+						if err != nil {
+							return eh.Errorf("unable to close file writer: %w", err)
 						}
 					}
 					/*err = universal.FormatValue(context, ir)

@@ -115,7 +115,13 @@ func overwriteCodeAtMarker(candidateFiles []string, marker string, content strin
 			err = eb.Build().Str("path", foundFile).Errorf("unable to open rust file for writing: %w", err)
 			return
 		}
-		defer f.Close()
+		defer func() {
+			// The file was truncated on open, so a failed close leaves the rust
+			// source shorter than it was found.
+			if cerr := f.Close(); cerr != nil && err == nil {
+				err = eb.Build().Str("path", foundFile).Errorf("unable to close rust file: %w", cerr)
+			}
+		}()
 		var after string
 		lastidx := strings.LastIndex(b, epilog)
 		if lastidx >= 0 {

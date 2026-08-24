@@ -84,7 +84,13 @@ func newCliCommandCardInspect() *cli.Command {
 			}
 
 			out := bufio.NewWriter(os.Stdout)
-			defer out.Flush()
+			defer func() {
+				// The buffer holds the tail of the output; a failed flush is a
+				// truncated card, so it must not exit 0 silently.
+				if ferr := out.Flush(); ferr != nil && err == nil {
+					err = eh.Errorf("unable to flush output: %w", ferr)
+				}
+			}()
 			var sink streamreadaccess.SinkI
 			{
 				format := context.String("cardFormat")

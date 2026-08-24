@@ -91,10 +91,16 @@ func (tp *TreeProcessor) ProcessTree(ctx context.Context, srcFS fs.FS, pattern s
 		if err != nil {
 			return eb.Build().Str("path", fpath).Errorf("failed to write output: %w", err)
 		}
-		defer w.Close()
 		_, err = buf.WriteTo(w)
 		if err != nil {
+			_ = w.Close()
 			return eh.Errorf("unable to use writer: %w", err)
+		}
+		// Not deferred: writerFn's WriteCloser may buffer, so Close is where a
+		// short write surfaces. Dropping it reports a truncated stub as written.
+		err = w.Close()
+		if err != nil {
+			return eb.Build().Str("path", fpath).Errorf("failed to close output file: %w", err)
 		}
 
 		return nil
