@@ -257,6 +257,30 @@ LIMIT 500"
 	settle=4000
 }
 
+scene_05_map_long_source() {
+	desc="Map — a table source pasted in over several lines: the field is held to ONE row (ADR-0187 §SD7), so the raster keeps its height instead of being squeezed by a control that grew"
+	# The regression this scene exists for: the source field was nominally
+	# single-line, but the layouter that comes with its highlight job wrapped at
+	# the field's fixed 240pt, and a paste carries newlines past a singleline
+	# TextEdit's Enter handling. A source like this one drew SEVEN rows tall and
+	# left the raster 107px high. sanitizeTable then rejected it for the
+	# newlines, so it did not even work -- it only took the space.
+	#
+	# A table FUNCTION, so the fold is load-bearing in both directions: folded
+	# it is a valid source and the raster draws; unfolded it is rejected.
+	senv=(
+		BOXER_PLAY_FOCUS_MAP=1
+		"BOXER_PLAY_MAP_TABLE=merge(default,
+       '^planes_mercator_sample100$')"
+		BOXER_PLAY_MAP_CENTER=47.4,8.5
+		BOXER_PLAY_MAP_ZOOM=7
+	)
+	sql="SELECT icao, lat, lon, altitude, ground_speed
+FROM default.planes_mercator_sample100
+LIMIT 500"
+	settle=4000
+}
+
 scene_05_map_custom_color() {
 	desc="Map — the Custom render's colour expression (ADR-0096 §SD6): the editor folded behind its own header, filling the panel width, and pinned to a fixed pane so a long expression scrolls inside it rather than shrinking the raster under it"
 	senv=(

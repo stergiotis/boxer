@@ -408,17 +408,10 @@ func (inst *MapDriver) cancelFetch() {
 }
 
 func (inst *MapDriver) renderControls() {
+	inst.renderTableEditor()
 	for range c.Horizontal().KeepIter() {
-		c.Label("table").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
-		inst.tableField.Render(inst.ids, sqleditor.FieldFrame{
-			IDSlot: "map-table",
-			Value:  &inst.table,
-			Width:  240,
-		})
 		c.SliderF64(inst.ids.PrepareStr("map-sampling"), inst.sampling, 1, 100).
 			Text("sampling").SendRespVal(&inst.sampling)
-	}
-	for range c.Horizontal().KeepIter() {
 		inst.renderModeCombo()
 	}
 	if builtinRenders[inst.renderIdx].custom {
@@ -460,6 +453,36 @@ func (inst *MapDriver) renderControls() {
 		}
 	}
 	c.Label(inst.statusLine()).Send()
+}
+
+// renderTableEditor draws the raster's table source, folded behind its own
+// header.
+//
+// The source is a SQL fragment — a table name, a table function, and in
+// principle something long — so it gets the panel's full width rather than the
+// fixed 240pt it used to sit at, where a long one wrapped.
+//
+// It needs no pinned pane, unlike the colour editor beside it, and the
+// difference is worth stating rather than looking like an oversight: the field
+// is one row and [sqleditor.Field] now holds it there (no-wrap layout, newlines
+// folded), so there is no growth for a pane to bound. The bound moved into the
+// widget, which is where every other single-line SQL field in the app benefits
+// from it too. What a long source does here is scroll sideways inside its own
+// row, leaving the map below it exactly where it was.
+//
+// This is the control that motivated the whole block: a pasted multi-line
+// source drew SEVEN rows tall at 240pt and squeezed the raster to 107px.
+func (inst *MapDriver) renderTableEditor() {
+	for range c.CollapsingHeader(inst.ids.PrepareStr("map-table-hdr"),
+		c.WidgetText().Text("Table source").Keep()).
+		DefaultOpen(true).KeepIter() {
+		inst.tableField.Render(inst.ids, sqleditor.FieldFrame{
+			IDSlot: "map-table",
+			Value:  &inst.table,
+			Hint:   "table, or a table function",
+			Width:  float32(math.Inf(1)),
+		})
+	}
 }
 
 // Geometry of the custom-colour editor's pane.
