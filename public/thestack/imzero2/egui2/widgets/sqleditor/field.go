@@ -30,12 +30,28 @@ type FieldFrame struct {
 	// nothing and needs no disarming. Above one selects the multi-line form,
 	// which wraps.
 	//
-	// A one-row field is kept one row whatever it is given, which costs the
+	// A single-line field is kept one row whatever it is given, which costs the
 	// embedder one thing worth knowing: [Field.Render] REWRITES a bound value
 	// carrying newlines, folding them to spaces. A single-line control holding
 	// a value it cannot show is the worse of the two surprises — see the
 	// no-wrap note in Render.
 	Rows uint32
+	// MultiLine selects egui's multi-line form independently of Rows, so a
+	// field can START at one row and grow with what it holds. Rows above one
+	// implies it.
+	//
+	// The two are separate because they answer different questions: Rows is how
+	// tall the control starts, MultiLine is whether a line break is a character
+	// the user may type at all. `Rows: 1, MultiLine: true` is the on-demand
+	// shape — a control that is usually a name and occasionally a formatted
+	// statement.
+	//
+	// Nothing here bounds a multi-line field's height: it sizes to
+	// max(Rows, content), so an embedder that cannot afford unbounded growth
+	// must cap it, and cap it on the ui the ScrollArea is built in rather than
+	// inside one (play's Map panel has both shapes, and the note there says
+	// why).
+	MultiLine bool
 	// Width is the desired width in points; zero leaves egui's default. A
 	// positive infinity is egui's fill idiom — the field takes the available
 	// width of whatever it is laid out in, which is what an embedder wants when
@@ -85,8 +101,9 @@ func (inst *Field) Render(ids *c.WidgetIdStack, f FieldFrame) {
 	if rows == 0 {
 		rows = 1
 	}
-	// A one-row field is a LINE, and is held to one however the text arrived.
-	// Two things can otherwise make it taller, and neither is egui misbehaving:
+	// A SINGLE-LINE field is a line, and is held to one however the text
+	// arrived. Two things can otherwise make it taller, and neither is egui
+	// misbehaving:
 	//
 	//   - The layouter installed with the highlight job wraps at the widget's
 	//     width. egui's own singleline rule (lay out at infinite width, scroll
@@ -101,7 +118,10 @@ func (inst *Field) Render(ids *c.WidgetIdStack, f FieldFrame) {
 	// Measured before this: play's Map panel took a multi-line table source
 	// into a 240pt-wide one-row field and drew it SEVEN rows tall, which ate
 	// the map underneath it.
-	if rows == 1 {
+	// Rows above one has always meant the multi-line form; MultiLine says so
+	// without also making the control start tall.
+	multiline := f.MultiLine || rows > 1
+	if !multiline {
 		if folded := foldNewlines(view); folded != view {
 			view = folded
 			*f.Value = folded
@@ -112,12 +132,12 @@ func (inst *Field) Render(ids *c.WidgetIdStack, f FieldFrame) {
 	// released rather than inherited: a field is a CONTROL in a strip, not a
 	// document, so Tab has to reach the control beside it. [Editor] keeps the
 	// capture because there an indent is part of the text being written.
-	b := c.TextEdit(ids.PrepareStr(f.IDSlot), view, rows > 1).
+	b := c.TextEdit(ids.PrepareStr(f.IDSlot), view, multiline).
 		CodeEditor().
 		LockFocus(false).
 		DesiredRows(rows).
 		HintText(f.Hint)
-	if rows == 1 {
+	if !multiline {
 		b = b.NoWrapLayout()
 	}
 	if f.Width > 0 {
