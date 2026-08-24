@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-08-23T12:39:03Z
+generated-at: 2026-08-24T07:31:41Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -118,7 +118,7 @@ generated-at: 2026-08-23T12:39:03Z
 | `IDS_PALETTE_SEQUENTIAL` | categorial-string | `batlow` | — |  | user-default sequential palette for ordered-data charts (boxenplot, treemap, heatmap). All values in the IDS catalogue are perceptually uniform and CVD-safe; the choice is aesthetic. Overridden by IDS_ACCESSIBILITY when that is non-default.<br>**Allowed:** `batlow` \| `lapaz` \| `oslo` \| `lajolla` \| `viridis` \| `magma` \| `plasma` \| `inferno` \| `batlow_k` \| `gray_c` |
 | `IMZERO2_ALLOW_NETWORK` | string | — | — |  | set to "1" to allow demo widgets to fetch external resources |
 | `IMZERO2_CLIENT_BINARY` | path | — | `--clientBinary` |  | path to the imzero2 GUI client the host launches; empty speaks the command protocol on stdin/stdout instead of opening a window |
-| `IMZERO2_DENSITY` | string | — | — |  | IDS density preset (tight\|standard\|roomy) at launch, switchable at runtime via Layout ▸ Density; empty defaults to standard |
+| `IMZERO2_DENSITY` | string | — | — |  | IDS density preset (tight\|standard\|roomy) at launch, switchable at runtime via the Layout > Density menu; empty defaults to standard |
 | `IMZERO2_FFMPEG_BIN` | path | — | — |  | explicit path to the ffmpeg binary the headless encoder and lane probe spawn; empty uses the PATH lookup |
 | `IMZERO2_HEADLESS` | string | — | — |  | dual-feature builds only: 1 or on selects the headless host at runtime; ignored in single-host builds |
 | `IMZERO2_HEADLESS_CODEC` | categorial-string | `h264` | — |  | startup stream lane: h264 (default; honours ENCODER_ARGS) \| vp9 \| av1 \| av1-444 (AV1 4:4:4) \| mesh (ADR-0128 draw-stream, WebGL2 viewer); runtime-switchable from the Go control<br>**Allowed:** `h264` \| `vp9` \| `av1` \| `av1-444` \| `mesh` |

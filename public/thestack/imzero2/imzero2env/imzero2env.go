@@ -100,7 +100,7 @@ var (
 	// back here.
 	Density = env.NewString(env.Spec{
 		Name:        "IMZERO2_DENSITY",
-		Description: "IDS density preset (tight|standard|roomy) at launch, switchable at runtime via Layout ▸ Density; empty defaults to standard",
+		Description: "IDS density preset (tight|standard|roomy) at launch, switchable at runtime via the Layout > Density menu; empty defaults to standard",
 		Category:    env.CategoryDev,
 	})
 
