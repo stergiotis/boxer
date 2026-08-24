@@ -321,6 +321,7 @@ func (st *portolanDemoState) camera() {
 	if ll, ok := m.Hover(); ok {
 		c.Label(fmt.Sprintf("hover      : %.5f, %.5f", ll.Lat, ll.Lng)).Send()
 	} else {
+		// designlint:ignore=L1 (aligned readout key; the Sprintf-built siblings above carry the same lowercase keys)
 		c.Label("hover      : —").Send()
 	}
 	if ll, ok := m.Clicked(); ok {

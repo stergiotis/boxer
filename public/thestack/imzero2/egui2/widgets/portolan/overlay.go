@@ -1,6 +1,7 @@
 package portolan
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
@@ -27,7 +28,7 @@ const smoothFactor = 1.0
 func (p Projector) Marker(ll LatLng, radius float32, col color.Color) {
 	at := p.ToCanvas(ll)
 	c.PaintCircleFilled(float32(at.X), float32(at.Y), radius, col).Send()
-	c.PaintCircleStroke(float32(at.X), float32(at.Y), radius, color.Hex(0x00000080), 1).Send()
+	c.PaintCircleStroke(float32(at.X), float32(at.Y), radius, color.Hex(0x00000080), styletokens.StrokeHair).Send()
 }
 
 // Label paints text anchored at a geographic point, offset by dx, dy pixels;

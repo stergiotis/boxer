@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
@@ -457,7 +458,7 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 	}
 	if r, ok := m.box.rect(); ok {
 		c.PaintRectFilled(float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y), 0, color.Hex(0xffffff40)).Send()
-		c.PaintRectStroke(float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y), 0, color.Hex(0x3388ffff), 2).Send()
+		c.PaintRectStroke(float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y), 0, color.Hex(0x3388ffff), styletokens.StrokeStrong).Send()
 	}
 	if !m.opts.HideAttribution && !m.opts.NoTiles && m.opts.Source.Attribution != "" {
 		m.paintAttribution(w, h)
