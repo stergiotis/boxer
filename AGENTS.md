@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-07-19
+reviewed-date: 2026-08-24
 ---
 
 # AGENTS.md
@@ -27,6 +27,7 @@ the linked document wins.
 | See *why* the architecture is the way it is | [doc/adr/](./doc/adr/) |
 | Read the analysis behind a decision — surveys, measurements, costed options | [doc/adr-background-work/](./doc/adr-background-work/) |
 | Run a trial — a reproducible measurement protocol repeated across builds | [doc/trials/](./doc/trials/) |
+| **Quote a performance number from a trial** | that trial's README **§0**, never a table under `runs/` — see [doc/trials § Citing a trial](./doc/trials/README.md#citing-a-trial) |
 | Configure behaviour via env vars | [doc/env-vars.md](./doc/env-vars.md) |
 | Run a task end to end | [doc/howto/](./doc/howto/) |
 | Persist a new kind of fact to `boxer.facts` | [doc/explanation/facts-bound-record-stores.md](./doc/explanation/facts-bound-record-stores.md) |
@@ -99,6 +100,22 @@ Repo docs are **descriptive and humble**. No taglines, manifestos, self-praise,
 or quality claims ("robust", "comprehensive", "production-grade"). Lead with the
 caveat; prefer retracting an overstatement to hedging it. Match the surrounding
 document's tone.
+
+## Measurement claims
+
+Trial numbers are the most mis-quoted content in this repository, because a
+ratio survives being extracted from its page and its conditions do not. Before
+repeating any figure from [doc/trials/](./doc/trials/):
+
+- Quote the trial README's **§0 citable claim**, which states the condition
+  the figure holds under. Tables under `runs/` are per-arm evidence.
+- **No figure travels without the pair of arms it compares.** Several arms in
+  these trials deliberately measure a *mistake* — a wrong read path, a missing
+  declaration — and their numbers are not the system's cost.
+- Superseded figures are deleted rather than annotated, so a number still in
+  the tree is meant to be there; one you find in git history is not.
+
+Full rules: [doc/trials § Citing a trial](./doc/trials/README.md#citing-a-trial).
 
 ## Privacy — this repo is public
 

@@ -1,4 +1,4 @@
--- The leeway half of the head-to-head in leeway-usp-experiments.md.
+-- The leeway half of the head-to-head in README.md §6.
 -- Run against the canonical leeway JSON mapping table, handles expanded by
 -- `jsonbench resolve`. The jsonv2 half is queries-usp-jsonv2.sql; the two files
 -- are matched statement for statement, U1..U9.

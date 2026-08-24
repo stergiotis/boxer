@@ -84,7 +84,7 @@ for f in $(ls "$DATA"/*.json.gz | head -n "$TIER"); do
   gunzip -c "$f" > "$u"
   # Note: the gunzip above is outside the timed section, matching upstream —
   # so this wall clock is not comparable with the facts arms', which
-  # decompress inline. results.md says so where the numbers are reported.
+  # decompress inline. README §5 says so where the numbers are reported.
   #
   # The retry is upstream's, not an embellishment (upstream/PIN.md § Run
   # discipline). Under `max_dynamic_paths = 0` the JSON type rejects

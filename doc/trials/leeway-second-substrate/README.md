@@ -40,7 +40,7 @@ exploration queries, measured — and it runs on exactly one substrate.
    ClickHouse-shaped, and how much code is written on the way? The artifacts
    are committed and counted; every escape hatch is a finding, not a fix.
 2. **Does the USP verdict survive a change of engine?** The sibling trial's
-   [USP experiments](../jsonbench-on-facts/leeway-usp-experiments.md) put the
+   [USP experiments](../jsonbench-on-facts/README.md) (§6) put the
    leeway shape head-to-head against ClickHouse's `JSON` type over nine
    queries and concluded: *a JSON column is fast when the path is in the
    query, a leeway table is fast when the path is in the data.* That thesis
@@ -94,7 +94,7 @@ re-derived here; if the sibling's pin moves, this trial's numbers move with it
 and the logbook must say so.
 
 The USP set's design and its ClickHouse-side results are in
-[leeway-usp-experiments.md](../jsonbench-on-facts/leeway-usp-experiments.md);
+[jsonbench-on-facts §6](../jsonbench-on-facts/README.md);
 this trial re-runs the leeway half on other engines and re-poses the JSON half,
 because the counterpart of ClickHouse's `JSON` type is a different object on
 each target (§3b, arm N).

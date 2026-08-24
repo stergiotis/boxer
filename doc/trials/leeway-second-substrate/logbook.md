@@ -657,11 +657,11 @@ leeway-written file has to cast every path lane before it can ask them.
   from the same ten source files, against the leeway arms' 9,999,994.
 - **Environment:** as M0; hot = min(try 2, try 3) of 3, cold absent.
 - **Attempted:** the arm H5 turns on. The sibling trial's
-  [USP experiments](../jsonbench-on-facts/leeway-usp-experiments.md) argue *a
+  [USP experiments](../jsonbench-on-facts/README.md) (§6) argue *a
   JSON column is fast when the path is in the query, a leeway table is fast
   when the path is in the data*, and rest that on two structural facts about
   ClickHouse's `JSON` type: an enumerated path cannot be used to **read** the
-  column (§2a), and enumeration stops at an array (§2b). This arm re-poses the
+  column, and enumeration stops at an array (both in its §6a). This arm re-poses the
   head-to-head on an engine with a different JSON type, in the two shapes
   DuckDB actually offers.
 

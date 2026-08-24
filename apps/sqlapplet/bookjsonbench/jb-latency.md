@@ -1,13 +1,13 @@
 ---
 type: reference
 audience: end-user
-status: draft
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-24
 title: JSONBench latency by arm
 icon: "⏱️"
 tabs: [table]
 ---
-
-> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
 # JSONBench latency by arm
 

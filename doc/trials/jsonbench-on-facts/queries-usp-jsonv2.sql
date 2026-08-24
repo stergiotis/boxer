@@ -1,4 +1,4 @@
--- The jsonv2 half of the head-to-head in leeway-usp-experiments.md, matched
+-- The jsonv2 half of the head-to-head in README.md §6, matched
 -- statement for statement with queries-usp-leeway.sql (U1..U9). Run against the
 -- A00 reference — plain `JSON`, engine defaults, ORDER BY tuple().
 --

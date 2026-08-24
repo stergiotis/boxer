@@ -68,5 +68,6 @@ exercised in this run.
 4. **No comparison table was loaded.** This run measures what the canonical
    mapping costs and what it can express; it does not re-measure ClickHouse's
    native JSON type. Ratios against arms A/A0/A00/B are taken from the
-   [10M run](../2026-08-06-m4-10m/results.md) and are therefore **cross-tier**
+   [10M run](../2026-08-06-m4-10m/) (as summarised in
+   [README §5](../../README.md)) and are therefore **cross-tier**
    wherever this run reports 100M numbers — they are labelled where used.

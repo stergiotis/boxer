@@ -44,7 +44,7 @@ drop_caches() {
 # --oneline -n` does the normalisation, so query files can be written to be
 # read — multi-line, indented, commented — instead of as single 2,000-character
 # lines the runner loop happens to need. (Borrowed from the prior-art harness;
-# see runs/2026-08-05-m0-m3-1m/prior-art.md.)
+# see the 2026-08-05 logbook entry.)
 #
 # RESOLVE, when set to a `jsonbench` binary, first expands leeway column
 # handles (`symbol:value`) to physical names via ADR-0116's ResolveColumnNames
