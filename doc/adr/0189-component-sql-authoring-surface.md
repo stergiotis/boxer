@@ -554,11 +554,11 @@ Every `Filter` splice is now wrapped, at a call site and in the injection alike.
 The `Projection` is unchanged: it is a single `CAST` call, so it is
 self-delimiting wherever it lands.
 
-Found while scoping [ADR-0193](./0193-component-survey-and-cooccurrence.md),
-which puts filters into arbitrary expression contexts (`toUInt8(…)`,
-`countIf(… AND …)`) rather than only into a `WHERE`, and so meets this
-routinely. It is a defect in this ADR's surface, not that one's, and is fixed
-separately.
+Found while scoping ADR-0193 (component survey and co-occurrence — proposed,
+not yet written), which puts filters into arbitrary expression contexts
+(`toUInt8(…)`, `countIf(… AND …)`) rather than only into a `WHERE`, and so
+meets this routinely. It is a defect in this ADR's surface, not that one's,
+and is fixed separately.
 
 No `LW_` name, artefact or registry changes shape. The sysmetrics expansion
 golden moves by three lines — the injected `WHERE` gains its parentheses — which
