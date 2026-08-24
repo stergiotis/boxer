@@ -31,6 +31,10 @@
 #   - the demo fixtures the scenes read — see fixtures() below, and
 #     `PLAYSHOT_CHECK_FIXTURES=0` to run anyway with the misses rendering as
 #     error states (which are themselves worth a screenshot)
+#   - a headless Rust client that can RASTERIZE — build_rust_headless.sh (wgpu)
+#     or build_rust_headless_soft.sh (CPU, no GPU). The lean mesh-only build
+#     cannot capture; see the capability guard below, which says so out loud
+#     rather than letting the first capture time out
 #   - no display, no compositor, no browser
 set -uo pipefail
 
@@ -1847,13 +1851,42 @@ if [[ "$BUILD" == 1 ]]; then
 	# The HEADLESS client: it links no window system, which is what lets this
 	# tour run with no compositor. Built by rust/imzero2/build_rust_headless.sh
 	# into its own target dir, separate from the desktop build.
-	[[ -x "$root/rust/imzero2/target/headless/release/imzero2" ]] ||
-		die "no headless client at rust/imzero2/target/headless/release/imzero2 — run rust/imzero2/build_rust_headless.sh"
+	#
+	# It must be a client that can RASTERIZE. Every scene ends in a capture, and
+	# a capture is a PNG the host writes itself — which the lean mesh-only
+	# appliance build (ADR-0128 SD6, build_rust_headless_mesh.sh) cannot do at
+	# all: it carries the draw-stream lane and no pixel path. That build lands
+	# at the SAME target/headless/release path when someone runs cargo there by
+	# hand, and what it produces here is "timed out waiting for the carrier" on
+	# the first capture — a build problem wearing a scene problem's clothes,
+	# which is what this guard exists to stop.
+	#
+	# Identified by the banner only the no-raster build logs. The software
+	# raster host is the fallback rather than a hard failure: it is GPU-less,
+	# so it works wherever this tour does, and picking it is announced, because
+	# WHICH binary produced a capture is the one thing that must not be silent.
+	client_src="$root/rust/imzero2/target/headless/release/imzero2"
+	client_soft="$root/rust/imzero2/target/headless-soft/release/imzero2"
+	no_raster() { [[ -x "$1" ]] && grep -qa 'mesh-only appliance host' "$1"; }
+	if [[ ! -x "$client_src" ]] || no_raster "$client_src"; then
+		why="missing"
+		no_raster "$client_src" && why="the mesh-only build, which cannot rasterize"
+		if [[ -x "$client_soft" ]] && ! no_raster "$client_soft"; then
+			log "NOTE: $client_src is $why"
+			log "      falling back to the software-raster client: $client_soft"
+			client_src="$client_soft"
+		else
+			die "no headless client that can capture: $client_src is $why.
+       Build a pixel host — rust/imzero2/build_rust_headless.sh (wgpu, needs a
+       GPU) or rust/imzero2/build_rust_headless_soft.sh (CPU, no GPU needed) —
+       or point PLAYSHOT_CLIENT at one."
+		fi
+	fi
 	# -p preserves the mtime, which the staleness guard below compares against.
 	# Without it the copy is stamped NOW, is therefore newer than any codegen,
 	# and the guard can never fire — which is how a stale client reached a tour
 	# silently on 2026-08-05 and read as a panel bug for half an hour.
-	cp -fp "$root/rust/imzero2/target/headless/release/imzero2" "$BIN/imzero2" ||
+	cp -fp "$client_src" "$BIN/imzero2" ||
 		die "cannot copy the headless client"
 	# Staleness guard. The Go host is rebuilt from the tree just above; the
 	# Rust client is not, and a client older than the last egui2 codegen
