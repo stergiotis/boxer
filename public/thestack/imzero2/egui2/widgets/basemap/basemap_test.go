@@ -52,9 +52,8 @@ func TestOpenStreetMapDefaults(t *testing.T) {
 
 // TestTLSKnobsDefaultToVerifiedPublicRoots pins the safe default: with nothing
 // set, neither TLS knob is on, so a basemap fetches under ordinary certificate
-// verification. Apply gates both on BOXER_MAP_TILE_URL as well, which this
-// cannot observe through the fluid — that gating is asserted by reading
-// PortolanLoader, which applies it.
+// verification. This covers the specs themselves; the BOXER_MAP_TILE_URL
+// gating on top of them is TestPortolanLoaderGatesOnConfiguredURL below.
 func TestTLSKnobsDefaultToVerifiedPublicRoots(t *testing.T) {
 	if TileInsecureTLS.Get() {
 		t.Fatalf("BOXER_MAP_TILE_INSECURE_TLS defaults to true; verification must be on unless asked")
@@ -97,5 +96,57 @@ func TestClampMaxZoom(t *testing.T) {
 			t.Errorf("clampMaxZoom(%d) = (%d, %t); want (%d, %t)",
 				tc.in, zoom, set, tc.wantZoom, tc.wantSet)
 		}
+	}
+}
+
+// TestPortolanLoaderGatesOnConfiguredURL is the assertion the comment on
+// TestTLSKnobsDefaultToVerifiedPublicRoots used to promise and never made: the
+// TLS knobs reach the loader only once BOXER_MAP_TILE_URL names a server. Both
+// are set here and must still come out inert, because the URL in effect is the
+// OpenStreetMap default — the case where honouring them would disable
+// certificate verification against a public host on the strength of a stray
+// environment variable.
+func TestPortolanLoaderGatesOnConfiguredURL(t *testing.T) {
+	TileCAFile.SetForTest(t, "/etc/ssl/gis-ca.pem")
+	TileInsecureTLS.SetForTest(t, "1")
+
+	// BOXER_MAP_TILE_URL unset: the default OSM server is in effect, so
+	// neither knob applies however loudly the environment asks.
+	if Configured() {
+		t.Fatalf("Configured() = true with BOXER_MAP_TILE_URL unset; the rest of this test is meaningless")
+	}
+	opts := PortolanLoader()
+	if opts.InsecureTLS {
+		t.Errorf("PortolanLoader().InsecureTLS = true with BOXER_MAP_TILE_URL unset; the OSM default must not be downgradable")
+	}
+	if opts.CAFile != "" {
+		t.Errorf("PortolanLoader().CAFile = %q with BOXER_MAP_TILE_URL unset; want empty", opts.CAFile)
+	}
+
+	// Whitespace-only is unset too — the same predicate Configured uses.
+	TileURL.SetForTest(t, "   ")
+	if opts := PortolanLoader(); opts.InsecureTLS || opts.CAFile != "" {
+		t.Errorf("PortolanLoader() = %+v with whitespace-only BOXER_MAP_TILE_URL; want the zero options", opts)
+	}
+
+	// A named server: now both knobs land on the loader options.
+	TileURL.SetForTest(t, "https://mygis.internal/{z}/{x}/{y}.png")
+	opts = PortolanLoader()
+	if !opts.InsecureTLS {
+		t.Errorf("PortolanLoader().InsecureTLS = false with BOXER_MAP_TILE_URL set; the knob never reaches the loader")
+	}
+	if opts.CAFile != "/etc/ssl/gis-ca.pem" {
+		t.Errorf("PortolanLoader().CAFile = %q; want /etc/ssl/gis-ca.pem", opts.CAFile)
+	}
+}
+
+// TestPortolanLoaderTrimsCAFile pins the trim on the path: an env var edited
+// by hand or through a YAML block picks up trailing whitespace easily, and a
+// path with a stray space is a CA file that silently does not load.
+func TestPortolanLoaderTrimsCAFile(t *testing.T) {
+	TileURL.SetForTest(t, "https://mygis.internal/{z}/{x}/{y}.png")
+	TileCAFile.SetForTest(t, "  /etc/ssl/gis-ca.pem\n")
+	if got := PortolanLoader().CAFile; got != "/etc/ssl/gis-ca.pem" {
+		t.Errorf("PortolanLoader().CAFile = %q; want the trimmed path", got)
 	}
 }

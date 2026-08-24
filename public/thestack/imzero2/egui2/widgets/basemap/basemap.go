@@ -20,6 +20,12 @@
 // would disable certificate verification against tile.openstreetmap.org, which
 // is exactly the connection nobody has any business weakening. Neither knob
 // applies until a deployment names its own server.
+//
+// The two are not the same size. BOXER_MAP_TILE_CA_FILE moves the trust anchor
+// and leaves everything else alone; BOXER_MAP_TILE_INSECURE_TLS stops
+// authenticating the peer, and so also lowers the protocol floor to TLS 1.0
+// and admits the legacy cipher suites, which is what makes it usable against
+// the old appliance it exists for. Prefer the CA file.
 package basemap
 
 import (
@@ -91,7 +97,7 @@ var (
 
 	TileInsecureTLS = env.NewBool(env.Spec{
 		Name:        "BOXER_MAP_TILE_INSECURE_TLS",
-		Description: "disable TLS certificate verification for BOXER_MAP_TILE_URL tile requests. Accepts any certificate, so it also accepts an interceptor's: use it only against a tile server you control on a trusted network, and prefer BOXER_MAP_TILE_CA_FILE. Ignored unless BOXER_MAP_TILE_URL is set explicitly — it never applies to the default OpenStreetMap server.",
+		Description: "disable TLS certificate verification for BOXER_MAP_TILE_URL tile requests. Accepts any certificate, so it also accepts an interceptor's: use it only against a tile server you control on a trusted network, and prefer BOXER_MAP_TILE_CA_FILE. Also drops the protocol floor to TLS 1.0 and admits the legacy cipher suites (static-RSA key exchange, 3DES, RC4), so an old server is reachable rather than failing on version or cipher negotiation — once the peer is unauthenticated neither one protects anything. Ignored unless BOXER_MAP_TILE_URL is set explicitly — it never applies to the default OpenStreetMap server.",
 		Category:    env.CategoryE("boxer-map"),
 	})
 )

@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-08-24T07:31:41Z
+generated-at: 2026-08-24T12:37:14Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -32,7 +32,7 @@ generated-at: 2026-08-24T07:31:41Z
 | `BOXER_MAP_TILE_ATTRIBUTION` | string | `OpenStreetMap contributors` | — |  | attribution/credit line rendered over the basemap; empty shows none. Defaults to OpenStreetMap's required credit, which stays correct for a mirror of OSM tiles — a different tile source needs whatever credit line its terms of use require. |
 | `BOXER_MAP_TILE_ATTRIBUTION_URL` | string | `https://www.openstreetmap.org/copyright` | — |  | link target behind BOXER_MAP_TILE_ATTRIBUTION; empty renders the credit as plain text. Defaults to the OpenStreetMap copyright page. |
 | `BOXER_MAP_TILE_CA_FILE` | path | — | — |  | path to a PEM certificate bundle added to the trust roots when fetching from BOXER_MAP_TILE_URL, for a tile server behind an internal CA; certificate verification stays on. Must hold the issuing CA — a bare self-signed server certificate is not accepted as its own trust anchor, and needs BOXER_MAP_TILE_INSECURE_TLS instead. Ignored unless BOXER_MAP_TILE_URL is set explicitly, and superseded by BOXER_MAP_TILE_INSECURE_TLS. |
-| `BOXER_MAP_TILE_INSECURE_TLS` | bool | — | — |  | disable TLS certificate verification for BOXER_MAP_TILE_URL tile requests. Accepts any certificate, so it also accepts an interceptor's: use it only against a tile server you control on a trusted network, and prefer BOXER_MAP_TILE_CA_FILE. Ignored unless BOXER_MAP_TILE_URL is set explicitly — it never applies to the default OpenStreetMap server. |
+| `BOXER_MAP_TILE_INSECURE_TLS` | bool | — | — |  | disable TLS certificate verification for BOXER_MAP_TILE_URL tile requests. Accepts any certificate, so it also accepts an interceptor's: use it only against a tile server you control on a trusted network, and prefer BOXER_MAP_TILE_CA_FILE. Also drops the protocol floor to TLS 1.0 and admits the legacy cipher suites (static-RSA key exchange, 3DES, RC4), so an old server is reachable rather than failing on version or cipher negotiation — once the peer is unauthenticated neither one protects anything. Ignored unless BOXER_MAP_TILE_URL is set explicitly — it never applies to the default OpenStreetMap server. |
 | `BOXER_MAP_TILE_MAX_ZOOM` | int64 | `19` | — |  | highest zoom level served by BOXER_MAP_TILE_URL (1..255); 0 keeps the widget default. Defaults to 19, which is what OpenStreetMap serves. |
 | `BOXER_MAP_TILE_URL` | string | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | — |  | XYZ tile-server URL template for slippy-map basemaps, e.g. "http://mygis/{z}/{x}/{y}.png"; must contain the {z}/{x}/{y} placeholders. Defaults to OpenStreetMap, which fetches tiles from tile.openstreetmap.org over the public internet — set this to a self-hosted GIS to keep basemap traffic inside the deployment. Setting it is also what enables the BOXER_MAP_TILE_*_TLS / _CA_FILE knobs. |
 

@@ -164,8 +164,20 @@ how it gets bytes, not a separate design.
 - **SD4 — ADR-0165 folded in.** Go fetches tile bytes through its own HTTP
   client under the env registry; `BOXER_MAP_TILE_CA_FILE` and
   `BOXER_MAP_TILE_INSECURE_TLS` become ordinary `http.Transport`
-  configuration and keep their names. ADR-0165's open questions close as
-  follows. *Cache ownership (Q1):* Go holds a bounded LRU of compressed bytes
+  configuration and keep their names. The two are not the same size, and the
+  transport reflects that: `BOXER_MAP_TILE_CA_FILE` moves the trust anchor and
+  changes nothing else, while `BOXER_MAP_TILE_INSECURE_TLS` also drops
+  `MinVersion` to TLS 1.0 and admits the suites `crypto/tls` keeps out of its
+  default list (static-RSA key exchange, 3DES, RC4). Lowering only the
+  certificate check would have left the knob unable to reach the servers it
+  exists for — every static-RSA suite an old appliance offers is in Go's
+  insecure list, so the handshake fails on version or cipher negotiation
+  instead, which reads as a knob that does not work. Once verification is off
+  the peer is unauthenticated, so neither the floor nor the cipher list is
+  defending anything: an attacker who can present an arbitrary certificate is
+  already the peer. Both halves are covered by round-trip tests against
+  in-process TLS 1.0-only and static-RSA-only servers, not just by asserting
+  the `tls.Config` fields. ADR-0165's open questions close as follows. *Cache ownership (Q1):* Go holds a bounded LRU of compressed bytes
   and a negative cache; decoded RGBA is handed to `paintImage` once per tile
   and lives in the renderer's per-id texture cache; a tile-source change
   invalidates by id prefix. *Backpressure (Q2):* the pyramid's load queue is
