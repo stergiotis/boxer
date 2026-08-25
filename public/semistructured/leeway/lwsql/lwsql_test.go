@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	"github.com/stretchr/testify/require"
@@ -141,4 +142,21 @@ func TestBuildLabels_RoundTrip(t *testing.T) {
 	require.Contains(t, lower, "symbol:value")
 	require.Contains(t, lower, "symbol:ref")
 	require.Contains(t, lower, "id:id")
+}
+
+// TestDefaultConditionSectionIsAValidName is the check NewResolver used to make
+// at runtime, and panic on. Keeping it here is what lets that constructor be
+// infallible: an edit to DefaultConditionSection that a leeway name cannot
+// carry fails this test instead of crashing a host at its wiring site.
+func TestDefaultConditionSectionIsAValidName(t *testing.T) {
+	name, err := naming.MakeStylableName(fold(DefaultConditionSection))
+	require.NoErrorf(t, err, "DefaultConditionSection %q is not a valid leeway name", DefaultConditionSection)
+	require.Equal(t, name, defaultConditionSection,
+		"NewResolver's condition section must be the validated fold of DefaultConditionSection")
+
+	// And the two constructors agree, so a host that names the default
+	// explicitly gets the same Resolver as one that takes it.
+	explicit, err := NewResolverWithConditionSection(nil, DefaultConditionSection)
+	require.NoError(t, err)
+	require.Equal(t, explicit.conditionSection, NewResolver(nil).conditionSection)
 }

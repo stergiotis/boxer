@@ -76,17 +76,28 @@ type columnRef struct {
 	scalarModifier canonicaltypes.ScalarModifierE
 }
 
+// defaultConditionSection is DefaultConditionSection folded to the
+// style-independent form the Resolver keeps it in.
+//
+// It is a package var rather than a MakeStylableName call inside NewResolver
+// because the only way that call can fail is an invalid DefaultConditionSection
+// — a compile-time constant — and settling that in
+// TestDefaultConditionSectionIsAValidName is not the same as panicking in a
+// constructor every host calls at its wiring site. The validation did not go
+// away; it moved to where a failure is a build failure rather than a crash.
+var defaultConditionSection = naming.StylableName(fold(DefaultConditionSection))
+
 // NewResolver builds a Resolver over a schema provider (expected to be caching;
 // the Resolver caches the derived indexes, not the raw column lists), with the
-// default condition section name.
+// default condition section name. It cannot fail — see
+// [defaultConditionSection]; a caller naming its own section wants
+// [NewResolverWithConditionSection], which validates.
 func NewResolver(provider passes.SchemaProviderI) *Resolver {
-	inst, err := NewResolverWithConditionSection(provider, DefaultConditionSection)
-	if err != nil {
-		// Unreachable: DefaultConditionSection is a compile-time constant this
-		// package's tests validate.
-		panic(err)
+	return &Resolver{
+		provider:         provider,
+		conditionSection: defaultConditionSection,
+		cache:            make(map[string]*tableIndex, 8),
 	}
-	return inst
 }
 
 // NewResolverWithConditionSection is NewResolver with the condition section
