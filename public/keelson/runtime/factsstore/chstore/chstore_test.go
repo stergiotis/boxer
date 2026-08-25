@@ -23,7 +23,10 @@ import (
 // caller defers cleanup. Skips the calling test when CH is unreachable.
 func newLiveStore(t *testing.T) (s *chstore.Store, cleanup func()) {
 	t.Helper()
-	cfg := chstore.Defaults()
+	// ConfigFromEnv, not Defaults: a CH that wants CLICKHOUSE_USER /
+	// CLICKHOUSE_PASSWORD would otherwise answer /ping and then reject the
+	// DDL, failing the test instead of skipping it.
+	cfg := chstore.ConfigFromEnv()
 	cfg.Database = "runtime_chstore_test"
 	ctx := context.Background()
 	s, err := chstore.New(cfg)
@@ -570,7 +573,7 @@ func TestStore_ColumnWidth_DeleteThenWrite_LiveCH(t *testing.T) {
 // §SD3 store-level stamp is active.
 func newLiveStampedStore(t *testing.T, runId string) (s *chstore.Store, cleanup func()) {
 	t.Helper()
-	cfg := chstore.Defaults()
+	cfg := chstore.ConfigFromEnv()
 	cfg.Database = "runtime_chstore_test"
 	cfg.RunId = runId
 	ctx := context.Background()
@@ -589,7 +592,7 @@ func newLiveStampedStore(t *testing.T, runId string) (s *chstore.Store, cleanup 
 // The store exposes no generic query verb — by design, its readers are the
 // per-kind ones — so a test asserting the physical encoding brings its own.
 func readClient() *chclient.Client {
-	return chclient.New(chclient.Config{URL: chstore.Defaults().URL, User: chstore.Defaults().User}, nil)
+	return chclient.New(chclient.ConfigFromEnv(), nil)
 }
 
 // attributionOf reads back the run id and instance key of the single row in

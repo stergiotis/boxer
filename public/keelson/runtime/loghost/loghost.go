@@ -138,6 +138,10 @@ func (w fullWriteAdapter) Write(p []byte) (n int, err error) {
 // route through chstore so events persist. Otherwise we fall back to
 // an in-memory store — the Sink and its tail ring still work, which
 // is all the logviewer / logdemo demo needs.
+//
+// The server and its credentials come from chstore.ConfigFromEnv (the
+// CLICKHOUSE_* entries), with BOXER_LOG_FACTS_URL overriding the endpoint
+// for this store alone.
 func selectFactsStore(ctx context.Context) (store factsstore.FactsStoreI, kind string) {
 	v := chstore.LogFactsEnabled.Get()
 	if v == "" || v == "0" {
@@ -145,7 +149,7 @@ func selectFactsStore(ctx context.Context) (store factsstore.FactsStoreI, kind s
 		kind = "memory"
 		return
 	}
-	cfg := chstore.Defaults()
+	cfg := chstore.ConfigFromEnv()
 	if url := chstore.LogFactsURL.Get(); url != "" {
 		cfg.URL = url
 	}

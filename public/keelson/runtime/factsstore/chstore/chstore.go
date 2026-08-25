@@ -62,6 +62,65 @@ func Defaults() (c Config) {
 	return
 }
 
+// ConfigFromEnv layers the CLICKHOUSE_* registry entries (ADR-0009) over
+// Defaults: the endpoint from CLICKHOUSE_ENDPOINT, falling back to
+// CLICKHOUSE_URL, and the credentials from CLICKHOUSE_USER /
+// CLICKHOUSE_PASSWORD. The values come from chclient.ConfigFromEnv, which is
+// the one place that decides the endpoint precedence, so this store and every
+// other chclient consumer resolve the same server. An entry that is unset or
+// empty leaves the Defaults value in place, so the zero-configuration case
+// stays exactly what Defaults describes.
+//
+// Database and Table are deliberately not env-derived. The facts table is a
+// fixed location in the schema (factsschema.DatabaseName / TableName, which
+// ComposeSetupSQL rewrites against), not the session's default database, so
+// CLICKHOUSE_DATABASE does not move it. RunId is the process's, not the
+// environment's.
+//
+// Not a live re-read: the registry resolves each entry once and caches it, so
+// mutating the environment after the first resolution has no effect.
+func ConfigFromEnv() (c Config) {
+	c = Defaults()
+	cc := chclient.ConfigFromEnv()
+	c.URL = cc.URL
+	c.User = cc.User
+	c.Password = cc.Password
+	return
+}
+
+// ConfigWithEnvDefaults completes the fields cfg left empty from
+// ConfigFromEnv and returns every field cfg did set unchanged — so a caller
+// that builds a Config for its own reasons (a RunId, a scratch database) still
+// picks up the environment's server and credentials, and one that pins a
+// server keeps it.
+//
+// Password is filled whenever cfg leaves it empty, including when cfg names a
+// User: the common case is a config assembled from Defaults (user "default",
+// no password) against a server that does require one, which is the whole
+// point of consulting the environment. A caller that must send no key at all
+// while CLICKHOUSE_PASSWORD is set in its environment builds the Store with
+// New, which reads nothing.
+func ConfigWithEnvDefaults(cfg Config) (out Config) {
+	out = cfg
+	e := ConfigFromEnv()
+	if out.URL == "" {
+		out.URL = e.URL
+	}
+	if out.User == "" {
+		out.User = e.User
+	}
+	if out.Password == "" {
+		out.Password = e.Password
+	}
+	if out.Database == "" {
+		out.Database = e.Database
+	}
+	if out.Table == "" {
+		out.Table = e.Table
+	}
+	return
+}
+
 // Store is the live-CH FactsStoreI. Each Write* call constructs a fresh
 // InEntityFacts builder, encodes one row, and ships it as a single-record
 // Arrow IPC batch through chclient.InsertArrow.

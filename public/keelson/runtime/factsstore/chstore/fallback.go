@@ -15,14 +15,21 @@ import (
 // is logged at Info; transient connectivity issues that flip to memory
 // are surfaced at Warn (under the supplied logger's run_id context).
 //
+// Whatever cfg leaves empty is completed from ConfigWithEnvDefaults, so a
+// server that requires authentication is reached with the CLICKHOUSE_USER /
+// CLICKHOUSE_PASSWORD credentials rather than silently degrading to memory:
+// the missing password does not fail the /ping (ClickHouse answers that
+// unauthenticated), it fails the DDL, which this helper reports as "reachable
+// but DDL setup failed". Fields cfg does set — a pinned URL, the RunId —
+// survive.
+//
 // Intended for the runtime entry-point — the carousel calls this once
 // at start, hands the result to the DockHost, and never reconfigures.
-// If the user wants stricter behaviour (e.g. fail-fast on missing CH),
-// they can construct a Store directly and skip this helper.
+// If the user wants stricter behaviour (e.g. fail-fast on missing CH,
+// or no environment at all), they can construct a Store directly with
+// New and skip this helper.
 func NewWithFallback(cfg Config, logger zerolog.Logger, pingTimeout time.Duration) (store factsstore.FactsStoreI, isChStore bool) {
-	if cfg.URL == "" {
-		cfg = Defaults()
-	}
+	cfg = ConfigWithEnvDefaults(cfg)
 	if pingTimeout <= 0 {
 		pingTimeout = 2 * time.Second
 	}
@@ -51,12 +58,14 @@ func NewWithFallback(cfg Config, logger zerolog.Logger, pingTimeout time.Duratio
 	if setupErr != nil {
 		logger.Warn().Err(setupErr).
 			Str("url", cfg.URL).
+			Str("user", cfg.User).
 			Msg("factsstore: ClickHouse reachable but DDL setup failed; falling back to in-memory")
 		store = factsstore.NewInMemoryFactsStore()
 		return
 	}
 	logger.Info().
 		Str("url", cfg.URL).
+		Str("user", cfg.User).
 		Str("db", cfg.Database).
 		Str("table", cfg.Table).
 		Msg("factsstore: using ClickHouse-backed audit trail")

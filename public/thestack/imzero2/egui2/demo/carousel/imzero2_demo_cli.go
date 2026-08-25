@@ -152,7 +152,13 @@ func NewCommand() *cli.Command {
 					Str("component", topo.Self()).
 					Msg("runinfo: process boot")
 			}
-			factsCfg := chstore.Defaults()
+			// ConfigFromEnv, not Defaults: a CH that requires
+			// authentication is reached with the CLICKHOUSE_USER /
+			// CLICKHOUSE_PASSWORD credentials, and CLICKHOUSE_ENDPOINT
+			// repoints the server. Defaults' hardcoded localhost/no-password
+			// pair made every such server look like a broken one and
+			// dropped the audit trail to memory.
+			factsCfg := chstore.ConfigFromEnv()
 			if runInst != nil {
 				// Every row this store writes carries the run (ADR-0191
 				// §SD3), including the kinds whose DTOs have no field for

@@ -20,10 +20,12 @@ var (
 		Category:    env.CategoryObservability,
 	})
 
-	// LogFactsURL overrides chstore.Defaults().URL when the upper
-	// layer is wiring chstore.New(). chstore.New itself takes the
-	// URL from Config.URL — this spec is purely the convention for
-	// the override env var.
+	// LogFactsURL overrides the URL ConfigFromEnv resolved (so it wins
+	// over CLICKHOUSE_ENDPOINT / CLICKHOUSE_URL) when the upper layer is
+	// wiring chstore.New(). chstore.New itself takes the URL from
+	// Config.URL — this spec is purely the convention for the override
+	// env var. Credentials are not part of it: the user and password come
+	// from the CLICKHOUSE_* entries in either case.
 	LogFactsURL = env.NewString(env.Spec{
 		Name:        "BOXER_LOG_FACTS_URL",
 		Description: "overrides the chstore default ClickHouse URL when BOXER_LOG_FACTS is enabled",
