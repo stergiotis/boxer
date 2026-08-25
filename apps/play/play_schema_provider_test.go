@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -119,4 +120,76 @@ func TestSetURLEmptyKeepsSchemaCaches(t *testing.T) {
 	client.SetURL("")
 	_, _ = client.buildResidual("SELECT `symbol:value` FROM facts")
 	require.Equal(t, before, probesA.Load(), "an ignored SetURL must not drop the caches")
+}
+
+// mutableSchemaEndpoint serves whatever column list it currently holds, so a
+// test can change a table under a running client the way an ALTER TABLE does.
+type mutableSchemaEndpoint struct {
+	mu     sync.Mutex
+	names  []string
+	probes atomic.Int64
+}
+
+func (inst *mutableSchemaEndpoint) set(names []string) {
+	inst.mu.Lock()
+	inst.names = names
+	inst.mu.Unlock()
+}
+
+func newMutableSchemaEndpoint(t *testing.T, names []string) (url string, ep *mutableSchemaEndpoint) {
+	t.Helper()
+	ep = &mutableSchemaEndpoint{names: names}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ep.probes.Add(1)
+		ep.mu.Lock()
+		body := strings.Join(ep.names, "\n") + "\n"
+		ep.mu.Unlock()
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL, ep
+}
+
+// TestReloadSchemasPicksUpSameEndpointChanges is the case SetURL cannot cover:
+// the endpoint did not change and its tables did. play does not run the DDL and
+// is not told about one, and the derived leeway index has no expiry, so a
+// `section:*` keeps expanding to the column set that existed at the first
+// probe — for the whole session. ReloadSchemas is the deliberate way out.
+func TestReloadSchemasPicksUpSameEndpointChanges(t *testing.T) {
+	url, ep := newMutableSchemaEndpoint(t, schemaWithSymbol)
+	client := schemaSwitchClient(t, url)
+
+	resolves := func(handle string) bool {
+		t.Helper()
+		out, _ := client.buildResidual("SELECT `" + handle + "` FROM facts")
+		return !strings.Contains(out, "`"+handle+"`")
+	}
+
+	require.True(t, resolves("symbol:value"))
+	require.False(t, resolves("foreignKey:value"), "the section does not exist yet")
+
+	// The DDL play cannot see: the table gains a section.
+	ep.set(append(append([]string{}, schemaWithSymbol...), schemaWithForeignKey[2:]...))
+
+	// Nothing re-probes on its own, which is the whole problem.
+	require.False(t, resolves("foreignKey:value"),
+		"a cached index must not spontaneously notice a schema change")
+
+	client.ReloadSchemas()
+	require.True(t, resolves("foreignKey:value"), "after a reload the new section resolves")
+	require.True(t, resolves("symbol:value"), "and the pre-existing one still does")
+
+	// A reload is not a retarget: the pin is untouched.
+	require.Equal(t, url, client.URL())
+}
+
+// TestReloadSchemasWithoutInstall: a client with no resolver installed (the
+// pass factories decline, so nothing is cached) must treat the action as a
+// no-op rather than depending on the install having happened.
+func TestReloadSchemasWithoutInstall(t *testing.T) {
+	client := NewClient(ClientConfig{URL: "http://example.invalid"}, nil)
+	require.Empty(t, client.schemaCaches)
+	client.ReloadSchemas() // must not panic
+	client.SetURL("http://other.invalid")
+	require.Equal(t, "http://other.invalid", client.URL())
 }

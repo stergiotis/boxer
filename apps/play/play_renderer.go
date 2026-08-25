@@ -2343,6 +2343,21 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 				inst.setEndpoint(inst.externalURL)
 			}
 		}
+		c.Separator().Send()
+		// Switching endpoint already drops the schema caches; this is the
+		// same endpoint changing under us, which nothing here can observe.
+		// It lives in this menu because that is where the other cause of a
+		// stale schema is handled, and it does not touch the pin — so, unlike
+		// the presets, it leaves Auto alone.
+		for range c.HoverText("Re-probe system.columns for every table the next query names. " +
+			"Needed after a table or view changed on this endpoint — a new column, " +
+			"a recreated view — which play cannot see happen.").KeepIter() {
+			if c.Button(ids.PrepareStr("endpointReloadSchema"),
+				c.Atoms().Text("Reload schema").Keep()).
+				SendResp().HasPrimaryClicked() {
+				inst.client.ReloadSchemas()
+			}
+		}
 	}
 }
 

@@ -770,9 +770,31 @@ func (inst *Client) SetURL(u string) {
 		// "select the current target" gesture cost a re-probe per table.
 		return
 	}
-	// Outside inst.mu: each cache takes its own lock, and holding this one
-	// across them would order the two against the execution path, which reads
-	// targetURL while probing through those same caches.
+	inst.resetSchemaCaches()
+}
+
+// ReloadSchemas drops the cached schema knowledge for the CURRENT endpoint, so
+// the next query re-probes system.columns for every table it names.
+//
+// SetURL covers the case where the server changed. This covers the case where
+// the server did not and its tables did: an `ALTER TABLE … ADD COLUMN`, a
+// dropped and recreated view, a table created after play first looked for it.
+// None of those are observable from here — play does not run the DDL and gets
+// no notification of one — and neither cache expires on its own where it
+// matters: the derived leeway index has no TTL at all, so a `section:*` keeps
+// expanding to the column set that existed at the first probe. Hence a
+// deliberate action rather than a heuristic; the cost of being wrong about
+// when to re-probe is paid by whoever asks.
+func (inst *Client) ReloadSchemas() {
+	inst.resetSchemaCaches()
+}
+
+// resetSchemaCaches clears every schema cache, outermost first.
+//
+// Never called with inst.mu held: each cache takes its own lock, and holding
+// this one across them would order the two against the execution path, which
+// reads targetURL while probing through those same caches.
+func (inst *Client) resetSchemaCaches() {
 	for _, c := range inst.schemaCaches {
 		c.Reset()
 	}

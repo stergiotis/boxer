@@ -39,6 +39,16 @@ written instead of filling the result panes. Everything else that changes
 state (`TRUNCATE` / `CREATE` / `ALTER` / DDL generally) still does **not**
 round-trip through the playground; run it from a regular ClickHouse client.
 
+The **Endpoint** menu pins where queries go, and carries one cache action.
+Column handles and `section:*` expansion resolve against the endpoint's
+`system.columns`, probed once per table and then remembered for the session.
+Switching endpoint drops what was remembered, because it describes the server
+you left. The same endpoint changing under you does not: play neither runs the
+DDL nor hears about one, so a table that gained a column, or a view that was
+dropped and recreated, keeps resolving to the shape it had at the first probe.
+**Reload schema** re-probes every table the next query names. It does not touch
+the pin or the Auto setting.
+
 See **Configuration** for the connection flags and environment variables.
 
 ## The editor
