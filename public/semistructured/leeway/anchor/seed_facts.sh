@@ -35,13 +35,45 @@ if [ -n "${CLICKHOUSE_PASSWORD:-}" ]; then
 fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(git -C "$script_dir" rev-parse --show-toplevel)"
-# boxer build tags; the package won't compile without them. `integration` is
-# appended because the loader is a member of the integration lane
-# (`//go:build integration`, ENGINEERING_PRACTICES §4) — without that tag the
-# test is not compiled in, `-run` matches nothing, and `go test` exits 0 having
-# inserted nothing at all.
-tags="$(cat "$repo_root/tags"),integration"
+
+# The module root that owns this package, found by walking up to its go.mod
+# rather than by asking git. An airgap bundle is unpacked from `git archive
+# HEAD` (ADR-0095), so the deployed tree carries no .git and `git rev-parse`
+# aborted this script under `set -e` before it ever reached ClickHouse. Left
+# empty if no go.mod is above us; `go test` below then reports that far more
+# clearly than a root-finding failure here could.
+repo_root=""
+dir="$script_dir"
+while :; do
+	if [ -f "$dir/go.mod" ]; then
+		repo_root="$dir"
+		break
+	fi
+	parent="$(dirname "$dir")"
+	[ "$parent" != "$dir" ] || break
+	dir="$parent"
+done
+
+# boxer build tags, resolved the way godepcollect.ResolveTags does it: the
+# root's `tags` file, else the -tags= carried in GOFLAGS, else none. A tree with
+# no `tags` file is legitimate rather than broken — the required set has been
+# empty since encoding/json/v2 graduated (ADR-0199), and both an airgap
+# deployment and a downstream consumer can arrive without one — so a missing
+# file must not be fatal here. `integration` is appended unconditionally,
+# because the loader is a member of the integration lane (`//go:build
+# integration`, ENGINEERING_PRACTICES §4) — without that tag the test is not
+# compiled in, `-run` matches nothing, and `go test` exits 0 having inserted
+# nothing at all.
+tags=""
+if [ -n "$repo_root" ] && [ -f "$repo_root/tags" ]; then
+	# Newline-separated on disk, comma-separated on the flag; blank lines and a
+	# trailing newline must not become empty tags.
+	tags="$(tr '\n' ',' <"$repo_root/tags" | sed -e 's/,,*/,/g' -e 's/^,//' -e 's/,$//')"
+elif [[ "${GOFLAGS:-}" == *-tags=* ]]; then
+	tags="${GOFLAGS##*-tags=}"
+	tags="${tags%% *}"
+fi
+tags="${tags:+$tags,}integration"
 
 # 1. Pre-flight. If ClickHouse is down the test would SKIP silently and leave
 #    the table untouched, so fail loudly here instead.
