@@ -1,6 +1,8 @@
 package lwsql
 
 import (
+	"iter"
+	"slices"
 	"strings"
 	"testing"
 
@@ -159,4 +161,65 @@ func TestDefaultConditionSectionIsAValidName(t *testing.T) {
 	explicit, err := NewResolverWithConditionSection(nil, DefaultConditionSection)
 	require.NoError(t, err)
 	require.Equal(t, explicit.conditionSection, NewResolver(nil).conditionSection)
+}
+
+// flakyProvider fails its first probe the way an unreachable server or a timed
+// out system.columns query does, then answers normally.
+type flakyProvider struct {
+	calls int
+	names []string
+}
+
+func (inst *flakyProvider) GetColumns(dbName string, tableName string) (columns iter.Seq[string], nColumns int, found bool) {
+	inst.calls++
+	if inst.calls == 1 {
+		return nil, 0, false
+	}
+	return slices.Values(inst.names), len(inst.names), true
+}
+
+// TestResolver_TransientProbeFailureIsNotCached guards a bug where a provider
+// that could not answer was cached as "not leeway" with no expiry: one probe
+// timeout stopped every handle on that table from resolving for the rest of the
+// process's life, and the provider was never consulted again to notice the
+// server had come back.
+func TestResolver_TransientProbeFailureIsNotCached(t *testing.T) {
+	p := &flakyProvider{names: buildKnownNames(t)}
+	r := NewResolver(p)
+
+	// First probe fails: no resolution, and nothing learned about the table.
+	require.Equal(t, passes.ResolveNotAHandle, r.Resolve("", testTable, "symbol:*").Kind)
+	require.Equal(t, 1, p.calls)
+
+	// Second attempt must re-probe rather than answer from a cached negative.
+	res := r.Resolve("", testTable, "symbol:*")
+	require.Equal(t, passes.ResolveOK, res.Kind, "a transient probe failure must not be cached")
+	require.Len(t, res.Physical, 2)
+	require.Equal(t, 2, p.calls)
+
+	// And the successful index IS cached — no third probe.
+	require.Equal(t, passes.ResolveOK, r.Resolve("", testTable, "symbol:*").Kind)
+	require.Equal(t, 2, p.calls, "a resolved index should be cached")
+}
+
+// TestResolver_NonLeewayVerdictIsCached is the other half: a table the provider
+// answered for, whose columns are not leeway-shaped, is a stable fact and must
+// be probed once — the property the transient-failure fix must not give up.
+func TestResolver_NonLeewayVerdictIsCached(t *testing.T) {
+	p := &countingProvider{names: []string{"user_id", "amount", "created_at"}}
+	r := NewResolver(p)
+	for range 3 {
+		require.Equal(t, passes.ResolveNotAHandle, r.Resolve("", "plain", "foo:bar").Kind)
+	}
+	require.Equal(t, 1, p.calls, "a non-leeway table should be probed once, not per Resolve")
+}
+
+type countingProvider struct {
+	calls int
+	names []string
+}
+
+func (inst *countingProvider) GetColumns(dbName string, tableName string) (columns iter.Seq[string], nColumns int, found bool) {
+	inst.calls++
+	return slices.Values(inst.names), len(inst.names), true
 }

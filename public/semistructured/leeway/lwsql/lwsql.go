@@ -38,14 +38,17 @@ import (
 // passes.ConditionNamerI (selection-condition columns, ADR-0121); a host binds
 // a single Resolver and every pass factory asserts the interface it needs off
 // it. Per-table indexes are built lazily from a passes.SchemaProviderI (the
-// physical column list) and cached for the session; negatives (non-leeway
-// tables) are cached too, so a table is probed at most once.
+// physical column list) and cached for the session. A table the provider
+// ANSWERED for is cached either way — a leeway index, or the verdict that its
+// columns are not leeway-shaped — so a plain SQL table is probed at most once.
+// A probe the provider could not answer at all is not cached; see [Resolver.build]
+// for why those two need different lifetimes.
 type Resolver struct {
 	provider         passes.SchemaProviderI
 	conditionSection naming.StylableName // folded; the condition section name
 
 	mu    sync.Mutex
-	cache map[string]*tableIndex // key: db\x00table; nil value == not leeway
+	cache map[string]*tableIndex // key: db\x00table; nil value == answered, not leeway-shaped
 }
 
 // tableIndex maps each section (by its style-folded name) to its columns, and
@@ -170,7 +173,17 @@ func (inst *Resolver) indexFor(dbName string, tableName string) *tableIndex {
 	if hit {
 		return idx
 	}
-	idx = inst.build(dbName, tableName) // build outside the lock (may hit the network)
+	idx, known := inst.build(dbName, tableName) // build outside the lock (may hit the network)
+	if !known {
+		// The provider could not answer at all — a probe timeout, an
+		// unreachable server, a table that does not exist yet. That is a
+		// statement about the moment, not about the table, so it is not
+		// cached and the next Resolve asks again. Caching it made ONE
+		// transient probe failure stop every handle on that table from
+		// resolving for the rest of the process's life, with the provider
+		// below never consulted again to notice the server had come back.
+		return nil
+	}
 	inst.mu.Lock()
 	if existing, hit := inst.cache[key]; hit {
 		idx = existing
@@ -181,21 +194,32 @@ func (inst *Resolver) indexFor(dbName string, tableName string) *tableIndex {
 	return idx
 }
 
-func (inst *Resolver) build(dbName string, tableName string) *tableIndex {
+// build derives a table's index from its physical column names.
+//
+// The two ways this returns no index are different facts and get different
+// lifetimes (which is why known exists rather than a bare nil):
+//
+//   - known == false — the provider supplied no column list. Nothing was
+//     learned about the table, so the caller must not cache it.
+//   - known == true with a nil idx — the columns came back and are not
+//     leeway-shaped. That is a stable property of the table, so caching it
+//     keeps a plain SQL table from being re-probed on every Resolve.
+func (inst *Resolver) build(dbName string, tableName string) (idx *tableIndex, known bool) {
 	cols, n, found := inst.provider.GetColumns(dbName, tableName)
 	if !found || n == 0 {
-		return nil
+		return nil, false
 	}
+	known = true
 	names := make([]string, 0, n)
 	for c := range cols {
 		names = append(names, c)
 	}
 	infos, meta, ok := classifyColumns(names)
 	if !ok {
-		return nil // not leeway-shaped
+		return nil, known // not leeway-shaped
 	}
 
-	idx := &tableIndex{sections: make(map[string]*sectionIndex, 8), meta: meta}
+	idx = &tableIndex{sections: make(map[string]*sectionIndex, 8), meta: meta}
 	for _, ci := range infos {
 		if ci.section == "" {
 			continue
@@ -214,9 +238,9 @@ func (inst *Resolver) build(dbName string, tableName string) *tableIndex {
 		}
 	}
 	if len(idx.sections) == 0 {
-		return nil
+		return nil, known
 	}
-	return idx
+	return idx, known
 }
 
 func valueColumnNames(si *sectionIndex) []string {
