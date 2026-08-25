@@ -223,3 +223,13 @@ func (inst *countingProvider) GetColumns(dbName string, tableName string) (colum
 	inst.calls++
 	return slices.Values(inst.names), len(inst.names), true
 }
+
+// TestResolver_IsHandleSyntax pins the gate the no-catalog-source diagnostic
+// hangs off: it is the colon-always rule alone, with no table consulted.
+func TestResolver_IsHandleSyntax(t *testing.T) {
+	r := NewResolver(passes.NewStaticSchemaProvider(nil))
+	require.True(t, r.IsHandleSyntax("symbol:value"))
+	require.True(t, r.IsHandleSyntax("id:*"))
+	require.False(t, r.IsHandleSyntax("symbol"), "a bare identifier is ordinary SQL")
+	require.False(t, r.IsHandleSyntax("tv:symbol:value:val:s:124::I:0::data"), "a physical name is not a handle")
+}

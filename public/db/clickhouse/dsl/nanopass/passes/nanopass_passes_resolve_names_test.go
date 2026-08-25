@@ -33,6 +33,12 @@ func (f *fakeResolver) Resolve(dbName string, tableName string, handle string) R
 	return ResolveResult{Kind: ResolveNotAHandle}
 }
 
+// IsHandleSyntax mirrors the leeway resolver's colon-always rule, so the pass's
+// no-catalog-source diagnostic is exercised the way a real host wires it.
+func (f *fakeResolver) IsHandleSyntax(name string) bool {
+	return strings.Count(name, ":") == 1
+}
+
 func newFakeResolver() *fakeResolver {
 	return &fakeResolver{byTable: map[string]map[string]ResolveResult{
 		"facts": {
@@ -201,4 +207,87 @@ func TestResolve_UnparseableBareColonIsError(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected a parse error for a bare (unquoted) colon")
 	}
+}
+
+// TestResolve_NoCatalogSourceDiagnostic covers the gap where a handle whose
+// only source is a subquery, a CTE or a table function was left untouched AND
+// unreported: the statement shipped the handle verbatim and the server answered
+// UNKNOWN_IDENTIFIER about a name the user never typed. The rewrite still does
+// not happen — there is no schema to resolve against — but the Diagnostics sink
+// now says so before the round-trip.
+func TestResolve_NoCatalogSourceDiagnostic(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		sql    string
+		expect string
+	}{
+		{"from subquery", "SELECT `symbol:value` FROM (SELECT * FROM facts)", "(subquery)"},
+		{"from aliased subquery", "SELECT `symbol:value` FROM (SELECT * FROM facts) AS v", "v (subquery)"},
+		{"qualified through subquery", "SELECT v.`symbol:value` FROM (SELECT * FROM facts) AS v", "v (subquery)"},
+		{"from cte", "WITH c AS (SELECT * FROM facts) SELECT `symbol:value` FROM c", "c (CTE)"},
+		{"from table function", "SELECT `symbol:value` FROM numbers(10)", "numbers (table function)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, diags := runResolveDiag(t, tc.sql)
+			if out != tc.sql {
+				t.Errorf("statement should ship unchanged, got %q", out)
+			}
+			if len(diags) != 1 {
+				t.Fatalf("want exactly 1 diagnostic, got %d: %+v", len(diags), diags)
+			}
+			if diags[0].Handle != "symbol:value" {
+				t.Errorf("diagnostic handle = %q, want symbol:value", diags[0].Handle)
+			}
+			if !strings.Contains(diags[0].Message, tc.expect) {
+				t.Errorf("message %q should name the source %q", diags[0].Message, tc.expect)
+			}
+		})
+	}
+}
+
+// TestResolve_NoCatalogSourceDoesNotFlagOrdinarySQL is the other half, and the
+// reason the diagnostic is gated on handle SPELLING rather than on failure to
+// resolve: a subquery-sourced SELECT is full of ordinary column references, and
+// warning about those would make the pane useless.
+func TestResolve_NoCatalogSourceDoesNotFlagOrdinarySQL(t *testing.T) {
+	for _, sql := range []string{
+		// Bare identifiers — no colon, never handles.
+		"SELECT a, b, c FROM (SELECT * FROM facts)",
+		"WITH c AS (SELECT * FROM facts) SELECT x FROM c WHERE y = 1",
+		// A physical name typed verbatim has many colons and is not a handle.
+		"SELECT `tv:symbol:value:val:s:124::I:0::data` FROM (SELECT * FROM facts)",
+		// A real table in scope: resolution happens, nothing to report.
+		"SELECT `symbol:value` FROM facts",
+		// A table the resolver knows nothing about is not a no-catalog-source
+		// case — it has a schema, the resolver just cannot judge it.
+		"SELECT `symbol:value` FROM unknown_table",
+	} {
+		_, diags := runResolveDiag(t, sql)
+		if len(diags) != 0 {
+			t.Errorf("%q should produce no diagnostic, got %+v", sql, diags)
+		}
+	}
+}
+
+// TestResolve_NoCatalogSourceNeedsHandleSyntax pins the optional-capability
+// contract: a resolver that does not implement HandleSyntaxI cannot tell a
+// handle from plain SQL, so the pass stays silent rather than guessing.
+func TestResolve_NoCatalogSourceNeedsHandleSyntax(t *testing.T) {
+	var diags []ColumnDiagnostic
+	plain := plainResolver{newFakeResolver()}
+	_, err := ResolveColumnNames(plain, "", func(d ColumnDiagnostic) { diags = append(diags, d) }).
+		Run("SELECT `symbol:value` FROM (SELECT * FROM facts)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diags) != 0 {
+		t.Errorf("a resolver without HandleSyntaxI should get no diagnostic, got %+v", diags)
+	}
+}
+
+// plainResolver exposes only Resolve, hiding the fake's IsHandleSyntax.
+type plainResolver struct{ inner *fakeResolver }
+
+func (p plainResolver) Resolve(dbName string, tableName string, handle string) ResolveResult {
+	return p.inner.Resolve(dbName, tableName, handle)
 }

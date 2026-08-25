@@ -124,6 +124,17 @@ func NewResolverWithConditionSection(provider passes.SchemaProviderI, section st
 
 var _ passes.ColumnResolverI = (*Resolver)(nil)
 var _ passes.ConditionNamerI = (*Resolver)(nil)
+var _ passes.HandleSyntaxI = (*Resolver)(nil)
+
+// IsHandleSyntax implements passes.HandleSyntaxI: it reports whether name is
+// SPELLED as a handle, with no table involved. This is the colon-always rule on
+// its own — exactly one colon — so a bare identifier and a physical name typed
+// verbatim both answer false, and the pass can warn about a handle whose source
+// has no schema to resolve against without flagging the ordinary SQL beside it.
+func (inst *Resolver) IsHandleSyntax(name string) bool {
+	_, _, isHandle := splitHandle(name)
+	return isHandle
+}
 
 // Resolve implements passes.ColumnResolverI.
 func (inst *Resolver) Resolve(dbName string, tableName string, handle string) passes.ResolveResult {

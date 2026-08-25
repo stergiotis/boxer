@@ -47,6 +47,21 @@ type ColumnResolverI interface {
 	Resolve(dbName string, tableName string, handle string) ResolveResult
 }
 
+// HandleSyntaxI optionally reports whether an identifier is SPELLED as a
+// handle, independent of any table. It is what lets the pass warn about a
+// handle whose source has no catalog schema — a CTE, a subquery, a table
+// function — without warning about every ordinary column beside it: the
+// resolver is never consulted in that case, so nothing else in the pass can
+// tell a handle from plain SQL.
+//
+// Asserted off the ColumnResolverI rather than added to it, so an
+// implementation that does not offer the distinction keeps working and simply
+// gets no such diagnostic (the same optional-capability shape the pass
+// registry uses for its bindings).
+type HandleSyntaxI interface {
+	IsHandleSyntax(name string) bool
+}
+
 // ColumnDiagnostic is a warning about one handle that a ResolveColumnNames pass
 // could not resolve. It is emitted only when a sink is supplied (the execution
 // path passes none), so a host can surface it — e.g. play's Diagnostics pane —
@@ -215,12 +230,30 @@ func resolveColumnIdentifier(rw nanopass.RewriterI, scope *nanopass.SelectScope,
 	if tid := colIdCtx.TableIdentifier(); tid != nil {
 		src, found := scope.ResolveAlias(nanopass.DecodeIdentifier(tid.GetText()))
 		if !found || src.IsCTE || src.IsSubquery || src.IsFunction {
+			// An unknown alias is left alone: the scope may simply not model
+			// the shape. A source that IS resolved and carries no catalog
+			// schema is different — the handle cannot resolve in principle,
+			// which is worth saying rather than letting the server answer
+			// UNKNOWN_IDENTIFIER about a name the user never typed.
+			if found {
+				reportNoCatalogSource(sink, resolver, handle, sourceLabels([]nanopass.TableSource{src}))
+			}
 			return
 		}
 		aliasPrefix = tid.GetText() + "."
 		res = resolver.Resolve(src.ResolvedDatabase(scope), src.Table, handle)
 	} else {
 		res = resolveBareAcrossScope(scope, resolver, handle)
+		// Every source in scope is a CTE, a subquery or a table function, so
+		// no resolver was consulted and the verdict above is a default rather
+		// than an answer. Report it — but only here: with a real table in
+		// scope, a NotAHandle verdict came from the resolver deciding the
+		// name is ordinary SQL or the table is not leeway-shaped, and warning
+		// on that would flag every plain column.
+		if res.Kind == ResolveNotAHandle && len(scope.Tables) > 0 && !scopeHasCatalogTable(scope) {
+			reportNoCatalogSource(sink, resolver, handle, sourceLabels(scope.Tables))
+			return
+		}
 	}
 
 	switch res.Kind {
@@ -284,4 +317,70 @@ func resolveBareAcrossScope(scope *nanopass.SelectScope, resolver ColumnResolver
 		return ResolveResult{Kind: ResolveNotAHandle} // ambiguous — leave it
 	}
 	return best
+}
+
+// scopeHasCatalogTable reports whether any of scope's sources is a stored
+// table — something a schema lookup can answer for. False with a non-empty
+// Tables means every source is a CTE, a subquery or a table function.
+func scopeHasCatalogTable(scope *nanopass.SelectScope) bool {
+	for i := range scope.Tables {
+		ts := &scope.Tables[i]
+		if !ts.IsCTE && !ts.IsSubquery && !ts.IsFunction {
+			return true
+		}
+	}
+	return false
+}
+
+// sourceLabels names non-catalog sources for a diagnostic — `c (CTE)`,
+// `(subquery)`, `v (subquery)`, `numbers (table function)`. Stored tables are
+// skipped: they are not why the handle failed.
+func sourceLabels(sources []nanopass.TableSource) (labels []string) {
+	for i := range sources {
+		ts := &sources[i]
+		var kind string
+		switch {
+		case ts.IsCTE:
+			kind = "CTE"
+		case ts.IsSubquery:
+			kind = "subquery"
+		case ts.IsFunction:
+			kind = "table function"
+		default:
+			continue
+		}
+		name := ts.Alias
+		if name == "" {
+			name = ts.Table
+		}
+		if name == "" {
+			labels = append(labels, "("+kind+")")
+			continue
+		}
+		labels = append(labels, name+" ("+kind+")")
+	}
+	return
+}
+
+// reportNoCatalogSource warns that a handle's source carries no catalog schema,
+// so the handle cannot be resolved at all.
+//
+// It fires only for an identifier the resolver spells as a handle — without
+// that gate every ordinary column of a subquery-sourced SELECT would be
+// flagged — and only where a sink wants diagnostics, so the execution path
+// (nil sink) does no extra work.
+func reportNoCatalogSource(sink func(ColumnDiagnostic), resolver ColumnResolverI, handle string, labels []string) {
+	if sink == nil || len(labels) == 0 {
+		return
+	}
+	syn, ok := resolver.(HandleSyntaxI)
+	if !ok || !syn.IsHandleSyntax(handle) {
+		return
+	}
+	sink(ColumnDiagnostic{
+		Handle: handle,
+		Message: fmt.Sprintf(
+			"a column handle resolves against a stored table's schema, and this SELECT reads %s — spell the physical name here, or move the handle into the subselect that reads the table",
+			strings.Join(labels, ", ")),
+	})
 }
