@@ -68,6 +68,15 @@ func (inst *StaticSchemaProvider) GetColumns(db string, tableName string) (colum
 	return
 }
 
+// CachingSchemaProvider memoises a delegate's column lists for maxAge.
+//
+// The cache is keyed by database AND table. Keying it by the table name alone
+// made two same-named tables in different databases share one entry, so
+// whichever was probed first served both for the rest of the session and a
+// handle silently resolved against the wrong schema. An empty database is its
+// own key, distinct from any named one: it means "whatever the delegate
+// resolves the default to", which is a different question than a named
+// database and must not answer for one.
 type CachingSchemaProvider struct {
 	delegate SchemaProviderI
 	cache    map[string]struct {
@@ -76,6 +85,13 @@ type CachingSchemaProvider struct {
 	}
 	maxSize int
 	maxAge  time.Duration
+}
+
+// cacheKey joins a database and table into one map key. The NUL separator
+// cannot occur in either name, so no (db, table) pair can collide with
+// another by concatenation.
+func cacheKey(dbName string, tableName string) string {
+	return dbName + "\x00" + tableName
 }
 
 func NewCachingSchemaProvider(maxAge time.Duration, delegate SchemaProviderI, maxSize int) (inst *CachingSchemaProvider) {
@@ -91,7 +107,8 @@ func NewCachingSchemaProvider(maxAge time.Duration, delegate SchemaProviderI, ma
 }
 
 func (inst *CachingSchemaProvider) GetColumns(dbName, tableName string) (columns iter.Seq[string], nColumns int, found bool) {
-	c, hit := inst.cache[tableName]
+	key := cacheKey(dbName, tableName)
+	c, hit := inst.cache[key]
 	if hit && time.Since(c.timestamp) < inst.maxAge {
 		columns = slices.Values(c.columns)
 		nColumns = len(c.columns)
@@ -105,7 +122,7 @@ func (inst *CachingSchemaProvider) GetColumns(dbName, tableName string) (columns
 		for v := range cs {
 			cs2 = append(cs2, v)
 		}
-		inst.cache[tableName] = struct {
+		inst.cache[key] = struct {
 			timestamp time.Time
 			columns   []string
 		}{timestamp: t, columns: cs2}
