@@ -61,6 +61,14 @@ type Client struct {
 	// pre-execute set. A zero Pass (never installed) means the toggle does
 	// nothing.
 	conditionsPass nanopass.Pass
+
+	// schemaCaches are the per-endpoint schema caches installLeewayNameResolution
+	// built, in the order they must be cleared: the outermost (the derived
+	// leeway index) before the one it reads through, so a probe racing the
+	// clear cannot refill the outer from the inner's stale entry. SetURL
+	// clears them, because every entry describes the endpoint being left.
+	// Empty until installed, and nothing to clear is not a special case.
+	schemaCaches []schemaCacheI
 	// exposeConditions is the toggle itself, default off. Written from the render
 	// thread (the top-bar checkbox) and read wherever a query is built, hence
 	// atomic.
@@ -742,13 +750,32 @@ func (inst *Client) URL() (u string) {
 // SetURL switches the target endpoint. Safe to call from the UI goroutine
 // while a query runs on another: ExecuteArrowStream reads the target once at
 // request-build time. An empty url is ignored (keeps the current target).
+// Switching the target also drops the cached schema knowledge: a physical
+// column list, and the leeway index derived from it, describe the server they
+// were probed from, and the new one may not carry that table at all — or may
+// carry a different table under the name. Nothing else invalidates them; the
+// derived index has no expiry, so before this a session that retargeted kept
+// resolving handles against the endpoint it had left.
 func (inst *Client) SetURL(u string) {
 	if u == "" {
 		return
 	}
 	inst.mu.Lock()
+	changed := inst.targetURL != u
 	inst.targetURL = u
 	inst.mu.Unlock()
+	if !changed {
+		// Re-pinning the endpoint already in use is not a switch, and
+		// throwing the schemas away would make the switcher's own
+		// "select the current target" gesture cost a re-probe per table.
+		return
+	}
+	// Outside inst.mu: each cache takes its own lock, and holding this one
+	// across them would order the two against the execution path, which reads
+	// targetURL while probing through those same caches.
+	for _, c := range inst.schemaCaches {
+		c.Reset()
+	}
 }
 
 // ExecuteArrowStream rewrites the query's FORMAT clause to `ArrowStream` via

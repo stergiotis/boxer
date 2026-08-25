@@ -47,6 +47,17 @@ func (inst *chSchemaProvider) GetColumns(dbName string, tableName string) (colum
 	return slices.Values(names), len(names), true
 }
 
+// schemaCacheI is a cache of one endpoint's schema knowledge. Both layers the
+// resolver reads through implement it — the physical column lists
+// (passes.CachingSchemaProvider) and the leeway indexes derived from them
+// (lwsql.Resolver) — and both have to be cleared together: clearing only the
+// derived one refills it from stale column lists, and clearing only the column
+// lists leaves the derived indexes standing, since they never re-probe a table
+// they already resolved.
+type schemaCacheI interface {
+	Reset()
+}
+
 // clientPassBinding is what a Client hands to ApplyBestEffortBound: the bundle
 // of seams this client's pre-execute factories realise against. A single
 // binding reaches every factory's Build (passreg passes the same value to each),
@@ -97,6 +108,9 @@ func installLeewayNameResolution(client *Client) *lwsql.Resolver {
 		fetch: client.fetchColumnNames,
 	}, schemaCacheMaxTables)
 	resolver := lwsql.NewResolver(provider)
+	// Derived index first, then the column lists it is built from — see
+	// Client.schemaCaches for why the order is the one that matters.
+	client.schemaCaches = []schemaCacheI{resolver, provider}
 	client.passBinding = &clientPassBinding{
 		Resolver:        resolver,
 		SchemaProviderI: provider,

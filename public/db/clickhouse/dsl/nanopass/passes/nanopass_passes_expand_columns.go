@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -77,14 +78,41 @@ func (inst *StaticSchemaProvider) GetColumns(db string, tableName string) (colum
 // own key, distinct from any named one: it means "whatever the delegate
 // resolves the default to", which is a different question than a named
 // database and must not answer for one.
+// Every entry describes ONE endpoint, so a consumer that retargets must call
+// [CachingSchemaProvider.Reset]; the TTL alone would serve the old server's
+// columns until it lapsed.
+//
+// mu guards cache. A Reset arrives from whichever goroutine noticed the
+// endpoint change — in play, the UI thread — while a query may be probing on
+// another, and lwsql.Resolver already calls GetColumns outside its own lock so
+// two probes can land here at once.
 type CachingSchemaProvider struct {
 	delegate SchemaProviderI
+	mu       sync.Mutex
 	cache    map[string]struct {
 		timestamp time.Time
 		columns   []string
 	}
 	maxSize int
 	maxAge  time.Duration
+}
+
+// Reset drops every cached column list. Call it when the schemas behind the
+// delegate may have been replaced wholesale rather than merely aged — the
+// target endpoint changed, so every entry describes a server this provider is
+// no longer talking to.
+//
+// A probe already in flight when Reset lands still writes its result, which
+// then describes the previous endpoint; that entry ages out under maxAge like
+// any other. Closing the window would need the probe to carry the endpoint it
+// asked, which is the delegate's business rather than this cache's.
+func (inst *CachingSchemaProvider) Reset() {
+	inst.mu.Lock()
+	inst.cache = make(map[string]struct {
+		timestamp time.Time
+		columns   []string
+	})
+	inst.mu.Unlock()
 }
 
 // cacheKey joins a database and table into one map key. The NUL separator
@@ -108,7 +136,9 @@ func NewCachingSchemaProvider(maxAge time.Duration, delegate SchemaProviderI, ma
 
 func (inst *CachingSchemaProvider) GetColumns(dbName, tableName string) (columns iter.Seq[string], nColumns int, found bool) {
 	key := cacheKey(dbName, tableName)
+	inst.mu.Lock()
 	c, hit := inst.cache[key]
+	inst.mu.Unlock()
 	if hit && time.Since(c.timestamp) < inst.maxAge {
 		columns = slices.Values(c.columns)
 		nColumns = len(c.columns)
@@ -122,10 +152,12 @@ func (inst *CachingSchemaProvider) GetColumns(dbName, tableName string) (columns
 		for v := range cs {
 			cs2 = append(cs2, v)
 		}
+		inst.mu.Lock()
 		inst.cache[key] = struct {
 			timestamp time.Time
 			columns   []string
 		}{timestamp: t, columns: cs2}
+		inst.mu.Unlock()
 		// Return what we just fetched — not the zero-valued named returns.
 		// Missing this made every first (cache-miss) lookup report not-found,
 		// so a delegate result was cached yet never surfaced until the *second*
