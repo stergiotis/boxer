@@ -38,6 +38,27 @@ pub struct AppConfig {
     /// vsync
     pub vsync: bool,
 
+    /// Colour the root viewport is cleared to each frame
+    /// (`-backgroundColorRGBA`, hex `RRGGBB` or `RRGGBBAA`). `None` follows
+    /// the active theme's `panel_fill`, which is what keeps the uncovered
+    /// root indistinguishable from the panels painted over it.
+    ///
+    /// Leaving this to eframe's own default is what made the window
+    /// semi-transparent under a compositing X11 WM: `eframe::App::clear_color`
+    /// defaults to `rgba(12, 12, 12, 180)` — deliberately translucent, so
+    /// that switching on `ViewportBuilder::with_transparent` shows an
+    /// immediate effect — and whether that alpha then reaches the compositor
+    /// is platform business, not something the app decided. The observable is
+    /// the window's visual depth: `xwininfo` reports 24 (no alpha channel, so
+    /// the alpha is dropped) on the Xwayland/wgpu path measured here, and 32
+    /// once transparency is actually requested.
+    ///
+    /// Desktop (eframe) host only. The headless hosts keep their own opaque
+    /// black clear, which is what makes the wgpu and CPU rasterizers
+    /// byte-comparable on any pixel the UI does not cover (see
+    /// `softraster::CLEAR`).
+    pub background_color_rgba: Option<egui::Color32>,
+
     /// fffi interpreter
     pub fffi_interpreter: bool,
 
@@ -72,6 +93,7 @@ impl Default for AppConfig {
             app_title: "imzero2".to_string(),
             fullscreen: false,
             vsync: true,
+            background_color_rgba: None,
             fffi_interpreter: true,
             main_font_ttf: String::new(),
             mono_font_ttf: String::new(),
@@ -111,6 +133,13 @@ impl AppConfig {
             flags::find_flag_default(args, used, "-appTitle", self.window_title.clone()).to_owned();
 
         self.vsync = flags::find_flag_value_default_bool(args, used, "-vsync", self.vsync);
+        self.background_color_rgba = parse_background_color(&flags::find_flag_default(
+            args,
+            used,
+            "-backgroundColorRGBA",
+            String::new(),
+        ))
+        .or(self.background_color_rgba);
         self.fffi_interpreter = flags::find_flag_value_default_bool(
             args,
             used,
@@ -244,6 +273,17 @@ impl AppConfig {
             "\t-vsync [bool:{}]\n",
             if self.vsync { "on" } else { "off" }
         )?;
+        write!(
+            w,
+            "\t-backgroundColorRGBA [hex RRGGBB|RRGGBBAA:{}]\n",
+            match self.background_color_rgba {
+                Some(c) => {
+                    let [r, g, b, a] = c.to_srgba_unmultiplied();
+                    format!("{r:02x}{g:02x}{b:02x}{a:02x}")
+                }
+                None => "theme panel fill".to_owned(),
+            }
+        )?;
 
         write!(w, "fffi flags:\n")?;
         write!(
@@ -321,5 +361,80 @@ impl AppConfig {
             self.fallback_font_tweak.y_offset
         )?;
         return Ok(());
+    }
+}
+
+/// Parses `RRGGBB` / `RRGGBBAA` hex (a leading `#` is tolerated) into a
+/// colour. Alpha is read as *straight*, not premultiplied, so `8f8f8fff` is
+/// an opaque grey and `8f8f8f80` is the same grey at half coverage.
+///
+/// An unparsable value warns and yields `None` instead of aborting, unlike
+/// the geometry and font flags, where `flags::` panics. The difference is
+/// that a fallback exists here and is well defined — the theme's
+/// `panel_fill` — so a typo'd colour is not worth refusing to start over.
+fn parse_background_color(s: &str) -> Option<egui::Color32> {
+    let h = s.strip_prefix('#').unwrap_or(s);
+    if h.is_empty() {
+        return None;
+    }
+    // The byte slicing below is not char-boundary safe, so establish that
+    // every byte is a hex digit before indexing into it.
+    if !matches!(h.len(), 6 | 8) || !h.bytes().all(|b| b.is_ascii_hexdigit()) {
+        tracing::warn!(
+            value = s,
+            "ignoring malformed -backgroundColorRGBA, expected RRGGBB or RRGGBBAA hex"
+        );
+        return None;
+    }
+    let byte = |i: usize| {
+        u8::from_str_radix(&h[i..i + 2], 16).expect("two validated hex digits parse as u8")
+    };
+    let (r, g, b) = (byte(0), byte(2), byte(4));
+    Some(if h.len() == 8 {
+        egui::Color32::from_rgba_unmultiplied(r, g, b, byte(6))
+    } else {
+        egui::Color32::from_rgb(r, g, b)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_background_color as parse;
+
+    #[test]
+    fn six_digit_hex_is_opaque() {
+        assert_eq!(
+            parse("8f8f8f"),
+            Some(egui::Color32::from_rgb(143, 143, 143))
+        );
+        assert_eq!(parse("#0b0e0f"), Some(egui::Color32::from_rgb(11, 14, 15)));
+    }
+
+    #[test]
+    fn eight_digit_hex_carries_straight_alpha() {
+        // An explicit ...ff must land on exactly the same colour as the
+        // six-digit form — nothing may read it as near-opaque and drag the
+        // window onto the transparency path.
+        assert_eq!(parse("8f8f8fff"), parse("8f8f8f"));
+        let half = parse("8f8f8f80").expect("well-formed");
+        assert_eq!(half.to_srgba_unmultiplied(), [143, 143, 143, 128]);
+    }
+
+    #[test]
+    fn absent_and_malformed_both_fall_back() {
+        // "\u{e9}\u{e9}\u{e9}" is three chars but six *bytes*: it passes the
+        // length check and would panic on a byte-indexed slice, so it is the
+        // case the ascii-hexdigit guard exists for.
+        for s in [
+            "",
+            "8f8f8",
+            "8f8f8f0",
+            "8f8f8f0ff",
+            "not-a-colour",
+            "8f8f8g",
+            "\u{e9}\u{e9}\u{e9}",
+        ] {
+            assert_eq!(parse(s), None, "input {s:?}");
+        }
     }
 }

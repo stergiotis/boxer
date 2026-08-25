@@ -42,7 +42,13 @@ func (inst *ImZeroClientConfig) PassthroughArgs(args []string) (argsOut []string
 	//add("exportBasePath", inst.ExportBasePath)
 	// graphics
 	add("vsync", inst.Vsync)
-	//add("backgroundColorRGBA", inst.BackgroundColorRGBA)
+	// Hex RRGGBB or RRGGBBAA, no leading '#'. The client clears its root
+	// viewport to this; unset, it follows the active theme's panel fill.
+	// An alpha below ff also makes the client ask for a transparent
+	// window. The client aborts on an argument it does not consume
+	// (flags::validate_all_args_used), so this passthrough and the
+	// client-side -backgroundColorRGBA flag have to move together.
+	add("backgroundColorRGBA", inst.BackgroundColorRGBA)
 	//add("backdropFilter", inst.BackdropFilter)
 	return
 }

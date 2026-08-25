@@ -23,6 +23,10 @@ pub struct App<'a, R: std::io::BufRead, W: std::io::Write> {
     /// idle heartbeat after warmup. When false (continuous, the default) it
     /// requests an immediate repaint every pass. See `logic()`.
     reactive: bool,
+    /// `-backgroundColorRGBA`, or `None` to track the theme. Resolved per
+    /// call in `clear_color()` rather than at construction so that a later
+    /// style change moves the root background with the panels.
+    background_color_rgba: Option<egui::Color32>,
 }
 
 impl<'a, R: std::io::BufRead, W: std::io::Write> App<'a, R, W> {
@@ -36,6 +40,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> App<'a, R, W> {
             fffi,
             warmup_passes: WARMUP_PASSES,
             reactive,
+            background_color_rgba: config.background_color_rgba,
         }
     }
 }
@@ -43,6 +48,29 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> App<'a, R, W> {
 impl<'a, R: std::io::BufRead, W: std::io::Write> eframe::App for App<'a, R, W> {
     /// Called by the framework to save state before shutdown.
     fn save(&mut self, _storage: &mut dyn eframe::Storage) {}
+
+    /// The colour the root viewport is cleared to before each frame — every
+    /// pixel the UI does not cover.
+    ///
+    /// This has to be overridden. eframe's default is
+    /// `Color32::from_rgba_unmultiplied(12, 12, 12, 180)`, translucent on
+    /// purpose so that turning on `ViewportBuilder::with_transparent` shows
+    /// an immediate effect. We never request transparency, but whether that
+    /// alpha is then dropped or handed to the compositor is platform
+    /// business, not the app's: on one compositing X11 setup it came through
+    /// and the window read as semi-transparent wherever no panel was
+    /// painted, while an Xwayland/wgpu run of the same binary got an
+    /// alpha-less depth-24 visual and stayed opaque. Not a difference to
+    /// leave a window's appearance resting on.
+    ///
+    /// Unset (the default), the root follows the active theme's `panel_fill`,
+    /// so it matches the panels drawn over it instead of a framework-chosen
+    /// grey. `-backgroundColorRGBA` overrides it; an alpha below `ff` there
+    /// is an explicit request for a see-through window, and `entry.rs` pairs
+    /// it with `with_transparent` so the compositor is actually asked.
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        self.background_color_rgba.unwrap_or(visuals.panel_fill).to_normalized_gamma_f32()
+    }
 
     /// Called before ui() AND whenever the window is hidden but a repaint was
     /// requested. This is the *only* lifecycle hook eframe 0.34 runs while the

@@ -163,6 +163,15 @@ rm -f "$flightRecord"
 # needed. Set BOXER_CLICKHOUSE_LOCAL to override the binary path;
 # default resolves "clickhouse" through $PATH.
 
+# Root-viewport background: deliberately not set, so the client clears to
+# the active theme's panel fill and the uncovered root is indistinguishable
+# from the panels drawn over it. Pass
+# `--clientBackgroundColorRGBA RRGGBB[AA]` to override; an alpha below ff
+# asks the windowing system for a transparent window, which is the only way
+# to get a see-through root on purpose. This used to read `8f8f8fff` — a
+# skia-client leftover that never reached the egui client, and a light grey
+# that would now clash with the dark theme.
+
 # Launch from the Go module root rather than rust/imzero2 so apps that
 # shell out to the toolchain at runtime (e.g. godepview's go/packages
 # collection) see the module. The build steps above ran relative to
@@ -189,7 +198,6 @@ export BOXER_COMPONENT="${BOXER_COMPONENT:-imzero2-demo}"
        	--flightRecorder --flightRecorderOutputFile="$flightRecord" --flightRecorderFlushOnSignal=SIGTERM,SIGINT \
        	imzero2 demo --clientBinary "$clientDir/imzero2" \
                       --clientType "egui" \
-                      --clientBackgroundColorRGBA 8f8f8fff \
                       --clientVsync $VSYNC \
 		      --clientFullscreen off \
 		      --clientInitialMainWindowWidth "$WINDOW_W" \
