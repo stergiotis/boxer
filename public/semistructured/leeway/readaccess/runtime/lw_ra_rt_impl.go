@@ -1,6 +1,9 @@
 package runtime
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/generic"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -46,4 +49,66 @@ func ReleaseIfNotNil[T ReleasableI](a T) {
 	if !generic.IsNil(a) {
 		a.Release()
 	}
+}
+
+var ErrColumnIndexOutOfRange = eh.Errorf("column index out of range")
+
+// recordShapeI is the part of a record the index guard needs. Both RecordI
+// variants — the non-generic one and the type-parameterised leeway_generic one —
+// carry these two methods, so the guard is written once here rather than twice
+// behind the build tags.
+type recordShapeI interface {
+	Schema() *arrow.Schema
+	NumCols() int64
+}
+
+// outOfRangeColumnNames caps how many of the record's column names go into the
+// message. Enough to recognise the record, short enough to stay readable in a
+// GUI label or a CLI line.
+const outOfRangeColumnNames = 8
+
+// checkColumnIndexE guards the positional column lookup the generated read
+// access performs.
+//
+// Read access binds by position, so a record narrower than the table it was
+// generated for has no column at the index at all — arrow's Record.Column
+// indexes a slice and panics rather than reporting it. That is not a corrupt
+// program: a record reaches read access straight from whatever query a person
+// typed, and `SELECT count() FROM facts11` is one column wide. It has to come
+// back as an error so the callers that already handle unexpectedDataTypeE — the
+// facts viewer's detail pane falls back to its generic renderer — handle this
+// the same way instead of taking the process down.
+//
+// The record's own column names go into the message alongside the count, for
+// the same reason unexpectedDataTypeE names the column it found: seeing
+// "count()" in a record read access expected to be facts11-shaped is what makes
+// the mismatch obvious, and a caller cannot read eb's fields back.
+func checkColumnIndexE(rec recordShapeI, idx uint32) (err error) {
+	n := rec.NumCols()
+	if int64(idx) < n {
+		return
+	}
+	var names []string
+	if schema := rec.Schema(); schema != nil {
+		for i := 0; i < schema.NumFields() && i < outOfRangeColumnNames; i++ {
+			names = append(names, schema.Field(i).Name)
+		}
+	}
+	// "1 column", "3 columns" — the message is read by people, and a trailing
+	// "(s)" in a GUI label reads as an unfinished string.
+	have := fmt.Sprintf("%d columns", n)
+	if n == 1 {
+		have = "1 column"
+	}
+	if len(names) > 0 {
+		rendered := strings.Join(names, ", ")
+		if int64(len(names)) < n {
+			rendered += ", …"
+		}
+		have += " (" + rendered + ")"
+	}
+	err = eb.Build().Uint32("columnIndex", idx).Int64("numColumns", n).Strs("columnNames", names).
+		Errorf("read access binds column %d but the record has only %s: %w",
+			idx, have, ErrColumnIndexOutOfRange)
+	return
 }

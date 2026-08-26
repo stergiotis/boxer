@@ -25,6 +25,10 @@ type ArrayDataI interface {
 }
 
 func LoadAccelFieldFromRecord[F, B IndexConstraintI](idx uint32, rec RecordI, dest *RandomAccessTwoLevelLookupAccel[F, B, int, int64]) (err error) {
+	err = checkColumnIndexE(rec, idx)
+	if err != nil {
+		return
+	}
 	c := rec.Column(int(idx))
 	if c.DataType().ID() != arrow.LIST {
 		err = unexpectedDataTypeE(rec.Schema(), idx, c.DataType(), arrow.LIST)
@@ -42,6 +46,10 @@ func LoadAccelFieldFromRecord[F, B IndexConstraintI](idx uint32, rec RecordI, de
 	return
 }
 func LoadScalarValueFieldFromRecord[S any](idx uint32, expectedDatatype arrow.Type, rec RecordI, dest **S, ctor func(data arrow.ArrayData) *S) (err error) {
+	err = checkColumnIndexE(rec, idx)
+	if err != nil {
+		return
+	}
 	c := rec.Column(int(idx))
 	if c.DataType().ID() != expectedDatatype {
 		if expectedDatatype == arrow.BINARY && c.DataType().ID() == arrow.STRING {
@@ -54,6 +62,10 @@ func LoadScalarValueFieldFromRecord[S any](idx uint32, expectedDatatype arrow.Ty
 	return
 }
 func LoadNonScalarValueFieldFromRecord[S any](idx uint32, expectedDatatype arrow.Type, rec RecordI, dest **array.List, destElementAccess **S, ctorElementAccess func(data arrow.ArrayData) *S) (err error) {
+	err = checkColumnIndexE(rec, idx)
+	if err != nil {
+		return
+	}
 	c := rec.Column(int(idx))
 	if c.DataType().ID() != arrow.LIST {
 		err = unexpectedDataTypeE(rec.Schema(), idx, c.DataType(), arrow.LIST)
