@@ -27,6 +27,13 @@ Package names are `lading*` and the ClickHouse tables are `boxer.fs*`. The two
 answer different questions: `lading` is which subsystem owns them, `fs` is what
 they hold, and it is the table names a query author sees.
 
+To read the page by running it, [`scripts/dev/lading-demo.sh`](../../scripts/dev/lading-demo.sh)
+does §1 to §3 against this repository — the tables, then five mounts: the
+tracked tree, `doc/`, the `lading` packages, the checkout metadata-only, and a
+generated tree carrying the edge cases §9 lists. It prints §5's and §6's read
+paths with the ids filled in, writes a file of §5's queries with this run's
+mounts and snapshots in them, and `lading-demo.sh purge` takes it back out.
+
 ## 1. Provision the tables
 
 Once per store, and idempotently at every start:
