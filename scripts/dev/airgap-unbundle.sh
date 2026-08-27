@@ -40,6 +40,10 @@ esac
 
 manifest="$repo/_airgap/MANIFEST"
 [ -f "$manifest" ] || airgap_die "$manifest missing — is this an extracted airgap bundle?"
+# Before anything is positioned or run: this bundle's binaries are native to one
+# CPU, and an aarch64 bundle on an x86_64 host (or the reverse) otherwise fails
+# as "Exec format error" partway through provisioning.
+airgap_require_manifest_arch "$manifest"
 scope="$(sed -n 's/^scope=//p' "$manifest")"
 tags="$(tr -d '\n' < "$repo/tags")"
 
@@ -81,13 +85,15 @@ fi
 
 # ---- preflight the things no vendoring can supply ---------------------------
 airgap_step "preflight (warnings only)"
-if [ "$scope" = full ]; then
-    airgap_preflight_c_compiler
-fi
-airgap_preflight_vulkan
-# ffmpeg is bundled when the packing host could build it; only fall back to
-# expecting one from the environment when it is not.
-airgap_preflight_ffmpeg "$ffmpeg_bin" || airgap_preflight_services ffmpeg
+# Vulkan, a C toolchain and ffmpeg are all conditional on the render head this
+# bundle carries, so they are derived from the feature set the MANIFEST records
+# rather than asserted here. `builds` is yes only in full scope, where the target
+# compiles the head itself. A bundle from before that record exists reports
+# `unknown` and gets every check.
+airgap_preflight_render_head \
+    "$(sed -n 's/^imzero2_features=//p' "$manifest" | head -1)" \
+    "$ffmpeg_bin" \
+    "$([ "$scope" = full ] && echo yes || echo no)"
 # Same shape for tinygo: report the bundled one (by running it), else fall back to
 # expecting a host copy. The Go SDK goes on the probe's PATH because
 # `tinygo version` consults `go`.

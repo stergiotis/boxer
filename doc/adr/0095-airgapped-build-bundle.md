@@ -246,6 +246,144 @@ directly — an airgapped target has no other `tinygo` for that to displace.
   Best-effort throughout, matching `ffmpeg`: what could not be obtained is warned
   about at pack time and recorded as absent in the `MANIFEST`.
 
+### 2026-08-25 — aarch64 supported; bundles declared native-only and enforced
+
+The bundle now packs and provisions on **aarch64** as well as x86_64, and the
+"native-only" property that was always true of it is now stated and checked
+rather than left to the operator.
+
+**What actually blocked aarch64.** Not the pinned artefacts: the Go SDK, TinyGo,
+Grafana, `mcp-grafana` and `rclone` all publish `linux-arm64` releases, and each
+`AIRGAP_*_SHA256_arm64` constant was already in place. It was the static `ffmpeg`
+build, which demanded `nasm` unconditionally. `nasm` is an x86 assembler and
+nothing in that component set reaches for it on another CPU — libaom gates its
+whole nasm/yasm search on `AOM_TARGET_CPU` being x86/x86_64, SVT-AV1 gates it on
+`HAVE_X86_PLATFORM`, libvpx's `which nasm` probe sits inside its x86 branch (which
+is also the only reason the `which` *binary* was ever a prerequisite), and ffmpeg
+looks for an `x86asmexe` only on x86. So the preflight refused hosts that could
+build all four perfectly well. Because `airgap_preflight_ffmpeg_build` is what
+gates the ffmpeg stage, the visible cost was every aarch64 bundle silently losing
+its encoder. The requirement is now architecture-conditional: `nasm` plus `which`
+on x86, GNU `as` on aarch64 — the assembler libvpx's `arm64-linux-gcc` target
+actually names, and which libaom and ffmpeg need for their `.S` files regardless.
+
+**Native-only, said out loud.** Nothing in a bundle cross-compiles, so the packing
+host's CPU *is* the bundle's CPU. Two consequences follow, and both are now
+enforced rather than documented:
+
+- **Pack time.** `airgap_require_arch` refuses an unsupported CPU up front. The
+  pinned-artefact stagers are each best-effort by design, which means an
+  unsupported host did not fail — it succeeded, and produced a bundle quietly
+  missing its pinned Go SDK, tinygo and ffmpeg. A refusal is strictly better than
+  that discovery happening across an air gap.
+- **Unbundle time.** `airgap_require_manifest_arch` refuses an extracted bundle
+  whose `MANIFEST` arch is not the host's, before anything is positioned or run.
+  With one architecture in circulation this check was pointless; with two it is
+  the difference between one sentence naming both arches and
+  `.../toolchains/go/bin/go: cannot execute binary file: Exec format error`
+  several steps into provisioning. A `MANIFEST` with no `arch=` line predates the
+  record and warns rather than refuses — such a bundle is far more likely to be an
+  old one on its native host than a mismatched one.
+
+**Two spellings, both deliberate.** `airgap_arch` yields Go's (`amd64`, `arm64`),
+which is what release URLs and the `AIRGAP_*_SHA256_<arch>` families are keyed by;
+`airgap_arch_uname` yields `uname -m`'s (`x86_64`, `aarch64`), which is what
+bundle *filenames* carry and therefore what downstream `(scope, arch)` routing is
+named after. An operator reading a tarball name expects the string their own host
+prints, so the conventions stay separate even though one derives from the other.
+
+**One incidental fix.** The stagers each expanded
+`eval "sha=\$AIRGAP_X_SHA256_$arch"` directly. Under the `set -u` the wrappers
+run with, a case arm added *without* its hash constant is then an `unbound
+variable` that aborts the entire pack, rather than skipping one best-effort
+artefact — a trap set for exactly the kind of change this entry makes.
+`airgap_pinned_sha_for_arch` makes it a warning and a non-zero return.
+
+### 2026-08-25 — the target-side contract is derived from the render head, not asserted
+
+Three preflights told an airgapped operator the wrong thing, and the errors
+pointed in opposite directions at once. All three are now derived from the
+imzero2 feature set the bundle records, via `airgap_preflight_render_head`.
+
+**What was wrong.** The `## Consequences` note below says the shipped toolchains
+"expect a compatible glibc and the same CPU architecture", and §Context above
+attributes to Rust a residue of "a C compiler at build time (`libmimalloc-sys`
+compiles bundled C) and a Vulkan loader + ICD at runtime". That residue is real
+for the **wgpu/winit** stack. It is not real for the head this bundle actually
+builds. Measured 2026-08-25:
+
+| feature set | crates | wgpu | builds with no `cc` | `libvulkan` | ffmpeg |
+| --- | ---: | --- | --- | --- | --- |
+| `headless` (what the bundle builds) | 161 | no | **yes** | no | unused |
+| `headless_soft` | 166 | no | **yes** | no | **required** |
+| `headless_wgpu` | 199 | yes | — | yes | **required** |
+
+`--no-default-features --features headless` and `headless_soft` both complete a
+release build with `CC` and `CXX` pointed at a nonexistent binary, producing a
+binary whose entire dynamic contract is `libc`/`libm`/`libgcc_s`/`ld.so`. So:
+
+- the **C compiler + `pkg-config`** check ran for `--scope full` and blamed
+  `libmimalloc-sys` — a crate not in the graph. mimalloc sits behind imzero2's
+  `fast_alloc`, which lives only in `default`, and every airgap build passes
+  `--no-default-features`. The real causes of a C dependency are the wgpu graph's
+  `wayland-sys` (which probes with `pkg-config`) and `fast_alloc` — independent of
+  each other, which is why `cc` is now its own capability rather than a
+  consequence of `wgpu`;
+- the **Vulkan** check ran unconditionally, for a head that carries no wgpu;
+- **ffmpeg** was treated as merely nice to have, when a rasterizing head has the
+  encoder lane compiled in and spawns it as soon as `IMZERO2_HEADLESS_LISTEN` or
+  `IMZERO2_HEADLESS_H264_OUT` is set.
+
+**Why this is worth an entry rather than a quiet fix.** Asking for a Vulkan ICD
+that nothing loads, while calling the one genuinely required binary optional, is
+the most expensive way for a deploy contract to be wrong: a missing ICD is exactly
+the thing that gets chased for hours on a host with no network to search from.
+
+**The mechanism.** `AIRGAP_IMZERO2_FEATURES` is the single source of truth — the
+bundlers pass it to cargo, the MANIFEST publishes it as `imzero2_features`, and
+the unbundler derives requirements from it. Same doctrine as `tags`: the string
+that built the artefact is the string that describes it, so the two cannot drift.
+`airgap_render_head_caps` maps a feature set to `raster` / `wgpu` / `cc`; an
+unrecognised set resolves to all three, so a bundle predating this record asks for
+too much rather than promising too little.
+
+**One source correction alongside it.** `headless.rs`'s module doc and four
+inline comments said the PNG dump, the H264 sink, the encode probe and "every
+video codec" live under `headless_wgpu`. The `#[cfg]` beneath them says
+`headless_raster` — they predate ADR-0205's `headless_soft` split, and they are
+the difference between "this head has no encoder" and "it does". Comments only;
+no gate changed.
+
+### 2026-08-27 — boxer declares its own head; the verify now compiles what ships
+
+Two corrections to the entry above, both about `AIRGAP_IMZERO2_FEATURES`.
+
+**Boxer's head is `headless_wgpu,fast_alloc`, not `headless`.** The 2026-08-25
+entry gave that variable a single default for boxer and its downstream, and chose
+the lean head. Wrong here: `airgap-unbundle.sh` runs
+`rust/imzero2/build_rust_headless.sh` in **both** scopes — full scope builds it on
+the target, go-only ships what it produced — and that script builds
+`headless_wgpu,fast_alloc`. So this bundle really does need a Vulkan ICD at
+runtime and a C compiler at build time, and its original unconditional preflights
+were right, `libmimalloc-sys` attribution included, since `fast_alloc` is on here.
+The derived-requirements machinery stays; each bundler now declares its own head
+rather than inheriting a shared default, and the capability mapping treats a C
+toolchain as independent of wgpu precisely because `fast_alloc` can require one on
+its own.
+
+**The offline verify was testing a feature set the bundle does not ship.** It
+compiled a hardcoded `headless` while the target built `headless_wgpu,fast_alloc`
+— so it passed while saying nothing about the binary the target would produce, and
+the wgpu/naga subtree (the largest part of the graph, and the part with the C
+dependency) was never exercised offline at all. It now compiles the declared head.
+That is a pre-existing gap, not one the 2026-08-25 entry introduced.
+
+The verify also moves onto `airgap_verify_imzero2_heads`, the primitive
+hackathon2026 uses to check a whole menu of heads. Boxer declares no menu — its
+unbundler runs a fixed script rather than taking a head argument — so here it
+verifies one head; the point is that the toolchain pinning, the graded failure and
+the timing report do not exist in two versions.
+
 ## Status
 
 Accepted (2026-06-23; updated 2026-07-31).

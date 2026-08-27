@@ -41,6 +41,129 @@ airgap_require_cmd() {  # <cmd> [message]
     command -v "$1" >/dev/null 2>&1 || airgap_die "${2:-$1 not found on PATH.}"
 }
 
+# ---- architecture -----------------------------------------------------------
+# One place that answers "which CPU are we packing for". Two vocabularies are in
+# play and both are load-bearing, so both are named rather than converted ad hoc
+# at each call site:
+#
+#   airgap_arch        Go's spelling (amd64, arm64). What upstream release URLs
+#                      and the AIRGAP_*_SHA256_<arch> constants are keyed by.
+#   airgap_arch_uname  `uname -m`'s spelling (x86_64, aarch64). What bundle
+#                      FILENAMES carry, and therefore what the ingress router
+#                      and the per-(scope,arch) git-daemon repos are named after
+#                      (boxer ADR-0095; hackathon ADR-0015). An operator reading
+#                      a tarball name expects the arch string their own host
+#                      prints, so the two conventions stay separate even though
+#                      one function derives from the other.
+#
+# Supported today: x86_64 and aarch64. Every pinned artefact a bundle carries —
+# the Go SDK, TinyGo, Grafana, mcp-grafana, rclone — publishes a linux release
+# for both. Anything else normalises to EMPTY rather than being guessed at, which
+# is how the pinned-artefact stagers below decide to stage nothing and degrade.
+#
+# A bundle is NATIVE-ONLY by construction: nothing here cross-compiles, so the
+# packing host's CPU is the bundle's CPU, and airgap_require_manifest_arch
+# refuses one on a host it does not match.
+
+# Normalise any of the spellings a system might print into Go's, or empty when
+# the bundle flow has no support for it. Takes the name as an argument so it also
+# serves the unbundler, which normalises what a MANIFEST recorded rather than
+# what this host reports.
+airgap_normalize_arch() {  # <arch-name>
+    case "$1" in
+        x86_64|amd64)  echo amd64 ;;
+        aarch64|arm64) echo arm64 ;;
+        *)             echo "" ;;
+    esac
+}
+
+airgap_arch() { airgap_normalize_arch "$(uname -m)"; }
+
+airgap_arch_uname() {
+    case "$(airgap_arch)" in
+        amd64) echo x86_64 ;;
+        arm64) echo aarch64 ;;
+        *)     echo "" ;;
+    esac
+}
+
+# Resolve the pinned SHA-256 for THIS host out of a family of <prefix>_<goarch>
+# constants, echoing it on stdout.
+#
+# Exists so that adding an architecture is a two-line change that cannot half
+# apply. Every stager used to expand `eval "sha=\$AIRGAP_X_SHA256_$arch"`
+# directly, which under the `set -u` the wrappers run with turns a case arm added
+# WITHOUT its hash constant into `unbound variable` — aborting the whole pack
+# instead of skipping one best-effort artefact. Here that is a warning naming the
+# artefact and the missing constant, and a non-zero return the caller already
+# knows how to handle.
+#   args: <constant-prefix, e.g. AIRGAP_TINYGO_SHA256> <artefact label>
+airgap_pinned_sha_for_arch() {
+    local prefix="$1" label="$2" arch sha
+    arch="$(airgap_arch)"
+    [ -n "$arch" ] || {
+        airgap_warn "unsupported architecture $(uname -m) — no pinned $label release (x86_64/aarch64 only)."
+        return 1; }
+    eval "sha=\${${prefix}_${arch}:-}"
+    [ -n "$sha" ] || {
+        airgap_warn "no pinned $label release for $arch (${prefix}_${arch} is unset) — not bundling it."
+        return 1; }
+    echo "$sha"
+}
+
+# Refuse to pack for an architecture this flow does not support, naming what it
+# would have produced. Called by a bundler up front: the pinned-artefact stagers
+# are individually best-effort, so without this an unsupported host does not fail
+# — it quietly yields a bundle with no Grafana, no rclone, no pinned Go SDK, and
+# an unbuilt render head, which is a worse thing to discover across an air gap
+# than a refusal at pack time. Echoes the `uname -m` spelling on stdout.
+airgap_require_arch() {
+    local arch; arch="$(airgap_arch_uname)"
+    [ -n "$arch" ] || airgap_die "unsupported architecture: $(uname -m).
+  Airgap bundles are native-only (nothing here cross-compiles) and pinned
+  artefacts are published for linux x86_64 and aarch64 only. Pack on one of those."
+    echo "$arch"
+}
+
+# Refuse an extracted bundle whose recorded architecture is not this host's.
+#
+# A bundle carries native binaries for exactly one CPU: the shipped Go SDK and
+# rustc, tinygo, Grafana, mcp-grafana, rclone, the static ffmpeg, and — in
+# go-only scope — the prebuilt render head. With more than one architecture in
+# circulation, grabbing the wrong tarball is an ordinary mistake, and unchecked
+# its first symptom is
+#     .../_airgap/toolchains/go/bin/go: cannot execute binary file: Exec format error
+# several steps into provisioning; worse, a go-only bundle can provision cleanly
+# and only fail when the prebuilt render head is launched.
+#
+# A bundle whose MANIFEST has no `arch=` line predates this record: warn, do not
+# refuse. Such a bundle is far more likely to be an old one on its native host
+# than a mismatched one, and there is nothing better to go on.
+#   args: <manifest-path>
+airgap_require_manifest_arch() {
+    local manifest="$1" want got wantn gotn
+    want="$(sed -n 's/^arch=//p' "$manifest" | head -1)"
+    got="$(uname -m)"
+    if [ -z "$want" ]; then
+        airgap_warn "this bundle's MANIFEST records no arch — cannot confirm it was packed for $got."
+        return 0
+    fi
+    wantn="$(airgap_normalize_arch "$want")"
+    gotn="$(airgap_arch)"
+    # Compare normalised where both are known, and literally otherwise, so an
+    # architecture this library has never heard of still gets a useful check
+    # rather than silently passing as "empty equals empty".
+    if [ -n "$wantn" ] && [ -n "$gotn" ]; then
+        [ "$wantn" = "$gotn" ] || airgap_die "architecture mismatch: this bundle was packed for $want, this host is $got.
+  A bundle carries native binaries for one CPU only — the Go SDK, rustc, the
+  static ffmpeg, the render head — and nothing in it cross-compiles.
+  Fetch the $got bundle, or provision this one on an $want host."
+    elif [ "$want" != "$got" ]; then
+        airgap_die "architecture mismatch: this bundle was packed for $want, this host is $got."
+    fi
+    airgap_ok "architecture $got matches the bundle"
+}
+
 # ---- compression ------------------------------------------------------------
 # Sets AIRGAP_COMPEXT and defines airgap_compress() (reads stdin, writes $1).
 # Prefers zstd, falls back to gzip — matching boxer's original behaviour.
@@ -182,19 +305,200 @@ airgap_cargo_config_materialize() {
     sed -E "s#^directory = .*#directory = \"$3\"#" "$1" > "$2"
 }
 
+# Compile every DECLARED head offline from the vendor tree, with the toolchain the
+# bundle ships, and record which ones actually built.
+#
+# This is what turns AIRGAP_IMZERO2_HEADS from a hint into a promise. The vendor
+# tree already carries every head's crates (see that variable's note), so without
+# this the bundle would be offering the target feature sets nothing had ever
+# compiled — which is precisely the failure the single-head verify was added to
+# prevent (an h3o release whose MSRV had drifted past the pinned channel shipped
+# in a bundle before that check existed).
+#
+# ONE shared CARGO_HOME and ONE shared target dir across all heads, deliberately:
+# the graphs overlap heavily, so each head after the first reuses most of the
+# previous artifacts. Measured 2026-08-25 on a warm registry cache, release
+# builds, in that shared dir:
+#
+#   headless        115s   (cold — pays for the shared base)
+#   headless_soft   +24s   (166 crates, 161 of them already built)
+#   headless_wgpu  +168s   (wgpu/ash/naga is a large new subtree)
+#   ------------------------
+#   all three       307s   = 2.7x one head, not 3x
+#
+# The shared target dir peaked at 1.6 GB. It lives under `mktemp -d`, so a packing
+# host with a small tmpfs /tmp may need TMPDIR pointed at real disk — the
+# single-head verify this replaced already used ~1 GB there.
+#
+# Returns non-zero ONLY when the DEFAULT head fails. That one is the bundle's
+# primary deliverable, and shipping a Rust tree its own toolchain cannot build is
+# the thing this check exists to stop. A secondary head that fails is dropped from
+# the verified menu with a warning — the bundle then offers less rather than
+# promising something untested.
+#
+# Sets AIRGAP_IMZERO2_HEADS_VERIFIED to the space-separated subset that compiled.
+# A global rather than a stdout return, following airgap_pick_compressor: the
+# progress output below would corrupt anything echoed.
+#
+#   args: <sysroot> <config.in> <vendordir> <cratedir> <default-head> <head...>
+airgap_verify_imzero2_heads() {
+    local sysroot="$1" configin="$2" vendordir="$3" cratedir="$4" default="$5"; shift 5
+    local tmp_cargo rc=0 h t0 elapsed
+    local -a heads=() ok=()
+    AIRGAP_IMZERO2_HEADS_VERIFIED=""
+    [ $# -gt 0 ] || { airgap_warn "no render heads declared — nothing to verify."; return 0; }
+    heads=( "$@" )
+
+    tmp_cargo="$(mktemp -d)"
+    airgap_cargo_config_materialize "$configin" "$tmp_cargo/config.toml" "$vendordir"
+    for h in "${heads[@]}"; do
+        airgap_step "verify offline compile: --features $h"
+        t0=$SECONDS
+        if ( cd "$cratedir" && \
+             CARGO_HOME="$tmp_cargo" CARGO_NET_OFFLINE=true \
+             RUSTUP_TOOLCHAIN="$(basename "$sysroot")" \
+               "$sysroot/bin/cargo" build --release --frozen \
+                 --no-default-features --features "$h" \
+                 --target-dir "$tmp_cargo/target" ); then
+            elapsed=$(( SECONDS - t0 ))
+            airgap_ok "$h compiles offline from the vendor tree (${elapsed}s)"
+            ok+=( "$h" )
+        else
+            elapsed=$(( SECONDS - t0 ))
+            if [ "$h" = "$default" ]; then
+                airgap_warn "the DEFAULT head '$h' does NOT compile offline (${elapsed}s)."
+                rc=1
+            else
+                airgap_warn "'$h' does not compile offline (${elapsed}s) — dropping it from the"
+                airgap_warn "  declared menu, so the bundle will not offer it to the target."
+            fi
+        fi
+    done
+    rm -rf -- "$tmp_cargo"
+    AIRGAP_IMZERO2_HEADS_VERIFIED="${ok[*]:-}"
+    return $rc
+}
+
+# Is <head> in <menu>? Used by both the pack (to sanity-check its declaration)
+# and the unbundler (to gate what the target may select).
+airgap_head_in_menu() {  # <head> <menu>
+    case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
 airgap_cargo_env_lines() {  # <rust_tc_bin_parent> <cargo_home>
     echo "export CARGO_HOME=\"$2\""
     echo "export CARGO_NET_OFFLINE=true"
     echo "export PATH=\"$1/bin:\$PATH\""
 }
 
+# ---- the render head's feature set ------------------------------------------
+# The imzero2 feature set the airgap flow builds, in ONE place. The bundlers pass
+# it to cargo, the MANIFEST publishes it, and the unbundler derives the target's
+# requirements from it — so the binary that ships, the record of what shipped,
+# and the list of things the operator is told to supply cannot disagree.
+#
+# `headless` is the lean appliance host (ADR-0128 SD6): carrier + FFFI2
+# interpreter + the mesh draw-stream lane. Overridable so a caller can pack a
+# different head; whatever it is set to is what the pack COMPILES (the full-scope
+# offline verify and the go-only prebuilt both use this variable), so an override
+# is verified rather than merely declared.
+# NOTE the default here is only a conservative fallback. Each bundler DECLARES its
+# own, because the two repos genuinely build different heads: boxer's
+# rust/imzero2/build_rust_headless.sh — which its unbundler runs in both scopes —
+# builds `headless_wgpu,fast_alloc`, while hackathon's flow builds `headless`.
+# Getting this wrong is not cosmetic: it decides whether the operator is told to
+# supply a Vulkan ICD and a C compiler.
+AIRGAP_IMZERO2_FEATURES="${AIRGAP_IMZERO2_FEATURES:-headless}"
+
+# The render heads a bundle DECLARES it can build on the airgapped side — the
+# menu, of which AIRGAP_IMZERO2_FEATURES is the default pick.
+#
+# WHY A MENU IS POSSIBLE AT ALL. `cargo vendor` has no feature or target filter:
+# it materializes every entry in Cargo.lock, all 560 of them, including `wgpu`,
+# `ash`, `eframe`, `winit`, `mimalloc` and `egui_software_backend`. So a bundle
+# that ships the Rust toolchain and the vendor tree already carries the crates for
+# EVERY head — the choice of head is not a property of the payload, it is a
+# decision the target can make at provision time. What the pack adds is the
+# guarantee: each declared head is COMPILED here, offline, with the toolchain the
+# bundle ships, before it is offered.
+#
+# The declaration is therefore a promise, not a hint, and it is bounded by what
+# the pack is willing to compile. A head that fails to build here is dropped from
+# the menu rather than offered untested — except the default, whose failure is
+# fatal, because that one is the bundle's primary deliverable.
+#
+# Only meaningful for a bundle that ships toolchain + vendor. One that ships a
+# prebuilt head offers exactly that head and no choice.
+AIRGAP_IMZERO2_HEADS="${AIRGAP_IMZERO2_HEADS:-headless headless_soft headless_wgpu}"
+
+# Capabilities a feature set implies, as space-separated words. This is the whole
+# of the mapping from "what was built" to "what the target must supply". The three
+# are INDEPENDENT — deriving one from another is how the old contract went wrong:
+#
+#   raster  the build can rasterize frames into host memory (`headless_raster`),
+#           so the ffmpeg encoder lane is COMPILED IN and fires as soon as
+#           IMZERO2_HEADLESS_LISTEN or _H264_OUT is set. ffmpeg becomes a
+#           requirement, not a nicety. Note `desktop` does NOT imply this: it
+#           renders to a window through eframe and never enables headless_raster,
+#           so the encoder lane is absent there.
+#   wgpu    the build carries wgpu, so it needs a Vulkan loader + ICD at runtime.
+#   cc      a C toolchain (and pkg-config) at BUILD time. Two independent causes:
+#           the wgpu/eframe graph, which pulls `wayland-sys` and probes with
+#           pkg-config; and mimalloc via `fast_alloc`, which `default` carries.
+#           Either one alone is enough, which is why this is not folded into wgpu.
+#
+# Measured on 2026-08-25 with `cargo tree` plus release builds run with CC and
+# CXX pointed at a nonexistent binary:
+#
+#   feature set     crates  wgpu  builds w/o cc  libvulkan  ffmpeg
+#   headless           161   no        yes          no      unused (mesh lane)
+#   headless_soft      166   no        yes          no      REQUIRED
+#   headless_wgpu      199  yes         -          yes      REQUIRED
+#
+# The lean pair's only -sys crate is `linux-raw-sys` (pure Rust); headless_wgpu
+# adds `wayland-sys` and `renderdoc-sys`. An unrecognised feature set yields
+# `unknown`, and the preflight then checks EVERYTHING rather than quietly telling
+# an operator they need nothing.
+airgap_render_head_caps() {  # <feature-string>
+    local f=",${1//[[:space:]]/,}," caps="" known=0
+    case "$f" in *,headless_soft,*|*,headless_wgpu,*|*,headless_raster,*)
+        caps="raster"; known=1 ;; esac
+    case "$f" in *,headless_wgpu,*|*,desktop,*|*,default,*)
+        caps="$caps wgpu"; known=1 ;; esac
+    case "$f" in *,headless_wgpu,*|*,desktop,*|*,default,*|*,fast_alloc,*)
+        caps="$caps cc"; known=1 ;; esac
+    # Bare `headless` implies none of the three, but it IS a known set — so it
+    # must not fall through to `unknown`.
+    case "$f" in *,headless,*) known=1 ;; esac
+    [ "$known" = 1 ] || { echo unknown; return 0; }
+    caps="${caps# }"
+    echo "$caps"
+}
+
+airgap_caps_have() {  # <caps> <word>
+    case " $1 " in *" $2 "*) return 0 ;; *) return 1 ;; esac
+}
+
+# Caps with an unrecognised feature set resolved to the STRICTEST answer rather
+# than the emptiest. A bundle packed before `imzero2_features` was recorded has
+# no feature line at all, and for that case asking the operator for too much is
+# the safe direction — promising them "you need nothing" is not.
+airgap_render_head_caps_effective() {  # <feature-string>
+    local c; c="$(airgap_render_head_caps "$1")"
+    [ "$c" = unknown ] && c="raster wgpu cc"
+    echo "$c"
+}
+
 # ---- preflight (target-side; warnings only) ---------------------------------
+# Only reached for a build whose graph actually pulls a C-requiring crate — see
+# airgap_preflight_render_head. The lean heads do not: they build AND link with
+# no compiler on the box at all (measured, see the table above).
 airgap_preflight_c_compiler() {
     if command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1 || command -v clang >/dev/null 2>&1
-        then airgap_ok "C compiler present (needed at build time for libmimalloc-sys)"
-        else airgap_warn "no C compiler (cc/gcc/clang) — the Rust build will fail on libmimalloc-sys"; fi
+        then airgap_ok "C compiler present (the wgpu graph needs one at build time)"
+        else airgap_warn "no C compiler (cc/gcc/clang) — building the wgpu render head will fail"; fi
     command -v pkg-config >/dev/null 2>&1 \
-        && airgap_ok "pkg-config present" || airgap_warn "pkg-config absent — some -sys crates probe with it"
+        && airgap_ok "pkg-config present" || airgap_warn "pkg-config absent — wayland-sys and friends probe with it"
 }
 
 airgap_preflight_vulkan() {
@@ -289,6 +593,75 @@ airgap_preflight_ffmpeg() {  # <ffmpeg-path>
     return 1
 }
 
+# Preflight exactly the target-side requirements the bundle's render head
+# actually creates, and say so for the ones it does not.
+#
+# WHY THIS EXISTS. These three checks used to be keyed on the wrong thing, and
+# the result was a deploy contract wrong in both directions at once:
+#
+#   * the C compiler + pkg-config check ran for `--scope full` and blamed
+#     `libmimalloc-sys` — a crate that is NOT in the graph the airgap flow
+#     builds. mimalloc sits behind imzero2's `fast_alloc`, which lives only in
+#     `default`, and every airgap build passes `--no-default-features`. Measured:
+#     `--features headless` and `--features headless_soft` both build and LINK
+#     with CC=/nonexistent, producing a binary whose entire dynamic contract is
+#     libc/libm/libgcc_s/ld.so.
+#   * the Vulkan check ran unconditionally, and the docs promised an ICD was
+#     needed "for the wgpu render head" — but the lean heads carry no wgpu at
+#     all. Measured: no `libvulkan` reference in either binary.
+#   * ffmpeg was treated as merely nice to have, when a rasterizing head has the
+#     encoder lane COMPILED IN and spawns it the moment the carrier or the H264
+#     sink is configured.
+#
+# Asking an airgapped operator for a Vulkan ICD nothing loads, while calling the
+# one genuinely required binary optional, is the worst way for this to be wrong:
+# a missing ICD is exactly the thing that gets chased for hours on an isolated
+# host. So the requirements are now DERIVED from the feature set the MANIFEST
+# records, and each is reported as required, satisfied, or not applicable.
+#
+#   args: <feature-string> <ffmpeg-path> <target-builds-the-head: yes|no>
+airgap_preflight_render_head() {
+    local features="$1" ffmpeg="$2" builds="${3:-no}" caps
+    caps="$(airgap_render_head_caps "$features")"
+    if [ "$caps" = unknown ]; then
+        airgap_warn "unrecognised render-head feature set '$features' — cannot derive what this"
+        airgap_warn "  target needs, so EVERY requirement is checked below. Teach"
+        airgap_warn "  airgap_render_head_caps about it to get an accurate report."
+        caps="$(airgap_render_head_caps_effective "$features")"
+    else
+        airgap_ok "render head: --no-default-features --features $features${caps:+ ($caps)}"
+    fi
+
+    if airgap_caps_have "$caps" wgpu; then
+        airgap_preflight_vulkan
+    else
+        airgap_ok "no wgpu in this build — needs no Vulkan loader/ICD"
+    fi
+
+    # Only a target that COMPILES the head can need a C toolchain for it, so this
+    # is silent for a bundle that ships the render head prebuilt.
+    if [ "$builds" = yes ]; then
+        if airgap_caps_have "$caps" cc; then
+            airgap_preflight_c_compiler
+        else
+            airgap_ok "this Rust graph is pure Rust — needs no C compiler or pkg-config to build"
+        fi
+    fi
+
+    if airgap_caps_have "$caps" raster; then
+        if ! airgap_preflight_ffmpeg "$ffmpeg"; then
+            airgap_warn "ffmpeg is NOT bundled, and this build requires one: it rasterizes frames,"
+            airgap_warn "  so the encoder lane is compiled in and spawns ffmpeg as soon as"
+            airgap_warn "  IMZERO2_HEADLESS_LISTEN or IMZERO2_HEADLESS_H264_OUT is set."
+            airgap_warn "  The environment must supply it:"
+            airgap_preflight_services ffmpeg
+        fi
+    else
+        airgap_ok "mesh draw-stream lane only (no raster) — this build never spawns ffmpeg"
+    fi
+    return 0
+}
+
 # ---- pinned upstream prebuilt tools -----------------------------------------
 # Everything else in a bundle is either vendored source, compiled here from
 # source (ffmpeg), or a copy of a toolchain the packing operator already
@@ -354,19 +727,16 @@ AIRGAP_TINYGO_SHA256_arm64=789733bc3b5bace0bd1835a267b3ea267804a7ef1cfe69bc522c2
 # it constrains the target's CPU architecture but not its libc. It does still need
 # a `go` on PATH; the bundle's shipped GOROOT supplies that.
 #
-# BEST-EFFORT, like airgap_ship_ffmpeg: an architecture with no pinned release, a
-# missing curl, or a hash mismatch warns and stages nothing, leaving the target to
-# supply its own tinygo. Returns non-zero when nothing was staged.
+# BEST-EFFORT, like airgap_ship_ffmpeg: an architecture with no pinned release
+# (see airgap_pinned_sha_for_arch), a missing curl, or a hash mismatch warns and
+# stages nothing, leaving the target to supply its own tinygo. Returns non-zero
+# when nothing was staged.
 #   args: <destdir> <cachedir>
 airgap_ship_tinygo() {
     local dest="$1" cache="$2"
     local arch sha url tarball work
-    arch="$(uname -m)"
-    case "$arch" in
-        x86_64|amd64)  arch=amd64; sha="$AIRGAP_TINYGO_SHA256_amd64" ;;
-        aarch64|arm64) arch=arm64; sha="$AIRGAP_TINYGO_SHA256_arm64" ;;
-        *) airgap_warn "no pinned TinyGo release for $arch — not bundling tinygo."; return 1 ;;
-    esac
+    arch="$(airgap_arch)"
+    sha="$(airgap_pinned_sha_for_arch AIRGAP_TINYGO_SHA256 TinyGo)" || return 1
     url="https://github.com/tinygo-org/tinygo/releases/download/v${AIRGAP_TINYGO_VERSION}/tinygo${AIRGAP_TINYGO_VERSION}.linux-${arch}.tar.gz"
     airgap_step "stage TinyGo ${AIRGAP_TINYGO_VERSION} (linux-${arch})"
     tarball="$(airgap_fetch_pinned "$url" "$sha" "$cache")" || return 1

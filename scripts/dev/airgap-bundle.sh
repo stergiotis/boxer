@@ -58,11 +58,17 @@
 # builds it from that vendored source — no separate binary, no repo bloat
 # (ADR-0026 §SD4: still an external binary the monolith neither imports nor
 # supervises; showcase/onbox/nats.service runs it).
-# And two things no language vendoring can supply, which the target still needs:
-#   - build-time (full scope only): a C compiler + pkg-config (libmimalloc-sys
-#     compiles bundled C via `cc`).
-#   - runtime: a Vulkan loader + ICD for wgpu (hardware driver, or lavapipe for
-#     software rendering). The unbundler preflights for both.
+# What no language vendoring can supply depends on WHICH RENDER HEAD is packed, so
+# the unbundler derives it from the MANIFEST's `imzero2_features` line rather than
+# assuming a fixed list. For the default lean head (--no-default-features
+# --features headless) the answer is: nothing. Measured 2026-08-25 — it builds and
+# links with no C compiler on the box, and its binary references no libvulkan.
+#   - a rasterizing head (headless_soft, headless_wgpu) REQUIRES ffmpeg at
+#     runtime: the encoder lane is then compiled in and spawns it as soon as
+#     IMZERO2_HEADLESS_LISTEN or IMZERO2_HEADLESS_H264_OUT is set.
+#   - a wgpu head additionally needs a Vulkan loader + ICD at runtime (hardware
+#     driver, or lavapipe for software rendering), and — in full scope, where the
+#     target compiles it — a C compiler + pkg-config for `wayland-sys`.
 #
 # Requires (on this connected build host):
 #   - `go` (the SSH-signed release toolchain; its GOROOT is shipped verbatim).
@@ -111,7 +117,25 @@ case "$scope" in
 esac
 
 tags="$(tr -d '\n' < "$repo/tags")"
-arch="$(uname -m)"
+# The render head THIS repo ships, in both scopes: rust/imzero2/build_rust_headless.sh
+# is what the unbundler runs (full scope) and what produced the prebuilt binary
+# (go-only), and it builds `headless_wgpu,fast_alloc`. Declared here rather than
+# taken from the library default, which is the lean head hackathon2026 uses — the
+# difference decides whether the target is told it needs a Vulkan ICD and a C
+# compiler, and boxer's answer is yes to both.
+#
+# Keep this in step with build_rust_headless.sh. The offline verify below compiles
+# THIS string, so a drift between the two shows up as a verify that tested
+# something other than what the target will build.
+AIRGAP_IMZERO2_FEATURES="${AIRGAP_IMZERO2_FEATURES:-headless_wgpu,fast_alloc}"
+# No menu here: the unbundler runs a fixed build script rather than taking a head
+# argument, so this bundle offers exactly the one head above. hackathon2026's
+# bundle is where the selectable menu lives.
+AIRGAP_IMZERO2_HEADS="${AIRGAP_IMZERO2_HEADS:-$AIRGAP_IMZERO2_FEATURES}"
+# Refuse an unsupported CPU here rather than one best-effort artefact at a time:
+# the stagers degrade individually, so an unsupported host otherwise yields a
+# bundle quietly missing its pinned Go SDK, tinygo and ffmpeg. x86_64/aarch64.
+arch="$(airgap_require_arch)"
 stamp="$(date +%Y%m%d)"
 [ -n "$out" ] || out="$repo/boxer-airgap-${scope}-${arch}-${stamp}.tar.zst"
 
@@ -176,24 +200,27 @@ if [ "$scope" = full ]; then
         rust/vendor rust/imzero2/Cargo.toml rust/h3bridge/Cargo.toml )
     echo "    wrote rust/vendor and _airgap/cargo-config.toml.in"
 
+    # One head here, not a menu (see the declaration above) — but through the same
+    # primitive hackathon2026 uses, so the toolchain pinning, the graded failure
+    # and the timing report do not exist in two versions.
+    #
+    # This now compiles `headless_wgpu,fast_alloc`, i.e. what build_rust_headless.sh
+    # actually builds on the target. It previously compiled a hardcoded `headless`,
+    # so the verify was testing a feature set the bundle does not ship — the check
+    # passed while saying nothing about the binary the target would produce.
     if [ "$verify_rust" = 1 ]; then
-        airgap_step "verify Rust builds offline from rust/vendor (slow: full compile)"
-        tmp_cargo="$(mktemp -d)"
-        airgap_cargo_config_materialize "$src/_airgap/cargo-config.toml.in" \
-            "$tmp_cargo/config.toml" "$src/rust/vendor"
-        # Pin every rustc to the toolchain we ship (the rustup proxy resolves
-        # per-crate by cwd; vendored crates carry no pin, so it would fall back
-        # to the host default).
-        ( cd "$src/rust/imzero2" && \
-          CARGO_HOME="$tmp_cargo" CARGO_NET_OFFLINE=true \
-          RUSTUP_TOOLCHAIN="$(basename "$rust_sysroot")" \
-            "$rust_sysroot/bin/cargo" build --release --frozen --no-default-features --features headless \
-              --target-dir "$tmp_cargo/target" )
-        rm -rf -- "$tmp_cargo"
-        echo "    Rust vendor is offline-complete."
+        airgap_step "verify the render head compiles offline from rust/vendor (slow)"
+        airgap_verify_imzero2_heads "$rust_sysroot" "$src/_airgap/cargo-config.toml.in" \
+            "$src/rust/vendor" "$src/rust/imzero2" \
+            "$AIRGAP_IMZERO2_FEATURES" \
+            $AIRGAP_IMZERO2_HEADS `# unquoted on purpose: the menu splits into args` \
+            || airgap_die "the render head does not build offline from rust/vendor.
+  Refusing to pack a Rust tree this bundle's own pinned toolchain cannot build."
+        heads_verified="$AIRGAP_IMZERO2_HEADS_VERIFIED"
     else
         airgap_warn "skipped the Rust offline compile (--skip-rust-verify)."
         airgap_warn "  The bundle may ship a Rust tree its own pinned toolchain cannot build."
+        heads_verified=""
     fi
 
     airgap_ship_goroot "$src/_airgap/toolchains/go"
@@ -260,6 +287,15 @@ fi
     echo "date=$stamp"
     echo "go=$(go version)"
     echo "tags=$tags"
+    # The render head's feature set. The unbundler derives the target's real
+    # requirements from this (Vulkan? a C toolchain? ffmpeg?), so it has to be
+    # recorded rather than re-guessed there.
+    echo "imzero2_features=$AIRGAP_IMZERO2_FEATURES"
+    # Same two keys hackathon2026's MANIFEST carries, so one reader serves both.
+    # No menu here: offered == the single declared head (this unbundler runs a
+    # fixed build script rather than taking a --head argument).
+    echo "imzero2_heads=$AIRGAP_IMZERO2_HEADS"
+    echo "imzero2_heads_verified=${heads_verified:-$AIRGAP_IMZERO2_FEATURES}"
     [ "$scope" = full ] && echo "rust=$(cd rust/imzero2 && rustc --version 2>/dev/null || true)"
     echo "ffmpeg=$([ "$ffmpeg_shipped" = 1 ] && "$src/_airgap/bin/ffmpeg" -hide_banner -version 2>/dev/null | head -1 || echo "none (environment-provided)")"
     # A tinygo appears here only if the wasm smoke build passed; a failure drops

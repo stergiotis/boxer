@@ -18,12 +18,18 @@ on the target. The decision and trade-offs are recorded in
 
 One asymmetry shapes everything below. **Go vendors to a fully self-contained
 offline build** — it is CGO-free, so it needs no C compiler and no system
-libraries. **Rust does not quite**: its ~660 crates vendor cleanly (all from the
-registry — there are no git dependencies), but the wgpu/winit stack leaves a thin
-residue that no `cargo vendor` can supply — a **C compiler at build time**
-(`libmimalloc-sys` compiles bundled C) and a **Vulkan loader + ICD at runtime**
-(`ash` dlopens `libvulkan.so.1`). That residue, plus the toolchains themselves,
-is what the bundle and this guide are mostly about.
+libraries. **Rust can too, but only for some render heads**: its crates vendor
+cleanly (all from the registry — there are no git dependencies), and the residue
+`cargo vendor` cannot supply belongs to the **wgpu/winit** stack specifically — a
+**C compiler at build time** (`wayland-sys` probes with `pkg-config`; `mimalloc`,
+via `default`'s `fast_alloc`, compiles bundled C) and a **Vulkan loader + ICD at
+runtime** (`ash` dlopens `libvulkan.so.1`).
+
+The head this bundle builds by default, `--no-default-features --features
+headless`, carries none of that: measured 2026-08-25, it builds *and links* with
+`CC` pointed at a nonexistent binary, and its binary references no `libvulkan`.
+So that residue is conditional, and the unbundler derives it from the feature set
+the MANIFEST records — see the requirements table below.
 
 This is the language-native route. A whole-system, fully hermetic alternative
 (Nix — cryptographic reproducibility and near-free incremental transfer) is out
@@ -62,8 +68,11 @@ system `ffmpeg` for anything else. It is **software-only by construction**: a
 static binary cannot `dlopen`, which is how both VAAPI and NVENC load their
 drivers. That costs nothing on a host without a GPU, and `CodecLane::best`
 probes and falls back on its own. Packing is best-effort: a build host lacking
-`cmake`/`nasm`/a static libc simply produces a bundle without it, and the old
-environment-provided behaviour returns. `--no-ffmpeg` opts out deliberately.
+`cmake`/an assembler/a static libc simply produces a bundle without it, and the
+old environment-provided behaviour returns. `--no-ffmpeg` opts out deliberately.
+The assembler is architecture-dependent — `nasm` on x86_64, GNU `as` on aarch64,
+since every codec here gates its nasm search on an x86 target;
+`scripts/dev/build-static-ffmpeg.sh --preflight-only` names what is missing.
 Verify a bundled binary with `scripts/dev/verify-ffmpeg-lanes.sh`.
 
 **`tinygo` is bundled as a pinned upstream binary** at `_airgap/toolchains/tinygo`
@@ -86,15 +95,24 @@ shadow the system one, an airgapped target has no other `tinygo` to displace.
 material against a `go-only` bundle. `linux-amd64` and `linux-arm64` are pinned;
 any other architecture gets a warning and no tinygo.
 
-**Not bundled and the target still needs** (no language vendoring covers these):
+**Not bundled and the target still needs** — conditional on the render head the
+bundle carries, which `airgap-unbundle.sh` reads from the MANIFEST's
+`imzero2_features` line rather than assuming:
 
-- *Build time, `full` scope only:* a C compiler (`cc`/`gcc`/`clang`) and
-  `pkg-config`. Distro packages.
-- *Runtime:* a Vulkan loader + ICD for the wgpu head — a hardware driver (see
-  [How to enable AMD hardware video encoding](./amd-hardware-video-encoding.md))
-  or `lavapipe` for software rendering. Without an ICD the imzero2 head will not
-  start, though headless pixel streaming ([ADR-0024](../adr/0024-imzero2-remote-access-browser-viewer.md))
-  still drives off it.
+| render head | C compiler + `pkg-config` (build, `full` scope) | Vulkan loader + ICD (runtime) | `ffmpeg` (runtime) |
+| --- | --- | --- | --- |
+| `headless` — the default here | no | no | not used (mesh lane only) |
+| `headless_soft` — CPU raster | no | no | **required** |
+| `headless_wgpu` — GPU raster | yes | yes | **required** |
+
+For a wgpu head the ICD is a hardware driver (see
+[How to enable AMD hardware video encoding](./amd-hardware-video-encoding.md)) or
+`lavapipe` for software rendering; without one that head will not start.
+`ffmpeg` turns from optional into required the moment the head can rasterize
+(`headless_raster`): the encoder lane is compiled in and spawns it as soon as
+`IMZERO2_HEADLESS_LISTEN` or `IMZERO2_HEADLESS_H264_OUT` is set. A bundle packed
+before the MANIFEST carried `imzero2_features` is preflighted against the
+strictest column.
 
 ## Prerequisites (on the connected build host)
 
@@ -234,6 +252,14 @@ go build -tags "$(tr -d '\n' < tags)" -o /dev/null ./public/app   # rebuilds off
   Across distro families, prefer `go-only` (Go binaries are static) or run the
   bundle script on a host matching the target. The bundled `tinygo` and `ffmpeg`
   are the exceptions — both static, so they constrain architecture only.
+- **x86_64 and aarch64; native only.** Nothing in a bundle cross-compiles, so it
+  is packed *for* the CPU it is packed *on*, and every pinned artefact publishes a
+  linux release for both. Any other CPU is refused at pack time rather than
+  yielding a bundle quietly missing its pinned Go SDK, `tinygo` and `ffmpeg` —
+  the stagers are individually best-effort, so without that gate an unsupported
+  host produces a broken bundle instead of an error. `airgap-unbundle.sh` then
+  refuses a bundle whose `MANIFEST` arch is not the target's, before it positions
+  or runs anything; a bundle predating that record warns instead.
 - **`tinygo` is pinned, not built here.** It comes from an upstream release,
   verified against a SHA-256 in `scripts/dev/airgap-lib.sh`. Bump the version and
   its hash together; a bump with a stale hash fails closed and the bundle is
