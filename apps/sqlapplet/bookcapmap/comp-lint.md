@@ -32,9 +32,10 @@ standards, technologies — in a sibling tree that is deliberately *not* read as
 competences, because their names collide with competence names. A link into one
 of those trees is a well-formed slug this corpus does not carry, so it lands in
 `unresolved` beside the genuine typos, and nothing in the data separates them.
-On the catalog this model was built against that split was 217 genuinely
-dangling against 1,481 pointing at sibling trees — so treat the `unresolved`
-count as an upper bound on the defects, not as the defect count.
+On the catalog this model was built against, the large majority of unresolved
+links pointed at sibling trees and only a small fraction at nothing — so treat
+the `unresolved` count as an upper bound on the defects, not as the defect
+count.
 
 `cited_by` is the signal that helps. A missing target named by one competence is
 usually a typo; one named by a dozen is usually a note that was never written,

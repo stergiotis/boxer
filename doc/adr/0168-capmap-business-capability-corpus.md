@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-05
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0168: capmap — a business-capability corpus as `boxer.facts`
 
@@ -96,18 +94,21 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   could ever match, so they name something outside the corpus and are not
   defects; and the two spellings of a link to a directory-backed competence
   differ only in whether the link also resolves inside Obsidian. Collapsing
-  either distinction into "broken" turns 3,257 apparent defects on the
-  reference corpus into 1,698 real candidates.
+  either distinction into "broken" roughly doubled the apparent defect count
+  on the reference corpus.
 
   **`unresolved` is an upper bound, not the defect count**, and M6 measured by
-  how much. Of those 1,698, only 217 name nothing that exists anywhere; 1,481
+  how much: on the reference corpus the large majority of unresolved links
   point into the vault's sibling reference trees — `standards/`,
   `technologies/` — which §"Point it at a competence tree" deliberately keeps
-  out of the read, because their names collide with competence names. A
-  fifth state would need the parser to be told where those trees are, so it is
-  not encoded; the applet book states the bound instead, and offers a
-  `cited_by` fan-in count as the usable signal, since a missing target named
-  once is a typo and one named a dozen times is a note that was never written.
+  out of the read, because their names collide with competence names, and only
+  a small fraction name nothing that exists anywhere. (The counts themselves
+  are not recorded here: they moved every time the corpus was edited and were
+  stale within weeks.) A fifth state would need the parser to be told where
+  those trees are, so it is not encoded; the applet book states the bound
+  instead, and offers a `cited_by` fan-in count as the usable signal, since a
+  missing target named once is a typo and one named a dozen times is a note
+  that was never written.
 
 - **SD3 — The vault stays authoritative; facts are derived.** Ingest rebuilds
   facts from markdown and is repeatable from scratch. Editing stays in the
@@ -216,8 +217,9 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   datasets hit, and recovering from it took a rebinder that watches for the
   data to appear. And decoding from SQL means hand-written leeway column
   names, the coupling M1 found already spread across a hundred sites with
-  nothing guarding it. A live read has neither, and costs ~150 ms for a
-  ~1,700-competence tree against `capmapcorpus`'s existing snapshot window.
+  nothing guarding it. A live read has neither, and costs on the order of
+  100 ms for the reference corpus against `capmapcorpus`'s existing snapshot
+  window.
   The ingest keeps its own job — history, and joins on the ClickHouse side —
   and `competence.fact_id` carries the id it wrote, so the two surfaces can be
   joined without knowing how the id is derived.
@@ -419,6 +421,41 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   than a short pane, and fixing it is ADR-0132's business rather than this
   ADR's.
 
+- **M12 — the similarity ranker (2026-08-27).** The prototype's one analysis,
+  and the last piece of it still unported: `boxer capmap similar` measures the
+  normalised compression distance between every eligible pair of competences
+  and records each one's nearest neighbours as `similar:` frontmatter, which
+  the parser already read (§SD2's `similar` relation and its `f64Array` score
+  were the read half of a channel nothing in-tree wrote). The ranker is
+  `public/gov/capmapsimilarity`, over the zstd raw-dictionary trick
+  `analytics/similarity/compression` already uses; the write is
+  `capmapcorpus.UpsertSimilar`, which edits the frontmatter as a YAML node tree
+  so that one stanza changes and the rest of the note — key order, quoting, the
+  body — does not, because a re-render from the model would turn every run into
+  a whole-vault diff. Three rules the prototype did not have, each measured to
+  matter: ancestors and descendants are never compared (a parent restates its
+  children by construction), comparison is within a catalog unless `--cross`
+  asks for the mapping between two frameworks, and a note without prose is
+  left out rather than reported as unlike everything. The prototype also read
+  only the directory-backed notes and skipped every pair sharing a directory,
+  which excluded leaves and siblings — the pairs a merge review is for. Written
+  to the vault, not the store, for §SD3's reason: a ranking that reached only
+  `boxer.facts` would be gone at the next `load`.
+
+- **M13 — the depth ladder and the colour readout (2026-08-27).** The last of
+  the reading screen's gaps (background survey §12.6 G12), both in the play
+  Treemap panel rather than in this book, since neither is about competences.
+  The nesting control gains two rungs between `drill` and `full` — three and
+  four levels below the frontier — which is the depth a four-tier map is read
+  at with its leaves still labelled. The numeric colour legend gains, under the
+  bar, where the described colours sit: min, quartiles, P90, P99 and max in the
+  channel's unit, over how many cells said anything — surveyed client-side from
+  the built tree, and surveyed under a declared scale most of all, since a ramp
+  pinned to the measure says nothing about where this result's values fall on
+  it. `comp-browser` reaches the ladder; its colour is categorical, so the
+  readout there is the swatch key, and the numeric readout is what a book whose
+  colour is a measure gets.
+
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
@@ -433,7 +470,9 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
 | keelson `competence` table columns | Added — `tags` | The applet book's `tag` knob and its coverage rows |
 | keelson `competencesection` table columns | Added — `words` (M11) | The browser's `size_by` knob and its table |
 | `boxer capmap` verb names | Renamed — `ingest` is `load`, which keeps `ingest` as an alias; `dump` is new | The command's own help; the prose in `doc/competences/README.md`, the providers and the book |
-| Exported Go API under `public/` | Added — `capmapcorpus`, `capmapvocab`, `capmapfacts` under `public/gov/`, and the `boxer capmap` command. M8/M9 add `NormalizeTag`, `ParseResolution`, `RenderCompetence`, `WriteVault`, `SortCorpus` and `capmapfacts.ReadCorpus` | Nothing yet; no downstream module compiles against them |
+| Exported Go API under `public/` | Added — `capmapcorpus`, `capmapvocab`, `capmapfacts` under `public/gov/`, and the `boxer capmap` command. M8/M9 add `NormalizeTag`, `ParseResolution`, `RenderCompetence`, `WriteVault`, `SortCorpus` and `capmapfacts.ReadCorpus`; M12 adds `capmapsimilarity`, `capmapcorpus.UpsertSimilar` and `Competence.DirectoryBacked` | Nothing yet; no downstream module compiles against them |
+| `boxer capmap` verb names (again, M12) | Added — `similar`, the one verb that writes into the vault | The command's own help; `doc/competences/README.md` |
+| play Treemap panel controls ([ADR-0166](./0166-play-treemap-panel.md), M13) | Reshaped — the nesting bar is a four-rung ladder; the numeric legend carries a quantile readout | Every book with a treemap tab sees the new control; no document changes |
 
 ## Alternatives
 
@@ -473,13 +512,13 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
 - Ingest against a live store needs ClickHouse, pushing part of the test surface
   into the integration lane.
 - Of the prototype's four webapps, two are replaced (browser, lint) and two are
-  deferred with the triage workflow (culler, cull-configer). The treemap gap
-  closed when ADR-0166 landed, and the browser's map lane reads its nodes
-  contract. The
-  replacement is not feature-parity: the browser's enumerated filters, its
-  reset, its free `WHERE` bar and its pane placement are play and sqlapplet
-  features that do not exist yet, and the lenses are knobs and tabs until they
-  do (background survey §12).
+  dropped with the triage workflow (culler, cull-configer; §Deferrals). The
+  browser's replacement reached the prototype's controls in steps rather than
+  at once — pane placement, enumerated knobs, a reset and a predicate input as
+  play features (background survey §12.9–12.10), the depth ladder and the
+  colour readout as M13 — and it is not a feature-for-feature copy: the free
+  `WHERE` bar is an expression slot a document has to declare, and the
+  *Open in Obsidian* link is dropped rather than approximated.
 - The store holds a corpus that can be recovered from it (§SD11), which is what
   makes `boxer.facts` a place to keep one rather than only a place to query
   one. It also means two copies exist and can disagree; SD3 says which wins.
@@ -589,14 +628,22 @@ holds is a *competence*, not a *capability*: §SD6 has the rule and why.
   not as two; and a fixture vault loaded and dumped parses equal to itself,
   which is the only test that exercises the two verbs against each other rather
   than each against a fixture.
+  M12's tests are in the default lane and need no vault on disk: the ranker
+  finds a paraphrase and not an unrelated note, never pairs an ancestor with
+  its descendant, partitions pairs between the within-catalog and cross-catalog
+  runs, and gives the same answer at any worker count; `UpsertSimilar` is
+  pinned by a parse-edit-parse round trip asserting every competence unchanged
+  and exactly one relation added. M13's are the panel's: the quantile survey
+  over a known ladder with NaN and Inf excluded, the readout formatted in the
+  channel's unit, and the survey still taken under a declared scale.
 - **Gap.** The serverless read path — facts-shaped Arrow through `file()` — has
   been reasoned about but not run; proving it is a step inside M4 rather than a
   standing lane. Nothing verifies that the corpus content is *correct*, only
   that it parses, encodes and decodes; competence maturity and pain scores are
   human judgements with no oracle. That gap is wider than it sounds: on the
-  reference corpus **nothing has been assessed at all** — every one of the
-  1,722 competences carries the `255` sentinel for both maturity and pain, and
-  none carries a lifecycle record. So the scoring half of what §Context calls
+  reference corpus **nothing has been assessed at all** — every competence
+  carries the `255` sentinel for both maturity and pain, and none carries a
+  lifecycle record. So the scoring half of what §Context calls
   "how mature each part is, where the pain is" has a schema, an encoding and a
   query surface, and no data. `comp-overview` reports the coverage rather than
   averaging over an empty column.
@@ -717,29 +764,36 @@ Each carries a trigger rather than a date.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-08-27.
 
 Reconciled against the tree on 2026-08-14, which is what a proposed ADR's
 in-place edits are for: M8 and M9 were added, SD10 and SD11 record decisions
 taken while building them, SD6 gained the ordinal rule that adding a membership
 exposed, and §Verification plan's claim about a parse-render test was corrected
 — it named a guard the tree did not have. What has *not* changed is the shape:
-the nine original decisions all still describe what is there. The two things a
-reviewer should weigh before this is accepted are SD11, which pays SD8's
-coupling on purpose for the dump path, and the §Deferrals note on triage, which
-is the only open decision left.
+the nine original decisions all still describe what is there. The two things
+weighed at acceptance were SD11, which pays SD8's coupling on purpose for the
+dump path, and the §Deferrals note on triage.
 
 Reconciled again on 2026-08-15: M11 merged the map into the browser, and
 §Verification plan's Gap became a decision — the corpus stays unassessed, so
 capmap is a structure-and-prose tool and the prototype's four scoring lenses are
-not ported. That closes the last open question in §Deferrals; there is nothing
-left for a reviewer to settle before this is accepted or rejected.
+not ported. That closed the last open question in §Deferrals.
 
 Reconciled again on 2026-08-17, after §SD11's read path prompted the same
 question of the write path: §Deferrals gains the record store, which is a
 deferral with a trigger rather than a question — the Competence encoding has no
 component plan, for two reasons that are properties of §SD5's chosen shape.
 Nothing in the decision moved.
+
+Reconciled a last time on 2026-08-27 and accepted the same day. M12 and M13
+landed — the similarity ranker the survey's ledger had counted as ported before
+it was, and the two panel controls that closed the reading screen's gap list —
+and the corpus counts quoted from the reference vault were replaced with the
+ratios they stood for, because a re-read of that vault no longer reproduced
+them. The promised Update on ADR-0026 §SD6 (§SD1) was written with the flip;
+it had been owed since M4. From here the record changes only through dated
+entries under `## Updates`.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

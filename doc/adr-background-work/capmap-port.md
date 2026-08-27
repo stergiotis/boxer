@@ -1,13 +1,15 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
 
-> **Status: draft — pre-human-review.** Measurements below were taken
-> 2026-08-05 against the tree at that date; nothing here has been reviewed.
+> **Provenance.** Measurements in §1–§11 were taken 2026-08-05 against the tree
+> at that date, §12's on the dates each subsection carries. Corpus counts are
+> stated as ratios or orders of magnitude on purpose: the exact figures moved
+> with every edit to the vault and were stale within weeks.
 
 # Porting a business-capability map into boxer
 
@@ -273,7 +275,7 @@ ADR-0168.
 
 | Fate | Lines | What |
 | --- | --- | --- |
-| Ported | ~1,900 | vault parsing, lint, similarity |
+| Ported | ~1,900 | vault parsing, lint, similarity — the last of these landed on 2026-08-27 as `boxer capmap similar` (ADR-0168 M12), three weeks after this line first claimed it |
 | Deferred | 1,070 | the culler's tag-write path |
 | Replaced by boxer | ~2,900 | its ClickHouse client, its WHERE-predicate validator and filter builder, its SVG treemap and layout fork, its colour scale, its table and detail renderers |
 | Dropped | ~1,750 | the HTTP server, middleware, all 1,221 lines of HTML/JS/CSS, the vendored HTMX, and both SQL files |
@@ -426,7 +428,7 @@ populated dropdown.
   exist as a widget, the composition does not.
 - **G12** — treemap depth (the panel's `show` is `drill`/`full`, the Browser's
   is 1–4) and the toolbar's quantile colour scale (the panel has a legend, not
-  the min/P25/median/P75/P90/P99/max readout).
+  the min/P25/median/P75/P90/P99/max readout). **Closed 2026-08-27**, §12.12.
 
 ### 12.7 Actions, and the write path
 
@@ -440,8 +442,8 @@ what makes the Browser's *Open in Obsidian* link unbuildable as drawn.
 - **G13** — an action seam: a way for a panel gesture to reach host code. Today
   a panel can emit a signal and no host can read it (G5), so this is G5's
   consequence rather than a separate mechanism.
-- **G14** — a vault-scoped write. Tagging one of 1,722 competences per keystroke
-  cannot go through a per-file save dialog. This is the decision ADR-0168
+- **G14** — a vault-scoped write. Tagging one of well over a thousand
+  competences per keystroke cannot go through a per-file save dialog. This is the decision ADR-0168
   deferred, and it is the only gap on this page that is a *policy* question
   rather than a missing feature.
 
@@ -543,3 +545,36 @@ without a new column. The third, `words`, is real signal and landed with §M11.
 
 ADR-0168 §Verification plan turns this into a decision rather than a backlog:
 the corpus stays unassessed, so these four are not ported.
+
+### 12.12 G12 is closed, and the ledger's last line is true
+
+**2026-08-27.** The two things left on the reading screen's list landed in the
+play Treemap panel (ADR-0168 M13), as §12.8 predicted they would — neither is
+about competences, and every book with a treemap tab gets them. The nesting bar
+is a ladder, `drill` · `3 deep` · `4 deep` · `full`, the middle rungs named by
+the levels they show below the frontier; and the numeric colour legend carries,
+under the bar, where the described colours sit — min, quartiles, P90, P99 and
+max in the channel's unit, over how many cells said anything. The readout is
+surveyed client-side from the built tree, so it costs no query and is never a
+frame behind the picture. One boundary, worth naming: the Browser's colour is a
+category (the level-2 branch), so it gets the swatch key, and the numeric
+readout is what a book whose colour is a measure sees — a document cannot
+switch a column between a string and a number by parameter, since the panel
+classifies `color` by its Arrow type.
+
+The same day closed the one line in §9's ledger that was not yet true. The
+ledger counted the prototype's similarity ranker as *ported* when it was only
+*read*: the parser accepted `similar:` frontmatter and the encoding carried its
+score, but nothing in-tree produced one. `boxer capmap similar` (ADR-0168 M12)
+does, over the zstd raw-dictionary approximation `analytics/similarity/compression`
+already uses, and writes the result into the notes through a node-tree edit of
+the frontmatter rather than a re-render, so a run changes one stanza per note
+and nothing else. Measured on the reference corpus, an all-pairs pass over
+~1,600 written notes is about a million comparisons and under two minutes of
+wall clock on a workstation; the prototype, which built a fresh compressor per
+pair and compared only the directory-backed notes, was not measured at that
+scale because it could not reach it.
+
+With that, §12.8's split holds as written: the Browser is an applet and has
+everything it asked for; the Culler is not, and ADR-0168 §Deferrals settled that
+it is not built.

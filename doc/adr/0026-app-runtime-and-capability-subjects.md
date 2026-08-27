@@ -359,6 +359,24 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-08-27 — `boxer.facts` holds a corpus that is not process state (ADR-0168 §SD1)
+
+§SD6 describes `boxer.facts` as holding runtime state, capability grants and
+audit records — and, since a later Update, logs. It now also holds a
+**business-capability corpus**: [ADR-0168](./0168-capmap-business-capability-corpus.md)
+§SD1 writes competence and relation facts into the same table under its own
+`capmap*` membership vocabulary, so that "which app implements which business
+capability" is a join against what the runtime already publishes about itself,
+rather than a data-integration exercise across two tables. That widens the
+table's meaning past process state, and this entry is where the widening is
+recorded rather than left as a silent reinterpretation. Nothing in §SD6's
+mechanics changes: kind is still a membership, the sections are the same, and
+the runtime's own writers are untouched. What changes is the reading of
+"facts" — a fact may now be something a person wrote in a vault and a tool
+derived rows from, with the vault, not the table, authoritative for it
+(ADR-0168 §SD3). ADR-0168 §SD6 also explains why that corpus's unit is called a
+*competence* and never a capability: the word is this record's.
+
 ### 2026-08-15 — revocation "later" and the closing edge are decided in ADR-0188
 
 Two things this record left open are settled elsewhere and pointed to

@@ -77,6 +77,18 @@ colouring at all — with `domain`, `catalog` and `level` as alternatives.
 `maturity` and `pain` render as `—` when nothing has been assessed, which is not
 the same as a zero: a zero is the judgement "none".
 
+**The map's own controls are the panel's, not this document's.** Its `show` bar
+is a depth ladder — `drill` for the frontier's children and one level under
+them, `3 deep` and `4 deep` for as many levels below the frontier, `full` for
+the whole subtree — and a four-tier competence map is read at `4 deep`, where
+every tier is visible and the leaves still carry their labels; `full` on a
+catalog of a thousand notes is a mosaic. The colour key here is a row of
+swatches, because `color_by` names a category. The panel's other legend — a
+gradient bar with a readout of where the values sit, min to max through the
+quartiles and the upper tail — appears when a document's `color` is a number,
+and this one's is not: a column is a string or a number by its type, not by a
+parameter, so a document picks one. Here the branch reading won.
+
 ```sql
 SET param_level = 0;
 SET param_catalog = '';
