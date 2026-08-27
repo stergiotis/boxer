@@ -37,4 +37,5 @@ func TestLoadKeepsTheIngestAlias(t *testing.T) {
 	assert.Contains(t, byName["load"], "ingest")
 	assert.Contains(t, byName, "dump")
 	assert.Contains(t, byName, "parse")
+	assert.Contains(t, byName, "similar")
 }

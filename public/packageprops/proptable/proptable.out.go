@@ -135,6 +135,7 @@ var Table = packageprops.Table{
 	{ImportPath: "github.com/stergiotis/boxer/public/gov/buildtags", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},
 	{ImportPath: "github.com/stergiotis/boxer/public/gov/callsites", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMBlocked}},
 	{ImportPath: "github.com/stergiotis/boxer/public/gov/capmapcorpus", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMBlocked}},
+	{ImportPath: "github.com/stergiotis/boxer/public/gov/capmapsimilarity", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMBlocked}},
 	{ImportPath: "github.com/stergiotis/boxer/public/gov/capmapvocab", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMBlocked}},
 	{ImportPath: "github.com/stergiotis/boxer/public/gov/codelint", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMBlocked}},
 	{ImportPath: "github.com/stergiotis/boxer/public/gov/commitdigest", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMBlocked}},

@@ -100,6 +100,20 @@ go run -tags="$(cat ./tags)" ./public/app capmap parse
 It finds this directory by walking up from the working directory; set
 `BOXER_CAPMAP_VAULT` to read one kept somewhere else.
 
+`boxer capmap similar` is the one verb that writes here. It measures how alike
+every pair of notes' prose is — the normalised compression distance, 0 for
+identical text and 1 for nothing shared — and records each competence's nearest
+neighbours as a `similar:` stanza in its frontmatter, which the parser reads
+back as scored relations and the lint lens lists. Ancestors and descendants are
+never paired, comparison stays within a catalog unless `--cross` asks for the
+mapping between two, and a note without prose is left alone. Run it with
+`--dry-run --out report.json` first; the write touches only the notes whose
+stanza changes, and comes back as an ordinary diff:
+
+```sh
+go run -tags="$(cat ./tags)" ./public/app capmap similar --dry-run --out /tmp/similar.json
+```
+
 ## Keep it publishable
 
 This repository is public and the ignore rule is one `git add -f` away from

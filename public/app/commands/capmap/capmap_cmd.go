@@ -6,13 +6,16 @@
 // to the runtime's security capabilities here (§SD6). This command speaks
 // boxer's side of that boundary.
 //
-// Three verbs, one of which needs no database:
+// Four verbs, two of which need no database:
 //
 //   - `parse` reads the vault and reports what is in it — counts, the files
 //     that were not competences, and the links that did not resolve. No
-//     ClickHouse, so it works in a checkout with nothing running, and it is
-//     the corpus lint until the applet book lands.
-//   - `load` does the same read and then writes the rows.
+//     ClickHouse, so it works in a checkout with nothing running.
+//   - `similar` ranks the competences by the compression distance of their
+//     prose and writes each one's nearest neighbours into its note as
+//     `similar:` frontmatter — the one derived fact the vault carries, and
+//     the one edit this command makes to it (capmap_cmd_similar.go).
+//   - `load` reads the vault and writes the rows.
 //   - `dump` is `load` backwards: it reads the rows and writes a vault.
 //
 // `load` and `dump` are named after the pair they are, which is also what the
@@ -84,7 +87,7 @@ func storeFlags() []cli.Flag {
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "capmap",
-		Usage: "read a business-capability vault; report it, load it into boxer.facts as competence and relation rows, or dump it back out",
+		Usage: "read a business-capability vault; report it, rank its competences by resemblance, load it into boxer.facts as competence and relation rows, or dump it back out",
 		Subcommands: []*cli.Command{
 			{
 				Name:   "parse",
@@ -92,6 +95,7 @@ func NewCliCommand() *cli.Command {
 				Flags:  []cli.Flag{vaultFlag()},
 				Action: actionParse,
 			},
+			similarCommand(),
 			{
 				Name: "load",
 				// `ingest` was this verb's only name until `dump` arrived and
