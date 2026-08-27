@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-05
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0166: a Treemap panel for play — one hierarchy contract, and a node's own value
 
@@ -344,10 +341,14 @@ migrates: the additions are additive and the panel is new.
 
 ## Status
 
-Proposed — 2026-08-05. Awaiting human review. Built and captured the same day;
+Accepted 2026-08-27. Proposed 2026-08-05, and built and captured that day;
 nothing in the verification plan is outstanding. Two decisions record what the
 code does rather than what was first proposed: SD3's second half, and SD2's
 inheritance and legend — all three found by a capture rather than by design.
+The flip came with the last in-place edits, both driven by the capmap port
+(ADR-0168 M13): the nesting bar became a four-rung ladder (§SD5) and the
+numeric legend gained a readout of where the values sit (§SD2). From here the
+record changes only through dated entries under `## Updates`.
 
 SD2's declared scale (`color_min` / `color_max` / `color_unit`) was added
 2026-08-17, driven by a consumer: ADR-0169's coverage map, whose colour is a

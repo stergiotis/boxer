@@ -561,7 +561,14 @@ ORDER BY value DESC"
 	# reaches one. It lands on the top-left container's HEADER strip, above its
 	# first child: leaf-click sensing is on, so a click inside a child pins that
 	# leaf instead of drilling the parent.
+	# `4 deep` is the ladder's middle (ADR-0166 §SD5, 2026-08-27): every level
+	# of this three-level tree nested, which on a deeper tree is where the
+	# tiers are all visible and the leaves still carry labels. The numeric
+	# legend's quantile readout is in every capture of this scene, since the
+	# colour is a measure.
 	steps='{"do":"capture","text":"08_treemap","settleMs":600}
+{"do":"click","name":"4 deep"}
+{"do":"capture","text":"08_treemap_deep","settleMs":600}
 {"do":"click","name":"full"}
 {"do":"capture","text":"08_treemap_all","settleMs":600}
 {"do":"click","name":"drill"}
