@@ -19,21 +19,27 @@
 # in --src-dir, so a target with no network can build from a staged source set.
 # Nothing else is downloaded. Verify a result with scripts/dev/verify-ffmpeg-lanes.sh.
 #
+# ARCHITECTURE: x86_64 and aarch64 are both supported and both build the same
+# component set. The difference is the assembler, and it is entirely in the
+# preflight -- see the "target architecture" block there for why nasm is an
+# x86-only prerequisite and GNU as takes its place on aarch64.
+#
 # Build-host prerequisites (system packages, all of them ordinary toolchain):
-#   cc/c++, make, cmake, nasm, perl, pkg-config, tar, GNU diff, the `which`
-#   BINARY, a static libc, and -- for the default h264 build -- a static
-#   libstdc++. You do not have to work from this list: --preflight-only checks
-#   every one of them and prints those that are missing TOGETHER, each with the
-#   package that supplies it on the host it is run on.
+#   cc/c++, make, cmake, perl, pkg-config, tar, GNU diff, an assembler for this
+#   CPU (x86_64: nasm plus the `which` BINARY; aarch64: GNU as), a static libc,
+#   and -- for the default h264 build -- a static libstdc++. You do not have to
+#   work from this list: --preflight-only checks every one of them and prints
+#   those that are missing TOGETHER, each with the package that supplies it on
+#   the host it is run on.
 #
 #   Four of them are easy to miss because a modern distro may ship none of them,
 #   and each fails in a way that names the wrong culprit:
 #     * busybox diff lacks options libvpx's configure uses, which then fails
 #       with a bare "Configuration failed" that names no cause;
-#     * libvpx probes for its assembler with `which nasm` rather than the shell
-#       builtin -- on Fedora 42, which drops the `which` package and puts nasm
-#       in /usr/sbin, an otherwise complete toolchain fails with "Neither yasm
-#       nor nasm have been found" while nasm is plainly installed;
+#     * on x86 libvpx probes for its assembler with `which nasm` rather than the
+#       shell builtin -- on Fedora 42, which drops the `which` package and puts
+#       nasm in /usr/sbin, an otherwise complete toolchain fails with "Neither
+#       yasm nor nasm have been found" while nasm is plainly installed;
 #     * without a static libc nothing links at all (glibc-static on RPM distros;
 #       musl hosts have one already, and give the smaller binary);
 #     * openh264 is C++ and its pkg-config file carries -lstdc++, so the static
@@ -155,6 +161,44 @@ pkg_for() { # <rpm> <deb> <apk> <arch>
     esac
 }
 
+# ---- target architecture ----------------------------------------------------
+# Every codec here builds on both x86_64 and aarch64; only the ASSEMBLER differs,
+# and getting that wrong is the difference between "aarch64 is unsupported" and
+# "aarch64 works". nasm is an x86 assembler and nothing in this component set
+# reaches for it on any other CPU:
+#   * libaom gates its entire nasm/yasm search on AOM_TARGET_CPU being x86 or
+#     x86_64 (cmake/aom_configure.cmake); on aarch64 it takes AOM_TARGET_CPU=arm64
+#     and assembles .S through the C driver;
+#   * SVT-AV1 gates the same search on HAVE_X86_PLATFORM, and on ARM builds its
+#     Neon/SVE flavours with plain -march= flags (CMakeLists.txt);
+#   * libvpx's `which nasm` probe sits inside its x86 branch
+#     (build/make/configure.sh) -- which is also the only reason the `which`
+#     BINARY is a prerequisite at all;
+#   * ffmpeg only looks for an x86asmexe on x86.
+# So demanding nasm unconditionally would refuse an aarch64 host that can build
+# all four perfectly well -- and, through airgap_preflight_ffmpeg_build, would
+# silently cost every aarch64 bundle its ffmpeg.
+#
+# What takes nasm's place there is GNU as: libvpx's arm64-linux-gcc target sets
+# AS=${CROSS}as outright (configure.sh), and libaom and ffmpeg push their .S
+# files through the C driver, which needs it too. binutils rides along with gcc,
+# so this is nearly always satisfied -- but a clang-only host is not, and
+# "as: command not found" partway into a libvpx build names the wrong thing.
+#
+# Only x86_64 and aarch64 are exercised. Anything else is not refused -- this
+# script is usable outside the airgap flow, which does refuse them -- but it gets
+# the aarch64 prerequisite set and a warning, because that is a guess: the codecs
+# would fall back to their generic-C paths, and SVT-AV1 in particular wants
+# -DCOMPILE_C_ONLY=ON there, which this script does not pass.
+case "$(uname -m)" in
+x86_64 | amd64)   target_cpu=x86 ;;
+aarch64 | arm64)  target_cpu=arm64 ;;
+*)                target_cpu=other ;;
+esac
+if [ "$target_cpu" = other ]; then
+    echo "  WARNING: $(uname -m) is not an exercised target (x86_64/aarch64); proceeding anyway." >&2
+fi
+
 miss_what=() miss_pkg=() miss_why=()
 need() { # <what> <package> <why>
     miss_what+=("$1")
@@ -167,7 +211,11 @@ lacks cc         && need cc         "$(pkg_for gcc build-essential build-base gc
 lacks c++        && need c++        "$(pkg_for gcc-c++ build-essential build-base gcc)"     "libaom's cmake project declares CXX"
 lacks make       && need make       "$(pkg_for make build-essential make make)"             "libvpx, openh264 and ffmpeg build with it"
 lacks cmake      && need cmake      "$(pkg_for cmake cmake cmake cmake)"                    "libaom and SVT-AV1 are cmake projects"
-lacks nasm       && need nasm       "$(pkg_for nasm nasm nasm nasm)"                        "libaom, libvpx and ffmpeg assemble their hot paths"
+if [ "$target_cpu" = x86 ]; then
+    lacks nasm   && need nasm       "$(pkg_for nasm nasm nasm nasm)"                        "libaom, libvpx and ffmpeg assemble their hot paths"
+else
+    lacks as     && need as         "$(pkg_for binutils binutils binutils binutils)"        "libvpx sets AS=as on aarch64; .S files need it either way"
+fi
 lacks perl       && need perl       "$(pkg_for perl perl perl perl)"                        "ffmpeg's configure and openh264's makefiles use it"
 lacks tar        && need tar        "$(pkg_for tar tar tar tar)"                            "the pinned sources are tarballs"
 lacks pkg-config && need pkg-config "$(pkg_for pkgconf-pkg-config pkg-config pkgconf pkgconf)" \
@@ -182,15 +230,19 @@ if ! diff --help 2>&1 | grep -q -- '--unified'; then
     need "GNU diff" "$(pkg_for diffutils diffutils diffutils diffutils)" \
         "libvpx's configure uses options busybox diff lacks"
 fi
-# ...and it locates its assembler with `which nasm`, not the shell builtin. Test
-# the binary the way libvpx will, or the build dies much later claiming nasm is
-# absent when it is merely unreachable that way.
-if lacks which; then
-    need "the 'which' binary" "$(pkg_for which debianutils which which)" \
-        "libvpx's configure finds nasm with it, not the shell builtin"
-elif ! lacks nasm && ! which nasm >/dev/null 2>&1; then
-    need "nasm reachable by 'which'" "" \
-        "nasm is installed but 'which nasm' fails (often /usr/sbin; add it to PATH)"
+# ...and on x86 it locates its assembler with `which nasm`, not the shell
+# builtin. Test the binary the way libvpx will, or the build dies much later
+# claiming nasm is absent when it is merely unreachable that way. Both checks are
+# x86-only: that `which` call is in libvpx's x86 branch, so on aarch64 a host
+# without the `which` binary builds fine and must not be told otherwise.
+if [ "$target_cpu" = x86 ]; then
+    if lacks which; then
+        need "the 'which' binary" "$(pkg_for which debianutils which which)" \
+            "libvpx's configure finds nasm with it, not the shell builtin"
+    elif ! lacks nasm && ! which nasm >/dev/null 2>&1; then
+        need "nasm reachable by 'which'" "" \
+            "nasm is installed but 'which nasm' fails (often /usr/sbin; add it to PATH)"
+    fi
 fi
 
 probe_dir=$(mktemp -d)
@@ -240,7 +292,7 @@ if [ "$n" -gt 0 ]; then
 fi
 
 if [ "$preflight_only" = 1 ]; then
-    echo "  all prerequisites present"
+    echo "  all prerequisites present ($(uname -m); assembler: $([ "$target_cpu" = x86 ] && echo nasm || echo 'GNU as'))"
     exit 0
 fi
 
