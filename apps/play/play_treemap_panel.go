@@ -3,6 +3,7 @@ package play
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -124,7 +125,16 @@ const (
 	treemapColorDepth
 )
 
-// treemapNestingE is how much of the tree renders below the frontier.
+// treemapNestingE is how much of the tree renders below the frontier: a ladder
+// from the drill view to the whole subtree, with two fixed depths between.
+//
+// The two middle rungs exist because the ends are a long way apart on a wide
+// tree. `drill` shows two levels and bounds the frame cost by the frontier's
+// fanout; `full` shows everything and is what a business-capability map is
+// read at, since its four tiers are the picture — but on a corpus of a
+// thousand leaves it is a mosaic, and the intermediate depths are where the
+// tiers are all visible and the leaves still carry labels. The prototype this
+// was measured against exposed the same 1–4 ladder as its only depth control.
 type treemapNestingE uint8
 
 const (
@@ -132,13 +142,25 @@ const (
 	// default, and what bounds the frame cost: cells are egui Frames, so the
 	// budget is the frontier's FANOUT rather than the tree's size.
 	treemapNestDrill treemapNestingE = iota
+	// treemapNestThree — three levels below the frontier.
+	treemapNestThree
+	// treemapNestFour — four levels below the frontier.
+	treemapNestFour
 	// treemapNestAll — the whole subtree at once, bounded only by the minimum
 	// cell size. Readable for a shallow tree and expensive for a wide one.
 	treemapNestAll
 )
 
+// depth maps a rung to the widget's preview-level count (WithMaxNestingDepth):
+// the frontier's children always render, and n is how many levels render
+// below THEM, so `drill` is one and three visible levels is two.
 func (n treemapNestingE) depth() int {
-	if n == treemapNestAll {
+	switch n {
+	case treemapNestThree:
+		return 2
+	case treemapNestFour:
+		return 3
+	case treemapNestAll:
 		return 0 // the widget's "unlimited", capped internally
 	}
 	return 1
@@ -161,6 +183,14 @@ type treemapColorInfo struct {
 	// The value's `unit` cannot serve — area and tint are different measures,
 	// and here one is statements and the other a percentage.
 	unit string
+	// quantiles is where the result's own colours sit, at treemapQuantileProbs,
+	// and described counts them. The legend's ticks say what the ramp spans;
+	// this says how the data is spread along it, which the ticks cannot — a
+	// ramp over 0–1,000 with a median at 40 is a picture that is mostly one
+	// colour, and the reader should be told so rather than left to infer it
+	// from a wall of near-identical cells. Empty when nothing was described.
+	quantiles []float64
+	described int
 	// cats maps a category key to its cycle index, and catOrder keeps the
 	// first-seen order the indices were handed out in — first-seen rather than
 	// sorted so adding a row cannot recolour the rows above it.
@@ -640,9 +670,44 @@ func (inst *treemapDriver) renderLegend() {
 			return
 		}
 		inst.scale.Render()
+		inst.renderQuantileReadout()
 	case hierColorCategorical:
 		inst.renderCategoryKey()
 	}
+}
+
+// renderQuantileReadout is the line under the colour bar saying where the
+// described colours sit: min, quartiles, P90, P99 and max, in the colour
+// channel's unit, over how many cells said anything. Small and weak like the
+// other readouts, because it is a table of numbers beside a picture and must
+// not compete with it.
+func (inst *treemapDriver) renderQuantileReadout() {
+	if len(inst.color.quantiles) == 0 {
+		return
+	}
+	for rt := range c.RichTextLabel(inst.quantileLine()) {
+		rt.Small().Weak()
+	}
+}
+
+// quantileLine formats the colour spread for the legend. Kept apart from the
+// render so a test can read it without a UI.
+func (inst *treemapDriver) quantileLine() string {
+	if len(inst.color.quantiles) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, q := range inst.color.quantiles {
+		if i > 0 {
+			b.WriteString(" · ")
+		}
+		b.WriteString(treemapQuantileNames[i])
+		b.WriteByte(' ')
+		b.WriteString(treemapQty(q, inst.color.unit))
+	}
+	fmt.Fprintf(&b, " · over %s described cell%s", humanize.Comma(int64(inst.color.described)),
+		plural(inst.color.described, "", "s"))
+	return b.String()
 }
 
 // renderCategoryKey draws one swatch per category, in the first-seen order the
@@ -701,6 +766,10 @@ func (inst *treemapDriver) resolveColorInfo() (info treemapColorInfo) {
 	switch info.kind {
 	case hierColorNumeric:
 		info.unit = inst.stats.colorScale.unit
+		// The spread is surveyed even under a declared scale — there most of
+		// all, since a ramp pinned to the measure says nothing about where this
+		// result's values fall on it.
+		info.quantiles, info.described = treemapColorQuantiles(inst.tree.ColorNum)
 		if sc := inst.stats.colorScale; sc.declared {
 			info.min, info.max, info.declared = sc.min, sc.max, true
 			return
@@ -731,6 +800,52 @@ func (inst *treemapDriver) resolveColorInfo() (info treemapColorInfo) {
 		}
 	}
 	return
+}
+
+// treemapQuantileProbs are the points the colour readout reports, and
+// treemapQuantileNames their captions. The set is the one the prototype's
+// toolbar showed and the one a skewed measure needs: the upper tail is where
+// prose length, bytes and counts pile up, so the ladder is denser there.
+var (
+	treemapQuantileProbs = []float64{0, 0.25, 0.5, 0.75, 0.9, 0.99, 1}
+	treemapQuantileNames = []string{"min", "P25", "median", "P75", "P90", "P99", "max"}
+)
+
+// treemapColorQuantiles surveys the described colours — the NaN-free entries of
+// the result's own `color` column — at treemapQuantileProbs, interpolating
+// linearly between order statistics. It returns nil when nothing was described,
+// so a legend with no data to report renders no readout rather than a row of
+// zeros.
+//
+// Client-side over the built tree rather than a second query: the values are
+// already here, the count is bounded by hierMaxNodes, and a readout that had to
+// go back to the server would be a frame behind the picture it explains.
+func treemapColorQuantiles(colors []float64) (qs []float64, described int) {
+	sorted := make([]float64, 0, len(colors))
+	for _, v := range colors {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			continue
+		}
+		sorted = append(sorted, v)
+	}
+	if len(sorted) == 0 {
+		return nil, 0
+	}
+	sort.Float64s(sorted)
+	qs = make([]float64, len(treemapQuantileProbs))
+	last := float64(len(sorted) - 1)
+	for i, p := range treemapQuantileProbs {
+		pos := p * last
+		lo := int(math.Floor(pos))
+		hi := int(math.Ceil(pos))
+		if lo == hi {
+			qs[i] = sorted[lo]
+			continue
+		}
+		frac := pos - float64(lo)
+		qs[i] = sorted[lo]*(1-frac) + sorted[hi]*frac
+	}
+	return qs, len(sorted)
 }
 
 // treemapColorRange widens a degenerate numeric range. A column with one
@@ -946,6 +1061,11 @@ func (inst *treemapDriver) renderControls() {
 			Inline().
 			Style(selector.StyleSelectable).
 			Option(treemapNestDrill, "drill").
+			// The middle rungs are named by the levels they show below the
+			// frontier, which is the number a reader counts; `drill` is two
+			// and is named for what it is for rather than for its count.
+			Option(treemapNestThree, "3 deep").
+			Option(treemapNestFour, "4 deep").
 			// "full", not "all": a forest's synthetic container is named `all`
 			// and sits in the breadcrumb directly below this row, so two
 			// different meanings of the word would share one pane — and an

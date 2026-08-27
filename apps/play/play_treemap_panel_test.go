@@ -558,3 +558,79 @@ func TestTreemapRebuildDropsTheStaleScale(t *testing.T) {
 func treemapCellInfo(n *layout.Node) treemap.CellInfo {
 	return treemap.CellInfo{Node: n}
 }
+
+// The readout under the colour bar reports where the DESCRIBED colours sit —
+// the result's own, NaN-free — at the seven points the prototype's toolbar
+// showed. Linear interpolation between order statistics, so an even ladder
+// reads back as itself.
+func TestTreemapColorQuantilesSurveyDescribedCellsOnly(t *testing.T) {
+	qs, n := treemapColorQuantiles([]float64{9, math.NaN(), 1, 5, 3, 7, math.Inf(1)})
+	assert.Equal(t, 5, n, "NaN and Inf are not described colours")
+	require.Len(t, qs, len(treemapQuantileProbs))
+	assert.Equal(t, 1.0, qs[0], "min")
+	assert.Equal(t, 3.0, qs[1], "P25 of 1,3,5,7,9")
+	assert.Equal(t, 5.0, qs[2], "median")
+	assert.Equal(t, 7.0, qs[3], "P75")
+	assert.InDelta(t, 8.2, qs[4], 1e-9, "P90 interpolates between 7 and 9")
+	assert.InDelta(t, 8.92, qs[5], 1e-9, "P99")
+	assert.Equal(t, 9.0, qs[6], "max")
+
+	qs, n = treemapColorQuantiles([]float64{math.NaN()})
+	assert.Nil(t, qs, "nothing described, nothing to report")
+	assert.Zero(t, n)
+}
+
+// The readout is carried on the colour info and formatted in the channel's
+// unit; a categorical colour has no spread to report.
+func TestTreemapQuantileLineFollowsTheColourKind(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "id", str: []string{"a", "b", "c"}},
+		icicleTestCol{name: "parent", str: []string{"", "a", "a"}},
+		icicleTestCol{name: "value", num: []float64{1, 1, 1}},
+		icicleTestCol{name: "color", num: []float64{5, 40, 12}},
+		icicleTestCol{name: "color_unit", str: []string{"w", "w", "w"}},
+	)
+	require.Len(t, inst.color.quantiles, len(treemapQuantileProbs))
+	assert.Equal(t, 3, inst.color.described)
+	line := inst.quantileLine()
+	assert.Contains(t, line, "min 5 w")
+	assert.Contains(t, line, "median 12 w")
+	assert.Contains(t, line, "max 40 w")
+	assert.Contains(t, line, "over 3 described cells")
+
+	cat := treemapTestDriver(t,
+		icicleTestCol{name: "id", str: []string{"a", "b"}},
+		icicleTestCol{name: "parent", str: []string{"", "a"}},
+		icicleTestCol{name: "value", num: []float64{1, 1}},
+		icicleTestCol{name: "color", str: []string{"x", "y"}},
+	)
+	assert.Empty(t, cat.color.quantiles)
+	assert.Empty(t, cat.quantileLine())
+}
+
+// A declared scale pins the ramp, and the spread is surveyed anyway — there most
+// of all, since the ticks then say nothing about where this result's values are.
+func TestTreemapQuantilesSurveyedUnderADeclaredScale(t *testing.T) {
+	inst := treemapTestDriver(t,
+		icicleTestCol{name: "id", str: []string{"a", "b"}},
+		icicleTestCol{name: "parent", str: []string{"", "a"}},
+		icicleTestCol{name: "value", num: []float64{1, 1}},
+		icicleTestCol{name: "color", num: []float64{40, 70}},
+		icicleTestCol{name: "color_min", num: []float64{0, 0}},
+		icicleTestCol{name: "color_max", num: []float64{100, 100}},
+	)
+	require.True(t, inst.color.declared)
+	require.Len(t, inst.color.quantiles, len(treemapQuantileProbs))
+	assert.Equal(t, 40.0, inst.color.quantiles[0])
+	assert.Equal(t, 70.0, inst.color.quantiles[len(inst.color.quantiles)-1])
+}
+
+// The nesting ladder's middle rungs are named by the levels they show below the
+// frontier; the widget counts preview levels below the frontier's CHILDREN, so
+// each is one less.
+func TestTreemapNestingLadder(t *testing.T) {
+	assert.Equal(t, 2, treemapNestThree.depth())
+	assert.Equal(t, 3, treemapNestFour.depth())
+	assert.Less(t, treemapNestDrill.depth(), treemapNestThree.depth())
+	assert.Less(t, treemapNestThree.depth(), treemapNestFour.depth())
+}

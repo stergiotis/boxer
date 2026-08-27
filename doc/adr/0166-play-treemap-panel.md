@@ -131,9 +131,16 @@ A panel-side "scale: data / declared" control was rejected: the correct setting
 is a fact about the query, so a reader would have to know to flip it, and it
 would reset per pane rather than travel with the applet.
 
-**Legend, for the data mode only.** Numeric gets a `colorscale` gradient bar,
-categorical a row of swatches in cycle order capped at twelve; depth gets none,
-encoding structure rather than identity. The bar renders the **same `Colormap`
+**Legend, for the data mode only.** Numeric gets a `colorscale` gradient bar
+and, under it, a readout of where the described colours sit — min, quartiles,
+P90, P99 and max in the channel's unit, over how many cells said anything
+(added 2026-08-27, ADR-0168 M13): the ticks say what the ramp spans, the
+readout how the data is spread along it, and a ramp over 0–1,000 with a median
+at 40 is a picture that is mostly one colour and should say so. The survey is
+client-side over the built tree, and it is taken under a declared scale too —
+there most of all, since a pinned ramp says nothing about where this result
+falls on it. Categorical gets a row of swatches in cycle order capped at twelve;
+depth gets none, encoding structure rather than identity. The bar renders the **same `Colormap`
 instance** the cells use — what `treemap.ContinuousColoringFromMap` exists for —
 since one built from the same numbers rather than the same object drifts as soon
 as either side changes how it samples the palette. It sits above the canvas per
@@ -185,7 +192,13 @@ so it spans many rows and no row cursor is honest about it.
 
 `maxNestingDepth` stays at the widget's default of 1, which is what makes C5
 tractable: cells per frame are bounded by the frontier's fanout rather than tree
-size. "Show everything" is a control, not the default.
+size. "Show everything" is a control, not the default — and since 2026-08-27
+the control is a four-rung ladder rather than a switch: `drill`, `3 deep`,
+`4 deep`, `full`, the middle rungs named by the levels they show below the
+frontier. They exist because the ends are far apart on a wide tree: a
+business-capability map (ADR-0168 M13) has four tiers and is read with all of
+them visible and the leaves still labelled, which `full` does not give on a
+thousand leaves and `drill` does not give at all.
 
 ### SD6 — Deferred, deliberately
 
