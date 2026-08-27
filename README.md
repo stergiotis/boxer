@@ -99,7 +99,7 @@ for the parts that have no such term. New house names belong in this table.
 | `anchor` | the fixed point a ship rides to | leeway's showcase schema and shared test fixture — `public/semistructured/leeway/anchor` |
 | `lading` | a bill of lading is issued once per voyage, lists exactly what was loaded, and is never amended — only superseded by the next one | the filesystem snapshot store — `public/fs/lading` ([ADR-0198](doc/adr/0198-fs-snapshot-store.md)) |
 | `tally` | the count of cargo checked against the bill of lading | the browser over the lading store — `apps/tally` ([ADR-0200](doc/adr/0200-tally-lading-browser.md)) |
-| `portolan` | a chart ruled with rhumb lines | the Web-Mercator map widget — `public/thestack/imzero2/egui2/widgets/portolan` ([ADR-0204](doc/adr/0204-leaflet-map-core-port.md), proposed) |
+| `portolan` | a chart ruled with rhumb lines | the Web-Mercator map widget — `public/thestack/imzero2/egui2/widgets/portolan` ([ADR-0204](doc/adr/0204-leaflet-map-core-port.md)) |
 
 ### Glossary
 <dl>

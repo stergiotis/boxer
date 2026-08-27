@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-01
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0160: an icicle / flamegraph widget on the implot custom-item lane
 
@@ -539,7 +537,7 @@ the drift.
 
 ## Status
 
-Proposed — 2026-08-01. Awaiting human review.
+Accepted 2026-08-27.
 
 Built: the widget, and the `play` panel of SD9 (2026-08-02) — SD9 was written
 against the panel rather than ahead of it, so it records what the binding

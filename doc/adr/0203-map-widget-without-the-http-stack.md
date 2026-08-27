@@ -1,12 +1,12 @@
 ---
 type: adr
-status: proposed
+status: superseded
 date: 2026-08-22
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+superseded-by: ADR-0204
+superseded-date: 2026-08-27
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Superseded by [ADR-0204](./0204-leaflet-map-core-port.md) (2026-08-27).** Never accepted, never implemented. The Decision below — carry a patched `walkers` to gate its HTTP client — is replaced by the port, whose M4 removed `walkers` and `reqwest` outright (ADR-0204 Q2 records what is left of O2/O3). The Context's closure and musl measurements are the analysis the port was decided on and they stand, including the re-measurement after M4 recorded there.
 
 # ADR-0203: a map widget without the HTTP stack
 
@@ -461,14 +461,14 @@ Go call site that draws a map.
 
 ## Status
 
-Proposed — 2026-08-22; revised in place the same day after the closure and musl
-measurements in the Context. No implementation. Supersedes
-[ADR-0056 §SD12](./0056-walkers-map-h3-binding.md) in its conclusion only (a
-patched walkers is now carried, as a git patch rather than a vendored copy);
-§SD4, §SD6, §SD11 of the same ADR would be superseded only under O4/O5 (§SD4
-above), and [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) is
-corrected rather than superseded — its Decision claims a dependency removal it
-does not deliver alone.
+Superseded by [ADR-0204](./0204-leaflet-map-core-port.md) — 2026-08-27, never
+accepted: its Decision is replaced by the port, its Context remains the
+analysis. Before that: Proposed — 2026-08-22; revised in place the same day
+after the closure and musl measurements in the Context. No implementation. It
+supersedes nothing itself — the [ADR-0056](./0056-walkers-map-h3-binding.md)
+sub-decisions it would have touched fell with the binding at ADR-0204 M4, and
+[ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md), which it corrected, is
+folded into the same ADR.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 

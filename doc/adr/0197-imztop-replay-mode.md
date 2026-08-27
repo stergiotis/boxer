@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-18
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0197: imztop replay — a second bundle source, not a second publisher
 
@@ -625,48 +622,45 @@ commit as the manifest cap, or the lint gate fails on drift.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-08-27. Every milestone below was built before the flip and
+landed 2026-08-19 (`ce24fd7b`, `ed13b696`); the decision and its implementation
+were reviewed together. Four sub-decisions were corrected by the act of
+building them (§SD4, §SD7, §SD8's loss list, and §SD11), and the body reads as
+built.
 
-**All milestones below are built and unreviewed**, in the working tree rather
-than committed. They are still written as a plan rather than ticked off as a
-ledger: the decision they implement has not been accepted, and four of its
-sub-decisions were corrected by the act of building them (§SD4, §SD7, §SD8's
-loss list, and §SD11). A reviewer reading this should expect to review a
-decision and its implementation together.
+Milestones:
 
-Milestones, if accepted:
-
-- **M0 — the seam.** `SamplerI` widened, render path retyped, singleton typed
+- **M0 — the seam.** ✓ `SamplerI` widened, render path retyped, singleton typed
   as the interface. No replay yet, no new dependency, behaviour unchanged.
-- **M1 — reassembly.** The thirteen-key merge and the `SysmetricsEntity` →
+- **M1 — reassembly.** ✓ The thirteen-key merge and the `SysmetricsEntity` →
   `sysmsnap` inverse, tested against a tee round-trip. Library only; imztop
   does not import it yet.
-- **M2 — the replay source.** A `SamplerI` over M1 with a cursor and a
+- **M2 — the replay source.** ✓ A `SamplerI` over M1 with a cursor and a
   transport, off the render thread.
-- **M3 — capability and wiring.** The manifest entry, the capslock baseline,
+- **M3 — capability and wiring.** ✓ The manifest entry, the capslock baseline,
   the ClickHouse client construction, and the "no tee, nothing to replay"
   path.
-- **M4 — the control surface.** Live / Frozen / Replay in the top bar, range
+- **M4 — the control surface.** ✓ Live / Frozen / Replay in the top bar, range
   selection, the mode banner and SD8's not-recorded states.
-- **M5 — the tour.** Two replay-mode captures — the mode's surface, and the
+- **M5 — the tour.** ✓ Two replay-mode captures — the mode's surface, and the
   §SD8 not-recorded state on the Sensors tab — plus the ADR-0020 Update
   recording which of its two scrubbing deferrals this closes and which it does
   not. Both scenes run off the synthetic generator the live scenes use, so the
   tour needs no database and no network flag; each imztop scene asserts the
   mode it wants per frame, because the session is process-wide and the driver
   captures in name order.
-- **M6 — the brush.** ADR-0043 §SD16's strip on the timeline widget: opt-in,
+- **M6 — the brush.** ✓ ADR-0043 §SD16's strip on the timeline widget: opt-in,
   its own callback, existing callers untouched. Verified in the widget demo
   before imztop uses it.
-- **M7 — availability bands.** The envelope-only coverage query (SD10) behind
+- **M7 — availability bands.** ✓ The envelope-only coverage query (SD10) behind
   a `BackgroundBandProducer`, and the timeline replacing the window combo as
   the range control (SD9). The jog stays.
-- **M8 — the load preview, and SD6's closure.** Bucketed aggregation through
+- **M8 — the load preview, and SD6's closure.** ✓ Bucketed aggregation through
   the store's published projection (SD10) onto the rug's intensity encoding,
   and an envelope-only sampling plan that lifts the bounded-range limitation
   (SD11, as corrected). Done: a 5 h 48 m range holding 4 369 bundles replays as
   124 frames.
-- **M9 — the range controls agree.** The fold resets on every seek, the frame
+- **M9 — the range controls agree.** ✓ The fold resets on every seek, the frame
   carries an epoch so the heatmap's ring resets with it, and the jog pans the
   strip to the window it just picked, and the strip marks where playback has got
   to with ADR-0043 §SD18's playhead (SD12). Both controls reach the same seam,

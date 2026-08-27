@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-05
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0169: continuous coverage — live Go code coverage as keelson data
 
@@ -461,7 +459,7 @@ the deferrals (§SD6 tee first) are what remains.
 
 ## Status
 
-Proposed, 2026-08-05.
+Accepted 2026-08-27.
 
 ## References
 

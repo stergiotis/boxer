@@ -1,12 +1,12 @@
 ---
 type: adr
-status: proposed
+status: superseded
 date: 2026-08-05
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+superseded-by: ADR-0204
+superseded-date: 2026-08-27
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Superseded by [ADR-0204](./0204-leaflet-map-core-port.md) (2026-08-27).** Never accepted, never implemented. The move described here — tile bytes fetched by Go rather than by the renderer — is intrinsic to the Leaflet port, which fetches through Go's HTTP client without the IDL work planned below; ADR-0204 §SD4 folds this ADR in and closes its open questions. Retained as the record of the transport-over-FFFI2 shape that was not built. Do not implement from it.
 
 # ADR-0165: imzero2 tile transport over FFFI2
 
@@ -85,7 +85,10 @@ These are the reasons this is proposed rather than accepted; each needs a dialog
 
 ## Status
 
-Proposed — 2026-08-05. No implementation. Supersedes nothing; [ADR-0056 §SD15](./0056-walkers-map-h3-binding.md) records the deferral this ADR describes.
+Superseded by [ADR-0204](./0204-leaflet-map-core-port.md) §SD4 — 2026-08-27,
+never accepted. Before that: Proposed — 2026-08-05. No implementation.
+Supersedes nothing; [ADR-0056 §SD15](./0056-walkers-map-h3-binding.md) records
+the deferral this ADR describes, which the port discharged.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 

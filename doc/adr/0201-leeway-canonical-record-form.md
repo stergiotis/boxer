@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-21
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0201: leeway canonical record form — deterministic CBOR for hashing, invariant under aspects and numeric width
 
@@ -486,7 +484,7 @@ The form is implemented once, at the protocol level, as a sink:
 
 ## Status
 
-Proposed — awaiting review by the leeway code owner. The ten design forks were
+Accepted 2026-08-27. The ten design forks were
 put to the code owner and resolved on 2026-08-21 (M0 was built on the
 resolutions; the body above reflects them):
 
@@ -508,6 +506,9 @@ resolutions; the body above reflects them):
 10. **The classifier is an `Options` input, nil = all primary, applied inside
     the encoder at `EndTaggedValue`** (SD5, SD8) — yes; the preprocessing-pass
     alternative is recorded and rejected.
+
+M1 (the invariance suite) and M2 (first consumers) remain open; M3 is deferred,
+as §Milestones says.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

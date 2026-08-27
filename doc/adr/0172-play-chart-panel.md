@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-06
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0172: a Chart panel for play — one contract, four marks
 
@@ -528,10 +525,9 @@ changes:
 
 ## Status
 
-Proposed. M0 is the whole panel as described — there is no useful smaller cut,
+Accepted 2026-08-27. M0 is the whole panel as described — there is no useful smaller cut,
 the contract being what makes it useful at all. Implemented and driven
-2026-08-06 ahead of review, per the verification items above; the decisions
-remain open to revision until the ADR is accepted.
+2026-08-06 ahead of review, per the verification items above.
 
 ## References
 

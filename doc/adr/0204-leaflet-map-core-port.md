@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-22
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0204: port Leaflet's map core to Go on the painter lane
 
@@ -591,18 +589,16 @@ camera readback's consumers other than through the new package's view state.
 
 ## Status
 
-Proposed — 2026-08-22; revised in place through 2026-08-23 with M0's
-results, both halves (§SD6, §SD8, Q1, Q5), and with M1's to M5's completion.
-Every milestone has landed: the `drag` verb, M1's kernel, M2's widget, with
+Accepted 2026-08-27. Proposed 2026-08-22 and revised in place through
+2026-08-23 as M0–M5 landed: the `drag` verb, M1's kernel, M2's widget, with
 `play` and `terrainscope` on it, M3's animations and handlers, M4's overlays,
-H3 and the removal of the walkers binding (ADR-0056 now carries its
-supersession), M5's scene and tour scene. Open for the reader who accepts:
-Q2 (F7), Q3, Q4, Q6. On acceptance this ADR
-supersedes
+H3 and the removal of the walkers binding, M5's scene and tour scene. Q2 (F7),
+Q3, Q4 and Q6 stay open as recorded above. This ADR supersedes
 [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) (folded in, §SD4) and
 the Decision of [ADR-0203](./0203-map-widget-without-the-http-stack.md)
-(Q2 records what is left of its O2/O3); at M4 it supersedes
-[ADR-0056](./0056-walkers-map-h3-binding.md), whose binding it removes.
+(Q2 records what is left of its O2/O3), both marked so on acceptance; it
+superseded [ADR-0056](./0056-walkers-map-h3-binding.md) at M4, whose binding
+it removed.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

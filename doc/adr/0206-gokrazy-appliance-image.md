@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-22
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0206: A gokrazy appliance image for the headless host
 
@@ -292,14 +290,18 @@ changes.
   `SELECT * FROM "boxer"."facts" FORMAT ArrowStream` and its startup leeway UDF
   registration. The glibc closure widened from 4 files to 7 on its own —
   `build.sh` reads it from the binaries rather than listing it (§SD2).
-- **M4 — musl-static.** Blocked on ADR-0204 M4 (§SD4). `fast_alloc` is the half
-  that could land early; `ring` is the half that cannot.
+- **M4 — musl-static.** Open, and no longer blocked: `fast_alloc` landed in M1
+  and `ring` left with ADR-0204 M4 (2026-08-23). Whether `cargo check --target
+  x86_64-unknown-linux-musl --features headless_soft` now passes is not
+  recorded, and no image is built from a musl binary. §SD4 still holds — nothing
+  here needs it.
 
 ## Status
 
-Proposed 2026-08-22. Recorded after the probe rather than before it, which is
+Accepted 2026-08-27. Recorded after the probe rather than before it, which is
 what ADR-0128 M3 asked for — the probe existed to find out whether this was
 possible at all, and §Context records the measurement that changed the answer.
+M4 is the one open milestone.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 

@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-18
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0196: two-stage SLL parsing, and the WITH-clause ambiguity behind it
 
@@ -477,10 +474,10 @@ For the grammar repair specifically:
 
 ## Status
 
-Proposed 2026-08-18. Implemented in the working tree as one change: two-stage
-prediction, the shared bounded cache, and the grammar repair. Flip to accepted
-only after human review of §SD1's correctness argument, the differential result,
-and the regenerated grammar diff.
+Accepted 2026-08-27, on §SD1's correctness argument, the differential result,
+and the regenerated grammar diff. Implemented as one change (`d56ba80b`,
+2026-08-18): two-stage prediction, the shared bounded cache, and the grammar
+repair.
 
 ## References
 

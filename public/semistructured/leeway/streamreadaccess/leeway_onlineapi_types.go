@@ -129,7 +129,7 @@ type MembershipSinkI interface {
 // The text lane formats through arrow.Array.ValueStr, which renders a
 // Float32 with 'g'/-1/32 — a consumer that reparses that as float64 gets a
 // different number than the column holds. Consumers that need the exact
-// value (ADR-0201 (proposed): the canonical record form) implement this;
+// value (ADR-0201: the canonical record form) implement this;
 // rendering sinks keep the text lane.
 type ArrowValueSinkI interface {
 	// WriteArrowScalar delivers the scalar of the current column: element

@@ -144,7 +144,7 @@ them in Rust through `reqwest`, and with it `rustls`, `ring`, `hyper`, `tokio`
 and an HTTP cache — 40 crates, 24 owners, 1,057,461 bytes of machine code for
 a widget of 13,826 bytes (2026-08-22,
 [ADR-0203 §Context](./adr/0203-map-widget-without-the-http-stack.md),
-proposed). [ADR-0204](./adr/0204-leaflet-map-core-port.md) (proposed) ports
+superseded by ADR-0204). [ADR-0204](./adr/0204-leaflet-map-core-port.md) ports
 Leaflet's map core to Go on the painter lane instead:
 [`public/thestack/imzero2/egui2/widgets/portolan`](../public/thestack/imzero2/egui2/widgets/portolan)
 fetches with `net/http`, caches compressed bytes, and ships decoded tiles
@@ -155,14 +155,14 @@ went 435 → 313 for the desktop build and 321 → 166 for `headless_soft`, and
 `reqwest`, `rustls`, `ring`, `hyper` appear in neither tree (figures re-taken
 2026-08-23, ADR-0204 M4). [ADR-0056](./adr/0056-walkers-map-h3-binding.md)'s
 binding is gone — its 2026-08-22 Update records the supersession — and
-[ADR-0165](./adr/0165-imzero2-tile-transport-over-fffi2.md) (proposed) is
+[ADR-0165](./adr/0165-imzero2-tile-transport-over-fffi2.md) (superseded by ADR-0204) is
 folded into the port.
 
 Why this matters beyond tidiness: `ring` and `libmimalloc-sys` were the only
 two crates in the headless closure that compile C, and exactly the two that
 stopped a static musl build (340 of 348 crates checked clean without a musl C
 compiler, 2026-08-22, ADR-0203 §Context). `mimalloc` sits behind a `fast_alloc`
-feature ([ADR-0206 §SD4](./adr/0206-gokrazy-appliance-image.md), proposed) and
+feature ([ADR-0206 §SD4](./adr/0206-gokrazy-appliance-image.md)) and
 `ring` left with the map port, so `cargo check --target
 x86_64-unknown-linux-musl --no-default-features --features headless_soft` now
 passes with `fast_alloc` off (ADR-0204 M4, 2026-08-23): no C toolchain stands
@@ -275,7 +275,7 @@ hardware-encode recipe is
   **authentication and TLS are decided but unbuilt** —
   [ADR-0082](./adr/0082-imzero2-remote-session-auth-tls.md) is accepted, the
   carrier today has neither, and the non-loopback refusal lives in a shell
-  script ([ADR-0206 §SD5](./adr/0206-gokrazy-appliance-image.md), proposed),
+  script ([ADR-0206 §SD5](./adr/0206-gokrazy-appliance-image.md)),
   so a reverse proxy supplies both.
 - **Status:** shipped; [`rust/imzero2/hmi_headless.sh`](../rust/imzero2/hmi_headless.sh),
   recipe in [doc/howto/launch-apps-non-interactively.md](./howto/launch-apps-non-interactively.md).
@@ -319,7 +319,7 @@ lists four files, about 4.8 MB.
 
 ### 2.4 What the appliance adds
 
-[ADR-0206](./adr/0206-gokrazy-appliance-image.md) (proposed 2026-08-22)
+[ADR-0206](./adr/0206-gokrazy-appliance-image.md)
 packages §2.3 as bootable x86-64 images with gokrazy — "a Go-first appliance,
 non-Go binaries via `ExtraFilePaths`" — under
 [showcase/gokrazy](../showcase/gokrazy/README.md): a pair that isolates
@@ -448,7 +448,7 @@ feeds the encoder pipeline of §2.2, and the carrier advertises H.264.
   latency; the static `ffmpeg` is a second supply chain of five tarballs
   whose digests the build script prints but does not pin; WebCodecs-only
   browsers; the §2.4 caveats.
-- **Status:** image built and booted 2026-08-22 (ADR-0206, proposed); 1.1 ms
+- **Status:** image built and booted 2026-08-22 (ADR-0206); 1.1 ms
   per frame in Rust at 1920×984 measured in-frame on the appliance.
 
 ### 2.7 Lanes that are not a person's screen
@@ -485,7 +485,7 @@ feeds the encoder pipeline of §2.2, and the carrier advertises H.264.
 | wire, idle → busy | — | constant, encoder-paced | constant, encoder-paced | 20 kbit/s → 1–2 Mbit/s, bursts to 34 Mbit/s | constant, encoder-paced |
 | several viewers | no | 1 active + N passive | same | same carrier | same |
 | auth / TLS | n/a | decided (ADR-0082), unbuilt | same | same, QEMU-only posture | same |
-| decision record | ADR-0024 baseline | ADR-0024 / 0088 / 0086 accepted | ADR-0205 accepted | ADR-0128 + 0206 proposed | ADR-0206 proposed |
+| decision record | ADR-0024 baseline | ADR-0024 / 0088 / 0086 accepted | ADR-0205 accepted | ADR-0128 proposed + 0206 accepted | ADR-0206 accepted |
 
 The choice follows the axes: a seat → desktop; a server with a GPU and a
 VAAPI driver → headless wgpu; a server without one, or an appliance → the CPU

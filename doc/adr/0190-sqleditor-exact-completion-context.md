@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-16
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0190: sqleditor completion — an exact caret model, typed argument domains, and a completion pane
 
@@ -446,11 +444,12 @@ editor. Keyboard acceptance is one captured key. This amends ADR-0147 §SD5 and
 
 ## Status
 
-Proposed — awaiting review by the code owner. **M0–M3, M5 and M6 are built**;
-M4 stands behind its trigger. The body above describes the design as built: it
-was edited in place where the implementation overturned it, which is what the
-proposed stage permits (DOCUMENTATION_STANDARD §1's Tier-1 policy), so a
-reviewer reads what exists rather than what was first written.
+Accepted 2026-08-27. M0–M3, M5 and M6 are built; **M4 is the one open item**
+and stays behind its trigger (the first request for member completion on a
+built-in function's result or a Nested column). The body above describes the
+design as built: it was edited in place where the implementation overturned it,
+which is what the proposed stage permits (DOCUMENTATION_STANDARD §1's Tier-1
+policy), so the record reads what exists rather than what was first written.
 
 ADR-0147 keeps authority over the widget, the probes and the key-capture
 mechanism, and carries a dated Update recording that this ADR replaces its §SD5

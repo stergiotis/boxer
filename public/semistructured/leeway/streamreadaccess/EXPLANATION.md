@@ -82,7 +82,7 @@ The attribute count for a tagged section is determined by reading list offsets f
 
 The membership cardinality column for a given role is found by appending `"card"` to the role string (e.g. `"lr"` → `"lrcard"`). This relies on the convention that cardinality role strings are always `<membershipRole> + "card"`. If the `ColumnRoleE` constants change this pattern, the matching breaks silently.
 
-### Fixed 2026-08-21 — three driving defects found while building the canonical record form (ADR-0201, proposed)
+### Fixed 2026-08-21 — three driving defects found while building the canonical record form (ADR-0201)
 
 - **Mixed membership pairing.** For `ColumnRoleMixedLowCardRef` / `ColumnRoleMixedLowCardVerbatim` the driver used to emit the identity half with empty params and the params half (`…HighCardParameters`) separately with an empty identity — two half-populated calls per membership. `linkMixedPartners` now pairs the two columns per section (they are co-indexed and counted by one cardinality column) and `emitOneMembership` emits one `(identity, params)` call from the identity half; the params half is skipped unless it is on its own.
 - **Homogenous-array cardinality.** The IR names the array support column `len` (`ColumnRoleLength`); the driver registered only `card` (`ColumnRoleCardinality`, the set role), so every homogenous array was driven with card=1 — silently truncated to its first element. Both preparation paths now accept either role (`isPerAttributeCountRole`). The anchor goldens moved accordingly: 3-point polygons had been emitted as 1-point.
