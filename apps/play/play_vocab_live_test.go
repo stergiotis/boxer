@@ -74,6 +74,6 @@ func TestLiveVocabProbeUserDefinedIsASubset(t *testing.T) {
 	all, ready := probe.demandAll()
 	require.True(t, ready, "the same landed answer serves both halves")
 	require.NotEmpty(t, userDefined, "the fixtures install user-defined functions")
-	require.Less(t, len(userDefined), len(all),
+	require.Less(t, len(userDefined), all.Len(),
 		"the built-ins belong to the other half; counting them here is what buried the tab's extras families")
 }

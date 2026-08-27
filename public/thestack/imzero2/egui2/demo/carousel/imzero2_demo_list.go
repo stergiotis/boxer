@@ -198,7 +198,7 @@ func runChLocalQuery(arrowBytes []byte, query, format string, stdout io.Writer) 
 	runErr := cmd.Run()
 	if runErr != nil {
 		err = eb.Build().Str("stderr", stderrBuf.String()).Str("bin", cmd.Path).
-			Str("query", query).Errorf("clickhouse-local: %w", runErr)
+			Str("query", query).Errorf("clickhouse local: %w", runErr)
 		return
 	}
 	return

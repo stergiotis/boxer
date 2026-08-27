@@ -61,6 +61,10 @@ func (inst *recordingBus) Subscribe(string, app.MsgHandlerFunc) (unsubscribe fun
 
 func (inst *recordingBus) Request(string, []byte) (reply []byte, err error) { return }
 
+func (inst *recordingBus) RequestWithTimeout(string, []byte, time.Duration) (reply []byte, err error) {
+	return
+}
+
 func (inst *recordingBus) seen(queryID string) (ticks []queryprogress.Tick) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
