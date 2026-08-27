@@ -20,8 +20,10 @@
 //! build is the lean appliance host (SD6): the carrier, the FFFI2 interpreter,
 //! and the mesh draw-stream lane only — `ctx.run` + `ctx.tessellate` +
 //! serialize, no GPU, no ffmpeg. The PNG dump, the H264_OUT file sink, the
-//! video-encode probe, and every video codec live under `headless_wgpu`; the
-//! lean build offers only the mesh lane, so those env vars are inert there.
+//! video-encode probe, and every video codec live under `headless_raster` — so
+//! they are present in the CPU-rasterized `headless_soft` host too, not only
+//! under wgpu; the bare `headless` build offers just the mesh lane, so those env
+//! vars are inert there.
 //!
 //! Configuration rides env vars (precedent: IMZERO2_RENDER_CADENCE,
 //! IMZERO2_SCREENSHOT_DIR — the Go launcher inherits its environment to
@@ -103,13 +105,13 @@ pub enum HeadlessError {
 struct HeadlessOpts {
     fps: f32,
     max_frames: u64,
-    /// PNG-dump directory — raster only, so `headless_wgpu`.
+    /// PNG-dump directory — raster only, so `headless_raster`.
     #[cfg(feature = "headless_raster")]
     dump_dir: Option<std::path::PathBuf>,
     #[cfg(feature = "headless_raster")]
     dump_every: u64,
     pixels_per_point: f32,
-    /// H.264 file-sink target — raster + encoder, so `headless_wgpu`.
+    /// H.264 file-sink target — raster + encoder, so `headless_raster`.
     #[cfg(feature = "headless_raster")]
     h264_out: Option<std::path::PathBuf>,
     lane: CodecLane,
@@ -145,7 +147,7 @@ impl HeadlessOpts {
                 .unwrap_or(false)
         }
         let listen = std::env::var("IMZERO2_HEADLESS_LISTEN").ok().filter(|v| !v.is_empty());
-        // Resolve (and thus probe) the encoder lane only under `headless_wgpu`,
+        // Resolve (and thus probe) the encoder lane only under `headless_raster`,
         // and only when something will actually encode — a remote carrier or the
         // file dump. PNG-only / null runs never spawn ffmpeg, so probing the
         // VAAPI lane (CodecLane::best) would be pure startup cost (L2). The lean
@@ -189,8 +191,8 @@ impl HeadlessOpts {
 /// force software (`-c:v libopenh264 …`) or pin a specific encoder — so an
 /// existing deployment that sets it behaves exactly as before.
 ///
-/// Under `headless_wgpu` only — the lean build has no encoder and forces the
-/// mesh lane (see [`HeadlessOpts::from_env`]).
+/// Under `headless_raster` only — the bare `headless` build has no encoder and
+/// forces the mesh lane (see [`HeadlessOpts::from_env`]).
 #[cfg(feature = "headless_raster")]
 fn build_codec_lane() -> CodecLane {
     let codec = std::env::var("IMZERO2_HEADLESS_CODEC")
