@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-04-16
+reviewed-date: 2026-08-27
 ---
 
 # Boxer Documentation Standards
@@ -196,7 +196,7 @@ Prose that *frames* the project — the repository `README`, package `README` ov
 
 Documents here carry two kinds of statement in one voice. A **durable** claim — the decision, the constraint, the reason an option was rejected — stays true as the code moves. A **perishable** claim — the current shape of a package, a count, a measurement — does not. Both are worth writing, and the detail that makes a document navigable is mostly of the second kind.
 
-The failure is not that perishable claims exist. It is that a reader cannot tell which is which, so a perishable claim that has gone false still reads with the authority of the durable claim beside it. These rules make the difference legible. None of them asks for less detail: a document stripped of specifics to avoid decay is not more accurate, only less useful.
+The failure is not that perishable claims exist. It is that a reader cannot tell which is which, so a perishable claim that has gone false still reads with the authority of the durable claim beside it. These rules make the difference legible. None of them asks for fewer *durable* claims — a decision stripped of its reasons is not more accurate, only less useful. How many perishable claims to keep at all is the question of *What to leave out*, below.
 
 - **Reference code in a form that can be contradicted.** A file path is a Markdown link (§7), not a bare backticked path — a link is checked, and a reader can follow it. Name a symbol by its exact identifier, so a search either resolves it or shows that it is gone. A reference nothing can check is one nothing will correct.
 - **A quantitative claim is dated or it is live.** A number recording evidence, a measurement, or a past state carries its date and, where a reader would need it to repeat the work, its method — "(2026-08-10, same method, 812 columns)". A number with no date is a claim about the tree as it stands and must be true there. Thresholds and estimates ("~25–30 files", "roughly 200 LOC") are neither; the tilde already says so.
@@ -204,6 +204,25 @@ The failure is not that perishable claims exist. It is that a reader cannot tell
 - **Don't transcribe what a mechanism can serve.** Field lists, signatures, enum members, and call-site inventories reproduce something that already has a single source of truth, with nothing binding the copy to the original. Link the source or the generated artifact instead. Where the shape *is* the decision — a wire format, a schema contract — reproduce it, put it under `Surfaces`, and give it a `Verification plan` entry so a silent divergence turns a lane red.
 - **An exclusivity claim names its guard or its date.** "X is the sole client of Y", "nothing else writes this table" — claims of this shape carry decisions, and they go false the moment someone adds the second case, without touching the document. Name the lint, test, or registry that keeps the claim true, or date it as an observation and let it read as one.
 - **Prefer the phrasing something can check.** Where a sentence could describe a behaviour or point at the mechanism that enforces it, point at the mechanism. Prose that no tool, test, or lane can contradict is precisely the prose that decays unobserved.
+
+### What to leave out
+
+A document carries a decision and what justifies it; the tree carries everything else, and the tree is what a reader trusts when the two disagree. Most of the length in a long ADR or how-to describes the tree as it stood while the author was looking at it — accurate that day, unverifiable a month later, written in the same voice as the decision beside it. Two tests, per sentence:
+
+- **Could a reader regenerate it from the tree?** Link the source and cut the copy (§5 *What a model cannot supply*).
+- **Would it go false after a refactor that does not revisit the decision?** Then it describes the environment, not the decision. Anchor it to what a refactor preserves — a symbol name, an `ADR-NNNN` marker, a registry key, a test name — or date it as an observation, or drop it. Line numbers, counts, orderings, and slugged paths are not preserved.
+
+The sentences that fail both come in a few recurring shapes:
+
+- **Source locations by line number.** `statemanagement.go:244` is stale on the next edit to that file and nothing flags it. Name the symbol and link the file. (2026-08-27: 291 such references under `doc/`.)
+- **Inventories of the current state** — call-site lists, "the twelve packages that import X", file-by-file walkthroughs. Where the inventory *is* the decision it belongs under `Surfaces` with a `Verification plan` entry; elsewhere it is a copy nothing binds to the original.
+- **The route to the decision.** "We first tried A, then noticed B, so…" — the record wants A's kill-reason, not the itinerary. What was asked and what a session discussed are exploration; compact it away, keep the reasons.
+- **Implementation scaffolding.** The order of edits, the files each step touches, pasted test output. A milestone is a declared sub-item (§1) — marker, title, `✓` — and what shipped under it is a Tier 2 `Updates` entry; the *how* lives in the commits, and the `Verification plan` names the lane rather than quoting its output.
+- **Undated time words.** *Today*, *currently*, *for now*, *not yet*, *will be* — true at the keyboard, silently false later. Rewrite as a durable statement, or date it.
+- **Versions that are not the decision.** A toolchain version pinned in passing ages with the toolchain. Name the feature relied upon; pin a version only where the version *is* the decision (ADR-0199 is one).
+- **Code that copies the implementation.** A fence shows a *shape* — an interface, a wire layout, an API before and after — and stays true while the shape does. A fence that must change when the body is refactored is a copy of the body.
+
+What remains is shorter than a diligent author, or a model, produces by default: the Decision, the Alternatives with their kill-reasons, the Consequences, and the Context a reader a year out needs to see why the question arose. When a section wants to grow past that, what is growing is almost always the description of the tree.
 
 ### Go doc comments
 - Follow [go.dev/doc/comment](https://go.dev/doc/comment) in full. Short summary first, begins with the identifier's name, ends with a period.
@@ -298,6 +317,8 @@ What no model can supply is what was never in the code: the alternatives that we
 
 Spend the documentation budget there. **When a passage could be regenerated from the code on demand, that is a reason to cut it, not a reason to keep it current.** The corollary is uncomfortable and intended: the documentation worth writing is the documentation a model cannot draft for you, and cannot check afterwards.
 
+A model that has just made a change also knows every file it touched, every command it ran, and every option it weighed on the way, and its default is to write all of it down. The files are the commit, the commands are the `Verification plan`'s lane, and the options that lost are one kill-reason each. §4 *What to leave out* lists the shapes this takes and what to anchor each to.
+
 ### Prompt hygiene
 
 Include at minimum:
@@ -382,6 +403,9 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 | ADR citations — in Markdown and in Go comments — resolve to an existing ADR, and cite by number rather than filename. | §1 ADR | `DL014 (pending)` |
 | Quantitative claims are dated, or true against the current tree. | §4 *Claims that decay* | *manual* |
 | Exclusivity claims name a guard or a date. | §4 *Claims that decay* | *manual* |
+| Markdown does not pin a source location by line number (`path.go:NNN`); it names the symbol and links the file. | §4 *What to leave out* | `DL016 (pending)` |
+| Prose records the decision; the state of the tree is linked, not transcribed — no call-site inventories, implementation walkthroughs, or pasted command output. | §4 *What to leave out* | *manual* |
+| Time words (*today*, *currently*, *not yet*) carry a date or are rewritten as durable statements. | §4 *What to leave out* | *manual* |
 | A doc comment carries something the signature does not. | §1 Reference, §4 | *manual* |
 | Cross-package references inside Go comments follow the Markdown reference rules. | §4 | *manual* (doclint walks Markdown only) |
 

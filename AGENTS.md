@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-08-24
+reviewed-date: 2026-08-27
 ---
 
 # AGENTS.md
@@ -89,8 +89,8 @@ Architecture Decision Records in [doc/adr/](./doc/adr/) are the primary record o
 
 - **Proposed / pre-acceptance** ADRs are living snapshots — edit in place and
   compact the exploration away, but keep the kill-reasons for rejected options.
-- **Accepted** ADRs change only via dated `## Update` sections, never silent
-  rewrites.
+- **Accepted** ADRs change only via dated entries under `## Updates`, never
+  silent rewrites.
 - A new decision that supersedes an old one gets its **own** ADR that references
   the superseded one.
 
@@ -100,6 +100,19 @@ Repo docs are **descriptive and humble**. No taglines, manifestos, self-praise,
 or quality claims ("robust", "comprehensive", "production-grade"). Lead with the
 caveat; prefer retracting an overstatement to hedging it. Match the surrounding
 document's tone.
+
+## Detail budget
+
+A document carries the decision and what justifies it; the tree carries
+everything else. Before a sentence goes into a doc or ADR, two tests: could a
+reader **regenerate it from the code** — then link, don't transcribe; would it
+**go false after a refactor that doesn't revisit the decision** — then it
+describes the environment, not the decision: anchor it to what survives (a
+symbol, an `ADR-NNNN` marker, a registry key), date it, or drop it. Line
+numbers, call-site inventories, step-by-step implementation plans, pasted test
+output, "today" / "currently" / "not yet", and the route by which the decision
+was reached all age in weeks. The shapes and what to do with each:
+[DOCUMENTATION_STANDARD §4 — What to leave out](./doc/DOCUMENTATION_STANDARD.md#what-to-leave-out).
 
 ## Measurement claims
 

@@ -10,6 +10,11 @@ date: YYYY-MM-DD
 
 # ADR-NNNN: <short decision title>
 
+<!-- Scope: the decision, the kill-reasons for what lost, and the consequences.
+Not the tree — no line numbers, call-site inventories, implementation
+walkthroughs, or pasted command output; see DOCUMENTATION_STANDARD §4
+"What to leave out". Delete this comment. -->
+
 ## Context
 
 <What forces are at play? What constraints, incidents, or requirements

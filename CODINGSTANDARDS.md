@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-06-12
+reviewed-date: 2026-08-27
 ---
 
 # Go Coding Standard
@@ -35,6 +35,7 @@ This holds even when the request reads as "add a package that does X" or "integr
 
 *   **Iterate, then freeze.** Present concrete options with their trade-offs and let the decision settle before implementing. Capture it with the ADR template at [`doc/templates/adr/0000-template.md`](./doc/templates/adr/0000-template.md); use a QOC matrix when there are ≥3 viable options against ≥3 criteria (see [§1 of DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md#1-artifact-types--where-they-belong)).
 *   **Implement against the accepted decision.** Start coding once the ADR is `accepted`; the ADR is then the contract the code follows. A later change of direction is a new or superseding ADR, not a silent divergence in the implementation.
+*   **Record the decision, not the tree.** An ADR carries the choice, the kill-reasons for what lost, and the consequences. The files touched, the order of edits, and the test output belong to the commits, and a description of how the code looks today is a copy the tree will contradict. [§4 of DOCUMENTATION_STANDARD.md — *What to leave out*](./doc/DOCUMENTATION_STANDARD.md#what-to-leave-out) lists what ages and what to anchor it to.
 ### What triggers an ADR
 
 "Significant" is not checkable at the change site, so the trigger is enumerated instead. Two tiers, and they are answered in order.
@@ -278,6 +279,7 @@ var OnePiB = 1*1024*1024*1024*1024*1024
 var Mask = (uint32(1)<<4)-1
 ```
 *   **Invariants:** Explicitly document assumptions about the runtime environment (e.g., "Assumes Little Endian").
+*   **No change narration:** a comment describes the code as it is, not how it got there. *Previously*, *now*, *was changed to*, *added for* — and any mention of the session or request that produced the change — belong in the commit message, where they stay true.
 
 ## ADR References
 
