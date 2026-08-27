@@ -105,6 +105,7 @@ func TestRankFindsParaphrasesAndSkipsAncestry(t *testing.T) {
 		assert.NotEqual(t, "identity", n.Slug, "an ancestor is never a neighbour")
 	}
 	assert.Empty(t, entryFor(t, res, "cooling").Similar)
+	assert.NotNil(t, entryFor(t, res, "cooling").Similar, "an empty list, so the JSON report says [] rather than null")
 	auth := entryFor(t, res, "authorization")
 	require.Len(t, auth.Similar, 1)
 	assert.Equal(t, ac.Similar[0].Ncd, auth.Similar[0].Ncd, "a pair is measured once and shared")

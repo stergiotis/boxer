@@ -14,6 +14,13 @@
 // the candidate once. That approximation is what makes an all-pairs pass over
 // a vault of a thousand notes a matter of seconds rather than minutes.
 //
+// The approximation is not symmetric — C(x) + C_x(y) and C(y) + C_y(x) differ
+// — and each unordered pair is measured once, with the alphabetically earlier
+// slug as the reference. The choice is arbitrary and deterministic; the
+// alternative, measuring both directions and taking the smaller, doubles the
+// pass for a difference that on the reference corpus stayed in the third
+// decimal.
+//
 // # What is not compared
 //
 // Two rules keep the result about resemblance rather than about structure.
@@ -259,6 +266,11 @@ func Rank(corpus capmapcorpus.Corpus, opts Options) (res Result, err error) {
 		})
 		if len(near) > opts.Top {
 			near = near[:opts.Top]
+		}
+		if near == nil {
+			// An empty list, not a null: the JSON report is read by tools, and
+			// "compared, found nothing" is a list with no items.
+			near = []Neighbour{}
 		}
 		res.Entries = append(res.Entries, Entry{
 			Slug: comps[i].Slug, Name: comps[i].Name, Level: comps[i].Level,
