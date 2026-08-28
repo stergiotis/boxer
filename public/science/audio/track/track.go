@@ -140,7 +140,46 @@ func (inst *Track) TimeBase() (tb TimeBase) { return inst.tb }
 func (inst *Track) Peaks() (p *peaks.Pyramid) { return inst.pyramid }
 
 // Sink returns the transport. It is never nil.
-func (inst *Track) Sink() (s sink.SinkI) { return inst.transport }
+func (inst *Track) Sink() (s sink.SinkI) {
+	inst.mu.Lock()
+	s = inst.transport
+	inst.mu.Unlock()
+	return s
+}
+
+// ReplaceSinkE swaps the transport for one built by newSink over the track's
+// shared source — the seam through which an output device arrives after the
+// track was opened (ADR-0208 SD6: a keelson-brokered capability hands out a
+// Sink, the player never opens a device). The new sink takes over the old
+// one's position, rate and volume and starts paused; the old sink is closed
+// afterwards. When newSink fails the old sink stays in place, paused.
+func (inst *Track) ReplaceSinkE(newSink func(src pcm.SourceI) (s sink.SinkI, err error)) (err error) {
+	if newSink == nil {
+		return eh.New("nil sink constructor")
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.closed {
+		return eh.New("replace sink on a closed track")
+	}
+	old := inst.transport
+	old.Pause()
+	pos, rate, volume := old.Position(), old.Rate(), old.Volume()
+	next, err := newSink(inst.src)
+	if err != nil {
+		return eh.Errorf("unable to open the replacement sink: %w", err)
+	}
+	if next == nil {
+		return eh.New("sink constructor returned no sink")
+	}
+	var errs []error
+	errs = eh.AppendError(errs, next.SeekE(pos))
+	errs = eh.AppendError(errs, next.SetRateE(rate))
+	errs = eh.AppendError(errs, next.SetVolumeE(volume))
+	inst.transport = next
+	errs = eh.AppendError(errs, old.CloseE())
+	return eh.CheckErrors(errs)
+}
 
 // ReadWindowE fills dst with the interleaved frames of
 // [fromFrame, fromFrame+len(dst)/Channels) and returns how many frames it

@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
+	"github.com/stergiotis/boxer/public/science/audio/sink/pulsesink"
 	"github.com/stergiotis/boxer/public/science/audio/track"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
@@ -38,6 +39,12 @@ type waveformDemoState struct {
 	err       error
 	lastClick int64
 	hasClick  bool
+	// Bound to widgets, so they live on the heap for the frame after the
+	// edit (stable-pointer rule).
+	device    bool
+	deviceErr string
+	rate      float64
+	volume    float64
 }
 
 func init() {
@@ -54,8 +61,9 @@ func init() {
 			"seek (Shift for a longer step), Home/End jump, PageUp/PageDown zoom. " +
 			"Zoom in far enough and the columns give way to the samples themselves. " +
 			"The track here is synthetic — a gated tone on the left, a chirp on the " +
-			"right — and the sink is the device-less clock, so play moves the playhead " +
-			"without audio hardware.",
+			"right. It opens on the device-less clock, so play moves the playhead " +
+			"without audio hardware; 'output device' swaps in the PulseAudio sink " +
+			"(ADR-0208 SD6, M3) and plays through the speakers, with rate and volume.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			return newWaveformDemoState(ids)
 		},
@@ -67,7 +75,7 @@ func init() {
 }
 
 func newWaveformDemoState(ids *c.WidgetIdStack) (st *waveformDemoState) {
-	st = &waveformDemoState{}
+	st = &waveformDemoState{rate: 1, volume: 1}
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	frames := format.DurationToFrames(waveformDemoSeconds * time.Second)
 	// Bursts of 0.35 s tone every 0.9 s, over a slow amplitude ramp so the
@@ -134,6 +142,38 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 			v.FramesPerPx = 480
 			p.SetView(v)
 		}
+	}
+	for range c.HorizontalTop().KeepIter() {
+		if c.Checkbox(ids.PrepareStr("wf-device"), st.device, "output device").SendRespVal(&st.device).HasChanged() {
+			st.deviceErr = ""
+			var err error
+			if st.device {
+				err = st.tr.ReplaceSinkE(func(src pcm.SourceI) (sink.SinkI, error) {
+					return pulsesink.OpenE(src, pulsesink.Options{AppName: "boxer widget gallery"})
+				})
+			} else {
+				err = st.tr.ReplaceSinkE(func(src pcm.SourceI) (sink.SinkI, error) { return sink.NewNull(src, nil), nil })
+			}
+			if err != nil {
+				// The old sink stays; put the checkbox back and say why.
+				st.device = false
+				st.deviceErr = err.Error()
+				c.CurrentApplicationState.StateManager.OverrideDatabindingBPtr(&st.device)
+			}
+		}
+		if c.SliderF64(ids.PrepareStr("wf-rate"), st.rate, 0.5, 2.0).Text("rate").SendRespVal(&st.rate).HasChanged() {
+			if err := st.tr.Sink().SetRateE(st.rate); err != nil {
+				log.Warn().Err(err).Msg("waveform demo: rate rejected")
+			}
+		}
+		if c.SliderF64(ids.PrepareStr("wf-volume"), st.volume, 0, 1).Text("volume").SendRespVal(&st.volume).HasChanged() {
+			if err := st.tr.Sink().SetVolumeE(st.volume); err != nil {
+				log.Warn().Err(err).Msg("waveform demo: volume rejected")
+			}
+		}
+	}
+	if st.deviceErr != "" {
+		c.Label("no output device: " + st.deviceErr).Selectable(false).Send()
 	}
 	c.AddSpace(styletokens.GapItems(styletokens.ActiveDensity()))
 
