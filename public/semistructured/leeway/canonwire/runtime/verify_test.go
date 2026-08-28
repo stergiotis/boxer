@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"encoding/hex"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -129,7 +130,7 @@ func TestVerifyCanonicalAcceptsTheValueForms(t *testing.T) {
 		require.NoError(t, err2)
 		ew.Slot(sig).Add(a)
 	}
-	add("f64", 1, func(cw *CborWriter) { cw.WriteF64(-0.0) })
+	add("f64", 1, func(cw *CborWriter) { cw.WriteF64(math.Copysign(0, -1)) })
 	add("b", 1, func(cw *CborWriter) { cw.WriteBool(true) })
 	add("n", 0, func(cw *CborWriter) { cw.WriteNull() })
 	add("sh", 2, func(cw *CborWriter) {

@@ -95,11 +95,11 @@ func (c *CborReader) fail(err error) {
 // PeekMajor returns the major type of the next item without consuming
 // anything. ok is false when the reader is exhausted or already in error. The
 // head is not validated: a well-formed major type may still fail to read.
-func (c *CborReader) PeekMajor() (mt MajorType, ok bool) {
+func (c *CborReader) PeekMajor() (mt MajorTypeE, ok bool) {
 	if c.err != nil || c.pos >= len(c.b) {
 		return
 	}
-	return MajorType(c.b[c.pos] & 0xe0), true
+	return MajorTypeE(c.b[c.pos] & 0xe0), true
 }
 
 // IsNull reports whether the next item is CBOR null, without consuming it.
@@ -115,7 +115,7 @@ func (c *CborReader) IsNull() bool {
 // 25, 26 or 27 the argument is the raw float16/32/64 bit pattern; ai tells
 // the width apart, which is why the typed float readers go through this
 // instead of ReadHead.
-func (c *CborReader) readHead() (mt MajorType, ai byte, arg uint64) {
+func (c *CborReader) readHead() (mt MajorTypeE, ai byte, arg uint64) {
 	if c.err != nil {
 		return
 	}
@@ -124,7 +124,7 @@ func (c *CborReader) readHead() (mt MajorType, ai byte, arg uint64) {
 		return
 	}
 	ib := c.b[c.pos]
-	mt = MajorType(ib & 0xe0)
+	mt = MajorTypeE(ib & 0xe0)
 	ai = ib & 0x1f
 	if ai < 24 {
 		c.pos++
@@ -166,7 +166,7 @@ func (c *CborReader) readHead() (mt MajorType, ai byte, arg uint64) {
 	case 27:
 		arg = binary.BigEndian.Uint64(p)
 	}
-	if mt == MajorSimple {
+	if mt == MajorTypeSimple {
 		// Major type 7 does not encode a count: 25…27 are floats, whose
 		// shortest-width rule is the typed readers' business, and 24 is a
 		// simple value which must be 32 or above.
@@ -206,13 +206,13 @@ func (c *CborReader) readHead() (mt MajorType, ai byte, arg uint64) {
 // For major type 7 with additional information 25…27 the argument is the raw
 // float bit pattern and its width is not reported; read floats with
 // ReadFloat64 or ReadFloat32, which enforce the shortest-width rule.
-func (c *CborReader) ReadHead() (mt MajorType, arg uint64) {
+func (c *CborReader) ReadHead() (mt MajorTypeE, arg uint64) {
 	mt, _, arg = c.readHead()
 	return
 }
 
 // expect consumes a head and requires it to carry major type want.
-func (c *CborReader) expect(want MajorType) (arg uint64) {
+func (c *CborReader) expect(want MajorTypeE) (arg uint64) {
 	mt, _, arg := c.readHead()
 	if c.err != nil {
 		return 0
@@ -225,7 +225,7 @@ func (c *CborReader) expect(want MajorType) (arg uint64) {
 }
 
 // ReadUint reads an unsigned integer (major type 0).
-func (c *CborReader) ReadUint() uint64 { return c.expect(MajorUint) }
+func (c *CborReader) ReadUint() uint64 { return c.expect(MajorTypeUint) }
 
 // ReadInt reads a signed integer (major type 0 or 1). A magnitude that does
 // not fit int64 is out of range.
@@ -235,13 +235,13 @@ func (c *CborReader) ReadInt() (v int64) {
 		return
 	}
 	switch mt {
-	case MajorUint:
+	case MajorTypeUint:
 		if arg > math.MaxInt64 {
 			c.fail(eb.Build().Int("pos", c.pos).Uint64("value", arg).Errorf("unsigned value does not fit int64: %w", ErrOutOfRange))
 			return
 		}
 		return int64(arg)
-	case MajorNeg:
+	case MajorTypeNeg:
 		if arg > math.MaxInt64 {
 			c.fail(eb.Build().Int("pos", c.pos).Uint64("magnitude", arg).Errorf("negative value does not fit int64: %w", ErrOutOfRange))
 			return
@@ -265,7 +265,7 @@ func (c *CborReader) ReadU32() uint32 { return uint32(c.readUintMax(math.MaxUint
 func (c *CborReader) ReadU64() uint64 { return c.ReadUint() }
 
 func (c *CborReader) readUintMax(max uint64) (v uint64) {
-	v = c.expect(MajorUint)
+	v = c.expect(MajorTypeUint)
 	if c.err != nil {
 		return 0
 	}
@@ -317,7 +317,7 @@ func (c *CborReader) take(n uint64) (b []byte) {
 // ReadBytes reads a byte string (major type 2). The result is a view into the
 // reader's buffer, valid until that buffer is reused; copy it to keep it.
 func (c *CborReader) ReadBytes() (b []byte) {
-	n := c.expect(MajorBytes)
+	n := c.expect(MajorTypeBytes)
 	if c.err != nil {
 		return
 	}
@@ -328,7 +328,7 @@ func (c *CborReader) ReadBytes() (b []byte) {
 // The result is a view into the reader's buffer, valid until that buffer is
 // reused; copy it to keep it.
 func (c *CborReader) ReadText() (b []byte) {
-	n := c.expect(MajorText)
+	n := c.expect(MajorTypeText)
 	if c.err != nil {
 		return
 	}
@@ -372,7 +372,7 @@ func (c *CborReader) ReadTextString() string {
 // element count, refusing counts that cannot be present in the remaining
 // bytes — one byte is the smallest item, so a count above the bytes left is
 // truncation however it is later read.
-func (c *CborReader) readCount(want MajorType, perElement int) (n int) {
+func (c *CborReader) readCount(want MajorTypeE, perElement int) (n int) {
 	arg := c.expect(want)
 	if c.err != nil {
 		return
@@ -386,16 +386,16 @@ func (c *CborReader) readCount(want MajorType, perElement int) (n int) {
 
 // ReadArrayHead reads the head of a definite-length array and returns its
 // element count.
-func (c *CborReader) ReadArrayHead() int { return c.readCount(MajorArray, 1) }
+func (c *CborReader) ReadArrayHead() int { return c.readCount(MajorTypeArray, 1) }
 
 // ReadMapHead reads the head of a definite-length map and returns its entry
 // count. The reader does not check that the keys are sorted; a form that
 // needs that checks the keys it reads.
-func (c *CborReader) ReadMapHead() int { return c.readCount(MajorMap, 2) }
+func (c *CborReader) ReadMapHead() int { return c.readCount(MajorTypeMap, 2) }
 
 // ReadTag reads a tag head (major type 6) and returns the tag number. The
 // tagged item follows and is read separately.
-func (c *CborReader) ReadTag() uint64 { return c.expect(MajorTag) }
+func (c *CborReader) ReadTag() uint64 { return c.expect(MajorTypeTag) }
 
 // ExpectTag reads a tag head and requires it to be want.
 func (c *CborReader) ExpectTag(want uint64) {
@@ -414,11 +414,11 @@ func (c *CborReader) ReadBool() (v bool) {
 	if c.err != nil {
 		return
 	}
-	if mt != MajorSimple || ai >= 24 {
+	if mt != MajorTypeSimple || ai >= 24 {
 		c.fail(eb.Build().Int("pos", c.pos).Uint8("got", byte(mt)>>5).Errorf("expected a bool: %w", ErrUnexpectedMajor))
 		return
 	}
-	switch byte(MajorSimple) | byte(arg) {
+	switch byte(MajorTypeSimple) | byte(arg) {
 	case SimpleFalse:
 		return false
 	case SimpleTrue:
@@ -434,7 +434,7 @@ func (c *CborReader) ReadNull() {
 	if c.err != nil {
 		return
 	}
-	if mt != MajorSimple || ai >= 24 || byte(MajorSimple)|byte(arg) != SimpleNull {
+	if mt != MajorTypeSimple || ai >= 24 || byte(MajorTypeSimple)|byte(arg) != SimpleNull {
 		c.fail(eb.Build().Int("pos", c.pos).Uint8("got", byte(mt)>>5).Uint64("simpleValue", arg).Errorf("expected null: %w", ErrUnexpectedMajor))
 	}
 }
@@ -522,7 +522,7 @@ func (c *CborReader) ReadFloat64() (f float64) {
 	if c.err != nil {
 		return
 	}
-	if mt != MajorSimple {
+	if mt != MajorTypeSimple {
 		c.fail(eb.Build().Int("pos", c.pos).Uint8("got", byte(mt)>>5).Errorf("expected a float: %w", ErrUnexpectedMajor))
 		return
 	}
@@ -608,19 +608,19 @@ func (c *CborReader) skip(depth int) {
 		return
 	}
 	switch mt {
-	case MajorUint, MajorNeg:
+	case MajorTypeUint, MajorTypeNeg:
 		// The head carried the whole item.
-	case MajorSimple:
+	case MajorTypeSimple:
 		// The head carried the whole item, but a float's width is only
 		// well-formed if it is the shortest one that preserves the value.
 		if isFloatAI(ai) {
 			c.checkCanonicalFloat(ai, arg, floatFromHead(ai, arg))
 		}
-	case MajorBytes, MajorText:
+	case MajorTypeBytes, MajorTypeText:
 		c.take(arg)
-	case MajorArray, MajorMap:
+	case MajorTypeArray, MajorTypeMap:
 		n := arg
-		if mt == MajorMap {
+		if mt == MajorTypeMap {
 			if n > math.MaxUint64/2 {
 				c.fail(eb.Build().Int("pos", c.pos).Uint64("count", n).Errorf("map entry count overflows: %w", ErrTruncated))
 				return
@@ -637,7 +637,7 @@ func (c *CborReader) skip(depth int) {
 				return
 			}
 		}
-	case MajorTag:
+	case MajorTypeTag:
 		c.skip(depth + 1)
 	}
 }

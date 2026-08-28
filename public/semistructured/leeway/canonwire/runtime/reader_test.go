@@ -38,26 +38,26 @@ func TestReadHeadWidths(t *testing.T) {
 	cases := []struct {
 		name string
 		item string
-		mt   MajorType
+		mt   MajorTypeE
 		arg  uint64
 	}{
-		{"0", "00", MajorUint, 0},
-		{"23 immediate", "17", MajorUint, 23},
-		{"24 one byte", "1818", MajorUint, 24},
-		{"255", "18ff", MajorUint, math.MaxUint8},
-		{"256 two bytes", "190100", MajorUint, 256},
-		{"65535", "19ffff", MajorUint, math.MaxUint16},
-		{"65536 four bytes", "1a00010000", MajorUint, 65536},
-		{"2^32-1", "1affffffff", MajorUint, math.MaxUint32},
-		{"2^32 eight bytes", "1b0000000100000000", MajorUint, 1 << 32},
-		{"MaxUint64", "1bffffffffffffffff", MajorUint, math.MaxUint64},
-		{"negative", "3818", MajorNeg, 24},
-		{"bytes head", "43", MajorBytes, 3},
-		{"text head", "63", MajorText, 3},
-		{"array head", "9818", MajorArray, 24},
-		{"map head", "a2", MajorMap, 2},
-		{"tag 258", "d90102", MajorTag, TagSet},
-		{"tag 1001", "d903e9", MajorTag, TagExtendedTime},
+		{"0", "00", MajorTypeUint, 0},
+		{"23 immediate", "17", MajorTypeUint, 23},
+		{"24 one byte", "1818", MajorTypeUint, 24},
+		{"255", "18ff", MajorTypeUint, math.MaxUint8},
+		{"256 two bytes", "190100", MajorTypeUint, 256},
+		{"65535", "19ffff", MajorTypeUint, math.MaxUint16},
+		{"65536 four bytes", "1a00010000", MajorTypeUint, 65536},
+		{"2^32-1", "1affffffff", MajorTypeUint, math.MaxUint32},
+		{"2^32 eight bytes", "1b0000000100000000", MajorTypeUint, 1 << 32},
+		{"MaxUint64", "1bffffffffffffffff", MajorTypeUint, math.MaxUint64},
+		{"negative", "3818", MajorTypeNeg, 24},
+		{"bytes head", "43", MajorTypeBytes, 3},
+		{"text head", "63", MajorTypeText, 3},
+		{"array head", "9818", MajorTypeArray, 24},
+		{"map head", "a2", MajorTypeMap, 2},
+		{"tag 258", "d90102", MajorTypeTag, TagSet},
+		{"tag 1001", "d903e9", MajorTypeTag, TagExtendedTime},
 	}
 	for _, tc := range cases {
 		r := rd(t, tc.item)
@@ -270,7 +270,7 @@ func TestReadSimpleValues(t *testing.T) {
 
 	mt, ok := rd(t, "d90102").PeekMajor()
 	require.True(t, ok)
-	require.Equal(t, MajorTag, mt)
+	require.Equal(t, MajorTypeTag, mt)
 }
 
 // Floats are accepted only in the shortest width that preserves the value —
@@ -426,7 +426,7 @@ func TestSkipAndItemBytes(t *testing.T) {
 	// A nest deeper than the limit is an error, not a stack overflow.
 	deep := make([]byte, maxNestingDepth+2)
 	for i := range deep {
-		deep[i] = byte(MajorArray) | 1
+		deep[i] = byte(MajorTypeArray) | 1
 	}
 	deep[len(deep)-1] = 0x00
 	r = NewCborReader(deep)
