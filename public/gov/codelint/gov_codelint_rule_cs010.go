@@ -29,6 +29,12 @@ var allowedIterMethodNames = map[string]struct{}{
 // ForwardEdges, DeletedPartitionMembers) use domain-describing names
 // and are out of scope — this rule only fires when a receiver has
 // exactly one iter-returning method whose name isn't in the quartet.
+//
+// A method whose name an interface fixes is exempt: when the receiver
+// (or its pointer) implements an interface declared in the package or in
+// one of its direct imports, and that interface has a method of the same
+// name, the name was not the author's to choose (recordstore.ExecutorI's
+// QueryArrow is the motivating case).
 type RuleCS010 struct{}
 
 func NewRuleCS010() (inst *RuleCS010) {
@@ -87,12 +93,15 @@ func (inst *RuleCS010) run(pass *analysis.Pass) (res any, err error) {
 			})
 		}
 	}
-	for _, methods := range byReceiver {
+	for recv, methods := range byReceiver {
 		if len(methods) != 1 {
 			continue
 		}
 		m := methods[0]
 		if _, allowed := allowedIterMethodNames[m.name]; allowed {
+			continue
+		}
+		if interfaceFixesMethodName(pass.Pkg, recv, m.name) {
 			continue
 		}
 		pass.Report(analysis.Diagnostic{
@@ -161,5 +170,45 @@ func isIterSeqType(t types.Type) (ok bool) {
 	}
 	name := obj.Name()
 	ok = name == "Seq" || name == "Seq2"
+	return
+}
+
+// interfaceFixesMethodName reports whether recv (or *recv) implements an
+// interface, declared in pkg or one of its direct imports, that declares a
+// method called name — in which case the name is the interface's, not the
+// implementer's, and CS010 does not apply.
+func interfaceFixesMethodName(pkg *types.Package, recv *types.TypeName, name string) (fixed bool) {
+	scopes := []*types.Scope{pkg.Scope()}
+	for _, imp := range pkg.Imports() {
+		scopes = append(scopes, imp.Scope())
+	}
+	recvT := recv.Type()
+	ptrT := types.NewPointer(recvT)
+	for _, scope := range scopes {
+		for _, n := range scope.Names() {
+			tn, ok := scope.Lookup(n).(*types.TypeName)
+			if !ok {
+				continue
+			}
+			iface, ok := tn.Type().Underlying().(*types.Interface)
+			if !ok || !interfaceHasMethod(iface, name) {
+				continue
+			}
+			if types.Implements(recvT, iface) || types.Implements(ptrT, iface) {
+				fixed = true
+				return
+			}
+		}
+	}
+	return
+}
+
+func interfaceHasMethod(iface *types.Interface, name string) (has bool) {
+	for i := 0; i < iface.NumMethods(); i++ {
+		if iface.Method(i).Name() == name {
+			has = true
+			return
+		}
+	}
 	return
 }
