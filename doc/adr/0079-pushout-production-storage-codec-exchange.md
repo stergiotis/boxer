@@ -432,6 +432,31 @@ THIRD_PARTY_NOTICES §1.5 still call the borrowed construct a *graggle*,
 because that is what ojo and Joe Neeman's blog series introduced; the
 NOTICE gained a NAMING section stating what boxer calls it instead.
 
+## Update — 2026-08-28: `json1` replaced by `cbor1`; the identity codec moved too
+
+[ADR-0209](./0209-pushout-cbor-identity-and-wire.md) replaces
+both of pushout's JSON uses with deterministic CBOR. Two lines of this ADR
+are affected.
+
+**Q2's closing sentence** — "Identity codec … is explicitly NOT the wire
+codec and does not change here" — stated a separation, and a fact about
+that particular change. The separation still holds and is load-bearing:
+re-encoding an envelope with a different codec preserves identity, so O2b
+("ship as received") is unaffected by anything ADR-0209 does. The fact has
+expired: the identity codec *has* since changed, independently of the wire
+codec, and every `PatchHash` moved with it.
+
+**The Negative consequence** naming "`jsonv1` payload remaining
+human-readable after the short header" as the mitigation for framed
+envelopes no longer being raw JSON on disk. `json1` is removed; the
+mitigation is now `boxer.sh cbor diagnostics`, which renders a payload in
+RFC 8949 §8 diagnostic notation. Strictly weaker than `less` — it is a
+step rather than no step — and that trade is recorded in ADR-0209's own
+Negative section.
+
+The layering sketch under *Decision* still reads `jsonv1` as the codec
+`envelope` ships. Read it as `cbor1`; the seam it illustrates is unchanged.
+
 ## Open questions
 
 - **OQ-1 — sync at scale.** Full-list exchange is O(history) per
