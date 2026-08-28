@@ -657,6 +657,13 @@ const (
 )
 
 const (
+	ScrollingTextureMethodIdBuild ScrollingTextureMethodIdE = 0
+
+	ScrollingTextureMethodIdCaptureZoom   ScrollingTextureMethodIdE = 1
+	ScrollingTextureMethodIdCaptureScroll ScrollingTextureMethodIdE = 2
+)
+
+const (
 	SeparatorMethodIdBuild SeparatorMethodIdE = 0
 
 	SeparatorMethodIdHorizontal SeparatorMethodIdE = 1

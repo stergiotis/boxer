@@ -54,6 +54,14 @@ pub struct ScrollingTextureResponse {
     /// gone; the interpreter reports the id on the starved-textures register
     /// so the Go sender can reset its head instead of desyncing.
     pub fresh_texture: bool,
+    /// egui's topmost-under-pointer hit-test for the widget rect: the gate
+    /// for hover-scoped wheel capture (ADR-0140, second capture site).
+    pub contains_pointer: bool,
+    /// Pointer position relative to the widget rect origin, in logical
+    /// points — the zoom anchor a wheel capture travels with. NaN when the
+    /// pointer is not over the widget.
+    pub hover_x: f32,
+    pub hover_y: f32,
 }
 
 impl ScrollingTextureResponse {
@@ -62,6 +70,9 @@ impl ScrollingTextureResponse {
             hover_rc: HOVER_RC_NONE,
             clicked: false,
             fresh_texture: false,
+            contains_pointer: false,
+            hover_x: f32::NAN,
+            hover_y: f32::NAN,
         }
     }
 }
@@ -591,10 +602,17 @@ impl ScrollingTextureCache {
             HOVER_RC_NONE
         };
 
+        let (hover_x, hover_y) = match resp.hover_pos() {
+            Some(hp) => (hp.x - rect.min.x, hp.y - rect.min.y),
+            None => (f32::NAN, f32::NAN),
+        };
         ScrollingTextureResponse {
             hover_rc,
             clicked: resp.clicked(),
             fresh_texture,
+            contains_pointer: resp.contains_pointer(),
+            hover_x,
+            hover_y,
         }
     }
 }

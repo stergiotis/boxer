@@ -207,7 +207,20 @@ fn build_codec_lane() -> CodecLane {
         if let Some(args) =
             std::env::var("IMZERO2_HEADLESS_ENCODER_ARGS").ok().filter(|v| !v.trim().is_empty())
         {
-            return CodecLane::h264(args.split_whitespace().map(str::to_owned).collect());
+            // Verbatim, but probed like the automatic lanes: an encoder the
+            // box lacks (`-c:v libopenh264` against an ffmpeg built without
+            // it) would otherwise hand the sink a lane that can never spawn,
+            // and the stream would be dead from the first viewer on.
+            let lane = CodecLane::h264(args.split_whitespace().map(str::to_owned).collect());
+            let probe = crate::imzero2::codeclane::probe_lane(&lane);
+            if probe.is_ok() {
+                return lane;
+            }
+            tracing::warn!(
+                ?probe,
+                args = %args,
+                "IMZERO2_HEADLESS_ENCODER_ARGS lane failed its probe — choosing the lane automatically instead"
+            );
         }
     }
     CodecLane::best(codec)
@@ -1120,6 +1133,9 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                     frames_sent,
                     frames_dropped,
                     frames_sent.saturating_sub(frames_decoded),
+                    // The lane served, not the one requested: a degraded
+                    // host reports mesh here (videooutput's label).
+                    c.video_codec().as_u8() as u64,
                 ]);
             } else {
                 fffi.set_video_capabilities(&[]);

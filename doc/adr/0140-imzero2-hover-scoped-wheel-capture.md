@@ -297,6 +297,22 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-08-28 — second capture site: `scrollingTexture`
+
+The primitive was declared on `paintCanvas` only. A waterfall built on the
+`scrollingTexture` widget (heatmapscroll; sailing's Binnacle) had to read the
+unscoped `GetScrollDelta()` to zoom on the wheel, with the hover gate rebuilt
+by hand — the one shape SD3 kept the globals for was a whole-viewport read,
+not this. `scrollingTexture` now carries the same two opt-ins,
+`.CaptureScroll()` / `.CaptureZoom()`, applied under the same contract: the
+widget's own response gates ownership (`contains_pointer`), scroll is
+consumed globally, zoom is a per-id read, and the capture lands in the r23
+register keyed by the widget id with the texture-local hover as the anchor.
+`heatmapscroll` exposes it as `SetCaptureScroll` / `SetCaptureZoom` /
+`Wheel()`; the gallery's heatmapscroll demo captures on every panel and shows
+the delta. No third site is known; a widget that needs one adds the two
+methods to its opcode and pushes r23 from its apply code.
+
 ### 2026-08-04 — r14 retired, r15 keyed
 
 A sweep for registers with this ADR's shape — one slot per process where the

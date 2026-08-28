@@ -515,6 +515,17 @@ grew in practice — but a future minimal host embedding the launcher alone
 would pay for it, and the remedy then is to lift the battery type into a
 leaf package, not to hand-roll a second matcher.
 
+### 2026-08-28 — a `sensing` topic for instruments and radios
+
+The first adopter outside this repository — the sailing repository's
+Micronet receiver, a windowed app fed by a software-defined radio — had no
+honest place in the vocabulary: `data` names datasets and columnar
+modelling, `geo` names maps and terrain, and neither says "live
+measurements from the physical world". §SD1's hand-ordered list gains
+`sensing` (instruments, radios, sensors), placed after `geo` in the
+launcher order. The §SD9 gate and `ParseTopic` cover it as they cover every
+member; no existing manifest moves.
+
 ## References
 
 - [app-organization-and-launching.md](../adr-background-work/app-organization-and-launching.md)

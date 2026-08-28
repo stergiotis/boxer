@@ -3201,9 +3201,23 @@ func (inst ScrollAreaFluid) KeepIter() iter.Seq[functional.NilIteratorValueType]
 
 	}
 }
+func (inst ScrollingTextureFluid) CaptureZoom() ScrollingTextureFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ScrollingTextureMethodIdCaptureZoom))
+
+	return inst
+}
+
+func (inst ScrollingTextureFluid) CaptureScroll() ScrollingTextureFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ScrollingTextureMethodIdCaptureScroll))
+
+	return inst
+}
+
 func (inst ScrollingTextureFluid) Send() {
 	r := inst.r
-
+	r.WriteOpCode(uint32(ScrollingTextureMethodIdBuild))
 	r.SendIntermediate()
 }
 func (inst ScrollingTextureReleaseFluid) Send() {

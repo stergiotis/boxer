@@ -190,12 +190,18 @@ into decode switches and `Scan` filter SQL, where a shared section under
 colliding ids would silently cross-read — not a rule of the component model
 (ADR-0100 SD6, as corrected 2026-08-10). Notes:
 
-- The gate is cross-kind per section; one kind may hold several memberships in
-  one section.
-- Two kinds naming one membership is a generation error under any id regime (the
-  `kind<Name>` symbol is declared once per generated package); cross-kind slot
-  sharing inside one store needs the reflect path. On a shared table this is why
-  two domains get two stores rather than one.
+- The gate is cross-kind per section and counts only sections a kind reaches
+  through a ref channel; one kind may hold several memberships in one section.
+  A literal-name (`lowCardVerbatim`) membership is matched by its bytes on its
+  own lane and cannot alias by id, so all-verbatim kinds may share sections
+  under any id source (2026-08-28; before that the gate was channel-blind and
+  such a store passed only via an empty `FixedIdsWrapper`).
+- Two kinds naming one membership is a generation error under any id regime —
+  for ref names because the `kind<Name>` symbol is declared once per generated
+  package, for verbatim names per `(section, name)` because a component is
+  present on any matched slot; cross-kind slot sharing inside one store needs
+  the reflect path. On a shared table this is why two domains get two stores
+  rather than one.
 - The lift landed 2026-08-10 (ADR-0105 D2): `gen.Input.Wrapper` selects the id
   source and the gate relaxes to id-level disjointness. One source feeds the
   codec consts, the baked `Scan` filters and the exported `<Store>MembershipIds`
@@ -213,6 +219,7 @@ test is where to look first when a field is unexpectedly empty.
 | A whole batch reads as carrying nothing | The reader is on a different assignment than the writer (I2) | same |
 | `present` with zero-valued fields | Present is not conforming (R1); ask `Detect` or the Filter | same |
 | An empty slice where you wrote one | Empty, nil and never-written are one wire observation (R2) — emptiness cannot be asserted, only observed | same |
+| An all-container kind reads absent | A container writes zero attributes when empty (splice semantics, ADR-0146 M1), so a kind whose memberships are all containers has no presence signal on a row where every container is empty; give it a scalar membership if "present with nothing" must be observable | `recordstore/example/empty_container_test.go` |
 | A string that changed by itself | Decoded strings alias the Arrow record; retain it or copy (R6) | same |
 | A widened field still reads old rows | Widening is admits-superset by construction | `marshallreflect_test/arity_evolution_test.go` |
 | A tuple field carrying a neighbour's attribute | Tuple fields are section-scoped | same |

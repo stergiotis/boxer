@@ -348,7 +348,7 @@ func Decode(codecIds []uint64, flags iter.Seq[uint32]) []CodecCaps {
 
 // StreamInfo is the active stream's telemetry (ADR-0088 fetchVideoStreamInfo:
 // [width, height, fps, cadence, bitrate_kbps, frames_sent, frames_dropped,
-// frames_in_flight]).
+// frames_in_flight, codec]).
 type StreamInfo struct {
 	Width, Height, Fps int
 	Reactive           bool // render cadence: false=continuous, true=reactive
@@ -356,6 +356,12 @@ type StreamInfo struct {
 	FramesSent         int
 	FramesDropped      int // coalesced before the encoder under congestion (SD9)
 	FramesInFlight     int // sent − decoded: how far the viewer is behind
+	// Codec is the lane the host is actually serving (the ninth value), which
+	// differs from the requested one after a host-side degradation — an
+	// encoder that could not be spawned falls back to the mesh lane. CodecKnown
+	// is false for a host that reports only the eight older values.
+	Codec      Codec
+	CodecKnown bool
 }
 
 // Valid is true once the host has reported a geometry (i.e. a viewer is live).
@@ -369,7 +375,7 @@ func (s StreamInfo) CadenceName() string {
 	return "continuous"
 }
 
-// DecodeStreamInfo unpacks a FetchVideoStreamInfo result (3 or 8 values).
+// DecodeStreamInfo unpacks a FetchVideoStreamInfo result (3, 8 or 9 values).
 func DecodeStreamInfo(info iter.Seq[uint64]) StreamInfo {
 	v := make([]uint64, 0, 8)
 	for x := range info {
@@ -385,6 +391,10 @@ func DecodeStreamInfo(info iter.Seq[uint64]) StreamInfo {
 		s.FramesSent = int(v[5])
 		s.FramesDropped = int(v[6])
 		s.FramesInFlight = int(v[7])
+	}
+	if len(v) >= 9 {
+		s.Codec = Codec(v[8])
+		s.CodecKnown = true
 	}
 	return s
 }

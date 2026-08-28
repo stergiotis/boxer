@@ -67,6 +67,28 @@ Every matching app opens as its own window through the window host, which
 is the path that reads the `BOXER_PLAY_*` seed variables
 ([doc/env-vars.md](../env-vars.md)); the standalone `play` CLI does not.
 
+## 2b. Seed an app's launch config
+
+`--launch` opens each matching app with no config, the way the Apps menu
+does. Two ways carry a config into a seeded window:
+
+- **`--launch-config <alias>=<path>`** (repeatable). The file holds the
+  config encoded for the app's manifest `LaunchKind` (the same bytes a
+  `windowhost.open` request would carry, [ADR-0135](../adr/0135-app-launch-requests.md)
+  §SD2); the kind's registered probe validates it at open and the window
+  mounts with `LaunchReasonCaller`. A failed open is a boot error, unlike
+  an unresolved `--launch` ref, because the config was asked for
+  explicitly. This is `hostboot.SeedWindow` at the command line
+  ([ADR-0208](../adr/0208-hostboot-runtime-bootstrap.md) §SD3).
+- **Env seeds.** An app may register its own seed variables through the
+  environment registry ([ADR-0009](../adr/0009-environment-variable-registry.md);
+  `env.NewString` / `NewFloat` / `NewPath` with a `CliFlagName`) and read
+  them in `Mount` when no caller config arrived — `play` does this with
+  `BOXER_PLAY_*`. Precedence is the [ADR-0148](../adr/0148-app-workingsets.md)
+  §SD5 order: caller config, then env seeds, then a restored workingset,
+  then the app's defaults. `boxer env list` (or the adopter's equivalent)
+  documents what a given binary honours.
+
 ## 3. Launch headless
 
 ```sh
@@ -138,7 +160,10 @@ JSON Lines trace (one step per line, `#` comments allowed):
 
 Anchor a step by an exact `id` from the dump, or by `name` / `contains`
 plus `role`; egui window title bars expose their ✕ as a button named
-`Close window`, one per window, so with several windows use the id. Ids
+`Close window`, one per window, so with several windows use the id. Dock
+tabs are buttons named by their title (`{"do":"click","name":"Controls",
+"role":"button"}` switches to that tab) — egui_dock registers no node for a
+tab on its own; the host adds the label from its tab viewer. Ids
 print signed in the dump but the trace field is unsigned — convert a
 negative id by adding 2⁶⁴ (`python3 -c 'print(2**64 + (ID))'`).
 

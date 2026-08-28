@@ -356,7 +356,7 @@ When a type exposes a single iterator, use one of the canonical method names:
 *   `Keys()`: Iterates over keys/indices.
 *   `Backward()`: Iterates in reverse order.
 
-Types that legitimately expose multiple distinct iterators (e.g. a graph store with `LiveChildren`, `ForwardEdges`, `BackwardEdges`, `DeletedPartitionMembers`) should use domain-describing method names instead — the canonical quartet is for single-collection-per-receiver cases.
+Types that legitimately expose multiple distinct iterators (e.g. a graph store with `LiveChildren`, `ForwardEdges`, `BackwardEdges`, `DeletedPartitionMembers`) should use domain-describing method names instead — the canonical quartet is for single-collection-per-receiver cases. A name an interface fixes (`recordstore.ExecutorI`'s `QueryArrow`) is exempt: the implementer did not choose it (codelint CS010 recognises an implemented interface declared in the package or a direct import).
 
 ### Error Handling in Iterators
 If an iteration can fail (e.g., I/O during traversal), use `iter.Seq2[V, error]`.

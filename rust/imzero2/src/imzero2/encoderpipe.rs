@@ -293,6 +293,13 @@ impl EncoderSink {
     }
 
     /// Frames coalesced (dropped) before the encoder under congestion (SD9).
+    /// True once the supervisor spent its fast-restart budget on this lane:
+    /// the encoder cannot be made to run and the stream is dead until the
+    /// lane changes. The carrier reads this to degrade to the mesh lane.
+    pub fn gave_up(&self) -> bool {
+        self.gave_up
+    }
+
     pub fn dropped(&self) -> u64 {
         self.mailbox.dropped()
     }

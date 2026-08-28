@@ -5,7 +5,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 
 	cli "github.com/urfave/cli/v2"
@@ -23,26 +22,27 @@ type CategorialStringVar struct {
 	// allowed is set once in NewCategorialString and never mutated;
 	// membership checks therefore need no synchronisation.
 	allowed []string
-	cacheMu sync.Mutex
-	cached  bool
-	value   string
+	res     resolved[string]
 }
 
 var _ VarI = (*CategorialStringVar)(nil)
 
 // NewCategorialString registers spec with the restricted value set and
-// returns a *CategorialStringVar. Allowed must be non-empty;
-// Spec.Default must be non-empty and a member of allowed. All three
-// violations panic at registration as programmer errors.
+// returns a *CategorialStringVar. Allowed must be non-empty and must not
+// contain the empty string; Spec.Default is either a member of allowed or
+// empty. An empty Default declares "unset" as a legitimate resolved state:
+// Get returns "" until a value in the set is supplied, so a variable whose
+// absence means "idle" or "no selection" needs no sentinel member. Violations
+// panic at registration as programmer errors.
 func NewCategorialString(spec Spec, allowed []string) (v *CategorialStringVar) {
 	mustValidate(spec)
 	if len(allowed) == 0 {
 		panic(fmt.Sprintf("env: NewCategorialString(%q) requires non-empty allowed values", spec.Name))
 	}
-	if spec.Default == "" {
-		panic(fmt.Sprintf("env: NewCategorialString(%q) requires non-empty Default — categorial vars cannot return an out-of-set zero value", spec.Name))
+	if slices.Contains(allowed, "") {
+		panic(fmt.Sprintf("env: NewCategorialString(%q): the empty string cannot be an allowed value — empty means unset", spec.Name))
 	}
-	if !slices.Contains(allowed, spec.Default) {
+	if spec.Default != "" && !slices.Contains(allowed, spec.Default) {
 		panic(fmt.Sprintf("env: default %q for %q is not in allowed values %v",
 			spec.Default, spec.Name, allowed))
 	}
@@ -83,19 +83,16 @@ func (inst *CategorialStringVar) IsAllowed(value string) (ok bool) {
 // error and silently falls back to the default (same convention as
 // BoolVar/IntVar/DurationVar).
 func (inst *CategorialStringVar) Get() (out string) {
-	inst.cacheMu.Lock()
-	defer inst.cacheMu.Unlock()
-	if inst.cached {
-		return inst.value
-	}
+	out, _ = inst.res.get(inst.resolveEnv)
+	return
+}
+
+func (inst *CategorialStringVar) resolveEnv() (out string, src ValueSourceE) {
 	raw, ok := os.LookupEnv(inst.spec.Name)
 	if !ok || raw == "" || !inst.IsAllowed(raw) {
-		inst.value = inst.spec.Default
-	} else {
-		inst.value = raw
+		return inst.spec.Default, ValueSourceDefault
 	}
-	inst.cached = true
-	return inst.value
+	return raw, ValueSourceEnv
 }
 
 // Lookup returns the raw env var value and whether it is set and non-empty.
@@ -110,10 +107,7 @@ func (inst *CategorialStringVar) Lookup() (raw string, set bool) {
 }
 
 func (inst *CategorialStringVar) setCached(value string) {
-	inst.cacheMu.Lock()
-	defer inst.cacheMu.Unlock()
-	inst.value = value
-	inst.cached = true
+	inst.res.setFlag(value)
 }
 
 // AsCliFlag returns a cli.StringFlag derived from the Spec. The Usage
@@ -136,6 +130,11 @@ func (inst *CategorialStringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 		EnvVars:  []string{inst.spec.Name},
 		Value:    inst.spec.Default,
 		Action: func(ctx *cli.Context, parsed string) (err error) {
+			// Empty means unset; see StringVar.AsCliFlag.
+			if parsed == "" {
+				inst.res.clearCache()
+				return
+			}
 			effective := parsed
 			if !inst.IsAllowed(effective) {
 				envRaw, envSet := os.LookupEnv(inst.spec.Name)
@@ -164,21 +163,37 @@ func (inst *CategorialStringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	}
 }
 
+// Override pins the resolved value for this process (ValueSourceOverride):
+// it shadows the flag, the environment and the default until ClearOverride,
+// and is never written to the process environment, so child processes and
+// `env list`'s CURRENT column do not see it. It is the seam a wrapper
+// command uses to seed another component's variables before that component
+// reads them in-process (ADR-0009, update 2026-08-28).
+func (inst *CategorialStringVar) Override(value string) {
+	inst.res.setOverride(value)
+}
+
+// ClearOverride removes the Override; resolution falls back to the flag,
+// environment or default.
+func (inst *CategorialStringVar) ClearOverride() {
+	inst.res.clearOverride()
+}
+
+// ValueSource reports which tier Get's value comes from.
+func (inst *CategorialStringVar) ValueSource() (src ValueSourceE) {
+	_, src = inst.res.get(inst.resolveEnv)
+	return
+}
+
 // SetForTest sets the env var via t.Setenv and resets the cache. The
 // cache is reset again on t.Cleanup so subsequent tests start fresh.
 // Out-of-set values are allowed here; the next Get() will fall back to
 // the default per the env-parse-failure convention.
 func (inst *CategorialStringVar) SetForTest(t testing.TB, value string) {
 	t.Helper()
-	inst.cacheMu.Lock()
-	inst.cached = false
-	inst.value = ""
-	inst.cacheMu.Unlock()
+	inst.res.reset()
 	t.Setenv(inst.spec.Name, value)
 	t.Cleanup(func() {
-		inst.cacheMu.Lock()
-		inst.cached = false
-		inst.value = ""
-		inst.cacheMu.Unlock()
+		inst.res.reset()
 	})
 }

@@ -5,6 +5,26 @@
 // declaration registers a Spec process-globally, and the returned typed
 // *Var carries the resolved value, caching, CLI-flag derivation, and
 // test helpers. See ADR-0009 for design rationale.
+//
+// # Resolution
+//
+// A Var resolves from four tiers, highest precedence first: an in-process
+// Override, the value its derived CLI flag parsed, the process environment,
+// and Spec.Default ([ValueSourceE]). An empty value is never a value: a
+// variable that is set but empty, and a flag given as a bare `--flag=`,
+// both read as unset and fall through to the next tier. Get caches the
+// environment read on first call; ValueSource reports the tier in use.
+//
+// # Seeding another component's variables in-process
+//
+// A wrapper command that hosts another component in the same process
+// (sailing's `gui` around boxer's carousel is the first) seeds that
+// component's variables by calling Override on each *Var before the
+// component reads them, typically from its own flag values. Nothing is
+// written to the process environment — Lookup, `env list`'s CURRENT column
+// and child processes keep seeing the shell's values — and ClearOverride
+// hands resolution back. Exporting values with os.Setenv to reach an
+// in-process reader is the pattern Override replaces.
 package env
 
 import (
@@ -57,6 +77,12 @@ type Origin struct {
 // Spec is the declarative metadata for one environment variable. All
 // caller-supplied fields are immutable after registration; Origin,
 // Type, and Allowed are filled in by the NewXxx constructor.
+//
+// Empty means unset, on every path: a variable present in the environment
+// with an empty value, or a derived flag given as `--flag=`, resolves as if
+// absent — Default applies (or the empty state, for a categorial variable
+// declared without a Default). Consequently no variable can carry the empty
+// string as a distinct value.
 type Spec struct {
 	Name        string
 	Default     string

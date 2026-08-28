@@ -60,6 +60,19 @@ impl VideoCodec {
         }
     }
 
+    /// The Go-side codec id, the inverse of [`Self::from_u8`]; the ninth
+    /// `fetchVideoStreamInfo` value carries it so the control names the lane
+    /// actually served.
+    pub fn as_u8(self) -> u8 {
+        match self {
+            VideoCodec::H264 => 0,
+            VideoCodec::Vp9 => 1,
+            VideoCodec::Av1 => 2,
+            VideoCodec::Av1Hi444 => 3,
+            VideoCodec::Mesh => 4,
+        }
+    }
+
     /// Map the Go-side codec id (ADR-0088 `setVideoPipeline`): 1=VP9, 2=AV1,
     /// 3=AV1 4:4:4, 4=mesh (ADR-0128), anything else = H.264.
     pub fn from_u8(v: u8) -> Self {

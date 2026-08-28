@@ -69,6 +69,7 @@ type heatmapDemoPanel struct {
 	label       string
 	orientation heatmapscroll.Orientation
 	hs          *heatmapscroll.HeatmapScroll
+	lastWheel   string // last non-identity wheel capture, kept so the readout does not flicker
 }
 
 // heatmapDemoTitle keeps the demo title declaration with the rest of the
@@ -146,6 +147,13 @@ func (st *heatmapscrollDemoState) initPanels(ids *c.WidgetIdStack) {
 		st.panels[i].hs.SetOrientation(st.panels[i].orientation)
 	}
 	st.panels[1].hs.SetFilter(heatmapscroll.FilterLinear) // contrast sampling modes
+	// Every panel owns the wheel while hovered (ADR-0140, second capture
+	// site): scrolling over a panel no longer scrolls the gallery pane, and
+	// the captured delta / zoom factor show in the panel readout.
+	for i := range st.panels {
+		st.panels[i].hs.SetCaptureScroll(true)
+		st.panels[i].hs.SetCaptureZoom(true)
+	}
 }
 
 // heatmapDemoPseudoRand returns a deterministic noise value in [0, 1)
@@ -226,6 +234,8 @@ func renderHeatmapDemoIntro() {
 	c.Label("position, axes rotated. Click anywhere inside a panel to bump the counter.").Send() // designlint:ignore=L1 (continuation of preceding line)
 	c.Label("Pause freezes new samples (Render still fires). Inject NaN/+Inf sprinkles").Send()
 	c.Label("non-finite samples so BadColor (red speckle) and OverflowColor (white) show.").Send() // designlint:ignore=L1 (continuation of preceding line)
+	c.Label("The wheel is captured while hovering a panel (scroll does not reach the").Send()
+	c.Label("gallery pane); the readout shows the delta and zoom factor received.").Send() // designlint:ignore=L1 (continuation of preceding line)
 }
 
 func (st *heatmapscrollDemoState) renderHeatmapDemoControls(ids *c.WidgetIdStack) {
@@ -287,5 +297,12 @@ func (st *heatmapscrollDemoState) renderHeatmapDemoPanel(p *heatmapDemoPanel) {
 			txt = "hover: —"
 		}
 		c.LabelAtoms(c.Atoms().Text(txt).Keep()).Send()
+		if w := p.hs.Wheel(); w.ScrollX != 0 || w.ScrollY != 0 || w.Zoom != 1 {
+			p.lastWheel = fmt.Sprintf("wheel: dx=%.0f dy=%.0f zoom=%.2f at (%.0f, %.0f)", w.ScrollX, w.ScrollY, w.Zoom, w.HoverX, w.HoverY)
+		}
+		if p.lastWheel == "" {
+			p.lastWheel = "wheel: —"
+		}
+		c.LabelAtoms(c.Atoms().Text(p.lastWheel).Keep()).Send()
 	}
 }

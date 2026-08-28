@@ -39,6 +39,12 @@ func ShowStatus(ids *c.WidgetIdStack, st *State) {
 		st.dialogOpen = false
 		return
 	}
+	// The indicator names the lane the host serves, not the one this side
+	// last asked for: after a host-side degradation (no usable encoder → mesh)
+	// the two differ, and the label used to keep the stale request.
+	if st.model.Stream.Valid() && st.model.Stream.CodecKnown {
+		st.model.Active = st.model.Stream.Codec
+	}
 	label := "codec: " + st.model.Active.String()
 	if c.SelectableLabel(ids.PrepareStr("videoout-ind"), st.dialogOpen, label).SendResp().HasPrimaryClicked() {
 		st.dialogOpen = !st.dialogOpen

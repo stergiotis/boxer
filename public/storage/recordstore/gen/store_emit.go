@@ -214,6 +214,13 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	// compile break. (Deliberate cross-kind slot sharing needs the reflect
 	// path — ADR-0146 D5/D6.)
 	membOwner := map[string]string{}
+	// Literal-name channels carry no kind symbol, but the presence hazard is
+	// the same: <Kind>ReadRow marks a component present on any matched
+	// (section reader, membership value) slot, so two kinds naming one
+	// verbatim membership in one section would decode as each other. The
+	// match is scoped to the section, so the same name in two sections is
+	// two slots (ADR-0100 SD6, update 2026-08-28).
+	verbatimOwner := map[string]string{}
 	for _, sc := range comps {
 		for _, name := range sortedIdNames(sc.ids) {
 			if owner, taken := membOwner[name]; taken && owner != sc.Kind {
@@ -221,6 +228,14 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 				return
 			}
 			membOwner[name] = sc.Kind
+		}
+		for _, slot := range verbatimSlots(sc.plan) {
+			key := slot.section + "@" + slot.name
+			if owner, taken := verbatimOwner[key]; taken && owner != sc.Kind {
+				err = eh.Errorf("components %s and %s both name verbatim membership %q in section %q — a component is present on any matched slot, so two kinds sharing one (section, name) would decode as each other", owner, sc.Kind, slot.name, slot.section)
+				return
+			}
+			verbatimOwner[key] = sc.Kind
 		}
 	}
 	if !idSrc.GloballyUniqueIds() {
@@ -231,10 +246,17 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		// baked Scan filters would silently cross-read. A precondition of
 		// this id regime, not a component-model rule (ADR-0100 SD6 as
 		// corrected 2026-08-10; leeway itself permits sharing, ADR-0146
-		// D5); a globally-unique id source lifts it (ADR-0105 D2).
+		// D5); a globally-unique id source lifts it (ADR-0105 D2). Only
+		// sections a component reaches through a ref channel take part:
+		// a literal-name channel matches its name on its own lane and
+		// cannot alias by id (update 2026-08-28), so all-verbatim
+		// components may share sections under any id source.
 		sectionOwner := map[string]string{}
 		for _, sc := range comps {
 			for _, g := range sc.groups {
+				if !refBound(g) {
+					continue
+				}
 				if owner, taken := sectionOwner[g.Section]; taken && owner != sc.Kind {
 					err = eh.Errorf("components %s and %s both bind section %q — components must own disjoint sections (ADR-0100 SD6)", owner, sc.Kind, g.Section)
 					return
@@ -658,6 +680,49 @@ func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetriev
 	sc.presence = artefacts.Presence
 	sc.validator = artefacts.Validator
 	sc.projection = artefacts.Projection
+	return
+}
+
+// refBound reports whether a section group is bound through at least one
+// ref channel — a membership resolved by uint64 id, the only kind that can
+// alias across kinds under per-plan ids. A group without memberships is
+// treated as ref-bound, the conservative side of the gate.
+func refBound(g goplan.SectionGroup) bool {
+	if len(g.Memberships) == 0 {
+		return true
+	}
+	for _, m := range g.Memberships {
+		if m.Flags.Channel.NeedsKindVar() {
+			return true
+		}
+	}
+	return false
+}
+
+// verbatimSlot is one (section, literal membership name) a plan binds.
+type verbatimSlot struct{ section, name string }
+
+// verbatimSlots returns the plan's literal-name memberships, one per
+// distinct slot, sorted for deterministic gate iteration.
+func verbatimSlots(plan *mappingplan.Plan) (slots []verbatimSlot) {
+	seen := map[verbatimSlot]bool{}
+	for _, f := range plan.Fields {
+		if f.LWMembership == "" || f.Flags.Channel.NeedsKindVar() {
+			continue
+		}
+		slot := verbatimSlot{section: f.Section(), name: f.LWMembership}
+		if seen[slot] {
+			continue
+		}
+		seen[slot] = true
+		slots = append(slots, slot)
+	}
+	sort.Slice(slots, func(i, j int) bool {
+		if slots[i].section != slots[j].section {
+			return slots[i].section < slots[j].section
+		}
+		return slots[i].name < slots[j].name
+	})
 	return
 }
 

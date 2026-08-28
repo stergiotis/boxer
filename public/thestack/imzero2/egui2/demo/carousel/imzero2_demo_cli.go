@@ -2,60 +2,31 @@ package demo
 
 import (
 	gocontext "context"
-	"encoding/binary"
 	"os"
-	"os/signal"
 	"slices"
-	"sync"
-	"syscall"
+	"strings"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
 	"github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/config"
-	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
-	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
-	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
-	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
-	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
-	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/covscrape"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
-	"github.com/stergiotis/boxer/public/keelson/runtime/heartbeat"
-	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/hostboot"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep"
-	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
-	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
-	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
-	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
-	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
-	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
 // signalShutdownGrace bounds how long a signal-driven shutdown waits for the
@@ -94,6 +65,10 @@ func NewCommand() *cli.Command {
 					Usage: "bare identifier `play` (shorthand for `subject_alias = 'play'`) or a SQL WHERE clause over the registered-applications table; the runtime wraps it as `SELECT id FROM table WHERE <expr>` and evaluates via clickhouse-local (run --list to see the column set)",
 					Value: "",
 				},
+				&cli.StringSliceFlag{
+					Name:  "launch-config",
+					Usage: "seed one window with a launch config: `<alias>=<path>` where the file holds the config encoded for the app's LaunchKind (repeatable; see --list for aliases)",
+				},
 				&cli.BoolFlag{
 					Name:  "list",
 					Usage: "print the registered applications as a table and exit (no client launch)",
@@ -123,607 +98,159 @@ func NewCommand() *cli.Command {
 			if nMessages > 0 {
 				return eb.Build().Int("nMessages", nMessages).Errorf("unable to create config")
 			}
-			var application_ *application.Application[*runtime.Unmarshaller]
-			var err error
-
-			// ADR-0134 SD8: close the core-dump bridge before any key or
-			// decrypted buffer can exist, so a crash cannot spill process
-			// memory to disk. Unconditional, best-effort.
-			adhocdata.DisableCoreDumps(log.Logger)
-
-			// Runtime identity + audit setup. Best-effort throughout —
-			// audit-trail failures never block boot. Identity is taken
-			// first so any logging below carries run_id; facts store is
-			// chosen second, runtime-start row third, dock-host wiring
-			// last.
-			runInst, riErr := runinfo.Init()
-			if riErr != nil {
-				log.Warn().Err(riErr).Msg("runinfo init failed; continuing without run identity")
-			} else {
-				log.Logger = runinfo.TagLogger(log.Logger, runInst)
-				log.Info().
-					Str("run_id", runInst.RunId).
-					Str("hostname", runInst.Hostname).
-					Int("pid", runInst.Pid).
-					Str("go_version", runInst.GoVersion).
-					Str("vcs_revision", runInst.VcsRevision).
-					Bool("vcs_modified", runInst.VcsModified).
-					Str("module_path", runInst.ModulePath).
-					Str("component", topo.Self()).
-					Msg("runinfo: process boot")
-			}
-			// ConfigFromEnv, not Defaults: a CH that requires
-			// authentication is reached with the CLICKHOUSE_USER /
-			// CLICKHOUSE_PASSWORD credentials, and CLICKHOUSE_ENDPOINT
-			// repoints the server. Defaults' hardcoded localhost/no-password
-			// pair made every such server look like a broken one and
-			// dropped the audit trail to memory.
-			factsCfg := chstore.ConfigFromEnv()
-			if runInst != nil {
-				// Every row this store writes carries the run (ADR-0191
-				// §SD3), including the kinds whose DTOs have no field for
-				// it — audit, grant, log, column width. Before this, "in
-				// this run" for those was a timestamp range, which a
-				// second boxer process overlapping this one silently
-				// joined.
-				factsCfg.RunId = runInst.RunId
-			}
-			facts, isChStore := chstore.NewWithFallback(factsCfg, log.Logger, 2*time.Second)
-			var heartbeatInst *heartbeat.Inst
-			if runInst != nil {
-				_, wErr := facts.WriteRuntimeStart(factsstore.RuntimeStartRow{
-					RunId:        runInst.RunId,
-					Hostname:     runInst.Hostname,
-					Pid:          runInst.Pid,
-					GoVersion:    runInst.GoVersion,
-					VcsRevision:  runInst.VcsRevision,
-					VcsModified:  runInst.VcsModified,
-					VcsBuildInfo: runInst.VcsBuildInfo,
-					ModulePath:   runInst.ModulePath,
-					Ts:           runInst.StartedAt,
-				})
-				if wErr != nil {
-					log.Warn().Err(wErr).Msg("runtime-start audit write failed")
-				}
-				// Heartbeat ticker — best-effort liveness signal so a
-				// crashed process (no runtime-stop, no app-lifecycle stop
-				// rows) is distinguishable from a clean shutdown by the
-				// absence of a recent heartbeat. Stopped by doReap on
-				// shutdown alongside ReapAll.
-				hbInst, hbErr := heartbeat.Start(gocontext.Background(),
-					facts, runInst.RunId, heartbeat.DefaultInterval, log.Logger)
-				if hbErr != nil {
-					log.Warn().Err(hbErr).Msg("heartbeat: start failed")
-				} else {
-					heartbeatInst = hbInst
-				}
-			}
-			_ = isChStore
-
-			// M2 in-proc subject router (ADR-0026 §SD3, §SD5).
-			// Constructed unconditionally so apps with declared Caps
-			// have a real BusI to talk to; apps with no Caps see
-			// permission errors from any Publish/Subscribe — which is
-			// the intended lockdown shape. The audit sink lands every
-			// allowed request as a boxer.facts row when CH is
-			// reachable.
-			bus := inprocbus.NewInst(log.Logger)
-			// MultiSink fan-out: the durable facts sink lands every
-			// audit row in boxer.facts; the capinspector.Tally
-			// counter sink keeps per-cap monotonic counts the
-			// inspector window renders on cap nodes (Phase 2 of the
-			// capability legibility direction).
-			// The durable facts sink issues a synchronous insert per audit
-			// row, and the bus calls Record inside Client.Request on the
-			// caller's goroutine — wrap it in an AsyncSink so audited
-			// Requests don't pay that round-trip inline. capinspector.Tally
-			// is an in-memory counter feeding the live UI; it stays
-			// synchronous. The deferred Close drains buffered audit rows at
-			// shutdown (after doReap stops the producers).
-			auditSink := audit.NewAsyncSink(factsstore.AsAuditSink(facts), 0)
-			defer auditSink.Close()
-			bus.SetAuditSink(audit.MultiSink{
-				auditSink,
-				capinspector.Tally,
+			return Run(context.Context, cfg, RunOptions{
+				Launch:        context.String("launch"),
+				LaunchConfigs: context.StringSlice("launch-config"),
 			})
-
-			// M2 Phase B: fs.* Powerbox (ADR-0026 §SD7). The service
-			// subscribes to fs.> and queues dialog requests; the
-			// per-frame pickerbridge drives the egui file picker as
-			// an overlay above the window host body. Apps publish
-			// fs.dialog.read / .write / .bundle to request a handle;
-			// the broker mints an opaque uuid and augments the
-			// requesting client's caps to include fs.handle.{uuid}.>
-			// — the path is never exposed to the app. Best-effort:
-			// a NewService error leaves fs.* unbound (apps timeout
-			// on Request) but doesn't block startup.
-			fsSvc, fsErr := fsbroker.NewService(bus, log.Logger)
-			if fsErr != nil {
-				log.Warn().Err(fsErr).Msg("fsbroker: service start failed; fs.* will be unbound")
-				fsSvc = nil
-			}
-
-			// M2 Phase C: runtime.persist.> Powerbox (ADR-0026 §SD3,
-			// §SD6). The host auto-injects runtime.persist.{ownAlias}.>
-			// for any app declaring PersistedKeys in its manifest, so
-			// apps don't have to repeat that boilerplate.
-			//
-			// Backend follows the chstore verdict: when it reached
-			// ClickHouse, persist writes land on boxer.persiststate and
-			// app state outlives the process. When it fell back to the
-			// in-memory facts store there is nothing to gain from a
-			// durable path that cannot reach a server either, so the
-			// memory backend stays. The choice is surfaced in the status
-			// bar rather than inferred.
-			//
-			// The open does DDL over HTTP, so it is bounded: a server that
-			// answered the 2s ping and then stalls must not hang boot.
-			persistCtx, persistCancel := gocontext.WithTimeout(gocontext.Background(), 15*time.Second)
-			persistBackend, persistBackendLabel, persistBackendClose, persistExec := selectPersistBackend(persistCtx, factsCfg, isChStore, log.Logger)
-			persistCancel()
-			defer persistBackendClose()
-			persistSvc, pErr := persist.NewService(bus, log.Logger, persistBackend)
-			if pErr != nil {
-				log.Warn().Err(pErr).Msg("persist: service start failed; runtime.persist.* will be unbound")
-				persistSvc = nil
-			}
-			defer func() {
-				if persistSvc != nil {
-					persistSvc.Close()
-				}
-			}()
-
-			// Capability inspector: tell it which backend the runtime
-			// resolved for each cap so the schematic can highlight the
-			// effective impl (vs the dim alternatives). isChStore is
-			// the chstore.NewWithFallback verdict.
-			capinspector.SetActiveBackend(capinspector.CapRun, "runinfo")
-			if isChStore {
-				capinspector.SetActiveBackend(capinspector.CapFacts, "chstore")
-			} else {
-				capinspector.SetActiveBackend(capinspector.CapFacts, "inmem")
-			}
-			capinspector.SetActiveBackend(capinspector.CapBus, "inprocbus")
-			if fsSvc != nil {
-				capinspector.SetActiveBackend(capinspector.CapFs, "fsbroker")
-			}
-			if persistSvc != nil {
-				// The same label the status bar shows ("store" / "mem"),
-				// which is also the BackendImpl id the inspector declares.
-				capinspector.SetActiveBackend(capinspector.CapPersist, persistBackendLabel)
-			}
-			// CapTask backend reads the supervisor wiring: "supervisor"
-			// when the audit hook is live; "task" (the producer surface
-			// alone) when the supervisor failed to start. Set below
-			// after the supervisor block runs so the choice reflects
-			// actual wiring rather than intent.
-
-			// ADR-0028 §SD9, M2: chlocalbroker subscribes to
-			// ch.local.exec.> and lazy-creates a chlocalpool.Pool per
-			// pool name. Best-effort: a start failure leaves
-			// ch.local.* unbound (apps will see request timeouts) but
-			// doesn't block boot. First consumer is regex_explorer,
-			// which declares `ch.local.exec.regex_explorer` in its
-			// manifest Caps.
-			chlocalSvc, chErr := chlocalbroker.NewService(bus, chlocalpool.Config{}, log.Logger)
-			if chErr != nil {
-				log.Warn().Err(chErr).Msg("chlocalbroker: service start failed; ch.local.* will be unbound")
-				chlocalSvc = nil
-			}
-			defer func() {
-				if chlocalSvc != nil {
-					ctx, cancel := gocontext.WithTimeout(gocontext.Background(), 5*time.Second)
-					defer cancel()
-					_ = chlocalSvc.Stop(ctx)
-				}
-			}()
-
-			// ADR-0134: the ad-hoc dataset capability. Owns the encrypted
-			// store, custodies keys with the broker (its KeyStore), and
-			// registers ephemeral handles as queryable providers into the
-			// shared introspection registry, so an applet querying
-			// keelson('<handle>') resolves it through the same /query
-			// endpoint as any keelson table (the /table endpoint streams
-			// the in-process decrypt, §SD3 revised). Best-effort: a start
-			// failure leaves adhoc.* unbound.
-			introspectReg := introspect.NewRegistry()
-			var adhocSvc *adhocdata.Service
-			if chlocalSvc != nil {
-				var adhocErr error
-				adhocSvc, adhocErr = adhocdata.NewService(adhocdata.Config{
-					Bus:      bus,
-					Registry: introspectReg,
-					Keys:     chlocalSvc.KeyStore(),
-					Log:      log.Logger,
-				})
-				if adhocErr != nil {
-					log.Warn().Err(adhocErr).Msg("adhocdata: service start failed; adhoc.* will be unbound")
-					adhocSvc = nil
-				}
-			}
-			defer func() {
-				if adhocSvc != nil {
-					ctx, cancel := gocontext.WithTimeout(gocontext.Background(), 5*time.Second)
-					defer cancel()
-					_ = adhocSvc.Close(ctx)
-				}
-			}()
-
-			// Clipboard Powerbox (ADR-0026 Update 2026-05-30): subscribes to
-			// clipboard.write and accumulates copy requests off-frame; the
-			// windowed renderer drains them each frame and emits the egui
-			// copy_text op. Best-effort: a start failure leaves clipboard.*
-			// unbound (copies time out on Request) but doesn't block boot.
-			// First consumer is the markdown copy button via capdemo.
-			clipSvc, clipErr := clipboardbroker.NewService(bus, log.Logger)
-			if clipErr != nil {
-				log.Warn().Err(clipErr).Msg("clipboardbroker: service start failed; clipboard.* will be unbound")
-				clipSvc = nil
-			}
-			defer func() {
-				if clipSvc != nil {
-					clipSvc.Close()
-				}
-			}()
-
-			// ADR-0038 §M3: task supervisor subscribes to task.>,
-			// persists every terminal-grade verb (created / done /
-			// error / cancel / abandoned) into boxer.facts via
-			// factsstore.WriteLog with structured run_id / instance_id
-			// / task_id fields, and serves task.list.inflight
-			// snapshots. Best-effort: a start failure leaves task.*
-			// observable (the M1 producer surface works without a
-			// supervisor) but un-audited; the capinspector reports
-			// CapTask backend as "task" rather than "supervisor".
-			taskSupBus := bus.NewClient(tasksupervisor.AppId, tasksupervisor.Caps())
-			taskSup := tasksupervisor.New(taskSupBus, facts, log.Logger, tasksupervisor.Opts{})
-			if startErr := taskSup.Start(); startErr != nil {
-				log.Warn().Err(startErr).Msg("task supervisor: start failed; task.* observable but un-audited")
-				taskSup = nil
-			}
-			defer func() {
-				if taskSup != nil {
-					_ = taskSup.Stop()
-				}
-			}()
-			if taskSup != nil {
-				capinspector.SetActiveBackend(capinspector.CapTask, "supervisor")
-			} else {
-				capinspector.SetActiveBackend(capinspector.CapTask, "task")
-			}
-
-			// Runtime status snapshot for the bottom-panel readout.
-			// Constructed once: backend identities are process-static
-			// (a service that fails NewService stays nil for the
-			// whole run). Threaded into both screenshot- and windowed-
-			// mode renderers so the indicator is visible in either
-			// path.
-			status := buildStatusSnapshot(runInst, isChStore, bus, fsSvc, persistSvc, persistBackendLabel)
-
-			u := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
-
-			// ADR-0132 §SD2: mint one Manifest per registered SQL-applet doc
-			// before launch resolution, so `--launch <appletId>` and the Apps
-			// menu see the minted set. Best-effort per doc — the corpus test
-			// is the hard gate; a partially minted set never blocks boot.
-			appletCount, appletErrs := sqlapplet.MintManifests(log.Logger)
-			for _, mintErr := range appletErrs {
-				log.Warn().Err(mintErr).Msg("sqlapplet: mint")
-			}
-			if appletCount > 0 {
-				log.Info().Int("applets", appletCount).Msg("sqlapplet: manifests minted")
-			}
-			// ADR-0132 Update "O4": the runtime applet store — loads
-			// persisted applets (minted after the committed books, which
-			// win slug collisions) and serves `applet.store.save` so play
-			// can author applets at runtime. Best-effort, never blocks
-			// boot.
-			if bus != nil {
-				appletStore, storeErr := sqlapplet.StartStore(bus, log.Logger)
-				if storeErr != nil {
-					log.Warn().Err(storeErr).Msg("sqlapplet: applet store unavailable")
-				} else {
-					defer appletStore.Stop()
-				}
-			}
-
-			launchApps, resolveErr := resolveLaunchSql(context.String("launch"))
-			if resolveErr != nil {
-				return eb.Build().Str("launch", context.String("launch")).
-					Errorf("--launch: %w", resolveErr)
-			}
-
-			// IMZERO2_SCREENSHOT_DIR mode uses the renderer-slice path so
-			// the widgets TestDriver runs at top scope without WindowHost
-			// wrapping (ADR-0057): launching `widgets` captures every
-			// registered Demo in one run. Interactive mode (the common
-			// case) builds a WindowHost over app.Registry and seeds it with
-			// the resolved --launch apps.
-			screenshotMode := imzero2env.ScreenshotDir.Get() != ""
-			renderers := make([]func() error, 0, 4)
-			var windowHostRef *windowhost.Inst
-			if screenshotMode {
-				if len(launchApps) == 0 {
-					return eh.Errorf("--launch must match at least one app in screenshot mode (IMZERO2_SCREENSHOT_DIR set)")
-				}
-				for _, a := range launchApps {
-					// Screenshot mode has no windowhost — status segments
-					// stay non-clickable, the capinspector is
-					// unreachable. The fields still render.
-					r := decorateRenderer(adaptToRenderer(a), nil, status, nil)
-					log.Info().Str("id", string(a.Manifest().Id)).
-						Msg("screenshot mode: adding tour renderer")
-					renderers = append(renderers, r)
-				}
-			} else {
-				runId := ""
-				if runInst != nil {
-					runId = runInst.RunId
-				}
-				r, host := buildWindowedRenderer(launchApps, runId, facts, bus, fsSvc, clipSvc, status)
-				windowHostRef = host
-				renderers = append(renderers, r)
-				log.Info().Int("initialWindows", len(launchApps)).Msg("window host: started")
-			}
-
-			// ADR-0108 §SD4: register the standard SQL pass set (e.g. LW_ID_*
-			// macro expansion) plus play's host additions (statement
-			// canonicalisation) into the process-wide pass registry — explicit
-			// aggregation at the wiring site, so what this process rewrites is
-			// reviewable here. Consumed by play's execute path and the
-			// introspection /query endpoint; best-effort, never blocks boot.
-			if passErr := passregdefaults.RegisterDefaults(); passErr != nil {
-				log.Warn().Err(passErr).Msg("passreg: standard pass registration failed")
-			}
-			if passErr := play.RegisterPasses(passreg.Default); passErr != nil {
-				log.Warn().Err(passErr).Msg("passreg: play host pass registration failed")
-			}
-			// The component registry LW_COMPONENT reads (ADR-0189 §SD7),
-			// aggregated at the same wiring site and for the same reason:
-			// which components this process can read is a property of what it
-			// links, and stating it here is what keeps that reviewable.
-			if compErr := play.RegisterComponents(componentsql.Default); compErr != nil {
-				log.Warn().Err(compErr).Msg("componentsql: play component registration failed")
-			}
-			if vocabErr := play.RegisterVocabulary(sqlvocab.Default); vocabErr != nil {
-				log.Warn().Err(vocabErr).Msg("sqlvocab: play vocabulary registration failed")
-			}
-
-			// This module's Go package graph as keelson('go_packages') and
-			// friends — registered HERE rather than in introspecthost's static
-			// provider set on purpose: collecting the graph links
-			// golang.org/x/tools, which appliance builds have no use for, and
-			// the static set is shared with them. Registration is cheap; the
-			// toolchain runs only if a query touches one of the tables.
-			if godepErr := providersgodep.Register(introspectReg, providersgodep.Config{Log: log.Logger}); godepErr != nil {
-				log.Warn().Err(godepErr).Msg("introspect: godep table registration failed")
-			}
-
-			// ADR-0169 §SD4: the coverage plane — on a -cover -covermode=atomic
-			// build, sample this process's counters and publish pre-aggregated
-			// updates; the live keelson.coverage_* tables read the sampler
-			// directly. Uninstrumented builds refuse construction: one line,
-			// tables stay empty. Process-lifetime, like the sysmetrics wiring.
-			var covSampler *coverage.Sampler
-			if bus != nil {
-				if covInterval, covEnabled := coveragebus.IntervalFromEnv(); covEnabled {
-					covPub := bus.NewClient(coveragebus.ServiceAppId, []runtimeapp.SubjectFilter{
-						{Pattern: coveragebus.SubjectWildcard, Direction: runtimeapp.CapDirectionPub},
-					})
-					if s, _, cerr := covscrape.StartCoverageSampler(gocontext.Background(), covPub, covscrape.DefaultHostToken(), covInterval, log.Logger); cerr != nil {
-						log.Info().Err(cerr).Msg("carousel: coverage sampling unavailable; coverage tables will be empty")
-					} else {
-						covSampler = s
-					}
-				}
-			}
-
-			// ADR-0094 §SD3/§SD4: expose keelson runtime state as ClickHouse-
-			// queryable tables over a loopback HTTP endpoint, and (when chlocal
-			// is up) back POST /query so a co-resident app (apps/play) can query
-			// keelson('env') in-process. This MUST run here, in the GUI host's
-			// own process — the providers read live state (windowHostRef is nil
-			// in screenshot mode, dropping only keelson.windows). Gated by
-			// KEELSON_INTROSPECT_ENABLE; best-effort, never blocks boot.
-			introspectDeps := introspecthost.Deps{
-				WindowHost:       windowHostRef,
-				Bus:              bus,
-				ChlocalAvailable: chlocalSvc != nil,
-				Registry:         introspectReg,
-				// The same store the window host saves workingsets through, so
-				// keelson('workingsets') reports what a restore would find
-				// (ADR-0148 §SD7).
-				Facts: facts,
-				// The persist store's executor, for the app-state half of
-				// keelson('runtime_events') (ADR-0191 §SD7). nil on the
-				// in-memory backend, which leaves that half empty.
-				PersistExec: persistExec,
-				Log:         log.Logger,
-			}
-			// Guard against the typed-nil interface trap: only hand over the
-			// broker as the ad-hoc decryptor when it actually started.
-			if chlocalSvc != nil {
-				introspectDeps.Decryptor = chlocalSvc
-			}
-			// Same trap for the coverage sampler (ADR-0169 §SD5).
-			if covSampler != nil {
-				introspectDeps.Coverage = covSampler
-			}
-			// keelson('tasks') reads the supervisor's in-flight map (ADR-0188
-			// §SD4); nil when it failed to start leaves the table empty.
-			if taskSup != nil {
-				introspectDeps.Tasks = taskSup
-			}
-			introspectStop, introspectErr := introspecthost.Start(introspectDeps)
-			if introspectErr != nil {
-				log.Warn().Err(introspectErr).Msg("introspect: table source unavailable")
-			}
-			defer func() {
-				ctx, cancel := gocontext.WithTimeout(gocontext.Background(), 5*time.Second)
-				defer cancel()
-				_ = introspectStop(ctx)
-			}()
-
-			application_, err = application.NewApplication(cfg, u)
-			if err != nil {
-				return eh.Errorf("unable to create application: %w", err)
-			}
-
-			// Reap any windows still open at shutdown so the audit
-			// trail is complete (no orphan "started" rows without
-			// matching "stopped"). ReapAll is a no-op when
-			// windowHostRef is nil (screenshot mode) or no windows
-			// remain. Triggered by two paths to cover both clean exit
-			// (Action returns) and signal-driven exit (boxer's
-			// flightRecorder handler calls os.Exit, skipping defers in
-			// this goroutine): a defer and a parallel signal listener,
-			// guarded by sync.Once so neither path emits stop rows
-			// twice.
-			var reapOnce sync.Once
-			doReap := func() {
-				reapOnce.Do(func() {
-					if windowHostRef != nil {
-						windowHostRef.ReapAll("shutdown")
-					}
-					// Stop the heartbeat after the last app-lifecycle
-					// stopped row lands so the gap between the final
-					// heartbeat and the runtime-stop signal is small —
-					// a crashed-vs-clean distinction relies on that.
-					heartbeatInst.Stop()
-				})
-			}
-			defer doReap()
-			sigCh := make(chan os.Signal, 1)
-			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-			go func() {
-				sig := <-sigCh
-				log.Info().Str("signal", sig.String()).Msg("carousel: caught signal, shutting down")
-				// Reap before anything else: an armed
-				// --flightRecorderFlushOnSignal handler races this
-				// goroutine and calls os.Exit, which would skip the
-				// deferred reap above.
-				doReap()
-				// Ask the render loop to wind up, so Run returns and the
-				// remaining deferred cleanup (introspect stop) runs on the
-				// normal path.
-				application_.Shutdown()
-				// Shutdown only lands at a frame boundary, and a loop wedged
-				// on a client read never reaches one. Without this
-				// escalation the process survived both SIGINT and SIGTERM —
-				// signal.Notify had removed Go's default terminate
-				// disposition and nothing here replaced it — leaving SIGKILL
-				// as the only way out. SIGKILL runs no exit hooks, so an
-				// instrumented build also lost its coverage counters
-				// (ADR-0169); os.Exit does run them.
-				time.AfterFunc(signalShutdownGrace, func() {
-					log.Warn().Dur("grace", signalShutdownGrace).
-						Msg("carousel: shutdown did not complete within the grace period, forcing exit")
-					os.Exit(1)
-				})
-			}()
-
-			return mainE(application_, renderers)
 		},
 	}
 }
 
-// buildStatusSnapshot summarises the active runtime services for the
-// bottom-panel status line. Called once after all subsystems boot;
-// the snapshot's fields are process-static so a single read suffices
-// for the lifetime of the run. runInst may be nil (runinfo failed
-// to init) — the short id falls back to "standalone".
-func buildStatusSnapshot(runInst *runinfo.Inst, isChStore bool, bus *inprocbus.Inst, fsSvc *fsbroker.Service, persistSvc *persist.Service, persistBackendLabel string) (s *runtimestatus.Snapshot) {
-	s = &runtimestatus.Snapshot{
-		BusActive:      bus != nil,
-		FsBrokerActive: fsSvc != nil,
+// RunOptions are the carousel's own inputs beside the application config:
+// the --launch expression and the --launch-config specs.
+type RunOptions struct {
+	// Launch is a bare alias or a SQL WHERE clause over the registered
+	// applications (see NewCommand's description); empty seeds no window.
+	Launch string
+	// LaunchConfigs are `<alias>=<path>` seeds; see parseLaunchConfigs.
+	LaunchConfigs []string
+}
+
+// Run is the carousel harness behind `imzero2 demo`, callable from another
+// command: an adopter that mounts this package's apps in its own binary
+// seeds whatever its app reads (env variables, a config file) and runs the
+// same host — every service on, the carousel's registrations — without
+// re-hosting the *cli.Command. cfg is the parsed application config.
+func Run(ctx gocontext.Context, cfg *application.Config, opts RunOptions) (err error) {
+	// Applet manifests are minted before launch resolution so an applet
+	// alias resolves like any registered app.
+	appletCount, appletErrs := sqlapplet.MintManifests(log.Logger)
+	for _, mintErr := range appletErrs {
+		log.Warn().Err(mintErr).Msg("sqlapplet: mint")
 	}
-	if runInst != nil && len(runInst.RunId) >= 8 {
-		s.RunIdShort = runInst.RunId[:8]
+	if appletCount > 0 {
+		log.Info().Int("applets", appletCount).Msg("sqlapplet: manifests minted")
+	}
+	launchApps, resolveErr := resolveLaunchSql(opts.Launch)
+	if resolveErr != nil {
+		err = eb.Build().Str("launch", opts.Launch).Errorf("--launch: %w", resolveErr)
+		return
+	}
+	seeds, seedErr := parseLaunchConfigs(opts.LaunchConfigs)
+	if seedErr != nil {
+		err = eh.Errorf("--launch-config: %w", seedErr)
+		return
+	}
+	// The runtime bootstrap is hostboot's (ADR-0208); the carousel is its
+	// every-service caller and adds what is carousel-specific: the
+	// capability inspector's audit counters and backend labels, the play
+	// host's passes and vocabularies, the applet store.
+	rt, bootErr := hostboot.Boot(ctx, hostboot.Options{
+		Log:              log.Logger,
+		Services:         hostboot.AllServices(),
+		LaunchApps:       launchApps,
+		SeedWindows:      seeds,
+		ExtraAuditSinks:  []audit.AuditSinkI{capinspector.Tally},
+		VideoOutput:      true,
+		HelpHost:         true,
+		BeforeFirstFrame: widgets.BeforeFirstFrameInitHandler,
+		AfterHost:        registerHostExtras,
+		ShutdownGrace:    signalShutdownGrace,
+	})
+	if bootErr != nil {
+		err = eh.Errorf("carousel: boot: %w", bootErr)
+		return
+	}
+	labelBackends(rt)
+	err = rt.Run(cfg)
+	return
+}
+
+// registerHostExtras is the carousel's hostboot.Options.AfterHost hook: the
+// applet store on the bus, the play host's passes, components and SQL
+// vocabulary, and the Go-dependency introspection tables.
+func registerHostExtras(rt *hostboot.Runtime) (err error) {
+	appletStore, storeErr := sqlapplet.StartStore(rt.Bus, log.Logger)
+	if storeErr != nil {
+		log.Warn().Err(storeErr).Msg("sqlapplet: applet store unavailable")
 	} else {
-		s.RunIdShort = "standalone"
+		rt.OnClose(appletStore.Stop)
 	}
-	if isChStore {
-		s.FactsBackend = "ch"
-	} else {
-		s.FactsBackend = "mem"
+	if passErr := passregdefaults.RegisterDefaults(); passErr != nil {
+		log.Warn().Err(passErr).Msg("passreg: standard pass registration failed")
 	}
-	if persistSvc != nil {
-		s.PersistBackend = persistBackendLabel
+	if passErr := play.RegisterPasses(passreg.Default); passErr != nil {
+		log.Warn().Err(passErr).Msg("passreg: play host pass registration failed")
+	}
+	if compErr := play.RegisterComponents(componentsql.Default); compErr != nil {
+		log.Warn().Err(compErr).Msg("componentsql: play component registration failed")
+	}
+	if vocabErr := play.RegisterVocabulary(sqlvocab.Default); vocabErr != nil {
+		log.Warn().Err(vocabErr).Msg("sqlvocab: play vocabulary registration failed")
+	}
+	if godepErr := providersgodep.Register(rt.Introspect, providersgodep.Config{Log: log.Logger}); godepErr != nil {
+		log.Warn().Err(godepErr).Msg("introspect: godep table registration failed")
 	}
 	return
 }
 
-// selectPersistBackend picks the StorageBackendI the persist service runs
-// on, the label the status bar shows for it, and a teardown for backends
-// that hold resources.
-//
-// The durable backend is the generated record store on `boxer.persiststate`
-// (ADR-0105 D3a), not the facts store. It is chosen only when chstore
-// reached ClickHouse: that verdict is the cheapest available evidence that
-// the same server will answer this store's own DDL and inserts, and over an
-// in-memory facts store there was never anything to gain — both are
-// process-scoped.
-//
-// A construction failure degrades to the memory backend rather than leaving
-// runtime.persist unbound: losing durability is a smaller regression than
-// losing the subject family, and the label says which one ran.
-func selectPersistBackend(ctx gocontext.Context, cfg chstore.Config, isChStore bool, logger zerolog.Logger) (backend persist.StorageBackendI, label string, closeFn func(), exec recordstore.ExecutorI) {
-	closeFn = func() {}
-	if isChStore {
-		storeExec, err := storeexec.New(chclient.New(chclient.Config{
-			URL: cfg.URL, User: cfg.User, Password: cfg.Password,
-		}, nil), nil)
-		if err == nil {
-			var sb *persist.StoreBackend
-			sb, err = persist.OpenStoreBackend(ctx, storeExec, nil)
-			if err == nil {
-				backend = sb
-				label = "store"
-				closeFn = sb.Close
-				// Returned so the introspection host can read the app-state
-				// half of this run's trail on its own read-only store
-				// (ADR-0191 §SD7). Only on the path that actually opened —
-				// an executor whose store failed to provision would answer
-				// every scan with the same error.
-				exec = storeExec
-				return
-			}
-		}
-		logger.Warn().Err(err).
-			Msg("persist: store backend construction failed; falling back to in-memory (app state will not survive restart)")
+// labelBackends tells the capability inspector which backend the runtime
+// resolved for each cap, so its schematic highlights the effective impl.
+func labelBackends(rt *hostboot.Runtime) {
+	capinspector.SetActiveBackend(capinspector.CapRun, "runinfo")
+	if rt.IsChStore {
+		capinspector.SetActiveBackend(capinspector.CapFacts, "chstore")
+	} else {
+		capinspector.SetActiveBackend(capinspector.CapFacts, "inmem")
 	}
-	backend = persist.NewMemoryBackend()
-	label = "mem"
-	return
+	capinspector.SetActiveBackend(capinspector.CapBus, "inprocbus")
+	if rt.Fs != nil {
+		capinspector.SetActiveBackend(capinspector.CapFs, "fsbroker")
+	}
+	if rt.Persist != nil {
+		capinspector.SetActiveBackend(capinspector.CapPersist, rt.PersistBackend)
+	}
+	if rt.Tasks != nil {
+		capinspector.SetActiveBackend(capinspector.CapTask, "supervisor")
+	} else {
+		capinspector.SetActiveBackend(capinspector.CapTask, "task")
+	}
 }
 
-func mainE(app *application.Application[*runtime.Unmarshaller], renderers []func() error) (err error) {
-	app.FffiEstablishedHandler = func(fffi *runtime.Fffi2[*runtime.Unmarshaller]) error {
-		typed.SetCurrentFffiVar(fffi)
-		return nil
-	}
-	app.BeforeFirstFrameInitHandler = func() error {
-		return widgets.BeforeFirstFrameInitHandler()
-	}
-	app.RenderLoopHandler = func() error {
-		for _, r := range renderers {
-			err = r()
-			if err != nil {
-				return err
+// parseLaunchConfigs turns each `<alias>=<path>` of --launch-config into a
+// seeded window: the alias resolves through the registry, the kind is the
+// manifest's LaunchKind, and the file holds the encoded config the kind's
+// probe validates at open.
+func parseLaunchConfigs(specs []string) (seeds []hostboot.SeedWindow, err error) {
+	for _, spec := range specs {
+		alias, path, ok := strings.Cut(spec, "=")
+		alias = strings.TrimSpace(alias)
+		if !ok || alias == "" || strings.TrimSpace(path) == "" {
+			err = eb.Build().Str("spec", spec).Errorf("expected <alias>=<path>")
+			return
+		}
+		var m runtimeapp.Manifest
+		found := false
+		for _, cand := range runtimeapp.AllManifests() {
+			if cand.Id.SubjectAlias() == alias {
+				m, found = cand, true
+				break
 			}
 		}
-		return nil
+		if !found {
+			err = eb.Build().Str("alias", alias).Errorf("no registered app has this alias (see --list)")
+			return
+		}
+		if m.LaunchKind == "" {
+			err = eb.Build().Str("alias", alias).Errorf("app accepts no launch config")
+			return
+		}
+		raw, readErr := os.ReadFile(strings.TrimSpace(path))
+		if readErr != nil {
+			err = eb.Build().Str("alias", alias).Str("path", path).Errorf("read launch config: %w", readErr)
+			return
+		}
+		seeds = append(seeds, hostboot.SeedWindow{AppId: m.Id, Kind: m.LaunchKind, Config: raw})
 	}
-	err = app.Launch()
-	if err != nil {
-		err = eh.Errorf("unable to launch application: %w", err)
-		return
-	}
-	err = app.Run()
-	if err != nil {
-		err = eh.Errorf("unable to run application: %w", err)
-		return
-	}
-
 	return
 }

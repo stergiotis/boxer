@@ -1,6 +1,7 @@
 package carrierclient
 
 import (
+	"errors"
 	"io"
 	"os"
 	"sync"
@@ -184,6 +185,31 @@ func (inst *Client) pump(deadline time.Time) (ctl *SessionControl, err error) {
 	default:
 		inst.log.Debug().Int("prefix", int(prefix)).Msg("unknown carrier message prefix")
 		return nil, nil
+	}
+}
+
+// Idle keeps the connection serviced for d: it pumps and discards whatever
+// the carrier sends — answering its keepalive pings on the way — and returns
+// once d has elapsed. A plain time.Sleep leaves the pings unanswered and the
+// carrier reaps an unresponsive peer after its keepalive window (about ten
+// seconds), so every pause in a trace goes through here. A connection the
+// carrier closes, or that stalls mid-frame, is an error.
+func (inst *Client) Idle(d time.Duration) (err error) {
+	deadline := time.Now().Add(d)
+	for {
+		if _, err = inst.pump(deadline); err == nil {
+			continue
+		}
+		switch {
+		case errors.Is(err, errIdleTimeout):
+			return nil
+		case err == io.EOF:
+			return eh.Errorf("carrier closed the connection")
+		case os.IsTimeout(err):
+			return eh.Errorf("carrier stalled mid-frame")
+		default:
+			return err
+		}
 	}
 }
 

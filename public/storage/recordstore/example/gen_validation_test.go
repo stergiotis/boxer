@@ -44,6 +44,76 @@ func validationManipulator(t *testing.T, sections ...string) *common.TableManipu
 	return manip
 }
 
+// verbatimManipulator is validationManipulator with literal-name
+// (lowCardVerbatim) memberships instead of ref ids.
+func verbatimManipulator(t *testing.T, sections ...string) *common.TableManipulator {
+	t.Helper()
+	manip, err := common.NewTableManipulator()
+	require.NoError(t, err)
+	manip.SetTableName("valcheck")
+	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.U64)
+	manip.PlainValueColumn(common.PlainItemTypeEntityTimestamp, "ts", ctabb.Z64)
+	for _, s := range sections {
+		sec := manip.TaggedValueSection(naming.MustBeValidStylableName(s)).
+			SectionStreamingGroup("data").
+			AddSectionMembership(common.MembershipSpecLowCardVerbatim)
+		sec.TaggedValueColumn("value", ctabb.S)
+	}
+	return manip
+}
+
+// verbatimDTOs writes two kinds binding the given sections through
+// literal-name memberships.
+func verbatimDTOs(t *testing.T, membA, secA, membB, secB string) (a, b string) {
+	t.Helper()
+	dir := t.TempDir()
+	a = writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\""+membA+","+secA+",lowCardVerbatim\"`"+`
+}
+`)
+	b = writeDTO(t, dir, "kind_b.go", `package tmp
+
+type KindB struct {
+	_  struct{} `+"`kind:\"kindB\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	B  string   `+"`lw:\""+membB+","+secB+",lowCardVerbatim\"`"+`
+}
+`)
+	return
+}
+
+// TestGenerateAllVerbatimSharedSectionAllowed: a literal-name membership is
+// matched by its bytes on its own lane and cannot alias by id, so two
+// all-verbatim kinds may share a section under the default per-plan ids —
+// the disjoint-sections gate considers ref-bound sections only (ADR-0100
+// SD6, update 2026-08-28).
+func TestGenerateAllVerbatimSharedSectionAllowed(t *testing.T) {
+	a, b := verbatimDTOs(t, "fieldA", "shared", "fieldB", "shared")
+	require.NoError(t, generateInto(t, verbatimManipulator(t, "shared"), a, b))
+}
+
+// TestGenerateRejectsSharedVerbatimSlot: the presence hazard is the same
+// for literal names — a component is present on any matched slot — so two
+// kinds naming one (section, name) is refused under any id source.
+func TestGenerateRejectsSharedVerbatimSlot(t *testing.T) {
+	a, b := verbatimDTOs(t, "dup", "shared", "dup", "shared")
+	err := generateInto(t, verbatimManipulator(t, "shared"), a, b)
+	require.ErrorContains(t, err, "both name verbatim membership")
+	require.ErrorContains(t, err, "KindA")
+	require.ErrorContains(t, err, "KindB")
+}
+
+// TestGenerateVerbatimSameNameAcrossSectionsAllowed: the match is scoped to
+// a section's reader, so the same literal name in two sections is two slots.
+func TestGenerateVerbatimSameNameAcrossSectionsAllowed(t *testing.T) {
+	a, b := verbatimDTOs(t, "dup", "alpha", "dup", "beta")
+	require.NoError(t, generateInto(t, verbatimManipulator(t, "alpha", "beta"), a, b))
+}
+
 func generateInto(t *testing.T, manip *common.TableManipulator, componentPaths ...string) error {
 	t.Helper()
 	_, err := generateIntoDir(t, manip, componentPaths...)

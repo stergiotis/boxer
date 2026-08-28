@@ -10,7 +10,9 @@
 // executor seam, the Scan options and the synthetic-sequence Order
 // helpers. The store types themselves are emitted per schema by
 // recordstore/gen; concrete ClickHouse executors live in
-// recordstore/chexec.
+// recordstore/chexec (clickhouse local) and keelson/data/storeexec (HTTP),
+// and recordstore/ipcexec is the write-only Arrow IPC stream executor for
+// capture-now-load-later deployments.
 //
 // A store instance — like the cache and the DML builders it composes — is
 // single-goroutine; use one instance per goroutine.

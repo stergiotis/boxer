@@ -1029,6 +1029,8 @@ pub enum ScrollAreaBuilderMethodId {
 #[repr(u32)]
 pub enum ScrollingTextureBuilderMethodId {
     Build = 0,
+    CaptureZoom = 1,
+    CaptureScroll = 2,
 }
 
 #[allow(dead_code)]
