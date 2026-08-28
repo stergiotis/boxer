@@ -30,7 +30,7 @@ var ErrCellCreateWhileConflicted = errors.New("cannot create a cell while the pu
 
 // pushoutBackend is the native realisation of [BackendI]: a thin
 // KV-cell adapter over the domain-neutral engine (pushout/repo) with a
-// filestore per actor under <repoDir>/.pushout/, jsonv1 envelopes, and
+// filestore per actor under <repoDir>/.pushout/, cbor1 envelopes, and
 // the in-process exchange carrier for Push/Pull. All engine concerns —
 // persistence, recovery, dependency gating, identity disambiguation,
 // retention — live in the engine; this file only translates cells to
@@ -121,6 +121,25 @@ func (inst *PushoutRepo) Engine() (r *repo.Repo) {
 	return
 }
 
+// WireCodecName is the codec this backend records envelopes with.
+// Exported alongside [NewEnvelopeRegistry] so a consumer holding raw
+// envelope bytes can say which codec produced them without guessing.
+const WireCodecName = envelope.CBORV1Name
+
+// NewEnvelopeRegistry returns the codec registry this backend records
+// and ships envelopes with.
+//
+// Anything that decodes bytes this backend produced — an armored bundle
+// pasted between actors, a stored envelope inspected for its changes —
+// must use this registry rather than assembling its own. A private
+// registry built from a hard-coded codec silently stops decoding the
+// moment the backend's codec changes, and the failure surfaces as
+// "unknown codec" far from the line that chose it.
+func NewEnvelopeRegistry() (reg *envelope.Registry, err error) {
+	reg, err = envelope.NewRegistry(envelope.CBORV1{})
+	return
+}
+
 // Init opens — or RECOVERS — the repo at <path>/.pushout. An existing
 // store is recovered, not reset.
 func (inst *PushoutRepo) Init(ctx context.Context) (audit string, err error) {
@@ -128,14 +147,14 @@ func (inst *PushoutRepo) Init(ctx context.Context) (audit string, err error) {
 	if err != nil {
 		return
 	}
-	reg, err := envelope.NewRegistry(envelope.JSONV1{})
+	reg, err := NewEnvelopeRegistry()
 	if err != nil {
 		return
 	}
 	eng, err := repo.Open(ctx, repo.Options{
 		Storage:  st,
 		Codecs:   reg,
-		Wire:     envelope.JSONV1Name,
+		Wire:     WireCodecName,
 		Producer: inst.actor,
 		Clock:    inst.clock,
 	})

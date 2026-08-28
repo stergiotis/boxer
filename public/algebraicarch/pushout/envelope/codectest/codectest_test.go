@@ -8,18 +8,18 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
 )
 
-func TestJSONV1Conformance(tt *testing.T) {
-	Run(tt, envelope.JSONV1{})
+func TestCBORV1Conformance(tt *testing.T) {
+	Run(tt, envelope.CBORV1{})
 }
 
 // lossyCodec drops the producer — CheckRoundTrip must reject it.
-type lossyCodec struct{ envelope.JSONV1 }
+type lossyCodec struct{ envelope.CBORV1 }
 
 func (lossyCodec) Name() string { return "lossy1" }
 
 func (l lossyCodec) Encode(env envelope.EnvelopeV1) ([]byte, error) {
 	env.Producer = ""
-	return l.JSONV1.Encode(env)
+	return l.CBORV1.Encode(env)
 }
 
 func TestSuiteBites_LossyCodec(tt *testing.T) {

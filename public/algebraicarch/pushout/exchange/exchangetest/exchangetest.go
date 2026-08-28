@@ -37,7 +37,7 @@ func newRepo(tt *testing.T, producer string) *repo.Repo {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	reg, err := envelope.NewRegistry(envelope.JSONV1{})
+	reg, err := envelope.NewRegistry(envelope.CBORV1{})
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func newRepo(tt *testing.T, producer string) *repo.Repo {
 	r, err := repo.Open(context.Background(), repo.Options{
 		Storage:  st,
 		Codecs:   reg,
-		Wire:     envelope.JSONV1Name,
+		Wire:     envelope.CBORV1Name,
 		Producer: producer,
 		Clock: func() time.Time {
 			tick = tick.Add(time.Minute)

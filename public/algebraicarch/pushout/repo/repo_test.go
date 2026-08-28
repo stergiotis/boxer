@@ -36,14 +36,14 @@ func testOptions(tt testing.TB, dir string) repo.Options {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	reg, err := envelope.NewRegistry(envelope.JSONV1{})
+	reg, err := envelope.NewRegistry(envelope.CBORV1{})
 	if err != nil {
 		tt.Fatal(err)
 	}
 	return repo.Options{
 		Storage:  st,
 		Codecs:   reg,
-		Wire:     envelope.JSONV1Name,
+		Wire:     envelope.CBORV1Name,
 		Producer: "tester",
 		Clock:    testClock(),
 	}
@@ -171,7 +171,7 @@ func TestRepo_RecordCloseReopen(tt *testing.T) {
 	}
 	// PatchInfo for snapshot-covered history loads lazily from storage.
 	info, err := r2.PatchInfo(ctx, hA)
-	if err != nil || info.Patch.Hash != hA || info.Codec != envelope.JSONV1Name {
+	if err != nil || info.Patch.Hash != hA || info.Codec != envelope.CBORV1Name {
 		tt.Fatalf("lazy PatchInfo: %+v, %v", info, err)
 	}
 }

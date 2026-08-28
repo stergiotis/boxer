@@ -66,11 +66,11 @@ func TestGolden_EnvelopeBytes(tt *testing.T) {
 		Producer:  "golden-producer",
 		Timestamp: time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
 	}
-	reg, err := NewRegistry(JSONV1{})
+	reg, err := NewRegistry(CBORV1{})
 	if err != nil {
 		tt.Fatal(err)
 	}
-	data, err := reg.Encode(JSONV1Name, env)
+	data, err := reg.Encode(CBORV1Name, env)
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestGolden_EnvelopeBytes(tt *testing.T) {
 		tt.Fatalf("read golden (run with -args -update to regenerate): %v", err)
 	}
 	if !bytes.Equal(data, want) {
-		tt.Fatalf("canonical envelope bytes changed — wire format drift; if intentional, regenerate with -args -update and note that persisted envelopes invalidate.\n got:\n%s\nwant:\n%s", data, want)
+		tt.Fatalf("canonical envelope bytes changed — wire format drift; if intentional, regenerate with -args -update and note that persisted envelopes invalidate.\n got:  %x\nwant: %x", data, want)
 	}
 	if _, _, err := reg.Decode(data); err != nil {
 		tt.Fatalf("golden envelope no longer decodes: %v", err)
