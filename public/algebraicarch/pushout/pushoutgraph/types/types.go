@@ -11,15 +11,20 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"lukechampine.com/blake3"
 )
 
-// PatchHash is the 32-byte content-addressed identifier of a patch,
-// computed with BLAKE3. Pushout uses the hash purely for content-addressed
-// identity; collision resistance is the only requirement, and BLAKE3
-// already provides that at the same 32-byte size while matching the hash
-// function used elsewhere in this repo (e.g. the leeway schema
-// fingerprint). Switching changes every patch hash — any persisted
+// PatchHash is the 32-byte content-addressed identifier of a patch: the
+// keyed BLAKE3-256 digest of the patch identity item, a deterministic
+// CBOR encoding of the canonicalized dependency set plus the changes.
+// The item and the key's derivation context are defined by the patch
+// package (identityform.go, ADR-0209); this package holds only the
+// value type, so nothing here can compute one.
+//
+// Pushout uses the hash purely for content-addressed identity; collision
+// resistance is the only requirement, and BLAKE3 already provides that at
+// the same 32-byte size while matching the hash function used elsewhere
+// in this repo (e.g. the leeway schema fingerprint). Changing either the
+// hash function or the item changes every patch hash — any persisted
 // envelope files from a different build will fail Decode's
 // hash-validation guard.
 type PatchHash [32]byte
@@ -264,11 +269,5 @@ func CompareNodeID(a, b NodeID) (c int) {
 		return
 	}
 	c = cmp.Compare(a.Index, b.Index)
-	return
-}
-
-// HashBytes computes a PatchHash from arbitrary data using BLAKE3.
-func HashBytes(data []byte) (h PatchHash) {
-	h = blake3.Sum256(data)
 	return
 }

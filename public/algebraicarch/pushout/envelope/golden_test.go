@@ -48,7 +48,7 @@ func goldenPatch() *patch.Patch {
 	})
 }
 
-const goldenPatchHashHex = "f37bb5a9be25a4f0ed7c3466742c30a86c6df297b4b8594d38a1ad6a0507d03f"
+const goldenPatchHashHex = "c8b8a2c193a2ce4b3cdbc8eed833ef77386933c9f762d82c6cd386af8b0622a0"
 
 func TestGolden_PatchHash(tt *testing.T) {
 	p := goldenPatch()
