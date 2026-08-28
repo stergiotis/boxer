@@ -2,27 +2,13 @@ package demo
 
 import (
 	"bytes"
-	"context"
 	"regexp"
 	"strings"
-	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
-	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker/pickerbridge"
-	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
 	imzhost "github.com/stergiotis/boxer/public/thestack/imzero2/host"
 
 	// Side-effect imports — each app's init() registers itself into
@@ -51,141 +37,6 @@ import (
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/sccmap"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
 )
-
-// decorateRenderer wraps an inner renderer in the shared host chrome. The
-// implementation moved to package imzhost (public/thestack/imzero2/host);
-// this thin wrapper preserves carousel's original unexported signature so the
-// CLI's call sites keep working unchanged. Carousel always wires the full
-// chrome (videooutput codec control + F1 help), so VideoOutput/HelpHost are
-// hard-coded true.
-func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.Snapshot, host *windowhost.Inst) func() error {
-	return imzhost.DecorateRenderer(r, imzhost.ChromeConfig{
-		ExtraMenus:  extraMenus,
-		Status:      status,
-		Host:        host,
-		VideoOutput: true,
-		HelpHost:    true,
-	})
-}
-
-// buildWindowedRenderer constructs the top-level RenderLoopHandler
-// for interactive mode (no IMZERO2_SCREENSHOT_DIR). It builds a
-// WindowHost over app.DefaultRegistry, attaches audit wiring (runId +
-// facts) before any windows open so seeded windows produce "started"
-// lifecycle rows, then seeds one window per pre-resolved AppI from
-// --launch, and wraps the host Frame in decorateRenderer with the
-// Apps menu installed.
-//
-// runId / facts may be empty/nil — in that case SetAudit is skipped
-// and no lifecycle rows are written. bus may be nil — in that case
-// SetBus is skipped and per-app MountCtx.Bus() returns NoopBus
-// (every Subscribe/Publish/Request errors out). fsSvc may be nil —
-// in that case the per-frame fs picker overlay is skipped (apps that
-// publish `fs.dialog.*` get no responder and time out). Errors from
-// initial Open calls are logged and dropped; a bad seed entry
-// shouldn't abort startup. An empty seed is fine (user opens apps
-// via the Apps menu).
-//
-// clipSvc may be nil — in that case clipboard.write copies are not
-// drained into egui copy_text ops (apps publishing clipboard.write get
-// no responder and their Request times out), but rendering is otherwise
-// unaffected.
-func buildWindowedRenderer(apps []app.AppI, runId string, facts factsstore.FactsStoreI, bus *inprocbus.Inst, fsSvc *fsbroker.Service, clipSvc *clipboardbroker.Service, status *runtimestatus.Snapshot) (r func() error, host *windowhost.Inst) {
-	host = windowhost.NewInst(app.DefaultRegistry, log.Logger)
-	if bus != nil {
-		// Wire the bus before seeding so the seeded windows pick up a
-		// real inprocbus.Client at Open. SetBus after Open has no
-		// retroactive effect on already-mounted windows.
-		host.SetBus(bus)
-		// System-metrics plane (ADR-0090). imztop consumes it via MountCtx.Bus()
-		// either way. With IMZERO2_SYSMETRICS_NATS_URL set (headless/sandboxed),
-		// an external sysmetricsd reads /proc in its own sandbox and publishes to
-		// NATS; we bridge that onto this in-proc host bus, so the carrier itself
-		// never reads /proc. Otherwise (desktop/dev) we run the scraper
-		// co-located. Process-lifetime; failures are logged and leave the metric
-		// panels empty.
-		metricPub := bus.NewClient(sysmetricsbus.ServiceAppId, []app.SubjectFilter{
-			{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub},
-		})
-		if natsURL := sysmetricsbus.NatsURL.Get(); natsURL != "" {
-			if natsClient, nerr := natsbus.Connect(natsbus.Options{URL: natsURL, AppId: sysmetricsbus.ServiceAppId}); nerr != nil {
-				log.Warn().Err(nerr).Str("url", natsURL).Msg("carousel: sysmetrics NATS bridge connect failed; metric panels will be empty")
-			} else if _, berr := sysmetricsbus.Bridge(natsClient, metricPub, sysmetricsbus.BundleSubjectWildcard()); berr != nil {
-				log.Warn().Err(berr).Msg("carousel: sysmetrics NATS bridge subscribe failed")
-				_ = natsClient.Close()
-			} else {
-				log.Info().Str("url", natsURL).Msg("carousel: bridging system metrics from NATS onto the host bus")
-			}
-		} else if _, serr := sysmscrape.StartScraper(context.Background(), metricPub, sysmetricsbus.DefaultHostToken(), time.Second, log.Logger); serr != nil {
-			log.Warn().Err(serr).Msg("carousel: sysmetrics scraper unavailable; metric panels will be empty")
-		}
-	}
-	if runId != "" && facts != nil {
-		host.SetAudit(runId, facts)
-	}
-	if bus != nil {
-		// App-launch requests (ADR-0135): service `windowhost.open` so apps
-		// holding the cap can open other apps with typed launch configs.
-		// Process-lifetime, like the sysmetrics wiring above.
-		if _, osErr := windowhost.NewOpenService(bus, host, log.Logger); osErr != nil {
-			log.Warn().Err(osErr).Msg("carousel: windowhost open service unavailable; windowhost.open requests will time out")
-		}
-	}
-	for _, a := range apps {
-		id := a.Manifest().Id
-		_, openErr := host.Open(id)
-		if openErr != nil {
-			log.Warn().Err(openErr).Str("id", string(id)).
-				Msg("windowhost seed: open failed, skipping")
-			continue
-		}
-		log.Info().Str("id", string(id)).Msg("windowhost seed: opened window")
-	}
-	// Two separate WidgetIdStacks: one for the host body (reset at
-	// the top of each Frame), one for the Apps menu (lives in the top
-	// bar's MenuBar scope, rendered by extraMenus BEFORE the body's
-	// reset). Sharing a single stack between extraMenus and inner
-	// produced stale-derived ids on the Apps-menu buttons under the
-	// previous dockhost design; the same hazard exists for windowhost.
-	// Distinct stacks side-step the lifecycle entirely.
-	bodyIds := c.NewWidgetIdStack()
-	menuIds := c.NewWidgetIdStack()
-	// bridgeIds carries the per-frame stack for the fs picker overlay.
-	// Distinct from body/menu stacks so picker widgets never collide
-	// with app or menu ids — the overlay floats on top of the host
-	// body and reuses egui's modal/popup z-order.
-	var bridgeIds *c.WidgetIdStack
-	var fsBridge *pickerbridge.Bridge
-	if fsSvc != nil {
-		fsBridge = pickerbridge.NewBridge(fsSvc, log.Logger, pickerbridge.Config{})
-		bridgeIds = c.NewWidgetIdStack()
-	}
-	inner := func() (err error) {
-		bodyIds.Reset()
-		err = host.Frame(bodyIds)
-		if fsBridge != nil {
-			bridgeIds.Reset()
-			fsBridge.Render(bridgeIds)
-		}
-		// Clipboard bridge (ADR-0026 Update 2026-05-30): drain the copies
-		// the clipboardbroker accumulated off the bus this frame and emit
-		// one CopyTextToClipboard op per pending string. Runs after the
-		// host body + picker overlay; the op rides the frame-scoped egui
-		// Context, not a Ui scope, so no active panel is required and no
-		// WidgetIdStack is needed (it is a procedural op, not a widget).
-		if clipSvc != nil {
-			for _, text := range clipSvc.DrainPending() {
-				c.CopyTextToClipboard(text)
-			}
-		}
-		return
-	}
-	r = decorateRenderer(inner, func() {
-		menuIds.Reset()
-		host.RenderAppsMenu(menuIds)
-	}, status, host)
-	return
-}
 
 // legacyCodeToId maps the ADR-0026 §SD12 M1-window numeric aliases
 // (e.g. 5 → org.pebble2.play). The map is still consulted by
@@ -319,11 +170,4 @@ func resolveLaunchSql(whereExpr string) (apps []app.AppI, err error) {
 // carousel's original unexported name so the CLI's call sites keep working.
 func adaptToRenderer(a app.AppI) (r func() error) {
 	return imzhost.AdaptToRenderer(a)
-}
-
-// windowDefaultSize returns the initial Window size for a windowed app. The
-// implementation moved to package imzhost; this thin wrapper preserves
-// carousel's original unexported name for buildWindowedRenderer's callers.
-func windowDefaultSize(h app.SurfaceHints) (float32, float32) {
-	return imzhost.WindowDefaultSize(h)
 }
