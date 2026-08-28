@@ -3,6 +3,7 @@ package widgets
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -347,7 +348,11 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 				c.CurrentApplicationState.StateManager.OverrideDatabindingBPtr(&st.device)
 			}
 		}
-		if c.SliderF64(ids.PrepareStr("wf-rate"), st.rate, 0.5, 2.0).Text("rate").SendRespVal(&st.rate).HasChanged() {
+		if c.SliderF64(ids.PrepareStr("wf-rate"), st.rate, 0.5, 2.0).Text("rate").FixedDecimals(2).SendRespVal(&st.rate).HasChanged() {
+			// Snap to 0.05 steps: a slider released at "1.00" must mean exactly
+			// 1.0, since a rate a hair off unity keeps the sink resampling.
+			st.rate = math.Round(st.rate*20) / 20
+			c.CurrentApplicationState.StateManager.OverrideDatabindingF64Ptr(&st.rate)
 			if err := st.tr.Sink().SetRateE(st.rate); err != nil {
 				log.Warn().Err(err).Msg("waveform demo: rate rejected")
 			}

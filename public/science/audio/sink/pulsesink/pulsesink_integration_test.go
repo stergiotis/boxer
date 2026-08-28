@@ -3,12 +3,16 @@
 package pulsesink_test
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/jfreymuth/pulse"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/extbin"
+	"github.com/stergiotis/boxer/public/science/audio/decode"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
 	"github.com/stergiotis/boxer/public/science/audio/sink/pulsesink"
@@ -103,4 +107,35 @@ func TestRateAndVolume(t *testing.T) {
 	// At 2× the position covers roughly twice the wall time.
 	require.Greater(t, pos, format.DurationToFrames(700*time.Millisecond))
 	require.Less(t, pos, format.DurationToFrames(1700*time.Millisecond))
+}
+
+// A rate other than 1 must not make the sink read behind the decoder: on an
+// ffmpeg-backed source every such read is a process restart, audible as a
+// stutter that outlasts the rate change. Skips without ffmpeg.
+func TestNonUnityRateNeverRestartsTheDecoder(t *testing.T) {
+	requireServer(t)
+	if _, ok := extbin.Ffmpeg.Resolve(); !ok {
+		t.Skip("ffmpeg not available")
+	}
+	dir := t.TempDir()
+	flac := filepath.Join(dir, "tone.flac")
+	// A quiet tone, so a run is not loud; lavfi's sine is a fraction of full scale.
+	out, err := extbin.Ffmpeg.CombinedOutput(context.Background(), extbin.Opts{},
+		"-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=6", "-ac", "2", "-ar", "48000", "-c:a", "flac", flac)
+	require.NoError(t, err, string(out))
+	src, err := decode.OpenFfmpegE(context.Background(), flac)
+	require.NoError(t, err)
+	defer func() { _ = src.CloseE() }()
+	s, err := pulsesink.OpenE(src, pulsesink.Options{AppName: "boxer-test", Latency: 40 * time.Millisecond})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, s.CloseE()) }()
+	require.NoError(t, s.SetVolumeE(0.05))
+	require.NoError(t, s.SetRateE(1.31))
+	s.Play()
+	time.Sleep(700 * time.Millisecond)
+	require.NoError(t, s.SetRateE(1))
+	time.Sleep(400 * time.Millisecond)
+	s.Pause()
+	require.Zero(t, src.Restarts(), "playback at any rate reads the decoder forwards only")
+	require.False(t, s.Underflow())
 }

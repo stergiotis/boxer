@@ -509,7 +509,13 @@ task API reports it as a keelson task (ADR-0038) through
 `waveform.SpawnBuildTask`, so it is listed, carries an ETA and can be
 cancelled from the task monitor — `track.CancelBuild` stops the build and
 leaves the partial pyramid drawable. `BuildProgress` carries the elapsed
-time and a rate-based ETA for hosts without a bus. The
+time and a rate-based ETA for hosts without a bus. One consequence of SD5
+found in use: a sink that resamples must read its decoder strictly forwards
+— a callback that re-reads the frame it interpolated past restarts an
+ffmpeg process every callback, audibly, and keeps doing so after the rate
+returns to 1 because the fractional position survives; the pulse sink keeps
+that lookahead across calls instead, and an integration test holds the
+decoder's restart count at zero through a rate excursion. The
 twelve-hour build benchmark over a procedural source runs in about 80 s on a
 mobile CPU, of which roughly a quarter is the pyramid fold itself (~94 M
 frames/s) and the rest is generating the synthetic signal — a real decoder's

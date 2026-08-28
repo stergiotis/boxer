@@ -67,7 +67,12 @@ type Sink struct {
 	lastPos     int64     // the last position reported; positions never go back
 	pausedPos   int64     // the position frozen by Pause
 
+	// scratch holds held source frames that start at cursor: the lookahead
+	// the interpolation needs past the frames it consumes. Reads append past
+	// them, so the source is read strictly forwards at any rate — an
+	// ffmpeg-backed source restarts its process on any other offset.
 	scratch []float32
+	held    int
 }
 
 var _ sink.SinkI = (*Sink)(nil)
@@ -155,7 +160,7 @@ func (inst *Sink) Play() {
 	resume := inst.state == sink.StatePaused && inst.corked
 	if !resume {
 		if inst.ended || inst.cursor >= inst.frames {
-			inst.cursor, inst.frac = 0, 0
+			inst.cursor, inst.frac, inst.held = 0, 0, 0
 		}
 		inst.startPos, inst.delivered = inst.cursor, 0
 		inst.lastPos = inst.cursor
@@ -240,7 +245,7 @@ func (inst *Sink) SeekE(frame int64) (err error) {
 		return eb.Build().Int64("frame", frame).Errorf("seek on a closed sink")
 	}
 	frame = max(0, min(frame, inst.frames))
-	inst.cursor, inst.frac = frame, 0
+	inst.cursor, inst.frac, inst.held = frame, 0, 0
 	inst.startPos, inst.delivered = frame, 0
 	inst.lastPos, inst.pausedPos = frame, frame
 	inst.ended = false
@@ -288,6 +293,11 @@ func (inst *Sink) SetRateE(rate float64) (err error) {
 		inst.deliveredAt = inst.clock.Now()
 	}
 	inst.rate = rate
+	if rate == 1 {
+		// Back at unity the fraction is a sub-frame offset nobody hears;
+		// dropping it returns playback to the bit-exact direct path.
+		inst.frac = 0
+	}
 	return nil
 }
 
@@ -346,6 +356,10 @@ func (inst *Sink) CloseE() (err error) {
 
 // read is the pull callback, on the stream's goroutine. It returns the
 // number of float32 samples written; pulse.EndOfData ends the stream.
+//
+// The source is read strictly forwards: the interpolation's lookahead frames
+// stay in scratch across calls instead of being read again, so a decoder
+// whose random access is a process restart is never restarted by playback.
 func (inst *Sink) read(out []float32) (n int, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -360,29 +374,48 @@ func (inst *Sink) read(out []float32) (n int, err error) {
 	ctx := context.Background()
 	var produced int
 	if inst.rate == 1 && inst.frac == 0 {
-		produced, err = inst.src.ReadFramesAtE(ctx, inst.cursor, out[:outFrames*channels])
-		if err != nil || produced == 0 {
-			return inst.endLocked(err)
+		// Direct path: held lookahead frames go out first, the rest is read
+		// from where the last read ended.
+		pre := min(inst.held, outFrames)
+		copy(out[:pre*channels], inst.scratch[:pre*channels])
+		inst.dropHeldLocked(pre)
+		produced = pre
+		if pre < outFrames {
+			var got int
+			got, err = inst.src.ReadFramesAtE(ctx, inst.cursor, out[pre*channels:outFrames*channels])
+			if err != nil || got == 0 {
+				if produced == 0 {
+					return inst.endLocked(err)
+				}
+			} else {
+				produced += got
+				inst.cursor += int64(got)
+				inst.delivered += int64(got)
+			}
 		}
-		inst.cursor += int64(produced)
-		inst.delivered += int64(produced)
 	} else {
-		need := framesNeeded(outFrames, inst.frac, inst.rate)
-		if cap(inst.scratch) < int(need)*channels {
-			inst.scratch = make([]float32, int(need)*channels)
+		need := int(framesNeeded(outFrames, inst.frac, inst.rate))
+		if cap(inst.scratch) < need*channels {
+			grown := make([]float32, need*channels)
+			copy(grown, inst.scratch[:inst.held*channels])
+			inst.scratch = grown
 		}
-		var got int
-		got, err = inst.src.ReadFramesAtE(ctx, inst.cursor, inst.scratch[:int(need)*channels])
-		if err != nil || got < 2 {
+		if inst.held < need {
+			var got int
+			got, err = inst.src.ReadFramesAtE(ctx, inst.cursor+int64(inst.held), inst.scratch[inst.held*channels:need*channels])
+			if err == nil {
+				inst.held += got
+			}
+		}
+		if inst.held < 2 {
 			return inst.endLocked(err)
 		}
 		var consumed int64
-		produced, consumed, inst.frac = resampleLinear(inst.scratch[:got*channels], channels, inst.frac, inst.rate, out[:outFrames*channels])
+		produced, consumed, inst.frac = resampleLinear(inst.scratch[:inst.held*channels], channels, inst.frac, inst.rate, out[:outFrames*channels])
 		if produced == 0 {
 			return inst.endLocked(nil)
 		}
-		inst.cursor += consumed
-		inst.delivered += consumed
+		inst.dropHeldLocked(int(consumed))
 	}
 	if inst.volume != 1 {
 		gain := float32(inst.volume)
@@ -392,6 +425,26 @@ func (inst *Sink) read(out []float32) (n int, err error) {
 	}
 	inst.deliveredAt = inst.clock.Now()
 	return produced * channels, nil
+}
+
+// dropHeldLocked consumes k frames from the front of the lookahead: the
+// cursor moves past them and what remains slides to the front.
+func (inst *Sink) dropHeldLocked(k int) {
+	if k <= 0 {
+		return
+	}
+	channels := int(inst.format.Channels)
+	if k >= inst.held {
+		inst.cursor += int64(k)
+		inst.delivered += int64(k)
+		inst.held = 0
+		return
+	}
+	rem := inst.held - k
+	copy(inst.scratch[:rem*channels], inst.scratch[k*channels:inst.held*channels])
+	inst.held = rem
+	inst.cursor += int64(k)
+	inst.delivered += int64(k)
 }
 
 // endLocked marks the end of playback: the source ran out (io.EOF or a

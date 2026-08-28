@@ -10,7 +10,13 @@
 // server resamples to the device, so the sink never resamples for a rate
 // mismatch. A playback rate other than 1 is a linear-interpolation resample
 // of the source in the pull callback — pitch follows rate, as SD6 decided —
-// and volume is a software gain applied in the same callback.
+// and volume is a software gain applied in the same callback. The callback
+// reads the source strictly forwards at every rate: the frame or two of
+// lookahead the interpolation needs are kept across calls rather than read
+// again, because a decoder whose random access is a process restart (SD5)
+// would otherwise restart on every callback — a stutter that, since the
+// fractional position survives a return to rate 1, would never end. Back at
+// exactly rate 1 the fraction is dropped and playback is bit-exact again.
 //
 // # Position
 //
