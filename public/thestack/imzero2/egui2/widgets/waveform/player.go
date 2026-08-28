@@ -1,7 +1,6 @@
 package waveform
 
 import (
-	"context"
 	"math"
 	"time"
 
@@ -27,10 +26,13 @@ type Visuals struct {
 	Hover          color.Color // the hairline under the pointer
 	HoverText      color.Color
 	ChannelDivider color.Color
-	Ruler          axisruler.Style
-	RulerHeight    float32 // the strip under the waveform holding the ruler
-	ChannelGap     float32 // between channel bands when channels are split
-	HoverFontSize  float32
+	// Unbuilt marks the span of the track whose peaks are not built yet
+	// (ADR-0208 SD4): a hairline where the waveform will appear.
+	Unbuilt       color.Color
+	Ruler         axisruler.Style
+	RulerHeight   float32 // the strip under the waveform holding the ruler
+	ChannelGap    float32 // between channel bands when channels are split
+	HoverFontSize float32
 }
 
 // DefaultVisuals reads the design-system palette (ADR-0031).
@@ -43,6 +45,7 @@ func DefaultVisuals() (vis Visuals) {
 		Hover:          color.Hex(styletokens.NeutralTextSecondary.AsHex()),
 		HoverText:      color.Hex(styletokens.NeutralTextPrimary.AsHex()),
 		ChannelDivider: color.Hex(styletokens.NeutralBorderFaint.AsHex()),
+		Unbuilt:        color.Hex(styletokens.NeutralBorderFaint.AsHex()),
 		Ruler:          axisruler.DefaultStyle(),
 		RulerHeight:    20,
 		ChannelGap:     2,
@@ -118,13 +121,10 @@ type Player struct {
 	tickBuf                    []time.Duration
 	ticks                      []axisruler.Tick
 
-	// The raw window under the view when zoomed past the pyramid's base bin
-	// (ADR-0208 SD3). One window, re-read only when the visible frame span
-	// changes; M4 replaces this with the track's cache.
-	raw     []float32
-	rawFrom int64
-	rawTo   int64
-	rawOk   bool
+	// windowWait is set during a frame that asked the track for a raw window
+	// it did not have yet (ADR-0208 SD3): the pyramid is drawn instead and
+	// the frame loop is kept hot until the window arrives.
+	windowWait bool
 }
 
 const (
@@ -142,7 +142,6 @@ const (
 	defaultSeekStep         = 5 * time.Second
 	shiftSeekMul            = 6
 	keyZoomFactor           = 2.0
-	maxRawFrames    int64   = 1 << 22
 )
 
 // keyMask is what the player eats while focused (ADR-0177). Plus/minus are
@@ -315,6 +314,7 @@ func (inst *Player) frame(w, h float32) {
 	pos := s.Position()
 	playing := s.State() == sink.StatePlaying
 	inst.followPlayhead(pos, playing, frames, w)
+	inst.windowWait = false
 
 	c.PaintClipPush(0, 0, w, h).Send()
 	inst.paintWave(w, waveH, pos)
@@ -333,7 +333,9 @@ func (inst *Player) frame(w, h float32) {
 		CaptureScroll().
 		Send()
 
-	if playing || inst.dragging {
+	// Keep the loop hot while anything is still arriving: the sink's clock,
+	// a drag, a raw window in flight, or a pyramid still building.
+	if playing || inst.dragging || inst.windowWait || inst.tr.WindowPending() || !inst.tr.Peaks().IsComplete() {
 		c.RequestRepaintAfter(1.0 / 60)
 	}
 }
@@ -511,25 +513,50 @@ func (inst *Player) paintWave(w, waveH float32, pos int64) {
 
 		switch {
 		case fppCol >= float64(p.BaseBin()):
-			n := p.Columns(fromI, toI, ch, inst.qMin[:cols], inst.qMax[:cols])
-			for i := range n {
-				inst.fMin[i] = float32(inst.qMin[i]) / 127
-				inst.fMax[i] = float32(inst.qMax[i]) / 127
-			}
-			inst.emitColumns(n, colW, barW, yc, hh, gain, top, top+bandH, pos)
+			inst.emitPyramid(fromI, toI, ch, cols, colW, barW, yc, hh, gain, top, top+bandH, pos, w)
 		case fpp >= 1:
-			if !inst.ensureRaw(fromI, toI) {
+			raw, ok := inst.window(fromI, toI)
+			if !ok {
+				inst.emitPyramid(fromI, toI, ch, cols, colW, barW, yc, hh, gain, top, top+bandH, pos, w)
 				continue
 			}
-			n := reduceColumns(inst.raw[:(inst.rawTo-inst.rawFrom)*int64(channels)], channels, ch, fppCol, inst.fMin[:cols], inst.fMax[:cols])
+			n := reduceColumns(raw, channels, ch, fppCol, inst.fMin[:cols], inst.fMax[:cols])
 			inst.emitColumns(n, colW, barW, yc, hh, gain, top, top+bandH, pos)
 		default:
-			if !inst.ensureRaw(fromI, min(toI+1, frames)) {
+			raw, ok := inst.window(fromI, min(toI+1, frames))
+			if !ok {
+				inst.emitPyramid(fromI, toI, ch, cols, colW, barW, yc, hh, gain, top, top+bandH, pos, w)
 				continue
 			}
-			inst.emitSamples(ch, channels, yc, hh, gain, pos, w)
+			inst.emitSamples(raw, fromI, ch, channels, yc, hh, gain, pos)
 		}
 	}
+}
+
+// emitPyramid draws the columns of [fromI, toI) from the peaks pyramid and
+// marks the columns whose peaks are not built yet with a hairline.
+func (inst *Player) emitPyramid(fromI, toI int64, ch, cols int, colW, barW, yc, hh, gain, top, bottom float32, pos int64, w float32) {
+	p := inst.tr.Peaks()
+	n := p.Columns(fromI, toI, ch, inst.qMin[:cols], inst.qMax[:cols])
+	for i := range n {
+		inst.fMin[i] = float32(inst.qMin[i]) / 127
+		inst.fMax[i] = float32(inst.qMax[i]) / 127
+	}
+	inst.emitColumns(n, colW, barW, yc, hh, gain, top, bottom, pos)
+	if n < cols && !p.IsComplete() {
+		x0 := float32(n) * colW
+		c.PaintRectFilled(x0, yc-0.5, w, yc+0.5, 0, inst.vis.Unbuilt).Send()
+	}
+}
+
+// window asks the track for raw frames [from, to); a miss is drawn from the
+// pyramid this frame and asked again next frame (ADR-0208 SD3).
+func (inst *Player) window(from, to int64) (raw []float32, ok bool) {
+	raw, ok = inst.tr.Window(from, to)
+	if !ok {
+		inst.windowWait = true
+	}
+	return raw, ok
 }
 
 // emitColumns turns n min/max columns in fMin/fMax into one rect batch.
@@ -565,8 +592,8 @@ func (inst *Player) emitColumns(n int, colW, barW, yc, hh, gain, top, bottom flo
 // emitSamples draws the raw window as a polyline (and markers when a sample
 // is wide enough), split at the playhead so the played part keeps the
 // progress colour.
-func (inst *Player) emitSamples(ch, channels int, yc, hh, gain float32, pos int64, w float32) {
-	n := int(inst.rawTo - inst.rawFrom)
+func (inst *Player) emitSamples(raw []float32, rawFrom int64, ch, channels int, yc, hh, gain float32, pos int64) {
+	n := len(raw) / channels
 	if n <= 0 {
 		return
 	}
@@ -578,9 +605,9 @@ func (inst *Player) emitSamples(ch, channels int, yc, hh, gain float32, pos int6
 	view := inst.view
 	split := n
 	for i := range n {
-		f := inst.rawFrom + int64(i)
+		f := rawFrom + int64(i)
 		xs[i] = view.FrameToX(float64(f))
-		ys[i] = yc - inst.raw[i*channels+ch]*hh*gain
+		ys[i] = yc - raw[i*channels+ch]*hh*gain
 		if f < pos {
 			split = i + 1
 		}
@@ -601,33 +628,6 @@ func (inst *Player) emitSamples(ch, channels int, yc, hh, gain float32, pos int6
 			c.PaintMarkers(xs[split:], ys[split:], 0, 2.5, inst.vis.Wave, stroke).Send()
 		}
 	}
-	_ = w
-}
-
-// ensureRaw makes inst.raw hold frames [from, to) of the track, reading
-// only when the span changed since the last frame.
-func (inst *Player) ensureRaw(from, to int64) (ok bool) {
-	if inst.rawOk && inst.rawFrom == from && inst.rawTo == to {
-		return true
-	}
-	n := to - from
-	if n <= 0 || n > maxRawFrames {
-		inst.rawOk = false
-		return false
-	}
-	channels := int64(inst.tr.Format().Channels)
-	need := int(n * channels)
-	if cap(inst.raw) < need {
-		inst.raw = make([]float32, need)
-	}
-	got, err := inst.tr.ReadWindowE(context.Background(), from, inst.raw[:need])
-	if err != nil {
-		log.Warn().Err(err).Int64("from", from).Int64("to", to).Msg("waveform: raw window read failed")
-		inst.rawOk = false
-		return false
-	}
-	inst.rawFrom, inst.rawTo, inst.rawOk = from, from+int64(got), true
-	return got > 0
 }
 
 func (inst *Player) growScratch(cols int) {

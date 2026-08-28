@@ -80,6 +80,33 @@ var (
 	})
 )
 
+// Media.
+var (
+	// Ffmpeg decodes the compressed formats the audio subtree's native WAV
+	// reader does not cover (ADR-0208 §SD5): decode.FfmpegSource streams
+	// f32le frames out of it. It reuses IMZERO2_FFMPEG_BIN — the variable the
+	// Rust client's headless encoder already honours — so one airgap setting
+	// points every ffmpeg spawn in the toolkit at the same bundled build.
+	Ffmpeg = Declare(Program{
+		Name:        "ffmpeg",
+		Kind:        Host,
+		OverrideEnv: "IMZERO2_FFMPEG_BIN",
+		InstallHint: "install ffmpeg (https://ffmpeg.org) or point IMZERO2_FFMPEG_BIN at a static build",
+	})
+
+	// Ffprobe reports a recording's sample rate, channel count and duration,
+	// which is where decode gets the frame count the pcm.SourceI contract
+	// requires up front (ADR-0208 §SD5). Its own variable rather than
+	// IMZERO2_FFMPEG_BIN: the Rust client never spawns ffprobe, and the two
+	// binaries are separate files even in one install.
+	Ffprobe = Declare(Program{
+		Name:        "ffprobe",
+		Kind:        Host,
+		OverrideEnv: "BOXER_FFPROBE_BIN",
+		InstallHint: "install ffmpeg's ffprobe (https://ffmpeg.org) or point BOXER_FFPROBE_BIN at it",
+	})
+)
+
 // Storage transports.
 var (
 	// Rclone is both halves of the lading store's SFTP-over-stdio seam

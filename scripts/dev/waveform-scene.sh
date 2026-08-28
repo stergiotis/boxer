@@ -103,9 +103,23 @@ cat >"$traceA" <<'EOF'
 {"do":"wait","value":"position: 0:00.000 · paused","role":"label"}
 EOF
 
+# --- a real recording, when ffmpeg is here -----------------------------------
+# Phase C opens a FLAC through the demo's file field: the sniffing decoder,
+# ffmpeg via extbin, the background build and the widget, end to end. The
+# peaks cache is a per-run directory so the readout says "built", not "from
+# cache". Skipped, not failed, without ffmpeg.
+FIXTURE=""
+if command -v ffmpeg >/dev/null 2>&1; then
+	FIXTURE="$OUT/tone.flac"
+	ffmpeg -y -v error -f lavfi -i "sine=frequency=440:duration=30" -ac 2 -ar 48000 -c:a flac "$FIXTURE" ||
+		{ log "ffmpeg could not write the fixture; skipping phase C"; FIXTURE=""; }
+fi
+rm -rf "$OUT/peaks-cache"
+
 # --- run ---------------------------------------------------------------------
 log "launching the widget gallery headless on 127.0.0.1:$PORT"
 env -u DISPLAY -u WAYLAND_DISPLAY \
+	BOXER_AUDIO_PEAKS_CACHE_DIR="$OUT/peaks-cache" \
 	IMZERO2_HEADLESS_LISTEN="127.0.0.1:$PORT" \
 	IMZERO2_HEADLESS_DUMP_DIR="$OUT" \
 	IMZERO2_HEADLESS_DUMP_EVERY=1000000 \
@@ -197,11 +211,66 @@ EOF
 
 drive "$traceB" 2>&1 | tee "$OUT/logs/drive-b.log"
 rc=${PIPESTATUS[0]}
+((rc == 0)) || { log "FAIL — see $OUT/logs/drive-b.log and $OUT/logs/host.log"; exit "$rc"; }
 
-if ((rc == 0)); then
-	log "PASS — hover, click-to-seek, drag-to-pan and the null-sink transport all reached the widget"
-	log "       capture: $OUT/waveform-player.png"
+# --- phase C: a file through the decoder -------------------------------------
+# The demo's path field is not reachable through the accessibility tree, so
+# the file goes in through BOXER_WAVEFORM_DEMO_FILE at mount: a second host,
+# the same expansion steps, and the readouts say what happened.
+if [[ -n "$FIXTURE" ]]; then
+	cleanup
+	trap - EXIT
+	log "relaunching with BOXER_WAVEFORM_DEMO_FILE=$FIXTURE"
+	env -u DISPLAY -u WAYLAND_DISPLAY \
+		BOXER_AUDIO_PEAKS_CACHE_DIR="$OUT/peaks-cache" \
+		BOXER_WAVEFORM_DEMO_FILE="$FIXTURE" \
+		IMZERO2_HEADLESS_LISTEN="127.0.0.1:$PORT" \
+		IMZERO2_HEADLESS_DUMP_DIR="$OUT" \
+		IMZERO2_HEADLESS_DUMP_EVERY=1000000 \
+		IMZERO2_HEADLESS_FPS=30 \
+		IMZERO2_SCREENSHOT_SIZE="$SIZE" \
+		BOXER_COMPONENT=waveform-scene-file \
+		"$MAIN_GO" --logFormat=console --logLevel=warn \
+			imzero2 demo \
+			--clientBinary "$CLIENT" \
+			--clientInitialMainWindowWidth "$W" \
+			--clientInitialMainWindowHeight "$H" \
+			${MAIN_FONT:+--mainFontTTF "$MAIN_FONT"} \
+			${MONO_FONT:+--monoFontTTF "$MONO_FONT"} \
+			${PHOSPHOR_FONT:+--phosphorFontTTF "$PHOSPHOR_FONT"} \
+			${FALLBACK_FONT:+--fallbackFontTTF "$FALLBACK_FONT"} \
+			--launch widgets \
+		>"$OUT/logs/host-file.log" 2>&1 &
+	app_pid=$!
+	trap cleanup EXIT
+	for _ in $(seq 1 $((TIMEOUT * 4))); do
+		(exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null && { exec 3<&-; break; }
+		kill -0 "$app_pid" 2>/dev/null || break
+		sleep 0.25
+	done
+	traceC="$OUT/logs/c-file.jsonl"
+	cat >"$traceC" <<'EOF'
+{"do":"note","text":"--- a FLAC through decode → ffmpeg → background build → the widget ---"}
+{"do":"wait","role":"text_input","comment":"the gallery has mounted"}
+{"do":"focus","role":"text_input"}
+{"do":"type","role":"text_input","text":"waveform"}
+{"do":"wait","contains":"waveform player","settleMs":400}
+{"do":"click","contains":"waveform player","comment":"mounting the demo opens the file named by the environment"}
+{"do":"wait","name":"10 ms/px","settleMs":600}
+{"do":"scroll_into_view","name":"10 ms/px","settleMs":600}
+{"do":"wait","valueContains":"track: ffmpeg file","role":"label","comment":"the sniffing opener routed a FLAC to ffmpeg"}
+{"do":"wait","valueContains":"peaks built","role":"label","comment":"the background build over the ffmpeg decoder completed"}
+{"do":"wait","valueContains":"view: 0:00.000 – 0:30.000","role":"label","comment":"the declared length is the file's"}
+{"do":"capture","text":"waveform-file"}
+EOF
+	drive "$traceC" 2>&1 | tee "$OUT/logs/drive-c.log"
+	rc=${PIPESTATUS[0]}
+	((rc == 0)) || { log "FAIL — the file path; see $OUT/logs/drive-c.log and $OUT/logs/host-file.log"; exit "$rc"; }
+	log "PASS — a FLAC opened through ffmpeg, its peaks built in the background: $OUT/waveform-file.png"
 else
-	log "FAIL — see $OUT/logs/drive-b.log and $OUT/logs/host.log"
+	log "skipped phase C (no ffmpeg on PATH)"
 fi
-exit "$rc"
+
+log "PASS — hover, click-to-seek, drag-to-pan and the null-sink transport all reached the widget"
+log "       capture: $OUT/waveform-player.png"
+exit 0

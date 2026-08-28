@@ -11,8 +11,9 @@ import (
 // lockedSource makes one [pcm.SourceI] usable from several goroutines by
 // serialising the calls the contract restricts to one at a time. It is the
 // seam ADR-0208 §SD1 needs so that one open recording can serve both the
-// frame thread and the sink's callback goroutine (§SD6): the peaks build,
-// [Track.ReadWindowE] and whatever sink [Options.NewSink] returns all hold
+// frame thread and the sink's callback goroutine (§SD6): [Track.ReadWindowE],
+// whatever sink [Options.NewSink] returns, and — unless [Options.Reopen] gave
+// them a source of their own — the peaks build and the window cache all hold
 // this adapter rather than the source it wraps.
 //
 // Format and Frames are immutable for the source's lifetime, so they are
