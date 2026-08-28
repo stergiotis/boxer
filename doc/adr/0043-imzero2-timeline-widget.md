@@ -135,6 +135,24 @@ See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-pol
 
 ## Updates
 
+### 2026-08-28 — Offset axis and locked view (adds SD17, for ADR-0208 SD8)
+
+- **SD17 — An offset axis, the same widget.** `WithOffsetAxis(unit)` makes
+  every `int64` the widget takes or returns a count of `unit` from a zero
+  that is no calendar instant — a recording's position, an elapsed time —
+  and `SetRangeUnits` / `ViewRangeUnits` / `CursorValue` are the same
+  surface in those values. Ticks come from `timeticks.OffsetLadder` and are
+  labelled as offsets; the rollover rows, the now line and the time zone
+  are inert; tooltips print offsets. The lanes, the LOD index, the brush and
+  every hit test were already unit-agnostic integers, which is why this is an
+  option and not a second widget: ADR-0208 SD8 needed annotation lanes under
+  a waveform at up to microsecond precision and the alternative was a copy
+  of the lane engine. `WithLockedView` leaves the view to a host that owns
+  the axis and drives the range every frame. The calendar path is unchanged:
+  with the option unset the tick map, the tooltips and the LOD scales
+  compute exactly as before.
+
+
 ### 2026-08-19 — The playhead: a caller-set instant marker (adds SD18)
 
 **Built.** Verified in the widget gallery before imztop drove it, as SD16 was.

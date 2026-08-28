@@ -596,6 +596,14 @@ type Timeline struct {
 	loc *time.Location
 
 	laneAssn layout.LaneAssignment
+
+	// Offset axis (ADR-0043 SD17, update 2026-08-28): when offsetAxis is set
+	// every int64 value counts unit from a zero that is no calendar instant;
+	// the calendar-only features are inert. unit == 0 is the millisecond.
+	offsetAxis bool
+	unit       time.Duration
+	// lockedView leaves the view to the host: no wheel zoom, no drag pan.
+	lockedView bool
 }
 
 // Option configures a Timeline at construction.
@@ -745,8 +753,8 @@ func WithRange(t0, t1 time.Time) Option {
 	}
 	return func(inst *Timeline) {
 		inst.explicitRange = true
-		inst.viewMinMS = t0.UnixMilli()
-		inst.viewMaxMS = t1.UnixMilli()
+		inst.viewMinMS = inst.timeToUnits(t0)
+		inst.viewMaxMS = inst.timeToUnits(t1)
 	}
 }
 
@@ -1142,7 +1150,7 @@ func (inst *Timeline) CursorTime() (t time.Time, ok bool) {
 	if !inst.cursorTimeValid {
 		return
 	}
-	t = time.UnixMilli(inst.cursorTimeMS).UTC()
+	t = inst.unitsToTime(inst.cursorTimeMS)
 	ok = true
 	return
 }
@@ -1151,7 +1159,7 @@ func (inst *Timeline) CursorTime() (t time.Time, ok bool) {
 // from New after options are applied and from SetPoints. Cheap when points
 // is empty (allocates only the empty scale maps).
 func (inst *Timeline) rebuildLOD() {
-	inst.lodIndex = layout.BuildLODIndex(asPointValues(inst.points), inst.lodScales)
+	inst.lodIndex = layout.BuildLODIndexUnit(asPointValues(inst.points), inst.lodScales, inst.unitOrMS())
 }
 
 // asPointValues unwraps a slice of *PointEvent pointers into a slice of
@@ -1186,9 +1194,45 @@ func (inst *Timeline) SetRange(t0, t1 time.Time) {
 	}
 	inst.explicitRange = true
 	inst.interactivePin = false
-	inst.viewMinMS = t0.UnixMilli()
-	inst.viewMaxMS = t1.UnixMilli()
+	inst.viewMinMS = inst.timeToUnits(t0)
+	inst.viewMaxMS = inst.timeToUnits(t1)
 }
+
+// SetRangeUnits is [Timeline.SetRange] in the axis's own values — counts of
+// the unit on an offset axis, epoch milliseconds on the calendar. A host that
+// owns the time axis (a waveform player, ADR-0208 SD8) calls it every frame.
+func (inst *Timeline) SetRangeUnits(from, to int64) {
+	if to <= from {
+		panic(fmt.Sprintf("timeline: SetRangeUnits requires to after from (got %d, %d)", from, to))
+	}
+	inst.explicitRange = true
+	inst.interactivePin = false
+	inst.viewMinMS = from
+	inst.viewMaxMS = to
+}
+
+// ViewRangeUnits is [Timeline.ViewRange] in the axis's own values.
+func (inst *Timeline) ViewRangeUnits() (from, to int64, ok bool) {
+	if inst.lastViewPxWidth == 0 {
+		return
+	}
+	return inst.lastViewMinMS, inst.lastViewMaxMS, true
+}
+
+// CursorValue is [Timeline.CursorTime] in the axis's own values.
+func (inst *Timeline) CursorValue() (v int64, ok bool) {
+	if !inst.cursorTimeValid {
+		return
+	}
+	return inst.cursorTimeMS, true
+}
+
+// Unit is the duration one axis value counts: the millisecond on the
+// calendar, the unit given to [WithOffsetAxis] otherwise.
+func (inst *Timeline) Unit() (unit time.Duration) { return inst.unitOrMS() }
+
+// IsOffsetAxis reports whether the axis counts offsets rather than the calendar.
+func (inst *Timeline) IsOffsetAxis() (yes bool) { return inst.offsetAxis }
 
 // computeVerticalLayout is the single source of truth for the timeline's
 // per-frame Y geometry + horizontal axis bounds. Called once at the top
@@ -1242,8 +1286,8 @@ func (inst *Timeline) ViewRange() (from, to time.Time, ok bool) {
 	if inst.lastViewPxWidth == 0 {
 		return
 	}
-	from = time.UnixMilli(inst.lastViewMinMS).UTC()
-	to = time.UnixMilli(inst.lastViewMaxMS).UTC()
+	from = inst.unitsToTime(inst.lastViewMinMS)
+	to = inst.unitsToTime(inst.lastViewMaxMS)
 	ok = true
 	return
 }
@@ -1304,16 +1348,14 @@ func (inst *Timeline) renderBody() {
 	// Detail pane's read-only strip — would otherwise be stuck at the fallback
 	// width and overspill a narrow pane, clipping its right edge (the newest
 	// event). Only the pan/zoom input handling here is gated on interactivity.
-	if inst.interactionEnabled {
+	if inst.interactionEnabled && !inst.lockedView {
 		inst.applyZoomInput(wheel, effW)
 		inst.applyPanInput(stateMgr, labelW, effW)
 	}
 
-	viewMin, viewMax := inst.computeViewRange()
-	viewMinMS := viewMin.UnixMilli()
-	viewMaxMS := viewMax.UnixMilli()
+	viewMinMS, viewMaxMS := inst.computeViewRange()
 
-	tm := layout.ComputeTickMap(viewMin, viewMax, float64(labelW), float64(effW), inst.loc, timeticks.TimeStep{})
+	tm := inst.computeTickMap(viewMinMS, viewMaxMS, float64(labelW), float64(effW))
 	fl := inst.computeFlagLayout(tm, labelW, effW)
 	vl := inst.computeVerticalLayout(len(tm.RolloverRows), fl.rowCount, labelW, effW)
 
@@ -1682,12 +1724,12 @@ func (inst *Timeline) pinToCurrentView() (ok bool) {
 		ok = true
 		return
 	}
-	viewMin, viewMax := inst.computeViewRange()
-	if !viewMax.After(viewMin) {
+	v0, v1 := inst.computeViewRange()
+	if v1 <= v0 {
 		return
 	}
-	inst.viewMinMS = viewMin.UnixMilli()
-	inst.viewMaxMS = viewMax.UnixMilli()
+	inst.viewMinMS = v0
+	inst.viewMaxMS = v1
 	inst.explicitRange = true
 	inst.interactivePin = true
 	ok = true
@@ -1851,7 +1893,7 @@ func (inst *Timeline) paintBackgroundBands(tm layout.TickMap, vl verticalLayout,
 // Skipped silently for historical / future-only views — no "off-screen
 // now" indicator is rendered, by design (Grafana convention).
 func (inst *Timeline) paintNowLine(tm layout.TickMap, vl verticalLayout, viewMinMS, viewMaxMS int64) {
-	if !inst.nowLineEnabled {
+	if !inst.nowLineEnabled || inst.offsetAxis {
 		return
 	}
 	nowMS := time.Now().UnixMilli()
@@ -2108,11 +2150,11 @@ func (inst *Timeline) paintHoverTooltip(tm layout.TickMap, fl flagLayout, vl ver
 
 func (inst *Timeline) hitTestTooltipText(tm layout.TickMap, fl flagLayout, vl verticalLayout, cursorX, cursorY float32) (text string) {
 	if a := inst.hitTestAnnotation(fl, cursorX, cursorY); a != nil {
-		text = formatAnnotationTooltip(a)
+		text = inst.formatAnnotationTooltip(a)
 		return
 	}
 	if ev, hint := inst.hitTestInterval(tm, vl, cursorX, cursorY); ev != nil {
-		text = formatIntervalTooltip(ev, hint)
+		text = inst.formatIntervalTooltip(ev, hint)
 		return
 	}
 	if inst.rugReserved() && cursorY >= vl.rugTopY && cursorY <= vl.rugTopY+inst.visuals.RugStripH {
@@ -2122,20 +2164,20 @@ func (inst *Timeline) hitTestTooltipText(tm layout.TickMap, fl flagLayout, vl ve
 		}
 	}
 	if band, ok := inst.hitTestBackgroundBand(tm, cursorX); ok && band.Label != "" {
-		text = formatBandTooltip(band)
+		text = inst.formatBandTooltip(band)
 	}
 	return
 }
 
-func formatBandTooltip(b layout.BackgroundBand) (text string) {
-	from := time.UnixMilli(b.FromMS).UTC().Format("2006-01-02 15:04")
-	to := time.UnixMilli(b.ToMS).UTC().Format("2006-01-02 15:04")
+func (inst *Timeline) formatBandTooltip(b layout.BackgroundBand) (text string) {
+	from := inst.formatValue(b.FromMS, "2006-01-02 15:04")
+	to := inst.formatValue(b.ToMS, "2006-01-02 15:04")
 	text = fmt.Sprintf("%s\n%s – %s", b.Label, from, to)
 	return
 }
 
-func formatAnnotationTooltip(a *layout.Annotation) (text string) {
-	t := a.AsTime().Format("2006-01-02 15:04:05")
+func (inst *Timeline) formatAnnotationTooltip(a *layout.Annotation) (text string) {
+	t := inst.formatValue(a.TMS, "2006-01-02 15:04:05")
 	if a.Label != "" {
 		text = fmt.Sprintf("#%d  %s\n%s", a.Number, a.Label, t)
 		return
@@ -2144,10 +2186,10 @@ func formatAnnotationTooltip(a *layout.Annotation) (text string) {
 	return
 }
 
-func formatIntervalTooltip(ev *layout.IntervalEvent, hint string) (text string) {
-	from := ev.AsFromTime().Format("2006-01-02 15:04:05")
-	to := ev.AsToTime().Format("15:04:05")
-	dur := time.Duration(ev.DurationMS()) * time.Millisecond
+func (inst *Timeline) formatIntervalTooltip(ev *layout.IntervalEvent, hint string) (text string) {
+	from := inst.formatValue(ev.FromMS, "2006-01-02 15:04:05")
+	to := inst.formatValue(ev.ToMS, "15:04:05")
+	dur := time.Duration(ev.DurationMS()) * inst.unitOrMS()
 	if hint != "" {
 		text = fmt.Sprintf("%s\n%s – %s\n%s", hint, from, to, dur)
 		return
@@ -2161,8 +2203,8 @@ func (inst *Timeline) formatRugTooltip(tm layout.TickMap, cursorX float32) (text
 	if !ok {
 		return
 	}
-	start := time.UnixMilli(b.StartMS).UTC().Format("2006-01-02 15:04:05")
-	end := time.UnixMilli(b.StartMS + scaleMS).UTC().Format("15:04:05")
+	start := inst.formatValue(b.StartMS, "2006-01-02 15:04:05")
+	end := inst.formatValue(b.StartMS+scaleMS, "15:04:05")
 	text = fmt.Sprintf("%s – %s\n%d event(s)", start, end, b.Count)
 	return
 }
@@ -2214,11 +2256,9 @@ func splitLines(s string) (out []string) {
 	return
 }
 
-func (inst *Timeline) computeViewRange() (t0, t1 time.Time) {
+func (inst *Timeline) computeViewRange() (v0, v1 int64) {
 	if inst.explicitRange {
-		t0 = time.UnixMilli(inst.viewMinMS).UTC()
-		t1 = time.UnixMilli(inst.viewMaxMS).UTC()
-		return
+		return inst.viewMinMS, inst.viewMaxMS
 	}
 	minMS := int64(math.MaxInt64)
 	maxMS := int64(math.MinInt64)
@@ -2230,19 +2270,19 @@ func (inst *Timeline) computeViewRange() (t0, t1 time.Time) {
 		maxMS = max(maxMS, ev.ToMS)
 	}
 	if minMS == int64(math.MaxInt64) {
+		if inst.offsetAxis {
+			// No events on an offset axis: the first stretch from zero.
+			return 0, max(int64(emptyFallback/inst.unitOrMS()), 1)
+		}
 		now := time.Now().UTC()
-		t0 = now.Add(-emptyFallback)
-		t1 = now
-		return
+		return now.Add(-emptyFallback).UnixMilli(), now.UnixMilli()
 	}
 	span := float64(maxMS - minMS)
 	if span <= 0 {
-		span = float64(time.Second.Milliseconds())
+		span = float64(max(int64(time.Second/inst.unitOrMS()), 1))
 	}
 	padMS := max(int64(span*rangePaddingFraction), 1)
-	t0 = time.UnixMilli(minMS - padMS).UTC()
-	t1 = time.UnixMilli(maxMS + padMS).UTC()
-	return
+	return minMS - padMS, maxMS + padMS
 }
 
 const (
@@ -2264,4 +2304,71 @@ func clamp01(v float32) (out float32) {
 		out = v
 	}
 	return
+}
+
+// WithOffsetAxis makes the axis an offset from zero instead of the calendar
+// (ADR-0043 SD17, for ADR-0208 SD8). Every int64 value the widget takes or
+// returns — event bounds, the view, the playhead, the brush — counts unit (a
+// duration; zero or less is the millisecond) from a zero that is no calendar
+// instant. Ticks come from [timeticks.OffsetLadder] and are labelled as
+// offsets; the rollover rows, the now line and the time zone are inert. The
+// time.Time surface stays usable and maps through the Unix epoch.
+func WithOffsetAxis(unit time.Duration) Option {
+	if unit <= 0 {
+		unit = time.Millisecond
+	}
+	return func(inst *Timeline) {
+		inst.offsetAxis = true
+		inst.unit = unit
+	}
+}
+
+// WithLockedView leaves the view where the host puts it: the wheel does not
+// zoom and a drag does not pan, while hover, click, selection and the brush
+// still work. For a timeline stacked under a widget that owns the time axis
+// and drives [Timeline.SetRangeUnits] every frame.
+func WithLockedView(locked bool) Option {
+	return func(inst *Timeline) {
+		inst.lockedView = locked
+	}
+}
+
+func (inst *Timeline) unitOrMS() (unit time.Duration) {
+	if inst.unit > 0 {
+		return inst.unit
+	}
+	return time.Millisecond
+}
+
+// unitsToTime maps an axis value to the time.Time surface: epoch
+// milliseconds on the calendar; on an offset axis, through the Unix epoch.
+func (inst *Timeline) unitsToTime(v int64) (t time.Time) {
+	if inst.offsetAxis {
+		return time.Unix(0, 0).UTC().Add(time.Duration(v) * inst.unitOrMS())
+	}
+	return time.UnixMilli(v).UTC()
+}
+
+func (inst *Timeline) timeToUnits(t time.Time) (v int64) {
+	if inst.offsetAxis {
+		return int64(t.Sub(time.Unix(0, 0).UTC()) / inst.unitOrMS())
+	}
+	return t.UnixMilli()
+}
+
+// computeTickMap builds the frame's tick map for either axis.
+func (inst *Timeline) computeTickMap(v0, v1 int64, axisStartPx, axisEndPx float64) (tm layout.TickMap) {
+	if inst.offsetAxis {
+		return layout.ComputeOffsetTickMap(v0, v1, inst.unitOrMS(), axisStartPx, axisEndPx)
+	}
+	return layout.ComputeTickMap(inst.unitsToTime(v0), inst.unitsToTime(v1), axisStartPx, axisEndPx, inst.loc, timeticks.TimeStep{})
+}
+
+// formatValue renders an axis value for a tooltip: with the calendar layout
+// on the calendar, as an offset with millisecond precision otherwise.
+func (inst *Timeline) formatValue(v int64, calendarLayout string) (s string) {
+	if inst.offsetAxis {
+		return timeticks.FormatOffset(time.Duration(v)*inst.unitOrMS(), time.Millisecond)
+	}
+	return time.UnixMilli(v).UTC().Format(calendarLayout)
 }

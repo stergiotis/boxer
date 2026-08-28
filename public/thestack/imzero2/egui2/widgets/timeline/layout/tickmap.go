@@ -42,6 +42,13 @@ type TickMap struct {
 	Step         timeticks.TimeStep
 	Ticks        []TickAtX
 	RolloverRows []RolloverRowAtX
+	// Unit, ViewMinU and ViewMaxU are set by [ComputeOffsetTickMap]: the
+	// axis counts Unit from a zero that is not a calendar instant, and the
+	// x mapping uses these counts. Unit == 0 is the calendar map, whose
+	// mapping goes through ViewMin and ViewMax in milliseconds.
+	Unit     time.Duration
+	ViewMinU int64
+	ViewMaxU int64
 }
 
 // ComputeTickMap calls boxer's timeticks.TimeTicks for the [viewMin,viewMax]
@@ -124,33 +131,36 @@ func (inst TickMap) MapTimeToX(t time.Time) (px float64) {
 	return
 }
 
-// MapMSToX is the int64-epoch-milliseconds form of MapTimeToX. Use when
-// driving the renderer directly from PointEvent.TMS / IntervalEvent.FromMS
-// without going through time.Time.
+// MapMSToX maps an axis value — milliseconds since the epoch on a calendar
+// map, a count of Unit on an offset map — to a pixel.
 func (inst TickMap) MapMSToX(tMS int64) (px float64) {
+	if inst.Unit > 0 {
+		span := float64(inst.ViewMaxU - inst.ViewMinU)
+		if span <= 0 {
+			return inst.AxisStartPx
+		}
+		norm := float64(tMS-inst.ViewMinU) / span
+		return inst.AxisStartPx + norm*(inst.AxisEndPx-inst.AxisStartPx)
+	}
 	px = inst.MapTimeToX(time.UnixMilli(tMS).UTC())
 	return
 }
 
-// MapXToMS is the inverse of MapMSToX: given a screen-x coordinate
-// (already in the axis pixel range), return the corresponding epoch-ms
-// time. Useful for cursor-driven readouts. Returns the view minimum's
-// epoch-ms for a degenerate axis; the caller should clamp px to
-// [AxisStartPx, AxisEndPx] before calling if extrapolation is undesirable.
-//
-// Uses math.Floor on the millisecond offset to extrapolate consistently
-// in both directions: int64(...) truncates toward zero, which for px
-// LEFT of AxisStartPx produces a value AT or RIGHT of ViewMin instead of
-// left of it — wrong direction. math.Floor fixes that without affecting
-// the in-range case.
+// MapXToMS is the inverse of [TickMap.MapMSToX]; a pixel left of the axis
+// maps below the view's start, so a brush that leaves the axis keeps its
+// direction.
 func (inst TickMap) MapXToMS(px float64) (tMS int64) {
 	width := inst.AxisEndPx - inst.AxisStartPx
 	viewMinMS := inst.ViewMin.UnixMilli()
+	spanMS := inst.ViewMax.UnixMilli() - viewMinMS
+	if inst.Unit > 0 {
+		viewMinMS = inst.ViewMinU
+		spanMS = inst.ViewMaxU - inst.ViewMinU
+	}
 	if width <= 0 {
 		tMS = viewMinMS
 		return
 	}
-	spanMS := inst.ViewMax.UnixMilli() - viewMinMS
 	frac := (px - inst.AxisStartPx) / width
 	tMS = viewMinMS + int64(math.Floor(frac*float64(spanMS)))
 	return

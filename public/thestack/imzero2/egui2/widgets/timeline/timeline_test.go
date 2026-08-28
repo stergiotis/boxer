@@ -171,12 +171,12 @@ func TestSplitLines(t *testing.T) {
 
 func TestFormatAnnotationTooltip(t *testing.T) {
 	a := &layout.Annotation{TMS: time.Date(2026, 5, 15, 9, 0, 0, 0, time.UTC).UnixMilli(), Number: 3, Label: "deploy"}
-	got := formatAnnotationTooltip(a)
+	got := (&Timeline{}).formatAnnotationTooltip(a)
 	if got != "#3  deploy\n2026-05-15 09:00:00" {
 		t.Errorf("got %q", got)
 	}
 	a.Label = ""
-	got = formatAnnotationTooltip(a)
+	got = (&Timeline{}).formatAnnotationTooltip(a)
 	if got != "#3\n2026-05-15 09:00:00" {
 		t.Errorf("no-label: got %q", got)
 	}
@@ -188,7 +188,7 @@ func TestFormatBandTooltip(t *testing.T) {
 		ToMS:   time.Date(2026, 5, 17, 0, 0, 0, 0, time.UTC).UnixMilli(),
 		Label:  "Saturday",
 	}
-	got := formatBandTooltip(b)
+	got := (&Timeline{}).formatBandTooltip(b)
 	if got != "Saturday\n2026-05-16 00:00 – 2026-05-17 00:00" {
 		t.Errorf("got %q", got)
 	}
@@ -298,11 +298,11 @@ func TestComputeViewRange_AutoFit(t *testing.T) {
 	tl := newTestTimeline(t, []*layout.IntervalEvent{a, b})
 	t0, t1 := tl.computeViewRange()
 	// Auto-fit: from min FromMS to max ToMS, padded by 2% on each side.
-	if t0.UnixMilli() >= 1000 {
-		t.Errorf("t0: got %d want < 1000 (padding)", t0.UnixMilli())
+	if t0 >= 1000 {
+		t.Errorf("t0: got %d want < 1000 (padding)", t0)
 	}
-	if t1.UnixMilli() <= 6000 {
-		t.Errorf("t1: got %d want > 6000 (padding)", t1.UnixMilli())
+	if t1 <= 6000 {
+		t.Errorf("t1: got %d want > 6000 (padding)", t1)
 	}
 }
 
@@ -311,7 +311,7 @@ func TestComputeViewRange_Explicit(t *testing.T) {
 	pinnedEnd := pinned.Add(time.Hour)
 	tl := newTestTimeline(t, nil, WithRange(pinned, pinnedEnd))
 	t0, t1 := tl.computeViewRange()
-	if !t0.Equal(pinned) || !t1.Equal(pinnedEnd) {
+	if t0 != pinned.UnixMilli() || t1 != pinnedEnd.UnixMilli() {
 		t.Errorf("explicit range not preserved: got [%v,%v]", t0, t1)
 	}
 }
@@ -319,9 +319,65 @@ func TestComputeViewRange_Explicit(t *testing.T) {
 func TestComputeViewRange_EmptyFallbackToNowHour(t *testing.T) {
 	tl := newTestTimeline(t, nil)
 	t0, t1 := tl.computeViewRange()
-	span := t1.Sub(t0)
+	span := time.Duration(t1-t0) * time.Millisecond
 	if span < emptyFallback || span > emptyFallback+time.Second {
 		t.Errorf("empty fallback span: got %v want ~%v", span, emptyFallback)
+	}
+}
+
+// ADR-0043 SD17: an offset axis counts its unit from zero — the view, the
+// ticks, the tooltips and the LOD scales all work in that unit, and the
+// calendar-only paths stay quiet.
+func TestOffsetAxis_UnitsViewTicksAndTooltips(t *testing.T) {
+	// Microsecond axis over a 24 s recording.
+	a := &layout.IntervalEvent{FromMS: 1_000_000, ToMS: 2_500_000}
+	tl := newTestTimeline(t, []*layout.IntervalEvent{a}, WithOffsetAxis(time.Microsecond), WithLockedView(true))
+	if !tl.IsOffsetAxis() || tl.Unit() != time.Microsecond {
+		t.Fatalf("offset axis not configured: offset=%v unit=%v", tl.IsOffsetAxis(), tl.Unit())
+	}
+	tl.SetRangeUnits(0, 24_000_000)
+	v0, v1 := tl.computeViewRange()
+	if v0 != 0 || v1 != 24_000_000 {
+		t.Fatalf("view range: got [%d,%d] want [0,24000000]", v0, v1)
+	}
+	tm := tl.computeTickMap(v0, v1, 0, 1200)
+	if len(tm.Ticks) == 0 {
+		t.Fatal("offset tick map has no ticks")
+	}
+	if tm.Ticks[0].Label != "0:00" {
+		t.Errorf("first tick label: got %q want %q", tm.Ticks[0].Label, "0:00")
+	}
+	if len(tm.RolloverRows) != 0 {
+		t.Errorf("offset axis must not carry calendar rollover rows, got %d", len(tm.RolloverRows))
+	}
+	// The x mapping is in units: 12 s is the middle of the axis.
+	if x := tm.MapMSToX(12_000_000); x < 599 || x > 601 {
+		t.Errorf("MapMSToX(12 s): got %v want 600", x)
+	}
+	if back := tm.MapXToMS(600); back < 11_999_000 || back > 12_001_000 {
+		t.Errorf("MapXToMS(600): got %d want ~12000000", back)
+	}
+	// Tooltips print offsets, not 1970 dates.
+	tip := tl.formatIntervalTooltip(a, "")
+	if tip != "0:01.000 – 0:02.500\n1.5s" {
+		t.Errorf("interval tooltip: got %q", tip)
+	}
+	// The time.Time surface maps through the Unix epoch.
+	from, to, ok := tl.ViewRangeUnits()
+	if ok {
+		t.Errorf("no frame rendered yet, ViewRangeUnits must report ok=false (got %d,%d)", from, to)
+	}
+	tl.SetRange(time.Unix(0, 0).UTC().Add(2*time.Second), time.Unix(0, 0).UTC().Add(4*time.Second))
+	v0, v1 = tl.computeViewRange()
+	if v0 != 2_000_000 || v1 != 4_000_000 {
+		t.Errorf("SetRange through the epoch: got [%d,%d] want [2000000,4000000]", v0, v1)
+	}
+}
+
+func TestOffsetAxis_LODScalesInUnits(t *testing.T) {
+	idx := layout.BuildLODIndexUnit(nil, []time.Duration{time.Millisecond, 10 * time.Millisecond}, time.Microsecond)
+	if idx.ScaleMS(0) != 1000 || idx.ScaleMS(1) != 10_000 {
+		t.Errorf("scales in microseconds: got %d, %d want 1000, 10000", idx.ScaleMS(0), idx.ScaleMS(1))
 	}
 }
 
