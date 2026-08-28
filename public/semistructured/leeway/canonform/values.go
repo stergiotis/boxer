@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/runtime"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
@@ -49,9 +50,9 @@ func scalarOf(ct canonicaltypes.PrimitiveAstNodeI) canonicaltypes.PrimitiveAstNo
 // canonical type ct (ADR-0201 SD3). The Arrow array decides how the value is
 // read; ct decides what it means (text vs. bytes, temporal, network). An
 // Arrow null writes CBOR null.
-func writeScalar(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.PrimitiveAstNodeI) (err error) {
+func writeScalar(cw *runtime.CborWriter, arr arrow.Array, i int, ct canonicaltypes.PrimitiveAstNodeI) (err error) {
 	if arr.IsNull(i) {
-		cw.writeNull()
+		cw.WriteNull()
 		return
 	}
 	switch n := ct.(type) {
@@ -75,7 +76,7 @@ func writeScalar(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.Primi
 	return eb.Build().Stringer("canonicalType", ct).Errorf("canonform: unsupported canonical type")
 }
 
-func writeMachineNumeric(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.MachineNumericTypeAstNode) (err error) {
+func writeMachineNumeric(cw *runtime.CborWriter, arr arrow.Array, i int, ct canonicaltypes.MachineNumericTypeAstNode) (err error) {
 	switch ct.Width {
 	case 8, 16, 32, 64:
 	default:
@@ -86,27 +87,27 @@ func writeMachineNumeric(cw *cborWriter, arr arrow.Array, i int, ct canonicaltyp
 	}
 	switch a := arr.(type) {
 	case *array.Uint8:
-		cw.writeUint(uint64(a.Value(i)))
+		cw.WriteUint(uint64(a.Value(i)))
 	case *array.Uint16:
-		cw.writeUint(uint64(a.Value(i)))
+		cw.WriteUint(uint64(a.Value(i)))
 	case *array.Uint32:
-		cw.writeUint(uint64(a.Value(i)))
+		cw.WriteUint(uint64(a.Value(i)))
 	case *array.Uint64:
-		cw.writeUint(a.Value(i))
+		cw.WriteUint(a.Value(i))
 	case *array.Int8:
-		cw.writeInt(int64(a.Value(i)))
+		cw.WriteInt(int64(a.Value(i)))
 	case *array.Int16:
-		cw.writeInt(int64(a.Value(i)))
+		cw.WriteInt(int64(a.Value(i)))
 	case *array.Int32:
-		cw.writeInt(int64(a.Value(i)))
+		cw.WriteInt(int64(a.Value(i)))
 	case *array.Int64:
-		cw.writeInt(a.Value(i))
+		cw.WriteInt(a.Value(i))
 	case *array.Float16:
-		cw.writeFloat(float64(a.Value(i).Float32()))
+		writeFloatReduced(cw, float64(a.Value(i).Float32()))
 	case *array.Float32:
-		cw.writeFloat(float64(a.Value(i)))
+		writeFloatReduced(cw, float64(a.Value(i)))
 	case *array.Float64:
-		cw.writeFloat(a.Value(i))
+		writeFloatReduced(cw, a.Value(i))
 	default:
 		return eb.Build().Stringer("canonicalType", ct).Stringer("arrowType", arr.DataType()).Errorf("canonform: Arrow array type not supported for a machine-numeric column")
 	}
@@ -133,7 +134,7 @@ func valueBytes(arr arrow.Array, i int) (b []byte, ok bool) {
 	return
 }
 
-func writeStringLike(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.StringAstNode) (err error) {
+func writeStringLike(cw *runtime.CborWriter, arr arrow.Array, i int, ct canonicaltypes.StringAstNode) (err error) {
 	switch ct.BaseType {
 	case canonicaltypes.BaseTypeStringBool:
 		if ct.WidthModifier != canonicaltypes.WidthModifierNone {
@@ -142,9 +143,9 @@ func writeStringLike(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.S
 		}
 		switch a := arr.(type) {
 		case *array.Boolean:
-			cw.writeBool(a.Value(i))
+			cw.WriteBool(a.Value(i))
 		case *array.Uint8: // ClickHouse Bool over some Arrow lanes
-			cw.writeBool(a.Value(i) != 0)
+			cw.WriteBool(a.Value(i) != 0)
 		default:
 			return eb.Build().Stringer("canonicalType", ct).Stringer("arrowType", arr.DataType()).Errorf("canonform: Arrow array type not supported for a bool column")
 		}
@@ -153,13 +154,13 @@ func writeStringLike(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.S
 		if !ok {
 			return eb.Build().Stringer("canonicalType", ct).Stringer("arrowType", arr.DataType()).Errorf("canonform: Arrow array type not supported for a text column")
 		}
-		cw.writeText(b) // verbatim: no Unicode normalization, the fixed-width modifier is erased, padding is kept (SD3)
+		cw.WriteText(b) // verbatim: no Unicode normalization, the fixed-width modifier is erased, padding is kept (SD3)
 	case canonicaltypes.BaseTypeStringBytes:
 		b, ok := valueBytes(arr, i)
 		if !ok {
 			return eb.Build().Stringer("canonicalType", ct).Stringer("arrowType", arr.DataType()).Errorf("canonform: Arrow array type not supported for a bytes column")
 		}
-		cw.writeBytes(b)
+		cw.WriteBytes(b)
 	default:
 		return eb.Build().Stringer("canonicalType", ct).Errorf("canonform: unsupported string-like base type")
 	}
@@ -183,7 +184,7 @@ func floorDivMod(v int64, d int64) (q int64, r int64) {
 // non-zero (ADR-0201 SD3). The Arrow unit and the canonical width are erased
 // by integer arithmetic; a whole-second instant encodes identically from z32
 // and z64. The keys sort 0x01 < 0x28 bytewise, so the map is written 1, -9.
-func writeTemporal(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.TemporalTypeAstNode) (err error) {
+func writeTemporal(cw *runtime.CborWriter, arr arrow.Array, i int, ct canonicaltypes.TemporalTypeAstNode) (err error) {
 	if ct.BaseType != canonicaltypes.BaseTypeTemporalUtcDatetime {
 		// Zoned datetime / time are unimplemented on every lane (SD3).
 		return eb.Build().Stringer("canonicalType", ct).Errorf("canonform: temporal base type not supported")
@@ -217,18 +218,18 @@ func writeTemporal(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.Tem
 	default:
 		return eb.Build().Stringer("canonicalType", ct).Stringer("arrowType", arr.DataType()).Errorf("canonform: Arrow array type not supported for a temporal column")
 	}
-	cw.tag(tagExtendedTime)
+	cw.Tag(runtime.TagExtendedTime)
 	if nanos == 0 {
-		cw.mapHead(1)
-		cw.writeUint(1)
-		cw.writeInt(secs)
+		cw.MapHead(1)
+		cw.WriteUint(1)
+		cw.WriteInt(secs)
 		return
 	}
-	cw.mapHead(2)
-	cw.writeUint(1)
-	cw.writeInt(secs)
-	cw.writeInt(-9)
-	cw.writeUint(uint64(nanos))
+	cw.MapHead(2)
+	cw.WriteUint(1)
+	cw.WriteInt(secs)
+	cw.WriteInt(-9)
+	cw.WriteUint(uint64(nanos))
 	return
 }
 
@@ -253,7 +254,7 @@ func isIPv4Mapped(addr []byte) bool {
 // [prefix-length, address bytes with the unused bits zeroed and trailing zero
 // bytes omitted]. An IPv6 value in the IPv4-mapped range is reduced to IPv4
 // (a prefix of length ≥ 96 reduces by 96), so a v → w widening is invariant.
-func writeNetwork(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.NetworkTypeAstNode) (err error) {
+func writeNetwork(cw *runtime.CborWriter, arr arrow.Array, i int, ct canonicaltypes.NetworkTypeAstNode) (err error) {
 	var addr [17]byte // up to 16 address bytes plus the CIDR prefix byte
 	var n int
 	switch a := arr.(type) {
@@ -278,21 +279,21 @@ func writeNetwork(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.Netw
 		addrLen = n - 1
 		prefix = int(addr[addrLen])
 	}
-	tag := tagIPv4
+	tag := runtime.TagIPv4
 	if ct.BaseType == canonicaltypes.BaseTypeNetworkIPv6 {
-		tag = tagIPv6
+		tag = runtime.TagIPv6
 		if addrLen == 16 && isIPv4Mapped(addr[:16]) && (prefix < 0 || prefix >= ipv4MappedPrefixLen) {
 			copy(addr[:4], addr[12:16])
 			addrLen = 4
-			tag = tagIPv4
+			tag = runtime.TagIPv4
 			if prefix >= 0 {
 				prefix -= ipv4MappedPrefixLen
 			}
 		}
 	}
-	cw.tag(tag)
+	cw.Tag(tag)
 	if prefix < 0 {
-		cw.writeBytes(addr[:addrLen])
+		cw.WriteBytes(addr[:addrLen])
 		return
 	}
 	if prefix > addrLen*8 {
@@ -312,9 +313,9 @@ func writeNetwork(cw *cborWriter, arr arrow.Array, i int, ct canonicaltypes.Netw
 	for end > 0 && addr[end-1] == 0 {
 		end--
 	}
-	cw.arrayHead(2)
-	cw.writeUint(uint64(prefix))
-	cw.writeBytes(addr[:end])
+	cw.ArrayHead(2)
+	cw.WriteUint(uint64(prefix))
+	cw.WriteBytes(addr[:end])
 	return
 }
 

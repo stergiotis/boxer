@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/runtime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole"
@@ -58,8 +59,9 @@ type Encoder struct {
 	opts Options
 	dig  DigesterI
 	size int
-	cw   cborWriter // the hasher writer
-	sw   cborWriter // the scratch writer, for elements sorted before hashing
+	cw   *runtime.CborWriter // the hasher writer
+	sw   *runtime.CborWriter // the scratch writer, for elements sorted before hashing
+	kw   *runtime.CborWriter // the key writer, for the cached name encodings
 	sbuf bytes.Buffer
 
 	// Per co-section group (by key): the owning section of every merged value
@@ -170,10 +172,6 @@ func NewEncoder(tblDesc *common.TableDesc, ir *common.IntermediateTableRepresent
 		err = eh.Errorf("canonform: digester reports a non-positive digest size")
 		return
 	}
-	encMode, err := newCoreDetEncMode()
-	if err != nil {
-		return
-	}
 	inst = &Encoder{
 		opts:               opts,
 		dig:                dig,
@@ -182,9 +180,18 @@ func NewEncoder(tblDesc *common.TableDesc, ir *common.IntermediateTableRepresent
 		layouts:            make(map[string]*valueLayout, 16),
 		plainKeys:          make(map[naming.StylableName][]byte, 8),
 	}
-	inst.cw.initFloatEncoder(encMode)
-	inst.sw.initFloatEncoder(encMode)
-	inst.sw.reset(&inst.sbuf)
+	if inst.cw, err = runtime.NewCborWriter(nil); err != nil {
+		inst = nil
+		return
+	}
+	if inst.sw, err = runtime.NewCborWriter(&inst.sbuf); err != nil {
+		inst = nil
+		return
+	}
+	if inst.kw, err = runtime.NewCborWriter(nil); err != nil {
+		inst = nil
+		return
+	}
 	for _, tv := range ir.TaggedValueDesc {
 		if tv == nil || tv.CoSectionGroup == "" {
 			continue
@@ -253,15 +260,15 @@ func (inst *Encoder) EndEntity() (err error) {
 		return inst.err
 	}
 	h := inst.dig.NewRecord()
-	cw := &inst.cw
-	cw.reset(h)
-	cw.mapHead(2)
-	cw.writeUint(0)
+	cw := inst.cw
+	cw.Reset(h)
+	cw.MapHead(2)
+	cw.WriteUint(0)
 	inst.writePlains(cw)
-	cw.writeUint(1)
+	cw.WriteUint(1)
 	inst.writeLeaves(cw)
-	if cw.err != nil {
-		inst.fail(cw.err)
+	if cw.Err() != nil {
+		inst.fail(cw.Err())
 		return inst.err
 	}
 	before := len(inst.recordDigests)
@@ -278,14 +285,14 @@ func (inst *Encoder) EndEntity() (err error) {
 
 // writePlains writes the plains map: name → value, keys sorted bytewise by
 // their text encoding (ADR-0201 SD1).
-func (inst *Encoder) writePlains(cw *cborWriter) {
+func (inst *Encoder) writePlains(cw *runtime.CborWriter) {
 	ps := inst.plains
 	slices.SortFunc(ps, func(a, b colView) int {
 		return bytes.Compare(inst.plainKey(a.name), inst.plainKey(b.name))
 	})
-	cw.mapHead(len(ps))
+	cw.MapHead(len(ps))
 	for i := range ps {
-		cw.write(inst.plainKey(ps[i].name))
+		cw.Write(inst.plainKey(ps[i].name))
 		inst.writeView(cw, &ps[i].v, ps[i].ct)
 	}
 }
@@ -296,8 +303,9 @@ func (inst *Encoder) plainKey(name naming.StylableName) []byte {
 		return k
 	}
 	var b bytes.Buffer
-	w := cborWriter{w: &b}
-	w.writeTextString(string(name))
+	w := inst.kw
+	w.Reset(&b)
+	w.WriteTextString(string(name))
 	k := append([]byte(nil), b.Bytes()...)
 	inst.plainKeys[name] = k
 	return k
@@ -305,15 +313,15 @@ func (inst *Encoder) plainKey(name naming.StylableName) []byte {
 
 // writeLeaves sorts the leaf digests bytewise and writes them as an array of
 // byte strings.
-func (inst *Encoder) writeLeaves(cw *cborWriter) {
+func (inst *Encoder) writeLeaves(cw *runtime.CborWriter) {
 	n := len(inst.leaves) / inst.size
 	if len(inst.tmp) < inst.size {
 		inst.tmp = make([]byte, inst.size)
 	}
 	sort.Sort(&chunkSorter{b: inst.leaves, size: inst.size, n: n, tmp: inst.tmp})
-	cw.arrayHead(n)
+	cw.ArrayHead(n)
 	for i := range n {
-		cw.writeBytes(inst.leaves[i*inst.size : (i+1)*inst.size])
+		cw.WriteBytes(inst.leaves[i*inst.size : (i+1)*inst.size])
 	}
 }
 
@@ -401,13 +409,14 @@ func (inst *Encoder) layoutFor(sectionName naming.StylableName, valueNames []nam
 		}
 	}
 	var b bytes.Buffer
+	w := inst.kw
+	w.Reset(&b)
 	for i, n := range valueNames {
 		b.Reset()
-		w := cborWriter{w: &b}
 		if inst.inCoGroup && i < len(secs) {
-			w.writeTextString(string(secs[i]) + ":" + string(n))
+			w.WriteTextString(string(secs[i]) + ":" + string(n))
 		} else {
-			w.writeTextString(string(n))
+			w.WriteTextString(string(n))
 		}
 		l.keyEnc[i] = append([]byte(nil), b.Bytes()...)
 		l.order[i] = i
@@ -457,13 +466,13 @@ func (inst *Encoder) EndTaggedValue() (err error) {
 		return
 	}
 	h := inst.dig.NewLeaf()
-	cw := &inst.cw
-	cw.reset(h)
-	cw.arrayHead(2)
+	cw := inst.cw
+	cw.Reset(h)
+	cw.ArrayHead(2)
 	inst.writeMemberships(cw)
 	inst.writeAttributeValue(cw)
-	if cw.err != nil {
-		inst.fail(cw.err)
+	if cw.Err() != nil {
+		inst.fail(cw.Err())
 		return inst.err
 	}
 	inst.leaves = h.Sum(inst.leaves)
@@ -473,10 +482,10 @@ func (inst *Encoder) EndTaggedValue() (err error) {
 // writeMemberships writes the kept memberships as an array sorted bytewise by
 // element encoding (ADR-0201 SD5). The elements are encoded into the scratch
 // buffer first, sorted by offset, then written.
-func (inst *Encoder) writeMemberships(cw *cborWriter) {
-	sw := &inst.sw
+func (inst *Encoder) writeMemberships(cw *runtime.CborWriter) {
+	sw := inst.sw
 	inst.sbuf.Reset()
-	sw.reset(&inst.sbuf)
+	sw.Reset(&inst.sbuf)
 	inst.ranges = inst.ranges[:0]
 	for i := range inst.members {
 		m := &inst.members[i]
@@ -486,35 +495,35 @@ func (inst *Encoder) writeMemberships(cw *cborWriter) {
 		start := inst.sbuf.Len()
 		switch m.kind {
 		case membership.IdentityRef:
-			sw.writeUint(m.ref)
+			sw.WriteUint(m.ref)
 		case membership.IdentityVerbatim:
-			sw.writeBytesString(m.verbatim)
+			sw.WriteBytesString(m.verbatim)
 		case membership.IdentityPerRowId:
-			sw.arrayHead(2)
-			sw.writeUint(m.ref)
-			sw.writeBytesString(m.params)
+			sw.ArrayHead(2)
+			sw.WriteUint(m.ref)
+			sw.WriteBytesString(m.params)
 		case membership.IdentityPerRowName:
-			sw.arrayHead(2)
-			sw.writeBytesString(m.verbatim)
-			sw.writeBytesString(m.params)
+			sw.ArrayHead(2)
+			sw.WriteBytesString(m.verbatim)
+			sw.WriteBytesString(m.params)
 		case membership.IdentityPerRowBlob:
-			sw.arrayHead(1)
-			sw.writeBytesString(m.params)
+			sw.ArrayHead(1)
+			sw.WriteBytesString(m.params)
 		default:
 			inst.fail(eb.Build().Stringer("kind", m.kind).Errorf("canonform: unknown membership identity encoding"))
 			return
 		}
 		inst.ranges = append(inst.ranges, scratchRange{start: start, end: inst.sbuf.Len()})
 	}
-	if sw.err != nil {
-		inst.fail(sw.err)
+	if sw.Err() != nil {
+		inst.fail(sw.Err())
 		return
 	}
 	buf := inst.sbuf.Bytes()
 	slices.SortFunc(inst.ranges, func(a, b scratchRange) int { return bytes.Compare(buf[a.start:a.end], buf[b.start:b.end]) })
-	cw.arrayHead(len(inst.ranges))
+	cw.ArrayHead(len(inst.ranges))
 	for _, r := range inst.ranges {
-		cw.write(buf[r.start:r.end])
+		cw.Write(buf[r.start:r.end])
 	}
 }
 
@@ -522,10 +531,10 @@ func (inst *Encoder) writeMemberships(cw *cborWriter) {
 // SD6): null for a value-less section, the bare value for a single column of
 // a standalone section, otherwise a map keyed by column name — or by the
 // `section:column` handle inside a co-section group — in the layout's order.
-func (inst *Encoder) writeAttributeValue(cw *cborWriter) {
+func (inst *Encoder) writeAttributeValue(cw *runtime.CborWriter) {
 	n := len(inst.cols)
 	if n == 0 {
-		cw.writeNull()
+		cw.WriteNull()
 		return
 	}
 	if n == 1 && !inst.inCoGroup {
@@ -537,9 +546,9 @@ func (inst *Encoder) writeAttributeValue(cw *cborWriter) {
 		inst.fail(eb.Build().Str("section", string(inst.curSectionName)).Int("driven", n).Errorf("canonform: attribute column count disagrees with the section layout"))
 		return
 	}
-	cw.mapHead(n)
+	cw.MapHead(n)
 	for _, ord := range l.order {
-		cw.write(l.keyEnc[ord])
+		cw.Write(l.keyEnc[ord])
 		inst.writeView(cw, &inst.cols[ord].v, inst.cols[ord].ct)
 	}
 }
@@ -547,7 +556,7 @@ func (inst *Encoder) writeAttributeValue(cw *cborWriter) {
 // writeView writes one column's value from its Arrow view (ADR-0201 SD3/SD4):
 // the scalar form, an array of element forms in order, or a tag-258 set of
 // the distinct element forms sorted bytewise.
-func (inst *Encoder) writeView(cw *cborWriter, v *view, ct canonicaltypes.PrimitiveAstNodeI) {
+func (inst *Encoder) writeView(cw *runtime.CborWriter, v *view, ct canonicaltypes.PrimitiveAstNodeI) {
 	switch v.kind {
 	case viewKindScalar:
 		if err := writeScalar(cw, v.arr, v.idx, ct); err != nil {
@@ -555,7 +564,7 @@ func (inst *Encoder) writeView(cw *cborWriter, v *view, ct canonicaltypes.Primit
 		}
 	case viewKindArray:
 		elem := scalarOf(ct)
-		cw.arrayHead(v.end - v.start)
+		cw.ArrayHead(v.end - v.start)
 		for i := v.start; i < v.end; i++ {
 			if err := writeScalar(cw, v.arr, i, elem); err != nil {
 				inst.fail(err)
@@ -572,10 +581,10 @@ func (inst *Encoder) writeView(cw *cborWriter, v *view, ct canonicaltypes.Primit
 // writeSet encodes the set's elements into the scratch buffer, sorts them
 // bytewise, drops duplicates (equality of canonical bytes) and writes
 // tag 258 + the array.
-func (inst *Encoder) writeSet(cw *cborWriter, v *view, elem canonicaltypes.PrimitiveAstNodeI) {
-	sw := &inst.sw
+func (inst *Encoder) writeSet(cw *runtime.CborWriter, v *view, elem canonicaltypes.PrimitiveAstNodeI) {
+	sw := inst.sw
 	inst.sbuf.Reset()
-	sw.reset(&inst.sbuf)
+	sw.Reset(&inst.sbuf)
 	inst.ranges = inst.ranges[:0]
 	for i := v.start; i < v.end; i++ {
 		start := inst.sbuf.Len()
@@ -585,8 +594,8 @@ func (inst *Encoder) writeSet(cw *cborWriter, v *view, elem canonicaltypes.Primi
 		}
 		inst.ranges = append(inst.ranges, scratchRange{start: start, end: inst.sbuf.Len()})
 	}
-	if sw.err != nil {
-		inst.fail(sw.err)
+	if sw.Err() != nil {
+		inst.fail(sw.Err())
 		return
 	}
 	buf := inst.sbuf.Bytes()
@@ -602,10 +611,10 @@ func (inst *Encoder) writeSet(cw *cborWriter, v *view, elem canonicaltypes.Primi
 		w++
 	}
 	rs = rs[:w]
-	cw.tag(tagSet)
-	cw.arrayHead(len(rs))
+	cw.Tag(runtime.TagSet)
+	cw.ArrayHead(len(rs))
 	for _, r := range rs {
-		cw.write(buf[r.start:r.end])
+		cw.Write(buf[r.start:r.end])
 	}
 }
 

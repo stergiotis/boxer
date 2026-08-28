@@ -13,6 +13,11 @@
 // materialized: every attribute item streams into its own keyed hasher and
 // the entity item holds the plains plus the sorted 32-byte leaf digests.
 //
+// The CBOR writer is canonwire/runtime.CborWriter, shared with the leeway
+// canonical wire (ADR-0207). What is the quotient's own — the numeric
+// reduction (writeFloatReduced), the sorted memberships, the tag-258 sets —
+// stays in this package and layers on top of that writer.
+//
 // Encoder is a streamreadaccess sink: it implements SinkI together with the
 // optional MembershipSinkI, ArrowValueSinkI (Arrow views in place of the text
 // lane — the form needs the exact Float32, not its rendering) and
