@@ -62,9 +62,9 @@ pub struct AppConfig {
     /// fffi interpreter
     pub fffi_interpreter: bool,
 
-    /// path to main font TTF/OTF file (FontFamily::Proportional base)
+    /// path to main font TTF/OTF file (`FontFamily::Proportional` base)
     pub main_font_ttf: String,
-    /// path to monospace font TTF/OTF file (FontFamily::Monospace base).
+    /// path to monospace font TTF/OTF file (`FontFamily::Monospace` base).
     /// Empty leaves Monospace at egui's built-in default (Hack).
     pub mono_font_ttf: String,
     /// path to Phosphor TTF file (ADR-0044 — icon font; fallback in
@@ -76,21 +76,21 @@ pub struct AppConfig {
     /// main font size in pixels
     pub main_font_size: f32,
 
-    /// per-font tweaks (scale, y_offset_factor, y_offset)
+    /// per-font tweaks (scale, `y_offset_factor`, `y_offset`)
     pub main_font_tweak: FontTweakConfig,
     pub mono_font_tweak: FontTweakConfig,
     pub phosphor_font_tweak: FontTweakConfig,
     pub fallback_font_tweak: FontTweakConfig,
 }
 impl Default for AppConfig {
-    fn default() -> AppConfig {
-        AppConfig {
+    fn default() -> Self {
+        Self {
             initial_main_window_width: 1024.0f32,
             initial_main_window_height: 796.0f32,
             inner_min_size_width: 400.0f32,
             inner_min_size_height: 300.0f32,
-            window_title: "imzero2".to_string(),
-            app_title: "imzero2".to_string(),
+            window_title: "imzero2".to_owned(),
+            app_title: "imzero2".to_owned(),
             fullscreen: false,
             vsync: true,
             background_color_rgba: None,
@@ -127,10 +127,9 @@ impl AppConfig {
         self.vsync = flags::find_flag_value_default_bool(args, used, "-vsync", self.vsync);
 
         self.window_title =
-            flags::find_flag_default(args, used, "-windowTitle", self.window_title.clone())
-                .to_owned();
+            flags::find_flag_default(args, used, "-windowTitle", self.window_title.clone());
         self.app_title =
-            flags::find_flag_default(args, used, "-appTitle", self.window_title.clone()).to_owned();
+            flags::find_flag_default(args, used, "-appTitle", self.window_title.clone());
 
         self.vsync = flags::find_flag_value_default_bool(args, used, "-vsync", self.vsync);
         self.background_color_rgba = parse_background_color(&flags::find_flag_default(
@@ -148,25 +147,21 @@ impl AppConfig {
         );
 
         self.main_font_ttf =
-            flags::find_flag_default(args, used, "-mainFontTTF", self.main_font_ttf.clone())
-                .to_owned();
+            flags::find_flag_default(args, used, "-mainFontTTF", self.main_font_ttf.clone());
         self.mono_font_ttf =
-            flags::find_flag_default(args, used, "-monoFontTTF", self.mono_font_ttf.clone())
-                .to_owned();
+            flags::find_flag_default(args, used, "-monoFontTTF", self.mono_font_ttf.clone());
         self.phosphor_font_ttf = flags::find_flag_default(
             args,
             used,
             "-phosphorFontTTF",
             self.phosphor_font_ttf.clone(),
-        )
-        .to_owned();
+        );
         self.fallback_font_ttf = flags::find_flag_default(
             args,
             used,
             "-fallbackFontTTF",
             self.fallback_font_ttf.clone(),
-        )
-        .to_owned();
+        );
         self.main_font_size = flags::find_flag_value_default_parsable(
             args,
             used,
@@ -251,31 +246,31 @@ impl AppConfig {
         );
     }
     pub fn usage(&mut self, w: &mut impl std::io::Write) -> std::io::Result<()> {
-        write!(w, "usage:\n")?;
-        write!(w, "info flags:\n")?;
-        write!(w, "\t-help\n")?;
+        writeln!(w, "usage:")?;
+        writeln!(w, "info flags:")?;
+        writeln!(w, "\t-help")?;
 
-        write!(w, "general flags:\n")?;
-        write!(
+        writeln!(w, "general flags:")?;
+        writeln!(
             w,
-            "\t-initialMainWindowWidth [f32:{}]\n",
+            "\t-initialMainWindowWidth [f32:{}]",
             self.inner_min_size_width
         )?;
-        write!(
+        writeln!(
             w,
-            "\t-initialMainWindowHeight [f32:{}]\n",
+            "\t-initialMainWindowHeight [f32:{}]",
             self.inner_min_size_height
         )?;
 
-        write!(w, "graphics flags:\n")?;
-        write!(
+        writeln!(w, "graphics flags:")?;
+        writeln!(
             w,
-            "\t-vsync [bool:{}]\n",
+            "\t-vsync [bool:{}]",
             if self.vsync { "on" } else { "off" }
         )?;
-        write!(
+        writeln!(
             w,
-            "\t-backgroundColorRGBA [hex RRGGBB|RRGGBBAA:{}]\n",
+            "\t-backgroundColorRGBA [hex RRGGBB|RRGGBBAA:{}]",
             match self.background_color_rgba {
                 Some(c) => {
                     let [r, g, b, a] = c.to_srgba_unmultiplied();
@@ -285,82 +280,74 @@ impl AppConfig {
             }
         )?;
 
-        write!(w, "fffi flags:\n")?;
-        write!(
+        writeln!(w, "fffi flags:")?;
+        writeln!(
             w,
-            "\t-fffiInterpreter [bool:{}]\n",
+            "\t-fffiInterpreter [bool:{}]",
             if self.fffi_interpreter { "on" } else { "off" }
         )?;
 
-        write!(w, "font flags:\n")?;
-        write!(w, "\t-mainFontTTF [string:{}]\n", self.main_font_ttf)?;
-        write!(w, "\t-monoFontTTF [string:{}]\n", self.mono_font_ttf)?;
-        write!(
-            w,
-            "\t-phosphorFontTTF [string:{}]\n",
-            self.phosphor_font_ttf
-        )?;
-        write!(
-            w,
-            "\t-fallbackFontTTF [string:{}]\n",
-            self.fallback_font_ttf
-        )?;
-        write!(w, "\t-mainFontSizeInPixels [f32:{}]\n", self.main_font_size)?;
+        writeln!(w, "font flags:")?;
+        writeln!(w, "\t-mainFontTTF [string:{}]", self.main_font_ttf)?;
+        writeln!(w, "\t-monoFontTTF [string:{}]", self.mono_font_ttf)?;
+        writeln!(w, "\t-phosphorFontTTF [string:{}]", self.phosphor_font_ttf)?;
+        writeln!(w, "\t-fallbackFontTTF [string:{}]", self.fallback_font_ttf)?;
+        writeln!(w, "\t-mainFontSizeInPixels [f32:{}]", self.main_font_size)?;
 
-        write!(w, "font tweak flags:\n")?;
-        write!(w, "\t-mainFontScale [f32:{}]\n", self.main_font_tweak.scale)?;
-        write!(
+        writeln!(w, "font tweak flags:")?;
+        writeln!(w, "\t-mainFontScale [f32:{}]", self.main_font_tweak.scale)?;
+        writeln!(
             w,
-            "\t-mainFontYOffsetFactor [f32:{}]\n",
+            "\t-mainFontYOffsetFactor [f32:{}]",
             self.main_font_tweak.y_offset_factor
         )?;
-        write!(
+        writeln!(
             w,
-            "\t-mainFontYOffset [f32:{}]\n",
+            "\t-mainFontYOffset [f32:{}]",
             self.main_font_tweak.y_offset
         )?;
-        write!(w, "\t-monoFontScale [f32:{}]\n", self.mono_font_tweak.scale)?;
-        write!(
+        writeln!(w, "\t-monoFontScale [f32:{}]", self.mono_font_tweak.scale)?;
+        writeln!(
             w,
-            "\t-monoFontYOffsetFactor [f32:{}]\n",
+            "\t-monoFontYOffsetFactor [f32:{}]",
             self.mono_font_tweak.y_offset_factor
         )?;
-        write!(
+        writeln!(
             w,
-            "\t-monoFontYOffset [f32:{}]\n",
+            "\t-monoFontYOffset [f32:{}]",
             self.mono_font_tweak.y_offset
         )?;
-        write!(
+        writeln!(
             w,
-            "\t-phosphorFontScale [f32:{}]\n",
+            "\t-phosphorFontScale [f32:{}]",
             self.phosphor_font_tweak.scale
         )?;
-        write!(
+        writeln!(
             w,
-            "\t-phosphorFontYOffsetFactor [f32:{}]\n",
+            "\t-phosphorFontYOffsetFactor [f32:{}]",
             self.phosphor_font_tweak.y_offset_factor
         )?;
-        write!(
+        writeln!(
             w,
-            "\t-phosphorFontYOffset [f32:{}]\n",
+            "\t-phosphorFontYOffset [f32:{}]",
             self.phosphor_font_tweak.y_offset
         )?;
-        write!(
+        writeln!(
             w,
-            "\t-fallbackFontScale [f32:{}]\n",
+            "\t-fallbackFontScale [f32:{}]",
             self.fallback_font_tweak.scale
         )?;
-        write!(
+        writeln!(
             w,
-            "\t-fallbackFontYOffsetFactor [f32:{}]\n",
+            "\t-fallbackFontYOffsetFactor [f32:{}]",
             self.fallback_font_tweak.y_offset_factor
         )?;
-        write!(
+        writeln!(
             w,
-            "\t-fallbackFontYOffset [f32:{}]\n",
+            "\t-fallbackFontYOffset [f32:{}]",
             self.fallback_font_tweak.y_offset
         )?;
-        return Ok(());
+        Ok(())
     }
 }
 

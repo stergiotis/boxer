@@ -51,7 +51,7 @@ func TestHeadShortestArgument(t *testing.T) {
 	require.Equal(t, "d836", enc(t, func(c *CborWriter) { c.Tag(TagIPv6) }))
 	require.Equal(t, "d90102", enc(t, func(c *CborWriter) { c.Tag(TagSet) }))
 	require.Equal(t, "d903e9", enc(t, func(c *CborWriter) { c.Tag(TagExtendedTime) }))
-	require.Equal(t, "c0", enc(t, func(c *CborWriter) { c.Head(MajorTag, 0) }))
+	require.Equal(t, "c0", enc(t, func(c *CborWriter) { c.Head(MajorTypeTag, 0) }))
 }
 
 func TestWriteInt(t *testing.T) {

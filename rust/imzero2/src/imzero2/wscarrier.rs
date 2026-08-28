@@ -27,7 +27,7 @@
 //! first connection is admitted active and the rest passive (read-only).
 //! Every membership/role change rebroadcasts a per-recipient [`pb::Roster`]
 //! (each connection's copy carries its own `you_id`/`you_role`, which folds
-//! SD8's RoleChanged into the roster). Input, resize, cadence and clipboard
+//! SD8's `RoleChanged` into the roster). Input, resize, cadence and clipboard
 //! injection are honoured **only** from the active connection; passive
 //! connections are dropped at the server. Takeover (`TakeSession`) is
 //! unilateral (one principal, ADR-0082): it promotes the requester and
@@ -173,11 +173,11 @@ impl Registry {
         if self.active_id == Some(id) {
             self.active_id = None;
         }
-        if self.active_id.is_none() {
-            if let [only] = self.conns.as_mut_slice() {
-                only.role = pb::Role::Active;
-                self.active_id = Some(only.id);
-            }
+        if self.active_id.is_none()
+            && let [only] = self.conns.as_mut_slice()
+        {
+            only.role = pb::Role::Active;
+            self.active_id = Some(only.id);
         }
     }
 
@@ -318,6 +318,8 @@ impl WsCarrier {
     /// for the viewer page, then run both — plus the broadcast distributor —
     /// on a dedicated tokio thread. `waker` is signalled whenever wire
     /// activity wants a render pass soon.
+    // The carrier's whole launch configuration, given once at start.
+    #[allow(clippy::too_many_arguments)]
     pub fn start(
         listen: &str,
         width_px: u32,
@@ -446,7 +448,8 @@ impl WsCarrier {
 
     /// Latest pending runtime cadence request from the active connection.
     pub fn take_cadence(&mut self) -> Option<u32> {
-        self.inner.cadence_request.lock().ok().and_then(|mut c| c.take())
+        let mut c = self.inner.cadence_request.lock().ok()?;
+        c.take()
     }
 
     /// Record the applied cadence so future hellos report it.
@@ -465,13 +468,15 @@ impl WsCarrier {
 
     /// Latest pending viewport-resize from the active connection (latest wins).
     pub fn take_resize(&mut self) -> Option<pb::ViewportResize> {
-        self.inner.resize.lock().ok().and_then(|mut r| r.take())
+        let mut r = self.inner.resize.lock().ok()?;
+        r.take()
     }
 
     /// Latest pending clipboard paste from the active connection (ADR-0082
     /// SD6), drained by the render thread to inject `egui::Event::Paste`.
     pub fn take_paste(&mut self) -> Option<String> {
-        self.inner.paste.lock().ok().and_then(|mut p| p.take())
+        let mut p = self.inner.paste.lock().ok()?;
+        p.take()
     }
 
     /// Send host-copied text to the **active** connection's clipboard
@@ -644,11 +649,12 @@ impl WsCarrier {
 
     /// ADR-0088: a clone of the active connection's latest reported decode caps.
     pub fn decode_caps(&self) -> Option<pb::DecodeCapabilities> {
-        self.inner.decode_caps.lock().ok().and_then(|g| g.clone())
+        let g = self.inner.decode_caps.lock().ok()?;
+        g.clone()
     }
 
-    /// ADR-0088 wire telemetry for the Go control: (bytes_sent, frames_sent,
-    /// frames_decoded, frames_dropped). Cumulative for the current session
+    /// ADR-0088 wire telemetry for the Go control: (`bytes_sent`, `frames_sent`,
+    /// `frames_decoded`, `frames_dropped`). Cumulative for the current session
     /// (reset when the shared encoder respawns on the 0→1 transition).
     pub fn stats(&self) -> (u64, u64, u64, u64) {
         use std::sync::atomic::Ordering::Relaxed;
@@ -734,12 +740,13 @@ impl WsCarrier {
         if self.last_frame_hash == Some(hash) {
             return; // pixel-identical to the last fed frame
         }
-        let mut gave_up = false;
-        if let Some(enc) = &mut self.encoder {
+        let gave_up = if let Some(enc) = &mut self.encoder {
             enc.on_frame(bgra, width, height, frame_idx);
             self.last_frame_hash = Some(hash);
-            gave_up = enc.gave_up();
-        }
+            enc.gave_up()
+        } else {
+            false
+        };
         if gave_up {
             self.degrade_to_mesh("encoder supervisor gave up on the lane");
         }
@@ -828,7 +835,7 @@ impl WsCarrier {
     }
 }
 
-/// Fan the shared encoder's pre-framed NAL units (0x01 + VideoChunk) out to
+/// Fan the shared encoder's pre-framed NAL units (0x01 + `VideoChunk`) out to
 /// every connection's queue (ADR-0086 SD5 broadcast). Each connection's send
 /// is non-blocking `try_send`: a stalled viewer drops the unit (and recovers
 /// at its next decode-error reconnect) without backing up the encoder or the
@@ -1008,7 +1015,8 @@ async fn sniff_websocket(stream: &tokio::net::TcpStream) -> bool {
     let mut buf = [0u8; 2048];
     for _ in 0..10 {
         match stream.peek(&mut buf).await {
-            Ok(0) => return false,
+            // Nothing to peek at, or the peek failed: not a handshake.
+            Ok(0) | Err(_) => return false,
             Ok(n) => {
                 let head = buf.get(..n).unwrap_or_default();
                 if contains_ci(head, b"upgrade: websocket") {
@@ -1020,7 +1028,6 @@ async fn sniff_websocket(stream: &tokio::net::TcpStream) -> bool {
                     return false;
                 }
             }
-            Err(_) => return false,
         }
         tokio::time::sleep(std::time::Duration::from_millis(15)).await;
     }
@@ -1050,6 +1057,9 @@ async fn accept_loop(
     inner: std::sync::Arc<Inner>,
     page: std::sync::Arc<str>,
 ) {
+    // The carrier serves until the process ends; there is no shutdown path to
+    // break to, and an accept error is logged and retried rather than fatal.
+    #[allow(clippy::infinite_loop)]
     loop {
         let (stream, peer) = match listener.accept().await {
             Ok(x) => x,
@@ -1087,12 +1097,9 @@ async fn handle_session(
 
     // Admit into the registry. A full roster (MAX_CONNECTIONS) refuses the
     // connection — the loser is dropped (its viewer reconnects with backoff).
-    let id = match inner.registry.lock().ok().and_then(|mut r| r.admit(tx)) {
-        Some(id) => id,
-        None => {
-            tracing::info!(%peer, "rejecting connection — MAX_CONNECTIONS reached");
-            return Ok(());
-        }
+    let Some(id) = inner.registry.lock().ok().and_then(|mut r| r.admit(tx)) else {
+        tracing::info!(%peer, "rejecting connection — MAX_CONNECTIONS reached");
+        return Ok(());
     };
     // ≥ 1 connection now: the render thread renders pixels and runs the
     // shared encoder. (Idempotent — already true if others were present.)
@@ -1339,11 +1346,13 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
                     }
                 }
                 // Server→client only; ignore if a client echoes one.
-                Some(pb::session_control::Control::Hello(_))
-                | Some(pb::session_control::Control::Roster(_))
-                | Some(pb::session_control::Control::CursorShape(_))
-                | Some(pb::session_control::Control::TreeSnapshot(_))
-                | Some(pb::session_control::Control::CaptureDone(_))
+                Some(
+                    pb::session_control::Control::Hello(_)
+                    | pb::session_control::Control::Roster(_)
+                    | pb::session_control::Control::CursorShape(_)
+                    | pb::session_control::Control::TreeSnapshot(_)
+                    | pb::session_control::Control::CaptureDone(_),
+                )
                 | None => {}
             },
             Err(e) => tracing::debug!(error=%e, "undecodable session control"),
@@ -1371,7 +1380,7 @@ mod tests {
         assert_eq!(r.active_id, Some(a));
     }
 
-    /// MAX_CONNECTIONS refuses the surplus connection.
+    /// `MAX_CONNECTIONS` refuses the surplus connection.
     #[test]
     fn admit_refuses_past_max() {
         let mut r = Registry::new(2);

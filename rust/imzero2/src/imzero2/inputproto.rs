@@ -9,6 +9,15 @@
 //! The one-byte WebSocket framing prefixes (ADR-0024 SD6) are not part of
 //! the protobuf schema and are defined here.
 
+// prost splices its output into this module, so its doc comments and derives
+// are linted as if they were written here. They are not ours to edit — the
+// .proto is — so the lints they trip are off for the file.
+#![allow(
+    clippy::derive_partial_eq_without_eq,
+    clippy::doc_markdown,
+    clippy::too_long_first_doc_paragraph
+)]
+
 /// One-byte WebSocket message type prefixes (ADR-0024 SD6).
 pub const PREFIX_VIDEO: u8 = 0x01;
 pub const PREFIX_INPUT: u8 = 0x02;

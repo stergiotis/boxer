@@ -6,7 +6,7 @@
 //! (`RENDER_ATTACHMENT | COPY_SRC`), per-frame GPU→CPU readback through a
 //! 256-byte-row-aligned staging buffer, and a [`FrameSink`] consuming the
 //! resulting tightly-packed BGRA frames. eframe's other responsibilities
-//! (HiDPI, multi-monitor, persistence, viewport lifecycle) are non-issues
+//! (`HiDPI`, multi-monitor, persistence, viewport lifecycle) are non-issues
 //! server-side and are not re-implemented.
 //!
 //! Sinks: PNG dumps (verification), the ffmpeg encoder to a file
@@ -19,14 +19,14 @@
 //! GPU→CPU readback — is gated behind `headless_wgpu`. The bare `headless`
 //! build is the lean appliance host (SD6): the carrier, the FFFI2 interpreter,
 //! and the mesh draw-stream lane only — `ctx.run` + `ctx.tessellate` +
-//! serialize, no GPU, no ffmpeg. The PNG dump, the H264_OUT file sink, the
+//! serialize, no GPU, no ffmpeg. The PNG dump, the `H264_OUT` file sink, the
 //! video-encode probe, and every video codec live under `headless_raster` — so
 //! they are present in the CPU-rasterized `headless_soft` host too, not only
 //! under wgpu; the bare `headless` build offers just the mesh lane, so those env
 //! vars are inert there.
 //!
-//! Configuration rides env vars (precedent: IMZERO2_RENDER_CADENCE,
-//! IMZERO2_SCREENSHOT_DIR — the Go launcher inherits its environment to
+//! Configuration rides env vars (precedent: `IMZERO2_RENDER_CADENCE`,
+//! `IMZERO2_SCREENSHOT_DIR` — the Go launcher inherits its environment to
 //! the client process, so no Go-side flag plumbing is needed at v1):
 //!
 //! - `IMZERO2_HEADLESS_FPS` — render cadence in Hz (default 60). The
@@ -40,10 +40,10 @@
 //!   host owns the directory — so a scripted driver needs this set even when it
 //!   wants no periodic dump at all (pair it with a large `DUMP_EVERY`).
 //! - `IMZERO2_HEADLESS_DUMP_EVERY` — dump every Nth frame (default 60).
-//! - `IMZERO2_HEADLESS_PIXELS_PER_POINT` — initial HiDPI scale of the
+//! - `IMZERO2_HEADLESS_PIXELS_PER_POINT` — initial `HiDPI` scale of the
 //!   offscreen target (default 1.0). A connected viewer's reported
 //!   viewport + pixel scale (devicePixelRatio × zoom) take over via
-//!   ViewportResize; this only covers the pre-connect default.
+//!   `ViewportResize`; this only covers the pre-connect default.
 //! - `IMZERO2_HEADLESS_H264_OUT` — when set, spawn the ffmpeg encoder
 //!   (ADR-0024 SD3) and append the raw Annex-B H.264 byte stream to this
 //!   file. Phase 2 verification target; the Phase 4/5 WebSocket carrier
@@ -203,25 +203,24 @@ fn build_codec_lane() -> CodecLane {
     // honoured verbatim; otherwise pick the best working lane — hardware
     // (VAAPI) if it encodes on this host, else the portable software lane
     // (SD5; avoids the Fedora-mesa h264_vaapi ENOSYS respawn loop).
-    if codec == VideoCodec::H264 {
-        if let Some(args) =
+    if codec == VideoCodec::H264
+        && let Some(args) =
             std::env::var("IMZERO2_HEADLESS_ENCODER_ARGS").ok().filter(|v| !v.trim().is_empty())
-        {
-            // Verbatim, but probed like the automatic lanes: an encoder the
-            // box lacks (`-c:v libopenh264` against an ffmpeg built without
-            // it) would otherwise hand the sink a lane that can never spawn,
-            // and the stream would be dead from the first viewer on.
-            let lane = CodecLane::h264(args.split_whitespace().map(str::to_owned).collect());
-            let probe = crate::imzero2::codeclane::probe_lane(&lane);
-            if probe.is_ok() {
-                return lane;
-            }
-            tracing::warn!(
-                ?probe,
-                args = %args,
-                "IMZERO2_HEADLESS_ENCODER_ARGS lane failed its probe — choosing the lane automatically instead"
-            );
+    {
+        // Verbatim, but probed like the automatic lanes: an encoder the
+        // box lacks (`-c:v libopenh264` against an ffmpeg built without
+        // it) would otherwise hand the sink a lane that can never spawn,
+        // and the stream would be dead from the first viewer on.
+        let lane = CodecLane::h264(args.split_whitespace().map(str::to_owned).collect());
+        let probe = crate::imzero2::codeclane::probe_lane(&lane);
+        if probe.is_ok() {
+            return lane;
         }
+        tracing::warn!(
+            ?probe,
+            args = %args,
+            "IMZERO2_HEADLESS_ENCODER_ARGS lane failed its probe — choosing the lane automatically instead"
+        );
     }
     CodecLane::best(codec)
 }
@@ -232,7 +231,7 @@ fn build_codec_lane() -> CodecLane {
 /// (ADR-0128); flags bit0=sw-encode, bit1=decode-supported, bit2=decode-smooth,
 /// bit3=decode-hardware, bit4=hw-encode, bits5-7=hardware-lane fail reason,
 /// bits8-10=software-lane fail reason (0=ok, see
-/// codeclane::LaneProbe::reason_code).
+/// `codeclane::LaneProbe::reason_code`).
 ///
 /// The mesh lane (ADR-0128) is not a probed video codec — it has no encoder,
 /// so it never appears in `host`. It is appended unconditionally (the lane is
@@ -344,7 +343,7 @@ struct Gpu {
 /// The two are alternatives, and the build scripts each pass exactly one. A
 /// build carrying both (`--all-features`, or docs.rs) resolves to the GPU one
 /// — a precedence, not an error, mirroring how `main.rs` resolves
-/// desktop/headless/headless_svg when several are compiled in. There is no
+/// `desktop/headless/headless_svg` when several are compiled in. There is no
 /// runtime switch to go with it: unlike those three, the choice here is what
 /// is in the dependency graph, and the point of `headless_soft` is a build
 /// where wgpu is absent.
@@ -442,7 +441,7 @@ impl RasterStats {
     fn record(&mut self, t: Option<std::time::Instant>, width_px: u32, height_px: u32) {
         if let Some(t) = t {
             self.us.push(t.elapsed().as_micros().min(u32::MAX as u128) as u32);
-            if self.us.len() % Self::EVERY == 0 {
+            if self.us.len().is_multiple_of(Self::EVERY) {
                 self.report(width_px, height_px);
             }
             if self.us.len() == Self::CAP && !self.full_logged {
@@ -494,7 +493,7 @@ impl RasterStats {
 }
 
 /// Render target format. `Bgra8Unorm` matches the common native surface
-/// format (egui_wgpu selects its gamma-aware shader path from it), so the
+/// format (`egui_wgpu` selects its gamma-aware shader path from it), so the
 /// readback bytes are sRGB-encoded BGRA — exactly what both the PNG dump
 /// and the future `rawvideo -pix_fmt bgra` encoder input (ADR-0024 SD3)
 /// expect.
@@ -710,7 +709,7 @@ impl Gpu {
             let _ = tx.send(r);
         });
         self.device.poll(wgpu::PollType::wait_indefinitely())?;
-        rx.recv().map_err(|_| HeadlessError::MapChannelClosed)??;
+        rx.recv().map_err(|_e| HeadlessError::MapChannelClosed)??;
         {
             let data = slice.get_mapped_range();
             frame.clear();
@@ -743,13 +742,13 @@ fn even_up(v: u32) -> u32 {
 }
 
 /// Render cadence of the headless host (ADR-0062 brought to ADR-0024's
-/// host). Initial mode comes from IMZERO2_RENDER_CADENCE — the same
+/// host). Initial mode comes from `IMZERO2_RENDER_CADENCE` — the same
 /// variable the Go-side decorator reads at startup — and can be switched
-/// at runtime per the wire's SetCadence message.
+/// at runtime per the wire's `SetCadence` message.
 ///
 /// Continuous: fixed tick at the configured fps (the original behavior).
 /// Reactive: a pass runs when egui schedules a repaint (animations,
-/// caret blink, Go-side RequestRepaint opcodes), when wire activity
+/// caret blink, Go-side `RequestRepaint` opcodes), when wire activity
 /// arrives (input, resize, connect), or at a 1 s idle heartbeat —
 /// whichever is soonest, floored by the fps cap. A runtime switch (the
 /// viewer's toggle) reaches the Go decorator too, closing the loop that
@@ -758,7 +757,7 @@ fn even_up(v: u32) -> u32 {
 /// videooutput.State.HostReactive) to drop its per-frame immediate
 /// repaint. The switch settles a frame or two later, once that telemetry
 /// has round-tripped. While no viewer is connected the decorator falls
-/// back to the launch-time IMZERO2_RENDER_CADENCE.
+/// back to the launch-time `IMZERO2_RENDER_CADENCE`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Cadence {
     Continuous,
@@ -778,27 +777,23 @@ fn sleep_until_or_wake(
     min_next: std::time::Instant,
     waker: &std::sync::mpsc::Receiver<()>,
 ) {
-    loop {
-        let now = std::time::Instant::now();
-        if now >= deadline {
-            return;
+    let now = std::time::Instant::now();
+    if now >= deadline {
+        return;
+    }
+    match waker.recv_timeout(deadline - now) {
+        Ok(()) => {
+            while waker.try_recv().is_ok() {}
+            let now = std::time::Instant::now();
+            if now < min_next {
+                std::thread::sleep(min_next - now);
+            }
         }
-        match waker.recv_timeout(deadline - now) {
-            Ok(()) => {
-                while waker.try_recv().is_ok() {}
-                let now = std::time::Instant::now();
-                if now < min_next {
-                    std::thread::sleep(min_next - now);
-                }
-                return;
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => return,
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                // No carrier holds a sender (host keeps one, so this is
-                // defensive): plain sleep.
-                std::thread::sleep(deadline - now);
-                return;
-            }
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => (),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            // No carrier holds a sender (host keeps one, so this is
+            // defensive): plain sleep.
+            std::thread::sleep(deadline - now);
         }
     }
 }
@@ -953,7 +948,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     let mut next_deadline = std::time::Instant::now();
     // Reactive bookkeeping: when the last pass ran, and how soon egui
     // asked to be run again (repaint_delay of the last pass).
-    let mut last_pass = std::time::Instant::now() - frame_dt;
+    let mut last_pass = std::time::Instant::now().checked_sub(frame_dt).unwrap();
     let mut repaint_hint = std::time::Duration::ZERO;
     let mut frame_idx: u64 = 0;
     // Latch so an app that re-emits ViewportCommand::Close every frame under
@@ -1010,50 +1005,48 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         last_pass = std::time::Instant::now();
 
         // Runtime cadence switch (wire SetCadence — the viewer's toggle).
-        if let Some(c) = &mut carrier {
-            if let Some(req) = c.take_cadence() {
-                let new = if req == 1 {
-                    Cadence::Reactive
-                } else {
-                    Cadence::Continuous
-                };
-                if new != cadence {
-                    cadence = new;
-                    c.set_hello_cadence(cadence as u32);
-                    next_deadline = std::time::Instant::now();
-                    tracing::info!(?cadence, "render cadence switched at runtime");
-                }
+        if let Some(c) = &mut carrier
+            && let Some(req) = c.take_cadence()
+        {
+            let new = if req == 1 {
+                Cadence::Reactive
+            } else {
+                Cadence::Continuous
+            };
+            if new != cadence {
+                cadence = new;
+                c.set_hello_cadence(cadence as u32);
+                next_deadline = std::time::Instant::now();
+                tracing::info!(?cadence, "render cadence switched at runtime");
             }
         }
 
         // Viewport resize: apply the viewer's reported geometry — rebuild
         // the offscreen target, update egui's scale, re-announce the hello
         // and restart the encoder (fresh SPS/PPS + IDR at the new size).
-        if let Some(c) = &mut carrier {
-            if let Some(req) = c.take_resize() {
-                if let Some((nw, nh, nppp)) =
-                    clamp_resize(&req, max_texture_side, width_px, height_px, ppp)
-                {
-                    // A pixel build re-sizes its target; the lean build only
-                    // tracks geometry (mesh coords cross in points).
-                    #[cfg(feature = "headless_raster")]
-                    raster.resize(nw, nh, nppp);
-                    width_px = nw;
-                    height_px = nh;
-                    ppp = nppp;
-                    screen_rect = egui::Rect::from_min_size(
-                        egui::Pos2::ZERO,
-                        egui::vec2(nw as f32 / nppp, nh as f32 / nppp),
-                    );
-                    c.apply_geometry(nw, nh, nppp);
-                    tracing::info!(
-                        width_px = nw,
-                        height_px = nh,
-                        pixels_per_point = nppp,
-                        "viewport resize applied"
-                    );
-                }
-            }
+        if let Some(c) = &mut carrier
+            && let Some(req) = c.take_resize()
+            && let Some((nw, nh, nppp)) =
+                clamp_resize(&req, max_texture_side, width_px, height_px, ppp)
+        {
+            // A pixel build re-sizes its target; the lean build only
+            // tracks geometry (mesh coords cross in points).
+            #[cfg(feature = "headless_raster")]
+            raster.resize(nw, nh, nppp);
+            width_px = nw;
+            height_px = nh;
+            ppp = nppp;
+            screen_rect = egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(nw as f32 / nppp, nh as f32 / nppp),
+            );
+            c.apply_geometry(nw, nh, nppp);
+            tracing::info!(
+                width_px = nw,
+                height_px = nh,
+                pixels_per_point = nppp,
+                "viewport resize applied"
+            );
         }
 
         // Remote input (ADR-0024 SD8): drain wire events from the carrier
@@ -1198,10 +1191,10 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         // `cursor_icon` is `Copy`, so this coexists with the `commands` borrow.
         if let Some(c) = &mut carrier {
             for cmd in &out.platform_output.commands {
-                if let egui::OutputCommand::CopyText(text) = cmd {
-                    if !text.is_empty() {
-                        c.send_clipboard_to_active(text.clone());
-                    }
+                if let egui::OutputCommand::CopyText(text) = cmd
+                    && !text.is_empty()
+                {
+                    c.send_clipboard_to_active(text.clone());
                 }
             }
             c.send_cursor_to_active(inputmap::cursor_shape_code(out.platform_output.cursor_icon));
@@ -1216,11 +1209,11 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
 
         // ADR-0088: apply a runtime codec switch the Go control requested
         // (drained after dispatch; the carrier re-points the encoder).
-        if let Some(req) = fffi.take_video_pipeline_request() {
-            if let Some(c) = &mut carrier {
-                c.set_video_codec(VideoCodec::from_u8(req));
-                next_deadline = std::time::Instant::now();
-            }
+        if let Some(req) = fffi.take_video_pipeline_request()
+            && let Some(c) = &mut carrier
+        {
+            c.set_video_codec(VideoCodec::from_u8(req));
+            next_deadline = std::time::Instant::now();
         }
         // Draw-stream lane (ADR-0128): mirror texture deltas every frame —
         // cheap when empty, and a later runtime switch to the mesh lane must
@@ -1274,37 +1267,31 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                     sink.on_frame(&bgra_frame, width_px, height_px, frame_idx);
                 }
                 if let (Some(name), Some(c)) = (capture, carrier.as_ref()) {
-                    match opts.dump_dir.as_deref() {
-                        Some(dir) => {
-                            match framesink::capture_named(
-                                dir,
-                                &name,
-                                &bgra_frame,
-                                width_px,
-                                height_px,
-                            ) {
-                                Ok(path) => {
-                                    tracing::info!(path=%path.display(), frame_idx, "capture written");
-                                    c.send_capture_done(crate::imzero2::inputproto::CaptureDone {
-                                        path: path.to_string_lossy().into_owned(),
-                                        width: width_px,
-                                        height: height_px,
-                                        frame_index: frame_idx,
-                                    });
-                                }
-                                // No ack on failure: the client is waiting for
-                                // one, and a silent timeout there is a better
-                                // signal than a "done" naming a file that is
-                                // not on disk.
-                                Err(e) => {
-                                    tracing::warn!(error=%e, name, "capture request failed")
-                                }
+                    if let Some(dir) = opts.dump_dir.as_deref() {
+                        match framesink::capture_named(dir, &name, &bgra_frame, width_px, height_px)
+                        {
+                            Ok(path) => {
+                                tracing::info!(path=%path.display(), frame_idx, "capture written");
+                                c.send_capture_done(crate::imzero2::inputproto::CaptureDone {
+                                    path: path.to_string_lossy().into_owned(),
+                                    width: width_px,
+                                    height: height_px,
+                                    frame_index: frame_idx,
+                                });
+                            }
+                            // No ack on failure: the client is waiting for
+                            // one, and a silent timeout there is a better
+                            // signal than a "done" naming a file that is
+                            // not on disk.
+                            Err(e) => {
+                                tracing::warn!(error=%e, name, "capture request failed");
                             }
                         }
-                        None => tracing::warn!(
+                    } else {
+                        tracing::warn!(
                             name,
                             "capture requested but IMZERO2_HEADLESS_DUMP_DIR is unset — ignoring"
-                        ),
+                        );
                     }
                 }
                 if let Some(c) = &mut carrier {

@@ -51,8 +51,8 @@ pub fn pack_dt(date: Date, hour: u8, minute: u8, second: u8) -> u64 {
     }
 }
 
-/// Inverse of pack_dt. On any decode error, falls back to the Unix
-/// epoch in UTC, mirroring date_picker_button::unpack_ymd so a zero
+/// Inverse of `pack_dt`. On any decode error, falls back to the Unix
+/// epoch in UTC, mirroring `date_picker_button::unpack_ymd` so a zero
 /// wire value renders as 1970-01-01 00:00:00 UTC.
 pub fn unpack_dt(packed: u64) -> (Date, u8, u8, u8) {
     let ms = packed as i64;
@@ -75,7 +75,7 @@ struct DateTimePickerWidget<'a> {
     salt: String,
 }
 
-impl<'a> egui::Widget for DateTimePickerWidget<'a> {
+impl egui::Widget for DateTimePickerWidget<'_> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal(|ui| {
             let mut dpb = egui_extras::DatePickerButton::new(self.date).id_salt(&self.salt);
@@ -110,7 +110,7 @@ impl<'a> egui::Widget for DateTimePickerWidget<'a> {
     }
 }
 
-impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
+impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
     pub fn apply_date_time_picker_button(
         &mut self,
         req: DateTimePickerButtonRequest,

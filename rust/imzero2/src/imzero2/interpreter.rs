@@ -28,8 +28,28 @@ pub type InterpretResult<T> = Result<T, InterpretError>;
 
 use crate::imzero2::code_view;
 use crate::imzero2::debugtools::DebugTools;
-use crate::imzero2::enums_out::*;
-use crate::imzero2::fenums::*;
+use crate::imzero2::enums_out::{
+    AtomsBuilderMethodId, ButtonBuilderMethodId, CheckboxBuilderMethodId, CodeViewBuilderMethodId,
+    CodeViewJobBuilderMethodId, CollapsingHeaderBuilderMethodId, ColorBuilderMethodId,
+    ComboBoxBuilderMethodId, DatePickerButtonBuilderMethodId, DateTimePickerButtonBuilderMethodId,
+    DragValueF64BuilderMethodId, DragValueI64BuilderMethodId, DragValueU64BuilderMethodId,
+    EndETableBuilderMethodId, EtColumnBuilderMethodId, FrameBuilderMethodId, FuncProcId,
+    GraphBuilderMethodId, GraphEdgeBuilderMethodId, GraphNodeBuilderMethodId, GridBuilderMethodId,
+    HyperlinkBuilderMethodId, HyperlinkToBuilderMethodId, LabelAtomsBuilderMethodId,
+    LabelBuilderMethodId, NewTableBuilderMethodId, NewTableColumnBuilderMethodId,
+    PaintCanvasBuilderMethodId, PaintImageBuilderMethodId, PaintPolygonFilledBuilderMethodId,
+    PaintTextBuilderMethodId, PanelBottomBuilderMethodId, PanelBottomInsideBuilderMethodId,
+    PanelLeftBuilderMethodId, PanelLeftInsideBuilderMethodId, PanelRightBuilderMethodId,
+    PanelRightInsideBuilderMethodId, PanelTopBuilderMethodId, PanelTopInsideBuilderMethodId,
+    ProgressBarBuilderMethodId, ScalarSizeBuilderMethodId, ScrollAreaBuilderMethodId,
+    ScrollingTextureBuilderMethodId, SeparatorBuilderMethodId, SliderF64BuilderMethodId,
+    SliderI64BuilderMethodId, SliderU64BuilderMethodId, SpinnerBuilderMethodId,
+    StyledSectionsBuilderMethodId, TableBuilderMethodId, TableColumnBuilderMethodId,
+    TextEditBuilderMethodId, TimeRangePickerBuilderMethodId, TintedScopeBuilderMethodId,
+    UiWithLayoutBuilderMethodId, VectorSizeBuilderMethodId, WidgetTextBuilderMethodId,
+    WindowBuilderMethodId,
+};
+use crate::imzero2::fenums::ResponseFlags;
 use crate::imzero2::image::ImageCache;
 use crate::imzero2::scrolling_texture::ScrollingTextureCache;
 use crate::imzero2::svgexport::{
@@ -49,8 +69,8 @@ pub struct ScreenshotRequest {
 /// Splice `ins` into `text` over the char range `range` — a selection to
 /// replace, or an empty range used as a plain insertion point — returning the
 /// new caret as a char index just past the inserted text. Char-indexed
-/// throughout via egui's TextBuffer (UTF-8-safe); the caller maps egui's
-/// CCursorRange to `range`. Backs TextEditFluid.InsertAtCursor (ADR-0063).
+/// throughout via egui's `TextBuffer` (UTF-8-safe); the caller maps egui's
+/// `CCursorRange` to `range`. Backs TextEditFluid.InsertAtCursor (ADR-0063).
 fn splice_text_at_cursor(text: &mut String, ins: &str, range: std::ops::Range<usize>) -> usize {
     use egui::TextBuffer as _;
     // egui 0.35 wraps text offsets in the `CharIndex` newtype; convert at the
@@ -156,9 +176,9 @@ pub struct GraphEdgeUserData {
 }
 
 /// One row in the events register — flat representation of
-/// egui_graphs::events::Event translated from internal petgraph indices
+/// `egui_graphs::events::Event` translated from internal petgraph indices
 /// to Go's u64 node/edge keys. `kind` is the discriminator defined by
-/// the GRAPH_EV_* constants (1..=11 in v1; Pan/Zoom/NodeMove intentionally
+/// the `GRAPH_EV`_* constants (1..=11 in v1; Pan/Zoom/NodeMove intentionally
 /// skipped — continuous high-volume streams, not the useful subset).
 #[derive(Debug, Clone, Copy)]
 pub struct GraphEventRecord {
@@ -196,13 +216,13 @@ pub struct GraphState {
     >,
     pub node_idx: std::collections::HashMap<u64, petgraph::stable_graph::NodeIndex>,
     pub edge_idx: std::collections::HashMap<(u64, u64), petgraph::stable_graph::EdgeIndex>,
-    /// One-shot fit-to-screen latch. While true the GraphView renders with
+    /// One-shot fit-to-screen latch. While true the `GraphView` renders with
     /// fit-to-screen enabled; it latches off once the layout settles so
     /// manual pan/zoom sticks and the view stops rescaling every frame.
-    /// Armed on creation and re-armed by resetLayout / fitNow(). See
+    /// Armed on creation and re-armed by resetLayout / `fitNow()`. See
     /// `graph_fit_this_frame`.
     pub fit_pending: bool,
-    /// Frames fitted since the latch was last armed. egui_graphs only knows
+    /// Frames fitted since the latch was last armed. `egui_graphs` only knows
     /// the node bounds after it has rendered a frame, so we fit a few
     /// frames before trusting the settle signal — otherwise a deterministic
     /// layout fits once against empty bounds and latches off mis-framed.
@@ -266,7 +286,7 @@ where
     ) -> Vec<egui::Shape> {
         let mut shapes = self.inner.shapes(start, end, ctx);
         if let Some(c) = self.payload_color {
-            for s in shapes.iter_mut() {
+            for s in &mut shapes {
                 recolor_edge_shape(s, c);
             }
         }
@@ -380,7 +400,7 @@ pub const GRAPH_LAYOUT_FORCE_DIRECTED: u8 = 1;
 pub const GRAPH_LAYOUT_FORCE_DIRECTED_CG: u8 = 2;
 pub const GRAPH_LAYOUT_HIERARCHICAL: u8 = 3;
 
-/// Overlay any user-supplied FruchtermanReingold parameters onto the
+/// Overlay any user-supplied `FruchtermanReingold` parameters onto the
 /// persisted layout state in egui ctx memory. Each field only gets
 /// written if its matching `_set` flag is true, so callers can tune one
 /// parameter at a time without clobbering the simulation's running
@@ -485,8 +505,8 @@ pub fn apply_fr_overrides(
 }
 
 /// Overlay any user-supplied Hierarchical parameters onto the persisted
-/// hierarchical layout state. Orientation: 0 = TopDown (default), 1 =
-/// LeftRight. No-op unless `layout_kind` is Hierarchical.
+/// hierarchical layout state. Orientation: 0 = `TopDown` (default), 1 =
+/// `LeftRight`. No-op unless `layout_kind` is Hierarchical.
 #[allow(clippy::too_many_arguments)]
 pub fn apply_hierarchical_overrides(
     ui: &mut egui::Ui,
@@ -530,7 +550,7 @@ pub fn apply_hierarchical_overrides(
 
 /// Append every currently-selected node and edge in `state` onto the
 /// shared snapshot vectors on the interpreter, tagged with `gid`. Nodes
-/// surface as (kind=0, keyA=node_id, keyB=0); edges as (kind=1,
+/// surface as (kind=0, `keyA=node_id`, keyB=0); edges as (kind=1,
 /// keyA=from, keyB=to). Called once per graph per frame.
 pub fn snapshot_graph_selection(
     graph_id: u64,
@@ -549,15 +569,15 @@ pub fn snapshot_graph_selection(
         }
     }
     for (ei, edge) in state.graph.edges_iter() {
-        if edge.selected() {
-            if let Some((a, b)) = state.graph.edge_endpoints(ei) {
-                let ka = state.graph.node(a).map(|n| n.payload().key).unwrap_or(0);
-                let kb = state.graph.node(b).map(|n| n.payload().key).unwrap_or(0);
-                out_graph_ids.push(graph_id);
-                out_kind.push(1);
-                out_key_a.push(ka);
-                out_key_b.push(kb);
-            }
+        if edge.selected()
+            && let Some((a, b)) = state.graph.edge_endpoints(ei)
+        {
+            let ka = state.graph.node(a).map(|n| n.payload().key).unwrap_or(0);
+            let kb = state.graph.node(b).map(|n| n.payload().key).unwrap_or(0);
+            out_graph_ids.push(graph_id);
+            out_kind.push(1);
+            out_key_a.push(ka);
+            out_key_b.push(kb);
         }
     }
 }
@@ -565,6 +585,8 @@ pub fn snapshot_graph_selection(
 /// Append one metrics row for `state` onto the shared snapshot vectors.
 /// `fr_steps` and `fr_last_disp` are meaningful only when the layout
 /// stored in egui memory is an FR variant; otherwise they're 0 / NaN.
+// One row of metrics is one call; the columns are the arguments.
+#[allow(clippy::too_many_arguments)]
 pub fn snapshot_graph_metrics(
     graph_id: u64,
     layout_kind: u8,
@@ -604,20 +626,20 @@ pub fn snapshot_graph_metrics(
 /// settled immediately; force-directed layouts settle once they have
 /// taken at least one step and their average per-step displacement has
 /// fallen to/under the convergence epsilon. Reads the layout state that
-/// egui_graphs persists in `ui` memory, so it reflects the previous
+/// `egui_graphs` persists in `ui` memory, so it reflects the previous
 /// frame's progress — exactly what we need to decide this frame's fit.
 pub fn graph_layout_settled(ui: &egui::Ui, graph_id: u64, layout_kind: u8) -> bool {
     let id = Some(graph_id.to_string());
     match layout_kind {
         GRAPH_LAYOUT_FORCE_DIRECTED => {
             let s: egui_graphs::FruchtermanReingoldState = egui_graphs::get_layout_state(ui, id);
-            s.step_count > 0 && s.last_avg_displacement.map_or(false, |d| d <= s.epsilon)
+            s.step_count > 0 && s.last_avg_displacement.is_some_and(|d| d <= s.epsilon)
         }
         GRAPH_LAYOUT_FORCE_DIRECTED_CG => {
             let s: egui_graphs::FruchtermanReingoldWithCenterGravityState =
                 egui_graphs::get_layout_state(ui, id);
             s.base.step_count > 0
-                && s.base.last_avg_displacement.map_or(false, |d| d <= s.base.epsilon)
+                && s.base.last_avg_displacement.is_some_and(|d| d <= s.base.epsilon)
         }
         _ => true,
     }
@@ -661,10 +683,13 @@ pub fn graph_fit_this_frame(
     true
 }
 
-/// Render a GraphView with the layout variant picked by `layout_kind`.
+/// Render a `GraphView` with the layout variant picked by `layout_kind`.
 /// Extracted from the `graph` apply code so the match-over-kind stays
 /// co-located with the other graph helpers. All generic bounds are
 /// instantiated here — the caller passes only runtime values.
+// The generic bounds are instantiated here, so every runtime value the
+// layouts need arrives as an argument.
+#[allow(clippy::too_many_arguments)]
 pub fn render_graph_with_layout(
     state: &mut GraphState,
     ui: &mut egui::Ui,
@@ -741,11 +766,11 @@ pub fn render_graph_with_layout(
     }
 }
 
-/// Translate an `egui_graphs::events::Event` into the flat GraphEventRecord
+/// Translate an `egui_graphs::events::Event` into the flat `GraphEventRecord`
 /// that the FFFI register expects. Returns `None` for variants we don't
-/// surface to Go in v1 (Pan, Zoom, NodeMove — continuous streams). Node
+/// surface to Go in v1 (Pan, Zoom, `NodeMove` — continuous streams). Node
 /// index → u64 key goes through the Node's user-data payload; edge index
-/// → (from, to) goes through StableGraph::edge_endpoints.
+/// → (from, to) goes through `StableGraph::edge_endpoints`.
 pub fn translate_graph_event(
     graph_id: u64,
     state: &GraphState,
@@ -869,10 +894,10 @@ pub fn reconcile_graph_state(
                 n.label.clone(),
                 graph_spawn_location(n.id),
             );
-            if let Some(col) = n.color {
-                if let Some(node) = state.graph.node_mut(idx) {
-                    node.set_color(col);
-                }
+            if let Some(col) = n.color
+                && let Some(node) = state.graph.node_mut(idx)
+            {
+                node.set_color(col);
             }
             state.node_idx.insert(n.id, idx);
         }
@@ -1106,10 +1131,10 @@ pub enum TableCell {
 impl TableCell {
     pub fn render(&self, ui: &mut egui::Ui) {
         match self {
-            TableCell::Text(text) => {
+            Self::Text(text) => {
                 ui.label(text.as_str());
             }
-            TableCell::RichText(widget_text) => {
+            Self::RichText(widget_text) => {
                 ui.label(widget_text.clone());
             }
         }
@@ -1133,13 +1158,13 @@ impl TableCell {
 ///   u64[num_new_leaf_tabs] new_leaf_tabs
 /// ```
 ///
-/// Used only the first time a dock_state is constructed. Subsequent
+/// Used only the first time a `dock_state` is constructed. Subsequent
 /// frames preserve the user's drag/drop changes in `dock_states`.
 /// Any parse error or unknown version falls back to the default
 /// `DockState::new(fallback_tabs)` single-leaf layout — the dock
 /// stays functional, the user just loses their split preset.
 pub fn parse_dock_initial_layout(bytes: &[u8], fallback_tabs: &[u64]) -> egui_dock::DockState<u64> {
-    use byteorder::{LittleEndian, ReadBytesExt};
+    use byteorder::{LittleEndian, ReadBytesExt as _};
     use std::io::Cursor;
 
     let fallback = || egui_dock::DockState::new(fallback_tabs.to_vec());
@@ -1147,16 +1172,14 @@ pub fn parse_dock_initial_layout(bytes: &[u8], fallback_tabs: &[u64]) -> egui_do
         return fallback();
     }
     let mut cur = Cursor::new(bytes);
-    let version = match cur.read_u8() {
-        Ok(v) => v,
-        Err(_) => return fallback(),
+    let Ok(version) = cur.read_u8() else {
+        return fallback();
     };
     if version != 1 {
         return fallback();
     }
-    let num_root_tabs = match cur.read_u32::<LittleEndian>() {
-        Ok(v) => v,
-        Err(_) => return fallback(),
+    let Ok(num_root_tabs) = cur.read_u32::<LittleEndian>() else {
+        return fallback();
     };
     let mut root_tabs = Vec::with_capacity(num_root_tabs as usize);
     for _ in 0..num_root_tabs {
@@ -1169,48 +1192,40 @@ pub fn parse_dock_initial_layout(bytes: &[u8], fallback_tabs: &[u64]) -> egui_do
     let mut leaf_nodes: std::collections::HashMap<u8, egui_dock::NodeIndex> =
         std::collections::HashMap::new();
     leaf_nodes.insert(0, egui_dock::NodeIndex::root());
-    let num_splits = match cur.read_u8() {
-        Ok(v) => v,
-        Err(_) => return state,
+    let Ok(num_splits) = cur.read_u8() else {
+        return state;
     };
     for _ in 0..num_splits {
-        let parent_id = match cur.read_u8() {
-            Ok(v) => v,
-            Err(_) => break,
+        let Ok(parent_id) = cur.read_u8() else {
+            break;
         };
-        let new_id = match cur.read_u8() {
-            Ok(v) => v,
-            Err(_) => break,
+        let Ok(new_id) = cur.read_u8() else {
+            break;
         };
-        let dir = match cur.read_u8() {
-            Ok(v) => v,
-            Err(_) => break,
+        let Ok(dir) = cur.read_u8() else {
+            break;
         };
-        let fraction = match cur.read_f32::<LittleEndian>() {
-            Ok(v) => v,
-            Err(_) => break,
+        let Ok(fraction) = cur.read_f32::<LittleEndian>() else {
+            break;
         };
-        let num_tabs = match cur.read_u32::<LittleEndian>() {
-            Ok(v) => v,
-            Err(_) => break,
+        let Ok(num_tabs) = cur.read_u32::<LittleEndian>() else {
+            break;
         };
         let mut tabs = Vec::with_capacity(num_tabs as usize);
         let mut ok = true;
         for _ in 0..num_tabs {
-            match cur.read_u64::<LittleEndian>() {
-                Ok(v) => tabs.push(v),
-                Err(_) => {
-                    ok = false;
-                    break;
-                }
+            if let Ok(v) = cur.read_u64::<LittleEndian>() {
+                tabs.push(v);
+            } else {
+                ok = false;
+                break;
             }
         }
         if !ok {
             break;
         }
-        let parent_node = match leaf_nodes.get(&parent_id).copied() {
-            Some(n) => n,
-            None => continue,
+        let Some(parent_node) = leaf_nodes.get(&parent_id).copied() else {
+            continue;
         };
         let tree = state.main_surface_mut();
         let [old_idx, new_idx] = match dir {
@@ -1226,9 +1241,9 @@ pub fn parse_dock_initial_layout(bytes: &[u8], fallback_tabs: &[u64]) -> egui_do
     state
 }
 
-/// Delegate that bridges egui_dock's TabViewer trait to FFFI2's deferred
+/// Delegate that bridges `egui_dock`'s `TabViewer` trait to FFFI2's deferred
 /// opcode block replay. The Go side owns tab identity (u64) and emits each
-/// tab's body as a deferred block; egui_dock owns the layout (splits, active
+/// tab's body as a deferred block; `egui_dock` owns the layout (splits, active
 /// tab, drag-to-reorder) and calls `ui(&mut tab)` for the active tab only.
 ///
 /// `closeable` is forced to false so the library never removes a tab on its
@@ -1240,13 +1255,13 @@ pub struct FffiDockTabViewer<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write>
     pub ctx: &'c egui::Context,
     pub bodies: std::collections::HashMap<u64, Vec<u8>>,
     pub titles: std::collections::HashMap<u64, String>,
-    /// Tab ids whose body is NOT wrapped in a live ScrollArea (see
+    /// Tab ids whose body is NOT wrapped in a live `ScrollArea` (see
     /// `scroll_bars`). Populated from the Go-side `noScrollTabIds` arg.
     pub no_scroll: std::collections::HashSet<u64>,
 }
 
-impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
-    for FffiDockTabViewer<'a, 'b, 'c, R, W>
+impl<R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
+    for FffiDockTabViewer<'_, '_, '_, R, W>
 {
     type Tab = u64;
 
@@ -1255,13 +1270,13 @@ impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut u64) {
-        if let Some(block) = self.bodies.get(tab) {
-            if !block.is_empty() {
-                // Disjoint field access: bodies (immutable borrow via .get)
-                // and interpreter (mutable reborrow) are separate fields of
-                // self, so this compiles under NLL.
-                let _ = self.interpreter.replay_deferred_block(self.ctx, ui, block);
-            }
+        if let Some(block) = self.bodies.get(tab)
+            && !block.is_empty()
+        {
+            // Disjoint field access: bodies (immutable borrow via .get)
+            // and interpreter (mutable reborrow) are separate fields of
+            // self, so this compiles under NLL.
+            let _ = self.interpreter.replay_deferred_block(self.ctx, ui, block);
         }
     }
 
@@ -1269,11 +1284,11 @@ impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
         false
     }
 
-    /// Name the tab button in the accessibility tree. egui_dock draws a tab
+    /// Name the tab button in the accessibility tree. `egui_dock` draws a tab
     /// with a bare `interact`, which registers no AccessKit node, so the
     /// headless driver (ADR-0154) could not click a tab by its title and had
     /// to fall back to coordinates. The title is registered as a button
-    /// label here, on the response egui_dock hands back for every tab.
+    /// label here, on the response `egui_dock` hands back for every tab.
     fn on_tab_button(&mut self, tab: &mut u64, response: &egui::Response) {
         let title = self.titles.get(tab).cloned().unwrap_or_else(|| format!("tab {tab}"));
         response.widget_info(|| {
@@ -1282,17 +1297,17 @@ impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
     }
 
     /// Key the tab body's ui id on the Go-assigned tab id rather than
-    /// egui_dock's default (`Id::new(self.title(tab).text())`). Titles here are
+    /// `egui_dock`'s default (`Id::new(self.title(tab).text())`). Titles here are
     /// per-frame view state — play appends graph marks and renames a bound tab
     /// after its node — so a title-derived id churns whenever the title does,
-    /// silently resetting that body's ScrollArea offset, and two tabs that
+    /// silently resetting that body's `ScrollArea` offset, and two tabs that
     /// happen to share a title in one surface collide. The u64 is stable for
     /// the life of the tab by construction (Go owns tab existence).
     fn id(&mut self, tab: &mut u64) -> egui::Id {
         egui::Id::new(*tab)
     }
 
-    /// egui_dock wraps every tab body in `ScrollArea::new(scroll_bars(tab))`
+    /// `egui_dock` wraps every tab body in `ScrollArea::new(scroll_bars(tab))`
     /// (leaf.rs, default `[true, true]`). For a tab whose body owns its
     /// pointer/scroll interaction — e.g. a map canvas that reads wheel and
     /// zoom input — that wrapper reacts to the same wheel events as the
@@ -1308,9 +1323,9 @@ impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
     }
 }
 
-/// Delegate that bridges egui_table's callback-driven API to FFFI2's
+/// Delegate that bridges `egui_table`'s callback-driven API to FFFI2's
 /// deferred opcode block replay. Each cell's buffered opcodes are replayed
-/// via `interpreter.replay_deferred_block()` when egui_table calls `cell_ui`.
+/// via `interpreter.replay_deferred_block()` when `egui_table` calls `cell_ui`.
 pub struct FffiTableDelegate<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> {
     pub interpreter: &'b mut ImZeroFffi<'a, R, W>,
     pub cells: &'c crate::fffi::io::DenseBlockMap,
@@ -1321,8 +1336,8 @@ pub struct FffiTableDelegate<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write>
     pub default_row_height: f32,
 }
 
-impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_table::TableDelegate
-    for FffiTableDelegate<'a, 'b, 'c, R, W>
+impl<R: std::io::BufRead, W: std::io::Write> egui_table::TableDelegate
+    for FffiTableDelegate<'_, '_, '_, R, W>
 {
     fn prepare(&mut self, _info: &egui_table::PrefetchInfo) {
         // Future: push info.visible_rows / info.visible_columns back to Go
@@ -1332,11 +1347,11 @@ impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_table::TableDelega
     fn header_cell_ui(&mut self, ui: &mut egui::Ui, cell: &egui_table::HeaderCellInfo) {
         let col = cell.col_range.start;
         let key = (cell.row_nr as u32, col as u32);
-        if let Some(block) = self.header_blocks.get(&key) {
-            if !block.is_empty() {
-                let _ = self.interpreter.replay_deferred_block(&ui.ctx().clone(), ui, block);
-                return;
-            }
+        if let Some(block) = self.header_blocks.get(&key)
+            && !block.is_empty()
+        {
+            let _ = self.interpreter.replay_deferred_block(&ui.ctx().clone(), ui, block);
+            return;
         }
         if col < self.header_texts.len() {
             ui.heading(self.header_texts[col].as_str());
@@ -1692,7 +1707,7 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub link_zones: LinkZonesHandle,
 }
 
-impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
+impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
     /// ADR-0088: take a pending runtime codec-pipeline request (set by the
     /// `setVideoPipeline` opcode); the headless host applies it to the encoder.
     pub fn take_video_pipeline_request(&mut self) -> Option<u8> {
@@ -1722,7 +1737,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     }
 }
 
-impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
+impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
     pub fn new(r: R, w: W) -> Self {
         //let default_resp = || {
         //    let rect = egui::Rect {
@@ -1993,7 +2008,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     pub fn interpret_commands_outer(&mut self, ctx: &egui::Context) -> InterpretResult<()> {
         let t0 = std::time::Instant::now();
         self.read_blocked_ns = 0;
-        self.handle_screenshot_event(ctx);
+        Self::handle_screenshot_event(ctx);
         // Advance per-frame state for widgets that need it. Must run exactly
         // once per real frame; `interpret_outer` alone does not qualify
         // because it is re-entered from `replay_deferred_block`.
@@ -2045,21 +2060,20 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     /// `UserData` carries either a bare `String` path (from `requestScreenshot`
     /// — full viewport capture) or a `ScreenshotRequest { path, rect }` (from
     /// `requestScreenshotRect` — cropped to `rect` before PNG encode).
-    fn handle_screenshot_event(&self, ctx: &egui::Context) {
+    fn handle_screenshot_event(ctx: &egui::Context) {
         ctx.input(|i| {
             for e in &i.events {
                 if let egui::Event::Screenshot {
                     image, user_data, ..
                 } = e
                 {
-                    let data = match user_data.data.as_ref() {
-                        Some(d) => d,
-                        None => continue,
+                    let Some(data) = user_data.data.as_ref() else {
+                        continue;
                     };
                     if let Some(req) = data.downcast_ref::<ScreenshotRequest>() {
-                        self.write_screenshot_png(image, &req.path, req.rect, i.pixels_per_point);
+                        Self::write_screenshot_png(image, &req.path, req.rect, i.pixels_per_point);
                     } else if let Some(path) = data.downcast_ref::<String>() {
-                        self.write_screenshot_png(image, path, None, i.pixels_per_point);
+                        Self::write_screenshot_png(image, path, None, i.pixels_per_point);
                     }
                 }
             }
@@ -2069,7 +2083,6 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     /// points; converted to physical pixels via `pixels_per_point`. A clamp
     /// guards against off-viewport rects.
     fn write_screenshot_png(
-        &self,
         image: &egui::ColorImage,
         path: &str,
         rect: Option<egui::Rect>,
@@ -2077,30 +2090,27 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     ) {
         let full_w = image.size[0] as u32;
         let full_h = image.size[1] as u32;
-        let (rgba, width, height) = match rect {
-            Some(r) => {
-                let x = (r.min.x * pixels_per_point).round().max(0.0) as u32;
-                let y = (r.min.y * pixels_per_point).round().max(0.0) as u32;
-                let w = (r.width() * pixels_per_point).round().max(1.0) as u32;
-                let h = (r.height() * pixels_per_point).round().max(1.0) as u32;
-                let x_end = (x + w).min(full_w);
-                let y_end = (y + h).min(full_h);
-                let cw = x_end.saturating_sub(x);
-                let ch = y_end.saturating_sub(y);
-                let mut buf = Vec::with_capacity((cw * ch * 4) as usize);
-                for row in y..y_end {
-                    let row_start = (row * full_w + x) as usize;
-                    let row_end = (row * full_w + x_end) as usize;
-                    for px in &image.pixels[row_start..row_end] {
-                        buf.extend_from_slice(&px.to_array());
-                    }
+        let (rgba, width, height) = if let Some(r) = rect {
+            let x = (r.min.x * pixels_per_point).round().max(0.0) as u32;
+            let y = (r.min.y * pixels_per_point).round().max(0.0) as u32;
+            let w = (r.width() * pixels_per_point).round().max(1.0) as u32;
+            let h = (r.height() * pixels_per_point).round().max(1.0) as u32;
+            let x_end = (x + w).min(full_w);
+            let y_end = (y + h).min(full_h);
+            let cw = x_end.saturating_sub(x);
+            let ch = y_end.saturating_sub(y);
+            let mut buf = Vec::with_capacity((cw * ch * 4) as usize);
+            for row in y..y_end {
+                let row_start = (row * full_w + x) as usize;
+                let row_end = (row * full_w + x_end) as usize;
+                for px in &image.pixels[row_start..row_end] {
+                    buf.extend_from_slice(&px.to_array());
                 }
-                (buf, cw, ch)
             }
-            None => {
-                let buf: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
-                (buf, full_w, full_h)
-            }
+            (buf, cw, ch)
+        } else {
+            let buf: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
+            (buf, full_w, full_h)
         };
         match Self::write_png(path, &rgba, width, height) {
             Ok(()) => {
@@ -2118,12 +2128,8 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         let mut encoder = png::Encoder::new(w, width, height);
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
-        let mut writer = encoder
-            .write_header()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        writer
-            .write_image_data(rgba)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let mut writer = encoder.write_header().map_err(std::io::Error::other)?;
+        writer.write_image_data(rgba).map_err(std::io::Error::other)?;
         Ok(())
     }
     pub fn begin_consume_message<T: std::fmt::Debug>(
@@ -2156,48 +2162,45 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                 tracing::trace!(msg_len = msg_len, "read msg");
                 let offset = self.io.read_bytes_count; // position of this line matters
                 let raw = self.io.read_plain_u32()?;
-                let func_proc_id = match from_repr(raw) {
-                    Some(v) => v,
-                    None => {
-                        // Wire desync: the 4 bytes we just decoded don't map to any
-                        // known opcode. Log the last frame that DID parse cleanly —
-                        // the suspect Go-side encoder is the opcode IMMEDIATELY
-                        // AFTER that one (it wrote more or fewer bytes than the
-                        // Rust apply consumed, so the cursor landed in the middle
-                        // of a payload or past the end of a frame, and the next
-                        // msg_len read picked up garbage). The 16-deep trail
-                        // below shows the approach. The desync_already_logged
-                        // flag suppresses the cascade from `let _ =
-                        // self.interpret_outer(...)` closures (e.g. line 2362)
-                        // that silently drop inner errors and re-enter the
-                        // broken stream — exactly one rich log per failure.
-                        if !self.desync_already_logged {
-                            let last_good = FuncProcId::from_repr(
-                                self.last_good_func_proc_id_raw.unwrap_or(u32::MAX),
-                            );
-                            let trail = self.render_frame_trail();
-                            let stack = self.render_message_stack();
-                            tracing::error!(
-                                raw_opcode = raw,
-                                raw_opcode_hex = format!("0x{:08x}", raw),
-                                msg_len = msg_len,
-                                msg_len_byte_offset = msg_len_offset,
-                                opcode_byte_offset = offset,
-                                live_cursor = self.io.read_bytes_count,
-                                in_flight_depth = self.message_offsets.len(),
-                                last_good_func_proc_id_raw = ?self.last_good_func_proc_id_raw,
-                                last_good_msg_len = ?self.last_good_msg_len,
-                                last_good_byte_offset = ?self.last_good_byte_offset,
-                                last_good_name = ?last_good,
-                                frame_trail_count = self.frame_trail_count,
-                                "FFFI wire desync: opcode 0x{:08x} ({}) does not decode to a known FuncProcId. \
-                                 The Go-side encoder of the opcode AFTER {:?} (the trail's last entry) is the suspect.\n  Recent clean frames (oldest → newest):{}\n  In-flight frames (begun but not ended — non-empty = an earlier apply errored mid-frame and is the real cause):{}",
-                                raw, raw, last_good, trail, stack,
-                            );
-                            self.desync_already_logged = true;
-                        }
-                        return Err(InterpretError::Fffi(FffiError::FromRepr(raw)));
+                let Some(func_proc_id) = from_repr(raw) else {
+                    // Wire desync: the 4 bytes we just decoded don't map to any
+                    // known opcode. Log the last frame that DID parse cleanly —
+                    // the suspect Go-side encoder is the opcode IMMEDIATELY
+                    // AFTER that one (it wrote more or fewer bytes than the
+                    // Rust apply consumed, so the cursor landed in the middle
+                    // of a payload or past the end of a frame, and the next
+                    // msg_len read picked up garbage). The 16-deep trail
+                    // below shows the approach. The desync_already_logged
+                    // flag suppresses the cascade from `let _ =
+                    // self.interpret_outer(...)` closures (e.g. line 2362)
+                    // that silently drop inner errors and re-enter the
+                    // broken stream — exactly one rich log per failure.
+                    if !self.desync_already_logged {
+                        let last_good = FuncProcId::from_repr(
+                            self.last_good_func_proc_id_raw.unwrap_or(u32::MAX),
+                        );
+                        let trail = self.render_frame_trail();
+                        let stack = self.render_message_stack();
+                        tracing::error!(
+                            raw_opcode = raw,
+                            raw_opcode_hex = format!("0x{:08x}", raw),
+                            msg_len = msg_len,
+                            msg_len_byte_offset = msg_len_offset,
+                            opcode_byte_offset = offset,
+                            live_cursor = self.io.read_bytes_count,
+                            in_flight_depth = self.message_offsets.len(),
+                            last_good_func_proc_id_raw = ?self.last_good_func_proc_id_raw,
+                            last_good_msg_len = ?self.last_good_msg_len,
+                            last_good_byte_offset = ?self.last_good_byte_offset,
+                            last_good_name = ?last_good,
+                            frame_trail_count = self.frame_trail_count,
+                            "FFFI wire desync: opcode 0x{:08x} ({}) does not decode to a known FuncProcId. \
+                             The Go-side encoder of the opcode AFTER {:?} (the trail's last entry) is the suspect.\n  Recent clean frames (oldest → newest):{}\n  In-flight frames (begun but not ended — non-empty = an earlier apply errored mid-frame and is the real cause):{}",
+                            raw, raw, last_good, trail, stack,
+                        );
+                        self.desync_already_logged = true;
                     }
+                    return Err(InterpretError::Fffi(FffiError::FromRepr(raw)));
                 };
                 let func_proc_id_raw = raw;
 
@@ -2318,7 +2321,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         }
         Ok(())
     }
-    /// Format the frame_trail ring buffer in chronological order
+    /// Format the `frame_trail` ring buffer in chronological order
     /// (oldest first). Called from desync sites to give the operator
     /// a 16-deep view of what was parsed cleanly just before the
     /// failure — the Go-side encoder of the opcode IMMEDIATELY AFTER
@@ -2328,7 +2331,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         let total = self.frame_trail_count as usize;
         let count = total.min(n);
         if count == 0 {
-            return "(empty — desync occurred before any frame parsed cleanly)".to_string();
+            return "(empty — desync occurred before any frame parsed cleanly)".to_owned();
         }
         let start = if total < n { 0 } else { self.frame_trail_head };
         let mut out = String::with_capacity(count * 64);
@@ -2347,17 +2350,17 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         }
         out
     }
-    /// Format the begin/end_consume_message stack — frames that have
+    /// Format the `begin/end_consume_message` stack — frames that have
     /// been BEGUN but not yet ENDED. Healthy steady state is 1 entry
     /// (the currently-dispatching opcode) or 0 (between top-level
     /// frames). Anything deeper means an apply errored before
     /// `if d == 0 { self.end_consume_message()? }` ran, leaving a
     /// stale entry — that earlier opcode is the actual cause of the
-    /// gap between last_good and the reported desync site.
+    /// gap between `last_good` and the reported desync site.
     fn render_message_stack(&self) -> String {
         let depth = self.message_offsets.len();
         if depth == 0 {
-            return "(empty)".to_string();
+            return "(empty)".to_owned();
         }
         let mut out = String::with_capacity(depth * 64);
         for i in 0..depth {
@@ -2366,8 +2369,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             let offset = self.message_offsets[i];
             let name = FuncProcId::from_repr(raw);
             out.push_str(&format!(
-                "\n    [{}] offset={:<7} msg_len={:<6} opcode={:<3} {:?}",
-                i, offset, msg_len, raw, name,
+                "\n    [{i}] offset={offset:<7} msg_len={msg_len:<6} opcode={raw:<3} {name:?}",
             ));
         }
         out
@@ -2398,7 +2400,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     /// such site so the inner error always surfaces.
     ///
     /// Cascade-suppression is shared with `begin/end_consume_message`:
-    /// if the inner failure already logged a rich diagnostic (FromRepr
+    /// if the inner failure already logged a rich diagnostic (`FromRepr`
     /// / overshoot / underread), we don't duplicate it. `PeerClosed` is
     /// an expected shutdown signal and never logs.
     pub fn interpret_outer_logged(
@@ -2430,7 +2432,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     /// Replay a captured deferred opcode block in the given Ui context.
     ///
     /// Sets the io overlay reader to a Cursor over the block bytes,
-    /// runs interpret_outer (which reads opcodes from the Cursor and
+    /// runs `interpret_outer` (which reads opcodes from the Cursor and
     /// renders widgets into the provided Ui), then clears the overlay.
     ///
     /// Widget responses (r7, r9, r10) accumulate in the normal registers
@@ -2481,7 +2483,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     }
 
     // TODO use https://docs.rs/recursive/latest/recursive/?
-    pub fn interpret_inner<'b>(
+    pub fn interpret_inner(
         &mut self,
         c: &egui::Context,
         u: &mut Option<&mut egui::Ui>,
@@ -11242,20 +11244,22 @@ egui::Window::new(label).id(i);
     ) -> Option<egui::Response> {
         if u.is_some() {
             let r = w.ui(u.as_mut().unwrap());
-            if i.is_some() && self.r8_response_flags_filter.match_response_any(&r) {
+            if let Some(i) = i
+                && self.r8_response_flags_filter.match_response_any(&r)
+            {
                 let mut res = ResponseFlags::empty();
                 res.populate(&r);
                 //tracing::debug!(
                 //    "sending response {} {:?}",
-                //    i.unwrap().value(),
+                //    i.value(),
                 //    res.iter_names().map(|p| p.0).collect::<Vec<&'static str>>(),
                 //);
-                self.r7_push(i.unwrap().value(), res);
+                self.r7_push(i.value(), res);
             }
             return Some(r);
         }
         //tracing::debug!("late culled widget {:?}", f);
-        return None;
+        None
     }
     pub fn read_from_repr<T>(
         &mut self,
@@ -11263,36 +11267,37 @@ egui::Window::new(label).id(i);
     ) -> FffiResult<(T, u32)> {
         let f = self.io.read_plain_u32()?;
         let r = from_repr(f).ok_or(FffiError::FromRepr(f))?;
-        return Ok((r, f));
+        Ok((r, f))
     }
     #[allow(unsafe_code)]
     pub fn read_id(&mut self) -> FffiResult<egui::Id> {
         let id = self.io.read_plain_u64()?;
-        unsafe {
-            return Ok(egui::Id::from_high_entropy_bits(id));
-        }
+        // SAFETY: egui asks that the bits carry enough entropy to not collide
+        // in its id maps. Go builds every id with the XOR id stack, whose
+        // output is a hash, and ships it whole over the wire.
+        unsafe { Ok(egui::Id::from_high_entropy_bits(id)) }
     }
     pub fn write_roaring_treemap_r5(&mut self) -> Result<(), FffiError> {
         let r = &self.r5_id_set;
         let raw_sz = r.serialized_size();
-        let sz: u32 = raw_sz.try_into().map_err(|_| FffiError::SerializedSizeOverflow(raw_sz))?;
+        let sz: u32 = raw_sz.try_into().map_err(|_e| FffiError::SerializedSizeOverflow(raw_sz))?;
         self.io.write_plain_u32(sz)?;
         r.serialize_into(&mut self.io.w)?;
-        return Ok(());
+        Ok(())
     }
 }
 
-impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
-    /// Drains the per-frame paint_cmds buffer into the given painter,
+impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
+    /// Drains the per-frame `paint_cmds` buffer into the given painter,
     /// offsetting every coordinate by `origin`. Single source of truth
-    /// for the cmd-match loop — used by PaintCanvas (with origin =
-    /// canvas's resp.rect.min and ui_for_sense = Some(ui), so
-    /// SenseRegion can fire) and by paintAbsoluteOverlay (origin =
-    /// Pos2::ZERO since the overlay painter already paints in
-    /// viewport-absolute coords, ui_for_sense = None so SenseRegion
+    /// for the cmd-match loop — used by `PaintCanvas` (with origin =
+    /// canvas's resp.rect.min and `ui_for_sense` = Some(ui), so
+    /// `SenseRegion` can fire) and by paintAbsoluteOverlay (origin =
+    /// `Pos2::ZERO` since the overlay painter already paints in
+    /// viewport-absolute coords, `ui_for_sense` = None so `SenseRegion`
     /// logs and skips).
     ///
-    /// Adding a new PaintCmd variant: extend the match here and both
+    /// Adding a new `PaintCmd` variant: extend the match here and both
     /// call sites pick it up automatically — no drift risk between
     /// canvas and overlay drains.
     pub fn drain_paint_cmds_to_painter(
@@ -11504,7 +11509,6 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     monospace,
                 } => {
                     let align2 = match (anchor_h, anchor_v) {
-                        (0, 0) => egui::Align2::LEFT_TOP,
                         (0, 1) => egui::Align2::LEFT_CENTER,
                         (0, 2) => egui::Align2::LEFT_BOTTOM,
                         (1, 0) => egui::Align2::CENTER_TOP,
@@ -11513,6 +11517,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                         (2, 0) => egui::Align2::RIGHT_TOP,
                         (2, 1) => egui::Align2::RIGHT_CENTER,
                         (2, 2) => egui::Align2::RIGHT_BOTTOM,
+                        // (0, 0) lands here too: LEFT_TOP is the default anchor.
                         _ => egui::Align2::LEFT_TOP,
                     };
                     let font = if *monospace {
@@ -11864,19 +11869,21 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         }
     }
 
-    /// Renders an egui_extras::TableBuilder driven by `newTable` IDL state.
+    /// Renders an `egui_extras::TableBuilder` driven by `newTable` IDL state.
     ///
-    /// Drains self.new_table_columns and self.new_table_row_heights, reads
+    /// Drains `self.new_table_columns` and `self.new_table_row_heights`, reads
     /// the two deferred block maps (header cells / row cells) from the IPC
-    /// stream, then drives builder.header() (zero or one) followed by
-    /// builder.body(). Cell content is replayed via replay_deferred_block.
+    /// stream, then drives `builder.header()` (zero or one) followed by
+    /// `builder.body()`. Cell content is replayed via `replay_deferred_block`.
     ///
-    /// Borrow strategy: the closures egui_extras takes don't have a
-    /// delegate trait to lean on, so each col() callback re-borrows
+    /// Borrow strategy: the closures `egui_extras` takes don't have a
+    /// delegate trait to lean on, so each `col()` callback re-borrows
     /// `self` by name (the closure captures `&mut self` once and re-uses
-    /// it on each col() call — the borrow is local to each FnOnce
-    /// invocation, no overlap). The cell HashMaps are also captured by
-    /// shared ref since lookups happen inside col().
+    /// it on each `col()` call — the borrow is local to each `FnOnce`
+    /// invocation, no overlap). The cell `HashMaps` are also captured by
+    /// shared ref since lookups happen inside `col()`.
+    // The table's IDL arguments, passed straight through from the dispatch.
+    #[allow(clippy::too_many_arguments)]
     pub fn render_new_table(
         &mut self,
         table_id: u64,
@@ -11943,11 +11950,11 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         // TableState::load. reset() addresses ui.id().with(id_salt) — the
         // same id_salt set above — so it drops exactly this table's state
         // and the next layout rebuilds from each column's initial width.
-        if let Some(epoch) = apply_widths_epoch {
-            if self.width_epochs.get(&table_id).copied() != Some(epoch) {
-                builder.reset();
-                self.width_epochs.insert(table_id, epoch);
-            }
+        if let Some(epoch) = apply_widths_epoch
+            && self.width_epochs.get(&table_id).copied() != Some(epoch)
+        {
+            builder.reset();
+            self.width_epochs.insert(table_id, epoch);
         }
         if striped {
             builder = builder.striped(true);
@@ -11979,10 +11986,10 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                 for col_idx in 0..col_count as u32 {
                     let block = header_blocks.get(&(0u32, col_idx));
                     header.col(|ui| {
-                        if let Some(block) = block {
-                            if !block.is_empty() {
-                                let _ = interp.replay_deferred_block(&ctx_cloned, ui, block);
-                            }
+                        if let Some(block) = block
+                            && !block.is_empty()
+                        {
+                            let _ = interp.replay_deferred_block(&ctx_cloned, ui, block);
                         }
                     });
                 }
@@ -12010,9 +12017,9 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     }
 }
 
-/// Drains row content blocks against an egui_extras::Table (post-header).
-fn new_table_render_body<'a, R: std::io::BufRead, W: std::io::Write>(
-    table: egui_extras::Table<'a>,
+/// Drains row content blocks against an `egui_extras::Table` (post-header).
+fn new_table_render_body<R: std::io::BufRead, W: std::io::Write>(
+    table: egui_extras::Table<'_>,
     row_heights: &[f32],
     row_blocks: &std::collections::HashMap<(u64, u32), Vec<u8>>,
     col_count: usize,
@@ -12025,10 +12032,10 @@ fn new_table_render_body<'a, R: std::io::BufRead, W: std::io::Write>(
             for col_idx in 0..col_count as u32 {
                 let block = row_blocks.get(&(row_idx, col_idx));
                 row.col(|ui| {
-                    if let Some(block) = block {
-                        if !block.is_empty() {
-                            let _ = interp.replay_deferred_block(ctx, ui, block);
-                        }
+                    if let Some(block) = block
+                        && !block.is_empty()
+                    {
+                        let _ = interp.replay_deferred_block(ctx, ui, block);
                     }
                 });
             }
@@ -12036,9 +12043,9 @@ fn new_table_render_body<'a, R: std::io::BufRead, W: std::io::Write>(
     });
 }
 
-/// Drains row content blocks against an egui_extras::TableBuilder (no header).
-fn new_table_render_body_builder<'a, R: std::io::BufRead, W: std::io::Write>(
-    builder: egui_extras::TableBuilder<'a>,
+/// Drains row content blocks against an `egui_extras::TableBuilder` (no header).
+fn new_table_render_body_builder<R: std::io::BufRead, W: std::io::Write>(
+    builder: egui_extras::TableBuilder<'_>,
     row_heights: &[f32],
     row_blocks: &std::collections::HashMap<(u64, u32), Vec<u8>>,
     col_count: usize,
@@ -12051,10 +12058,10 @@ fn new_table_render_body_builder<'a, R: std::io::BufRead, W: std::io::Write>(
             for col_idx in 0..col_count as u32 {
                 let block = row_blocks.get(&(row_idx, col_idx));
                 row.col(|ui| {
-                    if let Some(block) = block {
-                        if !block.is_empty() {
-                            let _ = interp.replay_deferred_block(ctx, ui, block);
-                        }
+                    if let Some(block) = block
+                        && !block.is_empty()
+                    {
+                        let _ = interp.replay_deferred_block(ctx, ui, block);
                     }
                 });
             }

@@ -98,11 +98,11 @@ mod tests {
                 table.show(child_ui, &mut NullDelegate);
 
                 let after = egui_table::TableState::load(child_ui, state_id);
-                for idx in 0..supplied.len() {
+                for (idx, initial) in supplied.iter().enumerate() {
                     let w = after
                         .as_ref()
                         .and_then(|s| s.col_widths.get(&column_width_key(idx)).copied())
-                        .unwrap_or(supplied[idx]);
+                        .unwrap_or(*initial);
                     read_back.push(w);
                 }
             });

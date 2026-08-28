@@ -24,7 +24,7 @@ mod tests {
     ///
     /// Measured from the cell `Ui`'s `max_rect`, deliberately not from the
     /// `Rect` that `TableRow::col` returns: that one is the *used* rect —
-    /// egui_extras feeds it straight into `max_used_widths` — so it reports
+    /// `egui_extras` feeds it straight into `max_used_widths` — so it reports
     /// the width of the cell's content, and a test built on it reads the
     /// same small number no matter what the column does. `TableState`
     /// itself is private, so the cell `Ui` is the observable.
@@ -56,7 +56,7 @@ mod tests {
         observed
     }
 
-    /// The premise of the reset-based design: once egui_extras has stored a
+    /// The premise of the reset-based design: once `egui_extras` has stored a
     /// width, a different `initial()` on a later frame does not take. If
     /// this stops being true, the binding should pass widths directly and
     /// drop the reset — along with the in-flight drag the reset costs.

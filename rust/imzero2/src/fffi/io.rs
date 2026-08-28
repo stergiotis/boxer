@@ -65,6 +65,9 @@ impl ReplayReader {
         Ok(())
     }
 
+    // The Result is what `read_active` needs to treat this overlay and the
+    // pipe's `std::io::Read` as one shape; reading a slice cannot fail.
+    #[allow(clippy::unnecessary_wraps)]
     #[inline(always)]
     fn read(&mut self, out: &mut [u8]) -> Result<usize, std::io::Error> {
         let available = self.buf.len() - self.pos;
@@ -94,7 +97,7 @@ pub struct ImZeroFffiIo<R: std::io::BufRead, W: std::io::Write> {
 }
 impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     pub fn new(r: R, w: W) -> Self {
-        return Self {
+        Self {
             r,
             w,
             written_bytes_count: 0,
@@ -103,7 +106,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
             replay_readers: Vec::new(),
             replay_depth: 0,
             replay_saved_read_bytes_counts: Vec::new(),
-        };
+        }
     }
     pub fn reset_counts(&mut self) {
         self.written_bytes_count = 0;
@@ -122,10 +125,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     }
 
     /// Push an overlay reader to replay a deferred opcode block.
-    /// Supports nesting: multiple begin_replay calls stack, each end_replay pops one.
+    /// Supports nesting: multiple `begin_replay` calls stack, each `end_replay` pops one.
     /// Saves `read_bytes_count` so replay reads don't pollute pipe accounting.
     ///
-    /// On the first call at a given depth, allocates a ReplayReader + buffer.
+    /// On the first call at a given depth, allocates a `ReplayReader` + buffer.
     /// On subsequent calls at the same depth, reuses the existing reader and
     /// its buffer capacity — the `load()` call is a memcpy, not an allocation.
     pub fn begin_replay(&mut self, block: &[u8]) {
@@ -192,37 +195,37 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     pub fn flush(&mut self) -> Result<(), FffiError> {
         self.flush_count += 1;
         self.w.flush()?;
-        return Ok(());
+        Ok(())
     }
     pub fn write_all(&mut self, buf: &[u8]) -> Result<(), FffiError> {
         self.w.write_all(buf)?;
         self.written_bytes_count += buf.len();
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_u8(&mut self, v: u8) -> Result<(), FffiError> {
         let buffer = [v];
         self.write_all(&buffer)?;
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_u16(&mut self, v: u16) -> Result<(), FffiError> {
         let buffer = v.to_le_bytes();
         self.write_all(&buffer)?;
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_u32(&mut self, v: u32) -> Result<(), FffiError> {
         let buffer = v.to_le_bytes();
         self.write_all(&buffer)?;
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_u64(&mut self, v: u64) -> Result<(), FffiError> {
         let buffer = v.to_le_bytes();
         self.write_all(&buffer)?;
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_i64(&mut self, v: i64) -> Result<(), FffiError> {
         let buffer = v.to_le_bytes();
         self.write_all(&buffer)?;
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_s(&mut self, v: String) -> Result<(), FffiError> {
         let l = v.len();
@@ -230,7 +233,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         if l > 0 {
             self.write_all(v.as_bytes())?;
         }
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_u32h(
         &mut self,
@@ -238,10 +241,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         it: impl IntoIterator<Item = u32>,
     ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
-        for e in it.into_iter() {
+        for e in it {
             self.write_plain_u32(e)?;
         }
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_u64h(
         &mut self,
@@ -249,10 +252,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         it: impl IntoIterator<Item = u64>,
     ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
-        for e in it.into_iter() {
+        for e in it {
             self.write_plain_u64(e)?;
         }
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_u8h(
         &mut self,
@@ -260,10 +263,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         it: impl IntoIterator<Item = u8>,
     ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
-        for e in it.into_iter() {
+        for e in it {
             self.write_plain_u8(e)?;
         }
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_f32h(
         &mut self,
@@ -271,10 +274,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         it: impl IntoIterator<Item = f32>,
     ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
-        for e in it.into_iter() {
+        for e in it {
             self.write_plain_f32(e)?;
         }
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_f64h(
         &mut self,
@@ -282,10 +285,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         it: impl IntoIterator<Item = f64>,
     ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
-        for e in it.into_iter() {
+        for e in it {
             self.write_plain_f64(e)?;
         }
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_i64h(
         &mut self,
@@ -293,10 +296,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         it: impl IntoIterator<Item = i64>,
     ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
-        for e in it.into_iter() {
+        for e in it {
             self.write_plain_i64(e)?;
         }
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_sh(
         &mut self,
@@ -304,19 +307,19 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         it: impl IntoIterator<Item = String>,
     ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
-        for e in it.into_iter() {
+        for e in it {
             self.write_plain_s(e)?;
         }
-        return Ok(());
+        Ok(())
     }
     pub fn write_plain_f32(&mut self, v: f32) -> Result<(), FffiError> {
-        return self.write_plain_u32(v.to_bits());
+        self.write_plain_u32(v.to_bits())
     }
     pub fn write_plain_f64(&mut self, v: f64) -> Result<(), FffiError> {
-        return self.write_plain_u64(v.to_bits());
+        self.write_plain_u64(v.to_bits())
     }
     pub fn write_plain_b(&mut self, v: bool) -> Result<(), FffiError> {
-        return self.write_plain_u8(if v { 1u8 } else { 0u8 });
+        self.write_plain_u8(u8::from(v))
     }
 
     // =========================================================================
@@ -326,50 +329,50 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     pub fn read_plain_u8(&mut self) -> FffiResult<u8> {
         let mut buffer: [u8; 1] = [0; 1];
         self.read_exact_active(&mut buffer)?;
-        return Ok(u8::from_le_bytes(buffer));
+        Ok(u8::from_le_bytes(buffer))
     }
     pub fn read_plain_u16(&mut self) -> FffiResult<u16> {
         let mut buffer: [u8; 2] = [0; 2];
         self.read_exact_active(&mut buffer)?;
-        return Ok(u16::from_le_bytes(buffer));
+        Ok(u16::from_le_bytes(buffer))
     }
     pub fn read_plain_u32(&mut self) -> FffiResult<u32> {
         let mut buffer: [u8; 4] = [0; 4];
         self.read_exact_active(&mut buffer)?;
-        return Ok(u32::from_le_bytes(buffer));
+        Ok(u32::from_le_bytes(buffer))
     }
     pub fn read_plain_u64(&mut self) -> FffiResult<u64> {
         let mut buffer: [u8; 8] = [0; 8];
         self.read_exact_active(&mut buffer)?;
-        return Ok(u64::from_le_bytes(buffer));
+        Ok(u64::from_le_bytes(buffer))
     }
     pub fn read_plain_i8(&mut self) -> FffiResult<i8> {
         let mut buffer: [u8; 1] = [0; 1];
         self.read_exact_active(&mut buffer)?;
-        return Ok(i8::from_le_bytes(buffer));
+        Ok(i8::from_le_bytes(buffer))
     }
     pub fn read_plain_i16(&mut self) -> FffiResult<i16> {
         let mut buffer: [u8; 2] = [0; 2];
         self.read_exact_active(&mut buffer)?;
-        return Ok(i16::from_le_bytes(buffer));
+        Ok(i16::from_le_bytes(buffer))
     }
     pub fn read_plain_i32(&mut self) -> FffiResult<i32> {
         let mut buffer: [u8; 4] = [0; 4];
         self.read_exact_active(&mut buffer)?;
-        return Ok(i32::from_le_bytes(buffer));
+        Ok(i32::from_le_bytes(buffer))
     }
     pub fn read_plain_i64(&mut self) -> FffiResult<i64> {
         let mut buffer: [u8; 8] = [0; 8];
         self.read_exact_active(&mut buffer)?;
-        return Ok(i64::from_le_bytes(buffer));
+        Ok(i64::from_le_bytes(buffer))
     }
     pub fn read_plain_f32(&mut self) -> FffiResult<f32> {
         let u = self.read_plain_u32()?;
-        return Ok(f32::from_bits(u));
+        Ok(f32::from_bits(u))
     }
     pub fn read_plain_f64(&mut self) -> FffiResult<f64> {
         let u = self.read_plain_u64()?;
-        return Ok(f64::from_bits(u));
+        Ok(f64::from_bits(u))
     }
     pub fn read_plain_s(&mut self) -> FffiResult<String> {
         let len_offset = self.read_bytes_count;
@@ -401,7 +404,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
                 let preview_len = bad.len().min(64);
                 let hex_preview: String = bad[..preview_len]
                     .iter()
-                    .map(|b| format!("{:02x}", b))
+                    .map(|b| format!("{b:02x}"))
                     .collect::<Vec<_>>()
                     .join(" ");
                 let ascii_preview: String = bad[..preview_len]
@@ -490,7 +493,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     }
     pub fn read_plain_b(&mut self) -> FffiResult<bool> {
         let v = self.read_plain_u8()?;
-        return Ok(v != 0);
+        Ok(v != 0)
     }
     pub fn skip(&mut self, skip: usize) -> FffiResult<()> {
         // see https://github.com/rust-lang/rust/issues/53294
@@ -510,10 +513,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(FffiError::Io(e)),
-            };
-            debug_assert!(total <= skip);
+            }
+            debug_assert!(total <= skip, "skip loop read past the frame end");
         }
-        return Ok(());
+        Ok(())
     }
 
     // =========================================================================
@@ -523,12 +526,12 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     /// Read a deferred block map with key type (u64, u32) from the active reader.
     ///
     /// Wire format:
-    ///   u32: block_count
+    ///   u32: `block_count`
     ///   for each block:
-    ///     u64: key_part_0
-    ///     u32: key_part_1
-    ///     u32: block_byte_length
-    ///     [u8; block_byte_length]: raw opcodes
+    ///     u64: `key_part_0`
+    ///     u32: `key_part_1`
+    ///     u32: `block_byte_length`
+    ///     [u8; `block_byte_length`]: raw opcodes
     pub fn read_deferred_block_map_u64_u32(
         &mut self,
     ) -> FffiResult<std::collections::HashMap<(u64, u32), Vec<u8>>> {
@@ -548,13 +551,13 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     /// Read a deferred block map with key type (u64, u32) into a dense flat layout.
     ///
     /// Same wire format as `read_deferred_block_map_u64_u32`, but stores all block
-    /// data in a single contiguous slab with O(1) indexed lookup instead of a HashMap.
+    /// data in a single contiguous slab with O(1) indexed lookup instead of a `HashMap`.
     /// `num_rows` and `col_count` define the flat index dimensions.
     ///
     /// For a 10k x 3 table this eliminates:
     ///   - 30,000 individual `Vec<u8>` allocations (one slab instead)
-    ///   - HashMap bucket array + entry overhead
-    ///   - SipHash computation per lookup
+    ///   - `HashMap` bucket array + entry overhead
+    ///   - `SipHash` computation per lookup
     pub fn read_deferred_block_map_dense_u64_u32(
         &mut self,
         num_rows: u64,

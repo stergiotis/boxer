@@ -24,7 +24,7 @@ func writeFloatReduced(cw *runtime.CborWriter, f float64) {
 	if !math.IsInf(f, 0) && !math.IsNaN(f) && f == math.Trunc(f) {
 		switch {
 		case f >= 0 && f < 18446744073709551616.0: // < 2^64 → fits uint64 exactly
-			cw.Head(runtime.MajorUint, uint64(f))
+			cw.Head(runtime.MajorTypeUint, uint64(f))
 			return
 		case f < 0 && f >= -9223372036854775808.0: // ≥ -2^63 → fits int64 exactly
 			cw.WriteInt(int64(f))

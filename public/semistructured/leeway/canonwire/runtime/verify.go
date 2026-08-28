@@ -7,7 +7,9 @@ import (
 )
 
 // VerifyCanonical checks one entity item against everything the leeway
-// canonical wire fixes without a table description (ADR-0210 SD1–SD5):
+// canonical wire fixes without a table description (ADR-0210 SD1–SD5).
+//
+// The checks:
 //
 //   - the item is `[Version, plains:map, tagged:map]`, and nothing follows it;
 //   - plain keys are readable item types, strictly increasing;
@@ -265,7 +267,7 @@ func verifyMemberships(r *CborReader) (nGroups int, total int) {
 func membershipsAreGrouped(r *CborReader) (grouped bool) {
 	p := NewCborReader(r.b[r.pos:])
 	mt, arg := p.ReadHead()
-	if p.Err() != nil || mt != MajorArray {
+	if p.Err() != nil || mt != MajorTypeArray {
 		return false
 	}
 	if arg == 0 {
@@ -278,7 +280,7 @@ func membershipsAreGrouped(r *CborReader) (grouped bool) {
 	}
 	// A membership's first element is the channel ordinal, a uint; a group's is
 	// a membership, an array.
-	return inner == MajorArray
+	return inner == MajorTypeArray
 }
 
 // verifyMembershipList walks n memberships and requires them to be
@@ -325,7 +327,7 @@ func verifyValue(r *CborReader) (card uint64) {
 		r.Skip() // records the truncation
 		return 0
 	}
-	if mt == MajorTag {
+	if mt == MajorTypeTag {
 		tag := r.ReadTag()
 		if r.err != nil {
 			return 0

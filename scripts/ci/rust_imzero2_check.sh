@@ -22,12 +22,6 @@
 #
 # What this deliberately does NOT run:
 #
-#   - `cargo clippy`. rust/imzero2/check.sh runs it with `-D warnings` and it is
-#     still red. The generated half is no longer the reason: the FFFI2 Rust
-#     generator emits its own lint allowances for the dispatch match and the
-#     enum file, so what remains sits in hand-written code. Fixing that is its
-#     own piece of work, and holding this gate hostage to it would leave the
-#     crate ungated for longer.
 #   - `--all-features`. It enables desktop and both pixel hosts at once, which
 #     resolves (see headless.rs `Raster`) but builds far more than any shipped
 #     configuration.
@@ -97,6 +91,16 @@ run_step "check desktop (default features)" cargo check --quiet --target-dir "$t
 run_step "check headless_soft without fast_alloc" \
     cargo check --quiet --no-default-features --features headless_soft \
     --target-dir "$target" --all-targets
+
+# Clippy, on the default feature set. The crate reached zero findings under the
+# curated lint list in Cargo.toml (the deliberately-off block there says which
+# lints were dropped and why), and a gate is what keeps it there — the findings
+# came back in the hundreds the moment nobody was looking. The default set is
+# gated rather than the whole matrix because clippy's findings are almost all
+# feature-independent and a second full build is not worth the CI minutes;
+# rust/imzero2/check.sh runs the --all-features form locally.
+run_step "clippy (default features)" \
+    cargo clippy --quiet --target-dir "$target" --all-targets -- -D warnings -W clippy::all
 
 # Tests run once, under the feature set that has them. The CPU rasterizer's
 # own tests plus the crate's existing ~106.

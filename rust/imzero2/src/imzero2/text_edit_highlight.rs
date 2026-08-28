@@ -19,7 +19,7 @@
 //! clamping, dropping inverted ranges and sorting, but deliberately do **not**
 //! gap-fill: an uncovered byte simply has no styling.
 //!
-//! Text stays authoritative in the TextEdit; everything here is presentation.
+//! Text stays authoritative in the `TextEdit`; everything here is presentation.
 //! Galley memoisation is egui's own (`Fonts` caches by job hash) — no cache
 //! lives here.
 
@@ -36,7 +36,7 @@ pub const STYLE_ITALICS: u32 = 1 << 3;
 /// One sparse style overlay over a byte range of the buffer. `color` is the
 /// stroke color for underline/strikethrough and the fill for background;
 /// italics ignores it.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StyledSection {
     pub byte_start: u32,
     pub byte_stop: u32,

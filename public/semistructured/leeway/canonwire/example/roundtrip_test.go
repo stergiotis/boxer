@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"iter"
+	"math"
 	"slices"
 	"testing"
 	"time"
@@ -168,7 +169,7 @@ func writeTestTable(t *testing.T, dml *InEntityTestTable) {
 			secGeo.BeginAttribute(float32(i)+0.5, -float32(i)-0.25, 0x45494+uint64(i), 0x45454543).
 				AddMembershipLowCardRef(uint64(i) + 100).
 				EndAttribute()
-			secGeo.BeginAttribute(-0.0, 12.5, 1, 2).
+			secGeo.BeginAttribute(float32(math.Copysign(0, -1)), 12.5, 1, 2).
 				AddMembershipMixedLowCardVerbatim([]byte("geo-kind"), []byte("geo-params")).
 				EndAttribute()
 		}

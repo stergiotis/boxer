@@ -11,33 +11,42 @@ import (
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
-// MajorType is a CBOR major type, pre-shifted into the head byte.
-type MajorType byte
+// MajorTypeE is a CBOR major type, pre-shifted into the head byte.
+type MajorTypeE byte
 
 const (
-	MajorUint   MajorType = 0 << 5
-	MajorNeg    MajorType = 1 << 5
-	MajorBytes  MajorType = 2 << 5
-	MajorText   MajorType = 3 << 5
-	MajorArray  MajorType = 4 << 5
-	MajorMap    MajorType = 5 << 5
-	MajorTag    MajorType = 6 << 5
-	MajorSimple MajorType = 7 << 5
+	MajorTypeUint   MajorTypeE = 0 << 5
+	MajorTypeNeg    MajorTypeE = 1 << 5
+	MajorTypeBytes  MajorTypeE = 2 << 5
+	MajorTypeText   MajorTypeE = 3 << 5
+	MajorTypeArray  MajorTypeE = 4 << 5
+	MajorTypeMap    MajorTypeE = 5 << 5
+	MajorTypeTag    MajorTypeE = 6 << 5
+	MajorTypeSimple MajorTypeE = 7 << 5
 )
 
-// The three simple values the wire uses, as their whole one-byte encoding.
+// The three simple values the wire uses, each as its whole one-byte encoding.
+
 const (
-	SimpleFalse = byte(MajorSimple) | 20
-	SimpleTrue  = byte(MajorSimple) | 21
-	SimpleNull  = byte(MajorSimple) | 22
+	// SimpleFalse is the one-byte encoding of CBOR false.
+	SimpleFalse = byte(MajorTypeSimple) | 20
+	// SimpleTrue is the one-byte encoding of CBOR true.
+	SimpleTrue = byte(MajorTypeSimple) | 21
+	// SimpleNull is the one-byte encoding of CBOR null.
+	SimpleNull = byte(MajorTypeSimple) | 22
 )
 
 // Tag numbers the forms over this writer use (IANA CBOR Tags registry).
+
 const (
-	TagIPv4         uint64 = 52   // RFC 9164
-	TagIPv6         uint64 = 54   // RFC 9164
-	TagSet          uint64 = 258  // mathematical finite set
-	TagExtendedTime uint64 = 1001 // RFC 9581
+	// TagIPv4 is the RFC 9164 tag for an IPv4 address or prefix.
+	TagIPv4 uint64 = 52
+	// TagIPv6 is the RFC 9164 tag for an IPv6 address or prefix.
+	TagIPv6 uint64 = 54
+	// TagSet is the mathematical-finite-set tag.
+	TagSet uint64 = 258
+	// TagExtendedTime is the RFC 9581 extended-time tag.
+	TagExtendedTime uint64 = 1001
 )
 
 // NewCoreDetEncMode returns an fxamacker encoding mode in RFC 8949 §4.2 core
@@ -107,7 +116,7 @@ func (c *CborWriter) Write(p []byte) {
 
 // Head writes the head of a data item: major type and the shortest argument
 // encoding of n (RFC 8949 §4.2.1 preferred serialization).
-func (c *CborWriter) Head(mt MajorType, n uint64) {
+func (c *CborWriter) Head(mt MajorTypeE, n uint64) {
 	hb := c.hb[:]
 	switch {
 	case n < 24:
@@ -132,24 +141,24 @@ func (c *CborWriter) Head(mt MajorType, n uint64) {
 	}
 }
 
-func (c *CborWriter) WriteUint(n uint64) { c.Head(MajorUint, n) }
+func (c *CborWriter) WriteUint(n uint64) { c.Head(MajorTypeUint, n) }
 
 func (c *CborWriter) WriteInt(n int64) {
 	if n >= 0 {
-		c.Head(MajorUint, uint64(n))
+		c.Head(MajorTypeUint, uint64(n))
 		return
 	}
 	// -1 - n is representable for every negative int64, including MinInt64.
-	c.Head(MajorNeg, uint64(-1-n))
+	c.Head(MajorTypeNeg, uint64(-1-n))
 }
 
 func (c *CborWriter) WriteBytes(b []byte) {
-	c.Head(MajorBytes, uint64(len(b)))
+	c.Head(MajorTypeBytes, uint64(len(b)))
 	c.Write(b)
 }
 
 func (c *CborWriter) WriteText(b []byte) {
-	c.Head(MajorText, uint64(len(b)))
+	c.Head(MajorTypeText, uint64(len(b)))
 	c.Write(b)
 }
 
@@ -161,9 +170,9 @@ func (c *CborWriter) WriteBytesString(s string) {
 	c.WriteBytes(unsafeperf.UnsafeStringToBytes(s))
 }
 
-func (c *CborWriter) ArrayHead(n int) { c.Head(MajorArray, uint64(n)) }
-func (c *CborWriter) MapHead(n int)   { c.Head(MajorMap, uint64(n)) }
-func (c *CborWriter) Tag(n uint64)    { c.Head(MajorTag, n) }
+func (c *CborWriter) ArrayHead(n int) { c.Head(MajorTypeArray, uint64(n)) }
+func (c *CborWriter) MapHead(n int)   { c.Head(MajorTypeMap, uint64(n)) }
+func (c *CborWriter) Tag(n uint64)    { c.Head(MajorTypeTag, n) }
 
 func (c *CborWriter) WriteBool(v bool) {
 	if v {

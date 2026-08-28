@@ -1,6 +1,6 @@
 use crate::ipc::ipc06::MeshNode;
-use rand::RngExt;
-use std::io::{self, Write};
+use rand::RngExt as _;
+use std::io::{self, Write as _};
 use std::thread;
 use std::time::Duration;
 

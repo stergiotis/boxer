@@ -4,7 +4,7 @@
 //! same `egui::RawInput` events as under the desktop host and never
 //! learns that input is remote. Modifier state is tracked per session
 //! from the modifier bitmask each event carries (1=alt, 2=ctrl, 4=shift,
-//! 8=mac_cmd, 16=command — mirrors `egui::Modifiers`).
+//! `8=mac_cmd`, 16=command — mirrors `egui::Modifiers`).
 //!
 //! The one *output*-side translation riding the same edge lives here too:
 //! [`cursor_shape_code`] maps egui's per-frame `CursorIcon` onto the wire's
@@ -343,7 +343,7 @@ mod tests {
         }
     }
 
-    /// The existing PinchZoom guard stays in force (regression anchor).
+    /// The existing `PinchZoom` guard stays in force (regression anchor).
     #[test]
     fn nonfinite_pinch_dropped() {
         assert!(run(E::PinchZoom(pb::PinchZoom { factor: f32::NAN })).is_empty());

@@ -106,9 +106,9 @@ func DeriveCardinality(item []byte) (card uint64, err error) {
 		return 0, err
 	}
 	switch mt {
-	case MajorArray:
+	case MajorTypeArray:
 		return arg, nil
-	case MajorTag:
+	case MajorTypeTag:
 		if arg != TagSet {
 			// A temporal or a network value: one tagged item, cardinality one.
 			return 1, nil

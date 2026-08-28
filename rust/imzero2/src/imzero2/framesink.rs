@@ -36,7 +36,7 @@ impl PngDumpSink {
 
 impl FrameSink for PngDumpSink {
     fn on_frame(&mut self, bgra: &[u8], width: u32, height: u32, frame_idx: u64) {
-        if frame_idx % self.every != 0 {
+        if !frame_idx.is_multiple_of(self.every) {
             return;
         }
         self.rgba.clear();
@@ -49,10 +49,10 @@ impl FrameSink for PngDumpSink {
         let path = self.dir.join(format!("frame_{frame_idx:06}.png"));
         match write_png(&path, &self.rgba, width, height) {
             Ok(()) => {
-                tracing::info!(path=%path.display(), width, height, frame_idx, "headless frame dumped")
+                tracing::info!(path=%path.display(), width, height, frame_idx, "headless frame dumped");
             }
             Err(e) => {
-                tracing::error!(path=%path.display(), error=%e, "failed to dump headless frame")
+                tracing::error!(path=%path.display(), error=%e, "failed to dump headless frame");
             }
         }
     }

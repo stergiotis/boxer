@@ -63,10 +63,10 @@ pub fn parse_cpu_list(s: &str) -> Vec<usize> {
     for part in s.trim().split(',').filter(|p| !p.is_empty()) {
         match part.split_once('-') {
             Some((lo, hi)) => {
-                if let (Ok(lo), Ok(hi)) = (lo.trim().parse::<usize>(), hi.trim().parse::<usize>()) {
-                    if lo <= hi {
-                        out.extend(lo..=hi);
-                    }
+                if let (Ok(lo), Ok(hi)) = (lo.trim().parse::<usize>(), hi.trim().parse::<usize>())
+                    && lo <= hi
+                {
+                    out.extend(lo..=hi);
                 }
             }
             None => {

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
+use std::hash::{Hash as _, Hasher as _};
 
 /// A single colored section within a code view.
 /// Corresponds to one syntax-highlighted token span.
@@ -10,26 +10,32 @@ pub struct Section {
     pub color: egui::Color32,
 }
 
-/// Accumulated data from the CodeViewJob evaluated argument.
-/// Populated by the FFFI interpreter, then consumed by the CodeView widget.
+/// Accumulated data from the `CodeViewJob` evaluated argument.
+/// Populated by the FFFI interpreter, then consumed by the `CodeView` widget.
 #[derive(Clone, Debug, Default)]
 pub struct CodeViewJobData {
     pub text: String,
     pub sections: Vec<Section>,
 }
 
-/// Cache entry storing a pre-built LayoutJob to avoid reconstruction each frame.
+/// Cache entry storing a pre-built `LayoutJob` to avoid reconstruction each frame.
 struct CacheEntry {
     text_hash: u64,
     sections_len: usize,
     layout_job: egui::text::LayoutJob,
 }
 
-/// Content-addressed cache for LayoutJob instances.
-/// Keyed by a hash of (text, sections) to skip LayoutJob construction
+/// Content-addressed cache for `LayoutJob` instances.
+/// Keyed by a hash of (text, sections) to skip `LayoutJob` construction
 /// when the highlighted content hasn't changed.
 pub struct CodeViewCache {
     entries: HashMap<u64, CacheEntry>,
+}
+
+impl Default for CodeViewCache {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CodeViewCache {
@@ -54,7 +60,7 @@ fn content_hash(job: &CodeViewJobData) -> u64 {
     hasher.finish()
 }
 
-/// Build a LayoutJob from text and colored sections.
+/// Build a `LayoutJob` from text and colored sections.
 fn build_layout_job(job: &CodeViewJobData, ctx: &egui::Context) -> egui::text::LayoutJob {
     let font_id = egui::FontId::monospace(
         ctx.style_of(ctx.theme()).text_styles[&egui::TextStyle::Monospace].size,
@@ -101,10 +107,10 @@ fn build_layout_job(job: &CodeViewJobData, ctx: &egui::Context) -> egui::text::L
     layout_job
 }
 
-/// Returns a (potentially cached) LayoutJob for the given CodeViewJobData.
+/// Returns a (potentially cached) `LayoutJob` for the given `CodeViewJobData`.
 ///
-/// Cache lookup is O(1) by content hash. On miss, builds the LayoutJob
-/// and stores it. On hit, clones the cached job (LayoutJob is a plain
+/// Cache lookup is O(1) by content hash. On miss, builds the `LayoutJob`
+/// and stores it. On hit, clones the cached job (`LayoutJob` is a plain
 /// data struct, cloning is cheap compared to font resolution).
 pub fn get_or_build_layout_job(
     cache: &mut CodeViewCache,
@@ -113,10 +119,11 @@ pub fn get_or_build_layout_job(
 ) -> egui::text::LayoutJob {
     let hash = content_hash(job);
 
-    if let Some(entry) = cache.entries.get(&hash) {
-        if entry.text_hash == hash && entry.sections_len == job.sections.len() {
-            return entry.layout_job.clone();
-        }
+    if let Some(entry) = cache.entries.get(&hash)
+        && entry.text_hash == hash
+        && entry.sections_len == job.sections.len()
+    {
+        return entry.layout_job.clone();
     }
 
     let layout_job = build_layout_job(job, ctx);

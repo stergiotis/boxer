@@ -39,11 +39,11 @@ pub enum VideoCodec {
 impl VideoCodec {
     pub fn as_str(self) -> &'static str {
         match self {
-            VideoCodec::H264 => "h264",
-            VideoCodec::Vp9 => "vp9",
-            VideoCodec::Av1 => "av1",
-            VideoCodec::Av1Hi444 => "av1-444",
-            VideoCodec::Mesh => "mesh",
+            Self::H264 => "h264",
+            Self::Vp9 => "vp9",
+            Self::Av1 => "av1",
+            Self::Av1Hi444 => "av1-444",
+            Self::Mesh => "mesh",
         }
     }
 
@@ -51,11 +51,11 @@ impl VideoCodec {
     /// common spellings.
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
-            "h264" | "avc" | "avc1" | "h.264" => Some(VideoCodec::H264),
-            "vp9" | "vp09" => Some(VideoCodec::Vp9),
-            "av1" | "av01" | "aom" => Some(VideoCodec::Av1),
-            "av1-444" | "av1_444" | "av1444" | "av1-hi444" => Some(VideoCodec::Av1Hi444),
-            "mesh" | "draw-stream" | "drawstream" => Some(VideoCodec::Mesh),
+            "h264" | "avc" | "avc1" | "h.264" => Some(Self::H264),
+            "vp9" | "vp09" => Some(Self::Vp9),
+            "av1" | "av01" | "aom" => Some(Self::Av1),
+            "av1-444" | "av1_444" | "av1444" | "av1-hi444" => Some(Self::Av1Hi444),
+            "mesh" | "draw-stream" | "drawstream" => Some(Self::Mesh),
             _ => None,
         }
     }
@@ -65,11 +65,11 @@ impl VideoCodec {
     /// actually served.
     pub fn as_u8(self) -> u8 {
         match self {
-            VideoCodec::H264 => 0,
-            VideoCodec::Vp9 => 1,
-            VideoCodec::Av1 => 2,
-            VideoCodec::Av1Hi444 => 3,
-            VideoCodec::Mesh => 4,
+            Self::H264 => 0,
+            Self::Vp9 => 1,
+            Self::Av1 => 2,
+            Self::Av1Hi444 => 3,
+            Self::Mesh => 4,
         }
     }
 
@@ -77,11 +77,11 @@ impl VideoCodec {
     /// 3=AV1 4:4:4, 4=mesh (ADR-0128), anything else = H.264.
     pub fn from_u8(v: u8) -> Self {
         match v {
-            1 => VideoCodec::Vp9,
-            2 => VideoCodec::Av1,
-            3 => VideoCodec::Av1Hi444,
-            4 => VideoCodec::Mesh,
-            _ => VideoCodec::H264,
+            1 => Self::Vp9,
+            2 => Self::Av1,
+            3 => Self::Av1Hi444,
+            4 => Self::Mesh,
+            _ => Self::H264,
         }
     }
 }
@@ -138,12 +138,12 @@ impl CodecLane {
         }
     }
 
-    /// The WebCodecs `VideoDecoder.configure` codec string the viewer needs
+    /// The `WebCodecs` `VideoDecoder.configure` codec string the viewer needs
     /// (ADR-0088 SD6), at the stream's physical `width`×`height`. Empty for
     /// H.264 — the viewer derives `avc1.*` from the in-band SPS, which carries
     /// the exact profile/level. VP9/AV1 expose no in-band descriptor the viewer
     /// parses, so the host names them here, with the **level computed from the
-    /// resolution**: WebCodecs validates the codec-string level against the
+    /// resolution**: `WebCodecs` validates the codec-string level against the
     /// coded dimensions at `configure`, so a level below what the resolution
     /// needs makes decode fail — the bug a fixed ~4.x level had once a viewer
     /// resized past ~2K (M2). The level is frame-rate-agnostic (rate is not part
@@ -185,10 +185,10 @@ impl CodecLane {
             INFINITE_GOP
         };
         let mut lane = self.clone();
-        if let Some(i) = lane.encoder_args.iter().position(|a| a == "-g") {
-            if let Some(v) = lane.encoder_args.get_mut(i + 1) {
-                *v = gop.to_owned();
-            }
+        if let Some(i) = lane.encoder_args.iter().position(|a| a == "-g")
+            && let Some(v) = lane.encoder_args.get_mut(i + 1)
+        {
+            *v = gop.to_owned();
         }
         lane
     }
@@ -398,18 +398,18 @@ pub enum LaneProbe {
 impl LaneProbe {
     /// True only for [`LaneProbe::Ok`].
     pub fn is_ok(self) -> bool {
-        matches!(self, LaneProbe::Ok)
+        matches!(self, Self::Ok)
     }
 
     /// Wire reason code (0 = ok / no failure), mirrored by Go's
     /// `videopipeline.ProbeFailReason`. Packed into the capability flags.
     pub fn reason_code(self) -> u8 {
         match self {
-            LaneProbe::Ok => 0,
-            LaneProbe::NotBuilt => 1,
-            LaneProbe::NoDevice => 2,
-            LaneProbe::EncodeRejected => 3,
-            LaneProbe::Other => 4,
+            Self::Ok => 0,
+            Self::NotBuilt => 1,
+            Self::NoDevice => 2,
+            Self::EncodeRejected => 3,
+            Self::Other => 4,
         }
     }
 }
@@ -580,7 +580,7 @@ pub fn probe_lane(lane: &CodecLane) -> LaneProbe {
 }
 
 /// Smallest VP9 level code (the `LL` field of `vp09.PP.LL.BD`) whose max luma
-/// picture size covers `width*height`. WebCodecs validates the codec-string
+/// picture size covers `width*height`. `WebCodecs` validates the codec-string
 /// level against the coded dimensions at `configure`, so the level must be ≥
 /// what the resolution needs; it is frame-rate-agnostic. Mirrored in
 /// `viewer/index.html` and the Go `videopipeline` model — keep them identical.
