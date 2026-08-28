@@ -38,7 +38,7 @@ type StreamExecutor struct {
 
 // NewStreamExecutor writes batches of schema to w. The caller keeps
 // ownership of w: Close finishes the stream but does not close w — wrap
-// with [Owning] to hand the writer's lifetime over. A nil alloc selects the
+// with [StreamExecutor.Owning] to hand the writer's lifetime over. A nil alloc selects the
 // Go allocator.
 func NewStreamExecutor(w io.Writer, schema *arrow.Schema, alloc memory.Allocator) (inst *StreamExecutor) {
 	if alloc == nil {
