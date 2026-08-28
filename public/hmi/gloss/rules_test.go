@@ -34,9 +34,9 @@ func TestCompileRule(t *testing.T) {
 	assert.ErrorContains(t, err, "does not compile")
 }
 
-// The affinities in v0: masked (sem:secret), url, the json family — narrow,
-// in catalog order (content family first, so application/json precedes
-// gloss/masked).
+// The affinities: masked (sem:secret), url, the json family and the network
+// canonical types — narrow, in catalog order (content family first, so
+// application/json precedes gloss/masked).
 func TestAffinityRules(t *testing.T) {
 	c := Default()
 	rules := c.AffinityRules()
@@ -49,6 +49,7 @@ func TestAffinityRules(t *testing.T) {
 		MediaTypeJSON + ` ← \bsem:json(-scalar|-array|-object)?\b`,
 		MediaTypeMasked + ` ← \bsem:secret\b`,
 		MediaTypeURL + ` ← \bsem:url\b`,
+		MediaTypeIPAddr + ` ← \bct:[vw]c?[hm]?\b`,
 	}, got)
 
 	r, ok := MatchFirst(rules, "name:pw section:auth role:val ct:s sem:secret arrow:utf8")
@@ -60,6 +61,11 @@ func TestAffinityRules(t *testing.T) {
 	assert.True(t, ok)
 	_, ok = MatchFirst(rules, "name:temp_c arrow:float64")
 	assert.False(t, ok, "units have no affinity — that is what the directive is for")
+	r, ok = MatchFirst(rules, "name:peer section:conn role:val ct:wc arrow:fixed_size_binary[17]")
+	require.True(t, ok)
+	assert.Equal(t, MediaTypeIPAddr, r.MediaType, "a network canonical type carries its own affinity")
+	_, ok = MatchFirst(rules, "name:weight ct:f64 arrow:float64")
+	assert.False(t, ok, "ct:[vw] is the whole type, not a prefix of another one")
 
 	// Directive rules precede affinities by list order; gloss/raw overrides.
 	raw, err := c.CompileRule("gloss/raw", `\bsem:secret\b`, "directive line 1")

@@ -245,14 +245,23 @@ fi
 
 # ---- ffmpeg for the headless encoder ----------------------------------------
 # Cached outside the staging dir so re-packing does not re-download ~89 MB of
-# codec sources; the bundle carries only the linked binary.
+# codec sources; the bundle then carries BOTH the linked binary and a copy of the
+# ~90 MB of tarballs, so the target can rebuild rather than only re-verify.
 ffmpeg_shipped=0
+ffmpeg_src_shipped=0
 if [ "$ship_ffmpeg" = 1 ]; then
     if airgap_ship_ffmpeg "$src/_airgap/bin" "$repo/.airgap-ffmpeg-src"; then
         ffmpeg_shipped=1
     fi
+    # ...and the source tarballs beside it, so the shipped build-static-ffmpeg.sh
+    # can actually be run on the target. Staged whether or not the binary built:
+    # if this host failed mid-compile, a target with the build toolchain can still
+    # produce what it could not.
+    if airgap_ship_ffmpeg_sources "$src/_airgap/ffmpeg-src" "$repo/.airgap-ffmpeg-src"; then
+        ffmpeg_src_shipped=1
+    fi
 else
-    echo "NOTE: --no-ffmpeg: the target must supply its own ffmpeg." >&2
+    echo "NOTE: --no-ffmpeg: the target must supply its own ffmpeg (and gets no sources)." >&2
 fi
 
 # ---- pinned prebuilt tools ---------------------------------------------------
@@ -298,6 +307,7 @@ fi
     echo "imzero2_heads_verified=${heads_verified:-$AIRGAP_IMZERO2_FEATURES}"
     [ "$scope" = full ] && echo "rust=$(cd rust/imzero2 && rustc --version 2>/dev/null || true)"
     echo "ffmpeg=$([ "$ffmpeg_shipped" = 1 ] && "$src/_airgap/bin/ffmpeg" -hide_banner -version 2>/dev/null | head -1 || echo "none (environment-provided)")"
+    echo "ffmpeg_src=$([ "$ffmpeg_src_shipped" = 1 ] && echo "yes (build-static-ffmpeg.sh can rebuild offline)" || echo "none")"
     # A tinygo appears here only if the wasm smoke build passed; a failure drops
     # it from the bundle, so the version line doubles as the verification record.
     if [ "$tinygo_shipped" = 1 ]; then

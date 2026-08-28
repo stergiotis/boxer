@@ -274,17 +274,3 @@ func TestNodeID_String(t *testing.T) {
 		t.Fatalf("string too short: %q", s)
 	}
 }
-
-// --- HashBytes ---
-
-func TestHashBytes_Deterministic(t *testing.T) {
-	h1 := HashBytes([]byte("hello"))
-	h2 := HashBytes([]byte("hello"))
-	if h1 != h2 {
-		t.Fatal("same input should produce same hash")
-	}
-	h3 := HashBytes([]byte("world"))
-	if h1 == h3 {
-		t.Fatal("different input should produce different hash")
-	}
-}

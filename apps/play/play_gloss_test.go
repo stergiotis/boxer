@@ -129,6 +129,10 @@ func TestGlossCatalogListing(t *testing.T) {
 	sample, _ = bindGlossSample(mustLookup(t, cat, gloss.MediaTypePNG), gloss.MediaTypePNG)
 	assert.Equal(t, "text · bytes", glossKindsLine(sample.inst), "an image column arrives as ClickHouse String: text is accepted")
 	assert.Equal(t, "[image/png · 24 B]", sample.face.Text)
+	sample, _ = bindGlossSample(mustLookup(t, cat, gloss.MediaTypeIPAddr), gloss.MediaTypeIPAddr)
+	assert.Equal(t, "numeric · text · bytes", glossKindsLine(sample.inst))
+	assert.Equal(t, glossSampleAddr, sample.face.Text, "the listing falls past the samples the gloss refuses to show")
+	assert.Equal(t, gloss.ToneNeutral, sample.face.Tone)
 }
 
 func mustLookup(t *testing.T, cat *gloss.Catalog, mediaType string) gloss.GlossI {
@@ -502,4 +506,84 @@ func glossInstanceFor(t *testing.T, mediaType string) gloss.InstanceI {
 	inst, err := g.Bind(nil)
 	require.NoError(t, err)
 	return inst
+}
+
+// ipAddrRec mints a leeway-shaped schema with the two representations an
+// address rides in — `ct:w` as packed bytes, `ct:v` as a big-endian uint32 —
+// so the affinity has a canonical type to match.
+func ipAddrRec(t *testing.T) arrow.RecordBatch {
+	t.Helper()
+	comp, err := lwsql.NewComposer(lwsql.DefaultTableSegments())
+	require.NoError(t, err)
+	idName, err := comp.PlainColumn("id", "u64", []string{"item:id"})
+	require.NoError(t, err)
+	peerName, err := comp.TaggedValueColumn("conn", "peer", "w", nil)
+	require.NoError(t, err)
+	hostName, err := comp.TaggedValueColumn("conn", "host", "v", nil)
+	require.NoError(t, err)
+
+	mem := memory.NewGoAllocator()
+	ib := array.NewUint64Builder(mem)
+	defer ib.Release()
+	ib.AppendValues([]uint64{1}, nil)
+	ids := ib.NewArray()
+	v6t := &arrow.FixedSizeBinaryType{ByteWidth: 16}
+	pb := array.NewListBuilder(mem, v6t)
+	defer pb.Release()
+	pvb := pb.ValueBuilder().(*array.FixedSizeBinaryBuilder)
+	pb.Append(true)
+	pvb.Append([]byte{0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1})
+	peers := pb.NewArray()
+	hb := array.NewListBuilder(mem, arrow.PrimitiveTypes.Uint32)
+	defer hb.Release()
+	hvb := hb.ValueBuilder().(*array.Uint32Builder)
+	hb.Append(true)
+	hvb.Append(0x01020304)
+	hosts := hb.NewArray()
+
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: idName, Type: arrow.PrimitiveTypes.Uint64},
+		{Name: peerName, Type: arrow.ListOf(v6t)},
+		{Name: hostName, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint32)},
+	}, nil)
+	return array.NewRecordBatch(schema, []arrow.Array{ids, peers, hosts}, 1)
+}
+
+// A leeway network column reaches gloss/ipaddr through its canonical type.
+// Nothing else can: the Arrow schema says uint32 and fixed_size_binary[16],
+// which read as a decimal and as bytes — base64 in the lanes that format
+// through arrow's own ValueStr.
+func TestGlossIPAddrOnLeewaySchema(t *testing.T) {
+	app := &PlayApp{}
+	rec := ipAddrRec(t)
+	defer rec.Release()
+	cols := app.glossColumns(rec.Schema())
+	require.Len(t, cols, 3)
+
+	assert.Empty(t, cols[0].mediaType, "a u64 id is not an address")
+	for _, i := range []int{1, 2} {
+		assert.Equal(t, gloss.MediaTypeIPAddr, cols[i].mediaType)
+		assert.Equal(t, `affinity: \bct:[vw]c?[hm]?\b`, cols[i].source)
+		assert.False(t, cols[i].glossed(), "the per-row cell of a tagged column is the list, still [len=N]")
+		assert.True(t, cols[i].glossedElem(), "the items are addresses")
+	}
+
+	// The per-attribute grid and the leeway card hand over text the driver
+	// wrote out; it passes through rather than being read as bytes again.
+	assert.Equal(t, "2001:db8::1", app.glossText(&cols[1], "2001:db8::1", gloss.ValueKindBytes))
+	assert.Equal(t, "1.2.3.4", app.glossText(&cols[2], "1.2.3.4", gloss.ValueKindNumeric))
+
+	// The grids hand over the Arrow value itself.
+	peers := rec.Column(1).(*array.List)
+	text, tone := app.glossCell(&cols[1], peers.ListValues(), 0, true)
+	assert.Equal(t, "2001:db8::1", text)
+	assert.Equal(t, gloss.ToneNeutral, tone)
+	hosts := rec.Column(2).(*array.List)
+	text, _ = app.glossCell(&cols[2], hosts.ListValues(), 0, true)
+	assert.Equal(t, "1.2.3.4", text)
+
+	// Raw cells shows what the column actually carries.
+	app.tableOpts.rawCells = true
+	text, _ = app.glossCell(&cols[1], peers.ListValues(), 0, true)
+	assert.Equal(t, "20010db8000000000000000000000001", text)
 }

@@ -68,6 +68,7 @@ prefix=""
 out=""
 jobs=$(nproc 2>/dev/null || echo 4)
 fetch=0
+fetch_only=0
 with_h264=1
 preflight_only=0
 
@@ -88,6 +89,12 @@ usage: $(basename "$0") [options]
                   check the build-host prerequisites and exit, building nothing.
                   For a caller that runs this build LATE in a longer flow: gate
                   on it up front instead of discovering a missing cmake at the end.
+  --fetch-only    download the source tarballs into --src-dir and exit, building
+                  nothing. Implies --fetch. For staging sources to be compiled
+                  somewhere else -- an airgap bundle carries them so the binary can
+                  be built later on a host of the TARGET's architecture, which is
+                  how a bundle for a foreign arch gets an ffmpeg at all. Skips the
+                  build-host preflight, since nothing is compiled here.
 EOF
 }
 
@@ -103,6 +110,7 @@ while [ $# -gt 0 ]; do
     --fetch) fetch=1; shift ;;
     --without-h264) with_h264=0; shift ;;
     --preflight-only) preflight_only=1; shift ;;
+    --fetch-only) fetch_only=1; fetch=1; shift ;;
     -h | --help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
@@ -131,11 +139,18 @@ have() { [ -f "$prefix/lib/$1" ]; }
 
 step "preflight"
 
+# --fetch-only compiles nothing, so the build toolchain is beside the point; only
+# curl and tar matter, and a missing one fails loudly at the fetch itself.
+if [ "$fetch_only" = 1 ]; then
+    echo "  skipped (--fetch-only compiles nothing)"
+fi
+
 # Every missing prerequisite is reported AT ONCE, each named with the package
 # that supplies it on this host. Failing on the first one costs the operator a
 # round trip per package, and a distro may plausibly be missing four of these at
 # a time -- a modern Fedora ships neither a static libc nor a static libstdc++,
 # and nasm and cmake are not in any base install.
+if [ "$fetch_only" = 0 ]; then
 pkgmgr=""
 for m in dnf apt-get apk pacman; do
     if command -v "$m" >/dev/null 2>&1; then pkgmgr=$m; break; fi
@@ -295,6 +310,7 @@ if [ "$preflight_only" = 1 ]; then
     echo "  all prerequisites present ($(uname -m); assembler: $([ "$target_cpu" = x86 ] && echo nasm || echo 'GNU as'))"
     exit 0
 fi
+fi   # end: fetch_only == 0
 
 mkdir -p "$src_dir" "$prefix" "$log_dir"
 
@@ -320,6 +336,11 @@ fetch_one "https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/v${SVTAV1_VER}/SVT-
 fetch_one "https://github.com/webmproject/libvpx/archive/refs/tags/v${VPX_VER}.tar.gz" "libvpx-${VPX_VER}.tar.gz"
 fetch_one "https://github.com/cisco/openh264/archive/refs/tags/v${OPENH264_VER}.tar.gz" "openh264-${OPENH264_VER}.tar.gz"
 (cd "$src_dir" && sha256sum ./*.tar.*)
+
+if [ "$fetch_only" = 1 ]; then
+    step "done (--fetch-only): sources staged in $src_dir"
+    exit 0
+fi
 
 cd "$src_dir"
 for t in *.tar.*; do

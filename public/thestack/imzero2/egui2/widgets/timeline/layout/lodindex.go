@@ -48,19 +48,30 @@ type LODIndex struct {
 // An empty scales slice produces an index whose queries always return
 // empty bucket lists; use this as a "no LOD" sentinel.
 func BuildLODIndex(events []PointEvent, scales []time.Duration) (idx *LODIndex) {
+	return BuildLODIndexUnit(events, scales, time.Millisecond)
+}
+
+// BuildLODIndexUnit is [BuildLODIndex] for an axis whose values count unit
+// rather than milliseconds (an offset axis, ADR-0043 update 2026-08-28): the
+// scales are converted to counts of unit, and must still ascend strictly at
+// that precision.
+func BuildLODIndexUnit(events []PointEvent, scales []time.Duration, unit time.Duration) (idx *LODIndex) {
 	idx = &LODIndex{}
 	if len(scales) == 0 {
 		return
 	}
+	if unit <= 0 {
+		unit = time.Millisecond
+	}
 	idx.scales = make([]int64, len(scales))
 	for i, s := range scales {
-		ms := s.Milliseconds()
+		ms := int64(s / unit)
 		if ms <= 0 {
 			ms = 1
 		}
 		if i > 0 && ms <= idx.scales[i-1] {
-			panic(fmt.Sprintf("layout: BuildLODIndex requires strictly ascending scales (ms-precision); scales[%d]=%dms <= scales[%d]=%dms",
-				i, ms, i-1, idx.scales[i-1]))
+			panic(fmt.Sprintf("layout: BuildLODIndex requires strictly ascending scales (at the axis unit %v); scales[%d]=%d <= scales[%d]=%d",
+				unit, i, ms, i-1, idx.scales[i-1]))
 		}
 		idx.scales[i] = ms
 	}

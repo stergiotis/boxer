@@ -22,11 +22,11 @@ func fuzzSeedEnvelope() []byte {
 	p := patch.NewPatch("alice", "edit", []t.PatchHash{dep.Hash}, []patch.Change{{
 		Kind: patch.ChangeKindDeleteNode, NodeID: t.NodeID{Patch: dep.Hash, Index: 0},
 	}})
-	reg, err := NewRegistry(JSONV1{})
+	reg, err := NewRegistry(CBORV1{})
 	if err != nil {
 		panic(err)
 	}
-	data, err := reg.Encode(JSONV1Name, EnvelopeV1{Patch: p, Producer: "alice", Timestamp: time.Unix(0, 0).UTC()})
+	data, err := reg.Encode(CBORV1Name, EnvelopeV1{Patch: p, Producer: "alice", Timestamp: time.Unix(0, 0).UTC()})
 	if err != nil {
 		panic(err)
 	}
@@ -45,7 +45,7 @@ func FuzzDecode(f *testing.F) {
 		mutated[i] ^= 0x20
 		f.Add(mutated)
 	}
-	reg, rerr := NewRegistry(JSONV1{})
+	reg, rerr := NewRegistry(CBORV1{})
 	if rerr != nil {
 		f.Fatal(rerr)
 	}

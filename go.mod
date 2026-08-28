@@ -30,6 +30,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hishamk/statetrooper v0.1.4
+	github.com/jfreymuth/pulse v0.1.3
 	github.com/klauspost/compress v1.19.2
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/mattn/go-isatty v0.0.24

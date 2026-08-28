@@ -95,8 +95,8 @@ func TestCompare_RelationString(tt *testing.T) {
 // in the version order.
 func TestCompare_RepoLifecycle(tt *testing.T) {
 	ctx := context.Background()
-	alice := openMixed(tt, "alice", envelope.JSONV1Name)
-	bob := openMixed(tt, "bob", envelope.JSONV1Name)
+	alice := openMixed(tt, "alice", envelope.CBORV1Name)
+	bob := openMixed(tt, "bob", envelope.CBORV1Name)
 
 	applied := func(r *repo.Repo) []t.PatchHash {
 		tt.Helper()

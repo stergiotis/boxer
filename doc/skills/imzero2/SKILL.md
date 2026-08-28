@@ -1450,3 +1450,79 @@ for range dock.Tab(dockID, title) {
 - **No id drift.** Each tab body is its own capture buffer and the XOR id stack is unaffected by sibling content; egui memory (scroll, collapse) for a hidden body's ids persists and restores on re-show.
 - **Send-once protocols** under a revealed body re-arm through the starved-texture report (`StateManager.TextureStarved`, §12) exactly as after an idle-LRU eviction — that r22 fix is what makes skipping a texture-bearing body safe. Use `JustRevealed()` to re-arm eagerly and shave the round-trip.
 - **Verify in the real bounded host, not the tour.** The tour starts *on* the tab under test, so it never exercises the hidden→visible edge — walk the tabs interactively ([`doc/howto/verify-dock-tab-walk.md`](../../howto/verify-dock-tab-walk.md)).
+
+## 19. waveform — the audio waveform player
+
+The audio player of ADR-0208 is a Go widget on the painter lane, package
+[`widgets/waveform`](../../../public/thestack/imzero2/egui2/widgets/waveform/),
+over the audio subtree `public/science/audio/{pcm,wavfile,peaks,sink,track}`.
+No opcode, no Rust. The gallery demo `egui2_hl_waveform_demo.go` and the
+headless scene `scripts/dev/waveform-scene.sh` exercise it.
+
+### 19.1 Usage
+
+```go
+tr, err := track.OpenE(ctx, src, track.Options{})        // src: any pcm.SourceI (wavfile.OpenE, pcm.NewSynthSourceE, …)
+p := waveform.New(ids, tr, waveform.Options{ScopeKey: "my-player"})
+// each frame, on the frame goroutine:
+p.RenderFillWidth(220, 1000)                               // or p.Render(w, h) / p.RenderFill(fw, fh)
+if f, ok := p.Clicked(); ok { /* a click seeked to frame f */ }
+```
+
+`track` owns source, peaks pyramid, sink and `TimeBase`; the player owns
+only the view. A track opens on whatever sink `Options.NewSink` builds
+(`sink.NewNull` by default — silent, headless-safe) and
+`track.ReplaceSinkE(func(src) (sink.SinkI, error))` swaps a device in later;
+`sink/pulsesink.OpenE` is the PulseAudio/PipeWire sink (pure Go, no cgo). Do
+not import `pulsesink` into a widget: the swap is the host's decision, and a
+headless scene or the tour must keep the null sink. A recording on disk opens
+with `track.OpenFileE(ctx, path, opts)` — sniffed format, one decoder per
+reader, peaks cached under `BOXER_AUDIO_PEAKS_CACHE_DIR`, built in the
+background; poll `tr.BuildProgress()` for a progress bar (it carries
+`EtaMs`), and where the host has a task API report the build as a keelson
+task with `waveform.SpawnBuildTask(ctx, tasks, tr, title)` — the task monitor
+then lists it and its cancel calls `tr.CancelBuild()`. Raw windows come
+from `tr.Window(from, to)`, which returns `ok=false` on a miss and fetches
+off-thread — draw the pyramid that frame and ask again; never call
+`ReadWindowE` from a frame.
+
+Annotations (SD8) are host-owned: `p.SetLayers(&layers)` with sorted
+`Regions` / `Markers` / `Curves`; read `p.Events()` after `Render` and apply a
+`RegionEdit` to your own slice (the player never mutates it). Interval and
+point lanes are the `timeline` widget on its offset axis (ADR-0043 SD17):
+`lanes := waveform.NewLanes(ids, key, tr.TimeBase(), intervals)` with bounds
+in `waveform.FrameToLaneUnit` (microseconds), then `lanes.Render(p)` right
+after the player so it locks to the view — leave `LaneHint` empty or the
+label column shifts the axis off the waveform's origin. `p.RenderMinimap(w, h)`
+is its own canvas; `p.SetReadout(waveform.ReadoutAbsolute)` prints the epoch's
+wall clock when the track has one. Make region editing a mode: a body drag
+and a pan are the same gesture. `Player.TogglePlay / SeekTo / ZoomBy / FitAll / SetView` are
+the programmatic controls; `Hover / Clicked / View / Position / FormatOffset`
+the readbacks (one frame behind, like every canvas register).
+
+### 19.2 What to know before changing it
+
+- **Two draw paths, no third** (ADR-0208 SD2/SD3): at ≥ 1 frame per column
+  each channel is one `PaintRectsFilled` of min/max columns — from
+  `peaks.Pyramid.Columns` when a column spans a base bin, reduced from a raw
+  window (`track.ReadWindowE`) otherwise; below 1 frame per column the raw
+  window is a `PaintPolyline` with markers. The per-column colour array
+  carries the played/unplayed split, so progress costs no second batch.
+- **Input is the portolan recipe** (§16.2): a sense region emitted last owns
+  the drag, the canvas senses click + hover and captures wheel and zoom
+  (R23), the drag is press-origin plus offset, keys arrive through a
+  `CaptureKeys` Frame the canvas focuses on press. `Seek` is `SeekTo` —
+  `go vet` rejects a `Seek(int64)` method as a malformed `io.Seeker`.
+- **The view is `View{FromFrame, FramesPerPx}` in float64**, clamped to the
+  track (`view.go`): never before 0, never past the end unless the whole
+  track fits, zoom within [1/64 px⁻¹, fit-all]. Zoom about an anchor keeps
+  the anchored frame under the pointer; property-tested.
+- **The ruler is a duration ladder** (`ticks.go`), not `timeticks`'s
+  calendar ladder; labels truncate rather than round so two ticks never read
+  the same. With a `TimeBase` epoch the same ticks label as wall-clock.
+- **Headless scene coordinates.** The canvas has no accessibility node. The
+  scene dumps the tree, finds the button row above and the readout below,
+  and aims at their midpoint; a fixed `10 ms/px` zoom makes a 300 px drag
+  exactly `0:03.000`. The `capture` step needs a **raster-capable** client
+  (`headless-soft` or the wgpu build) — a mesh-only appliance build passes
+  every assertion and then fails the capture.

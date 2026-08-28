@@ -677,7 +677,7 @@ func (inst *Driver) drivePlainSection(sink SinkI, rec arrow.RecordBatch, entityI
 			if av != nil {
 				av.WriteArrowScalar(rec.Column(col.arrowIdx), entityIdx)
 			} else {
-				text := inst.readPlainScalar(rec, col.arrowIdx, entityIdx)
+				text := inst.readPlainScalar(rec, col.arrowIdx, entityIdx, col.canonicalType)
 				_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
 				inst.handleError(err)
 			}
@@ -693,7 +693,7 @@ func (inst *Driver) drivePlainSection(sink SinkI, rec arrow.RecordBatch, entityI
 			} else {
 				for elemIdx := range card {
 					sink.BeginValueItem(elemIdx)
-					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
+					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx, col.canonicalType)
 					_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
 					inst.handleError(err)
 					sink.EndValueItem()
@@ -710,7 +710,7 @@ func (inst *Driver) drivePlainSection(sink SinkI, rec arrow.RecordBatch, entityI
 			} else {
 				for elemIdx := range card {
 					sink.BeginValueItem(elemIdx)
-					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
+					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx, col.canonicalType)
 					_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
 					inst.handleError(err)
 					sink.EndValueItem()
@@ -729,9 +729,11 @@ func (inst *Driver) drivePlainSection(sink SinkI, rec arrow.RecordBatch, entityI
 }
 
 // readPlainScalar reads a scalar value from a non-list column at row entityIdx.
-func (inst *Driver) readPlainScalar(rec arrow.RecordBatch, colIdx int, rowIdx int) (text string) {
+// ct is the column's canonical type: a network column is written out as its
+// address rather than as the integer or the packed bytes it rides in.
+func (inst *Driver) readPlainScalar(rec arrow.RecordBatch, colIdx int, rowIdx int, ct canonicaltypes.PrimitiveAstNodeI) (text string) {
 	col := rec.Column(colIdx)
-	text = col.ValueStr(rowIdx)
+	text = valueText(col, rowIdx, ct)
 	return
 }
 
@@ -930,7 +932,7 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 			if av != nil {
 				av.WriteArrowScalar(inst.listInnerArray(rec, col.arrowIdx), flatIdx)
 			} else {
-				text := inst.readListInnerValue(rec, col.arrowIdx, flatIdx)
+				text := inst.readListInnerValue(rec, col.arrowIdx, flatIdx, col.canonicalType)
 				_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
 				inst.handleError(err)
 			}
@@ -953,7 +955,7 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 			} else {
 				for elemIdx := range card {
 					sink.BeginValueItem(elemIdx)
-					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
+					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx, col.canonicalType)
 					_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
 					inst.handleError(err)
 					sink.EndValueItem()
@@ -977,7 +979,7 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 			} else {
 				for elemIdx := range card {
 					sink.BeginValueItem(elemIdx)
-					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx)
+					text := inst.readListInnerValue(rec, col.arrowIdx, elemStart+elemIdx, col.canonicalType)
 					_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
 					inst.handleError(err)
 					sink.EndValueItem()
@@ -1196,9 +1198,9 @@ func (inst *Driver) listFlatIndex(rec arrow.RecordBatch, arrowColIdx int, entity
 	return
 }
 
-func (inst *Driver) readListInnerValue(rec arrow.RecordBatch, arrowColIdx int, flatIdx int) (text string) {
+func (inst *Driver) readListInnerValue(rec arrow.RecordBatch, arrowColIdx int, flatIdx int, ct canonicaltypes.PrimitiveAstNodeI) (text string) {
 	inner := inst.listInnerArray(rec, arrowColIdx)
-	text = inner.ValueStr(flatIdx)
+	text = valueText(inner, flatIdx, ct)
 	return
 }
 

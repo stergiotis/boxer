@@ -46,7 +46,7 @@ func diagCommand() *cli.Command {
 					return err
 				}
 			}
-			return nil
+			return w.Flush()
 		},
 		Usage: "reads cbor from stdin and emits RFC8949 diagnose output to stdout",
 	}

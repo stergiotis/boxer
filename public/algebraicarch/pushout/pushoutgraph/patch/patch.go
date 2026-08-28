@@ -4,7 +4,6 @@ package patch
 
 import (
 	"bytes"
-	"encoding/json"
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -40,52 +39,15 @@ type Change struct {
 }
 
 // Patch is a set of changes with metadata and dependency tracking.
-// A patch's identity is the BLAKE3 hash of its canonicalized dependency
-// set plus its serialized changes (see ComputeHash).
+// A patch's identity is the keyed BLAKE3 digest of the CBOR identity
+// item over its canonicalized dependency set plus its changes (see
+// ComputeHash and identityform.go).
 type Patch struct {
 	Hash         t.PatchHash
 	Author       string
 	Description  string
 	Dependencies []t.PatchHash // Patches that must be applied before this one
 	Changes      []Change
-}
-
-// ComputeHash computes the patch hash from its dependencies and changes.
-//
-// The hashed payload is {canonicalized Dependencies, Changes}: the
-// dependency set is part of patch identity, so an envelope whose
-// dependency list was stripped or extended no longer validates against
-// the stored hash. The list is canonicalized (sorted, deduplicated)
-// before hashing — dependencies are semantically a set, and identity
-// must not depend on declaration order. Author and description stay
-// OUTSIDE the hash: they are provenance, carried at the envelope level,
-// and two actors independently recording the same edit against the same
-// state still converge on the same patch.
-//
-// Idempotence: NewPatch first hashes the changes with PlaceholderHash
-// self-references, then rewrites those placeholders to the resulting
-// patch hash. ComputeHash undoes that rewrite (changesForHash) before
-// marshaling so repeated calls return the same value, regardless of
-// fixup state.
-//
-// json.Marshal on the payload cannot fail in practice (all fields are
-// types the encoder supports), so a marshal error indicates a programmer
-// error in extending Change — panic rather than produce a silently bogus
-// hash that breaks patch identity downstream.
-func (inst *Patch) ComputeHash() (h t.PatchHash) {
-	payload := struct {
-		Dependencies []t.PatchHash
-		Changes      []Change
-	}{
-		Dependencies: canonicalDeps(inst.Dependencies),
-		Changes:      inst.changesForHash(),
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		panic(eh.Errorf("marshal payload: %w", err))
-	}
-	h = t.HashBytes(data)
-	return
 }
 
 // canonicalDeps returns a sorted, deduplicated copy of deps.

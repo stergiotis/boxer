@@ -4,20 +4,20 @@ digraph pushoutgraph {
   edge [fontname="monospace", fontsize=8];
 
   root [label="root", shape=diamond, style=filled, fillcolor=lightgrey];
-  n_5f7c6a9f4944f10f_0 [label="5f7c6a9f/0\nline a", shape=box, style=filled, fillcolor=lightyellow];
-  n_5f7c6a9f4944f10f_2 [label="5f7c6a9f/2\nline c", shape=box, style=filled, fillcolor=lightyellow];
-  n_5f7c6a9f4944f10f_3 [label="5f7c6a9f/3\nline d", shape=box, style=filled, fillcolor=lightyellow];
-  n_daf2d6a88e63227b_0 [label="daf2d6a8/0\nline Y", shape=box, style=filled, fillcolor=lightyellow];
-  n_f2d39c7393d7a98e_0 [label="f2d39c73/0\nline X", shape=box, style=filled, fillcolor=lightyellow];
-  n_5f7c6a9f4944f10f_1 [label="5f7c6a9f/1\nline b", shape=box, style="dashed,filled", fillcolor=lightgrey, fontcolor=grey40];
+  n_0c05a3c134fbe96a_0 [label="0c05a3c1/0\nline Y", shape=box, style=filled, fillcolor=lightyellow];
+  n_7540b6caf2e12946_0 [label="7540b6ca/0\nline X", shape=box, style=filled, fillcolor=lightyellow];
+  n_a0f8852af409dde0_0 [label="a0f8852a/0\nline a", shape=box, style=filled, fillcolor=lightyellow];
+  n_a0f8852af409dde0_2 [label="a0f8852a/2\nline c", shape=box, style=filled, fillcolor=lightyellow];
+  n_a0f8852af409dde0_3 [label="a0f8852a/3\nline d", shape=box, style=filled, fillcolor=lightyellow];
+  n_a0f8852af409dde0_1 [label="a0f8852a/1\nline b", shape=box, style="dashed,filled", fillcolor=lightgrey, fontcolor=grey40];
 
-  root -> n_5f7c6a9f4944f10f_0 [style=solid, color=black];
-  n_5f7c6a9f4944f10f_0 -> n_5f7c6a9f4944f10f_1 [style=dashed, color=grey];
-  n_5f7c6a9f4944f10f_0 -> n_5f7c6a9f4944f10f_2 [style=dotted, color=blue];
-  n_5f7c6a9f4944f10f_1 -> n_5f7c6a9f4944f10f_2 [style=dashed, color=grey];
-  n_5f7c6a9f4944f10f_2 -> n_5f7c6a9f4944f10f_3 [style=solid, color=black];
-  n_5f7c6a9f4944f10f_2 -> n_f2d39c7393d7a98e_0 [style=solid, color=black];
-  n_5f7c6a9f4944f10f_2 -> n_daf2d6a88e63227b_0 [style=solid, color=black];
-  n_daf2d6a88e63227b_0 -> n_5f7c6a9f4944f10f_3 [style=solid, color=black];
-  n_f2d39c7393d7a98e_0 -> n_5f7c6a9f4944f10f_3 [style=solid, color=black];
+  root -> n_a0f8852af409dde0_0 [style=solid, color=black];
+  n_0c05a3c134fbe96a_0 -> n_a0f8852af409dde0_3 [style=solid, color=black];
+  n_7540b6caf2e12946_0 -> n_a0f8852af409dde0_3 [style=solid, color=black];
+  n_a0f8852af409dde0_0 -> n_a0f8852af409dde0_1 [style=dashed, color=grey];
+  n_a0f8852af409dde0_0 -> n_a0f8852af409dde0_2 [style=dotted, color=blue];
+  n_a0f8852af409dde0_1 -> n_a0f8852af409dde0_2 [style=dashed, color=grey];
+  n_a0f8852af409dde0_2 -> n_a0f8852af409dde0_3 [style=solid, color=black];
+  n_a0f8852af409dde0_2 -> n_7540b6caf2e12946_0 [style=solid, color=black];
+  n_a0f8852af409dde0_2 -> n_0c05a3c134fbe96a_0 [style=solid, color=black];
 }

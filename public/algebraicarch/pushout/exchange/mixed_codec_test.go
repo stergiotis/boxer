@@ -1,4 +1,4 @@
-// Mixed-codec fleet: a json1 repo and a custom-codec repo exchange
+// Mixed-codec fleet: a cbor1 repo and a custom-codec repo exchange
 // patches in both directions. Envelopes ship as received (the frame
 // names the codec), identity is wire-independent, and both registries
 // know both codecs — the interop property the framed design exists for,
@@ -19,9 +19,10 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo/filestore"
 )
 
-// xor1 is a toy custom codec: the jsonv1 payload XORed with a constant —
-// trivially reversible, deliberately not JSON on the wire.
-type xor1 struct{ inner envelope.JSONV1 }
+// xor1 is a toy custom codec: the cbor1 payload XORed with a constant —
+// trivially reversible, deliberately not the reference encoding on the
+// wire.
+type xor1 struct{ inner envelope.CBORV1 }
 
 func (xor1) Name() string { return "xor1" }
 
@@ -51,7 +52,7 @@ func openMixed(tt *testing.T, producer, wire string) *repo.Repo {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	reg, err := envelope.NewRegistry(envelope.JSONV1{}, xor1{})
+	reg, err := envelope.NewRegistry(envelope.CBORV1{}, xor1{})
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -69,17 +70,17 @@ func openMixed(tt *testing.T, producer, wire string) *repo.Repo {
 
 func TestMixedCodecFleetConverges(tt *testing.T) {
 	ctx := context.Background()
-	jsonRepo := openMixed(tt, "alice", envelope.JSONV1Name)
+	cborRepo := openMixed(tt, "alice", envelope.CBORV1Name)
 	xorRepo := openMixed(tt, "bob", "xor1")
 
-	hA, err := jsonRepo.Record(ctx, "alice", "from json side", []patch.Change{{
+	hA, err := cborRepo.Record(ctx, "alice", "from cbor side", []patch.Change{{
 		Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 		Content: []byte("alpha\n"), UpContext: []t.NodeID{t.RootNodeID},
 	}})
 	if err != nil {
 		tt.Fatal(err)
 	}
-	if _, err := exchange.Pull(ctx, xorRepo, inproc.New(jsonRepo)); err != nil {
+	if _, err := exchange.Pull(ctx, xorRepo, inproc.New(cborRepo)); err != nil {
 		tt.Fatal(err)
 	}
 	// Bob extends ON TOP of alice's patch, recording in HIS codec.
@@ -90,22 +91,22 @@ func TestMixedCodecFleetConverges(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	if _, err := exchange.Pull(ctx, jsonRepo, inproc.New(xorRepo)); err != nil {
+	if _, err := exchange.Pull(ctx, cborRepo, inproc.New(xorRepo)); err != nil {
 		tt.Fatal(err)
 	}
 
-	aApplied, _ := jsonRepo.Applied(ctx)
+	aApplied, _ := cborRepo.Applied(ctx)
 	bApplied, _ := xorRepo.Applied(ctx)
 	if len(aApplied) != 2 || len(bApplied) != 2 || aApplied[0] != bApplied[0] || aApplied[1] != bApplied[1] {
 		tt.Fatalf("mixed-codec fleet diverged: %v vs %v", aApplied, bApplied)
 	}
 	// Identity is wire-independent and each envelope kept its origin codec.
-	infoA, err := jsonRepo.PatchInfo(ctx, hB)
+	infoA, err := cborRepo.PatchInfo(ctx, hB)
 	if err != nil || infoA.Codec != "xor1" {
 		tt.Fatalf("bob's patch on alice: codec=%q err=%v", infoA.Codec, err)
 	}
 	infoB, err := xorRepo.PatchInfo(ctx, hA)
-	if err != nil || infoB.Codec != envelope.JSONV1Name {
+	if err != nil || infoB.Codec != envelope.CBORV1Name {
 		tt.Fatalf("alice's patch on bob: codec=%q err=%v", infoB.Codec, err)
 	}
 }

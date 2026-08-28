@@ -3,14 +3,14 @@
 //
 // An [EnvelopeV1] wraps a *patch.Patch with provenance (Producer,
 // Timestamp) that must not enter the patch's content hash: the patch is
-// a value whose identity is the BLAKE3 hash of its canonicalized
-// dependencies plus changes, so author/send-time travel alongside, not
-// within. Provenance is NOT tamper-evident; identity and dependencies
+// a value whose identity is the keyed BLAKE3 digest of a deterministic
+// CBOR item over its canonicalized dependencies plus changes, so
+// author/send-time travel alongside, not within. Provenance is NOT tamper-evident; identity and dependencies
 // are (they feed the hash).
 //
 // Wire bytes are self-describing frames — "PXE1", a codec name, then a
 // codec payload — so heterogeneous fleets interoperate as long as both
-// registries know the named codec (see [CodecI], [Registry], [JSONV1]).
+// registries know the named codec (see [CodecI], [Registry], [CBORV1]).
 // [Validate] holds the codec-independent semantic checks and runs on
 // every Registry encode/decode.
 package envelope

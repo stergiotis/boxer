@@ -26,6 +26,11 @@ import (
 const (
 	glossSampleNumber = "4111111111111111"
 	glossSampleText   = "https://example.com/path"
+	// A documentation address (RFC 5737 TEST-NET-1), for the glosses that
+	// accept a kind the two above satisfy but a value they do not: without
+	// it gloss/ipaddr's row shows a refusal where every other row shows a
+	// face.
+	glossSampleAddr = "192.0.2.10"
 )
 
 func (inst *PlayApp) renderGlossesTab(schema *arrow.Schema) {
@@ -164,12 +169,23 @@ func bindGlossSample(g gloss.GlossI, token string) (sample glossSample, bound bo
 		return sample, false
 	}
 	sample.inst = d.Instance
+	// The first accepted sample the gloss can actually show, else the first
+	// accepted one: a face in the error tone is the gloss saying this value
+	// is not what it renders, which is a poor advertisement for it but is
+	// still better than an empty row when nothing fits.
 	for _, cell := range []gloss.TextCell{
 		{S: glossSampleNumber, K: gloss.ValueKindNumeric},
 		{S: glossSampleText, K: gloss.ValueKindText},
+		{S: glossSampleAddr, K: gloss.ValueKindText},
 	} {
-		if accepted, _ := d.Instance.Accepts(cell.K); accepted {
-			sample.face, sample.hasFace = d.Instance.Inline(cell), true
+		if accepted, _ := d.Instance.Accepts(cell.K); !accepted {
+			continue
+		}
+		face := d.Instance.Inline(cell)
+		if !sample.hasFace || sample.face.Tone == gloss.ToneError {
+			sample.face, sample.hasFace = face, true
+		}
+		if face.Tone != gloss.ToneError {
 			break
 		}
 	}

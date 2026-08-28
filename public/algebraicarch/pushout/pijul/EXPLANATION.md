@@ -66,7 +66,7 @@ this repo.
   (`patch.LineDiff` on the clean path, conflict resolution otherwise)
   and reads back through `Engine().View` read transactions; everything
   else — persistence and recovery (`repo/filestore` under
-  `<repoDir>/.pushout/`), wire codecs (`envelope` framing + `jsonv1`),
+  `<repoDir>/.pushout/`), wire codecs (`envelope` framing + `cbor1`),
   dependency gating, identity disambiguation, retention sweeps, and
   transactional verbs — is engine property. `Init` opens or RECOVERS
   (an existing store is replayed, not reset); `Push`/`Pull` ride the
@@ -248,8 +248,9 @@ Pushout-native backend internal invariants:
   dependencies always precede dependents
   (`TestClaim_PushShipsDepsFirst`). Envelope files are
   content-addressed and first-writer-wins.
-- Patch identity is the BLAKE3 hash of the canonicalized dependency
-  set plus the changes. Author and description stay envelope-level
+- Patch identity is the keyed BLAKE3 digest of a deterministic CBOR
+  item over the canonicalized dependency set plus the changes
+  (ADR-0209). Author and description stay envelope-level
   provenance, so two actors recording the identical edit against the
   same state converge on one patch. Dependency tampering fails the
   hash check at `envelope.Validate` (run on every Registry

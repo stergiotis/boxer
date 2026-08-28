@@ -156,7 +156,7 @@ func TestDefaultOrderPresentation(t *testing.T) {
 	}
 	assert.Equal(t, []string{
 		MediaTypeTemperature, MediaTypeLength, MediaTypeEpoch, MediaTypeDuration,
-		MediaTypeBytes, MediaTypeTaggedId, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeRaw,
+		MediaTypeBytes, MediaTypeTaggedId, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeIPAddr, MediaTypeRaw,
 	}, order[8:])
 }
 
@@ -180,4 +180,47 @@ func TestAcceptedKinds(t *testing.T) {
 	assert.Len(t, kinds, len(AllValueKinds))
 	_, all = AcceptedKinds(instFor(t, "r@gloss/raw"))
 	assert.True(t, all)
+}
+
+// TestIPAddrFace pins the three shapes an address arrives in (ADR-0186
+// §Verification, and the 2026-08-28 Update): the packed bytes an Arrow
+// binary column carries, the big-endian uint32 an IPv4 host rides as, and
+// text a driver already wrote out.
+func TestIPAddrFace(t *testing.T) {
+	ip := instFor(t, "peer@gloss/ipaddr")
+
+	// Packed: 4 and 16 address bytes, 5 and 17 with the prefix length last.
+	assert.Equal(t, Inline{Text: "1.2.3.4"}, ip.Inline(byteCell("\x01\x02\x03\x04")))
+	assert.Equal(t, Inline{Text: "2001:db8::1"},
+		ip.Inline(byteCell("\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01")))
+	assert.Equal(t, Inline{Text: "10.0.0.0/8"}, ip.Inline(byteCell("\x0a\x00\x00\x00\x08")))
+	assert.Equal(t, Inline{Text: "2001:db8::/32"},
+		ip.Inline(byteCell("\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x20")))
+	// ClickHouse keeps an IPv4 in an IPv6 column 4-in-6 and shows it that way.
+	assert.Equal(t, Inline{Text: "::ffff:1.2.3.4"},
+		ip.Inline(byteCell("\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04")))
+
+	// Numeric: the big-endian uint32 of ClickHouse's IPv4 column.
+	assert.Equal(t, Inline{Text: "1.2.3.4"}, ip.Inline(num("16909060")))
+	assert.Equal(t, Inline{Text: "0.0.0.0"}, ip.Inline(num("0")))
+
+	// Text: a value the leeway card and the per-attribute grid hand over
+	// already written out passes through, canonicalised.
+	assert.Equal(t, Inline{Text: "2001:db8::1"}, ip.Inline(txt("2001:0db8:0000::1")))
+	assert.Equal(t, Inline{Text: "10.0.0.0/8"}, ip.Inline(txt("10.0.0.0/8")))
+	// …including the ones whose written-out width collides with a packed
+	// width, which is why text is read first.
+	assert.Equal(t, Inline{Text: "2001:db8:1::abcd"}, ip.Inline(txt("2001:db8:1::abcd")))
+	assert.Equal(t, Inline{Text: "1::2"}, ip.Inline(txt("1::2")))
+
+	// Neither: the plain rendering, in the error tone.
+	assert.Equal(t, Inline{Text: "nope", Tone: ToneError}, ip.Inline(txt("nope")))
+	assert.Equal(t, Inline{Text: "\x0a\x00\x00\x00\xff", Tone: ToneError},
+		ip.Inline(byteCell("\x0a\x00\x00\x00\xff")), "a prefix length no IPv4 can carry")
+	assert.Equal(t, Inline{}, ip.Inline(byteCell("")))
+
+	// Kind discipline: a list, a struct or a timestamp is not an address.
+	ok, reason := ip.Accepts(ValueKindTemporal)
+	assert.False(t, ok)
+	assert.Contains(t, reason, "gloss/ipaddr expects numeric or text or bytes, got temporal")
 }

@@ -2,11 +2,13 @@ package envelope
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fxamacker/cbor/v2"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/store"
@@ -15,7 +17,7 @@ import (
 
 func testRegistry(tt *testing.T) *Registry {
 	tt.Helper()
-	reg, err := NewRegistry(JSONV1{})
+	reg, err := NewRegistry(CBORV1{})
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -59,7 +61,7 @@ func TestEnvelope_RoundTripByteIdentical(tt *testing.T) {
 	reg := testRegistry(tt)
 	env := sampleEnvelope(tt)
 
-	first, err := reg.Encode(JSONV1Name, env)
+	first, err := reg.Encode(CBORV1Name, env)
 	if err != nil {
 		tt.Fatalf("first encode: %v", err)
 	}
@@ -67,10 +69,10 @@ func TestEnvelope_RoundTripByteIdentical(tt *testing.T) {
 	if err != nil {
 		tt.Fatalf("decode: %v", err)
 	}
-	if name != JSONV1Name {
+	if name != CBORV1Name {
 		tt.Fatalf("frame name: %q", name)
 	}
-	second, err := reg.Encode(JSONV1Name, decoded)
+	second, err := reg.Encode(CBORV1Name, decoded)
 	if err != nil {
 		tt.Fatalf("second encode: %v", err)
 	}
@@ -92,7 +94,7 @@ func TestEnvelope_DecodedPatchAppliesEquivalently(tt *testing.T) {
 	}
 	wantRender := gA.Render()
 
-	data, err := reg.Encode(JSONV1Name, env)
+	data, err := reg.Encode(CBORV1Name, env)
 	if err != nil {
 		tt.Fatalf("encode: %v", err)
 	}
@@ -112,8 +114,22 @@ func TestEnvelope_DecodedPatchAppliesEquivalently(tt *testing.T) {
 	}
 }
 
-// mutatePayload unframes, applies a JSON-level edit to the payload, and
-// re-frames — the standard tamper vehicle for these tests.
+// tamperDecMode decodes the payload into generic maps for the tamper
+// tests. DefaultMapType makes nested CBOR maps land as map[string]any
+// (fxamacker's default for `any` is map[any]any), so an edit can walk
+// the structure by field name.
+var tamperDecMode = func() cbor.DecMode {
+	dm, err := cbor.DecOptions{DefaultMapType: reflect.TypeOf(map[string]any(nil))}.DecMode()
+	if err != nil {
+		panic(err)
+	}
+	return dm
+}()
+
+// mutatePayload unframes, applies a CBOR-level edit to the payload, and
+// re-frames — the standard tamper vehicle for these tests. It edits the
+// decoded data model rather than the bytes, so it stays valid against a
+// codec whose layout changes.
 func mutatePayload(tt *testing.T, framed []byte, edit func(patchObj map[string]any)) []byte {
 	tt.Helper()
 	name, payload, err := Unframe(framed)
@@ -121,11 +137,11 @@ func mutatePayload(tt *testing.T, framed []byte, edit func(patchObj map[string]a
 		tt.Fatal(err)
 	}
 	var raw map[string]any
-	if err := json.Unmarshal(payload, &raw); err != nil {
+	if err := tamperDecMode.Unmarshal(payload, &raw); err != nil {
 		tt.Fatal(err)
 	}
 	edit(raw["patch"].(map[string]any))
-	mutated, err := json.Marshal(raw)
+	mutated, err := cbor.Marshal(raw)
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -139,12 +155,12 @@ func mutatePayload(tt *testing.T, framed []byte, edit func(patchObj map[string]a
 // Content tampering must fail the hash check.
 func TestEnvelope_DecodeRejectsTamperedContent(tt *testing.T) {
 	reg := testRegistry(tt)
-	framed, err := reg.Encode(JSONV1Name, sampleEnvelope(tt))
+	framed, err := reg.Encode(CBORV1Name, sampleEnvelope(tt))
 	if err != nil {
 		tt.Fatal(err)
 	}
 	tampered := mutatePayload(tt, framed, func(po map[string]any) {
-		po["Changes"].([]any)[0].(map[string]any)["Content"] = "dGFtcGVyZWQK" // base64("tampered\n")
+		po["Changes"].([]any)[0].(map[string]any)["Content"] = []byte("tampered\n")
 	})
 	_, _, err = reg.Decode(tampered)
 	if !errors.Is(err, ErrTampered) {
@@ -165,7 +181,7 @@ func TestEnvelope_DecodeRejectsTamperedDependencies(tt *testing.T) {
 	p := patch.NewPatch("alice", "edit", []t.PatchHash{dep.Hash}, []patch.Change{{
 		Kind: patch.ChangeKindDeleteNode, NodeID: t.NodeID{Patch: dep.Hash, Index: 0},
 	}})
-	framed, err := reg.Encode(JSONV1Name, EnvelopeV1{Patch: p, Producer: "alice", Timestamp: time.Unix(0, 0).UTC()})
+	framed, err := reg.Encode(CBORV1Name, EnvelopeV1{Patch: p, Producer: "alice", Timestamp: time.Unix(0, 0).UTC()})
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -176,9 +192,8 @@ func TestEnvelope_DecodeRejectsTamperedDependencies(tt *testing.T) {
 	}
 
 	bogus := t.PatchHash{9, 9, 9}
-	bogusHex, _ := bogus.MarshalText()
 	extended := mutatePayload(tt, framed, func(po map[string]any) {
-		po["Dependencies"] = append(po["Dependencies"].([]any), string(bogusHex))
+		po["Dependencies"] = append(po["Dependencies"].([]any), bogus[:])
 	})
 	if _, _, err := reg.Decode(extended); !errors.Is(err, ErrTampered) {
 		tt.Fatalf("extended dependencies: expected ErrTampered, got: %v", err)
@@ -195,15 +210,15 @@ func TestEnvelope_RejectsUndeclaredDependency(tt *testing.T) {
 		Kind: patch.ChangeKindDeleteNode, NodeID: t.NodeID{Patch: foreign, Index: 0},
 	}})
 	env := EnvelopeV1{Patch: p, Producer: "mallory", Timestamp: time.Unix(0, 0).UTC()}
-	if _, err := reg.Encode(JSONV1Name, env); !errors.Is(err, ErrUndeclaredDependency) {
+	if _, err := reg.Encode(CBORV1Name, env); !errors.Is(err, ErrUndeclaredDependency) {
 		tt.Fatalf("encode: expected ErrUndeclaredDependency, got: %v", err)
 	}
 	// Bypass the write-path guard via the raw codec, then decode.
-	payload, err := JSONV1{}.Encode(env)
+	payload, err := CBORV1{}.Encode(env)
 	if err != nil {
 		tt.Fatal(err)
 	}
-	framed, err := Frame(JSONV1Name, payload)
+	framed, err := Frame(CBORV1Name, payload)
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -226,7 +241,7 @@ func TestEnvelope_RejectsPlaceholderNodeIDs(tt *testing.T) {
 	}
 	p.Hash = p.ComputeHash() // self-consistent hash over the pre-fixup form
 	env := EnvelopeV1{Patch: p, Producer: "mallory", Timestamp: time.Unix(0, 0).UTC()}
-	if _, err := reg.Encode(JSONV1Name, env); !errors.Is(err, ErrPlaceholderNodeID) {
+	if _, err := reg.Encode(CBORV1Name, env); !errors.Is(err, ErrPlaceholderNodeID) {
 		tt.Fatalf("expected ErrPlaceholderNodeID, got: %v", err)
 	}
 }
@@ -235,10 +250,10 @@ func TestEnvelope_RejectsPlaceholderNodeIDs(tt *testing.T) {
 func TestEnvelope_FrameAndRegistryRejections(tt *testing.T) {
 	reg := testRegistry(tt)
 
-	if _, err := reg.Encode(JSONV1Name, EnvelopeV1{Producer: "alice"}); !errors.Is(err, ErrMissingPatch) {
+	if _, err := reg.Encode(CBORV1Name, EnvelopeV1{Producer: "alice"}); !errors.Is(err, ErrMissingPatch) {
 		tt.Fatalf("nil patch: expected ErrMissingPatch, got: %v", err)
 	}
-	payload, err := JSONV1{}.Encode(sampleEnvelope(tt))
+	payload, err := CBORV1{}.Encode(sampleEnvelope(tt))
 	if err != nil {
 		tt.Fatal(err)
 	}

@@ -126,11 +126,12 @@ type MembershipSinkI interface {
 // sink; it reads the elements itself, in whatever order it needs, while the
 // RecordBatch is retained. Views cost no copy and no allocation.
 //
-// The text lane formats through arrow.Array.ValueStr, which renders a
-// Float32 with 'g'/-1/32 — a consumer that reparses that as float64 gets a
-// different number than the column holds. Consumers that need the exact
-// value (ADR-0201: the canonical record form) implement this;
-// rendering sinks keep the text lane.
+// The text lane formats through arrow.Array.ValueStr — except for the network
+// types, which it writes out as addresses — and ValueStr renders a Float32
+// with 'g'/-1/32: a consumer that reparses that as float64 gets a different
+// number than the column holds. Consumers that need the exact value
+// (ADR-0201: the canonical record form) implement this; rendering sinks keep
+// the text lane.
 type ArrowValueSinkI interface {
 	// WriteArrowScalar delivers the scalar of the current column: element
 	// flatIdx of arr — the inner array of a List column for tagged and

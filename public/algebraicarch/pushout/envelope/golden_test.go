@@ -48,7 +48,7 @@ func goldenPatch() *patch.Patch {
 	})
 }
 
-const goldenPatchHashHex = "f37bb5a9be25a4f0ed7c3466742c30a86c6df297b4b8594d38a1ad6a0507d03f"
+const goldenPatchHashHex = "c8b8a2c193a2ce4b3cdbc8eed833ef77386933c9f762d82c6cd386af8b0622a0"
 
 func TestGolden_PatchHash(tt *testing.T) {
 	p := goldenPatch()
@@ -66,11 +66,11 @@ func TestGolden_EnvelopeBytes(tt *testing.T) {
 		Producer:  "golden-producer",
 		Timestamp: time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
 	}
-	reg, err := NewRegistry(JSONV1{})
+	reg, err := NewRegistry(CBORV1{})
 	if err != nil {
 		tt.Fatal(err)
 	}
-	data, err := reg.Encode(JSONV1Name, env)
+	data, err := reg.Encode(CBORV1Name, env)
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestGolden_EnvelopeBytes(tt *testing.T) {
 		tt.Fatalf("read golden (run with -args -update to regenerate): %v", err)
 	}
 	if !bytes.Equal(data, want) {
-		tt.Fatalf("canonical envelope bytes changed — wire format drift; if intentional, regenerate with -args -update and note that persisted envelopes invalidate.\n got:\n%s\nwant:\n%s", data, want)
+		tt.Fatalf("canonical envelope bytes changed — wire format drift; if intentional, regenerate with -args -update and note that persisted envelopes invalidate.\n got:  %x\nwant: %x", data, want)
 	}
 	if _, _, err := reg.Decode(data); err != nil {
 		tt.Fatalf("golden envelope no longer decodes: %v", err)

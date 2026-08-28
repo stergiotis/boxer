@@ -60,7 +60,7 @@ func CheckEnvelopes(ctx context.Context, open OpenFunc, location string) (err er
 	}
 	defer st.Close()
 
-	data := []byte("PXE1\x05json1{\"x\":1}")
+	data := []byte("PXE1\x05opaq1\x00\x01\x02")
 	if err = st.PutEnvelope(ctx, h(1), data); err != nil {
 		return eh.Errorf("put: %w", err)
 	}

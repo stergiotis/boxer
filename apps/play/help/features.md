@@ -773,8 +773,9 @@ Three routes bind a column to a gloss, in precedence order:
   whose physical name cannot be aliased without the result losing its leeway
   shape, gets a gloss. Some glosses bring an affinity rule along —
   `gloss/masked` for `sem:secret`, `gloss/url` for `sem:url`, `application/json`
-  for `sem:json*` — and `gloss/raw` in a rule switches an affinity off for the
-  columns it matches;
+  for `sem:json*`, `gloss/ipaddr` for the network canonical types `ct:v` /
+  `ct:w` — and `gloss/raw` in a rule switches an affinity off for the columns
+  it matches;
 - **a rule set in code** — rules that should outlive a query are Go, checked
   in with the deployment: `gloss.Rules("acme").Rule("kelvin readings").When(gloss.Section("sensor"),
   gloss.NameMatches("^temp")).Show(gloss.MediaTypeTemperature, gloss.Unit("K"))`,
@@ -793,6 +794,30 @@ a `WHERE id =`) and **Copy hex**. A word that is not a tagged id, or a tag over
 the reserved counter 0, shows plain in the warning tone rather than pretending
 to split. It has no affinity: being a surrogate key does not make a column
 fibonacci-tagged, so bind it by alias or by rule.
+
+`gloss/ipaddr` is the other one worth calling out, because how automatic it is
+depends on where the column came from. An address survives a query as one of
+two things, neither of which reads as an address — switch **Raw cells** on to
+see them: ClickHouse's `IPv4` arrives as a big-endian `UInt32`, so `1.2.3.4`
+reads `16909060`, and its `IPv6` as 16 packed bytes, a hex blob. The gloss
+writes both out, along with the CIDR forms that carry their prefix length in
+a trailing byte.
+
+Its affinity is the **canonical type**, `ct:v` / `ct:w` and their CIDR (`c`)
+and array / set (`h`, `m`) spellings, so:
+
+- a **leeway** column is glossed with nothing declared — the spec line carries
+  its canonical type, which says the column *is* an address, a stronger claim
+  than the `sem:` affinities make about their columns;
+- a **plain** result carries no `ct:` token, only a name and an Arrow type, so
+  an address column there is not glossed on its own. Sixteen bytes are sixteen
+  bytes; nothing in the result distinguishes an address from a hash. Declare
+  it — `` AS `peer@gloss/ipaddr` ``, `gloss(peer, 'gloss/ipaddr')`, or a
+  `-- play: gloss gloss/ipaddr name:.*_ip` rule over a naming convention you
+  keep.
+
+A value the gloss cannot read as an address keeps its plain rendering in the
+error tone rather than inventing one.
 
 The tab shows the **catalog** (each gloss with its accepted value kinds,
 parameters, a sample rendering, its affinities, and two Insert buttons —

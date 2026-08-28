@@ -20,7 +20,7 @@ import (
 // Implementations must be deterministic (equal envelope ⇒ equal bytes)
 // and safe for concurrent use. Conformance: envelope/codectest.
 type CodecI interface {
-	// Name identifies the codec inside the wire frame, e.g. "json1".
+	// Name identifies the codec inside the wire frame, e.g. "cbor1".
 	// Allowed: 1–32 bytes, no NUL. Names are forever — they are written
 	// into persisted envelopes.
 	Name() string

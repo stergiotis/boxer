@@ -16,7 +16,7 @@
 // atomically via the same temp+rename path.
 //
 // The layout stays human-debuggable on purpose: envelopes are framed
-// jsonv1 by default and the applied log is a text file.
+// cbor1 by default and the applied log is a text file.
 package filestore
 
 import (
