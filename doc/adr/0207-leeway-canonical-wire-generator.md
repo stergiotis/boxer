@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-28
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-28
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0207: leeway canonical wire — a lossless, type-signature-keyed serialization with generated per-table codecs
 
@@ -414,7 +414,10 @@ consumer that needs them (M3).
 - **Gap.** No benchmark at M1; the encoder's cost against card-JSON and Arrow
   IPC is measured only when a consumer's latency budget asks for it.
 
-## Forks — decisions the reviewer should confirm
+## Forks — decided at acceptance
+
+The six points below were the open choices while the ADR was proposed;
+acceptance on 2026-08-28 confirms each as written.
 
 1. **Plain item type in the key (SD2).** Treated as fixed vocabulary, not
    table description. The alternative is to key plains by signature too and
@@ -437,7 +440,7 @@ consumer that needs them (M3).
 
 ## Status
 
-Proposed — awaiting review by the leeway code owner.
+Accepted 2026-08-28.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.

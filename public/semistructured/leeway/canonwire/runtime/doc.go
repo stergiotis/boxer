@@ -1,5 +1,5 @@
-// Package runtime is the runtime of the leeway canonical wire — ADR-0207
-// (proposed): the pieces a generated per-table encoder or decoder calls, as
+// Package runtime is the runtime of the leeway canonical wire — ADR-0207:
+// the pieces a generated per-table encoder or decoder calls, as
 // opposed to the pieces the generator emits. The generator itself, and the
 // slot table it builds from a common.TableDesc, are the parent canonwire
 // package; nothing here reads a table description.
