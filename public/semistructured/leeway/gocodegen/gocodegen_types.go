@@ -25,9 +25,30 @@ type GoClassNamerDmlI interface {
 	ComposeAttributeDmlClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error)
 }
 
+// GoClassNamerCanonWireI names the classes of the leeway canonical-wire
+// generator (ADR-0210 SD6): the per-table encoder and decoder, the
+// tagger/dispatcher pair the ambiguous signatures need, and the slot enum with
+// its per-slot signature and slot constants.
+//
+// A slot is identified by its ordinal in the generator's slot table and by the
+// sections it joins, in signature order — one for a standalone section, k for a
+// co-section group. An implementation may use either; the sections are what
+// make the name readable, the ordinal is a fallback that is always unique.
+type GoClassNamerCanonWireI interface {
+	ComposeCanonWireEncoderClassName(tableName naming.StylableName) (className string, err error)
+	ComposeCanonWireDecoderClassName(tableName naming.StylableName) (className string, err error)
+	ComposeCanonWireTaggerInterfaceName(tableName naming.StylableName) (interfaceName string, err error)
+	ComposeCanonWireDispatcherInterfaceName(tableName naming.StylableName) (interfaceName string, err error)
+	ComposeCanonWireSlotEnumName(tableName naming.StylableName) (enumName string, err error)
+	ComposeCanonWireSlotConstName(tableName naming.StylableName, slotOrdinal int, sectionNames []naming.StylableName) (constName string, err error)
+	ComposeCanonWireSignatureConstName(tableName naming.StylableName, slotOrdinal int, sectionNames []naming.StylableName) (constName string, err error)
+	ComposeCanonWirePlainGroupConstName(tableName naming.StylableName, itemType common.PlainItemTypeE) (constName string, err error)
+}
+
 type GoClassNamerI interface {
 	GoClassNamerReadAccessI
 	GoClassNamerDmlI
+	GoClassNamerCanonWireI
 	functional.PromiseReferentialTransparentI
 }
 

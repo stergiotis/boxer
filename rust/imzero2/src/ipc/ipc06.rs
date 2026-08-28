@@ -299,3 +299,14 @@ impl MeshNode {
         out
     }
 }
+
+// A consumer claims one of the MAX_CONSUMERS slots in `new`; this gives it
+// back, so a node that goes away does not leave its slot marked active and
+// drain the pool one reconnect at a time. Drop runs before `_mmap` is
+// unmapped, so the release still lands in shared memory. Producer-mode nodes
+// hold no slot, and `unregister` is a no-op for them.
+impl Drop for MeshNode {
+    fn drop(&mut self) {
+        self.unregister();
+    }
+}

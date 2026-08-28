@@ -1380,7 +1380,7 @@ func (inst *ReadAccessPushoutTableTaggedRetTimeAttributes) GetNumberOfAttributes
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2074
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2082
 
 type ReadAccessPushoutTableTaggedEnvBlob struct {
 	Attributes  *ReadAccessPushoutTableTaggedEnvBlobAttributes
@@ -1994,7 +1994,7 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) GetSectionMembershipSpec() comm
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2424
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2467
 
 type ReadAccessPushoutTable struct {
 	EntityId         *ReadAccessPushoutTablePlainEntityIdAttributes

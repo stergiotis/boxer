@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/runtime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -541,52 +542,52 @@ func TestSecondaryMembershipsAreNotContent(t *testing.T) {
 	require.NotEqual(t, hexs(base[0]), hexs(plainBase[0]), "the digest is a function of the classifier")
 }
 
-// --- CBOR writer vectors (ADR-0201 SD3 / SD4; measured against the spike) ---
+// --- Value vectors (ADR-0201 SD3 / SD4; measured against the spike) ---
+//
+// The writer's own vectors live with it in canonwire/runtime; these pin the
+// quotient's rules on top of it, the numeric reduction above all.
 
 func TestCborWriterNumbers(t *testing.T) {
-	em, err := newCoreDetEncMode()
-	require.NoError(t, err)
-	enc := func(f func(c *cborWriter)) string {
+	enc := func(f func(c *runtime.CborWriter)) string {
 		var b bytes.Buffer
-		c := &cborWriter{}
-		c.initFloatEncoder(em)
-		c.reset(&b)
+		c, err := runtime.NewCborWriter(&b)
+		require.NoError(t, err)
 		f(c)
-		require.NoError(t, c.err)
+		require.NoError(t, c.Err())
 		return hexs(b.Bytes())
 	}
 	cases := []struct {
 		name string
 		want string
-		f    func(c *cborWriter)
+		f    func(c *runtime.CborWriter)
 	}{
-		{"int 3", "03", func(c *cborWriter) { c.writeInt(3) }},
-		{"int -4", "23", func(c *cborWriter) { c.writeInt(-4) }},
-		{"uint64 max", "1bffffffffffffffff", func(c *cborWriter) { c.writeUint(math.MaxUint64) }},
-		{"int64 min", "3b7fffffffffffffff", func(c *cborWriter) { c.writeInt(math.MinInt64) }},
-		{"float 3.0 reduces", "03", func(c *cborWriter) { c.writeFloat(3.0) }},
-		{"float -4.0 reduces", "23", func(c *cborWriter) { c.writeFloat(-4.0) }},
-		{"float -0.0 reduces", "00", func(c *cborWriter) { c.writeFloat(math.Copysign(0, -1)) }},
-		{"float 2^63 reduces to uint", "1b8000000000000000", func(c *cborWriter) { c.writeFloat(math.Pow(2, 63)) }},
-		{"float -2^63 reduces to int", "3b7fffffffffffffff", func(c *cborWriter) { c.writeFloat(-math.Pow(2, 63)) }},
-		{"float 2^64 stays float", "fa5f800000", func(c *cborWriter) { c.writeFloat(math.Pow(2, 64)) }},
-		{"float 1e20 stays float", "fb4415af1d78b58c40", func(c *cborWriter) { c.writeFloat(1e20) }},
-		{"float 1.5 is float16", "f93e00", func(c *cborWriter) { c.writeFloat(1.5) }},
-		{"f32 0.1 is float32", "fa3dcccccd", func(c *cborWriter) { c.writeFloat(float64(float32(0.1))) }},
-		{"f64 0.1 is float64", "fb3fb999999999999a", func(c *cborWriter) { c.writeFloat(0.1) }},
-		{"NaN", "f97e00", func(c *cborWriter) { c.writeFloat(math.NaN()) }},
-		{"+Inf", "f97c00", func(c *cborWriter) { c.writeFloat(math.Inf(1)) }},
-		{"-Inf", "f9fc00", func(c *cborWriter) { c.writeFloat(math.Inf(-1)) }},
-		{"text abc", "63616263", func(c *cborWriter) { c.writeTextString("abc") }},
-		{"bytes abc", "43616263", func(c *cborWriter) { c.writeBytes([]byte("abc")) }},
-		{"empty array", "80", func(c *cborWriter) { c.arrayHead(0) }},
-		{"map head 2", "a2", func(c *cborWriter) { c.mapHead(2) }},
-		{"tag 258", "d90102", func(c *cborWriter) { c.tag(tagSet) }},
-		{"tag 1001", "d903e9", func(c *cborWriter) { c.tag(tagExtendedTime) }},
-		{"true false null", "f5f4f6", func(c *cborWriter) { c.writeBool(true); c.writeBool(false); c.writeNull() }},
-		{"head 24", "1818", func(c *cborWriter) { c.writeUint(24) }},
-		{"head 256", "190100", func(c *cborWriter) { c.writeUint(256) }},
-		{"head 65536", "1a00010000", func(c *cborWriter) { c.writeUint(65536) }},
+		{"int 3", "03", func(c *runtime.CborWriter) { c.WriteInt(3) }},
+		{"int -4", "23", func(c *runtime.CborWriter) { c.WriteInt(-4) }},
+		{"uint64 max", "1bffffffffffffffff", func(c *runtime.CborWriter) { c.WriteUint(math.MaxUint64) }},
+		{"int64 min", "3b7fffffffffffffff", func(c *runtime.CborWriter) { c.WriteInt(math.MinInt64) }},
+		{"float 3.0 reduces", "03", func(c *runtime.CborWriter) { writeFloatReduced(c, 3.0) }},
+		{"float -4.0 reduces", "23", func(c *runtime.CborWriter) { writeFloatReduced(c, -4.0) }},
+		{"float -0.0 reduces", "00", func(c *runtime.CborWriter) { writeFloatReduced(c, math.Copysign(0, -1)) }},
+		{"float 2^63 reduces to uint", "1b8000000000000000", func(c *runtime.CborWriter) { writeFloatReduced(c, math.Pow(2, 63)) }},
+		{"float -2^63 reduces to int", "3b7fffffffffffffff", func(c *runtime.CborWriter) { writeFloatReduced(c, -math.Pow(2, 63)) }},
+		{"float 2^64 stays float", "fa5f800000", func(c *runtime.CborWriter) { writeFloatReduced(c, math.Pow(2, 64)) }},
+		{"float 1e20 stays float", "fb4415af1d78b58c40", func(c *runtime.CborWriter) { writeFloatReduced(c, 1e20) }},
+		{"float 1.5 is float16", "f93e00", func(c *runtime.CborWriter) { writeFloatReduced(c, 1.5) }},
+		{"f32 0.1 is float32", "fa3dcccccd", func(c *runtime.CborWriter) { writeFloatReduced(c, float64(float32(0.1))) }},
+		{"f64 0.1 is float64", "fb3fb999999999999a", func(c *runtime.CborWriter) { writeFloatReduced(c, 0.1) }},
+		{"NaN", "f97e00", func(c *runtime.CborWriter) { writeFloatReduced(c, math.NaN()) }},
+		{"+Inf", "f97c00", func(c *runtime.CborWriter) { writeFloatReduced(c, math.Inf(1)) }},
+		{"-Inf", "f9fc00", func(c *runtime.CborWriter) { writeFloatReduced(c, math.Inf(-1)) }},
+		{"text abc", "63616263", func(c *runtime.CborWriter) { c.WriteTextString("abc") }},
+		{"bytes abc", "43616263", func(c *runtime.CborWriter) { c.WriteBytes([]byte("abc")) }},
+		{"empty array", "80", func(c *runtime.CborWriter) { c.ArrayHead(0) }},
+		{"map head 2", "a2", func(c *runtime.CborWriter) { c.MapHead(2) }},
+		{"tag 258", "d90102", func(c *runtime.CborWriter) { c.Tag(runtime.TagSet) }},
+		{"tag 1001", "d903e9", func(c *runtime.CborWriter) { c.Tag(runtime.TagExtendedTime) }},
+		{"true false null", "f5f4f6", func(c *runtime.CborWriter) { c.WriteBool(true); c.WriteBool(false); c.WriteNull() }},
+		{"head 24", "1818", func(c *runtime.CborWriter) { c.WriteUint(24) }},
+		{"head 256", "190100", func(c *runtime.CborWriter) { c.WriteUint(256) }},
+		{"head 65536", "1a00010000", func(c *runtime.CborWriter) { c.WriteUint(65536) }},
 	}
 	for _, tc := range cases {
 		require.Equal(t, tc.want, enc(tc.f), tc.name)
@@ -595,15 +596,12 @@ func TestCborWriterNumbers(t *testing.T) {
 
 // Network and temporal scalars straight from Arrow arrays (SD3).
 func TestScalarVectors(t *testing.T) {
-	em, err := newCoreDetEncMode()
-	require.NoError(t, err)
 	enc := func(arr arrow.Array, i int, ct canonicaltypes.PrimitiveAstNodeI) string {
 		var b bytes.Buffer
-		c := &cborWriter{}
-		c.initFloatEncoder(em)
-		c.reset(&b)
+		c, err := runtime.NewCborWriter(&b)
+		require.NoError(t, err)
 		require.NoError(t, writeScalar(c, arr, i, ct))
-		require.NoError(t, c.err)
+		require.NoError(t, c.Err())
 		return hexs(b.Bytes())
 	}
 	fsb := func(width int, vals ...[]byte) arrow.Array {

@@ -42,7 +42,7 @@ type InAttributeMembershipHighCardRefParametrizedI[A any] interface {
 	AddMembershipHighCardRefParametrized(highCardRefParametrized []byte) A
 }
 type InAttributeMembershipHighCardVerbatimI[A any] interface {
-	AddMembershipHighCardRef(highCardVerbatim []byte) A
+	AddMembershipHighCardVerbatim(highCardVerbatim []byte) A
 }
 type InAttributeMembershipLowCardRefI[A any] interface {
 	AddMembershipLowCardRef(lowCardRef uint64) A

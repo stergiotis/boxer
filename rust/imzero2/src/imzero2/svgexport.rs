@@ -25,7 +25,7 @@
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use egui::epaint::{
@@ -63,6 +63,9 @@ struct FontChain {
 #[derive(Debug, Clone)]
 struct FontEntry {
     /// The face's family name from the TTF `name` table, e.g. `"Noto Sans"`.
+    /// Carried for the `Debug` rendering and for a subsetter that names its
+    /// output after the source face; no code path reads it back.
+    #[allow(dead_code)]
     family_name: String,
     /// Bytes of the TTF/TTC. Retained so the Tier-2 subsetter has source
     /// material. Shared via `Arc` because the same bytes can back several
@@ -83,7 +86,9 @@ struct FontEntry {
 pub(crate) struct ChainSubset {
     /// 0-based index of the chain entry that produced this subset. Used
     /// by the visitor to build a per-family synthetic name like
-    /// `svg-embed-prop-2`.
+    /// `svg-embed-prop-2` — a naming scheme the visitor does not use, so the
+    /// field is written and not read.
+    #[allow(dead_code)]
     pub chain_index: usize,
     pub bytes: Vec<u8>,
 }
@@ -1020,7 +1025,7 @@ pub fn render_svg_window(
         // window-margin's vertical sum lines up with the chrome
         // height we want to drop. Off by a few pixels for very
         // long titles is acceptable for a v1 report mode.
-        let title_h = spacing.interact_size.y + spacing.window_margin.sum().y as f32;
+        let title_h = spacing.interact_size.y + spacing.window_margin.sum().y;
         let content_rect = Rect::from_min_max(
             egui::pos2(
                 viewport.min.x + stroke_w + spacing.window_margin.leftf(),
@@ -1207,6 +1212,10 @@ fn visit_for_chars(shape: &Shape, used: &mut HashMap<FontFamily, std::collection
 // Builder
 // ============================================================================
 
+// The dark viewport background the Faithful-mode callers pass in as `bg`
+// (they live on the Go side, which owns the default). Only this file's own
+// tests name it from Rust.
+#[cfg(test)]
 const VIEWPORT_BG: Color32 = Color32::from_rgb(0x1e, 0x1e, 0x1e);
 
 #[derive(Default, Debug, Clone, Copy)]

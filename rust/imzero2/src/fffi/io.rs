@@ -1,5 +1,4 @@
 use crate::fffi::common::{FffiError, FffiResult};
-use std::io::Read;
 
 /// Dense block map: all block data in a single contiguous slab, indexed by
 /// a flat `Vec<(u32, u32)>` of (offset, length) pairs. Lookup is a single

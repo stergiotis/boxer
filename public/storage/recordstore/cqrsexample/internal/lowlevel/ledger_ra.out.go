@@ -1412,7 +1412,7 @@ func (inst *ReadAccessLedgerTableTaggedSnapAsOfAttributes) GetNumberOfAttributes
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2074
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2082
 
 type ReadAccessLedgerTableTaggedAcctOwner struct {
 	Attributes  *ReadAccessLedgerTableTaggedAcctOwnerAttributes
@@ -2113,7 +2113,7 @@ func (inst *ReadAccessLedgerTableTaggedSnapAsOf) GetSectionMembershipSpec() comm
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2424
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2467
 
 type ReadAccessLedgerTable struct {
 	EntityId        *ReadAccessLedgerTablePlainEntityIdAttributes

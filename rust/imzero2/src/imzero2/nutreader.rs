@@ -91,6 +91,9 @@ pub struct NutFrame {
 #[derive(Clone, Copy, Default)]
 struct FrameCode {
     flags: u64,
+    // Parsed off the frame-code table to keep this struct a faithful image of
+    // it; the demuxer works off timestamps in the frame headers instead.
+    #[allow(dead_code)]
     pts_delta: i64,
     size_mul: u64,
     size_lsb: u64,

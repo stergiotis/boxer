@@ -1,5 +1,5 @@
-// Package canonform computes the leeway canonical record form — ADR-0201
-// (proposed) — and the digests over it.
+// Package canonform computes the leeway canonical record form — ADR-0201 —
+// and the digests over it.
 //
 // The form is a quotient, not a serialization: one leeway entity is mapped
 // into the CBOR data model so that every change the ADR declares content-free
@@ -12,6 +12,11 @@
 // bytes. Only primary memberships (membershiprole) are content. Nothing is
 // materialized: every attribute item streams into its own keyed hasher and
 // the entity item holds the plains plus the sorted 32-byte leaf digests.
+//
+// The CBOR writer is canonwire/runtime.CborWriter, shared with the leeway
+// canonical wire (ADR-0210). What is the quotient's own — the numeric
+// reduction (writeFloatReduced), the sorted memberships, the tag-258 sets —
+// stays in this package and layers on top of that writer.
 //
 // Encoder is a streamreadaccess sink: it implements SinkI together with the
 // optional MembershipSinkI, ArrowValueSinkI (Arrow views in place of the text

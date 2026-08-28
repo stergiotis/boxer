@@ -87,8 +87,9 @@ func resolveTypeToTransferRegister(t ir.TypeI) (consumeCode string, err error) {
 
 func generateFactoryArgumentsHandlingPlain(w io.Writer, it iter.Seq2[naming.StylableName, canonicaltypes.PrimitiveAstNodeI], tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
 	for name, typ := range it {
-		_, err := fmt.Fprintf(w, `#[allow(unused_mut)]
-let mut %s = self.io.read_plain_%s()?;
+		// No per-`let` lint attribute: `unused_mut` is allowed once on the
+		// dispatch match that encloses every one of these reads.
+		_, err := fmt.Fprintf(w, `let mut %s = self.io.read_plain_%s()?;
 `,
 			name.Convert(naming.LowerSnakeCase),
 			typ,
@@ -156,7 +157,6 @@ func generateFactoryInterpreterDispatchCode(w io.Writer, factory *ir.BuilderFact
 		code := bytes.NewBuffer(make([]byte, 0, 256))
 		if c != nil && !c.UseDefaultCode() {
 			_, err = fmt.Fprintf(code, `
-#[allow(unused_mut)]
 let mut %s = `, BuilderFactoryCodeGenExprs.Instance)
 			tracker.MergeError(err)
 			codeS := c.GetVerbatimCode()
@@ -335,8 +335,7 @@ func generateFetcherInterpreterDispatchCode(w io.Writer, fetcher *ir.FetcherNode
 }
 func generateMethodEnum(w io.Writer, factory *ir.BuilderFactoryNode, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
 	b := factory.Name.Convert(naming.UpperCamelCase).String()
-	_, err := fmt.Fprintf(w, `#[allow(dead_code)]
-#[derive(strum::FromRepr, Debug, PartialEq)]
+	_, err := fmt.Fprintf(w, `#[derive(strum::FromRepr, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum %sBuilderMethodId {
     Build = 0,
@@ -354,9 +353,14 @@ pub enum %sBuilderMethodId {
 	tracker.MergeError(err)
 }
 func generateFactoryEnum(w io.Writer, tls []ir.NodeI, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
-	_, err := fmt.Fprint(w, `
+	// File-level, because this is the first thing written to the enum file:
+	// every enum below mirrors the IDL, so a variant no build path names is
+	// the IDL's shape rather than a mistake, and the attribute saying so is
+	// itself generated (which is what `clippy::allow_attributes` objects to).
+	_, err := fmt.Fprint(w, `#![allow(dead_code, clippy::allow_attributes)]
+
 use crate::imzero2::fenums;
-#[derive(strum::FromRepr, Debug, PartialEq)]
+#[derive(strum::FromRepr, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum FuncProcId {
 `)
@@ -367,8 +371,14 @@ pub enum FuncProcId {
 			continue
 		}
 
-		_, err = fmt.Fprintf(w, `	%s = fenums::FUNC_PROC_ID_OFFSET + %d,
+		if idx == 0 {
+			// `+ 0` is clippy::identity_op, and this file is not editable.
+			_, err = fmt.Fprintf(w, `	%s = fenums::FUNC_PROC_ID_OFFSET,
+`, b)
+		} else {
+			_, err = fmt.Fprintf(w, `	%s = fenums::FUNC_PROC_ID_OFFSET + %d,
 `, b, idx)
+		}
 		tracker.MergeError(err)
 	}
 	_, err = fmt.Fprint(w, `}
@@ -379,7 +389,49 @@ pub enum FuncProcId {
 func GenerateCode(wh WriterHolder, tls []ir.NodeI, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) (err error) {
 	generateFactoryEnum(wh.EnumWriter, tls, tracker)
 	{
-		_, err = fmt.Fprintf(wh.DispatchWriter, "match %s {\n",
+		// One lint allowance for the whole dispatch, because no hand edit
+		// inside it survives a regeneration.
+		//
+		// The rustc half is structural: an opcode's arguments are read off the
+		// wire whether or not the widget's apply code names them (the read is
+		// the point — it advances the frame cursor), and an evaluated
+		// builder's holder is only read when that builder is consumed as a
+		// nested argument, never at top level. `unused_mut` rides along so the
+		// per-`let` attribute this used to emit at every argument can go.
+		//
+		// The clippy half is the shape of the IDL's Rust templates as they
+		// come out the other side — `{{EguiUiOptionalOuter}}.as_mut().unwrap()`
+		// alone accounts for most of `unwrap_used`. Correctness lints are
+		// deliberately absent from this list: one firing here would be a
+		// generator bug, and should still be heard. Extend the list when a new
+		// template shape trips a lint; do not reach for `clippy::all`.
+		_, err = fmt.Fprintf(wh.DispatchWriter, `#[allow(
+    unused_variables,
+    unused_assignments,
+    unused_mut,
+    clippy::allow_attributes,
+    clippy::assign_op_pattern,
+    clippy::collapsible_if,
+    clippy::elidable_lifetime_names,
+    clippy::explicit_into_iter_loop,
+    clippy::explicit_iter_loop,
+    clippy::indexing_slicing,
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::let_unit_value,
+    clippy::missing_assert_message,
+    clippy::mut_mut,
+    clippy::needless_return,
+    clippy::redundant_type_annotations,
+    clippy::semicolon_if_nothing_returned,
+    clippy::unnecessary_unwrap,
+    clippy::unused_unit,
+    clippy::unwrap_used,
+    clippy::useless_conversion,
+    clippy::useless_let_if_seq
+)]
+match %s {
+`,
 			BuilderFactoryCodeGenExprs.FuncProcIdOuter)
 		tracker.MergeError(err)
 	}
@@ -414,7 +466,13 @@ func GenerateCode(wh WriterHolder, tls []ir.NodeI, tracker *compiletime.StateAnd
 
 	tracker.ResetStateAndError()
 	{
+		// The arms above cover every FuncProcId variant, so this one is
+		// unreachable today and rustc says so. It stays as the landing site
+		// for a peer that sends an opcode this build does not know — a
+		// mismatched Go/Rust pair — which `from_repr` cannot produce but a
+		// future non-exhaustive id type could.
 		_, err = fmt.Fprintf(wh.DispatchWriter, `
+#[allow(unreachable_patterns)]
 _ => {
         tracing::warn!("received unhandled procedure {:?}", f);
         %s

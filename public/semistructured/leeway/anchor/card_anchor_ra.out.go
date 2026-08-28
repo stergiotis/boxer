@@ -3534,7 +3534,7 @@ func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) GetNumberOfAttributes(
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2074
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2082
 
 type ReadAccessTestTableTaggedForeignKey struct {
 	Attributes  *ReadAccessTestTableTaggedForeignKeyAttributes
@@ -5453,7 +5453,7 @@ func (inst *ReadAccessTestTableTaggedTimeArray) GetSectionMembershipSpec() commo
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2424
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2467
 
 type ReadAccessTestTable struct {
 	EntityId    *ReadAccessTestTablePlainEntityIdAttributes

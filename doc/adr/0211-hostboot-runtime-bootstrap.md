@@ -8,7 +8,7 @@ date: 2026-08-28
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0208: A reusable runtime bootstrap for window-host adopters
+# ADR-0211: A reusable runtime bootstrap for window-host adopters
 
 ## Context
 

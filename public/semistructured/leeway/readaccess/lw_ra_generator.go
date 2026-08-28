@@ -1976,6 +1976,14 @@ func (inst *%s%s) Len() (nEntities int) {
 		gocodegen.EmitGeneratingCodeLocation(b)
 
 		for _, s := range tblDesc.TaggedValuesSections {
+			if len(s.ValueColumnNames) == 0 {
+				// A value-less section (the JSON mapping's null / undefined /
+				// emptyObject / emptyArray) has no attribute class to hang this
+				// on, and no value column to read the count from — its
+				// attributes are counted through the membership pack's
+				// per-attribute accel instead.
+				continue
+			}
 			attrName := s.ValueColumnNames[0]
 			var clsName string
 			clsName, err = clsNamer.ComposeSectionReadAccessAttributeClassName(tableName, common.PlainItemTypeNone, s.Name)
@@ -2315,13 +2323,20 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		// section introspection
 		{ // .GetSectionName() naming.StylableName
 			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				// The body is written here rather than in the attribute-class
+				// callback: a value-less section has no attribute class, and a
+				// section introspection getter has nothing to do with one — put
+				// it there and such a section gets a body-less function.
 				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetSectionName() naming.StylableName {\n",
 					outerClsName,
 					genericTypeParamsUse,
 				)
+				if err != nil {
+					return
+				}
+				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.Name.Convert(naming.DefaultNamingStyle))
 				return
 			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.Name.Convert(naming.DefaultNamingStyle))
 				return
 			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 				return
@@ -2332,13 +2347,20 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 		{ // .GetSectionUseAspects() useaspects.AspectSet
 			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				// The body is written here rather than in the attribute-class
+				// callback: a value-less section has no attribute class, and a
+				// section introspection getter has nothing to do with one — put
+				// it there and such a section gets a body-less function.
 				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetSectionUseAspects() useaspects.AspectSet {\n",
 					outerClsName,
 					genericTypeParamsUse,
 				)
+				if err != nil {
+					return
+				}
+				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.UseAspects.String())
 				return
 			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.UseAspects.String())
 				return
 			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 				return
@@ -2349,13 +2371,20 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 		{ // .GetSectionStreamingGroup() naming.Key
 			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				// The body is written here rather than in the attribute-class
+				// callback: a value-less section has no attribute class, and a
+				// section introspection getter has nothing to do with one — put
+				// it there and such a section gets a body-less function.
 				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetSectionStreamingGroup() naming.Key {\n",
 					outerClsName,
 					genericTypeParamsUse,
 				)
+				if err != nil {
+					return
+				}
+				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.StreamingGroup)
 				return
 			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.StreamingGroup)
 				return
 			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 				return
@@ -2366,13 +2395,20 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 		{ // .GetSectionCoSectionGroup() naming.Key
 			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				// The body is written here rather than in the attribute-class
+				// callback: a value-less section has no attribute class, and a
+				// section introspection getter has nothing to do with one — put
+				// it there and such a section gets a body-less function.
 				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetSectionCoSectionGroup() naming.Key {\n",
 					outerClsName,
 					genericTypeParamsUse,
 				)
+				if err != nil {
+					return
+				}
+				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.CoSectionGroup)
 				return
 			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.CoSectionGroup)
 				return
 			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 				return
@@ -2383,13 +2419,20 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 		{ // .GetSectionMembershipSpec() common.MembershipSpecE
 			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				// The body is written here rather than in the attribute-class
+				// callback: a value-less section has no attribute class, and a
+				// section introspection getter has nothing to do with one — put
+				// it there and such a section gets a body-less function.
 				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetSectionMembershipSpec() common.MembershipSpecE {\n",
 					outerClsName,
 					genericTypeParamsUse,
 				)
+				if err != nil {
+					return
+				}
+				_, err = fmt.Fprintf(b, "\treturn 0b%b\n", sec.MembershipSpec)
 				return
 			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "\treturn 0b%b\n", sec.MembershipSpec)
 				return
 			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 				return
