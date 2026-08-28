@@ -67,7 +67,7 @@ const (
 	sysmetricsInterval = time.Second
 )
 
-// Services selects the optional bus-backed services Boot wires (ADR-0208
+// Services selects the optional bus-backed services Boot wires (ADR-0211
 // §SD2). The zero value boots identity, facts, heartbeat, the bus with its
 // audit sink, the task supervisor and the window host — the pieces an app
 // needs for the ADR-0026 lifecycle — and nothing else. Each true field
@@ -109,7 +109,7 @@ func AllServices() Services {
 }
 
 // SeedWindow is one window opened with a typed launch config at boot
-// (ADR-0208 §SD3): the window-host form of ADR-0135's `windowhost.open`
+// (ADR-0211 §SD3): the window-host form of ADR-0135's `windowhost.open`
 // request. Kind must match the app manifest's LaunchKind and Config must
 // pass that kind's registered probe; a failure is a boot error, unlike the
 // best-effort LaunchApps seeds, because the caller asked for this exact
@@ -210,7 +210,7 @@ type Runtime struct {
 	closeOnce sync.Once
 }
 
-// Boot wires the runtime in the carousel's order (ADR-0208 §SD1): identity,
+// Boot wires the runtime in the carousel's order (ADR-0211 §SD1): identity,
 // facts store, runtime-start row, heartbeat, bus with audit, the selected
 // services, task supervisor, status snapshot, window host or screenshot
 // renderers, AfterHost, introspection. It does not create the imzero2

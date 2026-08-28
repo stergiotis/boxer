@@ -79,7 +79,7 @@ does. Two ways carry a config into a seeded window:
   mounts with `LaunchReasonCaller`. A failed open is a boot error, unlike
   an unresolved `--launch` ref, because the config was asked for
   explicitly. This is `hostboot.SeedWindow` at the command line
-  ([ADR-0208](../adr/0208-hostboot-runtime-bootstrap.md) §SD3).
+  ([ADR-0211](../adr/0211-hostboot-runtime-bootstrap.md) §SD3).
 - **Env seeds.** An app may register its own seed variables through the
   environment registry ([ADR-0009](../adr/0009-environment-variable-registry.md);
   `env.NewString` / `NewFloat` / `NewPath` with a `CliFlagName`) and read

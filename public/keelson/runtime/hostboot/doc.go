@@ -1,5 +1,5 @@
 // Package hostboot is the reusable runtime bootstrap for hosts that run
-// keelson apps in the window host (ADR-0208). It wires, in one call, what
+// keelson apps in the window host (ADR-0211). It wires, in one call, what
 // the imzero2 demo carousel used to wire inline: process identity, the
 // facts store with its runtime-start row and heartbeat, the in-process bus
 // with its audit sink, the optional bus-backed services (file dialogs,
