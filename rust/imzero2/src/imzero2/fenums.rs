@@ -52,97 +52,95 @@ bitflags::bitflags! {
 
 impl ResponseFlags {
     pub fn populate(&mut self, resp: &egui::response::Response) {
-        self.set(ResponseFlags::PRIMARY_CLICKED, resp.clicked());
-        self.set(ResponseFlags::SECONDARY_CLICKED, resp.secondary_clicked());
-        self.set(ResponseFlags::LONG_TOUCHED, resp.long_touched());
-        self.set(ResponseFlags::MIDDLE_CLICKED, resp.middle_clicked());
-        self.set(ResponseFlags::DOUBLE_CLICKED, resp.double_clicked());
-        self.set(ResponseFlags::TRIPLE_CLICKED, resp.triple_clicked());
-        self.set(ResponseFlags::CLICKED_ELSEWHERE, resp.clicked_elsewhere());
-        self.set(ResponseFlags::ENABLED, resp.enabled());
-        self.set(ResponseFlags::HOVERED, resp.hovered());
-        self.set(ResponseFlags::CONTAINS_POINTER, resp.contains_pointer());
-        self.set(ResponseFlags::HIGHLIGHTED, resp.highlighted());
-        self.set(ResponseFlags::HAS_FOCUS, resp.has_focus());
-        self.set(ResponseFlags::GAINED_FOCUS, resp.gained_focus());
-        self.set(ResponseFlags::LOST_FOCUS, resp.lost_focus());
-        self.set(ResponseFlags::DRAG_STARTED, resp.drag_started());
-        self.set(ResponseFlags::DRAGGED, resp.dragged());
-        self.set(ResponseFlags::DRAG_STOPPED, resp.drag_stopped());
+        self.set(Self::PRIMARY_CLICKED, resp.clicked());
+        self.set(Self::SECONDARY_CLICKED, resp.secondary_clicked());
+        self.set(Self::LONG_TOUCHED, resp.long_touched());
+        self.set(Self::MIDDLE_CLICKED, resp.middle_clicked());
+        self.set(Self::DOUBLE_CLICKED, resp.double_clicked());
+        self.set(Self::TRIPLE_CLICKED, resp.triple_clicked());
+        self.set(Self::CLICKED_ELSEWHERE, resp.clicked_elsewhere());
+        self.set(Self::ENABLED, resp.enabled());
+        self.set(Self::HOVERED, resp.hovered());
+        self.set(Self::CONTAINS_POINTER, resp.contains_pointer());
+        self.set(Self::HIGHLIGHTED, resp.highlighted());
+        self.set(Self::HAS_FOCUS, resp.has_focus());
+        self.set(Self::GAINED_FOCUS, resp.gained_focus());
+        self.set(Self::LOST_FOCUS, resp.lost_focus());
+        self.set(Self::DRAG_STARTED, resp.drag_started());
+        self.set(Self::DRAGGED, resp.dragged());
+        self.set(Self::DRAG_STOPPED, resp.drag_stopped());
         self.set(
-            ResponseFlags::IS_POINTER_BUTTON_DOWN_ON,
+            Self::IS_POINTER_BUTTON_DOWN_ON,
             resp.is_pointer_button_down_on(),
         );
-        self.set(ResponseFlags::CHANGED, resp.changed());
-        self.set(ResponseFlags::SHOULD_CLOSE, resp.should_close());
-        self.set(ResponseFlags::IS_TOOLTIP_OPEN, resp.is_tooltip_open());
+        self.set(Self::CHANGED, resp.changed());
+        self.set(Self::SHOULD_CLOSE, resp.should_close());
+        self.set(Self::IS_TOOLTIP_OPEN, resp.is_tooltip_open());
     }
     pub fn match_response_any(&self, resp: &egui::response::Response) -> bool {
-        if self.contains(ResponseFlags::PRIMARY_CLICKED) && resp.clicked() {
+        if self.contains(Self::PRIMARY_CLICKED) && resp.clicked() {
             return true;
         }
-        if self.contains(ResponseFlags::SECONDARY_CLICKED) && resp.secondary_clicked() {
+        if self.contains(Self::SECONDARY_CLICKED) && resp.secondary_clicked() {
             return true;
         }
-        if self.contains(ResponseFlags::LONG_TOUCHED) && resp.long_touched() {
+        if self.contains(Self::LONG_TOUCHED) && resp.long_touched() {
             return true;
         }
-        if self.contains(ResponseFlags::MIDDLE_CLICKED) && resp.middle_clicked() {
+        if self.contains(Self::MIDDLE_CLICKED) && resp.middle_clicked() {
             return true;
         }
-        if self.contains(ResponseFlags::DOUBLE_CLICKED) && resp.double_clicked() {
+        if self.contains(Self::DOUBLE_CLICKED) && resp.double_clicked() {
             return true;
         }
-        if self.contains(ResponseFlags::TRIPLE_CLICKED) && resp.triple_clicked() {
+        if self.contains(Self::TRIPLE_CLICKED) && resp.triple_clicked() {
             return true;
         }
-        if self.contains(ResponseFlags::CLICKED_ELSEWHERE) && resp.clicked_elsewhere() {
+        if self.contains(Self::CLICKED_ELSEWHERE) && resp.clicked_elsewhere() {
             return true;
         }
-        if self.contains(ResponseFlags::ENABLED) && resp.enabled() {
+        if self.contains(Self::ENABLED) && resp.enabled() {
             return true;
         }
-        if self.contains(ResponseFlags::HOVERED) && resp.hovered() {
+        if self.contains(Self::HOVERED) && resp.hovered() {
             return true;
         }
-        if self.contains(ResponseFlags::CONTAINS_POINTER) && resp.contains_pointer() {
+        if self.contains(Self::CONTAINS_POINTER) && resp.contains_pointer() {
             return true;
         }
-        if self.contains(ResponseFlags::HIGHLIGHTED) && resp.highlighted() {
+        if self.contains(Self::HIGHLIGHTED) && resp.highlighted() {
             return true;
         }
-        if self.contains(ResponseFlags::HAS_FOCUS) && resp.has_focus() {
+        if self.contains(Self::HAS_FOCUS) && resp.has_focus() {
             return true;
         }
-        if self.contains(ResponseFlags::GAINED_FOCUS) && resp.gained_focus() {
+        if self.contains(Self::GAINED_FOCUS) && resp.gained_focus() {
             return true;
         }
-        if self.contains(ResponseFlags::LOST_FOCUS) && resp.lost_focus() {
+        if self.contains(Self::LOST_FOCUS) && resp.lost_focus() {
             return true;
         }
-        if self.contains(ResponseFlags::DRAG_STARTED) && resp.drag_started() {
+        if self.contains(Self::DRAG_STARTED) && resp.drag_started() {
             return true;
         }
-        if self.contains(ResponseFlags::DRAGGED) && resp.dragged() {
+        if self.contains(Self::DRAGGED) && resp.dragged() {
             return true;
         }
-        if self.contains(ResponseFlags::DRAG_STOPPED) && resp.drag_stopped() {
+        if self.contains(Self::DRAG_STOPPED) && resp.drag_stopped() {
             return true;
         }
-        if self.contains(ResponseFlags::IS_POINTER_BUTTON_DOWN_ON)
-            && resp.is_pointer_button_down_on()
-        {
+        if self.contains(Self::IS_POINTER_BUTTON_DOWN_ON) && resp.is_pointer_button_down_on() {
             return true;
         }
-        if self.contains(ResponseFlags::CHANGED) && resp.changed() {
+        if self.contains(Self::CHANGED) && resp.changed() {
             return true;
         }
-        if self.contains(ResponseFlags::SHOULD_CLOSE) && resp.should_close() {
+        if self.contains(Self::SHOULD_CLOSE) && resp.should_close() {
             return true;
         }
-        if self.contains(ResponseFlags::IS_TOOLTIP_OPEN) && resp.is_tooltip_open() {
+        if self.contains(Self::IS_TOOLTIP_OPEN) && resp.is_tooltip_open() {
             return true;
         }
-        return false;
+        false
     }
 }

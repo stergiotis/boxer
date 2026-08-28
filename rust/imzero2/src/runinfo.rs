@@ -23,7 +23,7 @@ pub const STANDALONE: &str = "standalone";
 
 static RUN_ID: OnceLock<Option<String>> = OnceLock::new();
 
-/// Returns the inherited run_id, or None when `PEBBLE2_RUN_ID` is
+/// Returns the inherited `run_id`, or None when `PEBBLE2_RUN_ID` is
 /// unset. Cached on first read; subsequent calls are lock-free.
 pub fn run_id() -> Option<&'static str> {
     RUN_ID.get_or_init(|| std::env::var(ENV_VAR).ok().filter(|s| !s.is_empty())).as_deref()
@@ -51,18 +51,19 @@ pub fn enter_root_span() -> tracing::span::EnteredSpan {
     tracing::info_span!("rust", run_id = rid).entered()
 }
 
-/// One-shot info event announcing the bound run_id. Called once from
+/// One-shot info event announcing the bound `run_id`. Called once from
 /// `main` after the tracing subscriber + root span are wired so the
 /// "Rust bound to run X" line appears in the same log stream that
 /// carries every subsequent event under the root span.
 pub fn log_bound_run() {
-    match run_id() {
-        Some(rid) => tracing::info!(
+    if let Some(rid) = run_id() {
+        tracing::info!(
             run_id = rid,
             env_var = ENV_VAR,
             "runinfo: bound to parent run"
-        ),
-        None => tracing::info!(env_var = ENV_VAR, "runinfo: standalone (no parent run_id)"),
+        );
+    } else {
+        tracing::info!(env_var = ENV_VAR, "runinfo: standalone (no parent run_id)");
     }
 }
 
@@ -96,6 +97,7 @@ mod tests {
         }
         let v = parse_helper();
         assert_eq!(v.as_deref(), Some("abcdef1234567890"));
+        // SAFETY: as above — still under ENV_LOCK.
         unsafe {
             std::env::remove_var(ENV_VAR);
         }
@@ -104,6 +106,8 @@ mod tests {
     #[test]
     fn parse_helper_returns_none_when_unset() {
         let _env = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        // SAFETY: ENV_LOCK serializes the env-mutating tests against each
+        // other, and no non-test thread reads ENV_VAR during the test run.
         unsafe {
             std::env::remove_var(ENV_VAR);
         }
@@ -114,18 +118,20 @@ mod tests {
     #[test]
     fn parse_helper_returns_none_on_empty() {
         let _env = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        // SAFETY: as above — still under ENV_LOCK.
         unsafe {
             std::env::set_var(ENV_VAR, "");
         }
         let v = parse_helper();
         assert_eq!(v, None);
+        // SAFETY: as above — still under ENV_LOCK.
         unsafe {
             std::env::remove_var(ENV_VAR);
         }
     }
 
     /// Mirrors the closure body of `RUN_ID.get_or_init` so the env-
-    /// var parsing logic is testable without the OnceLock memoisation
+    /// var parsing logic is testable without the `OnceLock` memoisation
     /// foreclosing later tests.
     fn parse_helper() -> Option<String> {
         std::env::var(ENV_VAR).ok().filter(|s| !s.is_empty())

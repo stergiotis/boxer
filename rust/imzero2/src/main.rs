@@ -118,7 +118,7 @@ fn run_imzero2(cfg: imzero2::appconfig::AppConfig) -> Result<(), Box<dyn std::er
         // Built alone (no other host), this is the only choice; built
         // alongside another host, an explicit env flag selects it.
         if env_pick || (!cfg!(feature = "desktop") && !cfg!(feature = "headless")) {
-            return imzero2::run_imzero2_svg_loop(cfg).map_err(Into::into);
+            return imzero2::run_imzero2_svg_loop(cfg);
         }
     }
     #[cfg(feature = "headless")]
@@ -132,7 +132,7 @@ fn run_imzero2(cfg: imzero2::appconfig::AppConfig) -> Result<(), Box<dyn std::er
     }
     #[cfg(feature = "desktop")]
     {
-        return imzero2::run_imzero2_main_loop(cfg).map_err(Into::into);
+        imzero2::run_imzero2_main_loop(cfg).map_err(Into::into)
     }
     #[cfg(not(feature = "desktop"))]
     {
@@ -143,9 +143,9 @@ fn run_imzero2(cfg: imzero2::appconfig::AppConfig) -> Result<(), Box<dyn std::er
 }
 
 fn usage(w: &mut impl std::io::Write, bin_name: &str, regular: bool) -> std::io::Result<()> {
-    write!(w, "usage:\n")?;
-    write!(w, "{bin_name} imzero2\n")?;
-    write!(w, "{bin_name} ipc\n")?;
+    writeln!(w, "usage:")?;
+    writeln!(w, "{bin_name} imzero2")?;
+    writeln!(w, "{bin_name} ipc")?;
     if !regular {
         std::process::exit(1);
     } else {
@@ -182,7 +182,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         usage(&mut std::io::stderr(), bin_name, true)?;
     }
 
-    let r = match command {
+    match command {
         "imzero2" => {
             let mut cfg = imzero2::appconfig::AppConfig::default();
             if imzero2::cli::flags::find_flag_value_default_bool(
@@ -193,14 +193,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ) {
                 cfg.usage(&mut std::io::stderr()).expect("unable to display usage");
             } else {
-                cfg.parse(&mut used, &rest_args);
+                cfg.parse(&mut used, rest_args);
             }
             flags::validate_all_args_used(rest_args, rest_args.len() as u32, &used);
             run_imzero2(cfg)
         }
         "ipc" => {
             let shm_path =
-                flags::find_flag_default(rest_args.iter(), &mut used, "-shm-path", "".to_string());
+                flags::find_flag_default(rest_args.iter(), &mut used, "-shm-path", String::new());
             let data_size = flags::find_flag_value_default_parsable(
                 rest_args.iter(),
                 &mut used,
@@ -211,7 +211,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 rest_args.iter(),
                 &mut used,
                 "-mode",
-                "consumer".to_string(),
+                "consumer".to_owned(),
             );
             flags::validate_all_args_used(rest_args, rest_args.len() as u32, &used);
             tracing::info!(
@@ -238,6 +238,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             usage(&mut std::io::stderr(), bin_name, false)?;
             Ok(())
         }
-    };
-    return r;
+    }
 }

@@ -40,7 +40,7 @@ pub fn pack_ymd(date: Date) -> u64 {
     (date.year() as u64) * 10000 + (date.month() as u64) * 100 + (date.day() as u64)
 }
 
-impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
+impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
     pub fn apply_date_picker_button(
         &mut self,
         req: DatePickerButtonRequest,

@@ -96,7 +96,7 @@ pub fn snapshot(update: &accesskit::TreeUpdate, pass: u64) -> pb::TreeSnapshot {
             });
             pb::TreeNode {
                 id: id.0,
-                role: role_name(node.role()).to_owned(),
+                role: role_name(node.role()).clone(),
                 name: node.label().unwrap_or_default().to_owned(),
                 value: node.value().unwrap_or_default().to_owned(),
                 x,
@@ -117,7 +117,7 @@ pub fn snapshot(update: &accesskit::TreeUpdate, pass: u64) -> pb::TreeSnapshot {
     }
 }
 
-/// Role as a lower-snake string ("check_box", "text_input", …).
+/// Role as a lower-snake string ("`check_box`", "`text_input`", …).
 ///
 /// A string, not an enum: AccessKit's role list is open-ended upstream, and a
 /// client matching on a role we have not heard of should see its name rather

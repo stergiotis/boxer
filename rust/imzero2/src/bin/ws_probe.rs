@@ -2,12 +2,12 @@
 //! Phase 5 verification; `required-features = ["headless"]`).
 //!
 //! Connects like the browser viewer would, prints every session hello,
-//! appends VideoChunk payloads to an Annex-B file (ffprobe-able), and can
+//! appends `VideoChunk` payloads to an Annex-B file (ffprobe-able), and can
 //! inject synthetic input mid-stream:
 //!
 //! - a mouse move + click (input round-trip verifiable by decoding the
 //!   stream and looking at the UI change), and/or
-//! - a ViewportResize request — the host then re-announces the hello and
+//! - a `ViewportResize` request — the host then re-announces the hello and
 //!   restarts the stream at the new geometry; the probe writes all AUs
 //!   received after that hello to `<out>.resized` so both stream segments
 //!   can be ffprobe'd independently for their dimensions.
@@ -21,8 +21,8 @@
 //!
 //! Counting is per received *frame* (a video access unit **or** a mesh frame,
 //! prefix `0x04`), so scripted input still fires after a switch onto the mesh
-//! lane, which carries no VideoChunks. Multiple `click` groups are honoured in
-//! order (e.g. open the dialog, pick Mesh, pick H.264). Every SessionHello is
+//! lane, which carries no `VideoChunks`. Multiple `click` groups are honoured in
+//! order (e.g. open the dialog, pick Mesh, pick H.264). Every `SessionHello` is
 //! printed with its `codec` string, so a runtime switch is observable.
 //!
 //! ADR-0154 verbs — `tree <at_secs>`, `clicknode <name> <at_secs>` and
@@ -33,8 +33,8 @@
 //! frames), so an AU-counted gesture on a static screen never fires at all.
 //!
 //! Usage:
-//!   imzero2_ws_probe <ws-url> <out.h264> <num_frames> [x y after_frame]... [resize lw lh scale after_au] [take after_au]
-//!                    [tree <at_secs>] [clicknode <name> <at_secs>] [capture <name> <at_secs>]
+//!   `imzero2_ws_probe` <ws-url> <out.h264> <`num_frames`> [x y `after_frame`]... [resize lw lh scale `after_au`] [take `after_au`]
+//!                    [tree <`at_secs`>] [clicknode <name> <`at_secs`>] [capture <name> <`at_secs`>]
 
 use futures_util::{SinkExt as _, StreamExt as _};
 use imzero2::imzero2::inputproto as pb;
@@ -384,67 +384,68 @@ async fn main() {
                     }
                     let sink: &mut std::fs::File = resized_out.as_mut().unwrap_or(&mut out);
                     std::io::Write::write_all(sink, &chunk.data).expect("write au");
-                    if let Some((after, hold)) = stall {
-                        if aus >= after {
-                            stall = None;
-                            eprintln!(
-                                "STALL: not reading the socket for {hold}s after AU {aus} (congesting the encoder)"
-                            );
-                            tokio::time::sleep(std::time::Duration::from_secs(hold)).await;
-                            eprintln!("STALL: resuming reads");
-                        }
+                    if let Some((after, hold)) = stall
+                        && aus >= after
+                    {
+                        stall = None;
+                        eprintln!(
+                            "STALL: not reading the socket for {hold}s after AU {aus} (congesting the encoder)"
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(hold)).await;
+                        eprintln!("STALL: resuming reads");
                     }
-                    if let Some((mode, after)) = set_cadence {
-                        if aus >= after {
-                            set_cadence = None;
-                            eprintln!("injecting SetCadence({mode}) after AU {aus}");
-                            let msg = pb::SessionControl {
-                                control: Some(pb::session_control::Control::SetCadence(
-                                    pb::SetCadence { cadence: mode },
-                                )),
-                            };
-                            tx.send(tokio_tungstenite::tungstenite::Message::Binary(
-                                framed(pb::PREFIX_SESSION, &msg).into(),
-                            ))
-                            .await
-                            .expect("send cadence");
-                        }
+                    if let Some((mode, after)) = set_cadence
+                        && aus >= after
+                    {
+                        set_cadence = None;
+                        eprintln!("injecting SetCadence({mode}) after AU {aus}");
+                        let msg = pb::SessionControl {
+                            control: Some(pb::session_control::Control::SetCadence(
+                                pb::SetCadence { cadence: mode },
+                            )),
+                        };
+                        tx.send(tokio_tungstenite::tungstenite::Message::Binary(
+                            framed(pb::PREFIX_SESSION, &msg).into(),
+                        ))
+                        .await
+                        .expect("send cadence");
                     }
-                    if let Some((lw, lh, scale, after)) = resize {
-                        if !resize_sent && aus >= after {
-                            resize_sent = true;
-                            eprintln!("injecting viewport resize {lw}x{lh}@{scale} after AU {aus}");
-                            let msg = pb::SessionControl {
-                                control: Some(pb::session_control::Control::ViewportResize(
-                                    pb::ViewportResize {
-                                        logical_width: lw,
-                                        logical_height: lh,
-                                        pixel_scale: scale,
-                                    },
-                                )),
-                            };
-                            tx.send(tokio_tungstenite::tungstenite::Message::Binary(
-                                framed(pb::PREFIX_SESSION, &msg).into(),
-                            ))
-                            .await
-                            .expect("send resize");
-                        }
+                    if let Some((lw, lh, scale, after)) = resize
+                        && !resize_sent
+                        && aus >= after
+                    {
+                        resize_sent = true;
+                        eprintln!("injecting viewport resize {lw}x{lh}@{scale} after AU {aus}");
+                        let msg = pb::SessionControl {
+                            control: Some(pb::session_control::Control::ViewportResize(
+                                pb::ViewportResize {
+                                    logical_width: lw,
+                                    logical_height: lh,
+                                    pixel_scale: scale,
+                                },
+                            )),
+                        };
+                        tx.send(tokio_tungstenite::tungstenite::Message::Binary(
+                            framed(pb::PREFIX_SESSION, &msg).into(),
+                        ))
+                        .await
+                        .expect("send resize");
                     }
-                    if let Some(after) = take_session {
-                        if aus >= after {
-                            take_session = None;
-                            eprintln!("injecting TakeSession after AU {aus}");
-                            let msg = pb::SessionControl {
-                                control: Some(pb::session_control::Control::TakeSession(
-                                    pb::TakeSession {},
-                                )),
-                            };
-                            tx.send(tokio_tungstenite::tungstenite::Message::Binary(
-                                framed(pb::PREFIX_SESSION, &msg).into(),
-                            ))
-                            .await
-                            .expect("send take_session");
-                        }
+                    if let Some(after) = take_session
+                        && aus >= after
+                    {
+                        take_session = None;
+                        eprintln!("injecting TakeSession after AU {aus}");
+                        let msg = pb::SessionControl {
+                            control: Some(pb::session_control::Control::TakeSession(
+                                pb::TakeSession {},
+                            )),
+                        };
+                        tx.send(tokio_tungstenite::tungstenite::Message::Binary(
+                            framed(pb::PREFIX_SESSION, &msg).into(),
+                        ))
+                        .await
+                        .expect("send take_session");
                     }
                 }
             }

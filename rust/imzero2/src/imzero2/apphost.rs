@@ -169,7 +169,7 @@ pub fn load_custom_fonts(
     if config.main_font_size > 0.0 {
         let size = config.main_font_size;
         ctx.all_styles_mut(|style| {
-            for (_text_style, font_id) in style.text_styles.iter_mut() {
+            for font_id in style.text_styles.values_mut() {
                 font_id.size = size;
             }
         });

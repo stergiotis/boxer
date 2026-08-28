@@ -4,9 +4,15 @@ pub struct DebugTools {
     last_update: Option<std::time::Instant>,
 }
 
+impl Default for DebugTools {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DebugTools {
     pub fn new() -> Self {
-        return Self { last_update: None };
+        Self { last_update: None }
     }
     pub fn render_debug_tools<R, W>(
         &mut self,
@@ -26,7 +32,7 @@ impl DebugTools {
                 let fps = 1.0 / dt;
                 fps.round().to_string()
             } else {
-                "n/a".to_string()
+                "n/a".to_owned()
             };
             self.last_update = Some(tnow);
         }

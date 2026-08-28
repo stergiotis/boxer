@@ -23,7 +23,7 @@ where
         tracing::error!(flag = flag, "expecting argument for flag");
         panic!("expecting argument for flag")
     }
-    return default_value;
+    default_value
 }
 pub fn find_flag_value_default_parsable<'a, I, T>(
     args: I,
@@ -38,18 +38,18 @@ where
 {
     let d = default_value.to_string();
     let v = find_flag_default(args, used, flag, d);
-    let r = v.parse::<T>();
-    if r.is_err() {
-        let err = r.unwrap_err().to_string();
-        tracing::error!(
-            err = err,
-            flag = flag,
-            value = v,
-            "unable to parse as float"
-        );
-        panic!("unable to parse as float");
+    match v.parse::<T>() {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            tracing::error!(
+                err = e.to_string(),
+                flag = flag,
+                value = v,
+                "unable to parse as float"
+            );
+            panic!("unable to parse as float");
+        }
     }
-    return r.unwrap();
 }
 pub fn find_flag_value_default_bool<'a, I>(
     args: I,
@@ -63,7 +63,7 @@ where
     let on = String::from("on");
     let off = String::from("off");
     let v = find_flag_default(args, used, flag, if default_value { on } else { off });
-    return v == "on";
+    v == "on"
 }
 pub fn validate_all_args_used<'a, I>(args: I, argc: u32, used: &roaring::RoaringBitmap)
 where

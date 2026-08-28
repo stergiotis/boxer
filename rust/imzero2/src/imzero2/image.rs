@@ -81,15 +81,17 @@ impl ImageCache {
     /// Drop the cache entry (and its GPU texture) for `id`. Invoked from the
     /// `imageRelease` opcode.
     pub fn release(&mut self, id: u64) {
-        if let Some(entry) = self.entries.remove(&id) {
-            if let Some(cache) = &self.texture_cache {
-                cache.lock().expect("texture cache poisoned").remove(entry.tex.id());
-            }
+        if let Some(entry) = self.entries.remove(&id)
+            && let Some(cache) = &self.texture_cache
+        {
+            cache.lock().expect("texture cache poisoned").remove(entry.tex.id());
         }
     }
 
     /// Re-upload pixels into the cached texture (or allocate a new one).
     /// Called only when `pixels` is non-empty and the length checks out.
+    // The upload's arguments are the texture's identity and its pixels.
+    #[allow(clippy::too_many_arguments)]
     fn upload(
         &mut self,
         ctx: &Context,
@@ -182,8 +184,8 @@ impl ImageCache {
 
     /// Compute the screen-space size for the allocated rect given the fit mode
     /// and native texture dims. `fixed_w/fixed_h` are inputs for FIXED and
-    /// ASPECT_MAX modes; `available` is `ui.available_size()`, used by
-    /// FILL_RECT and as the ASPECT_MAX bounding box when a fixed dimension is 0.
+    /// `ASPECT_MAX` modes; `available` is `ui.available_size()`, used by
+    /// `FILL_RECT` and as the `ASPECT_MAX` bounding box when a fixed dimension is 0.
     fn compute_size(
         fit: u8,
         native_w: u32,
@@ -306,15 +308,12 @@ impl ImageCache {
 
         // Either we just uploaded, or we're reusing. If still no entry, draw
         // a placeholder (0×0).
-        let entry = match self.entries.get_mut(&id) {
-            Some(e) => e,
-            None => {
-                // Reachable only via the length-mismatch fall-through with no
-                // prior entry — a resend can heal it, so report starved too.
-                let (_rect, resp) =
-                    ui.allocate_exact_size(vec2(0.0, 0.0), Sense::hover().union(Sense::click()));
-                return (resp, HOVER_RC_NONE, true);
-            }
+        let Some(entry) = self.entries.get_mut(&id) else {
+            // Reachable only via the length-mismatch fall-through with no
+            // prior entry — a resend can heal it, so report starved too.
+            let (_rect, resp) =
+                ui.allocate_exact_size(vec2(0.0, 0.0), Sense::hover().union(Sense::click()));
+            return (resp, HOVER_RC_NONE, true);
         };
         entry.last_touched_frame = self.frame;
 

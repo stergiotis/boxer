@@ -70,7 +70,7 @@ struct FontEntry {
     /// Bytes of the TTF/TTC. Retained so the Tier-2 subsetter has source
     /// material. Shared via `Arc` because the same bytes can back several
     /// `FontFamily` chains (Proportional + Monospace both lead with "main"
-    /// in this repo's load_custom_fonts).
+    /// in this repo's `load_custom_fonts`).
     ttf_bytes: Arc<Vec<u8>>,
     ttf_index: u32,
     /// Variation-axis coordinates to bake into the subset for VFs (Tier-2
@@ -123,7 +123,7 @@ impl FontResolver {
         if entries.is_empty() {
             return;
         }
-        names.push(generic.to_string());
+        names.push(generic.to_owned());
         let css_family = names.join(", ");
         self.chains.insert(
             family,
@@ -144,7 +144,7 @@ impl FontResolver {
         if let Some(c) = self.chains.get(&id.family) {
             return c.css_family.clone();
         }
-        generic_for(&id.family).to_string()
+        generic_for(&id.family).to_owned()
     }
 
     /// Route each char in `chars` to the first chain entry whose cmap
@@ -154,7 +154,7 @@ impl FontResolver {
     /// dropped (they'll tofu in the SVG, matching the egui-side behaviour).
     ///
     /// `subsetter` is designed for PDF embedding and strips the `cmap`
-    /// table from its output (PDFs carry an external CMap). For SVG
+    /// table from its output (PDFs carry an external `CMap`). For SVG
     /// `@font-face` the cmap has to live inside the font, so this method
     /// rebuilds a minimal cmap from the original face's char→gid lookup
     /// plus the subsetter's gid remapping and injects it back into the
@@ -241,7 +241,7 @@ fn generic_for(family: &FontFamily) -> &'static str {
 }
 
 /// For variable fonts, return each axis's tag + default value as a
-/// (subsetter::Tag, f32) pair so `subset_with_variations` can bake a static
+/// (`subsetter::Tag`, f32) pair so `subset_with_variations` can bake a static
 /// instance at the same coordinates `ab_glyph` uses inside egui. For
 /// non-VFs the `variation_axes` iterator is empty and we get an empty Vec.
 fn default_variation_axes(bytes: &[u8], index: u32) -> Vec<(subsetter::Tag, f32)> {
@@ -284,10 +284,10 @@ fn patch_subset_for_browser(
         let cmap_blob = build_cmap_blob(mappings);
         out = splice_in_table(&out, *b"cmap", &cmap_blob);
     }
-    if !has_table(&out, b"OS/2") {
-        if let Some(os2) = read_table(original_bytes, b"OS/2") {
-            out = splice_in_table(&out, *b"OS/2", &os2);
-        }
+    if !has_table(&out, b"OS/2")
+        && let Some(os2) = read_table(original_bytes, b"OS/2")
+    {
+        out = splice_in_table(&out, *b"OS/2", &os2);
     }
     out
 }
@@ -491,7 +491,7 @@ fn splice_in_table(bytes: &[u8], new_tag: [u8; 4], new_data: &[u8]) -> Vec<u8> {
         .collect();
     blobs.push((new_tag, new_data.to_vec()));
     // Directory entries must be sorted by tag.
-    blobs.sort_by(|a, b| a.0.cmp(&b.0));
+    blobs.sort_by_key(|a| a.0);
 
     let new_num = blobs.len() as u16;
     let new_dir_size = 12 + new_num as usize * 16;
@@ -551,10 +551,8 @@ fn parse_ttf_family_name(bytes: &[u8], index: u32) -> Option<String> {
                     typographic = name.to_string();
                 }
             }
-            1 => {
-                if family.is_none() {
-                    family = name.to_string();
-                }
+            1 if family.is_none() => {
+                family = name.to_string();
             }
             _ => {}
         }
@@ -628,7 +626,7 @@ pub type TexturePixelCacheHandle = Arc<Mutex<TexturePixelCache>>;
 // Hyperlink zones (Shape::Text → <a href="…">)
 // ============================================================================
 
-/// One zone (response rect + URL) per Hyperlink / HyperlinkTo call. Pushed
+/// One zone (response rect + URL) per Hyperlink / `HyperlinkTo` call. Pushed
 /// from the widget's IDL apply code, drained per frame by the visitor.
 /// The Go side keeps the URL string as a separate field on the IDL call
 /// so a future opcode (e.g. a "rewrite URLs for SVG export") can swap it
@@ -638,7 +636,7 @@ pub type TexturePixelCacheHandle = Arc<Mutex<TexturePixelCache>>;
 /// widget (`thestack/imzero2/egui2/widgets/markdown/render.go`) emits
 /// each inline `[text](url)` run as a separate `c.HyperlinkTo(...)` call
 /// in flow order, which goes through the same IDL apply and produces a
-/// LinkZone per inline link. egui's `TextFormat` carries no URL field,
+/// `LinkZone` per inline link. egui's `TextFormat` carries no URL field,
 /// so there is no other "rich text with inline URL" path to plug in.
 #[derive(Debug, Clone)]
 pub struct LinkZone {
@@ -681,12 +679,12 @@ pub struct ExportState {
 /// How much of a window to include in the SVG export.
 ///
 /// `Faithful` (M2 / screenshot use): includes the window's full frame
-/// — title-bar, body, resize chrome — and uses the area_rect as the
+/// — title-bar, body, resize chrome — and uses the `area_rect` as the
 /// viewBox. The output reads as a screenshot of the window as the
 /// user sees it.
 ///
 /// `ContentOnly` (M3 / webapp-report use): shrinks the viewBox to the
-/// inner content rect (area_rect minus the approximated title-bar +
+/// inner content rect (`area_rect` minus the approximated title-bar +
 /// frame margins) and emits `overflow="hidden"` on the root `<svg>`
 /// so SVG viewers clip the chrome shapes still present in the layer.
 /// Suited for embedding a report's body in HTML without dragging the
@@ -924,7 +922,7 @@ pub fn render_svg_from_context(
         // only needs to be stable run-to-run, not semantically
         // meaningful.
         let mut families: Vec<&FontFamily> = used.keys().collect();
-        families.sort_by_key(|f| format!("{:?}", f));
+        families.sort_by_key(|f| format!("{f:?}"));
         for family in families {
             let chars = &used[family];
             let subsets = fonts.subset_chain_for(family, chars);
@@ -939,7 +937,7 @@ pub fn render_svg_from_context(
             }
             // Append the generic so out-of-coverage chars (e.g. control
             // chars that egui drew as space) don't break rendering.
-            synth_names.push(generic_for(family).to_string());
+            synth_names.push(generic_for(family).to_owned());
             b.set_embed_for_family(family.clone(), synth_names.join(", "));
         }
     }
@@ -970,7 +968,7 @@ pub fn render_svg_from_context(
 /// `LayerId::new(Order::Middle, window_id)` paint list and uses the
 /// window's stored `area_rect` as the SVG viewBox.
 ///
-/// Returns `None` when the window has no recorded area_rect for this
+/// Returns `None` when the window has no recorded `area_rect` for this
 /// pass (collapsed, off-screen, or never opened). Caller maps that to
 /// an `Err` so the FFFI plugin logs the failure instead of writing an
 /// empty file.
@@ -981,6 +979,8 @@ pub fn render_svg_from_context(
 /// spawned by the window (tooltips, combo dropdowns, context menus)
 /// live on higher-order layers and are intentionally excluded — the
 /// scope is the window-as-document, not the user-visible composite.
+// Every knob the exporter has, passed per call rather than held as state.
+#[allow(clippy::too_many_arguments)]
 pub fn render_svg_window(
     ctx: &Context,
     fonts: &FontResolver,
@@ -1059,7 +1059,7 @@ pub fn render_svg_window(
                 b.add_embedded_font(&synth, &sub.bytes);
                 synth_names.push(format!("'{synth}'"));
             }
-            synth_names.push(generic_for(family).to_string());
+            synth_names.push(generic_for(family).to_owned());
             b.set_embed_for_family(family.clone(), synth_names.join(", "));
         }
     }
@@ -1131,7 +1131,7 @@ where
                 b.add_embedded_font(&synth, &sub.bytes);
                 synth_names.push(format!("'{synth}'"));
             }
-            synth_names.push(generic_for(family).to_string());
+            synth_names.push(generic_for(family).to_owned());
             b.set_embed_for_family(family.clone(), synth_names.join(", "));
         }
     }
@@ -1287,12 +1287,12 @@ struct SvgBuilder {
     fonts: FontResolver,
     weights: ThemeWeights,
     /// Optional handle to the CPU-side texture cache. `None` in the
-    /// post-pass test path (FullOutput visitor); `Some` in the
+    /// post-pass test path (`FullOutput` visitor); `Some` in the
     /// production plugin path. Textured meshes embed as `<image>` when
     /// available; comment-skip otherwise.
     textures: Option<TexturePixelCacheHandle>,
-    /// Snapshot of LinkZones pushed by Hyperlink IDL applies on the
-    /// current pass. A TextShape (or Image) whose screen bbox is fully
+    /// Snapshot of `LinkZones` pushed by Hyperlink IDL applies on the
+    /// current pass. A `TextShape` (or Image) whose screen bbox is fully
     /// inside one of these zones gets wrapped in `<a href="…">`.
     links: Vec<LinkZone>,
     /// Currently-open `<a>` wrap inside the SVG body — `Some` between an
@@ -1384,7 +1384,7 @@ impl SvgBuilder {
                         "  <a href=\"{}\" target=\"_blank\" rel=\"noopener\">",
                         xml_escape_attr(url)
                     );
-                    self.open_link = Some(url.to_string());
+                    self.open_link = Some(url.to_owned());
                 }
             }
         }
@@ -1397,7 +1397,7 @@ impl SvgBuilder {
     }
 
     fn add_embedded_font(&mut self, synth_name: &str, subset_bytes: &[u8]) {
-        use base64::Engine;
+        use base64::Engine as _;
         let b64 = base64::engine::general_purpose::STANDARD.encode(subset_bytes);
         let _ = writeln!(
             self.style_block,
@@ -1604,7 +1604,7 @@ impl SvgBuilder {
         // inside a registered hyperlink zone. `galley.rect` is in galley-
         // local coords with top=0; translate by `origin` for screen-space.
         let text_bbox = Rect::from_min_size(origin + galley.rect.min.to_vec2(), galley.rect.size());
-        let link_url = self.link_for_bbox(text_bbox).map(|s| s.to_string());
+        let link_url = self.link_for_bbox(text_bbox).map(|s| s.to_owned());
         self.set_link(link_url.as_deref());
 
         // Syntax-highlighted text (CodeView, json, markdown, ...) uses one
@@ -1902,7 +1902,7 @@ impl SvgBuilder {
             return false;
         };
 
-        use base64::Engine;
+        use base64::Engine as _;
         let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
         // `image-rendering="pixelated"` keeps nearest-neighbour scaling
         // when the browser upscales the embedded PNG — matches egui's
@@ -1917,16 +1917,15 @@ impl SvgBuilder {
         // lands in SVG. Catches `Image::rotate` (rotated screen, plain
         // UV) and `scrolling_texture` orientations (plain screen,
         // permuted UV) from the same solve.
-        if mesh.vertices.len() == 4 {
-            if let Some([a, b, c, d, e, f]) =
+        if mesh.vertices.len() == 4
+            && let Some([a, b, c, d, e, f]) =
                 solve_textured_quad_affine(&mesh.vertices, tex_w, tex_h, crop_x0, crop_y0)
-            {
-                let _ = writeln!(
-                    self.body,
-                    "  <image x=\"0\" y=\"0\" width=\"{crop_w}\" height=\"{crop_h}\" preserveAspectRatio=\"none\"{render_attr} transform=\"matrix({a:.6} {b:.6} {c:.6} {d:.6} {e:.3} {f:.3})\" href=\"data:image/png;base64,{b64}\"/>",
-                );
-                return true;
-            }
+        {
+            let _ = writeln!(
+                self.body,
+                "  <image x=\"0\" y=\"0\" width=\"{crop_w}\" height=\"{crop_h}\" preserveAspectRatio=\"none\"{render_attr} transform=\"matrix({a:.6} {b:.6} {c:.6} {d:.6} {e:.3} {f:.3})\" href=\"data:image/png;base64,{b64}\"/>",
+            );
+            return true;
         }
 
         // Fallback: non-quad mesh, or a quad whose UVs are collinear in
@@ -1934,9 +1933,7 @@ impl SvgBuilder {
         // rotated cases but at least visible.
         let _ = writeln!(
             self.body,
-            "  <image x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" preserveAspectRatio=\"none\"{render_attr} href=\"data:image/png;base64,{b64}\"/>",
-            x = min_x,
-            y = min_y,
+            "  <image x=\"{min_x:.2}\" y=\"{min_y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" preserveAspectRatio=\"none\"{render_attr} href=\"data:image/png;base64,{b64}\"/>",
         );
         true
     }
@@ -2316,8 +2313,7 @@ mod tests {
         let m = solve_textured_quad_affine(&v, 100.0, 60.0, 0, 0).expect("non-degenerate");
         assert!(
             matrix_close(m, [1.0, 0.0, 0.0, 1.0, 10.0, 20.0], 1e-4),
-            "got {:?}",
-            m
+            "got {m:?}"
         );
     }
 
@@ -2335,8 +2331,7 @@ mod tests {
         let m = solve_textured_quad_affine(&v, 100.0, 100.0, 0, 0).expect("non-degenerate");
         assert!(
             matrix_close(m, [0.0, 1.0, -1.0, 0.0, 100.0, 0.0], 1e-4),
-            "got {:?}",
-            m
+            "got {m:?}"
         );
     }
 
@@ -2354,8 +2349,7 @@ mod tests {
         // Local (lx, ly) → screen (100 - lx, ly).
         assert!(
             matrix_close(m, [-1.0, 0.0, 0.0, 1.0, 100.0, 0.0], 1e-4),
-            "got {:?}",
-            m
+            "got {m:?}"
         );
     }
 
@@ -2375,8 +2369,7 @@ mod tests {
         // Axis swap: local-x → screen-y, local-y → screen-x.
         assert!(
             matrix_close(m, [0.0, 1.0, 1.0, 0.0, 0.0, 0.0], 1e-3),
-            "got {:?}",
-            m
+            "got {m:?}"
         );
         // Sanity: image TR (local 151,0, ie the right edge of the
         // cropped 151×160 PNG) lands at screen v3 = (0, 151).
@@ -2385,9 +2378,7 @@ mod tests {
         let sy = b * 151.0 + d * 0.0 + f;
         assert!(
             (sx - 0.0).abs() < 1e-2 && (sy - 151.0).abs() < 1e-2,
-            "local(151,0) → ({}, {}), want (0, 151)",
-            sx,
-            sy
+            "local(151,0) → ({sx}, {sy}), want (0, 151)"
         );
     }
 
@@ -2406,8 +2397,7 @@ mod tests {
         let m = solve_textured_quad_affine(&v, 100.0, 60.0, 25, 0).expect("non-degenerate");
         assert!(
             matrix_close(m, [4.0, 0.0, 0.0, 100.0 / 60.0, 100.0, 200.0], 1e-3),
-            "got {:?}",
-            m
+            "got {m:?}"
         );
         // Round-trip: local (75, 60) — the crop's bottom-right — must
         // land at screen (400, 300).
@@ -2416,9 +2406,7 @@ mod tests {
         let sy = b * 75.0 + d * 60.0 + f;
         assert!(
             (sx - 400.0).abs() < 1e-2 && (sy - 300.0).abs() < 1e-2,
-            "local(75,60) → ({}, {}), want (400, 300)",
-            sx,
-            sy
+            "local(75,60) → ({sx}, {sy}), want (400, 300)"
         );
     }
 

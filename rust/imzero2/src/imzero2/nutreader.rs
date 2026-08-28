@@ -22,8 +22,8 @@
 //! <http://www.nut-container.org/> and <https://github.com/lu-zero/nut>.
 //! This module is an **independent Rust implementation** of that open
 //! format: the startcodes and frame flags below are constants of the public
-//! format, and the parser is original expression. **No FFmpeg source is
-//! copied or linked** — FFmpeg is invoked only as an encoder subprocess
+//! format, and the parser is original expression. **No `FFmpeg` source is
+//! copied or linked** — `FFmpeg` is invoked only as an encoder subprocess
 //! (ADR-0024 C7) and this reader consumes its NUT output, so the project's
 //! clean-redistribution posture is preserved. Correctness is validated
 //! against `ffprobe`'s packet view of real ffmpeg output (see tests).
@@ -69,11 +69,11 @@ pub enum NutError {
 impl std::fmt::Display for NutError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            NutError::FrameBeforeMain => "frame before main header",
-            NutError::InvalidFrameCode => "invalid frame code",
-            NutError::SmDataUnsupported => "per-frame sm_data unsupported",
-            NutError::Malformed => "malformed nut stream",
-            NutError::UnexpectedStartcode => "unexpected startcode",
+            Self::FrameBeforeMain => "frame before main header",
+            Self::InvalidFrameCode => "invalid frame code",
+            Self::SmDataUnsupported => "per-frame sm_data unsupported",
+            Self::Malformed => "malformed nut stream",
+            Self::UnexpectedStartcode => "unexpected startcode",
         };
         f.write_str(s)
     }
@@ -153,7 +153,7 @@ impl NutReader {
         loop {
             match self.step()? {
                 Step::Frame(f) => return Ok(Some(f)),
-                Step::Consumed => continue,
+                Step::Consumed => (),
                 Step::NeedMore => {
                     if self.pos > 0 {
                         self.buf.drain(..self.pos);
@@ -323,9 +323,8 @@ fn parse_main_header(b: &[u8], pos: usize) -> Result<Option<MainHeader>, NutErro
     if length > 4096 && skip_n(b, &mut c, 4).is_none() {
         return Ok(None);
     }
-    let end = match c.checked_add(length) {
-        Some(e) => e,
-        None => return Err(NutError::Malformed),
+    let Some(end) = c.checked_add(length) else {
+        return Err(NutError::Malformed);
     };
     if end > b.len() {
         return Ok(None);
@@ -515,9 +514,8 @@ fn parse_frame(
     if flags & FLAG_CHECKSUM != 0 && skip_n(b, &mut c, 4).is_none() {
         return Ok(None);
     }
-    let payload = match b.get(c..c + size) {
-        Some(p) => p,
-        None => return Ok(None),
+    let Some(payload) = b.get(c..c + size) else {
+        return Ok(None);
     };
 
     let mut data = Vec::with_capacity(prefix_len + size);
@@ -543,7 +541,7 @@ mod tests {
         Command::new(cmd).arg("-version").output().map(|o| o.status.success()).unwrap_or(false)
     }
 
-    /// Ground truth: ffprobe's per-packet (size, is_keyframe) for the stream.
+    /// Ground truth: ffprobe's per-packet (size, `is_keyframe`) for the stream.
     fn ffprobe_packets(path: &str) -> Vec<(usize, bool)> {
         let out = Command::new("ffprobe")
             .args([

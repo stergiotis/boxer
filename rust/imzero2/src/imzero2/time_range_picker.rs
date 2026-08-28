@@ -139,9 +139,9 @@ fn default_today() -> Date {
     Timestamp::now().to_zoned(TimeZone::UTC).datetime().date()
 }
 
-/// Render the calendar pop button followed by three h:m:s DragValues.
+/// Render the calendar pop button followed by three h:m:s `DragValues`.
 /// On any change among the four sub-widgets, `text` is overwritten
-/// with a ClickHouse SQL string literal `'YYYY-MM-DD HH:MM:SS'`.
+/// with a `ClickHouse` SQL string literal `'YYYY-MM-DD HH:MM:SS'`.
 #[allow(clippy::too_many_arguments)]
 fn render_calendar_pop(
     ui: &mut Ui,
@@ -174,14 +174,14 @@ fn render_calendar_pop(
 fn compact(s: &str, max: usize) -> String {
     let count = s.chars().count();
     if count <= max {
-        s.to_string()
+        s.to_owned()
     } else {
         let head: String = s.chars().take(max.saturating_sub(1)).collect();
         format!("{head}…")
     }
 }
 
-/// Resolve our dropdown's tz name to a jiff::tz::TimeZone. "System"
+/// Resolve our dropdown's tz name to a `jiff::tz::TimeZone`. "System"
 /// maps to the host's local zone via TZ env / /etc/localtime; "UTC"
 /// to the constant; anything else is an IANA lookup falling back to
 /// UTC on failure (consistent with the picker's own initial-tz
@@ -238,7 +238,7 @@ fn format_bounds(from_ms: i64, to_ms: i64, tz_name: &str) -> String {
 /// mislead a glance at the closed trigger).
 ///
 /// Priority:
-///   1. Preset whose (from_sql, to_sql) matches `(last_from, last_to)`
+///   1. Preset whose (`from_sql`, `to_sql`) matches `(last_from, last_to)`
 ///      → return the preset label (more informative than dates).
 ///   2. Evaluated bounds present → render formatted wall-clock time.
 ///   3. Otherwise → truncated `"last_from → last_to"` SQL fallback.
@@ -274,7 +274,7 @@ struct TimeRangePickerWidget<'a> {
     apply_signal: &'a mut Option<String>,
 }
 
-impl<'a> Widget for TimeRangePickerWidget<'a> {
+impl Widget for TimeRangePickerWidget<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let mem_id = self.salt_id.with("time_range_picker_drafts");
         let mut draft =
@@ -371,7 +371,7 @@ impl<'a> Widget for TimeRangePickerWidget<'a> {
                                     for cand in TZ_CANDIDATES {
                                         ui.selectable_value(
                                             &mut draft.tz,
-                                            (*cand).to_string(),
+                                            (*cand).to_owned(),
                                             *cand,
                                         );
                                         shown.insert(*cand);
@@ -439,7 +439,7 @@ impl<'a> Widget for TimeRangePickerWidget<'a> {
     }
 }
 
-impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
+impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
     pub fn apply_time_range_picker(
         &mut self,
         req: TimeRangePickerRequest,
@@ -450,7 +450,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         to_initial: String,
     ) {
         let mut apply_signal: Option<String> = None;
-        let initial_tz = req.tz.unwrap_or_else(|| "UTC".to_string());
+        let initial_tz = req.tz.unwrap_or_else(|| "UTC".to_owned());
         let evaluated_bounds = match (req.evaluated_from_ms, req.evaluated_to_ms) {
             (Some(f), Some(t)) => Some((f, t)),
             _ => None,

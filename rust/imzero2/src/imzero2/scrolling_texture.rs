@@ -2,8 +2,8 @@
 //!
 //! See `doc/adr/0009-imzero2-scrolling-texture-widget.md` for design rationale.
 //!
-//! Milestone 2.5: all four orientations, hover readout packed into r9_u64,
-//! click reported via r10, per-frame tick() wired from the interpreter.
+//! Milestone 2.5: all four orientations, hover readout packed into `r9_u64`,
+//! click reported via r10, per-frame `tick()` wired from the interpreter.
 //! `ScrollLeft` uses `painter.image` with axis-aligned UV rects (forward
 //! ring walk in both screen-x and texture-u). The other three orientations
 //! require a walk direction that `painter.image`'s UV rect can't express,
@@ -33,13 +33,13 @@ pub const FILTER_NEAREST: u8 = 0;
 pub const FILTER_LINEAR: u8 = 1;
 
 /// Packed "no hover" sentinel for `ScrollingTextureResponse::hover_rc`.
-/// (row=u32::MAX, col=u32::MAX) — unambiguous because real (row, col) indices
-/// are bounded by height_slots/width_slots, both u32 but always < u32::MAX in
+/// (`row=u32::MAX`, `col=u32::MAX`) — unambiguous because real (row, col) indices
+/// are bounded by `height_slots/width_slots`, both u32 but always < `u32::MAX` in
 /// any realistic widget.
 pub const HOVER_RC_NONE: u64 = u64::MAX;
 
 /// Per-call response carried back from `push_and_draw`. The interpreter's
-/// apply-code snippet forwards these to the r9_u64 and r10 registers; Go
+/// apply-code snippet forwards these to the `r9_u64` and r10 registers; Go
 /// reads them via the standard databinding / Fetch* path (SD11, SD12).
 #[derive(Clone, Copy, Debug)]
 pub struct ScrollingTextureResponse {
@@ -166,10 +166,10 @@ impl ScrollingTextureCache {
     /// Drop the cache entry (and its GPU texture) for `id`. Invoked from the
     /// `scrollingTextureRelease` opcode.
     pub fn release(&mut self, id: u64) {
-        if let Some(entry) = self.entries.remove(&id) {
-            if let Some(cache) = &self.texture_cache {
-                cache.lock().expect("texture cache poisoned").remove(entry.tex.id());
-            }
+        if let Some(entry) = self.entries.remove(&id)
+            && let Some(cache) = &self.texture_cache
+        {
+            cache.lock().expect("texture cache poisoned").remove(entry.tex.id());
         }
     }
 

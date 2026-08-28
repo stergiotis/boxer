@@ -1,6 +1,6 @@
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::ptr;
 use std::sync::atomic::{AtomicI64, AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -50,8 +50,13 @@ pub struct MeshNode {
     slot_idx: Option<usize>,
 }
 
+// SAFETY: the raw pointers all point into `_mmap`, which the node owns, and
+// every cross-process field they reach is an atomic in the `#[repr(C)]`
+// header both peers agree on. Nothing here is thread-affine.
 #[allow(unsafe_code)]
 unsafe impl Send for MeshNode {}
+// SAFETY: as for `Send` — shared access reaches shared memory only through
+// the header's atomics.
 #[allow(unsafe_code)]
 unsafe impl Sync for MeshNode {}
 
@@ -70,23 +75,30 @@ impl MeshNode {
             file.set_len(total_size)?;
         }
 
+        // SAFETY: mapping a file is unsound if another process resizes it
+        // underneath us. Every peer of this protocol sizes the file exactly
+        // once, in producer mode above, to the `total_size` computed here and
+        // never truncates it.
         #[allow(unsafe_code)]
         let mut mmap = unsafe { MmapMut::map_mut(&file)? };
 
         // Pointer Arithmetic
         let base_ptr = mmap.as_mut_ptr();
 
-        let header_ptr = base_ptr as *mut FileHeader;
+        let header_ptr = base_ptr.cast::<FileHeader>();
 
         // Metadata starts after FileHeader
+        // SAFETY: the mapping is `total_size` bytes, which is the header, the
+        // metadata block and the ring; both offsets below land inside it.
         #[allow(unsafe_code)]
         let meta_ptr = unsafe { base_ptr.add(FILE_HEADER_SIZE) } as *const Metadata;
 
         // Buffer starts after FileHeader + Metadata
+        // SAFETY: as above — still within the mapping.
         #[allow(unsafe_code)]
         let buffer_ptr = unsafe { base_ptr.add(FILE_HEADER_SIZE + METADATA_SIZE) };
 
-        let mut node = MeshNode {
+        let mut node = Self {
             _mmap: mmap,
             header: header_ptr,
             meta: meta_ptr,
@@ -97,6 +109,9 @@ impl MeshNode {
 
         if mode == "producer" {
             // Write Magic & Version
+            // SAFETY: `header` is the start of the live mapping owned by
+            // `node`, and `FileHeader` is `#[repr(C)]` with no padding
+            // invariants to uphold.
             #[allow(unsafe_code)]
             unsafe {
                 (*node.header).magic = MAGIC_CONSTANT;
@@ -104,6 +119,8 @@ impl MeshNode {
             }
         } else {
             // Validate Magic & Version
+            // SAFETY: as above; the reads happen before any peer state is
+            // trusted, which is the point of the check.
             #[allow(unsafe_code)]
             unsafe {
                 if (*node.header).magic != MAGIC_CONSTANT {
@@ -121,6 +138,9 @@ impl MeshNode {
     }
 
     fn register_consumer(&mut self) -> Result<(), std::io::Error> {
+        // SAFETY: `meta` points into `_mmap`, which this node owns and keeps
+        // mapped for its whole life, at a `#[repr(C)]` block both peers agree
+        // on; the borrow does not outlive the node.
         #[allow(unsafe_code)]
         let meta = unsafe { &*self.meta };
         for (i, slot) in meta.consumers.iter().enumerate() {
@@ -133,14 +153,13 @@ impl MeshNode {
                 return Ok(());
             }
         }
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "No consumer slots available",
-        ))
+        Err(std::io::Error::other("No consumer slots available"))
     }
 
     fn unregister(&self) {
         if let Some(idx) = self.slot_idx {
+            // SAFETY: as in `register_consumer` — a borrow of the node's own
+            // live mapping.
             #[allow(unsafe_code)]
             let meta = unsafe { &*self.meta };
             meta.consumers[idx].active.store(0, Ordering::SeqCst);
@@ -152,6 +171,8 @@ impl MeshNode {
         // Update the shared memory slot so the producer monitoring
         // sees that we are actually at 0 (and not lagging by billions of bytes)
         if let Some(idx) = self.slot_idx {
+            // SAFETY: as in `register_consumer` — a borrow of the node's own
+            // live mapping.
             #[allow(unsafe_code)]
             let meta = unsafe { &*self.meta };
             meta.consumers[idx].read_pos.store(0, Ordering::Relaxed);
@@ -160,12 +181,15 @@ impl MeshNode {
 
     // Producer Write
     pub fn write(&mut self, payload: &[u8]) {
+        // SAFETY: `meta` points into `_mmap`, which this node owns and keeps
+        // mapped for its whole life, at a `#[repr(C)]` block both peers agree
+        // on; the borrow does not outlive the node.
         #[allow(unsafe_code)]
         let meta = unsafe { &*self.meta };
         let msg_len = payload.len() as u32;
 
         let current_pos = meta.write_cursor.load(Ordering::Relaxed);
-        let (aligned_pos, ring_offset) = self.align_cursor(current_pos);
+        let (aligned_pos, ring_offset) = Self::align_cursor(current_pos);
         let current_lap = (aligned_pos / BUFFER_SIZE) as u32;
 
         // Write Payload
@@ -188,9 +212,12 @@ impl MeshNode {
         let Some(slot_idx) = self.slot_idx else {
             return Err(
                 "read called on unregistered node (producer-mode or registration failed)"
-                    .to_string(),
+                    .to_owned(),
             );
         };
+        // SAFETY: `meta` points into `_mmap`, which this node owns and keeps
+        // mapped for its whole life, at a `#[repr(C)]` block both peers agree
+        // on; the borrow does not outlive the node.
         #[allow(unsafe_code)]
         let meta = unsafe { &*self.meta };
         let slot = &meta.consumers[slot_idx];
@@ -206,11 +233,11 @@ impl MeshNode {
             return Ok(None);
         }
 
-        let (aligned_pos, ring_offset) = self.align_cursor(self.local_pos);
+        let (aligned_pos, ring_offset) = Self::align_cursor(self.local_pos);
 
         if remote_pos - aligned_pos > BUFFER_SIZE {
             self.local_pos = remote_pos;
-            return Err("Gap jump".to_string());
+            return Err("Gap jump".to_owned());
         }
 
         // Seqlock Check
@@ -226,6 +253,10 @@ impl MeshNode {
         let payload = self.read_raw_bytes(payload_start, msg_len as u64);
 
         // Atomic Load for Post-Check
+        // SAFETY: `ring_offset` is `< BUFFER_SIZE` and `align_cursor` has
+        // already moved the cursor forward if fewer than MSG_HEADER_SIZE bytes
+        // remained, so the four header bytes are contiguous inside the ring and
+        // aligned for the atomic read.
         #[allow(unsafe_code)]
         let post_lap = unsafe {
             // We align logic guarantees header is contiguous (align_cursor moves us if <8 bytes remain)
@@ -238,14 +269,14 @@ impl MeshNode {
 
         if pre_lap != expected_lap || post_lap != expected_lap {
             self.local_pos = remote_pos;
-            return Err("Tearing".to_string());
+            return Err("Tearing".to_owned());
         }
 
         self.local_pos = aligned_pos + MSG_HEADER_SIZE + msg_len as u64;
         Ok(Some(payload))
     }
 
-    fn align_cursor(&self, mut cursor: u64) -> (u64, u64) {
+    fn align_cursor(mut cursor: u64) -> (u64, u64) {
         let mut ring_offset = cursor % BUFFER_SIZE;
         let remaining = BUFFER_SIZE - ring_offset;
         if remaining < MSG_HEADER_SIZE {
@@ -258,6 +289,9 @@ impl MeshNode {
     fn write_raw_bytes(&self, offset: u64, data: &[u8]) {
         let offset = offset as usize;
         let size = data.len();
+        // SAFETY: `offset` is a ring offset (`< BUFFER_SIZE`) and the branch
+        // splits the copy at the ring's end, so both halves stay inside the
+        // `BUFFER_SIZE` bytes `data_buffer` points at.
         #[allow(unsafe_code)]
         unsafe {
             if (offset + size) <= BUFFER_SIZE as usize {
@@ -278,6 +312,7 @@ impl MeshNode {
         let offset = offset as usize;
         let size = size as usize;
         let mut out = vec![0u8; size];
+        // SAFETY: as in `write_raw_bytes`, with `out` sized to `size` bytes.
         #[allow(unsafe_code)]
         unsafe {
             if (offset + size) <= BUFFER_SIZE as usize {

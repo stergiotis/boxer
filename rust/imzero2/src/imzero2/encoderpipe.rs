@@ -71,7 +71,7 @@ const DRAIN_BACKPRESSURE_POLL: std::time::Duration = std::time::Duration::from_m
 
 pub enum EncoderTarget {
     File(std::path::PathBuf),
-    /// Pre-framed WebSocket payloads (0x01 + VideoChunk) for the carrier.
+    /// Pre-framed WebSocket payloads (0x01 + `VideoChunk`) for the carrier.
     Channel(tokio::sync::mpsc::Sender<Vec<u8>>),
 }
 
@@ -672,7 +672,11 @@ mod tests {
             RestartAction::Wait
         );
         assert_eq!(
-            restart_action(false, RESTART_BACKOFF - Duration::from_millis(1), 0),
+            restart_action(
+                false,
+                RESTART_BACKOFF.checked_sub(Duration::from_millis(1)).unwrap(),
+                0
+            ),
             RestartAction::Wait
         );
     }
@@ -723,10 +727,10 @@ mod tests {
     }
 
     /// H1: a drain parked on a full video channel (a viewer that stopped
-    /// reading the socket) must abandon its send the moment reap() sets the
-    /// stop flag — this is what keeps reap(), and the render thread that
+    /// reading the socket) must abandon its send the moment `reap()` sets the
+    /// stop flag — this is what keeps `reap()`, and the render thread that
     /// calls it on a resize / codec switch, from blocking on a stalled
-    /// viewer. (No tokio runtime needed: try_send/try_recv are sync.)
+    /// viewer. (No tokio runtime needed: `try_send/try_recv` are sync.)
     #[test]
     fn cancellable_send_unblocks_on_stop() {
         let (tx, _rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
