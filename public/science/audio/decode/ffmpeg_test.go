@@ -14,7 +14,7 @@ import (
 func TestFfmpegArgsPlaceTheSeekBeforeTheInput(t *testing.T) {
 	src := &FfmpegSource{path: "/tmp/a.flac", format: testFormat}
 
-	fromStart := src.appendArgs(nil, 0)
+	fromStart := src.appendArgs(nil, 0, src.path)
 	require.Equal(t, []string{
 		"-nostdin", "-v", "error",
 		"-i", "/tmp/a.flac",
@@ -26,7 +26,7 @@ func TestFfmpegArgsPlaceTheSeekBeforeTheInput(t *testing.T) {
 		"-",
 	}, fromStart, "no -ss at all when starting at the beginning")
 
-	seeked := src.appendArgs(nil, 24000)
+	seeked := src.appendArgs(nil, 24000, src.path)
 	require.Equal(t, []string{"-nostdin", "-v", "error", "-ss", "0.500000000", "-i", "/tmp/a.flac"}, seeked[:7])
 	require.Less(t, indexOf(seeked, "-ss"), indexOf(seeked, "-i"), "-ss before -i is the accurate seek")
 }

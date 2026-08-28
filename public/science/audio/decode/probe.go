@@ -1,9 +1,11 @@
 package decode
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/v2"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 
@@ -14,15 +16,17 @@ import (
 )
 
 // probeArgs asks ffprobe for the three numbers a [pcm.SourceI] needs before
-// its first read, and nothing else. The format-level duration is requested as
-// well because a container can carry it where the stream does not.
-func probeArgs(path string) (args []string) {
+// its first read, and nothing else. input is the recording's path or the
+// child's name for an inherited descriptor. The format-level duration is
+// requested as well because a container can carry it where the stream does
+// not.
+func probeArgs(input string) (args []string) {
 	return []string{
 		"-v", "error",
 		"-select_streams", "a:0",
 		"-show_entries", "stream=sample_rate,channels,duration:format=duration",
 		"-of", "json",
-		path,
+		input,
 	}
 }
 
@@ -36,6 +40,38 @@ func probeE(ctx context.Context, path string) (format pcm.Format, frames int64, 
 	format, frames, err = parseProbeE(out)
 	if err != nil {
 		return format, 0, eb.Build().Str("path", path).Errorf("%w", err)
+	}
+	return format, frames, nil
+}
+
+// probeFdE is [probeE] over an [FdInputI]: ffprobe inherits a handle of its
+// own and is asked about it by its name inside the child. It needs the same
+// seeks a path gives it — a duration read from a container's tail, a header
+// re-read after inference — which is why the input is a descriptor on a
+// seekable object and not a pipe.
+func probeFdE(ctx context.Context, in FdInputI) (format pcm.Format, frames int64, err error) {
+	handle, err := in.OpenE()
+	if err != nil {
+		return format, 0, eb.Build().Str("path", in.Name()).Errorf("unable to open the recording for ffprobe: %w", err)
+	}
+	defer func() { _ = handle.Close() }()
+	cmd, err := extbin.Ffprobe.Command(ctx, extbin.Opts{}, probeArgs(childFdPath(childInheritedFd))...)
+	if err != nil {
+		return format, 0, eb.Build().Str("path", in.Name()).Errorf("unable to resolve ffprobe: %w", err)
+	}
+	cmd.ExtraFiles = []*os.File{handle}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err = cmd.Run()
+	if err != nil {
+		return format, 0, eb.Build().
+			Str("path", in.Name()).
+			Str("stderr", strings.TrimSpace(stderr.String())).
+			Errorf("probe recording: %w", err)
+	}
+	format, frames, err = parseProbeE(stdout.Bytes())
+	if err != nil {
+		return format, 0, eb.Build().Str("path", in.Name()).Errorf("%w", err)
 	}
 	return format, frames, nil
 }

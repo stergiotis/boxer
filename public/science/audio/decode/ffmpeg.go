@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -46,8 +47,15 @@ type FfmpegSource struct {
 	// ctx bounds the ffmpeg process, including the processes later restarts
 	// spawn, which is why it is held rather than taken per read: a source
 	// outlives any one read and the process must not.
-	ctx    context.Context
-	path   string
+	ctx context.Context
+	// path is the argv input of a path-backed source; empty when the
+	// recording is reached through in instead.
+	path string
+	// in supplies a fresh descriptor per spawned process for a recording
+	// with no path (ADR-0208 §SD5). Nil for a path-backed source.
+	in FdInputI
+	// name is what errors call the recording, whichever way it is reached.
+	name   string
 	format pcm.Format
 	frames int64
 
@@ -88,6 +96,7 @@ func OpenFfmpegE(ctx context.Context, path string) (inst *FfmpegSource, err erro
 	inst = &FfmpegSource{
 		ctx:         ctx,
 		path:        path,
+		name:        path,
 		format:      format,
 		frames:      frames,
 		bufferBytes: readBufferBytes(format),
@@ -132,7 +141,7 @@ func (inst *FfmpegSource) Padded() (n int64) { return inst.padded.Load() }
 // context given to [OpenFfmpegE].
 func (inst *FfmpegSource) ReadFramesAtE(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
 	if inst.closed {
-		return 0, eb.Build().Str("path", inst.path).Errorf("read from a closed source")
+		return 0, eb.Build().Str("path", inst.name).Errorf("read from a closed source")
 	}
 	want, err := pcm.ClampReadE(inst.format, inst.frames, frameOffset, dst)
 	if err != nil || want == 0 {
@@ -140,7 +149,7 @@ func (inst *FfmpegSource) ReadFramesAtE(ctx context.Context, frameOffset int64, 
 	}
 	err = ctx.Err()
 	if err != nil {
-		return 0, eb.Build().Str("path", inst.path).Errorf("read cancelled: %w", err)
+		return 0, eb.Build().Str("path", inst.name).Errorf("read cancelled: %w", err)
 	}
 	channels := int(inst.format.Channels)
 	samples := want * channels
@@ -157,7 +166,7 @@ func (inst *FfmpegSource) ReadFramesAtE(ctx context.Context, frameOffset int64, 
 		err = ctx.Err()
 		if err != nil {
 			inst.stop()
-			return 0, eb.Build().Str("path", inst.path).Errorf("read cancelled: %w", err)
+			return 0, eb.Build().Str("path", inst.name).Errorf("read cancelled: %w", err)
 		}
 		if inst.asm.Pending() >= bytesPerSample {
 			filled += inst.asm.Decode(nil, dst[filled:samples])
@@ -222,20 +231,35 @@ func (inst *FfmpegSource) startAtE(frameOffset int64) (err error) {
 	// wanting a start, not reading the old one's end as silence.
 	inst.eos = false
 
-	inst.args = inst.appendArgs(inst.args[:0], frameOffset)
+	input := inst.path
+	var handle *os.File
+	if inst.in != nil {
+		handle, err = inst.in.OpenE()
+		if err != nil {
+			return eb.Build().Str("path", inst.name).Errorf("unable to open the recording for ffmpeg: %w", err)
+		}
+		// Closed as soon as the child has its own copy — or right here on any
+		// path that never reaches Start.
+		defer func() { _ = handle.Close() }()
+		input = childFdPath(childInheritedFd)
+	}
+	inst.args = inst.appendArgs(inst.args[:0], frameOffset, input)
 	cmd, err := extbin.Ffmpeg.Command(inst.ctx, extbin.Opts{}, inst.args...)
 	if err != nil {
-		return eb.Build().Str("path", inst.path).Errorf("unable to resolve ffmpeg: %w", err)
+		return eb.Build().Str("path", inst.name).Errorf("unable to resolve ffmpeg: %w", err)
+	}
+	if handle != nil {
+		cmd.ExtraFiles = []*os.File{handle}
 	}
 	tail := newStderrTail(stderrTailBytes)
 	cmd.Stderr = tail
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return eb.Build().Str("path", inst.path).Errorf("unable to pipe ffmpeg stdout: %w", err)
+		return eb.Build().Str("path", inst.name).Errorf("unable to pipe ffmpeg stdout: %w", err)
 	}
 	err = cmd.Start()
 	if err != nil {
-		return eb.Build().Str("path", inst.path).Errorf("unable to start ffmpeg: %w", err)
+		return eb.Build().Str("path", inst.name).Errorf("unable to start ffmpeg: %w", err)
 	}
 	if inst.reader == nil {
 		inst.reader = bufio.NewReaderSize(stdout, inst.bufferBytes)
@@ -252,18 +276,19 @@ func (inst *FfmpegSource) startAtE(frameOffset int64) (err error) {
 	return nil
 }
 
-// appendArgs builds the decode invocation. -ss goes before -i, where ffmpeg's
-// seek is accurate: it decodes and discards from the nearest seek point up to
-// the requested instant itself, so the first sample out is the one at
-// frameOffset.
-func (inst *FfmpegSource) appendArgs(dst []string, frameOffset int64) (out []string) {
+// appendArgs builds the decode invocation over input, which is the recording's
+// path or the child's name for an inherited descriptor. -ss goes before -i,
+// where ffmpeg's seek is accurate: it decodes and discards from the nearest
+// seek point up to the requested instant itself, so the first sample out is
+// the one at frameOffset.
+func (inst *FfmpegSource) appendArgs(dst []string, frameOffset int64, input string) (out []string) {
 	out = append(dst, "-nostdin", "-v", "error")
 	if frameOffset > 0 {
 		seconds := float64(frameOffset) / float64(inst.format.SampleRate)
 		out = append(out, "-ss", strconv.FormatFloat(seconds, 'f', 9, 64))
 	}
 	out = append(out,
-		"-i", inst.path,
+		"-i", input,
 		"-map", "0:a:0",
 		"-f", "f32le",
 		"-acodec", "pcm_f32le",
@@ -284,14 +309,14 @@ func (inst *FfmpegSource) endStreamE(cause error) (err error) {
 		waitErr := cmd.Wait()
 		if waitErr != nil {
 			return eb.Build().
-				Str("path", inst.path).
+				Str("path", inst.name).
 				Str("stderr", inst.stderrText()).
 				Errorf("ffmpeg exited with an error: %w", waitErr)
 		}
 	}
 	if cause != nil && !errors.Is(cause, io.EOF) {
 		return eb.Build().
-			Str("path", inst.path).
+			Str("path", inst.name).
 			Str("stderr", inst.stderrText()).
 			Errorf("unable to read ffmpeg output: %w", cause)
 	}
