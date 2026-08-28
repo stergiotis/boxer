@@ -166,7 +166,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
 
 ### Subsidiary design decisions
 
-- **SD1 — Name and homes.** The widget is
+- **SD1 — Name and homes.** ✓ The widget is
   `public/thestack/imzero2/egui2/widgets/waveform`, entry type `Player`.
   Audio lives under `public/science/audio/`: `pcm` (sample formats, the
   `Source` interface, a resampler), `wavfile` (RIFF/WAVE + RF64/BW64 reader),
@@ -178,7 +178,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   `track` and nothing below it; `track` imports nothing from imzero2. Anything that wants the waveform of a file without a UI —
   a batch job, a test — uses `peaks` directly.
 
-- **SD2 — The waveform is a min/max pyramid, not samples.** Level 0 holds
+- **SD2 — The waveform is a min/max pyramid, not samples.** ✓ Level 0 holds
   per-bin `int8` min and max for a fixed base bin (default 256 frames, so
   ~5 ms at 48 kHz); each higher level halves the bin count by combining
   pairs. A twelve-hour stereo file is ~26 MB at level 0 and ~52 MB for the
@@ -192,7 +192,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   one opcode per channel regardless of file length. Bars mode
   (`barWidth`/`barGap`) is the same primitive with fewer rects.
 
-- **SD3 — Below the base bin, samples are fetched on demand.** Zooming past
+- **SD3 — Below the base bin, samples are fetched on demand.** ✓ Zooming past
   level 0 asks `track` for a window of raw frames. Windows are decoded off
   the frame thread and cached (byte-bounded LRU); the frame that asks gets
   `ok=false`, draws level 0 in the meantime, and keeps the loop hot — the
@@ -201,7 +201,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   it is a `paintPolyline` per channel with `paintMarkers` at the samples.
   There is no third drawing mode.
 
-- **SD4 — Built progressively in the background, cached on disk.** `track` learns the frame count first (the WAV header;
+- **SD4 — Built progressively in the background, cached on disk.** ✓ `track` learns the frame count first (the WAV header;
   `ffprobe` for the rest), preallocates every level, and a builder goroutine
   fills level 0 in sequential chunks, folding each chunk into the higher
   levels as it lands; it publishes the built prefix as one atomic frame
@@ -214,7 +214,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   instantaneous. `normalize` applies the pyramid's global maximum only once
   the build is complete; until then the gain is 1.
 
-- **SD5 — One `Source` interface, two decoders, sniffed format.** `pcm.Source` is `Info() (Format, frames)` plus positioned
+- **SD5 — One `Source` interface, two decoders, sniffed format.** ✓ `pcm.Source` is `Info() (Format, frames)` plus positioned
   reads of interleaved `float32` frames. `wavfile` implements it for
   PCM 8/16/24/32, IEEE float, `WAVE_FORMAT_EXTENSIBLE`, and RF64 — a
   twelve-hour stereo 16-bit file is 8.3 GB, past the 4 GB RIFF limit, so
@@ -225,7 +225,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   which is why SD3 caches windows. The peaks build is one sequential pass
   in either case.
 
-- **SD6 — Pulse-protocol output; position from frames delivered.** `sink` defines the interface — play,
+- **SD6 — Pulse-protocol output; position from frames delivered.** ✓ `sink` defines the interface — play,
   pause, seek, rate, volume, `Position() (frame, playing)` — and its default
   implementation is a `jfreymuth/pulse` playback stream at a fixed device
   rate, fed by a pull callback; files at another rate are resampled in
@@ -250,7 +250,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   this one. An `oto`-backed sink for macOS, Windows and ALSA-only hosts is
   the recorded follow-up once oto v3.5 is released.
 
-- **SD7 — Interaction is wavesurfer's, else timeline's.** Click seeks. Drag pans (wavesurfer's `dragToSeek` is an
+- **SD7 — Interaction is wavesurfer's, else timeline's.** ✓ Click seeks. Drag pans (wavesurfer's `dragToSeek` is an
   option, off by default). Wheel scrolls, Ctrl+wheel and pinch zoom about
   the hovered time (per-canvas R23, ADR-0140; never the global wheel).
   Shift+drag creates a region when the host has enabled region editing;
@@ -262,7 +262,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   (ADR-0204 §SD6's lesson). The sense region is emitted last so it wins the
   hit test over the canvas.
 
-- **SD8 — Annotation lanes are `timeline`, extended.** Interval and point annotations — VAD segments, speaker turns,
+- **SD8 — Annotation lanes are `timeline`, extended.** ✓ Interval and point annotations — VAD segments, speaker turns,
   markers, editable regions — are drawn by the `timeline` widget stacked
   under the waveform and locked to its view range, so the same LOD index,
   lane packer, selection and brush serve both. That requires two
@@ -283,7 +283,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   ([ADR-0031](./0031-imzero2-design-system-color.md) §SD5): every region has
   a label or a hover readout.
 
-- **SD9 — Two time bases, one position.** The player's position is a frame
+- **SD9 — Two time bases, one position.** ✓ The player's position is a frame
   index; everything shown is derived from it through a `TimeBase` of sample
   rate plus an optional **epoch** — the wall-clock instant of frame 0. With
   no epoch (a track, a clip) every axis, readout and annotation is a
@@ -294,7 +294,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   carry which base they were given in, so a segment list produced against
   the file and one produced against a clock line up on the same lane.
 
-- **SD10 — Chrome is composed, not built in.** The time ruler is `axisruler`
+- **SD10 — Chrome is composed, not built in.** ✓ The time ruler is `axisruler`
   over the same duration ladder SD8 gives `timeline`, or the calendar ladder
   when an epoch is set (SD9). The minimap is the pyramid's
   top level drawn on its **own** canvas with a brush over it, copied from
@@ -303,7 +303,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   widgets the demo composes around `Player`; the package exposes the pieces
   and a `Player.RenderDefault` that assembles them.
 
-- **SD11 — Repaint only while something moves.** The player requests a
+- **SD11 — Repaint only while something moves.** ✓ The player requests a
   repaint at 60 Hz while playing, animating a zoom, or waiting for a build
   chunk or a window; idle it draws once and lets the host go reactive.
   Under a host-skippable region it composes with `lazypane` like any other
@@ -325,17 +325,17 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
 
 ### Milestones
 
-- **M1 — Audio core.** `pcm`, `wavfile` (incl. RF64), `peaks` (build,
+- **M1 — Audio core.** ✓ `pcm`, `wavfile` (incl. RF64), `peaks` (build,
   query, cache file), `track` (synchronous build), `sink.Null`. Property
   tests over the pyramid; a procedural twelve-hour `Source` for a benchmark.
-- **M2 — Widget v1.** Waveform (rects and polyline paths), zoom, scroll,
+- **M2 — Widget v1.** ✓ Waveform (rects and polyline paths), zoom, scroll,
   click-to-seek, drag-to-pan, playhead, ruler, hover readout; a demo over a
   synthetic in-memory track; a headless scene.
-- **M3 — Playback.** `pulse` sink, transport, autoscroll/autocenter, keys,
+- **M3 — Playback.** ✓ `pulse` sink, transport, autoscroll/autocenter, keys,
   rate and volume.
-- **M4 — Long files.** Progressive background build with progress, window
+- **M4 — Long files.** ✓ Progressive background build with progress, window
   cache for deep zoom, `ffmpeg`/`ffprobe` decoding, the cache-dir variable.
-- **M5 — Layers and chrome.** The `timeline` extensions (relative axis,
+- **M5 — Layers and chrome.** ✓ The `timeline` extensions (relative axis,
   finer unit), lanes locked to the waveform, editable regions, curves,
   minimap, the epoch toggle; the demo's annotations are synthetic segments
   and a synthetic probability curve shaped like a detector's output.
@@ -515,7 +515,11 @@ found in use: a sink that resamples must read its decoder strictly forwards
 ffmpeg process every callback, audibly, and keeps doing so after the rate
 returns to 1 because the fractional position survives; the pulse sink keeps
 that lookahead across calls instead, and an integration test holds the
-decoder's restart count at zero through a rate excursion. The
+decoder's restart count at zero through a rate excursion. Region and marker
+labels stagger into rows through the timeline's `layout.PackFlagRows` rather
+than a second packer. Of SD12's three seams the window cache and the
+separate cache files are in place; the raster-lane slot waits for the
+spectrogram ADR that needs it, which is why SD12 is not marked done. The
 twelve-hour build benchmark over a procedural source runs in about 80 s on a
 mobile CPU, of which roughly a quarter is the pyramid fold itself (~94 M
 frames/s) and the rest is generating the synthetic signal — a real decoder's

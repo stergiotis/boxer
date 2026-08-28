@@ -137,7 +137,7 @@ See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-pol
 
 ### 2026-08-28 — Offset axis and locked view (adds SD17, for ADR-0208 SD8)
 
-- **SD17 — An offset axis, the same widget.** `WithOffsetAxis(unit)` makes
+- **SD17 — An offset axis, the same widget.** ✓ `WithOffsetAxis(unit)` makes
   every `int64` the widget takes or returns a count of `unit` from a zero
   that is no calendar instant — a recording's position, an elapsed time —
   and `SetRangeUnits` / `ViewRangeUnits` / `CursorValue` are the same
