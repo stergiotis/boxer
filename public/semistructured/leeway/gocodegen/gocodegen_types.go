@@ -26,7 +26,7 @@ type GoClassNamerDmlI interface {
 }
 
 // GoClassNamerCanonWireI names the classes of the leeway canonical-wire
-// generator (ADR-0207 SD6): the per-table encoder and decoder, the
+// generator (ADR-0210 SD6): the per-table encoder and decoder, the
 // tagger/dispatcher pair the ambiguous signatures need, and the slot enum with
 // its per-slot signature and slot constants.
 //

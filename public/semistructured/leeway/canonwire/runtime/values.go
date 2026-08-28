@@ -10,7 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// This file carries the ADR-0207 SD3 value forms over the Go types the
+// This file carries the ADR-0210 SD3 value forms over the Go types the
 // generated readaccess accessors hand out and the generated dml builders
 // take: sized integers, float32/float64, string, []byte, bool, time.Time and
 // the network lanes (netip.Addr / netip.Prefix, or their packed uint32 /
@@ -150,7 +150,7 @@ func (c *CborWriter) WriteIPv4(a netip.Addr) {
 }
 
 // WriteIPv6 writes a sixteen-byte address under RFC 9164 tag 54. An
-// IPv4-mapped address stays IPv6: ADR-0207 SD3 drops the reduction ADR-0201
+// IPv4-mapped address stays IPv6: ADR-0210 SD3 drops the reduction ADR-0201
 // applies, so a v → w widening is visible in the bytes and losslessly
 // reversible.
 func (c *CborWriter) WriteIPv6(a netip.Addr) {
@@ -465,7 +465,7 @@ func (c *CborReader) ReadSetHead() int {
 	return c.ReadArrayHead()
 }
 
-// SetWriter builds the ADR-0207 SD3 set form: tag 258 over a definite-length
+// SetWriter builds the ADR-0210 SD3 set form: tag 258 over a definite-length
 // array of elements sorted bytewise on their canonical encodings, duplicates
 // kept. Set order is not content and sorting is what makes the bytes
 // canonical; a set's *length* is content, because an `m` column is a DML

@@ -19,7 +19,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// leeway canonwire (ADR-0207 §SD6): the canonical-wire generator's CLI, plus
+// leeway canonwire (ADR-0210 §SD6): the canonical-wire generator's CLI, plus
 // the two things an operator needs when the bytes and the table disagree.
 //
 // `table generate go` is the generator, mirroring `leeway dml table generate
@@ -43,7 +43,7 @@ func NewCliCommandCanonWire() *cli.Command {
 	universalFlags := universal.ToCliFlags()
 	return &cli.Command{
 		Name:  "canonwire",
-		Usage: "generate the canonical-wire codecs for a table, inspect its slot table, and verify wire bytes (ADR-0207)",
+		Usage: "generate the canonical-wire codecs for a table, inspect its slot table, and verify wire bytes (ADR-0210)",
 		Subcommands: []*cli.Command{
 			{
 				Name: "table",
@@ -103,7 +103,7 @@ func NewCliCommandCanonWire() *cli.Command {
 					},
 					{
 						Name:  "slots",
-						Usage: "read a CBOR table description from stdin and report the wire slots it keys (ADR-0207 §SD2/§SD5)",
+						Usage: "read a CBOR table description from stdin and report the wire slots it keys (ADR-0210 §SD2/§SD5)",
 						Flags: slices.Concat([]cli.Flag{
 							&cli.StringFlag{
 								Name:  "tableName",
@@ -205,7 +205,7 @@ type canonWireSlotReport struct {
 }
 
 // canonWirePlainReport is one plain slot. It is keyed on the wire by its item
-// type (ADR-0207 §SD2, fork 1); the group is carried for the decoder's
+// type (ADR-0210 §SD2, fork 1); the group is carried for the decoder's
 // construction-time equality check and never travels.
 type canonWirePlainReport struct {
 	ItemType string

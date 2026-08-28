@@ -93,7 +93,7 @@ func TestFloatValueForms(t *testing.T) {
 
 	// A NaN payload does not survive: the writer's encoder is configured
 	// NaNConvert7e00, so every NaN collapses to the one quiet NaN. That is a
-	// deviation from ADR-0207 SD1's "NaN payloads survive", recorded here so
+	// deviation from ADR-0210 SD1's "NaN payloads survive", recorded here so
 	// the loss is a tested fact rather than a surprise.
 	payload := math.Float64frombits(0x7ff8_0000_0000_00ab)
 	r = form(t, "f97e00", func(c *CborWriter) { c.WriteF64(payload) })

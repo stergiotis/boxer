@@ -13,7 +13,7 @@ import (
 	cwruntime "github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/runtime"
 )
 
-// The smoke test of ADR-0207 M1: a batch written through the generated dml
+// The smoke test of ADR-0210 M1: a batch written through the generated dml
 // builders, read back through the generated readaccess classes and encoded by
 // the generated encoder, checked against the table-free canonical rules. It
 // says the three generated APIs fit together and that the bytes the encoder

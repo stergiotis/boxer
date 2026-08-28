@@ -7,7 +7,7 @@ import (
 )
 
 // VerifyCanonical checks one entity item against everything the leeway
-// canonical wire fixes without a table description (ADR-0207 SD1–SD5):
+// canonical wire fixes without a table description (ADR-0210 SD1–SD5):
 //
 //   - the item is `[Version, plains:map, tagged:map]`, and nothing follows it;
 //   - plain keys are readable item types, strictly increasing;
@@ -33,7 +33,7 @@ import (
 // The memberships element is read table-free too. A membership is always a
 // two-element array whose first element is a uint, so an element of that array
 // which is itself an empty array, or an array whose first element is an array,
-// can only be a co-section group's own membership list (ADR-0207 SD3) — and
+// can only be a co-section group's own membership list (ADR-0210 SD3) — and
 // the grouped form is only canonical for two or more groups, since one group
 // is written flat.
 func VerifyCanonical(item []byte) (err error) {

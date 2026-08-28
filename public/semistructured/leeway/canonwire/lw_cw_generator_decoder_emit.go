@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 )
 
-// The decoder's emission (ADR-0207 SD5, SD6). It is split from the planning so
+// The decoder's emission (ADR-0210 SD5, SD6). It is split from the planning so
 // that every refusal — a canonical type with no wire form, a plain item type
 // with no dml setter — has already happened before a byte of code is written.
 
@@ -27,7 +27,7 @@ func emitDispatcher(b *strings.Builder, plan *tablePlan) (err error) {
 // %s reports whether any signature of %s is carried by more than one slot.
 // It is what the decoder's constructor checks: an ambiguous table cannot be
 // decoded without a dispatcher, and the refusal is at construction rather than
-// at the first attribute that needs one (ADR-0207 SD5).
+// at the first attribute that needs one (ADR-0210 SD5).
 const %s = %t
 `, plan.ambiguousConst, plan.tableName, plan.ambiguousConst, ambiguous)
 	if err != nil {
@@ -38,7 +38,7 @@ const %s = %t
 // %s holds, per slot in slot order, the membership channels each member
 // section accepts — one bitmask per section in signature order, over the
 // mappingplan channel ordinals. It is the input to the narrowing step of
-// ADR-0207 SD5: a section that cannot store the memberships an attribute
+// ADR-0210 SD5: a section that cannot store the memberships an attribute
 // carries is not that attribute's target.
 var %s = [][]uint32{
 `, plan.masksVar, plan.masksVar)
@@ -80,7 +80,7 @@ var %s = []%s{%s}
 	}
 
 	_, err = fmt.Fprintf(b, `
-// %s is the decoder half of ADR-0207 SD5's dispatch pair.
+// %s is the decoder half of ADR-0210 SD5's dispatch pair.
 //
 // It is consulted only for an attribute whose signature more than one slot of
 // this table carries *and* whose memberships more than one of those slots can
@@ -95,7 +95,7 @@ type %s interface {
 	Dispatch(candidates []%s, attr *cwruntime.AttributeView) (slot %s, err error)
 }
 
-// %s is the built-in dispatcher of ADR-0207 SD5 and the mirror of %s: it reads
+// %s is the built-in dispatcher of ADR-0210 SD5 and the mirror of %s: it reads
 // the attribute's discriminator as the slot's ordinal within the full
 // ambiguity set. It round-trips between two tables that declare the same
 // sections in the same order, and is explicitly that declaration-order
@@ -174,7 +174,7 @@ func (inst %s) Dispatch(candidates []%s, attr *cwruntime.AttributeView) (slot %s
 // narrowing helper, and the entity walk that drives the dml.
 func emitDecoder(b *strings.Builder, plan *tablePlan) (err error) {
 	_, err = fmt.Fprintf(b, `
-// %s decodes leeway canonical wire entities (ADR-0207) into a %s.
+// %s decodes leeway canonical wire entities (ADR-0210) into a %s.
 //
 // It drives the generated dml builders directly: the plain setters, then one
 // BeginAttribute / container append / AddMembership… / EndAttribute per wire
@@ -220,7 +220,7 @@ type %s struct {
 // dispatcher may be nil only for a table with no ambiguous signature — %s says
 // which this is. A table that has one cannot resolve an attribute's slot from
 // the key alone, so it is refused here rather than at the first attribute that
-// would have needed the hook (ADR-0207 SD5).
+// would have needed the hook (ADR-0210 SD5).
 func New%s(dml *%s, dispatcher %s) (inst *%s, err error) {
 	if dml == nil {
 		err = eb.Build().Str("tableName", %q).Errorf("no dml builder to decode into")
@@ -238,7 +238,7 @@ func New%s(dml *%s, dispatcher %s) (inst *%s, err error) {
 	return
 }
 
-// slotAcceptsChannels is the narrowing step of ADR-0207 SD5: every membership
+// slotAcceptsChannels is the narrowing step of ADR-0210 SD5: every membership
 // the attribute carries must land on a channel the member section at that
 // group's position declares. It is also the check an unambiguous slot goes
 // through, because a signature match does not imply the carriage matches.

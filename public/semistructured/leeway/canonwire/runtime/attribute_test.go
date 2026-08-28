@@ -73,7 +73,7 @@ func TestAttributeValueLessSlot(t *testing.T) {
 }
 
 // Memberships are sorted bytewise on their encoded items, so insertion order
-// does not reach the wire (ADR-0207 SD3).
+// does not reach the wire (ADR-0210 SD3).
 func TestAttributeMembershipsSortedRegardlessOfInsertionOrder(t *testing.T) {
 	add := func(aw *AttributeWriter, order []int) {
 		for _, i := range order {
@@ -113,7 +113,7 @@ func TestAttributeDuplicateMembershipsKept(t *testing.T) {
 }
 
 // The cardinalities are derived from the value forms, in key order: a present
-// scalar is 1, a null one 0, and a container its element count (ADR-0207 SD3).
+// scalar is 1, a null one 0, and a container its element count (ADR-0210 SD3).
 func TestAttributeCardinalities(t *testing.T) {
 	a := buildAttr(t, 3, func(aw *AttributeWriter) {
 		aw.Membership(0, mappingplan.MembershipChannelLowCardRef, 1, nil, nil)
@@ -156,7 +156,7 @@ func TestAttributeDiscriminator(t *testing.T) {
 }
 
 // The canonical order: membership count, then cardinalities, then the
-// memberships' bytes, then the values' bytes (ADR-0207 SD3).
+// memberships' bytes, then the values' bytes (ADR-0210 SD3).
 func TestCompareAttributes(t *testing.T) {
 	mk := func(nMemb uint32, cards []uint64, memb string, vals string) (a Attr) {
 		mb, err := hex.DecodeString(memb)
@@ -238,7 +238,7 @@ func TestAttributeWriterRejectsMalformedUse(t *testing.T) {
 }
 
 // A slot of k > 1 co-sections carries k membership arrays in signature order,
-// each sorted on its own (ADR-0207 SD3). An empty group is written as an empty
+// each sorted on its own (ADR-0210 SD3). An empty group is written as an empty
 // array, not omitted.
 func TestAttributeCoGroupMemberships(t *testing.T) {
 	a := buildAttrGroups(t, 0, 2, func(aw *AttributeWriter) {

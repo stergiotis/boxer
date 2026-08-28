@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 )
 
-// The slot keys of ADR-0207 SD2. A tagged section's *group* is its value
+// The slot keys of ADR-0210 SD2. A tagged section's *group* is its value
 // columns' canonical types, stable-sorted by CT string and joined by
 // canonicaltypes.GroupSeparator; a co-section group's *signature* is its
 // member sections' groups sorted bytewise and joined by
@@ -28,7 +28,7 @@ import (
 // order is the permutation the sort applied: order[k] is the index, in cts, of
 // the column that lands at key position k. Columns of equal CT keep their
 // declaration order (the sort is stable), which is what makes a lat/lng pair
-// survive the canonicalisation — ADR-0207 QOC, criterion C3.
+// survive the canonicalisation — ADR-0210 QOC, criterion C3.
 //
 // A value-less section has no columns: group is "" and order is empty.
 func GroupOf(cts []canonicaltypes.PrimitiveAstNodeI) (group string, order []int) {

@@ -14,7 +14,7 @@
 // the entity item holds the plains plus the sorted 32-byte leaf digests.
 //
 // The CBOR writer is canonwire/runtime.CborWriter, shared with the leeway
-// canonical wire (ADR-0207). What is the quotient's own — the numeric
+// canonical wire (ADR-0210). What is the quotient's own — the numeric
 // reduction (writeFloatReduced), the sorted memberships, the tag-258 sets —
 // stays in this package and layers on top of that writer.
 //

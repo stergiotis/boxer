@@ -83,7 +83,7 @@ func TestEntityGolden(t *testing.T) {
 }
 
 // A slot that took no attribute is not a key: an entity's tagged map carries
-// only the slots it actually has (ADR-0207 SD2).
+// only the slots it actually has (ADR-0210 SD2).
 func TestEntityOmitsEmptySlots(t *testing.T) {
 	got := flushHex(t, func(ew *EntityWriter, aw *AttributeWriter) {
 		ew.Slot("s")

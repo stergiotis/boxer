@@ -14,7 +14,7 @@ import (
 	rartime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
 
-// The cross-table suite of ADR-0207: the requirement the whole form exists for.
+// The cross-table suite of ADR-0210: the requirement the whole form exists for.
 // test_table_renamed declares the same canonical types as test_table in the
 // same co-topology and under the same membership specs, and nothing else in
 // common — every section and column is renamed, the sections are declared in
@@ -191,7 +191,7 @@ func TestCrossTableRenamedToTestTable(t *testing.T) {
 // TestCrossTableNarrowed is the negative cross-table case: test_table_narrow
 // declares the same signatures but its `text` section accepts LowCardRef only.
 // The slot key still matches — the types did not change — so the refusal comes
-// from the narrowing step of ADR-0207 SD5 and nowhere else, and it is the
+// from the narrowing step of ADR-0210 SD5 and nowhere else, and it is the
 // carriage that the target cannot store.
 func TestCrossTableNarrowed(t *testing.T) {
 	src := NewInEntityTestTable(memory.DefaultAllocator, 128)

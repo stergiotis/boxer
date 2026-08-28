@@ -16,7 +16,7 @@ import (
 //
 // The reduction is a rule of the quotient (ADR-0201 SD3), not of the wire, so
 // it lives here rather than in the shared writer: the lossless form over the
-// same writer (ADR-0207) must keep 3.0 a float.
+// same writer (ADR-0210) must keep 3.0 a float.
 func writeFloatReduced(cw *runtime.CborWriter, f float64) {
 	if cw.Err() != nil {
 		return

@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-// The slot table of ADR-0207 SD2: a table description reduced to the CT
+// The slot table of ADR-0210 SD2: a table description reduced to the CT
 // signatures that key its tagged slots, plus the two facts SD5's dispatch
 // reads — which signatures more than one slot claims, and which membership
 // channels each candidate section can store.
@@ -51,7 +51,7 @@ type Slot struct {
 }
 
 // PlainSlot is one plain item type's columns. It is keyed on the wire by
-// ItemType, not by Group (ADR-0207 SD2, fork 1).
+// ItemType, not by Group (ADR-0210 SD2, fork 1).
 type PlainSlot struct {
 	ItemType common.PlainItemTypeE
 	// Group is the plain section's CT group, for the decoder-construction
@@ -76,7 +76,7 @@ type SlotTable struct {
 	Plains []PlainSlot
 }
 
-// BuildSlotTable reduces a table description to its slots (ADR-0207 SD2).
+// BuildSlotTable reduces a table description to its slots (ADR-0210 SD2).
 //
 // One slot per co-section group — sections sharing a non-empty
 // TaggedValuesSection.CoSectionGroup — and one per standalone section. Every
@@ -231,7 +231,7 @@ func (inst *SlotTable) Ambiguous() (sigs []string) {
 }
 
 // ChannelSpec maps a membership channel to the single common.MembershipSpecE
-// bit a section must declare to accept it (ADR-0207 SD5 step 1). All eight
+// bit a section must declare to accept it (ADR-0210 SD5 step 1). All eight
 // channels are covered: a lossless form restores carriage, so no channel may
 // be left without a spec.
 func ChannelSpec(ch mappingplan.MembershipChannel) (spec common.MembershipSpecE, err error) {

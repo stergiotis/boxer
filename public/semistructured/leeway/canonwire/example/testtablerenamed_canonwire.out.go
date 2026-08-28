@@ -28,7 +28,7 @@ var (
 // canonwire.(*GoClassBuilder).ComposeCodec
 // ./public/semistructured/leeway/canonwire/lw_cw_generator.go:210
 
-// The slot keys of ADR-0207 SD2: a tagged section's CT group, or a co-section
+// The slot keys of ADR-0210 SD2: a tagged section's CT group, or a co-section
 // group's CT signature. They key the entity item's tagged map and are the only
 // thing on the wire that comes from test-table-renamed's description: section names, column
 // names, aspects and hints are not.
@@ -40,7 +40,7 @@ const CanonWireSignatureTestTableRenamedCoords = "f32-f32-u64-u64"
 const CanonWireSignatureTestTableRenamedPhrases = "s-sh-u32h"
 
 // The plain sections' CT groups. A plain section is keyed on the wire by its
-// item type, which is fixed leeway vocabulary (ADR-0207 SD2, fork 1); its group
+// item type, which is fixed leeway vocabulary (ADR-0210 SD2, fork 1); its group
 // is emitted so a decoder can check the two tables agree on the types before it
 // reads a single entity.
 
@@ -84,7 +84,7 @@ func (inst CanonWireSlotTestTableRenamedE) Signature() string {
 }
 
 // Ambiguous reports whether the slot's signature is carried by more than one
-// slot of this table. Those are the slots ADR-0207 SD5's dispatch has to
+// slot of this table. Those are the slots ADR-0210 SD5's dispatch has to
 // resolve: the encoder consults its tagger for every attribute of one, and for
 // no attribute of any other.
 func (inst CanonWireSlotTestTableRenamedE) Ambiguous() bool {
@@ -92,7 +92,7 @@ func (inst CanonWireSlotTestTableRenamedE) Ambiguous() bool {
 	return false
 }
 
-// CanonWireTaggerTestTableRenamedI is the encoder half of ADR-0207 SD5's dispatch pair.
+// CanonWireTaggerTestTableRenamedI is the encoder half of ADR-0210 SD5's dispatch pair.
 //
 // It is consulted for every attribute of a slot whose signature is ambiguous
 // in this table, and its small opaque integer rides as the attribute item's
@@ -102,7 +102,7 @@ type CanonWireTaggerTestTableRenamedI interface {
 	Tag(slot CanonWireSlotTestTableRenamedE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64
 }
 
-// CanonWireOrdinalTaggerTestTableRenamed is the built-in tagger of ADR-0207 SD5.
+// CanonWireOrdinalTaggerTestTableRenamed is the built-in tagger of ADR-0210 SD5.
 //
 // It returns the slot's ordinal within its ambiguity set, which round-trips
 // between two tables that declare the same sections in the same order and is
@@ -117,7 +117,7 @@ func (inst CanonWireOrdinalTaggerTestTableRenamed) Tag(slot CanonWireSlotTestTab
 	return 0
 }
 
-// CanonWireEncoderTestTableRenamed writes entities of a loaded ReadAccessTestTableRenamed as the leeway canonical wire (ADR-0207).
+// CanonWireEncoderTestTableRenamed writes entities of a loaded ReadAccessTestTableRenamed as the leeway canonical wire (ADR-0210).
 //
 // It reads the generated readaccess accessors directly: no reflection, no
 // arrow.Array type switch, one typed runtime call per column. The buffers are
@@ -171,7 +171,7 @@ func NewCanonWireEncoderTestTableRenamed(ra *ReadAccessTestTableRenamed, tagger 
 
 // EncodeEntity writes one entity item to w: the plain sections under their item
 // types, then the tagged slots under their CT signatures, both in the order the
-// form fixes (ADR-0207 SD1–SD3). The attributes are held back only until the
+// form fixes (ADR-0210 SD1–SD3). The attributes are held back only until the
 // item is complete, which is what lets the writer sort them into canonical
 // order.
 func (inst *CanonWireEncoderTestTableRenamed) EncodeEntity(entityIdx runtime.EntityIdx, w io.Writer) (err error) {
@@ -324,20 +324,20 @@ func (inst *CanonWireEncoderTestTableRenamed) EncodeAll(w io.Writer) (err error)
 // canonWireAmbiguousTestTableRenamed reports whether any signature of test-table-renamed is carried by more than one slot.
 // It is what the decoder's constructor checks: an ambiguous table cannot be
 // decoded without a dispatcher, and the refusal is at construction rather than
-// at the first attribute that needs one (ADR-0207 SD5).
+// at the first attribute that needs one (ADR-0210 SD5).
 const canonWireAmbiguousTestTableRenamed = false
 
 // canonWireAcceptMasksTestTableRenamed holds, per slot in slot order, the membership channels each member
 // section accepts — one bitmask per section in signature order, over the
 // mappingplan channel ordinals. It is the input to the narrowing step of
-// ADR-0207 SD5: a section that cannot store the memberships an attribute
+// ADR-0210 SD5: a section that cannot store the memberships an attribute
 // carries is not that attribute's target.
 var canonWireAcceptMasksTestTableRenamed = [][]uint32{
 	{0x21}, // coords
 	{0x21}, // phrases
 }
 
-// CanonWireDispatcherTestTableRenamedI is the decoder half of ADR-0207 SD5's dispatch pair.
+// CanonWireDispatcherTestTableRenamedI is the decoder half of ADR-0210 SD5's dispatch pair.
 //
 // It is consulted only for an attribute whose signature more than one slot of
 // this table carries *and* whose memberships more than one of those slots can
@@ -352,7 +352,7 @@ type CanonWireDispatcherTestTableRenamedI interface {
 	Dispatch(candidates []CanonWireSlotTestTableRenamedE, attr *cwruntime.AttributeView) (slot CanonWireSlotTestTableRenamedE, err error)
 }
 
-// CanonWireOrdinalDispatcherTestTableRenamed is the built-in dispatcher of ADR-0207 SD5 and the mirror of CanonWireOrdinalTaggerTestTableRenamed: it reads
+// CanonWireOrdinalDispatcherTestTableRenamed is the built-in dispatcher of ADR-0210 SD5 and the mirror of CanonWireOrdinalTaggerTestTableRenamed: it reads
 // the attribute's discriminator as the slot's ordinal within the full
 // ambiguity set. It round-trips between two tables that declare the same
 // sections in the same order, and is explicitly that declaration-order
@@ -369,7 +369,7 @@ func (inst CanonWireOrdinalDispatcherTestTableRenamed) Dispatch(candidates []Can
 	return
 }
 
-// CanonWireDecoderTestTableRenamed decodes leeway canonical wire entities (ADR-0207) into a InEntityTestTableRenamed.
+// CanonWireDecoderTestTableRenamed decodes leeway canonical wire entities (ADR-0210) into a InEntityTestTableRenamed.
 //
 // It drives the generated dml builders directly: the plain setters, then one
 // BeginAttribute / container append / AddMembership… / EndAttribute per wire
@@ -404,7 +404,7 @@ type CanonWireDecoderTestTableRenamed struct {
 // dispatcher may be nil only for a table with no ambiguous signature — canonWireAmbiguousTestTableRenamed says
 // which this is. A table that has one cannot resolve an attribute's slot from
 // the key alone, so it is refused here rather than at the first attribute that
-// would have needed the hook (ADR-0207 SD5).
+// would have needed the hook (ADR-0210 SD5).
 func NewCanonWireDecoderTestTableRenamed(dml *InEntityTestTableRenamed, dispatcher CanonWireDispatcherTestTableRenamedI) (inst *CanonWireDecoderTestTableRenamed, err error) {
 	if dml == nil {
 		err = eb.Build().Str("tableName", "test-table-renamed").Errorf("no dml builder to decode into")
@@ -422,7 +422,7 @@ func NewCanonWireDecoderTestTableRenamed(dml *InEntityTestTableRenamed, dispatch
 	return
 }
 
-// slotAcceptsChannels is the narrowing step of ADR-0207 SD5: every membership
+// slotAcceptsChannels is the narrowing step of ADR-0210 SD5: every membership
 // the attribute carries must land on a channel the member section at that
 // group's position declares. It is also the check an unambiguous slot goes
 // through, because a signature match does not imply the carriage matches.

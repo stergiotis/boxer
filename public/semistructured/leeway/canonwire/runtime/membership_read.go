@@ -9,7 +9,7 @@ import (
 )
 
 // ReadMembership reads one membership item, `[channel:uint, identity]` — the
-// inverse of WriteMembership (ADR-0207 SD4).
+// inverse of WriteMembership (ADR-0210 SD4).
 //
 // The channel ordinal decides the identity payload's shape, and the shape read
 // is checked against the one the channel's IdentityEncoding declares, so a

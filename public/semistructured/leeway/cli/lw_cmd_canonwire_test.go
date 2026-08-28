@@ -85,7 +85,7 @@ func TestCanonWireSlotsTableNameOverride(t *testing.T) {
 }
 
 // canonWireGoldenEntity is the entity item pinned by the runtime's own golden
-// (ADR-0207 §SD1): version 1, one plain entity id, and two slots — `s` and
+// (ADR-0210 §SD1): version 1, one plain entity id, and two slots — `s` and
 // `u64` — each with one attribute.
 const canonWireGoldenEntity = "8301a10181182aa26173818281820001626869637536348182818201416d07"
 

@@ -58,7 +58,7 @@ func NewCoreDetEncMode() (em cbor.EncMode, err error) {
 // must be sorted before they reach their destination. Heads use the shortest
 // argument encoding and floats the shortest value-preserving width; no
 // quotient rule is applied here, so the writer is usable by a lossless form
-// (ADR-0207) and by canonform's quotient (ADR-0201) alike.
+// (ADR-0210) and by canonform's quotient (ADR-0201) alike.
 //
 // The first write error is kept and every later call is a no-op; callers
 // check Err once per item.

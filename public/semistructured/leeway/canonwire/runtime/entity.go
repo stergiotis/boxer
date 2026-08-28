@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 )
 
-// Version is the leeway canonical wire's form version (ADR-0207 SD1). It is
+// Version is the leeway canonical wire's form version (ADR-0210 SD1). It is
 // the first element of every entity item, and a decoder refuses a version it
 // does not implement.
 //
@@ -87,7 +87,7 @@ type plainSpan struct {
 
 // EntityWriter assembles one entity item of the leeway canonical wire.
 //
-// The item is the 3-element array of ADR-0207 SD1:
+// The item is the 3-element array of ADR-0210 SD1:
 //
 //	[ version:uint, plains:map, tagged:map ]
 //

@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-// The canonical-wire class names (ADR-0207 SD6). They follow the two existing
+// The canonical-wire class names (ADR-0210 SD6). They follow the two existing
 // families: the read-access namer prefixes with ReadAccess and the DML namer
 // with InEntity, so this one prefixes with CanonWire — CanonWireEncoder<Table>,
 // CanonWireTagger<Table>I, CanonWireSlot<Table>E.
@@ -39,7 +39,7 @@ func composeCanonWireSlotSuffix(slotOrdinal int, sectionNames []naming.StylableN
 }
 
 // composeCanonWirePlainSuffix names a plain section by its item type, which is
-// fixed leeway vocabulary rather than a table-authored name (ADR-0207 SD2).
+// fixed leeway vocabulary rather than a table-authored name (ADR-0210 SD2).
 func composeCanonWirePlainSuffix(itemType common.PlainItemTypeE) (suffix string, err error) {
 	name := naming.MustBeValidStylableName(itemType.String())
 	if !name.IsValid() {

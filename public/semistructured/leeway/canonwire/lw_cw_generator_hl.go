@@ -29,7 +29,7 @@ func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech co
 // file: the slot signature constants, the slot enum, the tagger and dispatcher
 // interfaces with their built-in ordinal implementations, the encoder over the
 // table's generated readaccess classes and the decoder into its generated dml
-// builders (ADR-0207 SD5, SD6).
+// builders (ADR-0210 SD5, SD6).
 //
 // The file is emitted into packageName, which must be the package the table's
 // readaccess *and* dml classes were generated into — the codec calls both by

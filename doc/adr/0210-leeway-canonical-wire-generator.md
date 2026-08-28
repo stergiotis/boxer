@@ -6,7 +6,7 @@ reviewed-by: "p@stergiotis"
 reviewed-date: 2026-08-28
 ---
 
-# ADR-0207: leeway canonical wire — a lossless, type-signature-keyed serialization with generated per-table codecs
+# ADR-0210: leeway canonical wire — a lossless, type-signature-keyed serialization with generated per-table codecs
 
 ## Context
 

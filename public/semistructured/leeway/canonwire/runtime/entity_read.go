@@ -11,11 +11,11 @@ import (
 
 // ErrVersion is an entity whose leading version integer is not Version. The
 // wrapping error carries the number seen, because a decoder that refuses a
-// form it does not implement (ADR-0207 SD1) is the one place where the number
+// form it does not implement (ADR-0210 SD1) is the one place where the number
 // itself is the whole diagnosis.
 var ErrVersion = errors.New("unsupported wire version")
 
-// EntityReader reads one entity item, `[version, plains, tagged]` (ADR-0207
+// EntityReader reads one entity item, `[version, plains, tagged]` (ADR-0210
 // SD1), as a cursor over a CborReader.
 //
 // It is the mirror of EntityWriter and, like AttributeReader, it reads the

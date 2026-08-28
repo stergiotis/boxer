@@ -1,4 +1,4 @@
-// Package canonwire is the leeway canonical wire generator — ADR-0207:
+// Package canonwire is the leeway canonical wire generator — ADR-0210:
 // the pieces that read a table description at generation time and
 // emit a per-table encoder and decoder, as opposed to the pieces those emitted
 // classes call at run time.

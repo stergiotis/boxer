@@ -11,7 +11,7 @@ import (
 )
 
 // AttributeKey is the cardinality prefix of an attribute's canonical sort key
-// (ADR-0207 SD3): the membership count, then each value column's cardinality
+// (ADR-0210 SD3): the membership count, then each value column's cardinality
 // in key order. It is what CompareAttributes looks at before it compares any
 // bytes, and it is not itself on the wire — the lengths it records are already
 // implied by the encoded item.
@@ -65,7 +65,7 @@ type Attr struct {
 	cardLen   int32
 }
 
-// CompareAttributes orders two attributes of the same slot as ADR-0207 SD3
+// CompareAttributes orders two attributes of the same slot as ADR-0210 SD3
 // requires: by membership count, then by the value cardinalities
 // lexicographically, then by the memberships' encoded bytes, then by the
 // values' encoded bytes. Equal under all four means duplicate attributes,
@@ -87,7 +87,7 @@ func CompareAttributes(a *Attr, b *Attr) (r int) {
 	return bytes.Compare(a.Vals, b.Vals)
 }
 
-// DeriveCardinality reports the ADR-0207 SD3 cardinality of one encoded value:
+// DeriveCardinality reports the ADR-0210 SD3 cardinality of one encoded value:
 // the element count of an array or of a tag-258 set, 0 for `null`, 1 for any
 // other item. Only the heads that decide the answer are read; the value's
 // remaining bytes, and anything after it in item, are ignored.
@@ -129,7 +129,7 @@ func DeriveCardinality(item []byte) (card uint64, err error) {
 // the slot's signature.
 //
 // A slot of k co-sections carries k membership groups, one per section in
-// signature order (ADR-0207 SD3): the memberships element is then an array of
+// signature order (ADR-0210 SD3): the memberships element is then an array of
 // k arrays, each sorted on its own. For k == 1 it stays the flat array, so a
 // standalone section's bytes are what they always were.
 //
@@ -295,7 +295,7 @@ func (inst *AttributeWriter) BeginValue() (cw *CborWriter) {
 }
 
 // EndValue closes the value opened by BeginValue, derives the column's
-// cardinality from the bytes just written (ADR-0207 SD3, through
+// cardinality from the bytes just written (ADR-0210 SD3, through
 // DeriveCardinality) and advances to the next column. The caller never states
 // a cardinality: it is a function of the value's form, and reading it back off
 // the bytes is what keeps the encoder and the table-free checker in agreement.

@@ -28,7 +28,7 @@ var (
 // canonwire.(*GoClassBuilder).ComposeCodec
 // ./public/semistructured/leeway/canonwire/lw_cw_generator.go:210
 
-// The slot keys of ADR-0207 SD2: a tagged section's CT group, or a co-section
+// The slot keys of ADR-0210 SD2: a tagged section's CT group, or a co-section
 // group's CT signature. They key the entity item's tagged map and are the only
 // thing on the wire that comes from json's description: section names, column
 // names, aspects and hints are not.
@@ -61,7 +61,7 @@ const CanonWireSignatureJsonString = "s"
 const CanonWireSignatureJsonSymbol = "s"
 
 // The plain sections' CT groups. A plain section is keyed on the wire by its
-// item type, which is fixed leeway vocabulary (ADR-0207 SD2, fork 1); its group
+// item type, which is fixed leeway vocabulary (ADR-0210 SD2, fork 1); its group
 // is emitted so a decoder can check the two tables agree on the types before it
 // reads a single entity.
 
@@ -137,7 +137,7 @@ func (inst CanonWireSlotJsonE) Signature() string {
 }
 
 // Ambiguous reports whether the slot's signature is carried by more than one
-// slot of this table. Those are the slots ADR-0207 SD5's dispatch has to
+// slot of this table. Those are the slots ADR-0210 SD5's dispatch has to
 // resolve: the encoder consults its tagger for every attribute of one, and for
 // no attribute of any other.
 func (inst CanonWireSlotJsonE) Ambiguous() bool {
@@ -158,7 +158,7 @@ func (inst CanonWireSlotJsonE) Ambiguous() bool {
 	return false
 }
 
-// CanonWireTaggerJsonI is the encoder half of ADR-0207 SD5's dispatch pair.
+// CanonWireTaggerJsonI is the encoder half of ADR-0210 SD5's dispatch pair.
 //
 // It is consulted for every attribute of a slot whose signature is ambiguous
 // in this table, and its small opaque integer rides as the attribute item's
@@ -168,7 +168,7 @@ type CanonWireTaggerJsonI interface {
 	Tag(slot CanonWireSlotJsonE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64
 }
 
-// CanonWireOrdinalTaggerJson is the built-in tagger of ADR-0207 SD5.
+// CanonWireOrdinalTaggerJson is the built-in tagger of ADR-0210 SD5.
 //
 // It returns the slot's ordinal within its ambiguity set, which round-trips
 // between two tables that declare the same sections in the same order and is
@@ -192,7 +192,7 @@ func (inst CanonWireOrdinalTaggerJson) Tag(slot CanonWireSlotJsonE, entityIdx ru
 	return 0
 }
 
-// CanonWireEncoderJson writes entities of a loaded ReadAccessJson as the leeway canonical wire (ADR-0207).
+// CanonWireEncoderJson writes entities of a loaded ReadAccessJson as the leeway canonical wire (ADR-0210).
 //
 // It reads the generated readaccess accessors directly: no reflection, no
 // arrow.Array type switch, one typed runtime call per column. The buffers are
@@ -288,7 +288,7 @@ func NewCanonWireEncoderJson(ra *ReadAccessJson, tagger CanonWireTaggerJsonI) (i
 
 // EncodeEntity writes one entity item to w: the plain sections under their item
 // types, then the tagged slots under their CT signatures, both in the order the
-// form fixes (ADR-0207 SD1–SD3). The attributes are held back only until the
+// form fixes (ADR-0210 SD1–SD3). The attributes are held back only until the
 // item is complete, which is what lets the writer sort them into canonical
 // order.
 func (inst *CanonWireEncoderJson) EncodeEntity(entityIdx runtime.EntityIdx, w io.Writer) (err error) {
@@ -527,13 +527,13 @@ func (inst *CanonWireEncoderJson) EncodeAll(w io.Writer) (err error) {
 // canonWireAmbiguousJson reports whether any signature of json is carried by more than one slot.
 // It is what the decoder's constructor checks: an ambiguous table cannot be
 // decoded without a dispatcher, and the refusal is at construction rather than
-// at the first attribute that needs one (ADR-0207 SD5).
+// at the first attribute that needs one (ADR-0210 SD5).
 const canonWireAmbiguousJson = true
 
 // canonWireAcceptMasksJson holds, per slot in slot order, the membership channels each member
 // section accepts — one bitmask per section in signature order, over the
 // mappingplan channel ordinals. It is the input to the narrowing step of
-// ADR-0207 SD5: a section that cannot store the memberships an attribute
+// ADR-0210 SD5: a section that cannot store the memberships an attribute
 // carries is not that attribute's target.
 var canonWireAcceptMasksJson = [][]uint32{
 	{0x20}, // undefined
@@ -557,7 +557,7 @@ var canonWireAmbiguitySetJson00 = []CanonWireSlotJsonE{CanonWireSlotJsonUndefine
 // this slice.
 var canonWireAmbiguitySetJson04 = []CanonWireSlotJsonE{CanonWireSlotJsonString, CanonWireSlotJsonSymbol}
 
-// CanonWireDispatcherJsonI is the decoder half of ADR-0207 SD5's dispatch pair.
+// CanonWireDispatcherJsonI is the decoder half of ADR-0210 SD5's dispatch pair.
 //
 // It is consulted only for an attribute whose signature more than one slot of
 // this table carries *and* whose memberships more than one of those slots can
@@ -572,7 +572,7 @@ type CanonWireDispatcherJsonI interface {
 	Dispatch(candidates []CanonWireSlotJsonE, attr *cwruntime.AttributeView) (slot CanonWireSlotJsonE, err error)
 }
 
-// CanonWireOrdinalDispatcherJson is the built-in dispatcher of ADR-0207 SD5 and the mirror of CanonWireOrdinalTaggerJson: it reads
+// CanonWireOrdinalDispatcherJson is the built-in dispatcher of ADR-0210 SD5 and the mirror of CanonWireOrdinalTaggerJson: it reads
 // the attribute's discriminator as the slot's ordinal within the full
 // ambiguity set. It round-trips between two tables that declare the same
 // sections in the same order, and is explicitly that declaration-order
@@ -615,7 +615,7 @@ func (inst CanonWireOrdinalDispatcherJson) Dispatch(candidates []CanonWireSlotJs
 	return
 }
 
-// CanonWireDecoderJson decodes leeway canonical wire entities (ADR-0207) into a InEntityJson.
+// CanonWireDecoderJson decodes leeway canonical wire entities (ADR-0210) into a InEntityJson.
 //
 // It drives the generated dml builders directly: the plain setters, then one
 // BeginAttribute / container append / AddMembership… / EndAttribute per wire
@@ -643,7 +643,7 @@ type CanonWireDecoderJson struct {
 // dispatcher may be nil only for a table with no ambiguous signature — canonWireAmbiguousJson says
 // which this is. A table that has one cannot resolve an attribute's slot from
 // the key alone, so it is refused here rather than at the first attribute that
-// would have needed the hook (ADR-0207 SD5).
+// would have needed the hook (ADR-0210 SD5).
 func NewCanonWireDecoderJson(dml *InEntityJson, dispatcher CanonWireDispatcherJsonI) (inst *CanonWireDecoderJson, err error) {
 	if dml == nil {
 		err = eb.Build().Str("tableName", "json").Errorf("no dml builder to decode into")
@@ -661,7 +661,7 @@ func NewCanonWireDecoderJson(dml *InEntityJson, dispatcher CanonWireDispatcherJs
 	return
 }
 
-// slotAcceptsChannels is the narrowing step of ADR-0207 SD5: every membership
+// slotAcceptsChannels is the narrowing step of ADR-0210 SD5: every membership
 // the attribute carries must land on a channel the member section at that
 // group's position declares. It is also the check an unambiguous slot goes
 // through, because a signature match does not imply the carriage matches.

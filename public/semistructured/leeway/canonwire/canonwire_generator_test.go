@@ -38,12 +38,12 @@ import (
 //   - net_table: the four network lanes, whose readaccess accessors hand out
 //     packed lane values (uint32 / [16]byte / [5]byte / [17]byte) rather than
 //     net/netip types;
-//   - json: the ambiguity story of ADR-0207 SD2 — four value-less sections
+//   - json: the ambiguity story of ADR-0210 SD2 — four value-less sections
 //     sharing the empty signature and two sharing `s`;
 //   - place: a co-section group, which is one slot with two membership groups,
 //     beside a standalone section whose `h` and `m` columns are co-containers;
 //   - test_table_renamed: test_table's types under different names, orders,
-//     hints and aspects — the cross-table requirement of ADR-0207;
+//     hints and aspects — the cross-table requirement of ADR-0210;
 //   - test_table_narrow: test_table with one section's membership spec
 //     narrowed, which is the cross-table refusal.
 //
@@ -136,7 +136,7 @@ func networkSampleTableDesc() (tbl common.TableDesc, err error) {
 
 // jsonTableDesc is the leeway JSON mapping in its lossless variant: four
 // value-less sections share the empty signature and two share `s`, which is the
-// pair of ambiguity sets ADR-0207 SD5's dispatch exists for.
+// pair of ambiguity sets ADR-0210 SD5's dispatch exists for.
 func jsonTableDesc() (tbl common.TableDesc, err error) {
 	var manip *common.TableManipulator
 	manip, err = common.NewTableManipulator()
@@ -182,7 +182,7 @@ func placeTableDesc() (tbl common.TableDesc, err error) {
 	{
 		// An `h` column beside an `m` column: the two are DML co-containers —
 		// one element is appended to both at once — so the set's length is
-		// content and the form keeps its duplicates (ADR-0207 SD3).
+		// content and the form keeps its duplicates (ADR-0210 SD3).
 		sec := manip.TaggedValueSection("tags").
 			AddSectionMembership(common.MembershipSpecLowCardVerbatim)
 		sec.TaggedValueColumn("tag", ctabb.Sh)
@@ -198,7 +198,7 @@ func placeTableDesc() (tbl common.TableDesc, err error) {
 // columns swapped, and different encoding hints, value aspects and section
 // use-aspects.
 //
-// None of what differs is on the wire (ADR-0207 SD2), so an entity written
+// None of what differs is on the wire (ADR-0210 SD2), so an entity written
 // through test_table must decode into this table and back. The column mapping
 // follows from the key order — the canonical types stable-sorted — and not from
 // the names:
@@ -276,7 +276,7 @@ func renamedSampleTableDesc() (tbl common.TableDesc, err error) {
 // narrowSampleTableDesc is sampleTableDesc with the `text` section's membership
 // spec narrowed to LowCardRef alone. Every signature is unchanged, so the slot
 // key still matches; what does not match is the carriage, and the narrowing
-// step of ADR-0207 SD5 is what turns that into ErrChannelNotAccepted rather
+// step of ADR-0210 SD5 is what turns that into ErrChannelNotAccepted rather
 // than a silently dropped membership.
 func narrowSampleTableDesc() (tbl common.TableDesc, err error) {
 	var manip *common.TableManipulator
@@ -391,7 +391,7 @@ func TestGenerateCanonWireTestTableNarrow(t *testing.T) {
 }
 
 // The renamed table must key its slots exactly as the source does: the slot
-// signatures are the whole cross-table contract of ADR-0207 SD2, and if the
+// signatures are the whole cross-table contract of ADR-0210 SD2, and if the
 // renaming, the reordering or the re-hinting moved one of them the crosstable
 // test would fail with a decode error rather than with a mismatch.
 func TestRenamedTableKeysTheSameSlots(t *testing.T) {
@@ -481,7 +481,7 @@ func parseAcceptMasks(t *testing.T, path string) (masks [][]uint32) {
 
 // TestGeneratedAcceptMasksMatchSpecs pins the generated accept masks of every
 // golden to SpecChannels of the section's declared MembershipSpecE. They are
-// the whole input to the narrowing step of ADR-0207 SD5: a mask too wide lets
+// the whole input to the narrowing step of ADR-0210 SD5: a mask too wide lets
 // an attribute into a section that cannot store its carriage, and a mask too
 // narrow refuses one the table does accept.
 func TestGeneratedAcceptMasksMatchSpecs(t *testing.T) {

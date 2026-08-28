@@ -17,7 +17,7 @@ import (
 var ErrNotCanonical = errors.New("item is well-formed but not in canonical order")
 
 // AttributeReader reads one attribute item, `[memberships, v_1, …, v_n(, disc)]`
-// (ADR-0207 SD3), as a cursor over a CborReader.
+// (ADR-0210 SD3), as a cursor over a CborReader.
 //
 // The values are not read here: the generated decoder knows each column's
 // canonical type and calls the typed value readers on Reader() itself, which
@@ -30,7 +30,7 @@ var ErrNotCanonical = errors.New("item is well-formed but not in canonical order
 // The call order is Begin, then NextGroup followed by its Membership calls
 // once per membership group, then the nCols values on Reader(), Discriminator
 // when Begin reported one, End. A slot of k co-sections carries k groups in
-// signature order (ADR-0207 SD3); a standalone section carries one, and its
+// signature order (ADR-0210 SD3); a standalone section carries one, and its
 // memberships element is the flat array NextGroup then reads.
 //
 // One reader per decoding goroutine, reused across attributes; not

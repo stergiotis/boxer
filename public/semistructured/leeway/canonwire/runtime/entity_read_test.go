@@ -393,7 +393,7 @@ type randMemb struct {
 
 type randAttr struct {
 	// membs holds one membership list per membership group — one group for a
-	// standalone section, k for a co-section group of k (ADR-0207 SD3).
+	// standalone section, k for a co-section group of k (ADR-0210 SD3).
 	membs   [][]randMemb
 	vals    []any
 	disc    uint64
@@ -449,7 +449,7 @@ func drawValue(rt *rapid.T, kind int, label string) (v any) {
 }
 
 // writeValue writes one drawn value and returns the cardinality the form
-// derives from it (ADR-0207 SD3).
+// derives from it (ADR-0210 SD3).
 func writeValue(cw *CborWriter, sw *SetWriter, kind int, v any) (card uint64) {
 	switch kind {
 	case kindUint:

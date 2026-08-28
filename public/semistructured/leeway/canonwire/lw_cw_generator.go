@@ -15,7 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-// The encoder generator of ADR-0207 SD6, and the plan both directions are
+// The encoder generator of ADR-0210 SD6, and the plan both directions are
 // emitted from. It reads the slot table of SD2 and emits, for one table, the
 // code that walks that table's generated readaccess classes and writes each
 // entity through the canonwire runtime writers; the decoder half is in
@@ -153,7 +153,7 @@ type tablePlan struct {
 	scratches     []scratchField
 	needsSet      bool
 
-	// The decoder half (ADR-0207 SD5, SD6).
+	// The decoder half (ADR-0210 SD5, SD6).
 	dmlClass          string
 	decoderClass      string
 	dispatcherIface   string
@@ -365,7 +365,7 @@ func buildTablePlan(tableName naming.StylableName, tblDesc *common.TableDesc, cl
 }
 
 // ordinalTaggerName names the built-in tagger implementation. GoClassNamerI has
-// no method of its own for it — ADR-0207 SD6 names the pluggable pair, not the
+// no method of its own for it — ADR-0210 SD6 names the pluggable pair, not the
 // built-in — so it is derived from the tagger interface's name: the trailing I
 // of the Go interface convention dropped, and "Ordinal" put where the family
 // prefix ends. A namer that does not use that prefix gets a suffixed name,
@@ -486,7 +486,7 @@ func elementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingaspect
 }
 
 // valueWriteCall maps a column's canonical type to the runtime writer call for
-// one value of it (ADR-0207 SD3), over a local named v. The container modifier
+// one value of it (ADR-0210 SD3), over a local named v. The container modifier
 // is stripped first: an `h` array and an `m` set write the same element form,
 // and only their framing differs.
 //
@@ -641,7 +641,7 @@ func valueReadCall(ct canonicaltypes.PrimitiveAstNodeI) (call string, fixedWidth
 
 func emitSlotKeys(b *strings.Builder, plan *tablePlan) (err error) {
 	_, err = fmt.Fprintf(b, `
-// The slot keys of ADR-0207 SD2: a tagged section's CT group, or a co-section
+// The slot keys of ADR-0210 SD2: a tagged section's CT group, or a co-section
 // group's CT signature. They key the entity item's tagged map and are the only
 // thing on the wire that comes from %s's description: section names, column
 // names, aspects and hints are not.
@@ -659,7 +659,7 @@ func emitSlotKeys(b *strings.Builder, plan *tablePlan) (err error) {
 	if len(plan.plains) > 0 {
 		_, err = b.WriteString(`
 // The plain sections' CT groups. A plain section is keyed on the wire by its
-// item type, which is fixed leeway vocabulary (ADR-0207 SD2, fork 1); its group
+// item type, which is fixed leeway vocabulary (ADR-0210 SD2, fork 1); its group
 // is emitted so a decoder can check the two tables agree on the types before it
 // reads a single entity.
 `)
@@ -744,7 +744,7 @@ func (inst %s) Signature() string {
 
 	_, err = fmt.Fprintf(b, `
 // Ambiguous reports whether the slot's signature is carried by more than one
-// slot of this table. Those are the slots ADR-0207 SD5's dispatch has to
+// slot of this table. Those are the slots ADR-0210 SD5's dispatch has to
 // resolve: the encoder consults its tagger for every attribute of one, and for
 // no attribute of any other.
 func (inst %s) Ambiguous() bool {
@@ -780,7 +780,7 @@ func (inst %s) Ambiguous() bool {
 
 func emitTagger(b *strings.Builder, plan *tablePlan) (err error) {
 	_, err = fmt.Fprintf(b, `
-// %s is the encoder half of ADR-0207 SD5's dispatch pair.
+// %s is the encoder half of ADR-0210 SD5's dispatch pair.
 //
 // It is consulted for every attribute of a slot whose signature is ambiguous
 // in this table, and its small opaque integer rides as the attribute item's
@@ -790,7 +790,7 @@ type %s interface {
 	Tag(slot %s, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64
 }
 
-// %s is the built-in tagger of ADR-0207 SD5.
+// %s is the built-in tagger of ADR-0210 SD5.
 //
 // It returns the slot's ordinal within its ambiguity set, which round-trips
 // between two tables that declare the same sections in the same order and is
@@ -835,7 +835,7 @@ func (inst %s) Tag(slot %s, entityIdx runtime.EntityIdx, attrIdx runtime.Attribu
 
 func emitEncoder(b *strings.Builder, plan *tablePlan) (err error) {
 	_, err = fmt.Fprintf(b, `
-// %s writes entities of a loaded %s as the leeway canonical wire (ADR-0207).
+// %s writes entities of a loaded %s as the leeway canonical wire (ADR-0210).
 //
 // It reads the generated readaccess accessors directly: no reflection, no
 // arrow.Array type switch, one typed runtime call per column. The buffers are
@@ -951,7 +951,7 @@ func emitEncodeEntity(b *strings.Builder, plan *tablePlan) (err error) {
 	_, err = fmt.Fprintf(b, `
 // EncodeEntity writes one entity item to w: the plain sections under their item
 // types, then the tagged slots under their CT signatures, both in the order the
-// form fixes (ADR-0207 SD1–SD3). The attributes are held back only until the
+// form fixes (ADR-0210 SD1–SD3). The attributes are held back only until the
 // item is complete, which is what lets the writer sort them into canonical
 // order.
 func (inst *%s) EncodeEntity(entityIdx runtime.EntityIdx, w io.Writer) (err error) {

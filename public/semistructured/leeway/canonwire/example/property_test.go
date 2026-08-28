@@ -18,7 +18,7 @@ import (
 	rartime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
 
-// The properties of ADR-0207 M2, over three of the goldens: test_table
+// The properties of ADR-0210 M2, over three of the goldens: test_table
 // (scalars, an `h` container, two membership channels), place (a co-section
 // group and a section whose `h` and `m` columns are co-containers) and json
 // (the two ambiguity sets, driven through the built-in ordinal tagger and

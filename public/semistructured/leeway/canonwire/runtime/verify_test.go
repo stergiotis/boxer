@@ -54,7 +54,7 @@ func rawAttr(t require.TestingT, membs [][]byte, vals ...[]byte) (b []byte) {
 }
 
 // rawAttrGroups builds an attribute whose memberships element is the co-section
-// form of ADR-0207 SD3: one array per membership group, in signature order.
+// form of ADR-0210 SD3: one array per membership group, in signature order.
 func rawAttrGroups(t require.TestingT, groups [][][]byte, vals ...[]byte) (b []byte) {
 	return rawEncode(t, func(cw *CborWriter) {
 		cw.ArrayHead(1 + len(vals))

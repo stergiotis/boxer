@@ -345,7 +345,7 @@ func (c *CborReader) ReadText() (b []byte) {
 
 // ReadBytesInto reads a byte string of exactly len(dst) bytes and copies it
 // into dst. It is the read form of the fixed-width `y<N>` lane, whose Go type
-// is an array rather than a slice, and of the padded fixed-width bytes ADR-0207
+// is an array rather than a slice, and of the padded fixed-width bytes ADR-0210
 // SD3 keeps as content.
 func (c *CborReader) ReadBytesInto(dst []byte) {
 	b := c.ReadBytes()

@@ -16,13 +16,13 @@ import (
 	rartime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
 
-// The round-trip suite of ADR-0207 M2: dml → batch → Encoder → bytes₁ →
+// The round-trip suite of ADR-0210 M2: dml → batch → Encoder → bytes₁ →
 // Decoder → batch → Encoder → bytes₂, with bytes₁ == bytes₂ and the two
 // batches agreeing under the generated read accessors.
 //
 // The comparison of the two batches is deliberately **order-insensitive**
 // within a section: the form sorts a slot's attributes into canonical order
-// (ADR-0207 SD3), and it sorts an attribute's memberships too, so a decoded
+// (ADR-0210 SD3), and it sorts an attribute's memberships too, so a decoded
 // batch holds the same attributes as the written one but not in the order they
 // were written. Each attribute is rendered as one line, the lines of one
 // section of one entity are sorted, and the sorted lists are compared — a
@@ -67,7 +67,7 @@ func seqOrdered[T any](seq iter.Seq[T]) (line string) {
 }
 
 // seqMultiset renders an `m` column: sorted, duplicates kept. The form sorts a
-// set's elements bytewise and keeps its length (ADR-0207 SD3), so what survives
+// set's elements bytewise and keeps its length (ADR-0210 SD3), so what survives
 // the round trip is the multiset, not the stored order — and not the pairing
 // with the co-container `h` column beside it either.
 func seqMultiset[T any](seq iter.Seq[T]) (line string) {
@@ -243,7 +243,7 @@ func netTableLines(ra *ReadAccessNetTable) (perEntity []string) {
 }
 
 // writeNetTable drives the four network lanes. The prefixes are written
-// **masked**: ADR-0207 SD3 keeps a prefix's host bits out of the wire (RFC
+// **masked**: ADR-0210 SD3 keeps a prefix's host bits out of the wire (RFC
 // 9164), so an unmasked prefix would come back masked and the two batches
 // would differ where the bytes do not.
 func writeNetTable(t *testing.T, dml *InEntityNetTable) {
@@ -543,7 +543,7 @@ func TestRoundTripJson(t *testing.T) {
 
 	// The ordinal pair is the only one that can round-trip null vs undefined:
 	// they have the same signature *and* the same memberships, so nothing on
-	// the wire but the discriminator tells them apart (ADR-0207 SD5).
+	// the wire but the discriminator tells them apart (ADR-0210 SD5).
 	enc, err := NewCanonWireEncoderJson(raFirst, CanonWireOrdinalTaggerJson{})
 	require.NoError(t, err)
 	var first bytes.Buffer

@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-// The decoder generator of ADR-0207 SD5 and SD6. It reads the same slot table
+// The decoder generator of ADR-0210 SD5 and SD6. It reads the same slot table
 // the encoder does and emits, for one table, the code that walks an entity
 // item and drives that table's generated dml builders.
 //

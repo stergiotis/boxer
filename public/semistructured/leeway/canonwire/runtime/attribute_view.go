@@ -5,13 +5,13 @@ import (
 )
 
 // The table-free view a generated decoder hands to the pluggable dispatch of
-// ADR-0207 SD5. It carries what the wire said about one attribute — its
+// ADR-0210 SD5. It carries what the wire said about one attribute — its
 // memberships, its values as raw CBOR items, and the optional discriminator —
 // and nothing about either endpoint's table description, so a dispatcher
 // written against it works for any table that declares the signature.
 
 // MembershipView is one membership of an attribute as the decoder read it
-// (ADR-0207 SD4). The fields a channel does not carry are zero: a ref channel
+// (ADR-0210 SD4). The fields a channel does not carry are zero: a ref channel
 // leaves Verbatim and Params nil.
 //
 // Verbatim and Params are views into the buffer handed to the decoder; they

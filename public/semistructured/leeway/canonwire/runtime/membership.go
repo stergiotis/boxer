@@ -14,7 +14,7 @@ import (
 var ErrUnknownChannel = errors.New("unknown membership channel")
 
 // WriteMembership writes one membership item, `[channel:uint, identity]`
-// (ADR-0207 SD4).
+// (ADR-0210 SD4).
 //
 // The first element is the mappingplan.MembershipChannel ordinal; the second is
 // the ADR-0201 SD5 identity payload for the channel's IdentityEncoding:

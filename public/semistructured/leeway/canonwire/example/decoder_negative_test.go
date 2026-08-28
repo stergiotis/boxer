@@ -32,7 +32,7 @@ func buildEntity(t *testing.T, write func(w *cwruntime.CborWriter)) []byte {
 	return buf.Bytes()
 }
 
-// TestDecoderNilDispatcherRefused is the construction check of ADR-0207 SD5:
+// TestDecoderNilDispatcherRefused is the construction check of ADR-0210 SD5:
 // the JSON table has two ambiguous signatures, so a decoder for it cannot be
 // built without a dispatcher, and the refusal is once and early rather than at
 // the first attribute that would have needed the hook.
@@ -89,7 +89,7 @@ func TestDecoderUnknownPlain(t *testing.T) {
 	require.ErrorIs(t, err, cwruntime.ErrUnknownPlain)
 }
 
-// TestDecoderChannelNotAccepted drives the narrowing step of ADR-0207 SD5 on
+// TestDecoderChannelNotAccepted drives the narrowing step of ADR-0210 SD5 on
 // an unambiguous slot: place's `tags` section declares LowCardVerbatim only, so
 // a membership arriving on the LowCardRef channel has nowhere to be stored even
 // though the signature matches.
@@ -146,7 +146,7 @@ func TestDecoderCoContainerLength(t *testing.T) {
 }
 
 // TestDecoderVersionMismatch: the form is not forwards-compatible by design
-// (ADR-0207 SD1), so a decoder that meets a version it does not implement has
+// (ADR-0210 SD1), so a decoder that meets a version it does not implement has
 // no grounds to guess at the rest.
 func TestDecoderVersionMismatch(t *testing.T) {
 	item := buildEntity(t, func(w *cwruntime.CborWriter) {
@@ -233,7 +233,7 @@ func (inst firstCandidateDispatcher) Dispatch(candidates []CanonWireSlotJsonE, a
 // story. Encoded without a tagger no attribute carries a discriminator, so the
 // built-in ordinal dispatcher has nothing to read and refuses; a dispatcher
 // that guesses succeeds, but every attribute of an ambiguity set lands in that
-// set's first slot. This is the stated consequence of ADR-0207 SD5, not a bug:
+// set's first slot. This is the stated consequence of ADR-0210 SD5, not a bug:
 // null and undefined have the same signature *and* the same memberships.
 func TestJsonWithoutTaggerCollapsesAmbiguity(t *testing.T) {
 	src := NewInEntityJson(memory.DefaultAllocator, 128)
