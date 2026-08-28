@@ -2,12 +2,14 @@ package waveform
 
 import (
 	"math"
+	"sort"
 	"time"
 
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
 	"github.com/stergiotis/boxer/public/science/audio/track"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -28,7 +30,15 @@ type Visuals struct {
 	ChannelDivider color.Color
 	// Unbuilt marks the span of the track whose peaks are not built yet
 	// (ADR-0208 SD4): a hairline where the waveform will appear.
-	Unbuilt       color.Color
+	Unbuilt color.Color
+	// Region, Marker and Curve are the default tints of the layers (SD8); a
+	// layer item with a colour of its own overrides them. CurveStrip is the
+	// strip background, LabelText the small labels on regions and strips.
+	Region        color.Color
+	Marker        color.Color
+	Curve         color.Color
+	CurveStrip    color.Color
+	LabelText     color.Color
 	Ruler         axisruler.Style
 	RulerHeight   float32 // the strip under the waveform holding the ruler
 	ChannelGap    float32 // between channel bands when channels are split
@@ -46,6 +56,11 @@ func DefaultVisuals() (vis Visuals) {
 		HoverText:      color.Hex(styletokens.NeutralTextPrimary.AsHex()),
 		ChannelDivider: color.Hex(styletokens.NeutralBorderFaint.AsHex()),
 		Unbuilt:        color.Hex(styletokens.NeutralBorderFaint.AsHex()),
+		Region:         color.Hex(styletokens.SuccessDefault.AsHex()),
+		Marker:         color.Hex(styletokens.InfoDefault.AsHex()),
+		Curve:          color.Hex(styletokens.WarningStrong.AsHex()),
+		CurveStrip:     color.Hex(styletokens.NeutralBgSurface.AsHex()),
+		LabelText:      color.Hex(styletokens.NeutralTextSecondary.AsHex()),
 		Ruler:          axisruler.DefaultStyle(),
 		RulerHeight:    20,
 		ChannelGap:     2,
@@ -125,6 +140,36 @@ type Player struct {
 	// it did not have yet (ADR-0208 SD3): the pyramid is drawn instead and
 	// the frame loop is kept hot until the window arrives.
 	windowWait bool
+
+	// Layers (SD8): host-owned; maxLen bounds the visible-region search and
+	// is recomputed when the Regions slice header changes or an edit ends.
+	layers       *Layers
+	regionsPtr   *Region
+	regionsLen   int
+	maxRegionLen int64
+	hoverRegion  int
+	events       Events
+	edit         regionEdit
+	readout      ReadoutE
+	curveXs      []float32
+	curveYs      []float32
+
+	// Minimap drag state (SD10).
+	miniDragging bool
+	miniOriginX  float32
+	miniDragFrom float64
+}
+
+// regionEdit is an in-progress drag on an editable region.
+type regionEdit struct {
+	active   bool
+	index    int
+	edge     int8 // -1 left edge, 0 body, +1 right edge
+	originX  float32
+	origFrom int64
+	origTo   int64
+	from     int64
+	to       int64
 }
 
 const (
@@ -173,6 +218,31 @@ func (inst *Player) View() (v View) { return inst.view }
 
 // Size returns the canvas size of the last Render, in logical pixels.
 func (inst *Player) Size() (w, h float32) { return inst.width, inst.height }
+
+// SetLayers hands the player the host's annotations (SD8). The host keeps
+// ownership and may mutate the slices between frames; nil clears.
+func (inst *Player) SetLayers(l *Layers) { inst.layers = l }
+
+// Layers returns the annotations set by [Player.SetLayers].
+func (inst *Player) Layers() (l *Layers) { return inst.layers }
+
+// Events reports what the pointer did to the layers during the last frame.
+func (inst *Player) Events() (ev Events) { return inst.events }
+
+// SetReadout selects how frames are printed on the ruler and by
+// [Player.FormatOffset] (SD9).
+func (inst *Player) SetReadout(mode ReadoutE) { inst.readout = mode }
+
+// Readout returns the readout mode.
+func (inst *Player) Readout() (mode ReadoutE) { return inst.readout }
+
+// isAbsolute reports whether frames print as wall-clock time this frame.
+func (inst *Player) isAbsolute() (yes bool) {
+	if !inst.tr.TimeBase().IsAbsolute() {
+		return false
+	}
+	return inst.readout != ReadoutRelative
+}
 
 // SetView replaces the view; it is clamped at the next Render.
 func (inst *Player) SetView(v View) {
@@ -303,8 +373,12 @@ func (inst *Player) frame(w, h float32) {
 	ptr := sm.GetPointer()
 
 	inst.hoverOk, inst.clickedOk = false, false
+	inst.events = Events{RegionClicked: -1, MarkerClicked: -1}
+	inst.hoverRegion = -1
+	inst.refreshRegionBound()
+	bandsH := inst.bandsHeight(waveH)
 	if live {
-		inst.handleInput(cur, areaCur, areaOk, flags, wheel, ptr, frames, w, waveH)
+		inst.handleInput(cur, areaCur, areaOk, flags, wheel, ptr, frames, w, waveH, bandsH)
 	}
 	if !inst.opts.NoKeyboard {
 		inst.handleKeys(sm, frames, w)
@@ -317,7 +391,10 @@ func (inst *Player) frame(w, h float32) {
 	inst.windowWait = false
 
 	c.PaintClipPush(0, 0, w, h).Send()
-	inst.paintWave(w, waveH, pos)
+	inst.paintWave(w, bandsH, pos)
+	inst.paintRegions(w, bandsH)
+	inst.paintMarkers(w, bandsH)
+	inst.paintCurves(w, bandsH)
 	inst.paintRuler(w, waveH)
 	inst.paintPlayhead(pos, w, waveH)
 	inst.paintHover(w, waveH)
@@ -335,16 +412,20 @@ func (inst *Player) frame(w, h float32) {
 
 	// Keep the loop hot while anything is still arriving: the sink's clock,
 	// a drag, a raw window in flight, or a pyramid still building.
-	if playing || inst.dragging || inst.windowWait || inst.tr.WindowPending() || !inst.tr.Peaks().IsComplete() {
+	if playing || inst.dragging || inst.edit.active || inst.windowWait || inst.tr.WindowPending() || !inst.tr.Peaks().IsComplete() {
 		c.RequestRepaintAfter(1.0 / 60)
 	}
 }
 
 func (inst *Player) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, flags c.ResponseFlagsE,
-	wheel c.CanvasWheelValue, ptr c.PointerValue, frames int64, w, waveH float32) {
+	wheel c.CanvasWheelValue, ptr c.PointerValue, frames int64, w, waveH, bandsH float32) {
 	posX, posY, posOk := cur.PosX, cur.PosY, !isNaN32(cur.PosX) && !isNaN32(cur.PosY)
 	if ptr.Valid && !isNaN32(ptr.X) && !isNaN32(ptr.Y) && !isNaN32(cur.OriginX) && !isNaN32(cur.OriginY) {
 		posX, posY, posOk = ptr.X-cur.OriginX, ptr.Y-cur.OriginY, true
+	}
+	var regions []Region
+	if inst.layers != nil {
+		regions = inst.layers.Regions
 	}
 
 	if flags.HasDragStarted() && posOk {
@@ -353,10 +434,22 @@ func (inst *Player) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, f
 			// The sense region's drag-started row carries the press origin.
 			origin = areaCur.PosX
 		}
-		inst.dragging = true
-		inst.dragOriginX = origin
-		inst.dragFromFrame = inst.view.FromFrame
+		// An editable region under the press takes the drag (SD8): its edge
+		// resizes, its body moves. Anything else pans.
+		if idx, edge, ok := hitRegion(regions, inst.maxRegionLen, inst.view, w, origin); ok && posY >= 0 && posY <= bandsH && regions[idx].Editable {
+			r := regions[idx]
+			inst.edit = regionEdit{active: true, index: idx, edge: edge, originX: origin,
+				origFrom: r.FromFrame, origTo: r.ToFrame, from: r.FromFrame, to: r.ToFrame}
+		} else {
+			inst.dragging = true
+			inst.dragOriginX = origin
+			inst.dragFromFrame = inst.view.FromFrame
+		}
 		inst.focusKeys()
+	}
+	if inst.edit.active && (flags.HasDragged() || flags.HasDragStopped()) && posOk {
+		inst.applyRegionDrag(posX, frames)
+		inst.events.RegionEdit = &RegionEdit{Index: inst.edit.index, FromFrame: inst.edit.from, ToFrame: inst.edit.to, Done: flags.HasDragStopped()}
 	}
 	if inst.dragging && (flags.HasDragged() || flags.HasDragStopped()) && posOk {
 		v := inst.view
@@ -365,16 +458,33 @@ func (inst *Player) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, f
 	}
 	if flags.HasDragStopped() {
 		inst.dragging = false
+		if inst.edit.active {
+			inst.edit.active = false
+			inst.regionsLen = -1 // the host's edit may have changed the longest region
+		}
 	}
 
 	if posOk && flags.HasContainsPointer() && posX >= 0 && posX <= w && posY >= 0 && posY <= waveH {
 		inst.hoverFrame = clampFrame(inst.view.FrameAtX(posX), frames)
 		inst.hoverOk = true
+		if posY <= bandsH {
+			if idx, _, ok := hitRegion(regions, inst.maxRegionLen, inst.view, w, posX); ok {
+				inst.hoverRegion = idx
+			}
+		}
 	}
 	if posOk && flags.HasPrimaryClicked() && posY >= 0 && posY <= waveH {
 		f := clampFrame(inst.view.FrameAtX(posX), frames)
 		inst.SeekTo(f)
 		inst.clickedFrame, inst.clickedOk = f, true
+		if posY <= bandsH {
+			if idx, _, ok := hitRegion(regions, inst.maxRegionLen, inst.view, w, posX); ok {
+				inst.events.RegionClicked = idx
+			}
+			if inst.layers != nil {
+				inst.events.MarkerClicked = hitMarker(inst.layers.Markers, inst.view, posX)
+			}
+		}
 		// A click's release surrenders the focus its press asked for.
 		inst.focusKeys()
 	}
@@ -654,16 +764,16 @@ func (inst *Player) paintRuler(w, waveH float32) {
 	if span <= 0 {
 		return
 	}
-	step := pickDurationStep(span, w, rulerTargetPx)
-	inst.tickBuf = durationTicks(fromD, toD, step, inst.tickBuf)
+	step := timeticks.PickOffsetStep(span, w, rulerTargetPx)
+	inst.tickBuf = timeticks.OffsetTicks(fromD, toD, step, inst.tickBuf)
 	inst.ticks = inst.ticks[:0]
 	for _, t := range inst.tickBuf {
 		x := float32(float64(t-fromD) / float64(span) * float64(w))
 		var label string
-		if tb.IsAbsolute() {
-			label = formatClock(tb.Epoch.Add(t), step)
+		if inst.isAbsolute() {
+			label = timeticks.FormatClock(tb.Epoch.Add(t), step)
 		} else {
-			label = formatOffset(t, step)
+			label = timeticks.FormatOffset(t, step)
 		}
 		inst.ticks = append(inst.ticks, axisruler.Tick{Pos: x, Label: label})
 	}
@@ -714,10 +824,10 @@ func (inst *Player) readoutStep() (step time.Duration) {
 func (inst *Player) formatFrame(frame int64, step time.Duration) (s string) {
 	tb := inst.tr.TimeBase()
 	d := tb.FrameToDuration(frame)
-	if tb.IsAbsolute() {
-		return formatClock(tb.Epoch.Add(d), step)
+	if inst.isAbsolute() {
+		return timeticks.FormatClock(tb.Epoch.Add(d), step)
 	}
-	return formatOffset(d, step)
+	return timeticks.FormatOffset(d, step)
 }
 
 func clampFrame(f, frames int64) (out int64) {
@@ -725,3 +835,212 @@ func clampFrame(f, frames int64) (out int64) {
 }
 
 func isNaN32(v float32) (yes bool) { return math.IsNaN(float64(v)) }
+
+// ---- layers (SD8) ---------------------------------------------------------
+
+// bandsHeight is the height left for the channel bands once the curve strips
+// have taken theirs.
+func (inst *Player) bandsHeight(waveH float32) (h float32) {
+	if inst.layers == nil {
+		return waveH
+	}
+	return max(waveH-curvesHeight(inst.layers.Curves), 1)
+}
+
+// refreshRegionBound recomputes the longest-region bound when the host's
+// Regions slice changed identity or length, or an edit just ended.
+func (inst *Player) refreshRegionBound() {
+	if inst.layers == nil || len(inst.layers.Regions) == 0 {
+		inst.regionsPtr, inst.regionsLen, inst.maxRegionLen = nil, 0, 0
+		return
+	}
+	rs := inst.layers.Regions
+	if inst.regionsPtr == &rs[0] && inst.regionsLen == len(rs) {
+		return
+	}
+	inst.regionsPtr, inst.regionsLen = &rs[0], len(rs)
+	inst.maxRegionLen = maxRegionLen(rs)
+}
+
+// hitRegion finds the region under canvas x: an edge within regionEdgeGrabPx
+// wins over a body, and among overlapping bodies the last drawn (highest
+// index) wins, as it is the one on top.
+func hitRegion(regions []Region, maxLen int64, v View, w float32, x float32) (idx int, edge int8, ok bool) {
+	if len(regions) == 0 {
+		return -1, 0, false
+	}
+	from := int64(math.Floor(v.FromFrame))
+	to := int64(math.Ceil(v.ToFrame(w)))
+	lo, hi := visibleRegions(regions, maxLen, from, to)
+	idx = -1
+	for i := hi - 1; i >= lo; i-- {
+		r := regions[i]
+		x0 := v.FrameToX(float64(r.FromFrame))
+		x1 := v.FrameToX(float64(r.ToFrame))
+		switch {
+		case math.Abs(float64(x-x0)) <= float64(regionEdgeGrabPx):
+			return i, -1, true
+		case math.Abs(float64(x-x1)) <= float64(regionEdgeGrabPx):
+			return i, 1, true
+		case x > x0 && x < x1 && idx < 0:
+			idx = i
+		}
+	}
+	return idx, 0, idx >= 0
+}
+
+// hitMarker finds the marker within markerGrabPx of canvas x, or -1.
+func hitMarker(markers []Marker, v View, x float32) (idx int) {
+	f := v.XToFrame(x)
+	i := sort.Search(len(markers), func(i int) bool { return float64(markers[i].Frame) >= f })
+	best, bestD := -1, markerGrabPx+1
+	for _, j := range []int{i - 1, i} {
+		if j < 0 || j >= len(markers) {
+			continue
+		}
+		if d := float32(math.Abs(float64(v.FrameToX(float64(markers[j].Frame)) - x))); d <= markerGrabPx && d < bestD {
+			best, bestD = j, d
+		}
+	}
+	return best
+}
+
+// applyRegionDrag moves the in-progress edit by the pointer's offset from
+// the press origin, clamped so the region keeps at least one frame and stays
+// inside the track.
+func (inst *Player) applyRegionDrag(posX float32, frames int64) {
+	d := int64(math.Round(float64(posX-inst.edit.originX) * inst.view.FramesPerPx))
+	from, to := inst.edit.origFrom, inst.edit.origTo
+	switch inst.edit.edge {
+	case -1:
+		from = max(0, min(from+d, to-1))
+	case 1:
+		to = max(from+1, min(to+d, frames))
+	default:
+		length := to - from
+		from = max(0, min(from+d, frames-length))
+		to = from + length
+	}
+	inst.edit.from, inst.edit.to = from, to
+}
+
+// regionBounds returns a region's bounds for drawing, with the in-progress
+// edit applied to the region being dragged.
+func (inst *Player) regionBounds(i int, r Region) (from, to int64) {
+	if inst.edit.active && inst.edit.index == i {
+		return inst.edit.from, inst.edit.to
+	}
+	return r.FromFrame, r.ToFrame
+}
+
+func (inst *Player) paintRegions(w, bandsH float32) {
+	if inst.layers == nil || len(inst.layers.Regions) == 0 {
+		return
+	}
+	regions := inst.layers.Regions
+	view := inst.view
+	from := int64(math.Floor(view.FromFrame))
+	to := int64(math.Ceil(view.ToFrame(w)))
+	lo, hi := visibleRegions(regions, inst.maxRegionLen, from, to)
+	for i := lo; i < hi; i++ {
+		r := regions[i]
+		rf, rt := inst.regionBounds(i, r)
+		if rt <= from || rf >= to {
+			continue
+		}
+		col := r.Color
+		if col.Literal() == 0 {
+			col = inst.vis.Region
+		}
+		alpha := regionFillAlpha
+		if i == inst.hoverRegion || (inst.edit.active && inst.edit.index == i) {
+			alpha = regionHoverAlpha
+		}
+		x0 := max(view.FrameToX(float64(rf)), -1)
+		x1 := min(view.FrameToX(float64(rt)), w+1)
+		c.PaintRectFilled(x0, 0, x1, bandsH, 0, withAlpha(col, alpha)).Send()
+		stroke := styletokens.StrokeHair
+		if r.Editable {
+			stroke = styletokens.StrokeRegular
+		}
+		c.PaintLine(x0, 0, x0, bandsH, col, stroke).Send()
+		c.PaintLine(x1, 0, x1, bandsH, col, stroke).Send()
+		if r.Label != "" && x1-x0 > 12 {
+			c.PaintText(max(x0, 0)+3, 2, 0, 0, r.Label, inst.vis.HoverFontSize, inst.vis.LabelText).Send()
+		}
+	}
+}
+
+func (inst *Player) paintMarkers(w, bandsH float32) {
+	if inst.layers == nil || len(inst.layers.Markers) == 0 {
+		return
+	}
+	markers := inst.layers.Markers
+	view := inst.view
+	from := int64(math.Floor(view.FromFrame))
+	to := int64(math.Ceil(view.ToFrame(w)))
+	lo, hi := visibleMarkers(markers, from, to)
+	for i := lo; i < hi; i++ {
+		m := markers[i]
+		col := m.Color
+		if col.Literal() == 0 {
+			col = inst.vis.Marker
+		}
+		x := view.FrameToX(float64(m.Frame))
+		c.PaintDashedLine(x, 0, x, bandsH, 4, 3, col, styletokens.StrokeRegular).Send()
+		if m.Label != "" {
+			c.PaintText(x+3, bandsH-2, 0, 2, m.Label, inst.vis.HoverFontSize, col).Send()
+		}
+	}
+}
+
+func (inst *Player) paintCurves(w, bandsH float32) {
+	if inst.layers == nil || len(inst.layers.Curves) == 0 {
+		return
+	}
+	view := inst.view
+	from := int64(math.Floor(view.FromFrame))
+	to := int64(math.Ceil(view.ToFrame(w)))
+	top := bandsH + curveGap
+	for _, cv := range inst.layers.Curves {
+		h := curveStripHeight(cv)
+		bottom := top + h
+		c.PaintRectFilled(0, top, w, bottom, 0, inst.vis.CurveStrip).Send()
+		lo, hi := visiblePoints(cv.Frames, from, to)
+		n := min(hi-lo, len(cv.Values)-lo)
+		if n > 1 {
+			// More points than the strip can show are strided, not cut at the
+			// end: the line still reaches the right edge.
+			stride := max(n/(int(w)*maxCurvePointsPerPx+1), 1)
+			pts := (n + stride - 1) / stride
+			if cap(inst.curveXs) < pts {
+				inst.curveXs = make([]float32, pts)
+				inst.curveYs = make([]float32, pts)
+			}
+			xs, ys := inst.curveXs[:0], inst.curveYs[:0]
+			vmin, vmax := cv.Min, cv.Max
+			if vmin == 0 && vmax == 0 {
+				vmax = 1
+			}
+			span := vmax - vmin
+			if span <= 0 {
+				span = 1
+			}
+			for i := lo; i < lo+n; i += stride {
+				xs = append(xs, view.FrameToX(float64(cv.Frames[i])))
+				t := (cv.Values[i] - vmin) / span
+				t = max(0, min(t, 1))
+				ys = append(ys, bottom-1-t*(h-2))
+			}
+			col := cv.Color
+			if col.Literal() == 0 {
+				col = inst.vis.Curve
+			}
+			c.PaintPolyline(xs, ys, col, styletokens.StrokeRegular).Send()
+		}
+		if cv.Label != "" {
+			c.PaintText(3, top+2, 0, 0, cv.Label, inst.vis.HoverFontSize, inst.vis.LabelText).Send()
+		}
+		top = bottom + curveGap
+	}
+}
