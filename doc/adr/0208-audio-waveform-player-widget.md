@@ -483,7 +483,12 @@ M1 shipped as `public/science/audio/{pcm,wavfile,peaks,sink,track}` with
 `pcm/pcmtest` as the shared source-contract check; M2 as `widgets/waveform`
 with its gallery demo and the headless scene `scripts/dev/waveform-scene.sh`,
 which asserts hover, click-to-seek, an exact 300 px drag and the null-sink
-transport through the demo's readouts. The
+transport through the demo's readouts; M3 as `sink/pulsesink` — the stream is
+opened at the source's own rate and the server resamples, so the `pcm`
+resampler SD6 anticipated is only the playback-rate one, a linear
+interpolation in the pull callback — with `track.ReplaceSinkE` as the seam
+that swaps a device in after open, which is how the demo goes from silent to
+audible and how a brokered capability would hand a sink out. The
 twelve-hour build benchmark over a procedural source runs in about 80 s on a
 mobile CPU, of which roughly a quarter is the pyramid fold itself (~94 M
 frames/s) and the rest is generating the synthetic signal — a real decoder's

@@ -1470,7 +1470,12 @@ if f, ok := p.Clicked(); ok { /* a click seeked to frame f */ }
 ```
 
 `track` owns source, peaks pyramid, sink and `TimeBase`; the player owns
-only the view. `Player.TogglePlay / SeekTo / ZoomBy / FitAll / SetView` are
+only the view. A track opens on whatever sink `Options.NewSink` builds
+(`sink.NewNull` by default — silent, headless-safe) and
+`track.ReplaceSinkE(func(src) (sink.SinkI, error))` swaps a device in later;
+`sink/pulsesink.OpenE` is the PulseAudio/PipeWire sink (pure Go, no cgo). Do
+not import `pulsesink` into a widget: the swap is the host's decision, and a
+headless scene or the tour must keep the null sink. `Player.TogglePlay / SeekTo / ZoomBy / FitAll / SetView` are
 the programmatic controls; `Hover / Clicked / View / Position / FormatOffset`
 the readbacks (one frame behind, like every canvas register).
 
