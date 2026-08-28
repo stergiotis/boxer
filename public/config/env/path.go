@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	cli "github.com/urfave/cli/v2"
@@ -14,10 +13,8 @@ import (
 // expands a leading "~" or "~/" to the user's home directory; absolute
 // or relative paths are returned unchanged.
 type PathVar struct {
-	spec    Spec
-	cacheMu sync.Mutex
-	cached  bool
-	value   string
+	spec Spec
+	res  resolved[string]
 }
 
 var _ VarI = (*PathVar)(nil)
@@ -36,19 +33,16 @@ func (inst *PathVar) Spec() (out Spec) {
 }
 
 func (inst *PathVar) Get() (out string) {
-	inst.cacheMu.Lock()
-	defer inst.cacheMu.Unlock()
-	if inst.cached {
-		return inst.value
-	}
+	out, _ = inst.res.get(inst.resolveEnv)
+	return
+}
+
+func (inst *PathVar) resolveEnv() (out string, src ValueSourceE) {
 	raw, ok := os.LookupEnv(inst.spec.Name)
 	if !ok || raw == "" {
-		inst.value = expandHome(inst.spec.Default)
-	} else {
-		inst.value = expandHome(raw)
+		return expandHome(inst.spec.Default), ValueSourceDefault
 	}
-	inst.cached = true
-	return inst.value
+	return expandHome(raw), ValueSourceEnv
 }
 
 func (inst *PathVar) Lookup() (raw string, set bool) {
@@ -60,10 +54,7 @@ func (inst *PathVar) Lookup() (raw string, set bool) {
 }
 
 func (inst *PathVar) setCached(value string) {
-	inst.cacheMu.Lock()
-	defer inst.cacheMu.Unlock()
-	inst.value = expandHome(value)
-	inst.cached = true
+	inst.res.setFlag(expandHome(value))
 }
 
 // WithPathAction attaches a caller-supplied Action func to the
@@ -86,6 +77,11 @@ func (inst *PathVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 		EnvVars:  []string{inst.spec.Name},
 		Value:    inst.spec.Default,
 		Action: func(ctx *cli.Context, parsed string) (err error) {
+			// Empty means unset; see StringVar.AsCliFlag.
+			if parsed == "" {
+				inst.res.clearCache()
+				return
+			}
 			if userAction != nil {
 				err = userAction(ctx, parsed)
 				if err != nil {
@@ -98,18 +94,34 @@ func (inst *PathVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	}
 }
 
+// Override pins the resolved value for this process (ValueSourceOverride):
+// it shadows the flag, the environment and the default until ClearOverride,
+// and is never written to the process environment, so child processes and
+// `env list`'s CURRENT column do not see it. It is the seam a wrapper
+// command uses to seed another component's variables before that component
+// reads them in-process (ADR-0009, update 2026-08-28).
+func (inst *PathVar) Override(value string) {
+	inst.res.setOverride(expandHome(value))
+}
+
+// ClearOverride removes the Override; resolution falls back to the flag,
+// environment or default.
+func (inst *PathVar) ClearOverride() {
+	inst.res.clearOverride()
+}
+
+// ValueSource reports which tier Get's value comes from.
+func (inst *PathVar) ValueSource() (src ValueSourceE) {
+	_, src = inst.res.get(inst.resolveEnv)
+	return
+}
+
 func (inst *PathVar) SetForTest(t testing.TB, value string) {
 	t.Helper()
-	inst.cacheMu.Lock()
-	inst.cached = false
-	inst.value = ""
-	inst.cacheMu.Unlock()
+	inst.res.reset()
 	t.Setenv(inst.spec.Name, value)
 	t.Cleanup(func() {
-		inst.cacheMu.Lock()
-		inst.cached = false
-		inst.value = ""
-		inst.cacheMu.Unlock()
+		inst.res.reset()
 	})
 }
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"sync"
 	"testing"
 
 	cli "github.com/urfave/cli/v2"
@@ -12,10 +11,8 @@ import (
 
 // BoolVar is the typed env-var handle for boolean values.
 type BoolVar struct {
-	spec    Spec
-	cacheMu sync.Mutex
-	cached  bool
-	value   bool
+	spec Spec
+	res  resolved[bool]
 }
 
 var _ VarI = (*BoolVar)(nil)
@@ -36,24 +33,22 @@ func (inst *BoolVar) Spec() (out Spec) {
 // Get returns the resolved value. Env-side parse failures fall back to
 // the default; default-side parse failures panic (programmer error).
 func (inst *BoolVar) Get() (out bool) {
-	inst.cacheMu.Lock()
-	defer inst.cacheMu.Unlock()
-	if inst.cached {
-		return inst.value
-	}
+	out, _ = inst.res.get(inst.resolveEnv)
+	return
+}
+
+// resolveEnv reads the process environment: an unset, empty or unparsable
+// value yields Spec.Default (ValueSourceDefault).
+func (inst *BoolVar) resolveEnv() (out bool, src ValueSourceE) {
 	raw, ok := os.LookupEnv(inst.spec.Name)
 	if !ok || raw == "" {
-		inst.value = inst.parseDefault()
-	} else {
-		parsed, parseErr := strconv.ParseBool(raw)
-		if parseErr != nil {
-			inst.value = inst.parseDefault()
-		} else {
-			inst.value = parsed
-		}
+		return inst.parseDefault(), ValueSourceDefault
 	}
-	inst.cached = true
-	return inst.value
+	parsed, parseErr := strconv.ParseBool(raw)
+	if parseErr != nil {
+		return inst.parseDefault(), ValueSourceDefault
+	}
+	return parsed, ValueSourceEnv
 }
 
 func (inst *BoolVar) parseDefault() (out bool) {
@@ -77,10 +72,7 @@ func (inst *BoolVar) Lookup() (raw string, set bool) {
 }
 
 func (inst *BoolVar) setCached(value bool) {
-	inst.cacheMu.Lock()
-	defer inst.cacheMu.Unlock()
-	inst.value = value
-	inst.cached = true
+	inst.res.setFlag(value)
 }
 
 // WithBoolAction attaches a caller-supplied Action func to the
@@ -118,17 +110,33 @@ func (inst *BoolVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	}
 }
 
+// Override pins the resolved value for this process (ValueSourceOverride):
+// it shadows the flag, the environment and the default until ClearOverride,
+// and is never written to the process environment, so child processes and
+// `env list`'s CURRENT column do not see it. It is the seam a wrapper
+// command uses to seed another component's variables before that component
+// reads them in-process (ADR-0009, update 2026-08-28).
+func (inst *BoolVar) Override(value bool) {
+	inst.res.setOverride(value)
+}
+
+// ClearOverride removes the Override; resolution falls back to the flag,
+// environment or default.
+func (inst *BoolVar) ClearOverride() {
+	inst.res.clearOverride()
+}
+
+// ValueSource reports which tier Get's value comes from.
+func (inst *BoolVar) ValueSource() (src ValueSourceE) {
+	_, src = inst.res.get(inst.resolveEnv)
+	return
+}
+
 func (inst *BoolVar) SetForTest(t testing.TB, value string) {
 	t.Helper()
-	inst.cacheMu.Lock()
-	inst.cached = false
-	inst.value = false
-	inst.cacheMu.Unlock()
+	inst.res.reset()
 	t.Setenv(inst.spec.Name, value)
 	t.Cleanup(func() {
-		inst.cacheMu.Lock()
-		inst.cached = false
-		inst.value = false
-		inst.cacheMu.Unlock()
+		inst.res.reset()
 	})
 }
