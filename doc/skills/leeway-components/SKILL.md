@@ -219,6 +219,7 @@ test is where to look first when a field is unexpectedly empty.
 | A whole batch reads as carrying nothing | The reader is on a different assignment than the writer (I2) | same |
 | `present` with zero-valued fields | Present is not conforming (R1); ask `Detect` or the Filter | same |
 | An empty slice where you wrote one | Empty, nil and never-written are one wire observation (R2) — emptiness cannot be asserted, only observed | same |
+| An all-container kind reads absent | A container writes zero attributes when empty (splice semantics, ADR-0146 M1), so a kind whose memberships are all containers has no presence signal on a row where every container is empty; give it a scalar membership if "present with nothing" must be observable | `recordstore/example/empty_container_test.go` |
 | A string that changed by itself | Decoded strings alias the Arrow record; retain it or copy (R6) | same |
 | A widened field still reads old rows | Widening is admits-superset by construction | `marshallreflect_test/arity_evolution_test.go` |
 | A tuple field carrying a neighbour's attribute | Tuple fields are section-scoped | same |
