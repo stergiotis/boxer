@@ -39,6 +39,10 @@ const (
 	TopicUi TopicT = "ui"
 	// TopicGeo: terrain, maps, and geospatial work.
 	TopicGeo TopicT = "geo"
+	// TopicSensing: instruments, radios and sensors — live measurements from
+	// the physical world (ADR-0158 Update 2026-08-28; the first member is
+	// the sailing repository's Micronet receiver).
+	TopicSensing TopicT = "sensing"
 	// TopicAbout: the project itself — provenance, licence, splash.
 	TopicAbout TopicT = "about"
 )
@@ -56,6 +60,7 @@ var AllTopics = []TopicT{
 	TopicSql,
 	TopicUi,
 	TopicGeo,
+	TopicSensing,
 	TopicAbout,
 }
 
