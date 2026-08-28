@@ -1,6 +1,7 @@
 package carrierclient
 
 import (
+	"os"
 	"bufio"
 	"crypto/rand"
 	"crypto/sha1"
@@ -190,6 +191,18 @@ func (inst *wsConn) writeFrame(opcode byte, payload []byte) (err error) {
 	return nil
 }
 
+// idleTimeoutError marks a read deadline that expired between frames: nothing
+// of the next frame was consumed, so the connection remains usable. It is a
+// timeout for os.IsTimeout, so callers that treat any expiry as failure keep
+// working, while Client.Idle can tell it from a mid-frame stall.
+type idleTimeoutError struct{}
+
+func (idleTimeoutError) Error() string   { return "read deadline expired between frames" }
+func (idleTimeoutError) Timeout() bool   { return true }
+func (idleTimeoutError) Temporary() bool { return true }
+
+var errIdleTimeout error = idleTimeoutError{}
+
 // readBinary returns the next binary message, answering ping frames and
 // reassembling fragments on the way. Control frames the peer sends between
 // fragments are handled where they arrive, as the RFC requires.
@@ -203,9 +216,21 @@ func (inst *wsConn) readBinary(deadline time.Time) (payload []byte, err error) {
 	var assembled []byte
 	var assembling bool
 	for {
+		if !assembling {
+			// Wait for the next frame without consuming it: a deadline that
+			// expires here leaves the stream at a frame boundary, so the
+			// connection is still usable — the case an idle pause relies on.
+			// bufio keeps whatever it buffered across the failed Peek.
+			if _, err = inst.br.Peek(2); err != nil {
+				if os.IsTimeout(err) {
+					return nil, errIdleTimeout
+				}
+				return nil, err // io.EOF passes through for the caller's loop
+			}
+		}
 		var b [2]byte
 		if _, err = io.ReadFull(inst.br, b[:]); err != nil {
-			return nil, err // io.EOF / timeout pass through for the caller's loop
+			return nil, err // a timeout here is mid-frame: the stream is unusable
 		}
 		fin := b[0]&0x80 != 0
 		opcode := b[0] & 0x0F

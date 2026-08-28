@@ -97,7 +97,8 @@ type Step struct {
 	Scale float32 `json:"scale,omitempty"`
 
 	// SettleMs pauses after the step, for animations and debounced fetches
-	// the tree cannot report on. Also the duration of `sleep`.
+	// the tree cannot report on. Also the duration of `sleep`. A `capture`
+	// pauses before the shot instead, so the pause is what the frame shows.
 	SettleMs int `json:"settleMs,omitempty"`
 
 	// Comment is free prose kept beside the step; the runner logs it.
@@ -270,6 +271,16 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 			log.Info().Msg("dry run: " + st.describe())
 			continue
 		}
+		settle := time.Duration(st.SettleMs) * time.Millisecond
+		if settle == 0 {
+			settle = time.Duration(opts.SettleMs) * time.Millisecond
+		}
+		if settleBefore(st.Do) && settle > 0 {
+			if err = c.Idle(settle); err != nil {
+				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
+					Errorf("settle before the step failed: %w", err)
+			}
+		}
 		if err = runStep(c, st, node, opts); err != nil {
 			return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
 				Errorf("step failed: %w", err)
@@ -279,16 +290,25 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 		if st.Do != "wait" && st.Do != "note" && st.Do != "capture" {
 			stale = true
 		}
-		settle := st.SettleMs
-		if settle == 0 {
-			settle = opts.SettleMs
-		}
-		if settle > 0 {
-			time.Sleep(time.Duration(settle) * time.Millisecond)
+		if !settleBefore(st.Do) && settle > 0 {
+			// Idle, not time.Sleep: the pause must keep answering the
+			// carrier's keepalive or a long `sleep` gets the driver reaped.
+			if err = c.Idle(settle); err != nil {
+				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
+					Errorf("settle after the step failed: %w", err)
+			}
 		}
 		log.Info().Msg(st.describe())
 	}
 	return nil
+}
+
+// settleBefore reports whether a verb's settle runs before it rather than
+// after. A capture's pause exists so the frame it takes has settled — an
+// animation finished, a debounced fetch landed — which is only useful before
+// the shot; every other verb settles afterwards, for what it set in motion.
+func settleBefore(do string) bool {
+	return do == "capture"
 }
 
 // waitFor polls the tree until the step's anchor resolves to a node that is
@@ -319,7 +339,9 @@ func waitFor(c *Client, st Step, opts RunOptions) (err error) {
 			return eb.Build().Int("attempts", attempt+1).
 				Errorf("still not ready after %s: %w", opts.Timeout, last)
 		}
-		time.Sleep(150 * time.Millisecond)
+		if err = c.Idle(150 * time.Millisecond); err != nil {
+			return err
+		}
 	}
 }
 
