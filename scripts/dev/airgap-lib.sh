@@ -41,6 +41,42 @@ airgap_require_cmd() {  # <cmd> [message]
     command -v "$1" >/dev/null 2>&1 || airgap_die "${2:-$1 not found on PATH.}"
 }
 
+# ---- signing (SSHSIG detached signatures) -----------------------------------
+# Sign <file>, emitting <file>.sig and <file>.allowed_signers.
+#
+# One implementation, because there is now more than one producer of a signable
+# artefact: airgap-bundle.sh signs what it packs, and airgap-augment.sh signs what
+# it augmented (the pack -> augment -> sign order). Two copies of an ssh-keygen
+# invocation is how a namespace or an allowed_signers format quietly diverges, and
+# the failure mode is a bundle the target's verifier rejects for no visible reason.
+#
+# The NAMESPACE is a required argument with no default here on purpose: it is
+# per-project domain separation, so the library must not invent one. Each wrapper
+# supplies its own, and it has to match what the verifier expects.
+#
+#   args: <file> <private-key> <identity-or-empty> <namespace>
+airgap_sign_artifact() {
+    local file="$1" key="$2" identity="$3" ns="$4" pub="$2.pub"
+    airgap_require_cmd ssh-keygen "ssh-keygen not found; cannot sign (needs OpenSSH >= 8.2)."
+    [ -f "$key" ] || { airgap_warn "signing key not found: $key"; return 1; }
+    [ -f "$pub" ] || { airgap_warn "public key not found: $pub — needed for the allowed_signers anchor."; return 1; }
+    airgap_step "sign ${file##*/} (SSHSIG, namespace '$ns')"
+    ssh-keygen -Y sign -f "$key" -n "$ns" "$file" >/dev/null || {
+        airgap_warn "ssh-keygen -Y sign failed (a passphrase-protected key needs an agent/askpass)."
+        return 1; }
+    # allowed_signers line: <principal> <keytype> <base64>. Principal is the
+    # explicit identity, else the .pub comment, else a stable fallback.
+    [ -n "$identity" ] || identity="$(awk '{print $3}' "$pub")"
+    [ -n "$identity" ] || identity="airgap-signer"
+    printf '%s %s\n' "$identity" "$(awk '{print $1" "$2}' "$pub")" > "$file.allowed_signers"
+    airgap_ok "signature       -> ${file##*/}.sig"
+    airgap_ok "trust anchor    -> ${file##*/}.allowed_signers  (identity: $identity)"
+    airgap_ok "key fingerprint -> $(ssh-keygen -l -f "$pub" | awk '{print $2}')"
+    airgap_warn "deliver ${file##*/}.allowed_signers to the target OUT-OF-BAND and confirm the"
+    airgap_warn "fingerprint above against a value you already trust — do NOT ship it inside the bundle."
+    return 0
+}
+
 # ---- architecture -----------------------------------------------------------
 # One place that answers "which CPU are we packing for". Two vocabularies are in
 # play and both are load-bearing, so both are named rather than converted ad hoc
@@ -551,6 +587,372 @@ airgap_ship_ffmpeg() {  # <destdir> <srccache> [args...]
     return 1
 }
 
+# Stage the pinned ffmpeg SOURCE tarballs, so the target can rebuild or
+# re-configure the encoder offline rather than only re-verify the binary.
+#
+# WHY: the bundle already carried build-static-ffmpeg.sh, verify-ffmpeg-lanes.sh
+# and bench-ffmpeg-lanes.sh, on the stated grounds that the target could
+# "re-verify or rebuild the bundled encoder binary without a boxer checkout".
+# Only re-verify actually worked. A rebuild died on
+#   missing <src-dir>/<tarball> (pass --fetch, or stage the tarballs first)
+# and --fetch needs exactly the network the target does not have. ~90 MB closes
+# that gap, and it is the doctrine the Rust and Go halves already follow: the
+# target gets source it can change, not just a binary it must accept.
+#
+# ONLY the tarballs. The source cache is also the build's working directory — it
+# accumulates extracted trees, _b/, _prefix/ and _logs/, several hundred MB of
+# host-specific output that must not travel.
+#
+# BEST-EFFORT: returns non-zero when nothing was staged. Note the tarballs are
+# fetched BEFORE the build proper but AFTER the preflight, so a host that fails
+# the preflight has neither binary nor sources, while one that fails mid-compile
+# still has sources to pass on — which is the useful case, since a target with the
+# build toolchain can then produce what the packing host could not.
+#   args: <destdir> <srccache>
+airgap_ship_ffmpeg_sources() {
+    local dest="$1" cache="$2" n=0 f
+    [ -d "$cache" ] || { airgap_warn "no ffmpeg source cache at $cache — not shipping sources."; return 1; }
+    mkdir -p "$dest" || return 1
+    for f in "$cache"/*.tar.*; do
+        [ -f "$f" ] || continue
+        cp -p "$f" "$dest/" && n=$((n + 1))
+    done
+    if [ "$n" = 0 ]; then
+        rmdir "$dest" 2>/dev/null || true
+        airgap_warn "no ffmpeg source tarballs in $cache — not shipping sources."
+        return 1
+    fi
+    airgap_ok "shipped $n ffmpeg source tarballs ($(du -sh "$dest" | cut -f1)) -> ${dest##*/}"
+    return 0
+}
+
+# Fetch the pinned codec tarballs into <cachedir> WITHOUT building anything, for
+# a pack that ships sources and defers the binary (see airgap_augment_ffmpeg).
+# Delegates to the builder's --fetch-only so the pinned versions and URLs stay in
+# exactly one place; that mode also skips the build-host preflight, so a packing
+# host with no C toolchain can still stage sources.
+#   args: <cachedir>
+airgap_fetch_ffmpeg_sources() {
+    local cache="$1" builder="$AIRGAP_LIB_DIR/build-static-ffmpeg.sh"
+    [ -x "$builder" ] || { airgap_warn "build-static-ffmpeg.sh not found at $builder."; return 1; }
+    airgap_step "fetch ffmpeg codec sources (no build)"
+    "$builder" --src-dir "$cache" --fetch-only >/dev/null || {
+        airgap_warn "could not fetch the ffmpeg sources."; return 1; }
+    airgap_ok "ffmpeg sources staged in ${cache##*/}"
+    return 0
+}
+
+# ---- ffmpeg sidecars --------------------------------------------------------
+# A sidecar is the alternative to re-packing: instead of rewriting a ~900 MB
+# bundle to insert one 21 MB binary — which invalidates the packer's signature —
+# the augment step emits the binary as its OWN small signed artefact, and the
+# bundle travels untouched.
+#
+# WHY THAT IS BETTER, not just cheaper. Re-packing forces one signature to cover
+# work done by two parties: whoever assembled the payload and whoever compiled the
+# encoder. Whoever signs last vouches for both, so the augment host must hold a key
+# the target trusts. With a sidecar each party signs exactly what it produced, and
+# the chain composes to arbitrary length:
+#
+#   pack -> [re-sign] -> augment(sidecar) -> [sign sidecar] -> verify both -> apply -> provision
+#
+# The packer's signature stays valid forever because its artefact never changes,
+# and the augment host needs no release key at all — only a key the target is
+# willing to accept for encoders.
+#
+# THE BINDING. A sidecar must not be applicable to an arbitrary bundle, and the
+# thing that actually determines the binary is the sources it was built from plus
+# the architecture. So a sidecar records a digest over the bundle's codec tarballs
+# and its own arch, and applying re-computes that digest from the bundle in hand.
+# Binding to the *sources* rather than to the bundle's bytes is deliberate: the
+# same encoder is legitimately correct for any bundle carrying those same pinned
+# sources for that arch, which is exactly when you want to reuse it.
+
+# Stable digest over the codec tarballs in <srcdir>: sha256 of the sorted
+# "<sha256>  <name>" listing, so it is independent of directory order and of any
+# build leftovers sitting beside them.
+#   args: <srcdir>
+airgap_ffmpeg_sources_digest() {  # <srcdir>
+    local d="$1" listing
+    listing="$( cd "$d" 2>/dev/null && sha256sum ./*.tar.* 2>/dev/null | sort -k2 )" || true
+    [ -n "$listing" ] || { airgap_warn "no codec tarballs under $d — cannot digest sources."; return 1; }
+    printf '%s\n' "$listing" | sha256sum | cut -d' ' -f1
+}
+
+# Copy a bundle's codec tarballs into a scratch build directory.
+#
+# NOT a nicety. build-static-ffmpeg.sh uses --src-dir as its WORKING directory:
+# it extracts the trees there and creates _b/, _prefix/ and _logs/ beside them. So
+# building straight out of _airgap/ffmpeg-src would leave several hundred MB of
+# host-specific output inside the bundle — which breaks the sidecar's whole promise
+# that the bundle is untouched, and for the re-pack path would bloat the result and
+# violate the "tarballs only" rule the pack asserts. 90 MB of copying buys a
+# read-only bundle.
+#   args: <srcdir> <builddir>
+airgap_stage_ffmpeg_build_dir() {  # <srcdir> <builddir>
+    local src="$1" dst="$2" n=0 f
+    mkdir -p "$dst" || return 1
+    for f in "$src"/*.tar.*; do
+        [ -f "$f" ] || continue
+        cp -p "$f" "$dst/" && n=$((n + 1))
+    done
+    [ "$n" -gt 0 ] || { airgap_warn "no codec tarballs under $src."; return 1; }
+    return 0
+}
+
+# Build the encoder from a bundle's own sources, verify every lane natively, and
+# package it as a signed-able sidecar tarball. The bundle is NOT modified.
+#   args: <bundle-root> <out.tar.zst> [extra build-static-ffmpeg.sh args...]
+airgap_emit_ffmpeg_sidecar() {
+    local root="$1" out="$2"; shift 2
+    local man="$root/_airgap/MANIFEST" src="$root/_airgap/ffmpeg-src"
+    local builder="" verifier="" d work dig ver
+
+    [ -f "$man" ] || { airgap_warn "no MANIFEST at $man."; return 1; }
+    [ -d "$src" ] || { airgap_warn "no ffmpeg sources at $src — only a bundle packed with sources can produce a sidecar."; return 1; }
+    for d in "$root/boxer/scripts/dev" "$root/scripts/dev"; do
+        [ -x "$d/build-static-ffmpeg.sh" ] && { builder="$d/build-static-ffmpeg.sh"; verifier="$d/verify-ffmpeg-lanes.sh"; break; }
+    done
+    [ -n "$builder" ] || { airgap_warn "build-static-ffmpeg.sh not found inside $root."; return 1; }
+
+    dig="$(airgap_ffmpeg_sources_digest "$src")" || return 1
+
+    airgap_step "sidecar: check this host can build ffmpeg"
+    # --preflight-only exits before creating any directory, so this cannot write
+    # into the bundle even though it names it.
+    "$builder" --src-dir "$src" --preflight-only "$@" || {
+        airgap_warn "this host cannot build ffmpeg — see the missing prerequisites above."
+        return 1; }
+
+    work="$(mktemp -d)"
+    mkdir -p "$work/ffmpeg-sidecar"
+    airgap_stage_ffmpeg_build_dir "$src" "$work/build" || { rm -rf -- "$work"; return 1; }
+    airgap_step "sidecar: build static ffmpeg from the bundle's sources (offline)"
+    # Built in scratch, so the bundle stays byte-for-byte as it arrived — that is
+    # the sidecar's entire point. No --fetch either: the tarballs came from the
+    # bundle, so this touches no network.
+    "$builder" --src-dir "$work/build" --out "$work/ffmpeg-sidecar/ffmpeg" "$@" || {
+        rm -rf -- "$work"; airgap_warn "the ffmpeg build failed — no sidecar written."; return 1; }
+
+    if [ -x "$verifier" ]; then
+        airgap_step "sidecar: verify every codec lane natively"
+        "$verifier" "$work/ffmpeg-sidecar/ffmpeg" || {
+            rm -rf -- "$work"
+            airgap_warn "the freshly built ffmpeg FAILED lane verification — no sidecar written."
+            return 1; }
+    else
+        airgap_warn "verify-ffmpeg-lanes.sh not in this bundle — packaging unverified."
+    fi
+
+    ver="$("$work/ffmpeg-sidecar/ffmpeg" -hide_banner -version 2>/dev/null | head -1)"
+    {
+        echo "kind=ffmpeg"
+        echo "arch=$(uname -m)"
+        echo "goarch=$(airgap_arch)"
+        echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "built_by=airgap-augment"
+        echo "ffmpeg=$ver"
+        echo "lanes_verified=$([ -x "$verifier" ] && echo yes || echo no)"
+        # The binding. Applying re-computes this from the bundle it is given.
+        echo "sources_digest=$dig"
+        # ...and the per-tarball detail, so a mismatch can be diagnosed rather
+        # than merely reported.
+        ( cd "$src" && sha256sum ./*.tar.* | sort -k2 | sed 's|^|source_tarball=|' )
+        # Informational provenance about the bundle this was built from.
+        sed -n 's/^\(boxer_head\|boxer_tag\|hackathon_head\|scope\)=/bundle_\1=/p' "$man"
+    } > "$work/ffmpeg-sidecar/SIDECAR"
+
+    airgap_pick_compressor
+    tar -C "$work" -cf - ffmpeg-sidecar | airgap_compress "$out" || {
+        rm -rf -- "$work"; airgap_warn "could not write $out."; return 1; }
+    rm -rf -- "$work"
+    airgap_ok "sidecar -> ${out##*/} ($(du -h "$out" | cut -f1)); the bundle is untouched"
+    return 0
+}
+
+# Install a sidecar's encoder into an extracted bundle, refusing any sidecar that
+# was not built for THIS bundle's sources and architecture.
+#
+# Needs no build toolchain: this is the step that runs on the airgapped target.
+#   args: <bundle-root> <sidecar.tar.zst>
+airgap_apply_ffmpeg_sidecar() {
+    local root="$1" side="$2"
+    local man="$root/_airgap/MANIFEST" src="$root/_airgap/ffmpeg-src"
+    local work sm dig want_arch got_arch kind
+
+    [ -f "$man" ] || { airgap_warn "no MANIFEST at $man."; return 1; }
+    [ -f "$side" ] || { airgap_warn "no such sidecar: $side"; return 1; }
+
+    work="$(mktemp -d)"
+    case "$side" in
+        *.zst) command -v zstd >/dev/null 2>&1 || { rm -rf -- "$work"; airgap_warn "zstd not found."; return 1; }
+               tar -I zstd -xf "$side" -C "$work" ;;
+        *.gz)  tar -xzf "$side" -C "$work" ;;
+        *)     rm -rf -- "$work"; airgap_warn "unrecognised sidecar extension: $side"; return 1 ;;
+    esac
+    sm="$work/ffmpeg-sidecar/SIDECAR"
+    [ -f "$sm" ] && [ -f "$work/ffmpeg-sidecar/ffmpeg" ] || {
+        rm -rf -- "$work"; airgap_warn "$side does not look like an ffmpeg sidecar."; return 1; }
+
+    kind="$(sed -n 's/^kind=//p' "$sm" | head -1)"
+    [ "$kind" = ffmpeg ] || { rm -rf -- "$work"; airgap_warn "sidecar kind is '$kind', expected 'ffmpeg'."; return 1; }
+
+    # Architecture: the sidecar's, the bundle's, and this host's must all agree.
+    got_arch="$(sed -n 's/^arch=//p' "$sm" | head -1)"
+    want_arch="$(sed -n 's/^arch=//p' "$man" | head -1)"
+    if [ -n "$want_arch" ] && [ "$(airgap_normalize_arch "$got_arch")" != "$(airgap_normalize_arch "$want_arch")" ]; then
+        rm -rf -- "$work"
+        airgap_warn "sidecar was built for $got_arch but this bundle is for $want_arch."
+        return 1
+    fi
+    if [ "$(airgap_normalize_arch "$got_arch")" != "$(airgap_arch)" ]; then
+        rm -rf -- "$work"
+        airgap_warn "sidecar was built for $got_arch but this host is $(uname -m) — it would not run here."
+        return 1
+    fi
+
+    # The binding: this encoder must have been built from THESE sources.
+    if [ -d "$src" ]; then
+        dig="$(airgap_ffmpeg_sources_digest "$src")" || { rm -rf -- "$work"; return 1; }
+        # Read the sidecar's claim into a variable BEFORE any cleanup: the whole
+        # value of this diagnostic is showing both sides of the mismatch, and
+        # reading $sm after removing $work printed an empty one.
+        local claimed; claimed="$(sed -n 's/^sources_digest=//p' "$sm" | head -1)"
+        if [ "$dig" != "$claimed" ]; then
+            rm -rf -- "$work"
+            airgap_warn "sidecar was built from DIFFERENT codec sources than this bundle carries."
+            airgap_warn "  bundle:  $dig"
+            airgap_warn "  sidecar: ${claimed:-<absent>}"
+            airgap_warn "  Use the sidecar built from this bundle, or re-emit one from it."
+            return 1
+        fi
+        airgap_ok "sidecar matches this bundle's codec sources"
+    else
+        airgap_warn "this bundle carries no codec sources, so the sidecar's binding cannot be checked."
+        airgap_warn "  Proceeding on the strength of its signature alone (verify it first!)."
+    fi
+
+    mkdir -p "$root/_airgap/bin"
+    install -m 0755 "$work/ffmpeg-sidecar/ffmpeg" "$root/_airgap/bin/ffmpeg"
+    local ver stamp
+    ver="$(sed -n 's/^ffmpeg=//p' "$sm" | head -1)"
+    stamp="applied from sidecar, built by $(sed -n 's/^built_by=//p' "$sm" | head -1) on $got_arch $(sed -n 's/^built=//p' "$sm" | head -1)"
+    sed -i "s|^ffmpeg=.*|ffmpeg=$ver|" "$man"
+    if grep -q '^ffmpeg_augmented=' "$man"; then
+        sed -i "s|^ffmpeg_augmented=.*|ffmpeg_augmented=$stamp|" "$man"
+    else
+        printf 'ffmpeg_augmented=%s\n' "$stamp" >> "$man"
+    fi
+    rm -rf -- "$work"
+    airgap_ok "installed _airgap/bin/ffmpeg from the sidecar and recorded its provenance"
+    return 0
+}
+
+# ---- augmenting a packed bundle ---------------------------------------------
+# Build the static ffmpeg from the sources ALREADY INSIDE an extracted bundle and
+# install it as that bundle's binary, then verify it with the bundle's own lane
+# verifier.
+#
+# WHY THIS EXISTS — the third step. A bundle is native-only because nothing in it
+# cross-compiles, which normally means the packing host must BE the target's
+# architecture. ffmpeg is the one piece that escapes: its sources are
+# architecture-independent, they now travel, and the build needs no network at
+# all (--fetch is never passed; the tarballs are right there). So the native build
+# can be deferred to a THIRD host that is neither the packing host nor the
+# airgapped destination:
+#
+#   1. pack       connected host, any architecture   --ffmpeg-source-only
+#   2. augment    offline host, TARGET architecture  this function
+#   3. provision  offline target, no C toolchain     airgap-unbundle.sh
+#
+# Step 2 needs a C/C++ build toolchain (cmake, make, cc, a static libc, this CPU's
+# assembler) and nothing else — no network, no dhall, no Go, no Rust. That is what
+# separates it from packing, and why it can happen on a transit box, a build
+# runner of the right arch, or the target itself before it is isolated.
+#
+# It VERIFIES what it builds, natively, with the verify-ffmpeg-lanes.sh the bundle
+# already carries: 9 checks over the four codec lanes plus the Annex-B file sink.
+# That is stronger than the pack-time check it replaces, because it runs on the
+# architecture that will actually encode. A binary that fails is NOT installed.
+#
+# The MANIFEST is updated so provenance stays visible: the ffmpeg line reflects the
+# new binary and ffmpeg_augmented records where and when it was built, because a
+# bundle whose binary did not come from its packing host should say so.
+#
+#   args: <extracted-bundle-root> [extra build-static-ffmpeg.sh args...]
+airgap_augment_ffmpeg() {
+    local root="$1"; shift
+    local man="$root/_airgap/MANIFEST" src="$root/_airgap/ffmpeg-src"
+    local builder="" verifier="" d out
+
+    [ -f "$man" ] || { airgap_warn "no MANIFEST at $man — is this an extracted bundle?"; return 1; }
+    [ -d "$src" ] || { airgap_warn "no ffmpeg sources at $src.
+  Only a bundle packed with sources can be augmented; re-pack with
+  --ffmpeg-source-only (or without --no-ffmpeg) to carry them."; return 1; }
+
+    # The bundle layout differs between repos: boxer's root IS the boxer tree,
+    # a downstream bundle nests it under boxer/. Try both rather than assume.
+    for d in "$root/boxer/scripts/dev" "$root/scripts/dev"; do
+        [ -x "$d/build-static-ffmpeg.sh" ] && { builder="$d/build-static-ffmpeg.sh"; verifier="$d/verify-ffmpeg-lanes.sh"; break; }
+    done
+    [ -n "$builder" ] || { airgap_warn "build-static-ffmpeg.sh not found inside $root."; return 1; }
+
+    # Refuse early and with the package list rather than dying mid-compile: this
+    # host may be a transit box that was never meant to be a build host.
+    airgap_step "augment: check this host can build ffmpeg"
+    "$builder" --src-dir "$src" --preflight-only "$@" || {
+        airgap_warn "this host cannot build ffmpeg — see the missing prerequisites above."
+        airgap_warn "  Augmenting needs a C/C++ toolchain (but no network). Run it somewhere else,"
+        airgap_warn "  or let the airgapped target supply its own ffmpeg."
+        return 1; }
+
+    local work; work="$(mktemp -d)"
+    airgap_stage_ffmpeg_build_dir "$src" "$work/build" || { rm -rf -- "$work"; return 1; }
+    out="$work/ffmpeg-augmented"
+    airgap_step "augment: build static ffmpeg from the bundled sources (offline)"
+    # Built in scratch rather than in _airgap/ffmpeg-src: the builder works in its
+    # --src-dir, and leaving extracted trees plus _b/_prefix/_logs inside the
+    # bundle would both bloat the re-pack and break the "tarballs only" rule the
+    # pack asserts. No --fetch, so this touches no network.
+    "$builder" --src-dir "$work/build" --out "$out" "$@" || {
+        rm -rf -- "$work"
+        airgap_warn "the ffmpeg build failed — the bundle is left unchanged."; return 1; }
+
+    if [ -x "$verifier" ]; then
+        airgap_step "augment: verify every codec lane natively"
+        "$verifier" "$out" || {
+            airgap_warn "the freshly built ffmpeg FAILED lane verification — NOT installing it."
+            airgap_warn "  The bundle keeps whatever it had. Investigate before shipping this."
+            rm -rf -- "$work"; return 1; }
+    else
+        airgap_warn "verify-ffmpeg-lanes.sh not in this bundle — installing unverified."
+    fi
+
+    mkdir -p "$root/_airgap/bin"
+    install -m 0755 "$out" "$root/_airgap/bin/ffmpeg"
+    rm -rf -- "$work"
+
+    # Rewrite the two MANIFEST lines in place, appending ffmpeg_augmented if absent.
+    local ver; ver="$("$root/_airgap/bin/ffmpeg" -hide_banner -version 2>/dev/null | head -1)"
+    local stamp; stamp="built by airgap-augment on $(uname -m) $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    sed -i "s|^ffmpeg=.*|ffmpeg=$ver|" "$man"
+    if grep -q '^ffmpeg_augmented=' "$man"; then
+        sed -i "s|^ffmpeg_augmented=.*|ffmpeg_augmented=$stamp|" "$man"
+    else
+        printf 'ffmpeg_augmented=%s\n' "$stamp" >> "$man"
+    fi
+    airgap_ok "installed _airgap/bin/ffmpeg ($(du -h "$root/_airgap/bin/ffmpeg" | cut -f1)) and recorded provenance"
+    return 0
+}
+
+# Emit the env line pointing at the shipped ffmpeg sources, so a rebuild on the
+# target does not have to know the bundle layout. No-op when none were staged.
+#   args: <ffmpeg-src-dir>
+airgap_ffmpeg_src_env_lines() {  # <srcdir>
+    [ -d "$1" ] || return 0
+    echo "export IMZERO2_FFMPEG_SRC=\"$1\""
+}
+
 # Check ONLY the above build's host prerequisites, building nothing. For a caller
 # that ships ffmpeg late in a long flow, gate on this up front: airgap_ship_ffmpeg
 # is best-effort, so without it the first sign of a missing cmake is a finished
@@ -619,9 +1021,9 @@ airgap_preflight_ffmpeg() {  # <ffmpeg-path>
 # host. So the requirements are now DERIVED from the feature set the MANIFEST
 # records, and each is reported as required, satisfied, or not applicable.
 #
-#   args: <feature-string> <ffmpeg-path> <target-builds-the-head: yes|no>
+#   args: <feature-string> <ffmpeg-path> <target-builds-the-head: yes|no> [ffmpeg-src-dir]
 airgap_preflight_render_head() {
-    local features="$1" ffmpeg="$2" builds="${3:-no}" caps
+    local features="$1" ffmpeg="$2" builds="${3:-no}" ffsrc="${4:-}" caps
     caps="$(airgap_render_head_caps "$features")"
     if [ "$caps" = unknown ]; then
         airgap_warn "unrecognised render-head feature set '$features' — cannot derive what this"
@@ -653,7 +1055,16 @@ airgap_preflight_render_head() {
             airgap_warn "ffmpeg is NOT bundled, and this build requires one: it rasterizes frames,"
             airgap_warn "  so the encoder lane is compiled in and spawns ffmpeg as soon as"
             airgap_warn "  IMZERO2_HEADLESS_LISTEN or IMZERO2_HEADLESS_H264_OUT is set."
-            airgap_warn "  The environment must supply it:"
+            # A source-only bundle has a better answer than "find one yourself":
+            # the sources are right here. Saying so is the difference between a
+            # solvable situation and an apparent dead end on an isolated host.
+            if [ -n "$ffsrc" ] && [ -d "$ffsrc" ]; then
+                airgap_warn "  BUT this bundle carries the sources, so you can build one here:"
+                airgap_warn "    <bundle>/hackathon_2026/scripts/dev/airgap-augment.sh <bundle-root>"
+                airgap_warn "  (needs a C/C++ toolchain on this host, no network). Otherwise:"
+            else
+                airgap_warn "  The environment must supply it:"
+            fi
             airgap_preflight_services ffmpeg
         fi
     else

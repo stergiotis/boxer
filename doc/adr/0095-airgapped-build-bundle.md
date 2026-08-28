@@ -384,6 +384,112 @@ unbundler runs a fixed script rather than taking a head argument — so here it
 verifies one head; the point is that the toolchain pinning, the graded failure and
 the timing report do not exist in two versions.
 
+### 2026-08-28 — the ffmpeg sources ship, so the target can rebuild the encoder
+
+`_airgap/ffmpeg-src` now carries the five pinned codec tarballs (~90 MB, 58 MB of
+it openh264) beside the static binary.
+
+**It closes a claim the bundle was already making.** The 2026-07-28 entry above
+put `build-static-ffmpeg.sh`, `verify-ffmpeg-lanes.sh` and
+`bench-ffmpeg-lanes.sh` into the bundle so the target could "re-verify or rebuild
+the bundled encoder binary without a boxer checkout". Only re-verify worked. The
+source cache deliberately lives *outside* the staging tree so a re-pack does not
+re-download, so only the linked binary travelled — and on the target the builder
+died with `missing <src-dir>/<tarball> (pass --fetch, or stage the tarballs
+first)`, where `--fetch` wants exactly the network that is absent. The bundle was
+shipping a build script it could not run.
+
+**Why it is worth the 90 MB.** ffmpeg is not optional for a rasterizing render
+head: the encoder lane is compiled in under `headless_raster` and spawns it as
+soon as the carrier or the H264 sink is configured (2026-08-25 entry). So the one
+component the target cannot do without was also the only one it could not change
+— against a bundle whose entire point is that boxer and hackathon stay editable
+source. `--without-h264` drops openh264 and two thirds of the added weight for an
+AV1+VP9 build.
+
+Only the tarballs travel. The source cache doubles as the build's working
+directory, so it also holds extracted trees, `_b/`, `_prefix/` and `_logs/` —
+several hundred MB of host-specific output that must not leak into a bundle; CI
+asserts exactly five tarballs and nothing else.
+
+Sources are staged whether or not the binary built, which is deliberate: the
+tarballs are fetched after the preflight but before the compile, so a host that
+fails mid-compile still has sources to pass on, and a target with the build
+toolchain can then produce what the packing host could not.
+
+Verified by running the shipped builder against only the shipped tarballs with no
+`--fetch`, i.e. touching no network at all. `--preflight-only` exits before
+creating any directory, so CI can rehearse the rebuild against the bundle's own
+source dir without polluting it.
+
+### 2026-08-28 — a packed bundle can be augmented with a natively-built ffmpeg
+
+`airgap_augment_ffmpeg` builds the static ffmpeg from the sources already inside
+an extracted bundle, verifies every codec lane natively, installs it as that
+bundle's binary and records where it came from. `--fetch-only` on
+`build-static-ffmpeg.sh` is the pack-side half: stage the tarballs without
+compiling, and without demanding a build toolchain.
+
+**What it changes about "native-only".** Nothing in a bundle cross-compiles, so
+the packing host has had to BE the target's architecture. ffmpeg is the one
+component that escapes: its sources are architecture-independent, they travel
+since the entry above, and building them needs **no network** — the tarballs are
+right there, so `--fetch` is never passed. The native build can therefore be
+deferred to a third host that is neither the packing host nor the destination:
+
+| step | where | needs |
+| --- | --- | --- |
+| pack | connected, **any** arch | network, dhall, Go, Rust |
+| augment | offline, **target** arch | a C/C++ toolchain, nothing else |
+| provision | offline, target arch | no build toolchain at all |
+
+The middle step needing no network is what makes it a different thing from
+packing, and why it can run on a transit box, a build runner, or the target itself
+before isolation.
+
+**It verifies before it installs**, with the `verify-ffmpeg-lanes.sh` the bundle
+already carries: nine checks over the four codec lanes plus the Annex-B sink. A
+binary that fails is discarded and the bundle left unchanged. This is *stronger*
+than the pack-time check it replaces, because it runs on the architecture that
+will actually encode — the pack could only ever verify its own arch.
+
+**Provenance is recorded, not assumed.** The `ffmpeg` line is rewritten and
+`ffmpeg_augmented` appended, because a bundle whose binary did not come from its
+packing host should say so — otherwise the MANIFEST implies a chain of custody
+that did not happen.
+
+**The encoder is delivered as a sidecar.** `airgap_emit_ffmpeg_sidecar` packages
+it as its own small artefact and leaves the bundle byte-for-byte untouched;
+`airgap_apply_ffmpeg_sidecar` installs one, needing no build toolchain, which is
+what lets that half run on the airgapped target. Re-packing (`airgap_augment_ffmpeg`)
+remains for handing on a single file.
+
+Re-packing makes one signature cover work done by two parties — whoever assembled
+the payload and whoever compiled the encoder — so the last signer vouches for both
+and the augment host must hold a release key. A sidecar separates them: each party
+signs what it produced, earlier signatures stay valid because earlier artefacts
+never change, and the chain composes to any length (pack → re-sign → sidecar →
+sign → verify both → apply → provision).
+
+The binding is a digest over the bundle's codec tarballs plus the architecture,
+re-computed at apply time. Binding to the *sources* rather than the bundle's bytes
+is deliberate — the same encoder is correct for any bundle carrying those same
+pinned sources for that arch — and the digest runs over a sorted listing so it
+ignores directory order and build leftovers. It proves integrity, not
+authenticity, so applying takes an optional trust anchor and checks the signature
+before installing.
+
+**Signing has an order now: pack → augment → sign.** Augmenting alters the
+artefact, so a signature made at pack time stops verifying. That is the signature
+working, not a defect, and the wrapper refuses rather than producing a bundle whose
+own verifier rejects it. It never re-signs by itself: that needs a key belonging to
+whoever owns the release, and silently re-signing would put the augment host
+outside the trust boundary while acting as if it were inside.
+
+**Scope.** ffmpeg only, and deliberately: it is the one native artefact whose
+source is architecture-independent and small enough to ship. The general shape
+would fit anything in the same position, but nothing else is.
+
 ## Status
 
 Accepted (2026-06-23; updated 2026-07-31).

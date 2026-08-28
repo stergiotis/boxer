@@ -73,6 +73,18 @@ old environment-provided behaviour returns. `--no-ffmpeg` opts out deliberately.
 The assembler is architecture-dependent — `nasm` on x86_64, GNU `as` on aarch64,
 since every codec here gates its nasm search on an x86 target;
 `scripts/dev/build-static-ffmpeg.sh --preflight-only` names what is missing.
+The pinned **source tarballs ship too**, at `_airgap/ffmpeg-src` (~90 MB), so the
+`build-static-ffmpeg.sh` the bundle already carried can actually be run on the
+target — without them a rebuild died for want of the tarballs, and only
+re-verifying the shipped binary worked. `IMZERO2_FFMPEG_SRC` points at them and
+the MANIFEST records `ffmpeg_src`.
+
+Because those sources are architecture-independent and need no network to build,
+the encoder can also be compiled *after* packing, on a host of the target's
+architecture — which is how a bundle for a foreign arch gets an ffmpeg at all. The
+library carries the pieces (`airgap_emit_ffmpeg_sidecar`,
+`airgap_apply_ffmpeg_sidecar`, `airgap_augment_ffmpeg`); the downstream wrapper is
+`hackathon2026`'s `scripts/dev/airgap-augment.sh`.
 Verify a bundled binary with `scripts/dev/verify-ffmpeg-lanes.sh`.
 
 **`tinygo` is bundled as a pinned upstream binary** at `_airgap/toolchains/tinygo`
