@@ -1,5 +1,5 @@
-// Package canonform computes the leeway canonical record form — ADR-0201
-// (proposed) — and the digests over it.
+// Package canonform computes the leeway canonical record form — ADR-0201 —
+// and the digests over it.
 //
 // The form is a quotient, not a serialization: one leeway entity is mapped
 // into the CBOR data model so that every change the ADR declares content-free
