@@ -23,10 +23,11 @@
 # What this deliberately does NOT run:
 #
 #   - `cargo clippy`. rust/imzero2/check.sh runs it with `-D warnings` and it is
-#     red at HEAD with ~2,100 findings, most of them in the generated
-#     interpreter. Gating on it would mean fixing that first; that is its own
-#     piece of work, and holding this gate hostage to it would leave the crate
-#     ungated for longer.
+#     still red. The generated half is no longer the reason: the FFFI2 Rust
+#     generator emits its own lint allowances for the dispatch match and the
+#     enum file, so what remains sits in hand-written code. Fixing that is its
+#     own piece of work, and holding this gate hostage to it would leave the
+#     crate ungated for longer.
 #   - `--all-features`. It enables desktop and both pixel hosts at once, which
 #     resolves (see headless.rs `Raster`) but builds far more than any shipped
 #     configuration.
@@ -54,10 +55,8 @@ fi
 
 cd "$crate"
 
-# The crate emits ~500 warnings on every build, nearly all of them from the
-# generated interpreter. Surfacing those on success would bury the gate's own
-# output, so each step is captured and echoed only when it fails — the same
-# shape lint.sh uses for its own steps.
+# Each step is captured and echoed only when it fails — the same shape lint.sh
+# uses for its own steps.
 run_step() {
     local label="$1"
     shift

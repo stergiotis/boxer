@@ -38,7 +38,7 @@ mod tests {
         let mut observed = f32::NAN;
         let _ = ctx.run_ui(raw, |ui| {
             ui.push_id(salt, |ui| {
-                let mut builder = egui_extras::TableBuilder::new(ui)
+                let builder = egui_extras::TableBuilder::new(ui)
                     .column(egui_extras::Column::initial(initial).resizable(true));
                 if do_reset {
                     builder.reset();
