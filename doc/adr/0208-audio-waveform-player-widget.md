@@ -496,7 +496,20 @@ the widget asks without blocking, and `Options.Reopen` — one decoder per
 reader, because a decoder whose random access is a process restart cannot be
 shared by a sequential builder, a sink and a window fetcher. The widget draws
 the unbuilt remainder as a hairline and falls back to the pyramid while a
-window is in flight. The
+window is in flight. M5 as the layers: `timeline` gained the offset axis and
+the locked view SD8 asked for (ADR-0043 SD17) and `waveform.Lanes` stacks it
+under the player in microseconds; regions, markers and curve strips are
+host-owned `Layers` on the player's canvas with editing reported as `Events`;
+the minimap is its own canvas; the readout toggles between offsets and the
+epoch's wall clock. One thing SD8 did not foresee: a body drag on an editable
+region and a pan are the same gesture, so editing is a mode the host switches
+on, not a property of every region at all times. SD4's "background" build
+is a goroutine inside `track`, which stays bus-free; the host that has a
+task API reports it as a keelson task (ADR-0038) through
+`waveform.SpawnBuildTask`, so it is listed, carries an ETA and can be
+cancelled from the task monitor — `track.CancelBuild` stops the build and
+leaves the partial pyramid drawable. `BuildProgress` carries the elapsed
+time and a rate-based ETA for hosts without a bus. The
 twelve-hour build benchmark over a procedural source runs in about 80 s on a
 mobile CPU, of which roughly a quarter is the pyramid fold itself (~94 M
 frames/s) and the rest is generating the synthetic signal — a real decoder's

@@ -1478,10 +1478,25 @@ not import `pulsesink` into a widget: the swap is the host's decision, and a
 headless scene or the tour must keep the null sink. A recording on disk opens
 with `track.OpenFileE(ctx, path, opts)` — sniffed format, one decoder per
 reader, peaks cached under `BOXER_AUDIO_PEAKS_CACHE_DIR`, built in the
-background; poll `tr.BuildProgress()` for a progress bar. Raw windows come
+background; poll `tr.BuildProgress()` for a progress bar (it carries
+`EtaMs`), and where the host has a task API report the build as a keelson
+task with `waveform.SpawnBuildTask(ctx, tasks, tr, title)` — the task monitor
+then lists it and its cancel calls `tr.CancelBuild()`. Raw windows come
 from `tr.Window(from, to)`, which returns `ok=false` on a miss and fetches
 off-thread — draw the pyramid that frame and ask again; never call
-`ReadWindowE` from a frame. `Player.TogglePlay / SeekTo / ZoomBy / FitAll / SetView` are
+`ReadWindowE` from a frame.
+
+Annotations (SD8) are host-owned: `p.SetLayers(&layers)` with sorted
+`Regions` / `Markers` / `Curves`; read `p.Events()` after `Render` and apply a
+`RegionEdit` to your own slice (the player never mutates it). Interval and
+point lanes are the `timeline` widget on its offset axis (ADR-0043 SD17):
+`lanes := waveform.NewLanes(ids, key, tr.TimeBase(), intervals)` with bounds
+in `waveform.FrameToLaneUnit` (microseconds), then `lanes.Render(p)` right
+after the player so it locks to the view — leave `LaneHint` empty or the
+label column shifts the axis off the waveform's origin. `p.RenderMinimap(w, h)`
+is its own canvas; `p.SetReadout(waveform.ReadoutAbsolute)` prints the epoch's
+wall clock when the track has one. Make region editing a mode: a body drag
+and a pan are the same gesture. `Player.TogglePlay / SeekTo / ZoomBy / FitAll / SetView` are
 the programmatic controls; `Hover / Clicked / View / Position / FormatOffset`
 the readbacks (one frame behind, like every canvas register).
 
