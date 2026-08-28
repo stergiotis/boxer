@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/axisruler"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
 )
 
 // Visuals are the colours and dimensions of the player. Colours are
@@ -153,6 +154,8 @@ type Player struct {
 	readout      ReadoutE
 	curveXs      []float32
 	curveYs      []float32
+	labelXs      []float64 // scratch for label packing
+	labelIdx     []int
 
 	// Minimap drag state (SD10).
 	miniDragging bool
@@ -187,6 +190,12 @@ const (
 	defaultSeekStep         = 5 * time.Second
 	shiftSeekMul            = 6
 	keyZoomFactor           = 2.0
+	// Label layout: the timeline's ASCII character-width estimate at its
+	// 11 px label font, the padding a label keeps from its anchor, and the
+	// most rows labels stagger into before they are allowed to overlap.
+	labelCharWidthPx float32 = 6.5
+	labelPadPx       float32 = 3
+	maxLabelRows     int32   = 3
 )
 
 // keyMask is what the player eats while focused (ADR-0177). Plus/minus are
@@ -942,6 +951,8 @@ func (inst *Player) paintRegions(w, bandsH float32) {
 	from := int64(math.Floor(view.FromFrame))
 	to := int64(math.Ceil(view.ToFrame(w)))
 	lo, hi := visibleRegions(regions, inst.maxRegionLen, from, to)
+	inst.labelXs, inst.labelIdx = inst.labelXs[:0], inst.labelIdx[:0]
+	var widest float64
 	for i := lo; i < hi; i++ {
 		r := regions[i]
 		rf, rt := inst.regionBounds(i, r)
@@ -966,9 +977,29 @@ func (inst *Player) paintRegions(w, bandsH float32) {
 		c.PaintLine(x0, 0, x0, bandsH, col, stroke).Send()
 		c.PaintLine(x1, 0, x1, bandsH, col, stroke).Send()
 		if r.Label != "" && x1-x0 > 12 {
-			c.PaintText(max(x0, 0)+3, 2, 0, 0, r.Label, inst.vis.HoverFontSize, inst.vis.LabelText).Send()
+			lw := labelWidthPx(r.Label, inst.vis.HoverFontSize)
+			widest = max(widest, lw)
+			inst.labelXs = append(inst.labelXs, float64(max(x0, 0)+labelPadPx)+lw/2)
+			inst.labelIdx = append(inst.labelIdx, i)
 		}
 	}
+	// Labels stagger into rows so adjoining regions never print over each
+	// other — the timeline's flag packing (ADR-0043), with the widest visible
+	// label as the flag width so no two labels in a row can touch.
+	lineH := inst.vis.HoverFontSize + 3
+	maxRows := max(int32(bandsH/lineH), 1)
+	rows, _ := layout.PackFlagRows(inst.labelXs, widest, min(maxRows, maxLabelRows))
+	for k, i := range inst.labelIdx {
+		x := float32(inst.labelXs[k]) - float32(labelWidthPx(regions[i].Label, inst.vis.HoverFontSize)/2)
+		y := 2 + float32(rows[k])*lineH
+		c.PaintText(x, y, 0, 0, regions[i].Label, inst.vis.HoverFontSize, inst.vis.LabelText).Send()
+	}
+}
+
+// labelWidthPx estimates a label's width from its rune count — the same
+// ASCII-only estimate the timeline uses for its label band.
+func labelWidthPx(label string, fontSize float32) (w float64) {
+	return float64(len([]rune(label)))*float64(labelCharWidthPx*fontSize/11) + 2*float64(labelPadPx)
 }
 
 func (inst *Player) paintMarkers(w, bandsH float32) {
@@ -980,6 +1011,8 @@ func (inst *Player) paintMarkers(w, bandsH float32) {
 	from := int64(math.Floor(view.FromFrame))
 	to := int64(math.Ceil(view.ToFrame(w)))
 	lo, hi := visibleMarkers(markers, from, to)
+	inst.labelXs, inst.labelIdx = inst.labelXs[:0], inst.labelIdx[:0]
+	var widest float64
 	for i := lo; i < hi; i++ {
 		m := markers[i]
 		col := m.Color
@@ -989,8 +1022,24 @@ func (inst *Player) paintMarkers(w, bandsH float32) {
 		x := view.FrameToX(float64(m.Frame))
 		c.PaintDashedLine(x, 0, x, bandsH, 4, 3, col, styletokens.StrokeRegular).Send()
 		if m.Label != "" {
-			c.PaintText(x+3, bandsH-2, 0, 2, m.Label, inst.vis.HoverFontSize, col).Send()
+			lw := labelWidthPx(m.Label, inst.vis.HoverFontSize)
+			widest = max(widest, lw)
+			inst.labelXs = append(inst.labelXs, float64(x+labelPadPx)+lw/2)
+			inst.labelIdx = append(inst.labelIdx, i)
 		}
+	}
+	lineH := inst.vis.HoverFontSize + 3
+	maxRows := max(int32(bandsH/lineH), 1)
+	rows, _ := layout.PackFlagRows(inst.labelXs, widest, min(maxRows, maxLabelRows))
+	for k, i := range inst.labelIdx {
+		m := markers[i]
+		col := m.Color
+		if col.Literal() == 0 {
+			col = inst.vis.Marker
+		}
+		x := float32(inst.labelXs[k]) - float32(labelWidthPx(m.Label, inst.vis.HoverFontSize)/2)
+		y := bandsH - 2 - float32(rows[k])*lineH
+		c.PaintText(x, y, 0, 2, m.Label, inst.vis.HoverFontSize, col).Send()
 	}
 }
 
