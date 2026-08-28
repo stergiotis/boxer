@@ -28,18 +28,21 @@ type CategorialStringVar struct {
 var _ VarI = (*CategorialStringVar)(nil)
 
 // NewCategorialString registers spec with the restricted value set and
-// returns a *CategorialStringVar. Allowed must be non-empty;
-// Spec.Default must be non-empty and a member of allowed. All three
-// violations panic at registration as programmer errors.
+// returns a *CategorialStringVar. Allowed must be non-empty and must not
+// contain the empty string; Spec.Default is either a member of allowed or
+// empty. An empty Default declares "unset" as a legitimate resolved state:
+// Get returns "" until a value in the set is supplied, so a variable whose
+// absence means "idle" or "no selection" needs no sentinel member. Violations
+// panic at registration as programmer errors.
 func NewCategorialString(spec Spec, allowed []string) (v *CategorialStringVar) {
 	mustValidate(spec)
 	if len(allowed) == 0 {
 		panic(fmt.Sprintf("env: NewCategorialString(%q) requires non-empty allowed values", spec.Name))
 	}
-	if spec.Default == "" {
-		panic(fmt.Sprintf("env: NewCategorialString(%q) requires non-empty Default — categorial vars cannot return an out-of-set zero value", spec.Name))
+	if slices.Contains(allowed, "") {
+		panic(fmt.Sprintf("env: NewCategorialString(%q): the empty string cannot be an allowed value — empty means unset", spec.Name))
 	}
-	if !slices.Contains(allowed, spec.Default) {
+	if spec.Default != "" && !slices.Contains(allowed, spec.Default) {
 		panic(fmt.Sprintf("env: default %q for %q is not in allowed values %v",
 			spec.Default, spec.Name, allowed))
 	}

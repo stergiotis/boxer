@@ -204,23 +204,38 @@ func TestCategorialStringVarRejectsEmptyAllowed(t *testing.T) {
 	}, nil)
 }
 
-func TestCategorialStringVarRejectsEmptyDefault(t *testing.T) {
+func TestCategorialStringVarEmptyDefaultMeansUnset(t *testing.T) {
 	resetRegistryForTest()
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatalf("expected panic when Default is empty for categorial var")
-		}
-		msg, _ := r.(string)
-		if !strings.Contains(msg, "Default") {
-			t.Errorf("panic message = %q, want it to mention 'Default'", msg)
-		}
-	}()
-	_ = NewCategorialString(Spec{
+	v := NewCategorialString(Spec{
 		Name:        "BOXER_TEST_CAT_EMPTY_DEFAULT",
 		Description: "test fixture",
 		Category:    CategoryDev,
 	}, []string{"a", "b"})
+	if got := v.Get(); got != "" {
+		t.Errorf("Get with empty default and no env = %q, want empty (unset)", got)
+	}
+	if v.IsAllowed("") {
+		t.Errorf("empty must not count as an allowed value")
+	}
+	v.SetForTest(t, "b")
+	if got := v.Get(); got != "b" {
+		t.Errorf("Get after SetForTest = %q, want b", got)
+	}
+}
+
+func TestCategorialStringVarRejectsEmptyAllowedMember(t *testing.T) {
+	resetRegistryForTest()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("expected panic when the allowed set contains the empty string")
+		}
+	}()
+	NewCategorialString(Spec{
+		Name:        "BOXER_TEST_CAT_EMPTY_MEMBER",
+		Default:     "a",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	}, []string{"a", ""})
 }
 
 func TestCategorialStringVarAllowedIsDefensiveCopy(t *testing.T) {

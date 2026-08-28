@@ -99,6 +99,25 @@ func TestPathVarEmptyEnvMeansUnset(t *testing.T) {
 	}
 }
 
+func TestCategorialStringVarEmptyEnvMeansUnset(t *testing.T) {
+	resetRegistryForTest()
+	v := NewCategorialString(Spec{
+		Name:        "BOXER_TEST_RESOLVE_CAT",
+		Description: "test fixture",
+		Category:    CategoryDev,
+		CliFlagName: "fixture",
+	}, []string{"a", "b"})
+	t.Setenv(v.Spec().Name, "")
+	runWithFlag(t, v.AsCliFlag())
+	if got := v.Get(); got != "" {
+		t.Errorf("Get = %q, want empty (unset)", got)
+	}
+	runWithFlag(t, v.AsCliFlag(), "--fixture=b")
+	if got := v.Get(); got != "b" {
+		t.Errorf("Get after --fixture=b = %q, want b", got)
+	}
+}
+
 // Override shadows every other tier until cleared, and never reaches the
 // process environment.
 func TestOverridePrecedence(t *testing.T) {
