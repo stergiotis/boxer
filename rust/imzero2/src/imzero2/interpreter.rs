@@ -1725,7 +1725,8 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
 
     /// ADR-0088: publish the active stream telemetry for Go to drain via
     /// `fetchVideoStreamInfo`. The headless host packs `[width, height, fps,
-    /// cadence, bitrate_kbps, frames_sent, frames_dropped, frames_in_flight]`.
+    /// cadence, bitrate_kbps, frames_sent, frames_dropped, frames_in_flight,
+    /// codec]` — the last is the lane actually served (`VideoCodec::as_u8`).
     pub fn set_video_stream_info(&mut self, values: &[u64]) {
         self.video_stream_info.clear();
         self.video_stream_info.extend_from_slice(values);

@@ -586,6 +586,32 @@ impl WsCarrier {
         broadcast_hello(&self.inner, hello);
     }
 
+    /// The lane currently served — after a degradation this is the mesh lane
+    /// regardless of what was requested (reported to the Go control as the
+    /// ninth `fetchVideoStreamInfo` value).
+    pub fn video_codec(&self) -> crate::imzero2::codeclane::VideoCodec {
+        self.lane.codec
+    }
+
+    /// Leave a video lane whose encoder cannot run for the encoderless mesh
+    /// draw-stream lane (ADR-0206 SD1 promises this degradation; ADR-0128).
+    /// Detected once — the spawn failed, or the supervisor gave up — logged
+    /// once, and from then on the host serves meshes; viewers reconnect on the
+    /// announced codec-class change. Losing the requested codec beats a
+    /// silently dead stream.
+    fn degrade_to_mesh(&mut self, why: &str) {
+        if self.is_mesh() {
+            return;
+        }
+        tracing::warn!(
+            from = ?self.lane.codec,
+            why,
+            ffmpeg = %crate::imzero2::codeclane::ffmpeg_bin(),
+            "video lane unusable — degrading to the mesh draw-stream lane"
+        );
+        self.set_video_codec(crate::imzero2::codeclane::VideoCodec::Mesh);
+    }
+
     /// ADR-0088 SD7: switch the active codec at runtime. Updates the lane and
     /// the hello's codec string, stops the current encoder (its drain flushes
     /// the old codec's tail), re-announces the hello to all connections, and
@@ -699,6 +725,7 @@ impl WsCarrier {
                 }
                 Err(e) => {
                     tracing::error!(error=%e, "failed to start shared encoder");
+                    self.degrade_to_mesh("encoder spawn failed");
                     return;
                 }
             }
@@ -707,9 +734,14 @@ impl WsCarrier {
         if self.last_frame_hash == Some(hash) {
             return; // pixel-identical to the last fed frame
         }
+        let mut gave_up = false;
         if let Some(enc) = &mut self.encoder {
             enc.on_frame(bgra, width, height, frame_idx);
             self.last_frame_hash = Some(hash);
+            gave_up = enc.gave_up();
+        }
+        if gave_up {
+            self.degrade_to_mesh("encoder supervisor gave up on the lane");
         }
     }
 
