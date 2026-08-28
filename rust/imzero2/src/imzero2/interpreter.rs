@@ -9348,6 +9348,31 @@ self.apply_widget(w,u,f,Some(i));
 
                 #[allow(unused_mut)]
                 let mut w = 0u8;
+                let mut capture_zoom = false;
+                let mut capture_scroll = false;
+                // methods
+                loop {
+                    let (m, _) = self.read_from_repr(ScrollingTextureBuilderMethodId::from_repr)?;
+                    match m {
+                        ScrollingTextureBuilderMethodId::Build => {
+                            break;
+                        }
+                        ScrollingTextureBuilderMethodId::CaptureZoom => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match ScrollingTextureBuilderMethodId::CaptureZoom"
+                            );
+                            capture_zoom = true;
+                        }
+                        ScrollingTextureBuilderMethodId::CaptureScroll => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match ScrollingTextureBuilderMethodId::CaptureScroll"
+                            );
+                            capture_scroll = true;
+                        }
+                    }
+                }
                 if d == 0 {
                     self.end_consume_message()?;
                 }
@@ -9380,6 +9405,31 @@ self.apply_widget(w,u,f,Some(i));
                     }
                     self.r9_u64_push(i.value(), resp.hover_rc);
                     self.r10_push(i.value(), resp.clicked);
+                    // ADR-0140 hover-scoped wheel capture, keyed by this widget's id: own the
+                    // wheel only while the pointer is over the texture rect; scroll is
+                    // consumed so the enclosing ScrollArea does not also scroll.
+                    if (capture_zoom || capture_scroll) && resp.contains_pointer {
+                        let mut wheel_scroll_x = 0.0f32;
+                        let mut wheel_scroll_y = 0.0f32;
+                        let mut wheel_zoom = 1.0f32;
+                        if capture_zoom {
+                            wheel_zoom = ui.input(|inp| inp.zoom_delta());
+                        }
+                        if capture_scroll {
+                            let sd = ui.input(|inp| inp.smooth_scroll_delta);
+                            wheel_scroll_x = sd.x;
+                            wheel_scroll_y = sd.y;
+                            ui.input_mut(|inp| inp.smooth_scroll_delta = egui::Vec2::ZERO);
+                        }
+                        self.r23_canvas_wheel_push(
+                            i.value(),
+                            wheel_scroll_x,
+                            wheel_scroll_y,
+                            wheel_zoom,
+                            resp.hover_x,
+                            resp.hover_y,
+                        );
+                    }
                 }
             }
             FuncProcId::ScrollingTextureRelease => {

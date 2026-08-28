@@ -49,7 +49,21 @@ func definitionsScrollingTexture() (nodes []*ir.BuilderFactoryNode) {
 			PlainArg("displayWidthPx", ctabb.F32).
 			PlainArg("displayHeightPx", ctabb.F32).
 			Build()).
-		WithConstructionCodeClientRust(rustClientCode(`0u8;`)).
+		// ADR-0140 (Update 2026-08-28): the second hover-scoped wheel-capture
+		// site. Same contract as paintCanvas — captureZoom is a pure per-id read,
+		// captureScroll additionally zeroes the global smooth_scroll_delta so an
+		// enclosing ScrollArea does not also scroll — read back per widget id via
+		// StateManager.GetCanvasWheel. The widget already senses hover+click.
+		AddMethods(idl.NewMethodBuilder().
+			BeginMethod("captureZoom").
+			CodeClientRust(rustClientCode("capture_zoom = true;\n")).EndMethod().
+			BeginMethod("captureScroll").
+			CodeClientRust(rustClientCode("capture_scroll = true;\n")).EndMethod().
+			Build()...).
+		WithConstructionCodeClientRust(rustClientCode(`0u8;
+let mut capture_zoom = false;
+let mut capture_scroll = false;
+`)).
 		WithApplyCodeClientRust(rustClientCode(`
 if {{EguiUiOptionalOuter}}.is_some() {
     let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -77,6 +91,24 @@ if {{EguiUiOptionalOuter}}.is_some() {
     }
     self.r9_u64_push({{Id}}.value(), resp.hover_rc);
     self.r10_push({{Id}}.value(), resp.clicked);
+    // ADR-0140 hover-scoped wheel capture, keyed by this widget's id: own the
+    // wheel only while the pointer is over the texture rect; scroll is
+    // consumed so the enclosing ScrollArea does not also scroll.
+    if (capture_zoom || capture_scroll) && resp.contains_pointer {
+        let mut wheel_scroll_x = 0.0f32;
+        let mut wheel_scroll_y = 0.0f32;
+        let mut wheel_zoom = 1.0f32;
+        if capture_zoom {
+            wheel_zoom = ui.input(|inp| inp.zoom_delta());
+        }
+        if capture_scroll {
+            let sd = ui.input(|inp| inp.smooth_scroll_delta);
+            wheel_scroll_x = sd.x;
+            wheel_scroll_y = sd.y;
+            ui.input_mut(|inp| inp.smooth_scroll_delta = egui::Vec2::ZERO);
+        }
+        self.r23_canvas_wheel_push({{Id}}.value(), wheel_scroll_x, wheel_scroll_y, wheel_zoom, resp.hover_x, resp.hover_y);
+    }
 }
 `)).
 		WithSettingImmediate(true).

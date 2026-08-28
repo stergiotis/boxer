@@ -151,7 +151,7 @@ status: draft
 | Scope | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | ScrollArea | BuilderFactory | No | 0 | 0 | 4 | Immediate, BlockIterator |
 | ScrollToCursor | Procedural | No | 1 | 0 | - | - |
-| ScrollingTexture | BuilderFactory | Yes | 9 | 0 | 0 | Immediate |
+| ScrollingTexture | BuilderFactory | Yes | 9 | 0 | 2 | Immediate |
 | ScrollingTextureRelease | BuilderFactory | Yes | 0 | 0 | 0 | Immediate |
 | SelectableLabel | BuilderFactory | Yes | 2 | 0 | 0 | Immediate |
 | Separator | BuilderFactory | No | 0 | 0 | 5 | Immediate |
@@ -2027,6 +2027,11 @@ Block
 | newColumns | plain | u32h |
 | displayWidthPx | plain | f32 |
 | displayHeightPx | plain | f32 |
+
+#### Builder Methods
+
+- **CaptureZoom**()
+- **CaptureScroll**()
 
 #### Return Type
 

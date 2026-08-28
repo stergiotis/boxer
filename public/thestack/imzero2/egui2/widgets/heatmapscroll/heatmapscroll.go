@@ -36,6 +36,7 @@ package heatmapscroll
 
 import (
 	"fmt"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
@@ -103,6 +104,12 @@ type HeatmapScroll struct {
 
 	hoverRc uint64 // r9_u64 databound; packed (row<<32)|col or u64::MAX
 	clicked bool   // r10 databound; primary-click on previous frame
+
+	// captureScroll / captureZoom opt the widget into owning the wheel while
+	// the pointer is over it (ADR-0140, second capture site); read back via
+	// Wheel.
+	captureScroll bool
+	captureZoom   bool
 
 	totalStats colormap.ColumnStats // accumulated across all PushColumn calls
 }
@@ -219,7 +226,7 @@ func (inst *HeatmapScroll) Render() {
 	if c.CurrentApplicationState.StateManager.TextureStarved(inst.ids.PrepareStr(inst.scopeKey).Derive()) {
 		inst.head = 0
 	}
-	c.ScrollingTexture(
+	f := c.ScrollingTexture(
 		inst.ids.PrepareStr(inst.scopeKey),
 		inst.widthSlots,
 		inst.heightSlots,
@@ -230,7 +237,14 @@ func (inst *HeatmapScroll) Render() {
 		inst.pending,
 		inst.displayWidthPx,
 		inst.displayHeightPx,
-	).SendRespVal(&inst.hoverRc, &inst.clicked)
+	)
+	if inst.captureScroll {
+		f = f.CaptureScroll()
+	}
+	if inst.captureZoom {
+		f = f.CaptureZoom()
+	}
+	f.SendRespVal(&inst.hoverRc, &inst.clicked)
 
 	if inst.pendingCount > 0 {
 		inst.head = (inst.head + inst.pendingCount) % inst.widthSlots
@@ -259,6 +273,28 @@ func (inst *HeatmapScroll) HoveredCell() (row uint32, col uint32, hovered bool) 
 // Clicked reports whether egui registered a primary click on the
 // widget rect on the previous frame. One-frame lag, same as HoveredCell.
 func (inst *HeatmapScroll) Clicked() bool { return inst.clicked }
+
+// SetCaptureScroll opts the widget into owning the mouse wheel while the
+// pointer is over it (ADR-0140): the scroll delta is delivered through Wheel
+// and zeroed for everything else that frame, so an enclosing ScrollArea does
+// not scroll under a waterfall that pans on the wheel. Off by default.
+func (inst *HeatmapScroll) SetCaptureScroll(on bool) { inst.captureScroll = on }
+
+// SetCaptureZoom opts the widget into reading the zoom gesture (ctrl+wheel /
+// pinch) while the pointer is over it (ADR-0140); the factor arrives through
+// Wheel with the hover anchor. Zoom needs no global consume, so other widgets
+// are unaffected. Off by default.
+func (inst *HeatmapScroll) SetCaptureZoom(on bool) { inst.captureZoom = on }
+
+// Wheel returns the scroll / zoom the widget captured on the previous frame
+// while the pointer was over it, with the pointer's position relative to the
+// widget origin as the zoom anchor. The identity {0, 0, 1, NaN, NaN} when the
+// widget did not own the wheel — capture off, pointer elsewhere, or nothing
+// scrolled. One-frame lag, same as HoveredCell.
+func (inst *HeatmapScroll) Wheel() c.CanvasWheelValue {
+	return c.CurrentApplicationState.StateManager.GetCanvasWheel(
+		widgethandle.Make(inst.ids.PrepareStr(inst.scopeKey).Derive()))
+}
 
 // Head returns the current ring-buffer write cursor. Useful for callers
 // maintaining a parallel retained sample ring — they can translate
