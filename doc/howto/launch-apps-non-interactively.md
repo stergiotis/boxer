@@ -160,7 +160,10 @@ JSON Lines trace (one step per line, `#` comments allowed):
 
 Anchor a step by an exact `id` from the dump, or by `name` / `contains`
 plus `role`; egui window title bars expose their ✕ as a button named
-`Close window`, one per window, so with several windows use the id. Ids
+`Close window`, one per window, so with several windows use the id. Dock
+tabs are buttons named by their title (`{"do":"click","name":"Controls",
+"role":"button"}` switches to that tab) — egui_dock registers no node for a
+tab on its own; the host adds the label from its tab viewer. Ids
 print signed in the dump but the trace field is unsigned — convert a
 negative id by adding 2⁶⁴ (`python3 -c 'print(2**64 + (ID))'`).
 

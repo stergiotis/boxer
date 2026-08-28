@@ -1280,6 +1280,18 @@ impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
         false
     }
 
+    /// Name the tab button in the accessibility tree. egui_dock draws a tab
+    /// with a bare `interact`, which registers no AccessKit node, so the
+    /// headless driver (ADR-0154) could not click a tab by its title and had
+    /// to fall back to coordinates. The title is registered as a button
+    /// label here, on the response egui_dock hands back for every tab.
+    fn on_tab_button(&mut self, tab: &mut u64, response: &egui::Response) {
+        let title = self.titles.get(tab).cloned().unwrap_or_else(|| format!("tab {tab}"));
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, title.clone())
+        });
+    }
+
     /// Key the tab body's ui id on the Go-assigned tab id rather than
     /// egui_dock's default (`Id::new(self.title(tab).text())`). Titles here are
     /// per-frame view state — play appends graph marks and renames a bound tab
