@@ -25,9 +25,19 @@ leave *follow latest* on to stay on the newest one.
 it as an outline. Double-click or Enter enters a directory, Backspace goes
 up, the arrows move the cursor, ctrl-click adds to the selection. Selecting a
 file shows it in **Preview** (text with highlighting, markdown, JSON, images,
-a hex dump for anything else) and its recorded attributes in **Info** — size,
-times, mode, the BLAKE3 hash, whether the content was stored inline,
-referenced or not at all, and the day the snapshot expires.
+a waveform player for a recording, a hex dump for anything else) and its
+recorded attributes in **Info** — size, times, mode, the BLAKE3 hash, whether
+the content was stored inline, referenced or not at all, and the day the
+snapshot expires.
+
+A recording — `.wav`, `.flac`, `.mp3`, `.opus` and the rest — previews as a
+waveform with a transport: Space or *Play* starts it, clicking the waveform
+seeks, dragging pans, the wheel scrolls and ctrl-wheel zooms. Playing needs the
+whole recording, so it is read out of the store once, up to a limit the app
+names when a file is over it; the copy it works from is encrypted or held in
+memory that has no name, and it is released the moment you select something
+else. There is no sound if the host has no audio device — the playhead still
+moves, and the reason is under the waveform.
 
 Snapshots are taken outside the app: `boxer fs snapshot --mount <id> <dir>`,
 or `ladingingest.Snapshot` from Go. The `lading` sqlapplet book carries the

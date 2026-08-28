@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -33,7 +34,7 @@ var manifest = app.Manifest{
 		PreferredWidth:  1200,
 		PreferredHeight: 760,
 	},
-	Caps: []app.SubjectFilter{
+	Caps: append([]app.SubjectFilter{
 		{
 			Pattern:   windowhost.OpenSubject,
 			Reason:    "open the selection in play as a query over the store",
@@ -44,7 +45,9 @@ var manifest = app.Manifest{
 			Reason:    "copy a snapshot path or an rclone mount command",
 			Direction: app.CapDirectionPub,
 		},
-	},
+		// A recording's peaks build is a background job the task monitor
+		// should list and be able to cancel (ADR-0208, ADR-0038).
+	}, task.ProducerCaps()...),
 	LaunchKind: launchcfg.Kind,
 	Workingset: true,
 	Help:       help.MustSub(helpFS, "help"),

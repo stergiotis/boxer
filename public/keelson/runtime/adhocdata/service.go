@@ -657,6 +657,14 @@ func newHandle() (handle string, err error) {
 	return "adhoc_" + hex.EncodeToString(b[:]), nil
 }
 
+// ResolveStoreDir returns the directory the ephemeral store writes into:
+// [StoreDir] when set, else <user cache dir>/boxer/adhoc, else a directory
+// under [os.TempDir]. It is exported because the store's guarantees are
+// directory-wide — every file here is swept at service start and deleted at
+// orderly exit — so another runtime component staging ephemeral bytes under
+// the same scheme belongs in the same directory rather than one of its own.
+func ResolveStoreDir() (dir string) { return resolveStoreDir() }
+
 // resolveStoreDir returns the configured store directory, defaulting to
 // <user cache dir>/boxer/adhoc.
 func resolveStoreDir() string {

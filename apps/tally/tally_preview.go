@@ -29,6 +29,7 @@ const (
 	previewKindSQL
 	previewKindGo
 	previewKindImage
+	previewKindAudio
 	previewKindHex
 	previewKindTooLarge
 	previewKindError
@@ -51,12 +52,16 @@ const (
 
 // previewContent is what the preview lane produces for one file.
 type previewContent struct {
-	kind   previewKindE
-	path   string
-	size   int64
-	note   string
-	job    typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-	doc    *markdown.Doc
+	kind previewKindE
+	path string
+	size int64
+	note string
+	job  typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	doc  *markdown.Doc
+	// audio is the open track of a recording (ADR-0208). It owns staged
+	// bytes, decoders and possibly the output device, so the preview lane
+	// disposes it; nothing else keeps a pointer to it.
+	audio  *audioSession
 	pixels []uint32
 	imgW   uint32
 	imgH   uint32
@@ -68,6 +73,9 @@ type previewContent struct {
 func loadPreview(ctx context.Context, fsys fs.FS, p string) (out previewContent, err error) {
 	out.path = p
 	kind := classifyByName(p)
+	if kind == previewKindAudio {
+		return loadAudioPreview(ctx, fsys, p)
+	}
 	budget := int64(previewMaxBytes)
 	if kind == previewKindImage {
 		// An encoded image is read whole up to previewImageMaxBytes; the
@@ -145,7 +153,35 @@ func classifyByName(p string) previewKindE {
 	case ".png", ".jpg", ".jpeg", ".gif":
 		return previewKindImage
 	}
+	if isAudioName(p) {
+		return previewKindAudio
+	}
 	return previewKindNone
+}
+
+// loadAudioPreview stages the recording and opens it as a track. It does not
+// go through [ladingview.ReadHead]: a recording is read whole, into staging,
+// and the head a preview would keep is the part the decoder wants least.
+func loadAudioPreview(ctx context.Context, fsys fs.FS, p string) (out previewContent, err error) {
+	out.path = p
+	out.kind = previewKindAudio
+	info, err := fs.Stat(fsys, p)
+	if err != nil {
+		return
+	}
+	out.size = info.Size()
+	if info.IsDir() {
+		out.kind = previewKindNone
+		out.note = "a directory"
+		return
+	}
+	out.audio, err = openAudioSession(ctx, fsys, p, out.size, info.ModTime())
+	if err != nil {
+		out.kind = previewKindError
+		out.note = err.Error()
+		return out, nil
+	}
+	return
 }
 
 // looksText is the store's own text rule (ADR-0198 M2, TextSniff): the first
