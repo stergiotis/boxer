@@ -488,7 +488,15 @@ opened at the source's own rate and the server resamples, so the `pcm`
 resampler SD6 anticipated is only the playback-rate one, a linear
 interpolation in the pull callback — with `track.ReplaceSinkE` as the seam
 that swaps a device in after open, which is how the demo goes from silent to
-audible and how a brokered capability would hand a sink out. The
+audible and how a brokered capability would hand a sink out. M4 as `decode`
+(the sniffing opener, `ffmpeg`/`ffprobe` through `extbin`, the file identity)
+and the long-file half of `track`: the background build with its progress and
+the `BOXER_AUDIO_PEAKS_CACHE_DIR` cache file, the byte-bounded window cache
+the widget asks without blocking, and `Options.Reopen` — one decoder per
+reader, because a decoder whose random access is a process restart cannot be
+shared by a sequential builder, a sink and a window fetcher. The widget draws
+the unbuilt remainder as a hairline and falls back to the pyramid while a
+window is in flight. The
 twelve-hour build benchmark over a procedural source runs in about 80 s on a
 mobile CPU, of which roughly a quarter is the pyramid fold itself (~94 M
 frames/s) and the rest is generating the synthetic signal — a real decoder's

@@ -1475,7 +1475,13 @@ only the view. A track opens on whatever sink `Options.NewSink` builds
 `track.ReplaceSinkE(func(src) (sink.SinkI, error))` swaps a device in later;
 `sink/pulsesink.OpenE` is the PulseAudio/PipeWire sink (pure Go, no cgo). Do
 not import `pulsesink` into a widget: the swap is the host's decision, and a
-headless scene or the tour must keep the null sink. `Player.TogglePlay / SeekTo / ZoomBy / FitAll / SetView` are
+headless scene or the tour must keep the null sink. A recording on disk opens
+with `track.OpenFileE(ctx, path, opts)` — sniffed format, one decoder per
+reader, peaks cached under `BOXER_AUDIO_PEAKS_CACHE_DIR`, built in the
+background; poll `tr.BuildProgress()` for a progress bar. Raw windows come
+from `tr.Window(from, to)`, which returns `ok=false` on a miss and fetches
+off-thread — draw the pyramid that frame and ask again; never call
+`ReadWindowE` from a frame. `Player.TogglePlay / SeekTo / ZoomBy / FitAll / SetView` are
 the programmatic controls; `Hover / Clicked / View / Position / FormatOffset`
 the readbacks (one frame behind, like every canvas register).
 
