@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/rs/zerolog/log"
 
@@ -42,13 +43,31 @@ type BuildProgress struct {
 	// open its head start and nothing else, so it is reported apart from Err
 	// and leaves the build successful.
 	CacheErr error
+	// Elapsed is the build's running time so far, or its total once done;
+	// zero for a pyramid that came from the cache.
+	Elapsed time.Duration
+	// EtaMs is the rate-based estimate of the milliseconds left, from the
+	// frames built over Elapsed; zero when unknown, done, or failed.
+	EtaMs int64
+}
+
+// EstimateEtaMs is the rate-based remaining time: built frames over elapsed
+// time extrapolated to the remainder. Zero until anything is built and once
+// everything is.
+func EstimateEtaMs(elapsed time.Duration, built, total int64) (etaMs int64) {
+	if elapsed <= 0 || built <= 0 || total <= built {
+		return 0
+	}
+	perFrame := float64(elapsed) / float64(built)
+	return int64(perFrame * float64(total-built) / float64(time.Millisecond))
 }
 
 // buildOutcome is what one build run ended with, published as a whole so a
 // reader never sees one of the two errors updated without the other.
 type buildOutcome struct {
-	err      error
-	cacheErr error
+	err        error
+	cacheErr   error
+	finishedAt time.Time
 }
 
 // BuildProgress returns the state of the peaks build. Safe from any
@@ -65,7 +84,26 @@ func (inst *Track) BuildProgress() (bp BuildProgress) {
 		bp.Err = outcome.err
 		bp.CacheErr = outcome.cacheErr
 	}
+	if !inst.buildStart.IsZero() {
+		end := time.Now()
+		if outcome != nil && !outcome.finishedAt.IsZero() {
+			end = outcome.finishedAt
+		}
+		bp.Elapsed = end.Sub(inst.buildStart)
+		if !bp.Complete && bp.Err == nil {
+			bp.EtaMs = EstimateEtaMs(bp.Elapsed, bp.BuiltFrames, bp.TotalFrames)
+		}
+	}
 	return bp
+}
+
+// CancelBuild stops a background build where it is; the pyramid keeps the
+// prefix it has and draws it, and BuildProgress reports context.Canceled.
+// The track itself stays open. A build that is not running is unaffected.
+func (inst *Track) CancelBuild() {
+	if inst.buildCancel != nil {
+		inst.buildCancel()
+	}
 }
 
 // buildJob is what a build run needs: where to read from, whether that
@@ -111,7 +149,7 @@ func (inst *Track) runBuild(ctx context.Context, job buildJob) {
 			log.Warn().Err(closeErr).Msg("unable to close the peaks build source")
 		}
 	}
-	inst.outcome.Store(&buildOutcome{err: err, cacheErr: cacheErr})
+	inst.outcome.Store(&buildOutcome{err: err, cacheErr: cacheErr, finishedAt: time.Now()})
 }
 
 // writePeaksCache writes the finished pyramid to the job's path, or returns

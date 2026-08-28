@@ -95,6 +95,11 @@ type Track struct {
 	windowOwned pcm.SourceI
 	// cancel ends the background build and the window cache's reads.
 	cancel context.CancelFunc
+	// buildCancel ends the background build alone (CancelBuild); nil when the
+	// build ran synchronously or came from the cache.
+	buildCancel context.CancelFunc
+	// buildStart is when the build began; zero for a cache hit.
+	buildStart time.Time
 	// buildDone is closed when the background build's goroutine has exited;
 	// nil when there is no such goroutine.
 	buildDone chan struct{}
@@ -207,6 +212,10 @@ func OpenE(ctx context.Context, src pcm.SourceI, opts Options) (inst *Track, err
 
 	background := opts.Background && !fromCache
 	var syncCacheErr error
+	var buildStart time.Time
+	if !fromCache {
+		buildStart = time.Now()
+	}
 	if !background {
 		if !fromCache {
 			err = pyramid.FillFromE(ctx, job.src, job.chunkFrames, job.progress)
@@ -249,15 +258,18 @@ func OpenE(ctx context.Context, src pcm.SourceI, opts Options) (inst *Track, err
 		wc:          newWindowCache(trackCtx, windowSrc, opts.WindowCacheBytes),
 		windowOwned: windowOwned,
 		cancel:      cancel,
+		buildStart:  buildStart,
 		tb:          TimeBase{Format: format, Epoch: opts.Epoch},
 		frames:      frames,
 		fromCache:   fromCache,
 	}
 	if background {
+		buildCtx, buildCancel := context.WithCancel(trackCtx)
+		inst.buildCancel = buildCancel
 		inst.buildDone = make(chan struct{})
-		go inst.runBuild(trackCtx, job)
-	} else if syncCacheErr != nil {
-		inst.outcome.Store(&buildOutcome{cacheErr: syncCacheErr})
+		go inst.runBuild(buildCtx, job)
+	} else if !fromCache {
+		inst.outcome.Store(&buildOutcome{cacheErr: syncCacheErr, finishedAt: time.Now()})
 	}
 	return inst, nil
 }

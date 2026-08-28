@@ -5,6 +5,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
@@ -22,13 +23,16 @@ var manifest = app.Manifest{
 	Keywords: []string{"gallery", "widgets", "showcase", "demo"},
 	Kind:     app.KindDemo,
 	Surface:  app.SurfaceWindowed,
-	Caps: []app.SubjectFilter{
+	Caps: append([]app.SubjectFilter{
 		{
 			Pattern:   chlocalbroker.SubjectExecPrefix + timerangepicker.PoolName,
 			Direction: app.CapDirectionPub,
 			Reason:    "evaluate user time-range expressions (ADR-0016 Phase 4)",
 		},
 	},
+		// Demos that run background jobs as keelson tasks (ADR-0038): the
+		// waveform player's peaks build, the distsummary band warm-up.
+		task.ProducerCaps()...),
 }
 
 // init registers the widget-showcase app. Interactive mode hands back

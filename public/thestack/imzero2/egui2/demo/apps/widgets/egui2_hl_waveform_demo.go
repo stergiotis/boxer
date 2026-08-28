@@ -9,7 +9,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
 	"github.com/stergiotis/boxer/public/science/audio/sink/pulsesink"
@@ -17,6 +19,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/waveform"
 )
 
@@ -34,9 +37,14 @@ import (
 
 const (
 	waveformDemoSeconds = 24
-	waveformDemoHeight  = 220
+	waveformDemoHeight  = 260
 	waveformDemoWidth   = 1000
+	waveformMinimapH    = 40
 )
+
+// waveformDemoEpoch gives the synthetic tracks a wall-clock start, so the
+// readout toggle (ADR-0208 SD9) has something to show.
+var waveformDemoEpoch = time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
 
 // waveformDemoFile names a recording the demo opens at mount instead of the
 // synthetic track — the scripted route for a headless scene, since the demo's
@@ -58,13 +66,27 @@ type waveformDemoState struct {
 	hasClick  bool
 	// Bound to widgets, so they live on the heap for the frame after the
 	// edit (stable-pointer rule).
-	device    bool
-	deviceErr string
-	rate      float64
-	volume    float64
-	path      string
-	openErr   string
-	source    string // what the track is: the short synthetic, the 12 h one, or a file
+	device      bool
+	deviceErr   string
+	rate        float64
+	volume      float64
+	path        string
+	openErr     string
+	source      string // what the track is: the short synthetic, the 12 h one, or a file
+	wallClock   bool
+	editRegions bool
+
+	// tasks is the host's task API (nil in the tour and headless lanes): a
+	// background peaks build is reported through it as a keelson task
+	// (ADR-0038), so the task monitor shows it and can cancel it.
+	tasks       task.TaskApiI
+	buildTaskId string
+
+	// Annotations (SD8): host-owned, regenerated per track.
+	layers         waveform.Layers
+	lanes          *waveform.Lanes
+	lastEdit       string
+	lastLayerClick string
 }
 
 func init() {
@@ -87,8 +109,12 @@ func init() {
 			"'twelve hours' opens a 12 h synthetic track whose peaks build in the " +
 			"background while you scroll it; 'open' loads a recording from disk (WAV " +
 			"natively, other formats through ffmpeg), its peaks cached for the next open.",
-		Init: func(ids *c.WidgetIdStack) (state any) {
-			return newWaveformDemoState(ids)
+		BusInit: func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+			var tasks task.TaskApiI
+			if bus != nil {
+				tasks = task.NewBusApi(task.ApiConfig{Bus: bus})
+			}
+			return newWaveformDemoState(ids, tasks)
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			demoWaveform(ids, state.(*waveformDemoState))
@@ -112,8 +138,49 @@ func waveformDemoSignal(format pcm.Format, frames int64) (fn pcm.SampleFunc) {
 	return pcm.PerChannel(ramp, right)
 }
 
-func newWaveformDemoState(ids *c.WidgetIdStack) (st *waveformDemoState) {
-	st = &waveformDemoState{ids: ids, rate: 1, volume: 1}
+// waveformDemoAnnotations shapes the layers a voice-activity detector would
+// produce over the demo signal: one editable region per tone burst, a
+// probability curve sampled every 100 ms (high inside a burst, low and noisy
+// outside), a marker at every ramp restart, and the same bursts as interval
+// events for the lanes in lane units.
+func waveformDemoAnnotations(tb track.TimeBase, frames int64) (l waveform.Layers, intervals []*layout.IntervalEvent) {
+	rate := int64(tb.Format.SampleRate)
+	on, off := rate*35/100, rate*55/100
+	period := on + off
+	n := int(frames / period)
+	l.Regions = make([]waveform.Region, 0, n)
+	intervals = make([]*layout.IntervalEvent, 0, n)
+	for p := int64(0); p+on <= frames; p += period {
+		l.Regions = append(l.Regions, waveform.Region{FromFrame: p, ToFrame: p + on, Label: "speech"})
+		kind := int32(1)
+		if (p/period)%3 == 2 {
+			kind = 2
+		}
+		intervals = append(intervals, &layout.IntervalEvent{
+			FromMS: waveform.FrameToLaneUnit(tb, p), ToMS: waveform.FrameToLaneUnit(tb, p+on), KindID: kind, Intensity: 1,
+		})
+	}
+	step := rate / 10
+	pts := int(frames/step) + 1
+	cv := waveform.Curve{Label: "speech probability", Frames: make([]int64, 0, pts), Values: make([]float32, 0, pts)}
+	for f := int64(0); f < frames; f += step {
+		in := f%period < on
+		v := float32(0.06) + 0.05*float32((f/step)%7)/7
+		if in {
+			v = 0.9 - 0.08*float32((f/step)%5)/5
+		}
+		cv.Frames = append(cv.Frames, f)
+		cv.Values = append(cv.Values, v)
+	}
+	l.Curves = []waveform.Curve{cv}
+	for f := int64(0); f < frames; f += rate * 8 {
+		l.Markers = append(l.Markers, waveform.Marker{Frame: f, Label: "ramp"})
+	}
+	return l, intervals
+}
+
+func newWaveformDemoState(ids *c.WidgetIdStack, tasks task.TaskApiI) (st *waveformDemoState) {
+	st = &waveformDemoState{ids: ids, rate: 1, volume: 1, tasks: tasks}
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	frames := format.DurationToFrames(waveformDemoSeconds * time.Second)
 	src, err := pcm.NewSynthSourceE(format, frames, waveformDemoSignal(format, frames))
@@ -122,6 +189,7 @@ func newWaveformDemoState(ids *c.WidgetIdStack) (st *waveformDemoState) {
 		return st
 	}
 	tr, err := track.OpenE(context.Background(), src, track.Options{
+		Epoch:   waveformDemoEpoch,
 		NewSink: func(s pcm.SourceI) sink.SinkI { return sink.NewNull(s, nil) },
 	})
 	if err != nil {
@@ -129,7 +197,7 @@ func newWaveformDemoState(ids *c.WidgetIdStack) (st *waveformDemoState) {
 		log.Error().Err(err).Msg("waveform demo: unable to open the synthetic track")
 		return st
 	}
-	st.setTrack(tr, fmt.Sprintf("synthetic %d s", waveformDemoSeconds))
+	st.setTrack(tr, fmt.Sprintf("synthetic %d s", waveformDemoSeconds), true)
 	if path := waveformDemoFile.Get(); path != "" {
 		st.path = path
 		st.openFile()
@@ -139,7 +207,7 @@ func newWaveformDemoState(ids *c.WidgetIdStack) (st *waveformDemoState) {
 
 // setTrack swaps the track and rebuilds the player over it; the old track is
 // closed. The player keeps its scope key, so egui state under it survives.
-func (st *waveformDemoState) setTrack(tr *track.Track, source string) {
+func (st *waveformDemoState) setTrack(tr *track.Track, source string, synthetic bool) {
 	if st.tr != nil {
 		if err := st.tr.CloseE(); err != nil {
 			log.Warn().Err(err).Msg("waveform demo: closing the previous track")
@@ -148,6 +216,30 @@ func (st *waveformDemoState) setTrack(tr *track.Track, source string) {
 	st.tr = tr
 	st.source = source
 	st.player = waveform.New(st.ids, tr, waveform.Options{ScopeKey: "waveform-demo"})
+	st.player.SetReadout(waveform.ReadoutRelative)
+	st.wallClock, st.editRegions = false, false
+	c.CurrentApplicationState.StateManager.OverrideDatabindingBPtr(&st.wallClock)
+	c.CurrentApplicationState.StateManager.OverrideDatabindingBPtr(&st.editRegions)
+	// A file carries no detector output; the synthetic tracks carry the
+	// layers a detector would have produced over their signal.
+	st.layers = waveform.Layers{}
+	var intervals []*layout.IntervalEvent
+	if synthetic {
+		st.layers, intervals = waveformDemoAnnotations(tr.TimeBase(), tr.Frames())
+	}
+	st.player.SetLayers(&st.layers)
+	st.lanes = waveform.NewLanes(st.ids, "waveform-demo-lanes", tr.TimeBase(), intervals)
+	st.lastEdit, st.lastLayerClick = "", ""
+	// A build still running is a background job the host should see.
+	st.buildTaskId = ""
+	if st.tasks != nil {
+		h, err := waveform.SpawnBuildTask(context.Background(), st.tasks, tr, "audio peaks: "+source)
+		if err != nil {
+			log.Warn().Err(err).Msgf("waveform demo: unable to report the peaks build as a task: %v", err)
+		} else if h != nil {
+			st.buildTaskId = string(h.Id())
+		}
+	}
 	st.hasClick = false
 	st.device, st.deviceErr = false, ""
 	st.rate, st.volume = 1, 1
@@ -173,6 +265,7 @@ func (st *waveformDemoState) openTwelveHours() {
 	tr, err := track.OpenE(context.Background(), src, track.Options{
 		Background: true,
 		Reopen:     reopen,
+		Epoch:      waveformDemoEpoch,
 		NewSink:    func(s pcm.SourceI) sink.SinkI { return sink.NewNull(s, nil) },
 	})
 	if err != nil {
@@ -180,7 +273,7 @@ func (st *waveformDemoState) openTwelveHours() {
 		return
 	}
 	st.openErr = ""
-	st.setTrack(tr, "synthetic 12 h")
+	st.setTrack(tr, "synthetic 12 h", true)
 }
 
 func (st *waveformDemoState) openFile() {
@@ -196,7 +289,7 @@ func (st *waveformDemoState) openFile() {
 		return
 	}
 	st.openErr = ""
-	st.setTrack(tr, kind.String()+" file")
+	st.setTrack(tr, kind.String()+" file", false)
 }
 
 func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
@@ -264,6 +357,20 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 				log.Warn().Err(err).Msg("waveform demo: volume rejected")
 			}
 		}
+		if c.Checkbox(ids.PrepareStr("wf-wallclock"), st.wallClock, "wall clock").SendRespVal(&st.wallClock).HasChanged() {
+			mode := waveform.ReadoutRelative
+			if st.wallClock {
+				mode = waveform.ReadoutAbsolute
+			}
+			st.player.SetReadout(mode)
+		}
+		// With editing off a drag pans; on, a drag on a region moves or
+		// resizes it (SD8) — a mode, so the two gestures never compete.
+		if c.Checkbox(ids.PrepareStr("wf-edit"), st.editRegions, "edit regions").SendRespVal(&st.editRegions).HasChanged() {
+			for i := range st.layers.Regions {
+				st.layers.Regions[i].Editable = st.editRegions
+			}
+		}
 	}
 	if st.deviceErr != "" {
 		c.Label("no output device: " + st.deviceErr).Selectable(false).Send()
@@ -282,9 +389,31 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 	}
 	c.AddSpace(styletokens.GapItems(styletokens.ActiveDensity()))
 
-	// A button above may have swapped the track; draw the current player.
+	// A button above may have swapped the track; draw the current player,
+	// the lanes locked under it (SD8) and the minimap (SD10).
 	p = st.player
 	p.RenderFillWidth(waveformDemoHeight, waveformDemoWidth)
+	ev := p.Events()
+	if ev.RegionEdit != nil {
+		e := ev.RegionEdit
+		if e.Index >= 0 && e.Index < len(st.layers.Regions) {
+			// The host applies the edit (SD8): the layers are its own.
+			st.layers.Regions[e.Index].FromFrame = e.FromFrame
+			st.layers.Regions[e.Index].ToFrame = e.ToFrame
+			st.lastEdit = fmt.Sprintf("region %d → %s – %s", e.Index, p.FormatOffset(e.FromFrame), p.FormatOffset(e.ToFrame))
+		}
+	}
+	if ev.RegionClicked >= 0 {
+		st.lastLayerClick = fmt.Sprintf("region %d", ev.RegionClicked)
+	} else if ev.MarkerClicked >= 0 {
+		st.lastLayerClick = fmt.Sprintf("marker %d", ev.MarkerClicked)
+	}
+	if st.lanes != nil {
+		st.lanes.Render(p)
+	}
+	c.AddSpace(styletokens.GapItems(styletokens.ActiveDensity()))
+	w0, _ := p.Size()
+	p.RenderMinimap(max(w0, 1), waveformMinimapH)
 
 	c.AddSpace(styletokens.GapItems(styletokens.ActiveDensity()))
 	bp := st.tr.BuildProgress()
@@ -295,9 +424,11 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 		}
 		note := "peaks building in the background"
 		if bp.Err != nil {
-			note = "build failed: " + bp.Err.Error()
+			note = "build stopped: " + bp.Err.Error()
 		}
-		jobprogress.Render(jobprogress.Input{Title: "peaks", Fraction: frac, Note: note})
+		if jobprogress.Render(jobprogress.Input{Title: "peaks", Fraction: frac, EtaMs: bp.EtaMs, Note: note, CancelId: ids.PrepareStr("wf-cancel-build")}) {
+			st.tr.CancelBuild()
+		}
 	}
 
 	state := "paused"
@@ -327,9 +458,24 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 		click = "clicked: " + p.FormatOffset(st.lastClick)
 	}
 	c.Label(click).Selectable(false).Send()
+	layersLine := fmt.Sprintf("layers: %d regions · %d markers · %d curves", len(st.layers.Regions), len(st.layers.Markers), len(st.layers.Curves))
+	if st.lastEdit != "" {
+		layersLine += " · edit: " + st.lastEdit
+	}
+	if st.lastLayerClick != "" {
+		layersLine += " · clicked " + st.lastLayerClick
+	}
+	if sel := st.lanes.Timeline().Selection(); sel.Kind != 0 {
+		layersLine += fmt.Sprintf(" · lane selection: %v", sel.Kind)
+	}
+	c.Label(layersLine).Selectable(false).Send()
 	entries, bytes, hits, misses, fetches := st.tr.WindowCacheStats()
-	c.Label(fmt.Sprintf("track: %s · %s · peaks %s · windows %d (%d KiB) hits %d misses %d fetches %d",
-		st.source, st.tr.Duration().Round(time.Second), peaksState(bp), entries, bytes/1024, hits, misses, fetches)).Selectable(false).Send()
+	trackLine := fmt.Sprintf("track: %s · %s · peaks %s · windows %d (%d KiB) hits %d misses %d fetches %d",
+		st.source, st.tr.Duration().Round(time.Second), peaksState(bp), entries, bytes/1024, hits, misses, fetches)
+	if st.buildTaskId != "" {
+		trackLine += " · task " + st.buildTaskId
+	}
+	c.Label(trackLine).Selectable(false).Send()
 }
 
 func peaksState(bp track.BuildProgress) (s string) {

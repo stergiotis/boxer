@@ -199,6 +199,44 @@ cat >"$traceB" <<EOF
 {"do":"drag","x":$CX,"y":$CY,"toX":$((CX-300)),"toY":$CY,"steps":16,"durationMs":320,"settleMs":400}
 {"do":"wait","valueContains":"view: 0:03.000 –","role":"label","comment":"300 px at 10 ms/px, from a view that started at 0"}
 
+EOF
+
+drive "$traceB" 2>&1 | tee "$OUT/logs/drive-b.log"
+rc=${PIPESTATUS[0]}
+((rc == 0)) || { log "FAIL — see $OUT/logs/drive-b.log and $OUT/logs/host.log"; exit "$rc"; }
+
+# --- measure the time under the pointer, to land a press inside a region -----
+# The demo's regions are the tone bursts: 0.35 s every 0.9 s. At 10 ms/px the
+# hover readout under (CX, CY) says which time the pointer is over; the drag
+# for the edit starts where the middle of the next burst is.
+printf '%s\n' "{\"do\":\"hover\",\"x\":$CX,\"y\":$CY,\"settleMs\":300}" >"$OUT/logs/b-hover.jsonl"
+drive "$OUT/logs/b-hover.jsonl" >"$OUT/logs/drive-b-hover.log" 2>&1 || die "hover for the measurement failed"
+drive "" --dumpTree >"$OUT/logs/tree-b.txt" 2>&1 || die "tree dump failed"
+hover_t=$(grep -F 'value="hover: ' "$OUT/logs/tree-b.txt" | head -1 | sed -n 's/.*value="hover: \([0-9]*\):\([0-9.]*\)".*/\1 \2/p')
+[[ -n "$hover_t" ]] || die "no hover readout after the measurement hover"
+read -r hm hs <<<"$hover_t"
+EX=$(python3 -c "
+t = $hm*60 + float('$hs')
+import math
+k = math.ceil(t / 0.9)
+target = k*0.9 + 0.17
+print(round($CX + (target - t) / 0.010))")
+log "time under the pointer: $hm:$hs — pressing at x=$EX for a region"
+
+traceB2="$OUT/logs/b2-assert.jsonl"
+cat >"$traceB2" <<EOF
+{"do":"note","text":"--- region editing (SD8): with the mode on, a drag on a region moves it and the host applies the edit ---"}
+{"do":"click","name":"edit regions"}
+{"do":"drag","x":$EX,"y":$CY,"toX":$((EX+200)),"toY":$CY,"steps":16,"durationMs":320,"settleMs":400}
+{"do":"wait","valueContains":"edit: region","role":"label","comment":"an editable region under the press took the drag and reported the new bounds"}
+{"do":"click","name":"edit regions","comment":"back to pan-by-drag"}
+
+{"do":"note","text":"--- the wall-clock readout (SD9): the synthetic track has an epoch of 09:00:00 ---"}
+{"do":"click","name":"wall clock"}
+{"do":"wait","valueContains":"position: 09:00:0","role":"label"}
+{"do":"click","name":"wall clock"}
+{"do":"wait","valueContains":"position: 0:0","role":"label"}
+
 {"do":"note","text":"--- transport on the null sink: play advances the position, pause holds it ---"}
 {"do":"click","name":" play"}
 {"do":"wait","valueContains":"· playing","role":"label"}
@@ -209,9 +247,9 @@ cat >"$traceB" <<EOF
 {"do":"capture","text":"waveform-player"}
 EOF
 
-drive "$traceB" 2>&1 | tee "$OUT/logs/drive-b.log"
+drive "$traceB2" 2>&1 | tee "$OUT/logs/drive-b2.log"
 rc=${PIPESTATUS[0]}
-((rc == 0)) || { log "FAIL — see $OUT/logs/drive-b.log and $OUT/logs/host.log"; exit "$rc"; }
+((rc == 0)) || { log "FAIL — see $OUT/logs/drive-b2.log and $OUT/logs/host.log"; exit "$rc"; }
 
 # --- phase C: a file through the decoder -------------------------------------
 # The demo's path field is not reachable through the accessibility tree, so
@@ -260,6 +298,7 @@ if [[ -n "$FIXTURE" ]]; then
 {"do":"scroll_into_view","name":"10 ms/px","settleMs":600}
 {"do":"wait","valueContains":"track: ffmpeg file","role":"label","comment":"the sniffing opener routed a FLAC to ffmpeg"}
 {"do":"wait","valueContains":"peaks built","role":"label","comment":"the background build over the ffmpeg decoder completed"}
+{"do":"wait","valueContains":"· task ","role":"label","comment":"the build was reported as a keelson task through the gallery host's bus (ADR-0038)"}
 {"do":"wait","valueContains":"view: 0:00.000 – 0:30.000","role":"label","comment":"the declared length is the file's"}
 {"do":"capture","text":"waveform-file"}
 EOF
@@ -271,6 +310,6 @@ else
 	log "skipped phase C (no ffmpeg on PATH)"
 fi
 
-log "PASS — hover, click-to-seek, drag-to-pan and the null-sink transport all reached the widget"
+log "PASS — hover, click-to-seek, drag-to-pan, region editing, the wall-clock readout and the null-sink transport all reached the widget"
 log "       capture: $OUT/waveform-player.png"
 exit 0
