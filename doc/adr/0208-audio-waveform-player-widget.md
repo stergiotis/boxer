@@ -480,7 +480,10 @@ test asserts the exact byte count. The decision stands — the pyramid is held
 in memory, no mmap — the cost is a fifth higher than stated.
 
 M1 shipped as `public/science/audio/{pcm,wavfile,peaks,sink,track}` with
-`pcm/pcmtest` as the shared source-contract check. The
+`pcm/pcmtest` as the shared source-contract check; M2 as `widgets/waveform`
+with its gallery demo and the headless scene `scripts/dev/waveform-scene.sh`,
+which asserts hover, click-to-seek, an exact 300 px drag and the null-sink
+transport through the demo's readouts. The
 twelve-hour build benchmark over a procedural source runs in about 80 s on a
 mobile CPU, of which roughly a quarter is the pyramid fold itself (~94 M
 frames/s) and the rest is generating the synthetic signal — a real decoder's
