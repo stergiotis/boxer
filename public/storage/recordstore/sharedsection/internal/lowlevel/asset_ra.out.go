@@ -373,7 +373,7 @@ func (inst *ReadAccessAssetTableTaggedSymbolAttributes) GetNumberOfAttributes(en
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2074
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2082
 
 type ReadAccessAssetTableTaggedSymbol struct {
 	Attributes  *ReadAccessAssetTableTaggedSymbolAttributes
@@ -465,7 +465,7 @@ func (inst *ReadAccessAssetTableTaggedSymbol) GetSectionMembershipSpec() common.
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2424
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2467
 
 type ReadAccessAssetTable struct {
 	EntityId        *ReadAccessAssetTablePlainEntityIdAttributes

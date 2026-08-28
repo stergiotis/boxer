@@ -495,7 +495,7 @@ func (inst *ReadAccessProvenanceTableTaggedSymbolArrayAttributes) GetNumberOfAtt
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2074
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2082
 
 type ReadAccessProvenanceTableTaggedSymbol struct {
 	Attributes  *ReadAccessProvenanceTableTaggedSymbolAttributes
@@ -674,7 +674,7 @@ func (inst *ReadAccessProvenanceTableTaggedSymbolArray) GetSectionMembershipSpec
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2424
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2467
 
 type ReadAccessProvenanceTable struct {
 	EntityId        *ReadAccessProvenanceTablePlainEntityIdAttributes

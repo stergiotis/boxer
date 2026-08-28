@@ -1063,7 +1063,7 @@ func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) GetNumberOfAttributes
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2074
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2082
 
 type ReadAccessDeviceTableTaggedSymbol struct {
 	Attributes  *ReadAccessDeviceTableTaggedSymbolAttributes
@@ -1416,7 +1416,7 @@ func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetSectionMembershipSpec() comm
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2424
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2467
 
 type ReadAccessDeviceTable struct {
 	EntityId        *ReadAccessDeviceTablePlainEntityIdAttributes
