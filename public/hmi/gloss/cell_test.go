@@ -127,3 +127,7 @@ func TestKindOfArrow(t *testing.T) {
 	assert.Equal(t, ValueKindOther, KindOfArrow(nil))
 	assert.Equal(t, ValueKindText, KindOfArrow(&arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Int32, ValueType: arrow.BinaryTypes.String}))
 }
+
+// byteCell is a cell of raw bytes, the shape an Arrow binary column hands a
+// face. TextCell.Raw returns S as-is, so it carries bytes as well as text.
+func byteCell(s string) TextCell { return TextCell{S: s, K: ValueKindBytes} }

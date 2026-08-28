@@ -194,8 +194,10 @@ as a note, as `-- play: enum` errors do; the buffer still runs.
 ```
 
 **Affinities in v0**, narrow: `gloss/masked` ← `\bsem:secret\b`, `gloss/url`
-← `\bsem:url\b`, `application/json` ← `\bsem:json(-scalar|-array|-object)?\b`.
-Units have no aspect and hence no affinity; that is what the directive is for.
+← `\bsem:url\b`, `application/json` ← `\bsem:json(-scalar|-array|-object)?\b`
+(`gloss/ipaddr` ← the network canonical types joined by the 2026-08-28
+Update). Units have no aspect and hence no affinity; that is what the
+directive is for.
 
 **Precedence per column**, strongest first:
 
@@ -241,6 +243,7 @@ it permutes rows on the raw values.
 | `gloss/luhn` | text, numeric | — | groups of four, middle groups masked, ✓/✗ tone by check digit | mask + verdict | — |
 | `gloss/masked` | any | — | `••••••`, never length-revealing | same | ← `sem:secret` |
 | `gloss/url` | text | — | the URL, accent tone; a hyperlink cell in the grids | `HyperlinkTo` | ← `sem:url` |
+| `gloss/ipaddr` | numeric, text, bytes | — | the address written out, `2001:db8::1` (added by the 2026-08-28 Update) | — | ← `ct:v`, `ct:w` and their CIDR / array spellings |
 | `gloss/raw` | any | — | `formatCell` | — | — |
 
 One or two exemplars per archetype — unit formatting, check digit, masking,
@@ -584,6 +587,44 @@ Verified live through the headless tour: a new `02_table_taggedid` scene
 captures the grid and, after selecting a later row, the Detail block face;
 the leeway card's plain-section face was captured against `anchor.facts` with
 its ids shifted into a tag.
+
+### 2026-08-28 — `gloss/ipaddr`, and the text lane that made it necessary
+
+An eleventh presentation gloss: `gloss/ipaddr` writes an IP address out as an
+address. Nothing in an Arrow result says a column holds one — ClickHouse's
+`IPv4` rides as a big-endian `uint32`, so `1.2.3.4` reads as `16909060`, and
+its `IPv6` as a packed 16-byte `FixedSizeBinary`, which the grids hex-encode
+and any lane formatting through `arrow.Array.ValueStr` base64-encodes. Leeway's
+network columns use those same two representations, plus the CIDR forms that
+carry the prefix length in a trailing byte — the canonical types `v`, `w`,
+`vc`, `wc`.
+
+The face reads by the cell's kind: numeric is the big-endian `uint32`; bytes
+are read as address text first and only then as packed bytes by width (4 / 16,
+5 / 17 with the prefix length last); text is parsed and canonicalised. Text
+before packed, because both lanes reach the same face — the grids hand it the
+Arrow bytes, the leeway card and the per-attribute grid hand it text a driver
+already wrote out — and an IPv6 written out is routinely 16 characters, the
+width of a packed one. A value that is neither keeps its plain rendering in
+the error tone.
+
+Its affinity is the **canonical type**, not an aspect: `\bct:[vw]c?[hm]?\b`.
+That is a stronger warrant than the `sem:` affinities have — `ct:w` says the
+column *is* an IPv6, where `sem:secret` says only how to treat a value — and
+`v` / `w` are the only base types spelled with those runes, so no other type
+collides. A plain (non-leeway) result carries no `ct:` token, so an address
+column there still reaches the gloss by alias or by a rule, as before.
+
+Found while fixing the lane underneath it. `streamreadaccess`'s text lane —
+what the leeway card and the per-attribute grid render — formatted every value
+through `arrow.Array.ValueStr`, which is base64 for a packed column: the
+`ValueFormatter` seam is handed the canonical type but was handed the value
+already encoded, so no formatter and no gloss could have recovered the address
+from it. The driver now writes a network column out from the Arrow value it
+holds, and the `ValueFormatter` receives the value written out rather than an
+artefact of how it is carried. A column whose Arrow array does not match the
+layout its canonical type implies keeps arrow's rendering rather than becoming
+an invented address.
 
 ## References
 
