@@ -923,6 +923,38 @@ reason alone.
   table is neither provisioned nor written; a malformed override panics).
   All in-tree stores regenerated.
 
+### 2026-08-28 — the disjoint-sections gate is channel-aware; verbatim slots gain the name gate
+
+Trigger: the sailing repository's events store (sailing ADR-0006) binds
+every membership through `lowCardVerbatim`. Its four kinds share the
+type-named sections of the `boxer.facts` idiom, and under the default
+per-plan ids the SD6 gate refused the layout — although an all-verbatim
+component carries no id that could alias: a literal-name membership is
+matched by its bytes on its own lane, never by the uint64 the gate guards.
+The consumer passed the gate with an empty `marshallgen.FixedIdsWrapper`,
+which is a true statement of its id regime (no ref ids exist) but reads as
+an exemption. Two changes make the gate say what it checks:
+
+- **Sections count only when ref-bound.** The gate iterates the sections a
+  component reaches through at least one ref channel; a section bound only
+  through literal-name channels takes no part. All-verbatim components may
+  therefore share sections under any id source, and the empty fixed-ids
+  wrapper is no longer needed for them. Ref-bound sharing is refused exactly
+  as before.
+- **Verbatim slots get the cross-kind name gate.** The presence hazard the
+  `kind<Name>` symbol gate guarded for ref names — `<Kind>ReadRow` marks a
+  component present on any matched slot — is identical for literal names, so
+  two kinds naming one `(section, name)` is now a generation error under any
+  id source. The key is the pair: the match is scoped to a section's reader,
+  so one name in two sections is two slots.
+
+Every existing store regenerates byte-identically (example, sharedsection,
+cqrsexample, pushoutstore, dimension/provenance, sysmfacts, persiststore,
+ladingmeta, ladingdata); the fixtures are in `recordstore/example`
+(`TestGenerateAllVerbatimSharedSectionAllowed`,
+`TestGenerateRejectsSharedVerbatimSlot`,
+`TestGenerateVerbatimSameNameAcrossSectionsAllowed`).
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

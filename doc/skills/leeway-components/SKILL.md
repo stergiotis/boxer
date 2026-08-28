@@ -190,12 +190,18 @@ into decode switches and `Scan` filter SQL, where a shared section under
 colliding ids would silently cross-read — not a rule of the component model
 (ADR-0100 SD6, as corrected 2026-08-10). Notes:
 
-- The gate is cross-kind per section; one kind may hold several memberships in
-  one section.
-- Two kinds naming one membership is a generation error under any id regime (the
-  `kind<Name>` symbol is declared once per generated package); cross-kind slot
-  sharing inside one store needs the reflect path. On a shared table this is why
-  two domains get two stores rather than one.
+- The gate is cross-kind per section and counts only sections a kind reaches
+  through a ref channel; one kind may hold several memberships in one section.
+  A literal-name (`lowCardVerbatim`) membership is matched by its bytes on its
+  own lane and cannot alias by id, so all-verbatim kinds may share sections
+  under any id source (2026-08-28; before that the gate was channel-blind and
+  such a store passed only via an empty `FixedIdsWrapper`).
+- Two kinds naming one membership is a generation error under any id regime —
+  for ref names because the `kind<Name>` symbol is declared once per generated
+  package, for verbatim names per `(section, name)` because a component is
+  present on any matched slot; cross-kind slot sharing inside one store needs
+  the reflect path. On a shared table this is why two domains get two stores
+  rather than one.
 - The lift landed 2026-08-10 (ADR-0105 D2): `gen.Input.Wrapper` selects the id
   source and the gate relaxes to id-level disjointness. One source feeds the
   codec consts, the baked `Scan` filters and the exported `<Store>MembershipIds`
