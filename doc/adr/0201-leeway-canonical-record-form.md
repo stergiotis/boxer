@@ -513,13 +513,27 @@ as §Milestones says.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-08-29 — there is no plain-item mask; `Options` gates the entity id only
+
+The §Surfaces row for `canonform` describes `Options` as "(classifier,
+plain-item mask)". No mask was built. `Options` carries `Classifier`,
+`IncludeEntityId`, `Digester` and `OnRecord`; the only plain the caller can
+exclude is `PlainItemTypeEntityId`, through the `IncludeEntityId` boolean (SD1).
+Every other plain — the timestamp, a lifecycle marker, any pass-through column —
+is hashed unconditionally. SD5's sentence "the digest is a function of
+`(record, classifier, plains mask)`" therefore reads today as
+`(record, classifier, IncludeEntityId, digester)`.
+
+Recorded because a downstream design (a patch record whose `lifecycle` plain must
+stay out of its identity) read the surfaces table and expected the mask. Adding
+one is an `Options` extension, not a form change — the entity item's plains map
+already omits excluded items by construction — but it is a second caller
+argument two parties would have to agree on, which is the CS-2 concern the
+signing explanation raises. Whether to add it, and whether the classifier and
+mask should instead be frozen into the form version, is left to the first
+consumer that needs it; the package is alpha and the API may move.
 
 ## References
 

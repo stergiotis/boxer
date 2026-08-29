@@ -202,6 +202,40 @@ encoding does not exist in the tree today.**
 These are **tier-independent** (they serve AES 26(d), inherited by RES/QES). They are
 requirements **on leeway/boxer**.
 
+> **State as of 2026-08-29 — read the table's "State today" column with this.**
+> The table below was written 2026-07-23 and its states predate three landings:
+>
+> - **`canonform` (ADR-0201, accepted 2026-08-21, M0 shipped).** A deterministic
+>   CBOR *quotient* of one entity — erases naming, widths, order and secondary
+>   memberships; keyed BLAKE3 leaf and record digests. It is the content-identity
+>   form, not a signable octet string: it "cannot round-trip a record and does not
+>   try to". Against CS-1 it gives the data plane an order- and naming-independent
+>   *digest*; against CS-5 it settles the canonical numerics and the total order on
+>   set elements, but as a hash preimage that is never materialised. Its digest is
+>   a function of `(record, classifier, IncludeEntityId, digester)` — caller
+>   arguments — so **CS-2 is not met by it** (ADR-0201 §Updates 2026-08-29). M1,
+>   the invariance suite, is open, so the form is not yet proven.
+> - **`canonwire` (ADR-0210, accepted 2026-08-28, M0–M2 shipped).** A *lossless*
+>   deterministic-CBOR encoding of one entity keyed by canonical type signatures,
+>   with a version integer in the item and a strict reader; second-pass byte
+>   equality and cross-table portability are tested. This is the profile CS-4 and
+>   CS-6 ask for (total, loss-free coverage; a fingerprint over the signed bytes
+>   themselves) and it carries CS-3's version. Its remaining CS-2 exposure is the
+>   tagger/dispatcher pair for same-typed sections, table-independent only if the
+>   built-in ordinal pair is not used. **CS-5's "does not exist" is therefore no
+>   longer accurate**: a byte-canonical, lossless data-plane encoding exists; what
+>   does not exist is its certification for signing (conformance vectors, a second
+>   implementation, CS-2 freezing) and a fingerprint binding it to the schema
+>   (CS-8).
+> - **pushout identity (ADR-0209, accepted 2026-08-28).** The patch identity
+>   preimage moved from Go-`encoding/json` (the CS-3 defect verbatim: layout pinned
+>   to Go struct order) to a hand-written deterministic-CBOR item under a keyed
+>   BLAKE3 context. The scheme version lives in the key context only, not in the
+>   artifact (ADR-0209 Q4, deferred) — CS-3/CS-9 half-met for patches.
+>
+> The rows below are left as written; the sentence "CS-5 does not exist" in
+> §Trade-offs and §Mapping to code is superseded by the above.
+
 | # | Requirement | Legal driver | State today |
 | --- | --- | --- | --- |
 | **CS-1** | **Canonical form.** Equal logical content ⇒ byte-identical output, independent of authoring order, naming style, map iteration, build. | AES 26(d) | Schema: yes *after* `Normalize`. Data: **no**. |
@@ -282,9 +316,14 @@ The generic recipe (a consumer discharges the specifics):
   (schema plane), `card.JsonCardSchemaEmitter` + `Fingerprint()` (content-addressed
   doc, [ADR-0018](../adr/0018-leeway-card-json-canonical-format.md)),
   `namemint/naturalkey` (deterministic identity) — all under
-  `public/semistructured/leeway/`. Governance metadata that a consumer can attach to
-  columns lives in `useaspects` / `valueaspects`
-  ([leeway-column-names](./leeway-column-names.md)).
+  `public/semistructured/leeway/`. Since 2026-08 also `canonform` (the
+  content-identity quotient, [ADR-0201](../adr/0201-leeway-canonical-record-form.md))
+  and `canonwire` + `canonwire/runtime` (the lossless deterministic wire,
+  [ADR-0210](../adr/0210-leeway-canonical-wire-generator.md)); for pushout
+  patches, `pushoutgraph/patch/identityform.go`
+  ([ADR-0209](../adr/0209-pushout-cbor-identity-and-wire.md)). Governance
+  metadata that a consumer can attach to columns lives in `useaspects` /
+  `valueaspects` ([leeway-column-names](./leeway-column-names.md)).
 - **Net-new:** the CS-5 canonical row encoding; the CS-3 magic+version; the CS-8
   schema↔data binding; and a signing/attestation seam (canonical preimage → detached
   CAdES-B-LTA → ASiC-E), which may live in a dedicated package or in a consumer. Each
