@@ -91,7 +91,10 @@ type Input struct {
 	// ShowHidden includes dot-names.
 	ShowHidden bool
 	// RowHeight, MaxHeight and Striped are passed to the table; zero means
-	// the defaults (one text line; fill; plain).
+	// the defaults (one text line; the table's own auto-fit, capped at
+	// ETABLE_AUTOFIT_CAP_PX; plain). MaxHeight is a ceiling — a listing
+	// shorter than it renders at its own size — so feed it the pane's
+	// measured height to bound the browser by its pane.
 	RowHeight float32
 	MaxHeight float32
 	Striped   bool

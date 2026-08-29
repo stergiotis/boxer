@@ -3284,10 +3284,14 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// order[p]. nil means "record order", the unsorted case.
 	order := inst.tableSort.orderFor(rec, totalRows)
 
+	// The grid is the last thing in the Table tab, so it takes the rest of
+	// it. Without this it falls to the auto-fit cap (400 px) and leaves the
+	// bottom of the tab empty on any taller window.
 	et := c.EndETable(ids.PrepareStr(masterTableTag),
 		uint64(displayRows),
 		18.0, 1, 1).
-		Striped(true)
+		Striped(true).
+		FillPane(true)
 	if inst.colWidthRes != nil {
 		et = et.ApplyWidths(inst.colWidthRes.Epoch(masterTableTag))
 	}

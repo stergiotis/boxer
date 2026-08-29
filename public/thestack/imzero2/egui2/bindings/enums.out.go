@@ -379,7 +379,8 @@ const (
 	EndETableMethodIdStriped         EndETableMethodIdE = 6
 	EndETableMethodIdSelectedRow     EndETableMethodIdE = 7
 	EndETableMethodIdMaxHeight       EndETableMethodIdE = 8
-	EndETableMethodIdApplyWidths     EndETableMethodIdE = 9
+	EndETableMethodIdFillPane        EndETableMethodIdE = 9
+	EndETableMethodIdApplyWidths     EndETableMethodIdE = 10
 )
 
 const (

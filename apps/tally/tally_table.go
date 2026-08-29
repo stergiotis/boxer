@@ -107,7 +107,15 @@ func (t *stringTable) render(ids *c.WidgetIdStack, density styletokens.DensityE)
 		}
 		et := c.EndETable(ids.PrepareStr("t"), uint64(len(t.rows)), tableRowHeight, 1, 0)
 		if t.maxHeight > 0 {
+			// A caller-supplied ceiling: the table takes what its rows need
+			// and stops there. Du sets one so the listing beside the treemap
+			// cannot outgrow it.
 			et = et.MaxHeight(t.maxHeight)
+		} else {
+			// Otherwise the table is the last thing in its tab and takes the
+			// rest of it. Without this it falls to the auto-fit cap (400 px)
+			// and leaves the bottom of the tab empty on any taller window.
+			et = et.FillPane(true)
 		}
 		if t.res != nil {
 			et = et.ApplyWidths(epoch)
