@@ -244,7 +244,11 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 		procRowHeight,
 		1, // numStickyHeaders: keep the sortable header row pinned during scroll
 		0, // numStickyCols: no frozen leading columns
-	).Striped(true)
+	).Striped(true).
+		// The table is the last thing in this tab, so it takes the rest of
+		// it. Without this it falls to the auto-fit cap (400 px) and leaves
+		// the bottom of the pane empty on any taller window.
+		FillPane(true)
 
 	inst.renderProcHeader(et, view)
 

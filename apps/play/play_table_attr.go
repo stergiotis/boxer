@@ -555,7 +555,11 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 		col.Send()
 	}
 
-	et := c.EndETable(ids.PrepareStr(attrTableTag), uint64(len(rows)), attrRowHeight, 1, 1).Striped(true)
+	// FillPane for the per-DB-row grid's reason: this grid is the last
+	// thing in the Table tab and takes the rest of it.
+	et := c.EndETable(ids.PrepareStr(attrTableTag), uint64(len(rows)), attrRowHeight, 1, 1).
+		Striped(true).
+		FillPane(true)
 	if inst.colWidthRes != nil {
 		et = et.ApplyWidths(inst.colWidthRes.Epoch(attrTableTag))
 	}

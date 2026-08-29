@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"math"
 	"path"
 	"time"
 
@@ -134,7 +135,16 @@ type pane struct {
 	fsErr        error
 	selected     string // the one selected file, for Preview / Info / History
 	navigated    bool   // this frame
+	// paneH is the last height this pane's probe answered with; the browser
+	// is sized to it. Held across frames: the probe is a frame late and
+	// absent on the frame the tab comes back.
+	paneH float32
 }
+
+// panePaneProbeSalt namespaces a browser pane's probe inside the shared r21
+// slot map; threading it through the instance's id stack makes the slot
+// window-unique, and ProbeSeq over the pane id separates A from B.
+const panePaneProbeSalt uint64 = 0x7a11179a4e000001
 
 var _ app.AppI = (*App)(nil)
 
@@ -665,6 +675,17 @@ func (inst *App) renderPane(sc *storeConn, id paneIDE) {
 	if !p.followLatest {
 		snapText = time.Unix(0, key.snap).UTC().Format("2006-01-02 15:04:05")
 	}
+	// The browser is the whole tab, so the tab's height is its ceiling: a long
+	// listing fills the pane, a short one stays short. Probed before it,
+	// because the rect a probe reports is the room left for the NEXT widget;
+	// held on the pane because the answer is a frame late and absent on the
+	// frame the tab comes back. Without a height the browser's etable takes
+	// the interpreter's 400 px auto-fit cap and leaves the bottom of the pane
+	// empty.
+	seq := c.ProbeSeq("tally-pane", id.String()) ^ inst.ids.PrepareHighEntropy(panePaneProbeSalt).Derive()
+	if _, h, ok := c.CapturePaneSize(seq); ok && h > 0 && !math.IsNaN(float64(h)) {
+		p.paneH = h
+	}
 	res := fsbrowser.Render(fsbrowser.Input{
 		Ids:        inst.ids,
 		ScopeKey:   "pane-" + id.String(),
@@ -677,6 +698,7 @@ func (inst *App) renderPane(sc *storeConn, id paneIDE) {
 		Striped:    true,
 		Widths:     inst.colWidths,
 		WidthTag:   "pane-" + id.String(),
+		MaxHeight:  p.paneH,
 	})
 	if res.Err != nil {
 		inst.status = res.Err.Error()

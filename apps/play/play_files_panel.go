@@ -2,6 +2,7 @@ package play
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +35,10 @@ import (
 
 // filesDriver owns the Files tab state: the browser's caller-owned State, the
 // interned file system and its build cache.
+// filesPaneProbeSalt namespaces the browser's pane probe r21 slot; threading
+// it through the instance's id stack makes the slot window-unique.
+const filesPaneProbeSalt uint64 = 0xf11e5b0a71e70001
+
 type filesDriver struct {
 	ids *c.WidgetIdStack
 
@@ -62,6 +67,11 @@ type filesDriver struct {
 	// emitted is the path last published, so a cursor that lands where it
 	// already was does not re-emit every frame.
 	emitted string
+
+	// paneH is the last height the Files tab reported to the browser's pane
+	// probe. Held across frames because the probe answers one frame late and
+	// is absent on the frame the tab comes back — see render.
+	paneH float32
 }
 
 func newFilesDriver(ids *c.WidgetIdStack) (inst *filesDriver) {
@@ -120,6 +130,17 @@ func (inst filesPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmi
 func (inst *filesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k pathClaim, emit SignalEmitterI) {
 	inst.rebuild(rec, schema, k)
 	inst.renderStrip()
+	// The pane's height, which bounds the browser: MaxHeight is a ceiling, so
+	// a long listing fills the tab and a short one stays short. Probed after
+	// the strip and before the browser, because the rect a probe reports is
+	// the room left for the NEXT widget. The tab is declared NoScroll — its
+	// overflow clips rather than scrolls — so a browser left at the etable's
+	// 400 px auto-fit cap would strand the bottom of the pane empty with no
+	// way to reach the rows past it.
+	if _, h, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(filesPaneProbeSalt).Derive()); ok &&
+		h > 0 && !math.IsNaN(float64(h)) {
+		inst.paneH = h
+	}
 	res := fsbrowser.Render(fsbrowser.Input{
 		Ids:      inst.ids,
 		ScopeKey: "files",
@@ -136,6 +157,7 @@ func (inst *filesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k p
 		Striped:    true,
 		Widths:     inst.widths,
 		WidthTag:   "files",
+		MaxHeight:  inst.paneH,
 	})
 	inst.flushWidths()
 	if res.Err != nil {

@@ -442,8 +442,13 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 	c.EtColumn(180.0).Resizable(true).Send() // caller
 	c.EtColumn(560.0).Resizable(true).Send() // message
 
+	// The table is the central panel's only occupant, so it is as tall as
+	// the panel: bounded above by the filter strip, below by the detail
+	// pane when a row is selected. Without this it falls to the auto-fit
+	// cap (400 px) and leaves the bottom of the panel empty.
 	et := c.EndETable(inst.ids.PrepareStr("logviewer-table"),
-		uint64(len(rows)), rowHeight, stickyHeads, stickyCols)
+		uint64(len(rows)), rowHeight, stickyHeads, stickyCols).
+		FillPane(true)
 	if inst.follow {
 		et = et.ScrollToRow(uint64(len(rows)-1), 1)
 	}
