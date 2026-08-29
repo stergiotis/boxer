@@ -37,8 +37,10 @@ the linked document wins.
 
 ## Build & test: read this first
 
-**Always pass the repo's build tags.** Every `go build` / `test` / `vet` / `run`
-must carry them, or packages fail to compile with misleading "undefined" errors:
+**Pass the repo's build tags.** Every `go build` / `test` / `vet` / `run` should
+carry them so local builds match CI. Nothing is *required* any more — the one
+active tag selects a profiling arm, and the tree builds cleanly without it
+([ENGINEERING_PRACTICES §3](./doc/ENGINEERING_PRACTICES.md#3-build-tag-discipline)):
 
 ```sh
 go test  -tags="$(cat ./tags)" ./...

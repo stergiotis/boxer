@@ -285,9 +285,10 @@ the integrated stack; they are argued in their ADRs, not here.
 Consequences that land on a consumer regardless of which premise attracted
 them:
 
-- Every `go build` / `go test` / `go vet` needs the repository's build tags
-  ([README § Building](../../README.md#building)); without them, packages
-  fail with misleading `undefined` errors.
+- Every `go build` / `go test` / `go vet` should carry the repository's build
+  tags to match CI ([README § Building](../../README.md#building)); none is
+  required any more — the one active tag selects a profiling arm
+  ([ENGINEERING_PRACTICES §3](../ENGINEERING_PRACTICES.md#3-build-tag-discipline)).
 - House idioms replace ecosystem defaults: structured error building and
   handling (`eb` / `eh`) instead of `fmt.Errorf` chains; house caching, bus,
   and app-runtime layers.
