@@ -213,6 +213,23 @@ idl.NewBuilderFactoryNode("endETable").
     WithDeferredBlockMap("headers", ctabb.U32, ctabb.U32). // generates BeginHeaders/EndHeaders
 ```
 
+### How tall an etable is
+
+An etable does not take the room around it: left alone it takes what its rows
+need, capped at 400 px. Two methods decide otherwise, and a table that owns a
+pane needs one of them.
+
+```go
+et.FillPane(true)     // take the room left in the parent, whatever the rows need
+et.MaxHeight(252)     // a ceiling: what the rows need, and no more than this
+```
+
+`FillPane` is for a table that owns its pane — a dock tab body, a central
+panel, a leaf of a split — and is placed last in it. `MaxHeight` is for one
+that should stay as short as its content. Together they mean "the pane, but
+never more than this". Why the default is neither, and what goes wrong
+without them: §12, *Table Stops Short of Its Pane*.
+
 ## 5.3 How They Compose
 
 `.Keep()` and deferred blocks are complementary layers that can nest:
@@ -517,7 +534,7 @@ res := tree.Render(tree.Input{
 if res.Clicked >= 0 { /* … */ }
 ```
 
-Three things follow from the design and are worth knowing before you use it:
+Four things follow from the design and are worth knowing before you use it:
 
 1.  **The host owns the state.** Expansion, selection and the keyboard cursor
     live in a caller-held `tree.State`, so expand-all, collapse-all, reveal-a-node
@@ -531,6 +548,11 @@ Three things follow from the design and are worth knowing before you use it:
 3.  **Rows are virtualised and one line high.** A collapsed subtree and an
     off-screen row build nothing. A value that needs two lines wants a second
     column and a tooltip, not a taller row (SD12).
+4.  **`MaxHeight` is the host's job.** The widget is an etable underneath and
+    inherits its 400 px auto-fit cap (ADR-0176), which a tree in a tall pane
+    overruns. `MaxHeight` is a ceiling — a short tree stays short — so feed it
+    the pane's height from `c.CapturePaneSize`, with a constant to fall back on
+    for the frame before the probe answers. Same for `widgets/fsbrowser`.
 
 ---
 
@@ -967,6 +989,33 @@ That `UiSetMinHeight(...)`-before-a-`DockArea` floor is a **scroll-host device**
   - **Carry `FillHost`:** `schemaview.Input` and `mappingplanview.Input`. The gallery demos leave it `false`; play's Schema dock-tab (`apps/play/play_schema_panel.go`) sets it `true`.
   - **Inlined floor, no field:** an *app* that owns its dock and always renders into a bounded window may keep an unconditional floor **iff** the window is guaranteed ≥ the floor — the floor is then a no-op that fills the window (e.g. `apps/godepview`: a 620 floor inside a ≥760 px window). Resizing such a window below the floor reintroduces the overflow, so prefer `FillHost` (or drop the floor) for any widget that can also land in a short bounded host.
   - **Verify in the real bounded host, not the gallery/tour** — the inverse of the caveat above. The overflow only shows where the host is bounded *and* shorter than the floor; the play window (or a resized leaf), not the demo, is the falsifier.
+
+## Table Stops Short of Its Pane (Etable Auto-Fit)
+
+* **The Symptom:** An `EndETable` that is the whole content of a dock tab, a central panel or a split leaf draws about 400 px of rows and then stops. The rest of the pane is empty, with no scrollbar to say there is more, and the table does not grow when the window does. The row count makes no difference: 12 log lines or 500 processes, the table ends in the same place. Resizing the pane *smaller* than 400 px shows the other half of it — the table overflows and is clipped by the pane.
+* **The Cause:** An etable does not take the room around it. Left alone it asks for its natural height (header rows + body rows + a scrollbar margin) capped at `ETABLE_AUTOFIT_CAP_PX` = 400. That cap is not a mistake and cannot be dropped: an etable's parent is often *unbounded* — an auto-sized `Window`'s inner ui reaches to the bottom of the screen, a `Vscroll` `ScrollArea` accepts any content height it is offered — and a table that measured such a parent and believed the answer would ask it for 180 000 px of content on a 10k-row result. Nothing at the call site distinguishes an unbounded parent from a pane, so the binding assumes the former.
+* **The Pattern:** **Say which one it is.** A table that owns its pane declares `FillPane(true)` and gets the room left in the parent, whatever the rows need — read on the Rust side at the point of allocation, so there is no probe to key and no frame of lag. A table that should stay as short as its content declares `MaxHeight(h)`, which is a *ceiling*: the rows decide, and `h` bounds them.
+  ```go
+  // WRONG: the table owns the tab, but takes 400 px of it
+  et := c.EndETable(ids.PrepareStr("rows"), n, rowH, 1, 0).Striped(true)
+
+  // RIGHT: the table owns the tab and is the last thing in it
+  et := c.EndETable(ids.PrepareStr("rows"), n, rowH, 1, 0).
+      Striped(true).
+      FillPane(true)
+
+  // ALSO RIGHT, different intent: a popup's log, as tall as its rows, never
+  // taller than 252 px. Do NOT hand over min(natural, 252) — the binding
+  // knows the natural height and applies the min itself.
+  et := c.EndETable(ids.PrepareStr("history"), n, rowH, 1, 0).MaxHeight(252)
+  ```
+  Both, together, mean "take the pane but never more than `h`".
+
+  Two things follow from `FillPane` reading the parent:
+  - **Do not use it in an unbounded parent.** In an auto-sized `Window` or a vscroll `ScrollArea` there is nothing to fill and the table grows the parent instead of fitting it. That is the case the 400 px cap exists for — leave those tables on the default. A `Tab` body is *not* one of these: egui gives a `ScrollArea`'s content ui a max_rect the size of the visible viewport, so a dock tab body measures its leaf.
+  - **Place it last in the pane.** It claims the room from the cursor down, so anything emitted after it is pushed out of view.
+
+  A widget that wraps an etable and cannot know its host's intent (`widgets/tree`, `widgets/fsbrowser`) takes the ceiling as an `Input.MaxHeight` and leaves the choice to the embedder, which feeds it a pane height from `c.CapturePaneSize`.
 
 ---
 

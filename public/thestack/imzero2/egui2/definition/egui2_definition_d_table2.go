@@ -102,16 +102,47 @@ func definitionsEtBlock() []*ir.BuilderFactoryNode {
 			CodeClientRust(rustClientCode("striped_flag = val;\n")).EndMethod().
 			BeginMethod("selectedRow").Arg("row", ctabb.U64).
 			CodeClientRust(rustClientCode("selected_row_opt = Some(row);\n")).EndMethod().
-			// maxHeight caps the vertical region the table allocates. Non-zero
-			// values switch the bounded-child-ui wrap to use exactly this
-			// height; zero (the default) leaves the auto-fit heuristic in
-			// charge — see the apply prelude for the heuristic itself.
+			// maxHeight is a CEILING on the table's height, not the height
+			// itself: the table takes what its rows need and stops here. A
+			// table shorter than the ceiling renders at its own size, so a
+			// three-row log stays three rows tall rather than reserving the
+			// cap. Zero (the default) leaves the auto-fit heuristic in charge
+			// — see the apply prelude for the heuristic itself.
+			//
+			// A caller that wants the table to take the whole pane wants
+			// fillPane below, not a maxHeight equal to the pane. (It read as
+			// an exact height until 2026-08-29, so a call site that hands
+			// over min(natural, cap) is applying a min the binding now
+			// applies itself.)
+			//
 			// Egui_table's SplitScroll otherwise greedily consumes
 			// ui.available_size() (table.rs:468 in egui_table 0.8.0), which
 			// silently pushes every sibling widget after the table off-screen
 			// when the etable sits inside a vertically flowing parent.
 			BeginMethod("maxHeight").Arg("height", ctabb.F32).
 			CodeClientRust(rustClientCode("max_height_override = Some(height);\n")).EndMethod().
+			// fillPane makes the table as tall as the room left in its parent
+			// — the whole point being that the ROOM is what decides, not the
+			// row count: the table keeps its size as rows arrive and leave,
+			// and its gridlines run to the bottom of the pane.
+			//
+			// Use it for a table that owns its pane (a dock tab body, a
+			// central panel, a leaf of a split) and is the last thing placed
+			// in it. Do NOT use it in an unbounded parent — an auto-sized
+			// Window's inner ui reaches to the bottom of the screen, and the
+			// table would grow the window to match; that is what the auto-fit
+			// cap in the apply prelude is for.
+			//
+			// This replaces the Go-side idiom of probing the pane with
+			// CaptureUiAvailableRect and feeding the answer back as a height:
+			// the rect is read here, at the point of allocation, so there is
+			// no one-frame lag, no r21 slot to key, and no held value to
+			// carry across the frames a probe is absent.
+			//
+			// Composes with maxHeight, which still caps: fillPane takes the
+			// pane, maxHeight bounds what it may take.
+			BeginMethod("fillPane").Arg("val", ctabb.B).
+			CodeClientRust(rustClientCode("fill_pane = val;\n")).EndMethod().
 			// applyWidths opts the table into the ADR-0151 width protocol.
 			// The epoch is Go's "my resolved widths changed" generation: the
 			// binding seeds egui_table's TableState from the etColumn widths
@@ -147,6 +178,7 @@ let mut auto_size_mode = egui_table::AutoSizeMode::Never;
 let mut striped_flag = false;
 let mut selected_row_opt: Option<u64> = None;
 let mut max_height_override: Option<f32> = None;
+let mut fill_pane = false;
 let mut apply_widths_epoch: Option<u32> = None;
 fn decode_scroll_align(v: u8) -> Option<egui::Align> {
     match v { 1 => Some(egui::Align::TOP), 2 => Some(egui::Align::Center), 3 => Some(egui::Align::BOTTOM), _ => None }
@@ -349,15 +381,19 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// Pattern mirrors the egui_dock 0.19 wrap in d_dock.go (DockArea's
 	// show_inside has the same greedy-alloc bug).
 	//
-	// Height heuristic:
-	//   - natural = header_rows × default_row_height + body_rows × default_row_height + ~16px scrollbar margin
-	//     (uses the row_offsets prefix sum when per-row heights are set)
-	//   - if maxHeight was set explicitly via .MaxHeight(f32), use exactly that
-	//   - otherwise auto-fit: cap natural by the parent's remaining height
-	//     when the parent is finite; cap by ETABLE_AUTOFIT_CAP_PX when the
-	//     parent is unbounded (i.e. inside a Vscroll=true ScrollArea — there
-	//     the table would otherwise demand an absurd 10_000-row content
-	//     size from the outer scroll)
+	// Height, in three cases:
+	//   - fillPane: the room left in the parent, whatever the rows need.
+	//   - otherwise: natural, capped. natural = header rows + body rows
+	//     (from the row_offsets prefix sum when per-row heights are set,
+	//     else num_rows × default) + a scrollbar margin. The cap is
+	//     maxHeight when the caller set one, else ETABLE_AUTOFIT_CAP_PX.
+	//   - both: the room left, capped by maxHeight.
+	//
+	// The default cap exists for the unbounded parent — an auto-sized Window
+	// whose inner ui reaches the bottom of the screen, a Vscroll ScrollArea
+	// that would happily accept an absurd 10_000-row content size. There is
+	// no way to tell such a parent from a pane by measuring it, which is why
+	// filling one is opt-in rather than the default.
 	const ETABLE_AUTOFIT_CAP_PX: f32 = 400.0;
 	const ETABLE_SCROLLBAR_MARGIN_PX: f32 = 16.0;
 
@@ -373,31 +409,34 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	};
 	let natural_height = header_height + body_height + ETABLE_SCROLLBAR_MARGIN_PX;
 
-	// Don't compute "remaining height" from ui.max_rect() or ui.clip_rect():
-	//  - ui.clip_rect() is the visible viewport. Inside a ScrollArea the
-	//    cursor legitimately advances past clip_rect.max.y (the scroll
-	//    area renders off-viewport content so the user can scroll to it).
-	//  - ui.max_rect() is the parent's currently-allocated layout area,
-	//    which inside content-sized containers (ScrollArea content, the
-	//    body of a CollapsingHeader, a Window's auto-sized inner ui) is
-	//    flush with the cursor — max_rect.max.y == cursor.y at the moment
-	//    we're about to render. "remaining = max_y - cursor.y" then
-	//    collapses to zero and bounded_height to zero, so only the table
-	//    header paints (sticky_size, ~20px) and the body region (which
-	//    needs scroll_outer_size > 0) renders nothing.
+	// The pane, for fillPane: available_rect_before_wrap() is the room from
+	// the cursor to the parent's max_rect corner — the same rect the Go-side
+	// CaptureUiAvailableRect probe reports, read here a frame earlier.
 	//
-	// Pick natural_height (or max_height_override), clamp at the autofit
-	// cap to keep 10k-row tables from demanding 180000px of content from
-	// the outer ScrollArea. The parent extends itself to fit our
-	// allocation — that's exactly the behaviour ScrollArea / Window /
-	// CollapsingHeader / AllocateUiAtRect all share. For a tightly
-	// bounded parent that's smaller than natural, the table simply
-	// scrolls internally — that's the same outcome egui_table picks for
-	// MaxHeight overrides anyway.
+	// Not clip_rect(): inside a ScrollArea the cursor legitimately advances
+	// past clip_rect.max.y, since the area renders off-viewport content for
+	// the user to scroll to. max_rect is the right one and is well-defined in
+	// the parents fillPane is meant for — egui 0.35 gives a ScrollArea's
+	// content ui a max_rect the size of the visible viewport
+	// (scroll_area.rs, content_max_size = inner_size), so a dock tab body
+	// measures its leaf rather than infinity.
+	//
+	// Floored at one header plus one row: a pane dragged shorter than that
+	// gets a clipped table instead of a header over nothing, which at least
+	// keeps a row and the scrollbar reachable.
+	//
+	// The parent extends itself to fit our allocation — the behaviour
+	// ScrollArea / Window / CollapsingHeader / AllocateUiAtRect all share —
+	// so a table larger than a tightly bounded parent simply scrolls
+	// internally, which is what egui_table does for any bound anyway.
 	let avail_x = (ui.max_rect().max.x - ui.cursor().min.x).max(0.0);
-	let bounded_height = match max_height_override {
-		Some(h) if h > 0.0 => h,
-		_ => natural_height.min(ETABLE_AUTOFIT_CAP_PX),
+	let pane_height =
+		ui.available_rect_before_wrap().height().max(header_height + default_row_height);
+	let bounded_height = match (fill_pane, max_height_override) {
+		(true, Some(h)) if h > 0.0 => pane_height.min(h),
+		(true, _) => pane_height,
+		(false, Some(h)) if h > 0.0 => natural_height.min(h),
+		(false, _) => natural_height.min(ETABLE_AUTOFIT_CAP_PX),
 	};
 	let bound_size = egui::Vec2::new(avail_x, bounded_height);
 	let layout = *ui.layout();

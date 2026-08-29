@@ -4484,6 +4484,7 @@ self.apply_widget(w,u,f,Some(i));
                 let mut striped_flag = false;
                 let mut selected_row_opt: Option<u64> = None;
                 let mut max_height_override: Option<f32> = None;
+                let mut fill_pane = false;
                 let mut apply_widths_epoch: Option<u32> = None;
                 fn decode_scroll_align(v: u8) -> Option<egui::Align> {
                     match v {
@@ -4565,6 +4566,12 @@ self.apply_widget(w,u,f,Some(i));
                             puffin::profile_scope!("match EndETableBuilderMethodId::MaxHeight");
                             let mut height = self.io.read_plain_f32()?;
                             max_height_override = Some(height);
+                        }
+                        EndETableBuilderMethodId::FillPane => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match EndETableBuilderMethodId::FillPane");
+                            let mut val = self.io.read_plain_b()?;
+                            fill_pane = val;
                         }
                         EndETableBuilderMethodId::ApplyWidths => {
                             #[cfg(feature = "puffin")]
@@ -4796,15 +4803,19 @@ self.apply_widget(w,u,f,Some(i));
                     // Pattern mirrors the egui_dock 0.19 wrap in d_dock.go (DockArea's
                     // show_inside has the same greedy-alloc bug).
                     //
-                    // Height heuristic:
-                    //   - natural = header_rows × default_row_height + body_rows × default_row_height + ~16px scrollbar margin
-                    //     (uses the row_offsets prefix sum when per-row heights are set)
-                    //   - if maxHeight was set explicitly via .MaxHeight(f32), use exactly that
-                    //   - otherwise auto-fit: cap natural by the parent's remaining height
-                    //     when the parent is finite; cap by ETABLE_AUTOFIT_CAP_PX when the
-                    //     parent is unbounded (i.e. inside a Vscroll=true ScrollArea — there
-                    //     the table would otherwise demand an absurd 10_000-row content
-                    //     size from the outer scroll)
+                    // Height, in three cases:
+                    //   - fillPane: the room left in the parent, whatever the rows need.
+                    //   - otherwise: natural, capped. natural = header rows + body rows
+                    //     (from the row_offsets prefix sum when per-row heights are set,
+                    //     else num_rows × default) + a scrollbar margin. The cap is
+                    //     maxHeight when the caller set one, else ETABLE_AUTOFIT_CAP_PX.
+                    //   - both: the room left, capped by maxHeight.
+                    //
+                    // The default cap exists for the unbounded parent — an auto-sized Window
+                    // whose inner ui reaches the bottom of the screen, a Vscroll ScrollArea
+                    // that would happily accept an absurd 10_000-row content size. There is
+                    // no way to tell such a parent from a pane by measuring it, which is why
+                    // filling one is opt-in rather than the default.
                     const ETABLE_AUTOFIT_CAP_PX: f32 = 400.0;
                     const ETABLE_SCROLLBAR_MARGIN_PX: f32 = 16.0;
 
@@ -4820,31 +4831,36 @@ self.apply_widget(w,u,f,Some(i));
                     };
                     let natural_height = header_height + body_height + ETABLE_SCROLLBAR_MARGIN_PX;
 
-                    // Don't compute "remaining height" from ui.max_rect() or ui.clip_rect():
-                    //  - ui.clip_rect() is the visible viewport. Inside a ScrollArea the
-                    //    cursor legitimately advances past clip_rect.max.y (the scroll
-                    //    area renders off-viewport content so the user can scroll to it).
-                    //  - ui.max_rect() is the parent's currently-allocated layout area,
-                    //    which inside content-sized containers (ScrollArea content, the
-                    //    body of a CollapsingHeader, a Window's auto-sized inner ui) is
-                    //    flush with the cursor — max_rect.max.y == cursor.y at the moment
-                    //    we're about to render. "remaining = max_y - cursor.y" then
-                    //    collapses to zero and bounded_height to zero, so only the table
-                    //    header paints (sticky_size, ~20px) and the body region (which
-                    //    needs scroll_outer_size > 0) renders nothing.
+                    // The pane, for fillPane: available_rect_before_wrap() is the room from
+                    // the cursor to the parent's max_rect corner — the same rect the Go-side
+                    // CaptureUiAvailableRect probe reports, read here a frame earlier.
                     //
-                    // Pick natural_height (or max_height_override), clamp at the autofit
-                    // cap to keep 10k-row tables from demanding 180000px of content from
-                    // the outer ScrollArea. The parent extends itself to fit our
-                    // allocation — that's exactly the behaviour ScrollArea / Window /
-                    // CollapsingHeader / AllocateUiAtRect all share. For a tightly
-                    // bounded parent that's smaller than natural, the table simply
-                    // scrolls internally — that's the same outcome egui_table picks for
-                    // MaxHeight overrides anyway.
+                    // Not clip_rect(): inside a ScrollArea the cursor legitimately advances
+                    // past clip_rect.max.y, since the area renders off-viewport content for
+                    // the user to scroll to. max_rect is the right one and is well-defined in
+                    // the parents fillPane is meant for — egui 0.35 gives a ScrollArea's
+                    // content ui a max_rect the size of the visible viewport
+                    // (scroll_area.rs, content_max_size = inner_size), so a dock tab body
+                    // measures its leaf rather than infinity.
+                    //
+                    // Floored at one header plus one row: a pane dragged shorter than that
+                    // gets a clipped table instead of a header over nothing, which at least
+                    // keeps a row and the scrollbar reachable.
+                    //
+                    // The parent extends itself to fit our allocation — the behaviour
+                    // ScrollArea / Window / CollapsingHeader / AllocateUiAtRect all share —
+                    // so a table larger than a tightly bounded parent simply scrolls
+                    // internally, which is what egui_table does for any bound anyway.
                     let avail_x = (ui.max_rect().max.x - ui.cursor().min.x).max(0.0);
-                    let bounded_height = match max_height_override {
-                        Some(h) if h > 0.0 => h,
-                        _ => natural_height.min(ETABLE_AUTOFIT_CAP_PX),
+                    let pane_height = ui
+                        .available_rect_before_wrap()
+                        .height()
+                        .max(header_height + default_row_height);
+                    let bounded_height = match (fill_pane, max_height_override) {
+                        (true, Some(h)) if h > 0.0 => pane_height.min(h),
+                        (true, _) => pane_height,
+                        (false, Some(h)) if h > 0.0 => natural_height.min(h),
+                        (false, _) => natural_height.min(ETABLE_AUTOFIT_CAP_PX),
                     };
                     let bound_size = egui::Vec2::new(avail_x, bounded_height);
                     let layout = *ui.layout();

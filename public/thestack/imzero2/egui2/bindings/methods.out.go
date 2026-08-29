@@ -1242,6 +1242,14 @@ func (inst EndETableFluid) MaxHeight(height float32) EndETableFluid {
 	return inst
 }
 
+func (inst EndETableFluid) FillPane(val bool) EndETableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdFillPane))
+	r.WriteBool(val)
+
+	return inst
+}
+
 func (inst EndETableFluid) ApplyWidths(epoch uint32) EndETableFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(EndETableMethodIdApplyWidths))

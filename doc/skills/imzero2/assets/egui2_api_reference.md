@@ -43,7 +43,7 @@ status: draft
 | DragValueU64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
 | EnabledUi | BuilderFactory | No | 1 | 0 | 0 | Immediate, BlockIterator |
 | End | Procedural | No | 0 | 0 | - | - |
-| EndETable | BuilderFactory | Yes | 4 | 0 | 9 | Immediate, Retained |
+| EndETable | BuilderFactory | Yes | 4 | 0 | 10 | Immediate, Retained |
 | EndRow | Procedural | No | 0 | 0 | - | - |
 | EtColumn | BuilderFactory | No | 1 | 0 | 3 | Immediate, Retained |
 | EtHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
@@ -686,6 +686,7 @@ Block
 - **Striped**(val: b)
 - **SelectedRow**(row: u64)
 - **MaxHeight**(height: f32)
+- **FillPane**(val: b)
 - **ApplyWidths**(epoch: u32)
 
 #### Deferred Block Maps

@@ -225,10 +225,11 @@ type Input struct {
 
 	// RowHeight is the fixed height of every row; 0 takes defaultRowHeight.
 	RowHeight float32
-	// MaxHeight caps the vertical extent the table claims. Feed it the pane's
-	// measured height, from c.CapturePaneSize, with a constant to fall back on
-	// for the first frame — the probe answers one frame late and not at all on
-	// the first. That is what every in-repo adopter does.
+	// MaxHeight caps the vertical extent the table claims — a ceiling, not a
+	// height: a tree shorter than this renders at its own size. Feed it the
+	// pane's measured height, from c.CapturePaneSize, with a constant to fall
+	// back on for the first frame — the probe answers one frame late and not
+	// at all on the first. That is what every in-repo adopter does.
 	//
 	// Left at 0 the table falls back to endETable's auto-fit heuristic, capped
 	// by ETABLE_AUTOFIT_CAP_PX, which a tree of any length overruns. That is

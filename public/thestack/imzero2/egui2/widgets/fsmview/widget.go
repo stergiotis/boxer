@@ -717,10 +717,6 @@ const (
 	// a short viewport. Nine rows is enough to read a burst of transitions
 	// without the popup dominating whatever it floats over.
 	fsmHistoryMaxH float32 = 252
-	// fsmHistoryScrollbarH mirrors the allowance the framework's own height
-	// heuristic makes for the horizontal scrollbar, so the natural height
-	// computed here agrees with the one it would have computed.
-	fsmHistoryScrollbarH float32 = 16
 )
 
 // fsmHistId* namespace the History tab's PrepareSeq ids away from each other
@@ -782,13 +778,14 @@ func (inst *Widget[T]) renderHistory() {
 		c.EtColumn(fsmHistColReason).Resizable(true).RangeMinMax(80, 400).Send()
 	}
 
-	// Bound the table at the smaller of what the rows need and the cap, so a
-	// three-entry log stays three rows tall instead of reserving the cap.
-	naturalH := fsmHistoryRowH*float32(len(rows)+1) + fsmHistoryScrollbarH
+	// A ceiling, not a height: the table takes what its rows need and stops
+	// there, so a three-entry log stays three rows tall instead of
+	// reserving the cap. (It used to hand over min(natural, cap) computed
+	// here, back when maxHeight meant an exact height.)
 	et := c.EndETable(inst.ids.PrepareStr("history-table"),
 		uint64(len(rows)), fsmHistoryRowH, 1, 0).
 		Striped(true).
-		MaxHeight(min(naturalH, fsmHistoryMaxH))
+		MaxHeight(fsmHistoryMaxH)
 
 	cellPadX := styletokens.PaddingTight(inst.density)
 	headers := [...]string{"#", "From", "To", "When", "Dwell", "Reason"}

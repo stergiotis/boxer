@@ -418,7 +418,8 @@ pub enum EndETableBuilderMethodId {
     Striped = 6,
     SelectedRow = 7,
     MaxHeight = 8,
-    ApplyWidths = 9,
+    FillPane = 9,
+    ApplyWidths = 10,
 }
 
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
