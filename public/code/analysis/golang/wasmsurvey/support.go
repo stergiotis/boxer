@@ -66,7 +66,11 @@ var unsupportedExternalPrefix = []string{
 	"github.com/ClickHouse/clickhouse-go", // network database driver
 	"google.golang.org/grpc",              // sockets
 	"google.golang.org/protobuf/reflect",  // protoreflect: heavy reflect
-	"github.com/apache/arrow",             // cgo/unsafe-heavy columnar runtime
+	// github.com/apache/arrow-go was seeded here as "cgo/unsafe-heavy" and
+	// pruned unprobed; measured, it compiles and runs under TinyGo (wasip1 and
+	// wasm) and under the Go toolchain for both wasm GOOS values — see ADR-0078
+	// §Updates. Its cgo is behind opt-in tags (ccalloc, mallocator) and its asm is
+	// amd64/arm64-only with Go fallbacks, so it is an ordinary Yellow external.
 }
 
 // supportedExternalPrefix are external prefixes confidently pure-Go and

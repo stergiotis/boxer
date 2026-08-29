@@ -244,8 +244,59 @@ in `both` mode rather than prune them (see open question 6).
    seeded-Red packages are never compiled (see Update). `redStdlib` was
    corrected; `unsupportedExternalPrefix` (Arrow, `x/tools`) is still
    unvalidated. Fix: in `both` mode, probe seeded-Reds instead of pruning them.
+   **2026-08-29:** the Arrow entry was probed, found false-Red, and removed
+   (see Updates); `x/tools` is still unvalidated and the pruning is unchanged.
 
 ## Updates
+
+### 2026-08-29 — the Arrow seed was a false-Red; removed. `arrow/math` needs `noasm` on wasm
+
+Open question 6 predicted this. `unsupportedExternalPrefix` carried
+`github.com/apache/arrow` with the rationale "cgo/unsafe-heavy columnar
+runtime", seeded-Red packages are pruned before the probe, and so nothing had
+ever compiled arrow-go for a wasm target. Probing it directly — TinyGo 0.41.1
+on Go 1.26.4, targets `wasip1` and `wasm`, plus the Go toolchain for `wasip1`
+and `js` — arrow-go **compiles, links, and runs**: builders, `RecordBatch`,
+IPC write and read-back, `List<Struct>`, dictionary-encoded strings, executed
+under wazero with output identical to the Go-toolchain build. The rationale
+was wrong on both counts. Its cgo sits behind opt-in tags (`ccalloc`,
+`mallocator`) and in `arrow/cdata`, none of which this tree reaches; its asm is
+amd64/arm64-only with Go fallbacks, so `GOARCH=wasm` selects no `.s` file; and
+`unsafe` is not a TinyGo blocker. The one construct TinyGo cannot take —
+`goccy/go-json`'s `//go:linkname` into `reflect`/`runtime` — arrow-go already
+swaps for `encoding/json` under its own `tinygo` build tag; upstream carries
+a `tinygo` tag lane and a TinyGo CI job.
+
+The seed entry is removed; arrow-go is now an ordinary Yellow external that
+the probe judges. Static effect over the same 545 packages: red 210 → 38 on
+every target. 139 tracked `package_props.go` declarations were `WASMBlocked`
+solely through this seed — never probed, since static mode proves only red —
+and move to `WASMUnknown`; the 53 declarations that are Blocked without a
+static red were probe results on 2026-06-12 and stand. The four
+declarations ADR-0080's 2026-08-14 entry turned Blocked on their arrow edge
+(`chlocalbroker`, `componentview`, `timerangepicker/evaluator`, `sysmvocab`)
+are among the 139; their comments keep the blame edge and drop the claim.
+
+Still unmeasured: this tree's *own* arrow-using packages under TinyGo. The
+module requires Go 1.27 and TinyGo 0.41.1 stops at 1.26 (the 2026-08-20
+entry), so the probe cannot reach them; the leeway reflection question
+[ADR-0077](./0077-keelson-browser-wasm-execution.md) rests on is untouched by
+this entry.
+
+**One genuine wasm defect, in both toolchains.** `arrow/math` wires its
+function pointers in `init()` from `math_{amd64,arm64,ppc64le,s390x}.go`
+(`//go:build !noasm`) or `math_noasm.go` (`//go:build noasm`). `GOARCH=wasm`
+selects neither, so the pointers stay nil and the first `Sum` call
+nil-panics — under TinyGo and under the Go toolchain alike. `-tags noasm`
+selects the Go fallback (upstream's TinyGo CI passes exactly that). `arrow/memory`
+has a `wasm`-tagged file and `arrow/bitutil` has safe defaults; `arrow/math` is
+the only package with the hole. This tree only blank-imports `arrow/math` from
+generated DML code, so nothing here can hit it, but any wasm build of this tree
+should carry `noasm`. The probe verdict (SD4: compile and link) is unaffected.
+
+Open question 6 is half closed: the Arrow entry is resolved by measurement,
+`golang.org/x/tools` is still unvalidated, and the prune-before-probe logic
+itself is unchanged.
 
 ### 2026-08-20 — TinyGo 0.41.1 does not accept Go 1.27
 

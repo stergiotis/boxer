@@ -104,14 +104,18 @@ TinyGo — it only reads what is already committed.
 - **Compile-and-link, not runtime.** Green means the package *builds* for the
   target. TinyGo stubs or overlays things like `os/exec` and `net`, so they
   compile but fail at *runtime* on wasm (no process model, no host sockets).
-  Read green as "portable to build," not "works."
+  Read green as "portable to build," not "works." The same gap exists inside
+  a dependency: `arrow/math` compiles for `GOARCH=wasm` but its function
+  pointers are only wired under an arch tag or `noasm`, so a wasm build of
+  anything that calls it needs `-tags noasm` (ADR-0078, Updates 2026-08-29).
 - **The static Red seed is load-bearing.** Entries in `support.go`'s `redStdlib`
   / `unsupportedExternalPrefix` are pruned *before* the empirical probe, so a
   wrong Red entry is never overturned — only the Yellow seed gets probed. Keep
   the Red seed minimal and empirically justified. A 2026-06-12 audit found most
   of the original stdlib seed was false-Red (`net`, `os/exec`, `net/http`, …
-  all actually compile); see the ADR-0078 Update. The external seed (Arrow,
-  `golang.org/x/tools`) is still unprobed.
+  all actually compile), and a 2026-08-29 probe found the Arrow entry false-Red
+  too and removed it; see the ADR-0078 Updates. `golang.org/x/tools` is the
+  remaining unprobed external entry.
 - **It is a snapshot.** A verdict set is for one TinyGo version + the repo's
   current tags; re-run as either moves. ADR-0078 carries the latest numbers.
 
