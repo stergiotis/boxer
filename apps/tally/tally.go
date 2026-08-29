@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
@@ -100,6 +101,10 @@ type App struct {
 	auditArmed    string
 	components    lane[[]componentHit]
 
+	// tasks reports a recording's peaks build as a keelson task (ADR-0038);
+	// nil when the host gave no bus.
+	tasks task.TaskApiI
+
 	lazy   map[uint64]*lazypane.Pane
 	status string
 	imgGen uint64
@@ -158,6 +163,17 @@ func newApp() (inst *App) {
 	}
 	inst.panes[paneIDA].followLatest = true
 	inst.panes[paneIDB].followLatest = true
+	// The preview lane is the only owner of an open recording: it closes the
+	// one it replaces, so browsing away from a track releases its staged
+	// bytes, its decoders and the output device.
+	inst.preview.dispose = func(content previewContent) {
+		if content.audio == nil {
+			return
+		}
+		if err := content.audio.closeE(); err != nil {
+			inst.log.Warn().Err(err).Msg("tally: closing a recording")
+		}
+	}
 	inst.historyTable = stringTable{scopeKey: "history-table", selected: -1}
 	inst.diffTable = stringTable{scopeKey: "diff-table", selected: -1}
 	inst.find.table = stringTable{scopeKey: "find-table", selected: -1}
@@ -172,6 +188,9 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.log = ctx.Log()
 	inst.bus = ctx.Bus()
+	if inst.bus != nil {
+		inst.tasks = task.NewBusApi(task.ApiConfig{Bus: inst.bus})
+	}
 	inst.status = "connecting…"
 	if raw := ctx.LaunchConfig(); len(raw) > 0 {
 		cfg, dErr := buscodec.Decode[launchcfg.TallyLaunch](raw)
@@ -770,6 +789,14 @@ func (inst *App) renderPreview(sc *storeConn) {
 	c.LabelAtoms(c.Atoms().BeginRichText(header).Strong().End().Keep()).Selectable(false).Send()
 	if content.note != "" {
 		c.Label(content.note).Send()
+	}
+	if content.kind == previewKindAudio {
+		// The player captures the wheel and owns its own drag, so it draws
+		// outside the scroll area rather than fighting it for both.
+		for range c.IdScope(inst.ids.PrepareStr("preview-audio")) {
+			inst.renderAudioPreview(content.audio)
+		}
+		return
 	}
 	for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
 		for range c.IdScope(inst.ids.PrepareStr("preview-body")) {

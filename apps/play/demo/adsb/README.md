@@ -41,7 +41,10 @@ public instance.
 After that the data is entirely local; rendering needs no network.
 
 `switzerland.sh` is a preset wrapper over `demo.sh` for the common case — a
-full-resolution week for the whole country (see [below](#switzerlandsh-preset)).
+full-resolution week for the whole country (see [below](#switzerlandsh-preset));
+`switzerland-germany.sh` widens that to Switzerland ∪ Germany, tiled to stay
+under the public user's per-query row cap
+(see [below](#switzerland-germanysh-preset)).
 
 ## Prerequisites
 
@@ -78,6 +81,51 @@ It defaults the bbox to Switzerland's extent (lat `45.8`–`47.85`, lon
 days ending yesterday, and `ADSB_SRC` to full-resolution `planes_mercator`. An
 explicit `ADSB_FROM`/`ADSB_TO` still wins over the rolling window; if a recent
 day comes back empty, the public instance's data lags — shift the window back.
+
+### `switzerland-germany.sh` preset
+
+`switzerland-germany.sh` is the Swiss recipe widened to cover Germany as well:
+the same rolling full-resolution week, over the union of the two national
+bboxes (lat `45.8`–`55.06`, lon `5.87`–`15.04`, minus a 0.03°-wide sliver of
+France that lies in neither) — roughly 7× the Swiss preset's area and traffic.
+
+It cannot be one bbox. The public `website` user caps a query result at
+1,048,576 rows, and when the preset was sized the whole region held 2.46 M
+full-resolution rows in a single peak hour (Saturday 2026-08-22 08:00 UTC) —
+2.3× the cap. So the script splits the region into nine disjoint rectangles
+(edges at the Swiss preset's `47.85` / `10.55` plus density-driven splits at
+`8.25` / `9.0` / `49.0` / `51.0` / `53.0`), each holding ≤ ~310 k rows in that
+hour, and runs each through `demo.sh`: the first alone in replace mode (wake the
+remote, `TRUNCATE`, load), the rest in append mode `ADSB_PARALLEL` (default 3)
+at a time. Each tile's `demo.sh` output goes to its own log under
+`ADSB_LOG_DIR`; the script prints one line per tile and a final summary, and
+re-surfaces any `chunks failed` warning from the logs.
+
+```sh
+apps/play/demo/adsb/switzerland-germany.sh                    # last 7 days, full res
+ADSB_SRC=planes_mercator_sample10 apps/play/demo/adsb/switzerland-germany.sh   # ~10× lighter
+ADSB_PARALLEL=1 apps/play/demo/adsb/switzerland-germany.sh    # serial, gentler on the remote
+ADSB_APPEND=1 ADSB_TILES=4 ADSB_DAYS=2026-08-21 ADSB_HOURS="9" \
+  apps/play/demo/adsb/switzerland-germany.sh                  # redo one failed chunk
+```
+
+Preset-only knobs: `ADSB_PARALLEL` (concurrent tiles after the first),
+`ADSB_TILES` (1-based indexes of the tiles to load — see the list in the
+script), `ADSB_LOG_DIR`. Everything from the `demo.sh` table applies too; an
+explicit `ADSB_DAYS` is honoured (the rolling window is only filled in when it
+is unset), which is what makes the single-chunk redo above work.
+
+Volume and time, from one run of the 2026-08-19..25 week:
+- 226 M rows in `planes_mercator` (30–38 M per day, 18.7 k distinct aircraft),
+  plus the 10 % / 1 % sample tables — 19.9 GiB + 2.3 GiB + 0.26 GiB on disk.
+- 51 minutes wall-clock with `ADSB_PARALLEL=3`: ~31 min for the first tile alone
+  (a full-resolution tile-hour takes ~10 s regardless of how many rows it
+  carries, so the remote-side scan, not the transfer, sets the pace), ~40 min
+  for the other eight. No chunk needed a retry.
+
+The tile edges were sized against one Saturday hour. If a weekday chunk fails
+with a result-rows-limit error, that tile needs splitting — re-probe the
+per-degree density for the hour in question rather than guessing.
 
 See [Loading more](#loading-more) for the multi-day / wider-area / accumulate
 knobs. Then view it in `play` (default endpoint is already

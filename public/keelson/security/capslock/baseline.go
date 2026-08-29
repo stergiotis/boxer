@@ -24,9 +24,12 @@ import (
 //
 // # The shape of the current debt
 //
-// The remaining entry is real filesystem access from app code. It is not
-// dangerous; it is an app reaching past the §SD7 picker substrate to touch the
-// disk directly, which is the thing §SD10 exists to make visible.
+// Both entries are real filesystem access from app code. Neither is dangerous;
+// each is an app reaching past the §SD7 picker substrate to touch the disk
+// directly, which is the thing §SD10 exists to make visible. They differ in
+// kind: one is harness code compiled into a demo, the other is an app doing its
+// own ephemeral staging because the service that owns that directory has no
+// operation it could ask for instead.
 //
 // This list was six entries when the gate was first enforced, and each way one
 // left is worth remembering, because they are three different things:
@@ -43,6 +46,9 @@ import (
 //   - None so far has left the way the list wants: an app declaring the subject
 //     it needs, or reading through the broker.
 var baseline = map[string][]string{
+	"github.com/stergiotis/boxer/apps/tally": {
+		"CAPABILITY_FILES",
+	},
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets": {
 		"CAPABILITY_FILES",
 	},
@@ -52,6 +58,14 @@ var baseline = map[string][]string{
 // "<appId> :: <capability>". Each names the call site that incurs the
 // capability, so an entry can be checked rather than taken on trust.
 var baselineReasons = map[string]string{
+	"github.com/stergiotis/boxer/apps/tally :: CAPABILITY_FILES": "" +
+		"tally.stageRecording -> os.OpenFile / os.Remove / unix.MemfdCreate: playing a " +
+		"recording out of a lading snapshot needs it as a file a decoder can seek, so the " +
+		"app stages it into the ad-hoc dataset store's directory (ADR-0134) under a key it " +
+		"holds in memory, or into anonymous memory for ffmpeg. The store's OWNER is a " +
+		"runtime service with the disk capability; it publishes Arrow datasets, not blobs, " +
+		"so there is no operation to ask it for. Routing staging through that service is " +
+		"the way this entry leaves — see ADR-0200's 2026-08-28 update.",
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets :: CAPABILITY_FILES": "" +
 		"widgets.RenderLoopHandlerTestDriver -> os.MkdirAll: the screenshot TestDriver " +
 		"(ADR-0057) creates its capture output directory. Harness code compiled into the " +

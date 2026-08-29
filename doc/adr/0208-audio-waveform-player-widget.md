@@ -366,6 +366,7 @@ here so the additions are found.
 | `extbin` program registry | added: `Ffmpeg`, `Ffprobe` | the airgap bundle's binary list; `doc/env-vars.md` regenerates if an override variable is declared |
 | Environment-variable registry (ADR-0009) | added: `BOXER_AUDIO_PEAKS_CACHE_DIR` | `doc/env-vars.md` regenerates |
 | `go.mod` | added: `github.com/jfreymuth/pulse` (MIT, no transitive dependencies) | license gate SBOM (ADR-0004) |
+| `decode` package API | added: `FdInputI`, `OpenFfmpegFdE`, `ReopenerFd` (2026-08-28 update) | nothing — a leaf library's own surface |
 
 ## Alternatives
 
@@ -525,6 +526,31 @@ mobile CPU, of which roughly a quarter is the pyramid fold itself (~94 M
 frames/s) and the rest is generating the synthetic signal — a real decoder's
 read cost is what will dominate, which is the reason SD4 builds in the
 background.
+
+### 2026-08-28 — a second host, and a recording with no path
+
+tally plays the recordings in a lading snapshot (ADR-0200's update of the same
+date), which is the first host whose recordings have no filesystem path: they
+are rows in ClickHouse, and staging them as plain files would outlive the
+window. SD5 routed a recording by sniffing a path, and the native reader was
+already path-free — `wavfile.NewReaderE` takes an `io.ReaderAt`, so a decrypting
+reader satisfies it. ffmpeg was not: `-i` needs something openable, and ffprobe
+needs to seek it, so a pipe is not a substitute: ffprobe prints `N/A` for a
+duration it cannot establish, and SD5 makes a missing frame count an error
+rather than a source of unknown length.
+
+`decode.FdInputI` is the seam for that: a recording the host holds open rather
+than names, handed to each spawned ffprobe and ffmpeg as an inherited
+descriptor and addressed by them as `/proc/self/fd/3`. Every spawn asks for a
+*fresh* handle, because two decoder processes sharing one open file description
+would share its offset and seek each other off course — and a source restarts
+its process on every backward read, so that is not a corner case. `-ss` seeks
+an inherited descriptor exactly as it seeks a path; the integration test holds
+an fd-backed source sample-for-sample against a path-backed one across a
+restart.
+
+This does not change SD5's routing, only what an input may be. A path-shaped
+recording still goes through `OpenE` and pays nothing for the seam.
 
 ## References
 

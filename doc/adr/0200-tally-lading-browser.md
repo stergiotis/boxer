@@ -492,6 +492,58 @@ the widget's new cell inset, which is the `PaddingTight` play's resolver
 already used, so the two floors are the same expression and a column dragged to
 the widget's floor no longer comes back a couple of points wider.
 
+### 2026-08-28 — Preview plays a recording, and how its bytes get to a decoder
+
+Preview gained an audio kind: a file named like a recording opens as an
+ADR-0208 player — waveform, transport, ruler, minimap — instead of a hex dump.
+It is a preview kind and not a tab of its own, so the preview lane's key
+governs it and a new selection closes the track. That made the lane the owner
+of something with a lifetime, which it had not been: a lane may now carry a
+disposer, and it releases the value it replaces, the value a superseded run
+produced anyway, and whatever it holds when the app unmounts. Nothing else
+keeps a pointer to an open recording.
+
+SD4 said browse and preview go through `ladingadapter`, and that stands — but a
+decoder wants a *file*, not bytes: the native WAV reader an `io.ReaderAt`,
+ffmpeg and ffprobe an input they can name on their own command line and seek.
+Staging a snapshot's recording as a plain file would leave it on disk after the
+window closed, which is the durability [ADR-0134](./0134-adhoc-datasets.md)
+exists to refuse, so staging reuses that store: its directory, its per-dataset
+quota, its AES-GCM chunk format, its keys-in-memory-only rule, and its
+sweep-at-start. A WAV is sealed into a BXAD file and read back through
+`adhocdata.SeekableReader`, so its plaintext never leaves the process. Anything
+else is ffmpeg's, and an external process can read neither our ciphertext nor a
+stream: ffprobe seeks to establish a duration, prints `N/A` where it cannot,
+and a source with no frame count is not a `pcm.SourceI`. ADR-0134 met the same wall at ClickHouse and answered it by
+decrypting on our side of the boundary into a kernel object with no name; the
+audio-shaped version of that answer is a memfd, which `decode.FdInputI` hands
+to each spawned decoder as an inherited descriptor. Bounded by the same quota,
+which for that branch also bounds anonymous memory.
+
+Consequences worth stating rather than discovering. The peaks cache is off:
+it is a plaintext derivative of a recording staged precisely so it leaves
+nothing behind, so every open rebuilds — in the background, reported as a
+keelson task, which is why the manifest gained `task.ProducerCaps()` (ADR-0038;
+without them a task the app spawns is denied). Opening a recording opens the
+audio device, falling back to the silent clock with the reason on screen.
+Staging reads the whole recording out of the store before anything is drawn,
+which is why the quota is a refusal at selection with both sizes named and not
+a surprise part-way through. And the store dates the file, not the recording,
+so the wall-clock readout is offered only where an entry's mtime gave frame 0
+an epoch.
+
+Staging is the app touching the disk itself, which is what ADR-0026 §SD10's
+gate is for, and it is now tally's entry in the capslock baseline. The store's
+owner is a runtime service that *has* the disk capability — but it publishes
+Arrow datasets, not blobs, so there is no operation to ask it for. Giving it
+one, so an app stages by request rather than by `os.OpenFile`, is how that
+entry leaves; it is a change to ADR-0134's wire surface and quota accounting,
+and it is not made here.
+
+`scripts/dev/tally-audio-scene.sh` drives both staging shapes and the release,
+asserting on the readouts: the waveform is painter output and the headless
+client cannot capture it, the same gap `waveform-scene.sh` has.
+
 ## References
 
 - [ADR-0198](./0198-fs-snapshot-store.md) and
