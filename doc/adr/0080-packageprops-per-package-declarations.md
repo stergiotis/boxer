@@ -311,3 +311,21 @@ merely runnable. Its first run reported 882 mismatches, of which 870 were
 — and 12 were the real regressions. Abstentions are now counted rather than
 listed (`--show-unjudged` restores them). A gate whose output is 98% noise is a
 gate that gets tuned out, which is a fair account of why this one sat unwired.
+
+### 2026-08-29 — 139 `WASMBlocked` declarations rest on a seed that was wrong
+
+The 2026-08-14 entry turned four declarations Blocked because their closures
+reach `arrow-go`, which the survey's static seed classified
+unsupported-external. That seed was never probed; probed, arrow-go compiles
+and runs under TinyGo ([ADR-0078](./0078-tinygo-wasm-amenability-survey.md),
+Updates 2026-08-29), and the entry is removed. Every tracked declaration that
+was Blocked *only* through it — 139, the four above included — moves to
+`WASMUnknown`: static mode proves only red, and none of these packages has
+been probed, so nothing is asserted. Declarations that are Blocked without a
+static red are probe results from the 2026-06-12 rollout and are untouched.
+
+The transitive-closure lesson in that entry stands unchanged — `sysmvocab`'s
+own code still tells a reader nothing about its verdict — only the verdict it
+led to turned out to be unfounded rather than wrong-by-omission. Comments in
+the affected files keep their blame edge and drop the claim that arrow-go
+does not compile.

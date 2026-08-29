@@ -4,9 +4,9 @@ import "github.com/stergiotis/boxer/public/packageprops"
 
 // PackageProps records this package's curated properties (ADR-0080).
 var PackageProps = packageprops.Props{
-	WASMWASI:         packageprops.WASMBlocked,
-	WASMJS:           packageprops.WASMBlocked,
-	WASMFreestanding: packageprops.WASMBlocked,
+	WASMWASI:         packageprops.WASMUnknown,
+	WASMJS:           packageprops.WASMUnknown,
+	WASMFreestanding: packageprops.WASMUnknown,
 }
 
 func init() {

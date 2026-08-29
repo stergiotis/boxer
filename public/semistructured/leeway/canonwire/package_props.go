@@ -6,13 +6,18 @@ import "github.com/stergiotis/boxer/public/packageprops"
 // Seeded by `boxer code analysis golang wasmsurvey props generate`; curate by
 // hand. The same group's `props verify` reconciles it.
 //
-// Blocked, not amenable: the generator reads a common.TableDesc and speaks
-// mappingplan.MembershipChannel, and both of those packages are themselves
-// blocked. It is generation-time code and has no reason to run in a browser.
+// Not asserted on any target: the closure reaches arrow-go, which the survey
+// seeded unsupported-external and therefore never probed. Measured, arrow-go
+// compiles and runs under TinyGo (ADR-0078, Updates 2026-08-29), the seed is
+// gone, and static mode proves only red — so this package stays unjudged
+// until a TinyGo that accepts the repo's Go version probes it.
+//
+// Generation-time code — it reads a common.TableDesc and speaks
+// mappingplan.MembershipChannel — with no reason to run in a browser either way.
 var PackageProps = packageprops.Props{
-	WASMWASI:         packageprops.WASMBlocked,
-	WASMJS:           packageprops.WASMBlocked,
-	WASMFreestanding: packageprops.WASMBlocked,
+	WASMWASI:         packageprops.WASMUnknown,
+	WASMJS:           packageprops.WASMUnknown,
+	WASMFreestanding: packageprops.WASMUnknown,
 }
 
 func init() {

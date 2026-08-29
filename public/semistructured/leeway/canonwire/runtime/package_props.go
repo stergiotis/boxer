@@ -6,16 +6,19 @@ import "github.com/stergiotis/boxer/public/packageprops"
 // Seeded by `boxer code analysis golang wasmsurvey props generate`; curate by
 // hand. The same group's `props verify` reconciles it.
 //
-// Blocked, not amenable: the entity form keys its plains by
-// common.PlainItemTypeE (ADR-0210 SD2) and its memberships by
-// mappingplan.MembershipChannel (SD4), and both of those packages are
-// themselves blocked. Both are leeway vocabulary the wire cannot drop and
-// stay lossless. The CBOR writer, the reader and the value forms would
-// compile for WASM on their own.
+// Not asserted on any target: the closure reaches arrow-go, which the survey
+// seeded unsupported-external and therefore never probed. Measured, arrow-go
+// compiles and runs under TinyGo (ADR-0078, Updates 2026-08-29), the seed is
+// gone, and static mode proves only red — so this package stays unjudged
+// until a TinyGo that accepts the repo's Go version probes it.
+//
+// The entity form keys its plains by common.PlainItemTypeE (ADR-0210 SD2) and
+// its memberships by mappingplan.MembershipChannel (SD4): leeway vocabulary the
+// wire cannot drop and stay lossless, so the verdict follows those packages.
 var PackageProps = packageprops.Props{
-	WASMWASI:         packageprops.WASMBlocked,
-	WASMJS:           packageprops.WASMBlocked,
-	WASMFreestanding: packageprops.WASMBlocked,
+	WASMWASI:         packageprops.WASMUnknown,
+	WASMJS:           packageprops.WASMUnknown,
+	WASMFreestanding: packageprops.WASMUnknown,
 }
 
 func init() {
