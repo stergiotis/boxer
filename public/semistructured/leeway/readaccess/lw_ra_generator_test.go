@@ -309,7 +309,7 @@ func TestComposeMembershipPackInfo(t *testing.T) {
 	var membershipSpecs []common.MembershipSpecE
 	var classNames []string
 	var sectionToClassNames []string
-	membershipSpecs, classNames, sectionToClassNames, err = ComposeMembershipPackInfo(tblDesc, namer)
+	membershipSpecs, _, classNames, sectionToClassNames, err = ComposeMembershipPackInfo(tblDesc, namer)
 	require.NoError(t, err)
 	require.EqualValues(t, []common.MembershipSpecE{
 		common.MembershipSpecHighCardRef,

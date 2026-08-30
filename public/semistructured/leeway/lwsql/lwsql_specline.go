@@ -58,7 +58,7 @@ func SpecLines(columnNames []string) (lines []string) {
 	if err != nil {
 		return lines
 	}
-	if _, _, ok := classifyColumns(columnNames); !ok {
+	if _, _, _, ok := classifyColumns(columnNames); !ok {
 		return lines
 	}
 	var b strings.Builder

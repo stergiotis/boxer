@@ -45,6 +45,35 @@ func LoadAccelFieldFromRecord[F, B IndexConstraintI](idx uint32, rec RecordI, de
 	dest.SetReleaser(d)
 	return
 }
+
+// LoadAccelIdentityFromRecord loads the accel of a membership channel the
+// schema declares single-instance (ADR-0213): there is no cardinality
+// column, the membership column carries exactly one element per attribute,
+// so the column's own list offsets are the per-entity attribute ranges and
+// every per-attribute cardinality is 1. idx addresses the MEMBERSHIP column
+// itself; only its list structure is read, never its values, so any element
+// type qualifies.
+func LoadAccelIdentityFromRecord[F, B IndexConstraintI](idx uint32, rec RecordI, dest *RandomAccessTwoLevelLookupAccel[F, B, int, int64]) (err error) {
+	err = checkColumnIndexE(rec, idx)
+	if err != nil {
+		return
+	}
+	c := rec.Column(int(idx))
+	if c.DataType().ID() != arrow.LIST {
+		err = unexpectedDataTypeE(rec.Schema(), idx, c.DataType(), arrow.LIST)
+		return
+	}
+	d := array.NewListData(c.Data())
+	ones := make([]uint64, d.ListValues().Len())
+	for i := range ones {
+		ones[i] = 1
+	}
+	dest.LoadCardinalities(ones)
+	dest.SetRanger(d)
+	dest.SetReleaser(d)
+	return
+}
+
 func LoadScalarValueFieldFromRecord[S any](idx uint32, expectedDatatype arrow.Type, rec RecordI, dest **S, ctor func(data arrow.ArrayData) *S) (err error) {
 	err = checkColumnIndexE(rec, idx)
 	if err != nil {

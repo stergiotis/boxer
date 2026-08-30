@@ -93,8 +93,35 @@ func tableDescFromIr(ir *common.IntermediateTableRepresentation, tableName namin
 	return
 }
 
-func ComposeMembershipPackInfo(tblDesc common.TableDesc, namer gocodegen.GoClassNamerReadAccessI) (membershipSpecs []common.MembershipSpecE, classNames []string, sectionToClassName []string, err error) {
-	kv := containers.NewBinarySearchGrowingKV[common.MembershipSpecE, int](len(tblDesc.TaggedValuesSections), func(a common.MembershipSpecE, b common.MembershipSpecE) int {
+// singleMembershipClassSuffix disambiguates a shared membership pack whose
+// sections declare channels single-instance (ADR-0213): packs sharing a
+// MembershipSpecE but differing in the declaration cannot share a class —
+// the declaration decides which channels load their accel from the
+// cardinality lane and which from the membership column itself.
+func singleMembershipClassSuffix(single common.MembershipSpecE) (s string, err error) {
+	if single == 0 {
+		return
+	}
+	s = "Single"
+	for m := range single.Iterate() {
+		role, ok := common.GetMembershipRoleByMembershipSpec(m)
+		if !ok {
+			err = eb.Build().Stringer("spec", m).Errorf("no membership identity role for spec bit")
+			return
+		}
+		s += naming.MustBeValidStylableName(role.String()).Convert(naming.UpperCamelCase).String()
+	}
+	return
+}
+
+func ComposeMembershipPackInfo(tblDesc common.TableDesc, namer gocodegen.GoClassNamerReadAccessI) (membershipSpecs []common.MembershipSpecE, singleSpecs []common.MembershipSpecE, classNames []string, sectionToClassName []string, err error) {
+	// The pack key is the (channel set, single-instance declaration) pair,
+	// packed for the comparator; sections agreeing on both share one class.
+	type packedKey = uint16
+	pack := func(spec common.MembershipSpecE, single common.MembershipSpecE) packedKey {
+		return packedKey(spec)<<8 | packedKey(single)
+	}
+	kv := containers.NewBinarySearchGrowingKV[packedKey, int](len(tblDesc.TaggedValuesSections), func(a packedKey, b packedKey) int {
 		if a < b {
 			return -1
 		} else if a > b {
@@ -104,7 +131,7 @@ func ComposeMembershipPackInfo(tblDesc common.TableDesc, namer gocodegen.GoClass
 	})
 	for i, s := range tblDesc.TaggedValuesSections {
 		if s.MembershipSpec != 0 {
-			kv.MergeValue(s.MembershipSpec, i, func(old int, new int) int {
+			kv.MergeValue(pack(s.MembershipSpec, common.SingleMembershipSpecs(s.UseAspects)), i, func(old int, new int) int {
 				if old < 0 {
 					return old - 1
 				} else {
@@ -121,9 +148,15 @@ func ComposeMembershipPackInfo(tblDesc common.TableDesc, namer gocodegen.GoClass
 	}
 	sharedIndex := 0
 	membershipSpecs = make([]common.MembershipSpecE, 0, kv.Len())
+	singleSpecs = make([]common.MembershipSpecE, 0, kv.Len())
 	classNames = make([]string, 0, kv.Len())
 	sectionToClassName = make([]string, len(tblDesc.TaggedValuesSections))
-	for spec, n := range kv.IteratePairs() {
+	for key, n := range kv.IteratePairs() {
+		spec := common.MembershipSpecE(key >> 8)
+		single := common.MembershipSpecE(key & 0xff)
+		matches := func(s *common.TaggedValuesSection) bool {
+			return s.MembershipSpec == spec && common.SingleMembershipSpecs(s.UseAspects) == single
+		}
 		var clsName string
 		if n < 0 {
 			sharedIndex++
@@ -132,17 +165,23 @@ func ComposeMembershipPackInfo(tblDesc common.TableDesc, namer gocodegen.GoClass
 				err = eb.Build().Stringer("tableName", tblDesc.DictionaryEntry.Name).Stringer("spec", spec).Errorf("unable to compose shared membership pack class: %w", err)
 				return
 			}
-			for i, s := range tblDesc.TaggedValuesSections {
-				if s.MembershipSpec == spec {
+			var suffix string
+			suffix, err = singleMembershipClassSuffix(single)
+			if err != nil {
+				return
+			}
+			clsName += suffix
+			for i := range tblDesc.TaggedValuesSections {
+				if matches(&tblDesc.TaggedValuesSections[i]) {
 					sectionToClassName[i] = clsName
 				}
 			}
 		} else {
 			var sectionName naming.StylableName
 			var sectionIndex int
-			for i, s := range tblDesc.TaggedValuesSections {
-				if s.MembershipSpec == spec {
-					sectionName = s.Name
+			for i := range tblDesc.TaggedValuesSections {
+				if matches(&tblDesc.TaggedValuesSections[i]) {
+					sectionName = tblDesc.TaggedValuesSections[i].Name
 					sectionIndex = i
 					break
 				}
@@ -155,6 +194,7 @@ func ComposeMembershipPackInfo(tblDesc common.TableDesc, namer gocodegen.GoClass
 			sectionToClassName[sectionIndex] = clsName
 		}
 		membershipSpecs = append(membershipSpecs, spec)
+		singleSpecs = append(singleSpecs, single)
 		classNames = append(classNames, clsName)
 	}
 	return
@@ -250,9 +290,9 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 	b := inst.builder
 	gocodegen.EmitGeneratingCodeLocation(b)
 
-	var membershipSpecs []common.MembershipSpecE
+	var membershipSpecs, singleSpecs []common.MembershipSpecE
 	var classNames, sectionToClassName []string
-	membershipSpecs, classNames, sectionToClassName, err = ComposeMembershipPackInfo(tblDesc, clsNamer)
+	membershipSpecs, singleSpecs, classNames, sectionToClassName, err = ComposeMembershipPackInfo(tblDesc, clsNamer)
 	if err != nil {
 		err = eh.Errorf("unable to compose membership pack info: %w", err)
 		return
@@ -343,6 +383,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 				continue
 			}
 			spec := membershipSpecs[idx]
+			single := common.SingleMembershipSpecs(sec.UseAspects)
 			colIdxGen.Reset()
 			_, err = fmt.Fprintf(b, `func New%s%s%s() (inst *%s%s) {
 	inst = &%s%s{}
@@ -372,16 +413,23 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					err = eh.Errorf("unable to find column: %w", err)
 					return
 				}
-				var cardRole1 common.ColumnRoleE
-				cardRole1, err = common.GetCardinalityRoleByMembershipRole(role1)
-				if err != nil {
-					err = eh.Errorf("unable to resolve cardinality role: %w", err)
-					return
-				}
-				idx1Accel, err = inst.getColumnIndexBySectionAndRole(ir, sec.Name, cardRole1)
-				if err != nil {
-					err = eh.Errorf("unable to find column: %w", err)
-					return
+				if single&s != 0 {
+					// Declared single-instance (ADR-0213): no cardinality
+					// column exists; the accel loads from the membership
+					// column's own list structure (identity permutation).
+					idx1Accel = idx1
+				} else {
+					var cardRole1 common.ColumnRoleE
+					cardRole1, err = common.GetCardinalityRoleByMembershipRole(role1)
+					if err != nil {
+						err = eh.Errorf("unable to resolve cardinality role: %w", err)
+						return
+					}
+					idx1Accel, err = inst.getColumnIndexBySectionAndRole(ir, sec.Name, cardRole1)
+					if err != nil {
+						err = eh.Errorf("unable to find column: %w", err)
+						return
+					}
 				}
 				colIdxGen.AddField(columnIndexFieldName1, uint32(idx1))
 				colIdxGen.AddField(columnIndexFieldName1+"Accel", uint32(idx1Accel))
@@ -401,16 +449,20 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 						err = eh.Errorf("unable to find column: %w", err)
 						return
 					}
-					var cardRole2 common.ColumnRoleE
-					cardRole2, err = common.GetCardinalityRoleByMembershipRole(role2)
-					if err != nil {
-						err = eh.Errorf("unable to resolve cardinality role: %w", err)
-						return
-					}
-					idx2Accel, err = inst.getColumnIndexBySectionAndRole(ir, sec.Name, cardRole2)
-					if err != nil {
-						err = eh.Errorf("unable to find column: %w", err)
-						return
+					if single&s != 0 {
+						idx2Accel = idx2
+					} else {
+						var cardRole2 common.ColumnRoleE
+						cardRole2, err = common.GetCardinalityRoleByMembershipRole(role2)
+						if err != nil {
+							err = eh.Errorf("unable to resolve cardinality role: %w", err)
+							return
+						}
+						idx2Accel, err = inst.getColumnIndexBySectionAndRole(ir, sec.Name, cardRole2)
+						if err != nil {
+							err = eh.Errorf("unable to find column: %w", err)
+							return
+						}
 					}
 					columnIndexFieldName2 := clsNamer.ComposeColumnIndexFieldName(name2)
 					colIdxGen.AddField(columnIndexFieldName2, uint32(idx2))
@@ -550,11 +602,18 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					return
 				}
 				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
+				// A channel declared single-instance (ADR-0213) has no
+				// cardinality column: its accel loads from the membership
+				// column's own list structure (the identity permutation).
+				accelLoadFn := "LoadAccelFieldFromRecord"
+				if singleSpecs[i]&s != 0 {
+					accelLoadFn = "LoadAccelIdentityFromRecord"
+				}
 				const tmpl = `	err = runtime.LoadNonScalarValueFieldFromRecord(inst.%s,arrow.%s,rec,&inst.%s,&inst.%s,array.New%sData)
 	if err != nil {
 		return
 	}
-	err = runtime.LoadAccelFieldFromRecord(inst.%sAccel,rec,inst.%s)
+	err = runtime.%s(inst.%sAccel,rec,inst.%s)
 	if err != nil {
 		return
 	}
@@ -567,6 +626,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					clsNamer.ComposeValueFieldElementAccessor(name1),
 					typeName1,
 
+					accelLoadFn,
 					columnIndexFieldName1,
 					clsNamer.ComposeAccelFieldName(name1),
 				)
@@ -593,6 +653,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 						clsNamer.ComposeValueFieldElementAccessor(name2),
 						typeName2,
 
+						accelLoadFn,
 						columnIndexFieldName2,
 						clsNamer.ComposeAccelFieldName(name2),
 					)
@@ -2081,7 +2142,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 	b := inst.builder
 	gocodegen.EmitGeneratingCodeLocation(b)
 	var sectionToClassNames []string
-	_, _, sectionToClassNames, err = ComposeMembershipPackInfo(tblDesc, clsNamer)
+	_, _, _, sectionToClassNames, err = ComposeMembershipPackInfo(tblDesc, clsNamer)
 	if err != nil {
 		err = eh.Errorf("unable to compose membership pack info: %w", err)
 		return

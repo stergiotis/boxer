@@ -290,18 +290,21 @@ func (inst *extractState) expandCall(name string, spelled string, funcExpr *gram
 		return
 	}
 
-	// The membership cardinality lane is required, and its absence is a
-	// refusal rather than a licence. lwextract reads an empty Card as "the
-	// schema proves one membership per attribute" and drops the
-	// position→attribute map accordingly; a column merely missing from this
-	// table's listing is not that proof, and taking the fast form on the
-	// strength of it would read a membership position as an attribute index
-	// on every row. The read-back generator refuses the same situation.
+	// The membership cardinality lane is required unless the schema DECLARES
+	// the channel single-instance (ADR-0213). lwextract reads an empty Card
+	// as "the schema proves one membership per attribute" and drops the
+	// position→attribute map accordingly; the declaration — recovered from
+	// the use-aspects the column names encode (Channel.SingleMembership) —
+	// is that proof, and licenses the fast form. A column merely missing
+	// from this table's listing is not, and taking the fast form on the
+	// strength of absence alone would read a membership position as an
+	// attribute index on every row. The read-back generator draws the same
+	// line.
 	//
 	// NameSel is the one member exempt: it selects positions in the identity
 	// lane and never crosses to the attribute axis, so it has nothing to map
 	// and nothing to get wrong.
-	if ch.Card == "" && name != nanopass.NormalizeCallName(NameSel) {
+	if ch.Card == "" && !ch.SingleMembership && name != nanopass.NormalizeCallName(NameSel) {
 		err = inst.errCall(spelled, funcExpr).Str("section", lanes.Section).Str("channel", ch.Name).
 			Errorf("the section's membership cardinality column is not among this table's columns; an attribute cannot be located without it")
 		return

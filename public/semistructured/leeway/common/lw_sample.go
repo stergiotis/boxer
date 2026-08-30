@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"math/rand/v2"
+	"slices"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -21,6 +22,13 @@ func generateExampleAspects(rnd *rand.Rand, nAspectsMax int) (r useaspects2.Aspe
 	}
 	// the validator rejects exclusive-family violations
 	asps = useaspects2.SanitizeFamilyExclusivity(asps)
+	// Single-membership declarations (ADR-0213) name a membership channel and
+	// are only valid beside it; PopulateManipulator adds them coherently after
+	// the section's channels are known, so the free sample must not.
+	asps = slices.DeleteFunc(asps, func(a useaspects2.AspectE) bool {
+		_, isSingle := GetMembershipSpecBySingleMembershipAspect(a)
+		return isSingle
+	})
 	var err error
 	r, err = useaspects2.EncodeAspects(asps...)
 	if err != nil {
@@ -124,8 +132,10 @@ func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCa
 		// use-aspects are section-level; sampling them per column would union
 		// contradictory pairs across columns of the same section
 		asp := generateExampleAspects(rnd, 4)
+		specUnion := MembershipSpecNone
 		for j := range columnCount {
 			mem := generateExampleMembershipSpec(rnd)
+			specUnion |= mem
 			hints := GenerateSampleEncodingAspectEx(rnd.IntN(2)+1, rnd, acceptEncodingAspect)
 			valueSemantics := GenerateSampleValueSemantics(rnd.IntN(2)+1, rnd)
 			manipulator.MergeTaggedValueColumn(naming.StylableName(fmt.Sprintf("section%d", i)),
@@ -135,6 +145,13 @@ func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCa
 				valueSemantics,
 				asp,
 				mem, "", "")
+		}
+		// Declare a random subset of the section's channels single-instance
+		// (ADR-0213), so the fuzzed generators cover declared schemas too.
+		for m := range specUnion.Iterate() {
+			if rnd.IntN(4) == 0 {
+				manipulator.TaggedValueSection(naming.StylableName(fmt.Sprintf("section%d", i))).AddSectionSingleMembership(m)
+			}
 		}
 	}
 	return

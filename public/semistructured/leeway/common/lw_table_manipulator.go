@@ -367,6 +367,28 @@ func (inst TaggedValueSectionMerger) AddSectionMembership(memberships ...Members
 	}
 	return inst
 }
+
+// AddSectionSingleMembership declares the given membership channels
+// single-instance (ADR-0213): every attribute of the section carries
+// exactly one membership on each declared channel. Spelled as the
+// channel's section use-aspect, so it rides the physical column names and
+// round-trips through schema discovery. Declare the channel itself with
+// AddSectionMembership as usual; the table validator rejects a declaration
+// whose channel is missing from the section's membership spec.
+func (inst TaggedValueSectionMerger) AddSectionSingleMembership(memberships ...MembershipSpecE) TaggedValueSectionMerger {
+	for _, membership := range memberships {
+		for m := range membership.Iterate() {
+			a, ok := GetSingleMembershipAspectByMembershipSpec(m)
+			if !ok {
+				log.Panic().Stringer("membership", m).Msg("no single-membership aspect for membership spec")
+			}
+			inst.table.TaggedValuesSections[inst.sectionIndex].UseAspects =
+				inst.table.TaggedValuesSections[inst.sectionIndex].UseAspects.UnionAspectsIgnoreInvalid(useaspects2.EncodeAspectsIgnoreInvalid(a))
+		}
+	}
+	return inst
+}
+
 func (inst TaggedValueSectionMerger) ClearSectionMembership(memberships ...MembershipSpecE) TaggedValueSectionMerger {
 	for _, membership := range memberships {
 		inst.table.TaggedValuesSections[inst.sectionIndex].MembershipSpec =

@@ -147,6 +147,13 @@ func (inst *TableValidator) validateSection(section TaggedValuesSection) {
 	} else if e := useaspects2.CheckFamilyExclusivity(section.UseAspects); e != nil {
 		addErr(eb.Build().Stringer("section", section.Name).Errorf("section use aspects violate family exclusivity: %w", e))
 	}
+	// A single-membership declaration (ADR-0213) names a channel; without
+	// that channel in the section's MembershipSpec it declares a layout of a
+	// lane that does not exist.
+	if orphan := SingleMembershipSpecs(section.UseAspects) & ^section.MembershipSpec; orphan != 0 {
+		addErr(eb.Build().Stringer("section", section.Name).Stringer("channels", orphan).
+			Errorf("single-membership declaration without its membership channel — add the channel to the section's membership spec or drop the declaration"))
+	}
 	addErr(inst.validateNamesTypes(section.ValueColumnNames, section.ValueColumnTypes))
 	n := len(section.ValueColumnNames)
 	addErr(checkCoSliceLen("section "+section.Name.String(), "encodingHints", n, len(section.ValueEncodingHints)))

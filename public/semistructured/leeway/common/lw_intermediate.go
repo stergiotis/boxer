@@ -164,6 +164,15 @@ func (inst *IntermediateTaggedValuesDesc) loadSectionMembership(sec *TaggedValue
 		if m.ContainsMixed() {
 			inst.Membership.Add(naming.StylableName(role2.String()), role2, ct2, hints2, valueaspects.EmptyAspectSet)
 		}
+		if a, hasAspect := GetSingleMembershipAspectByMembershipSpec(m); hasAspect && sec.UseAspects.Contains(a) {
+			// The channel is declared single-instance (ADR-0213): every
+			// attribute carries exactly one membership, so the flattened
+			// membership array is co-indexed with the value array and the
+			// cardinality lane would be identically 1 — its ABSENCE is the
+			// schema statement the read side licenses the fast form on
+			// (ADR-0066, ADR-0181 §SD3; lwextract).
+			continue
+		}
 		err = addSetSupportColumn(inst.MembershipSupport, cardRole)
 		if err != nil {
 			err = eh.Errorf("unable to add support column: %w", err)
