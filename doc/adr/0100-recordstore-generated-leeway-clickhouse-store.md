@@ -618,10 +618,6 @@ The QOC options above carry the rankings; notes below record nuance.
 
 ## Deferred
 
-- **Explicit role configuration** (SD2). Role binding is by
-  `PlainItemTypeE` and column order; a schema with several same-typed
-  columns cannot elect which one is the role — the leading `EntityId` is the
-  Key and the rest pass through, with no way to name a different one.
 - **Pass-through of `Transaction`/`Opaque` plain columns** (SD2). Every
   other plain-item type passes through today; these two carry
   streaming-group / transaction semantics the store glue does not model and
@@ -719,7 +715,7 @@ SD6 corrected in place 2026-08-10 (see Updates). The decision in force:
 generated, append-only store composing leeway, the read-through cache and
 ClickHouse — SD1–SD9 as written, with all four slices delivered and the two
 consumer adapters (pushout `StorageI` passing `repo/storagetest`, the CQRS
-ledger example) as the acceptance evidence. Open items (explicit roles, CAS,
+ledger example) as the acceptance evidence. Open items (CAS,
 carrier/explode ReadRow coverage, a streaming executor, negative caching)
 remain recorded under Deferred.
 
@@ -954,6 +950,39 @@ ladingmeta, ladingdata); the fixtures are in `recordstore/example`
 (`TestGenerateAllVerbatimSharedSectionAllowed`,
 `TestGenerateRejectsSharedVerbatimSlot`,
 `TestGenerateVerbatimSameNameAcrossSectionsAllowed`).
+
+### 2026-08-30 — SD2's explicit role configuration lands: `gen.Input.Roles`
+
+The deferral SD2 recorded — role binding by `PlainItemTypeE` and column
+order alone, with no way to elect among several same-typed columns — is
+lifted. `gen.Input` gains an optional `Roles{Key, Order, Lifecycle}` field
+naming the role columns by their leeway names as authored in the
+`TableDesc`. Each field overrides only its own role; an empty field keeps
+that role's positional default, so the zero value is exactly the positional
+binding and every existing store regenerates byte-identically (verified over
+example, widget, sharedsection, cqrsexample, pushoutstore,
+dimension/provenance, sysmfacts, persiststore, meshdemo, ladingmeta,
+ladingdata, ladingpolicy).
+
+- Validation is at generation time: a declared name must resolve to a plain
+  column, fit the role's gates (Key: an EntityId column deriving to
+  uint64/string; Order: the EntityTimestamp lane; Lifecycle: a u8
+  EntityLifecycle column), and no two roles may bind one column. A role
+  column the declaration demotes becomes an ordinary pass-through envelope
+  field — including the reserved-name collision gate, so a demoted column
+  named `ts` is refused rather than colliding with the entity's fixed `Ts`.
+- The derived DDL defaults follow the declaration: `ORDER BY` binds to the
+  declared Key and Order names (`Input.tableOptions`), not to the positional
+  candidates.
+- Unchanged and worth knowing: a component DTO's plain bindings
+  (`lw:",id"`, `lw:",ts"`) resolve by column *name*, and the store decode
+  backfills `ent.ID`/`ent.Ts` only into fields bound to columns literally
+  named `id`/`ts` — the role declaration does not re-point that coupling.
+
+Fixtures: `recordstore/example/gen_roles_test.go`
+(`TestGenerateDeclaredRolesElectColumns`,
+`TestGeneratePartialRolesKeepPositionalDefaults`, and the refusal cases).
+The Deferred bullet this lifts is removed above.
 
 ## References
 

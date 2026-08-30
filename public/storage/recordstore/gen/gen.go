@@ -64,6 +64,29 @@ func (inst *Scaffold) valid() (err error) {
 	return
 }
 
+// Roles binds the ADR-0100 SD2 envelope roles by leeway column name (as
+// authored in the TableDesc), overriding the positional defaults — the
+// leading EntityId column as Key, the first EntityTimestamp as Order, the
+// first u8 EntityLifecycle as Lifecycle. Each field overrides only its own
+// role; an empty field keeps that role's positional default, so the zero
+// value is exactly the positional binding.
+//
+// Validation happens at generation time: a named column must exist among
+// the schema's plain columns, fit the role's type gate, and no two roles
+// may bind one column. The derived DDL defaults follow the declaration —
+// ORDER BY binds to the declared Key and Order.
+type Roles struct {
+	// Key names the point-lookup key column: an EntityId plain column
+	// deriving to uint64 or string.
+	Key string
+	// Order names the version / replay-order column: an EntityTimestamp
+	// column on the z64 timestamp lane.
+	Order string
+	// Lifecycle names the state-view marker column: a u8 EntityLifecycle
+	// plain column.
+	Lifecycle string
+}
+
 // Input parameterizes one store generation.
 type Input struct {
 	// PackageName is the Go package the emitted files declare.
@@ -90,8 +113,14 @@ type Input struct {
 	Database string
 	// Table is the physical schema. Its plain columns form the envelope;
 	// the ADR-0100 roles are bound by PlainItemTypeE: EntityId → Key,
-	// EntityTimestamp → Order, EntityLifecycle → Lifecycle (state view).
+	// EntityTimestamp → Order, EntityLifecycle → Lifecycle (state view) —
+	// unless Roles names the columns explicitly.
 	Table common.TableDesc
+	// Roles optionally binds the envelope roles by column name, for a
+	// schema whose role columns positional binding cannot elect — several
+	// same-typed columns, or an Order that is not the timestamp lane. The
+	// zero value keeps the positional defaults (ADR-0100 SD2).
+	Roles Roles
 	// RowConfig is the leeway table-row configuration.
 	RowConfig common.TableRowConfigE
 	// ComponentPaths are the lw:-tagged DTO sources, one kind per file.
@@ -328,17 +357,28 @@ func (inst Input) Generate() (err error) {
 // bind ORDER BY to the envelope roles — Key leading (the point-lookup
 // guidance), Order second when the schema has one. Both are addressed by
 // column name, so a composite id (several EntityId columns, the rest
-// pass-through) leaves the ORDER BY unambiguous; the Key is the leading
-// EntityId column, matching enumeratePlain's binding.
+// pass-through) leaves the ORDER BY unambiguous; the Key is the declared
+// Roles.Key or the leading EntityId column, matching enumeratePlain's
+// binding (Generate runs the store emission — and thereby the role
+// validation — before composing the DDL, so the names are resolved here
+// only after they are known to exist).
 func (inst Input) tableOptions() (opts clickhouse.TableOptions) {
 	opts = clickhouse.TableOptions{
 		Mode:     clickhouse.CreateModeIfNotExists,
 		Engine:   "MergeTree()",
 		Settings: []string{"allow_suspicious_low_cardinality_types=1"},
 	}
-	if keyName, ok := firstPlainName(inst.Table, common.PlainItemTypeEntityId); ok {
+	keyName, hasKey := firstPlainName(inst.Table, common.PlainItemTypeEntityId)
+	if inst.Roles.Key != "" {
+		keyName, hasKey = naming.StylableName(inst.Roles.Key), true
+	}
+	if hasKey {
 		opts.OrderBy = []clickhouse.ColumnRef{{Plain: keyName}}
-		if orderName, ok := firstPlainName(inst.Table, common.PlainItemTypeEntityTimestamp); ok {
+		orderName, hasOrder := firstPlainName(inst.Table, common.PlainItemTypeEntityTimestamp)
+		if inst.Roles.Order != "" {
+			orderName, hasOrder = naming.StylableName(inst.Roles.Order), true
+		}
+		if hasOrder {
 			opts.OrderBy = append(opts.OrderBy, clickhouse.ColumnRef{Plain: orderName})
 		}
 	}

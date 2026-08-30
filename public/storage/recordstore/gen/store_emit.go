@@ -81,6 +81,7 @@ const (
 // whose read-access accessor yields an iter.Seq.
 type plainCol struct {
 	itemType common.PlainItemTypeE
+	name     string // leeway column name as authored (what Input.Roles names)
 	pascal   string // UpperCamelCase identifier, e.g. "PartitioningKey"
 	goType   string // field / setter-arg Go type, e.g. "uint64", "[]string"
 	isArray  bool
@@ -380,6 +381,7 @@ func (inst Input) enumeratePlain(info *readback.InformationRetrieval) (m plainMo
 		}
 		var col plainCol
 		col.itemType = it
+		col.name = cr.Name.String()
 		col.physical = cr.PhysicalColumn.String()
 		col.pascal = cr.Name.Convert(naming.UpperCamelCase).String()
 		col.goType, col.isArray, err = fieldGoType(cr.CanonicalType)
@@ -397,9 +399,20 @@ func (inst Input) enumeratePlain(info *readback.InformationRetrieval) (m plainMo
 	}
 	// Bind roles onto the stored columns. The groups slice is not mutated
 	// after this point, so the role pointers stay valid across the return.
+	// Declared roles (Input.Roles) bind first; the positional defaults then
+	// fill only the roles left undeclared, skipping already-bound columns —
+	// so a column elected Order by name cannot also positionally become the
+	// Key.
+	err = inst.bindDeclaredRoles(&m)
+	if err != nil {
+		return
+	}
 	for gi := range m.groups {
 		for ci := range m.groups[gi].cols {
 			c := &m.groups[gi].cols[ci]
+			if c.role != rolePassThrough {
+				continue
+			}
 			switch c.itemType {
 			case common.PlainItemTypeEntityId:
 				if m.key == nil {
@@ -426,6 +439,75 @@ func (inst Input) enumeratePlain(info *readback.InformationRetrieval) (m plainMo
 				m.passthrough = append(m.passthrough, c)
 			}
 		}
+	}
+	return
+}
+
+// bindDeclaredRoles binds the roles Input.Roles names explicitly (ADR-0100
+// SD2's deferred explicit role configuration). Each declared name must
+// resolve to a plain column that fits the role; two roles naming one column
+// are refused — Latest/Replay compare the Key and Order as independent
+// lanes, so a shared column cannot serve both.
+func (inst Input) bindDeclaredRoles(m *plainModel) (err error) {
+	find := func(name string) *plainCol {
+		for gi := range m.groups {
+			for ci := range m.groups[gi].cols {
+				if m.groups[gi].cols[ci].name == name {
+					return &m.groups[gi].cols[ci]
+				}
+			}
+		}
+		return nil
+	}
+	taken := func(role string, c *plainCol) error {
+		return eh.Errorf("Roles.%s names column %q, which another declared role already binds — every role needs its own column (ADR-0100 SD2)", role, c.name)
+	}
+	if inst.Roles.Key != "" {
+		c := find(inst.Roles.Key)
+		if c == nil {
+			err = eh.Errorf("Roles.Key names no plain column %q in the schema", inst.Roles.Key)
+			return
+		}
+		if c.itemType != common.PlainItemTypeEntityId {
+			err = eh.Errorf("Roles.Key column %q carries item type %v — the Key role requires an EntityId plain column", c.name, c.itemType)
+			return
+		}
+		c.role = roleKey
+		m.key = c
+	}
+	if inst.Roles.Order != "" {
+		c := find(inst.Roles.Order)
+		if c == nil {
+			err = eh.Errorf("Roles.Order names no plain column %q in the schema", inst.Roles.Order)
+			return
+		}
+		if c.role != rolePassThrough {
+			err = taken("Order", c)
+			return
+		}
+		if c.itemType != common.PlainItemTypeEntityTimestamp {
+			err = eh.Errorf("Roles.Order column %q carries item type %v — the Order role requires an EntityTimestamp plain column", c.name, c.itemType)
+			return
+		}
+		c.role = roleOrder
+		m.order = c
+	}
+	if inst.Roles.Lifecycle != "" {
+		c := find(inst.Roles.Lifecycle)
+		if c == nil {
+			err = eh.Errorf("Roles.Lifecycle names no plain column %q in the schema", inst.Roles.Lifecycle)
+			return
+		}
+		if c.role != rolePassThrough {
+			err = taken("Lifecycle", c)
+			return
+		}
+		if c.itemType != common.PlainItemTypeEntityLifecycle || c.goType != "uint8" {
+			err = eh.Errorf("Roles.Lifecycle column %q carries item type %v with Go type %s — the Lifecycle role requires a u8 EntityLifecycle plain column", c.name, c.itemType, c.goType)
+			return
+		}
+		c.role = roleLifecycle
+		m.lifecycle = c
 	}
 	return
 }
