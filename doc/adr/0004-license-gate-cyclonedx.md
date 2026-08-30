@@ -138,10 +138,11 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 `goexperiment.jsonv2` was retired with the Go 1.27 adoption
 ([ADR-0199](0199-adopt-go-1-27.md)), joining `identifier_tag_fixed*` (ADR-0106)
 and `llm_generated_*` (ADR-0083). All three families SD9 names as tag-gated
-dependencies entering the gate unconditionally are gone, and the one remaining
-tag — `boxer_enable_profiling` — gates a compile-out arm, not a dependency. SD9's
-reasoning is unchanged and still correct; a reader looking for a live instance of
-it will not find one today.
+dependencies entering the gate unconditionally are gone, and so is the last
+remaining tag, `boxer_enable_profiling`, retired by ADR-0212 — it gated a
+compile-out arm rather than a dependency, so its removal does not move the gate
+either. SD9's reasoning is unchanged and still correct; a reader looking for a
+live instance of it will not find one today.
 
 ### 2026-05-02 — Per-module license election (SD12)
 

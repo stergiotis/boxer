@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/profiling"
+	"github.com/stergiotis/boxer/public/observability/profiling/pprofhttp"
 	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/carrierclient/drivecmd"
@@ -38,6 +39,7 @@ func mainC() (exitCode int) {
 		Flags: slices.Concat(
 			logging.LoggingFlags,
 			profiling.ProfilingFlags,
+			pprofhttp.Flags,
 			tracing.TracingFlags,
 			dev.DebuggerFlags,
 			dev.IoOverrideFlags,

@@ -105,6 +105,12 @@ So boxer goes 2 tags → 1, but **a consumer goes 2 → 0**, since
 opens up for consumers — launcher and `GOFLAGS` export become optional for them,
 though not for boxer.
 
+*Outdated 2026-08-30:* boxer went 2 → **0**.
+[ADR-0212](../adr/0212-split-pprof-http-listener.md) found the profiling tag's
+cost fell on consumers rather than on boxer, split the pprof HTTP listener into
+a package a host imports explicitly, and retired the tag. `go tool` delivery
+opens up for boxer too.
+
 ## Candidate cuts
 
 1. **`tags-retired` + a check.** A tracked file of retired tags with their ADR;

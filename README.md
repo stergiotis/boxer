@@ -44,7 +44,7 @@ Boxer is a collection of packages under `public/`. The larger subsystems:
 ImZero **v1** (Dear ImGui-based) lives in [`imzero_imgui`](https://github.com/stergiotis/imzero_imgui). ImZero **v2** (egui-based) is part of this module: the Go side under `public/thestack/{imzero2,fffi2}`, its Rust egui renderer under `rust/imzero2`, and runnable demo applications under `apps/` (`play`, `imztop`, `tally`, `capdemo`, `capinspector`, `taskdemo`, …).
 
 ## Building
-Boxer requires **Go 1.27** (ADR-0199) and needs no build tags to compile. Tags gate optional features only — GPU backends, opt-in profiling — and the set boxer itself builds with lives in [`./tags`](tags). Pass it to every `go build`, `go test`, and `go vet` invocation, so that what you build matches what CI builds:
+Boxer requires **Go 1.27** (ADR-0199) and needs no build tags to compile. The set boxer itself builds with lives in [`./tags`](tags), which has been **empty** since ADR-0212. Pass it anyway to every `go build`, `go test`, and `go vet` invocation, so that what you build matches what CI builds and a tag added later reaches you:
 
 ```
 go build -tags="$(cat ./tags)" ./...
@@ -52,7 +52,7 @@ go test  -tags="$(cat ./tags)" ./...
 go vet   -tags="$(cat ./tags)" ./...
 ```
 
-Without these tags, packages that opt into one of those features are compiled out — silently, since each has a no-op arm. Until Go 1.27 the set also carried `goexperiment.jsonv2`, without which the build failed outright with misleading *undefined identifier* errors; `encoding/json/v2` graduated and that tag is retired.
+The file has been empty since `boxer_enable_profiling` — which compiled out the pprof capture paths — was retired in favour of splitting the HTTP listener into its own package, so that a binary pays for `net/http` only if it imports one ([ADR-0212](doc/adr/0212-split-pprof-http-listener.md)). Before that, and until Go 1.27, the set carried `goexperiment.jsonv2`, without which the build failed outright with misleading *undefined identifier* errors; `encoding/json/v2` graduated and that tag is retired too.
 
 ## Documentation
 Boxer follows the [Diátaxis](https://diataxis.fr/) framework (ADR-0001). Docs live next to the code they describe:

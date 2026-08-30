@@ -44,6 +44,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
+	"github.com/stergiotis/boxer/public/observability/profiling/pprofhttp"
 	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
@@ -81,6 +82,7 @@ func mainC() (exitCode int) {
 		Flags: cli2.FlagsNilRemoved(
 			logging.LoggingFlags,
 			profiling.ProfilingFlags,
+			pprofhttp.Flags,
 			tracing.TracingFlags,
 			docgen.DocFlags,
 			dev.DebuggerFlags,

@@ -45,13 +45,14 @@ import (
 // that reason.
 var RequiredTags = []string{}
 
-// OptionalTags are recognised opt-ins. boxer_enable_profiling selects the
-// profiling_enabled.go arm; omitting it selects profiling_disabled.go and
-// compiles cleanly, so it is deliberately not required of consumers even though
-// boxer's own ./tags carries it.
-var OptionalTags = []string{
-	"boxer_enable_profiling",
-}
+// OptionalTags are recognised opt-ins a consumer may set or omit.
+//
+// It is empty, and has been since ADR-0212 split the pprof HTTP listener into
+// its own package and retired boxer_enable_profiling. As with RequiredTags the
+// set is kept rather than deleted: the next feature whose cost is worth
+// compiling out lands here, and [Check] must go on accepting a declared opt-in
+// silently. TestCheckAcceptsOptional substitutes a set for that reason.
+var OptionalTags = []string{}
 
 // RetiredTag names a tag boxer no longer honours, together with the decision
 // that retired it.
@@ -80,6 +81,11 @@ var RetiredTags = []RetiredTag{
 	{
 		Pattern: "goexperiment.jsonv2",
 		Adr:     "ADR-0199",
+		Retired: "2026-08",
+	},
+	{
+		Pattern: "boxer_enable_profiling",
+		Adr:     "ADR-0212",
 		Retired: "2026-08",
 	},
 }

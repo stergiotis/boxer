@@ -140,9 +140,9 @@ looking for a `go.mod`, which is gokrazy's documented hook for exactly this;
 pointing back at the checkout. The path is relative, so no build host's
 filesystem layout ends up in the tree.
 
-The build tags match `rust/imzero2/build_go.sh` — `boxer_enable_profiling` from
-`./tags`, plus `binary_log` for the keelson logbridge's CBOR wire format — and
-`CGO_ENABLED=0`, which the host is already built with.
+The build tags match `rust/imzero2/build_go.sh` — whatever `./tags` carries,
+which is nothing since ADR-0212, plus `binary_log` for the keelson logbridge's
+CBOR wire format — and `CGO_ENABLED=0`, which the host is already built with.
 
 ## Fonts
 

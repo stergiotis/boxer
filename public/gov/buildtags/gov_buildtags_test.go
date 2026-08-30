@@ -31,7 +31,14 @@ func TestCheckAcceptsRequiredPlusLocal(t *testing.T) {
 	assert.Empty(t, collect(tags), "repo-local tags must pass silently")
 }
 
+// OptionalTags is empty since ADR-0212, so the live set cannot exercise the
+// declared-opt-in path. Substituting one keeps it tested: an opt-in must pass
+// silently, exactly as a repo-local tag does, and must not be mistaken for a
+// retired one.
 func TestCheckAcceptsOptional(t *testing.T) {
+	defer func(prev []string) { OptionalTags = prev }(OptionalTags)
+	OptionalTags = []string{"boxer_enable_somethingfuture"}
+
 	tags := slices.Concat(RequiredTags, OptionalTags)
 	assert.Empty(t, collect(tags))
 }
@@ -60,10 +67,10 @@ func TestCheckRequiresNothing(t *testing.T) {
 }
 
 // The retirements this package exists to catch, as the consumer repositories
-// actually carried them. goexperiment.jsonv2 joins them with ADR-0199: a
-// consumer still carrying it is not broken — the tag is inert under Go 1.27 —
-// but it is carrying a tag that means something, which is the drift this
-// reports.
+// actually carried them. goexperiment.jsonv2 joined them with ADR-0199 and
+// boxer_enable_profiling with ADR-0212: a consumer still carrying either is not
+// broken — both are inert now — but it is carrying a tag that means something,
+// which is the drift this reports.
 func TestCheckReportsRetiredFamilies(t *testing.T) {
 	tags := slices.Clone(RequiredTags)
 	tags = append(tags,
@@ -74,7 +81,7 @@ func TestCheckReportsRetiredFamilies(t *testing.T) {
 		"boxer_enable_profiling",
 	)
 	f := collect(tags)
-	require.Len(t, f, 4)
+	require.Len(t, f, 5)
 	for _, x := range f {
 		assert.Equal(t, FindingKindRetired, x.Kind)
 		assert.NotEmpty(t, x.Adr)
@@ -85,6 +92,8 @@ func TestCheckReportsRetiredFamilies(t *testing.T) {
 	assert.Contains(t, f[1].Message(), "remove it")
 	assert.Equal(t, "goexperiment.jsonv2", f[3].Tag)
 	assert.Equal(t, "ADR-0199", f[3].Adr)
+	assert.Equal(t, "boxer_enable_profiling", f[4].Tag)
+	assert.Equal(t, "ADR-0212", f[4].Adr)
 }
 
 func TestCheckOrderIsStableRegardlessOfInputOrder(t *testing.T) {

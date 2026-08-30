@@ -59,6 +59,13 @@ blank-imports `net/http/pprof` — which registers debug handlers on
 different decision with a security surface, not a tidy-up. **boxer goes 2 tags
 → 1; a consumer goes 2 → 0.**
 
+*Superseded 2026-08-30:* that different decision was taken as
+[ADR-0212](../adr/0212-split-pprof-http-listener.md). The correction above is
+right that the side effect is real and wrong about who pays for it: boxer's own
+binaries link `net/http` regardless, and it is the consumer that would inherit
+`net/http/pprof`'s dependency closure. Splitting the listener into its own
+package puts the tag out of work, and **boxer goes 2 → 0** as well.
+
 ### What moves
 
 | Surface | Change |

@@ -1,5 +1,3 @@
-//go:build boxer_enable_profiling
-
 package profiling
 
 import (
