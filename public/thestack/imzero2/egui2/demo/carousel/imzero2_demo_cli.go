@@ -16,16 +16,12 @@ import (
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
-	"github.com/stergiotis/boxer/public/keelson/data/passreg"
-	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/hostboot"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
 )
 
@@ -141,7 +137,7 @@ func Run(ctx gocontext.Context, cfg *application.Config, opts RunOptions) (err e
 		err = eh.Errorf("--launch-config: %w", seedErr)
 		return
 	}
-	// The runtime bootstrap is hostboot's (ADR-0208); the carousel is its
+	// The runtime bootstrap is hostboot's (ADR-0211); the carousel is its
 	// every-service caller and adds what is carousel-specific: the
 	// capability inspector's audit counters and backend labels, the play
 	// host's passes and vocabularies, the applet store.
@@ -176,18 +172,7 @@ func registerHostExtras(rt *hostboot.Runtime) (err error) {
 	} else {
 		rt.OnClose(appletStore.Stop)
 	}
-	if passErr := passregdefaults.RegisterDefaults(); passErr != nil {
-		log.Warn().Err(passErr).Msg("passreg: standard pass registration failed")
-	}
-	if passErr := play.RegisterPasses(passreg.Default); passErr != nil {
-		log.Warn().Err(passErr).Msg("passreg: play host pass registration failed")
-	}
-	if compErr := play.RegisterComponents(componentsql.Default); compErr != nil {
-		log.Warn().Err(compErr).Msg("componentsql: play component registration failed")
-	}
-	if vocabErr := play.RegisterVocabulary(sqlvocab.Default); vocabErr != nil {
-		log.Warn().Err(vocabErr).Msg("sqlvocab: play vocabulary registration failed")
-	}
+	play.RegisterHostSql(log.Logger)
 	if godepErr := providersgodep.Register(rt.Introspect, providersgodep.Config{Log: log.Logger}); godepErr != nil {
 		log.Warn().Err(godepErr).Msg("introspect: godep table registration failed")
 	}
