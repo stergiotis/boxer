@@ -7,13 +7,9 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
-	"github.com/stergiotis/boxer/public/keelson/data/passreg"
-	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
@@ -66,30 +62,9 @@ func NewCliCommand() *cli.Command {
 			}
 
 			// ADR-0108 §SD4: the standalone play binary is its own host, so
-			// it registers the standard SQL pass set (e.g. LW_ID_* macro
-			// expansion) plus play's own additions (statement
-			// canonicalisation) itself; the carousel host does the same for
-			// the embedded app. Best-effort, never blocks boot.
-			if passErr := passregdefaults.RegisterDefaults(); passErr != nil {
-				log.Warn().Err(passErr).Msg("play: standard pass registration failed")
-			}
-			if passErr := RegisterPasses(passreg.Default); passErr != nil {
-				log.Warn().Err(passErr).Msg("play: host pass registration failed")
-			}
-			// The component registry the LW_COMPONENT pass reads (ADR-0189
-			// §SD7). Best-effort like the passes: unregistered kinds make
-			// LW_COMPONENT refuse by name, which is a query-level error
-			// rather than a reason not to boot.
-			if compErr := RegisterComponents(componentsql.Default); compErr != nil {
-				log.Warn().Err(compErr).Msg("play: component registration failed")
-			}
-			// The one vocabulary registry both the Vocabulary tab and the
-			// completion engine read (ADR-0190 §SD4). Best-effort like the
-			// rest: an unregistered roster costs a listing and a set of
-			// completions, not a boot.
-			if vocabErr := RegisterVocabulary(sqlvocab.Default); vocabErr != nil {
-				log.Warn().Err(vocabErr).Msg("play: vocabulary registration failed")
-			}
+			// it makes the host's SQL registrations itself. A window host
+			// embedding the app calls the same function.
+			RegisterHostSql(log.Logger)
 
 			clientCfg := ClientConfig{
 				URL:      ctx.String(flagURL),

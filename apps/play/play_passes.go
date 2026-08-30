@@ -1,6 +1,8 @@
 package play
 
 import (
+	"github.com/rs/zerolog"
+
 	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
@@ -9,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
@@ -16,6 +19,36 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 )
+
+// RegisterHostSql makes every SQL registration a host owes play, against the
+// process-wide default registries: the standard pass set, play's own passes,
+// the component registry the LW_COMPONENT pass reads, and the vocabulary the
+// Vocabulary tab and the completion engine read.
+//
+// Any host that runs play calls this — the standalone binary for itself, a
+// window host for the embedded app (ADR-0108 §SD4). It is one function so the
+// set is stated once: a host that assembles it by copying another host's call
+// sequence silently lacks whatever the next registration adds, and nothing
+// compares the copy against the original.
+//
+// Best-effort, by the rule each registration carries individually: a failure
+// costs the surface that registration feeds — a macro expansion, an
+// LW_COMPONENT kind, a listing and its completions — and never blocks a boot.
+// The logger receives one warning per failed registration.
+func RegisterHostSql(logger zerolog.Logger) {
+	if err := passregdefaults.RegisterDefaults(); err != nil {
+		logger.Warn().Err(err).Msg("play: standard pass registration failed")
+	}
+	if err := RegisterPasses(passreg.Default); err != nil {
+		logger.Warn().Err(err).Msg("play: host pass registration failed")
+	}
+	if err := RegisterComponents(componentsql.Default); err != nil {
+		logger.Warn().Err(err).Msg("play: component registration failed")
+	}
+	if err := RegisterVocabulary(sqlvocab.Default); err != nil {
+		logger.Warn().Err(err).Msg("play: vocabulary registration failed")
+	}
+}
 
 // RegisterPasses adds play's host-scoped entries to the shared pre-execute
 // stage, beyond the standard set (passreg/defaults): a play-hosting process
