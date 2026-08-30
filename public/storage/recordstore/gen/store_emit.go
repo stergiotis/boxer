@@ -36,6 +36,10 @@ type emitter struct {
 	// keyGoType is the Key column's derived Go type ("uint64" or
 	// "string").
 	keyGoType string
+	// orderGoType is the Order column's derived Go type: "time.Time" for
+	// the z64 timestamp lane, "uint64" for a declared plain-integer Order
+	// (ADR-0100 Update 2026-08-30).
+	orderGoType string
 	// model is the enumerated plain-column backbone: the role bindings plus
 	// the pass-through envelope columns and their PlainItemType grouping.
 	model plainModel
@@ -187,8 +191,14 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		err = eh.Errorf("Key column Go type %q not supported (uint64 and string are; ADR-0100 SD2)", model.key.goType)
 		return
 	}
-	if model.order.goType != "time.Time" {
-		err = eh.Errorf("Order column Go type %q not supported — Replay and the decode assume the timestamp lane; declare the EntityTimestamp column as a temporal (ctabb.Z64 for nanosecond replay precision)", model.order.goType)
+	switch {
+	case model.order.goType == "time.Time":
+	case model.order.goType == "uint64" && inst.Roles.Order != "":
+		// The u64 Order regime (ADR-0100 Update 2026-08-30): reached only
+		// through the explicit declaration — positional binding stays on
+		// the timestamp lane, so undeclared schemas cannot drift into it.
+	default:
+		err = eh.Errorf("Order column Go type %q not supported — Replay and the decode assume the timestamp lane; declare the EntityTimestamp column as a temporal (ctabb.Z64 for nanosecond replay precision), or bind a uint64 column explicitly via Roles.Order", model.order.goType)
 		return
 	}
 	stateView := model.stateView
@@ -288,7 +298,11 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	// fixed entity fields/methods or a component field, since Go would
 	// reject the generated type.
 	if len(model.passthrough) > 0 {
-		reserved := map[string]bool{"ID": true, "Ts": true, "Lifecycle": true, "Archetype": true, "IsTombstone": true}
+		orderEntityField := "Ts"
+		if model.order.goType == "uint64" {
+			orderEntityField = "Ord"
+		}
+		reserved := map[string]bool{"ID": true, orderEntityField: true, "Lifecycle": true, "Archetype": true, "IsTombstone": true}
 		for _, sc := range comps {
 			reserved[sc.Kind] = true
 		}
@@ -326,7 +340,8 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		}
 	}
 
-	em := emitter{Input: inst, keyGoType: model.key.goType, model: model, hasComps: len(comps) > 0,
+	em := emitter{Input: inst, keyGoType: model.key.goType, orderGoType: model.order.goType,
+		model: model, hasComps: len(comps) > 0,
 		stampLane: stampLane, stampLaneAsData: stampLaneAsData,
 		registryIds: hasIdSrc && idSrc.GloballyUniqueIds()}
 	var sb strings.Builder
@@ -485,8 +500,8 @@ func (inst Input) bindDeclaredRoles(m *plainModel) (err error) {
 			err = taken("Order", c)
 			return
 		}
-		if c.itemType != common.PlainItemTypeEntityTimestamp {
-			err = eh.Errorf("Roles.Order column %q carries item type %v — the Order role requires an EntityTimestamp plain column", c.name, c.itemType)
+		if c.itemType != common.PlainItemTypeEntityTimestamp && c.goType != "uint64" {
+			err = eh.Errorf("Roles.Order column %q carries item type %v with Go type %s — the Order role takes the EntityTimestamp z64 lane or a plain column deriving to uint64", c.name, c.itemType, c.goType)
 			return
 		}
 		c.role = roleOrder
@@ -586,12 +601,34 @@ func plainReaderVar(itemType common.PlainItemTypeE) string {
 	return lowerFirst(plainReaderRoleToken(itemType)) + "R"
 }
 
+// orderU64 reports the u64 Order regime (ADR-0100 Update 2026-08-30);
+// false is the z64 timestamp lane.
+func (inst emitter) orderU64() bool { return inst.orderGoType == "uint64" }
+
+// orderArg is the Begin/Delete/Ingest parameter name carrying the Order
+// value: "ts" on the timestamp lane, "ord" under the u64 regime.
+func (inst emitter) orderArg() string {
+	if inst.orderU64() {
+		return "ord"
+	}
+	return "ts"
+}
+
+// orderEntityField is the entity field carrying the Order value: Ts on the
+// timestamp lane, Ord under the u64 regime.
+func (inst emitter) orderEntityField() string {
+	if inst.orderU64() {
+		return "Ord"
+	}
+	return "Ts"
+}
+
 // dmlChain renders the ".SetId(…).SetTimestamp(…)…" plain-setter chain over
 // every group in canonical order. The Key column is sourced from id, the
-// Order from ts, the state-view Lifecycle from lifecycleExpr, and each
-// pass-through column from envVar.<field> (envVar is unreferenced when a
-// group carries no pass-through column, e.g. every group in a role-only
-// schema).
+// Order from the order argument, the state-view Lifecycle from
+// lifecycleExpr, and each pass-through column from envVar.<field> (envVar
+// is unreferenced when a group carries no pass-through column, e.g. every
+// group in a role-only schema).
 func (inst emitter) dmlChain(lifecycleExpr, envVar string) string {
 	var sb strings.Builder
 	for _, g := range inst.model.groups {
@@ -601,7 +638,7 @@ func (inst emitter) dmlChain(lifecycleExpr, envVar string) string {
 			case roleKey:
 				args = append(args, "id")
 			case roleOrder:
-				args = append(args, "ts")
+				args = append(args, inst.orderArg())
 			case roleLifecycle:
 				args = append(args, lifecycleExpr)
 			default:
@@ -652,7 +689,7 @@ func (inst emitter) emitBeginFrame(p func(string, ...any), recv, lifecycleExpr, 
 			case roleKey:
 				args = append(args, "id")
 			case roleOrder:
-				args = append(args, "ts")
+				args = append(args, inst.orderArg())
 			case roleLifecycle:
 				args = append(args, lifecycleExpr)
 			default:
@@ -965,7 +1002,13 @@ func (inst emitter) emitEntityBag(sb *strings.Builder, comps []storeComponent, s
 	p("// every later reader): treat them as immutable.")
 	p("type %s struct {", inst.entityType())
 	p("\tID %s", inst.keyGoType)
-	p("\tTs time.Time")
+	if inst.orderU64() {
+		p("\t// Ord is the Order role value — the caller-supplied, per-key")
+		p("\t// strictly monotonic sequence (ADR-0100 SD2).")
+		p("\tOrd uint64")
+	} else {
+		p("\tTs time.Time")
+	}
 	if stateView {
 		p("\tLifecycle uint8")
 	}
@@ -1319,12 +1362,12 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 		beginSuffix = ", " + extras[0] + " and " + extras[1]
 	}
 	p("// (Key, Order)%s.", beginSuffix)
-	sig := fmt.Sprintf("func (inst *%s) Begin(id %s, ts time.Time", inst.storeType(), inst.keyGoType)
+	sig := fmt.Sprintf("func (inst *%s) Begin(id %s, %s %s", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
 	if hasPT {
 		sig += fmt.Sprintf(", env %sEnvelope", inst.StoreName)
 	}
 	p("%s) *%s {", sig, inst.builderType())
-	lit := fmt.Sprintf("%s{ID: id, Ts: ts", inst.entityType())
+	lit := fmt.Sprintf("%s{ID: id, %s: %s", inst.entityType(), inst.orderEntityField(), inst.orderArg())
 	if stateView {
 		lit += ", Lifecycle: recordstore.LifecycleLive"
 	}
@@ -1439,14 +1482,15 @@ func (inst emitter) emitIngest(sb *strings.Builder, comps []storeComponent) (err
 			err = eh.Errorf("component %s: plain id field %s has Go type %s but the Key column is %s — Ingest%s cannot be emitted", c.Kind, idCol.GoField, gt, inst.keyGoType, c.Kind)
 			return
 		}
+		ord := inst.orderArg()
 		p("// Ingest%s buffers one whole entity per row carrying only the", c.Kind)
-		p("// %s component, all stamped with ts — rows ship on the next Flush,", c.Kind)
+		p("// %s component, all stamped with %s — rows ship on the next Flush,", c.Kind, ord)
 		p("// like every write. Keys must be distinct within one call (rows")
-		p("// share ts, so duplicates would tie on Order): a duplicate returns")
+		p("// share %s, so duplicates would tie on Order): a duplicate returns", ord)
 		p("// recordstore.ErrDuplicateIngestKey. On any error the rows buffered")
 		p("// so far remain buffered — Flush ships them, DiscardPending drops")
 		p("// them.")
-		p("func (inst *%s) Ingest%s(ts time.Time, rows []%s) (err error) {", inst.storeType(), c.Kind, c.Kind)
+		p("func (inst *%s) Ingest%s(%s %s, rows []%s) (err error) {", inst.storeType(), c.Kind, ord, inst.orderGoType, c.Kind)
 		p("\tseen := make(map[%s]struct{}, len(rows))", inst.keyGoType)
 		p("\tfor i := range rows {")
 		p("\t\tif _, dup := seen[rows[i].%s]; dup {", idCol.GoField)
@@ -1454,7 +1498,7 @@ func (inst emitter) emitIngest(sb *strings.Builder, comps []storeComponent) (err
 		p("\t\t\treturn")
 		p("\t\t}")
 		p("\t\tseen[rows[i].%s] = struct{}{}", idCol.GoField)
-		beginArgs := fmt.Sprintf("rows[i].%s, ts", idCol.GoField)
+		beginArgs := fmt.Sprintf("rows[i].%s, %s", idCol.GoField, ord)
 		if len(inst.model.passthrough) > 0 {
 			beginArgs += fmt.Sprintf(", %sEnvelope{}", inst.StoreName)
 		}
@@ -1598,7 +1642,11 @@ func (inst emitter) emitCacheView(sb *strings.Builder, stateView bool) {
 	p("// as one IN (…) lookup, and local writes populate the view at Commit —")
 	p("// pinned until the store's Flush makes them durable — so reads after")
 	p("// writes hit immediately. Admission is version-gated on the entity's")
-	p("// Order timestamp: a raced refetch of an older row bounces off. Only")
+	if inst.orderU64() {
+		p("// Order value: a raced refetch of an older row bounces off. Only")
+	} else {
+		p("// Order timestamp: a raced refetch of an older row bounces off. Only")
+	}
 	p("// EXTERNAL writers can leave the view stale; they need a caller-")
 	p("// provided signal: MarkStale / Invalidate / InvalidateAll (a freshness")
 	p("// TTL option exists on the underlying cache). Raw() commits and")
@@ -1637,8 +1685,16 @@ func (inst emitter) emitCacheView(sb *strings.Builder, stateView bool) {
 	p("func (inst *%s[W]) rebuild() {", inst.cacheType())
 	p("\topts := []caching.CacheOption[%s, *%s, W]{", inst.keyGoType, inst.entityType())
 	p("\t\t// Admission mirrors the table's newest-row-per-key semantics:")
-	p("\t\t// the Order timestamp is the entity's monotonic version.")
-	p("\t\tcaching.WithVersioning[%s, *%s, W](func(e *%s) int64 { return e.Ts.UnixNano() }),", inst.keyGoType, inst.entityType(), inst.entityType())
+	if inst.orderU64() {
+		p("\t\t// the Order value is the entity's monotonic version. The int64")
+		p("\t\t// reinterpretation preserves the per-key order as long as one")
+		p("\t\t// key's values share their top bit — which a single writer")
+		p("\t\t// stream per key (the SD2 contract) gives by construction.")
+		p("\t\tcaching.WithVersioning[%s, *%s, W](func(e *%s) int64 { return int64(e.Ord) }),", inst.keyGoType, inst.entityType(), inst.entityType())
+	} else {
+		p("\t\t// the Order timestamp is the entity's monotonic version.")
+		p("\t\tcaching.WithVersioning[%s, *%s, W](func(e *%s) int64 { return e.Ts.UnixNano() }),", inst.keyGoType, inst.entityType(), inst.entityType())
+	}
 	p("\t}")
 	p("\tif inst.cfg.FreshnessTTL > 0 {")
 	p("\t\topts = append(opts, caching.WithFreshnessTTL[%s, *%s, W](inst.cfg.FreshnessTTL))", inst.keyGoType, inst.entityType())
@@ -1737,8 +1793,13 @@ func (inst emitter) emitCacheView(sb *strings.Builder, stateView bool) {
 	p("// it stales the cached entry only if its Order is below order, so a")
 	p("// redundant signal for a version the view already holds is free —")
 	p("// the natural sink for an invalidation stream carrying (key, Order).")
-	p("func (inst *%s[W]) MarkStaleIfOlder(key %s, order time.Time) {", inst.cacheType(), inst.keyGoType)
-	p("\tinst.cache.MarkAsStaleIfOlder(key, order.UnixNano())")
+	if inst.orderU64() {
+		p("func (inst *%s[W]) MarkStaleIfOlder(key %s, order uint64) {", inst.cacheType(), inst.keyGoType)
+		p("\tinst.cache.MarkAsStaleIfOlder(key, int64(order))")
+	} else {
+		p("func (inst *%s[W]) MarkStaleIfOlder(key %s, order time.Time) {", inst.cacheType(), inst.keyGoType)
+		p("\tinst.cache.MarkAsStaleIfOlder(key, order.UnixNano())")
+	}
 	p("}")
 	p("")
 	p("// Invalidate drops the key's cached entry (L1 and stash).")
@@ -1905,23 +1966,41 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("")
 	p("// Replay iterates the rows for key with the order column >= fromOrder")
 	p("// in ascending order — the event-replay primitive. A zero fromOrder")
-	p("// replays everything (zero time.Time has no defined UnixNano;")
-	p("// recordstore.SeqTs(0) is the equivalent explicit bound);")
+	if inst.orderU64() {
+		p("// replays everything (0 is the replay-everything bound — a caller")
+		p("// whose Order values start at 0 must start them at 1 instead);")
+	} else {
+		p("// replays everything (zero time.Time has no defined UnixNano;")
+		p("// recordstore.SeqTs(0) is the equivalent explicit bound);")
+	}
 	p("// opts.To bounds the replay exclusively (\"state as of To\") and")
 	p("// opts.Limit caps the row count. The sequence is single-use; ctx")
 	p("// must stay valid until iteration completes; the query may execute")
 	p("// at call time or lazily during iteration (buffered in v1 — a")
 	p("// streaming executor changes nothing visible); an error ends the")
 	p("// sequence as a final (nil, err) pair. Reads see only flushed rows.")
-	p("func (inst *%s) Replay(ctx context.Context, key %s, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*%s, error] {", inst.storeType(), inst.keyGoType, inst.entityType())
+	if inst.orderU64() {
+		p("func (inst *%s) Replay(ctx context.Context, key %s, fromOrder uint64, opts recordstore.ReplayOptsU64) iter.Seq2[*%s, error] {", inst.storeType(), inst.keyGoType, inst.entityType())
+	} else {
+		p("func (inst *%s) Replay(ctx context.Context, key %s, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*%s, error] {", inst.storeType(), inst.keyGoType, inst.entityType())
+	}
 	p("\tsql := \"SELECT * FROM \" + inst.tableName() +")
 	p("\t\t\" WHERE \" + %sColKey + \" = \" + %sKeyLiteral(key)", inst.StoreName, inst.TableName)
-	p("\tif !fromOrder.IsZero() {")
-	p("\t\tsql += \" AND \" + %sColOrder + \" >= fromUnixTimestamp64Nano(\" + strconv.FormatInt(fromOrder.UnixNano(), 10) + \")\"", inst.StoreName)
-	p("\t}")
-	p("\tif !opts.To.IsZero() {")
-	p("\t\tsql += \" AND \" + %sColOrder + \" < fromUnixTimestamp64Nano(\" + strconv.FormatInt(opts.To.UnixNano(), 10) + \")\"", inst.StoreName)
-	p("\t}")
+	if inst.orderU64() {
+		p("\tif fromOrder > 0 {")
+		p("\t\tsql += \" AND \" + %sColOrder + \" >= \" + strconv.FormatUint(fromOrder, 10)", inst.StoreName)
+		p("\t}")
+		p("\tif opts.To > 0 {")
+		p("\t\tsql += \" AND \" + %sColOrder + \" < \" + strconv.FormatUint(opts.To, 10)", inst.StoreName)
+		p("\t}")
+	} else {
+		p("\tif !fromOrder.IsZero() {")
+		p("\t\tsql += \" AND \" + %sColOrder + \" >= fromUnixTimestamp64Nano(\" + strconv.FormatInt(fromOrder.UnixNano(), 10) + \")\"", inst.StoreName)
+		p("\t}")
+		p("\tif !opts.To.IsZero() {")
+		p("\t\tsql += \" AND \" + %sColOrder + \" < fromUnixTimestamp64Nano(\" + strconv.FormatInt(opts.To.UnixNano(), 10) + \")\"", inst.StoreName)
+		p("\t}")
+	}
 	p("\tsql += \" ORDER BY \" + %sColOrder + \" ASC\"", inst.StoreName)
 	p("\tif opts.Limit > 0 {")
 	p("\t\tsql += \" LIMIT \" + strconv.Itoa(opts.Limit)")
@@ -1940,7 +2019,7 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("// the deletion). The tombstone writes through to attached cache views")
 	p("// like any commit — a versioned deletion, so GetLive reads the key as")
 	p("// absent immediately.")
-	p("func (inst *%s) Delete(id %s, ts time.Time) (err error) {", inst.storeType(), inst.keyGoType)
+	p("func (inst *%s) Delete(id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
 	if len(inst.model.passthrough) > 0 {
 		p("\tvar env %sEnvelope // a tombstone carries no pass-through payload", inst.StoreName)
 	}
@@ -1952,7 +2031,7 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("\t}")
 	p("\tinst.buffered++")
 	p("\tinst.dirty[id] = struct{}{}")
-	p("\tinst.notifyWrite(id, &%s{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleTombstone})", inst.entityType())
+	p("\tinst.notifyWrite(id, &%s{ID: id, %s: %s, Lifecycle: recordstore.LifecycleTombstone})", inst.entityType(), inst.orderEntityField(), inst.orderArg())
 	p("\treturn")
 	p("}")
 	p("")
@@ -2118,16 +2197,22 @@ func (inst emitter) emitDecode(sb *strings.Builder, comps []storeComponent, stat
 	keyField := "Value" + inst.model.key.pascal
 	orderField := "Value" + inst.model.order.pascal
 	p("\tn := %s.%s.Len()", keyVar, keyField)
-	p("\ttsType, ok := %s.%s.DataType().(*arrow.TimestampType)", orderVar, orderField)
-	p("\tif !ok {")
-	p("\t\terr = eh.Errorf(\"order column is not a timestamp (got %%s)\", %s.%s.DataType())", orderVar, orderField)
-	p("\t\treturn")
-	p("\t}")
+	if !inst.orderU64() {
+		p("\ttsType, ok := %s.%s.DataType().(*arrow.TimestampType)", orderVar, orderField)
+		p("\tif !ok {")
+		p("\t\terr = eh.Errorf(\"order column is not a timestamp (got %%s)\", %s.%s.DataType())", orderVar, orderField)
+		p("\t\treturn")
+		p("\t}")
+	}
 	p("\tents = make([]*%s, 0, n)", inst.entityType())
 	p("\tfor i := range n {")
 	p("\t\tent := &%s{", inst.entityType())
 	p("\t\t\tID: %s.%s.Value(i),", keyVar, keyField)
-	p("\t\t\tTs: %s.%s.Value(i).ToTime(tsType.Unit).UTC(),", orderVar, orderField)
+	if inst.orderU64() {
+		p("\t\t\tOrd: %s.%s.Value(i),", orderVar, orderField)
+	} else {
+		p("\t\t\tTs: %s.%s.Value(i).ToTime(tsType.Unit).UTC(),", orderVar, orderField)
+	}
 	if stateView {
 		p("\t\t\tLifecycle: %s.Value%s.Value(i),", plainReaderVar(inst.model.lifecycle.itemType), inst.model.lifecycle.pascal)
 	}
@@ -2163,7 +2248,15 @@ func (inst emitter) emitDecode(sb *strings.Builder, comps []storeComponent, stat
 			p("\t\t\t\trow.%s = ent.ID", idCol.GoField)
 		}
 		if tsCol := goplan.FindPlainCol(c.plan, "ts"); tsCol != nil {
-			p("\t\t\t\trow.%s = ent.Ts", tsCol.GoField)
+			// Under the u64 Order regime a column named ts is either the
+			// Order role itself (backfilled from Ord) or an ordinary z64
+			// pass-through, whose promoted envelope field carries the read
+			// value already ("Ts" is not reserved there).
+			src := "Ts"
+			if inst.orderU64() && inst.model.order.name == "ts" {
+				src = "Ord"
+			}
+			p("\t\t\t\trow.%s = ent.%s", tsCol.GoField, src)
 		}
 		p("\t\t\t\tent.%s = option.Some(row)", c.Kind)
 		p("\t\t\t}")

@@ -80,7 +80,16 @@ type Roles struct {
 	// deriving to uint64 or string.
 	Key string
 	// Order names the version / replay-order column: an EntityTimestamp
-	// column on the z64 timestamp lane.
+	// column on the z64 timestamp lane, or any envelope plain column
+	// deriving to uint64 (e.g. a consumer's sequential EntityId). Under a
+	// u64 Order the store's verb signatures carry uint64 — Begin, Delete,
+	// Ingest<Kind>, Replay (with recordstore.ReplayOptsU64), the cache's
+	// MarkStaleIfOlder — the entity field is Ord, and the generated range
+	// SQL compares plain integers. The SD2 contract is unchanged: Order
+	// values must stay strictly monotonic per key, the caller's
+	// obligation, which for tagged id streams means a single writer
+	// stream per key per table (cross-tag numeric order follows code bit
+	// patterns and carries no meaning — ADR-0106).
 	Order string
 	// Lifecycle names the state-view marker column: a u8 EntityLifecycle
 	// plain column.

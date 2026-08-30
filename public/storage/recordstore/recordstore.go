@@ -105,6 +105,17 @@ type ReplayOpts struct {
 	Limit int
 }
 
+// ReplayOptsU64 is ReplayOpts for a store whose Order role is a plain
+// uint64 column (declared via gen.Input.Roles; ADR-0100 Update
+// 2026-08-30). The zero value replays everything from fromOrder on.
+type ReplayOptsU64 struct {
+	// To is the exclusive upper Order bound — "state as of To" folds
+	// replay rows with Order < To. Zero means unbounded.
+	To uint64
+	// Limit caps the number of returned rows; zero means no limit.
+	Limit int
+}
+
 // ScanOpts parameterizes the generated Scan<Kind> verbs. The zero value
 // scans everything: no extra predicate, no limit.
 type ScanOpts struct {

@@ -984,6 +984,52 @@ Fixtures: `recordstore/example/gen_roles_test.go`
 `TestGeneratePartialRolesKeepPositionalDefaults`, and the refusal cases).
 The Deferred bullet this lifts is removed above.
 
+### 2026-08-30 — the Order role accepts a plain uint64 column, via the explicit declaration
+
+SD2 fixed Order to the z64 timestamp lane because `Replay`'s range SQL and
+the decode assumed it. Both assumptions are now per-regime: an Order bound
+through `Roles.Order` to a plain column deriving to `uint64` — any envelope
+item type, e.g. a consumer's sequential `EntityId` — generates the **u64
+regime**: verb signatures carry `uint64` (`Begin`, `Delete`,
+`Ingest<Kind>`, `Replay` with `recordstore.ReplayOptsU64`, the cache view's
+`MarkStaleIfOlder`), the entity field is `Ord uint64`, the `Replay` range
+SQL compares plain integers, and the decode reads the column directly. The
+regime is reachable **only** through the declaration: positional binding
+stays on the timestamp lane, and a schema whose EntityTimestamp column
+derives to uint64 is refused with a pointer at `Roles.Order`. `Latest`'s
+`ORDER BY … DESC LIMIT 1 BY` and `Scan`'s `(Order, Key)` ordering are
+type-agnostic and unchanged; `SeqTs`/`SeqOf` and `ReplayOpts` remain the
+timestamp-lane vocabulary; timestamp stores regenerate byte-identically.
+
+- **The contract is unchanged**: Order values must stay strictly monotonic
+  per key — the caller's obligation, exactly as on the timestamp lane. For
+  tagged id streams (ADR-0106 fibonacci ids) that means a **single writer
+  stream per key per table**: cross-tag numeric order follows code bit
+  patterns and carries no time or causal meaning (ADR-0106 Consequences,
+  Negative), so a key written under two tags can order a later row before
+  an earlier one — `Latest` would then shadow the newer writer permanently.
+- The cache view's version gate reinterprets the Order as `int64`; within
+  one writer stream per key (the same condition as above) the per-key
+  order survives the reinterpretation.
+- `Replay`'s zero `fromOrder` / zero `To` mean unbounded, so an Order
+  vocabulary must start above 0.
+- The component decode's `,ts`-bound plain backfill: under the u64 regime a
+  column named `ts` is either the Order itself (backfilled from `Ord`) or
+  an ordinary pass-through whose promoted envelope field carries the value
+  (`Ts` is not a reserved entity field there).
+- `pushoutstore` stays on synthetic nanos (`SeqTs`/`SeqOf`, `nextTs`):
+  moving its Order to a u64 column changes the physical schema of a durable
+  table — `VerifySchema` on every existing deployment would refuse, and the
+  adapter's contract has no migration step — so the cut is not clean and is
+  deliberately not taken.
+
+Fixtures: `recordstore/example` `seq` store (`GetSeqSchemaInManipulator` —
+Key `id`, Order the second EntityId `eid`, declared via `Roles`;
+`TestSeqStoreU64OrderRoundTrip` runs Latest / Replay bounds / Scan / state
+view over clickhouse-local) and `gen_roles_test.go`
+(`TestGenerateRolesU64OrderSignatures`,
+`TestGeneratePositionalU64OrderRefused`).
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

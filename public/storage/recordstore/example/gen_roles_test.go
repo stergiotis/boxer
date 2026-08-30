@@ -95,11 +95,53 @@ func TestGenerateRolesKeyWrongItemType(t *testing.T) {
 	require.ErrorContains(t, err, "requires an EntityId plain column")
 }
 
-// TestGenerateRolesOrderWrongItemType: the Order role takes the
-// EntityTimestamp lane.
-func TestGenerateRolesOrderWrongItemType(t *testing.T) {
-	_, err := generateRolesInto(t, rolesManipulator(t), gen.Roles{Order: "idb"})
-	require.ErrorContains(t, err, "requires an EntityTimestamp plain column")
+// TestGenerateRolesOrderWrongType: the Order role takes the EntityTimestamp
+// lane or a u64-deriving plain column — a u8 lifecycle column is neither.
+func TestGenerateRolesOrderWrongType(t *testing.T) {
+	_, err := generateRolesInto(t, rolesManipulator(t), gen.Roles{Order: "lca"})
+	require.ErrorContains(t, err, "takes the EntityTimestamp z64 lane or a plain column deriving to uint64")
+}
+
+// TestGenerateRolesOrderSharedWithKey: one column cannot serve two roles.
+func TestGenerateRolesOrderSharedWithKey(t *testing.T) {
+	_, err := generateRolesInto(t, rolesManipulator(t), gen.Roles{Key: "idb", Order: "idb"})
+	require.ErrorContains(t, err, "another declared role already binds")
+}
+
+// TestGenerateRolesU64OrderSignatures: an Order bound to a u64 EntityId
+// column (ADR-0100 Update 2026-08-30) generates uint64 verb signatures,
+// the Ord entity field, plain integer range SQL in Replay, and the
+// ReplayOptsU64 option type; the timestamp helpers stay off the surface.
+func TestGenerateRolesU64OrderSignatures(t *testing.T) {
+	out, err := generateRolesInto(t, rolesManipulator(t), gen.Roles{Key: "ida", Order: "idb"})
+	require.NoError(t, err)
+	store := readStore(t, out)
+	require.Contains(t, store, "Begin(id uint64, ord uint64")
+	require.Regexp(t, `Ord\s+uint64`, store)
+	require.Contains(t, store, "fromOrder uint64, opts recordstore.ReplayOptsU64")
+	require.Contains(t, store, "strconv.FormatUint(fromOrder, 10)")
+	require.Contains(t, store, "MarkStaleIfOlder(key uint64, order uint64)")
+	require.Contains(t, store, "Delete(id uint64, ord uint64)")
+	require.Contains(t, store, "int64(e.Ord)")
+	require.NotContains(t, store, "fromUnixTimestamp64Nano")
+	require.NotRegexp(t, `Ts\s+time\.Time`, store)
+}
+
+// TestGeneratePositionalU64OrderRefused: the u64 regime is reachable only
+// through the explicit declaration — a positionally-bound Order stays on
+// the timestamp lane.
+func TestGeneratePositionalU64OrderRefused(t *testing.T) {
+	manip, err := common.NewTableManipulator()
+	require.NoError(t, err)
+	manip.SetTableName("valcheck")
+	manip.PlainValueColumn(common.PlainItemTypeEntityId, "ida", ctabb.U64)
+	manip.PlainValueColumn(common.PlainItemTypeEntityTimestamp, "seq", ctabb.U64)
+	sec := manip.TaggedValueSection("solo").
+		SectionStreamingGroup("data").
+		AddSectionMembership(common.MembershipSpecLowCardRef)
+	sec.TaggedValueColumn("value", ctabb.S)
+	_, err = generateRolesInto(t, manip, gen.Roles{})
+	require.ErrorContains(t, err, "bind a uint64 column explicitly via Roles.Order")
 }
 
 // TestGenerateRolesLifecycleWrongType: the Lifecycle role takes a u8
