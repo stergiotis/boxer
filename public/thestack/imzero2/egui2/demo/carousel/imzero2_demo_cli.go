@@ -141,7 +141,7 @@ func Run(ctx gocontext.Context, cfg *application.Config, opts RunOptions) (err e
 		err = eh.Errorf("--launch-config: %w", seedErr)
 		return
 	}
-	// The runtime bootstrap is hostboot's (ADR-0208); the carousel is its
+	// The runtime bootstrap is hostboot's (ADR-0211); the carousel is its
 	// every-service caller and adds what is carousel-specific: the
 	// capability inspector's audit counters and backend labels, the play
 	// host's passes and vocabularies, the applet store.
