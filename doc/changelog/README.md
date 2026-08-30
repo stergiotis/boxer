@@ -3,7 +3,7 @@ type: how-to
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-08-16
+reviewed-date: 2026-08-30
 ---
 
 # Compiling a changelog entry
@@ -17,6 +17,11 @@ continuation** table so the next compilation can pick up exactly where the
 last one ended, with no gap and no overlap. The oldest entry
 (2026-07-02 – 2026-07-16) has no such table — it predates the rule; chain from
 the newest entry, not from it.
+
+[INDEX.md](./INDEX.md) is a generated cross-entry table of contents: every
+entry's thematic section headings, newest first, linked to their anchors. It
+is extraction, not summarisation — the reviewed summary of a window is that
+entry's *window in brief* — and it is regenerated, never edited (step 7).
 
 The `summarize_*.sh` scripts here are a separate, experimental lineage: they
 drive `gov commitdigest` through an external LLM and keep resume state under
@@ -93,6 +98,13 @@ drive `gov commitdigest` through an external LLM and keep resume state under
    ([DOCUMENTATION_STANDARD §4](../DOCUMENTATION_STANDARD.md)). It requires
    `reviewed-by` + `reviewed-date` and removal of the draft banner; doclint
    checks both.
+
+7. **Regenerate the index.** `boxer.sh gov changelogindex` rewrites
+   [INDEX.md](./INDEX.md) from the entries; commit it alongside the entry.
+   `--check` verifies without writing, and a drift test in
+   `public/gov/changelogindex` fails CI when an entry lands without a
+   regeneration. A new machinery section (one that would repeat in every
+   entry) belongs in that package's skip list, not in the index.
 
 ## Cadence
 
